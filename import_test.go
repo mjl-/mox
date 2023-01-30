@@ -43,6 +43,7 @@ func TestMaildirReader(t *testing.T) {
 	createTemp := func(pattern string) (*os.File, error) {
 		return os.CreateTemp("", pattern)
 	}
+	// todo: rename 1642966915.1.mox to "1642966915.1.mox:2,"? cannot have that name in the git repo because go module (or the proxy) doesn't like it. could also add some flags and test they survive the import.
 	newf, err := os.Open("testdata/importtest.maildir/new")
 	if err != nil {
 		t.Fatalf("open maildir new: %v", err)
