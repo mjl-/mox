@@ -1,4 +1,4 @@
-Mox - modern full-featured open source secure mail server for low-maintenance self-hosted email
+Mox is a modern full-featured open source secure mail server for low-maintenance self-hosted email.
 
 See Quickstart below to get started.
 
@@ -71,9 +71,7 @@ You can easily (cross) compile mox if you have a Go toolchain installed:
 
 	go install github.com/mjl-/mox@latest
 
-Or you can download binaries from:
-
-	https://beta.gobuilds.org/github.com/mjl-/mox
+Or you can download binaries from https://beta.gobuilds.org/github.com/mjl-/mox
 
 
 # Quickstart
@@ -113,16 +111,14 @@ need to run their own mail server. Mox aims to make that easy.
 
 - Where is the documentation?
 
-Run "mox" without arguments to list its subcommands and usage, run "mox help
-<subcommand>" for more details. See all commands and help text at:
+See all commands and help text at https://pkg.go.dev/github.com/mjl-/mox/, and
+example config files at https://pkg.go.dev/github.com/mjl-/mox/config/.
 
-	https://pkg.go.dev/github.com/mjl-/mox/
+You can get the same information by running "mox" without arguments to list its
+subcommands and usage, and "mox help <subcommand>" for more details.
 
-The example configuration files annotated with comments can be helpful too.
-They are printed by "mox config describe-static" and "mox config
-describe-dynamic", and can be viewed at:
-
-	https://pkg.go.dev/github.com/mjl-/mox/config/
+The example config files are printed by "mox config describe-static" and "mox
+config describe-dynamic".
 
 Mox is still in early stages, and documentation is still limited. Please create
 an issue describing what is unclear or confusing, and we'll try to improve the
