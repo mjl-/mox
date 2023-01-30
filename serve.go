@@ -195,36 +195,44 @@ requested, other TLS certificates are requested on demand.
 	}
 
 	if mox.Conf.Static.CheckUpdates {
-		checkUpdates := func() {
+		checkUpdates := func() time.Duration {
+			next := 24 * time.Hour
 			current, lastknown, mtime, err := mox.LastKnown()
 			if err != nil {
-				log.Infox("determining own version before checking for updates, trying again in 1h", err)
-				time.Sleep(time.Hour)
-				return
+				log.Infox("determining own version before checking for updates, trying again in 24h", err)
+				return next
 			}
+
+			// We don't want to check for updates at every startup. So we sleep based on file
+			// mtime. But file won't exist initially.
 			if !mtime.IsZero() && time.Since(mtime) < 24*time.Hour {
-				time.Sleep(24*time.Hour - time.Since(mtime))
+				d := 24*time.Hour - time.Since(mtime)
+				log.Debug("sleeping for next check for updates", mlog.Field("sleep", d))
+				time.Sleep(d)
+				next = 0
 			}
 			now := time.Now()
 			if err := os.Chtimes(mox.DataDirPath("lastknownversion"), now, now); err != nil {
-				log.Infox("setting mtime on lastknownversion file, for checking only once per 24h, trying again in 1h", err)
-				return
+				if !os.IsNotExist(err) {
+					log.Infox("setting mtime on lastknownversion file, continuing", err)
+				}
 			}
+
 			log.Debug("checking for updates", mlog.Field("lastknown", lastknown))
 			updatesctx, updatescancel := context.WithTimeout(mox.Context, time.Minute)
 			latest, _, changelog, err := updates.Check(updatesctx, dns.StrictResolver{}, dns.Domain{ASCII: changelogDomain}, lastknown, changelogURL, changelogPubKey)
 			updatescancel()
 			if err != nil {
 				log.Infox("checking for updates", err, mlog.Field("latest", latest))
-				return
+				return next
 			}
 			if !latest.After(lastknown) {
 				log.Debug("no new version available")
-				return
+				return next
 			}
 			if len(changelog.Changes) == 0 {
 				log.Info("new version available, but changelog is empty, ignoring", mlog.Field("latest", latest))
-				return
+				return next
 			}
 
 			var cl string
@@ -235,19 +243,19 @@ requested, other TLS certificates are requested on demand.
 			a, err := store.OpenAccount(mox.Conf.Static.Postmaster.Account)
 			if err != nil {
 				log.Infox("open account for postmaster changelog delivery", err)
-				return
+				return next
 			}
 			defer a.Close()
 			f, err := store.CreateMessageTemp("changelog")
 			if err != nil {
 				log.Infox("making temporary message file for changelog delivery", err)
-				return
+				return next
 			}
 			m := &store.Message{Received: time.Now(), Flags: store.Flags{Flagged: true}}
 			n, err := fmt.Fprintf(f, "Date: %s\r\nSubject: mox update %s available, changelog\r\n\r\nHi!\r\n\r\nVersion %s of mox is available.\r\nThe changes compared to the previous update notification email:\r\n\r\n%s\r\n\r\nDon't forget to update, this install is at %s.\r\nPlease report any issues at https://github.com/mjl-/mox\r\n", time.Now().Format(message.RFC5322Z), latest, latest, strings.ReplaceAll(cl, "\n", "\r\n"), current)
 			if err != nil {
 				log.Infox("writing temporary message file for changelog delivery", err)
-				return
+				return next
 			}
 			m.Size = int64(n)
 			if err := a.DeliverMailbox(log, mox.Conf.Static.Postmaster.Mailbox, m, f, true); err != nil {
@@ -261,11 +269,13 @@ requested, other TLS certificates are requested on demand.
 				// This will be awkward, we'll keep notifying the postmaster once every 24h...
 				log.Infox("updating last known version", err)
 			}
+			return next
 		}
 
 		go func() {
 			for {
-				checkUpdates()
+				next := checkUpdates()
+				time.Sleep(next)
 			}
 		}()
 	}
