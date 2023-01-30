@@ -1,0 +1,31 @@
+version: '3.7'
+services:
+  mox:
+    build: .
+    user: ${MOX_UID}:${MOX_GID}
+    volumes:
+      - ./testdata/imaptest/data:/mox/data
+      - ./testdata/imaptest/mox.conf:/mox/mox.conf
+      - ./testdata/imaptest/domains.conf:/mox/domains.conf
+      - ./testdata/imaptest/imaptest.mbox:/mox/imaptest.mbox
+    working_dir: /mox
+    command: sh -c 'echo testtest | ./mox setaccountpassword mjl@mox.example && ./mox serve'
+    healthcheck:
+      test: netstat -nlt | grep ':1143 '
+      interval: 1s
+      timeout: 1s
+      retries: 10
+
+  imaptest:
+    build:
+      dockerfile: Dockerfile.imaptest
+      context: .
+    command: host=mox port=1143 'user=mjl@mox.example' pass=testtest mbox=/imaptest/imaptest.mbox
+    working_dir: /imaptest
+    volumes:
+      - ./testdata/imaptest:/imaptest
+    user: ${MOX_UID}:${MOX_GID}
+    depends_on:
+      mox:
+        condition: service_healthy
+    restart: never

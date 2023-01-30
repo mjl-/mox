@@ -1,0 +1,25 @@
+{
+	"Name": "Account",
+	"Docs": "Account exports web API functions for the account web interface. All its\nmethods are exported under /account/api/. Function calls require valid HTTP\nAuthentication credentials of a user.",
+	"Functions": [
+		{
+			"Name": "SetPassword",
+			"Docs": "SetPassword saves a new password for the account, invalidating the previous password.\nSessions are not interrupted, and will keep working. New login attempts must use the new password.\nPassword must be at least 8 characters.",
+			"Params": [
+				{
+					"Name": "password",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		}
+	],
+	"Sections": [],
+	"Structs": [],
+	"Ints": [],
+	"Strings": [],
+	"SherpaVersion": 0,
+	"SherpadocVersion": 1
+}

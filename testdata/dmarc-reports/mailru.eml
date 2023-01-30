@@ -1,0 +1,52 @@
+Return-Path: <dmarc_support@corp.mail.ru>
+X-Original-To: postmaster@ueber.net
+Delivered-To: postmaster@ueber.net
+Received-SPF: Pass (sender SPF authorized) identity=mailfrom; client-ip=94.100.178.51; helo=relay7.m.smailru.net; envelope-from=dmarc_support@corp.mail.ru; receiver=postmaster@ueber.net 
+Authentication-Results: koriander.ueber.net;
+	dkim=pass (1024-bit key; unprotected) header.d=corp.mail.ru header.i=@corp.mail.ru header.b=BcnJkLoY;
+	dkim-atps=neutral
+Received: from relay7.m.smailru.net (relay7.m.smailru.net [94.100.178.51])
+	by koriander.ueber.net (Postfix) with ESMTPS id 776AFDEB1A
+	for <postmaster@ueber.net>; Fri,  7 Jun 2019 02:33:54 +0200 (CEST)
+DKIM-Signature: v=1; a=rsa-sha256; q=dns/txt; c=relaxed/relaxed; d=corp.mail.ru; s=mail;
+	h=Date:Message-ID:To:From:Subject:MIME-Version:Content-Type; bh=MrPDZJiL98IfURE6QX7TU5bRFq5lPjXGFQRQR8lJgSE=;
+	b=BcnJkLoY+mIX2I2wVU3KPYsIxzWHU0PpI31r3WL+zgziFX9conii4ub1jQfBWkHa4dL6EnxWGxHocvHEei/HoENm6OJfdu2xggDiUKNJSgNu48N3xGOTzkYt9ChOHNYEzGqeNMtn8wYQq0jxjvmNjreBCde19OVL0qiKeefkOUU=;
+Received: from [10.161.4.115] (port=33872 helo=60)
+	by relay7.m.smailru.net with esmtp (envelope-from <dmarc_support@corp.mail.ru>)
+	id 1hZ2pN-0008Kp-5K
+	for postmaster@ueber.net; Fri, 07 Jun 2019 03:33:53 +0300
+Content-Type: multipart/mixed; boundary="===============0297484745123892753=="
+MIME-Version: 1.0
+Subject: Report Domain: ueber.net; Submitter: Mail.Ru;
+ Report-ID: 82403907998914102491559779200
+From: dmarc_support@corp.mail.ru
+To: postmaster@ueber.net
+Message-ID: <dmarc-1559867633@corp.mail.ru>
+Date: Fri, 07 Jun 2019 03:33:53 +0300
+Auto-Submitted: auto-generated
+Authentication-Results: relay7.m.smailru.net; auth=pass smtp.auth=dmarc_support@corp.mail.ru smtp.mailfrom=dmarc_support@corp.mail.ru; iprev=pass policy.iprev=10.161.4.115
+
+--===============0297484745123892753==
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+VGhpcyBpcyBhbiBhZ2dyZWdhdGUgcmVwb3J0IGZyb20gTWFpbC5SdS4=
+
+--===============0297484745123892753==
+Content-Type: application/gzip
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+ filename="mail.ru!ueber.net!1559779200!1559865600.xml.gz"
+
+H4sICPGw+VwC/21haWwucnUhdWViZXIubmV0ITE1NTk3NzkyMDAhMTU1OTg2NTYwMC54bWwAZVNL
+kqQgEN3PKXpXqwa16+dENj0XmM1cgKAwLZlSIAC7em4/iYaWHbUxMx/5eS9B+Pga+pdPDNE4+74r
+WbF7QatdY+z1fTem9vW8+xA/oEVsLkrfBAT0LiQ5YFKNSkqAC1dp1YDitzI9+zMCXxHAgTDRDCpo
+GUefK39pFzzLOAuUO2cAfqWgpHY2KZ2ksa0TXUr+J+cd9ms6z/Y1I1T4XLFwM404V/virS5OdX2u
+y31ZVPu6PBzq06muigL4IxFIBMqg7JXoXvBqrNgmzgigbSb4fDwcM5xj4NtS/rQX73qj/0k/XnoT
+O8yjHPG3YsQLBmYxUYcZAdXczCAC8NkBFX07hdmCFwH/oqZ8LyA+InLB6yTKTCk79H0aGpAWnq27
+U7Ebg0ZpvChPR1aWb6yqGAmjXusJaDdaagp8dhYh+Kn6kRRnISZ6F02iN7OS2WIwqWjpsgifBGUd
+czwp4s89+UTQNGiTaQ09SAEdqgaDbIMbtkvbwsC/VagxdTJgHPsU56HL0m/D7d6xO63C03lk2g2P
+9UftPIohdySCUwBzF2GdxXy5U7Cw/z6GLyvm61/yHwz0ru1XAwAA
+--===============0297484745123892753==--

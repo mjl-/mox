@@ -1,0 +1,55 @@
+[Unit]
+Description=mox mail server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+UMask=007
+LimitNOFILE=65535
+Type=simple
+User=mox
+Group=mox
+Environment="MOXCONF=/home/service/mox/config/mox.conf"
+WorkingDirectory=/home/service/mox
+ExecStart=/home/service/mox/mox serve
+RestartSec=5s
+Restart=always
+ExecStop=/home/service/mox/mox stop
+# Restart does shut down existing smtp/imap connections (gracefully), but first
+# verifies the config file, and it returns after restart was complete.
+ExecReload=/home/service/mox/mox restart
+
+# Isolate process, reducing attack surface.
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/home/service/mox/config /home/service/mox/data
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+ProtectProc=invisible
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RemoveIPC=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+DevicePolicy=closed
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+# prevents CAP_NET_BIND_SERVICE from working?
+#PrivateUsers=yes
+
+# To check security-related settings:
+# sudo systemd-analyze security mox.service
+
+[Install]
+WantedBy=multi-user.target

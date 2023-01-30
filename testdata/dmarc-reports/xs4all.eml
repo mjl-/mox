@@ -1,0 +1,70 @@
+Return-Path: <noreply+postmaster=ueber.net@dmarc-reports.xs4all.net>
+X-Original-To: postmaster@ueber.net
+Delivered-To: postmaster@ueber.net
+Received-SPF: Pass (sender SPF authorized) identity=mailfrom; client-ip=194.109.24.21; helo=lb1-smtp-cloud8.xs4all.net; envelope-from=noreply+postmaster=ueber.net@dmarc-reports.xs4all.net; receiver=postmaster@ueber.net 
+Authentication-Results: koriander.ueber.net;
+	dkim=pass (2048-bit key; secure) header.d=dmarc-reports.xs4all.net header.i=@dmarc-reports.xs4all.net header.b=h2T0IB2w;
+	dkim-atps=neutral
+Received: from lb1-smtp-cloud8.xs4all.net (lb1-smtp-cloud8.xs4all.net [194.109.24.21])
+	by koriander.ueber.net (Postfix) with ESMTPS id 66607DEB76
+	for <postmaster@ueber.net>; Tue, 27 Jul 2021 02:49:47 +0200 (CEST)
+Received: from nsacron3.xs4all.net ([194.109.23.165])
+	by smtp-cloud8.xs4all.net with ESMTP
+	id 8BI1m1cKbXTlc8BI1mNgHo; Tue, 27 Jul 2021 02:49:45 +0200
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+	d=dmarc-reports.xs4all.net; s=s1; t=1627346985;
+	bh=AZBHYUTZOecz9axaEcCHh+B9Si1tcVYedtc//9KuCO4=;
+	h=From:To:Subject:Message-ID:MIME-Version:Content-Type:Date:From:
+	 Subject;
+	b=h2T0IB2wrRlxKq9AuQ6FMMpUKp8RvtzGlhzPYArN85s52LHtXT0NEAHIY+yqT1v0o
+	 nsjFIQG2p6LfyeMYjV2nPte5/tm62rvFa1nfSQB9NdZfaS3qQ1D150lno2gkjked4D
+	 +pI3UD/3mRuZCrMOM9mCvmnHqyL5m4UXjkSe4i6mSaZZI32XfDA3+OaqBC0NrfopRr
+	 Eo+dBU49uhiafVF2ggZjfyuhU7KYQp+jvbAJxyn8w3LXwoK7C0AkrnlCFvGotWlrDc
+	 8T/w/qOfems0wul0jgIW3XtwNf9VSrphVGZGmywHR3zlL+ixfxyPQXWvgOcbs84KKG
+	 taLlTNtszInAg==
+Received: by nsacron3.xs4all.net (Postfix, from userid 0)
+	id 9FEA95869; Tue, 27 Jul 2021 02:49:45 +0200 (CEST)
+From: noreply@dmarc-reports.xs4all.net
+To: postmaster@ueber.net
+Subject: Report Domain: ueber.net
+    Submitter: xs4all.nl
+    Report-ID: <xs4all.nl.1627349682.9725429@dmarc-reports.xs4all.net>
+Message-ID: <xs4all.nl.1627349682.9725429@dmarc-reports.xs4all.net>
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+    boundary="xs4all.nl-1627349683-9725429"
+Content-Transfer-Encoding: binary
+X-Auto-Response-Suppress: OOF
+Precedence: bulk
+Date: Tue, 27 Jul 2021 02:49:45 +0200 (CEST)
+X-CMAE-Envelope: MS4xfMiAcZo7QL98IFLYtwhtR/AR1Vv+/e692sq/8sI6BHh85YN/XGYMNfsrnkF360hpvXsEsV6huvYpvZqSnT0u9tdn3Lw5M2txNdoRZ/vgD3lFvftT9p9S
+ cgupm6nZPfFN6EH62IUPbwfPw1FXKU4rz7i2V1mSPFIvo3+662WrPzRiikY12ZDQEehFa7XYCNZzXyH5DuSu5l+ruL55xHhWb/v0Wm1BJyl0vol09HQRJ/31
+ wBnGhJF0ITbk7SJJst8UiA==
+
+--xs4all.nl-1627349683-9725429
+Content-Disposition: inline
+Content-Transfer-Encoding: 8bit
+Content-Type: text/plain; charset="UTF-8"
+
+This is a DMARC (rfc7489) aggregate report for your domain.
+For more information, see https://dmarc.org/
+
+--xs4all.nl-1627349683-9725429
+Content-Type: application/gzip;
+    name="xs4all.nl!ueber.net!1627257600!1627343999!9725429.xml.gz"
+Content-Disposition: attachment;
+    filename="xs4all.nl!ueber.net!1627257600!1627343999!9725429.xml.gz"
+Content-Transfer-Encoding: base64
+
+H4sIAClY/2AA/42UTXLjIBCF9zmFy/tIkfwXTRGSVU4ws1Zh1LIZI1AB8ji3nyaApNgpV1aG102/
+7g8s8nrp5OIMxgqtXpZF9rRcgOK6Eerwsvzz+/3xebl4pQ+kBWj2jJ/ow2JBYj7FdJKnjQ8Y6LVx
+dQeONcwxr6GqzaFWrAN6sWsmZaYkyUctpEDHhKRKYwH58dZ0zPDHUMxm6RQ4koe8eObiDKu5Vo5x
+VwvVauqjTv9iTSfUvSq3J0PJ2L9oplazYlvuVutq+1xm1a7crMvqTuWpQCiIFKA2TB3ioCjt4SAQ
+HVYtN7vtExIMSoqDamjwXFVVhc2qVCz/Wm10m+MmvZaCf9T9sJfCHmFsRCMbRQfYgwmtRiWEWXMS
+HTUkD4so2r791PxvkHpq4C9wPN5HxU6STVrPHS38ZH4RJERckDyARv2bJhE+1yb1a/S/kYjVg+FQ
+i56ut1lRZatNVpRr9Bv1lMn1oJw3CoskRzs4MzkgwiYFPBdhe22F8y9YaQXIZabM8jyWnlmLCSOh
+CKCNgRHTbMQrT7yzNBgRDSgnWoH/n9nln0HqHurW6G5+W18DKf0IrAFzkzyXo+2NGWGDO9YG7CDd
+5H812/1XE8YHiZevDT1pI5hCXwSRtCktGEVQcTOymruSGcUfdsCRC+38tGj9ufmh7/Su82saPjk8
+R3y147fvPz/sTtUvBQAA
+
+--xs4all.nl-1627349683-9725429--

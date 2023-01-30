@@ -1,0 +1,49 @@
+Return-Path: <noreply@dmarc.yahoo.com>
+X-Original-To: postmaster@ueber.net
+Delivered-To: postmaster@ueber.net
+Received-SPF: None (no SPF record) identity=mailfrom; client-ip=66.163.187.193; helo=sonic332-12.consmr.mail.ne1.yahoo.com; envelope-from=noreply@dmarc.yahoo.com; receiver=postmaster@ueber.net 
+Authentication-Results: koriander.ueber.net;
+	dkim=pass (2048-bit key; unprotected) header.d=yahoo.com header.i=@yahoo.com header.b=Nxc1Fcfb;
+	dkim-atps=neutral
+Received: from sonic332-12.consmr.mail.ne1.yahoo.com (sonic332-12.consmr.mail.ne1.yahoo.com [66.163.187.193])
+	by koriander.ueber.net (Postfix) with ESMTP id 6DD60DEB22
+	for <postmaster@ueber.net>; Tue,  4 Jun 2019 09:21:22 +0200 (CEST)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=yahoo.com; s=s2048; t=1559632880; bh=8HhQoiZcSB3sM2GICQqvsrqY1AEZaR+0yDu3XRsL6e8=; h=Date:From:To:Subject:From:Subject; b=Nxc1FcfbwWSpGsiHRGIsO49RynyYxB8SkXdwstMn1P1IFfieZoghJbEz+FHILXKTHMrOa7xfpwtSvKUzTuYhntPOKdHFiso32IQg1Y1P0bSEq4HI88YOLO2EWplojx+B/Pvu8LUa6MoMeuSEQEqN8VoGrTFsOsjDNisYRdC9wmAmm6EcLAJsZtlMkx2i6pM0bdT+esEgX1GN5XGBR+JLiDBUZuYZ3MEsF31TWtBgt+PblMBZAgt6dUFNLYkKfJCICUHFZdxAEk131bB3/AVKUUVEYbWYgZ7vJ9rfQdAzsbHpqW5dwQ4n7aqMHWnXn3L6T+hF2bRj/Ykb0JmcHMt/XA==
+Received: from sonic.gate.mail.ne1.yahoo.com by sonic332.consmr.mail.ne1.yahoo.com with HTTP; Tue, 4 Jun 2019 07:21:20 +0000
+MIME-Version: 1.0
+Content-Transfer-Encoding: binary
+Content-Type: multipart/mixed; boundary="_----------=_1559632880408154728"
+X-Mailer: MIME::Lite 3.028 (F2.82; A2.11; B3.13; Q3.13)
+Date: Tue, 4 Jun 2019 00:21:20 -0700
+From: noreply@dmarc.yahoo.com
+To: postmaster@ueber.net	
+Subject: Report Domain: ueber.net Submitter: yahoo.com Report-ID: <1559613526.307161>
+Message-Id: <1559632880.96079@dmarc.yahoo.com>
+
+This is a multi-part message in MIME format.
+
+--_----------=_1559632880408154728
+Content-Disposition: inline
+Content-Length: 37
+Content-Transfer-Encoding: binary
+Content-Type: text/plain
+
+This is an aggregate report from Oath
+--_----------=_1559632880408154728
+Content-Disposition: attachment; filename="yahoo.com!ueber.net!1559520000!1559606399.xml.gz"
+Content-Transfer-Encoding: base64
+Content-Type: application/gzip; name="yahoo.com!ueber.net!1559520000!1559606399.xml.gz"
+
+H4sIAO8b9lwAA61TS1LrMBBcP05hOIAUJ9ivUiUEW47AyqXIk0RgfUqS+dye
+cazIIlDFBm8s9/T0TI/G7P5dD9Ur+KCsubupyermnv+7YnuAfifkC56rinlw
+1sdOQxS9iOIEImz9oTNCA38SR2uvq0cjCaMZTSzQQg3c2RC1CBH8Q6+Fl+Rj
+yiHSakZnRqKnWqrnddNs23rTrFuyWf2v25rRJZjY2A50XpjDuRxiOzgoc8pu
+1it8GJ2RTACTxFftZrutsAGTBemFYq75xTxzdlDyo3PjblDhCEs/Fr0YPsIO
+PDEQUW9GUlz0L0pzz+h8OKPB7U/g9E6Y4x6eQaKCy5CMvJ78TIe5uR/7wBlK
+63NP3r4t3oMdvYROOX7bknpLNg2p17eMLnimSjsaLMjofMh4qgmvYhhxWH2O
+TP5VwJtWEbeJG2sA/RdISZzsOxECMpZJzC3iEObIMo7C62VdvKFskKkeTFR7
+hQu9ZB5B9OC7vbe6vJkSPkt9z2dijMfOQxiHWGheNv3LxafVnkSSt/Sx2Pui
+yErrfyJfrBb9Zmnip5VhtPj3PwHaJxO1HwQAAA==
+
+--_----------=_1559632880408154728--
+

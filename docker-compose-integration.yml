@@ -1,0 +1,95 @@
+version: '3.7'
+services:
+  moxmail:
+    # todo: understand why hostname and/or domainname don't have any influence on the reverse dns set up by docker, requiring us to use our own /etc/resolv.conf...
+    hostname: moxmail1.mox1.example
+    domainname: mox1.example
+    build:
+      dockerfile: Dockerfile.moxmail
+      context: testdata/integration
+    user: ${MOX_UID}:${MOX_GID}
+    volumes:
+      - ./.go:/.go
+      - ./testdata/integration/resolv.conf:/etc/resolv.conf
+      - .:/mox
+    environment:
+      GOCACHE: /.go/.cache/go-build
+    command: ["make", "test-postfix"]
+    healthcheck:
+      test: netstat -nlt | grep ':25 '
+      interval: 1s
+      timeout: 1s
+      retries: 10
+    depends_on:
+      dns:
+        condition: service_healthy
+      postfixmail:
+        condition: service_healthy
+    networks:
+      mailnet1:
+        ipv4_address: 172.28.1.10
+      mailnet2:
+        ipv4_address: 172.28.2.10
+      mailnet3:
+        ipv4_address: 172.28.3.10
+
+  postfixmail:
+    hostname: postfixmail.postfix.example
+    domainname: postfix.example
+    build:
+      dockerfile: Dockerfile.postfix
+      context: testdata/integration
+    volumes:
+      # todo: figure out how to mount files with a uid that the process in the container can read...
+      - ./testdata/integration/resolv.conf:/etc/resolv.conf
+    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; (echo 'maillog_file = /dev/stdout'; echo 'mydestination = $$myhostname, localhost.$$mydomain, localhost, $$mydomain') >>/etc/postfix/main.cf; echo 'root: moxtest1@mox1.example' >>/etc/postfix/aliases; newaliases; postfix start-fg"]
+    healthcheck:
+      test: netstat -nlt | grep ':25 '
+      interval: 1s
+      timeout: 1s
+      retries: 10
+    depends_on:
+      dns:
+        condition: service_healthy
+    networks:
+      mailnet1:
+        ipv4_address: 172.28.1.20
+
+  dns:
+    hostname: dns.example
+    build:
+      dockerfile: Dockerfile.dns
+      # todo: figure out how to build from dockerfile with empty context without creating empty dirs in file system.
+      context: testdata/integration
+    volumes:
+      - ./testdata/integration/resolv.conf:/etc/resolv.conf
+      - ./testdata/integration:/integration
+    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; install -m 640 -o unbound /integration/unbound.conf /integration/*.zone /etc/unbound/; unbound -d -p -v"]
+    healthcheck:
+      test: netstat -nlu | grep '172.28.1.30:53 '
+      interval: 1s
+      timeout: 1s
+      retries: 10
+    networks:
+      mailnet1:
+        ipv4_address: 172.28.1.30
+
+networks:
+  mailnet1:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.28.1.0/24"
+  mailnet2:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.28.2.0/24"
+  mailnet3:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.28.3.0/24"

@@ -1,0 +1,3 @@
+Known compatibility issues.
+
+- Autodiscovery with Microsoft Outlook (on macOS): Outlook appears to use a Microsoft service to fetch the configuration, instead of connecting directly. Their service makes an invalid TLS handshake (an SNI name with a trailing dot), which is rejected by the Go crypto/tls library. (2023-01)

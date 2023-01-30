@@ -1,0 +1,72 @@
+Return-Path: <3fkskYxoKAMUyz2p0w9-3x40-4w3-2p0z24tyrrzzrwp.nzx@smtp-tls-reporting.bounces.google.com>
+Received: from mail-qk1-x746.google.com ([2607:f8b0:4864:20::746]) by
+	komijn.test.xmox.nl ([2a02:2770::21a:4aff:feba:bde0]) with ESMTPS for
+	tlsrpt@test.xmox.nl; 16 Sep 2022 12:10 +0200
+Authentication-Results: komijn.test.xmox.nl; iprev=pass
+	policy.iprev=2607:f8b0:4864:20::746; dkim=pass header.d=google.com
+	header.s=20210112 header.a=rsa-sha256 header.i=@google.com; spf=pass
+	smtp.mailfrom=smtp-tls-reporting.bounces.google.com; dmarc=pass
+	header.from=google.com
+Received-SPF: pass client-ip="2607:f8b0:4864:20::746";
+	envelope-from="3fkskYxoKAMUyz2p0w9-3x40-4w3-2p0z24tyrrzzrwp.nzx@smtp-tls-reporting.bounces.google.com";
+	helo=mail-qk1-x746.google.com; mechanism="include:_netblocks2.google.com"
+	received=komijn.test.xmox.nl; identity=mailfrom
+Received: by mail-qk1-x746.google.com with SMTP id bm38-20020a05620a19a600b006ce9b8892b8so5568741qkb.17
+        for <tlsrpt@test.xmox.nl>; Fri, 16 Sep 2022 03:10:07 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=google.com; s=20210112;
+        h=to:from:subject:message-id:tls-report-submitter:tls-report-domain
+         :date:mime-version:from:to:cc:subject:date;
+        bh=8MGmH0fAJ1b33g562Ddkv2Hq5jFUkVOClPMnl04s+HQ=;
+        b=b9JMi7erZLJ3Gbf6D/YdpAu9VrZEkvIR32/WH2BjZBiXvBzj1+A1zAoGUJ3gKSjQKb
+         OZa6TkgceQohtn7ZwSwnBk3uLHBjoG7aUWtrSsSd5WwNZQqKqYaqJqDyfFqxIkMyhv/P
+         aBjbsGnpAGIBGkcumd0CNspCAvCo1UkMWi64ARXxIbJBy6PQHLk/wqW5fj2WBR+b3Z1X
+         7RT2lB2E+u95SUGkpJ6HuflETtISh1dmhTHRt3usJrfz8Y/Fp6NkTmpLMRMP4B/9Jybd
+         xapPfJBE2ENYm6LSUhnK/xJ4835YQhBDyP5Jb4Y9yZuycSkDpJQKCqBCMetLl7CHskgQ
+         FVmQ==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20210112;
+        h=to:from:subject:message-id:tls-report-submitter:tls-report-domain
+         :date:mime-version:x-gm-message-state:from:to:cc:subject:date;
+        bh=8MGmH0fAJ1b33g562Ddkv2Hq5jFUkVOClPMnl04s+HQ=;
+        b=c4Y72iT6Eq/VIUJnhYuRNrHhCJ6h711sgzIfd/tO5MipYCKF5Hpo2eFTiQx1rM+nOe
+         Pk3fnqf9CLz5K8uFTa+FNzMq894ukyo8WsoE+/H0ur33EK57ss9vP759BcbRvgDDWfWm
+         mvQcyBFvf79aXoMZ9Z1R5dTMSAvitinLLVfE/qFq3ZfrjvF2jqTQfFVSajAJykIk5LCd
+         Ku2FBlxmbQ3NAWFX5EDPA/Y7DCVw3007AkiKDoXMR3OTwdGRePPDrql8kNuQt9tgvbqk
+         Y/zcYWze5MGsJL2OcqQZgJt6Dpus982xgDWokMRB50MHKSLwuHMw1mef+49FBN6lMjOi
+         2ZJQ==
+X-Gm-Message-State: ACrzQf3PRMcHalxi9ZvtjHm55Edve7I9fgun0B/f8Bdw76UM6qcs1RiY
+	hTaTyRhw5Lr6TCdh2mdEzv0bNvbGb4ttxaQ36eNlXoqzzw==
+X-Google-Smtp-Source: AMsMyM6hmC0lYoFYv1MOeWf40QkJqOSOIW99MeFlaN2PWjdCDQ/BFkyJqI3G+9jsCyo610jQh86M7yNsfMFgBr97z0TdprNw6ZI4iNi9RiA=
+MIME-Version: 1.0
+X-Received: by 2002:a05:620a:4488:b0:6ce:8a74:8a31 with SMTP id
+ x8-20020a05620a448800b006ce8a748a31mr3221772qkp.468.1663323006597; Fri, 16
+ Sep 2022 03:10:06 -0700 (PDT)
+Date: Fri, 16 Sep 2022 03:10:06 -0700
+TLS-Report-Domain: test.xmox.nl
+TLS-Report-Submitter: google.com
+Message-ID: <000000000000f47cc505e8c8905c@google.com>
+Subject: Report Domain: test.xmox.nl Submitter: google.com Report-ID: <2022.09.15T00.00.00Z+test.xmox.nl@google.com>
+From: noreply-smtp-tls-reporting@google.com
+To: tlsrpt@test.xmox.nl
+Content-Type: multipart/report; boundary="000000000000f47cb005e8c8905b"; report-type=tlsrpt
+
+--000000000000f47cb005e8c8905b
+Content-Type: text/plain; charset="UTF-8"; format=flowed; delsp=yes
+
+This is an aggregate TLS report from google.com
+
+--000000000000f47cb005e8c8905b
+Content-Type: application/tlsrpt+gzip; 
+	name="google.com!test.xmox.nl!1663200000!1663286399!001.json.gz"
+Content-Disposition: attachment; 
+	filename="google.com!test.xmox.nl!1663200000!1663286399!001.json.gz"
+Content-Transfer-Encoding: base64
+
+H4sIAAAAAAAAAHVRwWrDMAz9leBzHdx0HatPu42d21NHKcZxM3exFSylpCv598npNlhZQWDp6fnp
+Wb4ISI2J/tOQhyijCU5o8QLQtK54jbYUM1EbcjKZ2HDrIpBMIpkx8hO5UlUl1UrOlxul9BRbvuVi
+fYdVLfRyxbEV40xYiGQsSR8PwDQM1ElqUSbXQSIfm+dmMlNaCKx6haWv7wzek0MqhwBDGVvmd9B6
+6x0K/Xa5Fuf8iGsm6dxlb0j4Qz1LpMRTmS9OLiEvRRfrzfo0Z0aA2unCsdNkXa7NsDcNQ0+PD0pl
+YNDFBwR/jOUfH7tf9RqC8ZFn3vgMg3wHpDz2XwHeFPYhmDTZJyDTSuytdYiHnlM+8/9Z6COLLGbf
+lIPxbZ/cbV+N4278AvzNJHb7AQAA
+--000000000000f47cb005e8c8905b--

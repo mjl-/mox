@@ -1,0 +1,37 @@
+Return-Path: <mjl+thunderbird@c.mox>
+Received: from x1.mox.example ([10.1.1.1]) by x1.a.mox ([10.1.1.1])
+	with ESMTP for mjl@a.mox; 23 Jan 2022 21:02 +0100
+Authentication-Results: x1.a.mox; iprev=fail policy.iprev=10.1.1.1;
+	dkim=pass header.d=c.mox header.s=2021 header.a=rsa-sha256
+	header.i=mjl+thunderbird@c.mox; spf=none smtp.mailfrom=c.mox; dmarc=pass
+	header.from=c.mox
+Received-SPF: none client-ip=10.1.1.1;
+	envelope-from="mjl+thunderbird@c.mox"; helo=x1.mox.example;
+	problem="no\ spf\ txt\ record:\ no\ txt\ record"; received=x1.a.mox;
+	identity=mailfrom
+Received: from x1.mox.example by x1.mox.example ([10.1.1.1]) with
+	ESMTP for mjl@a.mox; 23 Jan 2022 20:39 +0100
+Authentication-Results: x1.mox.example; auth=pass
+	smtp.mailfrom=mjl+thunderbird@c.mox
+DKIM-Signature: v=1; a=rsa-sha256; d=c.mox; s=2021; i=mjl+thunderbird@c.mox;
+	t=1642966793; h=From:To:Cc:Bcc:Reply-To:References:In-Reply-To:Subject:Date:
+	Message-ID:Content-Type:From:To:Subject:Date:Message-ID:Content-Type;
+	bh=jhmPv2Vh8l0Ezw0V1P64SjmGjgfM2tek6qiEL0zehQc=; b=h4NspINb2TA+VkSr+Try4Rz24W
+	hor/vjkfX4EyDg6nb0mB4RUlgQiwPrqnjJLLkp9DnUhSuJEwGjMUdRG5160K04c4/KDkzCctj6Bot
+	IrOCOJ3yyC4z5wUAdivn4OOZmjq9d5eBEBvbiXFGVesZODzAGLZGAiGuSey+8ap18i1FaiRZeMB7e
+	X5tjAMMlxIGU/1eN6xAchpi8/Pww7VBU13rhq3ge4cFo1rhftF8wHBNSehlBqvA6/WYEAMD/4DD7S
+	owenI72sQapxo3Yc2EdZ2f/ZYJgKgR5i6WmE6E/sTVZzDJ2eOYIUHwF1bYBeLNM7ITfAAoPotn0KB
+	hZpchIQw==
+Message-ID: <405af0b6-71ce-a2bd-ec57-7e320bd0e6e0@c.mox>
+Date: Sun, 23 Jan 2022 20:39:53 +0100
+MIME-Version: 1.0
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:91.0) Gecko/20100101
+ Thunderbird/91.4.0
+Content-Language: nl
+To: mjl@a.mox
+From: thunderbird c <mjl+thunderbird@c.mox>
+Subject: test van c
+Content-Type: text/plain; charset=UTF-8; format=flowed
+Content-Transfer-Encoding: 7bit
+
+test van c

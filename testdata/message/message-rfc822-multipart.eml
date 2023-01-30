@@ -1,0 +1,57 @@
+Content-Type: multipart/report; boundary="000000000000fa38d70590edfe62"; report-type=delivery-status
+
+--000000000000fa38d70590edfe62
+Content-Type: multipart/related; boundary="000000000000fa39ba0590edfe6a"
+
+--000000000000fa39ba0590edfe6a
+Content-Type: multipart/alternative; boundary="000000000000fa39c00590edfe6b"
+
+--000000000000fa39c00590edfe6b
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+
+error
+
+--000000000000fa39c00590edfe6b
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+
+error
+
+--000000000000fa39c00590edfe6b--
+--000000000000fa39ba0590edfe6a
+Content-Type: image/png; name="icon.png"
+Content-Disposition: attachment; filename="icon.png"
+Content-Transfer-Encoding: base64
+Content-ID: <icon.png>
+
+--000000000000fa39ba0590edfe6a--
+--000000000000fa38d70590edfe62
+Content-Type: message/delivery-status
+
+...
+
+--000000000000fa38d70590edfe62
+Content-Type: message/rfc822
+
+Content-Type: multipart/mixed; boundary="000000000000f67d600590edfee0"
+
+--000000000000f67d600590edfee0
+Content-Type: multipart/alternative; boundary="000000000000f67d540590edfede"
+
+--000000000000f67d540590edfede
+Content-Type: text/plain; charset="UTF-8"; format=flowed; delsp=yes
+Content-Transfer-Encoding: base64
+
+
+--000000000000f67d540590edfede
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+...
+----- Message truncated -----
+--000000000000f67d540590edfede--
+--000000000000f67d600590edfee0--
+--000000000000fa38d70590edfe62--

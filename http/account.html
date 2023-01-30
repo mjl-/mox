@@ -1,0 +1,214 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Mox Account</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<style>
+body, html { padding: 1em; font-size: 16px; }
+* { font-size: inherit; font-family: ubuntu, lato, sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+h1, h2, h3, h4 { margin-bottom: 1ex; }
+h1 { font-size: 1.2rem; }
+h2 { font-size: 1.1rem; }
+h3, h4 { font-size: 1rem; }
+.literal { background-color: #fdfdfd; padding: .5em 1em; border: 1px solid #eee; border-radius: 4px; white-space: pre-wrap; font-family: mono; font-size: 15px; tab-size: 4; }
+table td, table th { padding: .2em .5em; }
+table > tbody > tr:nth-child(odd) { background-color: #f8f8f8; }
+p { margin-bottom: 1em; max-width: 50em; }
+[title] { text-decoration: underline; text-decoration-style: dotted; }
+fieldset { border: 0; }
+#page { opacity: 1; animation: fadein 0.15s ease-in; }
+#page.loading { opacity: 0.1; animation: fadeout 1s ease-out; }
+@keyframes fadein { 0% { opacity: 0 } 100% { opacity: 1 } }
+@keyframes fadeout { 0% { opacity: 1 } 100% { opacity: 0.1 } }
+		</style>
+		<script src="api/sherpa.js"></script>
+	</head>
+	<body>
+		<div id="page">Loading...</div>
+
+		<script>
+const [dom, style, attr, prop] = (function() {
+function _domKids(e, ...kl) {
+	kl.forEach(k => {
+		if (typeof k === 'string' || k instanceof String) {
+			e.appendChild(document.createTextNode(k))
+		} else if (k instanceof Node) {
+			e.appendChild(k)
+		} else if (Array.isArray(k)) {
+			_domKids(e, ...k)
+		} else if (typeof k === 'function') {
+			if (!k.name) {
+				throw new Error('function without name', k)
+			}
+			e.addEventListener(k.name, k)
+		} else if (typeof k === 'object' && k !== null) {
+			if (k.root) {
+				e.appendChild(k.root)
+				return
+			}
+			for (const key in k) {
+				const value = k[key]
+				if (key === '_prop') {
+					for (const prop in value) {
+						e[prop] = value[prop]
+					}
+				} else if (key === '_attr') {
+					for (const prop in value) {
+						e.setAttribute(prop, value[prop])
+					}
+				} else if (key === '_listen') {
+					e.addEventListener(...value)
+				} else {
+					e.style[key] = value
+				}
+			}
+		} else {
+			console.log('bad kid', k)
+			throw new Error('bad kid')
+		}
+	})
+}
+const _dom = (kind, ...kl) => {
+	const t = kind.split('.')
+	const e = document.createElement(t[0])
+	for (let i = 1; i < t.length; i++) {
+		e.classList.add(t[i])
+	}
+	_domKids(e, kl)
+	return e
+}
+_dom._kids = function(e, ...kl) {
+	while(e.firstChild) {
+		e.removeChild(e.firstChild)
+	}
+	_domKids(e, kl)
+}
+const dom = new Proxy(_dom, {
+	get: function(dom, prop) {
+		if (prop in dom) {
+			return dom[prop]
+		}
+		const fn = (...kl) => _dom(prop, kl)
+		dom[prop] = fn
+		return fn
+	},
+	apply: function(target, that, args) {
+		if (args.length === 1 && typeof args[0] === 'object' && !Array.isArray(args[0])) {
+			return {_attr: args[0]}
+		}
+		return _dom(...args)
+	},
+})
+const style = x => x
+const attr = x => { return {_attr: x} }
+const prop = x => { return {_prop: x} }
+return [dom, style, attr, prop]
+})()
+
+const tr = dom.tr
+const td = dom.td
+const th = dom.th
+
+const crumblink = (text, link) => dom.a(text, attr({href: link}))
+const crumbs = (...l) => [dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])), dom.br()]
+
+const footer = dom.div(
+	style({marginTop: '6ex', opacity: 0.75}),
+	dom.a(attr({href: 'https://github.com/mjl-/mox'}), 'mox'),
+	' ',
+	api._sherpa.version,
+)
+
+const index = async () => {
+	let form, fieldset, password1, password2
+
+	const blockStyle = style({
+		display: 'block',
+		marginBottom: '1ex',
+	})
+
+	const page = document.getElementById('page')
+	dom._kids(page,
+		crumbs('Mox Account'),
+		dom.h2('Change password'),
+		form=dom.form(
+			fieldset=dom.fieldset(
+				dom.label(
+					style({display: 'inline-block'}),
+					'New password',
+					dom.br(),
+					password1=dom.input(attr({type: 'password', required: ''})),
+				),
+				' ',
+				dom.label(
+					style({display: 'inline-block'}),
+					'New password repeat',
+					dom.br(),
+					password2=dom.input(attr({type: 'password', required: ''})),
+				),
+				' ',
+				dom.button('Change password'),
+			),
+			async function submit(e) {
+				e.stopPropagation()
+				e.preventDefault()
+				if (!password1.value || password1.value !== password2.value) {
+					window.alert('Passwords do not match.')
+					return
+				}
+				fieldset.disabled = true
+				try {
+					await api.SetPassword(password1.value)
+					window.alert('Password has been changed.')
+					form.reset()
+				} catch (err) {
+					console.log('error', err)
+					window.alert('Error: ' + err.message)
+				} finally {
+					fieldset.disabled = false
+				}
+			},
+		),
+		footer,
+	)
+}
+
+const init = async () => {
+	let curhash
+
+	const page = document.getElementById('page')
+
+	const hashChange = async () => {
+		if (curhash === window.location.hash) {
+			return
+		}
+		let h = window.location.hash
+		if (h !== '' && h.substring(0, 1) == '#') {
+			h = h.substring(1)
+		}
+		page.classList.add('loading')
+		try {
+			if (h == '') {
+				await index()
+			} else {
+				dom._kids(page, 'page not found')
+			}
+		} catch (err) {
+			console.log('error', err)
+			window.alert('Error: ' + err.message)
+			window.location.hash = curhash
+			curhash = window.location.hash
+			return
+		}
+		curhash = window.location.hash
+		page.classList.remove('loading')
+	}
+	window.addEventListener('hashchange', hashChange)
+	hashChange()
+}
+
+window.addEventListener('load', init)
+		</script>
+	</body>
+</html>
