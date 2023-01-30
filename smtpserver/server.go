@@ -21,6 +21,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
+	"github.com/mjl-/bstore"
+
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"
@@ -36,6 +38,7 @@ import (
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/queue"
+	"github.com/mjl-/mox/scram"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/spf"
 	"github.com/mjl-/mox/store"
@@ -659,10 +662,9 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 		c.bwritelinef("250-STARTTLS")
 	}
 	if c.submission {
-		// todo future: implement SCRAM-SHA-256.
 		// ../rfc/4954:123
 		if c.tls || !c.requireTLSForAuth {
-			c.bwritelinef("250-AUTH PLAIN")
+			c.bwritelinef("250-AUTH PLAIN SCRAM-SHA-256")
 		} else {
 			c.bwritelinef("250-AUTH ")
 		}
@@ -757,16 +759,8 @@ func (c *conn) cmdAuth(p *parser) {
 	// ../rfc/4954:699
 	p.xspace()
 	mech := p.xsaslMech()
-	switch mech {
-	case "PLAIN":
-		authVariant = "plain"
 
-		// ../rfc/4954:343
-		// ../rfc/4954:326
-		if !c.tls && c.requireTLSForAuth {
-			xsmtpUserErrorf(smtp.C538EncReqForAuth, smtp.SePol7EncReqForAuth11, "authentication requires tls")
-		}
-
+	xreadInitial := func() []byte {
 		var auth string
 		if p.empty() {
 			c.writelinef("%d ", smtp.C334ContinueAuth) // ../rfc/4954:205
@@ -793,6 +787,34 @@ func (c *conn) cmdAuth(p *parser) {
 			// ../rfc/4954:235
 			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5Syntax2, "invalid base64: %s", err)
 		}
+		return buf
+	}
+
+	xreadContinuation := func() []byte {
+		line := c.readline()
+		if line == "*" {
+			authResult = "aborted"
+			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5Other0, "authentication aborted")
+		}
+		buf, err := base64.StdEncoding.DecodeString(line)
+		if err != nil {
+			// ../rfc/4954:235
+			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5Syntax2, "invalid base64: %s", err)
+		}
+		return buf
+	}
+
+	switch mech {
+	case "PLAIN":
+		authVariant = "plain"
+
+		// ../rfc/4954:343
+		// ../rfc/4954:326
+		if !c.tls && c.requireTLSForAuth {
+			xsmtpUserErrorf(smtp.C538EncReqForAuth, smtp.SePol7EncReqForAuth11, "authentication requires tls")
+		}
+
+		buf := xreadInitial()
 		plain := bytes.Split(buf, []byte{0})
 		if len(plain) != 3 {
 			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5BadParams4, "auth data should have 3 nul-separated tokens, got %d", len(plain))
@@ -816,6 +838,76 @@ func (c *conn) cmdAuth(p *parser) {
 		c.authFailed = 0
 		c.account = acc
 		c.username = authc
+		// ../rfc/4954:276
+		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
+
+	case "SCRAM-SHA-256":
+		// todo: improve handling of errors during scram. e.g. invalid parameters. should we abort the imap command, or continue until the end and respond with a scram-level error?
+		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
+
+		authVariant = "scram-sha-256"
+
+		c0 := xreadInitial()
+		ss, err := scram.NewServer(c0)
+		xcheckf(err, "starting scram")
+		c.log.Info("scram auth", mlog.Field("authentication", ss.Authentication))
+		acc, _, err := store.OpenEmail(ss.Authentication)
+		if err != nil {
+			// todo: we could continue scram with a generated salt, deterministically generated
+			// from the username. that way we don't have to store anything but attackers cannot
+			// learn if an account exists. same for absent scram saltedpassword below.
+			xsmtpUserErrorf(smtp.C454TempAuthFail, smtp.SeSys3Other0, "scram not possible")
+		}
+		defer func() {
+			if acc != nil {
+				err := acc.Close()
+				if err != nil {
+					c.log.Errorx("closing account", err)
+				}
+			}
+		}()
+		if ss.Authorization != "" && ss.Authorization != ss.Authentication {
+			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "authentication with authorization for different user not supported")
+		}
+		var password store.Password
+		acc.WithRLock(func() {
+			err := acc.DB.Read(func(tx *bstore.Tx) error {
+				password, err = bstore.QueryTx[store.Password](tx).Get()
+				xsc := password.SCRAMSHA256
+				if err == bstore.ErrAbsent || err == nil && (len(xsc.Salt) == 0 || xsc.Iterations == 0 || len(xsc.SaltedPassword) == 0) {
+					xsmtpUserErrorf(smtp.C454TempAuthFail, smtp.SeSys3Other0, "scram not possible")
+				}
+				xcheckf(err, "fetching credentials")
+				return err
+			})
+			xcheckf(err, "read tx")
+		})
+		s1, err := ss.ServerFirst(password.SCRAMSHA256.Iterations, password.SCRAMSHA256.Salt)
+		xcheckf(err, "scram first server step")
+		c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte(s1))) // ../rfc/4954:187
+		c2 := xreadContinuation()
+		s3, err := ss.Finish(c2, password.SCRAMSHA256.SaltedPassword)
+		if len(s3) > 0 {
+			c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte(s3))) // ../rfc/4954:187
+		}
+		if err != nil {
+			c.readline() // Should be "*" for cancellation.
+			if errors.Is(err, scram.ErrInvalidProof) {
+				authResult = "badcreds"
+				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad credentials")
+			}
+			xcheckf(err, "server final")
+		}
+
+		// Client must still respond, but there is nothing to say. See ../rfc/9051:6221
+		// The message should be empty. todo: should we require it is empty?
+		xreadContinuation()
+
+		authResult = "ok"
+		c.authFailed = 0
+		c.account = acc
+		acc = nil // Cancel cleanup.
+		c.username = ss.Authentication
 		// ../rfc/4954:276
 		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
 

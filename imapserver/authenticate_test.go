@@ -90,6 +90,11 @@ func TestAuthenticateSCRAMSHA256(t *testing.T) {
 		} else if err == nil || !errors.Is(err, serverFinalError) {
 			t.Fatalf("server final, got err %#v, expected %#v", err, serverFinalError)
 		}
+		if serverFinalError != nil {
+			tc.writelinef("*")
+		} else {
+			tc.writelinef("")
+		}
 		_, result, err := tc.client.Response()
 		tc.check(err, "read response")
 		if string(result.Status) != strings.ToUpper(status) {

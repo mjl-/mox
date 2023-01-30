@@ -32,9 +32,9 @@ var (
 	C504ParamNotImpl           = 504
 	C521HostNoMail             = 521 // ../rfc/7504:179
 	C530SecurityRequired       = 530 // ../rfc/3207:148 ../rfc/4954:623
-	C538EncReqForAuth          = 538 // ../rfc/4954:630
 	C534AuthMechWeak           = 534 // ../rfc/4954:593
 	C535AuthBadCreds           = 535 // ../rfc/4954:600
+	C538EncReqForAuth          = 538 // ../rfc/4954:630
 	C550MailboxUnavail         = 550
 	C551UserNotLocal           = 551
 	C552MailboxFull            = 552

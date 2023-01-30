@@ -1370,6 +1370,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 
 	case "SCRAM-SHA-256":
 		// todo: improve handling of errors during scram. e.g. invalid parameters. should we abort the imap command, or continue until the end and respond with a scram-level error?
+		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
 
 		authVariant = "scram-sha-256"
 
@@ -1409,9 +1410,6 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xcheckf(err, "read tx")
 		})
 		s1, err := ss.ServerFirst(password.SCRAMSHA256.Iterations, password.SCRAMSHA256.Salt)
-		if err != nil {
-			xsyntaxErrorf("server first: %w", err)
-		}
 		xcheckf(err, "scram first server step")
 		c.writelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(s1)))
 		c2 := xreadContinuation()
@@ -1420,6 +1418,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			c.writelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(s3)))
 		}
 		if err != nil {
+			c.readline(false) // Should be "*" for cancellation.
 			if errors.Is(err, scram.ErrInvalidProof) {
 				authResult = "badcreds"
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
@@ -2779,7 +2778,7 @@ func (c *conn) linkOrCopyFile(dst, src string) error {
 		if df != nil {
 			err = os.Remove(df.Name())
 			c.xsanity(err, "removing unfinished dst file")
-			df.Close()
+			err = df.Close()
 			c.xsanity(err, "closing unfinished dst file")
 		}
 	}()

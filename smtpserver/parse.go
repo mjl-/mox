@@ -139,6 +139,21 @@ func (p *parser) takefn1(what string, fn func(c rune, i int) bool) string {
 	return p.remainder()
 }
 
+func (p *parser) takefn1case(what string, fn func(c rune, i int) bool) string {
+	if p.empty() {
+		p.xerrorf("need at least one char for %s", what)
+	}
+	for i, c := range p.orig[p.o:] {
+		if !fn(c, i) {
+			if i == 0 {
+				p.xerrorf("expected at least one char for %s", what)
+			}
+			return p.xtaken(i)
+		}
+	}
+	return p.remainder()
+}
+
 func (p *parser) takefn(fn func(c rune, i int) bool) string {
 	for i, c := range p.upper[p.o:] {
 		if !fn(c, i) {
@@ -413,7 +428,7 @@ func (p *parser) xnumber(maxDigits int) int64 {
 // sasl mechanism, for AUTH command.
 // ../rfc/4422:436
 func (p *parser) xsaslMech() string {
-	return p.takefn1("sasl-mech", func(c rune, i int) bool {
+	return p.takefn1case("sasl-mech", func(c rune, i int) bool {
 		return i < 20 && (c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_')
 	})
 }
