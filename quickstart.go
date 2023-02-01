@@ -360,7 +360,7 @@ autoconfig/autodiscover does not work, use the settings below.`)
 
 	fmt.Println("")
 	fmt.Println(`Configuration files have been written to config/mox.conf and
-config/domains.sc. You should review them. Then create the DNS records below.
+config/domains.conf. You should review them. Then create the DNS records below.
 You can also skip creating the DNS records and start mox immediately. The admin
 interface can show these same records, and has a page to check they have been
 configured correctly.`)
