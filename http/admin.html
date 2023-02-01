@@ -107,20 +107,18 @@ const prop = x => { return {_prop: x} }
 return [dom, style, attr, prop]
 })()
 
-const tr = dom.tr
-const td = dom.td
-const th = dom.th
-
 const green = '#1dea20'
 const yellow = '#ffe400'
 const red = '#ff7443'
+
+const link = (href, anchorOpt) => dom.a(attr({href: href, rel: 'noopener noreferrer'}), anchorOpt || href)
 
 const crumblink = (text, link) => dom.a(text, attr({href: link}))
 const crumbs = (...l) => [dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])), dom.br()]
 
 const footer = dom.div(
 	style({marginTop: '6ex', opacity: 0.75}),
-	dom.a(attr({href: 'https://github.com/mjl-/mox'}), 'mox'),
+	link('https://github.com/mjl-/mox', 'mox'),
 	' ',
 	api._sherpa.version,
 )
@@ -533,8 +531,8 @@ const domain = async (d) => {
 		dom.div('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password.'),
 		dom.table(
 			dom.thead(
-				tr(
-					th('Protocol'), th('Host'), th('Port'), th('Listener'), th('Note'),
+				dom.tr(
+					dom.th('Protocol'), dom.th('Host'), dom.th('Port'), dom.th('Listener'), dom.th('Note'),
 				),
 			),
 			dom.tbody(
@@ -631,7 +629,7 @@ const domain = async (d) => {
 		dom.br(),
 		dom.h2('External checks'),
 		dom.ul(
-			dom.li(dom.a('Check configuration at internet.nl', attr({href: 'https://internet.nl/mail/'+dnsdomain.ASCII+'/', rel: 'noopener noreferrer'}))),
+			dom.li(link('https://internet.nl/mail/'+dnsdomain.ASCII+'/', 'Check configuration at internet.nl')),
 		),
 		dom.br(),
 		dom.h2('Danger'),
@@ -726,9 +724,9 @@ const domainDNSCheck = async (d) => {
 
 	const detailsMX = empty(checks.MX.Records) ? [] : [
 		dom.table(
-			tr(th('Preference'), th('Host'), th('IPs')),
+			dom.tr(dom.th('Preference'), dom.th('Host'), dom.th('IPs')),
 			checks.MX.Records.map(mx =>
-				tr(td(''+mx.Pref), td(mx.Host), td((mx.IPs || []).join(', '))),
+				dom.tr(dom.td(''+mx.Pref), dom.td(mx.Host), dom.td((mx.IPs || []).join(', '))),
 			)
 		),
 	]
@@ -739,9 +737,9 @@ const domainDNSCheck = async (d) => {
 	]
 	const detailsDKIM = empty(checks.DKIM.Records) ? [] : [
 		dom.table(
-			tr(th('Selector'), th('TXT record')),
+			dom.tr(dom.th('Selector'), dom.th('TXT record')),
 			checks.DKIM.Records.map(rec =>
-				tr(td(rec.Selector), td(rec.TXT)),
+				dom.tr(dom.td(rec.Selector), dom.td(rec.TXT)),
 			),
 		)
 	]
@@ -759,13 +757,13 @@ const domainDNSCheck = async (d) => {
 	]
 	const detailsSRVConf = !Object.entries(checks.SRVConf.SRVs) ? [] : [
 		dom.table(
-			tr(th('Service'), th('Priority'), th('Weight'), th('Port'), th('Host')),
+			dom.tr(dom.th('Service'), dom.th('Priority'), dom.th('Weight'), dom.th('Port'), dom.th('Host')),
 			Object.entries(checks.SRVConf.SRVs).map(t => {
 				const l = t[1]
 				if (!l || !l.length) {
-					return tr(td(t[0]), td(attr({attr: '4'}), '(none)'))
+					return dom.tr(dom.td(t[0]), dom.td(attr({attr: '4'}), '(none)'))
 				}
-				return t[1].map(r => tr([t[0], r.Priority, r.Weight, r.Port, r.Target].map(s => td(''+s))))
+				return t[1].map(r => dom.tr([t[0], r.Priority, r.Weight, r.Port, r.Target].map(s => dom.td(''+s))))
 			}),
 		),
 	]
@@ -774,9 +772,9 @@ const domainDNSCheck = async (d) => {
 	]
 	const detailsAutodiscover = !checks.Autodiscover.Records ? [] : [
 		dom.table(
-			tr(th('Host'), th('Port'), th('Priority'), th('Weight'), th('IPs')),
+			dom.tr(dom.th('Host'), dom.th('Port'), dom.th('Priority'), dom.th('Weight'), dom.th('IPs')),
 			checks.Autodiscover.Records.map(r =>
-				tr([r.Target, r.Port, r.Priority, r.Weight, (r.IPs || []).join(', ')].map(s => td(''+s)))
+				dom.tr([r.Target, r.Port, r.Priority, r.Weight, (r.IPs || []).join(', ')].map(s => dom.td(''+s)))
 			),
 		),
 	]
@@ -1230,7 +1228,7 @@ const mtasts = async () => {
 			crumblink('Mox Admin', '#'),
 			'MTA-STS policies',
 		),
-		dom.p("MTA-STS is a mechanism allowing email domains to publish a policy for using SMTP STARTTLS and TLS verification. See ", dom.a(attr({rel: 'noopener noreferrer', href: 'https://www.rfc-editor.org/rfc/rfc8461.html'}), 'RFC 8461'), '.'),
+		dom.p("MTA-STS is a mechanism allowing email domains to publish a policy for using SMTP STARTTLS and TLS verification. See ", link('https://www.rfc-editor.org/rfc/rfc8461.html', 'RFC 8461'), '.'),
 		dom.p("The SMTP protocol is unencrypted by default, though the SMTP STARTTLS command is typically used to enable TLS on a connection. However, MTA's using STARTTLS typically do not validate the TLS certificate. An MTA-STS policy can specify that validation of host name, non-expiration and webpki trust is required."),
 		makeMTASTSTable(policies),
 	)
@@ -1313,7 +1311,7 @@ const dnsbl = async () => {
 			Object.entries(ipZoneResults).sort().map(ipZones => {
 				const [ip, zoneResults] = ipZones
 				return dom.li(
-					dom.a(ip, attr({href: url(ip), target: '_blank', rel: 'noopener noreferrer'})),
+					link(url(ip), ip),
 					!ipZones.length ? [] : dom.ul(
 						Object.entries(zoneResults).sort().map(zoneResult =>
 							dom.li(

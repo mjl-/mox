@@ -106,16 +106,14 @@ const prop = x => { return {_prop: x} }
 return [dom, style, attr, prop]
 })()
 
-const tr = dom.tr
-const td = dom.td
-const th = dom.th
+const link = (href, anchorOpt) => dom.a(attr({href: href, rel: 'noopener noreferrer'}), anchorOpt || href)
 
 const crumblink = (text, link) => dom.a(text, attr({href: link}))
 const crumbs = (...l) => [dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])), dom.br()]
 
 const footer = dom.div(
 	style({marginTop: '6ex', opacity: 0.75}),
-	dom.a(attr({href: 'https://github.com/mjl-/mox'}), 'mox'),
+	link('https://github.com/mjl-/mox', 'mox'),
 	' ',
 	api._sherpa.version,
 )
