@@ -312,8 +312,10 @@ func (Admin) CheckDomain(ctx context.Context, domainName string) (r CheckResult)
 	// todo future: should run these checks without a DNS cache so recent changes are picked up.
 
 	resolver := dns.StrictResolver{Pkg: "check"}
-	dialer := &net.Dialer{Timeout: 5 * time.Second}
-	return checkDomain(ctx, resolver, dialer, domainName)
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	nctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return checkDomain(nctx, resolver, dialer, domainName)
 }
 
 func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer, domainName string) (r CheckResult) {
