@@ -40,6 +40,7 @@ low-maintenance self-hosted email.
 	mox config address rm address
 	mox config domain add domain account [localpart]
 	mox config domain rm domain
+	mox config describe-sendmail >/etc/moxsubmit.conf
 	mox checkupdate
 	mox cid cid
 	mox clientconfig domain
@@ -388,6 +389,12 @@ rejected.
 
 	usage: mox config domain rm domain
 
+# mox config describe-sendmail
+
+Describe configuration for mox when invoked as sendmail.
+
+	usage: mox config describe-sendmail >/etc/moxsubmit.conf
+
 # mox checkupdate
 
 Check if a newer version of mox is available.
@@ -538,8 +545,10 @@ Sendmail is a drop-in replacement for /usr/sbin/sendmail to deliver emails sent 
 If invoked as "sendmail", it will act as sendmail for sending messages. Its
 intention is to let processes like cron send emails. Messages are submitted to
 an actual mail server over SMTP. The destination mail server and credentials are
-configured in /etc/moxsubmit.conf. The From message header is rewritten to the
-configured address.
+configured in /etc/moxsubmit.conf, see mox config describe-sendmail. The From
+message header is rewritten to the configured address. When the addressee
+appears to be a local user, because without @, the message is sent to the
+configured default address.
 
 If submitting an email fails, it is added to a directory moxsubmit.failures in
 the user's home directory.

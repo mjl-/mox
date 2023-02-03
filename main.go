@@ -104,6 +104,7 @@ var commands = []struct {
 	{"config address rm", cmdConfigAddressRemove},
 	{"config domain add", cmdConfigDomainAdd},
 	{"config domain rm", cmdConfigDomainRemove},
+	{"config describe-sendmail", cmdConfigDescribeSendmail},
 
 	{"checkupdate", cmdCheckupdate},
 	{"cid", cmdCid},
@@ -351,7 +352,11 @@ func main() {
 	// If invoked as sendmail, e.g. /usr/sbin/sendmail, we do enough so cron can get a
 	// message sent using smtp submission to a configured server.
 	if len(os.Args) > 0 && filepath.Base(os.Args[0]) == "sendmail" {
-		cmdSendmail(&cmd{flagArgs: os.Args[1:]})
+		c := &cmd{
+			flag:     flag.NewFlagSet("sendmail", flag.ExitOnError),
+			flagArgs: os.Args[1:],
+		}
+		cmdSendmail(c)
 		return
 	}
 
@@ -1713,6 +1718,30 @@ func cmdBumpUIDValidity(c *cmd) {
 	fmt.Printf("uid validity for %q is now %d\n", args[1], uidvalidity)
 }
 
+var submitconf struct {
+	LocalHostname      string `sconf-doc:"Hosts don't always have an FQDN, set it explicitly, for EHLO."`
+	Host               string `sconf-doc:"Host to dial for delivery, e.g. mail.<domain>."`
+	Port               int    `sconf-doc:"Port to dial for delivery, e.g. 465 for submissions, 587 for submission, or perhaps 25 for smtp."`
+	TLS                bool   `sconf-doc:"Connect with TLS. Usually for connections to port 465."`
+	STARTTLS           bool   `sconf-doc:"After starting in plain text, use STARTTLS to enable TLS. For port 587 and 25."`
+	Username           string `sconf-doc:"For SMTP plain auth."`
+	Password           string `sconf-doc:"For SMTP plain auth."`
+	AuthMethod         string `sconf-doc:"Ignored for now, regardless of value, AUTH PLAIN is done. This will change in the future."`
+	From               string `sconf-doc:"Address for MAIL FROM in SMTP and From-header in message."`
+	DefaultDestination string `sconf:"optional" sconf-doc:"Used when specified address does not contain an @ and may be a local user (eg root)."`
+}
+
+func cmdConfigDescribeSendmail(c *cmd) {
+	c.params = ">/etc/moxsubmit.conf"
+	c.help = `Describe configuration for mox when invoked as sendmail.`
+	if len(c.Parse()) != 0 {
+		c.Usage()
+	}
+
+	err := sconf.Describe(os.Stdout, submitconf)
+	xcheckf(err, "describe config")
+}
+
 func cmdSendmail(c *cmd) {
 	c.params = "[-Fname] [ignoredflags] [-t] [<message]"
 	c.help = `Sendmail is a drop-in replacement for /usr/sbin/sendmail to deliver emails sent by unix processes like cron.
@@ -1720,8 +1749,10 @@ func cmdSendmail(c *cmd) {
 If invoked as "sendmail", it will act as sendmail for sending messages. Its
 intention is to let processes like cron send emails. Messages are submitted to
 an actual mail server over SMTP. The destination mail server and credentials are
-configured in /etc/moxsubmit.conf. The From message header is rewritten to the
-configured address.
+configured in /etc/moxsubmit.conf, see mox config describe-sendmail. The From
+message header is rewritten to the configured address. When the addressee
+appears to be a local user, because without @, the message is sent to the
+configured default address.
 
 If submitting an email fails, it is added to a directory moxsubmit.failures in
 the user's home directory.
@@ -1773,31 +1804,27 @@ binary should be setgid that group:
 		// todo: we may want to parse more flags. some invocations may not be about sending a message. for now, we'll assume sendmail is only invoked to send a message.
 	}
 	args = args[o:]
+
+	// todo: perhaps allow configuration of config file through environment variable? have to keep in mind that mox with setgid moxsubmit would be reading the file.
+	const confPath = "/etc/moxsubmit.conf"
+	err := sconf.ParseFile(confPath, &submitconf)
+	xcheckf(err, "parsing config")
+
 	var recipient string
 	if len(args) == 1 && !tflag {
-		_, err := smtp.ParseAddress(args[0])
-		xcheckf(err, "parsing recipient address")
 		recipient = args[0]
+		if !strings.Contains(recipient, "@") {
+			if submitconf.DefaultDestination == "" {
+				log.Fatalf("recipient %q has no @ and no default destination configured", recipient)
+			}
+			recipient = submitconf.DefaultDestination
+		} else {
+			_, err := smtp.ParseAddress(args[0])
+			xcheckf(err, "parsing recipient address")
+		}
 	} else if !tflag || len(args) != 0 {
 		log.Fatalln("need either exactly 1 recipient, or -t")
 	}
-
-	// todo: perhaps allow configuration of config file through environment variable?
-	// todo: could add a subcommand to describe this config. should add some struct tags with documentation then.
-	const confPath = "/etc/moxsubmit.conf"
-	var submitconf struct {
-		LocalHostname string // hosts don't always have an FQDN, set it explicitly, for EHLO.
-		Host          string
-		Port          int
-		TLS           bool
-		STARTTLS      bool
-		Username      string
-		Password      string
-		AuthMethod    string // Ignore for now, always plain authentication.
-		From          string
-	}
-	err := sconf.ParseFile(confPath, &submitconf)
-	xcheckf(err, "parsing config")
 
 	// Read message and build message we are going to send. We replace \n
 	// with \r\n, and we replace the From header.
@@ -1841,12 +1868,20 @@ binary should be setgid that group:
 					if recipient != "" {
 						log.Fatalf("only single To header allowed")
 					}
-					addrs, err := mail.ParseAddressList(strings.TrimSpace(t[1]))
-					xcheckf(err, "parsing To address list")
-					if len(addrs) != 1 {
-						log.Fatalf("only single address allowed in To header")
+					s := strings.TrimSpace(t[1])
+					if !strings.Contains(s, "@") {
+						if submitconf.DefaultDestination == "" {
+							log.Fatalf("recipient %q has no @ and no default destination is configured", s)
+						}
+						recipient = submitconf.DefaultDestination
+					} else {
+						addrs, err := mail.ParseAddressList(s)
+						xcheckf(err, "parsing To address list")
+						if len(addrs) != 1 {
+							log.Fatalf("only single address allowed in To header")
+						}
+						recipient = addrs[0].Address
 					}
-					recipient = addrs[0].Address
 				}
 				if k == "to" {
 					haveTo = true
@@ -1905,7 +1940,11 @@ binary should be setgid that group:
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	tlsMode := smtpclient.TLSOpportunistic
+	tlsMode := smtpclient.TLSStrict
+	if !submitconf.STARTTLS {
+		tlsMode = smtpclient.TLSSkip
+	}
+	// todo: should have more auth options, scram-sha-256 at least.
 	authLine := fmt.Sprintf("AUTH PLAIN %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("\u0000%s\u0000%s", submitconf.Username, submitconf.Password))))
 	mox.Conf.Static.HostnameDomain.ASCII = submitconf.LocalHostname
 	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, submitconf.Host, authLine)
