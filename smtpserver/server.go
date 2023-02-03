@@ -203,6 +203,8 @@ type conn struct {
 	resolver              dns.Resolver
 	r                     *bufio.Reader
 	w                     *bufio.Writer
+	tr                    *moxio.TraceReader // Kept for changing trace level during cmd/auth/data.
+	tw                    *moxio.TraceWriter
 	lastlog               time.Time // Used for printing the delta time since the previous logging for this connection.
 	submission            bool      // ../rfc/6409:19 applies
 	tlsConfig             *tls.Config
@@ -289,6 +291,17 @@ func (c *conn) xcheckAuth() {
 	if c.submission && c.account == nil {
 		// ../rfc/4954:623
 		xsmtpUserErrorf(smtp.C530SecurityRequired, smtp.SePol7Other0, "authentication required")
+	}
+}
+
+func (c *conn) xtrace(level mlog.Level) func() {
+	c.xflush()
+	c.tr.SetTrace(level)
+	c.tw.SetTrace(level)
+	return func() {
+		c.xflush()
+		c.tr.SetTrace(mlog.LevelTrace)
+		c.tw.SetTrace(mlog.LevelTrace)
 	}
 }
 
@@ -447,8 +460,10 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		}
 		return l
 	})
-	c.r = bufio.NewReader(moxio.NewTraceReader(c.log, "RC: ", c))
-	c.w = bufio.NewWriter(moxio.NewTraceWriter(c.log, "LS: ", c))
+	c.tr = moxio.NewTraceReader(c.log, "RC: ", c)
+	c.tw = moxio.NewTraceWriter(c.log, "LS: ", c)
+	c.r = bufio.NewReader(c.tr)
+	c.w = bufio.NewWriter(c.tw)
 
 	metricConnection.WithLabelValues(c.kind()).Inc()
 	c.log.Info("new connection", mlog.Field("remote", c.conn.RemoteAddr()), mlog.Field("local", c.conn.LocalAddr()), mlog.Field("submission", submission), mlog.Field("tls", tls), mlog.Field("listener", listenerName))
@@ -714,8 +729,10 @@ func (c *conn) cmdStarttls(p *parser) {
 	tlsversion, ciphersuite := mox.TLSInfo(tlsConn)
 	c.log.Debug("tls server handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite))
 	c.conn = tlsConn
-	c.r = bufio.NewReader(moxio.NewTraceReader(c.log, "RC: ", c))
-	c.w = bufio.NewWriter(moxio.NewTraceWriter(c.log, "LS: ", c))
+	c.tr = moxio.NewTraceReader(c.log, "RC: ", c)
+	c.tw = moxio.NewTraceWriter(c.log, "LS: ", c)
+	c.r = bufio.NewReader(c.tr)
+	c.w = bufio.NewWriter(c.tw)
 
 	c.reset() // ../rfc/3207:210
 	c.tls = true
@@ -814,7 +831,10 @@ func (c *conn) cmdAuth(p *parser) {
 			xsmtpUserErrorf(smtp.C538EncReqForAuth, smtp.SePol7EncReqForAuth11, "authentication requires tls")
 		}
 
+		// Password is in line in plain text, so hide it.
+		defer c.xtrace(mlog.LevelTraceauth)()
 		buf := xreadInitial()
+		c.xtrace(mlog.LevelTrace) // Restore.
 		plain := bytes.Split(buf, []byte{0})
 		if len(plain) != 3 {
 			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5BadParams4, "auth data should have 3 nul-separated tokens, got %d", len(plain))
@@ -846,6 +866,8 @@ func (c *conn) cmdAuth(p *parser) {
 		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
 
 		authVariant = "scram-sha-256"
+
+		// Passwords cannot be retrieved or replayed from the trace.
 
 		c0 := xreadInitial()
 		ss, err := scram.NewServer(c0)
@@ -1208,6 +1230,9 @@ func (c *conn) cmdData(p *parser) {
 	// ../rfc/5321:1994
 	c.writelinef("354 see you at the bare dot")
 
+	// Mark as tracedata.
+	defer c.xtrace(mlog.LevelTracedata)()
+
 	// We read the data into a temporary file. We limit the size and do basic analysis while reading.
 	dataFile, err := store.CreateMessageTemp("smtp-deliver")
 	if err != nil {
@@ -1223,7 +1248,9 @@ func (c *conn) cmdData(p *parser) {
 	}()
 	msgWriter := &message.Writer{Writer: dataFile}
 	dr := smtp.NewDataReader(c.r)
-	if n, err := io.Copy(&limitWriter{maxSize: c.maxMessageSize, w: msgWriter}, dr); err != nil {
+	n, err := io.Copy(&limitWriter{maxSize: c.maxMessageSize, w: msgWriter}, dr)
+	c.xtrace(mlog.LevelTrace) // Restore.
+	if err != nil {
 		if errors.Is(err, errMessageTooLarge) {
 			// ../rfc/1870:136 and ../rfc/3463:382
 			ecode := smtp.SeSys3MsgLimitExceeded4

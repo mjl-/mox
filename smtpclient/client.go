@@ -79,6 +79,8 @@ type Client struct {
 
 	r        *bufio.Reader
 	w        *bufio.Writer
+	tr       *moxio.TraceReader // Kept for changing trace levels between cmd/auth/data.
+	tw       *moxio.TraceWriter
 	log      *mlog.Log
 	lastlog  time.Time // For adding delta timestamps between log lines.
 	cmds     []string  // Last or active command, for generating errors and metrics.
@@ -183,10 +185,12 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, rem
 	// We don't wrap reads in a timeoutReader for fear of an optional TLS wrapper doing
 	// reads without the client asking for it. Such reads could result in a timeout
 	// error.
-	c.r = bufio.NewReader(moxio.NewTraceReader(c.log, "RS: ", c.conn))
+	c.tr = moxio.NewTraceReader(c.log, "RS: ", c.conn)
+	c.r = bufio.NewReader(c.tr)
 	// We use a single write timeout of 30 seconds.
 	// todo future: use different timeouts ../rfc/5321:3610
-	c.w = bufio.NewWriter(moxio.NewTraceWriter(c.log, "LC: ", timeoutWriter{c.conn, 30 * time.Second, c.log}))
+	c.tw = moxio.NewTraceWriter(c.log, "LC: ", timeoutWriter{c.conn, 30 * time.Second, c.log})
+	c.w = bufio.NewWriter(c.tw)
 
 	if err := c.hello(ctx, tlsMode, remoteHostname, auth); err != nil {
 		return nil, err
@@ -238,6 +242,17 @@ func (c *Client) xreadline() string {
 		c.xbotchf(0, "", "", "%s: %w", strings.Join(c.cmds, ","), err)
 	}
 	return line
+}
+
+func (c *Client) xtrace(level mlog.Level) func() {
+	c.xflush()
+	c.tr.SetTrace(level)
+	c.tw.SetTrace(level)
+	return func() {
+		c.xflush()
+		c.tr.SetTrace(mlog.LevelTrace)
+		c.tw.SetTrace(mlog.LevelTrace)
+	}
 }
 
 func (c *Client) xwritelinef(format string, args ...any) {
@@ -496,8 +511,10 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, remoteHostname, aut
 			c.xerrorf(false, 0, "", "", "%w: STARTTLS TLS handshake: %s", ErrTLS, err)
 		}
 		cancel()
-		c.r = bufio.NewReader(moxio.NewTraceReader(c.log, "RS: ", c.conn))
-		c.w = bufio.NewWriter(moxio.NewTraceWriter(c.log, "LC: ", c.conn)) // No need to wrap in timeoutWriter, it would just set the timeout on the underlying connection, which is still active.
+		c.tr = moxio.NewTraceReader(c.log, "RS: ", c.conn)
+		c.tw = moxio.NewTraceWriter(c.log, "LC: ", c.conn) // No need to wrap in timeoutWriter, it would just set the timeout on the underlying connection, which is still active.
+		c.r = bufio.NewReader(c.tr)
+		c.w = bufio.NewWriter(c.tw)
 
 		tlsversion, ciphersuite := mox.TLSInfo(nconn)
 		c.log.Debug("tls client handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite))
@@ -509,7 +526,9 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, remoteHostname, aut
 		// No metrics, only used for tests.
 		c.cmds[0] = "auth"
 		c.cmdStart = time.Now()
+		defer c.xtrace(mlog.LevelTraceauth)()
 		c.xwriteline(auth)
+		c.xtrace(mlog.LevelTrace) // Restore.
 		code, secode, lastLine, _ := c.xread()
 		if code != smtp.C235AuthSuccess {
 			c.xerrorf(code/100 == 5, code, secode, lastLine, "%w: auth: got %d, expected 2xx", ErrStatus, code)
@@ -652,11 +671,13 @@ func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, ms
 
 	// For a DATA write, the suggested timeout is 3 minutes, we use 30 seconds for all
 	// writes through timeoutWriter. ../rfc/5321:3651
+	defer c.xtrace(mlog.LevelTracedata)()
 	err := smtp.DataWrite(c.w, msg)
 	if err != nil {
 		c.xbotchf(0, "", "", "writing message as smtp data: %w", err)
 	}
 	c.xflush()
+	c.xtrace(mlog.LevelTrace) // Restore.
 	code, secode, lastline, _ := c.xread()
 	if code != smtp.C250Completed {
 		c.xerrorf(code/100 == 5, code, secode, lastline, "%w: got %d, expected 2xx", ErrStatus, code)

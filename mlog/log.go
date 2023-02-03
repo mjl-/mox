@@ -39,30 +39,36 @@ var Logfmt bool
 type Level int
 
 var LevelStrings = map[Level]string{
-	LevelPrint: "print",
-	LevelFatal: "fatal",
-	LevelError: "error",
-	LevelInfo:  "info",
-	LevelDebug: "debug",
-	LevelTrace: "trace",
+	LevelPrint:     "print",
+	LevelFatal:     "fatal",
+	LevelError:     "error",
+	LevelInfo:      "info",
+	LevelDebug:     "debug",
+	LevelTrace:     "trace",
+	LevelTraceauth: "traceauth",
+	LevelTracedata: "tracedata",
 }
 
 var Levels = map[string]Level{
-	"print": LevelPrint,
-	"fatal": LevelFatal,
-	"error": LevelError,
-	"info":  LevelInfo,
-	"debug": LevelDebug,
-	"trace": LevelTrace,
+	"print":     LevelPrint,
+	"fatal":     LevelFatal,
+	"error":     LevelError,
+	"info":      LevelInfo,
+	"debug":     LevelDebug,
+	"trace":     LevelTrace,
+	"traceauth": LevelTraceauth,
+	"tracedata": LevelTracedata,
 }
 
 const (
-	LevelPrint Level = 0 // Printed regardless of configured log level.
-	LevelFatal Level = 1 // Printed regardless of configured log level.
-	LevelError Level = 2
-	LevelInfo  Level = 3
-	LevelDebug Level = 4
-	LevelTrace Level = 5
+	LevelPrint     Level = 0 // Printed regardless of configured log level.
+	LevelFatal     Level = 1 // Printed regardless of configured log level.
+	LevelError     Level = 2
+	LevelInfo      Level = 3
+	LevelDebug     Level = 4
+	LevelTrace     Level = 5
+	LevelTraceauth Level = 6
+	LevelTracedata Level = 7
 )
 
 // Holds a map[string]Level, mapping a package (field pkg in logs) to a log level.
@@ -144,8 +150,8 @@ func (l *Log) MoreFields(fn func() []Pair) *Log {
 	return &nl
 }
 
-func (l *Log) Trace(text string) bool {
-	return l.logx(LevelTrace, nil, text)
+func (l *Log) Trace(traceLevel Level, text string) bool {
+	return l.logx(traceLevel, nil, text)
 }
 
 func (l *Log) Fatal(text string, fields ...Pair) { l.Fatalx(text, nil, fields...) }
@@ -181,8 +187,17 @@ func (l *Log) Errorx(text string, err error, fields ...Pair) bool {
 }
 
 func (l *Log) logx(level Level, err error, text string, fields ...Pair) bool {
-	if !l.match(level) {
+	if ok, high := l.match(level); ok {
+		// Nothing.
+	} else if high >= LevelTrace && level == LevelTraceauth {
+		text = "***"
+	} else if high >= LevelTrace && level == LevelTracedata {
+		text = "..."
+	} else {
 		return false
+	}
+	if level > LevelTrace {
+		level = LevelTrace
 	}
 	l.plog(level, err, text, fields...)
 	return true
@@ -327,14 +342,15 @@ func (l *Log) plog(level Level, err error, text string, fields ...Pair) {
 	os.Stderr.Write(b.Bytes())
 }
 
-func (l *Log) match(level Level) bool {
+func (l *Log) match(level Level) (bool, Level) {
 	if level == LevelPrint || level == LevelFatal {
-		return true
+		return true, level
 	}
 
 	cl := config.Load().(map[string]Level)
 
 	seen := false
+	var high Level
 	for _, kv := range l.fields {
 		if kv.key != "pkg" {
 			continue
@@ -344,16 +360,22 @@ func (l *Log) match(level Level) bool {
 			continue
 		}
 		v, ok := cl[pkg]
+		if v > high {
+			high = v
+		}
 		if ok && v >= level {
-			return true
+			return true, high
 		}
 		seen = seen || ok
 	}
 	if seen {
-		return false
+		return false, high
 	}
 	v, ok := cl[""]
-	return ok && v >= level
+	if v > high {
+		high = v
+	}
+	return ok && v >= level, v
 }
 
 type errWriter struct {

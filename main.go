@@ -745,7 +745,7 @@ By default, a single log level applies to all logging in mox. But for each
 smtpserver, smtpclient, queue, imapserver, spf, dkim, dmarc, junk, message,
 etc.
 
-Valid labels: error, info, debug, trace.
+Valid labels: error, info, debug, trace, traceauth, tracedata.
 `
 	args := c.Parse()
 	if len(args) > 2 {

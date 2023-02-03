@@ -3,6 +3,8 @@ package imapserver
 import (
 	"fmt"
 	"io"
+
+	"github.com/mjl-/mox/mlog"
 )
 
 type token interface {
@@ -107,6 +109,7 @@ func (t readerSizeSyncliteral) pack(c *conn) string {
 
 func (t readerSizeSyncliteral) writeTo(c *conn, w io.Writer) {
 	fmt.Fprintf(w, "{%d}\r\n", t.size)
+	defer c.xtrace(mlog.LevelTracedata)()
 	if _, err := io.Copy(w, io.LimitReader(t.r, t.size)); err != nil {
 		panic(err)
 	}
@@ -131,6 +134,7 @@ func (t readerSyncliteral) writeTo(c *conn, w io.Writer) {
 		panic(err)
 	}
 	fmt.Fprintf(w, "{%d}\r\n", len(buf))
+	defer c.xtrace(mlog.LevelTracedata)()
 	_, err = w.Write(buf)
 	if err != nil {
 		panic(err)

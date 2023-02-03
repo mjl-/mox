@@ -121,13 +121,15 @@ type conn struct {
 	cid               int64
 	state             state
 	conn              net.Conn
-	tls               bool          // Whether TLS has been initialized.
-	br                *bufio.Reader // From remote, with TLS unwrapped in case of TLS.
-	line              chan lineErr  // If set, instead of reading from br, a line is read from this channel. For reading a line in IDLE while also waiting for mailbox/account updates.
-	lastLine          string        // For detecting if syntax error is fatal, i.e. if this ends with a literal. Without crlf.
-	bw                *bufio.Writer // To remote, with TLS added in case of TLS.
-	lastlog           time.Time     // For printing time since previous log line.
-	tlsConfig         *tls.Config   // TLS config to use for handshake.
+	tls               bool               // Whether TLS has been initialized.
+	br                *bufio.Reader      // From remote, with TLS unwrapped in case of TLS.
+	line              chan lineErr       // If set, instead of reading from br, a line is read from this channel. For reading a line in IDLE while also waiting for mailbox/account updates.
+	lastLine          string             // For detecting if syntax error is fatal, i.e. if this ends with a literal. Without crlf.
+	bw                *bufio.Writer      // To remote, with TLS added in case of TLS.
+	tr                *moxio.TraceReader // Kept to change trace level when reading/writing cmd/auth/data.
+	tw                *moxio.TraceWriter
+	lastlog           time.Time   // For printing time since previous log line.
+	tlsConfig         *tls.Config // TLS config to use for handshake.
 	noRequireSTARTTLS bool
 	cmd               string // Currently executing, for deciding to applyChanges and logging.
 	cmdMetric         string // Currently executing, for metrics.
@@ -352,6 +354,17 @@ func (c *conn) Write(buf []byte) (int, error) {
 	return n, err
 }
 
+func (c *conn) xtrace(level mlog.Level) func() {
+	c.xflush()
+	c.tr.SetTrace(level)
+	c.tw.SetTrace(level)
+	return func() {
+		c.xflush()
+		c.tr.SetTrace(mlog.LevelTrace)
+		c.tw.SetTrace(mlog.LevelTrace)
+	}
+}
+
 // Cache of line buffers for reading commands.
 var bufpool = moxio.NewBufpool(8, 16*1024)
 
@@ -511,8 +524,10 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		}
 		return l
 	})
-	c.br = bufio.NewReader(moxio.NewTraceReader(c.log, "C: ", c.conn))
-	c.bw = bufio.NewWriter(moxio.NewTraceWriter(c.log, "S: ", c))
+	c.tr = moxio.NewTraceReader(c.log, "C: ", c.conn)
+	c.tw = moxio.NewTraceWriter(c.log, "S: ", c)
+	c.br = bufio.NewReader(c.tr)
+	c.bw = bufio.NewWriter(c.tw)
 
 	// Many IMAP connections use IDLE to wait for new incoming messages. We'll enable
 	// keepalive to get a higher chance of the connection staying alive, or otherwise
@@ -1272,8 +1287,10 @@ func (c *conn) cmdStarttls(tag, cmd string, p *parser) {
 	c.log.Debug("tls server handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite))
 
 	c.conn = tlsConn
-	c.br = bufio.NewReader(moxio.NewTraceReader(c.log, "C: ", c.conn))
-	c.bw = bufio.NewWriter(moxio.NewTraceWriter(c.log, "S: ", c))
+	c.tr = moxio.NewTraceReader(c.log, "C: ", c.conn)
+	c.tw = moxio.NewTraceWriter(c.log, "S: ", c)
+	c.br = bufio.NewReader(c.tr)
+	c.bw = bufio.NewWriter(c.tw)
 	c.tls = true
 }
 
@@ -1344,7 +1361,10 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xusercodeErrorf("PRIVACYREQUIRED", "tls required for login")
 		}
 
+		// Plain text passwords, mark as traceauth.
+		defer c.xtrace(mlog.LevelTraceauth)()
 		buf := xreadInitial()
+		c.xtrace(mlog.LevelTrace) // Restore.
 		plain := bytes.Split(buf, []byte{0})
 		if len(plain) != 3 {
 			xsyntaxErrorf("bad plain auth data, expected 3 nul-separated tokens, got %d tokens", len(plain))
@@ -1373,6 +1393,8 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
 
 		authVariant = "scram-sha-256"
+
+		// No plaintext credentials, we can log these normally.
 
 		c0 := xreadInitial()
 		ss, err := scram.NewServer(c0)
@@ -1453,6 +1475,8 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 	defer func() {
 		metrics.AuthenticationInc("imap", "login", authResult)
 	}()
+
+	// todo: get this line logged with traceauth. the plaintext password is included on the command line, which we've already read (before dispatching to this function).
 
 	// Request syntax: ../rfc/9051:6667 ../rfc/3501:4804
 	p.xspace()
@@ -2239,8 +2263,10 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			c.xsanity(err, "closing APPEND temporary file")
 		}
 	}()
+	defer c.xtrace(mlog.LevelTracedata)()
 	mw := &message.Writer{Writer: msgFile}
 	msize, err := io.Copy(mw, io.LimitReader(c.br, size))
+	c.xtrace(mlog.LevelTrace) // Restore.
 	if err != nil {
 		// Cannot use xcheckf due to %w handling of errIO.
 		panic(fmt.Errorf("reading literal message: %s (%w)", err, errIO))

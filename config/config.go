@@ -29,7 +29,7 @@ func Port(port, fallback int) int {
 // into a mox.Config after additional processing.
 type Static struct {
 	DataDir          string            `sconf-doc:"Directory where all data is stored, e.g. queue, accounts and messages, ACME TLS certs/keys. If this is a relative path, it is relative to the directory of mox.conf."`
-	LogLevel         string            `sconf-doc:"Default log level, one of: error, info, debug, trace. Trace logs full SMTP and IMAP protocol transcripts, which can be a large amount of data."`
+	LogLevel         string            `sconf-doc:"Default log level, one of: error, info, debug, trace, traceauth, tracedata. Trace logs SMTP and IMAP protocol transcripts, with traceauth also messages with passwords, and tracedata on top of that also the full data exchanges (full messages), which can be a large amount of data."`
 	PackageLogLevels map[string]string `sconf:"optional" sconf-doc:"Overrides of log level per package (e.g. queue, smtpclient, smtpserver, imapserver, spf, dkim, dmarc, dmarcdb, autotls, junk, mtasts, tlsrpt)."`
 	Hostname         string            `sconf-doc:"Full hostname of system, e.g. mail.<domain>"`
 	HostnameDomain   dns.Domain        `sconf:"-" json:"-"` // Parsed form of hostname.

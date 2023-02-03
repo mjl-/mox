@@ -13,8 +13,10 @@ describe-static" and "mox config describe-domains":
 	# mox.conf.
 	DataDir:
 
-	# Default log level, one of: error, info, debug, trace. Trace logs full SMTP and
-	# IMAP protocol transcripts, which can be a large amount of data.
+	# Default log level, one of: error, info, debug, trace, traceauth, tracedata.
+	# Trace logs SMTP and IMAP protocol transcripts, with traceauth also messages with
+	# passwords, and tracedata on top of that also the full data exchanges (full
+	# messages), which can be a large amount of data.
 	LogLevel:
 
 	# Overrides of log level per package (e.g. queue, smtpclient, smtpserver,
