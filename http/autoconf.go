@@ -150,6 +150,10 @@ func autoconfHandle(l config.Listener) http.HandlerFunc {
 
 // Autodiscover from Microsoft, also used by Thunderbird.
 // User should create a DNS record: _autodiscover._tcp.<domain> IN SRV 0 0 443 <hostname or autodiscover.<domain>>
+// In practice, autodiscover does not seem to work (any more). A connectivity test
+// tool for outlook is available on https://testconnectivity.microsoft.com/, it has
+// an option to do "Autodiscover to detect server settings". Incoming TLS
+// connections are all failing, with various errors.
 func autodiscoverHandle(l config.Listener) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := xlog.WithContext(r.Context())

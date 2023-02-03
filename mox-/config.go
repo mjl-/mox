@@ -193,12 +193,17 @@ func (c *Config) allowACMEHosts() {
 		for _, dom := range c.Dynamic.Domains {
 
 			if l.AutoconfigHTTPS.Enabled {
-				d, err := dns.ParseDomain("autoconfig." + dom.Domain.ASCII)
-				if err != nil {
+				if d, err := dns.ParseDomain("autoconfig." + dom.Domain.ASCII); err != nil {
 					xlog.Errorx("parsing autoconfig domain", err, mlog.Field("domain", dom.Domain))
-					continue
+				} else {
+					m.AllowHostname(d)
 				}
-				m.AllowHostname(d)
+
+				if d, err := dns.ParseDomain("autodiscover." + dom.Domain.ASCII); err != nil {
+					xlog.Errorx("parsing autodiscover domain", err, mlog.Field("domain", dom.Domain))
+				} else {
+					m.AllowHostname(d)
+				}
 			}
 
 			if l.MTASTSHTTPS.Enabled && dom.MTASTS != nil {
