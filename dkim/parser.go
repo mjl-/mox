@@ -51,13 +51,21 @@ func (p *parser) xtaken(n int) string {
 	return r
 }
 
-func (p *parser) xtakefn(fn func(c rune, i int) bool) string {
+func (p *parser) xtakefn(ignoreFWS bool, fn func(c rune, i int) bool) string {
+	var r string
 	for i, c := range p.s[p.o:] {
 		if !fn(c, i) {
-			return p.xtaken(i)
+			switch c {
+			case ' ', '\t', '\r', '\n':
+				continue
+			}
+			p.xtaken(i)
+			return r
 		}
+		r += string(c)
 	}
-	return p.xtaken(len(p.s) - p.o)
+	p.xtaken(len(p.s) - p.o)
+	return r
 }
 
 func (p *parser) empty() bool {
@@ -70,21 +78,28 @@ func (p *parser) xnonempty() {
 	}
 }
 
-func (p *parser) xtakefn1(fn func(c rune, i int) bool) string {
+func (p *parser) xtakefn1(ignoreFWS bool, fn func(c rune, i int) bool) string {
+	var r string
 	p.xnonempty()
 	for i, c := range p.s[p.o:] {
 		if !fn(c, i) {
+			switch c {
+			case ' ', '\t', '\r', '\n':
+				continue
+			}
 			if i == 0 {
 				p.xerrorf("expected at least 1 char")
 			}
-			return p.xtaken(i)
+			p.xtaken(i)
+			return r
 		}
+		r += string(c)
 	}
 	return p.xtaken(len(p.s) - p.o)
 }
 
 func (p *parser) wsp() {
-	p.xtakefn(func(c rune, i int) bool {
+	p.xtakefn(false, func(c rune, i int) bool {
 		return c == ' ' || c == '\t'
 	})
 }
@@ -124,7 +139,7 @@ func (p *parser) take(s string) bool {
 
 // ../rfc/6376:657
 func (p *parser) xtagName() string {
-	return p.xtakefn1(func(c rune, i int) bool {
+	return p.xtakefn1(false, func(c rune, i int) bool {
 		return isalpha(c) || i > 0 && (isdigit(c) || c == '_')
 	})
 }
@@ -134,9 +149,9 @@ func (p *parser) xalgorithm() (string, string) {
 	xtagx := func(c rune, i int) bool {
 		return isalpha(c) || i > 0 && isdigit(c)
 	}
-	algk := p.xtakefn1(xtagx)
+	algk := p.xtakefn1(false, xtagx)
 	p.xtake("-")
-	algv := p.xtakefn1(xtagx)
+	algv := p.xtakefn1(false, xtagx)
 	return algk, algv
 }
 
@@ -145,7 +160,7 @@ func (p *parser) xalgorithm() (string, string) {
 // ../rfc/6376:1076
 func (p *parser) xbase64() []byte {
 	s := ""
-	p.xtakefn(func(c rune, i int) bool {
+	p.xtakefn(false, func(c rune, i int) bool {
 		if isalphadigit(c) || c == '+' || c == '/' || c == '=' {
 			s += string(c)
 			return true
@@ -185,9 +200,9 @@ func (p *parser) xdomain() dns.Domain {
 		// todo: add a "lax" mode where underscore is allowed if this is a selector? seen in the wild, but invalid: ../rfc/6376:581 ../rfc/5321:2303
 		return isalphadigit(c) || (i > 0 && c == '-' && p.o+1 < len(p.s))
 	}
-	s := p.xtakefn1(subdomain)
+	s := p.xtakefn1(false, subdomain)
 	for p.hasPrefix(".") {
-		s += p.xtake(".") + p.xtakefn1(subdomain)
+		s += p.xtake(".") + p.xtakefn1(false, subdomain)
 	}
 	d, err := dns.ParseDomain(s)
 	if err != nil {
@@ -196,23 +211,24 @@ func (p *parser) xdomain() dns.Domain {
 	return d
 }
 
-func (p *parser) xhdrName() string {
+func (p *parser) xhdrName(ignoreFWS bool) string {
 	// ../rfc/6376:473
 	// ../rfc/5322:1689
 	// BNF for hdr-name (field-name) allows ";", but DKIM disallows unencoded semicolons. ../rfc/6376:643
-	return p.xtakefn1(func(c rune, i int) bool {
+	// ignoreFWS is needed for "z=", which can have FWS anywhere. ../rfc/6376:1372
+	return p.xtakefn1(ignoreFWS, func(c rune, i int) bool {
 		return c > ' ' && c < 0x7f && c != ':' && c != ';'
 	})
 }
 
 func (p *parser) xsignedHeaderFields() []string {
 	// ../rfc/6376:1157
-	l := []string{p.xhdrName()}
+	l := []string{p.xhdrName(false)}
 	for p.peekfws(":") {
 		p.fws()
 		p.xtake(":")
 		p.fws()
-		l = append(l, p.xhdrName())
+		l = append(l, p.xhdrName(false))
 	}
 	return l
 }
@@ -304,7 +320,7 @@ func (p *parser) xchar() rune {
 }
 
 func (p *parser) xatom() string {
-	return p.xtakefn1(func(c rune, i int) bool {
+	return p.xtakefn1(false, func(c rune, i int) bool {
 		switch c {
 		case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '/', '=', '?', '^', '_', '`', '{', '|', '}', '~':
 			return true
@@ -362,7 +378,7 @@ func (p *parser) xqtagmethod() string {
 	if strings.EqualFold(s, "dns") && len(rem) >= len("/txt") && strings.EqualFold(rem[:len("/txt")], "/txt") {
 		s += p.xtaken(4)
 	} else if p.take("/") {
-		s += "/" + p.xqp(true, true)
+		s += "/" + p.xqp(true, true, false)
 	}
 	return s
 }
@@ -381,25 +397,27 @@ func isalphadigit(c rune) bool {
 
 // ../rfc/6376:469
 func (p *parser) xhyphenatedWord() string {
-	return p.xtakefn1(func(c rune, i int) bool {
+	return p.xtakefn1(false, func(c rune, i int) bool {
 		return isalpha(c) || i > 0 && isdigit(c) || i > 0 && c == '-' && p.o+i+1 < len(p.s) && isalphadigit(rune(p.s[p.o+i+1]))
 	})
 }
 
 // ../rfc/6376:474
-func (p *parser) xqphdrvalue() string {
-	return p.xqp(true, false)
+func (p *parser) xqphdrvalue(ignoreFWS bool) string {
+	return p.xqp(true, false, ignoreFWS)
 }
 
 func (p *parser) xqpSection() string {
-	return p.xqp(false, false)
+	return p.xqp(false, false, false)
 }
 
 // dkim-quoted-printable (pipeEncoded true) or qp-section.
 //
 // It is described in terms of (lots of) modifications to MIME quoted-printable,
 // but it may be simpler to just ignore that reference.
-func (p *parser) xqp(pipeEncoded, colonEncoded bool) string {
+//
+// ignoreFWS is required for "z=", which can have FWS anywhere.
+func (p *parser) xqp(pipeEncoded, colonEncoded, ignoreFWS bool) string {
 	// ../rfc/6376:494 ../rfc/2045:1260
 
 	hex := func(c byte) rune {
@@ -418,12 +436,8 @@ func (p *parser) xqp(pipeEncoded, colonEncoded bool) string {
 		if colonEncoded && p.hasPrefix(":") {
 			break
 		}
-		if p.hasPrefix("=") {
-			p.xtake("=")
-			// note: \r\n before the full hex-octet has been encountered in the wild. Could be
-			// a sender just wrapping their headers after escaping, or not escaping an "=". We
-			// currently don't compensate for it.
-			h := p.xtakefn(func(c rune, i int) bool {
+		if p.take("=") {
+			h := p.xtakefn(ignoreFWS, func(c rune, i int) bool {
 				return i < 2 && (c >= '0' && c <= '9' || c >= 'A' && c <= 'Z')
 			})
 			if len(h) != 2 {
@@ -433,7 +447,7 @@ func (p *parser) xqp(pipeEncoded, colonEncoded bool) string {
 			s += string(c)
 			continue
 		}
-		x := p.xtakefn(func(c rune, i int) bool {
+		x := p.xtakefn(ignoreFWS, func(c rune, i int) bool {
 			return c > ' ' && c < 0x7f && c != ';' && c != '=' && !(pipeEncoded && c == '|')
 		})
 		if x == "" {
@@ -465,10 +479,11 @@ func (p *parser) xcopiedHeaderFields() []string {
 }
 
 func (p *parser) xztagcopy() string {
-	// ../rfc/6376:1386
-	f := p.xhdrName()
+	// ABNF does not mention FWS (unlike for other fields), but FWS is allowed everywhere in the value...
+	// ../rfc/6376:1386 ../rfc/6376:1372
+	f := p.xhdrName(true)
 	p.fws()
 	p.xtake(":")
-	v := p.xqphdrvalue()
+	v := p.xqphdrvalue(true)
 	return f + ":" + v
 }

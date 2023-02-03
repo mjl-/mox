@@ -213,7 +213,7 @@ func parseSignature(buf []byte, smtputf8 bool) (sig *Sig, verifySig []byte, err 
 	ds := newSigWithDefaults()
 	seen := map[string]struct{}{}
 	p := parser{s: string(buf), smtputf8: smtputf8}
-	name := p.xhdrName()
+	name := p.xhdrName(false)
 	if !strings.EqualFold(name, "DKIM-Signature") {
 		xerrorf("%w", errSigHeader)
 	}

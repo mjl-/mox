@@ -1123,13 +1123,25 @@ that was passed.
 	xcheckf(err, "dkim verify")
 
 	for _, result := range results {
-		record, err := result.Record.Record()
-		if err != nil {
-			log.Printf("warning: record: %s", err)
+		var sigh string
+		if result.Sig == nil {
+			log.Printf("warning: could not parse signature")
+		} else {
+			sigh, err = result.Sig.Header()
+			if err != nil {
+				log.Printf("warning: packing signature: %s", err)
+			}
 		}
-		sigh, err := result.Sig.Header()
-		xcheckf(err, "packing dkim-signature header")
-		fmt.Printf("status %q, err %v\nrecord %s\nheader %s\n", result.Status, result.Err, record, sigh)
+		var txt string
+		if result.Record == nil {
+			log.Printf("warning: missing DNS record")
+		} else {
+			txt, err = result.Record.Record()
+			if err != nil {
+				log.Printf("warning: packing record: %s", err)
+			}
+		}
+		fmt.Printf("status %q, err %v\nrecord %q\nheader %s\n", result.Status, result.Err, txt, sigh)
 	}
 }
 
