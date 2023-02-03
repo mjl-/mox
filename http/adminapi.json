@@ -593,6 +593,13 @@
 					]
 				},
 				{
+					"Name": "IPRev",
+					"Docs": "",
+					"Typewords": [
+						"IPRevCheckResult"
+					]
+				},
+				{
 					"Name": "MX",
 					"Docs": "",
 					"Typewords": [
@@ -660,6 +667,72 @@
 					"Docs": "",
 					"Typewords": [
 						"AutodiscoverCheckResult"
+					]
+				}
+			]
+		},
+		{
+			"Name": "IPRevCheckResult",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Hostname",
+					"Docs": "This hostname, IPs must resolve back to this.",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "IPNames",
+					"Docs": "IP to names.",
+					"Typewords": [
+						"{}",
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Errors",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Warnings",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Instructions",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Domain",
+			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups.",
+			"Fields": [
+				{
+					"Name": "ASCII",
+					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Unicode",
+					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain.",
+					"Typewords": [
+						"string"
 					]
 				}
 			]
@@ -1494,26 +1567,6 @@
 					"Docs": "",
 					"Typewords": [
 						"Domain"
-					]
-				}
-			]
-		},
-		{
-			"Name": "Domain",
-			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups.",
-			"Fields": [
-				{
-					"Name": "ASCII",
-					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "Unicode",
-					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain.",
-					"Typewords": [
-						"string"
 					]
 				}
 			]

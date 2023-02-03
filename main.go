@@ -346,6 +346,19 @@ func usage(l []cmd, unlisted bool) {
 	os.Exit(2)
 }
 
+var loglevel string
+
+// subcommands that are not "serve" should use this function to load the config, it
+// restores any loglevel specified on the command-line, instead of using the
+// loglevels from the config file.
+func mustLoadConfig() {
+	mox.MustLoadConfig()
+	if level, ok := mlog.Levels[loglevel]; ok && loglevel != "" {
+		mox.Conf.Log[""] = level
+		mlog.SetConfig(mox.Conf.Log)
+	}
+}
+
 func main() {
 	log.SetFlags(0)
 
@@ -360,9 +373,8 @@ func main() {
 		return
 	}
 
-	var loglevel string
 	flag.StringVar(&mox.ConfigStaticPath, "config", envString("MOXCONF", "mox.conf"), "configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf")
-	flag.StringVar(&loglevel, "loglevel", "", "if non-empty, this debug level is set early in startup")
+	flag.StringVar(&loglevel, "loglevel", "", "if non-empty, this log level is set early in startup")
 
 	flag.Usage = func() { usage(cmds, false) }
 	flag.Parse()
@@ -375,6 +387,7 @@ func main() {
 	if level, ok := mlog.Levels[loglevel]; ok && loglevel != "" {
 		mox.Conf.Log[""] = level
 		mlog.SetConfig(mox.Conf.Log)
+		// note: SetConfig may be called again when subcommands loads config.
 	}
 
 	var partial []cmd
@@ -438,7 +451,7 @@ configured over otherwise secured connections, like a VPN.
 		c.Usage()
 	}
 	d := xparseDomain(args[0], "domain")
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	printClientConfig(d)
 }
 
@@ -530,7 +543,7 @@ must be set if and only if account does not yet exist.
 	}
 
 	d := xparseDomain(args[0], "domain")
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	if len(args) == 2 {
 		args = append(args, "")
@@ -557,7 +570,7 @@ rejected.
 	}
 
 	d := xparseDomain(args[0], "domain")
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	ctl := xctl()
 	ctl.xwrite("domainrm")
 	ctl.xwrite(args[0])
@@ -577,7 +590,7 @@ explicitly, see the setaccountpassword command.
 		c.Usage()
 	}
 
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	ctl := xctl()
 	ctl.xwrite("accountadd")
 	for _, s := range args {
@@ -599,7 +612,7 @@ these addresses will be rejected.
 		c.Usage()
 	}
 
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	ctl := xctl()
 	ctl.xwrite("accountrm")
 	ctl.xwrite(args[0])
@@ -615,7 +628,7 @@ func cmdConfigAddressAdd(c *cmd) {
 		c.Usage()
 	}
 
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	ctl := xctl()
 	ctl.xwrite("addressadd")
 	for _, s := range args {
@@ -636,7 +649,7 @@ Incoming email for this address will be rejected.
 		c.Usage()
 	}
 
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	ctl := xctl()
 	ctl.xwrite("addressrm")
 	ctl.xwrite(args[0])
@@ -658,7 +671,7 @@ configured.
 	}
 
 	d := xparseDomain(args[0], "domain")
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	domConf, ok := mox.Conf.Domain(d)
 	if !ok {
 		log.Fatalf("unknown domain")
@@ -677,7 +690,7 @@ func cmdConfigDNSCheck(c *cmd) {
 	}
 
 	d := xparseDomain(args[0], "domain")
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	_, ok := mox.Conf.Domain(d)
 	if !ok {
 		log.Fatalf("unknown domain")
@@ -710,6 +723,7 @@ func cmdConfigDNSCheck(c *cmd) {
 	}
 
 	result := http.Admin{}.CheckDomain(context.Background(), args[0])
+	printResult("IPRev", result.IPRev.Result)
 	printResult("MX", result.MX.Result)
 	printResult("TLS", result.TLS.Result)
 	printResult("SPF", result.SPF.Result)
@@ -737,7 +751,7 @@ Valid labels: error, info, debug, trace.
 	if len(args) > 2 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	if len(args) == 0 {
 		ctl := xctl()
@@ -770,7 +784,7 @@ new mail deliveries.
 	if len(c.Parse()) != 0 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	ctl := xctl()
 	ctl.xwrite("stop")
@@ -800,7 +814,7 @@ Like stop, existing connections get a 3 second period for graceful shutdown.
 	if len(c.Parse()) != 0 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	ctl := xctl()
 	ctl.xwrite("restart")
@@ -830,7 +844,7 @@ The password is read from stdin. Its bcrypt hash is stored in a file named
 	if len(c.Parse()) != 0 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	path := mox.ConfigDirPath(mox.Conf.Static.AdminPasswordFile)
 	if path == "" {
@@ -871,7 +885,7 @@ Any email address configured for the account can be used.
 	if len(args) != 1 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	acc, _, err := store.OpenEmail(args[0])
 	xcheckf(err, "open account")
@@ -892,7 +906,7 @@ func cmdDeliver(c *cmd) {
 	if len(args) != 1 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	ctl := xctl()
 	ctl.xwrite("deliver")
@@ -916,7 +930,7 @@ error.
 	if len(c.Parse()) != 0 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	ctl := xctl()
 	ctl.xwrite("queue")
@@ -943,7 +957,7 @@ without rescheduling.
 	if len(c.Parse()) != 0 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	ctl := xctl()
 	ctl.xwrite("queuekick")
@@ -974,7 +988,7 @@ the message, use "queue dump" before removing.
 	if len(c.Parse()) != 0 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	ctl := xctl()
 	ctl.xwrite("queuedrop")
@@ -1000,7 +1014,7 @@ The message is printed to stdout and is in standard internet mail format.
 	if len(args) != 1 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	ctl := xctl()
 	ctl.xwrite("queuedump")
@@ -1346,7 +1360,7 @@ func cmdDMARCDBAddReport(c *cmd) {
 		c.Usage()
 	}
 
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	fromdomain := xparseDomain(args[0], "domain")
 	fmt.Fprintln(os.Stderr, "reading report message from stdin")
@@ -1506,7 +1520,7 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 		c.Usage()
 	}
 
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	// First read message, to get the From-header. Then parse it as TLSRPT.
 	fmt.Fprintln(os.Stderr, "reading report message from stdin")
@@ -1582,7 +1596,7 @@ printed.
 	if len(c.Parse()) != 0 {
 		c.Usage()
 	}
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	current, lastknown, _, err := mox.LastKnown()
 	if err != nil {
@@ -1616,7 +1630,7 @@ be decrypted to a cid by admin of a mox instance only.
 		c.Usage()
 	}
 
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	recvidpath := mox.DataDirPath("receivedid.key")
 	recvidbuf, err := os.ReadFile(recvidpath)
 	xcheckf(err, "reading %s", recvidpath)
@@ -1650,7 +1664,7 @@ func cmdEnsureParsed(c *cmd) {
 		c.Usage()
 	}
 
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	a, err := store.OpenAccount(args[0])
 	xcheckf(err, "open account")
 	defer a.Close()
@@ -1695,7 +1709,7 @@ func cmdBumpUIDValidity(c *cmd) {
 		c.Usage()
 	}
 
-	mox.MustLoadConfig()
+	mustLoadConfig()
 	a, err := store.OpenAccount(args[0])
 	xcheckf(err, "open account")
 	defer a.Close()

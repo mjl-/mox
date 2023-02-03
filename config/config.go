@@ -51,7 +51,7 @@ type Static struct {
 	DefaultMailboxes []string `sconf:"optional" sconf-doc:"Mailboxes to create when adding an account. Inbox is always created. If no mailboxes are specified, the following are automatically created: Sent, Archive, Trash, Drafts and Junk."`
 
 	// All IPs that were explicitly listen on for external SMTP. Only set when there
-	// are no unspecified external SMTP listeners and there is at most 1 for IPv4 and
+	// are no unspecified external SMTP listeners and there is at most one for IPv4 and
 	// at most one for IPv6. Used for setting the local address when making outgoing
 	// connections. Those IPs are assumed to be in an SPF record for the domain,
 	// potentially unlike other IPs on the machine.  If there is only one address

@@ -183,6 +183,12 @@ type TLSCheckResult struct {
 	Result
 }
 
+type IPRevCheckResult struct {
+	Hostname dns.Domain          // This hostname, IPs must resolve back to this.
+	IPNames  map[string][]string // IP to names.
+	Result
+}
+
 type MX struct {
 	Host string
 	Pref int
@@ -275,6 +281,7 @@ type AutodiscoverCheckResult struct {
 // (e.g. DNS records), and warnings and errors encountered.
 type CheckResult struct {
 	Domain       string
+	IPRev        IPRevCheckResult
 	MX           MXCheckResult
 	TLS          TLSCheckResult
 	SPF          SPFCheckResult
@@ -319,10 +326,10 @@ func (Admin) CheckDomain(ctx context.Context, domainName string) (r CheckResult)
 }
 
 func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer, domainName string) (r CheckResult) {
-	d, err := dns.ParseDomain(domainName)
+	domain, err := dns.ParseDomain(domainName)
 	xcheckf(ctx, err, "parsing domain")
 
-	domain, ok := mox.Conf.Domain(d)
+	domConf, ok := mox.Conf.Domain(domain)
 	if !ok {
 		panic(&sherpa.Error{Code: "user:notFound", Message: "domain not found"})
 	}
@@ -384,15 +391,88 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 	var wg sync.WaitGroup
 
+	// IPRev
+	wg.Add(1)
+	go func() {
+		defer logPanic(ctx)
+		defer wg.Done()
+
+		// For each mox.Conf.SpecifiedSMTPListenIPs, and each address for
+		// mox.Conf.HostnameDomain, check if they resolve back to the host name.
+		var ips []net.IP
+		ips, err := resolver.LookupIP(ctx, "ip", mox.Conf.Static.HostnameDomain.ASCII+".")
+		if err != nil {
+			addf(&r.IPRev.Errors, "Looking up IPs for hostname: %s", err)
+		}
+	nextip:
+		for _, ip := range mox.Conf.Static.SpecifiedSMTPListenIPs {
+			for _, xip := range ips {
+				if ip.Equal(xip) {
+					continue nextip
+				}
+			}
+			ips = append(ips, ip)
+		}
+
+		type result struct {
+			IP    string
+			Addrs []string
+			Err   error
+		}
+		results := make(chan result)
+		var ipstrs []string
+		for _, ip := range ips {
+			s := ip.String()
+			go func() {
+				addrs, err := resolver.LookupAddr(ctx, s)
+				results <- result{s, addrs, err}
+			}()
+			ipstrs = append(ipstrs, s)
+		}
+		r.IPRev.IPNames = map[string][]string{}
+		for i := 0; i < len(ips); i++ {
+			lr := <-results
+			addrs, ip, err := lr.Addrs, lr.IP, lr.Err
+			if err != nil {
+				addf(&r.IPRev.Errors, "Looking up reverse name for %s: %v", ip, err)
+				continue
+			}
+			if len(addrs) != 1 {
+				addf(&r.IPRev.Errors, "Expected exactly 1 name for %s, got %d (%v)", ip, len(addrs), addrs)
+			}
+			var match bool
+			for i, a := range addrs {
+				a = strings.TrimRight(a, ".")
+				addrs[i] = a
+				ad, err := dns.ParseDomain(a)
+				if err != nil {
+					addf(&r.IPRev.Errors, "Parsing reverse name %q for %s: %v", a, ip, err)
+				}
+				if ad == mox.Conf.Static.HostnameDomain {
+					match = true
+				}
+			}
+			if !match {
+				addf(&r.IPRev.Errors, "Reverse name(s) %s for ip %s do not match hostname %s, which will cause other mail servers to reject incoming messages from this IP.", strings.Join(addrs, ","), ip, mox.Conf.Static.HostnameDomain)
+			}
+			r.IPRev.IPNames[ip] = addrs
+		}
+
+		r.IPRev.Hostname = mox.Conf.Static.HostnameDomain
+		r.IPRev.Instructions = []string{
+			fmt.Sprintf("Ensure IPs %s have reverse address %s.", strings.Join(ipstrs, ", "), mox.Conf.Static.HostnameDomain.ASCII),
+		}
+	}()
+
 	// MX
 	wg.Add(1)
 	go func() {
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		mxs, err := resolver.LookupMX(ctx, d.ASCII+".")
+		mxs, err := resolver.LookupMX(ctx, domain.ASCII+".")
 		if err != nil {
-			addf(&r.MX.Errors, "Looking up MX records for %q: %s", d, err)
+			addf(&r.MX.Errors, "Looking up MX records for %q: %s", domain, err)
 		}
 		r.MX.Records = make([]MX, len(mxs))
 		for i, mx := range mxs {
@@ -416,7 +496,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 		}
 		r.MX.Instructions = []string{
-			fmt.Sprintf("Ensure a DNS MX record like the following exists:\n\n\t%s MX 10 %s\n\nWithout the trailing dot, the name would be interpreted as relative to the domain.", d.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+"."),
+			fmt.Sprintf("Ensure a DNS MX record like the following exists:\n\n\t%s MX 10 %s\n\nWithout the trailing dot, the name would be interpreted as relative to the domain.", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+"."),
 		}
 	}()
 
@@ -490,7 +570,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 		checkSMTPSTARTTLS := func() {
 			// Initial errors are ignored, will already have been warned about by MX checks.
-			mxs, err := resolver.LookupMX(ctx, d.ASCII+".")
+			mxs, err := resolver.LookupMX(ctx, domain.ASCII+".")
 			if err != nil {
 				return
 			}
@@ -573,7 +653,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 		// Check SPF record for domain.
 		var dspfr spf.Record
-		r.SPF.DomainTXT, r.SPF.DomainRecord, dspfr = verifySPF("domain", d)
+		r.SPF.DomainTXT, r.SPF.DomainRecord, dspfr = verifySPF("domain", domain)
 		// todo: possibly check all hosts for MX records? assuming they are also sending mail servers.
 		r.SPF.HostTXT, r.SPF.HostRecord, _ = verifySPF("host", mox.Conf.Static.HostnameDomain)
 
@@ -581,7 +661,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		if err != nil {
 			addf(&r.SPF.Errors, "Making SPF record for instructions: %s", err)
 		}
-		domainspf := fmt.Sprintf("%s IN TXT %s", d.ASCII+".", mox.TXTStrings(dtxt))
+		domainspf := fmt.Sprintf("%s IN TXT %s", domain.ASCII+".", mox.TXTStrings(dtxt))
 
 		// Check SPF record for sending host. ../rfc/7208:2263 ../rfc/7208:2287
 		hostspf := fmt.Sprintf(`%s IN TXT "v=spf1 a -all"`, mox.Conf.Static.HostnameDomain.ASCII+".")
@@ -597,12 +677,12 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 		var missing []string
 		var haveEd25519 bool
-		for sel, selc := range domain.DKIM.Selectors {
+		for sel, selc := range domConf.DKIM.Selectors {
 			if _, ok := selc.Key.(ed25519.PrivateKey); ok {
 				haveEd25519 = true
 			}
 
-			_, record, txt, err := dkim.Lookup(ctx, resolver, selc.Domain, d)
+			_, record, txt, err := dkim.Lookup(ctx, resolver, selc.Domain, domain)
 			if err != nil {
 				missing = append(missing, sel)
 				if errors.Is(err, dkim.ErrNoRecord) {
@@ -638,7 +718,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 				}
 			}
 		}
-		if len(domain.DKIM.Selectors) == 0 {
+		if len(domConf.DKIM.Selectors) == 0 {
 			addf(&r.DKIM.Errors, "No DKIM configuration, add a key to the configuration file, and instructions for DNS records will appear here.")
 		} else if !haveEd25519 {
 			addf(&r.DKIM.Warnings, "Consider adding an ed25519 key: the keys are smaller, the cryptography faster and more modern.")
@@ -648,7 +728,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 			dkimr := dkim.Record{
 				Version:   "DKIM1",
 				Hashes:    []string{"sha256"},
-				PublicKey: domain.DKIM.Selectors[sel].Key.Public(),
+				PublicKey: domConf.DKIM.Selectors[sel].Key.Public(),
 			}
 			switch dkimr.PublicKey.(type) {
 			case *rsa.PublicKey:
@@ -676,7 +756,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		_, dmarcDomain, record, txt, err := dmarc.Lookup(ctx, resolver, d)
+		_, dmarcDomain, record, txt, err := dmarc.Lookup(ctx, resolver, domain)
 		if err != nil {
 			addf(&r.DMARC.Errors, "Looking up DMARC record: %s", err)
 		} else if record == nil {
@@ -697,8 +777,8 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 			addf(&r.DMARC.Warnings, "It is recommended you specify you would like aggregate reports about delivery success in the DMARC record, see instructions.")
 		}
 		localpart := smtp.Localpart("dmarc-reports")
-		if domain.DMARC != nil {
-			localpart = domain.DMARC.ParsedLocalpart
+		if domConf.DMARC != nil {
+			localpart = domConf.DMARC.ParsedLocalpart
 		} else {
 			addf(&r.DMARC.Instructions, `Configure a DMARC destination in domain in config file. Localpart could be %q.`, localpart)
 		}
@@ -706,7 +786,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 			Version: "DMARC1",
 			Policy:  "reject",
 			AggregateReportAddresses: []dmarc.URI{
-				{Address: fmt.Sprintf("mailto:%s!10m", smtp.NewAddress(localpart, d).Pack(false))},
+				{Address: fmt.Sprintf("mailto:%s!10m", smtp.NewAddress(localpart, domain).Pack(false))},
 			},
 			AggregateReportingInterval: 86400,
 			Percentage:                 100,
@@ -721,7 +801,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		record, txt, err := tlsrpt.Lookup(ctx, resolver, d)
+		record, txt, err := tlsrpt.Lookup(ctx, resolver, domain)
 		if err != nil {
 			addf(&r.TLSRPT.Errors, "Looking up TLSRPT record: %s", err)
 		}
@@ -731,15 +811,15 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		}
 
 		localpart := smtp.Localpart("tls-reports")
-		if domain.TLSRPT != nil {
-			localpart = domain.TLSRPT.ParsedLocalpart
+		if domConf.TLSRPT != nil {
+			localpart = domConf.TLSRPT.ParsedLocalpart
 		} else {
 			addf(&r.TLSRPT.Errors, `Configure a TLSRPT destination in domain in config file. Localpart could be %q.`, localpart)
 		}
 		tlsrptr := &tlsrpt.Record{
 			Version: "TLSRPTv1",
 			// todo: should URI-encode the URI, including ',', '!' and ';'.
-			RUAs: [][]string{{fmt.Sprintf("mailto:%s", smtp.NewAddress(localpart, d).Pack(false))}},
+			RUAs: [][]string{{fmt.Sprintf("mailto:%s", smtp.NewAddress(localpart, domain).Pack(false))}},
 		}
 		instr := fmt.Sprintf(`TLSRPT is an opt-in mechanism to request feedback about TLS connectivity from remote SMTP servers when they connect to us. It allows detecting delivery problems and unwanted downgrades to plaintext SMTP connections. With TLSRPT you configure an email address to which reports should be sent. Remote SMTP servers will send a report once a day with the number of successful connections, and the number of failed connections including details that should help debugging/resolving any issues.
 
@@ -756,7 +836,7 @@ Ensure a DNS TXT record like the following exists:
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		record, txt, cnames, err := mtasts.LookupRecord(ctx, resolver, d)
+		record, txt, cnames, err := mtasts.LookupRecord(ctx, resolver, domain)
 		if err != nil {
 			addf(&r.MTASTS.Errors, "Looking up MTA-STS record: %s", err)
 		}
@@ -770,7 +850,7 @@ Ensure a DNS TXT record like the following exists:
 			r.MTASTS.Record = &MTASTSRecord{*record}
 		}
 
-		policy, text, err := mtasts.FetchPolicy(ctx, d)
+		policy, text, err := mtasts.FetchPolicy(ctx, domain)
 		if err != nil {
 			addf(&r.MTASTS.Errors, "Fetching MTA-STS policy: %s", err)
 		} else if policy.Mode == mtasts.ModeNone {
@@ -788,16 +868,16 @@ Ensure a DNS TXT record like the following exists:
 				addf(&r.MTASTS.Warnings, "Policy has a MaxAge of less than 1 day. For stable configurations, the recommended period is in weeks.")
 			}
 
-			mxl, _ := resolver.LookupMX(ctx, d.ASCII+".")
+			mxl, _ := resolver.LookupMX(ctx, domain.ASCII+".")
 			// We do not check for errors, the MX check will complain about mx errors, we assume we will get the same error here.
 			mxs := map[dns.Domain]struct{}{}
 			for _, mx := range mxl {
-				domain, err := dns.ParseDomain(strings.TrimSuffix(mx.Host, "."))
+				d, err := dns.ParseDomain(strings.TrimSuffix(mx.Host, "."))
 				if err != nil {
 					addf(&r.MTASTS.Warnings, "MX record %q is invalid: %s", mx.Host, err)
 					continue
 				}
-				mxs[domain] = struct{}{}
+				mxs[d] = struct{}{}
 			}
 			for mx := range mxs {
 				if !policy.Matches(mx) {
@@ -830,14 +910,14 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 
 		addf(&r.MTASTS.Instructions, `Enable a policy through the configuration file. For new deployments, it is best to start with mode "testing" while enabling TLSRPT. Start with a short "max_age", so updates to your policy are picked up quickly. When confidence in the deployment is high enough, switch to "enforce" mode and a longer "max age". A max age in the order of weeks is recommended. If you foresee a change to your setup in the future, requiring different policies or MX records, you may want to dial back the "max age" ahead of time, similar to how you would handle TTL's in DNS record updates.`)
 
-		host := fmt.Sprintf("Ensure DNS CNAME/A/AAAA records exist that resolve mta-sts.%s to this mail server. For example:\n\n\t%s IN CNAME %s\n\n", d.ASCII, "mta-sts."+d.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
+		host := fmt.Sprintf("Ensure DNS CNAME/A/AAAA records exist that resolve mta-sts.%s to this mail server. For example:\n\n\t%s IN CNAME %s\n\n", domain.ASCII, "mta-sts."+domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 		addf(&r.MTASTS.Instructions, host)
 
 		mtastsr := mtasts.Record{
 			Version: "STSv1",
 			ID:      time.Now().Format("20060102T150405"),
 		}
-		dns := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_mta-sts IN TXT %s\n\nConfigure the ID in the configuration file, it must be of the form [a-zA-Z0-9]{1,31}. It represents the version of the policy. For each policy change, you must change the ID to a new unique value. You could use a timestamp like 20220621T123000. When this field exists, an SMTP server will fetch a policy at https://mta-sts.%s/.well-known/mta-sts.txt. This policy is served by mox.", mox.TXTStrings(mtastsr.String()), d.Name())
+		dns := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_mta-sts IN TXT %s\n\nConfigure the ID in the configuration file, it must be of the form [a-zA-Z0-9]{1,31}. It represents the version of the policy. For each policy change, you must change the ID to a new unique value. You could use a timestamp like 20220621T123000. When this field exists, an SMTP server will fetch a policy at https://mta-sts.%s/.well-known/mta-sts.txt. This policy is served by mox.", mox.TXTStrings(mtastsr.String()), domain.Name())
 		addf(&r.MTASTS.Instructions, dns)
 	}()
 
@@ -885,7 +965,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		for i := range reqs {
 			go func(i int) {
 				defer srvwg.Done()
-				_, reqs[i].srvs, reqs[i].err = resolver.LookupSRV(ctx, reqs[i].name[1:], "tcp", d.ASCII+".")
+				_, reqs[i].srvs, reqs[i].err = resolver.LookupSRV(ctx, reqs[i].name[1:], "tcp", domain.ASCII+".")
 			}(i)
 		}
 		srvwg.Wait()
@@ -893,8 +973,8 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		instr := "Ensure DNS records like the following exist:\n\n"
 		r.SRVConf.SRVs = map[string][]*net.SRV{}
 		for _, req := range reqs {
-			name := req.name + "_.tcp." + d.ASCII
-			instr += fmt.Sprintf("\t%s._tcp.%s IN SRV 0 1 %d %s\n", req.name, d.ASCII+".", req.port, req.host)
+			name := req.name + "_.tcp." + domain.ASCII
+			instr += fmt.Sprintf("\t%s._tcp.%s IN SRV 0 1 %d %s\n", req.name, domain.ASCII+".", req.port, req.host)
 			r.SRVConf.SRVs[req.name] = req.srvs
 			if err != nil {
 				addf(&r.SRVConf.Errors, "Looking up SRV record %q: %s", name, err)
@@ -913,9 +993,9 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		addf(&r.Autoconf.Instructions, "Ensure a DNS CNAME record like the following exists:\n\n\tautoconfig.%s IN CNAME %s\n\nNote: the trailing dot is relevant, it makes the host name absolute instead of relative to the domain name.", d.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
+		addf(&r.Autoconf.Instructions, "Ensure a DNS CNAME record like the following exists:\n\n\tautoconfig.%s IN CNAME %s\n\nNote: the trailing dot is relevant, it makes the host name absolute instead of relative to the domain name.", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 
-		host := "autoconfig." + d.ASCII + "."
+		host := "autoconfig." + domain.ASCII + "."
 		ips, ourIPs, notOurIPs, err := lookupIPs(&r.Autoconf.Errors, host)
 		if err != nil {
 			addf(&r.Autoconf.Errors, "Looking up autoconfig host: %s", err)
@@ -929,7 +1009,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 			addf(&r.Autoconf.Errors, "Autoconfig does not point to some IP addresses that are not ours: %v", notOurIPs)
 		}
 
-		checkTLS(&r.Autoconf.Errors, "autoconfig."+d.ASCII, ips, "443")
+		checkTLS(&r.Autoconf.Errors, "autoconfig."+domain.ASCII, ips, "443")
 	}()
 
 	// Autodiscover
@@ -938,9 +1018,9 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		addf(&r.Autodiscover.Instructions, "Ensure DNS records like the following exist:\n\n\t_autodiscover._tcp.%s IN SRV 0 1 443 autoconfig.%s\n\tautoconfig.%s IN CNAME %s\n\nNote: the trailing dots are relevant, it makes the host names absolute instead of relative to the domain name.", d.ASCII+".", d.ASCII+".", d.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
+		addf(&r.Autodiscover.Instructions, "Ensure DNS records like the following exist:\n\n\t_autodiscover._tcp.%s IN SRV 0 1 443 autoconfig.%s\n\tautoconfig.%s IN CNAME %s\n\nNote: the trailing dots are relevant, it makes the host names absolute instead of relative to the domain name.", domain.ASCII+".", domain.ASCII+".", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 
-		_, srvs, err := resolver.LookupSRV(ctx, "autodiscover", "tcp", d.ASCII+".")
+		_, srvs, err := resolver.LookupSRV(ctx, "autodiscover", "tcp", domain.ASCII+".")
 		if err != nil {
 			addf(&r.Autodiscover.Errors, "Looking up SRV record %q: %s", "autodiscover", err)
 			return

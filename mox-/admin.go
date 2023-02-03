@@ -399,7 +399,11 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 		"$TTL 300",
 		"",
 
-		"; Deliver email to this host.",
+		"; For the machine, only needs to be created for the first domain added.",
+		fmt.Sprintf(`%-*s IN TXT "v=spf1 a -all"`, 20+len(d), h+"."), // ../rfc/7208:2263 ../rfc/7208:2287
+		"",
+
+		"; Deliver email for the domain to this host.",
 		fmt.Sprintf("%s.                    MX 10 %s.", d, h),
 		"",
 
@@ -447,8 +451,6 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 		"; ~all means softfail for anything else, which is done instead of -all to prevent older",
 		"; mail servers from rejecting the message because they never get to looking for a dkim/dmarc pass.",
 		fmt.Sprintf(`%s.                    IN TXT "v=spf1 mx ~all"`, d),
-		"; The next record may already exist if you have more domains configured.",
-		fmt.Sprintf(`%-*s IN TXT "v=spf1 a -all"`, 20+len(d), h+"."), // ../rfc/7208:2263 ../rfc/7208:2287
 		"",
 
 		"; Emails that fail the DMARC check (without DKIM and without SPF) should be rejected, and request reports.",

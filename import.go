@@ -19,7 +19,6 @@ import (
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/store"
 )
 
@@ -86,7 +85,7 @@ func xcmdImport(mbox, train, markRead bool, args []string, c *cmd) {
 		c.Usage()
 	}
 
-	mox.MustLoadConfig()
+	mustLoadConfig()
 
 	account := args[0]
 	mailbox := args[1]

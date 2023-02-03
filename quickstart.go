@@ -122,11 +122,64 @@ permissions, and if you run it on Linux it prints a systemd service file.
 	fmt.Printf("Looking up hostname %q...", hostname)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err = dns.StrictResolver{}.LookupIPAddr(ctx, hostname.ASCII+".")
+	resolver := dns.StrictResolver{}
+	ips, err := resolver.LookupIPAddr(ctx, hostname.ASCII+".")
 	if err != nil {
 		fmt.Printf("\n\nWARNING: Quickstart assumes hostname %q and generates a config for that host,\nbut could not retrieve that name from DNS:\n\n\t%s\n\n", hostname, err)
 	} else {
 		fmt.Printf(" OK\n")
+
+		var l []string
+		type result struct {
+			IP    string
+			Addrs []string
+			Err   error
+		}
+		results := make(chan result)
+		for _, ip := range ips {
+			s := ip.String()
+			l = append(l, s)
+			go func() {
+				addrs, err := resolver.LookupAddr(ctx, s)
+				results <- result{s, addrs, err}
+			}()
+		}
+		fmt.Printf("Looking up reverse names for IP(s) %s...", strings.Join(l, ", "))
+		var warned bool
+		warnf := func(format string, args ...any) {
+			fmt.Printf("\nWARNING: %s", fmt.Sprintf(format, args...))
+			warned = true
+		}
+		for i := 0; i < len(ips); i++ {
+			r := <-results
+			if r.Err != nil {
+				warnf("looking up reverse name for %s: %v", r.IP, r.Err)
+				continue
+			}
+			if len(r.Addrs) != 1 {
+				warnf("expected exactly 1 name for %s, got %d (%v)", r.IP, len(r.Addrs), r.Addrs)
+			}
+			var match bool
+			for i, a := range r.Addrs {
+				a = strings.TrimRight(a, ".")
+				r.Addrs[i] = a // For potential error message below.
+				d, err := dns.ParseDomain(a)
+				if err != nil {
+					warnf("parsing reverse name %q for %s: %v", a, r.IP, err)
+				}
+				if d == hostname {
+					match = true
+				}
+			}
+			if !match {
+				warnf("reverse name(s) %s for ip %s do not match hostname %s, which will cause other mail servers to reject incoming messages from this IP", strings.Join(r.Addrs, ","), r.IP, hostname)
+			}
+		}
+		if warned {
+			fmt.Printf("\n\n")
+		} else {
+			fmt.Printf(" OK\n")
+		}
 	}
 	cancel()
 
