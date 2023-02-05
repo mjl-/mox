@@ -24,7 +24,7 @@ check:
 
 # having "err" shadowed is common, best to not have others
 check-shadow:
-	go vet -vettool=$$(which shadow) ./...
+	go vet -vettool=$$(which shadow) ./... 2>&1 | grep -v '"err"'
 
 fuzz:
 	go test -fuzz FuzzParseSignature -fuzztime 5m ./dkim
