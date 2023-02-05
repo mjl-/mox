@@ -1,0 +1,125 @@
+X-Mox-Reason: no-bad-signals
+Return-Path: <tlsrpt-noreply@microsoft.com>
+Authentication-Results: komijn.test.xmox.nl; iprev=pass
+	policy.iprev=2a01:111:f403:c110::2; dkim=pass (1024 bit rsa)
+	header.d=microsoft.com header.s=selector2 header.a=rsa-sha256
+	header.b=Us/lkmPE/b1N; spf=pass smtp.mailfrom=microsoft.com; dmarc=pass
+	header.from=microsoft.com
+Received-SPF: pass (domain microsoft.com) client-ip="2a01:111:f403:c110::2";
+	envelope-from="tlsrpt-noreply@microsoft.com";
+	helo=bn6pr00cu002-vft-obe.outbound.protection.outlook.com;
+	mechanism="include:_spf-a.microsoft.com"; receiver=komijn.test.xmox.nl;
+	identity=mailfrom
+Received: from
+	bn6pr00cu002-vft-obe.outbound.protection.outlook.com (mail-eastus2azlp170110002.outbound.protection.outlook.com [IPv6:2a01:111:f403:c110::2])
+	by komijn.test.xmox.nl ([IPv6:2a02:2770::21a:4aff:feba:bde0]) via tcp with
+	ESMTPS id ET5aGZkrsqiMyI7lRqJILg (TLS1.2
+	TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256) for <tlsrpt@test.xmox.nl>;
+	03 Feb 2023 06:09 +0100
+ARC-Seal: i=1; a=rsa-sha256; s=arcselector9901; d=microsoft.com; cv=none;
+ b=Zj1+7Y+dQWDIGZml3YSDPY4CtUyZe1JhBI5EXh3K2lhXDVMmyTzByHBTNNDUEEFaBpOJeIoT4u8KnsBGqzuhKu6PDJFnC/cAzkmdrkK+Zktz9sRGW0UGfEK9gQQjK3plEQjQXv1kTndGd7nJKUZbnvhS+aMCZPy1zPW1s/TaN17zaj5W9KeHT9VnWM+KHL/G5yWjzSWZjCCKJ6X9QO1lzC+umImYk84GWsbO7Zz+Mow9cwk5MXTuTlh1t51/QBah2Ji+nIrtUlJdVMWfU/VTrSjWiYNoQKPccDLFsVx1NszfC+wjHJsQ16rQmemx5WGPMAQeuL7duxTZU2olTF3yGA==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=microsoft.com;
+ s=arcselector9901;
+ h=From:Date:Subject:Message-ID:Content-Type:MIME-Version:X-MS-Exchange-AntiSpam-MessageData-ChunkCount:X-MS-Exchange-AntiSpam-MessageData-0:X-MS-Exchange-AntiSpam-MessageData-1;
+ bh=Z6V0Gq60WfveQ5peWHeu237UjrSbJbb5WwH7R9oVmgE=;
+ b=K5U87q/9vj8zgOqhfqSJUGAcQUIH/2/1+L985UQd1fgxPFlt01ubeqIwLjKI8ZOU2Q4CY2dXdvjh0Ra04eNk/GtgPrpOEPkQRca+Wocd6x8so4+f+yEuxzUdcDlQwWG7moIfMxsTNp8oF8nXlEuiS8aSZRe4Gjtq5XPzTx6SmeznNGb7iwq/ilMW3+zBe+H56oO2XfKIU0/fbQgL6CuwiOGnKEnkB6SX9hqltadpdgDZ1FxcJ9UpH3pBVMxA65llTKWloQCoqvO5C8Usa3eYiqCzwcbaF1Kc3T0+llfMhZUuH5OsrNqxQ/GRfr2OLdcMRPPXiPDL1Aslnp+/pLKzbQ==
+ARC-Authentication-Results: i=1; mx.microsoft.com 1; spf=none; dmarc=none
+ action=none header.from=microsoft.com; dkim=none (message not signed);
+ arc=none
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=microsoft.com;
+ s=selector2;
+ h=From:Date:Subject:Message-ID:Content-Type:MIME-Version:X-MS-Exchange-SenderADCheck;
+ bh=Z6V0Gq60WfveQ5peWHeu237UjrSbJbb5WwH7R9oVmgE=;
+ b=Us/lkmPE/b1Nw3uwZcWd/DzyBQNqfj8DQfjMjtUf2jKUQC2GJ1CbykG19VBCZ9EEfE/UBU0tI6HvflaakEe8jo2HrBdcpEG4mZIVzHw/MREW8fnSPH3pvTFv9wL8OgGX7ls5aXVQBPS3lTTX9b67GVFQOsgG+FVe7cSsgkY4CYQ=
+Received: from DM6PR00CA0023.namprd00.prod.outlook.com (2603:10b6:5:114::36)
+ by PH7PR21MB3143.namprd21.prod.outlook.com (2603:10b6:510:1d7::17) with
+ Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.6086.6; Fri, 3 Feb
+ 2023 05:09:23 +0000
+Received: from BL2NAM06FT015.Eop-nam06.prod.protection.outlook.com
+ (2603:10b6:5:114:cafe::fb) by DM6PR00CA0023.outlook.office365.com
+ (2603:10b6:5:114::36) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.6108.0 via Frontend
+ Transport; Fri, 3 Feb 2023 05:09:23 +0000
+X-MS-Exchange-Authentication-Results: spf=none (sender IP is 13.64.196.54)
+ smtp.mailfrom=microsoft.com; dkim=none (message not signed)
+ header.d=none;dmarc=none action=none header.from=microsoft.com;
+Received: from 104.47.53.36 (13.64.196.54) by
+ BL2NAM06FT015.mail.protection.outlook.com (10.152.107.16) with Microsoft SMTP
+ Server (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.20.6105.0 via Frontend Transport; Fri, 3 Feb 2023 05:09:22 +0000
+From: <tlsrpt-noreply@microsoft.com>
+To: "tlsrpt@test.xmox.nl" <tlsrpt@test.xmox.nl>
+Date: Fri, 3 Feb 2023 05:09:22 +0000
+Subject: Report Domain: test.xmox.nl Submitter: microsoft.com Report-ID:
+ 133198585438131172+test.xmox.nl
+TLS-Report-Domain: test.xmox.nl
+TLS-Report-Submitter: microsoft.com
+MIME-Version: 1.0
+Message-ID: <133198585438131172+test.xmox.nl@test.xmox.nl>
+Content-Type: multipart/report;
+	boundary="_078e4900-4595-46ae-b003-a8055864441a_"; report-type=tlsrpt
+Return-Path: tlsrpt-noreply@microsoft.com
+X-MS-TrafficTypeDiagnostic:
+	BL2NAM06FT015:EE_FirstParty-TlsRpt-V3-System|PH7PR21MB3143:EE_FirstParty-TlsRpt-V3-System
+X-MS-PublicTrafficType: Email
+X-MS-Office365-Filtering-Correlation-Id: 629adf8c-973b-47b9-56f5-08db05a4d040
+X-MS-Exchange-SenderADCheck: 1
+X-MS-Exchange-AntiSpam-Relay: 0
+X-Microsoft-Antispam: BCL:0;
+X-Microsoft-Antispam-Message-Info:
+	=?us-ascii?Q?rEwfAcoxRs9ukTDgcUC1xc4EDv8bLTL/gAy36omW0Gnxy87sxTNdcDIZCn/q?=
+ =?us-ascii?Q?jLg59yN+UdeCkpS5/dzAak3t/JPkQ6dCcITlFXJoReZ466sIN21HSqp0MBj4?=
+ =?us-ascii?Q?j5sEn8nNT4Y1ZHOCYhtUnGlEdf83FbRsmuSy4waTFc+areFtv+qUlxROFuPN?=
+ =?us-ascii?Q?lc2JndCblM9FBKby5dMk+nB42pbvEDHXt9i3cKrXXY8QXqJJk6Cu0s7RwPh6?=
+ =?us-ascii?Q?KwuWBnruL8CjEOXux0mNQmkghzf6mnqgc0ctMfJyZXrKrWnbE2dra+BBeiuL?=
+ =?us-ascii?Q?+cwoKLYIjjbUHaZJRrpflKohxMdVJtJrC8nBY0kmzKr6r6YXx4H9f63e6olP?=
+ =?us-ascii?Q?E+DA+a8oDmYIpOAC7yVF1uN4G+zp1dKw7A+VbmCFEiJYyaouHs3koJ0pQU6E?=
+ =?us-ascii?Q?nee92VUtDPM97mgpHqsliBmgJ1tm7E42oofZ+IwTvPVQIpxRXoBmx+dU1aaR?=
+ =?us-ascii?Q?oRQzz9lCOa1alruvaxzqwZyPQOA/cE0KB29w67hk8KDAwG9mmCaslVEKdvnE?=
+ =?us-ascii?Q?cv1Lwp2QIPVMEKglkGAFJ3itGGsMMfx1fceObHkS6NnSZlXtPrE0Ob6O0nFt?=
+ =?us-ascii?Q?Qcb4Ie+cNQ9RjjZ3tmrsp5x1JCbLOVxLNX4XczDQw2xORC+PN7UIGgA5M0nG?=
+ =?us-ascii?Q?8AlHAv0SDJ2XistLmO/pVbSEdOVDfte+lymFby7N0FvD6GZnQvxnHgWsnOH0?=
+ =?us-ascii?Q?0CEhC1VJDmDqqj7TzPy4fDCxu8IoPd2GP4YHM/ELKcZaSj/BxKDKA4+miALp?=
+ =?us-ascii?Q?0xzJpf3BwQ3Fni2VbEtx1Uc3+QS/p3hYlL/X9yOKNKiIlIb8hD54IqA5wrQm?=
+ =?us-ascii?Q?mkSB4PMyW5MQrKmVXXfnv8p8cYXFai0TGvKxTkXjje8LCu9Sjsk5NkHISj3o?=
+ =?us-ascii?Q?jxG6AIOkgHS+2PYGPgiaDGZ3iAF5jJsMz/bqNsjSe3ZTcr2Oqdzwt0bQReT6?=
+ =?us-ascii?Q?soIxWt01s2OGdNQcemyVJQ=3D=3D?=
+X-Forefront-Antispam-Report:
+	CIP:13.64.196.54;CTRY:US;LANG:en;SCL:1;SRV:;IPV:NLI;SFV:NSPM;H:104.47.53.36;PTR:InfoDomainNonexistent;CAT:NONE;SFS:(13230025)(6049001)(376002)(396003)(39860400002)(136003)(346002)(47530400004)(451199018)(26005)(9316004)(478600001)(186003)(9686003)(956004)(86362001)(6486002)(356005)(336012)(44610500005)(66899018)(10290500003)(16576012)(316002)(36736006)(37006003)(19618925003)(2876002)(68406010)(8676002)(6916009)(82950400001)(82960400001)(41300700001)(2906002)(81166007)(8936002)(235185007)(5660300002)(564344004)(75746023)(1710700012);DIR:OUT;SFP:1102;
+X-MS-Exchange-AntiSpam-MessageData-ChunkCount: 1
+X-MS-Exchange-AntiSpam-MessageData-0:
+	2Lfsh+bHDu9fcO99os7Tw24yIOGu0DBFainaCWW4zRQcqdbNix88d/SGs7umhPzdE7zUksu7/VJVH7NKb92uaVWjHFTCuiHN8pTOMa/+ErAOXL/SlhMGPAA2geJkRy4Ok2TTuEdUEVlVRTk8ckSJ5yFmg3HD8p10RLVTwZcQ0XLCHCplEO5/j+y8eZ6YAELXT1UOI1DwbQ7RrIjVcHsPhUEAmxOMcTZ+V8ZUuyW9VQBdpc1Rg3NFnIgq/Mtd2nUCEpkhUdgUHCrZfey9qIJybyUWch1P8ney3WACXM54SU1wv7Vgy4S+QXjRAYxC8Ond8RP4yhn7mnA6JXlWoe8t0BCKMHon7pwev8zXbFneNUvQQO2X0XuxquvrwMtcYCTub6dZfaHkP3gFFrOlChqFe4us01paRuPcPevWz1RyHxULUMwo2iMv/g4SeMsftrXvowX1FjXwB3OKaeCa+DHjci8da4Mg7nLmEb8OUUzG43sKDpPZ2mx9kXREQgy44OXp
+X-OriginatorOrg: microsoft.com
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 03 Feb 2023 05:09:22.8303
+ (UTC)
+X-MS-Exchange-CrossTenant-Network-Message-Id: 629adf8c-973b-47b9-56f5-08db05a4d040
+X-MS-Exchange-CrossTenant-Id: 72f988bf-86f1-41af-91ab-2d7cd011db47
+X-MS-Exchange-CrossTenant-OriginalAttributedTenantConnectingIp: TenantId=72f988bf-86f1-41af-91ab-2d7cd011db47;Ip=[13.64.196.54];Helo=[104.47.53.36]
+X-MS-Exchange-CrossTenant-AuthAs: Internal
+X-MS-Exchange-CrossTenant-AuthSource: TreatMessagesAsInternal-BL2NAM06FT015.Eop-nam06.prod.protection.outlook.com
+X-MS-Exchange-CrossTenant-FromEntityHeader: Internet
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: PH7PR21MB3143
+
+--_078e4900-4595-46ae-b003-a8055864441a_
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: quoted-printable
+
+This is an aggregate TLS report from microsoft.com
+
+--_078e4900-4595-46ae-b003-a8055864441a_
+Content-Type: application/tlsrpt+gzip
+Content-Description:
+ microsoft.com!test.xmox.nl!1673308800!1673395199!133198585438131172.json.gz
+Content-Disposition: attachment;
+	filename="microsoft.com!test.xmox.nl!1673308800!1673395199!133198585438131172.json.gz"
+Content-Transfer-Encoding: base64
+
+H4sIAAAAAAAEAHWRwWrDMAyGXyX4ujjESbulPg123qm9jTKM4wRvsRVspSQLefcp6TpGYSCwZH2S
+fsszg9Aqb78UWvDcK2eYZK9WB4jQYPICoYewJVnKaoWGB+VbgmYWUQXk6x3arazIi5Lngov8lOdy
+Myoyvv4HKkq5P5CxJWUaPCqN3PoGiMIuhh65h2D6bnp2N0GZBkc96RZotq0JFWUpDtW+2u/KSpRC
+PBUPaCJmo4Mx8x3RPXRWWxOZfJuvwbTqv3ocp37VFTHe0IlHDNa3xLOLCZEeL5Pj6XgRRDiojUwM
+yQzarPEok09w9sNnd2OdGt9VS3D1uKNNnH+71+CU9esr/xbQEuLgnAqbOARUHY+D1ibGZiCXzvWL
+NAwemSzSH6RRthuCuc/ny3JevgG9VPpP3gEAAA==
+
+--_078e4900-4595-46ae-b003-a8055864441a_--

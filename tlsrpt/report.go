@@ -32,6 +32,47 @@ type TLSRPTDateRange struct {
 	End   time.Time `json:"end-datetime"`
 }
 
+// UnmarshalJSON is defined on the date range, not the individual time.Time fields
+// because it is easier to keep the unmodified time.Time fields stored in the
+// database.
+func (dr *TLSRPTDateRange) UnmarshalJSON(buf []byte) error {
+	var v struct {
+		Start xtime `json:"start-datetime"`
+		End   xtime `json:"end-datetime"`
+	}
+	if err := json.Unmarshal(buf, &v); err != nil {
+		return err
+	}
+	dr.Start = time.Time(v.Start)
+	dr.End = time.Time(v.End)
+	return nil
+}
+
+// xtime and its UnmarshalJSON exists to work around a specific invalid date-time encoding seen in the wild.
+type xtime time.Time
+
+func (x *xtime) UnmarshalJSON(buf []byte) error {
+	var t time.Time
+	err := t.UnmarshalJSON(buf)
+	if err == nil {
+		*x = xtime(t)
+		return nil
+	}
+
+	// Microsoft is sending reports with invalid start-datetime/end-datetime (missing
+	// timezone, ../rfc/8460:682 ../rfc/3339:415). We compensate.
+	var s string
+	if err := json.Unmarshal(buf, &s); err != nil {
+		return err
+	}
+	t, err = time.Parse("2006-01-02T15:04:05", s)
+	if err != nil {
+		return err
+	}
+	*x = xtime(t)
+	return nil
+}
+
 type Result struct {
 	Policy         ResultPolicy     `json:"policy"`
 	Summary        Summary          `json:"summary"`
