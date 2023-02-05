@@ -1,8 +1,11 @@
 package imapserver
 
 import (
+	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"hash"
 	"strings"
 	"testing"
 
@@ -53,19 +56,27 @@ func TestAuthenticatePlain(t *testing.T) {
 	tc.readstatus("ok")
 }
 
+func TestAuthenticateSCRAMSHA1(t *testing.T) {
+	testAuthenticateSCRAM(t, "SCRAM-SHA-1", sha1.New)
+}
+
 func TestAuthenticateSCRAMSHA256(t *testing.T) {
+	testAuthenticateSCRAM(t, "SCRAM-SHA-256", sha256.New)
+}
+
+func testAuthenticateSCRAM(t *testing.T, method string, h func() hash.Hash) {
 	tc := start(t)
-	tc.client.AuthenticateSCRAMSHA256("mjl@mox.example", "testtest")
+	tc.client.AuthenticateSCRAM(method, h, "mjl@mox.example", "testtest")
 	tc.close()
 
 	auth := func(status string, serverFinalError error, username, password string) {
 		t.Helper()
 
-		sc := scram.NewClient(username, "")
+		sc := scram.NewClient(h, username, "")
 		clientFirst, err := sc.ClientFirst()
 		tc.check(err, "scram clientFirst")
 		tc.client.LastTag = "x001"
-		tc.writelinef("%s authenticate scram-sha-256 %s", tc.client.LastTag, base64.StdEncoding.EncodeToString([]byte(clientFirst)))
+		tc.writelinef("%s authenticate %s %s", tc.client.LastTag, method, base64.StdEncoding.EncodeToString([]byte(clientFirst)))
 
 		xreadContinuation := func() []byte {
 			line, _, result, rerr := tc.client.ReadContinuation()
@@ -109,7 +120,7 @@ func TestAuthenticateSCRAMSHA256(t *testing.T) {
 	// auth("no", nil, "other@mox.example", "testtest")
 
 	tc.transactf("no", "authenticate bogus ")
-	tc.transactf("bad", "authenticate scram-sha-256 not base64...")
-	tc.transactf("bad", "authenticate scram-sha-256 %s", base64.StdEncoding.EncodeToString([]byte("bad data")))
+	tc.transactf("bad", "authenticate %s not base64...", method)
+	tc.transactf("bad", "authenticate %s %s", method, base64.StdEncoding.EncodeToString([]byte("bad data")))
 	tc.close()
 }

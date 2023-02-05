@@ -1,6 +1,8 @@
 package scram
 
 import (
+	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"testing"
@@ -21,12 +23,32 @@ func tcheck(t *testing.T, err error, msg string) {
 	}
 }
 
-func TestScramServer(t *testing.T) {
+func TestSCRAMSHA1Server(t *testing.T) {
+	// Test vector from ../rfc/5802:496
+	salt := base64Decode("QSXCR+Q6sek8bf92")
+	saltedPassword := SaltPassword(sha1.New, "pencil", salt, 4096)
+
+	server, err := NewServer(sha1.New, []byte("n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL"))
+	server.serverNonceOverride = "3rfcNHYJY1ZVvWVs7j"
+	tcheck(t, err, "newserver")
+	resp, err := server.ServerFirst(4096, salt)
+	tcheck(t, err, "server first")
+	if resp != "r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,s=QSXCR+Q6sek8bf92,i=4096" {
+		t.Fatalf("bad server first")
+	}
+	serverFinal, err := server.Finish([]byte("c=biws,r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,p=v0X8v3Bz2T0CJGbJQyF0X+HI4Ts="), saltedPassword)
+	tcheck(t, err, "finish")
+	if serverFinal != "v=rmF9pqV8S7suAoZWja4dJRkFsKQ=" {
+		t.Fatalf("bad server final")
+	}
+}
+
+func TestSCRAMSHA256Server(t *testing.T) {
 	// Test vector from ../rfc/7677:122
 	salt := base64Decode("W22ZaJ0SNY7soEsUEjb6gQ==")
-	saltedPassword := SaltPassword("pencil", salt, 4096)
+	saltedPassword := SaltPassword(sha256.New, "pencil", salt, 4096)
 
-	server, err := NewServer([]byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"))
+	server, err := NewServer(sha256.New, []byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"))
 	server.serverNonceOverride = "%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
 	tcheck(t, err, "newserver")
 	resp, err := server.ServerFirst(4096, salt)
@@ -44,9 +66,9 @@ func TestScramServer(t *testing.T) {
 // Bad attempt with wrong password.
 func TestScramServerBadPassword(t *testing.T) {
 	salt := base64Decode("W22ZaJ0SNY7soEsUEjb6gQ==")
-	saltedPassword := SaltPassword("marker", salt, 4096)
+	saltedPassword := SaltPassword(sha256.New, "marker", salt, 4096)
 
-	server, err := NewServer([]byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"))
+	server, err := NewServer(sha256.New, []byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"))
 	server.serverNonceOverride = "%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
 	tcheck(t, err, "newserver")
 	_, err = server.ServerFirst(4096, salt)
@@ -60,9 +82,9 @@ func TestScramServerBadPassword(t *testing.T) {
 // Bad attempt with different number of rounds.
 func TestScramServerBadIterations(t *testing.T) {
 	salt := base64Decode("W22ZaJ0SNY7soEsUEjb6gQ==")
-	saltedPassword := SaltPassword("pencil", salt, 2048)
+	saltedPassword := SaltPassword(sha256.New, "pencil", salt, 2048)
 
-	server, err := NewServer([]byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"))
+	server, err := NewServer(sha256.New, []byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"))
 	server.serverNonceOverride = "%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
 	tcheck(t, err, "newserver")
 	_, err = server.ServerFirst(4096, salt)
@@ -76,9 +98,9 @@ func TestScramServerBadIterations(t *testing.T) {
 // Another attempt but with a randomly different nonce.
 func TestScramServerBad(t *testing.T) {
 	salt := base64Decode("W22ZaJ0SNY7soEsUEjb6gQ==")
-	saltedPassword := SaltPassword("pencil", salt, 4096)
+	saltedPassword := SaltPassword(sha256.New, "pencil", salt, 4096)
 
-	server, err := NewServer([]byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"))
+	server, err := NewServer(sha256.New, []byte("n,,n=user,r=rOprNGfwEbeRWgbNEkqO"))
 	tcheck(t, err, "newserver")
 	_, err = server.ServerFirst(4096, salt)
 	tcheck(t, err, "server first")
@@ -89,7 +111,7 @@ func TestScramServerBad(t *testing.T) {
 }
 
 func TestScramClient(t *testing.T) {
-	c := NewClient("user", "")
+	c := NewClient(sha256.New, "user", "")
 	c.clientNonce = "rOprNGfwEbeRWgbNEkqO"
 	clientFirst, err := c.ClientFirst()
 	tcheck(t, err, "ClientFirst")
@@ -129,14 +151,14 @@ func TestScram(t *testing.T) {
 		}
 
 		salt := MakeRandom()
-		saltedPassword := SaltPassword(password, salt, iterations)
+		saltedPassword := SaltPassword(sha256.New, password, salt, iterations)
 
-		client := NewClient(username, "")
+		client := NewClient(sha256.New, username, "")
 		client.clientNonce = clientNonce
 		clientFirst, err := client.ClientFirst()
 		xerr(err, "client.ClientFirst")
 
-		server, err := NewServer([]byte(clientFirst))
+		server, err := NewServer(sha256.New, []byte(clientFirst))
 		xerr(err, "NewServer")
 		server.serverNonceOverride = serverNonce
 

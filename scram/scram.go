@@ -1,7 +1,7 @@
-// Package scram implements the SCRAM-SHA256 SASL authentication mechanism, RFC 7677.
+// Package scram implements the SCRAM-SHA-* SASL authentication mechanism, RFC 7677 and RFC 5802.
 //
-// SCRAM-SHA256 allows a client to authenticate to a server using a password
-// without handing plaintext password over to the server. The client also
+// SCRAM-SHA-256 and SCRAM-SHA-1 allow a client to authenticate to a server using a
+// password without handing plaintext password over to the server. The client also
 // verifies the server knows (a derivative of) the password.
 package scram
 
@@ -13,10 +13,10 @@ import (
 	"bytes"
 	"crypto/hmac"
 	cryptorand "crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"hash"
 	"strings"
 
 	"golang.org/x/crypto/pbkdf2"
@@ -83,14 +83,14 @@ func MakeRandom() []byte {
 }
 
 // SaltPassword returns a salted password.
-func SaltPassword(password string, salt []byte, iterations int) []byte {
+func SaltPassword(h func() hash.Hash, password string, salt []byte, iterations int) []byte {
 	password = norm.NFC.String(password)
-	return pbkdf2.Key([]byte(password), salt, iterations, sha256.Size, sha256.New)
+	return pbkdf2.Key([]byte(password), salt, iterations, h().Size(), h)
 }
 
 // HMAC returns the hmac with key over msg.
-func HMAC(key []byte, msg string) []byte {
-	mac := hmac.New(sha256.New, key)
+func HMAC(h func() hash.Hash, key []byte, msg string) []byte {
+	mac := hmac.New(h, key)
 	mac.Write([]byte(msg))
 	return mac.Sum(nil)
 }
@@ -101,10 +101,12 @@ func xor(a, b []byte) {
 	}
 }
 
-// Server represents the server-side of a SCRAM-SHA-256 authentication.
+// Server represents the server-side of a SCRAM-SHA-* authentication.
 type Server struct {
 	Authentication string // Username for authentication, "authc". Always set and non-empty.
 	Authorization  string // If set, role of user to assume after authentication, "authz".
+
+	h func() hash.Hash // sha1.New or sha256.New
 
 	// Messages used in hash calculations.
 	clientFirstBare         string
@@ -123,11 +125,11 @@ type Server struct {
 //
 //   - Read initial data from client, call NewServer (this call), then ServerFirst and write to the client.
 //   - Read response from client, call Finish or FinishFinal and write the resulting string.
-func NewServer(clientFirst []byte) (server *Server, rerr error) {
+func NewServer(h func() hash.Hash, clientFirst []byte) (server *Server, rerr error) {
 	p := newParser(clientFirst)
 	defer p.recover(&rerr)
 
-	server = &Server{}
+	server = &Server{h: h}
 
 	// ../rfc/5802:949 ../rfc/5802:910
 	gs2cbindFlag := p.xbyte()
@@ -209,18 +211,19 @@ func (s *Server) Finish(clientFinal []byte, saltedPassword []byte) (serverFinal 
 
 	msg := s.clientFirstBare + "," + s.serverFirst + "," + s.clientFinalWithoutProof
 
-	clientKey := HMAC(saltedPassword, "Client Key")
-	storedKey0 := sha256.Sum256(clientKey)
-	storedKey := storedKey0[:]
+	clientKey := HMAC(s.h, saltedPassword, "Client Key")
+	h := s.h()
+	h.Write(clientKey)
+	storedKey := h.Sum(nil)
 
-	clientSig := HMAC(storedKey, msg)
+	clientSig := HMAC(s.h, storedKey, msg)
 	xor(clientSig, clientKey) // Now clientProof.
 	if !bytes.Equal(clientSig, proof) {
 		return "e=" + string(ErrInvalidProof), ErrInvalidProof
 	}
 
-	serverKey := HMAC(saltedPassword, "Server Key")
-	serverSig := HMAC(serverKey, msg)
+	serverKey := HMAC(s.h, saltedPassword, "Server Key")
+	serverSig := HMAC(s.h, serverKey, msg)
 	return fmt.Sprintf("v=%s", base64.StdEncoding.EncodeToString(serverSig)), nil
 }
 
@@ -230,10 +233,12 @@ func (s *Server) FinishError(err Error) string {
 	return "e=" + string(err)
 }
 
-// Client represents the client-side of a SCRAM-SHA-256 authentication.
+// Client represents the client-side of a SCRAM-SHA-* authentication.
 type Client struct {
 	authc string
 	authz string
+
+	h func() hash.Hash // sha1.New or sha256.New
 
 	// Messages used in hash calculations.
 	clientFirstBare         string
@@ -248,17 +253,17 @@ type Client struct {
 }
 
 // NewClient returns a client for authentication authc, optionally for
-// authorization with role authz.
+// authorization with role authz, for the hash (sha1.New or sha256.New).
 //
 // The sequence for data and calls on a client:
 //
 //   - ClientFirst, write result to server.
 //   - Read response from server, feed to ServerFirst, write response to server.
 //   - Read response from server, feed to ServerFinal.
-func NewClient(authc, authz string) *Client {
+func NewClient(h func() hash.Hash, authc, authz string) *Client {
 	authc = norm.NFC.String(authc)
 	authz = norm.NFC.String(authz)
-	return &Client{authc: authc, authz: authz}
+	return &Client{authc: authc, authz: authz, h: h}
 }
 
 // ClientFirst returns the first client message to write to the server.
@@ -315,11 +320,12 @@ func (c *Client) ServerFirst(serverFirst []byte, password string) (clientFinal s
 
 	c.authMessage = c.clientFirstBare + "," + c.serverFirst + "," + c.clientFinalWithoutProof
 
-	c.saltedPassword = SaltPassword(password, salt, iterations)
-	clientKey := HMAC(c.saltedPassword, "Client Key")
-	storedKey0 := sha256.Sum256(clientKey)
-	storedKey := storedKey0[:]
-	clientSig := HMAC(storedKey, c.authMessage)
+	c.saltedPassword = SaltPassword(c.h, password, salt, iterations)
+	clientKey := HMAC(c.h, c.saltedPassword, "Client Key")
+	h := c.h()
+	h.Write(clientKey)
+	storedKey := h.Sum(nil)
+	clientSig := HMAC(c.h, storedKey, c.authMessage)
 	xor(clientSig, clientKey) // Now clientProof.
 	clientProof := clientSig
 
@@ -344,8 +350,8 @@ func (c *Client) ServerFinal(serverFinal []byte) (rerr error) {
 	p.xtake("v=")
 	verifier := p.xbase64()
 
-	serverKey := HMAC(c.saltedPassword, "Server Key")
-	serverSig := HMAC(serverKey, c.authMessage)
+	serverKey := HMAC(c.h, c.saltedPassword, "Server Key")
+	serverSig := HMAC(c.h, serverKey, c.authMessage)
 	if !bytes.Equal(verifier, serverSig) {
 		return fmt.Errorf("incorrect server signature")
 	}

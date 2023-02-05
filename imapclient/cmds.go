@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"hash"
 	"strings"
 	"time"
 
@@ -60,17 +61,17 @@ func (c *Conn) AuthenticatePlain(username, password string) (untagged []Untagged
 	return
 }
 
-// Authenticate with SCRAM-SHA-256, where the password is not exchanged in original
-// plaintext form, but only derived hashes are exchanged by both parties as proof
-// of knowledge of password.
-func (c *Conn) AuthenticateSCRAMSHA256(username, password string) (untagged []Untagged, result Result, rerr error) {
+// Authenticate with SCRAM-SHA-1 or SCRAM-SHA-256, where the password is not
+// exchanged in original plaintext form, but only derived hashes are exchanged by
+// both parties as proof of knowledge of password.
+func (c *Conn) AuthenticateSCRAM(method string, h func() hash.Hash, username, password string) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
 
-	sc := scram.NewClient(username, "")
+	sc := scram.NewClient(h, username, "")
 	clientFirst, err := sc.ClientFirst()
 	c.xcheckf(err, "scram clientFirst")
 	c.LastTag = c.nextTag()
-	err = c.Writelinef("%s authenticate scram-sha-256 %s", c.LastTag, base64.StdEncoding.EncodeToString([]byte(clientFirst)))
+	err = c.Writelinef("%s authenticate %s %s", c.LastTag, method, base64.StdEncoding.EncodeToString([]byte(clientFirst)))
 	c.xcheckf(err, "writing command line")
 
 	xreadContinuation := func() []byte {

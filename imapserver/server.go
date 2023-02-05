@@ -39,10 +39,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"net"
 	"os"
@@ -114,8 +117,9 @@ var (
 // LIST-STATUS: ../rfc/5819
 // ID: ../rfc/2971
 // AUTH=SCRAM-SHA-256: ../rfc/7677 ../rfc/5802
+// AUTH=SCRAM-SHA-1: ../rfc/5802
 // APPENDLIMIT, we support the max possible size, 1<<63 - 1: ../rfc/7889:129
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ONLY LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256 ID APPENDLIMIT=9223372036854775807"
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ONLY LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1 ID APPENDLIMIT=9223372036854775807"
 
 type conn struct {
 	cid               int64
@@ -1388,16 +1392,22 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		c.username = authc
 		authResult = "ok"
 
-	case "SCRAM-SHA-256":
+	case "SCRAM-SHA-1", "SCRAM-SHA-256":
 		// todo: improve handling of errors during scram. e.g. invalid parameters. should we abort the imap command, or continue until the end and respond with a scram-level error?
 		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
 
-		authVariant = "scram-sha-256"
+		authVariant = strings.ToLower(authType)
+		var h func() hash.Hash
+		if authVariant == "scram-sha-1" {
+			h = sha1.New
+		} else {
+			h = sha256.New
+		}
 
 		// No plaintext credentials, we can log these normally.
 
 		c0 := xreadInitial()
-		ss, err := scram.NewServer(c0)
+		ss, err := scram.NewServer(h, c0)
 		if err != nil {
 			xsyntaxErrorf("starting scram: %w", err)
 		}
@@ -1418,12 +1428,16 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		if ss.Authorization != "" && ss.Authorization != ss.Authentication {
 			xuserErrorf("authentication with authorization for different user not supported")
 		}
-		var password store.Password
+		var xscram store.SCRAM
 		acc.WithRLock(func() {
 			err := acc.DB.Read(func(tx *bstore.Tx) error {
-				password, err = bstore.QueryTx[store.Password](tx).Get()
-				xsc := password.SCRAMSHA256
-				if err == bstore.ErrAbsent || err == nil && (len(xsc.Salt) == 0 || xsc.Iterations == 0 || len(xsc.SaltedPassword) == 0) {
+				password, err := bstore.QueryTx[store.Password](tx).Get()
+				if authVariant == "scram-sha-1" {
+					xscram = password.SCRAMSHA1
+				} else {
+					xscram = password.SCRAMSHA256
+				}
+				if err == bstore.ErrAbsent || err == nil && (len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0) {
 					xuserErrorf("scram not possible")
 				}
 				xcheckf(err, "fetching credentials")
@@ -1431,11 +1445,11 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			})
 			xcheckf(err, "read tx")
 		})
-		s1, err := ss.ServerFirst(password.SCRAMSHA256.Iterations, password.SCRAMSHA256.Salt)
+		s1, err := ss.ServerFirst(xscram.Iterations, xscram.Salt)
 		xcheckf(err, "scram first server step")
 		c.writelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(s1)))
 		c2 := xreadContinuation()
-		s3, err := ss.Finish(c2, password.SCRAMSHA256.SaltedPassword)
+		s3, err := ss.Finish(c2, xscram.SaltedPassword)
 		if len(s3) > 0 {
 			c.writelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(s3)))
 		}

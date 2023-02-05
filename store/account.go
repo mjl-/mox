@@ -24,6 +24,8 @@ package store
 
 import (
 	"context"
+	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,14 +64,17 @@ var subjectpassRand = mox.NewRand()
 
 var InitialMailboxes = []string{"Inbox", "Sent", "Archive", "Trash", "Drafts", "Junk"}
 
+type SCRAM struct {
+	Salt           []byte
+	Iterations     int
+	SaltedPassword []byte
+}
+
 // Password holds a bcrypt hash for logging in with SMTP/IMAP/admin.
 type Password struct {
 	Hash        string
-	SCRAMSHA256 struct {
-		Salt           []byte
-		Iterations     int
-		SaltedPassword []byte
-	}
+	SCRAMSHA1   SCRAM
+	SCRAMSHA256 SCRAM
 }
 
 // Subjectpass holds the secret key used to sign subjectpass tokens.
@@ -609,9 +614,15 @@ func (a *Account) SetPassword(password string) error {
 		}
 		var pw Password
 		pw.Hash = string(hash)
+
+		pw.SCRAMSHA1.Salt = scram.MakeRandom()
+		pw.SCRAMSHA1.Iterations = 2 * 4096
+		pw.SCRAMSHA1.SaltedPassword = scram.SaltPassword(sha1.New, password, pw.SCRAMSHA1.Salt, pw.SCRAMSHA1.Iterations)
+
 		pw.SCRAMSHA256.Salt = scram.MakeRandom()
 		pw.SCRAMSHA256.Iterations = 4096
-		pw.SCRAMSHA256.SaltedPassword = scram.SaltPassword(password, pw.SCRAMSHA256.Salt, pw.SCRAMSHA256.Iterations)
+		pw.SCRAMSHA256.SaltedPassword = scram.SaltPassword(sha256.New, password, pw.SCRAMSHA256.Salt, pw.SCRAMSHA256.Iterations)
+
 		if err := tx.Insert(&pw); err != nil {
 			return fmt.Errorf("inserting new password: %v", err)
 		}
