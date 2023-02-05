@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -96,112 +98,14 @@ permissions, and if you run it on Linux it prints a systemd service file.
 
 	for _, c := range username {
 		if c > 0x7f {
-			fmt.Printf("NOTE: Username %q is not ASCII-only. It is recommended you also configure an\nASCII-only alias. Both for delivery of email from other systems, and for\nlogging in with IMAP.\n\n", username)
+			fmt.Printf(`NOTE: Username %q is not ASCII-only. It is recommended you also configure an
+ASCII-only alias. Both for delivery of email from other systems, and for
+logging in with IMAP.
+
+`, username)
 			break
 		}
 	}
-
-	var hostname dns.Domain
-	hostnameStr, err := os.Hostname()
-	if err != nil {
-		fatalf("hostname: %s", err)
-	}
-	if strings.Contains(hostnameStr, ".") {
-		hostname, err = dns.ParseDomain(hostnameStr)
-		if err != nil {
-			fatalf("parsing hostname: %v", err)
-		}
-	} else {
-		hostname, err = dns.ParseDomain(hostnameStr + "." + domain.Name())
-		if err != nil {
-			fatalf("parsing hostname: %v", err)
-		}
-	}
-
-	// todo: lookup without going through /etc/hosts, because a machine typically has its name configured there, and LookupIPAddr will return it, but we care about DNS settings that the rest of the world uses to find us. perhaps we should check if the address resolves to 127.0.0.0/8?
-	fmt.Printf("Looking up hostname %q...", hostname)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	resolver := dns.StrictResolver{}
-	ips, err := resolver.LookupIPAddr(ctx, hostname.ASCII+".")
-	if err != nil {
-		fmt.Printf("\n\nWARNING: Quickstart assumes hostname %q and generates a config for that host,\nbut could not retrieve that name from DNS:\n\n\t%s\n\n", hostname, err)
-	} else {
-		fmt.Printf(" OK\n")
-
-		var l []string
-		type result struct {
-			IP    string
-			Addrs []string
-			Err   error
-		}
-		results := make(chan result)
-		for _, ip := range ips {
-			s := ip.String()
-			l = append(l, s)
-			go func() {
-				addrs, err := resolver.LookupAddr(ctx, s)
-				results <- result{s, addrs, err}
-			}()
-		}
-		fmt.Printf("Looking up reverse names for IP(s) %s...", strings.Join(l, ", "))
-		var warned bool
-		warnf := func(format string, args ...any) {
-			fmt.Printf("\nWARNING: %s", fmt.Sprintf(format, args...))
-			warned = true
-		}
-		for i := 0; i < len(ips); i++ {
-			r := <-results
-			if r.Err != nil {
-				warnf("looking up reverse name for %s: %v", r.IP, r.Err)
-				continue
-			}
-			if len(r.Addrs) != 1 {
-				warnf("expected exactly 1 name for %s, got %d (%v)", r.IP, len(r.Addrs), r.Addrs)
-			}
-			var match bool
-			for i, a := range r.Addrs {
-				a = strings.TrimRight(a, ".")
-				r.Addrs[i] = a // For potential error message below.
-				d, err := dns.ParseDomain(a)
-				if err != nil {
-					warnf("parsing reverse name %q for %s: %v", a, r.IP, err)
-				}
-				if d == hostname {
-					match = true
-				}
-			}
-			if !match {
-				warnf("reverse name(s) %s for ip %s do not match hostname %s, which will cause other mail servers to reject incoming messages from this IP", strings.Join(r.Addrs, ","), r.IP, hostname)
-			}
-		}
-		if warned {
-			fmt.Printf("\n\n")
-		} else {
-			fmt.Printf(" OK\n")
-		}
-	}
-	cancel()
-
-	dc := config.Dynamic{}
-	sc := config.Static{DataDir: "../data"}
-	os.MkdirAll(sc.DataDir, 0770)
-	sc.LogLevel = "info"
-	sc.Hostname = hostname.Name()
-	sc.ACME = map[string]config.ACME{
-		"letsencrypt": {
-			DirectoryURL: "https://acme-v02.api.letsencrypt.org/directory",
-			ContactEmail: args[0], // todo: let user specify an alternative fallback address?
-		},
-	}
-	sc.AdminPasswordFile = "adminpasswd"
-	adminpw := pwgen()
-	adminpwhash, err := bcrypt.GenerateFromPassword([]byte(adminpw), bcrypt.DefaultCost)
-	if err != nil {
-		fatalf("generating hash for generated admin password: %s", err)
-	}
-	xwritefile(filepath.Join("config", sc.AdminPasswordFile), adminpwhash, 0660)
-	fmt.Printf("Admin password: %s\n", adminpw)
 
 	// Gather IP addresses for public and private listeners.
 	// If we cannot find addresses for a category we fallback to all ips or localhost ips.
@@ -268,6 +172,196 @@ permissions, and if you run it on Linux it prints a systemd service file.
 	if len(privateIPs) > 0 {
 		privateListenerIPs = privateIPs
 	}
+
+	resolver := dns.StrictResolver{}
+
+	var hostname dns.Domain
+	hostnameStr, err := os.Hostname()
+	if err != nil {
+		fatalf("hostname: %s", err)
+	}
+	if strings.Contains(hostnameStr, ".") {
+		hostname, err = dns.ParseDomain(hostnameStr)
+		if err != nil {
+			fatalf("parsing hostname: %v", err)
+		}
+	} else {
+		// It seems Linux machines don't have a single FQDN configured. E.g. /etc/hostname
+		// is just the name without domain. We'll look up the names for all IPs, and hope
+		// to find a single FQDN name (with at least 1 dot).
+		names := map[string]struct{}{}
+		if len(publicIPs) > 0 {
+			fmt.Printf("Trying to find hostname by reverse lookup of public IPs %s...", strings.Join(publicIPs, ", "))
+		}
+		var warned bool
+		warnf := func(format string, args ...any) {
+			warned = true
+			fmt.Printf("\n%s", fmt.Sprintf(format, args...))
+		}
+		for _, ip := range publicIPs {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			l, err := resolver.LookupAddr(ctx, ip)
+			if err != nil {
+				warnf("WARNING: looking up reverse name(s) for %s: %v", ip, err)
+			}
+			for _, name := range l {
+				if strings.Contains(name, ".") {
+					names[name] = struct{}{}
+				}
+			}
+		}
+		var nameList []string
+		for k := range names {
+			nameList = append(nameList, strings.TrimRight(k, "."))
+		}
+		sort.Slice(nameList, func(i, j int) bool {
+			return nameList[i] < nameList[j]
+		})
+		if len(nameList) == 0 {
+			hostname, err = dns.ParseDomain(hostnameStr + "." + domain.Name())
+			if err != nil {
+				fmt.Println()
+				fatalf("parsing hostname: %v", err)
+			}
+			warnf(`WARNING: cannot determine hostname because the system name is not an FQDN and
+no public IPs resolving to an FQDN were found. Quickstart will continue with the
+following hostname, please replace it in the suggested DNS records and config
+files if this is not correct:
+
+	%s
+`, hostname)
+		} else {
+			if len(nameList) > 1 {
+				warnf("WARNING: multiple hostnames found for the public IPs, using the first of: %s", strings.Join(nameList, ", "))
+			}
+			hostname, err = dns.ParseDomain(nameList[0])
+			if err != nil {
+				fmt.Println()
+				fatalf("parsing hostname %s: %v", nameList[0], err)
+			}
+		}
+		if warned {
+			fmt.Printf("\n\n")
+		} else {
+			fmt.Printf(" found %s\n", hostname)
+		}
+	}
+
+	// todo: lookup without going through /etc/hosts, because a machine typically has its name configured there, and LookupIPAddr will return it, but we care about DNS settings that the rest of the world uses to find us. perhaps we should check if the address resolves to 127.0.0.0/8?
+	fmt.Printf("Looking up IPs for hostname %s...", hostname)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ips, err := resolver.LookupIPAddr(ctx, hostname.ASCII+".")
+	var xips []net.IPAddr
+	for _, ip := range ips {
+		// During linux install, you may get an alias for you full hostname in /etc/hosts
+		// resolving to 127.0.1.1, which would result in a false positive about the
+		// hostname having a record. Filter it out. It is a bit surprising that hosts don't
+		// otherwise know their FQDN.
+		if !ip.IP.IsLoopback() {
+			xips = append(xips, ip)
+		}
+	}
+	if err == nil && len(xips) == 0 {
+		err = errors.New("hostname not in dns, probably only in /etc/hosts")
+	}
+	ips = xips
+	if err != nil {
+		fmt.Printf(`
+
+WARNING: Quickstart assumed the hostname of this machine is %s and generates a
+config for that host, but could not retrieve that name from DNS:
+
+	%s
+
+This likely means one of two things:
+
+1. You don't have any DNS records for this machine at all. You should add them
+   before continuing.
+2. The hostname mentioned is not the correct host name of this machine. You will
+   have to replace the hostname in the suggested DNS records and generated
+   config/mox.conf file. Make sure your hostname resolves to your public IPs, and
+   your public IPs resolve back (reverse) to your hostname.
+
+
+`, hostname, err)
+	} else {
+		fmt.Printf(" OK\n")
+
+		var l []string
+		type result struct {
+			IP    string
+			Addrs []string
+			Err   error
+		}
+		results := make(chan result)
+		for _, ip := range ips {
+			s := ip.String()
+			l = append(l, s)
+			go func() {
+				addrs, err := resolver.LookupAddr(ctx, s)
+				results <- result{s, addrs, err}
+			}()
+		}
+		fmt.Printf("Looking up reverse names for IP(s) %s...", strings.Join(l, ", "))
+		var warned bool
+		warnf := func(format string, args ...any) {
+			fmt.Printf("\nWARNING: %s", fmt.Sprintf(format, args...))
+			warned = true
+		}
+		for i := 0; i < len(ips); i++ {
+			r := <-results
+			if r.Err != nil {
+				warnf("looking up reverse name for %s: %v", r.IP, r.Err)
+				continue
+			}
+			if len(r.Addrs) != 1 {
+				warnf("expected exactly 1 name for %s, got %d (%v)", r.IP, len(r.Addrs), r.Addrs)
+			}
+			var match bool
+			for i, a := range r.Addrs {
+				a = strings.TrimRight(a, ".")
+				r.Addrs[i] = a // For potential error message below.
+				d, err := dns.ParseDomain(a)
+				if err != nil {
+					warnf("parsing reverse name %q for %s: %v", a, r.IP, err)
+				}
+				if d == hostname {
+					match = true
+				}
+			}
+			if !match {
+				warnf("reverse name(s) %s for ip %s do not match hostname %s, which will cause other mail servers to reject incoming messages from this IP", strings.Join(r.Addrs, ","), r.IP, hostname)
+			}
+		}
+		if warned {
+			fmt.Printf("\n\n\n")
+		} else {
+			fmt.Printf(" OK\n\n")
+		}
+	}
+	cancel()
+
+	dc := config.Dynamic{}
+	sc := config.Static{DataDir: "../data"}
+	os.MkdirAll(sc.DataDir, 0770)
+	sc.LogLevel = "info"
+	sc.Hostname = hostname.Name()
+	sc.ACME = map[string]config.ACME{
+		"letsencrypt": {
+			DirectoryURL: "https://acme-v02.api.letsencrypt.org/directory",
+			ContactEmail: args[0], // todo: let user specify an alternative fallback address?
+		},
+	}
+	sc.AdminPasswordFile = "adminpasswd"
+	adminpw := pwgen()
+	adminpwhash, err := bcrypt.GenerateFromPassword([]byte(adminpw), bcrypt.DefaultCost)
+	if err != nil {
+		fatalf("generating hash for generated admin password: %s", err)
+	}
+	xwritefile(filepath.Join("config", sc.AdminPasswordFile), adminpwhash, 0660)
+	fmt.Printf("Admin password: %s\n", adminpw)
 
 	public := config.Listener{
 		IPs: publicListenerIPs,
@@ -434,8 +528,8 @@ or if you are sending email for your domain from other machines/services, you
 should understand the consequences of the DNS records above before
 continuing!
 
-You can now start mox with "mox serve", but see below for recommended ownership
-and permissions.
+You can now start mox with "mox -config config/mox.conf serve", but see below
+for recommended ownership and permissions.
 
 `)
 
@@ -488,7 +582,20 @@ sets the correct permissions:
 	fmt.Println(`For secure email exchange you should have a strictly validating DNSSEC
 resolver. An easy and the recommended way is to install unbound.
 
-Enjoy!`)
+Enjoy!
+
+PS: If port 443 is not available on this machine, automatic TLS with Let's
+Encrypt will not work. You can configure existing TLS certificates/keys in mox
+(run "mox config describe-static" for examples, and don't forget to renew the
+certificates!), or disable TLS (not secure, but perhaps you are just evaluating
+mox). If you disable TLS, you must also remove the DNS records about mta-sts,
+autoconfig, autodiscover and the SRV records. You also have to edit
+config/mox.conf and disable (comment out) TLS in the "public" listener, replace
+field "Submissions" with "Submission" and add a sub field "NoRequireSTARTTLS:
+true", replace field "IMAPS" with "IMAP" add add a sub field "NoRequireSTARTTLS:
+true", and set the "Enabled" field of "AutoconfigHTTPS" and "MTASTSHTTPS" to
+false. Final warning: If you disable TLS, your email messages, and user name and
+potentially password will be transferred over the internet in plain text!`)
 
 	cleanupPaths = nil
 }

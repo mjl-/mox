@@ -486,6 +486,8 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 		"",
 		// ../rfc/6186:242
 		"; Next records specify POP3 and plain text ports are not to be used.",
+		"; These are optional and safe to leave out (e.g. if you have to click a lot in a",
+		"; DNS admin web interface).",
 		fmt.Sprintf(`_imap._tcp.%s.         IN SRV 0 1 143 .`, d),
 		fmt.Sprintf(`_submission._tcp.%s.   IN SRV 0 1 587 .`, d),
 		fmt.Sprintf(`_pop3._tcp.%s.         IN SRV 0 1 110 .`, d),
@@ -791,7 +793,7 @@ func IPs(ctx context.Context) ([]net.IP, error) {
 	}
 
 	// We'll list the IPs on the interfaces. How useful is this? There is a good chance
-	// we're listening on all addresses because of a load balancing/firewall.
+	// we're listening on all addresses because of a load balancer/firewall.
 	if ipv4all || ipv6all {
 		ifaces, err := net.Interfaces()
 		if err != nil {

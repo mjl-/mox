@@ -119,8 +119,10 @@ new mail deliveries.
 
 Set new password an account.
 
-The password is read from stdin. Its bcrypt hash and SCRAM-SHA-256 derivations
-are stored in the accounts database.
+The password is read from stdin. Secrets derived from the password, but not the
+password itself, are stored in the account database. The stored secrets are for
+authentication with: scram-sha-256, scram-sha-1, cram-md5, plain text (bcrypt
+hash).
 
 Any email address configured for the account can be used.
 

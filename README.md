@@ -67,11 +67,21 @@ Mox was created by Mechiel Lukkien, mechiel@ueber.net.
 
 # Download
 
-You can easily (cross) compile mox if you have a Go toolchain installed:
+You can easily (cross) compile mox if you have a recent Go toolchain installed
+(see "go version", it must be >= 1.19; otherwise, see https://go.dev/dl/ or
+https://go.dev/doc/manage-install and $HOME/go/bin):
 
-	go install github.com/mjl-/mox@latest
+	GOBIN=$PWD go install github.com/mjl-/mox@latest
 
-Or you can download binaries from https://beta.gobuilds.org/github.com/mjl-/mox
+Or you can download a binary built with the latest Go toolchain from
+https://beta.gobuilds.org/github.com/mjl-/mox, and symlink or rename it to
+"mox".
+
+Verify you have a working mox binary:
+
+	./mox version
+
+Note: Mox only compiles/works on unix systems, not on Plan 9 or Windows.
 
 
 # Quickstart
