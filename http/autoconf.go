@@ -103,14 +103,14 @@ func autoconfHandle(l config.Listener) http.HandlerFunc {
 			log.Error("autoconfig: no imap configured?")
 		}
 
-		// todo: specify SCRAM-SHA256 once thunderbird and autoconfig supports it. we could implement CRAM-MD5 and use it.
+		// todo: specify SCRAM-SHA-256 once thunderbird and autoconfig supports it. or perhaps that will fall under "password-encrypted" by then.
 
 		resp.EmailProvider.IncomingServer.Type = "imap"
 		resp.EmailProvider.IncomingServer.Hostname = hostname.ASCII
 		resp.EmailProvider.IncomingServer.Port = imapPort
 		resp.EmailProvider.IncomingServer.SocketType = imapSocket
 		resp.EmailProvider.IncomingServer.Username = email
-		resp.EmailProvider.IncomingServer.Authentication = "password-cleartext"
+		resp.EmailProvider.IncomingServer.Authentication = "password-encrypted"
 
 		var smtpPort int
 		var smtpSocket string
@@ -133,7 +133,7 @@ func autoconfHandle(l config.Listener) http.HandlerFunc {
 		resp.EmailProvider.OutgoingServer.Port = smtpPort
 		resp.EmailProvider.OutgoingServer.SocketType = smtpSocket
 		resp.EmailProvider.OutgoingServer.Username = email
-		resp.EmailProvider.OutgoingServer.Authentication = "password-cleartext"
+		resp.EmailProvider.OutgoingServer.Authentication = "password-encrypted"
 
 		// todo: should we put the email address in the URL?
 		resp.ClientConfigUpdate.URL = fmt.Sprintf("https://%s/mail/config-v1.1.xml", hostname.ASCII)
@@ -150,10 +150,14 @@ func autoconfHandle(l config.Listener) http.HandlerFunc {
 
 // Autodiscover from Microsoft, also used by Thunderbird.
 // User should create a DNS record: _autodiscover._tcp.<domain> IN SRV 0 0 443 <hostname or autodiscover.<domain>>
-// In practice, autodiscover does not seem to work (any more). A connectivity test
-// tool for outlook is available on https://testconnectivity.microsoft.com/, it has
-// an option to do "Autodiscover to detect server settings". Incoming TLS
-// connections are all failing, with various errors.
+//
+// In practice, autodiscover does not seem to work wit microsoft clients. A
+// connectivity test tool for outlook is available on
+// https://testconnectivity.microsoft.com/, it has an option to do "Autodiscover to
+// detect server settings". Incoming TLS connections are all failing, with various
+// errors.
+//
+// Thunderbird does understand autodiscover.
 func autodiscoverHandle(l config.Listener) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log := xlog.WithContext(r.Context())
@@ -197,7 +201,10 @@ func autodiscoverHandle(l config.Listener) http.HandlerFunc {
 		// High-level starting point, https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxdscli/78530279-d042-4eb0-a1f4-03b18143cd19
 		// Request: https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxdscli/2096fab2-9c3c-40b9-b123-edf6e8d55a9b
 		// Response, protocol: https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxdscli/f4238db6-a983-435c-807a-b4b4a624c65b
-		// It appears autodiscover does not allow specifying SCRAM-SHA256 as authentication method. See https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxdscli/21fd2dd5-c4ee-485b-94fb-e7db5da93726
+		// It appears autodiscover does not allow specifying SCRAM-SHA-256 as
+		// authentication method, or any authentication method that real clients actually
+		// use. See
+		// https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxdscli/21fd2dd5-c4ee-485b-94fb-e7db5da93726
 
 		var imapPort int
 		imapSSL := "off"

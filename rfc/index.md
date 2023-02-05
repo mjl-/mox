@@ -226,6 +226,8 @@ and many more, see http://sieve.info/documents
 
 # SASL
 
+2104	HMAC: Keyed-Hashing for Message Authentication
+2195	IMAP/POP AUTHorize Extension for Simple Challenge/Response
 4013	(obsoleted by RFC 7613) SASLprep: Stringprep Profile for User Names and Passwords
 4422	Simple Authentication and Security Layer (SASL)
 4505	Anonymous Simple Authentication and Security Layer (SASL) Mechanism

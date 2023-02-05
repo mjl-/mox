@@ -39,6 +39,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/tls"
@@ -118,8 +119,9 @@ var (
 // ID: ../rfc/2971
 // AUTH=SCRAM-SHA-256: ../rfc/7677 ../rfc/5802
 // AUTH=SCRAM-SHA-1: ../rfc/5802
+// AUTH=CRAM-MD5: ../rfc/2195
 // APPENDLIMIT, we support the max possible size, 1<<63 - 1: ../rfc/7889:129
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ONLY LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1 ID APPENDLIMIT=9223372036854775807"
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ONLY LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807"
 
 type conn struct {
 	cid               int64
@@ -1392,6 +1394,71 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		c.username = authc
 		authResult = "ok"
 
+	case "CRAM-MD5":
+		authVariant = strings.ToLower(authType)
+
+		// ../rfc/9051:1462
+		p.xempty()
+
+		// ../rfc/2195:82
+		chal := fmt.Sprintf("<%d.%d@%s>", uint64(mox.CryptoRandInt()), time.Now().UnixNano(), mox.Conf.Static.HostnameDomain.ASCII)
+		c.writelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(chal)))
+
+		resp := xreadContinuation()
+		t := strings.Split(string(resp), " ")
+		if len(t) != 2 || len(t[1]) != 2*md5.Size {
+			xsyntaxErrorf("malformed cram-md5 response")
+		}
+		addr := t[0]
+		c.log.Info("cram-md5 auth", mlog.Field("address", addr))
+		acc, _, err := store.OpenEmail(addr)
+		if err != nil {
+			if errors.Is(err, store.ErrUnknownCredentials) {
+				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
+			}
+			xserverErrorf("looking up address: %v", err)
+		}
+		defer func() {
+			if acc != nil {
+				err := acc.Close()
+				c.xsanity(err, "close account")
+			}
+		}()
+		var ipadhash, opadhash hash.Hash
+		acc.WithRLock(func() {
+			err := acc.DB.Read(func(tx *bstore.Tx) error {
+				password, err := bstore.QueryTx[store.Password](tx).Get()
+				if err == bstore.ErrAbsent {
+					xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
+				}
+				if err != nil {
+					return err
+				}
+
+				ipadhash = password.CRAMMD5.Ipad
+				opadhash = password.CRAMMD5.Opad
+				return nil
+			})
+			xcheckf(err, "tx read")
+		})
+		if ipadhash == nil || opadhash == nil {
+			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", mlog.Field("address", addr))
+			xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
+		}
+
+		// ../rfc/2195:138 ../rfc/2104:142
+		ipadhash.Write([]byte(chal))
+		opadhash.Write(ipadhash.Sum(nil))
+		digest := fmt.Sprintf("%x", opadhash.Sum(nil))
+		if digest != t[1] {
+			xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
+		}
+
+		c.account = acc
+		acc = nil // Cancel cleanup.
+		c.username = addr
+		authResult = "ok"
+
 	case "SCRAM-SHA-1", "SCRAM-SHA-256":
 		// todo: improve handling of errors during scram. e.g. invalid parameters. should we abort the imap command, or continue until the end and respond with a scram-level error?
 		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
@@ -1438,6 +1505,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 					xscram = password.SCRAMSHA256
 				}
 				if err == bstore.ErrAbsent || err == nil && (len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0) {
+					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", mlog.Field("address", ss.Authentication))
 					xuserErrorf("scram not possible")
 				}
 				xcheckf(err, "fetching credentials")

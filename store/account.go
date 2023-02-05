@@ -24,11 +24,14 @@ package store
 
 import (
 	"context"
+	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"encoding"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -70,11 +73,68 @@ type SCRAM struct {
 	SaltedPassword []byte
 }
 
-// Password holds a bcrypt hash for logging in with SMTP/IMAP/admin.
+// CRAMMD5 holds HMAC ipad and opad hashes that are initialized with the first
+// block with (a derivation of) the key/password, so we don't store the password in plain
+// text.
+type CRAMMD5 struct {
+	Ipad hash.Hash
+	Opad hash.Hash
+}
+
+// BinaryMarshal is used by bstore to store the ipad/opad hash states.
+func (c CRAMMD5) MarshalBinary() ([]byte, error) {
+	if c.Ipad == nil || c.Opad == nil {
+		return nil, nil
+	}
+
+	ipad, err := c.Ipad.(encoding.BinaryMarshaler).MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("marshal ipad: %v", err)
+	}
+	opad, err := c.Opad.(encoding.BinaryMarshaler).MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("marshal opad: %v", err)
+	}
+	buf := make([]byte, 2+len(ipad)+len(opad))
+	ipadlen := uint16(len(ipad))
+	buf[0] = byte(ipadlen >> 8)
+	buf[1] = byte(ipadlen >> 0)
+	copy(buf[2:], ipad)
+	copy(buf[2+len(ipad):], opad)
+	return buf, nil
+}
+
+// BinaryUnmarshal is used by bstore to restore the ipad/opad hash states.
+func (c *CRAMMD5) UnmarshalBinary(buf []byte) error {
+	if len(buf) == 0 {
+		*c = CRAMMD5{}
+		return nil
+	}
+	if len(buf) < 2 {
+		return fmt.Errorf("short buffer")
+	}
+	ipadlen := int(uint16(buf[0])<<8 | uint16(buf[1])<<0)
+	if len(buf) < 2+ipadlen {
+		return fmt.Errorf("buffer too short for ipadlen")
+	}
+	ipad := md5.New()
+	opad := md5.New()
+	if err := ipad.(encoding.BinaryUnmarshaler).UnmarshalBinary(buf[2 : 2+ipadlen]); err != nil {
+		return fmt.Errorf("unmarshal ipad: %v", err)
+	}
+	if err := opad.(encoding.BinaryUnmarshaler).UnmarshalBinary(buf[2+ipadlen:]); err != nil {
+		return fmt.Errorf("unmarshal opad: %v", err)
+	}
+	*c = CRAMMD5{ipad, opad}
+	return nil
+}
+
+// Password holds credentials in various forms, for logging in with SMTP/IMAP.
 type Password struct {
-	Hash        string
-	SCRAMSHA1   SCRAM
-	SCRAMSHA256 SCRAM
+	Hash        string  // bcrypt hash for IMAP LOGIN and SASL PLAIN authentication.
+	CRAMMD5     CRAMMD5 // For SASL CRAM-MD5.
+	SCRAMSHA1   SCRAM   // For SASL SCRAM-SHA-1.
+	SCRAMSHA256 SCRAM   // For SASL SCRAM-SHA-256.
 }
 
 // Subjectpass holds the secret key used to sign subjectpass tokens.
@@ -614,6 +674,31 @@ func (a *Account) SetPassword(password string) error {
 		}
 		var pw Password
 		pw.Hash = string(hash)
+
+		// CRAM-MD5 calculates an HMAC-MD5, with the password as key, over a per-attempt
+		// unique text that includes a timestamp. HMAC performs two hashes. Both times, the
+		// first block is based on the key/password. We hash those first blocks now, and
+		// store the hash state in the database. When we actually authenticate, we'll
+		// complete the HMAC by hashing only the text. We cannot store crypto/hmac's hash,
+		// because it does not expose its internal state and isn't a BinaryMarshaler.
+		// ../rfc/2104:121
+		pw.CRAMMD5.Ipad = md5.New()
+		pw.CRAMMD5.Opad = md5.New()
+		key := []byte(password)
+		if len(key) > 64 {
+			t := md5.Sum(key)
+			key = t[:]
+		}
+		ipad := make([]byte, md5.BlockSize)
+		opad := make([]byte, md5.BlockSize)
+		copy(ipad, key)
+		copy(opad, key)
+		for i := range ipad {
+			ipad[i] ^= 0x36
+			opad[i] ^= 0x5c
+		}
+		pw.CRAMMD5.Ipad.Write(ipad)
+		pw.CRAMMD5.Opad.Write(opad)
 
 		pw.SCRAMSHA1.Salt = scram.MakeRandom()
 		pw.SCRAMSHA1.Iterations = 2 * 4096

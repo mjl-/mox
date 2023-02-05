@@ -876,8 +876,10 @@ func cmdSetaccountpassword(c *cmd) {
 	c.params = "address"
 	c.help = `Set new password an account.
 
-The password is read from stdin. Its bcrypt hash and SCRAM-SHA-256 derivations
-are stored in the accounts database.
+The password is read from stdin. Secrets derived from the password, but not the
+password itself, are stored in the account database. The stored secrets are for
+authentication with: scram-sha-256, scram-sha-1, cram-md5, plain text (bcrypt
+hash).
 
 Any email address configured for the account can be used.
 `
@@ -1958,7 +1960,7 @@ binary should be setgid that group:
 	if !submitconf.STARTTLS {
 		tlsMode = smtpclient.TLSSkip
 	}
-	// todo: should have more auth options, scram-sha-256 at least.
+	// todo: should have more auth options, scram-sha-256 at least, perhaps cram-md5 for compatibility as well.
 	authLine := fmt.Sprintf("AUTH PLAIN %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("\u0000%s\u0000%s", submitconf.Username, submitconf.Password))))
 	mox.Conf.Static.HostnameDomain.ASCII = submitconf.LocalHostname
 	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, submitconf.Host, authLine)

@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/md5"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -682,7 +683,7 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 	if c.submission {
 		// ../rfc/4954:123
 		if c.tls || !c.requireTLSForAuth {
-			c.bwritelinef("250-AUTH PLAIN SCRAM-SHA-256 SCRAM-SHA-1")
+			c.bwritelinef("250-AUTH PLAIN SCRAM-SHA-256 SCRAM-SHA-1 CRAM-MD5")
 		} else {
 			c.bwritelinef("250-AUTH ")
 		}
@@ -864,6 +865,75 @@ func (c *conn) cmdAuth(p *parser) {
 		// ../rfc/4954:276
 		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
 
+	case "CRAM-MD5":
+		authVariant = strings.ToLower(mech)
+
+		p.xempty()
+
+		// ../rfc/2195:82
+		chal := fmt.Sprintf("<%d.%d@%s>", uint64(mox.CryptoRandInt()), time.Now().UnixNano(), mox.Conf.Static.HostnameDomain.ASCII)
+		c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte(chal)))
+
+		resp := xreadContinuation()
+		t := strings.Split(string(resp), " ")
+		if len(t) != 2 || len(t[1]) != 2*md5.Size {
+			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5BadParams4, "malformed cram-md5 response")
+		}
+		addr := t[0]
+		c.log.Info("cram-md5 auth", mlog.Field("address", addr))
+		acc, _, err := store.OpenEmail(addr)
+		if err != nil {
+			if errors.Is(err, store.ErrUnknownCredentials) {
+				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
+			}
+		}
+		xcheckf(err, "looking up address")
+		defer func() {
+			if acc != nil {
+				err := acc.Close()
+				if err != nil {
+					c.log.Errorx("closing account", err)
+				}
+			}
+		}()
+		var ipadhash, opadhash hash.Hash
+		acc.WithRLock(func() {
+			err := acc.DB.Read(func(tx *bstore.Tx) error {
+				password, err := bstore.QueryTx[store.Password](tx).Get()
+				if err == bstore.ErrAbsent {
+					xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
+				}
+				if err != nil {
+					return err
+				}
+
+				ipadhash = password.CRAMMD5.Ipad
+				opadhash = password.CRAMMD5.Opad
+				return nil
+			})
+			xcheckf(err, "tx read")
+		})
+		if ipadhash == nil || opadhash == nil {
+			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", mlog.Field("address", addr))
+			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
+		}
+
+		// ../rfc/2195:138 ../rfc/2104:142
+		ipadhash.Write([]byte(chal))
+		opadhash.Write(ipadhash.Sum(nil))
+		digest := fmt.Sprintf("%x", opadhash.Sum(nil))
+		if digest != t[1] {
+			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
+		}
+
+		authResult = "ok"
+		c.authFailed = 0
+		c.account = acc
+		acc = nil // Cancel cleanup.
+		c.username = addr
+		// ../rfc/4954:276
+		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
+
 	case "SCRAM-SHA-1", "SCRAM-SHA-256":
 		// todo: improve handling of errors during scram. e.g. invalid parameters. should we abort the imap command, or continue until the end and respond with a scram-level error?
 		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
@@ -910,6 +980,7 @@ func (c *conn) cmdAuth(p *parser) {
 					xscram = password.SCRAMSHA256
 				}
 				if err == bstore.ErrAbsent || err == nil && (len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0) {
+					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", mlog.Field("address", ss.Authentication))
 					xsmtpUserErrorf(smtp.C454TempAuthFail, smtp.SeSys3Other0, "scram not possible")
 				}
 				xcheckf(err, "fetching credentials")
@@ -947,8 +1018,6 @@ func (c *conn) cmdAuth(p *parser) {
 		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
 
 	default:
-		// todo future: implement scram-sha-256 ../rfc/7677
-		// todo future: possibly implement cram-md5, at least where we allow PLAIN. ../rfc/4954:348
 		// ../rfc/4954:176
 		xsmtpUserErrorf(smtp.C504ParamNotImpl, smtp.SeProto5BadParams4, "mechanism %s not supported", mech)
 	}

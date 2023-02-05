@@ -1,10 +1,13 @@
 package imapserver
 
 import (
+	"crypto/hmac"
+	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"hash"
 	"strings"
 	"testing"
@@ -122,5 +125,52 @@ func testAuthenticateSCRAM(t *testing.T, method string, h func() hash.Hash) {
 	tc.transactf("no", "authenticate bogus ")
 	tc.transactf("bad", "authenticate %s not base64...", method)
 	tc.transactf("bad", "authenticate %s %s", method, base64.StdEncoding.EncodeToString([]byte("bad data")))
+	tc.close()
+}
+
+func TestAuthenticateCRAMMD5(t *testing.T) {
+	tc := start(t)
+
+	tc.transactf("no", "authenticate bogus ")
+	tc.transactf("bad", "authenticate CRAM-MD5 not base64...")
+	tc.transactf("bad", "authenticate CRAM-MD5 %s", base64.StdEncoding.EncodeToString([]byte("baddata")))
+	tc.transactf("bad", "authenticate CRAM-MD5 %s", base64.StdEncoding.EncodeToString([]byte("bad data")))
+
+	auth := func(status string, username, password string) {
+		t.Helper()
+
+		tc.client.LastTag = "x001"
+		tc.writelinef("%s authenticate CRAM-MD5", tc.client.LastTag)
+
+		xreadContinuation := func() []byte {
+			line, _, result, rerr := tc.client.ReadContinuation()
+			tc.check(rerr, "read continuation")
+			if result.Status != "" {
+				tc.t.Fatalf("expected continuation")
+			}
+			buf, err := base64.StdEncoding.DecodeString(line)
+			tc.check(err, "parsing base64 from remote")
+			return buf
+		}
+
+		chal := xreadContinuation()
+		h := hmac.New(md5.New, []byte(password))
+		h.Write([]byte(chal))
+		resp := fmt.Sprintf("%s %x", username, h.Sum(nil))
+		tc.writelinef("%s", base64.StdEncoding.EncodeToString([]byte(resp)))
+
+		_, result, err := tc.client.Response()
+		tc.check(err, "read response")
+		if string(result.Status) != strings.ToUpper(status) {
+			tc.t.Fatalf("got status %q, expected %q", result.Status, strings.ToUpper(status))
+		}
+	}
+
+	auth("no", "mjl@mox.example", "badpass")
+	auth("no", "mjl@mox.example", "")
+	auth("no", "other@mox.example", "testtest")
+
+	auth("ok", "mjl@mox.example", "testtest")
+
 	tc.close()
 }
