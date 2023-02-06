@@ -68,6 +68,8 @@ var dial = func(ctx context.Context, timeout time.Duration, addr string, laddr n
 	return dialer.DialContext(ctx, "tcp", addr)
 }
 
+var jitter = mox.NewRand()
+
 var queueDB *bstore.DB
 
 // Msg is a message in the queue.
@@ -456,7 +458,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 	// 8h, 16h (send permanent failure DSN).
 	// ../rfc/5321:3703
 	// todo future: make the back off times configurable. ../rfc/5321:3713
-	backoff := (7*60 + 30) * time.Second
+	backoff := time.Duration(7*60+30+jitter.Intn(10)-5) * time.Second
 	for i := 0; i < m.Attempts; i++ {
 		backoff *= time.Duration(2)
 	}
