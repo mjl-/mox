@@ -82,6 +82,8 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" && r.URL.Path == "/account/" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache; max-age=0")
+		// We typically return the embedded admin.html, but during development it's handy
+		// to load from disk.
 		f, err := os.Open("http/account.html")
 		if err == nil {
 			defer f.Close()
