@@ -745,6 +745,8 @@ By default, a single log level applies to all logging in mox. But for each
 smtpserver, smtpclient, queue, imapserver, spf, dkim, dmarc, junk, message,
 etc.
 
+Specify a pkg and an empty level to clear the configured level for a package.
+
 Valid labels: error, info, debug, trace, traceauth, tracedata.
 `
 	args := c.Parse()

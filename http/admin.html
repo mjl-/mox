@@ -260,6 +260,7 @@ const index = async () => {
 		dom.br(),
 		dom.h2('Configuration'),
 		dom.div(dom.a('See configuration', attr({href: '#config'}))),
+		dom.div(dom.a('Log levels', attr({href: '#loglevels'}))),
 		footer,
 	)
 }
@@ -277,6 +278,116 @@ const config = async () => {
 		dom('pre.literal', staticText),
 		dom.h2(dynamicPath),
 		dom('pre.literal', dynamicText),
+	)
+}
+
+const loglevels = async () => {
+	const loglevels = await api.LogLevels()
+
+	const levels = ['error', 'info', 'debug', 'trace', 'traceauth', 'tracedata']
+
+	let form, fieldset, pkg, level
+
+	const page = document.getElementById('page')
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			'Log levels',
+		),
+		dom.p('Note: changing a log level here only changes it for the current process. When mox restarts, it sets the log levels from the configuration file. Change mox.conf to keep the changes.'),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('Package', attr({title: 'Log levels can be configured per package. E.g. smtpserver, imapserver, dkim, dmarc, tlsrpt, etc.'})),
+					dom.th('Level', attr({title: 'If you set the log level to "trace", imap and smtp protocol transcripts will be logged. Sensitive authentication is replaced with "***" unless the level is >= "traceauth". Data is masked with "..." unless the level is "tracedata".'})),
+					dom.th('Action'),
+				),
+			),
+			dom.tbody(
+				Object.entries(loglevels).map(t => {
+					let lvl
+					return dom.tr(
+						dom.td(t[0] || '(default)'),
+						dom.td(
+							lvl=dom.select(levels.map(l => dom.option(l, t[1] === l ? attr({selected: ''}) : []))),
+						),
+						dom.td(
+							dom.button('Save', attr({title: 'Set new log level for package.'}), async function click(e) {
+								e.preventDefault()
+								try {
+									e.target.disabled = true
+									await api.LogLevelSet(t[0], lvl.value)
+								} catch (err) {
+									console.log({err})
+									window.alert('Error: ' + err)
+									return
+								} finally {
+									e.target.disabled = false
+								}
+								window.location.reload() // todo: reload just the current loglevels
+							}),
+							' ',
+							dom.button('Remove', attr({title: 'Remove this log level, the default log level will apply.'}), t[0] === '' ? attr({disabled: ''}) : [], async function click(e) {
+								e.preventDefault()
+								try {
+									e.target.disabled = true
+									await api.LogLevelRemove(t[0])
+								} catch (err) {
+									console.log({err})
+									window.alert('Error: ' + err)
+									return
+								} finally {
+									e.target.disabled = false
+								}
+								window.location.reload() // todo: reload just the current loglevels
+							}),
+						),
+					)
+				}),
+			),
+		),
+		dom.br(),
+		dom.h2('Add log level setting'),
+		form=dom.form(
+			async function submit(e) {
+				e.preventDefault()
+				e.stopPropagation()
+				fieldset.disabled = true
+				try {
+					await api.LogLevelSet(pkg.value, level.value)
+				} catch (err) {
+					console.log({err})
+					window.alert('Error: ' + err.message)
+					return
+				} finally {
+					fieldset.disabled = false
+				}
+				form.reset()
+				window.location.reload() // todo: reload just the current loglevels
+			},
+			fieldset=dom.fieldset(
+				dom.label(
+					style({display: 'inline-block'}),
+					'Package',
+					dom.br(),
+					pkg=dom.input(attr({required: ''})),
+				),
+				' ',
+				dom.label(
+					style({display: 'inline-block'}),
+					'Level',
+					dom.br(),
+					level=dom.select(
+						attr({required: ''}),
+						levels.map(l => dom.option(l, l === 'debug' ? attr({selected: ''}) : [])),
+					),
+				),
+				' ',
+				dom.button('Add'),
+			),
+			dom.br(),
+			dom.p('Suggestions for packages: autotls dkim dmarc dmarcdb dns dnsbl dsn http imapserver iprev junk message metrics mox moxio mtasts mtastsdb publicsuffix queue sendmail serve smtpserver spf store subjectpass tlsrpt tlsrptdb updates'),
+		),
 	)
 }
 
@@ -1438,6 +1549,8 @@ const init = async () => {
 				await index()
 			} else if (h === 'config') {
 				await config()
+			} else if (h === 'loglevels') {
+				await loglevels()
 			} else if (h === 'accounts') {
 				await accounts()
 			} else if (t[0] === 'accounts' && t.length === 2) {

@@ -66,16 +66,27 @@ type AccountDestination struct {
 	Destination config.Destination
 }
 
-// SetLogLevel sets a new log level for pkg. An empty pkg sets the default log
+// LogLevelSet sets a new log level for pkg. An empty pkg sets the default log
 // value that is used if no explicit log level is configured for a package.
 // This change is ephemeral, no config file is changed.
-func (c *Config) SetLogLevel(pkg string, level mlog.Level) {
+func (c *Config) LogLevelSet(pkg string, level mlog.Level) {
 	c.logMutex.Lock()
 	defer c.logMutex.Unlock()
 	l := c.copyLogLevels()
 	l[pkg] = level
 	c.Log = l
 	xlog.Print("log level changed", mlog.Field("pkg", pkg), mlog.Field("level", mlog.LevelStrings[level]))
+	mlog.SetConfig(c.Log)
+}
+
+// LogLevelRemove removes a configured log level for a package.
+func (c *Config) LogLevelRemove(pkg string) {
+	c.logMutex.Lock()
+	defer c.logMutex.Unlock()
+	l := c.copyLogLevels()
+	delete(l, pkg)
+	c.Log = l
+	xlog.Print("log level cleared", mlog.Field("pkg", pkg))
 	mlog.SetConfig(c.Log)
 }
 

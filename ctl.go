@@ -613,16 +613,20 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 		/* protocol:
 		> "setloglevels"
 		> pkg
-		> level
+		> level (if empty, log level for pkg will be unset)
 		< "ok" or error
 		*/
 		pkg := ctl.xread()
 		levelstr := ctl.xread()
-		level, ok := mlog.Levels[levelstr]
-		if !ok {
-			ctl.xerror("bad level")
+		if levelstr == "" {
+			mox.Conf.LogLevelRemove(pkg)
+		} else {
+			level, ok := mlog.Levels[levelstr]
+			if !ok {
+				ctl.xerror("bad level")
+			}
+			mox.Conf.LogLevelSet(pkg, level)
 		}
-		mox.Conf.SetLogLevel(pkg, level)
 		ctl.xwriteok()
 
 	default:

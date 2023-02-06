@@ -38,6 +38,10 @@ var Logfmt bool
 
 type Level int
 
+func (l Level) String() string {
+	return LevelStrings[l]
+}
+
 var LevelStrings = map[Level]string{
 	LevelPrint:     "print",
 	LevelFatal:     "fatal",

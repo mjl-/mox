@@ -1462,3 +1462,26 @@ func (Admin) QueueDrop(ctx context.Context, id int64) {
 	}
 	xcheckf(ctx, err, "drop message from queue")
 }
+
+// LogLevels returns the current log levels.
+func (Admin) LogLevels(ctx context.Context) map[string]string {
+	m := map[string]string{}
+	for pkg, level := range mox.Conf.LogLevels() {
+		m[pkg] = level.String()
+	}
+	return m
+}
+
+// LogLevelSet sets a log level for a package.
+func (Admin) LogLevelSet(ctx context.Context, pkg string, levelStr string) {
+	level, ok := mlog.Levels[levelStr]
+	if !ok {
+		xcheckf(ctx, errors.New("unknown"), "lookup level")
+	}
+	mox.Conf.LogLevelSet(pkg, level)
+}
+
+// LogLevelRemove removes a log level for a package, which cannot be the empty string.
+func (Admin) LogLevelRemove(ctx context.Context, pkg string) {
+	mox.Conf.LogLevelRemove(pkg)
+}

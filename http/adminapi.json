@@ -577,6 +577,52 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "LogLevels",
+			"Docs": "LogLevels returns the current log levels.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "LogLevelSet",
+			"Docs": "LogLevelSet sets a log level for a package.",
+			"Params": [
+				{
+					"Name": "pkg",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "levelStr",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "LogLevelRemove",
+			"Docs": "LogLevelRemove removes a log level for a package, which cannot be the empty string.",
+			"Params": [
+				{
+					"Name": "pkg",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
 		}
 	],
 	"Sections": [],
