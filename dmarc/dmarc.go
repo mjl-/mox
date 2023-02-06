@@ -202,7 +202,7 @@ func Verify(ctx context.Context, resolver dns.Resolver, from dns.Domain, dkimRes
 	}
 
 	// Below we can do a bunch of publicsuffix lookups. Cache the results, mostly to
-	// reduce log polution.
+	// reduce log pollution.
 	pubsuffixes := map[dns.Domain]dns.Domain{}
 	pubsuffix := func(name dns.Domain) dns.Domain {
 		if r, ok := pubsuffixes[name]; ok {

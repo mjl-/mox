@@ -1240,7 +1240,7 @@ func (c *conn) cmdRcpt(p *parser) {
 			receivedSPF, _, _, err := spf.Verify(spfctx, c.resolver, spfArgs)
 			spfcancel()
 			if err != nil {
-				c.log.Errorx("spf verify for multiple reciepients", err)
+				c.log.Errorx("spf verify for multiple recipients", err)
 			}
 			pass = receivedSPF.Identity == spf.ReceivedMailFrom && receivedSPF.Result == spf.StatusPass
 		}

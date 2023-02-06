@@ -166,7 +166,7 @@ type cmd struct {
 
 	// Set by invoked command or Parse.
 	unlisted bool   // If set, command is not listed until at least some words are matched from command.
-	params   string // Arguments to command. Mutliple lines possible.
+	params   string // Arguments to command. Multiple lines possible.
 	help     string // Additional explanation. First line is synopsis, the rest is only printed for an explicit help/usage for that command.
 	args     []string
 }
