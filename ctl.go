@@ -403,6 +403,32 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 		ctl.xcheck(err, "closing account")
 		ctl.xwriteok()
 
+	case "setaccountpassword":
+		/* protocol:
+		> "setaccountpassword"
+		> address
+		> password
+		< "ok" or error
+		*/
+
+		addr := ctl.xread()
+		pw := ctl.xread()
+
+		acc, _, err := store.OpenEmail(addr)
+		ctl.xcheck(err, "open account")
+		defer func() {
+			if acc != nil {
+				acc.Close()
+			}
+		}()
+
+		err = acc.SetPassword(pw)
+		ctl.xcheck(err, "setting password")
+		err = acc.Close()
+		ctl.xcheck(err, "closing account")
+		acc = nil
+		ctl.xwriteok()
+
 	case "queue":
 		/* protocol:
 		> "queue"

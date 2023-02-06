@@ -889,15 +889,13 @@ Any email address configured for the account can be used.
 	}
 	mustLoadConfig()
 
-	acc, _, err := store.OpenEmail(args[0])
-	xcheckf(err, "open account")
-
 	pw := xreadpassword()
 
-	err = acc.SetPassword(pw)
-	xcheckf(err, "setting password")
-	err = acc.Close()
-	xcheckf(err, "closing account")
+	ctl := xctl()
+	ctl.xwrite("setaccountpassword")
+	ctl.xwrite(args[0])
+	ctl.xwrite(pw)
+	ctl.xreadok()
 }
 
 func cmdDeliver(c *cmd) {
