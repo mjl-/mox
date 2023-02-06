@@ -161,7 +161,7 @@ const index = async () => {
 					window.alert('Password has been changed.')
 					form.reset()
 				} catch (err) {
-					console.log('error', err)
+					console.log({err})
 					window.alert('Error: ' + err.message)
 				} finally {
 					fieldset.disabled = false
@@ -193,7 +193,7 @@ const init = async () => {
 				dom._kids(page, 'page not found')
 			}
 		} catch (err) {
-			console.log('error', err)
+			console.log({err})
 			window.alert('Error: ' + err.message)
 			window.location.hash = curhash
 			curhash = window.location.hash

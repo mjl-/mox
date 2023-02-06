@@ -216,10 +216,10 @@ const index = async () => {
 				} catch (err) {
 					console.log({err})
 					window.alert('Error: ' + err.message)
-					fieldset.disabled = false
 					return
+				} finally {
+					fieldset.disabled = false
 				}
-				fieldset.disabled = false
 				window.location.hash = '#domains/' + domain.value
 			},
 			fieldset=dom.fieldset(
@@ -433,10 +433,10 @@ const accounts = async () => {
 				} catch (err) {
 					console.log({err})
 					window.alert('Error: ' + err.message)
-					fieldset.disabled = false
 					return
+				} finally {
+					fieldset.disabled = false
 				}
-				fieldset.disabled = false
 				window.location.hash = '#accounts/'+account.value
 			},
 			fieldset=dom.fieldset(
@@ -515,10 +515,10 @@ const account = async (name) => {
 								} catch (err) {
 									console.log({err})
 									window.alert('Error: ' + err.message)
-									e.target.disabled = false
 									return
+								} finally {
+									e.target.disabled = false
 								}
-								e.target.disabled = false
 								window.location.reload() // todo: reload just the list
 							}),
 						),
@@ -545,10 +545,10 @@ const account = async (name) => {
 				} catch (err) {
 					console.log({err})
 					window.alert('Error: ' + err.message)
-					fieldset.disabled = false
 					return
+				} finally {
+					fieldset.disabled = false
 				}
-				fieldset.disabled = false
 				form.reset()
 				window.location.reload() // todo: only reload the destinations
 			},
@@ -585,8 +585,9 @@ const account = async (name) => {
 					window.alert('Password has been changed.')
 					formPassword.reset()
 				} catch (err) {
-					console.log('error', err)
+					console.log({err})
 					window.alert('Error: ' + err.message)
+					return
 				} finally {
 					fieldsetPassword.disabled = false
 				}
@@ -605,10 +606,10 @@ const account = async (name) => {
 			} catch (err) {
 				console.log({err})
 				window.alert('Error: ' + err.message)
-				e.target.disabled = false
 				return
+			} finally {
+				e.target.disabled = false
 			}
-			e.target.disabled = false
 			window.location.hash = '#accounts'
 		}),
 	)
@@ -689,10 +690,10 @@ const domain = async (d) => {
 								} catch (err) {
 									console.log({err})
 									window.alert('Error: ' + err.message)
-									e.target.disabled = false
 									return
+								} finally {
+									e.target.disabled = false
 								}
-								e.target.disabled = false
 								window.location.reload() // todo: only reload the localparts
 							}),
 						),
@@ -712,10 +713,10 @@ const domain = async (d) => {
 				} catch (err) {
 					console.log({err})
 					window.alert('Error: ' + err.message)
-					fieldset.disabled = false
 					return
+				} finally {
+					fieldset.disabled = false
 				}
-				fieldset.disabled = false
 				form.reset()
 				window.location.reload() // todo: only reload the addresses
 			},
@@ -755,10 +756,10 @@ const domain = async (d) => {
 			} catch (err) {
 				console.log({err})
 				window.alert('Error: ' + err.message)
-				e.target.disabled = false
 				return
+			} finally {
+				e.target.disabled = false
 			}
-			e.target.disabled = false
 			window.location.hash = '#'
 		}),
 	)
