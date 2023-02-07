@@ -28,6 +28,7 @@ import (
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarcdb"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/smtp"
@@ -70,10 +71,13 @@ type testserver struct {
 	user, pass string
 	submission bool
 	dnsbls     []dns.Domain
+	tlsmode    smtpclient.TLSMode
 }
 
 func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *testserver {
-	ts := testserver{t: t, cid: 1, resolver: resolver}
+	limitersInit() // Reset rate limiters.
+
+	ts := testserver{t: t, cid: 1, resolver: resolver, tlsmode: smtpclient.TLSOpportunistic}
 
 	mox.Context = context.Background()
 	mox.ConfigStaticPath = configPath
@@ -125,7 +129,7 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 		authLine = fmt.Sprintf("AUTH PLAIN %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("\u0000%s\u0000%s", ts.user, ts.pass))))
 	}
 
-	client, err := smtpclient.New(context.Background(), xlog.WithCid(ts.cid-1), clientConn, smtpclient.TLSOpportunistic, "mox.example", authLine)
+	client, err := smtpclient.New(context.Background(), xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, "mox.example", authLine)
 	if err != nil {
 		clientConn.Close()
 	} else {
@@ -745,5 +749,126 @@ func TestTLSReport(t *testing.T) {
 
 	run(tlsrpt, 0)
 	run(strings.ReplaceAll(tlsrpt, "xmox.nl", "mox.example"), 1)
+}
 
+func TestRatelimitConnectionrate(t *testing.T) {
+	ts := newTestServer(t, "../testdata/smtp/mox.conf", dns.MockResolver{})
+	defer ts.close()
+
+	// We'll be creating 300 connections, no TLS and reduce noise.
+	ts.tlsmode = smtpclient.TLSSkip
+	mlog.SetConfig(map[string]mlog.Level{"": mlog.LevelInfo})
+
+	// We may be passing a window boundary during this tests. The limit is 300/minute.
+	// So make twice that many connections and hope the tests don't take too long.
+	for i := 0; i <= 2*300; i++ {
+		ts.run(func(err error, client *smtpclient.Client) {
+			t.Helper()
+			if err != nil && i < 300 {
+				t.Fatalf("expected smtp connection, got %v", err)
+			}
+			if err == nil && i == 600 {
+				t.Fatalf("expected no smtp connection due to connection rate limit, got connection")
+			}
+			if client != nil {
+				client.Close()
+			}
+		})
+	}
+}
+
+func TestRatelimitAuth(t *testing.T) {
+	ts := newTestServer(t, "../testdata/smtp/mox.conf", dns.MockResolver{})
+	defer ts.close()
+
+	ts.submission = true
+	ts.tlsmode = smtpclient.TLSSkip
+	ts.user = "bad"
+	ts.pass = "bad"
+
+	// We may be passing a window boundary during this tests. The limit is 10 auth
+	// failures/minute. So make twice that many connections and hope the tests don't
+	// take too long.
+	for i := 0; i <= 2*10; i++ {
+		ts.run(func(err error, client *smtpclient.Client) {
+			t.Helper()
+			if err == nil {
+				t.Fatalf("got auth success with bad credentials")
+			}
+			var cerr smtpclient.Error
+			badauth := errors.As(err, &cerr) && cerr.Code == smtp.C535AuthBadCreds
+			if !badauth && i < 10 {
+				t.Fatalf("expected auth failure, got %v", err)
+			}
+			if badauth && i == 20 {
+				t.Fatalf("expected no smtp connection due to failed auth rate limit, got other error %v", err)
+			}
+			if client != nil {
+				client.Close()
+			}
+		})
+	}
+}
+
+func TestRatelimitDelivery(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"example.org.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"example.org."},
+		},
+	}
+	ts := newTestServer(t, "../testdata/smtp/mox.conf", resolver)
+	defer ts.close()
+
+	orig := limitIPMasked1MessagesPerMinute
+	limitIPMasked1MessagesPerMinute = 1
+	defer func() {
+		limitIPMasked1MessagesPerMinute = orig
+	}()
+
+	ts.run(func(err error, client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@mox.example"
+		if err == nil {
+			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+		}
+		tcheck(t, err, "deliver to remote")
+
+		err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C452StorageFull {
+			t.Fatalf("got err %v, expected smtpclient error with code 452 for storage full", err)
+		}
+	})
+
+	limitIPMasked1MessagesPerMinute = orig
+
+	origSize := limitIPMasked1SizePerMinute
+	// Message was already delivered once. We'll do another one. But the 3rd will fail.
+	// We need the actual size with prepended headers, since that is used in the
+	// calculations.
+	msg, err := bstore.QueryDB[store.Message](ts.acc.DB).Get()
+	if err != nil {
+		t.Fatalf("getting delivered message for its size: %v", err)
+	}
+	limitIPMasked1SizePerMinute = 2*msg.Size + int64(len(deliverMessage)/2)
+	defer func() {
+		limitIPMasked1SizePerMinute = origSize
+	}()
+	ts.run(func(err error, client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@mox.example"
+		if err == nil {
+			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+		}
+		tcheck(t, err, "deliver to remote")
+
+		err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C452StorageFull {
+			t.Fatalf("got err %v, expected smtpclient error with code 452 for storage full", err)
+		}
+	})
 }

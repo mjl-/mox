@@ -48,6 +48,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -70,6 +71,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
+	"github.com/mjl-/mox/ratelimit"
 	"github.com/mjl-/mox/scram"
 	"github.com/mjl-/mox/store"
 )
@@ -100,6 +102,33 @@ var (
 		},
 	)
 )
+
+var limiterConnectionrate, limiterConnections *ratelimit.Limiter
+
+func init() {
+	// Also called by tests, so they don't trigger the rate limiter.
+	limitersInit()
+}
+
+func limitersInit() {
+	mox.LimitersInit()
+	limiterConnectionrate = &ratelimit.Limiter{
+		WindowLimits: []ratelimit.WindowLimit{
+			{
+				Window: time.Minute,
+				Limits: [...]int64{300, 900, 2700},
+			},
+		},
+	}
+	limiterConnections = &ratelimit.Limiter{
+		WindowLimits: []ratelimit.WindowLimit{
+			{
+				Window: time.Duration(math.MaxInt64), // All of time.
+				Limits: [...]int64{30, 90, 270},
+			},
+		},
+	}
+}
 
 // Capabilities (extensions) the server supports. Connections will add a few more, e.g. STARTTLS, LOGINDISABLED, AUTH=PLAIN.
 // ENABLE: ../rfc/5161
@@ -136,6 +165,7 @@ type conn struct {
 	tw                *moxio.TraceWriter
 	lastlog           time.Time   // For printing time since previous log line.
 	tlsConfig         *tls.Config // TLS config to use for handshake.
+	remoteIP          net.IP
 	noRequireSTARTTLS bool
 	cmd               string // Currently executing, for deciding to applyChanges and logging.
 	cmdMetric         string // Currently executing, for metrics.
@@ -507,12 +537,21 @@ func (c *conn) xreadliteral(size int64, sync bool) string {
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
 func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noRequireSTARTTLS bool) {
+	var remoteIP net.IP
+	if a, ok := nc.RemoteAddr().(*net.TCPAddr); ok {
+		remoteIP = a.IP
+	} else {
+		// For net.Pipe, during tests.
+		remoteIP = net.ParseIP("127.0.0.10")
+	}
+
 	c := &conn{
 		cid:               cid,
 		conn:              nc,
 		tls:               xtls,
 		lastlog:           time.Now(),
 		tlsConfig:         tlsConfig,
+		remoteIP:          remoteIP,
 		noRequireSTARTTLS: noRequireSTARTTLS,
 		enabled:           map[capability]bool{},
 		cmd:               "(greeting)",
@@ -582,6 +621,25 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		panic(errIO)
 	default:
 	}
+
+	if !limiterConnectionrate.Add(c.remoteIP, time.Now(), 1) {
+		c.writelinef("* BYE connection rate from your ip or network too high, slow down please")
+		return
+	}
+
+	// If remote IP/network resulted in too many authentication failures, refuse to serve.
+	if !mox.LimiterFailedAuth.CanAdd(c.remoteIP, time.Now(), 1) {
+		c.log.Debug("refusing connection due to many auth failures", mlog.Field("remoteip", c.remoteIP))
+		c.writelinef("* BYE too many auth failures")
+		return
+	}
+
+	if !limiterConnections.Add(c.remoteIP, time.Now(), 1) {
+		c.log.Debug("refusing connection due to many open connections", mlog.Field("remoteip", c.remoteIP))
+		c.writelinef("* BYE too many open connections from your ip or network")
+		return
+	}
+	defer limiterConnections.Add(c.remoteIP, time.Now(), -1)
 
 	// We register and unregister the original connection, in case it c.conn is
 	// replaced with a TLS connection later on.
@@ -1313,6 +1371,12 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	authResult := "error"
 	defer func() {
 		metrics.AuthenticationInc("imap", authVariant, authResult)
+		switch authResult {
+		case "ok":
+			mox.LimiterFailedAuth.Reset(c.remoteIP, time.Now())
+		default:
+			mox.LimiterFailedAuth.Add(c.remoteIP, time.Now(), 1)
+		}
 	}()
 
 	// Request syntax: ../rfc/9051:6341 ../rfc/3501:4561

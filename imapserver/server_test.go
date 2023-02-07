@@ -300,6 +300,8 @@ func startNoSwitchboard(t *testing.T) *testconn {
 }
 
 func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn {
+	limitersInit() // Reset rate limiters.
+
 	if first {
 		os.RemoveAll("../testdata/imap/data")
 	}

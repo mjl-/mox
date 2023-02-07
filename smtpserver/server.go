@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"math"
 	"net"
 	"os"
 	"runtime/debug"
@@ -42,6 +43,7 @@ import (
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/queue"
+	"github.com/mjl-/mox/ratelimit"
 	"github.com/mjl-/mox/scram"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/spf"
@@ -57,9 +59,39 @@ var xlog = mlog.New("smtpserver")
 
 // We use panic and recover for error handling while executing commands.
 // These errors signal the connection must be closed.
-var (
-	errIO = errors.New("fatal io error")
-)
+var errIO = errors.New("fatal io error")
+
+var limiterConnectionRate, limiterConnections *ratelimit.Limiter
+
+// For delivery rate limiting. Variable because changed during tests.
+var limitIPMasked1MessagesPerMinute int = 500
+var limitIPMasked1SizePerMinute int64 = 1000 * 1024 * 1024
+
+func init() {
+	// Also called by tests, so they don't trigger the rate limiter.
+	limitersInit()
+}
+
+func limitersInit() {
+	mox.LimitersInit()
+	// todo future: make these configurable
+	limiterConnectionRate = &ratelimit.Limiter{
+		WindowLimits: []ratelimit.WindowLimit{
+			{
+				Window: time.Minute,
+				Limits: [...]int64{300, 900, 2700},
+			},
+		},
+	}
+	limiterConnections = &ratelimit.Limiter{
+		WindowLimits: []ratelimit.WindowLimit{
+			{
+				Window: time.Duration(math.MaxInt64), // All of time.
+				Limits: [...]int64{30, 90, 270},
+			},
+		},
+	}
+}
 
 type codes struct {
 	code   int
@@ -503,6 +535,25 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 	default:
 	}
 
+	if !limiterConnectionRate.Add(c.remoteIP, time.Now(), 1) {
+		c.writecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "connection rate from your ip or network too high, slow down please", nil)
+		return
+	}
+
+	// If remote IP/network resulted in too many authentication failures, refuse to serve.
+	if submission && !mox.LimiterFailedAuth.CanAdd(c.remoteIP, time.Now(), 1) {
+		c.log.Debug("refusing connection due to many auth failures", mlog.Field("remoteip", c.remoteIP))
+		c.writecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "too many auth failures", nil)
+		return
+	}
+
+	if !limiterConnections.Add(c.remoteIP, time.Now(), 1) {
+		c.log.Debug("refusing connection due to many open connections", mlog.Field("remoteip", c.remoteIP))
+		c.writecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "too many open connections from your ip or network", nil)
+		return
+	}
+	defer limiterConnections.Add(c.remoteIP, time.Now(), -1)
+
 	// We register and unregister the original connection, in case c.conn is replaced
 	// with a TLS connection later on.
 	mox.Connections.Register(nc, "smtp", listenerName)
@@ -773,6 +824,12 @@ func (c *conn) cmdAuth(p *parser) {
 	authResult := "error"
 	defer func() {
 		metrics.AuthenticationInc("submission", authVariant, authResult)
+		switch authResult {
+		case "ok":
+			mox.LimiterFailedAuth.Reset(c.remoteIP, time.Now())
+		default:
+			mox.LimiterFailedAuth.Add(c.remoteIP, time.Now(), 1)
+		}
 	}()
 
 	// todo: implement "AUTH LOGIN"? it looks like PLAIN, but without the continuation. it is an obsolete sasl mechanism. an account in desktop outlook appears to go through the cloud, attempting to submit email only with unadvertised and AUTH LOGIN. it appears they don't know "plain".
@@ -1912,6 +1969,88 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				}
 			}
 		}()
+
+		// We don't want to let a single IP or network deliver too many messages to an
+		// account. They may fill up the mailbox, either with messages that have to be
+		// purged, or by filling the disk. We check both cases for IP's and networks.
+		var rateError bool // Whether returned error represents a rate error.
+		err = acc.DB.Read(func(tx *bstore.Tx) (retErr error) {
+			now := time.Now()
+			defer func() {
+				log.Debugx("checking message and size delivery rates", retErr, mlog.Field("duration", time.Since(now)))
+			}()
+
+			checkCount := func(msg store.Message, window time.Duration, limit int) {
+				if retErr != nil {
+					return
+				}
+				q := bstore.QueryTx[store.Message](tx)
+				q.FilterNonzero(msg)
+				q.FilterGreater("Received", now.Add(-window))
+				n, err := q.Count()
+				if err != nil {
+					retErr = err
+					return
+				}
+				if n >= limit {
+					rateError = true
+					retErr = fmt.Errorf("more than %d messages in past %s from your ip/network", limit, window)
+				}
+			}
+
+			checkSize := func(msg store.Message, window time.Duration, limit int64) {
+				if retErr != nil {
+					return
+				}
+				q := bstore.QueryTx[store.Message](tx)
+				q.FilterNonzero(msg)
+				q.FilterGreater("Received", now.Add(-window))
+				size := msgWriter.Size
+				err := q.ForEach(func(v store.Message) error {
+					size += v.Size
+					return nil
+				})
+				if err != nil {
+					retErr = err
+					return
+				}
+				if size > limit {
+					rateError = true
+					retErr = fmt.Errorf("more than %d bytes in past %s from your ip/network", limit, window)
+				}
+			}
+
+			// todo future: make these configurable
+
+			const day = 24 * time.Hour
+			checkCount(store.Message{RemoteIPMasked1: ipmasked1}, time.Minute, limitIPMasked1MessagesPerMinute)
+			checkCount(store.Message{RemoteIPMasked1: ipmasked1}, day, 20*500)
+			checkCount(store.Message{RemoteIPMasked2: ipmasked2}, time.Minute, 1500)
+			checkCount(store.Message{RemoteIPMasked2: ipmasked2}, day, 20*1500)
+			checkCount(store.Message{RemoteIPMasked3: ipmasked3}, time.Minute, 4500)
+			checkCount(store.Message{RemoteIPMasked3: ipmasked3}, day, 20*4500)
+
+			const MB = 1024 * 1024
+			checkSize(store.Message{RemoteIPMasked1: ipmasked1}, time.Minute, limitIPMasked1SizePerMinute)
+			checkSize(store.Message{RemoteIPMasked1: ipmasked1}, day, 3*1000*MB)
+			checkSize(store.Message{RemoteIPMasked2: ipmasked2}, time.Minute, 3000*MB)
+			checkSize(store.Message{RemoteIPMasked2: ipmasked2}, day, 3*3000*MB)
+			checkSize(store.Message{RemoteIPMasked3: ipmasked3}, time.Minute, 9000*MB)
+			checkSize(store.Message{RemoteIPMasked3: ipmasked3}, day, 3*9000*MB)
+
+			return retErr
+		})
+		if err != nil && !rateError {
+			log.Errorx("checking delivery rates", err)
+			metricDelivery.WithLabelValues("checkrates", "").Inc()
+			addError(rcptAcc, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
+			continue
+		} else if err != nil {
+			log.Debugx("refusing due to high delivery rate", err)
+			metricDelivery.WithLabelValues("highrate", "").Inc()
+			addError(rcptAcc, smtp.C452StorageFull, smtp.SeMailbox2Full2, true, err.Error())
+			continue
+		}
 
 		// ../rfc/5321:3204
 		// ../rfc/5321:3300
