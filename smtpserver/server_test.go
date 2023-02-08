@@ -38,6 +38,12 @@ import (
 	"github.com/mjl-/mox/tlsrptdb"
 )
 
+func init() {
+	// Don't make tests slow.
+	badClientDelay = 0
+	reputationlessSenderDeliveryDelay = 0
+}
+
 func tcheck(t *testing.T, err error, msg string) {
 	if err != nil {
 		t.Helper()

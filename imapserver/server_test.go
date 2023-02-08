@@ -23,6 +23,9 @@ import (
 
 func init() {
 	sanityChecks = true
+
+	// Don't slow down tests.
+	badClientDelay = 0
 }
 
 func tocrlf(s string) string {

@@ -16,9 +16,9 @@ Mox features:
 - Reputation tracking, learning (per user) host- and domain-based reputation from
   (Non-)Junk/Non-Junk email.
 - Bayesian spam filtering that learns (per user) from (Non-)Junk email.
-- Greylisting of servers with no/low reputation and questionable email content.
-  Temporarily refused emails are available over IMAP in a special mailbox for a
-  short period, helping with misclassified legimate synchronous
+- Slowing down senders with no/low reputation or questionable email content
+  (similar to greylisting). Rejected emails are stored in a mailbox called Rejects
+  for a short period, helping with misclassified legimate synchronous
   signup/login/transactional emails.
 - Internationalized email, with unicode names in domains and usernames
   ("localparts").

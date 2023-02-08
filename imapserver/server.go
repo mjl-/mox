@@ -130,6 +130,10 @@ func limitersInit() {
 	}
 }
 
+// Delay before reads and after 1-byte writes for probably spammers. Tests set this
+// to zero.
+var badClientDelay = time.Second
+
 // Capabilities (extensions) the server supports. Connections will add a few more, e.g. STARTTLS, LOGINDISABLED, AUTH=PLAIN.
 // ENABLE: ../rfc/5161
 // LITERAL+: ../rfc/7888
@@ -163,6 +167,7 @@ type conn struct {
 	bw                *bufio.Writer      // To remote, with TLS added in case of TLS.
 	tr                *moxio.TraceReader // Kept to change trace level when reading/writing cmd/auth/data.
 	tw                *moxio.TraceWriter
+	slow              bool        // If set, reads are done with a 1 second sleep, and writes are done 1 byte at a time, to keep spammers busy.
 	lastlog           time.Time   // For printing time since previous log line.
 	tlsConfig         *tls.Config // TLS config to use for handshake.
 	remoteIP          net.IP
@@ -182,9 +187,10 @@ type conn struct {
 	searchResult []store.UID
 
 	// Only when authenticated.
-	username string // Full username as used during login.
-	account  *store.Account
-	comm     *store.Comm // For sending/receiving changes on mailboxes in account, e.g. from messages incoming on smtp, or another imap client.
+	authFailed int    // Number of failed auth attempts. For slowing down remote with many failures.
+	username   string // Full username as used during login.
+	account    *store.Account
+	comm       *store.Comm // For sending/receiving changes on mailboxes in account, e.g. from messages incoming on smtp, or another imap client.
 
 	mailboxID int64       // Only for StateSelected.
 	readonly  bool        // If opened mailbox is readonly.
@@ -376,18 +382,40 @@ func (c *conn) unselect() {
 	c.uids = nil
 }
 
+func (c *conn) setSlow(on bool) {
+	if on && !c.slow {
+		c.log.Debug("connection changed to slow")
+	} else if !on && c.slow {
+		c.log.Debug("connection restored to regular pace")
+	}
+	c.slow = on
+}
+
 // Write makes a connection an io.Writer. It panics for i/o errors. These errors
 // are handled in the connection command loop.
 func (c *conn) Write(buf []byte) (int, error) {
-	if err := c.conn.SetWriteDeadline(time.Now().Add(30 * time.Second)); err != nil {
-		c.log.Errorx("setting write deadline", err)
+	chunk := len(buf)
+	if c.slow {
+		chunk = 1
 	}
 
-	n, err := c.conn.Write(buf)
-	if err != nil {
-		panic(fmt.Errorf("write: %s (%w)", err, errIO))
+	var n int
+	for len(buf) > 0 {
+		if err := c.conn.SetWriteDeadline(time.Now().Add(30 * time.Second)); err != nil {
+			c.log.Errorx("setting write deadline", err)
+		}
+
+		nn, err := c.conn.Write(buf[:chunk])
+		if err != nil {
+			panic(fmt.Errorf("write: %s (%w)", err, errIO))
+		}
+		n += nn
+		buf = buf[chunk:]
+		if len(buf) > 0 && badClientDelay > 0 {
+			mox.Sleep(mox.Context, badClientDelay)
+		}
 	}
-	return n, err
+	return n, nil
 }
 
 func (c *conn) xtrace(level mlog.Level) func() {
@@ -406,6 +434,10 @@ var bufpool = moxio.NewBufpool(8, 16*1024)
 
 // read line from connection, not going through line channel.
 func (c *conn) readline0() (string, error) {
+	if c.slow && badClientDelay > 0 {
+		mox.Sleep(mox.Context, badClientDelay)
+	}
+
 	d := 30 * time.Minute
 	if c.state == stateNotAuthenticated {
 		d = 30 * time.Second
@@ -1367,6 +1399,19 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	// Command: ../rfc/9051:1403 ../rfc/3501:1519
 	// Examples: ../rfc/9051:1520 ../rfc/3501:1631
 
+	// For many failed auth attempts, slow down verification attempts.
+	if c.authFailed > 3 {
+		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*time.Second)
+	}
+	c.authFailed++ // Compensated on success.
+	defer func() {
+		// On the 3rd failed authentication, start responding slowly. Successful auth will
+		// cause fast responses again.
+		if c.authFailed >= 3 {
+			c.setSlow(true)
+		}
+	}()
+
 	var authVariant string
 	authResult := "error"
 	defer func() {
@@ -1442,6 +1487,11 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		authz := string(plain[0])
 		authc := string(plain[1])
 		password := string(plain[2])
+
+		if authz != "" && authz != authc {
+			xusercodeErrorf("AUTHORIZATIONFAILED", "cannot assume role")
+		}
+
 		acc, err := store.OpenEmailAuth(authc, password)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
@@ -1450,13 +1500,8 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			}
 			xusercodeErrorf("", "error")
 		}
-		if authz != "" && authz != authc {
-			acc.Close()
-			xusercodeErrorf("AUTHORIZATIONFAILED", "cannot assume role")
-		}
 		c.account = acc
 		c.username = authc
-		authResult = "ok"
 
 	case "CRAM-MD5":
 		authVariant = strings.ToLower(authType)
@@ -1521,7 +1566,6 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		c.account = acc
 		acc = nil // Cancel cleanup.
 		c.username = addr
-		authResult = "ok"
 
 	case "SCRAM-SHA-1", "SCRAM-SHA-256":
 		// todo: improve handling of errors during scram. e.g. invalid parameters. should we abort the imap command, or continue until the end and respond with a scram-level error?
@@ -1601,11 +1645,14 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		c.account = acc
 		acc = nil // Cancel cleanup.
 		c.username = ss.Authentication
-		authResult = "ok"
 
 	default:
 		xuserErrorf("method not supported")
 	}
+
+	c.setSlow(false)
+	authResult = "ok"
+	c.authFailed = 0
 	c.comm = store.RegisterComm(c.account)
 	c.state = stateAuthenticated
 	c.writeresultf("%s OK [CAPABILITY %s] authenticate done", tag, c.capabilities())
@@ -1636,6 +1683,19 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 		xusercodeErrorf("PRIVACYREQUIRED", "tls required for login")
 	}
 
+	// For many failed auth attempts, slow down verification attempts.
+	if c.authFailed > 3 {
+		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*time.Second)
+	}
+	c.authFailed++ // Compensated on success.
+	defer func() {
+		// On the 3rd failed authentication, start responding slowly. Successful auth will
+		// cause fast responses again.
+		if c.authFailed >= 3 {
+			c.setSlow(true)
+		}
+	}()
+
 	acc, err := store.OpenEmailAuth(userid, password)
 	if err != nil {
 		authResult = "badcreds"
@@ -1647,6 +1707,8 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 	}
 	c.account = acc
 	c.username = userid
+	c.authFailed = 0
+	c.setSlow(false)
 	c.comm = store.RegisterComm(acc)
 	c.state = stateAuthenticated
 	authResult = "ok"

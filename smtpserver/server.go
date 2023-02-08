@@ -93,6 +93,14 @@ func limitersInit() {
 	}
 }
 
+var (
+	// Delay before reads and after 1-byte writes for probably spammers. Zero during tests.
+	badClientDelay = time.Second
+
+	// Delay before accepting message from sender without reputation. Zero during tests.
+	reputationlessSenderDeliveryDelay = 15 * time.Second
+)
+
 type codes struct {
 	code   int
 	secode string // Enhanced code, but without the leading major int from code.
@@ -241,6 +249,7 @@ type conn struct {
 	w                     *bufio.Writer
 	tr                    *moxio.TraceReader // Kept for changing trace level during cmd/auth/data.
 	tw                    *moxio.TraceWriter
+	slow                  bool      // If set, reads are done with a 1 second sleep, and writes are done 1 byte at a time, to keep spammers busy.
 	lastlog               time.Time // Used for printing the delta time since the previous logging for this connection.
 	submission            bool      // ../rfc/6409:19 applies
 	tlsConfig             *tls.Config
@@ -341,28 +350,57 @@ func (c *conn) xtrace(level mlog.Level) func() {
 	}
 }
 
+// setSlow marks the connection slow (or now), so reads are done with 3 second
+// delay for each read, and writes are done at 1 byte per second, to try to slow
+// down spammers.
+func (c *conn) setSlow(on bool) {
+	if on && !c.slow {
+		c.log.Debug("connection changed to slow")
+	} else if !on && c.slow {
+		c.log.Debug("connection restored to regular pace")
+	}
+	c.slow = on
+}
+
 // Write writes to the connection. It panics on i/o errors, which is handled by the
 // connection command loop.
 func (c *conn) Write(buf []byte) (int, error) {
-	// We set a single deadline for Write and Read. This may be a TLS connection.
-	// SetDeadline works on the underlying connection. If we wouldn't touch the read
-	// deadline, and only set the write deadline and do a bunch of writes, the TLS
-	// library would still have to do reads on the underlying connection, and may reach
-	// a read deadline that was set for some earlier read.
-	if err := c.conn.SetDeadline(c.earliestDeadline(30 * time.Second)); err != nil {
-		c.log.Errorx("setting deadline for write", err)
+	chunk := len(buf)
+	if c.slow {
+		chunk = 1
 	}
 
-	n, err := c.conn.Write(buf)
-	if err != nil {
-		panic(fmt.Errorf("write: %s (%w)", err, errIO))
+	var n int
+	for len(buf) > 0 {
+		// We set a single deadline for Write and Read. This may be a TLS connection.
+		// SetDeadline works on the underlying connection. If we wouldn't touch the read
+		// deadline, and only set the write deadline and do a bunch of writes, the TLS
+		// library would still have to do reads on the underlying connection, and may reach
+		// a read deadline that was set for some earlier read.
+		if err := c.conn.SetDeadline(c.earliestDeadline(30 * time.Second)); err != nil {
+			c.log.Errorx("setting deadline for write", err)
+		}
+
+		nn, err := c.conn.Write(buf[:chunk])
+		if err != nil {
+			panic(fmt.Errorf("write: %s (%w)", err, errIO))
+		}
+		n += nn
+		buf = buf[chunk:]
+		if len(buf) > 0 && badClientDelay > 0 {
+			mox.Sleep(mox.Context, badClientDelay)
+		}
 	}
-	return n, err
+	return n, nil
 }
 
 // Read reads from the connection. It panics on i/o errors, which is handled by the
 // connection command loop.
 func (c *conn) Read(buf []byte) (int, error) {
+	if c.slow && badClientDelay > 0 {
+		mox.Sleep(mox.Context, badClientDelay)
+	}
+
 	// todo future: make deadline configurable for callers, and through config file? ../rfc/5321:3610 ../rfc/6409:492
 	// See comment about Deadline instead of individual read/write deadlines at Write.
 	if err := c.conn.SetDeadline(c.earliestDeadline(30 * time.Second)); err != nil {
@@ -819,6 +857,13 @@ func (c *conn) cmdAuth(p *parser) {
 		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*time.Second)
 	}
 	c.authFailed++ // Compensated on success.
+	defer func() {
+		// On the 3rd failed authentication, start responding slowly. Successful auth will
+		// cause fast responses again.
+		if c.authFailed >= 3 {
+			c.setSlow(true)
+		}
+	}()
 
 	var authVariant string
 	authResult := "error"
@@ -903,6 +948,12 @@ func (c *conn) cmdAuth(p *parser) {
 		authz := string(plain[0])
 		authc := string(plain[1])
 		password := string(plain[2])
+
+		if authz != "" && authz != authc {
+			authResult = "badcreds"
+			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "cannot assume other role")
+		}
+
 		acc, err := store.OpenEmailAuth(authc, password)
 		if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
 			// ../rfc/4954:274
@@ -910,13 +961,10 @@ func (c *conn) cmdAuth(p *parser) {
 			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
 		}
 		xcheckf(err, "verifying credentials")
-		if authz != "" && authz != authc {
-			authResult = "badcreds"
-			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "cannot assume other role")
-		}
 
 		authResult = "ok"
 		c.authFailed = 0
+		c.setSlow(false)
 		c.account = acc
 		c.username = authc
 		// ../rfc/4954:276
@@ -985,6 +1033,7 @@ func (c *conn) cmdAuth(p *parser) {
 
 		authResult = "ok"
 		c.authFailed = 0
+		c.setSlow(false)
 		c.account = acc
 		acc = nil // Cancel cleanup.
 		c.username = addr
@@ -1068,6 +1117,7 @@ func (c *conn) cmdAuth(p *parser) {
 
 		authResult = "ok"
 		c.authFailed = 0
+		c.setSlow(false)
 		c.account = acc
 		acc = nil // Cancel cleanup.
 		c.username = ss.Authentication
@@ -1733,7 +1783,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 		// Crude attempt to slow down someone trying to guess names. Would work better
 		// with connection rate limiter.
-		mox.Sleep(ctx, 1*time.Second)
+		mox.Sleep(ctx, 5*time.Second)
 
 		// todo future: if remote does not look like a properly configured mail system, respond with generic 451 error? to prevent any random internet system from discovering accounts. we could give proper response if spf for ehlo or mailfrom passes.
 		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "no such user(s)")
@@ -2048,6 +2098,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		} else if err != nil {
 			log.Debugx("refusing due to high delivery rate", err)
 			metricDelivery.WithLabelValues("highrate", "").Inc()
+			c.setSlow(true)
 			addError(rcptAcc, smtp.C452StorageFull, smtp.SeMailbox2Full2, true, err.Error())
 			continue
 		}
@@ -2122,6 +2173,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 			log.Info("incoming message rejected", mlog.Field("reason", a.reason))
 			metricDelivery.WithLabelValues("reject", a.reason).Inc()
+			c.setSlow(true)
 			addError(rcptAcc, a.code, a.secode, a.userError, a.errmsg)
 			continue
 		}
@@ -2143,6 +2195,14 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				log.Info("tlsrpt report processed")
 				m.Flags.Seen = true
 			}
+		}
+
+		// If not dmarc or tls report (Seen set above), and this is a first-time sender,
+		// wait before actually delivering. If this turns out to be a spammer, we've kept
+		// one of their connections busy.
+		if !m.Flags.Seen && a.reason == reasonNoBadSignals && reputationlessSenderDeliveryDelay > 0 {
+			log.Debug("delaying before delivering from sender without reputation", mlog.Field("delay", reputationlessSenderDeliveryDelay))
+			mox.Sleep(mox.Context, reputationlessSenderDeliveryDelay)
 		}
 
 		acc.WithWLock(func() {
