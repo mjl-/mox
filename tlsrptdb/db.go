@@ -28,7 +28,7 @@ var (
 
 	metricSession = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "mox_tlsrpt_session_total",
+			Name: "mox_tlsrptdb_session_total",
 			Help: "Number of sessions, both success and known result types.",
 		},
 		[]string{"type"}, // Known result types, and "success"
