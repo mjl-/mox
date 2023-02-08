@@ -553,6 +553,19 @@
 			]
 		},
 		{
+			"Name": "QueueSize",
+			"Docs": "QueueSize returns the number of messages currently in the outgoing queue.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
 			"Name": "QueueKick",
 			"Docs": "QueueKick initiates delivery of a message from the queue.",
 			"Params": [

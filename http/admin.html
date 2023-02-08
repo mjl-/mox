@@ -188,7 +188,10 @@ const formatSize = n => {
 }
 
 const index = async () => {
-	const domains = await api.Domains()
+	const [domains, queueSize] = await Promise.all([
+		await api.Domains(),
+		await api.QueueSize(),
+	])
 
 	let fieldset, domain, account, localpart
 
@@ -197,7 +200,7 @@ const index = async () => {
 		crumbs('Mox Admin'),
 		dom.p(
 			dom.a('Accounts', attr({href: '#accounts'})), dom.br(),
-			dom.a('Queue', attr({href: '#queue'})), dom.br(),
+			dom.a('Queue', attr({href: '#queue'})), ' ('+queueSize+')', dom.br(),
 		),
 		dom.h2('Domains'),
 		domains.length === 0 ? box(red, 'No domains') :

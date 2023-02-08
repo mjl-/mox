@@ -1447,6 +1447,13 @@ func (Admin) QueueList(ctx context.Context) []queue.Msg {
 	return l
 }
 
+// QueueSize returns the number of messages currently in the outgoing queue.
+func (Admin) QueueSize(ctx context.Context) int {
+	n, err := queue.Count()
+	xcheckf(ctx, err, "listing messages in queue")
+	return n
+}
+
 // QueueKick initiates delivery of a message from the queue.
 func (Admin) QueueKick(ctx context.Context, id int64) {
 	n, err := queue.Kick(id, "", "")

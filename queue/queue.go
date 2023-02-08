@@ -162,6 +162,11 @@ func List() ([]Msg, error) {
 	return qmsgs, nil
 }
 
+// Count returns the number of messages in the delivery queue.
+func Count() (int, error) {
+	return bstore.QueryDB[Msg](queueDB).Count()
+}
+
 // Add a new message to the queue. The queue is kicked immediately to start a
 // first delivery attempt.
 //
