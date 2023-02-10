@@ -4,7 +4,7 @@ See Quickstart below to get started.
 
 Mox features:
 
-- Quick and easy to maintain mail server for your own domain through quickstart.
+- Quick and easy to start/maintain mail server, for your own domain(s).
 - SMTP for receiving and submitting email.
 - IMAP4 for giving email clients access to email.
 - Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
@@ -14,11 +14,11 @@ Mox features:
 - DMARC, for enforcing SPF/DKIM policies set by domains. Incoming DMARC
   aggregate reports are analyzed.
 - Reputation tracking, learning (per user) host- and domain-based reputation from
-  (Non-)Junk/Non-Junk email.
+  (Non-)Junk email.
 - Bayesian spam filtering that learns (per user) from (Non-)Junk email.
 - Slowing down senders with no/low reputation or questionable email content
   (similar to greylisting). Rejected emails are stored in a mailbox called Rejects
-  for a short period, helping with misclassified legimate synchronous
+  for a short period, helping with misclassified legitimate synchronous
   signup/login/transactional emails.
 - Internationalized email, with unicode names in domains and usernames
   ("localparts").
@@ -87,22 +87,23 @@ Note: Mox only compiles/works on unix systems, not on Plan 9 or Windows.
 # Quickstart
 
 The easiest way to get started with serving email for your domain is to get a
-vm/machine dedicated to serving email named <host>.<domain>, login as an admin
-user, e.g. /home/service, download mox, and generate a configuration for your
-desired email address at your domain:
+vm/machine dedicated to serving email, name it [host].[domain], login as an
+admin user, e.g. /home/service, download mox, and generate a configuration for
+your desired email address at your domain:
 
 	./mox quickstart you@example.com
 
-This creates an accounts, generates a password and configuration files, prints
-the DNS records you need to manually add for your domain and prints commands to
-set permissions and install as a service.
+This creates an account, generates a password and configuration files, prints
+the DNS records you need to manually create and prints commands to set
+permissions and install mox as a service.
 
 If you already have email configured for your domain, or if you are already
 sending email for your domain from other machines/services, you should modify
 the suggested configuration and/or DNS records.
 
-A dedicated machine is convenient because modern email requires HTTPS.  You can
-combine mox with an existing webserver, but it requires more configuration.
+A dedicated machine is highly recommended because modern email requires HTTPS,
+also for automatic TLS.  You can combine mox with an existing webserver, but it
+requires more configuration.
 
 After starting, you can access the admin web interface on internal IPs.
 
@@ -115,9 +116,10 @@ Mox aims to make "running a mail server" easy and nearly effortless. Excellent
 quality mail server software exists, but getting a working setup typically
 requires you configure half a dozen services (SMTP, IMAP, SPF/DKIM/DMARC, spam
 filtering). That seems to lead to people no longer running their own mail
-servers, instead switching to one of the few centralized email providers. SMTP
-is long-time distributed messaging protocol. To keep it distributed, people
-need to run their own mail server. Mox aims to make that easy.
+servers, instead switching to one of the few centralized email providers. Email
+with SMTP is a long-time decentralized messaging protocol. To keep it
+decentralized, people need to run their own mail server. Mox aims to make that
+easy.
 
 - Where is the documentation?
 
@@ -125,7 +127,7 @@ See all commands and help text at https://pkg.go.dev/github.com/mjl-/mox/, and
 example config files at https://pkg.go.dev/github.com/mjl-/mox/config/.
 
 You can get the same information by running "mox" without arguments to list its
-subcommands and usage, and "mox help <subcommand>" for more details.
+subcommands and usage, and "mox help [subcommand]" for more details.
 
 The example config files are printed by "mox config describe-static" and "mox
 config describe-dynamic".
@@ -151,7 +153,7 @@ issue if you encounter a problem or would like to see a feature/functionality
 implemented.
 
 Instead of switching your email for your domain over to mox, you could simply
-configure mox for a subdomain, e.g. <you>@moxtest.<yourdomain>.
+configure mox for a subdomain, e.g. [you]@moxtest.[yourdomain].
 
 If you have experience with how the email protocols are used in the wild, e.g.
 compatibility issues, limitations, anti-spam measures, specification
@@ -179,7 +181,7 @@ proper solution, you can simply run a single SMTP server.
 
 - How secure is mox?
 
-Security is high on the priorit list for mox. Mox is young, so don't expect no
+Security is high on the priority list for mox. Mox is young, so don't expect no
 bugs at all. Mox does have automated tests for some security aspects, e.g. for
 login, and uses fuzzing. Mox is written in Go, so some classes of bugs such as
 buffer mishandling do not typically result in privilege escalation.  Of course
