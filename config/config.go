@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"net"
+	"reflect"
 	"regexp"
 	"time"
 
@@ -216,20 +217,44 @@ type Destination struct {
 	TLSReports   bool `sconf:"-" json:"-"`
 }
 
+// Equal returns whether d and o are equal, only looking at their user-changeable fields.
+func (d Destination) Equal(o Destination) bool {
+	if d.Mailbox != o.Mailbox || len(d.Rulesets) != len(o.Rulesets) {
+		return false
+	}
+	for i, rs := range d.Rulesets {
+		if !rs.Equal(o.Rulesets[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 type Ruleset struct {
 	SMTPMailFromRegexp string            `sconf:"optional" sconf-doc:"Matches if this regular expression matches (a substring of) the SMTP MAIL FROM address (not the message From-header). E.g. user@example.org."`
-	VerifiedDomain     string            `sconf:"optional" sconf-doc:"Matches if this domain or a subdomain matches a SPF- and/or DKIM-verified domain."`
-	HeadersRegexp      map[string]string `sconf:"optional" sconf-doc:"Matches if these header field/value regular expressions all match (substrings of) the message headers. Header fields and valuees are converted to lower case before matching. Whitespace is trimmed from the value before matching. A header field can occur multiple times in a message, only one instance has to match."`
+	VerifiedDomain     string            `sconf:"optional" sconf-doc:"Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain."`
+	HeadersRegexp      map[string]string `sconf:"optional" sconf-doc:"Matches if these header field/value regular expressions all match (substrings of) the message headers. Header fields and valuees are converted to lower case before matching. Whitespace is trimmed from the value before matching. A header field can occur multiple times in a message, only one instance has to match. For mailing lists, you could match on ^list-id$ with the value typically the mailing list address in angled brackets with @ replaced with a dot, e.g. <name\\.lists\\.example\\.org>."`
 	// todo: add a SMTPRcptTo check, and MessageFrom that works on a properly parsed From header.
 
-	ListAllowDomain string `sconf:"optional" sconf-doc:"Influence the spam filtering, this does not change whether this ruleset applies to a message. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list."`
+	ListAllowDomain string `sconf:"optional" sconf-doc:"Influence the spam filtering, this does not change whether this ruleset applies to a message. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation."`
 
-	Mailbox string `sconf-doc:"Mailbox to deliver to if Rules match."`
+	Mailbox string `sconf-doc:"Mailbox to deliver to if this ruleset matches."`
 
 	SMTPMailFromRegexpCompiled *regexp.Regexp      `sconf:"-" json:"-"`
 	VerifiedDNSDomain          dns.Domain          `sconf:"-"`
 	HeadersRegexpCompiled      [][2]*regexp.Regexp `sconf:"-" json:"-"`
 	ListAllowDNSDomain         dns.Domain          `sconf:"-"`
+}
+
+// Equal returns whether r and o are equal, only looking at their user-changeable fields.
+func (r Ruleset) Equal(o Ruleset) bool {
+	if r.SMTPMailFromRegexp != o.SMTPMailFromRegexp || r.VerifiedDomain != o.VerifiedDomain || r.ListAllowDomain != o.ListAllowDomain || r.Mailbox != o.Mailbox {
+		return false
+	}
+	if !reflect.DeepEqual(r.HeadersRegexp, o.HeadersRegexp) {
+		return false
+	}
+	return true
 }
 
 type TLS struct {

@@ -15,6 +15,8 @@ import (
 	"github.com/mjl-/sherpa"
 	"github.com/mjl-/sherpaprom"
 
+	"github.com/mjl-/mox/config"
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -113,4 +115,42 @@ func (Account) SetPassword(ctx context.Context, password string) {
 	defer acc.Close()
 	err = acc.SetPassword(password)
 	xcheckf(ctx, err, "setting password")
+}
+
+// Destinations returns the default domain, and the destinations (keys are email
+// addresses, or localparts to the default domain).
+// todo: replace with a function that returns the whole account, when sherpadoc understands unnamed struct fields.
+func (Account) Destinations(ctx context.Context) (dns.Domain, map[string]config.Destination) {
+	accountName := ctx.Value(authCtxKey).(string)
+	accConf, ok := mox.Conf.Account(accountName)
+	if !ok {
+		xcheckf(ctx, errors.New("not found"), "looking up account")
+	}
+	return accConf.DNSDomain, accConf.Destinations
+}
+
+// DestinationSave updates a destination.
+// OldDest is compared against the current destination. If it does not match, an
+// error is returned. Otherwise newDest is saved and the configuration reloaded.
+func (Account) DestinationSave(ctx context.Context, destName string, oldDest, newDest config.Destination) {
+	accountName := ctx.Value(authCtxKey).(string)
+	accConf, ok := mox.Conf.Account(accountName)
+	if !ok {
+		xcheckf(ctx, errors.New("not found"), "looking up account")
+	}
+	curDest, ok := accConf.Destinations[destName]
+	if !ok {
+		xcheckf(ctx, errors.New("not found"), "looking up destination")
+	}
+
+	if !curDest.Equal(oldDest) {
+		xcheckf(ctx, errors.New("modified"), "checking stored destination")
+	}
+
+	// Keep fields we manage.
+	newDest.DMARCReports = curDest.DMARCReports
+	newDest.TLSReports = curDest.TLSReports
+
+	err := mox.DestinationSave(ctx, accountName, destName, newDest)
+	xcheckf(ctx, err, "saving destination")
 }

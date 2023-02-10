@@ -383,15 +383,17 @@ describe-static" and "mox config describe-domains":
 							# address (not the message From-header). E.g. user@example.org. (optional)
 							SMTPMailFromRegexp:
 
-							# Matches if this domain or a subdomain matches a SPF- and/or DKIM-verified
-							# domain. (optional)
+							# Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain.
+							# (optional)
 							VerifiedDomain:
 
 							# Matches if these header field/value regular expressions all match (substrings
 							# of) the message headers. Header fields and valuees are converted to lower case
 							# before matching. Whitespace is trimmed from the value before matching. A header
-							# field can occur multiple times in a message, only one instance has to match.
-							# (optional)
+							# field can occur multiple times in a message, only one instance has to match. For
+							# mailing lists, you could match on ^list-id$ with the value typically the mailing
+							# list address in angled brackets with @ replaced with a dot, e.g.
+							# <name\.lists\.example\.org>. (optional)
 							HeadersRegexp:
 								x:
 
@@ -401,10 +403,11 @@ describe-static" and "mox config describe-domains":
 							# DMARC reject evaluation. DMARC rejects should not apply for mailing lists that
 							# are not configured to rewrite the From-header of messages that don't have a
 							# passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you
-							# may be automatically unsubscribed from the mailing list. (optional)
+							# may be automatically unsubscribed from the mailing list. The assumption is that
+							# mailing lists do their own spam filtering/moderation. (optional)
 							ListAllowDomain:
 
-							# Mailbox to deliver to if Rules match.
+							# Mailbox to deliver to if this ruleset matches.
 							Mailbox:
 
 			# If configured, messages classified as weakly spam are rejected with instructions

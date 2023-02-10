@@ -703,6 +703,51 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	return nil
 }
 
+// DestinationSave updates a destination for an account and reloads the configuration.
+func DestinationSave(ctx context.Context, account, destName string, newDest config.Destination) (rerr error) {
+	log := xlog.WithContext(ctx)
+	defer func() {
+		if rerr != nil {
+			log.Errorx("saving destination", rerr, mlog.Field("account", account), mlog.Field("destname", destName), mlog.Field("destination", newDest))
+		}
+	}()
+
+	Conf.dynamicMutex.Lock()
+	defer Conf.dynamicMutex.Unlock()
+
+	c := Conf.Dynamic
+	acc, ok := c.Accounts[account]
+	if !ok {
+		return fmt.Errorf("account not present")
+	}
+
+	if _, ok := acc.Destinations[destName]; !ok {
+		return fmt.Errorf("destination not present")
+	}
+
+	// Compose new config without modifying existing data structures. If we fail, we
+	// leave no trace.
+	nc := c
+	nc.Accounts = map[string]config.Account{}
+	for name, a := range c.Accounts {
+		nc.Accounts[name] = a
+	}
+	nd := map[string]config.Destination{}
+	for dn, d := range acc.Destinations {
+		nd[dn] = d
+	}
+	nd[destName] = newDest
+	nacc := nc.Accounts[account]
+	nacc.Destinations = nd
+	nc.Accounts[account] = nacc
+
+	if err := writeDynamic(ctx, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %v", err)
+	}
+	log.Info("destination saved", mlog.Field("account", account), mlog.Field("destname", destName))
+	return nil
+}
+
 // ClientConfig holds the client configuration for IMAP/Submission for a
 // domain.
 type ClientConfig struct {

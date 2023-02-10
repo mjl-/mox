@@ -11,6 +11,7 @@ h1, h2, h3, h4 { margin-bottom: 1ex; }
 h1 { font-size: 1.2rem; }
 h2 { font-size: 1.1rem; }
 h3, h4 { font-size: 1rem; }
+ul { padding-left: 1rem; }
 .literal { background-color: #fdfdfd; padding: .5em 1em; border: 1px solid #eee; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 15px; tab-size: 4; }
 table td, table th { padding: .2em .5em; }
 table > tbody > tr:nth-child(odd) { background-color: #f8f8f8; }
@@ -118,17 +119,39 @@ const footer = dom.div(
 	api._sherpa.version,
 )
 
-const index = async () => {
-	let form, fieldset, password1, password2
+const domainName = d => {
+	return d.Unicode || d.ASCII
+}
 
-	const blockStyle = style({
-		display: 'block',
-		marginBottom: '1ex',
-	})
+const domainString = d => {
+	if (d.Unicode) {
+		return d.Unicode+" ("+d.ASCII+")"
+	}
+	return d.ASCII
+}
+
+const index = async () => {
+	const [domain, destinations] = await api.Destinations()
+
+	let form, fieldset, password1, password2, passwordHint
 
 	const page = document.getElementById('page')
 	dom._kids(page,
 		crumbs('Mox Account'),
+		dom.div(
+			'Default domain: ',
+			domain.ASCII ? domainString(domain) : '(none)',
+		),
+		dom.br(),
+		dom.h2('Addresses'),
+		dom.ul(
+			Object.entries(destinations).sort().map(t =>
+				dom.li(
+					dom.a(t[0], attr({href: '#destinations/'+t[0]})),
+				),
+			),
+		),
+		dom.br(),
 		dom.h2('Change password'),
 		form=dom.form(
 			fieldset=dom.fieldset(
@@ -136,7 +159,9 @@ const index = async () => {
 					style({display: 'inline-block'}),
 					'New password',
 					dom.br(),
-					password1=dom.input(attr({type: 'password', required: ''})),
+					password1=dom.input(attr({type: 'password', required: ''}), function focus() {
+						passwordHint.style.display = ''
+					}),
 				),
 				' ',
 				dom.label(
@@ -147,6 +172,7 @@ const index = async () => {
 				),
 				' ',
 				dom.button('Change password'),
+				passwordHint=dom.div(style({display: 'none', marginTop: '.5ex', fontStyle: 'italic'}), 'Password must be at least 8 characters.'),
 			),
 			async function submit(e) {
 				e.stopPropagation()
@@ -172,6 +198,151 @@ const index = async () => {
 	)
 }
 
+const destination = async (name) => {
+	const [domain, destinations] = await api.Destinations()
+	let dest = destinations[name]
+	if (!dest) {
+		throw new Error('destination not found')
+	}
+
+	let rulesetsTbody = dom.tbody()
+	let rulesetsRows = []
+
+	const addRulesetsRow = (rs) => {
+		let headersCell = dom.td()
+		let headers = [] // Holds objects: {key, value, root}
+		const addHeader = (k, v) => {
+			let h = {}
+			h.root = dom.div(
+				h.key=dom.input(attr({value: k})),
+				' ',
+				h.value=dom.input(attr({value: v})),
+				' ',
+				dom.button('-', style({width: '1.5em'}), function click(e) {
+					h.root.remove()
+					headers = headers.filter(x => x !== h)
+					if (headers.length === 0) {
+						const b = dom.button('+', style({width: '1.5em'}), function click(e) {
+							e.target.remove()
+							addHeader('', '')
+						})
+						headersCell.appendChild(dom.div(style({textAlign: 'right'}), b))
+					}
+				}),
+				' ',
+				dom.button('+', style({width: '1.5em'}), function click(e) {
+					addHeader('', '')
+				}),
+			)
+			headers.push(h)
+			headersCell.appendChild(h.root)
+		}
+		Object.entries(rs.HeadersRegexp || {}).sort().forEach(t =>
+			addHeader(t[0], t[1])
+		)
+		if (Object.entries(rs.HeadersRegexp || {}).length === 0) {
+			const b = dom.button('+', style({width: '1.5em'}), function click(e) {
+				e.target.remove()
+				addHeader('', '')
+			})
+			headersCell.appendChild(dom.div(style({textAlign: 'right'}), b))
+		}
+
+		let row = {headers}
+		row.root=dom.tr(
+			dom.td(row.SMTPMailFromRegexp=dom.input(attr({value: rs.SMTPMailFromRegexp || ''}))),
+			dom.td(row.VerifiedDomain=dom.input(attr({value: rs.VerifiedDomain || ''}))),
+			headersCell,
+			dom.td(row.ListAllowDomain=dom.input(attr({value: rs.ListAllowDomain || ''}))),
+			dom.td(row.Mailbox=dom.input(attr({value: rs.Mailbox || ''}))),
+			dom.td(
+				dom.button('Remove ruleset', function click(e) {
+					row.root.remove()
+					rulesetsRows = rulesetsRows.filter(e => e !== row)
+				}),
+			),
+		)
+		rulesetsRows.push(row)
+		rulesetsTbody.appendChild(row.root)
+	}
+
+	(dest.Rulesets || []).forEach(rs => {
+		addRulesetsRow(rs)
+	})
+
+	let defaultMailbox
+	let saveButton
+
+	const page = document.getElementById('page')
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Account', '#'),
+			'Destination ' + name,
+		),
+		dom.div(
+			dom.span('Default mailbox', attr({title: 'Default mailbox where email for this recipient is delivered to if it does not match any ruleset. Default is Inbox.'})),
+			dom.br(),
+			defaultMailbox=dom.input(attr({value: dest.Mailbox, placeholder: 'Inbox'})),
+			dom
+		),
+		dom.br(),
+		dom.h2('Rulesets'),
+		dom.p('Incoming messages are checked against the rulesets. If a ruleset matches, the message is delivered to the mailbox configured for the ruleset instead of to the default mailbox.'),
+		dom.p('The "List allow domain" does not affect the matching, but skips the regular spam checks if one of the verified domains is a (sub)domain of the domain mentioned here.'),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('SMTP "MAIL FROM" regexp', attr({title: 'Matches if this regular expression matches (a substring of) the SMTP MAIL FROM address (not the message From-header). E.g. user@example.org.'})),
+					dom.th('Verified domain', attr({title: 'Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain.'})),
+					dom.th('Headers regexp', attr({title: 'Matches if these header field/value regular expressions all match (substrings of) the message headers. Header fields and valuees are converted to lower case before matching. Whitespace is trimmed from the value before matching. A header field can occur multiple times in a message, only one instance has to match. For mailing lists, you could match on ^list-id$ with the value typically the mailing list address in angled brackets with @ replaced with a dot, e.g. <name\\.lists\\.example\\.org>.'})),
+					dom.th('List allow domain', attr({title: "Influence the spam filtering, this does not change whether this ruleset applies to a message. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation."})),
+					dom.th('Mailbox', attr({title: 'Mailbox to deliver to if this ruleset matches.'})),
+					dom.th('Action'),
+				)
+			),
+			rulesetsTbody,
+			dom.tfoot(
+				dom.tr(
+					dom.td(attr({colspan: '5'})),
+					dom.td(
+						dom.button('Add ruleset', function click(e) {
+							addRulesetsRow({})
+						}),
+					),
+				),
+			),
+		),
+		dom.br(),
+		saveButton=dom.button('Save', async function click(e) {
+			saveButton.disabled = true
+			try {
+				const newDest = {
+					Mailbox: defaultMailbox.value,
+					Rulesets: rulesetsRows.map(row => {
+						return {
+							SMTPMailFromRegexp: row.SMTPMailFromRegexp.value,
+							VerifiedDomain: row.VerifiedDomain.value,
+							HeadersRegexp: Object.fromEntries(row.headers.map(h => [h.key.value, h.value.value])),
+							ListAllowDomain: row.ListAllowDomain.value,
+							Mailbox: row.Mailbox.value,
+						}
+					}),
+				}
+				page.classList.add('loading')
+				await api.DestinationSave(name, dest, newDest)
+				dest = newDest // Set new dest, for if user edits again. Without this, they would get an error that the config has been modified.
+			} catch (err) {
+				console.log({err})
+				window.alert('Error: '+err.message)
+				return
+			} finally {
+				saveButton.disabled = false
+				page.classList.remove('loading')
+			}
+		}),
+	)
+}
+
 const init = async () => {
 	let curhash
 
@@ -185,10 +356,13 @@ const init = async () => {
 		if (h !== '' && h.substring(0, 1) == '#') {
 			h = h.substring(1)
 		}
+		const t = h.split('/')
 		page.classList.add('loading')
 		try {
-			if (h == '') {
+			if (h === '') {
 				await index()
+			} else if (t[0] === 'destinations' && t.length === 2) {
+				await destination(t[1])
 			} else {
 				dom._kids(page, 'page not found')
 			}

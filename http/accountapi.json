@@ -14,10 +14,153 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "Destinations",
+			"Docs": "Destinations returns the default domain, and the destinations (keys are email\naddresses, or localparts to the default domain).\ntodo: replace with a function that returns the whole account, when sherpadoc understands unnamed struct fields.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "r1",
+					"Typewords": [
+						"{}",
+						"Destination"
+					]
+				}
+			]
+		},
+		{
+			"Name": "DestinationSave",
+			"Docs": "DestinationSave updates a destination.\nOldDest is compared against the current destination. If it does not match, an\nerror is returned. Otherwise newDest is saved and the configuration reloaded.",
+			"Params": [
+				{
+					"Name": "destName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "oldDest",
+					"Typewords": [
+						"Destination"
+					]
+				},
+				{
+					"Name": "newDest",
+					"Typewords": [
+						"Destination"
+					]
+				}
+			],
+			"Returns": []
 		}
 	],
 	"Sections": [],
-	"Structs": [],
+	"Structs": [
+		{
+			"Name": "Domain",
+			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups.",
+			"Fields": [
+				{
+					"Name": "ASCII",
+					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Unicode",
+					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Destination",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Mailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Rulesets",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Ruleset"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Ruleset",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "SMTPMailFromRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "VerifiedDomain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "HeadersRegexp",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				},
+				{
+					"Name": "ListAllowDomain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Mailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "VerifiedDNSDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "ListAllowDNSDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		}
+	],
 	"Ints": [],
 	"Strings": [],
 	"SherpaVersion": 0,
