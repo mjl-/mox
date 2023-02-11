@@ -64,6 +64,8 @@ Mox includes the Public Suffix List by Mozilla, under Mozilla Public License, v.
 
 Mox was created by Mechiel Lukkien, mechiel@ueber.net.
 
+For discussions/talk, join #mox on irc.oftc.net, or #mox on the "Gopher slack".
+
 
 # Download
 
@@ -110,7 +112,7 @@ After starting, you can access the admin web interface on internal IPs.
 
 # FAQ - Frequently Asked Questions
 
-- Why a new mail server implementation?
+## Why a new mail server implementation?
 
 Mox aims to make "running a mail server" easy and nearly effortless. Excellent
 quality mail server software exists, but getting a working setup typically
@@ -121,7 +123,7 @@ with SMTP is a long-time decentralized messaging protocol. To keep it
 decentralized, people need to run their own mail server. Mox aims to make that
 easy.
 
-- Where is the documentation?
+## Where is the documentation?
 
 See all commands and help text at https://pkg.go.dev/github.com/mjl-/mox/, and
 example config files at https://pkg.go.dev/github.com/mjl-/mox/config/.
@@ -136,7 +138,7 @@ Mox is still in early stages, and documentation is still limited. Please create
 an issue describing what is unclear or confusing, and we'll try to improve the
 documentation.
 
-- How do I import/export email?
+## How do I import/export email?
 
 Use the "mox import maildir" or "mox import mbox" subcommands. You could also
 use your IMAP email client, add your mox account, and copy or move messages
@@ -145,7 +147,7 @@ from one account to the other.
 Similarly, see the "mox export maildir" and "mox export mbox" subcommands to
 export email.
 
-- How can I help?
+## How can I help?
 
 Mox needs users and testing in real-life setups! So just give it a try, send
 and receive emails through it with your favourite email clients, and file an
@@ -163,7 +165,7 @@ Pull requests for bug fixes and new code are welcome too. If the changes are
 large, it helps to start a discussion (create a ticket) before doing all the
 work.
 
-- How do I change my password?
+## How do I change my password?
 
 Regular users (doing IMAP/SMTP with authentication) can change their password
 at the account page, e.g. http://127.0.0.1/account/. Or you can set a password
@@ -171,7 +173,7 @@ with "mox setaccountpassword".
 
 The admin password can be changed with "mox setadminpassword".
 
-- How do I configure a second mox instance as a backup MX?
+## How do I configure a second mox instance as a backup MX?
 
 Unfortunately, mox does not yet provide an option for that. Mox does spam
 filtering based on reputation of received messages. It will take a good amount
@@ -179,7 +181,7 @@ of work to share that information with a backup MX. Without that information,
 spammer could use a backup MX to get their spam accepted. Until mox has a
 proper solution, you can simply run a single SMTP server.
 
-- How secure is mox?
+## How secure is mox?
 
 Security is high on the priority list for mox. Mox is young, so don't expect no
 bugs at all. Mox does have automated tests for some security aspects, e.g. for
