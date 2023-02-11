@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -15,6 +16,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
@@ -627,6 +630,67 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 			}
 			mox.Conf.LogLevelSet(pkg, level)
 		}
+		ctl.xwriteok()
+
+	case "retrain":
+		/* protocol:
+		> "retrain"
+		> account
+		< "ok" or error
+		*/
+		account := ctl.xread()
+		acc, err := store.OpenAccount(account)
+		ctl.xcheck(err, "open account")
+
+		acc.WithWLock(func() {
+			conf, _ := acc.Conf()
+			if conf.JunkFilter == nil {
+				ctl.xcheck(store.ErrNoJunkFilter, "looking for junk filter")
+			}
+
+			// Remove existing junk filter files.
+			basePath := mox.DataDirPath("accounts")
+			dbPath := filepath.Join(basePath, acc.Name, "junkfilter.db")
+			bloomPath := filepath.Join(basePath, acc.Name, "junkfilter.bloom")
+			if err := os.Remove(dbPath); err != nil {
+				log.Errorx("removing old junkfilter database file", err, mlog.Field("path", dbPath))
+			}
+			if err := os.Remove(bloomPath); err != nil {
+				log.Errorx("removing old junkfilter bloom filter file", err, mlog.Field("path", bloomPath))
+			}
+
+			// Open junk filter, this creates new files.
+			jf, _, err := acc.OpenJunkFilter(ctl.log)
+			ctl.xcheck(err, "open new junk filter")
+			defer func() {
+				if jf == nil {
+					return
+				}
+				if err := jf.Close(); err != nil {
+					log.Errorx("closing junk filter during cleanup", err)
+				}
+			}()
+
+			// Read through messages with junk or nonjunk flag set, and train them.
+			var total, trained int
+			q := bstore.QueryDB[store.Message](acc.DB)
+			err = q.ForEach(func(m store.Message) error {
+				total++
+				ok, err := acc.TrainMessage(ctl.log, jf, m)
+				if ok {
+					trained++
+				}
+				return err
+			})
+			ctl.xcheck(err, "training messages")
+			ctl.log.Info("retrained messages", mlog.Field("total", total), mlog.Field("trained", trained))
+
+			// Close junk filter, marking success.
+			err = jf.Close()
+			jf = nil
+			ctl.xcheck(err, "closing junk filter")
+		})
+
 		ctl.xwriteok()
 
 	default:

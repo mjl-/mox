@@ -1,5 +1,5 @@
 /*
-Package bstore is a database library for storing and quering Go struct data.
+Package bstore is a database library for storing and querying Go struct data.
 
 Bstore is designed as a small, pure Go library that still provides most of
 the common data consistency requirements for modest database use cases. Bstore
@@ -102,7 +102,7 @@ track of a data/schema version.
 
 As a special case, you can switch field types between pointer and non-pointer
 types. With one exception: changing from pointer to non-pointer where the type
-has a field that must be nonzer is not allowed. The on-disk encoding will not be
+has a field that must be nonzero is not allowed. The on-disk encoding will not be
 changed, and nil pointers will turn into zero values, and zero values into nil
 pointers. Also see section Limitations about pointer types.
 

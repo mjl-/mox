@@ -199,7 +199,12 @@ func (ft fieldType) parse(p *parser, rv reflect.Value) {
 			rv.Set(v.Elem())
 		}
 	case kindBool:
-		rv.SetBool(true)
+		if ft.Ptr {
+			buf := p.Take(1)
+			rv.SetBool(buf[0] != 0)
+		} else {
+			rv.SetBool(true)
+		}
 	case kindInt:
 		v := p.Varint()
 		if v < math.MinInt32 || v > math.MaxInt32 {
@@ -283,6 +288,9 @@ func (ft fieldType) skip(p *parser) {
 	case kindBytes, kindBinaryMarshal, kindString:
 		p.TakeBytes(false)
 	case kindBool:
+		if ft.Ptr {
+			p.Take(1)
+		}
 	case kindInt8, kindInt16, kindInt32, kindInt, kindInt64:
 		p.Varint()
 	case kindUint8, kindUint16, kindUint32, kindUint, kindUint64, kindFloat32, kindFloat64:

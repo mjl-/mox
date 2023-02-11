@@ -276,8 +276,9 @@ type Message struct {
 
 	MessageHash []byte // Hash of message. For rejects delivery, so optional like MessageID.
 	Flags
-	Size      int64
-	MsgPrefix []byte // Typically holds received headers and/or header separator.
+	Size        int64
+	TrainedJunk *bool  // If nil, no training done yet. Otherwise, true is trained as junk, false trained as nonjunk.
+	MsgPrefix   []byte // Typically holds received headers and/or header separator.
 
 	// ParsedBuf message structure. Currently saved as JSON of message.Part because bstore
 	// cannot yet store recursive types. Created when first needed, and saved in the
@@ -297,6 +298,48 @@ func (m Message) LoadPart(r io.ReaderAt) (message.Part, error) {
 	}
 	p.SetReaderAt(r)
 	return p, nil
+}
+
+// NeedsTraining returns whether message needs a training update, based on
+// TrainedJunk (current training status) and new Junk/Notjunk flags.
+func (m Message) NeedsTraining() bool {
+	untrain := m.TrainedJunk != nil
+	untrainJunk := untrain && *m.TrainedJunk
+	train := m.Junk || m.Notjunk && !(m.Junk && m.Notjunk)
+	trainJunk := m.Junk
+	return untrain != train || untrain && train && untrainJunk != trainJunk
+}
+
+// JunkFlagsForMailbox sets Junk and Notjunk flags based on mailbox name if configured. Often
+// used when delivering/moving/copying messages to a mailbox. Mail clients are not
+// very helpful with setting junk/notjunk flags. But clients can move/copy messages
+// to other mailboxes. So we set flags when clients move a message.
+func (m *Message) JunkFlagsForMailbox(mailbox string, conf config.Account) {
+	if !conf.AutomaticJunkFlags.Enabled {
+		return
+	}
+
+	lmailbox := strings.ToLower(mailbox)
+
+	if conf.JunkMailbox != nil && conf.JunkMailbox.MatchString(lmailbox) {
+		m.Junk = true
+		m.Notjunk = false
+	} else if conf.NeutralMailbox != nil && conf.NeutralMailbox.MatchString(lmailbox) {
+		m.Junk = false
+		m.Notjunk = false
+	} else if conf.NotJunkMailbox != nil && conf.NotJunkMailbox.MatchString(lmailbox) {
+		m.Junk = false
+		m.Notjunk = true
+	} else if conf.JunkMailbox == nil && conf.NeutralMailbox != nil && conf.NotJunkMailbox != nil {
+		m.Junk = true
+		m.Notjunk = false
+	} else if conf.JunkMailbox != nil && conf.NeutralMailbox == nil && conf.NotJunkMailbox != nil {
+		m.Junk = false
+		m.Notjunk = false
+	} else if conf.JunkMailbox != nil && conf.NeutralMailbox != nil && conf.NotJunkMailbox == nil {
+		m.Junk = false
+		m.Notjunk = true
+	}
 }
 
 // Recipient represents the recipient of a message. It is tracked to allow
@@ -528,14 +571,10 @@ func (a *Account) WithRLock(fn func()) {
 // If sync is true, the message file and its directory are synced. Should be true
 // for regular mail delivery, but can be false when importing many messages.
 //
-// if train is true, the junkfilter (if configured) is trained with the message.
-// Should be used for regular mail delivery, but can be false when importing many
-// messages.
-//
 // Must be called with account rlock or wlock.
 //
 // Caller must broadcast new message.
-func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, isSent, sync, train bool) {
+func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, isSent, sync bool) {
 	mb := Mailbox{ID: m.MailboxID}
 	err := tx.Get(&mb)
 	xcheckf(err, "get mailbox")
@@ -543,6 +582,9 @@ func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os
 	mb.UIDNext++
 	err = tx.Update(&mb)
 	xcheckf(err, "updating mailbox nextuid")
+
+	conf, _ := a.Conf()
+	m.JunkFlagsForMailbox(mb.Name, conf)
 
 	var part *message.Part
 	if m.ParsedBuf == nil {
@@ -629,13 +671,10 @@ func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os
 		xcheckf(err, "sync directory")
 	}
 
-	if train {
-		conf, _ := a.Conf()
-		if mb.Name != conf.RejectsMailbox {
-			err := a.Train(log, []Message{*m})
-			xcheckf(err, "train junkfilter with new message")
-		}
-	}
+	l := []Message{*m}
+	err = a.RetrainMessages(log, tx, l, false)
+	xcheckf(err, "training junkfilter")
+	*m = l[0]
 }
 
 // write contents of r to new file dst, for delivering a message.
@@ -969,7 +1008,7 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 		m.MailboxOrigID = mb.ID
 		changes = append(changes, chl...)
 
-		a.DeliverX(log, tx, m, msgFile, consumeFile, mb.Sent, true, true)
+		a.DeliverX(log, tx, m, msgFile, consumeFile, mb.Sent, true)
 		return nil
 	})
 	// todo: if rename succeeded but transaction failed, we should remove the file.
@@ -988,7 +1027,7 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 //
 // Caller most hold account wlock.
 // Changes are broadcasted.
-func (a *Account) TidyRejectsMailbox(rejectsMailbox string) (hasSpace bool, rerr error) {
+func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasSpace bool, rerr error) {
 	var changes []Change
 
 	err := extransact(a.DB, true, func(tx *bstore.Tx) error {
@@ -1007,7 +1046,7 @@ func (a *Account) TidyRejectsMailbox(rejectsMailbox string) (hasSpace bool, rerr
 		remove, err := qdel.List()
 		xcheckf(err, "listing old messages")
 
-		changes = a.xremoveMessages(tx, mb, remove)
+		changes = a.xremoveMessages(log, tx, mb, remove)
 
 		// We allow up to n messages.
 		qcount := bstore.QueryTx[Message](tx)
@@ -1027,7 +1066,7 @@ func (a *Account) TidyRejectsMailbox(rejectsMailbox string) (hasSpace bool, rerr
 	return hasSpace, err
 }
 
-func (a *Account) xremoveMessages(tx *bstore.Tx, mb *Mailbox, l []Message) []Change {
+func (a *Account) xremoveMessages(log *mlog.Log, tx *bstore.Tx, mb *Mailbox, l []Message) []Change {
 	if len(l) == 0 {
 		return nil
 	}
@@ -1048,8 +1087,18 @@ func (a *Account) xremoveMessages(tx *bstore.Tx, mb *Mailbox, l []Message) []Cha
 	// Actually remove the messages.
 	qdm := bstore.QueryTx[Message](tx)
 	qdm.FilterIDs(ids)
+	var deleted []Message
+	qdm.Gather(&deleted)
 	_, err = qdm.Delete()
-	xcheckf(err, "deleting from message recipient")
+	xcheckf(err, "deleting from messages")
+
+	// Mark as neutral and train so junk filter gets untrained with these (junk) messages.
+	for i := range deleted {
+		deleted[i].Junk = false
+		deleted[i].Notjunk = false
+	}
+	err = a.RetrainMessages(log, tx, deleted, true)
+	xcheckf(err, "training deleted messages")
 
 	changes := make([]Change, len(l))
 	for i, m := range l {
@@ -1077,7 +1126,7 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 		remove, err := q.List()
 		xcheckf(err, "listing messages to remove")
 
-		changes = a.xremoveMessages(tx, mb, remove)
+		changes = a.xremoveMessages(log, tx, mb, remove)
 
 		return err
 	})

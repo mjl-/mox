@@ -122,7 +122,9 @@ func reputation(tx *bstore.Tx, log *mlog.Log, m *store.Message) (rjunk *bool, rc
 	messageQuery := func(fm *store.Message, maxAge time.Duration, maxCount int) *bstore.Query[store.Message] {
 		q := bstore.QueryTx[store.Message](tx)
 		q.FilterEqual("MailboxOrigID", m.MailboxID)
-		q.FilterEqual("Seen", true)
+		q.FilterFn(func(m store.Message) bool {
+			return m.Junk || m.Notjunk
+		})
 		if fm != nil {
 			q.FilterNonzero(*fm)
 		}
@@ -167,10 +169,9 @@ func reputation(tx *bstore.Tx, log *mlog.Log, m *store.Message) (rjunk *bool, rc
 		q.FilterEqual("MsgFromValidated", m.MsgFromValidated)
 		msgs := xmessageList(q, "mgsfromfull")
 		if len(msgs) > 0 {
-			ham := !msgs[0].Junk || len(msgs) > 1 && !msgs[1].Junk
-			conclusive := m.MsgFromValidated
 			// todo: we may want to look at dkim/spf in this case.
-			spam := !ham
+			spam := msgs[0].Junk && (len(msgs) == 1 || msgs[1].Junk)
+			conclusive := m.MsgFromValidated
 			return &spam, conclusive, methodMsgfromFull, nil
 		}
 		if !m.MsgFromValidated {
@@ -180,8 +181,8 @@ func reputation(tx *bstore.Tx, log *mlog.Log, m *store.Message) (rjunk *bool, rc
 			q := messageQuery(&store.Message{MsgFromLocalpart: m.MsgFromLocalpart, MsgFromDomain: m.MsgFromDomain, MsgFromValidated: true}, 3*year, 2)
 			msgs = xmessageList(q, "msgfromfull-validated")
 			if len(msgs) > 0 {
-				ham := !msgs[0].Junk || len(msgs) > 1 && !msgs[1].Junk
-				return xtrue, !ham, methodMsgfromFull, nil
+				spam := msgs[0].Junk && (len(msgs) == 1 || msgs[1].Junk)
+				return xtrue, spam, methodMsgfromFull, nil
 			}
 		}
 
@@ -213,16 +214,16 @@ func reputation(tx *bstore.Tx, log *mlog.Log, m *store.Message) (rjunk *bool, rc
 			q.FilterEqual("MsgFromValidated", m.MsgFromValidated)
 			msgs := xmessageList(q, descr)
 			if len(msgs) > 0 {
-				nham := 0
+				nonjunk := 0
 				for _, m := range msgs {
 					if !m.Junk {
-						nham++
+						nonjunk++
 					}
 				}
-				if 100*nham/len(msgs) > 80 {
+				if 100*nonjunk/len(msgs) > 80 {
 					return xfalse, true, method, nil
 				}
-				if nham == 0 {
+				if nonjunk == 0 {
 					// Only conclusive with at least 3 different localparts.
 					localparts := map[smtp.Localpart]struct{}{}
 					for _, m := range msgs {
@@ -244,8 +245,8 @@ func reputation(tx *bstore.Tx, log *mlog.Log, m *store.Message) (rjunk *bool, rc
 				q.FilterEqual("MsgFromValidated", true)
 				msgs = xmessageList(q, descr+"-validated")
 				if len(msgs) > 0 {
-					ham := !msgs[0].Junk || len(msgs) > 1 && !msgs[1].Junk
-					return xtrue, !ham, method, nil
+					spam := msgs[0].Junk && (len(msgs) == 1 || msgs[1].Junk)
+					return xtrue, spam, method, nil
 				}
 			}
 

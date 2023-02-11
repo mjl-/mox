@@ -72,13 +72,13 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "sent mailbox")
 			msent.MailboxID = mbsent.ID
 			msent.MailboxOrigID = mbsent.ID
-			acc.DeliverX(xlog, tx, &msent, msgFile, false, true, true, true)
+			acc.DeliverX(xlog, tx, &msent, msgFile, false, true, true)
 
 			err = tx.Insert(&mbrejects)
 			tcheck(t, err, "insert rejects mailbox")
 			mreject.MailboxID = mbrejects.ID
 			mreject.MailboxOrigID = mbrejects.ID
-			acc.DeliverX(xlog, tx, &mreject, msgFile, false, false, true, true)
+			acc.DeliverX(xlog, tx, &mreject, msgFile, false, false, true)
 
 			return nil
 		})
@@ -86,25 +86,34 @@ func TestMailbox(t *testing.T) {
 
 		err = acc.Deliver(xlog, conf.Destinations["mjl"], &mconsumed, msgFile, true)
 		tcheck(t, err, "deliver with consume")
+
+		err = acc.DB.Write(func(tx *bstore.Tx) error {
+			m.Junk = true
+			l := []Message{m}
+			err = acc.RetrainMessages(log, tx, l, false)
+			tcheck(t, err, "train as junk")
+			m = l[0]
+			return nil
+		})
+		tcheck(t, err, "train messages")
 	})
 
-	m.Junk = true
-	err = acc.Train(log, []Message{m})
-	tcheck(t, err, "train as junk")
-
-	flags := m.Flags
-
-	m.Seen = true
 	m.Junk = false
+	m.Notjunk = true
 	jf, _, err := acc.OpenJunkFilter(log)
 	tcheck(t, err, "open junk filter")
-	err = acc.Retrain(log, jf, flags, m)
-	tcheck(t, err, "retrain as non-junk")
+	err = acc.DB.Write(func(tx *bstore.Tx) error {
+		return acc.RetrainMessage(log, tx, jf, &m, false)
+	})
+	tcheck(t, err, "retraining as non-junk")
 	err = jf.Close()
 	tcheck(t, err, "close junk filter")
 
-	err = acc.Untrain(log, []Message{m})
-	tcheck(t, err, "untrain non-junk")
+	m.Notjunk = false
+	err = acc.DB.Write(func(tx *bstore.Tx) error {
+		return acc.RetrainMessages(log, tx, []Message{m}, false)
+	})
+	tcheck(t, err, "untraining non-junk")
 
 	err = acc.SetPassword("testtest")
 	tcheck(t, err, "set password")
@@ -171,7 +180,7 @@ func TestMailbox(t *testing.T) {
 		tcheck(t, err, "write tx")
 
 		// todo: check that messages are removed and changes sent.
-		hasSpace, err := acc.TidyRejectsMailbox("Rejects")
+		hasSpace, err := acc.TidyRejectsMailbox(log, "Rejects")
 		tcheck(t, err, "tidy rejects mailbox")
 		if !hasSpace {
 			t.Fatalf("no space for more rejects")

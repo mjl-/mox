@@ -100,8 +100,8 @@ func TestReputation(t *testing.T) {
 			DKIMDomains: dkimDomains,
 
 			Flags: store.Flags{
-				Junk: junk,
-				Seen: true,
+				Junk:    junk,
+				Notjunk: !junk,
 			},
 		}
 		return m

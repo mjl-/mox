@@ -55,6 +55,7 @@ low-maintenance self-hosted email.
 	mox dnsbl check zone ip
 	mox dnsbl checkhealth zone
 	mox mtasts lookup domain
+	mox retrain accountname
 	mox sendmail [-Fname] [ignoredflags] [-t] [<message]
 	mox spf check domain ip
 	mox spf lookup domain
@@ -541,6 +542,15 @@ specifies the mode (enforce, testing, none), which MX servers support TLS and
 should be used, and how long the policy can be cached.
 
 	usage: mox mtasts lookup domain
+
+# mox retrain
+
+Recreate and retrain the junk filter for the account.
+
+Useful after having made changes to the junk filter configuration, or if the
+implementation has changed.
+
+	usage: mox retrain accountname
 
 # mox sendmail
 

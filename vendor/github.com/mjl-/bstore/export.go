@@ -262,7 +262,11 @@ func (ft fieldType) parseValue(p *parser) any {
 		// We don't have the type available, so we just return the binary data.
 		return p.TakeBytes(false)
 	case kindBool:
-		return true
+		if !ft.Ptr {
+			return true
+		}
+		buf := p.Take(1)
+		return buf[0] != 0
 	case kindInt8:
 		return int8(p.Varint())
 	case kindInt16:

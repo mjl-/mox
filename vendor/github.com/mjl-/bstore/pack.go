@@ -180,8 +180,15 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 		}
 		p.AddBytes(buf)
 	case kindBool:
-		// No value needed. If false, it would be zero, handled above,
-		// with a 0 in the fieldmap.
+		if ft.Ptr {
+			var b byte = 0
+			if rv.Bool() {
+				b = 1
+			}
+			p.Write([]byte{b})
+		}
+		// If not pointer, no value is needed. If false, we would not get here, there would
+		// be a 0 in the fieldmap.
 	case kindInt:
 		v := rv.Int()
 		if v < math.MinInt32 || v > math.MaxInt32 {

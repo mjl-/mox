@@ -121,6 +121,7 @@ var commands = []struct {
 	{"dnsbl check", cmdDNSBLCheck},
 	{"dnsbl checkhealth", cmdDNSBLCheckhealth},
 	{"mtasts lookup", cmdMTASTSLookup},
+	{"retrain", cmdRetrain},
 	{"sendmail", cmdSendmail},
 	{"spf check", cmdSPFCheck},
 	{"spf lookup", cmdSPFLookup},
@@ -1511,6 +1512,25 @@ should be used, and how long the policy can be cached.
 		fmt.Printf("policy at https://mta-sts.%s/.well-known/mta-sts.txt:\n", domain.ASCII)
 		fmt.Printf("%s", policy.String())
 	}
+}
+
+func cmdRetrain(c *cmd) {
+	c.params = "accountname"
+	c.help = `Recreate and retrain the junk filter for the account.
+
+Useful after having made changes to the junk filter configuration, or if the
+implementation has changed.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctl := xctl()
+	ctl.xwrite("retrain")
+	ctl.xwrite(args[0])
+	ctl.xreadok()
 }
 
 func cmdTLSRPTDBAddReport(c *cmd) {

@@ -732,12 +732,35 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		if err != nil {
 			addErrorf("parsing domain %q for account %q: %s", acc.Domain, accName, err)
 		}
-		c.Accounts[accName] = acc
 
 		if strings.EqualFold(acc.RejectsMailbox, "Inbox") {
-			addErrorf("account %q: cannot set RejectsMailbox to inbox", accName)
+			addErrorf("account %q: cannot set RejectsMailbox to inbox, messages will be removed automatically from the rejects mailbox", accName)
 		}
 		checkMailboxNormf(acc.RejectsMailbox, "account %q", accName)
+
+		if acc.AutomaticJunkFlags.JunkMailboxRegexp != "" {
+			r, err := regexp.Compile(acc.AutomaticJunkFlags.JunkMailboxRegexp)
+			if err != nil {
+				addErrorf("invalid JunkMailboxRegexp regular expression: %v", err)
+			}
+			acc.JunkMailbox = r
+		}
+		if acc.AutomaticJunkFlags.NeutralMailboxRegexp != "" {
+			r, err := regexp.Compile(acc.AutomaticJunkFlags.NeutralMailboxRegexp)
+			if err != nil {
+				addErrorf("invalid NeutralMailboxRegexp regular expression: %v", err)
+			}
+			acc.NeutralMailbox = r
+		}
+		if acc.AutomaticJunkFlags.NotJunkMailboxRegexp != "" {
+			r, err := regexp.Compile(acc.AutomaticJunkFlags.NotJunkMailboxRegexp)
+			if err != nil {
+				addErrorf("invalid NotJunkMailboxRegexp regular expression: %v", err)
+			}
+			acc.NotJunkMailbox = r
+		}
+		c.Accounts[accName] = acc
+
 		for addrName, dest := range acc.Destinations {
 			checkMailboxNormf(dest.Mailbox, "account %q, destination %q", accName, addrName)
 

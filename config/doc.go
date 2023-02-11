@@ -424,8 +424,31 @@ describe-static" and "mox config describe-domains":
 			# in a mailbox, e.g. Rejects. If mail isn't coming in when you expect, you can
 			# look there. The mail still isn't accepted, so the remote mail server may retry
 			# (hopefully, if legitimate), or give up (hopefully, if indeed a spammer).
-			# (optional)
+			# Messages are automatically removed from this mailbox, so do not set it to a
+			# mailbox that has messages you want to keep. (optional)
 			RejectsMailbox:
+
+			# Automatically set $Junk and $NotJunk flags based on mailbox messages are
+			# delivered/moved/copied to. Email clients typically have too limited
+			# functionality to conveniently set these flags, especially $NonJunk, but they can
+			# all move messages to a different mailbox, so this helps them. (optional)
+			AutomaticJunkFlags:
+
+				# If enabled, flags will be set automatically if they match a regular expression
+				# below. When two lists are set, the empty list will match all remaining messages.
+				# Messages are matched in the order specified and the search stops on the first
+				# match. Mailboxes are lowercased before matching.
+				Enabled: false
+
+				# Example: ^(junk|spam|rejects). (optional)
+				JunkMailboxRegexp:
+
+				# Example: ^(inbox|neutral|postmaster|dmarc|tlsrpt), and you may wish to add trash
+				# depending on how you use it, or leave this empty. (optional)
+				NeutralMailboxRegexp:
+
+				# Example: .* or an empty string. (optional)
+				NotJunkMailboxRegexp:
 
 			# Content-based filtering, using the junk-status of individual messages to rank
 			# words in such messages as spam or ham. It is recommended you always set the

@@ -322,7 +322,6 @@ func tretrain(t *testing.T, acc *store.Account) {
 
 	// Fetch messags to retrain on.
 	q := bstore.QueryDB[store.Message](acc.DB)
-	q.FilterEqual("Seen", true)
 	q.FilterFn(func(m store.Message) bool {
 		return m.Flags.Junk || m.Flags.Notjunk
 	})

@@ -198,10 +198,19 @@ type Account struct {
 	SubjectPass  struct {
 		Period time.Duration `sconf-doc:"How long unique values are accepted after generating, e.g. 12h."` // todo: have a reasonable default for this?
 	} `sconf:"optional" sconf-doc:"If configured, messages classified as weakly spam are rejected with instructions to retry delivery, but this time with a signed token added to the subject. During the next delivery attempt, the signed token will bypass the spam filter. Messages with a clear spam signal, such as a known bad reputation, are rejected/delayed without a signed token."`
-	RejectsMailbox string      `sconf:"optional" sconf-doc:"Mail that looks like spam will be rejected, but a copy can be stored temporarily in a mailbox, e.g. Rejects. If mail isn't coming in when you expect, you can look there. The mail still isn't accepted, so the remote mail server may retry (hopefully, if legitimate), or give up (hopefully, if indeed a spammer)."`
-	JunkFilter     *JunkFilter `sconf:"optional" sconf-doc:"Content-based filtering, using the junk-status of individual messages to rank words in such messages as spam or ham. It is recommended you always set the applicable (non)-junk status on messages, and that you do not empty your Trash because those messages contain valuable ham/spam training information."` // todo: sane defaults for junkfilter
+	RejectsMailbox     string `sconf:"optional" sconf-doc:"Mail that looks like spam will be rejected, but a copy can be stored temporarily in a mailbox, e.g. Rejects. If mail isn't coming in when you expect, you can look there. The mail still isn't accepted, so the remote mail server may retry (hopefully, if legitimate), or give up (hopefully, if indeed a spammer). Messages are automatically removed from this mailbox, so do not set it to a mailbox that has messages you want to keep."`
+	AutomaticJunkFlags struct {
+		Enabled              bool   `sconf-doc:"If enabled, flags will be set automatically if they match a regular expression below. When two lists are set, the empty list will match all remaining messages. Messages are matched in the order specified and the search stops on the first match. Mailboxes are lowercased before matching."`
+		JunkMailboxRegexp    string `sconf:"optional" sconf-doc:"Example: ^(junk|spam|rejects)."`
+		NeutralMailboxRegexp string `sconf:"optional" sconf-doc:"Example: ^(inbox|neutral|postmaster|dmarc|tlsrpt), and you may wish to add trash depending on how you use it, or leave this empty."`
+		NotJunkMailboxRegexp string `sconf:"optional" sconf-doc:"Example: .* or an empty string."`
+	} `sconf:"optional" sconf-doc:"Automatically set $Junk and $NotJunk flags based on mailbox messages are delivered/moved/copied to. Email clients typically have too limited functionality to conveniently set these flags, especially $NonJunk, but they can all move messages to a different mailbox, so this helps them."`
+	JunkFilter *JunkFilter `sconf:"optional" sconf-doc:"Content-based filtering, using the junk-status of individual messages to rank words in such messages as spam or ham. It is recommended you always set the applicable (non)-junk status on messages, and that you do not empty your Trash because those messages contain valuable ham/spam training information."` // todo: sane defaults for junkfilter
 
-	DNSDomain dns.Domain `sconf:"-"` // Parsed form of Domain.
+	DNSDomain      dns.Domain     `sconf:"-"` // Parsed form of Domain.
+	JunkMailbox    *regexp.Regexp `sconf:"-" json:"-"`
+	NeutralMailbox *regexp.Regexp `sconf:"-" json:"-"`
+	NotJunkMailbox *regexp.Regexp `sconf:"-" json:"-"`
 }
 
 type JunkFilter struct {

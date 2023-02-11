@@ -2150,11 +2150,12 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				if err != nil {
 					log.Errorx("checking whether reject is already present", err)
 				} else if !present {
-					m.Flags.Seen = true // We don't want to draw attention.
+					m.Seen = true // We don't want to draw attention.
+					m.Junk = true // This is junk, also train as such.
 					m.MessageID = messageid
 					m.MessageHash = messagehash
 					acc.WithWLock(func() {
-						if hasSpace, err := acc.TidyRejectsMailbox(conf.RejectsMailbox); err != nil {
+						if hasSpace, err := acc.TidyRejectsMailbox(c.log, conf.RejectsMailbox); err != nil {
 							log.Errorx("tidying rejects mailbox", err)
 						} else if hasSpace {
 							if err := acc.DeliverMailbox(log, conf.RejectsMailbox, m, dataFile, false); err != nil {

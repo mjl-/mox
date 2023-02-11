@@ -216,7 +216,10 @@ func importctl(ctl *ctl, mbox bool) {
 
 	// Messages don't always have a junk flag set. We'll assume anything in a mailbox
 	// starting with junk or spam is junk mail.
-	isjunk := strings.HasPrefix(strings.ToLower(mailbox), "junk") || strings.HasPrefix(strings.ToLower(mailbox), "spam")
+
+	var msgJunkFlags store.Message
+	conf, _ := a.Conf()
+	msgJunkFlags.JunkFlagsForMailbox(mailbox, conf)
 
 	// First check if we can access the mbox/maildir.
 	// Mox needs to be able to access those files, the user running the import command
@@ -224,13 +227,13 @@ func importctl(ctl *ctl, mbox bool) {
 	if mbox {
 		mboxf, err = os.Open(src)
 		ctl.xcheck(err, "open mbox file")
-		msgreader = newMboxReader(isjunk, store.CreateMessageTemp, mboxf, ctl.log)
+		msgreader = newMboxReader(msgJunkFlags.Junk, msgJunkFlags.Notjunk, store.CreateMessageTemp, mboxf, ctl.log)
 	} else {
 		mdnewf, err = os.Open(filepath.Join(src, "new"))
 		ctl.xcheck(err, "open subdir new of maildir")
 		mdcurf, err = os.Open(filepath.Join(src, "cur"))
 		ctl.xcheck(err, "open subdir cur of maildir")
-		msgreader = newMaildirReader(isjunk, store.CreateMessageTemp, mdnewf, mdcurf, ctl.log)
+		msgreader = newMaildirReader(msgJunkFlags.Junk, msgJunkFlags.Notjunk, store.CreateMessageTemp, mdnewf, mdcurf, ctl.log)
 	}
 
 	tx, err := a.DB.Begin(true)
@@ -276,8 +279,7 @@ func importctl(ctl *ctl, mbox bool) {
 		const consumeFile = true
 		isSent := mailbox == "Sent"
 		const sync = false
-		const train = false
-		a.DeliverX(ctl.log, tx, m, mf, consumeFile, isSent, sync, train)
+		a.DeliverX(ctl.log, tx, m, mf, consumeFile, isSent, sync)
 		deliveredIDs = append(deliveredIDs, m.ID)
 		ctl.log.Debug("delivered message", mlog.Field("id", m.ID))
 		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, Flags: m.Flags})
@@ -337,12 +339,13 @@ func importctl(ctl *ctl, mbox bool) {
 				}
 			}
 
-			if jf != nil && (m.Seen || m.Junk) {
+			if jf != nil && m.NeedsTraining() {
 				if words, err := jf.ParseMessage(p); err != nil {
 					ctl.log.Infox("parsing message for updating junk filter", err, mlog.Field("parse", ""), mlog.Field("path", origPath))
 				} else {
 					err = jf.Train(!m.Junk, words)
 					ctl.xcheck(err, "training junk filter")
+					m.TrainedJunk = &m.Junk
 				}
 			}
 
@@ -402,10 +405,11 @@ type mboxReader struct {
 	log        *mlog.Log
 	eof        bool
 	junk       bool
+	notjunk    bool
 }
 
-func newMboxReader(isjunk bool, createTemp func(pattern string) (*os.File, error), f *os.File, log *mlog.Log) *mboxReader {
-	return &mboxReader{createTemp: createTemp, path: f.Name(), line: 1, r: bufio.NewReader(f), log: log, junk: isjunk}
+func newMboxReader(isjunk, isnotjunk bool, createTemp func(pattern string) (*os.File, error), f *os.File, log *mlog.Log) *mboxReader {
+	return &mboxReader{createTemp: createTemp, path: f.Name(), line: 1, r: bufio.NewReader(f), log: log, junk: isjunk, notjunk: isnotjunk}
 }
 
 func (mr *mboxReader) position() string {
@@ -486,7 +490,7 @@ func (mr *mboxReader) Next() (*store.Message, *os.File, string, error) {
 
 	// todo: look at Status or X-Status header in message?
 	// todo: take Received from the "From " line if present?
-	flags := store.Flags{Seen: true, Junk: mr.junk}
+	flags := store.Flags{Seen: true, Junk: mr.junk, Notjunk: mr.notjunk}
 	m := &store.Message{Flags: flags, Size: size}
 
 	// Prevent cleanup by defer.
@@ -505,9 +509,10 @@ type maildirReader struct {
 	dovecotKeywords []string
 	log             *mlog.Log
 	junk            bool
+	notjunk         bool
 }
 
-func newMaildirReader(isjunk bool, createTemp func(pattern string) (*os.File, error), newf, curf *os.File, log *mlog.Log) *maildirReader {
+func newMaildirReader(isjunk, isnotjunk bool, createTemp func(pattern string) (*os.File, error), newf, curf *os.File, log *mlog.Log) *maildirReader {
 	mr := &maildirReader{createTemp: createTemp, newf: newf, curf: curf, f: newf, log: log, junk: isjunk}
 
 	// Best-effort parsing of dovecot keywords.
@@ -641,6 +646,9 @@ func (mr *maildirReader) Next() (*store.Message, *os.File, string, error) {
 
 	if mr.junk {
 		flags.Junk = true
+	}
+	if mr.notjunk {
+		flags.Notjunk = true
 	}
 
 	m := &store.Message{Received: received, Flags: flags, Size: size}

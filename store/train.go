@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mjl-/bstore"
+
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/junk"
 	"github.com/mjl-/mox/mlog"
@@ -40,28 +42,20 @@ func (a *Account) OpenJunkFilter(log *mlog.Log) (*junk.Filter, *config.JunkFilte
 	return f, jf, err
 }
 
-// Train new messages, if relevant given their flags.
-func (a *Account) Train(log *mlog.Log, msgs []Message) error {
-	return a.xtrain(log, msgs, false, true)
-}
-
-// Untrain removed messages, if relevant given their flags.
-func (a *Account) Untrain(log *mlog.Log, msgs []Message) error {
-	return a.xtrain(log, msgs, true, false)
-}
-
-// train or untrain messages, if relevant given their flags.
-func (a *Account) xtrain(log *mlog.Log, msgs []Message, untrain, train bool) (rerr error) {
+// RetrainMessages (un)trains messages, if relevant given their flags. Updates
+// m.TrainedJunk after retraining.
+func (a *Account) RetrainMessages(log *mlog.Log, tx *bstore.Tx, msgs []Message, absentOK bool) (rerr error) {
 	if len(msgs) == 0 {
 		return nil
 	}
 
 	var jf *junk.Filter
 
-	for _, m := range msgs {
-		if !m.Seen && !m.Junk {
+	for i := range msgs {
+		if !msgs[i].NeedsTraining() {
 			continue
 		}
+
 		// Lazy open the junk filter.
 		if jf == nil {
 			var err error
@@ -79,33 +73,28 @@ func (a *Account) xtrain(log *mlog.Log, msgs []Message, untrain, train bool) (re
 				}
 			}()
 		}
-		ham := !m.Junk
-		err := xtrainMessage(log, a, jf, m, untrain, ham, train, ham)
-		if err != nil {
+		if err := a.RetrainMessage(log, tx, jf, &msgs[i], absentOK); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Retrain message, if relevant given old flags and the new flags in m.
-func (a *Account) Retrain(log *mlog.Log, jf *junk.Filter, old Flags, m Message) error {
-	untrain := old.Seen || old.Junk
-	train := m.Seen || m.Junk
-	untrainHam := !old.Junk
-	trainHam := !m.Junk
+// RetrainMessage untrains and/or trains a message, if relevant given m.TrainedJunk
+// and m.Junk/m.Notjunk. Updates m.TrainedJunk after retraining.
+func (a *Account) RetrainMessage(log *mlog.Log, tx *bstore.Tx, jf *junk.Filter, m *Message, absentOK bool) error {
+	untrain := m.TrainedJunk != nil
+	untrainJunk := untrain && *m.TrainedJunk
+	train := m.Junk || m.Notjunk && !(m.Junk && m.Notjunk)
+	trainJunk := m.Junk
 
-	if !untrain && !train || (untrain && train && trainHam == untrainHam) {
+	if !untrain && !train || (untrain && train && untrainJunk == trainJunk) {
 		return nil
 	}
 
-	return xtrainMessage(log, a, jf, m, untrain, untrainHam, train, trainHam)
-}
+	log.Info("updating junk filter", mlog.Field("untrain", untrain), mlog.Field("untrainJunk", untrainJunk), mlog.Field("train", train), mlog.Field("trainJunk", trainJunk))
 
-func xtrainMessage(log *mlog.Log, a *Account, jf *junk.Filter, m Message, untrain, untrainHam, train, trainHam bool) error {
-	log.Info("updating junk filter", mlog.Field("untrain", untrain), mlog.Field("untrainHam", untrainHam), mlog.Field("train", train), mlog.Field("trainHam", trainHam))
-
-	mr := a.MessageReader(m)
+	mr := a.MessageReader(*m)
 	defer mr.Close()
 
 	p, err := m.LoadPart(mr)
@@ -121,16 +110,46 @@ func xtrainMessage(log *mlog.Log, a *Account, jf *junk.Filter, m Message, untrai
 	}
 
 	if untrain {
-		err := jf.Untrain(untrainHam, words)
+		err := jf.Untrain(!untrainJunk, words)
 		if err != nil {
 			return err
 		}
+		m.TrainedJunk = nil
 	}
 	if train {
-		err := jf.Train(trainHam, words)
+		err := jf.Train(!trainJunk, words)
 		if err != nil {
 			return err
 		}
+		m.TrainedJunk = &trainJunk
+	}
+	if err := tx.Update(m); err != nil && (!absentOK || err != bstore.ErrAbsent) {
+		return err
 	}
 	return nil
+}
+
+// TrainMessage trains the junk filter based on the current m.Junk/m.Notjunk flags,
+// disregarding m.TrainedJunk and not updating that field.
+func (a *Account) TrainMessage(log *mlog.Log, jf *junk.Filter, m Message) (bool, error) {
+	if !m.Junk && !m.Notjunk || (m.Junk && m.Notjunk) {
+		return false, nil
+	}
+
+	mr := a.MessageReader(m)
+	defer mr.Close()
+
+	p, err := m.LoadPart(mr)
+	if err != nil {
+		log.Errorx("loading part for message", err)
+		return false, nil
+	}
+
+	words, err := jf.ParseMessage(p)
+	if err != nil {
+		log.Errorx("parsing message for updating junk filter", err, mlog.Field("parse", ""))
+		return false, nil
+	}
+
+	return true, jf.Train(m.Notjunk, words)
 }

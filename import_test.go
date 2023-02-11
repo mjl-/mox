@@ -18,7 +18,7 @@ func TestMboxReader(t *testing.T) {
 	}
 	defer mboxf.Close()
 
-	mr := newMboxReader(false, createTemp, mboxf, mlog.New("mboxreader"))
+	mr := newMboxReader(false, false, createTemp, mboxf, mlog.New("mboxreader"))
 	_, mf0, _, err := mr.Next()
 	if err != nil {
 		t.Fatalf("next mbox message: %v", err)
@@ -56,7 +56,7 @@ func TestMaildirReader(t *testing.T) {
 	}
 	defer curf.Close()
 
-	mr := newMaildirReader(false, createTemp, newf, curf, mlog.New("maildirreader"))
+	mr := newMaildirReader(false, false, createTemp, newf, curf, mlog.New("maildirreader"))
 	_, mf0, _, err := mr.Next()
 	if err != nil {
 		t.Fatalf("next maildir message: %v", err)

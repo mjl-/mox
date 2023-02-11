@@ -138,6 +138,7 @@ const index = async () => {
 	const page = document.getElementById('page')
 	dom._kids(page,
 		crumbs('Mox Account'),
+		dom.p('NOTE: Not all account settings can be configured through these pages yet. See the configuration file for more options.'),
 		dom.div(
 			'Default domain: ',
 			domain.ASCII ? domainString(domain) : '(none)',

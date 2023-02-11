@@ -1951,11 +1951,13 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 				_, err = qm.Delete()
 				xcheckf(err, "removing messages")
 
-				conf, _ := c.account.Conf()
-				if name != conf.RejectsMailbox {
-					err = c.account.Untrain(c.log, remove)
-					xcheckf(err, "untraining deleted messages")
+				// Mark messages as not needing training. Then retrain them, so that are untrained if they were.
+				for i := range remove {
+					remove[i].Junk = false
+					remove[i].Notjunk = false
 				}
+				err = c.account.RetrainMessages(c.log, tx, remove, true)
+				xcheckf(err, "untraining deleted messages")
 			}
 
 			err = tx.Delete(&store.Mailbox{ID: mb.ID})
@@ -2519,7 +2521,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				MsgPrefix:     msgPrefix,
 			}
 			isSent := name == "Sent"
-			c.account.DeliverX(c.log, tx, &msg, msgFile, true, isSent, true, true)
+			c.account.DeliverX(c.log, tx, &msg, msgFile, true, isSent, true)
 		})
 
 		// Fetch pending changes, possibly with new UIDs, so we can apply them before adding our own new UID.
@@ -2684,11 +2686,14 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) []store.Message {
 			_, err = qm.Delete()
 			xcheckf(err, "removing messages marked for deletion")
 
-			conf, _ := c.account.Conf()
-			if mb.Name != conf.RejectsMailbox {
-				err = c.account.Untrain(c.log, remove)
-				xcheckf(err, "untraining deleted messages")
+			// Mark removed messages as not needing training, then retrain them, so if they
+			// were trained, they get untrained.
+			for i := range remove {
+				remove[i].Junk = false
+				remove[i].Notjunk = false
 			}
+			err = c.account.RetrainMessages(c.log, tx, remove, true)
+			xcheckf(err, "untraining deleted messages")
 		})
 
 		// Broadcast changes to other connections. We may not have actually removed any
@@ -2920,6 +2925,9 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			for _, m := range xmsgs {
 				msgs[m.UID] = m
 			}
+			nmsgs := make([]store.Message, len(xmsgs))
+
+			conf, _ := c.account.Conf()
 
 			// Insert new messages into database.
 			var origMsgIDs, newMsgIDs []int64
@@ -2934,9 +2942,12 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				m.UID = uidFirst + store.UID(i)
 				m.MailboxID = mbDst.ID
 				m.MailboxOrigID = mbSrc.ID
+				m.TrainedJunk = nil
+				m.JunkFlagsForMailbox(mbDst.Name, conf)
 				err := tx.Insert(&m)
 				xcheckf(err, "inserting message")
 				msgs[uid] = m
+				nmsgs[i] = m
 				origUIDs = append(origUIDs, uid)
 				newUIDs = append(newUIDs, m.UID)
 				newMsgIDs = append(newMsgIDs, m.ID)
@@ -2964,11 +2975,8 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				createdIDs = append(createdIDs, newMsgIDs[i])
 			}
 
-			conf, _ := c.account.Conf()
-			if mbDst.Name != conf.RejectsMailbox {
-				err = c.account.Train(c.log, xmsgs)
-				xcheckf(err, "train copied messages")
-			}
+			err = c.account.RetrainMessages(c.log, tx, nmsgs, false)
+			xcheckf(err, "train copied messages")
 		})
 
 		// Broadcast changes to other connections.
@@ -3087,6 +3095,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 				xserverErrorf("uid and message mismatch")
 			}
 
+			conf, _ := c.account.Conf()
 			for i := range msgs {
 				m := &msgs[i]
 				if m.UID != uids[i] {
@@ -3094,10 +3103,14 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 				}
 				m.MailboxID = mbDst.ID
 				m.UID = uidnext
+				m.JunkFlagsForMailbox(mbDst.Name, conf)
 				uidnext++
 				err := tx.Update(m)
 				xcheckf(err, "updating moved message in database")
 			}
+
+			err = c.account.RetrainMessages(c.log, tx, msgs, false)
+			xcheckf(err, "retraining messages after move")
 
 			// Prepare broadcast changes to other connections.
 			changes = make([]store.Change, 0, 1+len(msgs))
@@ -3172,12 +3185,10 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 	updates := store.FlagsQuerySet(mask, flags)
 
 	var updated []store.Message
-	var oflags []store.Flags
 
 	c.account.WithWLock(func() {
-		var mb store.Mailbox
 		c.xdbwrite(func(tx *bstore.Tx) {
-			mb = c.xmailboxID(tx, c.mailboxID) // Validate.
+			c.xmailboxID(tx, c.mailboxID) // Validate.
 
 			uidargs := c.xnumSetCondition(isUID, nums)
 
@@ -3188,11 +3199,6 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
 			q.FilterEqual("UID", uidargs...)
-			q.FilterFn(func(m store.Message) bool {
-				// We use this filter just to get the pre-update flags...
-				oflags = append(oflags, m.Flags)
-				return true
-			})
 			if len(updates) == 0 {
 				var err error
 				updated, err = q.List()
@@ -3202,29 +3208,10 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 				_, err := q.UpdateFields(updates)
 				xcheckf(err, "updating flags")
 			}
-		})
 
-		conf, _ := c.account.Conf()
-		if mb.Name != conf.RejectsMailbox {
-			jf, _, err := c.account.OpenJunkFilter(c.log)
-			if err == nil {
-				defer func() {
-					if jf != nil {
-						err := jf.Close()
-						c.xsanity(err, "closing junkfilter")
-					}
-				}()
-				for i, m := range updated {
-					err := c.account.Retrain(c.log, jf, oflags[i], m)
-					xcheckf(err, "retraining message")
-				}
-				err = jf.Close()
-				jf = nil
-				xcheckf(err, "closing junkfilter")
-			} else if !errors.Is(err, store.ErrNoJunkFilter) {
-				xcheckf(err, "open junk filter for retraining")
-			}
-		}
+			err := c.account.RetrainMessages(c.log, tx, updated, false)
+			xcheckf(err, "training messages")
+		})
 
 		// Broadcast changes to other connections.
 		changes := make([]store.Change, len(updated))
