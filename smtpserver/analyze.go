@@ -98,7 +98,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	if d.rcptAcc.destination.DMARCReports {
 		// Messages with DMARC aggregate reports must have a dmarc pass. ../rfc/7489:1866
 		if d.dmarcResult.Status != dmarc.StatusPass {
-			log.Info("received DMARC report without DMARC pass, not processing as DMARC report")
+			log.Info("received dmarc report without dmarc pass, not processing as dmarc report")
 		} else if report, err := dmarcrpt.ParseMessageReport(store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
 			log.Infox("parsing dmarc report", err)
 		} else if d, err := dns.ParseDomain(report.PolicyPublished.Domain); err != nil {
@@ -130,22 +130,22 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		}
 
 		if !ok {
-			log.Info("received mail to TLSRPT without acceptable DKIM signature, not processing as TLSRPT")
+			log.Info("received mail to tlsrpt without acceptable DKIM signature, not processing as tls report")
 		} else if report, err := tlsrpt.ParseMessage(store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
-			log.Infox("parsing TLSRPT report", err)
+			log.Infox("parsing tls report", err)
 		} else {
 			var known bool
 			for _, p := range report.Policies {
 				log.Info("tlsrpt policy domain", mlog.Field("domain", p.Policy.Domain))
 				if d, err := dns.ParseDomain(p.Policy.Domain); err != nil {
-					log.Infox("parsing domain in TLSRPT report", err)
+					log.Infox("parsing domain in tls report", err)
 				} else if _, ok := mox.Conf.Domain(d); ok {
 					known = true
 					break
 				}
 			}
 			if !known {
-				log.Info("TLSRPT report without one of configured domains, ignoring")
+				log.Info("tls report without one of configured domains, ignoring")
 			} else {
 				tlsReport = report
 			}

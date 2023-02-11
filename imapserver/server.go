@@ -1519,7 +1519,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xsyntaxErrorf("malformed cram-md5 response")
 		}
 		addr := t[0]
-		c.log.Info("cram-md5 auth", mlog.Field("address", addr))
+		c.log.Debug("cram-md5 auth", mlog.Field("address", addr))
 		acc, _, err := store.OpenEmail(addr)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
@@ -1586,7 +1586,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		if err != nil {
 			xsyntaxErrorf("starting scram: %w", err)
 		}
-		c.log.Info("scram auth", mlog.Field("authentication", ss.Authentication))
+		c.log.Debug("scram auth", mlog.Field("authentication", ss.Authentication))
 		acc, _, err := store.OpenEmail(ss.Authentication)
 		if err != nil {
 			// todo: we could continue scram with a generated salt, deterministically generated

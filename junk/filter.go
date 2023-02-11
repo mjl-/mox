@@ -255,7 +255,7 @@ func (f *Filter) Save() error {
 		return words[i] < words[j]
 	})
 
-	f.log.Info("inserting words in junkfilter db", mlog.Field("words", len(f.changed)))
+	f.log.Debug("inserting words in junkfilter db", mlog.Field("words", len(f.changed)))
 	// start := time.Now()
 	if f.isNew {
 		if err := f.db.HintAppend(true, wordscore{}); err != nil {

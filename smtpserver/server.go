@@ -985,7 +985,7 @@ func (c *conn) cmdAuth(p *parser) {
 			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5BadParams4, "malformed cram-md5 response")
 		}
 		addr := t[0]
-		c.log.Info("cram-md5 auth", mlog.Field("address", addr))
+		c.log.Debug("cram-md5 auth", mlog.Field("address", addr))
 		acc, _, err := store.OpenEmail(addr)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
@@ -1057,7 +1057,7 @@ func (c *conn) cmdAuth(p *parser) {
 		c0 := xreadInitial()
 		ss, err := scram.NewServer(h, c0)
 		xcheckf(err, "starting scram")
-		c.log.Info("scram auth", mlog.Field("authentication", ss.Authentication))
+		c.log.Debug("scram auth", mlog.Field("authentication", ss.Authentication))
 		acc, _, err := store.OpenEmail(ss.Authentication)
 		if err != nil {
 			// todo: we could continue scram with a generated salt, deterministically generated
@@ -1500,7 +1500,7 @@ func (c *conn) cmdData(p *parser) {
 		if err != nil {
 			c.log.Infox("reverse-forward lookup", err, mlog.Field("remoteip", c.remoteIP))
 		}
-		c.log.Info("dns iprev check", mlog.Field("addr", c.remoteIP), mlog.Field("status", iprevStatus))
+		c.log.Debug("dns iprev check", mlog.Field("addr", c.remoteIP), mlog.Field("status", iprevStatus))
 		var name string
 		if revName != "" {
 			name = revName
@@ -1804,7 +1804,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		c.log.Errorx("dkim verify", dkimErr)
 		authResAddDKIM("none", "", dkimErr.Error(), nil)
 	} else if len(dkimResults) == 0 {
-		c.log.Info("dkim verify: no dkim-signature header", mlog.Field("mailfrom", c.mailFrom))
+		c.log.Info("no dkim-signature header", mlog.Field("mailfrom", c.mailFrom))
 		authResAddDKIM("none", "", "no dkim signatures", nil)
 	}
 	for i, r := range dkimResults {
@@ -1868,7 +1868,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	})
 	switch receivedSPF.Result {
 	case spf.StatusPass:
-		c.log.Info("spf pass", mlog.Field("ip", spfArgs.RemoteIP), mlog.Field("mailfromDomain", spfArgs.MailFromDomain.ASCII)) // todo: log the domain that was actually verified.
+		c.log.Debug("spf pass", mlog.Field("ip", spfArgs.RemoteIP), mlog.Field("mailfromDomain", spfArgs.MailFromDomain.ASCII)) // todo: log the domain that was actually verified.
 	case spf.StatusFail:
 		if spfExpl != "" {
 			// Filter out potentially hostile text. ../rfc/7208:2529
@@ -1934,7 +1934,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		// todo future: consider enforcing an spf fail if there is no dmarc policy or the dmarc policy is none. ../rfc/7489:1507
 	}
 	authResults.Methods = append(authResults.Methods, dmarcMethod)
-	c.log.Info("dmarc verification", mlog.Field("result", dmarcResult.Status), mlog.Field("domain", msgFrom.Domain))
+	c.log.Debug("dmarc verification", mlog.Field("result", dmarcResult.Status), mlog.Field("domain", msgFrom.Domain))
 
 	// Prepare for analyzing content, calculating reputation.
 	var ipmasked1, ipmasked2, ipmasked3 string

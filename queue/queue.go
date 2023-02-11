@@ -568,7 +568,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 		if !ok && badTLS && tlsMode == smtpclient.TLSOpportunistic {
 			// In case of failure with opportunistic TLS, try again without TLS. ../rfc/7435:459
 			// todo future: revisit this decision. perhaps it should be a configuration option that defaults to not doing this?
-			nqlog.Info("connecting again for delivery attempt without TLS")
+			nqlog.Info("connecting again for delivery attempt without tls")
 			permanent, badTLS, secodeOpt, remoteIP, errmsg, ok = deliverHost(nqlog, resolver, cid, h, &m, smtpclient.TLSSkip)
 		}
 		if ok {

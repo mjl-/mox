@@ -92,7 +92,7 @@ func (a *Account) RetrainMessage(log *mlog.Log, tx *bstore.Tx, jf *junk.Filter, 
 		return nil
 	}
 
-	log.Info("updating junk filter", mlog.Field("untrain", untrain), mlog.Field("untrainJunk", untrainJunk), mlog.Field("train", train), mlog.Field("trainJunk", trainJunk))
+	log.Debug("updating junk filter", mlog.Field("untrain", untrain), mlog.Field("untrainJunk", untrainJunk), mlog.Field("train", train), mlog.Field("trainJunk", trainJunk))
 
 	mr := a.MessageReader(*m)
 	defer mr.Close()
