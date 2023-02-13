@@ -149,9 +149,8 @@ func (a *Account) ExportMessages(log *mlog.Log, archiver Archiver, maildir bool,
 		if iid != jid {
 			return mailboxOrder[iid] < mailboxOrder[jid]
 		}
-		t := msgs[i].Received.Compare(msgs[j].Received)
-		if t != 0 {
-			return t < 0
+		if !msgs[i].Received.Equal(msgs[j].Received) {
+			return msgs[i].Received.Before(msgs[j].Received)
 		}
 		return msgs[i].ID < msgs[j].ID
 	})
