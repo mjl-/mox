@@ -12,7 +12,7 @@ low-maintenance self-hosted email.
 
 # Commands
 
-	mox [-config mox.conf] ...
+	mox [-config config/mox.conf] ...
 	mox serve
 	mox quickstart user@domain
 	mox restart

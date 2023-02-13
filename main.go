@@ -322,7 +322,7 @@ Used to generate documentation.
 func usage(l []cmd, unlisted bool) {
 	var lines []string
 	if !unlisted {
-		lines = append(lines, "mox [-config mox.conf] ...")
+		lines = append(lines, "mox [-config config/mox.conf] ...")
 	}
 	for _, c := range l {
 		c.gather()
@@ -374,7 +374,7 @@ func main() {
 		return
 	}
 
-	flag.StringVar(&mox.ConfigStaticPath, "config", envString("MOXCONF", "mox.conf"), "configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf")
+	flag.StringVar(&mox.ConfigStaticPath, "config", envString("MOXCONF", "config/mox.conf"), "configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf")
 	flag.StringVar(&loglevel, "loglevel", "", "if non-empty, this log level is set early in startup")
 
 	flag.Usage = func() { usage(cmds, false) }
