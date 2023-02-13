@@ -1,6 +1,9 @@
 package http
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -109,7 +112,12 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == "GET" && r.URL.Path == "/" {
+	switch r.URL.Path {
+	case "/":
+		if r.Method != "GET" {
+			http.Error(w, "405 - method not allowed - post required", http.StatusMethodNotAllowed)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache; max-age=0")
 		// We typically return the embedded admin.html, but during development it's handy
@@ -121,9 +129,49 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.Write(accountHTML)
 		}
-		return
+
+	case "/mail-export-maildir.tgz", "/mail-export-maildir.zip", "/mail-export-mbox.tgz", "/mail-export-mbox.zip":
+		maildir := strings.Contains(r.URL.Path, "maildir")
+		tgz := strings.Contains(r.URL.Path, ".tgz")
+
+		acc, err := store.OpenAccount(accName)
+		if err != nil {
+			log.Errorx("open account for export", err)
+			http.Error(w, "500 - internal server error", http.StatusInternalServerError)
+			return
+		}
+		defer acc.Close()
+
+		var archiver store.Archiver
+		if tgz {
+			// Don't tempt browsers to "helpfully" decompress.
+			w.Header().Set("Content-Type", "application/octet-stream")
+
+			gzw := gzip.NewWriter(w)
+			defer func() {
+				gzw.Close()
+			}()
+			archiver = store.TarArchiver{Writer: tar.NewWriter(gzw)}
+		} else {
+			w.Header().Set("Content-Type", "application/zip")
+			archiver = store.ZipArchiver{Writer: zip.NewWriter(w)}
+		}
+		defer func() {
+			if err := archiver.Close(); err != nil {
+				log.Errorx("exporting mail close", err)
+			}
+		}()
+		if err := acc.ExportMessages(log, archiver, maildir, ""); err != nil {
+			log.Errorx("exporting mail", err)
+		}
+
+	default:
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			accountSherpaHandler.ServeHTTP(w, r.WithContext(context.WithValue(ctx, authCtxKey, accName)))
+			return
+		}
+		http.NotFound(w, r)
 	}
-	accountSherpaHandler.ServeHTTP(w, r.WithContext(context.WithValue(ctx, authCtxKey, accName)))
 }
 
 type ctxKey string

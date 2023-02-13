@@ -22,7 +22,8 @@ func cmdExportMaildir(c *cmd) {
 
 Export bypasses a running mox instance. It opens the account mailbox/message
 database file directly. This may block if a running mox instance also has the
-database open, e.g. for IMAP connections.
+database open, e.g. for IMAP connections. To export from a running instance, use
+the accounts web page.
 `
 	args := c.Parse()
 	xcmdExport(false, args, c)
@@ -36,7 +37,8 @@ Using mbox is not recommended. Maildir is a better format.
 
 Export bypasses a running mox instance. It opens the account mailbox/message
 database file directly. This may block if a running mox instance also has the
-database open, e.g. for IMAP connections.
+database open, e.g. for IMAP connections. To export from a running instance, use
+the accounts web page.
 
 For mbox export, we use "mboxrd" where message lines starting with the magic
 "From " string are escaped by prepending a >. We escape all ">*From ",
