@@ -1030,6 +1030,16 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasSpace bool, rerr error) {
 	var changes []Change
 
+	var remove []Message
+	defer func() {
+		for _, m := range remove {
+			p := a.MessagePath(m.ID)
+			if err := os.Remove(p); err != nil {
+				log.Errorx("removing rejects message file", err, mlog.Field("path", p))
+			}
+		}
+	}()
+
 	err := extransact(a.DB, true, func(tx *bstore.Tx) error {
 		mb := a.MailboxFindX(tx, rejectsMailbox)
 		if mb == nil {
@@ -1043,7 +1053,8 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 		qdel := bstore.QueryTx[Message](tx)
 		qdel.FilterNonzero(Message{MailboxID: mb.ID})
 		qdel.FilterLess("Received", old)
-		remove, err := qdel.List()
+		var err error
+		remove, err = qdel.List()
 		xcheckf(err, "listing old messages")
 
 		changes = a.xremoveMessages(log, tx, mb, remove)
@@ -1058,12 +1069,16 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 
 		return nil
 	})
+	if err != nil {
+		remove = nil // Don't remove files on failure.
+		return false, err
+	}
 
 	comm := RegisterComm(a)
 	defer comm.Unregister()
 	comm.Broadcast(changes)
 
-	return hasSpace, err
+	return hasSpace, nil
 }
 
 func (a *Account) xremoveMessages(log *mlog.Log, tx *bstore.Tx, mb *Mailbox, l []Message) []Change {
@@ -1110,8 +1125,18 @@ func (a *Account) xremoveMessages(log *mlog.Log, tx *bstore.Tx, mb *Mailbox, l [
 // RejectsRemove removes a message from the rejects mailbox if present.
 // Caller most hold account wlock.
 // Changes are broadcasted.
-func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string) {
+func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string) error {
 	var changes []Change
+
+	var remove []Message
+	defer func() {
+		for _, m := range remove {
+			p := a.MessagePath(m.ID)
+			if err := os.Remove(p); err != nil {
+				log.Errorx("removing rejects message file", err, mlog.Field("path", p))
+			}
+		}
+	}()
 
 	err := extransact(a.DB, true, func(tx *bstore.Tx) error {
 		mb := a.MailboxFindX(tx, rejectsMailbox)
@@ -1119,8 +1144,6 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 			return nil
 		}
 
-		// Note: these cannot have Recipients.
-		var remove []Message
 		q := bstore.QueryTx[Message](tx)
 		q.FilterNonzero(Message{MailboxID: mb.ID, MessageID: messageID})
 		remove, err := q.List()
@@ -1128,15 +1151,18 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 
 		changes = a.xremoveMessages(log, tx, mb, remove)
 
-		return err
+		return nil
 	})
 	if err != nil {
-		log.Errorx("removing message from rejects mailbox", err, mlog.Field("account", a.Name), mlog.Field("rejectsMailbox", rejectsMailbox), mlog.Field("messageID", messageID))
+		remove = nil // Don't remove files on failure.
+		return err
 	}
 
 	comm := RegisterComm(a)
 	defer comm.Unregister()
 	comm.Broadcast(changes)
+
+	return nil
 }
 
 // We keep a cache of recent successful authentications, so we don't have to bcrypt successful calls each time.

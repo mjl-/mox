@@ -2231,7 +2231,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 			conf, _ := acc.Conf()
 			if conf.RejectsMailbox != "" && messageID != "" {
-				acc.RejectsRemove(log, conf.RejectsMailbox, messageID)
+				if err := acc.RejectsRemove(log, conf.RejectsMailbox, messageID); err != nil {
+					log.Errorx("removing message from rejects mailbox", err, mlog.Field("messageID", messageID))
+				}
 			}
 		})
 
