@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	_ "embed"
 
@@ -40,48 +41,75 @@ func init() {
 		xlog.Fatalx("creating sherpa prometheus collector", err)
 	}
 
-	accountSherpaHandler, err = sherpa.NewHandler("/account/api/", moxvar.Version, Account{}, &accountDoc, &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none"})
+	accountSherpaHandler, err = sherpa.NewHandler("/api/", moxvar.Version, Account{}, &accountDoc, &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none"})
 	if err != nil {
 		xlog.Fatalx("sherpa handler", err)
 	}
 }
 
 // Account exports web API functions for the account web interface. All its
-// methods are exported under /account/api/. Function calls require valid HTTP
+// methods are exported under /api/. Function calls require valid HTTP
 // Authentication credentials of a user.
 type Account struct{}
 
-func accountHandle(w http.ResponseWriter, r *http.Request) {
-	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
-	log := xlog.WithContext(ctx).Fields(mlog.Field("userauth", ""))
-	var accountName string
+// check http basic auth, returns account name if valid, and writes http response
+// and returns empty string otherwise.
+func checkAccountAuth(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *http.Request) string {
 	authResult := "error"
+	start := time.Now()
+	var addr *net.TCPAddr
 	defer func() {
 		metrics.AuthenticationInc("httpaccount", "httpbasic", authResult)
+		if authResult == "ok" && addr != nil {
+			mox.LimiterFailedAuth.Reset(addr.IP, start)
+		}
 	}()
-	// todo: should probably add a cache here instead of looking up password in database all the time, just like in admin.go
+
+	var err error
+	addr, err = net.ResolveTCPAddr("tcp", r.RemoteAddr)
+	if err != nil {
+		log.Errorx("parsing remote address", err, mlog.Field("addr", r.RemoteAddr))
+	}
+	if addr != nil && !mox.LimiterFailedAuth.Add(addr.IP, start, 1) {
+		metrics.AuthenticationRatelimitedInc("httpaccount")
+		http.Error(w, "http 429 - too many auth attempts", http.StatusTooManyRequests)
+		return ""
+	}
+
+	// store.OpenEmailAuth has an auth cache, so we don't bcrypt for every auth attempt.
 	if auth := r.Header.Get("Authorization"); auth == "" || !strings.HasPrefix(auth, "Basic ") {
 	} else if authBuf, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err != nil {
-		log.Infox("parsing base64", err)
+		log.Debugx("parsing base64", err)
 	} else if t := strings.SplitN(string(authBuf), ":", 2); len(t) != 2 {
-		log.Info("bad user:pass form")
+		log.Debug("bad user:pass form")
 	} else if acc, err := store.OpenEmailAuth(t[0], t[1]); err != nil {
 		if errors.Is(err, store.ErrUnknownCredentials) {
 			authResult = "badcreds"
 		}
-		log.Infox("open account", err)
+		log.Errorx("open account", err)
 	} else {
-		accountName = acc.Name
 		authResult = "ok"
+		accName := acc.Name
+		acc.Close()
+		return accName
 	}
-	if accountName == "" {
-		w.Header().Set("WWW-Authenticate", `Basic realm="mox account - login with email address and password"`)
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintln(w, "http 401 - unauthorized - mox account - login with email address and password")
+	// note: browsers don't display the realm to prevent users getting confused by malicious realm messages.
+	w.Header().Set("WWW-Authenticate", `Basic realm="mox account - login with email address and password"`)
+	http.Error(w, "http 401 - unauthorized - mox account - login with email address and password", http.StatusUnauthorized)
+	return ""
+}
+
+func accountHandle(w http.ResponseWriter, r *http.Request) {
+	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
+	log := xlog.WithContext(ctx).Fields(mlog.Field("userauth", ""))
+
+	accName := checkAccountAuth(ctx, log, w, r)
+	if accName == "" {
+		// Response already sent.
 		return
 	}
 
-	if r.Method == "GET" && r.URL.Path == "/account/" {
+	if r.Method == "GET" && r.URL.Path == "/" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache; max-age=0")
 		// We typically return the embedded admin.html, but during development it's handy
@@ -95,7 +123,7 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	accountSherpaHandler.ServeHTTP(w, r.WithContext(context.WithValue(ctx, authCtxKey, accountName)))
+	accountSherpaHandler.ServeHTTP(w, r.WithContext(context.WithValue(ctx, authCtxKey, accName)))
 }
 
 type ctxKey string

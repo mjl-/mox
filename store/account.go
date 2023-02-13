@@ -131,7 +131,7 @@ func (c *CRAMMD5) UnmarshalBinary(buf []byte) error {
 
 // Password holds credentials in various forms, for logging in with SMTP/IMAP.
 type Password struct {
-	Hash        string  // bcrypt hash for IMAP LOGIN and SASL PLAIN authentication.
+	Hash        string  // bcrypt hash for IMAP LOGIN, SASL PLAIN and HTTP basic authentication.
 	CRAMMD5     CRAMMD5 // For SASL CRAM-MD5.
 	SCRAMSHA1   SCRAM   // For SASL SCRAM-SHA-1.
 	SCRAMSHA256 SCRAM   // For SASL SCRAM-SHA-256.

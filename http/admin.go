@@ -108,21 +108,46 @@ func init() {
 
 // check whether authentication from the config (passwordfile with bcrypt hash)
 // matches the authorization header "authHdr". we don't care about any username.
-func checkAdminAuth(ctx context.Context, passwordfile, authHdr string) bool {
+// on (auth) failure, a http response is sent and false returned.
+func checkAdminAuth(ctx context.Context, passwordfile string, w http.ResponseWriter, r *http.Request) bool {
 	log := xlog.WithContext(ctx)
 
+	respondAuthFail := func() bool {
+		// note: browsers don't display the realm to prevent users getting confused by malicious realm messages.
+		w.Header().Set("WWW-Authenticate", `Basic realm="mox admin - login with empty username and admin password"`)
+		http.Error(w, "http 401 - unauthorized - mox admin - login with empty username and admin password", http.StatusUnauthorized)
+		return false
+	}
+
 	authResult := "error"
+	start := time.Now()
+	var addr *net.TCPAddr
 	defer func() {
 		metrics.AuthenticationInc("httpadmin", "httpbasic", authResult)
+		if authResult == "ok" && addr != nil {
+			mox.LimiterFailedAuth.Reset(addr.IP, start)
+		}
 	}()
 
-	if !strings.HasPrefix(authHdr, "Basic ") || passwordfile == "" {
+	var err error
+	addr, err = net.ResolveTCPAddr("tcp", r.RemoteAddr)
+	if err != nil {
+		log.Errorx("parsing remote address", err, mlog.Field("addr", r.RemoteAddr))
+	}
+	if addr != nil && !mox.LimiterFailedAuth.Add(addr.IP, start, 1) {
+		metrics.AuthenticationRatelimitedInc("httpadmin")
+		http.Error(w, "http 429 - too many auth attempts", http.StatusTooManyRequests)
 		return false
+	}
+
+	authHdr := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHdr, "Basic ") || passwordfile == "" {
+		return respondAuthFail()
 	}
 	buf, err := os.ReadFile(passwordfile)
 	if err != nil {
 		log.Errorx("reading admin password file", err, mlog.Field("path", passwordfile))
-		return false
+		return respondAuthFail()
 	}
 	passwordhash := strings.TrimSpace(string(buf))
 	authCache.Lock()
@@ -133,15 +158,15 @@ func checkAdminAuth(ctx context.Context, passwordfile, authHdr string) bool {
 	}
 	auth, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHdr, "Basic "))
 	if err != nil {
-		return false
+		return respondAuthFail()
 	}
 	t := strings.SplitN(string(auth), ":", 2)
 	if len(t) != 2 || len(t[1]) < 8 {
-		return false
+		return respondAuthFail()
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordhash), []byte(t[1])); err != nil {
 		authResult = "badcreds"
-		return false
+		return respondAuthFail()
 	}
 	authCache.lastSuccessHash = passwordhash
 	authCache.lastSuccessAuth = authHdr
@@ -151,10 +176,8 @@ func checkAdminAuth(ctx context.Context, passwordfile, authHdr string) bool {
 
 func adminHandle(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
-	if !checkAdminAuth(ctx, mox.ConfigDirPath(mox.Conf.Static.AdminPasswordFile), r.Header.Get("Authorization")) {
-		w.Header().Set("WWW-Authenticate", `Basic realm="mox admin - login with empty username and admin password"`)
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprintln(w, "http 401 - unauthorized - mox admin - login with empty username and admin password")
+	if !checkAdminAuth(ctx, mox.ConfigDirPath(mox.Conf.Static.AdminPasswordFile), w, r) {
+		// Response already sent.
 		return
 	}
 

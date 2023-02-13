@@ -108,14 +108,22 @@ type Listener struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 993."`
 	} `sconf:"optional" sconf-doc:"IMAP over TLS for reading email, by email applications. Requires a TLS config."`
+	AccountHTTP struct {
+		Enabled bool
+		Port    int `sconf:"optional" sconf-doc:"Default 80."`
+	} `sconf:"optional" sconf-doc:"Account web interface, for email users wanting to change their accounts, e.g. set new password, set new delivery rulesets."`
+	AccountHTTPS struct {
+		Enabled bool
+		Port    int `sconf:"optional" sconf-doc:"Default 80."`
+	} `sconf:"optional" sconf-doc:"Account web interface listener for HTTPS. Requires a TLS config."`
 	AdminHTTP struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 80."`
-	} `sconf:"optional" sconf-doc:"Admin web interface, for administrators and regular users wanting to change their password."`
+	} `sconf:"optional" sconf-doc:"Admin web interface, for managing domains, accounts, etc. Served at /admin/. Preferrably only enable on non-public IPs."`
 	AdminHTTPS struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 443."`
-	} `sconf:"optional" sconf-doc:"Admin web interface listener for HTTPS. Requires a TLS config."`
+	} `sconf:"optional" sconf-doc:"Admin web interface listener for HTTPS. Requires a TLS config. Preferrably only enable on non-public IPs."`
 	MetricsHTTP struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 8010."`

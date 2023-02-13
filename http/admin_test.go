@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"net"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -19,7 +20,12 @@ func TestAdminAuth(t *testing.T) {
 	test := func(passwordfile, authHdr string, expect bool) {
 		t.Helper()
 
-		ok := checkAdminAuth(context.Background(), passwordfile, authHdr)
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("GET", "/ignored", nil)
+		if authHdr != "" {
+			r.Header.Add("Authorization", authHdr)
+		}
+		ok := checkAdminAuth(context.Background(), passwordfile, w, r)
 		if ok != expect {
 			t.Fatalf("got %v, expected %v", ok, expect)
 		}

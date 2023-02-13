@@ -176,15 +176,31 @@ describe-static" and "mox config describe-domains":
 				# Default 993. (optional)
 				Port: 0
 
-			# Admin web interface, for administrators and regular users wanting to change
-			# their password. (optional)
+			# Account web interface, for email users wanting to change their accounts, e.g.
+			# set new password, set new delivery rulesets. (optional)
+			AccountHTTP:
+				Enabled: false
+
+				# Default 80. (optional)
+				Port: 0
+
+			# Account web interface listener for HTTPS. Requires a TLS config. (optional)
+			AccountHTTPS:
+				Enabled: false
+
+				# Default 80. (optional)
+				Port: 0
+
+			# Admin web interface, for managing domains, accounts, etc. Served at /admin/.
+			# Preferrably only enable on non-public IPs. (optional)
 			AdminHTTP:
 				Enabled: false
 
 				# Default 80. (optional)
 				Port: 0
 
-			# Admin web interface listener for HTTPS. Requires a TLS config. (optional)
+			# Admin web interface listener for HTTPS. Requires a TLS config. Preferrably only
+			# enable on non-public IPs. (optional)
 			AdminHTTPS:
 				Enabled: false
 

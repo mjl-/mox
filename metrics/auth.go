@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	metricAuthentication = promauto.NewCounterVec(
+	metricAuth = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "mox_authentication_total",
 			Help: "Authentication attempts and results.",
@@ -18,8 +18,22 @@ var (
 			"result", // ok, baduser, badpassword, badcreds, error, aborted
 		},
 	)
+
+	metricAuthRatelimited = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "mox_authentication_ratelimited_total",
+			Help: "Authentication attempts that were refused due to rate limiting.",
+		},
+		[]string{
+			"kind", // submission, imap, httpaccount, httpadmin
+		},
+	)
 )
 
 func AuthenticationInc(kind, variant, result string) {
-	metricAuthentication.WithLabelValues(kind, variant, result).Inc()
+	metricAuth.WithLabelValues(kind, variant, result).Inc()
+}
+
+func AuthenticationRatelimitedInc(kind string) {
+	metricAuthRatelimited.WithLabelValues(kind).Inc()
 }

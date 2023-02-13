@@ -71,17 +71,28 @@ func ListenAndServe() {
 			ensureServe(true, 443, "acme-tls-alpn01")
 		}
 
+		if l.AccountHTTP.Enabled {
+			srv := ensureServe(false, config.Port(l.AccountHTTP.Port, 80), "account-http")
+			srv.mux.HandleFunc("/", safeHeaders(accountHandle))
+		}
+		if l.AccountHTTPS.Enabled {
+			srv := ensureServe(true, config.Port(l.AccountHTTP.Port, 443), "account-https")
+			srv.mux.HandleFunc("/", safeHeaders(accountHandle))
+		}
+
 		if l.AdminHTTP.Enabled {
 			srv := ensureServe(false, config.Port(l.AdminHTTP.Port, 80), "admin-http")
-			srv.mux.HandleFunc("/", safeHeaders(adminIndex))
+			if !l.AccountHTTP.Enabled {
+				srv.mux.HandleFunc("/", safeHeaders(adminIndex))
+			}
 			srv.mux.HandleFunc("/admin/", safeHeaders(adminHandle))
-			srv.mux.HandleFunc("/account/", safeHeaders(accountHandle))
 		}
 		if l.AdminHTTPS.Enabled {
 			srv := ensureServe(true, config.Port(l.AdminHTTPS.Port, 443), "admin-https")
-			srv.mux.HandleFunc("/", safeHeaders(adminIndex))
+			if !l.AccountHTTP.Enabled {
+				srv.mux.HandleFunc("/", safeHeaders(adminIndex))
+			}
 			srv.mux.HandleFunc("/admin/", safeHeaders(adminHandle))
-			srv.mux.HandleFunc("/account/", safeHeaders(accountHandle))
 		}
 		if l.MetricsHTTP.Enabled {
 			srv := ensureServe(false, config.Port(l.MetricsHTTP.Port, 8010), "metrics-http")
@@ -174,6 +185,7 @@ func ListenAndServe() {
 	}
 }
 
+// Only used when the account page is not active on the same listener.
 func adminIndex(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -183,27 +195,7 @@ func adminIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
-
-	const html = `<!doctype html>
-<html>
-	<head>
-		<title>mox</title>
-		<meta name="viewport" content="width=device-width" />
-		<style>
-body, html { font-family: ubuntu, lato, sans-serif; font-size: 16px; padding: 1em; }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-h1, h2, h3, h4 { margin-bottom: 1ex; }
-h1 { font-size: 1.2rem; }
-		</style>
-	</head>
-	<body>
-		<h1>mox</h1>
-		<div><a href="/account/">/account/</a>, for regular login</div>
-		<div><a href="/admin/">/admin/</a>, for adminstrators</div>
-	</body>
-</html>`
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(html))
+	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
 }
 
 func listenAndServe(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, mux *http.ServeMux) {

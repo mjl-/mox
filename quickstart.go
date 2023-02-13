@@ -382,6 +382,7 @@ This likely means one of two things:
 		IPs:      privateListenerIPs,
 		Hostname: "localhost",
 	}
+	internal.AccountHTTP.Enabled = true
 	internal.AdminHTTP.Enabled = true
 	internal.MetricsHTTP.Enabled = true
 

@@ -661,6 +661,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 
 	// If remote IP/network resulted in too many authentication failures, refuse to serve.
 	if !mox.LimiterFailedAuth.CanAdd(c.remoteIP, time.Now(), 1) {
+		metrics.AuthenticationRatelimitedInc("imap")
 		c.log.Debug("refusing connection due to many auth failures", mlog.Field("remoteip", c.remoteIP))
 		c.writelinef("* BYE too many auth failures")
 		return
