@@ -1039,7 +1039,7 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 		}
 
 		// Gather old messages to remove.
-		old := time.Now().Add(-24 * time.Hour)
+		old := time.Now().Add(-14 * 24 * time.Hour)
 		qdel := bstore.QueryTx[Message](tx)
 		qdel.FilterNonzero(Message{MailboxID: mb.ID})
 		qdel.FilterLess("Received", old)

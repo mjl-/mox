@@ -2151,7 +2151,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					log.Errorx("checking whether reject is already present", err)
 				} else if !present {
 					m.Seen = true // We don't want to draw attention.
-					m.Junk = true // This is junk, also train as such.
+					// Regular automatic junk flags configuration applies to these messages. The
+					// default is to treat these are neutral, so they won't cause outright rejections
+					// due to reputation for later delivery attempts.
 					m.MessageID = messageid
 					m.MessageHash = messagehash
 					acc.WithWLock(func() {

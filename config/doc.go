@@ -435,16 +435,17 @@ describe-static" and "mox config describe-domains":
 			AutomaticJunkFlags:
 
 				# If enabled, flags will be set automatically if they match a regular expression
-				# below. When two lists are set, the empty list will match all remaining messages.
-				# Messages are matched in the order specified and the search stops on the first
-				# match. Mailboxes are lowercased before matching.
+				# below. When two of the three mailbox regular expressions are set, the remaining
+				# one will match all unmatched messages. Messages are matched in the order
+				# specified and the search stops on the first match. Mailboxes are lowercased
+				# before matching.
 				Enabled: false
 
-				# Example: ^(junk|spam|rejects). (optional)
+				# Example: ^(junk|spam). (optional)
 				JunkMailboxRegexp:
 
-				# Example: ^(inbox|neutral|postmaster|dmarc|tlsrpt), and you may wish to add trash
-				# depending on how you use it, or leave this empty. (optional)
+				# Example: ^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects), and you may wish to
+				# add trash depending on how you use it, or leave this empty. (optional)
 				NeutralMailboxRegexp:
 
 				# Example: .* or an empty string. (optional)
