@@ -26,8 +26,8 @@ low-maintenance self-hosted email.
 	mox queue dump id
 	mox import maildir accountname mailboxname maildir
 	mox import mbox accountname mailboxname mbox
-	mox export maildir dst-path account-path [mailbox]
-	mox export mbox dst-path account-path [mailbox]
+	mox export maildir dst-dir account-path [mailbox]
+	mox export mbox dst-dir account-path [mailbox]
 	mox help [command ...]
 	mox config test
 	mox config dnscheck domain
@@ -266,7 +266,7 @@ database file directly. This may block if a running mox instance also has the
 database open, e.g. for IMAP connections. To export from a running instance, use
 the accounts web page.
 
-	usage: mox export maildir dst-path account-path [mailbox]
+	usage: mox export maildir dst-dir account-path [mailbox]
 
 # mox export mbox
 
@@ -279,11 +279,11 @@ database file directly. This may block if a running mox instance also has the
 database open, e.g. for IMAP connections. To export from a running instance, use
 the accounts web page.
 
-For mbox export, we use "mboxrd" where message lines starting with the magic
-"From " string are escaped by prepending a >. We escape all ">*From ",
+For mbox export, "mboxrd" is used where message lines starting with the magic
+"From " string are escaped by prepending a >. All ">*From " are escaped,
 otherwise reconstructing the original could lose a ">".
 
-	usage: mox export mbox dst-path account-path [mailbox]
+	usage: mox export mbox dst-dir account-path [mailbox]
 
 # mox help
 

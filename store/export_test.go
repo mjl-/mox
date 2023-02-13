@@ -5,7 +5,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -47,16 +49,21 @@ func TestExport(t *testing.T) {
 
 	archive := func(archiver Archiver, maildir bool) {
 		t.Helper()
-		err = acc.ExportMessages(log, archiver, maildir, "")
+		err = ExportMessages(log, acc.DB, acc.Dir, archiver, maildir, "")
 		tcheck(t, err, "export messages")
 		err = archiver.Close()
 		tcheck(t, err, "archiver close")
 	}
 
+	os.RemoveAll("../testdata/exportmaildir")
+	os.RemoveAll("../testdata/exportmbox")
+
 	archive(ZipArchiver{zip.NewWriter(&maildirZip)}, true)
 	archive(ZipArchiver{zip.NewWriter(&mboxZip)}, false)
 	archive(TarArchiver{tar.NewWriter(&maildirTar)}, true)
 	archive(TarArchiver{tar.NewWriter(&mboxTar)}, false)
+	archive(DirArchiver{"../testdata/exportmaildir"}, true)
+	archive(DirArchiver{"../testdata/exportmbox"}, false)
 
 	if r, err := zip.NewReader(bytes.NewReader(maildirZip.Bytes()), int64(maildirZip.Len())); err != nil {
 		t.Fatalf("reading maildir zip: %v", err)
@@ -86,11 +93,29 @@ func TestExport(t *testing.T) {
 			_, err = io.Copy(io.Discard, tr)
 			tcheck(t, err, "copy")
 		}
-		if n != have {
-			t.Fatalf("got %d files, expected %d", n, have)
+		if have != n {
+			t.Fatalf("got %d files, expected %d", have, n)
 		}
 	}
 
 	checkTarFiles(&maildirTar, 2*3+2)
 	checkTarFiles(&mboxTar, 2)
+
+	checkDirFiles := func(dir string, n int) {
+		t.Helper()
+		have := 0
+		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				have++
+			}
+			return nil
+		})
+		tcheck(t, err, "walkdir")
+		if n != have {
+			t.Fatalf("got %d files, expected %d", have, n)
+		}
+	}
+
+	checkDirFiles("../testdata/exportmaildir", 2)
+	checkDirFiles("../testdata/exportmbox", 2)
 }

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mjl-/bstore"
@@ -19,7 +20,9 @@ import (
 
 // Archiver can archive multiple mailboxes and their messages.
 type Archiver interface {
-	Create(name string, size int64, mtime time.Time) (io.Writer, error)
+	// Add file to archive. If name ends with a slash, it is created as a directory and
+	// the returned io.WriteCloser can be ignored.
+	Create(name string, size int64, mtime time.Time) (io.WriteCloser, error)
 	Close() error
 }
 
@@ -29,18 +32,18 @@ type TarArchiver struct {
 }
 
 // Create adds a file header to the tar file.
-func (a TarArchiver) Create(name string, size int64, mtime time.Time) (io.Writer, error) {
+func (a TarArchiver) Create(name string, size int64, mtime time.Time) (io.WriteCloser, error) {
 	hdr := tar.Header{
 		Name:    name,
 		Size:    size,
-		Mode:    0600,
+		Mode:    0660,
 		ModTime: mtime,
 		Format:  tar.FormatPAX,
 	}
 	if err := a.WriteHeader(&hdr); err != nil {
 		return nil, err
 	}
-	return a, nil
+	return nopCloser{a}, nil
 }
 
 // ZipArchiver is an Archiver that writes to a zip file.
@@ -49,14 +52,49 @@ type ZipArchiver struct {
 }
 
 // Create adds a file header to the zip file.
-func (a ZipArchiver) Create(name string, size int64, mtime time.Time) (io.Writer, error) {
+func (a ZipArchiver) Create(name string, size int64, mtime time.Time) (io.WriteCloser, error) {
 	hdr := zip.FileHeader{
 		Name:               name,
 		Method:             zip.Deflate,
 		Modified:           mtime,
 		UncompressedSize64: uint64(size),
 	}
-	return a.CreateHeader(&hdr)
+	w, err := a.CreateHeader(&hdr)
+	if err != nil {
+		return nil, err
+	}
+	return nopCloser{w}, nil
+}
+
+type nopCloser struct {
+	io.Writer
+}
+
+// Close does nothing.
+func (nopCloser) Close() error {
+	return nil
+}
+
+// DirArchiver is an Archiver that writes to a directory.
+type DirArchiver struct {
+	Dir string
+}
+
+// Create create name in the file system, in dir.
+func (a DirArchiver) Create(name string, size int64, mtime time.Time) (io.WriteCloser, error) {
+	isdir := strings.HasSuffix(name, "/")
+	name = strings.TrimSuffix(name, "/")
+	p := filepath.Join(a.Dir, name)
+	os.MkdirAll(filepath.Dir(p), 0770)
+	if isdir {
+		return nil, os.Mkdir(p, 0770)
+	}
+	return os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0660)
+}
+
+// Close on a dir does nothing.
+func (a DirArchiver) Close() error {
+	return nil
 }
 
 // ExportMessages writes messages to archiver. Either in maildir format, or otherwise in
@@ -66,11 +104,11 @@ func (a ZipArchiver) Create(name string, size int64, mtime time.Time) (io.Writer
 // Some errors are not fatal and result in skipped messages. In that happens, a
 // file "errors.txt" is added to the archive describing the errors. The goal is to
 // let users export (hopefully) most messages even in the face of errors.
-func (a *Account) ExportMessages(log *mlog.Log, archiver Archiver, maildir bool, mailboxOpt string) error {
+func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Archiver, maildir bool, mailboxOpt string) error {
 	// Start transaction without closure, we are going to close it early, but don't
 	// want to deal with declaring many variables now to be able to assign them in a
 	// closure and use them afterwards.
-	tx, err := a.DB.Begin(false)
+	tx, err := db.Begin(false)
 	if err != nil {
 		return fmt.Errorf("transaction: %v", err)
 	}
@@ -173,7 +211,48 @@ func (a *Account) ExportMessages(log *mlog.Log, archiver Archiver, maildir bool,
 		}
 	}()
 
-	finishMbox := func() error {
+	// For dovecot-keyword-style flags not in standard maildir.
+	maildirFlags := map[string]int{}
+	var maildirFlaglist []string
+	maildirFlag := func(flag string) string {
+		i, ok := maildirFlags[flag]
+		if !ok {
+			if len(maildirFlags) >= 26 {
+				// Max 26 flag characters.
+				return ""
+			}
+			i = len(maildirFlags)
+			maildirFlags[flag] = i
+			maildirFlaglist = append(maildirFlaglist, flag)
+		}
+		return string(rune('a' + i))
+	}
+
+	finishMailbox := func() error {
+		if maildir {
+			if len(maildirFlags) == 0 {
+				return nil
+			}
+
+			var b bytes.Buffer
+			for i, flag := range maildirFlaglist {
+				if _, err := fmt.Fprintf(&b, "%d %s\n", i, flag); err != nil {
+					return err
+				}
+			}
+			w, err := archiver.Create(curMailbox+"/dovecot-keywords", int64(b.Len()), start)
+			if err != nil {
+				return fmt.Errorf("adding dovecot-keywords: %v", err)
+			}
+			if _, err := w.Write(b.Bytes()); err != nil {
+				w.Close()
+				return fmt.Errorf("writing dovecot-keywords: %v", err)
+			}
+			maildirFlags = map[string]int{}
+			maildirFlaglist = nil
+			return w.Close()
+		}
+
 		if mboxtmp == nil {
 			return nil
 		}
@@ -193,7 +272,11 @@ func (a *Account) ExportMessages(log *mlog.Log, archiver Archiver, maildir bool,
 			return fmt.Errorf("add mbox to archive: %v", err)
 		}
 		if _, err := io.Copy(w, mboxtmp); err != nil {
+			w.Close()
 			return fmt.Errorf("copying temp mbox file to archive: %v", err)
+		}
+		if err := w.Close(); err != nil {
+			return fmt.Errorf("closing message file: %v", err)
 		}
 		if err := mboxtmp.Close(); err != nil {
 			log.Errorx("closing temporary mbox file", err)
@@ -205,7 +288,7 @@ func (a *Account) ExportMessages(log *mlog.Log, archiver Archiver, maildir bool,
 	}
 
 	exportMessage := func(m Message) error {
-		mp := a.MessagePath(m.ID)
+		mp := filepath.Join(accountDir, "msg", MessagePath(m.ID))
 		var mr io.ReadCloser
 		if m.Size == int64(len(m.MsgPrefix)) {
 			mr = io.NopCloser(bytes.NewReader(m.MsgPrefix))
@@ -236,19 +319,41 @@ func (a *Account) ExportMessages(log *mlog.Log, archiver Archiver, maildir bool,
 				p = filepath.Join(p, "new")
 			}
 			name := fmt.Sprintf("%d.%d.mox:2,", m.Received.Unix(), m.ID)
-			// todo: more flags? forwarded, (non)junk, phishing, mdnsent would be nice. but what is the convention. dovecot-keywords sounds non-standard.
-			if m.Flags.Seen {
-				name += "S"
-			}
-			if m.Flags.Answered {
-				name += "R"
+
+			// Standard flags. May need to be sorted.
+			if m.Flags.Draft {
+				name += "D"
 			}
 			if m.Flags.Flagged {
 				name += "F"
 			}
-			if m.Flags.Draft {
-				name += "D"
+			if m.Flags.Answered {
+				name += "R"
 			}
+			if m.Flags.Seen {
+				name += "S"
+			}
+			if m.Flags.Deleted {
+				name += "T"
+			}
+
+			// Non-standard flag. We set them with a dovecot-keywords file.
+			if m.Flags.Forwarded {
+				name += maildirFlag("$Forwarded")
+			}
+			if m.Flags.Junk {
+				name += maildirFlag("$Junk")
+			}
+			if m.Flags.Notjunk {
+				name += maildirFlag("$NotJunk")
+			}
+			if m.Flags.Phishing {
+				name += maildirFlag("$Phishing")
+			}
+			if m.Flags.MDNSent {
+				name += maildirFlag("$MDNSent")
+			}
+
 			p = filepath.Join(p, name)
 
 			// We store messages with \r\n, maildir needs without. But we need to know the
@@ -281,9 +386,10 @@ func (a *Account) ExportMessages(log *mlog.Log, archiver Archiver, maildir bool,
 				return fmt.Errorf("adding message to archive: %v", err)
 			}
 			if _, err := io.Copy(w, &dst); err != nil {
+				w.Close()
 				return fmt.Errorf("copying message to archive: %v", err)
 			}
-			return nil
+			return w.Close()
 		}
 
 		// todo: should we put status flags in Status or X-Status header inside the message?
@@ -327,7 +433,7 @@ func (a *Account) ExportMessages(log *mlog.Log, archiver Archiver, maildir bool,
 
 	for _, m := range msgs {
 		if m.MailboxID != curMailboxID {
-			if err := finishMbox(); err != nil {
+			if err := finishMailbox(); err != nil {
 				return err
 			}
 
@@ -362,7 +468,7 @@ func (a *Account) ExportMessages(log *mlog.Log, archiver Archiver, maildir bool,
 			return err
 		}
 	}
-	if err := finishMbox(); err != nil {
+	if err := finishMailbox(); err != nil {
 		return err
 	}
 
@@ -373,7 +479,11 @@ func (a *Account) ExportMessages(log *mlog.Log, archiver Archiver, maildir bool,
 			return err
 		}
 		if _, err := w.Write([]byte(errors)); err != nil {
+			w.Close()
 			log.Errorx("writing errors.txt to archive", err)
+			return err
+		}
+		if err := w.Close(); err != nil {
 			return err
 		}
 	}

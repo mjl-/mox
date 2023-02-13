@@ -161,7 +161,7 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 				log.Errorx("exporting mail close", err)
 			}
 		}()
-		if err := acc.ExportMessages(log, archiver, maildir, ""); err != nil {
+		if err := store.ExportMessages(log, acc.DB, acc.Dir, archiver, maildir, ""); err != nil {
 			log.Errorx("exporting mail", err)
 		}
 
