@@ -614,7 +614,7 @@ const init = async () => {
 		if (curhash === window.location.hash) {
 			return
 		}
-		let h = window.location.hash
+		let h = decodeURIComponent(window.location.hash)
 		if (h !== '' && h.substring(0, 1) == '#') {
 			h = h.substring(1)
 		}
