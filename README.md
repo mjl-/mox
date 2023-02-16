@@ -5,8 +5,8 @@ See Quickstart below to get started.
 Mox features:
 
 - Quick and easy to start/maintain mail server, for your own domain(s).
-- SMTP for receiving and submitting email.
-- IMAP4 for giving email clients access to email.
+- SMTP (with extensions) for receiving and submitting email.
+- IMAP4 (with extensions) for giving email clients access to email.
 - Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
 - SPF, verifying that a remote host is allowed to sent email for a domain.
 - DKIM, verifying that a message is signed by the claimed sender domain,
@@ -36,8 +36,9 @@ Mox features:
 Not supported (but perhaps in the future):
 
 - Webmail
-- Functioning as SMTP relay
 - HTTP-based API for sending messages and receiving delivery feedback
+- Calendaring
+- Functioning as SMTP relay
 - Forwarding (to an external address)
 - Autoresponders
 - POP3
@@ -45,7 +46,6 @@ Not supported (but perhaps in the future):
 - Sieve for filtering
 - PGP or S/MIME
 - Mailing list manager
-- Calendaring
 - Support for pluggable delivery mechanisms.
 
 Mox has automated tests, including for interoperability with Postfix for SMTP.
