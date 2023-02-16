@@ -140,12 +140,13 @@ documentation.
 
 ## How do I import/export email?
 
-Use the "mox import maildir" or "mox import mbox" subcommands. You could also
-use your IMAP email client, add your mox account, and copy or move messages
-from one account to the other.
+Use the import functionality on the accounts web page to import a zip/tgz with
+maildirs/mbox files, or use the "mox import maildir" or "mox import mbox"
+subcommands. You could also use your IMAP email client, add your mox account,
+and copy or move messages from one account to the other.
 
-Similarly, see the "mox export maildir" and "mox export mbox" subcommands to
-export email.
+Similarly, see the export functionality on the accounts web page and the "mox
+export maildir" and "mox export mbox" subcommands to export email.
 
 ## How can I help?
 
@@ -168,8 +169,8 @@ work.
 ## How do I change my password?
 
 Regular users (doing IMAP/SMTP with authentication) can change their password
-at the account page, e.g. http://127.0.0.1/account/. Or you can set a password
-with "mox setaccountpassword".
+at the account page, e.g. http://127.0.0.1/. Or you can set a password with "mox
+setaccountpassword".
 
 The admin password can be changed with "mox setadminpassword".
 

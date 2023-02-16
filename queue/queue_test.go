@@ -39,11 +39,11 @@ func setup(t *testing.T) (*store.Account, func()) {
 	err = acc.SetPassword("testtest")
 	tcheck(t, err, "set password")
 	switchDone := store.Switchboard()
-	mox.Shutdown = make(chan struct{})
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
 	return acc, func() {
 		acc.Close()
-		close(mox.Shutdown)
-		mox.Shutdown = make(chan struct{})
+		mox.ShutdownCancel()
+		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
 		Shutdown()
 		close(switchDone)
 	}
@@ -341,9 +341,9 @@ func TestQueueStart(t *testing.T) {
 	defer cleanup()
 	done := make(chan struct{}, 1)
 	defer func() {
-		close(mox.Shutdown)
+		mox.ShutdownCancel()
 		<-done
-		mox.Shutdown = make(chan struct{})
+		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
 	}()
 	err := Start(resolver, done)
 	tcheck(t, err, "queue start")

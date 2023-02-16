@@ -647,7 +647,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	}()
 
 	select {
-	case <-mox.Shutdown:
+	case <-mox.Shutdown.Done():
 		// ../rfc/9051:5381
 		c.writelinef("* BYE mox shutting down")
 		panic(errIO)
@@ -777,7 +777,7 @@ func (c *conn) command() {
 	c.cmdMetric = "(unrecognized)"
 
 	select {
-	case <-mox.Shutdown:
+	case <-mox.Shutdown.Done():
 		// ../rfc/9051:5375
 		c.writelinef("* BYE shutting down")
 		panic(errIO)
@@ -2522,7 +2522,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				MsgPrefix:     msgPrefix,
 			}
 			isSent := name == "Sent"
-			c.account.DeliverX(c.log, tx, &msg, msgFile, true, isSent, true)
+			c.account.DeliverX(c.log, tx, &msg, msgFile, true, isSent, true, false)
 		})
 
 		// Fetch pending changes, possibly with new UIDs, so we can apply them before adding our own new UID.
@@ -2572,7 +2572,7 @@ wait:
 		case changes := <-c.comm.Changes:
 			c.applyChanges(changes, false)
 			c.xflush()
-		case <-mox.Shutdown:
+		case <-mox.Shutdown.Done():
 			// ../rfc/9051:5375
 			c.writelinef("* BYE shutting down")
 			panic(errIO)

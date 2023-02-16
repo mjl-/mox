@@ -59,6 +59,19 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "ImportAbort",
+			"Docs": "ImportAbort aborts an import that is in progress. If the import exists and isn't\nfinished, no changes will have been made by the import.",
+			"Params": [
+				{
+					"Name": "importToken",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
 		}
 	],
 	"Sections": [],

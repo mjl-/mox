@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -106,6 +107,63 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
 	log := xlog.WithContext(ctx).Fields(mlog.Field("userauth", ""))
 
+	// Without authentication. The token is unguessable.
+	if r.URL.Path == "/importprogress" {
+		if r.Method != "GET" {
+			http.Error(w, "405 - method not allowed - get required", http.StatusMethodNotAllowed)
+			return
+		}
+
+		q := r.URL.Query()
+		token := q.Get("token")
+		if token == "" {
+			http.Error(w, "400 - bad request - missing token", http.StatusBadRequest)
+			return
+		}
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			log.Error("internal error: ResponseWriter not a http.Flusher")
+			http.Error(w, "500 - internal error - cannot sync to http connection", 500)
+			return
+		}
+
+		l := importListener{token, make(chan importEvent, 100), make(chan bool, 1)}
+		importers.Register <- &l
+		ok = <-l.Register
+		if !ok {
+			http.Error(w, "400 - bad request - unknown token, import may have finished more than a minute ago", http.StatusBadRequest)
+			return
+		}
+		defer func() {
+			importers.Unregister <- &l
+		}()
+
+		h := w.Header()
+		h.Set("Content-Type", "text/event-stream")
+		h.Set("Cache-Control", "no-cache")
+		_, err := w.Write([]byte(": keepalive\n\n"))
+		if err != nil {
+			return
+		}
+		flusher.Flush()
+
+		ctx := r.Context()
+		for {
+			select {
+			case e := <-l.Events:
+				_, err := w.Write(e.SSEMsg)
+				flusher.Flush()
+				if err != nil {
+					return
+				}
+
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
 	accName := checkAccountAuth(ctx, log, w, r)
 	if accName == "" {
 		// Response already sent.
@@ -164,6 +222,54 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		if err := store.ExportMessages(log, acc.DB, acc.Dir, archiver, maildir, ""); err != nil {
 			log.Errorx("exporting mail", err)
 		}
+
+	case "/import":
+		if r.Method != "POST" {
+			http.Error(w, "405 - method not allowed - post required", http.StatusMethodNotAllowed)
+			return
+		}
+
+		f, _, err := r.FormFile("file")
+		if err != nil {
+			if errors.Is(err, http.ErrMissingFile) {
+				http.Error(w, "400 - bad request - missing file", http.StatusBadRequest)
+			} else {
+				http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		defer f.Close()
+		skipMailboxPrefix := r.FormValue("skipMailboxPrefix")
+		tmpf, err := os.CreateTemp("", "mox-import")
+		if err != nil {
+			http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer func() {
+			if tmpf != nil {
+				tmpf.Close()
+			}
+		}()
+		if err := os.Remove(tmpf.Name()); err != nil {
+			log.Errorx("removing temporary file", err)
+			http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if _, err := io.Copy(tmpf, f); err != nil {
+			log.Errorx("copying import to temporary file", err)
+			http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		token, err := importStart(log, accName, tmpf, skipMailboxPrefix)
+		if err != nil {
+			log.Errorx("starting import", err)
+			http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		tmpf = nil // importStart is now responsible for closing.
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ImportToken": token})
 
 	default:
 		if strings.HasPrefix(r.URL.Path, "/api/") {
@@ -229,4 +335,12 @@ func (Account) DestinationSave(ctx context.Context, destName string, oldDest, ne
 
 	err := mox.DestinationSave(ctx, accountName, destName, newDest)
 	xcheckf(ctx, err, "saving destination")
+}
+
+// ImportAbort aborts an import that is in progress. If the import exists and isn't
+// finished, no changes will have been made by the import.
+func (Account) ImportAbort(ctx context.Context, importToken string) error {
+	req := importAbortRequest{importToken, make(chan error)}
+	importers.Abort <- req
+	return <-req.Response
 }

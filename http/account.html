@@ -130,10 +130,132 @@ const domainString = d => {
 	return d.ASCII
 }
 
+const box = (color, ...l) => [
+	dom.div(
+		style({
+			display: 'inline-block',
+			padding: '.25em .5em',
+			backgroundColor: color,
+			borderRadius: '3px',
+			margin: '.5ex 0',
+		}),
+		l,
+	),
+	dom.br(),
+]
+
+const green = '#1dea20'
+const yellow = '#ffe400'
+const red = '#ff7443'
+const blue = '#8bc8ff'
+
 const index = async () => {
 	const [domain, destinations] = await api.Destinations()
 
-	let form, fieldset, password1, password2, passwordHint
+	let passwordForm, passwordFieldset, password1, password2, passwordHint
+
+	let importForm, importFieldset, mailboxFile, mailboxFileHint, mailboxPrefix, mailboxPrefixHint, importProgress, importAbortBox, importAbort
+
+	const importTrack = async (token) => {
+		const importConnection = dom.div('Waiting for updates...')
+		importProgress.appendChild(importConnection)
+
+		let countsTbody
+		let counts = {} // mailbox -> elem
+
+		let problems // element
+
+		await new Promise((resolve, reject) => {
+			const eventSource = new window.EventSource('importprogress?token=' + encodeURIComponent(token))
+			eventSource.addEventListener('open', function(e) {
+				console.log('eventsource open', {e})
+				dom._kids(importConnection, dom.div('Waiting for updates, connected...'))
+
+				dom._kids(importAbortBox,
+					importAbort=dom.button('Abort import', attr({title: 'If the import is not yet finished, it can be aborted and no messages will have been imported.'}), async function click(e) {
+						try {
+							await api.ImportAbort(token)
+						} catch (err) {
+							console.log({err})
+							window.alert('Error: ' + err.message)
+						}
+						// On success, the event source will get an aborted notification and shutdown the connection.
+					})
+				)
+			})
+			eventSource.addEventListener('error', function(e) {
+				console.log('eventsource error', {e})
+				dom._kids(importConnection, box(red, 'Connection error'))
+				reject({message: 'Connection error'})
+			})
+			eventSource.addEventListener('count', (e) => {
+				const data = JSON.parse(e.data) // {Mailbox: ..., Count: ...}
+				console.log('import count event', {e, data})
+				if (!countsTbody) {
+					importProgress.appendChild(
+						dom.div(
+							dom.br(),
+							dom.h3('Importing mailboxes and messages...'),
+							dom.table(
+								dom.thead(
+									dom.tr(dom.th('Mailbox'), dom.th('Messages')),
+								),
+								countsTbody=dom.tbody(),
+							),
+						)
+					)
+				}
+				let elem = counts[data.Mailbox]
+				if (!elem) {
+					countsTbody.appendChild(
+						dom.tr(
+							dom.td(data.Mailbox),
+							elem=dom.td(style({textAlign: 'right'}), ''+data.Count),
+						),
+					)
+					counts[data.Mailbox] = elem
+				}
+				dom._kids(elem, ''+data.Count)
+			})
+			eventSource.addEventListener('problem', (e) => {
+				const data = JSON.parse(e.data) // {Message: ...}
+				console.log('import problem event', {e, data})
+				if (!problems) {
+					importProgress.appendChild(
+						dom.div(
+							dom.br(),
+							dom.h3('Problems during import'),
+							problems=dom.div(),
+						),
+					)
+				}
+				problems.appendChild(dom.div(box(yellow, data.Message)))
+			})
+			eventSource.addEventListener('done', (e) => {
+				console.log('import done event', {e})
+				importProgress.appendChild(dom.div(dom.br(), box(blue, 'Import finished')))
+
+				eventSource.close()
+				dom._kids(importConnection)
+				dom._kids(importAbortBox)
+				window.sessionStorage.removeItem('ImportToken')
+
+				resolve()
+			})
+			eventSource.addEventListener('aborted', function(e) {
+				console.log('import aborted event', {e})
+
+				importProgress.appendChild(dom.div(dom.br(), box(red, 'Import aborted, no message imported')))
+
+				eventSource.close()
+				dom._kids(importConnection)
+				dom._kids(importAbortBox)
+				window.sessionStorage.removeItem('ImportToken')
+
+				reject({message: 'Import aborted'})
+			})
+		})
+	}
 
 	const page = document.getElementById('page')
 	dom._kids(page,
@@ -154,8 +276,8 @@ const index = async () => {
 		),
 		dom.br(),
 		dom.h2('Change password'),
-		form=dom.form(
-			fieldset=dom.fieldset(
+		passwordForm=dom.form(
+			passwordFieldset=dom.fieldset(
 				dom.label(
 					style({display: 'inline-block'}),
 					'New password',
@@ -182,16 +304,16 @@ const index = async () => {
 					window.alert('Passwords do not match.')
 					return
 				}
-				fieldset.disabled = true
+				passwordFieldset.disabled = true
 				try {
 					await api.SetPassword(password1.value)
 					window.alert('Password has been changed.')
-					form.reset()
+					passwordForm.reset()
 				} catch (err) {
 					console.log({err})
 					window.alert('Error: ' + err.message)
 				} finally {
-					fieldset.disabled = false
+					passwordFieldset.disabled = false
 				}
 			},
 		),
@@ -204,8 +326,138 @@ const index = async () => {
 			dom.li(dom.a('mail-export-mbox.tgz', attr({href: 'mail-export-mbox.tgz'}))),
 			dom.li(dom.a('mail-export-mbox.zip', attr({href: 'mail-export-mbox.zip'}))),
 		),
+		dom.br(),
+		dom.h2('Import'),
+		dom.p('Import messages from a .zip or .tgz file with maildirs and/or mbox files.'),
+		importForm=dom.form(
+			async function submit(e) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				const request = () => {
+					return new Promise((resolve, reject) => {
+						// Browsers can do everything. Except show a progress bar while uploading...
+						let progressBox, progressPercentage, progressBar
+						dom._kids(importProgress,
+							progressBox=dom.div(
+								dom.div('Uploading... ', progressPercentage=dom.span()),
+							),
+						)
+						importProgress.style.display = ''
+
+						const xhr = new window.XMLHttpRequest()
+						xhr.open('POST', 'import', true)
+						xhr.upload.addEventListener('progress', (e) => {
+							if (!e.lengthComputable) {
+								return
+							}
+							const pct = Math.floor(100*e.loaded/e.total)
+							dom._kids(progressPercentage, pct+'%')
+						})
+						xhr.addEventListener('load', () => {
+							console.log('upload done', {xhr: xhr, status: xhr.status})
+							if (xhr.status !== 200) {
+								reject({message: 'status '+xhr.status})
+								return
+							}
+							let resp
+							try {
+								resp = JSON.parse(xhr.responseText)
+							} catch (err) {
+								reject({message: 'parsing resonse json: '+err.message})
+								return
+							}
+							resolve(resp)
+						})
+						xhr.addEventListener('error', (e) => reject({message: 'upload error', event: e}))
+						xhr.addEventListener('abort', (e) => reject({message: 'upload aborted', event: e}))
+						xhr.send(new window.FormData(importForm))
+					})
+				}
+				try {
+					const p = request()
+					importFieldset.disabled = true
+					const result = await p
+
+					try {
+						window.sessionStorage.setItem('ImportToken', result.ImportToken)
+					} catch (err) {
+						console.log('storing import token in session storage', {err})
+						// Ignore error, could be some browser security thing like private browsing.
+					}
+
+					await importTrack(result.ImportToken)
+				} catch (err) {
+					console.log({err})
+					window.alert('Error: '+err.message)
+				} finally {
+					importFieldset.disabled = false
+				}
+			},
+			importFieldset=dom.fieldset(
+				dom.div(
+					style({marginBottom: '1ex'}),
+					dom.label(
+						dom.div(style({marginBottom: '.5ex'}), 'File'),
+						mailboxFile=dom.input(attr({type: 'file', required: '', name: 'file'}), function focus() {
+							mailboxFileHint.style.display = ''
+						}),
+					),
+					mailboxFileHint=dom.p(style({display: 'none', fontStyle: 'italic', marginTop: '.5ex'}), 'This file must either be a zip file or a gzipped tar file with mbox and/or maildir mailboxes. For maildirs, an optional file "dovecot-keywords" is read additional keywords, like Forwarded/Junk/NotJunk. If an imported mailbox already exists by name, messages are added to the existing mailbox. If a mailbox does not yet exist it will be created.'),
+				),
+				dom.div(
+					style({marginBottom: '1ex'}),
+					dom.label(
+						dom.div(style({marginBottom: '.5ex'}), 'Skip mailbox prefix (optional)'),
+						mailboxPrefix=dom.input(attr({name: 'skipMailboxPrefix'}), function focus() {
+							mailboxPrefixHint.style.display = ''
+						}),
+					),
+					mailboxPrefixHint=dom.p(style({display: 'none', fontStyle: 'italic', marginTop: '.5ex'}), 'If set, any mbox/maildir path with this prefix will have it stripped before importing. For example, if all mailboxes are in a directory "Takeout", specify that path in the field above so mailboxes like "Takeout/Inbox.mbox" are imported into a mailbox called "Inbox" instead of "Takeout/Inbox".'),
+				),
+				dom.div(
+					dom.button('Upload and import'),
+					dom.p(style({fontStyle: 'italic', marginTop: '.5ex'}), 'The file is uploaded first, then its messages are imported. Importing is done in a transaction, you can abort the entire import before it is finished.'),
+				),
+			),
+		),
+		importAbortBox=dom.div(), // Outside fieldset because it gets disabled, above progress because may be scrolling it down quickly with problems.
+		importProgress=dom.div(
+			style({display: 'none'}),
+		),
 		footer,
 	)
+
+	// Try to show the progress of an earlier import session. The user may have just
+	// refreshed the browser.
+	let importToken
+	try {
+		importToken = window.sessionStorage.getItem('ImportToken')
+	} catch (err) {
+		console.log('looking up ImportToken in session storage', {err})
+		return
+	}
+	if (!importToken) {
+		return
+	}
+	importFieldset.disabled = true
+	dom._kids(importProgress,
+		dom.div(
+			dom.div('Reconnecting to import...'),
+		),
+	)
+	importProgress.style.display = ''
+	importTrack(importToken)
+	.catch((err) => {
+		if (window.confirm('Error reconnecting to import. Remove this import session?')) {
+			window.sessionStorage.removeItem('ImportToken')
+			dom._kids(importProgress)
+			importProgress.style.display = 'none'
+		}
+	})
+	.finally(() => {
+		importFieldset.disabled = false
+	})
 }
 
 const destination = async (name) => {

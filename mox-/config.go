@@ -283,6 +283,9 @@ func writeDynamic(ctx context.Context, c config.Dynamic) error {
 
 // MustLoadConfig loads the config, quitting on errors.
 func MustLoadConfig() {
+	Shutdown, ShutdownCancel = context.WithCancel(context.Background())
+	Context, ContextCancel = context.WithCancel(context.Background())
+
 	errs := LoadConfig(context.Background())
 	if len(errs) > 1 {
 		xlog.Error("loading config file: multiple errors")
@@ -396,7 +399,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 		}
 		acmeDir := dataDirPath(configFile, c.DataDir, "acme")
 		os.MkdirAll(acmeDir, 0770)
-		manager, err := autotls.Load(name, acmeDir, acme.ContactEmail, acme.DirectoryURL, Shutdown)
+		manager, err := autotls.Load(name, acmeDir, acme.ContactEmail, acme.DirectoryURL, Shutdown.Done())
 		if err != nil {
 			addErrorf("loading ACME identity for %q: %s", name, err)
 		}

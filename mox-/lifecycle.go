@@ -11,11 +11,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// Shutdown is closed when a graceful shutdown is initiated. SMTP, IMAP, periodic
+// Shutdown is canceled when a graceful shutdown is initiated. SMTP, IMAP, periodic
 // processes should check this before starting a new operation. If true, the
 // operation should be aborted, and new connections should receive a message that
 // the service is currently not available.
-var Shutdown chan struct{}
+var Shutdown context.Context
+var ShutdownCancel func()
 
 // Context should be used as parent by all operations. It is canceled when mox is
 // shutdown, aborting all pending operations.
@@ -25,10 +26,9 @@ var Shutdown chan struct{}
 // context.WithTimeout based on this context, so those contexts are still canceled
 // when shutting down.
 //
-// Explicit read/write deadlines on connections, typically 30s.
-//
 // HTTP servers don't get graceful shutdown, their connections are just aborted.
 var Context context.Context
+var ContextCancel func()
 
 // Connections holds all active protocol sockets (smtp, imap). They will be given
 // an immediate read/write deadline shortly after initiating mox shutdown, after
@@ -61,7 +61,7 @@ func (c *connections) Register(nc net.Conn, protocol, listener string) {
 	// This can happen, when a connection was initiated before a shutdown, but it
 	// doesn't hurt to log it.
 	select {
-	case <-Shutdown:
+	case <-Shutdown.Done():
 		xlog.Error("new connection added while shutting down")
 		debug.PrintStack()
 	default:

@@ -1,6 +1,7 @@
 package mox
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
@@ -10,6 +11,7 @@ import (
 )
 
 func TestLifecycle(t *testing.T) {
+	Shutdown, ShutdownCancel = context.WithCancel(context.Background())
 	c := &connections{
 		conns:  map[net.Conn]connKind{},
 		gauges: map[connKind]prometheus.GaugeFunc{},

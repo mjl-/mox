@@ -356,7 +356,7 @@ func Start(resolver dns.Resolver, done chan struct{}) error {
 
 		for {
 			select {
-			case <-mox.Shutdown:
+			case <-mox.Shutdown.Done():
 				done <- struct{}{}
 				return
 			case <-kick:

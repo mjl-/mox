@@ -566,7 +566,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 	}()
 
 	select {
-	case <-mox.Shutdown:
+	case <-mox.Shutdown.Done():
 		// ../rfc/5321:2811 ../rfc/5321:1666 ../rfc/3463:420
 		c.writecodeline(smtp.C421ServiceUnavail, smtp.SeSys3NotAccepting2, "shutting down", nil)
 		return
@@ -679,7 +679,7 @@ func command(c *conn) {
 	// todo future: should we return an error for lines that are too long? perhaps for submission or in a pedantic mode. we would have to take extensions for MAIL into account. ../rfc/5321:3500 ../rfc/5321:3552
 
 	select {
-	case <-mox.Shutdown:
+	case <-mox.Shutdown.Done():
 		// ../rfc/5321:2811 ../rfc/5321:1666 ../rfc/3463:420
 		c.writecodeline(smtp.C421ServiceUnavail, smtp.SeSys3NotAccepting2, "shutting down", nil)
 		panic(errIO)

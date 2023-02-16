@@ -38,7 +38,7 @@ func refresh() int {
 		}
 
 		select {
-		case <-mox.Shutdown:
+		case <-mox.Shutdown.Done():
 			return refreshed
 		case <-ticker.C:
 		}

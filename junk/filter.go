@@ -79,6 +79,16 @@ func (f *Filter) ensureBloom() error {
 	return err
 }
 
+// CloseDiscard closes the filter, discarding any changes.
+func (f *Filter) CloseDiscard() error {
+	if f.closed {
+		return errClosed
+	}
+	err := f.db.Close()
+	*f = Filter{log: f.log, closed: true}
+	return err
+}
+
 // Close first saves the filter if it has modifications, then closes the database
 // connection and releases the bloom filter.
 func (f *Filter) Close() error {

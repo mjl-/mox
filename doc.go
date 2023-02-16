@@ -206,56 +206,44 @@ The message is printed to stdout and is in standard internet mail format.
 
 Import a maildir into an account.
 
-By default, messages will train the junk filter based on their flags and
-mailbox naming. If the destination mailbox name starts with "junk" or "spam"
-(case insensitive), messages are imported and trained as junk regardless of
-pre-existing flags. Use the -train=false flag to prevent training the filter.
+By default, messages will train the junk filter based on their flags and, if
+"automatic junk flags" configuration is set, based on mailbox naming.
 
 If the destination mailbox is "Sent", the recipients of the messages are added
 to the message metadata, causing later incoming messages from these recipients
 to be accepted, unless other reputation signals prevent that.
 
-The message "read"/"seen" flag can be overridden during import with the
--markread flag.
+Users can also import mailboxes/messages through the account web page by
+uploading a zip or tgz file with mbox and/or maildirs.
 
-Mailbox flags, like "seen", "answered", "forwarded", will be imported. An
-attempt is made to parse dovecot keyword files.
+Mailbox flags, like "seen", "answered", will be imported. An optional
+dovecot-keywords file can specify additional flags, like Forwarded/Junk/NotJunk.
 
 The maildir files/directories are read by the mox process, so make sure it has
 access to the maildir directories/files.
 
 	usage: mox import maildir accountname mailboxname maildir
-	  -markread
-	    	mark all imported messages as read
-	  -train
-	    	train junkfilter with messages (default true)
 
 # mox import mbox
 
 Import an mbox into an account.
 
-Using mbox is not recommended, maildir is a better format.
+Using mbox is not recommended, maildir is a better defined format.
 
-By default, messages will train the junk filter based on their flags and
-mailbox naming. If the destination mailbox name starts with "junk" or "spam"
-(case insensitive), messages are imported and trained as junk regardless of
-pre-existing flags. Use the -train=false flag to prevent training the filter.
+By default, messages will train the junk filter based on their flags and, if
+"automatic junk flags" configuration is set, based on mailbox naming.
 
 If the destination mailbox is "Sent", the recipients of the messages are added
 to the message metadata, causing later incoming messages from these recipients
 to be accepted, unless other reputation signals prevent that.
 
-The message "read"/"seen" flag can be overridden during import with the
--markread flag.
+Users can also import mailboxes/messages through the account web page by
+uploading a zip or tgz file with mbox and/or maildirs.
 
 The mailbox is read by the mox process, so make sure it has access to the
 maildir directories/files.
 
 	usage: mox import mbox accountname mailboxname mbox
-	  -markread
-	    	mark all imported messages as read
-	  -train
-	    	train junkfilter with messages (default true)
 
 # mox export maildir
 

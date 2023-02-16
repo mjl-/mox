@@ -134,10 +134,6 @@ requested, other TLS certificates are requested on demand.
 	}
 	mox.MustLoadConfig()
 
-	mox.Shutdown = make(chan struct{})
-	servectx, servecancel := context.WithCancel(context.Background())
-	mox.Context = servectx
-
 	mlog.Logfmt = true
 	log := mlog.New("serve")
 
@@ -163,28 +159,33 @@ requested, other TLS certificates are requested on demand.
 	log.Print("starting up", mlog.Field("version", moxvar.Version))
 
 	shutdown := func() {
-		// We indicate we are shutting down. Causes new connections and new SMTP commands to be rejected. Should stop active connections pretty quickly.
-		close(mox.Shutdown)
+		// We indicate we are shutting down. Causes new connections and new SMTP commands
+		// to be rejected. Should stop active connections pretty quickly.
+		mox.ShutdownCancel()
 
 		// Now we are going to wait for all connections to be gone, up to a timeout.
 		done := mox.Connections.Done()
+		second := time.Tick(time.Second)
 		select {
 		case <-done:
-			log.Print("clean shutdown")
+			log.Print("connections shutdown, waiting until 1 second passed")
+			<-second
 
 		case <-time.Tick(3 * time.Second):
-			// We now cancel all pending operations, and set an immediate deadline on sockets. Should get us a clean shutdown relatively quickly.
-			servecancel()
+			// We now cancel all pending operations, and set an immediate deadline on sockets.
+			// Should get us a clean shutdown relatively quickly.
+			mox.ContextCancel()
 			mox.Connections.Shutdown()
 
+			second := time.Tick(time.Second)
 			select {
 			case <-done:
-				log.Print("no more connections, shutdown is clean")
-			case <-time.Tick(time.Second):
+				log.Print("no more connections, shutdown is clean, waiting until 1 second passed")
+				<-second // Still wait for second, giving processes like imports a chance to clean up.
+			case <-second:
 				log.Print("shutting down with pending sockets")
 			}
 		}
-		servecancel() // Keep go vet happy.
 		if err := os.Remove(mox.DataDirPath("ctl")); err != nil {
 			log.Errorx("removing ctl unix domain socket during shutdown", err)
 		}

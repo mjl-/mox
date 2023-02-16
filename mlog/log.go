@@ -154,6 +154,14 @@ func (l *Log) MoreFields(fn func() []Pair) *Log {
 	return &nl
 }
 
+// Check logs an error if err is not nil. Intended for logging errors that are good
+// to know, but would not influence program flow.
+func (l *Log) Check(err error, text string, fields ...Pair) {
+	if err != nil {
+		l.Errorx(text, err, fields...)
+	}
+}
+
 func (l *Log) Trace(traceLevel Level, text string) bool {
 	return l.logx(traceLevel, nil, text)
 }

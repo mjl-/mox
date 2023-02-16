@@ -147,13 +147,13 @@ func TestRefresh(t *testing.T) {
 		t.Fatalf("delete record that would be refreshed: %v", err)
 	}
 	mox.Context = context.Background()
-	mox.Shutdown = make(chan struct{})
-	close(mox.Shutdown)
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
+	mox.ShutdownCancel()
 	n := refresh()
 	if n != 0 {
 		t.Fatalf("refresh found unexpected work, n %d", n)
 	}
-	mox.Shutdown = make(chan struct{})
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
 }
 
 type pipeListener struct {

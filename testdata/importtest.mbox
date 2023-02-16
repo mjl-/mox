@@ -9,10 +9,12 @@ Date: Wed, 10 Nov 2021 23:47:13 +0100
 Message-ID: <12312312-f95c-09ec-97c6-94d124f0932d@mox.test>
 MIME-Version: 1.0
 Status: RO
+X-Status: AFTD
+X-Keywords: $NotJunk,$Forwarded
 Content-Length: 15
 Lines: 3
 
-test
+>From testing
 test2
 end
 

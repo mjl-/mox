@@ -574,7 +574,7 @@ func (a *Account) WithRLock(fn func()) {
 // Must be called with account rlock or wlock.
 //
 // Caller must broadcast new message.
-func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, isSent, sync bool) {
+func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, isSent, sync, notrain bool) {
 	mb := Mailbox{ID: m.MailboxID}
 	err := tx.Get(&mb)
 	xcheckf(err, "get mailbox")
@@ -671,6 +671,10 @@ func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os
 		xcheckf(err, "sync directory")
 	}
 
+	if notrain && m.NeedsTraining() {
+		// If this ever happens, hopefully we'll get bug reports about it.
+		log.Error("deliver of message that unexpectedly needs training", mlog.Field("messageid", m.ID), mlog.Field("trainedjunk", m.TrainedJunk), mlog.Field("flags", m.Flags))
+	}
 	l := []Message{*m}
 	err = a.RetrainMessages(log, tx, l, false)
 	xcheckf(err, "training junkfilter")
@@ -787,14 +791,14 @@ func (a *Account) Subjectpass(email string) (key string, err error) {
 // If subscribe is true, any mailboxes that were created will also be subscribed to.
 // Caller must hold account wlock.
 // Caller must propagate changes if any.
-func (a *Account) MailboxEnsureX(tx *bstore.Tx, name string, subscribe bool) (mb Mailbox, changes []Change) {
+func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool) (mb Mailbox, changes []Change, rerr error) {
 	if norm.NFC.String(name) != name {
-		panic("mailbox name not normalized")
+		return Mailbox{}, nil, fmt.Errorf("mailbox name not normalized")
 	}
 
 	// Quick sanity check.
 	if strings.EqualFold(name, "inbox") && name != "Inbox" {
-		panic("bad casing for inbox")
+		return Mailbox{}, nil, fmt.Errorf("bad casing for inbox")
 	}
 
 	elems := strings.Split(name, "/")
@@ -803,7 +807,9 @@ func (a *Account) MailboxEnsureX(tx *bstore.Tx, name string, subscribe bool) (mb
 		return mb.Name == elems[0] || strings.HasPrefix(mb.Name, elems[0]+"/")
 	})
 	l, err := q.List()
-	xcheckf(err, "list mailboxes")
+	if err != nil {
+		return Mailbox{}, nil, fmt.Errorf("list mailboxes: %v", err)
+	}
 
 	mailboxes := map[string]Mailbox{}
 	for _, xmb := range l {
@@ -822,24 +828,39 @@ func (a *Account) MailboxEnsureX(tx *bstore.Tx, name string, subscribe bool) (mb
 			continue
 		}
 		uidval, err := a.NextUIDValidity(tx)
-		xcheckf(err, "next uid validity")
+		if err != nil {
+			return Mailbox{}, nil, fmt.Errorf("next uid validity: %v", err)
+		}
 		mb = Mailbox{
 			Name:        p,
 			UIDValidity: uidval,
 			UIDNext:     1,
 		}
 		err = tx.Insert(&mb)
-		xcheckf(err, "creating new mailbox")
+		if err != nil {
+			return Mailbox{}, nil, fmt.Errorf("creating new mailbox: %v", err)
+		}
 
+		change := ChangeAddMailbox{Name: p}
 		if subscribe {
 			err := tx.Insert(&Subscription{p})
 			if err != nil && !errors.Is(err, bstore.ErrUnique) {
-				xcheckf(err, "subscribing to mailbox")
+				return Mailbox{}, nil, fmt.Errorf("subscribing to mailbox: %v", err)
 			}
+			change.Flags = []string{`\Subscribed`}
 		}
-		changes = append(changes, ChangeAddMailbox{Name: p, Flags: []string{`\Subscribed`}})
+		changes = append(changes, change)
 	}
-	return
+	return mb, changes, nil
+}
+
+// MailboxEnsureX calls MailboxEnsure, panicing with the error if it is not nil.
+func (a *Account) MailboxEnsureX(tx *bstore.Tx, name string, subscribe bool) (Mailbox, []Change) {
+	mb, changes, err := a.MailboxEnsure(tx, name, subscribe)
+	if err != nil {
+		panic(err)
+	}
+	return mb, changes
 }
 
 // Check if mailbox exists.
@@ -1008,7 +1029,7 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 		m.MailboxOrigID = mb.ID
 		changes = append(changes, chl...)
 
-		a.DeliverX(log, tx, m, msgFile, consumeFile, mb.Sent, true)
+		a.DeliverX(log, tx, m, msgFile, consumeFile, mb.Sent, true, false)
 		return nil
 	})
 	// todo: if rename succeeded but transaction failed, we should remove the file.
