@@ -30,10 +30,10 @@ func queueDSN(c *conn, rcptTo smtp.Path, m dsn.Message) error {
 	}
 	defer func() {
 		if f != nil {
-			if err := os.Remove(f.Name()); err != nil {
-				c.log.Errorx("removing temporary dsn message file", err)
-			}
-			f.Close()
+			err := os.Remove(f.Name())
+			c.log.Check(err, "removing temporary dsn message file")
+			err = f.Close()
+			c.log.Check(err, "closing temporary dsn message file")
 		}
 	}()
 	if _, err := f.Write([]byte(buf)); err != nil {
@@ -48,9 +48,8 @@ func queueDSN(c *conn, rcptTo smtp.Path, m dsn.Message) error {
 	if err := queue.Add(c.log, "", smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), nil, f, bufUTF8, true); err != nil {
 		return err
 	}
-	if err := f.Close(); err != nil {
-		c.log.Errorx("closing dsn file", err)
-	}
+	err = f.Close()
+	c.log.Check(err, "closing dsn file")
 	f = nil
 	return nil
 }

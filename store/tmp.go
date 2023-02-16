@@ -19,7 +19,8 @@ func CreateMessageTemp(pattern string) (*os.File, error) {
 	}
 	err = f.Chmod(0660)
 	if err != nil {
-		f.Close()
+		xerr := f.Close()
+		xlog.Check(xerr, "closing temp message file after chmod error")
 		return nil, err
 	}
 	return f, err

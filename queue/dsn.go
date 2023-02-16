@@ -71,7 +71,10 @@ func queueDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg stri
 		return
 	}
 	msgr := store.FileMsgReader(m.MsgPrefix, msgf)
-	defer msgr.Close()
+	defer func() {
+		err := msgr.Close()
+		log.Check(err, "closing message reader after queuing dsn")
+	}()
 	headers, err := message.ReadHeaders(bufio.NewReader(msgr))
 	if err != nil {
 		qlog("reading headers of queued message", err)
@@ -140,9 +143,8 @@ func queueDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg stri
 		mailbox = mox.Conf.Static.Postmaster.Mailbox
 	}
 	defer func() {
-		if err := acc.Close(); err != nil {
-			log.Errorx("queue dsn: closing account", err, mlog.Field("sender", m.Sender().XString(m.SMTPUTF8)), mlog.Field("kind", kind))
-		}
+		err := acc.Close()
+		log.Check(err, "queue dsn: closing account", mlog.Field("sender", m.Sender().XString(m.SMTPUTF8)), mlog.Field("kind", kind))
 	}()
 
 	msgFile, err := store.CreateMessageTemp("queue-dsn")
@@ -152,10 +154,10 @@ func queueDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg stri
 	}
 	defer func() {
 		if msgFile != nil {
-			if err := os.Remove(msgFile.Name()); err != nil {
-				log.Errorx("removing message file", err, mlog.Field("path", msgFile.Name()))
-			}
-			msgFile.Close()
+			err := os.Remove(msgFile.Name())
+			log.Check(err, "removing message file", mlog.Field("path", msgFile.Name()))
+			err = msgFile.Close()
+			log.Check(err, "closing message file")
 		}
 	}()
 
@@ -176,6 +178,7 @@ func queueDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg stri
 			return
 		}
 	})
-	msgFile.Close()
+	err = msgFile.Close()
+	log.Check(err, "closing dsn file")
 	msgFile = nil
 }

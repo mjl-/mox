@@ -152,9 +152,8 @@ requested, other TLS certificates are requested on demand.
 		if _, err := fmt.Fprint(f, "ok\n"); err != nil {
 			log.Infox("writing ok to restart ctl socket", err)
 		}
-		if err := f.Close(); err != nil {
-			log.Errorx("closing restart ctl socket", err)
-		}
+		err = f.Close()
+		log.Check(err, "closing restart ctl socket")
 	}
 	log.Print("starting up", mlog.Field("version", moxvar.Version))
 
@@ -186,9 +185,8 @@ requested, other TLS certificates are requested on demand.
 				log.Print("shutting down with pending sockets")
 			}
 		}
-		if err := os.Remove(mox.DataDirPath("ctl")); err != nil {
-			log.Errorx("removing ctl unix domain socket during shutdown", err)
-		}
+		err := os.Remove(mox.DataDirPath("ctl"))
+		log.Check(err, "removing ctl unix domain socket during shutdown")
 	}
 
 	if err := moxio.CheckUmask(); err != nil {
@@ -246,7 +244,10 @@ requested, other TLS certificates are requested on demand.
 				log.Infox("open account for postmaster changelog delivery", err)
 				return next
 			}
-			defer a.Close()
+			defer func() {
+				err := a.Close()
+				log.Check(err, "closing account")
+			}()
 			f, err := store.CreateMessageTemp("changelog")
 			if err != nil {
 				log.Infox("making temporary message file for changelog delivery", err)
@@ -261,9 +262,8 @@ requested, other TLS certificates are requested on demand.
 			m.Size = int64(n)
 			if err := a.DeliverMailbox(log, mox.Conf.Static.Postmaster.Mailbox, m, f, true); err != nil {
 				log.Infox("changelog delivery", err)
-				if err := os.Remove(f.Name()); err != nil {
-					log.Infox("removing temporary changelog message after delivery failure", err)
-				}
+				err := os.Remove(f.Name())
+				log.Check(err, "removing temporary changelog message after delivery failure")
 			}
 			log.Info("delivered changelog", mlog.Field("current", current), mlog.Field("lastknown", lastknown), mlog.Field("latest", latest))
 			if err := mox.StoreLastKnown(latest); err != nil {
@@ -313,7 +313,7 @@ requested, other TLS certificates are requested on demand.
 	go monitorDNSBL(log)
 
 	ctlpath := mox.DataDirPath("ctl")
-	os.Remove(ctlpath)
+	_ = os.Remove(ctlpath)
 	ctl, err := net.Listen("unix", ctlpath)
 	if err != nil {
 		log.Fatalx("listen on ctl unix domain socket", err)

@@ -94,7 +94,8 @@ func checkAccountAuth(ctx context.Context, log *mlog.Log, w http.ResponseWriter,
 	} else {
 		authResult = "ok"
 		accName := acc.Name
-		acc.Close()
+		err := acc.Close()
+		log.Check(err, "closing account")
 		return accName
 	}
 	// note: browsers don't display the realm to prevent users getting confused by malicious realm messages.
@@ -183,9 +184,9 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		f, err := os.Open("http/account.html")
 		if err == nil {
 			defer f.Close()
-			io.Copy(w, f)
+			_, _ = io.Copy(w, f)
 		} else {
-			w.Write(accountHTML)
+			_, _ = w.Write(accountHTML)
 		}
 
 	case "/mail-export-maildir.tgz", "/mail-export-maildir.zip", "/mail-export-mbox.tgz", "/mail-export-mbox.zip":
@@ -198,7 +199,10 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "500 - internal server error", http.StatusInternalServerError)
 			return
 		}
-		defer acc.Close()
+		defer func() {
+			err := acc.Close()
+			log.Check(err, "closing account")
+		}()
 
 		var archiver store.Archiver
 		if tgz {
@@ -207,7 +211,7 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 
 			gzw := gzip.NewWriter(w)
 			defer func() {
-				gzw.Close()
+				_ = gzw.Close()
 			}()
 			archiver = store.TarArchiver{Writer: tar.NewWriter(gzw)}
 		} else {
@@ -215,9 +219,8 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 			archiver = store.ZipArchiver{Writer: zip.NewWriter(w)}
 		}
 		defer func() {
-			if err := archiver.Close(); err != nil {
-				log.Errorx("exporting mail close", err)
-			}
+			err := archiver.Close()
+			log.Check(err, "exporting mail close")
 		}()
 		if err := store.ExportMessages(log, acc.DB, acc.Dir, archiver, maildir, ""); err != nil {
 			log.Errorx("exporting mail", err)
@@ -238,7 +241,10 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		defer f.Close()
+		defer func() {
+			err := f.Close()
+			log.Check(err, "closing form file")
+		}()
 		skipMailboxPrefix := r.FormValue("skipMailboxPrefix")
 		tmpf, err := os.CreateTemp("", "mox-import")
 		if err != nil {
@@ -247,7 +253,8 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		}
 		defer func() {
 			if tmpf != nil {
-				tmpf.Close()
+				err := tmpf.Close()
+				log.Check(err, "closing uploaded file")
 			}
 		}()
 		if err := os.Remove(tmpf.Name()); err != nil {
@@ -269,7 +276,7 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		tmpf = nil // importStart is now responsible for closing.
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"ImportToken": token})
+		_ = json.NewEncoder(w).Encode(map[string]string{"ImportToken": token})
 
 	default:
 		if strings.HasPrefix(r.URL.Path, "/api/") {
@@ -294,7 +301,10 @@ func (Account) SetPassword(ctx context.Context, password string) {
 	accountName := ctx.Value(authCtxKey).(string)
 	acc, err := store.OpenAccount(accountName)
 	xcheckf(ctx, err, "open account")
-	defer acc.Close()
+	defer func() {
+		err := acc.Close()
+		xlog.Check(err, "closing account")
+	}()
 	err = acc.SetPassword(password)
 	xcheckf(ctx, err, "setting password")
 }

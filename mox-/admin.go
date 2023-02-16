@@ -148,9 +148,8 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 	var paths []string
 	defer func() {
 		for _, p := range paths {
-			if err := os.Remove(p); err != nil {
-				log.Errorx("removing path for domain config", err, mlog.Field("path", p))
-			}
+			err := os.Remove(p)
+			log.Check(err, "removing path for domain config", mlog.Field("path", p))
 		}
 	}()
 
@@ -163,8 +162,10 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 		}
 		defer func() {
 			if f != nil {
-				os.Remove(path)
-				f.Close()
+				err := os.Remove(path)
+				log.Check(err, "removing file after error")
+				err = f.Close()
+				log.Check(err, "closing file after error")
 			}
 		}()
 		if _, err := f.Write(data); err != nil {
@@ -298,9 +299,8 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 	}
 	defer func() {
 		for _, f := range cleanupFiles {
-			if err := os.Remove(f); err != nil {
-				log.Errorx("cleaning up file after error", err, mlog.Field("path", f))
-			}
+			err := os.Remove(f)
+			log.Check(err, "cleaning up file after error", mlog.Field("path", f))
 		}
 	}()
 
@@ -316,7 +316,7 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 
 	nc.Domains[domain.Name()] = confDomain
 
-	if err := writeDynamic(ctx, nc); err != nil {
+	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
 	log.Info("domain added", mlog.Field("domain", domain))
@@ -355,7 +355,7 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 		}
 	}
 
-	if err := writeDynamic(ctx, nc); err != nil {
+	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
 
@@ -548,7 +548,7 @@ func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 	}
 	nc.Accounts[account] = MakeAccountConfig(addr)
 
-	if err := writeDynamic(ctx, nc); err != nil {
+	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
 	log.Info("account added", mlog.Field("account", account), mlog.Field("address", addr))
@@ -582,7 +582,7 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 		}
 	}
 
-	if err := writeDynamic(ctx, nc); err != nil {
+	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
 	log.Info("account removed", mlog.Field("account", account))
@@ -642,7 +642,7 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 	a.Destinations = nd
 	nc.Accounts[account] = a
 
-	if err := writeDynamic(ctx, nc); err != nil {
+	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
 	log.Info("address added", mlog.Field("address", addr), mlog.Field("account", account))
@@ -699,7 +699,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	}
 	nc.Accounts[ad.Account] = na
 
-	if err := writeDynamic(ctx, nc); err != nil {
+	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
 	log.Info("address removed", mlog.Field("address", addr), mlog.Field("account", ad.Account))
@@ -744,7 +744,7 @@ func DestinationSave(ctx context.Context, account, destName string, newDest conf
 	nacc.Destinations = nd
 	nc.Accounts[account] = nacc
 
-	if err := writeDynamic(ctx, nc); err != nil {
+	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
 	log.Info("destination saved", mlog.Field("account", account), mlog.Field("destname", destName))

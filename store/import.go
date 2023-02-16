@@ -82,10 +82,10 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 	}
 	defer func() {
 		if f != nil {
-			f.Close()
-			if err := os.Remove(f.Name()); err != nil {
-				mr.log.Errorx("removing temporary message file after mbox read error", err, mlog.Field("path", f.Name()))
-			}
+			err := os.Remove(f.Name())
+			mr.log.Check(err, "removing temporary message file after mbox read error", mlog.Field("path", f.Name()))
+			err = f.Close()
+			mr.log.Check(err, "closing temporary message file after mbox read error")
 		}
 	}()
 
@@ -209,7 +209,8 @@ func NewMaildirReader(createTemp func(pattern string) (*os.File, error), newf, c
 	if err == nil {
 		mr.dovecotKeywords, err = ParseDovecotKeywords(kf, log)
 		log.Check(err, "parsing dovecot keywords file")
-		kf.Close()
+		err = kf.Close()
+		log.Check(err, "closing dovecot-keywords file")
 	}
 
 	return mr
@@ -242,17 +243,20 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 	if err != nil {
 		return nil, nil, p, fmt.Errorf("open message in maildir: %s", err)
 	}
-	defer sf.Close()
+	defer func() {
+		err := sf.Close()
+		mr.log.Check(err, "closing message file after error")
+	}()
 	f, err := mr.createTemp("maildirreader")
 	if err != nil {
 		return nil, nil, p, err
 	}
 	defer func() {
 		if f != nil {
-			f.Close()
-			if err := os.Remove(f.Name()); err != nil {
-				mr.log.Errorx("removing temporary message file after maildir read error", err, mlog.Field("path", f.Name()))
-			}
+			err := os.Remove(f.Name())
+			mr.log.Check(err, "removing temporary message file after maildir read error", mlog.Field("path", f.Name()))
+			err = f.Close()
+			mr.log.Check(err, "closing temporary message file after maildir read error")
 		}
 	}()
 

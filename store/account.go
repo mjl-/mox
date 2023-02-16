@@ -1055,9 +1055,8 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 	defer func() {
 		for _, m := range remove {
 			p := a.MessagePath(m.ID)
-			if err := os.Remove(p); err != nil {
-				log.Errorx("removing rejects message file", err, mlog.Field("path", p))
-			}
+			err := os.Remove(p)
+			log.Check(err, "removing rejects message file", mlog.Field("path", p))
 		}
 	}()
 
@@ -1153,9 +1152,8 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 	defer func() {
 		for _, m := range remove {
 			p := a.MessagePath(m.ID)
-			if err := os.Remove(p); err != nil {
-				log.Errorx("removing rejects message file", err, mlog.Field("path", p))
-			}
+			err := os.Remove(p)
+			log.Check(err, "removing rejects message file", mlog.Field("path", p))
 		}
 	}()
 
@@ -1219,7 +1217,8 @@ func OpenEmailAuth(email string, password string) (acc *Account, rerr error) {
 
 	defer func() {
 		if rerr != nil && acc != nil {
-			acc.Close()
+			err := acc.Close()
+			xlog.Check(err, "closing account after open auth failure")
 			acc = nil
 		}
 	}()

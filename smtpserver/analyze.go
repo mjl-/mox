@@ -243,9 +243,8 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	f, jf, err := d.acc.OpenJunkFilter(log)
 	if err == nil {
 		defer func() {
-			if err := f.Close(); err != nil {
-				log.Errorx("closing junkfilter", err)
-			}
+			err := f.Close()
+			log.Check(err, "closing junkfilter")
 		}()
 		contentProb, _, _, _, err := f.ClassifyMessageReader(store.FileMsgReader(d.m.MsgPrefix, d.dataFile), d.m.Size)
 		if err != nil {

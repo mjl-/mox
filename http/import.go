@@ -198,7 +198,8 @@ type importAborted struct{}
 func importStart(log *mlog.Log, accName string, f *os.File, skipMailboxPrefix string) (string, error) {
 	defer func() {
 		if f != nil {
-			f.Close()
+			err := f.Close()
+			log.Check(err, "closing uploaded file")
 		}
 	}()
 
@@ -254,7 +255,8 @@ func importStart(log *mlog.Log, accName string, f *os.File, skipMailboxPrefix st
 	tx, err := acc.DB.Begin(true)
 	if err != nil {
 		acc.Unlock()
-		acc.Close()
+		xerr := acc.Close()
+		log.Check(xerr, "closing account")
 		return "", fmt.Errorf("start transaction: %v", err)
 	}
 
@@ -313,25 +315,22 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 	}
 
 	defer func() {
-		if err := f.Close(); err != nil {
-			log.Errorx("closing uploaded messages file", err)
-		}
+		err := f.Close()
+		log.Check(err, "closing uploaded messages file")
+
 		for _, id := range deliveredIDs {
 			p := acc.MessagePath(id)
-			if err := os.Remove(p); err != nil {
-				log.Errorx("closing message file after import error", err, mlog.Field("path", p))
-			}
+			err := os.Remove(p)
+			log.Check(err, "closing message file after import error", mlog.Field("path", p))
 		}
 		if tx != nil {
-			if err := tx.Rollback(); err != nil {
-				log.Errorx("rolling back transaction", err)
-			}
+			err := tx.Rollback()
+			log.Check(err, "rolling back transaction")
 		}
 		if acc != nil {
 			acc.Unlock()
-			if err := acc.Close(); err != nil {
-				log.Errorx("closing account", err)
-			}
+			err := acc.Close()
+			log.Check(err, "closing account")
 		}
 
 		x := recover()
@@ -395,7 +394,10 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 			problemf("opening message again for training junk filter: %v (continuing)", err)
 			return
 		}
-		defer f.Close()
+		defer func() {
+			err := f.Close()
+			log.Check(err, "closing file after training junkfilter")
+		}()
 		p, err := m.LoadPart(f)
 		if err != nil {
 			problemf("loading parsed message again for training junk filter: %v (continuing)", err)
@@ -714,7 +716,8 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 				continue
 			}
 			importFile(f.Name, zf)
-			zf.Close()
+			err = zf.Close()
+			log.Check(err, "closing file from zip")
 		}
 	} else {
 		for {
@@ -749,8 +752,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 	deliveredIDs = nil
 
 	if jf != nil {
-		err := jf.Close()
-		if err != nil {
+		if err := jf.Close(); err != nil {
 			problemf("saving changes of training junk filter: %v (continuing)", err)
 			log.Errorx("saving changes of training junk filter", err)
 		}
@@ -761,10 +763,8 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 	defer comm.Unregister()
 	comm.Broadcast(changes)
 	acc.Unlock()
-	if err := acc.Close(); err != nil {
-		log.Errorx("closing account after import", err)
-		// Continue
-	}
+	err = acc.Close()
+	log.Check(err, "closing account after import")
 	acc = nil
 
 	sendEvent("done", importDone{})

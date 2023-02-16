@@ -114,7 +114,8 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 	}
 	defer func() {
 		if tx != nil {
-			tx.Rollback()
+			err := tx.Rollback()
+			log.Check(err, "transaction rollback after export error")
 		}
 	}()
 
@@ -207,7 +208,8 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 	var mboxwriter *bufio.Writer
 	defer func() {
 		if mboxtmp != nil {
-			mboxtmp.Close()
+			err := mboxtmp.Close()
+			log.Check(err, "closing mbox temp file")
 		}
 	}()
 
@@ -245,7 +247,8 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 				return fmt.Errorf("adding dovecot-keywords: %v", err)
 			}
 			if _, err := w.Write(b.Bytes()); err != nil {
-				w.Close()
+				xerr := w.Close()
+				log.Check(xerr, "closing dovecot-keywords file after closing")
 				return fmt.Errorf("writing dovecot-keywords: %v", err)
 			}
 			maildirFlags = map[string]int{}
@@ -272,16 +275,15 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 			return fmt.Errorf("add mbox to archive: %v", err)
 		}
 		if _, err := io.Copy(w, mboxtmp); err != nil {
-			w.Close()
+			xerr := w.Close()
+			log.Check(xerr, "closing mbox message file after error")
 			return fmt.Errorf("copying temp mbox file to archive: %v", err)
 		}
 		if err := w.Close(); err != nil {
 			return fmt.Errorf("closing message file: %v", err)
 		}
-		if err := mboxtmp.Close(); err != nil {
-			log.Errorx("closing temporary mbox file", err)
-			// Continue, not fatal.
-		}
+		err = mboxtmp.Close()
+		log.Check(err, "closing temporary mbox file")
 		mboxwriter = nil
 		mboxtmp = nil
 		return nil
@@ -293,13 +295,16 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 		if m.Size == int64(len(m.MsgPrefix)) {
 			mr = io.NopCloser(bytes.NewReader(m.MsgPrefix))
 		} else {
-			mpf, err := os.Open(mp)
+			mf, err := os.Open(mp)
 			if err != nil {
 				errors += fmt.Sprintf("open message file for id %d, path %s: %v (message skipped)\n", m.ID, mp, err)
 				return nil
 			}
-			defer mpf.Close()
-			st, err := mpf.Stat()
+			defer func() {
+				err := mf.Close()
+				log.Check(err, "closing message file after export")
+			}()
+			st, err := mf.Stat()
 			if err != nil {
 				errors += fmt.Sprintf("stat message file for id %d, path %s: %v (message skipped)\n", m.ID, mp, err)
 				return nil
@@ -308,7 +313,7 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 			if size != m.Size {
 				errors += fmt.Sprintf("message size mismatch for message id %d, database has %d, size is %d+%d=%d, using calculated size\n", m.ID, m.Size, len(m.MsgPrefix), st.Size(), size)
 			}
-			mr = FileMsgReader(m.MsgPrefix, mpf)
+			mr = FileMsgReader(m.MsgPrefix, mf)
 		}
 
 		if maildir {
@@ -386,7 +391,8 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 				return fmt.Errorf("adding message to archive: %v", err)
 			}
 			if _, err := io.Copy(w, &dst); err != nil {
-				w.Close()
+				xerr := w.Close()
+				log.Check(xerr, "closing message")
 				return fmt.Errorf("copying message to archive: %v", err)
 			}
 			return w.Close()
@@ -479,8 +485,9 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 			return err
 		}
 		if _, err := w.Write([]byte(errors)); err != nil {
-			w.Close()
 			log.Errorx("writing errors.txt to archive", err)
+			xerr := w.Close()
+			log.Check(xerr, "closing errors.txt after error")
 			return err
 		}
 		if err := w.Close(); err != nil {

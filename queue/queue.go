@@ -131,9 +131,8 @@ func Init() error {
 
 // Shutdown closes the queue database. The delivery process isn't stopped. For tests only.
 func Shutdown() {
-	if err := queueDB.Close(); err != nil {
-		xlog.Errorx("closing queue db", err)
-	}
+	err := queueDB.Close()
+	xlog.Check(err, "closing queue db")
 	queueDB = nil
 }
 
@@ -202,9 +201,8 @@ func Add(log *mlog.Log, senderAccount string, mailFrom, rcptTo smtp.Path, has8bi
 	dst := mox.DataDirPath(filepath.Join("queue", store.MessagePath(qm.ID)))
 	defer func() {
 		if dst != "" {
-			if err := os.Remove(dst); err != nil {
-				log.Infox("removing destination message file for queue", err, mlog.Field("path", dst))
-			}
+			err := os.Remove(dst)
+			log.Check(err, "removing destination message file for queue", mlog.Field("path", dst))
 		}
 	}()
 	dstDir := filepath.Dir(dst)
@@ -243,7 +241,8 @@ func writeFile(dst string, r io.Reader) error {
 	}
 	defer func() {
 		if df != nil {
-			df.Close()
+			err := df.Close()
+			xlog.Check(err, "closing file after failed write")
 		}
 	}()
 	if _, err := io.Copy(df, r); err != nil {
@@ -713,7 +712,10 @@ func deliverHost(log *mlog.Log, resolver dns.Resolver, cid int64, host dns.IPDom
 		return false, false, "", nil, fmt.Sprintf("open message file: %s", err), false
 	}
 	msgr := store.FileMsgReader(m.MsgPrefix, f)
-	defer msgr.Close()
+	defer func() {
+		err := msgr.Close()
+		log.Check(err, "closing message after delivery attempt")
+	}()
 
 	cidctx := context.WithValue(mox.Context, mlog.CidKey, cid)
 	ctx, cancel := context.WithTimeout(cidctx, 30*time.Second)

@@ -371,10 +371,10 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 		ctl.xcheck(err, "creating temporary message file")
 		defer func() {
 			if msgFile != nil {
-				if err := os.Remove(msgFile.Name()); err != nil {
-					log.Errorx("removing temporary message file", err, mlog.Field("path", msgFile.Name()))
-				}
-				msgFile.Close()
+				err := os.Remove(msgFile.Name())
+				log.Check(err, "removing temporary message file", mlog.Field("path", msgFile.Name()))
+				err = msgFile.Close()
+				log.Check(err, "closing temporary message file")
 			}
 		}()
 		mw := &message.Writer{Writer: msgFile}
@@ -400,7 +400,8 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 			log.Info("message delivered through ctl", mlog.Field("to", to))
 		})
 
-		msgFile.Close()
+		err = msgFile.Close()
+		log.Check(err, "closing delivered message file")
 		msgFile = nil
 		err = a.Close()
 		ctl.xcheck(err, "closing account")
@@ -421,7 +422,8 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 		ctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
-				acc.Close()
+				err := acc.Close()
+				log.Check(err, "closing account after setting password")
 			}
 		}()
 
@@ -501,7 +503,10 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 		}
 		mr, err := queue.OpenMessage(id)
 		ctl.xcheck(err, "opening message")
-		defer mr.Close()
+		defer func() {
+			err := mr.Close()
+			log.Check(err, "closing message from queue")
+		}()
 		ctl.xwriteok()
 		ctl.xstreamfrom(mr)
 
@@ -652,12 +657,10 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 			basePath := mox.DataDirPath("accounts")
 			dbPath := filepath.Join(basePath, acc.Name, "junkfilter.db")
 			bloomPath := filepath.Join(basePath, acc.Name, "junkfilter.bloom")
-			if err := os.Remove(dbPath); err != nil {
-				log.Errorx("removing old junkfilter database file", err, mlog.Field("path", dbPath))
-			}
-			if err := os.Remove(bloomPath); err != nil {
-				log.Errorx("removing old junkfilter bloom filter file", err, mlog.Field("path", bloomPath))
-			}
+			err := os.Remove(dbPath)
+			log.Check(err, "removing old junkfilter database file", mlog.Field("path", dbPath))
+			err = os.Remove(bloomPath)
+			log.Check(err, "removing old junkfilter bloom filter file", mlog.Field("path", bloomPath))
 
 			// Open junk filter, this creates new files.
 			jf, _, err := acc.OpenJunkFilter(ctl.log)
@@ -666,9 +669,8 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 				if jf == nil {
 					return
 				}
-				if err := jf.Close(); err != nil {
-					log.Errorx("closing junk filter during cleanup", err)
-				}
+				err := jf.Close()
+				log.Check(err, "closing junk filter during cleanup")
 			}()
 
 			// Read through messages with junk or nonjunk flag set, and train them.

@@ -99,7 +99,8 @@ func Close() {
 	mutex.Lock()
 	defer mutex.Unlock()
 	if mtastsDB != nil {
-		mtastsDB.Close()
+		err := mtastsDB.Close()
+		xlog.Check(err, "closing database")
 		mtastsDB = nil
 	}
 }

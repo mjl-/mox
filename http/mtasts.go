@@ -60,5 +60,5 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("Cache-Control", "no-cache, max-age=0")
-	w.Write([]byte(policy.String()))
+	_, _ = w.Write([]byte(policy.String()))
 }

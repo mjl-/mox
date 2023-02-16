@@ -11,7 +11,8 @@ func SyncDir(dir string) error {
 	if err != nil {
 		return fmt.Errorf("open directory: %v", err)
 	}
-	xerr := d.Sync()
-	d.Close()
-	return xerr
+	err = d.Sync()
+	xerr := d.Close()
+	xlog.Check(xerr, "closing directory after sync")
+	return err
 }

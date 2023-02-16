@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"path/filepath"
 	"time"
 
@@ -57,7 +58,11 @@ func xcmdExport(mbox bool, args []string, c *cmd) {
 	dbpath := filepath.Join(accountDir, "index.db")
 	db, err := bstore.Open(dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, store.Message{}, store.Recipient{}, store.Mailbox{})
 	xcheckf(err, "open database %q", dbpath)
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("closing db after export: %v", err)
+		}
+	}()
 
 	a := store.DirArchiver{Dir: dst}
 	err = store.ExportMessages(mlog.New("export"), db, accountDir, a, !mbox, mailbox)

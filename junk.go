@@ -48,7 +48,11 @@ func (a junkArgs) Memprofile() {
 
 	f, err := os.Create(a.memprofile)
 	xcheckf(err, "creating memory profile")
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("closing memory profile: %v", err)
+		}
+	}()
 	runtime.GC() // get up-to-date statistics
 	err = pprof.WriteHeapProfile(f)
 	xcheckf(err, "writing memory profile")
@@ -67,7 +71,9 @@ func (a junkArgs) Profile() func() {
 	xcheckf(err, "start CPU profile")
 	return func() {
 		pprof.StopCPUProfile()
-		f.Close()
+		if err := f.Close(); err != nil {
+			log.Printf("closing cpu profile: %v", err)
+		}
 		a.Memprofile()
 	}
 }
@@ -129,7 +135,11 @@ func cmdJunkTrain(c *cmd) {
 	a.SetLogLevel()
 
 	f := must(junk.NewFilter(mlog.New("junktrain"), a.params, a.databasePath, a.bloomfilterPath))
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("closing junk filter: %v", err)
+		}
+	}()
 
 	hamFiles := listDir(args[0])
 	spamFiles := listDir(args[1])
@@ -155,7 +165,11 @@ func cmdJunkCheck(c *cmd) {
 	a.SetLogLevel()
 
 	f := must(junk.OpenFilter(mlog.New("junkcheck"), a.params, a.databasePath, a.bloomfilterPath, false))
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("closing junk filter: %v", err)
+		}
+	}()
 
 	prob, _, _, _, err := f.ClassifyMessagePath(args[0])
 	xcheckf(err, "testing mail")
@@ -176,7 +190,11 @@ func cmdJunkTest(c *cmd) {
 	a.SetLogLevel()
 
 	f := must(junk.OpenFilter(mlog.New("junktest"), a.params, a.databasePath, a.bloomfilterPath, false))
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("closing junk filter: %v", err)
+		}
+	}()
 
 	testDir := func(dir string, ham bool) (int, int) {
 		ok, bad := 0, 0
@@ -229,7 +247,11 @@ messages are shuffled, with optional random seed.`
 	a.SetLogLevel()
 
 	f := must(junk.NewFilter(mlog.New("junkanalyze"), a.params, a.databasePath, a.bloomfilterPath))
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("closing junk filter: %v", err)
+		}
+	}()
 
 	hamDir := args[0]
 	spamDir := args[1]
@@ -317,7 +339,11 @@ func cmdJunkPlay(c *cmd) {
 	a.SetLogLevel()
 
 	f := must(junk.NewFilter(mlog.New("junkplay"), a.params, a.databasePath, a.bloomfilterPath))
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("closing junk filter: %v", err)
+		}
+	}()
 
 	// We'll go through all emails to find their dates.
 	type msg struct {
@@ -339,15 +365,21 @@ func cmdJunkPlay(c *cmd) {
 			p, err := message.EnsurePart(mf, fi.Size())
 			if err != nil {
 				nbad++
-				mf.Close()
+				if err := mf.Close(); err != nil {
+					log.Printf("closing message file: %v", err)
+				}
 				continue
 			}
 			if p.Envelope.Date.IsZero() {
 				nnodate++
-				mf.Close()
+				if err := mf.Close(); err != nil {
+					log.Printf("closing message file: %v", err)
+				}
 				continue
 			}
-			mf.Close()
+			if err := mf.Close(); err != nil {
+				log.Printf("closing message file: %v", err)
+			}
 			msgs = append(msgs, msg{dir, name, ham, sent, p.Envelope.Date})
 			if sent {
 				nsent++
@@ -403,7 +435,11 @@ func cmdJunkPlay(c *cmd) {
 		} else {
 			mf, err := os.Open(path)
 			xcheckf(err, "open %q", path)
-			defer mf.Close()
+			defer func() {
+				if err := mf.Close(); err != nil {
+					log.Printf("closing message file: %v", err)
+				}
+			}()
 			fi, err := mf.Stat()
 			xcheckf(err, "stat %q", path)
 			p, err := message.EnsurePart(mf, fi.Size())

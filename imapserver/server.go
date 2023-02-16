@@ -401,9 +401,8 @@ func (c *conn) Write(buf []byte) (int, error) {
 
 	var n int
 	for len(buf) > 0 {
-		if err := c.conn.SetWriteDeadline(time.Now().Add(30 * time.Second)); err != nil {
-			c.log.Errorx("setting write deadline", err)
-		}
+		err := c.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+		c.log.Check(err, "setting write deadline")
 
 		nn, err := c.conn.Write(buf[:chunk])
 		if err != nil {
@@ -442,7 +441,8 @@ func (c *conn) readline0() (string, error) {
 	if c.state == stateNotAuthenticated {
 		d = 30 * time.Second
 	}
-	c.conn.SetReadDeadline(time.Now().Add(d))
+	err := c.conn.SetReadDeadline(time.Now().Add(d))
+	c.log.Check(err, "setting read deadline")
 
 	line, err := bufpool.Readline(c.br)
 	if err != nil && errors.Is(err, moxio.ErrLineTooLong) {
@@ -477,7 +477,8 @@ func (c *conn) readline(readCmd bool) string {
 	}
 	if err != nil {
 		if readCmd && errors.Is(err, os.ErrDeadlineExceeded) {
-			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			err := c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			c.log.Check(err, "setting write deadline")
 			c.writelinef("* BYE inactive")
 		}
 		if !errors.Is(err, errIO) && !errors.Is(err, errProtocol) {
@@ -496,7 +497,8 @@ func (c *conn) readline(readCmd bool) string {
 	if c.state == stateNotAuthenticated {
 		wd = 30 * time.Second
 	}
-	c.conn.SetWriteDeadline(time.Now().Add(wd))
+	err = c.conn.SetWriteDeadline(time.Now().Add(wd))
+	c.log.Check(err, "setting write deadline")
 
 	return line
 }
@@ -740,7 +742,8 @@ func (c *conn) command() {
 			c.log.Info("imap syntax error", mlog.Field("lastline", c.lastLine))
 			fatal := strings.HasSuffix(c.lastLine, "+}")
 			if fatal {
-				c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				c.log.Check(err, "setting write deadline")
 			}
 			c.bwriteresultf("%s BAD %s unrecognized syntax/command: %v", tag, cmd, err)
 			if fatal {
@@ -1145,7 +1148,8 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 		return
 	}
 
-	c.conn.SetWriteDeadline(time.Now().Add(5 * time.Minute))
+	err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Minute))
+	c.log.Check(err, "setting write deadline")
 
 	c.log.Debug("applying changes", mlog.Field("changes", changes))
 
@@ -1970,9 +1974,8 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 
 	for _, m := range remove {
 		p := c.account.MessagePath(m.ID)
-		if err := os.Remove(p); err != nil {
-			c.log.Infox("removing message file for mailbox delete", err, mlog.Field("path", p))
-		}
+		err := os.Remove(p)
+		c.log.Check(err, "removing message file for mailbox delete", mlog.Field("path", p))
 	}
 
 	c.ok(tag, cmd)
@@ -2534,7 +2537,8 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		c.broadcast([]store.Change{store.ChangeAddUID{MailboxID: mb.ID, UID: msg.UID, Flags: msg.Flags}})
 	})
 
-	msgFile.Close()
+	err = msgFile.Close()
+	c.log.Check(err, "closing appended file")
 	msgFile = nil
 
 	if c.mailboxID == mb.ID {
@@ -2581,7 +2585,8 @@ wait:
 
 	// Reset the write deadline. In case of little activity, with a command timeout of
 	// 30 minutes, we have likely passed it.
-	c.conn.SetWriteDeadline(time.Now().Add(5 * time.Minute))
+	err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Minute))
+	c.log.Check(err, "setting write deadline")
 
 	if strings.ToUpper(line) != "DONE" {
 		// We just close the connection because our protocols are out of sync.

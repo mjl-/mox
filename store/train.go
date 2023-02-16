@@ -95,7 +95,10 @@ func (a *Account) RetrainMessage(log *mlog.Log, tx *bstore.Tx, jf *junk.Filter, 
 	log.Debug("updating junk filter", mlog.Field("untrain", untrain), mlog.Field("untrainJunk", untrainJunk), mlog.Field("train", train), mlog.Field("trainJunk", trainJunk))
 
 	mr := a.MessageReader(*m)
-	defer mr.Close()
+	defer func() {
+		err := mr.Close()
+		log.Check(err, "closing message reader after retraining")
+	}()
 
 	p, err := m.LoadPart(mr)
 	if err != nil {
@@ -137,7 +140,10 @@ func (a *Account) TrainMessage(log *mlog.Log, jf *junk.Filter, m Message) (bool,
 	}
 
 	mr := a.MessageReader(m)
-	defer mr.Close()
+	defer func() {
+		err := mr.Close()
+		log.Check(err, "closing message after training")
+	}()
 
 	p, err := m.LoadPart(mr)
 	if err != nil {

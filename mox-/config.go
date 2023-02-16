@@ -232,7 +232,7 @@ func (c *Config) allowACMEHosts() {
 // todo future: write config parsing & writing code that can read a config and remembers the exact tokens including newlines and comments, and can write back a modified file. the goal is to be able to write a config file automatically (after changing fields through the ui), but not loose comments and whitespace, to still get useful diffs for storing the config in a version control system.
 
 // must be called with lock held.
-func writeDynamic(ctx context.Context, c config.Dynamic) error {
+func writeDynamic(ctx context.Context, log *mlog.Log, c config.Dynamic) error {
 	accDests, errs := prepareDynamicConfig(ctx, ConfigDynamicPath, Conf.Static, &c)
 	if len(errs) > 0 {
 		return errs[0]
@@ -249,7 +249,8 @@ func writeDynamic(ctx context.Context, c config.Dynamic) error {
 	}
 	defer func() {
 		if f != nil {
-			f.Close()
+			err := f.Close()
+			log.Check(err, "closing file after error")
 		}
 	}()
 	buf := b.Bytes()
@@ -270,6 +271,11 @@ func writeDynamic(ctx context.Context, c config.Dynamic) error {
 	if err != nil {
 		return fmt.Errorf("stat after writing domains.conf: %v", err)
 	}
+
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close written domains.conf: %v", err)
+	}
+	f = nil
 
 	Conf.dynamicMtime = fi.ModTime()
 	Conf.DynamicLastCheck = time.Now()

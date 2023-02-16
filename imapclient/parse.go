@@ -72,7 +72,7 @@ func (c *Conn) peek(exp byte) bool {
 
 func (c *Conn) take(exp byte) bool {
 	if c.peek(exp) {
-		c.readbyte()
+		_, _ = c.readbyte()
 		return true
 	}
 	return false

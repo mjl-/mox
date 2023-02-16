@@ -87,7 +87,8 @@ func Close() {
 	mutex.Lock()
 	defer mutex.Unlock()
 	if tlsrptDB != nil {
-		tlsrptDB.Close()
+		err := tlsrptDB.Close()
+		xlog.Check(err, "closing database")
 		tlsrptDB = nil
 	}
 }

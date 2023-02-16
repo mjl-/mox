@@ -23,7 +23,10 @@ func (f *Filter) tokenizeMail(path string) (bool, map[string]struct{}, error) {
 	if err != nil {
 		return false, nil, err
 	}
-	defer mf.Close()
+	defer func() {
+		err := mf.Close()
+		f.log.Check(err, "closing message file")
+	}()
 	fi, err := mf.Stat()
 	if err != nil {
 		return false, nil, err

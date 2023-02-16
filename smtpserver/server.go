@@ -309,7 +309,8 @@ func (c *conn) reset() {
 	c.hello = dns.IPDomain{}
 	c.username = ""
 	if c.account != nil {
-		c.account.Close()
+		err := c.account.Close()
+		c.log.Check(err, "closing account")
 	}
 	c.account = nil
 	c.rset()
@@ -544,12 +545,11 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 
 	defer func() {
 		c.origConn.Close() // Close actual TCP socket, regardless of TLS on top.
-		c.conn.Close()     // Will try to write alert notification to already closed socket, returning error quickly.
+		c.conn.Close()     // If TLS, will try to write alert notification to already closed socket, returning error quickly.
 
 		if c.account != nil {
-			if err := c.account.Close(); err != nil {
-				c.log.Infox("smtp: account close", err)
-			}
+			err := c.account.Close()
+			c.log.Check(err, "closing account")
 			c.account = nil
 		}
 
@@ -997,9 +997,7 @@ func (c *conn) cmdAuth(p *parser) {
 		defer func() {
 			if acc != nil {
 				err := acc.Close()
-				if err != nil {
-					c.log.Errorx("closing account", err)
-				}
+				c.log.Check(err, "closing account")
 			}
 		}()
 		var ipadhash, opadhash hash.Hash
@@ -1069,9 +1067,7 @@ func (c *conn) cmdAuth(p *parser) {
 		defer func() {
 			if acc != nil {
 				err := acc.Close()
-				if err != nil {
-					c.log.Errorx("closing account", err)
-				}
+				c.log.Check(err, "closing account")
 			}
 		}()
 		if ss.Authorization != "" && ss.Authorization != ss.Authentication {
@@ -1430,10 +1426,10 @@ func (c *conn) cmdData(p *parser) {
 	}
 	defer func() {
 		if dataFile != nil {
-			if err := os.Remove(dataFile.Name()); err != nil {
-				c.log.Infox("removing temporary message file", err, mlog.Field("path", dataFile.Name()))
-			}
-			dataFile.Close()
+			err := os.Remove(dataFile.Name())
+			c.log.Check(err, "removing temporary message file", mlog.Field("path", dataFile.Name()))
+			err = dataFile.Close()
+			c.log.Check(err, "removing temporary message file")
 		}
 	}()
 	msgWriter := &message.Writer{Writer: dataFile}
@@ -1673,7 +1669,8 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		metricSubmission.WithLabelValues("ok").Inc()
 		c.log.Info("message queued for delivery", mlog.Field("mailfrom", *c.mailFrom), mlog.Field("rcptto", rcptAcc.rcptTo), mlog.Field("smtputf8", c.smtputf8), mlog.Field("msgsize", msgSize))
 	}
-	dataFile.Close()
+	err = dataFile.Close()
+	c.log.Check(err, "closing file after submission")
 	*pdataFile = nil
 
 	c.transactionGood++
@@ -1725,7 +1722,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	var dkimErr error
 	go func() {
 		defer func() {
-			recover() // Should not happen, but don't take program down if it does.
+			x := recover() // Should not happen, but don't take program down if it does.
+			if x != nil {
+				c.log.Error("dkim verify panic", mlog.Field("err", x))
+				debug.PrintStack()
+			}
 		}()
 		defer wg.Done()
 		// We always evaluate all signatures. We want to build up reputation for each
@@ -1756,7 +1757,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	wg.Add(1)
 	go func() {
 		defer func() {
-			recover() // Should not happen, but don't take program down if it does.
+			x := recover() // Should not happen, but don't take program down if it does.
+			if x != nil {
+				c.log.Error("dkim verify panic", mlog.Field("err", x))
+				debug.PrintStack()
+			}
 		}()
 		defer wg.Done()
 		spfctx, spfcancel := context.WithTimeout(ctx, time.Minute)
@@ -2015,9 +2020,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		}
 		defer func() {
 			if acc != nil {
-				if err := acc.Close(); err != nil {
-					log.Errorx("closing account after delivery", err)
-				}
+				err := acc.Close()
+				log.Check(err, "closing account after delivery")
 			}
 		}()
 
@@ -2238,9 +2242,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 		})
 
-		if err := acc.Close(); err != nil {
-			log.Infox("closing account after delivering", err)
-		}
+		err = acc.Close()
+		log.Check(err, "closing account after delivering")
 		acc = nil
 	}
 
@@ -2325,8 +2328,10 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		}
 	}
 
-	os.Remove(dataFile.Name())
-	dataFile.Close()
+	err = os.Remove(dataFile.Name())
+	c.log.Check(err, "removing file after delivery")
+	err = dataFile.Close()
+	c.log.Check(err, "closing data file after delivery")
 	*pdataFile = nil
 
 	c.transactionGood++

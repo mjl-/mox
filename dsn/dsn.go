@@ -151,7 +151,7 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 	}
 
 	line := func(w io.Writer) {
-		w.Write([]byte("\r\n"))
+		_, _ = w.Write([]byte("\r\n"))
 	}
 
 	// Outer message headers.
@@ -179,7 +179,9 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	msgp.Write([]byte(strings.ReplaceAll(m.TextBody, "\n", "\r\n")))
+	if _, err := msgp.Write([]byte(strings.ReplaceAll(m.TextBody, "\n", "\r\n"))); err != nil {
+		return nil, err
+	}
 
 	// Machine-parsable message. ../rfc/3464:455
 	statusHdr := textproto.MIMEHeader{}
@@ -329,10 +331,14 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 					n = 78
 				}
 				line, data = data[:n], data[n:]
-				origp.Write([]byte(line + "\r\n"))
+				if _, err := origp.Write([]byte(line + "\r\n")); err != nil {
+					return nil, err
+				}
 			}
 		} else {
-			origp.Write(headers)
+			if _, err := origp.Write(headers); err != nil {
+				return nil, err
+			}
 		}
 	}
 

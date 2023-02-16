@@ -1689,7 +1689,11 @@ func cmdEnsureParsed(c *cmd) {
 	mustLoadConfig()
 	a, err := store.OpenAccount(args[0])
 	xcheckf(err, "open account")
-	defer a.Close()
+	defer func() {
+		if err := a.Close(); err != nil {
+			log.Printf("closing account: %v", err)
+		}
+	}()
 
 	n := 0
 	err = a.DB.Write(func(tx *bstore.Tx) error {
@@ -1734,7 +1738,11 @@ func cmdBumpUIDValidity(c *cmd) {
 	mustLoadConfig()
 	a, err := store.OpenAccount(args[0])
 	xcheckf(err, "open account")
-	defer a.Close()
+	defer func() {
+		if err := a.Close(); err != nil {
+			log.Printf("closing account: %v", err)
+		}
+	}()
 
 	var uidvalidity uint32
 	err = a.DB.Write(func(tx *bstore.Tx) error {
@@ -1951,7 +1959,9 @@ binary should be setgid that group:
 		xcheckf(err, "creating temp file for storing message after failed delivery")
 		defer func() {
 			if f != nil {
-				os.Remove(f.Name())
+				if err := os.Remove(f.Name()); err != nil {
+					log.Printf("removing temp file after failure storing failed delivery: %v", err)
+				}
 			}
 		}()
 		_, err = f.Write([]byte(msg))

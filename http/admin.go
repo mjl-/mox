@@ -189,9 +189,9 @@ func adminHandle(w http.ResponseWriter, r *http.Request) {
 		f, err := os.Open("http/admin.html")
 		if err == nil {
 			defer f.Close()
-			io.Copy(w, f)
+			_, _ = io.Copy(w, f)
 		} else {
-			w.Write(adminHTML)
+			_, _ = w.Write(adminHTML)
 		}
 		return
 	}
@@ -549,8 +549,8 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 			end := time.Now().Add(10 * time.Second)
 			cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
-			conn.SetReadDeadline(end)
-			conn.SetWriteDeadline(end)
+			err = conn.SetDeadline(end)
+			xlog.WithContext(ctx).Check(err, "setting deadline")
 
 			br := bufio.NewReader(conn)
 			_, err = br.ReadString('\n')
@@ -1447,7 +1447,10 @@ func (Admin) SetPassword(ctx context.Context, accountName, password string) {
 	}
 	acc, err := store.OpenAccount(accountName)
 	xcheckf(ctx, err, "open account")
-	defer acc.Close()
+	defer func() {
+		err := acc.Close()
+		xlog.Check(err, "closing account")
+	}()
 	err = acc.SetPassword(password)
 	xcheckf(ctx, err, "setting password")
 }

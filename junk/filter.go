@@ -145,7 +145,8 @@ func OpenFilter(log *mlog.Log, params Params, dbPath, bloomPath string, loadBloo
 		return err
 	})
 	if err != nil {
-		f.Close()
+		cerr := f.Close()
+		log.Check(cerr, "closing filter after error")
 		return nil, fmt.Errorf("looking up ham/spam message count: %s", err)
 	}
 	return f, nil
@@ -172,16 +173,21 @@ func NewFilter(log *mlog.Log, params Params, dbPath, bloomPath string) (*Filter,
 		return nil, fmt.Errorf("creating bloom file: %w", err)
 	}
 	if err := bf.Truncate(4 * 1024 * 1024); err != nil {
-		bf.Close()
-		os.Remove(bloomPath)
+		xerr := bf.Close()
+		log.Check(xerr, "closing bloom filter file after truncate error")
+		xerr = os.Remove(bloomPath)
+		log.Check(xerr, "removing bloom filter file after truncate error")
 		return nil, fmt.Errorf("making empty bloom filter: %s", err)
 	}
-	bf.Close()
+	err = bf.Close()
+	log.Check(err, "closing bloomfilter file")
 
-	db, err := newDB(dbPath)
+	db, err := newDB(log, dbPath)
 	if err != nil {
-		os.Remove(bloomPath)
-		os.Remove(dbPath)
+		xerr := os.Remove(bloomPath)
+		log.Check(xerr, "removing bloom filter file after db init error")
+		xerr = os.Remove(dbPath)
+		log.Check(xerr, "removing database file after db init error")
 		return nil, fmt.Errorf("open database: %s", err)
 	}
 
@@ -210,17 +216,14 @@ func openBloom(path string) (*Bloom, error) {
 	return NewBloom(buf, bloomK)
 }
 
-func newDB(path string) (db *bstore.DB, rerr error) {
+func newDB(log *mlog.Log, path string) (db *bstore.DB, rerr error) {
 	// Remove any existing files.
 	os.Remove(path)
 
 	defer func() {
 		if rerr != nil {
-			if db != nil {
-				db.Close()
-			}
-			db = nil
-			os.Remove(path)
+			err := os.Remove(path)
+			log.Check(err, "removing db file after init error")
 		}
 	}()
 
@@ -271,7 +274,10 @@ func (f *Filter) Save() error {
 		if err := f.db.HintAppend(true, wordscore{}); err != nil {
 			f.log.Errorx("hint appendonly", err)
 		} else {
-			defer f.db.HintAppend(false, wordscore{})
+			defer func() {
+				err := f.db.HintAppend(false, wordscore{})
+				f.log.Check(err, "restoring append hint")
+			}()
 		}
 	}
 	err := f.db.Write(func(tx *bstore.Tx) error {
@@ -480,7 +486,10 @@ func (f *Filter) ClassifyMessagePath(path string) (probability float64, words ma
 	if err != nil {
 		return 0, nil, 0, 0, err
 	}
-	defer mf.Close()
+	defer func() {
+		err := mf.Close()
+		f.log.Check(err, "closing file after classify")
+	}()
 	fi, err := mf.Stat()
 	if err != nil {
 		return 0, nil, 0, 0, err

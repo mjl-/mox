@@ -135,19 +135,16 @@ func importctl(ctl *ctl, mbox bool) {
 
 	defer func() {
 		if mboxf != nil {
-			if err := mboxf.Close(); err != nil {
-				ctl.log.Infox("closing mbox file after import", err)
-			}
+			err := mboxf.Close()
+			ctl.log.Check(err, "closing mbox file after import")
 		}
 		if mdnewf != nil {
-			if err := mdnewf.Close(); err != nil {
-				ctl.log.Infox("closing maildir new after import", err)
-			}
+			err := mdnewf.Close()
+			ctl.log.Check(err, "closing maildir new after import")
 		}
 		if mdcurf != nil {
-			if err := mdcurf.Close(); err != nil {
-				ctl.log.Infox("closing maildir cur after import", err)
-			}
+			err := mdcurf.Close()
+			ctl.log.Check(err, "closing maildir cur after import")
 		}
 	}()
 
@@ -157,9 +154,8 @@ func importctl(ctl *ctl, mbox bool) {
 	ctl.xcheck(err, "opening account")
 	defer func() {
 		if a != nil {
-			if err := a.Close(); err != nil {
-				ctl.log.Errorx("closing account after import", err)
-			}
+			err := a.Close()
+			ctl.log.Check(err, "closing account after import")
 		}
 	}()
 
@@ -185,7 +181,8 @@ func importctl(ctl *ctl, mbox bool) {
 	ctl.xcheck(err, "begin transaction")
 	defer func() {
 		if tx != nil {
-			tx.Rollback()
+			err := tx.Rollback()
+			ctl.log.Check(err, "rolling back transaction")
 		}
 	}()
 
@@ -208,9 +205,8 @@ func importctl(ctl *ctl, mbox bool) {
 
 		for _, id := range deliveredIDs {
 			p := a.MessagePath(id)
-			if err := os.Remove(p); err != nil {
-				ctl.log.Errorx("closing message file after import error", err, mlog.Field("path", p))
-			}
+			err := os.Remove(p)
+			ctl.log.Check(err, "closing message file after import error", mlog.Field("path", p))
 		}
 
 		ctl.xerror(fmt.Sprintf("%v", x))
@@ -256,10 +252,10 @@ func importctl(ctl *ctl, mbox bool) {
 				if msgf == nil {
 					return
 				}
-				if err := os.Remove(msgf.Name()); err != nil {
-					ctl.log.Errorx("removing temporary message after failing to import", err)
-				}
-				msgf.Close()
+				err := os.Remove(msgf.Name())
+				ctl.log.Check(err, "removing temporary message after failing to import")
+				err = msgf.Close()
+				ctl.log.Check(err, "closing temporary message after failing to import")
 			}()
 
 			// Parse message and store parsed information for later fast retrieval.
@@ -295,7 +291,8 @@ func importctl(ctl *ctl, mbox bool) {
 			m.MailboxID = mb.ID
 			m.MailboxOrigID = mb.ID
 			xdeliver(m, msgf)
-			msgf.Close()
+			err = msgf.Close()
+			ctl.log.Check(err, "closing message after delivery")
 			msgf = nil
 
 			n++
