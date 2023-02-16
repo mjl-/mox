@@ -1165,7 +1165,8 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 
 		q := bstore.QueryTx[Message](tx)
 		q.FilterNonzero(Message{MailboxID: mb.ID, MessageID: messageID})
-		remove, err := q.List()
+		var err error
+		remove, err = q.List()
 		xcheckf(err, "listing messages to remove")
 
 		changes = a.xremoveMessages(log, tx, mb, remove)

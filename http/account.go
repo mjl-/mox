@@ -149,7 +149,7 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		}
 		flusher.Flush()
 
-		ctx := r.Context()
+		cctx := r.Context()
 		for {
 			select {
 			case e := <-l.Events:
@@ -159,7 +159,7 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-			case <-ctx.Done():
+			case <-cctx.Done():
 				return
 			}
 		}

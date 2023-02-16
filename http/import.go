@@ -126,7 +126,7 @@ func importManage() {
 		case e := <-importers.Events:
 			s, ok := imports[e.Token]
 			if !ok {
-				s := state{
+				s = state{
 					MailboxCounts: map[string]int{},
 					Listeners:     map[*importListener]struct{}{},
 					Cancel:        e.Cancel,
