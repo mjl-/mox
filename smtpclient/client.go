@@ -583,11 +583,14 @@ func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, ms
 	}
 
 	if !c.ext8bitmime && req8bitmime {
-		c.xerrorf(true, 0, "", "", "%w", Err8bitmimeUnsupported)
+		// Temporary error, e.g. OpenBSD spamd does not announce 8bitmime support, but once
+		// you get through, the mail server behind it probably does. Just needs a few
+		// retries.
+		c.xerrorf(false, 0, "", "", "%w", Err8bitmimeUnsupported)
 	}
 	if !c.extSMTPUTF8 && reqSMTPUTF8 {
 		// ../rfc/6531:313
-		c.xerrorf(true, 0, "", "", "%w", ErrSMTPUTF8Unsupported)
+		c.xerrorf(false, 0, "", "", "%w", ErrSMTPUTF8Unsupported)
 	}
 
 	if c.extSize && msgSize > c.maxSize {
