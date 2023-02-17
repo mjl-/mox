@@ -444,8 +444,11 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 				err = tx.Insert(&mb)
 				ximportcheckf(err, "inserting mailbox in database")
 
-				changes = append(changes, store.ChangeAddMailbox{Name: p})
-				// todo: should we also subscribe to the mailbox?
+				err = tx.Insert(&store.Subscription{Name: p})
+				if err != nil && !errors.Is(err, bstore.ErrUnique) {
+					ximportcheckf(err, "subscribing to imported mailbox")
+				}
+				changes = append(changes, store.ChangeAddMailbox{Name: p, Flags: []string{`\Subscribed`}})
 			} else if err != nil {
 				ximportcheckf(err, "creating mailbox %s (aborting)", p)
 			}

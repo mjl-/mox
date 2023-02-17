@@ -1237,7 +1237,12 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 				c.bwritelinef("* %d FETCH (UID %d FLAGS %s)", seq, ch.UID, flaglist(ch.Flags).pack(c))
 			}
 		case store.ChangeRemoveMailbox:
-			c.bwritelinef(`* LIST (\NonExistent) "/" %s`, astring(ch.Name).pack(c))
+			// Only announce \NonExistent to modern clients, otherwise they may ignore the
+			// unrecognized \NonExistent and interpret this as a newly created mailbox, while
+			// the goal was to remove it...
+			if c.enabled[capIMAP4rev2] {
+				c.bwritelinef(`* LIST (\NonExistent) "/" %s`, astring(ch.Name).pack(c))
+			}
 		case store.ChangeAddMailbox:
 			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.Flags, " "), astring(ch.Name).pack(c))
 		case store.ChangeRenameMailbox:
