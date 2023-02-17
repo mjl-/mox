@@ -8,13 +8,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	bolt "go.etcd.io/bbolt"
 
 	"github.com/mjl-/bstore"
 
@@ -35,7 +39,8 @@ func tcheck(t *testing.T, err error, msg string) {
 // We check if we receive the message.
 func TestDeliver(t *testing.T) {
 	mlog.Logfmt = true
-	mox.Context = context.Background()
+	mox.Context, mox.ContextCancel = context.WithCancel(context.Background())
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
 
 	// Remove state.
 	os.RemoveAll("testdata/integration/run")
@@ -43,6 +48,7 @@ func TestDeliver(t *testing.T) {
 
 	// Load mox config.
 	mox.ConfigStaticPath = "testdata/integration/mox.conf"
+	filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	if errs := mox.LoadConfig(mox.Context); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}
@@ -71,7 +77,11 @@ func TestDeliver(t *testing.T) {
 	latestMsgID := func(username string) int64 {
 		// We open the account index database created by mox for the test user. And we keep looking for the email we sent.
 		dbpath := fmt.Sprintf("testdata/integration/run/accounts/%s/index.db", username)
-		db, err := bstore.Open(dbpath, &bstore.Options{Timeout: 5 * time.Second}, store.Message{}, store.Recipient{}, store.Mailbox{}, store.Password{})
+		db, err := bstore.Open(dbpath, &bstore.Options{Timeout: 3 * time.Second}, store.Message{}, store.Recipient{}, store.Mailbox{}, store.Password{})
+		if err != nil && errors.Is(err, bolt.ErrTimeout) {
+			log.Printf("db open timeout (normal delay for new sender with account and db file kept open)")
+			return 0
+		}
 		tcheck(t, err, "open test account database")
 		defer db.Close()
 
