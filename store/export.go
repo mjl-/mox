@@ -105,6 +105,8 @@ func (a DirArchiver) Close() error {
 // file "errors.txt" is added to the archive describing the errors. The goal is to
 // let users export (hopefully) most messages even in the face of errors.
 func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Archiver, maildir bool, mailboxOpt string) error {
+	// todo optimize: should prepare next file to add to archive (can be an mbox with many messages) while writing a file to the archive (which typically compresses, which takes time).
+
 	// Start transaction without closure, we are going to close it early, but don't
 	// want to deal with declaring many variables now to be able to assign them in a
 	// closure and use them afterwards.
@@ -398,8 +400,6 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 			return w.Close()
 		}
 
-		// todo: should we put status flags in Status or X-Status header inside the message?
-		// todo: should we do anything with Content-Length headers? changing the escaping could invalidate those. is anything checking that field?
 		mailfrom := "mox"
 		if m.MailFrom != "" {
 			mailfrom = m.MailFrom
@@ -407,6 +407,54 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 		if _, err := fmt.Fprintf(mboxwriter, "From %s %s\n", mailfrom, m.Received.Format(time.ANSIC)); err != nil {
 			return fmt.Errorf("write message line to mbox temp file: %v", err)
 		}
+
+		// Write message flags in the three headers that mbox consumers may (or may not) understand.
+		if m.Seen {
+			if _, err := fmt.Fprintf(mboxwriter, "Status: R\n"); err != nil {
+				return fmt.Errorf("writing status header: %v", err)
+			}
+		}
+		xstatus := ""
+		if m.Answered {
+			xstatus += "A"
+		}
+		if m.Flagged {
+			xstatus += "F"
+		}
+		if m.Draft {
+			xstatus += "T"
+		}
+		if m.Deleted {
+			xstatus += "D"
+		}
+		if xstatus != "" {
+			if _, err := fmt.Fprintf(mboxwriter, "X-Status: %s\n", xstatus); err != nil {
+				return fmt.Errorf("writing x-status header: %v", err)
+			}
+		}
+		var xkeywords []string
+		if m.Forwarded {
+			xkeywords = append(xkeywords, "$Forwarded")
+		}
+		if m.Junk && !m.Notjunk {
+			xkeywords = append(xkeywords, "$Junk")
+		}
+		if m.Notjunk && !m.Junk {
+			xkeywords = append(xkeywords, "$NotJunk")
+		}
+		if m.Phishing {
+			xkeywords = append(xkeywords, "$Phishing")
+		}
+		if m.MDNSent {
+			xkeywords = append(xkeywords, "$MDNSent")
+		}
+		if len(xkeywords) > 0 {
+			if _, err := fmt.Fprintf(mboxwriter, "X-Keywords: %s\n", strings.Join(xkeywords, ",")); err != nil {
+				return fmt.Errorf("writing x-keywords header: %v", err)
+			}
+		}
+
+		header := true
 		r := bufio.NewReader(mr)
 		for {
 			line, rerr := r.ReadBytes('\n')
@@ -417,6 +465,17 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 				if bytes.HasSuffix(line, []byte("\r\n")) {
 					line = line[:len(line)-1]
 					line[len(line)-1] = '\n'
+				}
+				if header && len(line) == 1 {
+					header = false
+				}
+				if header {
+					// Skip any previously stored flag-holding or now incorrect content-length headers.
+					// This assumes these headers are just a single line.
+					switch strings.ToLower(string(bytes.SplitN(line, []byte(":"), 2)[0])) {
+					case "status", "x-status", "x-keywords", "content-length":
+						continue
+					}
 				}
 				if bytes.HasPrefix(bytes.TrimLeft(line, ">"), []byte("From ")) {
 					if _, err := fmt.Fprint(mboxwriter, ">"); err != nil {
