@@ -3,6 +3,9 @@
 /local/
 /testdata/check/
 /testdata/empty/
+/testdata/exportmaildir/
+/testdata/exportmbox/
+/testdata/httpaccount/data/
 /testdata/imap/data/
 /testdata/imaptest/data/
 /testdata/integration/run
