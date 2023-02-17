@@ -519,11 +519,14 @@ func deliver(resolver dns.Resolver, m Msg) {
 	// allowed when a CNAME record is present.
 	var policyFresh bool
 	var policy *mtasts.Policy
+	tlsModeDefault := smtpclient.TLSOpportunistic
 	if !effectiveDomain.IsZero() {
 		cidctx := context.WithValue(mox.Context, mlog.CidKey, cid)
 		policy, policyFresh, err = mtastsdb.Get(cidctx, resolver, effectiveDomain)
 		if err != nil {
-			fail(false, dsn.NameIP{}, "", err.Error())
+			// No need to refuse to deliver if we have some mtasts error.
+			qlog.Infox("mtasts failed, continuing with strict tls requirement", err, mlog.Field("domain", effectiveDomain))
+			tlsModeDefault = smtpclient.TLSStrict
 			return
 		}
 		// note: policy can be nil, if a domain does not implement MTA-STS or its the first
@@ -557,11 +560,9 @@ func deliver(resolver dns.Resolver, m Msg) {
 		cid := mox.Cid()
 		nqlog := qlog.WithCid(cid)
 		var remoteIP net.IP
-		var tlsMode smtpclient.TLSMode
+		tlsMode := tlsModeDefault
 		if policy != nil && policy.Mode == mtasts.ModeEnforce {
 			tlsMode = smtpclient.TLSStrict
-		} else {
-			tlsMode = smtpclient.TLSOpportunistic
 		}
 		permanent, badTLS, secodeOpt, remoteIP, errmsg, ok = deliverHost(nqlog, resolver, cid, h, &m, tlsMode)
 		if !ok && badTLS && tlsMode == smtpclient.TLSOpportunistic {
