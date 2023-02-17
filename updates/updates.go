@@ -76,7 +76,7 @@ type Change struct {
 // prevent a potential future different domain owner from notifying users about
 // new versions.
 type Changelog struct {
-	Changes []Change
+	Changes []Change // Newest first.
 }
 
 // Lookup looks up the updates DNS TXT record at "_updates.<domain>" and returns

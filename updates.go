@@ -51,11 +51,12 @@ func cmdUpdatesAddSigned(c *cmd) {
 	// todo future: enforce this format?
 	sig := ed25519.Sign(privKey, buf)
 
-	changelog.Changes = append(changelog.Changes, updates.Change{
+	change := updates.Change{
 		PubKey: privKey.Public().(ed25519.PublicKey),
 		Sig:    sig,
 		Text:   string(buf),
-	})
+	}
+	changelog.Changes = append([]updates.Change{change}, changelog.Changes...)
 
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)

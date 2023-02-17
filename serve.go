@@ -235,8 +235,8 @@ requested, other TLS certificates are requested on demand.
 			}
 
 			var cl string
-			for i := len(changelog.Changes) - 1; i >= 0; i-- {
-				cl += changelog.Changes[i].Text + "\n\n"
+			for _, c := range changelog.Changes {
+				cl += c.Text + "\n\n"
 			}
 
 			a, err := store.OpenAccount(mox.Conf.Static.Postmaster.Account)

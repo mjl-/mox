@@ -1634,8 +1634,14 @@ printed.
 	if latest.After(current) {
 		changelog, err := updates.FetchChangelog(context.Background(), changelogURL, current, changelogPubKey)
 		xcheckf(err, "fetching changelog")
-		fmt.Printf("Changelog\n\n")
-		fmt.Println(changelog)
+		if len(changelog.Changes) == 0 {
+			log.Printf("no changes in changelog")
+			return
+		}
+		fmt.Println("Changelog")
+		for _, c := range changelog.Changes {
+			fmt.Println("\n" + strings.TrimSpace(c.Text))
+		}
 	}
 }
 
