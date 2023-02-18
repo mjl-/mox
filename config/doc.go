@@ -66,6 +66,12 @@ describe-static" and "mox config describe-domains":
 			# in such notification emails not arriving.
 			ContactEmail:
 
+			# TLS port for ACME validation, 443 by default. You should only override this if
+			# you cannot listen on port 443 directly. ACME will make requests to port 443, so
+			# you'll have to add an external mechanism to get the connection here, e.g. by
+			# configuring port forwarding. (optional)
+			Port: 0
+
 	# File containing hash of admin password, for authentication in the web admin
 	# pages (if enabled). (optional)
 	AdminPasswordFile:
@@ -228,10 +234,22 @@ describe-static" and "mox config describe-domains":
 			AutoconfigHTTPS:
 				Enabled: false
 
-			# Serve MTA-STS policies describing SMTP TLS requirements, will use port 443.
-			# Requires a TLS config. (optional)
+				# TLS port, 443 by default. You should only override this if you cannot listen on
+				# port 443 directly. Autoconfig requests will be made to port 443, so you'll have
+				# to add an external mechanism to get the connection here, e.g. by configuring
+				# port forwarding. (optional)
+				Port: 0
+
+			# Serve MTA-STS policies describing SMTP TLS requirements. Requires a TLS config.
+			# (optional)
 			MTASTSHTTPS:
 				Enabled: false
+
+				# TLS port, 443 by default. You should only override this if you cannot listen on
+				# port 443 directly. MTA-STS requests will be made to port 443, so you'll have to
+				# add an external mechanism to get the connection here, e.g. by configuring port
+				# forwarding. (optional)
+				Port: 0
 
 	# Destination for emails delivered to postmaster address.
 	Postmaster:

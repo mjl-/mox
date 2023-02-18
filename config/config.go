@@ -71,6 +71,7 @@ type ACME struct {
 	DirectoryURL string        `sconf-doc:"For letsencrypt, use https://acme-v02.api.letsencrypt.org/directory."`
 	RenewBefore  time.Duration `sconf:"optional" sconf-doc:"How long before expiration to renew the certificate. Default is 30 days."`
 	ContactEmail string        `sconf-doc:"Email address to register at ACME provider. The provider can email you when certificates are about to expire. If you configure an address for which email is delivered by this server, keep in mind that TLS misconfigurations could result in such notification emails not arriving."`
+	Port         int           `sconf:"optional" sconf-doc:"TLS port for ACME validation, 443 by default. You should only override this if you cannot listen on port 443 directly. ACME will make requests to port 443, so you'll have to add an external mechanism to get the connection here, e.g. by configuring port forwarding."`
 
 	Manager *autotls.Manager `sconf:"-" json:"-"`
 }
@@ -134,10 +135,12 @@ type Listener struct {
 	} `sconf:"optional" sconf-doc:"Serve /debug/pprof/ for profiling a running mox instance. Do not enable this on a public IP!"`
 	AutoconfigHTTPS struct {
 		Enabled bool
+		Port    int `sconf:"optional" sconf-doc:"TLS port, 443 by default. You should only override this if you cannot listen on port 443 directly. Autoconfig requests will be made to port 443, so you'll have to add an external mechanism to get the connection here, e.g. by configuring port forwarding."`
 	} `sconf:"optional" sconf-doc:"Serve autoconfiguration/autodiscovery to simplify configuring email applications, will use port 443. Requires a TLS config."`
 	MTASTSHTTPS struct {
 		Enabled bool
-	} `sconf:"optional" sconf-doc:"Serve MTA-STS policies describing SMTP TLS requirements, will use port 443. Requires a TLS config."`
+		Port    int `sconf:"optional" sconf-doc:"TLS port, 443 by default. You should only override this if you cannot listen on port 443 directly. MTA-STS requests will be made to port 443, so you'll have to add an external mechanism to get the connection here, e.g. by configuring port forwarding."`
+	} `sconf:"optional" sconf-doc:"Serve MTA-STS policies describing SMTP TLS requirements. Requires a TLS config."`
 }
 
 type Domain struct {

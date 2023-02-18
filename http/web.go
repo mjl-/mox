@@ -55,12 +55,12 @@ func ListenAndServe() {
 				s = serve{nil, nil, &http.ServeMux{}}
 			}
 			s.kinds = append(s.kinds, kind)
-			if https && port == 443 && l.TLS.ACME != "" {
+			if https && l.TLS.ACME != "" {
 				s.tlsConfig = l.TLS.ACMEConfig
 			} else if https {
 				s.tlsConfig = l.TLS.Config
 				if l.TLS.ACME != "" {
-					ensureServe(true, 443, "acme-tls-alpn-01")
+					ensureServe(true, config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443), "acme-tls-alpn-01")
 				}
 			}
 			portServe[port] = s
@@ -68,7 +68,7 @@ func ListenAndServe() {
 		}
 
 		if l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.IMAPS.Enabled {
-			ensureServe(true, 443, "acme-tls-alpn01")
+			ensureServe(true, config.Port(config.Port(l.AutoconfigHTTPS.Port, 443), 443), "acme-tls-alpn01")
 		}
 
 		if l.AccountHTTP.Enabled {
@@ -110,12 +110,12 @@ func ListenAndServe() {
 			}))
 		}
 		if l.AutoconfigHTTPS.Enabled {
-			srv := ensureServe(true, 443, "autoconfig-https")
+			srv := ensureServe(true, config.Port(l.AutoconfigHTTPS.Port, 443), "autoconfig-https")
 			srv.mux.HandleFunc("/mail/config-v1.1.xml", safeHeaders(autoconfHandle(l)))
 			srv.mux.HandleFunc("/autodiscover/autodiscover.xml", safeHeaders(autodiscoverHandle(l)))
 		}
 		if l.MTASTSHTTPS.Enabled {
-			srv := ensureServe(true, 443, "mtasts-https")
+			srv := ensureServe(true, config.Port(l.MTASTSHTTPS.Port, 443), "mtasts-https")
 			srv.mux.HandleFunc("/.well-known/mta-sts.txt", safeHeaders(mtastsPolicyHandle))
 		}
 		if l.PprofHTTP.Enabled {
