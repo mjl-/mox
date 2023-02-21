@@ -431,10 +431,10 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 					addErrorf("listener %q: unknown ACME provider %q", name, l.TLS.ACME)
 				}
 
-				// If only checking, we don't have an acme manager, so set an empty tls config to
-				// continue without errors.
+				// If only checking or with missing ACME definition, we don't have an acme manager,
+				// so set an empty tls config to continue.
 				var tlsconfig *tls.Config
-				if checkOnly {
+				if checkOnly || acme.Manager == nil {
 					tlsconfig = &tls.Config{}
 				} else {
 					tlsconfig = acme.Manager.TLSConfig.Clone()
