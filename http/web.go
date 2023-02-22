@@ -67,8 +67,8 @@ func ListenAndServe() {
 			return s
 		}
 
-		if l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.IMAPS.Enabled {
-			ensureServe(true, config.Port(config.Port(l.AutoconfigHTTPS.Port, 443), 443), "acme-tls-alpn01")
+		if l.TLS != nil && l.TLS.ACME != "" && (l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.IMAPS.Enabled) {
+			ensureServe(true, config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443), "acme-tls-alpn01")
 		}
 
 		if l.AccountHTTP.Enabled {
