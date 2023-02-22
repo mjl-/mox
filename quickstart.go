@@ -529,8 +529,8 @@ or if you are sending email for your domain from other machines/services, you
 should understand the consequences of the DNS records above before
 continuing!
 
-You can now start mox with "mox -config config/mox.conf serve", but see below
-for recommended ownership and permissions.
+You can now start mox with "mox serve", but see below for recommended ownership
+and permissions.
 
 `)
 
@@ -550,7 +550,7 @@ for recommended ownership and permissions.
 user name "mox", and the admin user is the current user, the following command
 sets the correct permissions:
 
-	sudo useradd --no-create-home --home-dir $PWD mox
+	sudo useradd -d $PWD mox
 	sudo chown %s:mox . mox
 	sudo chown -R mox:%s config data
 	sudo chmod 751 .
