@@ -605,6 +605,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	})
 	c.tr = moxio.NewTraceReader(c.log, "C: ", c.conn)
 	c.tw = moxio.NewTraceWriter(c.log, "S: ", c)
+	// todo: tracing should be done on whatever comes out of c.br. the remote connection write a command plus data, and bufio can read it in one read, causing a command parser that sets the tracing level to data to have no effect. we are now typically logging sent messages, when mail clients append to the Sent mailbox.
 	c.br = bufio.NewReader(c.tr)
 	c.bw = bufio.NewWriter(c.tw)
 
