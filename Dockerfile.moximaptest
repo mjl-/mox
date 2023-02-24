@@ -1,0 +1,11 @@
+FROM golang:1-alpine AS build
+WORKDIR /build
+COPY . .
+RUN GOPROXY=off CGO_ENABLED=0 go build -trimpath
+
+# Using latest may break at some point, but will hopefully be convenient most of the time.
+FROM alpine:latest
+WORKDIR /mox
+COPY --from=build /build/mox /bin/mox
+
+CMD ["/bin/mox", "serve"]

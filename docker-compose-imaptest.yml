@@ -1,7 +1,9 @@
 version: '3.7'
 services:
   mox:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.moximaptest
     user: ${MOX_UID}:${MOX_GID}
     volumes:
       - ./testdata/imaptest/data:/mox/data
@@ -9,7 +11,8 @@ services:
       - ./testdata/imaptest/domains.conf:/mox/domains.conf
       - ./testdata/imaptest/imaptest.mbox:/mox/imaptest.mbox
     working_dir: /mox
-    command: sh -c 'echo testtest | ./mox setaccountpassword mjl@mox.example && ./mox serve'
+    tty: true # For job control
+    command: sh -c 'export MOXCONF=mox.conf; set -m; mox serve & sleep 1; echo testtest | mox setaccountpassword mjl@mox.example; fg'
     healthcheck:
       test: netstat -nlt | grep ':1143 '
       interval: 1s

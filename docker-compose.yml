@@ -1,0 +1,30 @@
+# Before launching mox, run the quickstart to create config files:
+#
+# 	MOX_UID=0 MOX_GID=0 docker-compose run mox mox quickstart you@yourdomain.example
+#
+# After following the instructions, start mox as the newly created mox user:
+#
+# 	MOX_UID=$(id -u mox) MOX_GID=$(id -g mox) docker-compose up
+
+version: '3.7'
+services:
+  mox:
+    # Replace latest with the version you want to run.
+    image: moxmail/mox:latest
+    user: ${MOX_UID}:${MOX_GID}
+    environment:
+      - MOX_DOCKER=... # Quickstart won't try to write systemd service file.
+    # Mox needs host networking because it needs access to the IPs of the
+    # machine, and the IPs of incoming connections for spam filtering.
+    network_mode: 'host'
+    command: sh -c "umask 007 && exec mox serve"
+    volumes:
+      - ./config:/mox/config
+      - ./data:/mox/data
+    working_dir: /mox
+    restart: on-failure
+    healthcheck:
+      test: netstat -nlt | grep ':25 '
+      interval: 1s
+      timeout: 1s
+      retries: 10

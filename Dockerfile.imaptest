@@ -1,6 +1,6 @@
-FROM alpine:3.17
+FROM alpine:latest
 
-RUN apk update && apk add wget build-base
+RUN apk --no-cache add build-base
 WORKDIR /src
 RUN wget http://dovecot.org/nightly/dovecot-latest.tar.gz && tar -zxvf dovecot-latest.tar.gz && cd dovecot-0.0.0-* && ./configure && make install && cd ..
 RUN wget http://dovecot.org/nightly/imaptest/imaptest-latest.tar.gz && tar -zxvf imaptest-latest.tar.gz && cd dovecot-0.0-imaptest-0.0.0-* && ./configure --with-dovecot=$(ls -d ../dovecot-0.0.0-*) && make install

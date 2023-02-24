@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"os/user"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -345,7 +344,8 @@ This likely means one of two things:
 
 	dc := config.Dynamic{}
 	sc := config.Static{DataDir: "../data"}
-	os.MkdirAll(sc.DataDir, 0770)
+	dataDir := "data" // ../data is relative to config/
+	os.MkdirAll(dataDir, 0770)
 	sc.LogLevel = "info"
 	sc.Hostname = hostname.Name()
 	sc.ACME = map[string]config.ACME{
@@ -491,7 +491,7 @@ This likely means one of two things:
 	if err != nil {
 		fatalf("open account: %s", err)
 	}
-	cleanupPaths = append(cleanupPaths, sc.DataDir, filepath.Join(sc.DataDir, "accounts"), filepath.Join(sc.DataDir, "accounts", username), filepath.Join(sc.DataDir, "accounts", username, "index.db"))
+	cleanupPaths = append(cleanupPaths, dataDir, filepath.Join(dataDir, "accounts"), filepath.Join(dataDir, "accounts", username), filepath.Join(dataDir, "accounts", username, "index.db"))
 
 	password := pwgen()
 	if err := acc.SetPassword(password); err != nil {
@@ -534,34 +534,36 @@ and permissions.
 
 `)
 
-	userName := "root"
-	groupName := "root"
-	if u, err := user.Current(); err != nil {
-		log.Printf("get current user: %v", err)
-	} else {
-		userName = u.Username
-		if g, err := user.LookupGroupId(u.Gid); err != nil {
-			log.Printf("get current group: %v", err)
-		} else {
-			groupName = g.Name
-		}
-	}
-	fmt.Printf(`Assuming the mox binary is in the current directory, and you will run mox under
-user name "mox", and the admin user is the current user, the following command
-sets the correct permissions:
+	if os.Getenv("MOX_DOCKER") == "" {
+		fmt.Printf(`Assuming the mox binary is in the current directory, and you will run mox under
+user name "mox", and the admin user is the current user, the following commands
+set the correct permissions:
 
 	sudo useradd -d $PWD mox
-	sudo chown %s:mox . mox
-	sudo chown -R mox:%s config data
+	sudo chown $(id -nu):mox . mox
+	sudo chown -R mox:$(id -ng) config data
 	sudo chmod 751 .
 	sudo chmod 750 mox
 	sudo chmod -R u=rwX,g=rwX,o= config data
 	sudo chmod g+s $(find . -type d)
 
-`, userName, groupName)
+`)
+	} else {
+		fmt.Printf(`Assuming you will run mox under user name "mox", and the admin user is the
+current user, the following commands set the correct permissions:
 
-	// For now, we only give service config instructions for linux.
-	if runtime.GOOS == "linux" {
+	sudo useradd -d $PWD mox
+	sudo chown $(id -nu):mox .
+	sudo chown -R mox:$(id -ng) config data
+	sudo chmod 751 .
+	sudo chmod -R u=rwX,g=rwX,o= config data
+	sudo chmod g+s $(find . -type d)
+
+`)
+	}
+
+	// For now, we only give service config instructions for linux when not running in docker.
+	if runtime.GOOS == "linux" && os.Getenv("MOX_DOCKER") == "" {
 		pwd, err := os.Getwd()
 		if err != nil {
 			log.Printf("current working directory: %v", err)

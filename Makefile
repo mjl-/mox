@@ -50,7 +50,6 @@ integration-start:
 # run from within "make integration-start"
 integration-test:
 	CGO_ENABLED=0 go test -tags integration
-	go tool cover -html=cover.out -o cover.html
 
 imaptest-build:
 	-MOX_UID=$$(id -u) MOX_GID=$$(id -g) docker-compose -f docker-compose-imaptest.yml build --no-cache mox

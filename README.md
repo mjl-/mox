@@ -85,6 +85,9 @@ Verify you have a working mox binary:
 
 Note: Mox only compiles/works on unix systems, not on Plan 9 or Windows.
 
+You can also run mox with docker image "moxmail/mox" on hub.docker.com, with
+tags like "latest", "0.0.1", etc. See docker-compose.yml in this repository.
+
 
 # Quickstart
 
