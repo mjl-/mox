@@ -2,7 +2,7 @@ Mox is a modern full-featured open source secure mail server for low-maintenance
 
 See Quickstart below to get started.
 
-Mox features:
+## Features
 
 - Quick and easy to start/maintain mail server, for your own domain(s).
 - SMTP (with extensions) for receiving and submitting email.
@@ -33,38 +33,9 @@ Mox features:
   easy account setup (though not many clients support it).
 - Prometheus metrics and structured logging for operational insight.
 
-Not supported (but perhaps in the future):
-
-- Webmail
-- HTTP-based API for sending messages and receiving delivery feedback
-- Calendaring
-- Functioning as SMTP relay
-- Forwarding (to an external address)
-- Autoresponders
-- POP3
-- Delivery to (unix) OS system users
-- Sieve for filtering
-- PGP or S/MIME
-- Mailing list manager
-- Support for pluggable delivery mechanisms.
-
-Mox has automated tests, including for interoperability with Postfix for SMTP.
-
-Mox is manually tested with email clients: Mozilla Thunderbird, mutt, iOS Mail,
-macOS Mail, Android Mail, Microsoft Outlook.
-
-Mox is also manually tested to interoperate with popular cloud providers:
-gmail.com, outlook.com, yahoo.com, proton.me.
-
-Mox is implemented in Go, a modern safe programming language, and has a focus on
-security.
-
-Mox is available under the MIT-license.
-Mox includes the Public Suffix List by Mozilla, under Mozilla Public License, v. 2.0.
-
-Mox was created by Mechiel Lukkien, mechiel@ueber.net.
-
-For discussions/talk, join #mox on irc.oftc.net, or #mox on the "Gopher slack".
+Mox is available under the MIT-license and was created by Mechiel Lukkien,
+mechiel@ueber.net. Mox includes the Public Suffix List by Mozilla, under Mozilla
+Public License, v2.0.
 
 
 # Download
@@ -111,6 +82,56 @@ also for automatic TLS.  You can combine mox with an existing webserver, but it
 requires more configuration.
 
 After starting, you can access the admin web interface on internal IPs.
+
+
+# Future/development
+
+Mox has automated tests, including for interoperability with Postfix for SMTP.
+Mox is manually tested with email clients: Mozilla Thunderbird, mutt, iOS Mail,
+macOS Mail, Android Mail, Microsoft Outlook. Mox is also manually tested to
+interoperate with popular cloud providers: gmail.com, outlook.com, yahoo.com,
+proton.me.
+
+The code is heavily cross-referenced with the RFCs for readability/maintainability.
+
+## Roadmap
+
+- Strict vs lax mode, defaulting to lax when receiving from the internet, and
+  strict when sending.
+- "developer server" mode, to easily launch a local SMTP/IMAP server to test
+  your apps mail sending capabilities.
+- Rate limiting and spam detection for submitted/outgoing messages, to reduce
+  impact when an account gets compromised.
+- Privilege separation, isolating parts of the application to more restricted
+  sandbox (e.g. new unauthenticated connections).
+- DANE and DNSSEC.
+- Sending DMARC and TLS reports (currently only receiving).
+- OAUTH2 support, for single sign on.
+- Basic reverse proxy, so port 443 can be used for regular web serving too.
+- Using mox as backup MX.
+- ACME verification over HTTP (in addition to current tls-alpn01).
+- Add special IMAP mailbox ("Queue?") that contains queued but
+  not-yet-delivered messages.
+- Old-style internationalization in messages.
+- Calendaring
+- Webmail
+
+There are many smaller improvements to make as well, search for "todo" in the code.
+
+## Not supported
+
+But perhaps in the future...
+
+- Sieve for filtering (for now see Rulesets in the account config)
+- HTTP-based API for sending messages and receiving delivery feedback
+- Functioning as SMTP relay
+- Forwarding (to an external address)
+- Autoresponders
+- POP3
+- Delivery to (unix) OS system users
+- PGP or S/MIME
+- Mailing list manager
+- Support for pluggable delivery mechanisms
 
 
 # FAQ - Frequently Asked Questions
@@ -168,6 +189,12 @@ violations, that would be interesting to hear about.
 Pull requests for bug fixes and new code are welcome too. If the changes are
 large, it helps to start a discussion (create a ticket) before doing all the
 work.
+
+## Where can I discuss mox?
+
+Join #mox on irc.oftc.net, or #mox on the "Gopher slack".
+
+For bug reports, please file an issue at https://github.com/mjl-/mox/issues/new.
 
 ## How do I change my password?
 
