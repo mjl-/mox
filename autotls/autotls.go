@@ -52,7 +52,7 @@ var (
 // certificates for allowlisted hosts.
 type Manager struct {
 	ACMETLSConfig *tls.Config // For serving HTTPS on port 443, which is required for certificate requests to succeed.
-	TLSConfig     *tls.Config // For all TLS servers not used for validating ACME requests. Like SMTP and HTTPS on ports other than 443.
+	TLSConfig     *tls.Config // For all TLS servers not used for validating ACME requests. Like SMTP and IMAP (including with STARTTLS) and HTTPS on ports other than 443.
 	Manager       *autocert.Manager
 
 	shutdown <-chan struct{}
@@ -147,7 +147,7 @@ func Load(name, acmeDir, contactEmail, directoryURL string, shutdown <-chan stru
 		// common for SMTP STARTTLS connections, which often do not care about the
 		// validation of the certificate.
 		if hello.ServerName == "" {
-			log.Debug("tls request without sni servername, rejecting")
+			log.Debug("tls request without sni servername, rejecting", mlog.Field("localaddr", hello.Conn.LocalAddr()), mlog.Field("supportedprotos", hello.SupportedProtos))
 			return nil, fmt.Errorf("sni server name required")
 		}
 

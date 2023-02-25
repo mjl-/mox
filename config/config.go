@@ -287,6 +287,6 @@ type TLS struct {
 	} `sconf:"optional"`
 	MinVersion string `sconf:"optional" sconf-doc:"Minimum TLS version. Default: TLSv1.2."`
 
-	Config     *tls.Config `sconf:"-" json:"-"`
-	ACMEConfig *tls.Config `sconf:"-" json:"-"`
+	Config     *tls.Config `sconf:"-" json:"-"` // TLS config for non-ACME-verification connections, i.e. SMTP and IMAP, and not port 443.
+	ACMEConfig *tls.Config `sconf:"-" json:"-"` // TLS config that handles ACME verification, for serving on port 443.
 }
