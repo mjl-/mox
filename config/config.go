@@ -135,11 +135,13 @@ type Listener struct {
 	} `sconf:"optional" sconf-doc:"Serve /debug/pprof/ for profiling a running mox instance. Do not enable this on a public IP!"`
 	AutoconfigHTTPS struct {
 		Enabled bool
-		Port    int `sconf:"optional" sconf-doc:"TLS port, 443 by default. You should only override this if you cannot listen on port 443 directly. Autoconfig requests will be made to port 443, so you'll have to add an external mechanism to get the connection here, e.g. by configuring port forwarding."`
+		Port    int  `sconf:"optional" sconf-doc:"TLS port, 443 by default. You should only override this if you cannot listen on port 443 directly. Autoconfig requests will be made to port 443, so you'll have to add an external mechanism to get the connection here, e.g. by configuring port forwarding."`
+		NonTLS  bool `sconf:"optional" sconf-doc:"If set, plain HTTP instead of HTTPS is spoken on the configured port. Can be useful when the autoconfig domain is reverse proxied."`
 	} `sconf:"optional" sconf-doc:"Serve autoconfiguration/autodiscovery to simplify configuring email applications, will use port 443. Requires a TLS config."`
 	MTASTSHTTPS struct {
 		Enabled bool
-		Port    int `sconf:"optional" sconf-doc:"TLS port, 443 by default. You should only override this if you cannot listen on port 443 directly. MTA-STS requests will be made to port 443, so you'll have to add an external mechanism to get the connection here, e.g. by configuring port forwarding."`
+		Port    int  `sconf:"optional" sconf-doc:"TLS port, 443 by default. You should only override this if you cannot listen on port 443 directly. MTA-STS requests will be made to port 443, so you'll have to add an external mechanism to get the connection here, e.g. by configuring port forwarding."`
+		NonTLS  bool `sconf:"optional" sconf-doc:"If set, plain HTTP instead of HTTPS is spoken on the configured port. Can be useful when the mta-sts domain is reverse proxied."`
 	} `sconf:"optional" sconf-doc:"Serve MTA-STS policies describing SMTP TLS requirements. Requires a TLS config."`
 }
 

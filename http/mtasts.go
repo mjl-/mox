@@ -1,6 +1,7 @@
 package http
 
 import (
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -18,9 +19,14 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	domain, err := dns.ParseDomain(strings.TrimPrefix(r.Host, "mta-sts."))
+	host, _, err := net.SplitHostPort(strings.TrimPrefix(r.Host, "mta-sts."))
 	if err != nil {
-		log.Errorx("mtasts policy request: bad domain", err, mlog.Field("host", r.Host))
+		http.NotFound(w, r)
+		return
+	}
+	domain, err := dns.ParseDomain(host)
+	if err != nil {
+		log.Errorx("mtasts policy request: bad domain", err, mlog.Field("host", host))
 		http.NotFound(w, r)
 		return
 	}

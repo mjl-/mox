@@ -202,8 +202,7 @@ func (c *Config) allowACMEHosts() {
 		}
 		m := c.Static.ACME[l.TLS.ACME].Manager
 		for _, dom := range c.Dynamic.Domains {
-
-			if l.AutoconfigHTTPS.Enabled {
+			if l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS {
 				if d, err := dns.ParseDomain("autoconfig." + dom.Domain.ASCII); err != nil {
 					xlog.Errorx("parsing autoconfig domain", err, mlog.Field("domain", dom.Domain))
 				} else {
@@ -217,7 +216,7 @@ func (c *Config) allowACMEHosts() {
 				}
 			}
 
-			if l.MTASTSHTTPS.Enabled && dom.MTASTS != nil {
+			if l.MTASTSHTTPS.Enabled && dom.MTASTS != nil && !l.MTASTSHTTPS.NonTLS {
 				d, err := dns.ParseDomain("mta-sts." + dom.Domain.ASCII)
 				if err != nil {
 					xlog.Errorx("parsing mta-sts domain", err, mlog.Field("domain", dom.Domain))
@@ -484,11 +483,14 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 			if l.TLS.ACMEConfig != nil {
 				l.TLS.ACMEConfig.MinVersion = minVersion
 			}
-		} else if l.IMAPS.Enabled || l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.Submission.Enabled && !l.Submission.NoRequireSTARTTLS || l.AccountHTTPS.Enabled || l.AdminHTTPS.Enabled || l.AutoconfigHTTPS.Enabled || l.MTASTSHTTPS.Enabled {
+		} else if l.IMAPS.Enabled || l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.Submission.Enabled && !l.Submission.NoRequireSTARTTLS || l.AccountHTTPS.Enabled || l.AdminHTTPS.Enabled || (l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS) || (l.MTASTSHTTPS.Enabled && !l.MTASTSHTTPS.NonTLS) {
 			addErrorf("listener %q requires TLS, but does not specify tls config", name)
 		}
 		if l.AutoconfigHTTPS.Enabled && (!l.IMAP.Enabled && !l.IMAPS.Enabled || !l.Submission.Enabled && !l.Submissions.Enabled) {
 			addErrorf("listener %q with autoconfig enabled must have SMTP submission or submissions and IMAP or IMAPS enabled", name)
+		}
+		if l.AutoconfigHTTPS.Enabled && l.MTASTSHTTPS.Enabled && l.AutoconfigHTTPS.Port == l.MTASTSHTTPS.Port && l.AutoconfigHTTPS.NonTLS != l.MTASTSHTTPS.NonTLS {
+			addErrorf("listener %q tries to enable autoconfig and mta-sts enabled on same port but with both http and https", name)
 		}
 		if l.SMTP.Enabled {
 			if len(l.IPs) == 0 {

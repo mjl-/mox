@@ -110,12 +110,12 @@ func ListenAndServe() {
 			}))
 		}
 		if l.AutoconfigHTTPS.Enabled {
-			srv := ensureServe(true, config.Port(l.AutoconfigHTTPS.Port, 443), "autoconfig-https")
+			srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, config.Port(l.AutoconfigHTTPS.Port, 443), "autoconfig-https")
 			srv.mux.HandleFunc("/mail/config-v1.1.xml", safeHeaders(autoconfHandle(l)))
 			srv.mux.HandleFunc("/autodiscover/autodiscover.xml", safeHeaders(autodiscoverHandle(l)))
 		}
 		if l.MTASTSHTTPS.Enabled {
-			srv := ensureServe(true, config.Port(l.MTASTSHTTPS.Port, 443), "mtasts-https")
+			srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, config.Port(l.MTASTSHTTPS.Port, 443), "mtasts-https")
 			srv.mux.HandleFunc("/.well-known/mta-sts.txt", safeHeaders(mtastsPolicyHandle))
 		}
 		if l.PprofHTTP.Enabled {

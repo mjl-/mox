@@ -240,6 +240,10 @@ describe-static" and "mox config describe-domains":
 				# port forwarding. (optional)
 				Port: 0
 
+				# If set, plain HTTP instead of HTTPS is spoken on the configured port. Can be
+				# useful when the autoconfig domain is reverse proxied. (optional)
+				NonTLS: false
+
 			# Serve MTA-STS policies describing SMTP TLS requirements. Requires a TLS config.
 			# (optional)
 			MTASTSHTTPS:
@@ -250,6 +254,10 @@ describe-static" and "mox config describe-domains":
 				# add an external mechanism to get the connection here, e.g. by configuring port
 				# forwarding. (optional)
 				Port: 0
+
+				# If set, plain HTTP instead of HTTPS is spoken on the configured port. Can be
+				# useful when the mta-sts domain is reverse proxied. (optional)
+				NonTLS: false
 
 	# Destination for emails delivered to postmaster address.
 	Postmaster:
