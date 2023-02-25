@@ -422,7 +422,7 @@ var bufpool = moxio.NewBufpool(8, 2*1024)
 func (c *conn) readline() string {
 	line, err := bufpool.Readline(c.r)
 	if err != nil && errors.Is(err, moxio.ErrLineTooLong) {
-		c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Other0, "line too line, smtp max is 512, we reached 2048", nil)
+		c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Other0, "line too long, smtp max is 512, we reached 2048", nil)
 		panic(fmt.Errorf("%s (%w)", err, errIO))
 	} else if err != nil {
 		panic(fmt.Errorf("%s (%w)", err, errIO))
@@ -654,7 +654,7 @@ func command(c *conn) {
 
 		var serr smtpError
 		if errors.As(err, &serr) {
-			c.writecodeline(serr.code, serr.secode, serr.err.Error(), serr.err)
+			c.writecodeline(serr.code, serr.secode, fmt.Sprintf("%s (%s)", serr.err, mox.ReceivedID(c.cid)), serr.err)
 			if serr.printStack {
 				debug.PrintStack()
 			}
@@ -1443,7 +1443,7 @@ func (c *conn) cmdData(p *parser) {
 			if n < defaultMaxMsgSize {
 				ecode = smtp.SeMailbox2MsgLimitExceeded3
 			}
-			c.writecodeline(smtp.C451LocalErr, ecode, "error copying data to file", err)
+			c.writecodeline(smtp.C451LocalErr, ecode, fmt.Sprintf("error copying data to file (%s)", mox.ReceivedID(c.cid)), err)
 			panic(fmt.Errorf("remote sent too much DATA: %w", errIO))
 		}
 
@@ -1453,7 +1453,7 @@ func (c *conn) cmdData(p *parser) {
 		// available and our write blocks us from reading remaining data, leading to
 		// deadlock. We have a timeout on our connection writes though, so worst case we'll
 		// abort the connection due to expiration.
-		c.writecodeline(smtp.C451LocalErr, smtp.SeSys3Other0, "error copying data to file", err)
+		c.writecodeline(smtp.C451LocalErr, smtp.SeSys3Other0, fmt.Sprintf("error copying data to file (%s)", mox.ReceivedID(c.cid)), err)
 		io.Copy(io.Discard, dr)
 		return
 	}
