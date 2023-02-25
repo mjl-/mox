@@ -185,7 +185,7 @@ func Check(ctx context.Context, resolver dns.Resolver, domain dns.Domain, lastKn
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	defer func() {
-		log.Debugx("updates check result", rerr, mlog.Field("domain", domain), mlog.Field("lastKnown", lastKnown), mlog.Field("changelogbaseurl", changelogBaseURL), mlog.Field("version", rversion), mlog.Field("record", rrecord), mlog.Field("duration", time.Since(start)))
+		log.Debugx("updates check result", rerr, mlog.Field("domain", domain), mlog.Field("lastknown", lastKnown), mlog.Field("changelogbaseurl", changelogBaseURL), mlog.Field("version", rversion), mlog.Field("record", rrecord), mlog.Field("duration", time.Since(start)))
 	}()
 
 	latest, record, err := Lookup(ctx, resolver, domain)

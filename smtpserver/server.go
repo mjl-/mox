@@ -1874,7 +1874,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	})
 	switch receivedSPF.Result {
 	case spf.StatusPass:
-		c.log.Debug("spf pass", mlog.Field("ip", spfArgs.RemoteIP), mlog.Field("mailfromDomain", spfArgs.MailFromDomain.ASCII)) // todo: log the domain that was actually verified.
+		c.log.Debug("spf pass", mlog.Field("ip", spfArgs.RemoteIP), mlog.Field("mailfromdomain", spfArgs.MailFromDomain.ASCII)) // todo: log the domain that was actually verified.
 	case spf.StatusFail:
 		if spfExpl != "" {
 			// Filter out potentially hostile text. ../rfc/7208:2529
@@ -2237,7 +2237,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			conf, _ := acc.Conf()
 			if conf.RejectsMailbox != "" && messageID != "" {
 				if err := acc.RejectsRemove(log, conf.RejectsMailbox, messageID); err != nil {
-					log.Errorx("removing message from rejects mailbox", err, mlog.Field("messageID", messageID))
+					log.Errorx("removing message from rejects mailbox", err, mlog.Field("messageid", messageID))
 				}
 			}
 		})

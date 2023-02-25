@@ -442,7 +442,7 @@ func queueDelete(msgID int64) error {
 // message, or updating the time for the next attempt. A DSN may be sent.
 func deliver(resolver dns.Resolver, m Msg) {
 	cid := mox.Cid()
-	qlog := xlog.WithCid(cid).Fields(mlog.Field("from", m.Sender()), mlog.Field("recipient", m.Recipient()), mlog.Field("attempts", m.Attempts), mlog.Field("msgID", m.ID))
+	qlog := xlog.WithCid(cid).Fields(mlog.Field("from", m.Sender()), mlog.Field("recipient", m.Recipient()), mlog.Field("attempts", m.Attempts), mlog.Field("msgid", m.ID))
 
 	defer func() {
 		deliveryResult <- formatIPDomain(m.RecipientDomain)
@@ -492,7 +492,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 		qup := bstore.QueryDB[Msg](queueDB)
 		qup.FilterID(m.ID)
 		if _, err := qup.UpdateNonzero(Msg{LastError: errmsg, DialedIPs: m.DialedIPs}); err != nil {
-			qlog.Errorx("storing delivery error", err, mlog.Field("deliveryError", errmsg))
+			qlog.Errorx("storing delivery error", err, mlog.Field("deliveryerror", errmsg))
 		}
 
 		if m.Attempts == 5 {
@@ -705,7 +705,7 @@ func deliverHost(log *mlog.Log, resolver dns.Resolver, cid int64, host dns.IPDom
 	var deliveryResult string
 	defer func() {
 		metricDeliveryHost.WithLabelValues(fmt.Sprintf("%d", m.Attempts), string(tlsMode), deliveryResult).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debug("queue deliverhost result", mlog.Field("host", host), mlog.Field("attempt", m.Attempts), mlog.Field("tlsmode", tlsMode), mlog.Field("permanent", permanent), mlog.Field("badTLS", badTLS), mlog.Field("secodeOpt", secodeOpt), mlog.Field("errmsg", errmsg), mlog.Field("ok", ok), mlog.Field("duration", time.Since(start)))
+		log.Debug("queue deliverhost result", mlog.Field("host", host), mlog.Field("attempt", m.Attempts), mlog.Field("tlsmode", tlsMode), mlog.Field("permanent", permanent), mlog.Field("badtls", badTLS), mlog.Field("secodeopt", secodeOpt), mlog.Field("errmsg", errmsg), mlog.Field("ok", ok), mlog.Field("duration", time.Since(start)))
 	}()
 
 	f, err := os.Open(m.MessagePath())

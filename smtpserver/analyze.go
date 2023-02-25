@@ -271,7 +271,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		}
 		accept = contentProb <= threshold
 		junkSubjectpass = contentProb < threshold-0.2
-		log.Info("content analyzed", mlog.Field("accept", accept), mlog.Field("contentProb", contentProb), mlog.Field("subjectpass", junkSubjectpass))
+		log.Info("content analyzed", mlog.Field("accept", accept), mlog.Field("contentprob", contentProb), mlog.Field("subjectpass", junkSubjectpass))
 	} else if err != store.ErrNoJunkFilter {
 		log.Errorx("open junkfilter", err)
 		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonJunkFilterError)

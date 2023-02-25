@@ -291,7 +291,7 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	defer func() {
-		log.Debugx("spf evaluate result", rerr, mlog.Field("dnsrequests", *args.dnsRequests), mlog.Field("voidLookups", *args.voidLookups), mlog.Field("domain", args.domain), mlog.Field("status", rstatus), mlog.Field("mechanism", mechanism), mlog.Field("explanation", rexplanation), mlog.Field("duration", time.Since(start)))
+		log.Debugx("spf evaluate result", rerr, mlog.Field("dnsrequests", *args.dnsRequests), mlog.Field("voidlookups", *args.voidLookups), mlog.Field("domain", args.domain), mlog.Field("status", rstatus), mlog.Field("mechanism", mechanism), mlog.Field("explanation", rexplanation), mlog.Field("duration", time.Since(start)))
 	}()
 
 	resolver = dns.WithPackage(resolver, "spf")
