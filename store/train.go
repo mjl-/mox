@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -63,6 +64,8 @@ func (a *Account) RetrainMessages(log *mlog.Log, tx *bstore.Tx, msgs []Message, 
 			if err != nil && errors.Is(err, ErrNoJunkFilter) {
 				// No junk filter configured. Nothing more to do.
 				return nil
+			} else if err != nil {
+				return fmt.Errorf("open junk filter: %v", err)
 			}
 			defer func() {
 				if jf != nil {

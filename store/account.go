@@ -671,14 +671,12 @@ func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os
 		xcheckf(err, "sync directory")
 	}
 
-	if notrain && m.NeedsTraining() {
-		// If this ever happens, hopefully we'll get bug reports about it.
-		log.Error("deliver of message that unexpectedly needs training", mlog.Field("messageid", m.ID), mlog.Field("trainedjunk", m.TrainedJunk), mlog.Field("flags", m.Flags))
+	if !notrain && m.NeedsTraining() {
+		l := []Message{*m}
+		err = a.RetrainMessages(log, tx, l, false)
+		xcheckf(err, "training junkfilter")
+		*m = l[0]
 	}
-	l := []Message{*m}
-	err = a.RetrainMessages(log, tx, l, false)
-	xcheckf(err, "training junkfilter")
-	*m = l[0]
 }
 
 // write contents of r to new file dst, for delivering a message.
