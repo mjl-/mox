@@ -76,7 +76,7 @@ func ListenAndServe() {
 			srv.mux.HandleFunc("/", safeHeaders(accountHandle))
 		}
 		if l.AccountHTTPS.Enabled {
-			srv := ensureServe(true, config.Port(l.AccountHTTP.Port, 443), "account-https")
+			srv := ensureServe(true, config.Port(l.AccountHTTPS.Port, 443), "account-https")
 			srv.mux.HandleFunc("/", safeHeaders(accountHandle))
 		}
 
@@ -89,7 +89,7 @@ func ListenAndServe() {
 		}
 		if l.AdminHTTPS.Enabled {
 			srv := ensureServe(true, config.Port(l.AdminHTTPS.Port, 443), "admin-https")
-			if !l.AccountHTTP.Enabled {
+			if !l.AccountHTTPS.Enabled {
 				srv.mux.HandleFunc("/", safeHeaders(adminIndex))
 			}
 			srv.mux.HandleFunc("/admin/", safeHeaders(adminHandle))
