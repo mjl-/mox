@@ -199,9 +199,13 @@ func importctl(ctl *ctl, mbox bool) {
 			return
 		}
 
-		ctl.log.Error("store error", mlog.Field("panic", x))
-		debug.PrintStack()
-		metrics.PanicInc("import")
+		if x != ctl.x {
+			ctl.log.Error("import error", mlog.Field("panic", fmt.Errorf("%v", x)))
+			debug.PrintStack()
+			metrics.PanicInc("import")
+		} else {
+			ctl.log.Error("import error")
+		}
 
 		for _, id := range deliveredIDs {
 			p := a.MessagePath(id)
@@ -209,7 +213,7 @@ func importctl(ctl *ctl, mbox bool) {
 			ctl.log.Check(err, "closing message file after import error", mlog.Field("path", p))
 		}
 
-		ctl.xerror(fmt.Sprintf("%v", x))
+		ctl.xerror(fmt.Sprintf("import error: %v", x))
 	}()
 
 	var changes []store.Change
