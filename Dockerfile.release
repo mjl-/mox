@@ -1,12 +1,13 @@
-FROM golang:1-alpine AS build
-WORKDIR /build
-COPY . .
-RUN GOPROXY=off CGO_ENABLED=0 go build -trimpath
+FROM --platform=linux/amd64 docker.io/golang:1-alpine AS build
+WORKDIR /
+ARG moxversion
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go install -mod mod -trimpath github.com/mjl-/mox@$moxversion
+RUN test -f /go/bin/mox && cp /go/bin/mox /bin/mox || cp /go/bin/${TARGETOS}_${TARGETARCH}/mox /bin/mox
 
 # Using latest may break at some point, but will hopefully be convenient most of the time.
-FROM alpine:latest
+FROM --platform=$TARGETPLATFORM docker.io/alpine:latest
 WORKDIR /mox
-COPY --from=build /build/mox /bin/mox
+COPY --from=build /bin/mox /bin/mox
 
 # SMTP for incoming message delivery.
 EXPOSE 25/tcp

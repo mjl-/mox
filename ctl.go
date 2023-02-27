@@ -9,12 +9,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/mjl-/bstore"
@@ -300,58 +298,6 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 	case "stop":
 		shutdown()
 		os.Exit(0)
-
-	case "restart":
-		// First test the config.
-		_, errs := mox.ParseConfig(ctx, mox.ConfigStaticPath, true)
-		if len(errs) > 1 {
-			log.Error("multiple configuration errors before restart")
-			for _, err := range errs {
-				log.Errorx("config error", err)
-			}
-			ctl.xerror("restart aborted")
-		} else if len(errs) == 1 {
-			log.Errorx("configuration error, restart aborted", errs[0])
-			ctl.xerror(errs[0].Error())
-		}
-
-		binary, err := os.Executable()
-		ctl.xcheck(err, "finding executable")
-		cfr, ok := ctl.conn.(interface{ File() (*os.File, error) })
-		if !ok {
-			ctl.xerror("cannot dup ctl socket")
-		}
-		cf, err := cfr.File()
-		ctl.xcheck(err, "dup ctl socket")
-		defer cf.Close()
-		_, _, err = syscall.Syscall(syscall.SYS_FCNTL, cf.Fd(), syscall.F_SETFD, 0)
-		if err != syscall.Errno(0) {
-			ctl.xcheck(err, "clear close-on-exec on ctl socket")
-		}
-		ctl.xwriteok()
-
-		shutdown()
-
-		// todo future: we could gather all listen fd's, keep them open, passing them to the new process and indicate (in env var or cli flag) for which addresses they are, then exec and have the new process pick them up. not worth the trouble at the moment, our shutdown is typically quick enough.
-		// todo future: does this actually cleanup all M's on all platforms?
-
-		env := os.Environ()
-		var found bool
-		envv := fmt.Sprintf("MOX_RESTART_CTL_SOCKET=%d", cf.Fd())
-		for i, s := range env {
-			if strings.HasPrefix(s, "MOX_RESTART_CTL_SOCKET=") {
-				found = true
-				env[i] = envv
-				break
-			}
-		}
-		if !found {
-			env = append(env, envv)
-		}
-		// On success, we never get here and "serve" will write the OK on the MOX_RESTART_CTL_SOCKET and close it.
-		err = syscall.Exec(binary, os.Args, env)
-		runtime.KeepAlive(cf)
-		ctl.xcheck(err, "exec")
 
 	case "deliver":
 		/* The protocol, double quoted are literals.

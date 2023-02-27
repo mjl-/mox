@@ -8,7 +8,7 @@
 /testdata/httpaccount/data/
 /testdata/imap/data/
 /testdata/imaptest/data/
-/testdata/integration/run
+/testdata/integration/data/
 /testdata/junk/*.bloom
 /testdata/junk/*.db
 /testdata/queue/data/

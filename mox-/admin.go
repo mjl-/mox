@@ -138,7 +138,7 @@ func MakeAccountConfig(addr smtp.Address) config.Account {
 
 // MakeDomainConfig makes a new config for a domain, creating DKIM keys, using
 // accountName for DMARC and TLS reports.
-func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountName string) (config.Domain, []string, error) {
+func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountName string, withMTASTS bool) (config.Domain, []string, error) {
 	log := xlog.WithContext(ctx)
 
 	now := time.Now()
@@ -242,19 +242,22 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 			Localpart: "dmarc-reports",
 			Mailbox:   "DMARC",
 		},
-		MTASTS: &config.MTASTS{
-			PolicyID: time.Now().UTC().Format("20060102T150405"),
-			Mode:     mtasts.ModeEnforce,
-			// We start out with 24 hour, and warn in the admin interface that users should
-			// increase it to weeks. Once the setup works.
-			MaxAge: 24 * time.Hour,
-			MX:     []string{hostname.ASCII},
-		},
 		TLSRPT: &config.TLSRPT{
 			Account:   accountName,
 			Localpart: "tls-reports",
 			Mailbox:   "TLSRPT",
 		},
+	}
+
+	if withMTASTS {
+		confDomain.MTASTS = &config.MTASTS{
+			PolicyID: time.Now().UTC().Format("20060102T150405"),
+			Mode:     mtasts.ModeEnforce,
+			// We start out with 24 hour, and warn in the admin interface that users should
+			// increase it to weeks once the setup works.
+			MaxAge: 24 * time.Hour,
+			MX:     []string{hostname.ASCII},
+		}
 	}
 
 	rpaths := paths
@@ -293,7 +296,16 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 		nc.Domains[name] = d
 	}
 
-	confDomain, cleanupFiles, err := MakeDomainConfig(ctx, domain, Conf.Static.HostnameDomain, accountName)
+	// Only enable mta-sts for domain if there is a listener with mta-sts.
+	var withMTASTS bool
+	for _, l := range Conf.Static.Listeners {
+		if l.MTASTSHTTPS.Enabled {
+			withMTASTS = true
+			break
+		}
+	}
+
+	confDomain, cleanupFiles, err := MakeDomainConfig(ctx, domain, Conf.Static.HostnameDomain, accountName, withMTASTS)
 	if err != nil {
 		return fmt.Errorf("preparing domain config: %v", err)
 	}

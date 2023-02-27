@@ -78,7 +78,6 @@ var commands = []struct {
 }{
 	{"serve", cmdServe},
 	{"quickstart", cmdQuickstart},
-	{"restart", cmdRestart},
 	{"stop", cmdStop},
 	{"setaccountpassword", cmdSetaccountpassword},
 	{"setadminpassword", cmdSetadminpassword},
@@ -105,6 +104,7 @@ var commands = []struct {
 	{"config domain add", cmdConfigDomainAdd},
 	{"config domain rm", cmdConfigDomainRemove},
 	{"config describe-sendmail", cmdConfigDescribeSendmail},
+	{"config printservice", cmdConfigPrintservice},
 
 	{"checkupdate", cmdCheckupdate},
 	{"cid", cmdCid},
@@ -530,6 +530,27 @@ needs modifications to make it valid.
 	xcheckf(err, "describing config")
 }
 
+func cmdConfigPrintservice(c *cmd) {
+	c.params = ">mox.service"
+	c.help = `Prints a systemd unit service file for mox.
+
+This is the same file as generated using quickstart. If the systemd service file
+has changed with a newer version of mox, use this command to generate an up to
+date version.
+`
+	if len(c.Parse()) != 0 {
+		c.Usage()
+	}
+
+	pwd, err := os.Getwd()
+	if err != nil {
+		log.Printf("current working directory: %v", err)
+		pwd = "/home/mox"
+	}
+	service := strings.ReplaceAll(moxService, "/home/mox", pwd)
+	fmt.Print(service)
+}
+
 func cmdConfigDomainAdd(c *cmd) {
 	c.params = "domain account [localpart]"
 	c.help = `Adds a new domain to the configuration and reloads the configuration.
@@ -800,42 +821,6 @@ new mail deliveries.
 		log.Fatalf("expected eof after graceful shutdown, got error %v", err)
 	}
 	fmt.Println("mox stopped")
-}
-
-func cmdRestart(c *cmd) {
-	c.help = `Restart mox after validating the configuration file.
-
-Restart execs the mox binary, which have been updated. Restart returns after
-the restart has finished. If you update the mox binary, keep in mind that the
-validation of the configuration file is done by the old process with the old
-binary. The new binary may report a syntax error. If you update the binary, you
-should use the "config test" command with the new binary to validate the
-configuration file.
-
-Like stop, existing connections get a 3 second period for graceful shutdown.
-`
-	if len(c.Parse()) != 0 {
-		c.Usage()
-	}
-	mustLoadConfig()
-
-	ctl := xctl()
-	ctl.xwrite("restart")
-	line := ctl.xread()
-	if line != "ok" {
-		log.Fatalf("restart failed: %s", line)
-	}
-	// Server is now restarting. It will write ok when it is back online again. If it fails, our connection will be closed.
-	buf := make([]byte, 128)
-	n, err := ctl.conn.Read(buf)
-	if err != nil {
-		log.Fatalf("restart failed: %s", err)
-	}
-	s := strings.TrimSuffix(string(buf[:n]), "\n")
-	if s != "ok" {
-		log.Fatalf("restart failed: %s", s)
-	}
-	fmt.Println("mox restarted")
 }
 
 func cmdSetadminpassword(c *cmd) {

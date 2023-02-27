@@ -161,8 +161,9 @@ var (
 
 var jitterRand = mox.NewRand()
 
-// ListenAndServe starts network listeners that serve incoming SMTP connection.
-func ListenAndServe() {
+// Listen initializes network listeners for incoming SMTP connection.
+// The listeners are stored for a later call to Serve.
+func Listen() {
 	for name, listener := range mox.Conf.Static.Listeners {
 		var tlsConfig *tls.Config
 		if listener.TLS != nil {
@@ -181,7 +182,7 @@ func ListenAndServe() {
 			}
 			port := config.Port(listener.SMTP.Port, 25)
 			for _, ip := range listener.IPs {
-				go listenServe("smtp", name, ip, port, hostname, tlsConfig, false, false, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, listener.SMTP.DNSBLZones)
+				listen1("smtp", name, ip, port, hostname, tlsConfig, false, false, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, listener.SMTP.DNSBLZones)
 			}
 		}
 		if listener.Submission.Enabled {
@@ -191,7 +192,7 @@ func ListenAndServe() {
 			}
 			port := config.Port(listener.Submission.Port, 587)
 			for _, ip := range listener.IPs {
-				go listenServe("submission", name, ip, port, hostname, tlsConfig, true, false, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, nil)
+				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, nil)
 			}
 		}
 
@@ -202,34 +203,47 @@ func ListenAndServe() {
 			}
 			port := config.Port(listener.Submissions.Port, 465)
 			for _, ip := range listener.IPs {
-				go listenServe("submissions", name, ip, port, hostname, tlsConfig, true, true, maxMsgSize, true, true, nil)
+				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, maxMsgSize, true, true, nil)
 			}
 		}
 	}
 }
 
-func listenServe(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery bool, dnsBLs []dns.Domain) {
+var servers []func()
+
+func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery bool, dnsBLs []dns.Domain) {
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
-	xlog.Print("listening for smtp", mlog.Field("listener", name), mlog.Field("address", addr), mlog.Field("protocol", protocol))
+	if os.Getuid() == 0 {
+		xlog.Print("listening for smtp", mlog.Field("listener", name), mlog.Field("address", addr), mlog.Field("protocol", protocol))
+	}
 	network := mox.Network(ip)
-	var ln net.Listener
-	var err error
-	if xtls {
-		ln, err = tls.Listen(network, addr, tlsConfig)
-	} else {
-		ln, err = net.Listen(network, addr)
-	}
+	ln, err := mox.Listen(network, addr)
 	if err != nil {
-		xlog.Fatalx("smtp: listen for smtp"+mox.LinuxSetcapHint(err), err, mlog.Field("protocol", protocol), mlog.Field("listener", name))
+		xlog.Fatalx("smtp: listen for smtp", err, mlog.Field("protocol", protocol), mlog.Field("listener", name))
 	}
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			xlog.Infox("smtp: accept", err, mlog.Field("protocol", protocol), mlog.Field("listener", name))
-			continue
+	if xtls {
+		ln = tls.NewListener(ln, tlsConfig)
+	}
+
+	serve := func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				xlog.Infox("smtp: accept", err, mlog.Field("protocol", protocol), mlog.Field("listener", name))
+				continue
+			}
+			resolver := dns.StrictResolver{} // By leaving Pkg empty, it'll be set by each package that uses the resolver, e.g. spf/dkim/dmarc.
+			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, dnsBLs)
 		}
-		resolver := dns.StrictResolver{} // By leaving Pkg empty, it'll be set by each package that uses the resolver, e.g. spf/dkim/dmarc.
-		go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, dnsBLs)
+	}
+
+	servers = append(servers, serve)
+}
+
+// Serve starts serving on all listeners, launching a goroutine per listener.
+func Serve() {
+	for _, serve := range servers {
+		go serve()
 	}
 }
 

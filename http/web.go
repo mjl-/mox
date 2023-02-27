@@ -9,6 +9,7 @@ import (
 	golog "log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -36,9 +37,9 @@ func safeHeaders(fn http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// ListenAndServe starts listeners for HTTP, including those required for ACME to
-// generate TLS certificates.
-func ListenAndServe() {
+// Listen binds to sockets for HTTP listeners, including those required for ACME to
+// generate TLS certificates. It stores the listeners so Serve can start serving them.
+func Listen() {
 	type serve struct {
 		kinds     []string
 		tlsConfig *tls.Config
@@ -179,7 +180,7 @@ func ListenAndServe() {
 
 		for port, srv := range portServe {
 			for _, ip := range l.IPs {
-				listenAndServe(ip, port, srv.tlsConfig, name, srv.kinds, srv.mux)
+				listen1(ip, port, srv.tlsConfig, name, srv.kinds, srv.mux)
 			}
 		}
 	}
@@ -198,7 +199,11 @@ func adminIndex(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
 }
 
-func listenAndServe(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, mux *http.ServeMux) {
+// functions to be launched in goroutine that will serve on a listener.
+var servers []func()
+
+// listen prepares a listener, and adds it to "servers", to be launched (if not running as root) through Serve.
+func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, mux *http.ServeMux) {
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 
 	var protocol string
@@ -206,18 +211,23 @@ func listenAndServe(ip string, port int, tlsConfig *tls.Config, name string, kin
 	var err error
 	if tlsConfig == nil {
 		protocol = "http"
-		xlog.Print("http listener", mlog.Field("name", name), mlog.Field("kinds", strings.Join(kinds, ",")), mlog.Field("address", addr))
-		ln, err = net.Listen(mox.Network(ip), addr)
+		if os.Getuid() == 0 {
+			xlog.Print("http listener", mlog.Field("name", name), mlog.Field("kinds", strings.Join(kinds, ",")), mlog.Field("address", addr))
+		}
+		ln, err = mox.Listen(mox.Network(ip), addr)
 		if err != nil {
-			xlog.Fatalx("http: listen"+mox.LinuxSetcapHint(err), err, mlog.Field("addr", addr))
+			xlog.Fatalx("http: listen", err, mlog.Field("addr", addr))
 		}
 	} else {
 		protocol = "https"
-		xlog.Print("https listener", mlog.Field("name", name), mlog.Field("kinds", strings.Join(kinds, ",")), mlog.Field("address", addr))
-		ln, err = tls.Listen(mox.Network(ip), addr, tlsConfig)
-		if err != nil {
-			xlog.Fatalx("https: listen"+mox.LinuxSetcapHint(err), err, mlog.Field("addr", addr))
+		if os.Getuid() == 0 {
+			xlog.Print("https listener", mlog.Field("name", name), mlog.Field("kinds", strings.Join(kinds, ",")), mlog.Field("address", addr))
 		}
+		ln, err = mox.Listen(mox.Network(ip), addr)
+		if err != nil {
+			xlog.Fatalx("https: listen", err, mlog.Field("addr", addr))
+		}
+		ln = tls.NewListener(ln, tlsConfig)
 	}
 
 	server := &http.Server{
@@ -225,8 +235,20 @@ func listenAndServe(ip string, port int, tlsConfig *tls.Config, name string, kin
 		TLSConfig: tlsConfig,
 		ErrorLog:  golog.New(mlog.ErrWriter(xlog.Fields(mlog.Field("pkg", "net/http")), mlog.LevelInfo, protocol+" error"), "", 0),
 	}
-	go func() {
+	serve := func() {
 		err := server.Serve(ln)
 		xlog.Fatalx(protocol+": serve", err)
-	}()
+	}
+	servers = append(servers, serve)
+}
+
+// Serve starts serving on the initialized listeners.
+func Serve() {
+	go manageAuthCache()
+	go importManage()
+
+	for _, serve := range servers {
+		go serve()
+	}
+	servers = nil
 }

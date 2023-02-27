@@ -94,16 +94,16 @@ var authCache struct {
 	lastSuccessHash, lastSuccessAuth string
 }
 
-func init() {
-	go func() {
-		for {
-			authCache.Lock()
-			authCache.lastSuccessHash = ""
-			authCache.lastSuccessAuth = ""
-			authCache.Unlock()
-			time.Sleep(15 * time.Minute)
-		}
-	}()
+// started when we start serving. not at package init time, because we don't want
+// to make goroutines that early.
+func manageAuthCache() {
+	for {
+		authCache.Lock()
+		authCache.lastSuccessHash = ""
+		authCache.lastSuccessAuth = ""
+		authCache.Unlock()
+		time.Sleep(15 * time.Minute)
+	}
 }
 
 // check whether authentication from the config (passwordfile with bcrypt hash)

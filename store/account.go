@@ -1184,25 +1184,29 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 }
 
 // We keep a cache of recent successful authentications, so we don't have to bcrypt successful calls each time.
-var authCache struct {
+var authCache = struct {
 	sync.Mutex
 	success map[authKey]string
+}{
+	success: map[authKey]string{},
 }
 
 type authKey struct {
 	email, hash string
 }
 
-func init() {
-	authCache.success = map[authKey]string{}
-	go func() {
-		for {
-			authCache.Lock()
-			authCache.success = map[authKey]string{}
-			authCache.Unlock()
-			time.Sleep(15 * time.Minute)
-		}
-	}()
+// StartAuthCache starts a goroutine that regularly clears the auth cache.
+func StartAuthCache() {
+	go manageAuthCache()
+}
+
+func manageAuthCache() {
+	for {
+		authCache.Lock()
+		authCache.success = map[authKey]string{}
+		authCache.Unlock()
+		time.Sleep(15 * time.Minute)
+	}
 }
 
 // OpenEmailAuth opens an account given an email address and password.

@@ -69,6 +69,8 @@ func TestAccount(t *testing.T) {
 	_, dests := Account{}.Destinations(authCtx)
 	Account{}.DestinationSave(authCtx, "mjl", dests["mjl"], dests["mjl"]) // todo: save modified value and compare it afterwards
 
+	go importManage()
+
 	// Import mbox/maildir tgz/zip.
 	testImport := func(filename string, expect int) {
 		t.Helper()

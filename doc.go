@@ -14,8 +14,7 @@ low-maintenance self-hosted email.
 
 	mox [-config config/mox.conf] ...
 	mox serve
-	mox quickstart user@domain
-	mox restart
+	mox quickstart user@domain [user | uid]
 	mox stop
 	mox setaccountpassword address
 	mox setadminpassword
@@ -41,6 +40,7 @@ low-maintenance self-hosted email.
 	mox config domain add domain account [localpart]
 	mox config domain rm domain
 	mox config describe-sendmail >/etc/moxsubmit.conf
+	mox config printservice >mox.service
 	mox checkupdate
 	mox cid cid
 	mox clientconfig domain
@@ -83,26 +83,14 @@ requested, other TLS certificates are requested on demand.
 
 Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
 
-Quickstart prints initial admin and account passwords, configuration files, DNS
-records you should create, instructions for setting correct user/group and
-permissions, and if you run it on Linux it prints a systemd service file.
+Quickstart writes configuration files, prints initial admin and account
+passwords, DNS records you should create. If you run it on Linux it writes a
+systemd service file and prints commands to enable and start mox as service.
 
-	usage: mox quickstart user@domain
+The user or uid is optional, defaults to "mox", and is the user or uid/gid mox
+will run as after initialization.
 
-# mox restart
-
-Restart mox after validating the configuration file.
-
-Restart execs the mox binary, which have been updated. Restart returns after
-the restart has finished. If you update the mox binary, keep in mind that the
-validation of the configuration file is done by the old process with the old
-binary. The new binary may report a syntax error. If you update the binary, you
-should use the "config test" command with the new binary to validate the
-configuration file.
-
-Like stop, existing connections get a 3 second period for graceful shutdown.
-
-	usage: mox restart
+	usage: mox quickstart user@domain [user | uid]
 
 # mox stop
 
@@ -389,6 +377,16 @@ rejected.
 Describe configuration for mox when invoked as sendmail.
 
 	usage: mox config describe-sendmail >/etc/moxsubmit.conf
+
+# mox config printservice
+
+Prints a systemd unit service file for mox.
+
+This is the same file as generated using quickstart. If the systemd service file
+has changed with a newer version of mox, use this command to generate an up to
+date version.
+
+	usage: mox config printservice >mox.service
 
 # mox checkupdate
 

@@ -8,10 +8,6 @@ import (
 
 var LimiterFailedAuth *ratelimit.Limiter
 
-func init() {
-	LimitersInit()
-}
-
 // LimitesrsInit initializes the failed auth rate limiter.
 func LimitersInit() {
 	LimiterFailedAuth = &ratelimit.Limiter{

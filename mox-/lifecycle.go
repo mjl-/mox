@@ -2,14 +2,150 @@ package mox
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"os"
+	"os/signal"
+	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/mjl-/mox/mlog"
 )
+
+// We start up as root, bind to sockets, and fork and exec as unprivileged user.
+// During startup as root, we gather the fd's for the listen addresses in listens,
+// and pass their addresses in an environment variable to the new process.
+var listens = map[string]*os.File{}
+
+// RestorePassedSockets reads addresses from $MOX_SOCKETS and prepares an os.File
+// for each file descriptor, which are used by later calls of Listen.
+func RestorePassedSockets() {
+	s := os.Getenv("MOX_SOCKETS")
+	if s == "" {
+		var linuxhint string
+		if runtime.GOOS == "linux" {
+			linuxhint = " If you updated from v0.0.1, update the mox.service file to start as root (privileges are dropped): ./mox config printservice >mox.service && sudo systemctl daemon-reload && sudo systemctl restart mox."
+		}
+		xlog.Fatal("mox must be started as root, and will drop privileges after binding required sockets (missing environment variable MOX_SOCKETS)." + linuxhint)
+	}
+	addrs := strings.Split(s, ",")
+	for i, addr := range addrs {
+		// 0,1,2 are stdin,stdout,stderr, 3 is the network/address fd.
+		f := os.NewFile(3+uintptr(i), addr)
+		listens[addr] = f
+	}
+}
+
+// Fork and exec as unprivileged user.
+//
+// We don't use just setuid because it is hard to guarantee that no other
+// privileged go worker processes have been started before we get here. E.g. init
+// functions in packages can start goroutines.
+func ForkExecUnprivileged() {
+	prog, err := os.Executable()
+	if err != nil {
+		xlog.Fatalx("finding executable for exec", err)
+	}
+
+	files := []*os.File{os.Stdin, os.Stdout, os.Stderr}
+	var addrs []string
+	for addr, f := range listens {
+		files = append(files, f)
+		addrs = append(addrs, addr)
+	}
+	env := os.Environ()
+	env = append(env, "MOX_SOCKETS="+strings.Join(addrs, ","))
+
+	p, err := os.StartProcess(prog, os.Args, &os.ProcAttr{
+		Env:   env,
+		Files: files,
+		Sys: &syscall.SysProcAttr{
+			Credential: &syscall.Credential{
+				Uid: Conf.Static.UID,
+				Gid: Conf.Static.GID,
+			},
+		},
+	})
+	if err != nil {
+		xlog.Fatalx("fork and exec", err)
+	}
+	for _, f := range listens {
+		err := f.Close()
+		xlog.Check(err, "closing socket after passing to unprivileged child")
+	}
+
+	// If we get a interrupt/terminate signal, pass it on to the child. For interrupt,
+	// the child probably already got it.
+	// todo: see if we tie up child and root process so a kill -9 of the root process
+	// kills the child process too.
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		sig := <-sigc
+		p.Signal(sig)
+	}()
+
+	st, err := p.Wait()
+	if err != nil {
+		xlog.Fatalx("wait", err)
+	}
+	code := st.ExitCode()
+	xlog.Print("stopping after child exit", mlog.Field("exitcode", code))
+	os.Exit(code)
+}
+
+// CleanupPassedSockets closes the listening socket file descriptors passed in by
+// the parent process. To be called after listeners have been recreated (they dup
+// the file descriptor).
+func CleanupPassedSockets() {
+	for _, f := range listens {
+		err := f.Close()
+		xlog.Check(err, "closing listener socket file descriptor")
+	}
+}
+
+// Listen returns a newly created network listener when starting as root, and
+// otherwise (not root) returns a network listener from a file descriptor that was
+// passed by the parent root process.
+func Listen(network, addr string) (net.Listener, error) {
+	if os.Getuid() != 0 {
+		f, ok := listens[addr]
+		if !ok {
+			return nil, fmt.Errorf("no file descriptor for listener %s", addr)
+		}
+		ln, err := net.FileListener(f)
+		if err != nil {
+			return nil, fmt.Errorf("making network listener from file descriptor for address %s: %v", addr, err)
+		}
+		return ln, nil
+	}
+
+	if _, ok := listens[addr]; ok {
+		return nil, fmt.Errorf("duplicate listener: %s", addr)
+	}
+
+	ln, err := net.Listen(network, addr)
+	if err != nil {
+		return nil, err
+	}
+	tcpln, ok := ln.(*net.TCPListener)
+	if !ok {
+		return nil, fmt.Errorf("listener not a tcp listener, but %T, for network %s, address %s", ln, network, addr)
+	}
+	f, err := tcpln.File()
+	if err != nil {
+		return nil, fmt.Errorf("dup listener: %v", err)
+	}
+	listens[addr] = f
+	return ln, err
+}
 
 // Shutdown is canceled when a graceful shutdown is initiated. SMTP, IMAP, periodic
 // processes should check this before starting a new operation. If true, the

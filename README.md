@@ -56,30 +56,32 @@ Verify you have a working mox binary:
 
 Note: Mox only compiles/works on unix systems, not on Plan 9 or Windows.
 
-You can also run mox with docker image "moxmail/mox" on hub.docker.com, with
-tags like "latest", "0.0.1", etc. See docker-compose.yml in this repository.
+You can also run mox with docker image "docker.io/moxmail/mox", with tags like
+"latest", "0.0.1" and "0.0.1-go1.20.1-alpine3.17.2", etc. See docker-compose.yml
+in this repository for instructions on starting.
 
 
 # Quickstart
 
 The easiest way to get started with serving email for your domain is to get a
-vm/machine dedicated to serving email, name it [host].[domain], login as an
-admin user, e.g. /home/service, download mox, and generate a configuration for
-your desired email address at your domain:
+vm/machine dedicated to serving email, name it [host].[domain] (e.g.
+mail.example.com), login as root, create user "mox" and its homedir by running
+"useradd -d /home/mox mox && mkdir /home/mox", download mox to that directory,
+and generate a configuration for your desired email address at your domain:
 
 	./mox quickstart you@example.com
 
 This creates an account, generates a password and configuration files, prints
-the DNS records you need to manually create and prints commands to set
-permissions and install mox as a service.
+the DNS records you need to manually create and prints commands to start mox and
+optionally install mox as a service.
 
 If you already have email configured for your domain, or if you are already
 sending email for your domain from other machines/services, you should modify
 the suggested configuration and/or DNS records.
 
 A dedicated machine is highly recommended because modern email requires HTTPS,
-also for automatic TLS.  You can combine mox with an existing webserver, but it
-requires more configuration.
+and mox currently needs it for automatic TLS.  You can combine mox with an
+existing webserver, but it requires more configuration.
 
 After starting, you can access the admin web interface on internal IPs.
 

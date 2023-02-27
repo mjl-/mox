@@ -4,15 +4,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.moximaptest
-    user: ${MOX_UID}:${MOX_GID}
     volumes:
+      - ./testdata/imaptest/config:/mox/config
       - ./testdata/imaptest/data:/mox/data
-      - ./testdata/imaptest/mox.conf:/mox/mox.conf
-      - ./testdata/imaptest/domains.conf:/mox/domains.conf
       - ./testdata/imaptest/imaptest.mbox:/mox/imaptest.mbox
     working_dir: /mox
-    tty: true # For job control
-    command: sh -c 'export MOXCONF=mox.conf; set -m; mox serve & sleep 1; echo testtest | mox setaccountpassword mjl@mox.example; fg'
+    tty: true # For job control with set -m.
+    command: sh -c 'set -m; mox serve & sleep 1; echo testtest | mox setaccountpassword mjl@mox.example; fg'
     healthcheck:
       test: netstat -nlt | grep ':1143 '
       interval: 1s
@@ -27,7 +25,6 @@ services:
     working_dir: /imaptest
     volumes:
       - ./testdata/imaptest:/imaptest
-    user: ${MOX_UID}:${MOX_GID}
     depends_on:
       mox:
         condition: service_healthy

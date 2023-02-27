@@ -16,6 +16,10 @@ import (
 	"github.com/mjl-/mox/mox-"
 )
 
+func init() {
+	mox.LimitersInit()
+}
+
 func TestAdminAuth(t *testing.T) {
 	test := func(passwordfile, authHdr string, expect bool) {
 		t.Helper()

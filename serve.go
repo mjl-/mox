@@ -4,12 +4,13 @@ import (
 	"context"
 	cryptorand "crypto/rand"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -24,7 +25,6 @@ import (
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
-	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/updates"
@@ -138,60 +138,75 @@ requested, other TLS certificates are requested on demand.
 	log := mlog.New("serve")
 
 	if os.Getuid() == 0 {
-		log.Fatal("refusing to run as root, please start mox as unprivileged user")
-	}
+		// No need to potentially start and keep multiple processes. As root, we just need
+		// to start the child process.
+		runtime.GOMAXPROCS(1)
 
-	if fds := os.Getenv("MOX_RESTART_CTL_SOCKET"); fds != "" {
-		log.Print("restarted")
-
-		fd, err := strconv.ParseUint(fds, 10, 32)
-		if err != nil {
-			log.Fatalx("restart with invalid ctl socket", err, mlog.Field("fd", fds))
+		log.Print("starting as root, initializing network listeners", mlog.Field("version", moxvar.Version), mlog.Field("pid", os.Getpid()))
+		if os.Getenv("MOX_SOCKETS") != "" {
+			log.Fatal("refusing to start as root with $MOX_SOCKETS set")
 		}
-		f := os.NewFile(uintptr(fd), "restartctl")
-		if _, err := fmt.Fprint(f, "ok\n"); err != nil {
-			log.Infox("writing ok to restart ctl socket", err)
-		}
-		err = f.Close()
-		log.Check(err, "closing restart ctl socket")
-	}
-	log.Print("starting up", mlog.Field("version", moxvar.Version))
 
-	shutdown := func() {
-		// We indicate we are shutting down. Causes new connections and new SMTP commands
-		// to be rejected. Should stop active connections pretty quickly.
-		mox.ShutdownCancel()
-
-		// Now we are going to wait for all connections to be gone, up to a timeout.
-		done := mox.Connections.Done()
-		second := time.Tick(time.Second)
-		select {
-		case <-done:
-			log.Print("connections shutdown, waiting until 1 second passed")
-			<-second
-
-		case <-time.Tick(3 * time.Second):
-			// We now cancel all pending operations, and set an immediate deadline on sockets.
-			// Should get us a clean shutdown relatively quickly.
-			mox.ContextCancel()
-			mox.Connections.Shutdown()
-
-			second := time.Tick(time.Second)
-			select {
-			case <-done:
-				log.Print("no more connections, shutdown is clean, waiting until 1 second passed")
-				<-second // Still wait for second, giving processes like imports a chance to clean up.
-			case <-second:
-				log.Print("shutting down with pending sockets")
+		if !mox.Conf.Static.NoFixPermissions {
+			// Fix permissions now that we have privilege to do so. Useful for update of v0.0.1
+			// that was running directly as mox-user.
+			workdir, err := os.Getwd()
+			if err != nil {
+				log.Printx("get working dir, continuing without potentially fixing up permissions", err)
+			} else {
+				configdir := filepath.Dir(mox.ConfigStaticPath)
+				datadir := mox.DataDirPath(".")
+				err := fixperms(log, workdir, configdir, datadir, mox.Conf.Static.UID, mox.Conf.Static.GID)
+				if err != nil {
+					log.Fatalx("fixing permissions", err)
+				}
 			}
 		}
-		err := os.Remove(mox.DataDirPath("ctl"))
-		log.Check(err, "removing ctl unix domain socket during shutdown")
+	} else {
+		log.Print("starting as unprivileged user", mlog.Field("user", mox.Conf.Static.User), mlog.Field("uid", mox.Conf.Static.UID), mlog.Field("gid", mox.Conf.Static.GID), mlog.Field("pid", os.Getpid()))
+		mox.RestorePassedSockets()
 	}
 
-	if err := moxio.CheckUmask(); err != nil {
-		log.Errorx("bad umask", err)
+	syscall.Umask(syscall.Umask(007) | 007)
+
+	// Initialize key and random buffer for creating opaque SMTP
+	// transaction IDs based on "cid"s.
+	recvidpath := mox.DataDirPath("receivedid.key")
+	recvidbuf, err := os.ReadFile(recvidpath)
+	if err != nil || len(recvidbuf) != 16+8 {
+		recvidbuf = make([]byte, 16+8)
+		if _, err := cryptorand.Read(recvidbuf); err != nil {
+			log.Fatalx("reading random recvid data", err)
+		}
+		if err := os.WriteFile(recvidpath, recvidbuf, 0660); err != nil {
+			log.Fatalx("writing recvidpath", err, mlog.Field("path", recvidpath))
+		}
+		err := os.Chown(recvidpath, int(mox.Conf.Static.UID), 0)
+		log.Check(err, "chown receveidid.key", mlog.Field("path", recvidpath), mlog.Field("uid", mox.Conf.Static.UID), mlog.Field("gid", 0))
+		err = os.Chmod(recvidpath, 0640)
+		log.Check(err, "chmod receveidid.key to 0640", mlog.Field("path", recvidpath))
 	}
+	if err := mox.ReceivedIDInit(recvidbuf[:16], recvidbuf[16:]); err != nil {
+		log.Fatalx("init receivedid", err)
+	}
+
+	// Start mox. If running as root, this will bind/listen on network sockets, and
+	// fork and exec itself as unprivileged user, then waits for the child to stop and
+	// exit. When running as root, this function never returns. But the new
+	// unprivileged user will get here again, with network sockets prepared.
+	//
+	// We listen to the unix domain ctl socket afterwards, which we always remove
+	// before listening. We need to do that because we may not have cleaned up our
+	// control socket during unexpected shutdown. We don't want to remove and listen on
+	// the unix domain socket first. If we would, we would make the existing instance
+	// unreachable over its ctl socket, and then fail because the network addresses are
+	// taken.
+	const mtastsdbRefresher = true
+	const skipForkExec = false
+	if err := start(mtastsdbRefresher, skipForkExec); err != nil {
+		log.Fatalx("start", err)
+	}
+	log.Print("ready to serve")
 
 	if mox.Conf.Static.CheckUpdates {
 		checkUpdates := func() time.Duration {
@@ -281,36 +296,39 @@ requested, other TLS certificates are requested on demand.
 		}()
 	}
 
-	// Initialize key and random buffer for creating opaque SMTP
-	// transaction IDs based on "cid"s.
-	recvidpath := mox.DataDirPath("receivedid.key")
-	recvidbuf, err := os.ReadFile(recvidpath)
-	if err != nil || len(recvidbuf) != 16+8 {
-		recvidbuf = make([]byte, 16+8)
-		if _, err := cryptorand.Read(recvidbuf); err != nil {
-			log.Fatalx("reading random recvid data", err)
-		}
-		if err := os.WriteFile(recvidpath, recvidbuf, 0660); err != nil {
-			log.Fatalx("writing recvidpath", err, mlog.Field("path", recvidpath))
-		}
-	}
-	if err := mox.ReceivedIDInit(recvidbuf[:16], recvidbuf[16:]); err != nil {
-		log.Fatalx("init receivedid", err)
-	}
-
-	// We start the network listeners first. If an instance is already running, we'll
-	// get errors about address being in use. We listen to the unix domain socket
-	// afterwards, which we always remove before listening. We need to do that because
-	// we may not have cleaned up our control socket during unexpected shutdown. We
-	// don't want to remove and listen on the unix domain socket first. If we would, we
-	// would make the existing instance unreachable over its ctl socket, and then fail
-	// because the network addresses are taken.
-	mtastsdbRefresher := true
-	if err := start(mtastsdbRefresher); err != nil {
-		log.Fatalx("start", err)
-	}
-
 	go monitorDNSBL(log)
+
+	shutdown := func() {
+		// We indicate we are shutting down. Causes new connections and new SMTP commands
+		// to be rejected. Should stop active connections pretty quickly.
+		mox.ShutdownCancel()
+
+		// Now we are going to wait for all connections to be gone, up to a timeout.
+		done := mox.Connections.Done()
+		second := time.Tick(time.Second)
+		select {
+		case <-done:
+			log.Print("connections shutdown, waiting until 1 second passed")
+			<-second
+
+		case <-time.Tick(3 * time.Second):
+			// We now cancel all pending operations, and set an immediate deadline on sockets.
+			// Should get us a clean shutdown relatively quickly.
+			mox.ContextCancel()
+			mox.Connections.Shutdown()
+
+			second := time.Tick(time.Second)
+			select {
+			case <-done:
+				log.Print("no more connections, shutdown is clean, waiting until 1 second passed")
+				<-second // Still wait for second, giving processes like imports a chance to clean up.
+			case <-second:
+				log.Print("shutting down with pending sockets")
+			}
+		}
+		err := os.Remove(mox.DataDirPath("ctl"))
+		log.Check(err, "removing ctl unix domain socket during shutdown")
+	}
 
 	ctlpath := mox.DataDirPath("ctl")
 	_ = os.Remove(ctlpath)
@@ -359,4 +377,171 @@ requested, other TLS certificates are requested on demand.
 	sig := <-sigc
 	log.Print("shutting down, waiting max 3s for existing connections", mlog.Field("signal", sig))
 	shutdown()
+	if num, ok := sig.(syscall.Signal); ok {
+		os.Exit(int(num))
+	} else {
+		os.Exit(1)
+	}
+}
+
+// Set correct permissions for mox working directory, binary, config and data and service file.
+//
+// We require being able to stat the basic non-optional paths. Then we'll try to
+// fix up permissions. If an error occurs when fixing permissions, we log and
+// continue (could not be an actual problem).
+func fixperms(log *mlog.Log, workdir, configdir, datadir string, moxuid, moxgid uint32) (rerr error) {
+	type fserr struct{ Err error }
+	defer func() {
+		x := recover()
+		if x == nil {
+			return
+		}
+		e, ok := x.(fserr)
+		if ok {
+			rerr = e.Err
+		} else {
+			panic(x)
+		}
+	}()
+
+	checkf := func(err error, format string, args ...any) {
+		if err != nil {
+			panic(fserr{fmt.Errorf(format, args...)})
+		}
+	}
+
+	// Changes we have to make. We collect them first, then apply.
+	type change struct {
+		path           string
+		uid, gid       *uint32
+		olduid, oldgid uint32
+		mode           *fs.FileMode
+		oldmode        fs.FileMode
+	}
+	var changes []change
+
+	ensure := func(p string, uid, gid uint32, perm fs.FileMode) bool {
+		fi, err := os.Stat(p)
+		checkf(err, "stat %s", p)
+
+		st, ok := fi.Sys().(*syscall.Stat_t)
+		if !ok {
+			checkf(fmt.Errorf("got %T", st), "stat sys, expected syscall.Stat_t")
+		}
+
+		var ch change
+		if st.Uid != uid || st.Gid != gid {
+			ch.uid = &uid
+			ch.gid = &gid
+			ch.olduid = st.Uid
+			ch.oldgid = st.Gid
+		}
+		if perm != fi.Mode()&(fs.ModeSetgid|0777) {
+			ch.mode = &perm
+			ch.oldmode = fi.Mode() & (fs.ModeSetgid | 0777)
+		}
+		var zerochange change
+		if ch == zerochange {
+			return false
+		}
+		ch.path = p
+		changes = append(changes, ch)
+		return true
+	}
+
+	xexists := func(p string) bool {
+		_, err := os.Stat(p)
+		if err != nil && !os.IsNotExist(err) {
+			checkf(err, "stat %s", p)
+		}
+		return err == nil
+	}
+
+	// We ensure these permissions:
+	//
+	//	$workdir root:mox 0751
+	//	$configdir mox:root 0750 + setgid, and recursively (but files 0640)
+	//	$datadir mox:root 0750 + setgid, and recursively (but files 0640)
+	//	$workdir/mox (binary, optional) root:mox 0750
+	//	$workdir/mox.service (systemd service file, optional) root:root 0644
+
+	const root = 0
+	ensure(workdir, root, moxgid, 0751)
+	fixconfig := ensure(configdir, moxuid, 0, fs.ModeSetgid|0750)
+	fixdata := ensure(datadir, moxuid, 0, fs.ModeSetgid|0750)
+
+	// Binary and systemd service file do not exist (there) when running under docker.
+	binary := filepath.Join(workdir, "mox")
+	if xexists(binary) {
+		ensure(binary, root, moxgid, 0750)
+	}
+	svc := filepath.Join(workdir, "mox.service")
+	if xexists(svc) {
+		ensure(svc, root, root, 0644)
+	}
+
+	if len(changes) == 0 {
+		return
+	}
+
+	// Apply changes.
+	log.Print("fixing up permissions, will continue on errors")
+	for _, ch := range changes {
+		if ch.uid != nil {
+			err := os.Chown(ch.path, int(*ch.uid), int(*ch.gid))
+			log.Printx("chown, fixing uid/gid", err, mlog.Field("path", ch.path), mlog.Field("olduid", ch.olduid), mlog.Field("oldgid", ch.oldgid), mlog.Field("newuid", *ch.uid), mlog.Field("newgid", *ch.gid))
+		}
+		if ch.mode != nil {
+			err := os.Chmod(ch.path, *ch.mode)
+			log.Printx("chmod, fixing permissions", err, mlog.Field("path", ch.path), mlog.Field("oldmode", fmt.Sprintf("%03o", ch.oldmode)), mlog.Field("newmode", fmt.Sprintf("%03o", *ch.mode)))
+		}
+	}
+
+	walkchange := func(dir string) {
+		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				log.Printx("walk error, continuing", err, mlog.Field("path", path))
+				return nil
+			}
+			fi, err := d.Info()
+			if err != nil {
+				log.Printx("stat during walk, continuing", err, mlog.Field("path", path))
+				return nil
+			}
+			st, ok := fi.Sys().(*syscall.Stat_t)
+			if !ok {
+				log.Printx("syscall stat during walk, continuing", err, mlog.Field("path", path))
+				return nil
+			}
+			if st.Uid != moxuid || st.Gid != root {
+				err := os.Chown(path, int(moxuid), root)
+				log.Printx("walk chown, fixing uid/gid", err, mlog.Field("path", path), mlog.Field("olduid", st.Uid), mlog.Field("oldgid", st.Gid), mlog.Field("newuid", moxuid), mlog.Field("newgid", root))
+			}
+			omode := fi.Mode() & (fs.ModeSetgid | 0777)
+			var nmode fs.FileMode
+			if fi.IsDir() {
+				nmode = fs.ModeSetgid | 0750
+			} else {
+				nmode = 0640
+			}
+			if omode != nmode {
+				err := os.Chmod(path, nmode)
+				log.Printx("walk chmod, fixing permissions", err, mlog.Field("path", path), mlog.Field("oldmode", fmt.Sprintf("%03o", omode)), mlog.Field("newmode", fmt.Sprintf("%03o", nmode)))
+			}
+			return nil
+		})
+		log.Check(err, "walking dir to fix permissions", mlog.Field("dir", dir))
+	}
+
+	// If config or data dir needed fixing, also set uid/gid and mode and files/dirs
+	// inside, recursively. We don't always recurse, data probably contains many files.
+	if fixconfig {
+		log.Print("fixing permissions in config dir", mlog.Field("configdir", configdir))
+		walkchange(configdir)
+	}
+	if fixdata {
+		log.Print("fixing permissions in data dir", mlog.Field("configdir", configdir))
+		walkchange(datadir)
+	}
+	return nil
 }

@@ -25,6 +25,16 @@ describe-static" and "mox config describe-domains":
 	PackageLogLevels:
 		x:
 
+	# User to switch to after binding to all sockets as root. Default: mox. If the
+	# value is not a known user, it is parsed as integer and used as uid and gid.
+	# (optional)
+	User:
+
+	# If true, do not automatically fix file permissions when starting up. By default,
+	# mox will ensure reasonable owner/permissions on the working, data and config
+	# directories (and files), and mox binary (if present). (optional)
+	NoFixPermissions: false
+
 	# Full hostname of system, e.g. mail.<domain>
 	Hostname:
 

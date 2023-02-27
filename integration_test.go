@@ -43,11 +43,15 @@ func TestDeliver(t *testing.T) {
 	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
 
 	// Remove state.
-	os.RemoveAll("testdata/integration/run")
-	os.MkdirAll("testdata/integration/run", 0750)
+	os.RemoveAll("testdata/integration/data")
+	os.MkdirAll("testdata/integration/data", 0750)
+
+	// Cleanup afterwards, these are owned by root, annoying to have around due to
+	// permission errors.
+	defer os.RemoveAll("testdata/integration/data")
 
 	// Load mox config.
-	mox.ConfigStaticPath = "testdata/integration/mox.conf"
+	mox.ConfigStaticPath = "testdata/integration/config/mox.conf"
 	filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	if errs := mox.LoadConfig(mox.Context); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
@@ -69,14 +73,15 @@ func TestDeliver(t *testing.T) {
 	createAccount("moxtest3@mox3.example", "pass1234")
 
 	// Start mox.
-	mtastsdbRefresher := false
-	err := start(mtastsdbRefresher)
+	const mtastsdbRefresher = false
+	const skipForkExec = true
+	err := start(mtastsdbRefresher, skipForkExec)
 	tcheck(t, err, "starting mox")
 
 	// todo: we should probably hook store.Comm to get updates.
 	latestMsgID := func(username string) int64 {
 		// We open the account index database created by mox for the test user. And we keep looking for the email we sent.
-		dbpath := fmt.Sprintf("testdata/integration/run/accounts/%s/index.db", username)
+		dbpath := fmt.Sprintf("testdata/integration/data/accounts/%s/index.db", username)
 		db, err := bstore.Open(dbpath, &bstore.Options{Timeout: 3 * time.Second}, store.Message{}, store.Recipient{}, store.Mailbox{}, store.Password{})
 		if err != nil && errors.Is(err, bolt.ErrTimeout) {
 			log.Printf("db open timeout (normal delay for new sender with account and db file kept open)")

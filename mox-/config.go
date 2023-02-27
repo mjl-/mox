@@ -12,9 +12,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -387,6 +389,35 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 			config.Log[pkg] = logLevel
 		} else {
 			addErrorf("invalid package log level %q", s)
+		}
+	}
+
+	if c.User == "" {
+		c.User = "mox"
+	}
+	u, err := user.Lookup(c.User)
+	var userErr user.UnknownUserError
+	if err != nil && errors.As(err, &userErr) {
+		uid, err := strconv.ParseUint(c.User, 10, 32)
+		if err != nil {
+			addErrorf("parsing unknown user %s as uid: %v", c.User, err)
+		} else {
+			// We assume the same gid as uid.
+			c.UID = uint32(uid)
+			c.GID = uint32(uid)
+		}
+	} else if err != nil {
+		addErrorf("looking up user: %v", err)
+	} else {
+		if uid, err := strconv.ParseUint(u.Uid, 10, 32); err != nil {
+			addErrorf("parsing uid %s: %v", u.Uid, err)
+		} else {
+			c.UID = uint32(uid)
+		}
+		if gid, err := strconv.ParseUint(u.Gid, 10, 32); err != nil {
+			addErrorf("parsing gid %s: %v", u.Gid, err)
+		} else {
+			c.GID = uint32(gid)
 		}
 	}
 

@@ -59,10 +59,7 @@ var importers = struct {
 	make(chan importAbortRequest),
 }
 
-func init() {
-	go importManage()
-}
-
+// manage imports, run in a goroutine before serving.
 func importManage() {
 	log := mlog.New("httpimport")
 	defer func() {

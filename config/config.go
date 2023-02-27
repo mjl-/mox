@@ -32,6 +32,8 @@ type Static struct {
 	DataDir          string            `sconf-doc:"Directory where all data is stored, e.g. queue, accounts and messages, ACME TLS certs/keys. If this is a relative path, it is relative to the directory of mox.conf."`
 	LogLevel         string            `sconf-doc:"Default log level, one of: error, info, debug, trace, traceauth, tracedata. Trace logs SMTP and IMAP protocol transcripts, with traceauth also messages with passwords, and tracedata on top of that also the full data exchanges (full messages), which can be a large amount of data."`
 	PackageLogLevels map[string]string `sconf:"optional" sconf-doc:"Overrides of log level per package (e.g. queue, smtpclient, smtpserver, imapserver, spf, dkim, dmarc, dmarcdb, autotls, junk, mtasts, tlsrpt)."`
+	User             string            `sconf:"optional" sconf-doc:"User to switch to after binding to all sockets as root. Default: mox. If the value is not a known user, it is parsed as integer and used as uid and gid."`
+	NoFixPermissions bool              `sconf:"optional" sconf-doc:"If true, do not automatically fix file permissions when starting up. By default, mox will ensure reasonable owner/permissions on the working, data and config directories (and files), and mox binary (if present)."`
 	Hostname         string            `sconf-doc:"Full hostname of system, e.g. mail.<domain>"`
 	HostnameDomain   dns.Domain        `sconf:"-" json:"-"` // Parsed form of hostname.
 	CheckUpdates     bool              `sconf:"optional" sconf-doc:"If enabled, a single DNS TXT lookup of _updates.xmox.nl is done every 24h to check for a new release. Each time a new release is found, a changelog is fetched from https://updates.xmox.nl and delivered to the postmaster mailbox."`
@@ -59,6 +61,10 @@ type Static struct {
 	// family, outgoing connections with the other address family are still made if
 	// possible.
 	SpecifiedSMTPListenIPs []net.IP `sconf:"-" json:"-"`
+
+	// To switch to after initialization as root.
+	UID uint32 `sconf:"-" json:"-"`
+	GID uint32 `sconf:"-" json:"-"`
 }
 
 // Dynamic is the parsed form of domains.conf, and is automatically reloaded when changed.

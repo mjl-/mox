@@ -44,21 +44,22 @@ integration-build:
 	docker-compose -f docker-compose-integration.yml build --no-cache moxmail
 
 integration-start:
-	-MOX_UID=$$(id -u) MOX_GID=$$(id -g) docker-compose -f docker-compose-integration.yml run moxmail /bin/bash
-	MOX_UID= MOX_GID= docker-compose -f docker-compose-integration.yml down
+	-rm -r testdata/integration/data
+	-docker-compose -f docker-compose-integration.yml run moxmail /bin/bash
+	docker-compose -f docker-compose-integration.yml down
 
 # run from within "make integration-start"
 integration-test:
 	CGO_ENABLED=0 go test -tags integration
 
 imaptest-build:
-	-MOX_UID=$$(id -u) MOX_GID=$$(id -g) docker-compose -f docker-compose-imaptest.yml build --no-cache mox
+	-docker-compose -f docker-compose-imaptest.yml build --no-cache mox
 
 imaptest-run:
 	-rm -r testdata/imaptest/data
 	mkdir testdata/imaptest/data
-	MOX_UID=$$(id -u) MOX_GID=$$(id -g) docker-compose -f docker-compose-imaptest.yml run --entrypoint /usr/local/bin/imaptest imaptest host=mox port=1143 user=mjl@mox.example pass=testtest mbox=imaptest.mbox
-	MOX_UID= MOX_GID= docker-compose -f docker-compose-imaptest.yml down
+	docker-compose -f docker-compose-imaptest.yml run --entrypoint /usr/local/bin/imaptest imaptest host=mox port=1143 user=mjl@mox.example pass=testtest mbox=imaptest.mbox
+	docker-compose -f docker-compose-imaptest.yml down
 
 fmt:
 	go fmt ./...
@@ -72,4 +73,7 @@ jsinstall:
 	npm install jshint@2.13.2
 
 docker:
-	docker build -t mox:latest .
+	docker build -t mox:dev .
+
+docker-release:
+	./docker-release.sh

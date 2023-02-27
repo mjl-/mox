@@ -41,15 +41,18 @@ func pwgen() string {
 }
 
 func cmdQuickstart(c *cmd) {
-	c.params = "user@domain"
+	c.params = "user@domain [user | uid]"
 	c.help = `Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
 
-Quickstart prints initial admin and account passwords, configuration files, DNS
-records you should create, instructions for setting correct user/group and
-permissions, and if you run it on Linux it prints a systemd service file.
+Quickstart writes configuration files, prints initial admin and account
+passwords, DNS records you should create. If you run it on Linux it writes a
+systemd service file and prints commands to enable and start mox as service.
+
+The user or uid is optional, defaults to "mox", and is the user or uid/gid mox
+will run as after initialization.
 `
 	args := c.Parse()
-	if len(args) != 1 {
+	if len(args) != 1 && len(args) != 2 {
 		c.Usage()
 	}
 
@@ -342,19 +345,27 @@ This likely means one of two things:
 	}
 	cancel()
 
+	user := "mox"
+	if len(args) == 2 {
+		user = args[1]
+	}
+
 	dc := config.Dynamic{}
-	sc := config.Static{DataDir: "../data"}
+	sc := config.Static{
+		DataDir:  "../data",
+		User:     user,
+		LogLevel: "info",
+		Hostname: hostname.Name(),
+		ACME: map[string]config.ACME{
+			"letsencrypt": {
+				DirectoryURL: "https://acme-v02.api.letsencrypt.org/directory",
+				ContactEmail: args[0], // todo: let user specify an alternative fallback address?
+			},
+		},
+		AdminPasswordFile: "adminpasswd",
+	}
 	dataDir := "data" // ../data is relative to config/
 	os.MkdirAll(dataDir, 0770)
-	sc.LogLevel = "info"
-	sc.Hostname = hostname.Name()
-	sc.ACME = map[string]config.ACME{
-		"letsencrypt": {
-			DirectoryURL: "https://acme-v02.api.letsencrypt.org/directory",
-			ContactEmail: args[0], // todo: let user specify an alternative fallback address?
-		},
-	}
-	sc.AdminPasswordFile = "adminpasswd"
 	adminpw := pwgen()
 	adminpwhash, err := bcrypt.GenerateFromPassword([]byte(adminpw), bcrypt.DefaultCost)
 	if err != nil {
@@ -399,7 +410,8 @@ This likely means one of two things:
 	mox.Conf.DynamicLastCheck = time.Now() // Prevent error logging by Make calls below.
 
 	accountConf := mox.MakeAccountConfig(addr)
-	confDomain, keyPaths, err := mox.MakeDomainConfig(context.Background(), domain, hostname, username)
+	const withMTASTS = true
+	confDomain, keyPaths, err := mox.MakeDomainConfig(context.Background(), domain, hostname, username, withMTASTS)
 	if err != nil {
 		fatalf("making domain config: %s", err)
 	}
@@ -529,47 +541,20 @@ or if you are sending email for your domain from other machines/services, you
 should understand the consequences of the DNS records above before
 continuing!
 
-You can now start mox with "mox serve", but see below for recommended ownership
-and permissions.
+You can now start mox with "./mox serve", as root. File ownership and
+permissions are automatically set correctly by mox when starting up. On linux,
+you may want to enable mox as a systemd service.
 
 `)
-
-	if os.Getenv("MOX_DOCKER") == "" {
-		fmt.Printf(`Assuming the mox binary is in the current directory, and you will run mox under
-user name "mox", and the admin user is the current user, the following commands
-set the correct permissions:
-
-	sudo useradd -d $PWD mox
-	sudo chown $(id -nu):mox . mox
-	sudo chown -R mox:$(id -ng) config data
-	sudo chmod 751 .
-	sudo chmod 750 mox
-	sudo chmod -R u=rwX,g=rwX,o= config data
-	sudo chmod g+s $(find . -type d)
-
-`)
-	} else {
-		fmt.Printf(`Assuming you will run mox under user name "mox", and the admin user is the
-current user, the following commands set the correct permissions:
-
-	sudo useradd -d $PWD mox
-	sudo chown $(id -nu):mox .
-	sudo chown -R mox:$(id -ng) config data
-	sudo chmod 751 .
-	sudo chmod -R u=rwX,g=rwX,o= config data
-	sudo chmod g+s $(find . -type d)
-
-`)
-	}
 
 	// For now, we only give service config instructions for linux when not running in docker.
 	if runtime.GOOS == "linux" && os.Getenv("MOX_DOCKER") == "" {
 		pwd, err := os.Getwd()
 		if err != nil {
 			log.Printf("current working directory: %v", err)
-			pwd = "/home/service/mox"
+			pwd = "/home/mox"
 		}
-		service := strings.ReplaceAll(moxService, "/home/service/mox", pwd)
+		service := strings.ReplaceAll(moxService, "/home/mox", pwd)
 		xwritefile("mox.service", []byte(service), 0644)
 		cleanupPaths = append(cleanupPaths, "mox.service")
 		fmt.Printf(`See mox.service for a systemd service file. To enable and start:

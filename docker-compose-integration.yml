@@ -7,14 +7,12 @@ services:
     build:
       dockerfile: Dockerfile.moxmail
       context: testdata/integration
-    user: ${MOX_UID}:${MOX_GID}
     volumes:
       - ./.go:/.go
       - ./testdata/integration/resolv.conf:/etc/resolv.conf
       - .:/mox
     environment:
       GOCACHE: /.go/.cache/go-build
-    command: ["make", "test-postfix"]
     healthcheck:
       test: netstat -nlt | grep ':25 '
       interval: 1s

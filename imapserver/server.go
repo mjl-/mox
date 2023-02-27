@@ -300,8 +300,8 @@ func (c *conn) xsanity(err error, format string, args ...any) {
 
 type msgseq uint32
 
-// ListenAndServe starts all imap listeners for the configuration, in new goroutines.
-func ListenAndServe() {
+// Listen initializes all imap listeners for the configuration, and stores them for Serve to start them.
+func Listen() {
 	for name, listener := range mox.Conf.Static.Listeners {
 		var tlsConfig *tls.Config
 		if listener.TLS != nil {
@@ -311,44 +311,57 @@ func ListenAndServe() {
 		if listener.IMAP.Enabled {
 			port := config.Port(listener.IMAP.Port, 143)
 			for _, ip := range listener.IPs {
-				go listenServe("imap", name, ip, port, tlsConfig, false, listener.IMAP.NoRequireSTARTTLS)
+				listen1("imap", name, ip, port, tlsConfig, false, listener.IMAP.NoRequireSTARTTLS)
 			}
 		}
 
 		if listener.IMAPS.Enabled {
 			port := config.Port(listener.IMAPS.Port, 993)
 			for _, ip := range listener.IPs {
-				go listenServe("imaps", name, ip, port, tlsConfig, true, false)
+				listen1("imaps", name, ip, port, tlsConfig, true, false)
 			}
 		}
 	}
 }
 
-func listenServe(protocol, listenerName, ip string, port int, tlsConfig *tls.Config, xtls, noRequireSTARTTLS bool) {
+var servers []func()
+
+func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config, xtls, noRequireSTARTTLS bool) {
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
-	xlog.Print("listening for imap", mlog.Field("listener", listenerName), mlog.Field("addr", addr), mlog.Field("protocol", protocol))
+	if os.Getuid() == 0 {
+		xlog.Print("listening for imap", mlog.Field("listener", listenerName), mlog.Field("addr", addr), mlog.Field("protocol", protocol))
+	}
 	network := mox.Network(ip)
-	var ln net.Listener
-	var err error
-	if xtls {
-		ln, err = tls.Listen(network, addr, tlsConfig)
-	} else {
-		ln, err = net.Listen(network, addr)
-	}
+	ln, err := mox.Listen(network, addr)
 	if err != nil {
-		xlog.Fatalx("imap: listen for imap"+mox.LinuxSetcapHint(err), err, mlog.Field("protocol", protocol), mlog.Field("listener", listenerName))
+		xlog.Fatalx("imap: listen for imap", err, mlog.Field("protocol", protocol), mlog.Field("listener", listenerName))
+	}
+	if xtls {
+		ln = tls.NewListener(ln, tlsConfig)
 	}
 
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			xlog.Infox("imap: accept", err, mlog.Field("protocol", protocol), mlog.Field("listener", listenerName))
-			continue
+	serve := func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				xlog.Infox("imap: accept", err, mlog.Field("protocol", protocol), mlog.Field("listener", listenerName))
+				continue
+			}
+
+			metricIMAPConnection.WithLabelValues(protocol).Inc()
+			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noRequireSTARTTLS)
 		}
-
-		metricIMAPConnection.WithLabelValues(protocol).Inc()
-		go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noRequireSTARTTLS)
 	}
+
+	servers = append(servers, serve)
+}
+
+// Serve starts serving on all listeners, launching a goroutine per listener.
+func Serve() {
+	for _, serve := range servers {
+		go serve()
+	}
+	servers = nil
 }
 
 // returns whether this connection accepts utf-8 in strings.
