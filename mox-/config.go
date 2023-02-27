@@ -514,8 +514,24 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 			if l.TLS.ACMEConfig != nil {
 				l.TLS.ACMEConfig.MinVersion = minVersion
 			}
-		} else if l.IMAPS.Enabled || l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.Submission.Enabled && !l.Submission.NoRequireSTARTTLS || l.AccountHTTPS.Enabled || l.AdminHTTPS.Enabled || (l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS) || (l.MTASTSHTTPS.Enabled && !l.MTASTSHTTPS.NonTLS) {
-			addErrorf("listener %q requires TLS, but does not specify tls config", name)
+		} else {
+			var needsTLS []string
+			needtls := func(s string, v bool) {
+				if v {
+					needsTLS = append(needsTLS, s)
+				}
+			}
+			needtls("IMAPS", l.IMAPS.Enabled)
+			needtls("SMTP", l.SMTP.Enabled && !l.SMTP.NoSTARTTLS)
+			needtls("Submissions", l.Submissions.Enabled)
+			needtls("Submission", l.Submission.Enabled && !l.Submission.NoRequireSTARTTLS)
+			needtls("AccountHTTPS", l.AccountHTTPS.Enabled)
+			needtls("AdminHTTPS", l.AdminHTTPS.Enabled)
+			needtls("AutoconfigHTTPS", l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS)
+			needtls("MTASTSHTTPS", l.MTASTSHTTPS.Enabled && !l.MTASTSHTTPS.NonTLS)
+			if len(needsTLS) > 0 {
+				addErrorf("listener %q does not specify tls config, but requires tls for %s", name, strings.Join(needsTLS, ", "))
+			}
 		}
 		if l.AutoconfigHTTPS.Enabled && (!l.IMAP.Enabled && !l.IMAPS.Enabled || !l.Submission.Enabled && !l.Submissions.Enabled) {
 			addErrorf("listener %q with autoconfig enabled must have SMTP submission or submissions and IMAP or IMAPS enabled", name)
