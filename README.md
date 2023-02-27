@@ -115,7 +115,9 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 - Add special IMAP mailbox ("Queue?") that contains queued but
   not-yet-delivered messages.
 - Old-style internationalization in messages.
+- Sieve for filtering (for now see Rulesets in the account config)
 - Calendaring
+- JMAP
 - Webmail
 
 There are many smaller improvements to make as well, search for "todo" in the code.
@@ -124,7 +126,6 @@ There are many smaller improvements to make as well, search for "todo" in the co
 
 But perhaps in the future...
 
-- Sieve for filtering (for now see Rulesets in the account config)
 - HTTP-based API for sending messages and receiving delivery feedback
 - Functioning as SMTP relay
 - Forwarding (to an external address)
@@ -214,6 +215,21 @@ of work to share that information with a backup MX. Without that information,
 spammer could use a backup MX to get their spam accepted. Until mox has a
 proper solution, you can simply run a single SMTP server.
 
+## How do I stay up to date?
+
+Please set "CheckUpdates: true" in mox.conf. It will check for a new version
+through a DNS TXT request at `_updates.xmox.nl` once per 24h. Only if a new
+version is published, will the changelog be fetched and delivered to the
+postmaster mailbox.
+
+The changelog is at https://updates.xmox.nl/changelog
+
+You could also monitor newly added tags on this repository, or for the docker
+image, but update instructions are in the changelog.
+
+Keep in mind you have a responsibility to keep the internect-connected software
+you run up to date and secure.
+
 ## How secure is mox?
 
 Security is high on the priority list for mox. Mox is young, so don't expect no
@@ -222,3 +238,9 @@ login, and uses fuzzing. Mox is written in Go, so some classes of bugs such as
 buffer mishandling do not typically result in privilege escalation.  Of course
 logic bugs will still exist. If you find any security issues, please email them
 to mechiel@ueber.net.
+
+## I'm now running an email server, but how does email work?
+
+Congrats and welcome to the club! Running an email server brings some
+responsibility so you should understand how it works. See
+https://explained-from-first-principles.com/email/ for a thorough explanation.
