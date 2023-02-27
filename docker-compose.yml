@@ -11,7 +11,7 @@ version: '3.7'
 services:
   mox:
     # Replace latest with the version you want to run.
-    image: moxmail/mox:latest
+    image: docker.io/moxmail/mox:latest
     environment:
       - MOX_DOCKER=... # Quickstart won't try to write systemd service file.
     # Mox needs host networking because it needs access to the IPs of the
