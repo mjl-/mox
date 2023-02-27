@@ -410,7 +410,8 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 	h := Conf.Static.HostnameDomain.ASCII
 
 	records := []string{
-		"; Time To Live, may be recognized if importing as a zone file.",
+		"; Time To Live of 5 minutes, may be recognized if importing as a zone file.",
+		"; Once your setup is working, you may want to increase the TTL.",
 		"$TTL 300",
 		"",
 
@@ -482,6 +483,12 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 			fmt.Sprintf(`_mta-sts.%s.           IN TXT "v=STSv1; id=%s"`, d, sts.PolicyID),
 			"",
 		)
+	} else {
+		records = append(records,
+			"; Note: No MTA-STS to indicate TLS should be used. Either because disabled for the",
+			"; domain or because mox.conf does not have a listener with MTA-STS configured.",
+			"",
+		)
 	}
 
 	records = append(records,
@@ -500,7 +507,7 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 		fmt.Sprintf(`_submissions._tcp.%s.  IN SRV 0 1 465 %s.`, d, h),
 		"",
 		// ../rfc/6186:242
-		"; Next records specify POP3 and plain text ports are not to be used.",
+		"; Next records specify POP3 and non-TLS ports are not to be used.",
 		"; These are optional and safe to leave out (e.g. if you have to click a lot in a",
 		"; DNS admin web interface).",
 		fmt.Sprintf(`_imap._tcp.%s.         IN SRV 0 1 143 .`, d),
