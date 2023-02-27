@@ -57,6 +57,7 @@ Also see IANA assignments, https://www.iana.org/protocols
 6532	Internationalized Email Headers
 6533	Internationalized Delivery Status and Disposition Notifications
 6729	Indicating Email Handling States in Trace Fields
+6857	Post-Delivery Message Downgrading for Internationalized Email Messages
 7293	The Require-Recipient-Valid-Since Header Field and SMTP Service Extension
 7372	Email Authentication Status Codes
 7435	Opportunistic Security: Some Protection Most of the Time
