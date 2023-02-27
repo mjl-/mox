@@ -15,6 +15,7 @@ ul { padding-left: 1rem; }
 .literal { background-color: #fdfdfd; padding: .5em 1em; border: 1px solid #eee; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 15px; tab-size: 4; }
 table td, table th { padding: .2em .5em; }
 table > tbody > tr:nth-child(odd) { background-color: #f8f8f8; }
+.text { max-width: 50em; }
 p { margin-bottom: 1em; max-width: 50em; }
 [title] { text-decoration: underline; text-decoration-style: dotted; }
 fieldset { border: 0; }
@@ -296,7 +297,29 @@ const index = async () => {
 				),
 				' ',
 				dom.button('Change password'),
-				passwordHint=dom.div(style({display: 'none', marginTop: '.5ex', fontStyle: 'italic'}), 'Password must be at least 8 characters.'),
+			),
+			passwordHint=dom.div(
+				style({display: 'none', marginTop: '.5ex'}),
+				dom.button('Generate random password', attr({type: 'button'}), function click(e) {
+					e.preventDefault()
+					let b = new Uint8Array(1)
+					let s = ''
+					const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_;:,<.>/'
+					while (s.length < 12) {
+						self.crypto.getRandomValues(b)
+						if (Math.ceil(b[0]/chars.length)*chars.length > 255) {
+							continue // Prevent bias.
+						}
+						s += chars[b[0]%chars.length]
+					}
+					password1.type = 'text'
+					password2.type = 'text'
+					password1.value = s
+					password2.value = s
+				}),
+				dom('div.text',
+					box(yellow, 'Important: Bots will try to bruteforce your password. Connections with failed authentication attempts will be rate limited but attackers WILL find weak passwords. If your account is compromised, spammers are likely to abuse your system, spamming your address and the wider internet in your name. So please pick a random, unguessable password, preferrably at least 12 characters.'),
+				),
 			),
 			async function submit(e) {
 				e.stopPropagation()
