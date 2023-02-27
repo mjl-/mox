@@ -1291,7 +1291,8 @@ func (c *conn) cmdCapability(tag, cmd string, p *parser) {
 func (c *conn) capabilities() string {
 	caps := serverCapabilities
 	// ../rfc/9051:1238
-	if !c.tls {
+	// We only allow starting without TLS when explicitly configured, in violation of RFC.
+	if !c.tls && c.tlsConfig != nil {
 		caps += " STARTTLS"
 	}
 	if c.tls || c.noRequireSTARTTLS {
