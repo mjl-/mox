@@ -1520,3 +1520,8 @@ func (Admin) LogLevelSet(ctx context.Context, pkg string, levelStr string) {
 func (Admin) LogLevelRemove(ctx context.Context, pkg string) {
 	mox.Conf.LogLevelRemove(pkg)
 }
+
+// CheckUpdatesEnabled returns whether checking for updates is enabled.
+func (Admin) CheckUpdatesEnabled(ctx context.Context) bool {
+	return mox.Conf.Static.CheckUpdates
+}

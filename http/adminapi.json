@@ -636,6 +636,19 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "CheckUpdatesEnabled",
+			"Docs": "CheckUpdatesEnabled returns whether checking for updates is enabled.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
 		}
 	],
 	"Sections": [],

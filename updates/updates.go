@@ -151,6 +151,7 @@ func FetchChangelog(ctx context.Context, baseURL string, base Version, pubKey []
 	if err != nil {
 		return nil, fmt.Errorf("making request: %v", err)
 	}
+	req.Header.Add("Accept", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if resp == nil {
 		resp = &http.Response{StatusCode: 0}

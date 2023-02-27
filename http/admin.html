@@ -190,9 +190,10 @@ const formatSize = n => {
 }
 
 const index = async () => {
-	const [domains, queueSize] = await Promise.all([
+	const [domains, queueSize, checkUpdatesEnabled] = await Promise.all([
 		await api.Domains(),
 		await api.QueueSize(),
+		await api.CheckUpdatesEnabled(),
 	])
 
 	let fieldset, domain, account, localpart
@@ -200,6 +201,7 @@ const index = async () => {
 	const page = document.getElementById('page')
 	dom._kids(page,
 		crumbs('Mox Admin'),
+		checkUpdatesEnabled ? [] : dom.p(box(yellow, 'Warning: Checking for updates has not been enabled in mox.conf (CheckUpdates: true).', dom.br(), 'Make sure you stay up to date through another mechanism!', dom.br(), 'You have a responsibility to keep the internet-connected software you run up to date and secure!', dom.br(), 'See ', link('https://updates.xmox.nl/changelog'))),
 		dom.p(
 			dom.a('Accounts', attr({href: '#accounts'})), dom.br(),
 			dom.a('Queue', attr({href: '#queue'})), ' ('+queueSize+')', dom.br(),
