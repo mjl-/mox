@@ -1,8 +1,12 @@
 FROM --platform=linux/amd64 docker.io/golang:1-alpine AS build
+# note: cannot use $TARGETOS or $TARGETARCH because apparently the --platform in
+# the FROM above overrides the actual target os/arch from the command-line.
+ARG goos
+ARG goarch
 WORKDIR /
 ARG moxversion
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go install -mod mod -trimpath github.com/mjl-/mox@$moxversion
-RUN test -f /go/bin/mox && cp /go/bin/mox /bin/mox || cp /go/bin/${TARGETOS}_${TARGETARCH}/mox /bin/mox
+RUN CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go install -mod mod -trimpath github.com/mjl-/mox@$moxversion
+RUN test -f /go/bin/mox && cp /go/bin/mox /bin/mox || cp /go/bin/${goos}_${goarch}/mox /bin/mox
 
 # Using latest may break at some point, but will hopefully be convenient most of the time.
 FROM --platform=$TARGETPLATFORM docker.io/alpine:latest

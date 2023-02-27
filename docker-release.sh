@@ -32,18 +32,23 @@ alpineversion=alpine$(podman run alpine:latest cat /etc/alpine-release)
 # We assume the alpines for all platforms have the same version...
 echo Building with $goversion and $alpineversion
 
+# We build the images individually so we can pass goos and goarch ourselves,
+# needed because the platform in "FROM --platform <image>" in the first stage
+# seems to override the TARGET* variables.
 test -d empty || mkdir empty
-podman build --platform $platforms -f Dockerfile.release -v $HOME/go/pkg/sumdb:/go/pkg/sumbd:ro --build-arg moxversion=$moxversion --manifest docker.io/moxmail/mox:$moxversion-$goversion-$alpineversion empty
+(podman manifest rm moxmail/mox:$moxversion-$goversion-$alpineversion || exit 0)
+for platform in $(echo $platforms | sed 's/,/ /g'); do
+	goos=$(echo $platform | sed 's,/.*$,,')
+	goarch=$(echo $platform | sed 's,^.*/,,')
+	podman build --platform $platform -f Dockerfile.release -v $HOME/go/pkg/sumdb:/go/pkg/sumbd:ro --build-arg goos=$goos --build-arg goarch=$goarch --build-arg moxversion=$moxversion --manifest moxmail/mox:$moxversion-$goversion-$alpineversion empty
+done
 
 cat <<EOF
 
 # Suggested commands to push images:
 
-podman manifest push --all docker.io/moxmail/mox:$moxversion-$goversion-$alpineversion
+podman manifest push --all moxmail/mox:$moxversion-$goversion-$alpineversion docker.io/moxmail/mox:$moxversion-$goversion-$alpineversion
 
-podman tag docker.io/moxmail/mox:$moxversion-$goversion-$alpineversion docker.io/moxmail/mox:$moxversion
-podman manifest push --all docker.io/moxmail/mox:$moxversion
-
-podman tag docker.io/moxmail/mox:$moxversion docker.io/moxmail/mox:latest
-podman manifest push --all docker.io/moxmail/mox:latest
+podman manifest push --all moxmail/mox:$moxversion-$goversion-$alpineversion docker.io/moxmail/mox:$moxversion
+podman manifest push --all moxmail/mox:$moxversion-$goversion-$alpineversion docker.io/moxmail/mox:latest
 EOF
