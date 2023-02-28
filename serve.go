@@ -139,9 +139,14 @@ requested, other TLS certificates are requested on demand.
 	if len(args) != 0 {
 		c.Usage()
 	}
+
+	// Set debug logging until config is fully loaded.
+	mlog.Logfmt = true
+	mox.Conf.Log[""] = mlog.LevelDebug
+	mlog.SetConfig(mox.Conf.Log)
+
 	mox.MustLoadConfig()
 
-	mlog.Logfmt = true
 	log := mlog.New("serve")
 
 	if os.Getuid() == 0 {

@@ -105,6 +105,7 @@ var commands = []struct {
 	{"config domain rm", cmdConfigDomainRemove},
 	{"config describe-sendmail", cmdConfigDescribeSendmail},
 	{"config printservice", cmdConfigPrintservice},
+	{"examples", cmdExamples},
 
 	{"checkupdate", cmdCheckupdate},
 	{"cid", cmdCid},
@@ -756,6 +757,109 @@ func cmdConfigDNSCheck(c *cmd) {
 	printResult("SRVConf", result.SRVConf.Result)
 	printResult("Autoconf", result.Autoconf.Result)
 	printResult("Autodiscover", result.Autodiscover.Result)
+}
+
+var examples = []struct {
+	Name string
+	Get  func() string
+}{
+	{
+		"webhandlers",
+		func() string {
+			const webhandlers = `# Snippet of domains.conf to configure WebHandlers.
+WebHandlers:
+	-
+		# The name of the handler, used in logging and metrics.
+		LogName: staticmjl
+		# With ACME configured, each configured domain will automatically get a TLS
+		# certificate on first request.
+		Domain: mox.example
+		PathRegexp: ^/who/mjl/
+		WebStatic:
+			StripPrefix: /who/mjl
+			# Requested path /who/mjl/inferno/ resolves to local web/mjl/inferno.
+			# If a directory contains an index.html, it is served when a directory is requested.
+			Root: web/mjl
+			# With ListFiles true, if a directory does not contain an index.html, the contents are listed.
+			ListFiles: true
+			ResponseHeaders:
+				X-Mox: hi
+	-
+		LogName: redir
+		Domain: mox.example
+		PathRegexp: ^/redir/a/b/c
+		# Don't redirect from plain HTTP to HTTPS.
+		DontRedirectPlainHTTP: true
+		WebRedirect:
+			# Just change the domain and add query string set fragment. No change to scheme.
+			# Path will start with /redir/a/b/c (and whathever came after) because no
+			# OrigPathRegexp+ReplacePath is set.
+			BaseURL: //moxest.example?q=1#frag
+			# Default redirection is 308 - Permanent Redirect.
+			StatusCode: 307
+	-
+		LogName: oldnew
+		Domain: mox.example
+		PathRegexp: ^/old/
+		WebRedirect:
+			# Replace path, leaving rest of URL intact.
+			OrigPathRegexp: ^/old/(.*)
+			ReplacePath: /new/$1
+	-
+		LogName: app
+		Domain: mox.example
+		PathRegexp: ^/app/
+		WebForward:
+			# Strip the path matched by PathRegexp before forwarding the request. So original
+			# request /app/api become just /api.
+			StripPath: true
+			# URL of backend, where requests are forwarded to. The path in the URL is kept,
+			# so for incoming request URL /app/api, the outgoing request URL has path /app-v2/api.
+			# Requests are made with Go's net/http DefaultTransporter, including using
+			# HTTP_PROXY and HTTPS_PROXY environment variables.
+			URL: http://127.0.0.1:8900/app-v2/
+			# Add headers to response.
+			ResponseHeaders:
+				X-Frame-Options: deny
+				X-Content-Type-Options: nosniff
+`
+			// Parse just so we know we have the syntax right.
+			// todo: ideally we would have a complete config file and parse it fully.
+			var conf struct {
+				WebHandlers []config.WebHandler
+			}
+			err := sconf.Parse(strings.NewReader(webhandlers), &conf)
+			xcheckf(err, "parsing webhandlers example")
+			return webhandlers
+		},
+	},
+}
+
+func cmdExamples(c *cmd) {
+	c.params = "[name]"
+	c.help = `List available examples, or print a specific example.`
+
+	args := c.Parse()
+	if len(args) > 1 {
+		c.Usage()
+	}
+
+	var match func() string
+	for _, ex := range examples {
+		if len(args) == 0 {
+			fmt.Println(ex.Name)
+		} else if args[0] == ex.Name {
+			match = ex.Get
+		}
+	}
+	if len(args) == 0 {
+		return
+	}
+	if match == nil {
+		log.Fatalln("not found")
+	}
+	fmt.Print(match())
+	return
 }
 
 func cmdLoglevels(c *cmd) {

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"net"
+	"net/url"
 	"reflect"
 	"regexp"
 	"time"
@@ -16,7 +17,7 @@ import (
 	"github.com/mjl-/mox/smtp"
 )
 
-// todo: better default values, so less has to be specified in the config file. junkfilter and rejects mailbox should be enabled by default. other features as well possibly.
+// todo: better default values, so less has to be specified in the config file.
 
 // Port returns port if non-zero, and fallback otherwise.
 func Port(port, fallback int) int {
@@ -69,8 +70,9 @@ type Static struct {
 
 // Dynamic is the parsed form of domains.conf, and is automatically reloaded when changed.
 type Dynamic struct {
-	Domains  map[string]Domain  `sconf-doc:"Domains for which email is accepted. For internationalized domains, use their IDNA names in UTF-8."`
-	Accounts map[string]Account `sconf-doc:"Accounts to which email can be delivered. An account can accept email for multiple domains, for multiple localparts, and deliver to multiple mailboxes."`
+	Domains     map[string]Domain  `sconf-doc:"Domains for which email is accepted. For internationalized domains, use their IDNA names in UTF-8."`
+	Accounts    map[string]Account `sconf-doc:"Accounts to which email can be delivered. An account can accept email for multiple domains, for multiple localparts, and deliver to multiple mailboxes."`
+	WebHandlers []WebHandler       `sconf:"optional" sconf-doc:"Handle webserver requests by serving static files, redirecting or reverse-proxying HTTP(s). The first matching WebHandler will handle the request. Built-in handlers for autoconfig and mta-sts always run first. If no handler matches, the response status code is file not found (404). If functionality you need is missng, simply forward the requests to an application that can provide the needed functionality."`
 }
 
 type ACME struct {
@@ -149,6 +151,14 @@ type Listener struct {
 		Port    int  `sconf:"optional" sconf-doc:"TLS port, 443 by default. You should only override this if you cannot listen on port 443 directly. MTA-STS requests will be made to port 443, so you'll have to add an external mechanism to get the connection here, e.g. by configuring port forwarding."`
 		NonTLS  bool `sconf:"optional" sconf-doc:"If set, plain HTTP instead of HTTPS is spoken on the configured port. Can be useful when the mta-sts domain is reverse proxied."`
 	} `sconf:"optional" sconf-doc:"Serve MTA-STS policies describing SMTP TLS requirements. Requires a TLS config."`
+	WebserverHTTP struct {
+		Enabled bool
+		Port    int `sconf:"optional" sconf-doc:"Port for plain HTTP (non-TLS) webserver."`
+	} `sconf:"optional" sconf-doc:"All configured WebHandlers will serve on an enabled listener."`
+	WebserverHTTPS struct {
+		Enabled bool
+		Port    int `sconf:"optional" sconf-doc:"Port for HTTPS webserver."`
+	} `sconf:"optional" sconf-doc:"All configured WebHandlers will serve on an enabled listener. Either ACME must be configured, or for each WebHandler domain a TLS certificate must be configured."`
 }
 
 type Domain struct {
@@ -295,4 +305,45 @@ type TLS struct {
 
 	Config     *tls.Config `sconf:"-" json:"-"` // TLS config for non-ACME-verification connections, i.e. SMTP and IMAP, and not port 443.
 	ACMEConfig *tls.Config `sconf:"-" json:"-"` // TLS config that handles ACME verification, for serving on port 443.
+}
+
+type WebHandler struct {
+	LogName    string `sconf:"optional" sconf-doc:"Name to use in logging and metrics."`
+	Domain     string `sconf-doc:"Both Domain and PathRegexp must match for this WebHandler to match a request. Exactly one of WebStatic, WebRedirect, WebForward must be set."`
+	PathRegexp string `sconf-doc:"Regular expression matched against request path, must always start with ^ to ensure matching from the start of the path. The matching prefix can optionally be stripped by WebForward. The regular expression does not have to end with $."`
+
+	DontRedirectPlainHTTP bool         `sconf:"optional" sconf-doc:"If set, plain HTTP requests are not automatically permanently redirected (308) to HTTPS. If you don't have a HTTPS webserver configured, set this to true."`
+	WebStatic             *WebStatic   `sconf:"optional" sconf-doc:"Serve static files."`
+	WebRedirect           *WebRedirect `sconf:"optional" sconf-doc:"Redirect requests to configured URL."`
+	WebForward            *WebForward  `sconf:"optional" sconf-doc:"Forward requests to another webserver, i.e. reverse proxy."`
+
+	Name      string         `sconf:"-"` // Either LogName, or numeric index if LogName was empty. Used instead of LogName in logging/metrics.
+	DNSDomain dns.Domain     `sconf:"-"`
+	Path      *regexp.Regexp `sconf:"-" json:"-"`
+}
+
+type WebStatic struct {
+	StripPrefix      string            `sconf:"optional" sconf-doc:"Path to strip from the request URL before evaluating to a local path. If the requested URL path does not start with this prefix and ContinueNotFound it is considered non-matching and next WebHandlers are tried. If ContinueNotFound is not set, a file not found (404) is returned in that case."`
+	Root             string            `sconf-doc:"Directory to serve files from for this handler. Keep in mind that relative paths are relative to the working directory of mox."`
+	ListFiles        bool              `sconf:"optional" sconf-doc:"If set, and a directory is requested, and no index.html is present that can be served, a file listing is returned. Results in 403 if ListFiles is not set. If a directory is requested and the URL does not end with a slash, the response is a redirect to the path with trailing slash."`
+	ContinueNotFound bool              `sconf:"optional" sconf-doc:"If a requested URL does not exist, don't return a file not found (404) response, but consider this handler non-matching and continue attempts to serve with later WebHandlers, which may be a reverse proxy generating dynamic content, possibly even writing a static file for a next request to serve statically. If ContinueNotFound is set, HTTP requests other than GET and HEAD do not match. This mechanism can be used to implement the equivalent of 'try_files' in other webservers."`
+	ResponseHeaders  map[string]string `sconf:"optional" sconf-doc:"Headers to add to the response. Useful for cache-control, content-type, etc. By default, Content-Type headers are automatically added for recognized file types, unless added explicitly through this setting. For directory listings, a content-type header is skipped."`
+}
+
+type WebRedirect struct {
+	BaseURL        string `sconf:"optional" sconf-doc:"Base URL to redirect to. The path must be empty and will be replaced, either by the request URL path, or byOrigPathRegexp/ReplacePath. Scheme, host, port and fragment stay intact, and query strings are combined. If empty, the response redirects to a different path through OrigPathRegexp and ReplacePath, which must then be set. Use a URL without scheme to redirect without changing the protocol, e.g. //newdomain/."`
+	OrigPathRegexp string `sconf:"optional" sconf-doc:"Regular expression for matching path. If set and path does not match, a 404 is returned. The HTTP path used for matching always starts with a slash."`
+	ReplacePath    string `sconf:"optional" sconf-doc:"Replacement path for destination URL based on OrigPathRegexp. Implemented with Go's Regexp.ReplaceAllString: $1 is replaced with the text of the first submatch, etc. If both OrigPathRegexp and ReplacePath are empty, BaseURL must be set and all paths are redirected unaltered."`
+	StatusCode     int    `sconf:"optional" sconf-doc:"Status code to use in redirect, e.g. 307. By default, a permanent redirect (308) is returned."`
+
+	URL      *url.URL       `sconf:"-" json:"-"`
+	OrigPath *regexp.Regexp `sconf:"-" json:"-"`
+}
+
+type WebForward struct {
+	StripPath       bool              `sconf:"optional" sconf-doc:"Strip the matching WebHandler path from the WebHandler before forwarding the request."`
+	URL             string            `sconf-doc:"URL to forward HTTP requests to, e.g. http://127.0.0.1:8123/base. If StripPath is false the full request path is added to the URL. Host headers are sent unmodified. New X-Forwarded-{For,Host,Proto} headers are set. Any query string in the URL is ignored. Requests are made using Go's net/http.DefaultTransport that takes environment variables HTTP_PROXY and HTTPS_PROXY into account."`
+	ResponseHeaders map[string]string `sconf:"optional" sconf-doc:"Headers to add to the response. Useful for adding security- and cache-related headers."`
+
+	TargetURL *url.URL `sconf:"-" json:"-"`
 }

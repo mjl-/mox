@@ -62,6 +62,23 @@ EOF
 ./mox config describe-domains | sed 's/^/\t/'
 
 cat <<EOF
+
+# Examples
+
+Mox includes configuration files to illustrate common setups. You can see these
+examples with "mox examples", and print a specific example with "mox examples
+<name>". Below are all examples included in mox.
+
+EOF
+
+for ex in $(./mox examples); do
+	echo '# Example '$ex
+	echo
+	./mox examples $ex | sed 's/^/\t/'
+	echo
+done
+
+cat <<EOF
 */
 package config
 

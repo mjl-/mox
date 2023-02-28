@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -138,6 +139,7 @@ func (c *Config) loadDynamic() []error {
 	c.Dynamic = d
 	c.dynamicMtime = mtime
 	c.accountDestinations = accDests
+	c.allowACMEHosts()
 	return nil
 }
 
@@ -196,25 +198,39 @@ func (c *Config) AccountDestination(addr string) (accDests AccountDestination, o
 	return
 }
 
+func (c *Config) WebHandlers() (l []config.WebHandler) {
+	c.withDynamicLock(func() {
+		l = c.Dynamic.WebHandlers
+	})
+	return l
+}
+
 func (c *Config) allowACMEHosts() {
-	// todo future: reset the allowed hosts for autoconfig & mtasts when loading new list.
 	for _, l := range c.Static.Listeners {
 		if l.TLS == nil || l.TLS.ACME == "" {
 			continue
 		}
+
 		m := c.Static.ACME[l.TLS.ACME].Manager
+		hostnames := map[dns.Domain]struct{}{}
+
+		hostnames[c.Static.HostnameDomain] = struct{}{}
+		if l.HostnameDomain.ASCII != "" {
+			hostnames[l.HostnameDomain] = struct{}{}
+		}
+
 		for _, dom := range c.Dynamic.Domains {
 			if l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS {
 				if d, err := dns.ParseDomain("autoconfig." + dom.Domain.ASCII); err != nil {
 					xlog.Errorx("parsing autoconfig domain", err, mlog.Field("domain", dom.Domain))
 				} else {
-					m.AllowHostname(d)
+					hostnames[d] = struct{}{}
 				}
 
 				if d, err := dns.ParseDomain("autodiscover." + dom.Domain.ASCII); err != nil {
 					xlog.Errorx("parsing autodiscover domain", err, mlog.Field("domain", dom.Domain))
 				} else {
-					m.AllowHostname(d)
+					hostnames[d] = struct{}{}
 				}
 			}
 
@@ -222,11 +238,19 @@ func (c *Config) allowACMEHosts() {
 				d, err := dns.ParseDomain("mta-sts." + dom.Domain.ASCII)
 				if err != nil {
 					xlog.Errorx("parsing mta-sts domain", err, mlog.Field("domain", dom.Domain))
-					continue
+				} else {
+					hostnames[d] = struct{}{}
 				}
-				m.AllowHostname(d)
 			}
 		}
+
+		if l.WebserverHTTPS.Enabled {
+			for _, wh := range c.Dynamic.WebHandlers {
+				hostnames[wh.DNSDomain] = struct{}{}
+			}
+		}
+
+		m.SetAllowedHostnames(hostnames)
 	}
 }
 
@@ -529,6 +553,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 			needtls("AdminHTTPS", l.AdminHTTPS.Enabled)
 			needtls("AutoconfigHTTPS", l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS)
 			needtls("MTASTSHTTPS", l.MTASTSHTTPS.Enabled && !l.MTASTSHTTPS.NonTLS)
+			needtls("WebserverHTTPS", l.WebserverHTTPS.Enabled)
 			if len(needsTLS) > 0 {
 				addErrorf("listener %q does not specify tls config, but requires tls for %s", name, strings.Join(needsTLS, ", "))
 			}
@@ -964,6 +989,100 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		checkMailboxNormf(tlsrpt.Mailbox, "TLSRPT mailbox for account %q", tlsrpt.Account)
 		accDests[addrFull] = AccountDestination{lp, tlsrpt.Account, dest}
 	}
+
+	// Check webserver configs.
+	for i := range c.WebHandlers {
+		wh := &c.WebHandlers[i]
+
+		if wh.LogName == "" {
+			wh.Name = fmt.Sprintf("%d", i)
+		} else {
+			wh.Name = wh.LogName
+		}
+
+		dom, err := dns.ParseDomain(wh.Domain)
+		if err != nil {
+			addErrorf("webhandler %s %s: parsing domain: %v", wh.Domain, wh.PathRegexp, err)
+		}
+		wh.DNSDomain = dom
+
+		if !strings.HasPrefix(wh.PathRegexp, "^") {
+			addErrorf("webhandler %s %s: path regexp must start with a ^", wh.Domain, wh.PathRegexp)
+		}
+		re, err := regexp.Compile(wh.PathRegexp)
+		if err != nil {
+			addErrorf("webhandler %s %s: compiling regexp: %v", wh.Domain, wh.PathRegexp, err)
+		}
+		wh.Path = re
+
+		var n int
+		if wh.WebStatic != nil {
+			n++
+			ws := wh.WebStatic
+			if ws.StripPrefix != "" && !strings.HasPrefix(ws.StripPrefix, "/") {
+				addErrorf("webstatic %s %s: prefix to strip %s must start with a slash", wh.Domain, wh.PathRegexp, ws.StripPrefix)
+			}
+			for k := range ws.ResponseHeaders {
+				xk := k
+				k := strings.TrimSpace(xk)
+				if k != xk || k == "" {
+					addErrorf("webstatic %s %s: bad header %q", wh.Domain, wh.PathRegexp, xk)
+				}
+			}
+		}
+		if wh.WebRedirect != nil {
+			n++
+			wr := wh.WebRedirect
+			if wr.BaseURL != "" {
+				u, err := url.Parse(wr.BaseURL)
+				if err != nil {
+					addErrorf("webredirect %s %s: parsing redirect url %s: %v", wh.Domain, wh.PathRegexp, wr.BaseURL, err)
+				}
+				switch u.Path {
+				case "", "/":
+					u.Path = "/"
+				default:
+					addErrorf("webredirect %s %s: BaseURL must have empty path", wh.Domain, wh.PathRegexp, wr.BaseURL)
+				}
+				wr.URL = u
+			}
+			if wr.OrigPathRegexp != "" && wr.ReplacePath != "" {
+				re, err := regexp.Compile(wr.OrigPathRegexp)
+				if err != nil {
+					addErrorf("webredirect %s %s: compiling regexp %s: %v", wh.Domain, wh.PathRegexp, wr.OrigPathRegexp, err)
+				}
+				wr.OrigPath = re
+			} else if wr.OrigPathRegexp != "" || wr.ReplacePath != "" {
+				addErrorf("webredirect %s %s: must have either both OrigPathRegexp and ReplacePath, or neither", wh.Domain, wh.PathRegexp)
+			} else if wr.BaseURL == "" {
+				addErrorf("webredirect %s %s: must at least one of BaseURL and OrigPathRegexp+ReplacePath", wh.Domain, wh.PathRegexp)
+			}
+			if wr.StatusCode != 0 && (wr.StatusCode < 300 || wr.StatusCode >= 400) {
+				addErrorf("webredirect %s %s: invalid redirect status code %d", wh.Domain, wh.PathRegexp, wr.StatusCode)
+			}
+		}
+		if wh.WebForward != nil {
+			n++
+			wf := wh.WebForward
+			u, err := url.Parse(wf.URL)
+			if err != nil {
+				addErrorf("webforward %s %s: parsing url %s: %v", wh.Domain, wh.PathRegexp, wf.URL, err)
+			}
+			wf.TargetURL = u
+
+			for k := range wf.ResponseHeaders {
+				xk := k
+				k := strings.TrimSpace(xk)
+				if k != xk || k == "" {
+					addErrorf("webforward %s %s: bad header %q", wh.Domain, wh.PathRegexp, xk)
+				}
+			}
+		}
+		if n != 1 {
+			addErrorf("webhandler %s %s: must have exactly one handler, not %d", wh.Domain, wh.PathRegexp, n)
+		}
+	}
+
 	return
 }
 

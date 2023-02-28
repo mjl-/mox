@@ -24,6 +24,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -180,12 +181,22 @@ func Load(name, acmeDir, contactEmail, directoryURL string, shutdown <-chan stru
 	return a, nil
 }
 
-// AllowHostname adds hostname for use with ACME.
-func (m *Manager) AllowHostname(hostname dns.Domain) {
+// SetAllowedHostnames sets a new list of allowed hostnames for automatic TLS.
+func (m *Manager) SetAllowedHostnames(hostnames map[dns.Domain]struct{}) {
 	m.Lock()
 	defer m.Unlock()
-	xlog.Debug("autotls add hostname", mlog.Field("hostname", hostname))
-	m.hosts[hostname] = struct{}{}
+
+	// Log as slice, sorted.
+	l := make([]dns.Domain, 0, len(hostnames))
+	for d := range hostnames {
+		l = append(l, d)
+	}
+	sort.Slice(l, func(i, j int) bool {
+		return l[i].Name() < l[j].Name()
+	})
+
+	xlog.Debug("autotls setting allowed hostnames", mlog.Field("hostnames", l))
+	m.hosts = hostnames
 }
 
 // Hostnames returns the allowed host names for use with ACME.

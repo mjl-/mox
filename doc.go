@@ -41,6 +41,7 @@ low-maintenance self-hosted email.
 	mox config domain rm domain
 	mox config describe-sendmail >/etc/moxsubmit.conf
 	mox config printservice >mox.service
+	mox examples [name]
 	mox checkupdate
 	mox cid cid
 	mox clientconfig domain
@@ -387,6 +388,12 @@ has changed with a newer version of mox, use this command to generate an up to
 date version.
 
 	usage: mox config printservice >mox.service
+
+# mox examples
+
+List available examples, or print a specific example.
+
+	usage: mox examples [name]
 
 # mox checkupdate
 

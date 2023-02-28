@@ -269,6 +269,22 @@ describe-static" and "mox config describe-domains":
 				# useful when the mta-sts domain is reverse proxied. (optional)
 				NonTLS: false
 
+			# All configured WebHandlers will serve on an enabled listener. (optional)
+			WebserverHTTP:
+				Enabled: false
+
+				# Port for plain HTTP (non-TLS) webserver. (optional)
+				Port: 0
+
+			# All configured WebHandlers will serve on an enabled listener. Either ACME must
+			# be configured, or for each WebHandler domain a TLS certificate must be
+			# configured. (optional)
+			WebserverHTTPS:
+				Enabled: false
+
+				# Port for HTTPS webserver. (optional)
+				Port: 0
+
 	# Destination for emails delivered to postmaster address.
 	Postmaster:
 		Account:
@@ -540,6 +556,176 @@ describe-static" and "mox config describe-domains":
 					# Occurrences in word database until a word is considered rare and its influence
 					# in calculating probability reduced. E.g. 1 or 2. (optional)
 					RareWords: 0
+
+	# Handle webserver requests by serving static files, redirecting or
+	# reverse-proxying HTTP(s). The first matching WebHandler will handle the request.
+	# Built-in handlers for autoconfig and mta-sts always run first. If no handler
+	# matches, the response status code is file not found (404). If functionality you
+	# need is missng, simply forward the requests to an application that can provide
+	# the needed functionality. (optional)
+	WebHandlers:
+		-
+
+			# Name to use in logging and metrics. (optional)
+			LogName:
+
+			# Both Domain and PathRegexp must match for this WebHandler to match a request.
+			# Exactly one of WebStatic, WebRedirect, WebForward must be set.
+			Domain:
+
+			# Regular expression matched against request path, must always start with ^ to
+			# ensure matching from the start of the path. The matching prefix can optionally
+			# be stripped by WebForward. The regular expression does not have to end with $.
+			PathRegexp:
+
+			# If set, plain HTTP requests are not automatically permanently redirected (308)
+			# to HTTPS. If you don't have a HTTPS webserver configured, set this to true.
+			# (optional)
+			DontRedirectPlainHTTP: false
+
+			# Serve static files. (optional)
+			WebStatic:
+
+				# Path to strip from the request URL before evaluating to a local path. If the
+				# requested URL path does not start with this prefix and ContinueNotFound it is
+				# considered non-matching and next WebHandlers are tried. If ContinueNotFound is
+				# not set, a file not found (404) is returned in that case. (optional)
+				StripPrefix:
+
+				# Directory to serve files from for this handler. Keep in mind that relative paths
+				# are relative to the working directory of mox.
+				Root:
+
+				# If set, and a directory is requested, and no index.html is present that can be
+				# served, a file listing is returned. Results in 403 if ListFiles is not set. If a
+				# directory is requested and the URL does not end with a slash, the response is a
+				# redirect to the path with trailing slash. (optional)
+				ListFiles: false
+
+				# If a requested URL does not exist, don't return a file not found (404) response,
+				# but consider this handler non-matching and continue attempts to serve with later
+				# WebHandlers, which may be a reverse proxy generating dynamic content, possibly
+				# even writing a static file for a next request to serve statically. If
+				# ContinueNotFound is set, HTTP requests other than GET and HEAD do not match.
+				# This mechanism can be used to implement the equivalent of 'try_files' in other
+				# webservers. (optional)
+				ContinueNotFound: false
+
+				# Headers to add to the response. Useful for cache-control, content-type, etc. By
+				# default, Content-Type headers are automatically added for recognized file types,
+				# unless added explicitly through this setting. For directory listings, a
+				# content-type header is skipped. (optional)
+				ResponseHeaders:
+					x:
+
+			# Redirect requests to configured URL. (optional)
+			WebRedirect:
+
+				# Base URL to redirect to. The path must be empty and will be replaced, either by
+				# the request URL path, or byOrigPathRegexp/ReplacePath. Scheme, host, port and
+				# fragment stay intact, and query strings are combined. If empty, the response
+				# redirects to a different path through OrigPathRegexp and ReplacePath, which must
+				# then be set. Use a URL without scheme to redirect without changing the protocol,
+				# e.g. //newdomain/. (optional)
+				BaseURL:
+
+				# Regular expression for matching path. If set and path does not match, a 404 is
+				# returned. The HTTP path used for matching always starts with a slash. (optional)
+				OrigPathRegexp:
+
+				# Replacement path for destination URL based on OrigPathRegexp. Implemented with
+				# Go's Regexp.ReplaceAllString: $1 is replaced with the text of the first
+				# submatch, etc. If both OrigPathRegexp and ReplacePath are empty, BaseURL must be
+				# set and all paths are redirected unaltered. (optional)
+				ReplacePath:
+
+				# Status code to use in redirect, e.g. 307. By default, a permanent redirect (308)
+				# is returned. (optional)
+				StatusCode: 0
+
+			# Forward requests to another webserver, i.e. reverse proxy. (optional)
+			WebForward:
+
+				# Strip the matching WebHandler path from the WebHandler before forwarding the
+				# request. (optional)
+				StripPath: false
+
+				# URL to forward HTTP requests to, e.g. http://127.0.0.1:8123/base. If StripPath
+				# is false the full request path is added to the URL. Host headers are sent
+				# unmodified. New X-Forwarded-{For,Host,Proto} headers are set. Any query string
+				# in the URL is ignored. Requests are made using Go's net/http.DefaultTransport
+				# that takes environment variables HTTP_PROXY and HTTPS_PROXY into account.
+				URL:
+
+				# Headers to add to the response. Useful for adding security- and cache-related
+				# headers. (optional)
+				ResponseHeaders:
+					x:
+
+# Examples
+
+Mox includes configuration files to illustrate common setups. You can see these
+examples with "mox examples", and print a specific example with "mox examples
+<name>". Below are all examples included in mox.
+
+# Example webhandlers
+
+	# Snippet of domains.conf to configure WebHandlers.
+	WebHandlers:
+		-
+			# The name of the handler, used in logging and metrics.
+			LogName: staticmjl
+			# With ACME configured, each configured domain will automatically get a TLS
+			# certificate on first request.
+			Domain: mox.example
+			PathRegexp: ^/who/mjl/
+			WebStatic:
+				StripPrefix: /who/mjl
+				# Requested path /who/mjl/inferno/ resolves to local web/mjl/inferno.
+				# If a directory contains an index.html, it is served when a directory is requested.
+				Root: web/mjl
+				# With ListFiles true, if a directory does not contain an index.html, the contents are listed.
+				ListFiles: true
+				ResponseHeaders:
+					X-Mox: hi
+		-
+			LogName: redir
+			Domain: mox.example
+			PathRegexp: ^/redir/a/b/c
+			# Don't redirect from plain HTTP to HTTPS.
+			DontRedirectPlainHTTP: true
+			WebRedirect:
+				# Just change the domain and add query string set fragment. No change to scheme.
+				# Path will start with /redir/a/b/c (and whathever came after) because no
+				# OrigPathRegexp+ReplacePath is set.
+				BaseURL: //moxest.example?q=1#frag
+				# Default redirection is 308 - Permanent Redirect.
+				StatusCode: 307
+		-
+			LogName: oldnew
+			Domain: mox.example
+			PathRegexp: ^/old/
+			WebRedirect:
+				# Replace path, leaving rest of URL intact.
+				OrigPathRegexp: ^/old/(.*)
+				ReplacePath: /new/$1
+		-
+			LogName: app
+			Domain: mox.example
+			PathRegexp: ^/app/
+			WebForward:
+				# Strip the path matched by PathRegexp before forwarding the request. So original
+				# request /app/api become just /api.
+				StripPath: true
+				# URL of backend, where requests are forwarded to. The path in the URL is kept,
+				# so for incoming request URL /app/api, the outgoing request URL has path /app-v2/api.
+				# Requests are made with Go's net/http DefaultTransporter, including using
+				# HTTP_PROXY and HTTPS_PROXY environment variables.
+				URL: http://127.0.0.1:8900/app-v2/
+				# Add headers to response.
+				ResponseHeaders:
+					X-Frame-Options: deny
+					X-Content-Type-Options: nosniff
 */
 package config
 

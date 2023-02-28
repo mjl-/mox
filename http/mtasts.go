@@ -13,7 +13,9 @@ import (
 )
 
 func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
-	log := xlog.WithCid(mox.Cid())
+	log := func() *mlog.Log {
+		return xlog.WithContext(r.Context())
+	}
 
 	host := strings.ToLower(r.Host)
 	if !strings.HasPrefix(host, "mta-sts.") {
@@ -28,7 +30,7 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 	}
 	domain, err := dns.ParseDomain(host)
 	if err != nil {
-		log.Errorx("mtasts policy request: bad domain", err, mlog.Field("host", host))
+		log().Errorx("mtasts policy request: bad domain", err, mlog.Field("host", host))
 		http.NotFound(w, r)
 		return
 	}
@@ -49,7 +51,7 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 		}
 		d, err := dns.ParseDomain(s)
 		if err != nil {
-			log.Errorx("bad domain in mtasts config", err, mlog.Field("domain", s))
+			log().Errorx("bad domain in mtasts config", err, mlog.Field("domain", s))
 			http.Error(w, "500 - internal server error - invalid domain in configuration", http.StatusInternalServerError)
 			return
 		}
