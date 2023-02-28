@@ -15,14 +15,16 @@ import (
 func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 	log := xlog.WithCid(mox.Cid())
 
-	if !strings.HasPrefix(r.Host, "mta-sts.") {
+	host := strings.ToLower(r.Host)
+	if !strings.HasPrefix(host, "mta-sts.") {
 		http.NotFound(w, r)
 		return
 	}
-	host, _, err := net.SplitHostPort(strings.TrimPrefix(r.Host, "mta-sts."))
-	if err != nil {
-		http.NotFound(w, r)
-		return
+	host = strings.TrimPrefix(host, "mta-sts.")
+	nhost, _, err := net.SplitHostPort(host)
+	if err == nil {
+		// Only relevant for when host has a port.
+		host = nhost
 	}
 	domain, err := dns.ParseDomain(host)
 	if err != nil {
