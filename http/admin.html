@@ -874,7 +874,7 @@ const domainDNSCheck = async (d) => {
 		dom.table(
 			dom.tr(dom.th('IP'), dom.th('Addresses')),
 			Object.entries(checks.IPRev.IPNames).sort().map(t =>
-				dom.tr(dom.td(t[0]), dom.td(t[1])),
+				dom.tr(dom.td(t[0]), dom.td((t[1] || []).join(', '))),
 			)
 		),
 	]
