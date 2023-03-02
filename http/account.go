@@ -76,7 +76,7 @@ func checkAccountAuth(ctx context.Context, log *mlog.Log, w http.ResponseWriter,
 	}
 	if addr != nil && !mox.LimiterFailedAuth.Add(addr.IP, start, 1) {
 		metrics.AuthenticationRatelimitedInc("httpaccount")
-		http.Error(w, "http 429 - too many auth attempts", http.StatusTooManyRequests)
+		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
 		return ""
 	}
 

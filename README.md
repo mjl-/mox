@@ -31,6 +31,8 @@ See Quickstart below to get started.
   accounts/domains, and modifying the configuration file.
 - Autodiscovery (with SRV records, Microsoft-style and Thunderbird-style) for
   easy account setup (though not many clients support it).
+- Webserver with serving static files and forwarding requests (reverse
+  proxy), so port 443 can also be used to serve websites.
 - Prometheus metrics and structured logging for operational insight.
 
 Mox is available under the MIT-license and was created by Mechiel Lukkien,
@@ -54,7 +56,7 @@ Verify you have a working mox binary:
 
 	./mox version
 
-Note: Mox only compiles/works on unix systems, not on Plan 9 or Windows.
+Note: Mox only compiles for/works on unix systems, not on Plan 9 or Windows.
 
 You can also run mox with docker image "docker.io/moxmail/mox", with tags like
 "latest", "0.0.1" and "0.0.1-go1.20.1-alpine3.17.2", etc. See docker-compose.yml
@@ -66,8 +68,9 @@ in this repository for instructions on starting.
 The easiest way to get started with serving email for your domain is to get a
 vm/machine dedicated to serving email, name it [host].[domain] (e.g.
 mail.example.com), login as root, create user "mox" and its homedir by running
-"useradd -d /home/mox mox && mkdir /home/mox", download mox to that directory,
-and generate a configuration for your desired email address at your domain:
+`useradd -d /home/mox mox && mkdir /home/mox` (or pick another directory),
+download mox to that directory, and generate a configuration for your desired
+email address at your domain:
 
 	./mox quickstart you@example.com
 
@@ -75,13 +78,10 @@ This creates an account, generates a password and configuration files, prints
 the DNS records you need to manually create and prints commands to start mox and
 optionally install mox as a service.
 
-If you already have email configured for your domain, or if you are already
-sending email for your domain from other machines/services, you should modify
-the suggested configuration and/or DNS records.
-
 A dedicated machine is highly recommended because modern email requires HTTPS,
-and mox currently needs it for automatic TLS.  You can combine mox with an
-existing webserver, but it requires more configuration.
+and mox currently needs it for automatic TLS.  You could combine mox with an
+existing webserver, but it requires more configuration. If you want to serve
+websites on the same machine, use the webserver built into mox.
 
 After starting, you can access the admin web interface on internal IPs.
 
@@ -109,7 +109,6 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 - DANE and DNSSEC.
 - Sending DMARC and TLS reports (currently only receiving).
 - OAUTH2 support, for single sign on.
-- Basic reverse proxy, so port 443 can be used for regular web serving too.
 - Using mox as backup MX.
 - ACME verification over HTTP (in addition to current tls-alpn01).
 - Add special IMAP mailbox ("Queue?") that contains queued but
@@ -182,7 +181,7 @@ and receive emails through it with your favourite email clients, and file an
 issue if you encounter a problem or would like to see a feature/functionality
 implemented.
 
-Instead of switching your email for your domain over to mox, you could simply
+Instead of switching email for your domain over to mox, you could simply
 configure mox for a subdomain, e.g. [you]@moxtest.[yourdomain].
 
 If you have experience with how the email protocols are used in the wild, e.g.
@@ -212,17 +211,17 @@ The admin password can be changed with "mox setadminpassword".
 Unfortunately, mox does not yet provide an option for that. Mox does spam
 filtering based on reputation of received messages. It will take a good amount
 of work to share that information with a backup MX. Without that information,
-spammer could use a backup MX to get their spam accepted. Until mox has a
+spammers could use a backup MX to get their spam accepted. Until mox has a
 proper solution, you can simply run a single SMTP server.
 
 ## How do I stay up to date?
 
-Please set "CheckUpdates: true" in mox.conf. It will check for a new version
-through a DNS TXT request at `_updates.xmox.nl` once per 24h. Only if a new
-version is published, will the changelog be fetched and delivered to the
+Please set "CheckUpdates: true" in mox.conf. Mox will check for a new version
+through a DNS TXT request for `_updates.xmox.nl` once per 24h. Only if a new
+version is published will the changelog be fetched and delivered to the
 postmaster mailbox.
 
-The changelog is at https://updates.xmox.nl/changelog
+The changelog is at https://updates.xmox.nl/changelog.
 
 You could also monitor newly added tags on this repository, or for the docker
 image, but update instructions are in the changelog.
@@ -241,6 +240,6 @@ to mechiel@ueber.net.
 
 ## I'm now running an email server, but how does email work?
 
-Congrats and welcome to the club! Running an email server brings some
-responsibility so you should understand how it works. See
+Congrats and welcome to the club! Running an email server on the internet comes
+with some responsibilities so you should understand how it works. See
 https://explained-from-first-principles.com/email/ for a thorough explanation.

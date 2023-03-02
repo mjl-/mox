@@ -31,19 +31,40 @@ import (
 
 var xlog = mlog.New("http")
 
-var metricHTTPServer = promauto.NewHistogramVec(
-	prometheus.HistogramOpts{
-		Name:    "mox_httpserver_request_duration_seconds",
-		Help:    "HTTP(s) server request with handler name, protocol, method, result codes, and duration in seconds.",
-		Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20, 30, 60, 120},
-	},
-	[]string{
-		"handler", // Name from webhandler, can be empty.
-		"proto",   // "http" or "https"
-		"method",  // "(unknown)" and otherwise only common verbs
-		"code",
-	},
+var (
+	// metricRequest tracks performance (time to write response header) of server.
+	metricRequest = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "mox_httpserver_request_duration_seconds",
+			Help:    "HTTP(s) server request with handler name, protocol, method, result codes, and duration until response status code is written, in seconds.",
+			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20, 30, 60, 120},
+		},
+		[]string{
+			"handler", // Name from webhandler, can be empty.
+			"proto",   // "http" or "https"
+			"method",  // "(unknown)" and otherwise only common verbs
+			"code",
+		},
+	)
+	// metricResponse tracks performance of entire request as experienced by users,
+	// which also depends on their connection speed, so not necessarily something you
+	// could act on.
+	metricResponse = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "mox_httpserver_response_duration_seconds",
+			Help:    "HTTP(s) server response with handler name, protocol, method, result codes, and duration of entire response, in seconds.",
+			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20, 30, 60, 120},
+		},
+		[]string{
+			"handler", // Name from webhandler, can be empty.
+			"proto",   // "http" or "https"
+			"method",  // "(unknown)" and otherwise only common verbs
+			"code",
+		},
+	)
 )
+
+// todo: automatic gzip on responses, if client supports it, content is not already compressed. in case of static file only if it isn't too large. skip for certain response content-types (image/*, video/*), or file extensions if there is no identifying content-type. if cpu load isn't too high. if first N kb look compressible and come in quickly enough after first byte (e.g. within 100ms). always flush after 100ms to prevent stalled real-time connections.
 
 // http.ResponseWriter that writes access log and tracks metrics at end of response.
 type loggingWriter struct {
@@ -54,16 +75,34 @@ type loggingWriter struct {
 	Handler string // Set by router.
 
 	// Set by handlers.
-	Code     int
-	Size     int64
-	WriteErr error
+	StatusCode int
+	Size       int64
+	WriteErr   error
 }
 
 func (w *loggingWriter) Header() http.Header {
 	return w.W.Header()
 }
 
+func (w *loggingWriter) setStatusCode(statusCode int) {
+	if w.StatusCode != 0 {
+		return
+	}
+
+	w.StatusCode = statusCode
+	method := metricHTTPMethod(w.R.Method)
+	proto := "http"
+	if w.R.TLS != nil {
+		proto = "https"
+	}
+	metricRequest.WithLabelValues(w.Handler, proto, method, fmt.Sprintf("%d", w.StatusCode)).Observe(float64(time.Since(w.Start)) / float64(time.Second))
+}
+
 func (w *loggingWriter) Write(buf []byte) (int, error) {
+	if w.Size == 0 {
+		w.setStatusCode(http.StatusOK)
+	}
+
 	n, err := w.W.Write(buf)
 	if n > 0 {
 		w.Size += int64(n)
@@ -75,9 +114,7 @@ func (w *loggingWriter) Write(buf []byte) (int, error) {
 }
 
 func (w *loggingWriter) WriteHeader(statusCode int) {
-	if w.Code == 0 {
-		w.Code = statusCode
-	}
+	w.setStatusCode(statusCode)
 	w.W.WriteHeader(statusCode)
 }
 
@@ -104,7 +141,7 @@ func (w *loggingWriter) Done() {
 	if w.R.TLS != nil {
 		proto = "https"
 	}
-	metricHTTPServer.WithLabelValues(w.Handler, proto, method, fmt.Sprintf("%d", w.Code)).Observe(float64(time.Since(w.Start)) / float64(time.Second))
+	metricResponse.WithLabelValues(w.Handler, proto, method, fmt.Sprintf("%d", w.StatusCode)).Observe(float64(time.Since(w.Start)) / float64(time.Second))
 
 	tlsinfo := "plain"
 	if w.R.TLS != nil {
@@ -114,7 +151,21 @@ func (w *loggingWriter) Done() {
 			tlsinfo = "(other)"
 		}
 	}
-	xlog.WithContext(w.R.Context()).Debugx("http request", w.WriteErr, mlog.Field("httpaccess", ""), mlog.Field("handler", w.Handler), mlog.Field("url", w.R.URL), mlog.Field("host", w.R.Host), mlog.Field("duration", time.Since(w.Start)), mlog.Field("size", w.Size), mlog.Field("statuscode", w.Code), mlog.Field("proto", strings.ToLower(w.R.Proto)), mlog.Field("remoteaddr", w.R.RemoteAddr), mlog.Field("tlsinfo", tlsinfo))
+	xlog.WithContext(w.R.Context()).Debugx("http request", w.WriteErr,
+		mlog.Field("httpaccess", ""),
+		mlog.Field("handler", w.Handler),
+		mlog.Field("method", method),
+		mlog.Field("url", w.R.URL),
+		mlog.Field("host", w.R.Host),
+		mlog.Field("duration", time.Since(w.Start)),
+		mlog.Field("size", w.Size),
+		mlog.Field("statuscode", w.StatusCode),
+		mlog.Field("proto", strings.ToLower(w.R.Proto)),
+		mlog.Field("remoteaddr", w.R.RemoteAddr),
+		mlog.Field("tlsinfo", tlsinfo),
+		mlog.Field("useragent", w.R.Header.Get("User-Agent")),
+		mlog.Field("referrr", w.R.Header.Get("Referrer")),
+	)
 }
 
 // Set some http headers that should prevent potential abuse. Better safe than sorry.
@@ -131,9 +182,10 @@ func safeHeaders(fn http.HandlerFunc) http.HandlerFunc {
 
 // Built-in handlers, e.g. mta-sts and autoconfig.
 type pathHandler struct {
-	Name string // For logging/metrics.
-	Path string // Path to register, like on http.ServeMux.
-	Fn   http.HandlerFunc
+	Name      string                    // For logging/metrics.
+	HostMatch func(dom dns.Domain) bool // If not nil, called to see if domain of requests matches. Only called if requested host is a valid domain.
+	Path      string                    // Path to register, like on http.ServeMux.
+	Handle    http.HandlerFunc
 }
 type serve struct {
 	Kinds        []string // Type of handler and protocol (http/https).
@@ -142,10 +194,10 @@ type serve struct {
 	Webserver    bool          // Whether serving WebHandler. PathHandlers are always evaluated before WebHandlers.
 }
 
-// HandleFunc registers a named handler for a path. If path ends with a slash, it
-// is used as prefix match, otherwise a full path match is required.
-func (s *serve) HandleFunc(name, path string, fn http.HandlerFunc) {
-	s.PathHandlers = append(s.PathHandlers, pathHandler{name, path, fn})
+// HandleFunc registers a named handler for a path and optional host. If path ends with a slash, it
+// is used as prefix match, otherwise a full path match is required. If hostOpt is set, only requests to those host are handled by this handler.
+func (s *serve) HandleFunc(name string, hostMatch func(dns.Domain) bool, path string, fn http.HandlerFunc) {
+	s.PathHandlers = append(s.PathHandlers, pathHandler{name, hostMatch, path, fn})
 }
 
 var (
@@ -180,10 +232,10 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 		if r.TLS != nil {
 			proto = "https"
 		}
-		metricHTTPServer.WithLabelValues("(ratelimited)", proto, method, "429").Observe(0)
+		metricRequest.WithLabelValues("(ratelimited)", proto, method, "429").Observe(0)
 		// No logging, that's just noise.
 
-		http.Error(xw, "http 429 - too many auth attempts", http.StatusTooManyRequests)
+		http.Error(xw, "429 - too many auth attempts", http.StatusTooManyRequests)
 		return
 	}
 
@@ -210,15 +262,27 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 		r.URL.Path += "/"
 	}
 
+	var dom dns.Domain
+	host := r.Host
+	nhost, _, err := net.SplitHostPort(host)
+	if err == nil {
+		host = nhost
+	}
+	// host could be an IP, some handles may match, not an error.
+	dom, domErr := dns.ParseDomain(host)
+
 	for _, h := range s.PathHandlers {
+		if h.HostMatch != nil && (domErr != nil || !h.HostMatch(dom)) {
+			continue
+		}
 		if r.URL.Path == h.Path || strings.HasSuffix(h.Path, "/") && strings.HasPrefix(r.URL.Path, h.Path) {
 			nw.Handler = h.Name
-			h.Fn(nw, r)
+			h.Handle(nw, r)
 			return
 		}
 	}
-	if s.Webserver {
-		if WebHandle(nw, r) {
+	if s.Webserver && domErr == nil {
+		if WebHandle(nw, r, dom) {
 			return
 		}
 	}
@@ -260,35 +324,35 @@ func Listen() {
 		if l.AccountHTTP.Enabled {
 			port := config.Port(l.AccountHTTP.Port, 80)
 			srv := ensureServe(false, port, "account-http")
-			srv.HandleFunc("account", "/", safeHeaders(accountHandle))
+			srv.HandleFunc("account", nil, "/", safeHeaders(accountHandle))
 		}
 		if l.AccountHTTPS.Enabled {
 			port := config.Port(l.AccountHTTPS.Port, 443)
 			srv := ensureServe(true, port, "account-https")
-			srv.HandleFunc("account", "/", safeHeaders(accountHandle))
+			srv.HandleFunc("account", nil, "/", safeHeaders(accountHandle))
 		}
 
 		if l.AdminHTTP.Enabled {
 			port := config.Port(l.AdminHTTP.Port, 80)
 			srv := ensureServe(false, port, "admin-http")
 			if !l.AccountHTTP.Enabled {
-				srv.HandleFunc("admin", "/", safeHeaders(adminIndex))
+				srv.HandleFunc("admin", nil, "/", safeHeaders(adminIndex))
 			}
-			srv.HandleFunc("admin", "/admin/", safeHeaders(adminHandle))
+			srv.HandleFunc("admin", nil, "/admin/", safeHeaders(adminHandle))
 		}
 		if l.AdminHTTPS.Enabled {
 			port := config.Port(l.AdminHTTPS.Port, 443)
 			srv := ensureServe(true, port, "admin-https")
 			if !l.AccountHTTPS.Enabled {
-				srv.HandleFunc("admin", "/", safeHeaders(adminIndex))
+				srv.HandleFunc("admin", nil, "/", safeHeaders(adminIndex))
 			}
-			srv.HandleFunc("admin", "/admin/", safeHeaders(adminHandle))
+			srv.HandleFunc("admin", nil, "/admin/", safeHeaders(adminHandle))
 		}
 		if l.MetricsHTTP.Enabled {
 			port := config.Port(l.MetricsHTTP.Port, 8010)
 			srv := ensureServe(false, port, "metrics-http")
-			srv.HandleFunc("metrics", "/metrics", safeHeaders(promhttp.Handler().ServeHTTP))
-			srv.HandleFunc("metrics", "/", safeHeaders(func(w http.ResponseWriter, r *http.Request) {
+			srv.HandleFunc("metrics", nil, "/metrics", safeHeaders(promhttp.Handler().ServeHTTP))
+			srv.HandleFunc("metrics", nil, "/", safeHeaders(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/" {
 					http.NotFound(w, r)
 					return
@@ -303,13 +367,21 @@ func Listen() {
 		if l.AutoconfigHTTPS.Enabled {
 			port := config.Port(l.AutoconfigHTTPS.Port, 443)
 			srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, port, "autoconfig-https")
-			srv.HandleFunc("autoconfig", "/mail/config-v1.1.xml", safeHeaders(autoconfHandle(l)))
-			srv.HandleFunc("autodiscover", "/autodiscover/autodiscover.xml", safeHeaders(autodiscoverHandle(l)))
+			autoconfigMatch := func(dom dns.Domain) bool {
+				// todo: may want to check this against the configured domains, could in theory be just a webserver.
+				return strings.HasPrefix(dom.ASCII, "autoconfig.")
+			}
+			srv.HandleFunc("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", safeHeaders(autoconfHandle(l)))
+			srv.HandleFunc("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", safeHeaders(autodiscoverHandle(l)))
 		}
 		if l.MTASTSHTTPS.Enabled {
 			port := config.Port(l.MTASTSHTTPS.Port, 443)
 			srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, port, "mtasts-https")
-			srv.HandleFunc("mtasts", "/.well-known/mta-sts.txt", safeHeaders(mtastsPolicyHandle))
+			mtastsMatch := func(dom dns.Domain) bool {
+				// todo: may want to check this against the configured domains, could in theory be just a webserver.
+				return strings.HasPrefix(dom.ASCII, "mta-sts.")
+			}
+			srv.HandleFunc("mtasts", mtastsMatch, "/.well-known/mta-sts.txt", safeHeaders(mtastsPolicyHandle))
 		}
 		if l.PprofHTTP.Enabled {
 			// Importing net/http/pprof registers handlers on the default serve mux.
@@ -319,7 +391,7 @@ func Listen() {
 			}
 			srv := &serve{[]string{"pprof-http"}, nil, nil, false}
 			portServe[port] = srv
-			srv.HandleFunc("pprof", "/", http.DefaultServeMux.ServeHTTP)
+			srv.HandleFunc("pprof", nil, "/", http.DefaultServeMux.ServeHTTP)
 		}
 		if l.WebserverHTTP.Enabled {
 			port := config.Port(l.WebserverHTTP.Port, 80)
@@ -381,17 +453,17 @@ func Listen() {
 		}
 
 		for port, srv := range portServe {
+			sort.Slice(srv.PathHandlers, func(i, j int) bool {
+				a := srv.PathHandlers[i].Path
+				b := srv.PathHandlers[j].Path
+				if len(a) == len(b) {
+					// For consistent order.
+					return a < b
+				}
+				// Longest paths first.
+				return len(a) > len(b)
+			})
 			for _, ip := range l.IPs {
-				sort.Slice(srv.PathHandlers, func(i, j int) bool {
-					a := srv.PathHandlers[i].Path
-					b := srv.PathHandlers[j].Path
-					if len(a) == len(b) {
-						// For consistent order.
-						return a < b
-					}
-					// Longest paths first.
-					return len(a) > len(b)
-				})
 				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv)
 			}
 		}

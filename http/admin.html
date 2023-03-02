@@ -14,6 +14,9 @@ h3, h4 { font-size: 1rem; }
 ul { padding-left: 1rem; }
 .literal { background-color: #fdfdfd; padding: .5em 1em; border: 1px solid #eee; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 15px; tab-size: 4; }
 table td, table th { padding: .2em .5em; }
+table table td, table table th { padding: 0 0.1em; }
+table.long >tbody >tr >td { padding: 1em .5em; }
+table.long td { vertical-align: top; }
 table > tbody > tr:nth-child(odd) { background-color: #f8f8f8; }
 .text { max-width: 50em; }
 p { margin-bottom: 1em; max-width: 50em; }
@@ -267,7 +270,8 @@ const index = async () => {
 		dom.div(dom.a('DNSBL status', attr({href: '#dnsbl'}))),
 		dom.br(),
 		dom.h2('Configuration'),
-		dom.div(dom.a('See configuration', attr({href: '#config'}))),
+		dom.div(dom.a('Webserver', attr({href: '#webserver'}))),
+		dom.div(dom.a('Files', attr({href: '#config'}))),
 		dom.div(dom.a('Log levels', attr({href: '#loglevels'}))),
 		footer,
 	)
@@ -1561,6 +1565,541 @@ const queueList = async () => {
 	)
 }
 
+const webserver = async () => {
+	let conf = await api.WebserverConfig()
+
+	// We disable this while saving the form.
+	let fieldset
+
+	// Keep track of redirects. Rows are objects that hold both the DOM and allows
+	// retrieving the visible (modified) data to construct a config for saving.
+	let redirectRows = []
+	let redirectsTbody
+	let noredirect
+
+	// Similar to redirects, but for web handlers.
+	let handlerRows = []
+	let handlersTbody
+	let nohandler
+
+	// Make a new redirect rows, adding it to the list. The caller typically uses this
+	// while building the DOM, the element is added because this object has it as
+	// "root" field.
+	const redirectRow = (t) => {
+		const row = {}
+		row.root = dom.tr(
+			dom.td(
+				row.from=dom.input(attr({required: '', value: domainName(t[0])})),
+			),
+			dom.td(
+				row.to=dom.input(attr({required: '', value: domainName(t[1])})),
+			),
+			dom.td(
+				dom.button('Remove', attr({type: 'button'}), function click(e) {
+					redirectRows = redirectRows.filter(r => r !== row)
+					row.root.remove()
+					noredirect.style.display = redirectRows.length ? 'none' : ''
+				}),
+			),
+		)
+		// "get" is the common function to retrieve the data from an object with a root field as DOM element.
+		row.get = () => [row.from.value, row.to.value]
+		redirectRows.push(row)
+		return row
+	}
+
+	// Reusable component for managing headers. Just a table with a header key and
+	// value. We can remove existing rows, and add new rows, and edit existing.
+	const makeHeaders = (h) => {
+		const r = {
+			rows: [],
+		}
+		let tbody, norow
+		const headerRow = (k, v) => {
+			const row = {}
+			row.root = dom.tr(
+				dom.td(
+					row.key=dom.input(attr({required: '', value: k})),
+				),
+				dom.td(
+					row.value=dom.input(attr({required: '', value: v})),
+				),
+				dom.td(
+					dom.button('Remove', attr({type: 'button'}), function click(e) {
+						r.rows = r.rows.filter(x => x !== row)
+						row.root.remove()
+						norow.style.display = r.rows.length ? 'none' : ''
+					})
+				),
+			)
+			r.rows.push(row)
+			row.get = () => [row.key.value, row.value.value]
+			return row
+		}
+		r.add = dom.button('Add', attr({type: 'button'}), function click(e) {
+			const row = headerRow('', '')
+			tbody.appendChild(row.root)
+			norow.style.display = r.rows.length ? 'none' : ''
+		})
+		r.root = dom.table(
+			tbody=dom.tbody(
+				Object.entries(h).sort().map(t => headerRow(t[0], t[1])),
+				norow=dom.tr(
+					style({display: r.rows.length ? 'none' : ''}),
+					dom.td(attr({colspan: 3}), 'None added.'),
+				)
+			),
+		)
+		r.get = () => Object.fromEntries(r.rows.map(row => row.get()))
+		return r
+	}
+
+	// todo: make a mechanism to get the ../config/config.go sconf-doc struct tags
+	// here. So we can use them for the titles, as documentation. Instead of current
+	// approach of copy/pasting those texts, inevitably will get out of date.
+
+	// todo: perhaps lay these out in the same way as in the config file? will help admins mentally map between the two. will take a bit more vertical screen space, but current approach looks messy/garbled. we could use that mechanism for more parts of the configuration file. we can even show the same sconf-doc struct tags. the html admin page will then just be a glorified guided text editor!
+
+	// Make a handler row. This is more complicated, since it can be one of the three
+	// types (static, redirect, forward), and can change between those types.
+	const handlerRow = (wh) => {
+		// We make and remember components for headers, possibly not used.
+		const row = {
+			staticHeaders: makeHeaders((wh.WebStatic || {}).ResponseHeaders || {}),
+			forwardHeaders: makeHeaders((wh.WebForward || {}).ResponseHeaders || {}),
+		}
+
+		const makeWebStatic = () => {
+			const ws = wh.WebStatic || {}
+			row.getDetails = () => {
+				return {
+					StripPrefix: row.StripPrefix.value,
+					Root: row.Root.value,
+					ListFiles: row.ListFiles.checked,
+					ContinueNotFound: row.ContinueNotFound.checked,
+					ResponseHeaders: row.staticHeaders.get(),
+				}
+			}
+			return dom.table(
+				dom.tr(
+					dom.td('Type'),
+					dom.td(
+						'StripPrefix',
+						attr({title: 'Path to strip from the request URL before evaluating to a local path. If the requested URL path does not start with this prefix and ContinueNotFound it is considered non-matching and next WebHandlers are tried. If ContinueNotFound is not set, a file not found (404) is returned in that case.'}),
+					),
+					dom.td(
+						'Root',
+						attr({title: 'Directory to serve files from for this handler. Keep in mind that relative paths are relative to the working directory of mox.'}),
+					),
+					dom.td(
+						'ListFiles',
+						attr({title: 'If set, and a directory is requested, and no index.html is present that can be served, a file listing is returned. Results in 403 if ListFiles is not set. If a directory is requested and the URL does not end with a slash, the response is a redirect to the path with trailing slash.'}),
+					),
+					dom.td(
+						'ContinueNotFound',
+						attr({title: "If a requested URL does not exist, don't return a file not found (404) response, but consider this handler non-matching and continue attempts to serve with later WebHandlers, which may be a reverse proxy generating dynamic content, possibly even writing a static file for a next request to serve statically. If ContinueNotFound is set, HTTP requests other than GET and HEAD do not match. This mechanism can be used to implement the equivalent of 'try_files' in other webservers."}),
+					),
+					dom.td(
+						dom.span(
+							'Response headers',
+							attr({title: 'Headers to add to the response. Useful for cache-control, content-type, etc. By default, Content-Type headers are automatically added for recognized file types, unless added explicitly through this setting. For directory listings, a content-type header is skipped.'}),
+						),
+						' ',
+						row.staticHeaders.add,
+					),
+				),
+				dom.tr(
+					dom.td(
+						row.type=dom.select(
+							attr({required: ''}),
+							dom.option('Static', attr({selected: ''})),
+							dom.option('Redirect'),
+							dom.option('Forward'),
+							function change(e) {
+								makeType(e.target.value)
+							},
+						),
+					),
+					dom.td(
+						row.StripPrefix=dom.input(attr({value: ws.StripPrefix || ''})),
+					),
+					dom.td(
+						row.Root=dom.input(attr({required: '', placeholder: 'web/...', value: ws.Root || ''})),
+					),
+					dom.td(
+						row.ListFiles=dom.input(attr({type: 'checkbox'}), ws.ListFiles ? attr({checked: ''}) : []),
+					),
+					dom.td(
+						row.ContinueNotFound=dom.input(attr({type: 'checkbox'}), ws.ContinueNotFound ? attr({checked: ''}) : []),
+					),
+					dom.td(
+						row.staticHeaders,
+					),
+				)
+			)
+		}
+
+		const makeWebRedirect = () => {
+			const wr = wh.WebRedirect || {}
+			row.getDetails = () => {
+				return {
+					BaseURL: row.BaseURL.value,
+					OrigPathRegexp: row.OrigPathRegexp.value,
+					ReplacePath: row.ReplacePath.value,
+					StatusCode: row.StatusCode.value ? parseInt(row.StatusCode.value) : 0,
+				}
+			}
+			return dom.table(
+				dom.tr(
+					dom.td('Type'),
+					dom.td(
+						'BaseURL',
+						attr({title: 'Base URL to redirect to. The path must be empty and will be replaced, either by the request URL path, or by OrigPathRegexp/ReplacePath. Scheme, host, port and fragment stay intact, and query strings are combined. If empty, the response redirects to a different path through OrigPathRegexp and ReplacePath, which must then be set. Use a URL without scheme to redirect without changing the protocol, e.g. //newdomain/.'}),
+					),
+					dom.td(
+						'OrigPathRegexp',
+						attr({title: 'Regular expression for matching path. If set and path does not match, a 404 is returned. The HTTP path used for matching always starts with a slash.'}),
+					),
+					dom.td(
+						'ReplacePath',
+						attr({title: "Replacement path for destination URL based on OrigPathRegexp. Implemented with Go's Regexp.ReplaceAllString: $1 is replaced with the text of the first submatch, etc. If both OrigPathRegexp and ReplacePath are empty, BaseURL must be set and all paths are redirected unaltered."}),
+					),
+					dom.td(
+						'StatusCode',
+						attr({title: 'Status code to use in redirect, e.g. 307. By default, a permanent redirect (308) is returned.'}),
+					),
+				),
+				dom.tr(
+					dom.td(
+						row.type=dom.select(
+							attr({required: ''}),
+							dom.option('Static'),
+							dom.option('Redirect', attr({selected: ''})),
+							dom.option('Forward'),
+							function change(e) {
+								makeType(e.target.value)
+							},
+						),
+					),
+					dom.td(
+						row.BaseURL=dom.input(attr({placeholder: 'empty or https://target/path?q=1#frag or //target/...', value: wr.BaseURL || ''})),
+					),
+					dom.td(
+						row.OrigPathRegexp=dom.input(attr({placeholder: '^/old/(.*)', value: wr.OrigPathRegexp || ''})),
+					),
+					dom.td(
+						row.ReplacePath=dom.input(attr({placeholder: '/new/$1', value: wr.ReplacePath || ''})),
+					),
+					dom.td(
+						row.StatusCode=dom.input(style({width: '4em'}), attr({type: 'number', value: wr.StatusCode || '', min: 300, max: 399})),
+					),
+				),
+			)
+		}
+
+		const makeWebForward = () => {
+			const wf = wh.WebForward || {}
+			row.getDetails = () => {
+				return {
+					StripPath: row.StripPath.checked,
+					URL: row.URL.value,
+					ResponseHeaders: row.forwardHeaders.get(),
+				}
+			}
+			return dom.table(
+				dom.tr(
+					dom.td('Type'),
+					dom.td(
+						'StripPath',
+						attr({title: 'Strip the matching WebHandler path from the WebHandler before forwarding the request.'}),
+					),
+					dom.td(
+						'URL',
+						attr({title: "URL to forward HTTP requests to, e.g. http://127.0.0.1:8123/base. If StripPath is false the full request path is added to the URL. Host headers are sent unmodified. New X-Forwarded-{For,Host,Proto} headers are set. Any query string in the URL is ignored. Requests are made using Go's net/http.DefaultTransport that takes environment variables HTTP_PROXY and HTTPS_PROXY into account."}),
+					),
+					dom.td(
+						dom.span(
+							'Response headers',
+							attr({title: 'Headers to add to the response. Useful for adding security- and cache-related headers.'}),
+						),
+						' ',
+						row.forwardHeaders.add,
+					),
+				),
+				dom.tr(
+					dom.td(
+						row.type=dom.select(
+							attr({required: ''}),
+							dom.option('Static', ),
+							dom.option('Redirect'),
+							dom.option('Forward', attr({selected: ''})),
+							function change(e) {
+								makeType(e.target.value)
+							},
+						),
+					),
+					dom.td(
+						row.StripPath=dom.input(attr({type: 'checkbox'}), wf.StripPath || wf.StripPath === undefined ? attr({checked: ''}) : []),
+					),
+					dom.td(
+						row.URL=dom.input(attr({required: '', placeholder: 'http://127.0.0.1:8888', value: wf.URL || ''})),
+					),
+					dom.td(
+						row.forwardHeaders,
+					),
+				),
+			)
+		}
+
+		// Transform the input fields to match the type of WebHandler.
+		const makeType = (s) => {
+			let details
+			if (s === 'Static') {
+				details = makeWebStatic()
+			} else if (s === 'Redirect') {
+				details = makeWebRedirect()
+			} else if (s === 'Forward') {
+				details = makeWebForward()
+			} else {
+				throw new Error('unknown handler type')
+			}
+			row.details.replaceWith(details)
+			row.details = details
+		}
+
+		// Remove row from oindex, insert it in nindex. Both in handlerRows and in the DOM.
+		const moveHandler = (row, oindex, nindex) => {
+			row.root.remove()
+			handlersTbody.insertBefore(row.root, handlersTbody.children[nindex])
+			handlerRows.splice(oindex, 1)
+			handlerRows.splice(nindex, 0, row)
+		}
+
+		// Row that starts starts with two tables: one for the fields all WebHandlers have
+		// (in common). And one for the details, i.e. WebStatic, WebRedirect, WebForward.
+		row.root = dom.tr(
+			dom.td(
+				dom.table(
+					dom.tr(
+						dom.td('LogName', attr({title: 'Name used during logging for requests matching this handler. If empty, the index of the handler in the list is used.'})),
+						dom.td('Domain', attr({title: 'Request must be for this domain to match this handler.'})),
+						dom.td('Path Regexp', attr({title: 'Request must match this path regular expression to match this handler. Must start with with a ^.'})),
+						dom.td('To HTTPS', attr({title: 'Redirect plain HTTP (non-TLS) requests to HTTPS'})),
+					),
+					dom.tr(
+						dom.td(
+							row.LogName=dom.input(attr({value: wh.LogName || ''})),
+						),
+						dom.td(
+							row.Domain=dom.input(attr({required: '', placeholder: 'example.org', value: domainName(wh.DNSDomain)})),
+						),
+						dom.td(
+							row.PathRegexp=dom.input(attr({required: '', placeholder: '^/', value: wh.PathRegexp || ''})),
+						),
+						dom.td(
+							row.ToHTTPS=dom.input(attr({type: 'checkbox', title: 'Redirect plain HTTP (non-TLS) requests to HTTPS'}), !wh.DontRedirectPlainHTTP ? attr({checked: ''}) : []),
+						),
+					),
+				),
+				// Replaced with a call to makeType, below (and later when switching types).
+				row.details=dom.table(),
+			),
+			dom.td(
+				dom.td(
+					dom.button('Remove', attr({type: 'button'}), function click(e) {
+						handlerRows = handlerRows.filter(r => r !== row)
+						row.root.remove()
+						nohandler.style.display = handlerRows.length ? 'none' : ''
+					}),
+					' ',
+					// We show/hide the buttons to move when clicking the Move button.
+					row.moveButtons=dom.span(
+						style({display: 'none'}),
+						dom.button('↑↑', attr({type: 'button', title: 'Move to top.'}), function click(e) {
+							const index = handlerRows.findIndex(r => r === row)
+							if (index > 0) {
+								moveHandler(row, index, 0)
+							}
+						}),
+						' ',
+						dom.button('↑', attr({type: 'button', title: 'Move one up.'}), function click(e) {
+							const index = handlerRows.findIndex(r => r === row)
+							if (index > 0) {
+								moveHandler(row, index, index-1)
+							}
+						}),
+						' ',
+						dom.button('↓', attr({type: 'button', title: 'Move one down.'}), function click(e) {
+							const index = handlerRows.findIndex(r => r === row)
+							if (index+1 < handlerRows.length) {
+								moveHandler(row, index, index+1)
+							}
+						}),
+						' ',
+						dom.button('↓↓', attr({type: 'button', title: 'Move to bottom.'}), function click(e) {
+							const index = handlerRows.findIndex(r => r === row)
+							if (index+1 < handlerRows.length) {
+								moveHandler(row, index, handlerRows.length-1)
+							}
+						}),
+					),
+				),
+			),
+		)
+
+		// Final "get" that returns a WebHandler that reflects the UI.
+		row.get = () => {
+			const wh = {
+				LogName: row.LogName.value,
+				Domain: row.Domain.value,
+				PathRegexp: row.PathRegexp.value,
+				DontRedirectPlainHTTP: !row.ToHTTPS.checked,
+			}
+			const s = row.type.value
+			const details = row.getDetails()
+			if (s === 'Static') {
+				wh.WebStatic = details
+			} else if (s === 'Redirect') {
+				wh.WebRedirect = details
+			} else if (s === 'Forward') {
+				wh.WebForward = details
+			}
+			return wh
+		}
+
+		// Initialize one of the Web* types.
+		let s
+		if (wh.WebStatic) {
+			s = 'Static'
+		} else if (wh.WebRedirect) {
+			s = 'Redirect'
+		} else if (wh.WebForward) {
+			s = 'Forward'
+		}
+		makeType(s)
+
+		handlerRows.push(row)
+		return row
+	}
+
+	// Return webserver config to store.
+	const gatherConf = () => {
+		return {
+			WebDomainRedirects: redirectRows.map(row => row.get()),
+			WebHandlers: handlerRows.map(row => row.get()),
+		}
+	}
+
+	// Add and move buttons, both above and below the table for quick access, hence a function.
+	const handlerActions = () => {
+		return [
+			'Action ',
+			dom.button('Add', attr({type: 'button'}), function click(e) {
+				// New WebHandler added as WebForward. Good chance this is what the user wants. And
+				// it has the least fields. (;
+				const nwh = {
+					LogName: '',
+					DNSDomain: {ASCII: ''},
+					PathRegexp: '^/',
+					DontRedirectPlainHTTP: false,
+					WebForward: {
+						StripPath: true,
+						URL: '',
+					},
+				}
+				const row = handlerRow(nwh)
+				handlersTbody.appendChild(row.root)
+				nohandler.style.display = handlerRows.length ? 'none' : ''
+			}),
+			' ',
+			dom.button('Move', attr({type: 'button'}), function click(e) {
+				for(const row of handlerRows) {
+					row.moveButtons.style.display = row.moveButtons.style.display === 'none' ? '' : 'none'
+				}
+			}),
+		]
+	}
+
+	const page = document.getElementById('page')
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			'Webserver config',
+		),
+		dom.form(
+			fieldset=dom.fieldset(
+				dom.h2('Domain redirects', attr({title: 'Corresponds with WebDomainRedirects in domains.conf'})),
+				dom.p('Incoming requests for these domains are redirected to the target domain, with HTTPS.'),
+				dom.table(
+					dom.thead(
+						dom.tr(
+							dom.th('From'),
+							dom.th('To'),
+							dom.th(
+								'Action ',
+								dom.button('Add', attr({type: 'button'}), function click(e) {
+									const row = redirectRow([{ASCII: ''}, {ASCII: ''}])
+									redirectsTbody.appendChild(row.root)
+									noredirect.style.display = redirectRows.length ? 'none' : ''
+								}),
+							),
+						),
+					),
+					redirectsTbody=dom.tbody(
+						(conf.WebDNSDomainRedirects || []).sort().map(t => redirectRow(t)),
+						noredirect=dom.tr(
+							style({display: redirectRows.length ? 'none' : ''}),
+							dom.td(attr({colspan: 3}), 'No redirects.'),
+						),
+					),
+				),
+				dom.br(),
+				dom.h2('Handlers', attr({title: 'Corresponds with WebHandlers in domains.conf'})),
+				dom.p('Each incoming request is check against these handlers, in order. The first matching handler serves the request.'),
+				dom('table.long',
+					dom.thead(
+						dom.tr(
+							dom.th(),
+							dom.th(handlerActions()),
+						),
+					),
+					handlersTbody=dom.tbody(
+						(conf.WebHandlers || []).map(wh => handlerRow(wh)),
+						nohandler=dom.tr(
+							style({display: handlerRows.length ? 'none' : ''}),
+							dom.td(attr({colspan: 2}), 'No handlers.'),
+						),
+					),
+					dom.tfoot(
+						dom.tr(
+							dom.th(),
+							dom.th(handlerActions()),
+						),
+					),
+				),
+				dom.br(),
+				dom.button('Save', attr({type: 'submit'}), attr({title: 'Save config. If the configuration has changed since this page was loaded, an error will be returned. After saving, the changes take effect immediately.'})),
+			),
+			async function submit(e) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				fieldset.disabled = true
+				try {
+					const newConf = gatherConf()
+					const savedConf = await api.WebserverConfigSave(conf, newConf)
+					conf = savedConf
+				} catch (err) {
+					console.log({err})
+					window.alert('Error: ' + err.message)
+				} finally {
+					fieldset.disabled = false
+				}
+			}
+		),
+	)
+}
+
 const init = async () => {
 	let curhash
 
@@ -1611,6 +2150,8 @@ const init = async () => {
 				await mtasts()
 			} else if (h === 'dnsbl') {
 				await dnsbl()
+			} else if (h === 'webserver') {
+				await webserver()
 			} else {
 				dom._kids(page, 'page not found')
 			}

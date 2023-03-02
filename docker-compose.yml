@@ -20,6 +20,9 @@ services:
     volumes:
       - ./config:/mox/config
       - ./data:/mox/data
+      # web is optional but recommended to bind in, useful for serving static files with
+      # the webserver.
+      - ./web:/mox/web
     working_dir: /mox
     restart: on-failure
     healthcheck:

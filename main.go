@@ -766,14 +766,20 @@ var examples = []struct {
 	{
 		"webhandlers",
 		func() string {
-			const webhandlers = `# Snippet of domains.conf to configure WebHandlers.
+			const webhandlers = `# Snippet of domains.conf to configure WebDomainRedirects and WebHandlers.
+
+# Redirect all requests for mox.example to https://www.mox.example.
+WebDomainRedirects:
+	mox.example: www.mox.example
+
+# Each request is matched against these handlers until one matches and serves it.
 WebHandlers:
 	-
 		# The name of the handler, used in logging and metrics.
 		LogName: staticmjl
 		# With ACME configured, each configured domain will automatically get a TLS
 		# certificate on first request.
-		Domain: mox.example
+		Domain: www.mox.example
 		PathRegexp: ^/who/mjl/
 		WebStatic:
 			StripPrefix: /who/mjl
@@ -786,7 +792,7 @@ WebHandlers:
 				X-Mox: hi
 	-
 		LogName: redir
-		Domain: mox.example
+		Domain: www.mox.example
 		PathRegexp: ^/redir/a/b/c
 		# Don't redirect from plain HTTP to HTTPS.
 		DontRedirectPlainHTTP: true
@@ -799,7 +805,7 @@ WebHandlers:
 			StatusCode: 307
 	-
 		LogName: oldnew
-		Domain: mox.example
+		Domain: www.mox.example
 		PathRegexp: ^/old/
 		WebRedirect:
 			# Replace path, leaving rest of URL intact.
@@ -807,7 +813,7 @@ WebHandlers:
 			ReplacePath: /new/$1
 	-
 		LogName: app
-		Domain: mox.example
+		Domain: www.mox.example
 		PathRegexp: ^/app/
 		WebForward:
 			# Strip the path matched by PathRegexp before forwarding the request. So original
@@ -826,7 +832,8 @@ WebHandlers:
 			// Parse just so we know we have the syntax right.
 			// todo: ideally we would have a complete config file and parse it fully.
 			var conf struct {
-				WebHandlers []config.WebHandler
+				WebDomainRedirects map[string]string
+				WebHandlers        []config.WebHandler
 			}
 			err := sconf.Parse(strings.NewReader(webhandlers), &conf)
 			xcheckf(err, "parsing webhandlers example")

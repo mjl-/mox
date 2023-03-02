@@ -5,7 +5,6 @@ import (
 	htmltemplate "html/template"
 	"io"
 	golog "log"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"os"
@@ -21,32 +20,28 @@ import (
 	"github.com/mjl-/mox/moxio"
 )
 
-// todo: automatic gzip on responses, if client supports it, and if content looks compressible.
-
 // WebHandle serves an HTTP request by going through the list of WebHandlers,
 // check if there is a domain+path match, and running the handler if so.
 // WebHandle runs after the built-in handlers for mta-sts, autoconfig, etc.
 // If no handler matched, false is returned.
 // WebHandle sets w.Name to that of the matching handler.
-func WebHandle(w *loggingWriter, r *http.Request) (handled bool) {
-	log := func() *mlog.Log {
-		return xlog.WithContext(r.Context())
-	}
+func WebHandle(w *loggingWriter, r *http.Request, host dns.Domain) (handled bool) {
+	redirects, handlers := mox.Conf.WebServer()
 
-	host, _, err := net.SplitHostPort(r.Host)
-	if err != nil {
-		// Common, there often is not port.
-		host = r.Host
-	}
-	dom, err := dns.ParseDomain(host)
-	if err != nil {
-		log().Debugx("parsing http request domain", err, mlog.Field("host", host))
-		http.NotFound(w, r)
+	for from, to := range redirects {
+		if host != from {
+			continue
+		}
+		u := r.URL
+		u.Scheme = "https"
+		u.Host = to.Name()
+		w.Handler = "(domainredirect)"
+		http.Redirect(w, r, u.String(), http.StatusPermanentRedirect)
 		return true
 	}
 
-	for _, h := range mox.Conf.WebHandlers() {
-		if h.DNSDomain != dom {
+	for _, h := range handlers {
+		if host != h.DNSDomain {
 			continue
 		}
 		loc := h.Path.FindStringIndex(r.URL.Path)
@@ -60,7 +55,7 @@ func WebHandle(w *loggingWriter, r *http.Request) (handled bool) {
 		if r.TLS == nil && !h.DontRedirectPlainHTTP {
 			u := *r.URL
 			u.Scheme = "https"
-			u.Host = host
+			u.Host = h.DNSDomain.Name()
 			w.Handler = h.Name
 			http.Redirect(w, r, u.String(), http.StatusPermanentRedirect)
 			return true
@@ -138,7 +133,7 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 		if cid <= 0 {
 			return ""
 		}
-		return " (requestid " + mox.ReceivedID(cid) + ")"
+		return " (id " + mox.ReceivedID(cid) + ")"
 	}
 
 	if r.Method != "GET" && r.Method != "HEAD" {
@@ -166,6 +161,15 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 		fspath = filepath.Join(h.Root, r.URL.Path)
 	}
 
+	serveFile := func(name string, mtime time.Time, content *os.File) {
+		// ServeContent only sets a content-type if not already present in the response headers.
+		hdr := w.Header()
+		for k, v := range h.ResponseHeaders {
+			hdr.Add(k, v)
+		}
+		http.ServeContent(w, r, name, mtime, content)
+	}
+
 	f, err := os.Open(fspath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -176,6 +180,22 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 			http.NotFound(w, r)
 			return true
 		} else if os.IsPermission(err) {
+			// If we tried opening a directory, we may not have permission to read it, but
+			// still access files inside it (execute bit), such as index.html. So try to serve it.
+			index, err := os.Open(filepath.Join(fspath, "index.html"))
+			if err == nil {
+				defer index.Close()
+				var ifi os.FileInfo
+				ifi, err = index.Stat()
+				if err != nil {
+					log().Errorx("stat index.html in directory we cannot list", err, mlog.Field("url", r.URL), mlog.Field("fspath", fspath))
+					http.Error(w, "500 - internal server error"+recvid(), http.StatusInternalServerError)
+					return true
+				}
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				serveFile("index.html", ifi.ModTime(), index)
+				return true
+			}
 			http.Error(w, "403 - permission denied", http.StatusForbidden)
 			return true
 		}
@@ -191,23 +211,21 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 		http.Error(w, "500 - internal server error"+recvid(), http.StatusInternalServerError)
 		return true
 	}
+	// Redirect if the local path is a directory.
 	if fi.IsDir() && !strings.HasSuffix(r.URL.Path, "/") {
 		http.Redirect(w, r, r.URL.Path+"/", http.StatusTemporaryRedirect)
 		return true
 	}
 
-	serveFile := func(name string, mtime time.Time, content *os.File) {
-		// ServeContent only sets a content-type if not already present in the response headers.
-		hdr := w.Header()
-		for k, v := range h.ResponseHeaders {
-			hdr.Add(k, v)
-		}
-		http.ServeContent(w, r, name, mtime, content)
-	}
-
 	if fi.IsDir() {
 		index, err := os.Open(filepath.Join(fspath, "index.html"))
-		if err != nil && os.IsPermission(err) || err != nil && os.IsNotExist(err) && !h.ListFiles {
+		if err != nil && os.IsPermission(err) {
+			http.Error(w, "403 - permission denied", http.StatusForbidden)
+			return true
+		} else if err != nil && os.IsNotExist(err) && !h.ListFiles {
+			if h.ContinueNotFound {
+				return false
+			}
 			http.Error(w, "403 - permission denied", http.StatusForbidden)
 			return true
 		} else if err == nil {
@@ -216,7 +234,7 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 			ifi, err = index.Stat()
 			if err == nil {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				serveFile(filepath.Base(fspath), ifi.ModTime(), index)
+				serveFile("index.html", ifi.ModTime(), index)
 				return true
 			}
 		}
@@ -243,11 +261,13 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 				mb := float64(e.Size()) / (1024 * 1024)
 				var size string
 				var sizepad bool
-				if mb >= 10 {
-					size = fmt.Sprintf("%d", int64(mb))
-					sizepad = true
-				} else {
-					size = fmt.Sprintf("%.2f", mb)
+				if !e.IsDir() {
+					if mb >= 10 {
+						size = fmt.Sprintf("%d", int64(mb))
+						sizepad = true
+					} else {
+						size = fmt.Sprintf("%.2f", mb)
+					}
 				}
 				const dateTime = "2006-01-02 15:04:05" // time.DateTime, but only since go1.20.
 				modified := e.ModTime().UTC().Format(dateTime)
@@ -309,12 +329,12 @@ func HandleRedirect(h *config.WebRedirect, w http.ResponseWriter, r *http.Reques
 		u.ForceQuery = h.URL.ForceQuery
 		u.RawQuery = h.URL.RawQuery
 		u.Fragment = h.URL.Fragment
-	}
-	if r.URL.RawQuery != "" {
-		if u.RawQuery != "" {
-			u.RawQuery += "&"
+		if r.URL.RawQuery != "" {
+			if u.RawQuery != "" {
+				u.RawQuery += "&"
+			}
+			u.RawQuery += r.URL.RawQuery
 		}
-		u.RawQuery += r.URL.RawQuery
 	}
 	u.Path = dstpath
 	code := http.StatusPermanentRedirect
@@ -336,7 +356,7 @@ func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request,
 		if cid <= 0 {
 			return ""
 		}
-		return " (requestid " + mox.ReceivedID(cid) + ")"
+		return " (id " + mox.ReceivedID(cid) + ")"
 	}
 
 	xr := *r
@@ -351,8 +371,7 @@ func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request,
 	// Remove any forwarded headers passed in by client.
 	hdr := http.Header{}
 	for k, vl := range r.Header {
-		switch k {
-		case "Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto":
+		if k == "Forwarded" || k == "X-Forwarded" || strings.HasPrefix(k, "X-Forwarded-") {
 			continue
 		}
 		hdr[k] = vl
@@ -374,7 +393,11 @@ func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request,
 	proxy.ErrorLog = golog.New(mlog.ErrWriter(mlog.New("net/http/httputil").WithContext(r.Context()), mlog.LevelDebug, "reverseproxy error"), "", 0)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		log().Errorx("forwarding request to backend webserver", err, mlog.Field("url", r.URL))
-		http.Error(w, "502 - bad gateway"+recvid(), http.StatusBadGateway)
+		if os.IsTimeout(err) {
+			http.Error(w, "504 - gateway timeout"+recvid(), http.StatusGatewayTimeout)
+		} else {
+			http.Error(w, "502 - bad gateway"+recvid(), http.StatusBadGateway)
+		}
 	}
 	whdr := w.Header()
 	for k, v := range h.ResponseHeaders {

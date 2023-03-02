@@ -198,11 +198,12 @@ func (c *Config) AccountDestination(addr string) (accDests AccountDestination, o
 	return
 }
 
-func (c *Config) WebHandlers() (l []config.WebHandler) {
+func (c *Config) WebServer() (r map[dns.Domain]dns.Domain, l []config.WebHandler) {
 	c.withDynamicLock(func() {
+		r = c.Dynamic.WebDNSDomainRedirects
 		l = c.Dynamic.WebHandlers
 	})
-	return l
+	return r, l
 }
 
 func (c *Config) allowACMEHosts() {
@@ -245,6 +246,9 @@ func (c *Config) allowACMEHosts() {
 		}
 
 		if l.WebserverHTTPS.Enabled {
+			for from := range c.Dynamic.WebDNSDomainRedirects {
+				hostnames[from] = struct{}{}
+			}
 			for _, wh := range c.Dynamic.WebHandlers {
 				hostnames[wh.DNSDomain] = struct{}{}
 			}
@@ -678,11 +682,13 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 	}
 	checkMailboxNormf(static.Postmaster.Mailbox, "postmaster mailbox")
 
-	var haveSTSListener bool
+	var haveSTSListener, haveWebserverListener bool
 	for _, l := range static.Listeners {
 		if l.MTASTSHTTPS.Enabled {
 			haveSTSListener = true
-			break
+		}
+		if l.WebserverHTTP.Enabled || l.WebserverHTTPS.Enabled {
+			haveWebserverListener = true
 		}
 	}
 
@@ -991,6 +997,29 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 	}
 
 	// Check webserver configs.
+	if (len(c.WebDomainRedirects) > 0 || len(c.WebHandlers) > 0) && !haveWebserverListener {
+		addErrorf("WebDomainRedirects or WebHandlers configured but no listener with WebserverHTTP or WebserverHTTPS enabled")
+	}
+
+	c.WebDNSDomainRedirects = map[dns.Domain]dns.Domain{}
+	for from, to := range c.WebDomainRedirects {
+		fromdom, err := dns.ParseDomain(from)
+		if err != nil {
+			addErrorf("parsing domain for redirect %s: %v", from, err)
+		}
+		todom, err := dns.ParseDomain(to)
+		if err != nil {
+			addErrorf("parsing domain for redirect %s: %v", to, err)
+		} else if fromdom == todom {
+			addErrorf("will not redirect domain %s to itself", todom)
+		}
+		var zerodom dns.Domain
+		if _, ok := c.WebDNSDomainRedirects[fromdom]; ok && fromdom != zerodom {
+			addErrorf("duplicate redirect domain %s", from)
+		}
+		c.WebDNSDomainRedirects[fromdom] = todom
+	}
+
 	for i := range c.WebHandlers {
 		wh := &c.WebHandlers[i]
 

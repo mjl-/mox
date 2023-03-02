@@ -401,6 +401,31 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 	return nil
 }
 
+func WebserverConfigSet(ctx context.Context, domainRedirects map[string]string, webhandlers []config.WebHandler) (rerr error) {
+	log := xlog.WithContext(ctx)
+	defer func() {
+		if rerr != nil {
+			log.Errorx("saving webserver config", rerr)
+		}
+	}()
+
+	Conf.dynamicMutex.Lock()
+	defer Conf.dynamicMutex.Unlock()
+
+	// Compose new config without modifying existing data structures. If we fail, we
+	// leave no trace.
+	nc := Conf.Dynamic
+	nc.WebDomainRedirects = domainRedirects
+	nc.WebHandlers = webhandlers
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %v", err)
+	}
+
+	log.Info("webserver config saved")
+	return nil
+}
+
 // todo: find a way to automatically create the dns records as it would greatly simplify setting up email for a domain. we could also dynamically make changes, e.g. providing grace periods after disabling a dkim key, only automatically removing the dkim dns key after a few days. but this requires some kind of api and authentication to the dns server. there doesn't appear to be a single commonly used api for dns management. each of the numerous cloud providers have their own APIs and rather large SKDs to use them. we don't want to link all of them in.
 
 // DomainRecords returns text lines describing DNS records required for configuring

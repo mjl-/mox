@@ -557,6 +557,11 @@ describe-static" and "mox config describe-domains":
 					# in calculating probability reduced. E.g. 1 or 2. (optional)
 					RareWords: 0
 
+	# Redirect all requests from domain (key) to domain (value). Always redirects to
+	# HTTPS. For plain HTTP redirects, use a WebHandler with a WebRedirect. (optional)
+	WebDomainRedirects:
+		x:
+
 	# Handle webserver requests by serving static files, redirecting or
 	# reverse-proxying HTTP(s). The first matching WebHandler will handle the request.
 	# Built-in handlers for autoconfig and mta-sts always run first. If no handler
@@ -622,7 +627,7 @@ describe-static" and "mox config describe-domains":
 			WebRedirect:
 
 				# Base URL to redirect to. The path must be empty and will be replaced, either by
-				# the request URL path, or byOrigPathRegexp/ReplacePath. Scheme, host, port and
+				# the request URL path, or by OrigPathRegexp/ReplacePath. Scheme, host, port and
 				# fragment stay intact, and query strings are combined. If empty, the response
 				# redirects to a different path through OrigPathRegexp and ReplacePath, which must
 				# then be set. Use a URL without scheme to redirect without changing the protocol,
@@ -670,14 +675,20 @@ examples with "mox examples", and print a specific example with "mox examples
 
 # Example webhandlers
 
-	# Snippet of domains.conf to configure WebHandlers.
+	# Snippet of domains.conf to configure WebDomainRedirects and WebHandlers.
+
+	# Redirect all requests for mox.example to https://www.mox.example.
+	WebDomainRedirects:
+		mox.example: www.mox.example
+
+	# Each request is matched against these handlers until one matches and serves it.
 	WebHandlers:
 		-
 			# The name of the handler, used in logging and metrics.
 			LogName: staticmjl
 			# With ACME configured, each configured domain will automatically get a TLS
 			# certificate on first request.
-			Domain: mox.example
+			Domain: www.mox.example
 			PathRegexp: ^/who/mjl/
 			WebStatic:
 				StripPrefix: /who/mjl
@@ -690,7 +701,7 @@ examples with "mox examples", and print a specific example with "mox examples
 					X-Mox: hi
 		-
 			LogName: redir
-			Domain: mox.example
+			Domain: www.mox.example
 			PathRegexp: ^/redir/a/b/c
 			# Don't redirect from plain HTTP to HTTPS.
 			DontRedirectPlainHTTP: true
@@ -703,7 +714,7 @@ examples with "mox examples", and print a specific example with "mox examples
 				StatusCode: 307
 		-
 			LogName: oldnew
-			Domain: mox.example
+			Domain: www.mox.example
 			PathRegexp: ^/old/
 			WebRedirect:
 				# Replace path, leaving rest of URL intact.
@@ -711,7 +722,7 @@ examples with "mox examples", and print a specific example with "mox examples
 				ReplacePath: /new/$1
 		-
 			LogName: app
-			Domain: mox.example
+			Domain: www.mox.example
 			PathRegexp: ^/app/
 			WebForward:
 				# Strip the path matched by PathRegexp before forwarding the request. So original

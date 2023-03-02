@@ -70,9 +70,12 @@ type Static struct {
 
 // Dynamic is the parsed form of domains.conf, and is automatically reloaded when changed.
 type Dynamic struct {
-	Domains     map[string]Domain  `sconf-doc:"Domains for which email is accepted. For internationalized domains, use their IDNA names in UTF-8."`
-	Accounts    map[string]Account `sconf-doc:"Accounts to which email can be delivered. An account can accept email for multiple domains, for multiple localparts, and deliver to multiple mailboxes."`
-	WebHandlers []WebHandler       `sconf:"optional" sconf-doc:"Handle webserver requests by serving static files, redirecting or reverse-proxying HTTP(s). The first matching WebHandler will handle the request. Built-in handlers for autoconfig and mta-sts always run first. If no handler matches, the response status code is file not found (404). If functionality you need is missng, simply forward the requests to an application that can provide the needed functionality."`
+	Domains            map[string]Domain  `sconf-doc:"Domains for which email is accepted. For internationalized domains, use their IDNA names in UTF-8."`
+	Accounts           map[string]Account `sconf-doc:"Accounts to which email can be delivered. An account can accept email for multiple domains, for multiple localparts, and deliver to multiple mailboxes."`
+	WebDomainRedirects map[string]string  `sconf:"optional" sconf-doc:"Redirect all requests from domain (key) to domain (value). Always redirects to HTTPS. For plain HTTP redirects, use a WebHandler with a WebRedirect."`
+	WebHandlers        []WebHandler       `sconf:"optional" sconf-doc:"Handle webserver requests by serving static files, redirecting or reverse-proxying HTTP(s). The first matching WebHandler will handle the request. Built-in handlers for autoconfig and mta-sts always run first. If no handler matches, the response status code is file not found (404). If functionality you need is missng, simply forward the requests to an application that can provide the needed functionality."`
+
+	WebDNSDomainRedirects map[dns.Domain]dns.Domain `sconf:"-"`
 }
 
 type ACME struct {
@@ -308,10 +311,9 @@ type TLS struct {
 }
 
 type WebHandler struct {
-	LogName    string `sconf:"optional" sconf-doc:"Name to use in logging and metrics."`
-	Domain     string `sconf-doc:"Both Domain and PathRegexp must match for this WebHandler to match a request. Exactly one of WebStatic, WebRedirect, WebForward must be set."`
-	PathRegexp string `sconf-doc:"Regular expression matched against request path, must always start with ^ to ensure matching from the start of the path. The matching prefix can optionally be stripped by WebForward. The regular expression does not have to end with $."`
-
+	LogName               string       `sconf:"optional" sconf-doc:"Name to use in logging and metrics."`
+	Domain                string       `sconf-doc:"Both Domain and PathRegexp must match for this WebHandler to match a request. Exactly one of WebStatic, WebRedirect, WebForward must be set."`
+	PathRegexp            string       `sconf-doc:"Regular expression matched against request path, must always start with ^ to ensure matching from the start of the path. The matching prefix can optionally be stripped by WebForward. The regular expression does not have to end with $."`
 	DontRedirectPlainHTTP bool         `sconf:"optional" sconf-doc:"If set, plain HTTP requests are not automatically permanently redirected (308) to HTTPS. If you don't have a HTTPS webserver configured, set this to true."`
 	WebStatic             *WebStatic   `sconf:"optional" sconf-doc:"Serve static files."`
 	WebRedirect           *WebRedirect `sconf:"optional" sconf-doc:"Redirect requests to configured URL."`
@@ -320,6 +322,37 @@ type WebHandler struct {
 	Name      string         `sconf:"-"` // Either LogName, or numeric index if LogName was empty. Used instead of LogName in logging/metrics.
 	DNSDomain dns.Domain     `sconf:"-"`
 	Path      *regexp.Regexp `sconf:"-" json:"-"`
+}
+
+// Equal returns if wh and o are equal, only looking at fields in the configuration file, not the derived fields.
+func (wh WebHandler) Equal(o WebHandler) bool {
+	clean := func(x WebHandler) WebHandler {
+		x.Name = ""
+		x.DNSDomain = dns.Domain{}
+		x.Path = nil
+		x.WebStatic = nil
+		x.WebRedirect = nil
+		x.WebForward = nil
+		return x
+	}
+	cwh := clean(wh)
+	co := clean(o)
+	if cwh != co {
+		return false
+	}
+	if (wh.WebStatic == nil) != (o.WebStatic == nil) || (wh.WebRedirect == nil) != (o.WebRedirect == nil) || (wh.WebForward == nil) != (o.WebForward == nil) {
+		return false
+	}
+	if wh.WebStatic != nil {
+		return reflect.DeepEqual(wh.WebStatic, o.WebStatic)
+	}
+	if wh.WebRedirect != nil {
+		return wh.WebRedirect.equal(*o.WebRedirect)
+	}
+	if wh.WebForward != nil {
+		return wh.WebForward.equal(*o.WebForward)
+	}
+	return true
 }
 
 type WebStatic struct {
@@ -331,7 +364,7 @@ type WebStatic struct {
 }
 
 type WebRedirect struct {
-	BaseURL        string `sconf:"optional" sconf-doc:"Base URL to redirect to. The path must be empty and will be replaced, either by the request URL path, or byOrigPathRegexp/ReplacePath. Scheme, host, port and fragment stay intact, and query strings are combined. If empty, the response redirects to a different path through OrigPathRegexp and ReplacePath, which must then be set. Use a URL without scheme to redirect without changing the protocol, e.g. //newdomain/."`
+	BaseURL        string `sconf:"optional" sconf-doc:"Base URL to redirect to. The path must be empty and will be replaced, either by the request URL path, or by OrigPathRegexp/ReplacePath. Scheme, host, port and fragment stay intact, and query strings are combined. If empty, the response redirects to a different path through OrigPathRegexp and ReplacePath, which must then be set. Use a URL without scheme to redirect without changing the protocol, e.g. //newdomain/."`
 	OrigPathRegexp string `sconf:"optional" sconf-doc:"Regular expression for matching path. If set and path does not match, a 404 is returned. The HTTP path used for matching always starts with a slash."`
 	ReplacePath    string `sconf:"optional" sconf-doc:"Replacement path for destination URL based on OrigPathRegexp. Implemented with Go's Regexp.ReplaceAllString: $1 is replaced with the text of the first submatch, etc. If both OrigPathRegexp and ReplacePath are empty, BaseURL must be set and all paths are redirected unaltered."`
 	StatusCode     int    `sconf:"optional" sconf-doc:"Status code to use in redirect, e.g. 307. By default, a permanent redirect (308) is returned."`
@@ -340,10 +373,24 @@ type WebRedirect struct {
 	OrigPath *regexp.Regexp `sconf:"-" json:"-"`
 }
 
+func (wr WebRedirect) equal(o WebRedirect) bool {
+	wr.URL = nil
+	wr.OrigPath = nil
+	o.URL = nil
+	o.OrigPath = nil
+	return reflect.DeepEqual(wr, o)
+}
+
 type WebForward struct {
 	StripPath       bool              `sconf:"optional" sconf-doc:"Strip the matching WebHandler path from the WebHandler before forwarding the request."`
 	URL             string            `sconf-doc:"URL to forward HTTP requests to, e.g. http://127.0.0.1:8123/base. If StripPath is false the full request path is added to the URL. Host headers are sent unmodified. New X-Forwarded-{For,Host,Proto} headers are set. Any query string in the URL is ignored. Requests are made using Go's net/http.DefaultTransport that takes environment variables HTTP_PROXY and HTTPS_PROXY into account."`
 	ResponseHeaders map[string]string `sconf:"optional" sconf-doc:"Headers to add to the response. Useful for adding security- and cache-related headers."`
 
 	TargetURL *url.URL `sconf:"-" json:"-"`
+}
+
+func (wf WebForward) equal(o WebForward) bool {
+	wf.TargetURL = nil
+	o.TargetURL = nil
+	return reflect.DeepEqual(wf, o)
 }

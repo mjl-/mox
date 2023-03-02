@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	"github.com/mjl-/sherpadoc"
 	"github.com/mjl-/sherpaprom"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"
 	"github.com/mjl-/mox/dmarcdb"
@@ -136,7 +138,7 @@ func checkAdminAuth(ctx context.Context, passwordfile string, w http.ResponseWri
 	}
 	if addr != nil && !mox.LimiterFailedAuth.Add(addr.IP, start, 1) {
 		metrics.AuthenticationRatelimitedInc("httpadmin")
-		http.Error(w, "http 429 - too many auth attempts", http.StatusTooManyRequests)
+		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
 		return false
 	}
 
@@ -1524,4 +1526,74 @@ func (Admin) LogLevelRemove(ctx context.Context, pkg string) {
 // CheckUpdatesEnabled returns whether checking for updates is enabled.
 func (Admin) CheckUpdatesEnabled(ctx context.Context) bool {
 	return mox.Conf.Static.CheckUpdates
+}
+
+// WebserverConfig is the combination of WebDomainRedirects and WebHandlers
+// from the domains.conf configuration file.
+type WebserverConfig struct {
+	WebDNSDomainRedirects [][2]dns.Domain // From server to frontend.
+	WebDomainRedirects    [][2]string     // From frontend to server, it's not convenient to create dns.Domain in the frontend.
+	WebHandlers           []config.WebHandler
+}
+
+// WebserverConfig returns the current webserver config
+func (Admin) WebserverConfig(ctx context.Context) (conf WebserverConfig) {
+	conf = webserverConfig()
+	conf.WebDomainRedirects = nil
+	return conf
+}
+
+func webserverConfig() WebserverConfig {
+	r, l := mox.Conf.WebServer()
+	x := make([][2]dns.Domain, 0, len(r))
+	xs := make([][2]string, 0, len(r))
+	for k, v := range r {
+		x = append(x, [2]dns.Domain{k, v})
+		xs = append(xs, [2]string{k.Name(), v.Name()})
+	}
+	sort.Slice(x, func(i, j int) bool {
+		return x[i][0].ASCII < x[j][0].ASCII
+	})
+	sort.Slice(xs, func(i, j int) bool {
+		return xs[i][0] < xs[j][0]
+	})
+	return WebserverConfig{x, xs, l}
+}
+
+// WebserverConfigSave saves a new webserver config. If oldConf is not equal to
+// the current config, an error is returned.
+func (Admin) WebserverConfigSave(ctx context.Context, oldConf, newConf WebserverConfig) (savedConf WebserverConfig) {
+	current := webserverConfig()
+	webhandlersEqual := func() bool {
+		if len(current.WebHandlers) != len(oldConf.WebHandlers) {
+			return false
+		}
+		for i, wh := range current.WebHandlers {
+			if !wh.Equal(oldConf.WebHandlers[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	if !reflect.DeepEqual(oldConf.WebDNSDomainRedirects, current.WebDNSDomainRedirects) || !webhandlersEqual() {
+		xcheckf(ctx, errors.New("config has changed"), "comparing old/current config")
+	}
+
+	// Convert to map, check that there are no duplicates here. The canonicalized
+	// dns.Domain are checked again for uniqueness when parsing the config before
+	// storing.
+	domainRedirects := map[string]string{}
+	for _, x := range newConf.WebDomainRedirects {
+		if _, ok := domainRedirects[x[0]]; ok {
+			xcheckf(ctx, errors.New("already present"), "checking redirect %s", x[0])
+		}
+		domainRedirects[x[0]] = x[1]
+	}
+
+	err := mox.WebserverConfigSet(ctx, domainRedirects, newConf.WebHandlers)
+	xcheckf(ctx, err, "saving webserver config")
+
+	savedConf = webserverConfig()
+	savedConf.WebDomainRedirects = nil
+	return savedConf
 }

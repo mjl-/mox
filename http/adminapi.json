@@ -649,6 +649,45 @@
 					]
 				}
 			]
+		},
+		{
+			"Name": "WebserverConfig",
+			"Docs": "WebserverConfig returns the current webserver config",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "conf",
+					"Typewords": [
+						"WebserverConfig"
+					]
+				}
+			]
+		},
+		{
+			"Name": "WebserverConfigSave",
+			"Docs": "WebserverConfigSave saves a new webserver config. If oldConf is not equal to\nthe current config, an error is returned.",
+			"Params": [
+				{
+					"Name": "oldConf",
+					"Typewords": [
+						"WebserverConfig"
+					]
+				},
+				{
+					"Name": "newConf",
+					"Typewords": [
+						"WebserverConfig"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "savedConf",
+					"Typewords": [
+						"WebserverConfig"
+					]
+				}
+			]
 		}
 	],
 	"Sections": [],
@@ -2895,6 +2934,214 @@
 					"Docs": "",
 					"Typewords": [
 						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "WebserverConfig",
+			"Docs": "WebserverConfig is the combination of WebDomainRedirects and WebHandlers\nfrom the domains.conf configuration file.",
+			"Fields": [
+				{
+					"Name": "WebDNSDomainRedirects",
+					"Docs": "From server to frontend.",
+					"Typewords": [
+						"[]",
+						"[]",
+						"Domain"
+					]
+				},
+				{
+					"Name": "WebDomainRedirects",
+					"Docs": "From frontend to server, it's not convenient to create dns.Domain in the frontend.",
+					"Typewords": [
+						"[]",
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "WebHandlers",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"WebHandler"
+					]
+				}
+			]
+		},
+		{
+			"Name": "WebHandler",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "LogName",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "PathRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "DontRedirectPlainHTTP",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "WebStatic",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"WebStatic"
+					]
+				},
+				{
+					"Name": "WebRedirect",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"WebRedirect"
+					]
+				},
+				{
+					"Name": "WebForward",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"WebForward"
+					]
+				},
+				{
+					"Name": "Name",
+					"Docs": "Either LogName, or numeric index if LogName was empty. Used instead of LogName in logging/metrics.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "DNSDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "WebStatic",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "StripPrefix",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Root",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ListFiles",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ContinueNotFound",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ResponseHeaders",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "WebRedirect",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "BaseURL",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "OrigPathRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ReplacePath",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "StatusCode",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "WebForward",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "StripPath",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "URL",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ResponseHeaders",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"string"
 					]
 				}
 			]
