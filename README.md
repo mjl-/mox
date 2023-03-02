@@ -59,8 +59,9 @@ Verify you have a working mox binary:
 Note: Mox only compiles for/works on unix systems, not on Plan 9 or Windows.
 
 You can also run mox with docker image "docker.io/moxmail/mox", with tags like
-"latest", "0.0.1" and "0.0.1-go1.20.1-alpine3.17.2", etc. See docker-compose.yml
-in this repository for instructions on starting.
+"latest", "0.0.1" and "0.0.1-go1.20.1-alpine3.17.2", see
+https://hub.docker.com/r/moxmail/mox.  See docker-compose.yml in this
+repository for instructions on starting.
 
 
 # Quickstart
@@ -191,6 +192,9 @@ violations, that would be interesting to hear about.
 Pull requests for bug fixes and new code are welcome too. If the changes are
 large, it helps to start a discussion (create a ticket) before doing all the
 work.
+
+By contributing (e.g. code), you agree your contributions are licensed under the
+MIT license (like mox), and have the rights to do so.
 
 ## Where can I discuss mox?
 
