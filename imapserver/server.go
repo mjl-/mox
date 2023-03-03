@@ -2967,7 +2967,11 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				m.ID = 0
 				m.UID = uidFirst + store.UID(i)
 				m.MailboxID = mbDst.ID
-				m.MailboxOrigID = mbSrc.ID
+				if mbSrc.Name == conf.RejectsMailbox && m.MailboxDestinedID != 0 {
+					// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
+					// is used for reputation calculation during future deliveries.
+					m.MailboxOrigID = m.MailboxDestinedID
+				}
 				m.TrainedJunk = nil
 				m.JunkFlagsForMailbox(mbDst.Name, conf)
 				err := tx.Insert(&m)
@@ -3092,7 +3096,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 
 	c.account.WithWLock(func() {
 		c.xdbwrite(func(tx *bstore.Tx) {
-			c.xmailboxID(tx, c.mailboxID) // Validate.
+			mbSrc := c.xmailboxID(tx, c.mailboxID) // Validate.
 			mbDst = c.xmailbox(tx, name, "TRYCREATE")
 			if mbDst.ID == c.mailboxID {
 				xuserErrorf("cannot move to currently selected mailbox")
@@ -3128,6 +3132,11 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 					xserverErrorf("internal error: got uid %d, expected %d, for index %d", m.UID, uids[i], i)
 				}
 				m.MailboxID = mbDst.ID
+				if mbSrc.Name == conf.RejectsMailbox && m.MailboxDestinedID != 0 {
+					// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
+					// is used for reputation calculation during future deliveries.
+					m.MailboxOrigID = m.MailboxDestinedID
+				}
 				m.UID = uidnext
 				m.JunkFlagsForMailbox(mbDst.Name, conf)
 				uidnext++

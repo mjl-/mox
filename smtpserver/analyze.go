@@ -163,8 +163,8 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		err = d.acc.DB.Read(func(tx *bstore.Tx) error {
 			// Set message MailboxID to which mail will be delivered. Reputation is
 			// per-mailbox. If referenced mailbox is not found (e.g. does not yet exist), we
-			// can still use determine a reputation because we also base it on outgoing
-			// messages and those account-global.
+			// can still determine a reputation because we also base it on outgoing
+			// messages and those are account-global.
 			mailbox := d.rcptAcc.destination.Mailbox
 			if mailbox == "" {
 				mailbox = "Inbox"
@@ -174,7 +174,15 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 			}
 			mb := d.acc.MailboxFindX(tx, mailbox)
 			if mb != nil {
+				// We want to deliver to mb.ID, but this message may be rejected and sent to the
+				// Rejects mailbox instead, which MailboxID overwritten. Record the ID in
+				// MailboxDestinedID too. If the message is later moved out of the Rejects mailbox,
+				// we'll adjust the MailboxOrigID so it gets taken into account during reputation
+				// calculating in future deliveries. If we end up delivering to the intended
+				// mailbox (i.e. not rejecting), MailboxDestinedID is cleared during delivery so we
+				// don't store it unnecessarily.
 				d.m.MailboxID = mb.ID
+				d.m.MailboxDestinedID = mb.ID
 			} else {
 				log.Debug("mailbox not found in database", mlog.Field("mailbox", mailbox))
 			}

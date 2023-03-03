@@ -229,11 +229,23 @@ type Message struct {
 	UID       UID   `bstore:"nonzero"` // UID, for IMAP. Set during deliver.
 	MailboxID int64 `bstore:"nonzero,unique MailboxID+UID,index MailboxID+Received,ref Mailbox"`
 
-	// Mailbox message originally delivered to. I.e. not changed when moved to Trash or
-	// Junk. Useful for per-mailbox reputation. Not a bstore reference to prevent
-	// having to update all messages in a mailbox when the original mailbox is removed.
-	// Use of this field requires checking if the mailbox still exists.
-	MailboxOrigID int64
+	// MailboxOrigID is the mailbox the message was originally delivered to. Typically
+	// Inbox or Rejects, but can also be Postmaster and TLS/DMARC reporting addresses.
+	// MailboxOrigID is not changed when the message is moved to another mailbox, e.g.
+	// Archive/Trash/Junk. Used for per-mailbox reputation.
+	//
+	// MailboxDestinedID is normally 0, but when a message is delivered to the Rejects
+	// mailbox, it is set to the intended mailbox according to delivery rules,
+	// typically that of Inbox. When such a message is moved out of Rejects, the
+	// MailboxOrigID is corrected by setting it to MailboxDestinedID. This ensures the
+	// message is used for reputation calculation for future deliveries to that
+	// mailbox.
+	//
+	// These are not bstore references to prevent having to update all messages in a
+	// mailbox when the original mailbox is removed. Use of these fields requires
+	// checking if the mailbox still exists.
+	MailboxOrigID     int64
+	MailboxDestinedID int64
 
 	Received time.Time `bstore:"default now,index"`
 
@@ -598,6 +610,11 @@ func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os
 		buf, err := json.Marshal(part)
 		xcheckf(err, "marshal parsed message")
 		m.ParsedBuf = buf
+	}
+
+	// If we are delivering to the originally intended mailbox, no need to store the mailbox ID again.
+	if m.MailboxDestinedID != 0 && m.MailboxDestinedID == m.MailboxOrigID {
+		m.MailboxDestinedID = 0
 	}
 
 	err = tx.Insert(m)
