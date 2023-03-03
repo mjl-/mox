@@ -338,11 +338,7 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 
 	// Used for "a" and "mx".
 	checkHostIP := func(domain dns.Domain, d Directive, args *Args) (bool, Status, error) {
-		network := "ip4"
-		if remote6 != nil {
-			network = "ip6"
-		}
-		ips, err := resolver.LookupIP(ctx, network, domain.ASCII+".")
+		ips, err := resolver.LookupIP(ctx, "ip", domain.ASCII+".")
 		trackVoidLookup(err, args)
 		// If "not found", we must ignore the error and treat as zero records in answer. ../rfc/7208:1116
 		if err != nil && !dns.IsNotFound(err) {
@@ -478,11 +474,7 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 					break
 				}
 				lookups++
-				network := "ip4"
-				if remote6 != nil {
-					network = "ip6"
-				}
-				ips, err := resolver.LookupIP(ctx, network, rd.ASCII+".")
+				ips, err := resolver.LookupIP(ctx, "ip", rd.ASCII+".")
 				trackVoidLookup(err, &args)
 				for _, ip := range ips {
 					if checkIP(ip, d) {
@@ -669,11 +661,7 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 					if !matchfn(name) {
 						continue
 					}
-					network := "ip4"
-					if args.RemoteIP.To4() == nil {
-						network = "ip6"
-					}
-					ips, err := resolver.LookupIP(ctx, network, name)
+					ips, err := resolver.LookupIP(ctx, "ip", name)
 					trackVoidLookup(err, &args)
 					// ../rfc/7208:1714, we don't have to check other errors.
 					for _, ip := range ips {
