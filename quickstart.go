@@ -41,7 +41,7 @@ func pwgen() string {
 }
 
 func cmdQuickstart(c *cmd) {
-	c.params = "user@domain [user | uid]"
+	c.params = "[-existing-webserver] user@domain [user | uid]"
 	c.help = `Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
 
 Quickstart writes configuration files, prints initial admin and account
@@ -50,7 +50,25 @@ systemd service file and prints commands to enable and start mox as service.
 
 The user or uid is optional, defaults to "mox", and is the user or uid/gid mox
 will run as after initialization.
+
+Mox is by far easiest to operate if you let it listen on port 443 (HTTPS) and
+80 (HTTP). TLS will be fully automatic with ACME with Let's Encrypt.
+
+You can run mox along with an existing webserver, but because of MTA-STS and
+autoconfig, you'll need to forward HTTPS traffic for two domains to mox. Run
+"mox quickstart -existing-webserver ..." to generate configuration files and
+instructions for configuring mox along with an existing webserver.
+
+But please first consider configuring mox on port 443. It can itself serve
+domains with HTTP/HTTPS, including with automatic TLS with ACME, is easily
+configured through both configuration files and admin web interface, and can act
+as a reverse proxy (and static file server for that matter), so you can forward
+traffic to your existing backend applications. Look for "WebHandlers:" in the
+output of "mox config describe-domains" and see the output of "mox example
+webhandlers".
 `
+	var existingWebserver bool
+	c.flag.BoolVar(&existingWebserver, "existing-webserver", false, "use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.")
 	args := c.Parse()
 	if len(args) != 1 && len(args) != 2 {
 		c.Usage()
@@ -352,17 +370,19 @@ This likely means one of two things:
 
 	dc := config.Dynamic{}
 	sc := config.Static{
-		DataDir:  "../data",
-		User:     user,
-		LogLevel: "info",
-		Hostname: hostname.Name(),
-		ACME: map[string]config.ACME{
+		DataDir:           "../data",
+		User:              user,
+		LogLevel:          "debug", // Help new users, they'll bring it back to info when it all works.
+		Hostname:          hostname.Name(),
+		AdminPasswordFile: "adminpasswd",
+	}
+	if !existingWebserver {
+		sc.ACME = map[string]config.ACME{
 			"letsencrypt": {
 				DirectoryURL: "https://acme-v02.api.letsencrypt.org/directory",
 				ContactEmail: args[0], // todo: let user specify an alternative fallback address?
 			},
-		},
-		AdminPasswordFile: "adminpasswd",
+		}
 	}
 	dataDir := "data" // ../data is relative to config/
 	os.MkdirAll(dataDir, 0770)
@@ -376,15 +396,31 @@ This likely means one of two things:
 
 	public := config.Listener{
 		IPs: publicListenerIPs,
-		TLS: &config.TLS{
-			ACME: "letsencrypt",
-		},
 	}
 	public.SMTP.Enabled = true
 	public.Submissions.Enabled = true
 	public.IMAPS.Enabled = true
-	public.AutoconfigHTTPS.Enabled = true
-	public.MTASTSHTTPS.Enabled = true
+
+	if existingWebserver {
+		hostbase := fmt.Sprintf("path/to/%s", hostname.Name())
+		mtastsbase := fmt.Sprintf("path/to/mta-sts.%s", domain.Name())
+		autoconfigbase := fmt.Sprintf("path/to/autoconfig.%s", domain.Name())
+		public.TLS = &config.TLS{
+			KeyCerts: []config.KeyCert{
+				{CertFile: hostbase + "-chain.crt.pem", KeyFile: hostbase + ".key.pem"},
+				{CertFile: mtastsbase + "-chain.crt.pem", KeyFile: mtastsbase + ".key.pem"},
+				{CertFile: autoconfigbase + "-chain.crt.pem", KeyFile: autoconfigbase + ".key.pem"},
+			},
+		}
+	} else {
+		public.TLS = &config.TLS{
+			ACME: "letsencrypt",
+		}
+		public.AutoconfigHTTPS.Enabled = true
+		public.MTASTSHTTPS.Enabled = true
+		public.WebserverHTTP.Enabled = true
+		public.WebserverHTTPS.Enabled = true
+	}
 
 	// Suggest blocklists, but we'll comment them out after generating the config.
 	public.SMTP.DNSBLs = []string{"sbl.spamhaus.org", "bl.spamcop.net"}
@@ -396,6 +432,18 @@ This likely means one of two things:
 	internal.AccountHTTP.Enabled = true
 	internal.AdminHTTP.Enabled = true
 	internal.MetricsHTTP.Enabled = true
+	if existingWebserver {
+		internal.AccountHTTP.Port = 1080
+		internal.AdminHTTP.Port = 1080
+		internal.AutoconfigHTTPS.Enabled = true
+		internal.AutoconfigHTTPS.Port = 81
+		internal.AutoconfigHTTPS.NonTLS = true
+		internal.MTASTSHTTPS.Enabled = true
+		internal.MTASTSHTTPS.Port = 81
+		internal.MTASTSHTTPS.NonTLS = true
+		internal.WebserverHTTP.Enabled = true
+		internal.WebserverHTTP.Port = 81
+	}
 
 	sc.Listeners = map[string]config.Listener{
 		"public":   public,
@@ -478,7 +526,8 @@ This likely means one of two things:
 	xwritefile("config/domains.conf", []byte(dconfstr), 0660)
 
 	// Verify config.
-	mc, errs := mox.ParseConfig(context.Background(), "config/mox.conf", true)
+	skipCheckTLSKeyCerts := existingWebserver
+	mc, errs := mox.ParseConfig(context.Background(), "config/mox.conf", true, skipCheckTLSKeyCerts)
 	if len(errs) > 0 {
 		if len(errs) > 1 {
 			log.Printf("checking generated config, multiple errors:")
@@ -518,12 +567,41 @@ autoconfig/autodiscover does not work, use the settings below.`)
 	fmt.Println("")
 	printClientConfig(domain)
 
-	fmt.Println("")
-	fmt.Println(`Configuration files have been written to config/mox.conf and
+	if existingWebserver {
+		fmt.Printf(`
+Configuration files have been written to config/mox.conf and
+config/domains.conf.
+
+Create the DNS records below. The admin interface can show these same records, and
+has a page to check they have been configured correctly.
+
+You must configure your existing webserver to forward requests for:
+
+	https://mta-sts.%s/
+	https://autoconfig.%s/
+
+To mox, at:
+
+	http://127.0.0.1:81
+
+If it makes it easier to get a TLS certificate for %s, you can add a
+reverse proxy for that hostname too.
+
+You must edit mox.conf and configure the paths to the TLS certificates and keys.
+The paths are relative to config/ directory that holds mox.conf! To test if your
+config is valid, run:
+
+	./mox config test
+`, domain.ASCII, domain.ASCII, hostname.ASCII)
+	} else {
+		fmt.Printf(`
+Configuration files have been written to config/mox.conf and
 config/domains.conf. You should review them. Then create the DNS records below.
 You can also skip creating the DNS records and start mox immediately. The admin
 interface can show these same records, and has a page to check they have been
-configured correctly.`)
+configured correctly.
+`)
+	}
 
 	// We do not verify the records exist: If they don't exist, we would only be
 	// priming dns caches with negative/absent records, causing our "quick setup" to
@@ -533,17 +611,26 @@ configured correctly.`)
 	if err != nil {
 		fatalf("making required DNS records")
 	}
-	fmt.Print("\n\n\n" + strings.Join(records, "\n") + "\n\n\n\n")
+	fmt.Print("\n\n" + strings.Join(records, "\n") + "\n\n\n\n")
 
 	fmt.Printf(`WARNING: The configuration and DNS records above assume you do not currently
 have email configured for your domain. If you do already have email configured,
 or if you are sending email for your domain from other machines/services, you
 should understand the consequences of the DNS records above before
 continuing!
-
-You can now start mox with "./mox serve", as root. File ownership and
-permissions are automatically set correctly by mox when starting up. On linux,
-you may want to enable mox as a systemd service.
+`)
+	if os.Getenv("MOX_DOCKER") == "" {
+		fmt.Printf(`
+You can now start mox with "./mox serve", as root.
+`)
+	} else {
+		fmt.Printf(`
+You can now start the mox container.
+`)
+	}
+	fmt.Printf(`
+File ownership and permissions are automatically set correctly by mox when
+starting up. On linux, you may want to enable mox as a systemd service.
 
 `)
 
@@ -567,23 +654,21 @@ you may want to enable mox as a systemd service.
 `)
 	}
 
-	fmt.Println(`For secure email exchange you should have a strictly validating DNSSEC
+	fmt.Printf(`For secure email exchange you should have a strictly validating DNSSEC
 resolver. An easy and the recommended way is to install unbound.
 
-Enjoy!
+If you run into problem, have questions/feedback or found a bug, please let us
+know. Mox needs your help!
 
-PS: If port 443 is not available on this machine, automatic TLS with Let's
-Encrypt will not work. You can configure existing TLS certificates/keys in mox
-(run "mox config describe-static" for examples, and don't forget to renew the
-certificates!), or disable TLS (not secure, but perhaps you are just evaluating
-mox). If you disable TLS, you must also remove the DNS records about mta-sts,
-autoconfig, autodiscover and the SRV records. You also have to edit
-config/mox.conf and disable (comment out) TLS in the "public" listener, replace
-field "Submissions" with "Submission" and add a sub field "NoRequireSTARTTLS:
-true", replace field "IMAPS" with "IMAP" add add a sub field "NoRequireSTARTTLS:
-true", and set the "Enabled" field of "AutoconfigHTTPS" and "MTASTSHTTPS" to
-false. Final warning: If you disable TLS, your email messages, and user name and
-potentially password will be transferred over the internet in plain text!`)
+Enjoy!
+`)
+
+	if !existingWebserver {
+		fmt.Printf(`
+PS: If you want to run mox along side an existing webserver that uses port 443
+and 80, see "mox help quickstart" with the -existing-webserver option.
+`)
+	}
 
 	cleanupPaths = nil
 }

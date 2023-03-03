@@ -14,7 +14,7 @@ low-maintenance self-hosted email.
 
 	mox [-config config/mox.conf] ...
 	mox serve
-	mox quickstart user@domain [user | uid]
+	mox quickstart [-existing-webserver] user@domain [user | uid]
 	mox stop
 	mox setaccountpassword address
 	mox setadminpassword
@@ -41,7 +41,7 @@ low-maintenance self-hosted email.
 	mox config domain rm domain
 	mox config describe-sendmail >/etc/moxsubmit.conf
 	mox config printservice >mox.service
-	mox examples [name]
+	mox example [name]
 	mox checkupdate
 	mox cid cid
 	mox clientconfig domain
@@ -91,7 +91,25 @@ systemd service file and prints commands to enable and start mox as service.
 The user or uid is optional, defaults to "mox", and is the user or uid/gid mox
 will run as after initialization.
 
-	usage: mox quickstart user@domain [user | uid]
+Mox is by far easiest to operate if you let it listen on port 443 (HTTPS) and
+80 (HTTP). TLS will be fully automatic with ACME with Let's Encrypt.
+
+You can run mox along with an existing webserver, but because of MTA-STS and
+autoconfig, you'll need to forward HTTPS traffic for two domains to mox. Run
+"mox quickstart -existing-webserver ..." to generate configuration files and
+instructions for configuring mox along with an existing webserver.
+
+But please first consider configuring mox on port 443. It can itself serve
+domains with HTTP/HTTPS, including with automatic TLS with ACME, is easily
+configured through both configuration files and admin web interface, and can act
+as a reverse proxy (and static file server for that matter), so you can forward
+traffic to your existing backend applications. Look for "WebHandlers:" in the
+output of "mox config describe-domains" and see the output of "mox example
+webhandlers".
+
+	usage: mox quickstart [-existing-webserver] user@domain [user | uid]
+	  -existing-webserver
+	    	use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.
 
 # mox stop
 
@@ -389,11 +407,11 @@ date version.
 
 	usage: mox config printservice >mox.service
 
-# mox examples
+# mox example
 
 List available examples, or print a specific example.
 
-	usage: mox examples [name]
+	usage: mox example [name]
 
 # mox checkupdate
 

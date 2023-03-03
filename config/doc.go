@@ -670,7 +670,7 @@ describe-static" and "mox config describe-domains":
 # Examples
 
 Mox includes configuration files to illustrate common setups. You can see these
-examples with "mox examples", and print a specific example with "mox examples
+examples with "mox example", and print a specific example with "mox example
 <name>". Below are all examples included in mox.
 
 # Example webhandlers

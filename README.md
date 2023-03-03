@@ -61,28 +61,36 @@ Note: Mox only compiles for/works on unix systems, not on Plan 9 or Windows.
 You can also run mox with docker image "docker.io/moxmail/mox", with tags like
 "latest", "0.0.1" and "0.0.1-go1.20.1-alpine3.17.2", see
 https://hub.docker.com/r/moxmail/mox.  See docker-compose.yml in this
-repository for instructions on starting.
+repository for instructions on starting. You must run docker with host
+networking, because mox needs to find your actual public IP's and get the
+remote IPs for incoming connections, not a local/internal NAT IP.
 
 
 # Quickstart
 
 The easiest way to get started with serving email for your domain is to get a
 vm/machine dedicated to serving email, name it [host].[domain] (e.g.
-mail.example.com), login as root, create user "mox" and its homedir by running
-`useradd -d /home/mox mox && mkdir /home/mox` (or pick another directory),
-download mox to that directory, and generate a configuration for your desired
-email address at your domain:
+mail.example.com), login as root, and run:
 
+	# Create mox user and homedir (or pick another name or homedir):
+	useradd -m -d /home/mox mox
+
+	cd /home/mox
+	... compile or download mox to this directory, see above ...
+
+	# Generate config files for your address/domain:
 	./mox quickstart you@example.com
 
-This creates an account, generates a password and configuration files, prints
-the DNS records you need to manually create and prints commands to start mox and
-optionally install mox as a service.
+The quickstart creates an account, generates a password and configuration
+files, prints the DNS records you need to manually create and prints commands
+to start mox and optionally install mox as a service.
 
 A dedicated machine is highly recommended because modern email requires HTTPS,
 and mox currently needs it for automatic TLS.  You could combine mox with an
 existing webserver, but it requires more configuration. If you want to serve
-websites on the same machine, use the webserver built into mox.
+websites on the same machine, consider using the webserver built into mox. If
+you want to run an existing webserver on port 443/80, see "mox help quickstart",
+it'll tell you to run "./mox quickstart -existing-webserver you@example.com".
 
 After starting, you can access the admin web interface on internal IPs.
 
@@ -110,13 +118,15 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 - DANE and DNSSEC.
 - Sending DMARC and TLS reports (currently only receiving).
 - OAUTH2 support, for single sign on.
-- Using mox as backup MX.
 - ACME verification over HTTP (in addition to current tls-alpn01).
 - Add special IMAP mailbox ("Queue?") that contains queued but
   not-yet-delivered messages.
-- Old-style internationalization in messages.
 - Sieve for filtering (for now see Rulesets in the account config)
 - Calendaring
+- IMAP CONDSTORE and QRESYNC extensions
+- IMAP THREAD extension
+- Using mox as backup MX.
+- Old-style internationalization in messages.
 - JMAP
 - Webmail
 

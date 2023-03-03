@@ -336,7 +336,7 @@ func MustLoadConfig() {
 // LoadConfig attempts to parse and load a config, returning any errors
 // encountered.
 func LoadConfig(ctx context.Context) []error {
-	c, errs := ParseConfig(ctx, ConfigStaticPath, false)
+	c, errs := ParseConfig(ctx, ConfigStaticPath, false, false)
 	if len(errs) > 0 {
 		return errs
 	}
@@ -352,9 +352,11 @@ func SetConfig(c *Config) {
 	Conf = Config{c.Static, sync.Mutex{}, c.Log, sync.Mutex{}, c.Dynamic, c.dynamicMtime, c.DynamicLastCheck, c.accountDestinations}
 }
 
-// ParseConfig parses the static config at path p. If checkOnly is true, no
-// changes are made, such as registering ACME identities.
-func ParseConfig(ctx context.Context, p string, checkOnly bool) (c *Config, errs []error) {
+// ParseConfig parses the static config at path p. If checkOnly is true, no changes
+// are made, such as registering ACME identities. If skipCheckTLSKeyCerts is true,
+// the TLS KeyCerts configuration is not checked. This is used during the
+// quickstart in the case the user is going to provide their own certificates.
+func ParseConfig(ctx context.Context, p string, checkOnly, skipCheckTLSKeyCerts bool) (c *Config, errs []error) {
 	c = &Config{
 		Static: config.Static{
 			DataDir: ".",
@@ -373,7 +375,7 @@ func ParseConfig(ctx context.Context, p string, checkOnly bool) (c *Config, errs
 		return nil, []error{fmt.Errorf("parsing %s: %v", p, err)}
 	}
 
-	if xerrs := PrepareStaticConfig(ctx, p, c, checkOnly); len(xerrs) > 0 {
+	if xerrs := PrepareStaticConfig(ctx, p, c, checkOnly, skipCheckTLSKeyCerts); len(xerrs) > 0 {
 		return nil, xerrs
 	}
 
@@ -390,7 +392,7 @@ func ParseConfig(ctx context.Context, p string, checkOnly bool) (c *Config, errs
 // PrepareStaticConfig parses the static config file and prepares data structures
 // for starting mox. If checkOnly is set no substantial changes are made, like
 // creating an ACME registration.
-func PrepareStaticConfig(ctx context.Context, configFile string, config *Config, checkOnly bool) (errs []error) {
+func PrepareStaticConfig(ctx context.Context, configFile string, config *Config, checkOnly, skipCheckTLSKeyCerts bool) (errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
@@ -428,7 +430,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 	if err != nil && errors.As(err, &userErr) {
 		uid, err := strconv.ParseUint(c.User, 10, 32)
 		if err != nil {
-			addErrorf("parsing unknown user %s as uid: %v", c.User, err)
+			addErrorf("parsing unknown user %s as uid: %v (hint: add user mox with \"useradd -d $PWD mox\" or specify a different username on the quickstart command-line)", c.User, err)
 		} else {
 			// We assume the same gid as uid.
 			c.UID = uint32(uid)
@@ -514,8 +516,10 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 				}
 				l.TLS.Config = tlsconfig
 			} else if len(l.TLS.KeyCerts) != 0 {
-				if err := loadTLSKeyCerts(configFile, "listener "+name, l.TLS); err != nil {
-					addErrorf("%w", err)
+				if !skipCheckTLSKeyCerts {
+					if err := loadTLSKeyCerts(configFile, "listener "+name, l.TLS); err != nil {
+						addErrorf("%w", err)
+					}
 				}
 			} else {
 				addErrorf("listener %q: cannot have TLS config without ACME and without static keys/certificates", name)
@@ -561,9 +565,6 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 			if len(needsTLS) > 0 {
 				addErrorf("listener %q does not specify tls config, but requires tls for %s", name, strings.Join(needsTLS, ", "))
 			}
-		}
-		if l.AutoconfigHTTPS.Enabled && (!l.IMAP.Enabled && !l.IMAPS.Enabled || !l.Submission.Enabled && !l.Submissions.Enabled) {
-			addErrorf("listener %q with autoconfig enabled must have SMTP submission or submissions and IMAP or IMAPS enabled", name)
 		}
 		if l.AutoconfigHTTPS.Enabled && l.MTASTSHTTPS.Enabled && l.AutoconfigHTTPS.Port == l.MTASTSHTTPS.Port && l.AutoconfigHTTPS.NonTLS != l.MTASTSHTTPS.NonTLS {
 			addErrorf("listener %q tries to enable autoconfig and mta-sts enabled on same port but with both http and https", name)

@@ -66,15 +66,15 @@ cat <<EOF
 # Examples
 
 Mox includes configuration files to illustrate common setups. You can see these
-examples with "mox examples", and print a specific example with "mox examples
+examples with "mox example", and print a specific example with "mox example
 <name>". Below are all examples included in mox.
 
 EOF
 
-for ex in $(./mox examples); do
+for ex in $(./mox example); do
 	echo '# Example '$ex
 	echo
-	./mox examples $ex | sed 's/^/\t/'
+	./mox example $ex | sed 's/^/\t/'
 	echo
 done
 

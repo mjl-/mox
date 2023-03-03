@@ -105,7 +105,7 @@ var commands = []struct {
 	{"config domain rm", cmdConfigDomainRemove},
 	{"config describe-sendmail", cmdConfigDescribeSendmail},
 	{"config printservice", cmdConfigPrintservice},
-	{"examples", cmdExamples},
+	{"example", cmdExample},
 
 	{"checkupdate", cmdCheckupdate},
 	{"cid", cmdCid},
@@ -477,7 +477,7 @@ are printed.
 		c.Usage()
 	}
 
-	_, errs := mox.ParseConfig(context.Background(), mox.ConfigStaticPath, true)
+	_, errs := mox.ParseConfig(context.Background(), mox.ConfigStaticPath, true, false)
 	if len(errs) > 1 {
 		log.Printf("multiple errors:")
 		for _, err := range errs {
@@ -842,7 +842,7 @@ WebHandlers:
 	},
 }
 
-func cmdExamples(c *cmd) {
+func cmdExample(c *cmd) {
 	c.params = "[name]"
 	c.help = `List available examples, or print a specific example.`
 
@@ -866,7 +866,6 @@ func cmdExamples(c *cmd) {
 		log.Fatalln("not found")
 	}
 	fmt.Print(match())
-	return
 }
 
 func cmdLoglevels(c *cmd) {

@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/mjl-/mox/autotls"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
@@ -371,8 +372,8 @@ func Listen() {
 				// todo: may want to check this against the configured domains, could in theory be just a webserver.
 				return strings.HasPrefix(dom.ASCII, "autoconfig.")
 			}
-			srv.HandleFunc("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", safeHeaders(autoconfHandle(l)))
-			srv.HandleFunc("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", safeHeaders(autodiscoverHandle(l)))
+			srv.HandleFunc("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", safeHeaders(autoconfHandle))
+			srv.HandleFunc("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", safeHeaders(autodiscoverHandle))
 		}
 		if l.MTASTSHTTPS.Enabled {
 			port := config.Port(l.MTASTSHTTPS.Port, 443)
@@ -405,51 +406,32 @@ func Listen() {
 		}
 
 		// We'll explicitly ensure these TLS certs exist (e.g. are created with ACME)
-		// immediately after startup. We only do so for our explicitly hostnames, not for
-		// autoconfig or mta-sts DNS records, they can be requested on demand (perhaps
-		// never).
-		ensureHosts := map[dns.Domain]struct{}{}
+		// immediately after startup. We only do so for our explicit listener hostnames,
+		// not for mta-sts DNS records, it can be requested on demand (perhaps never). We
+		// do request autoconfig, otherwise clients may run into their timeouts waiting for
+		// the certificate to be given during the first https connection.
+		ensureManagerHosts = map[*autotls.Manager]map[dns.Domain]struct{}{}
 
 		if l.TLS != nil && l.TLS.ACME != "" {
 			m := mox.Conf.Static.ACME[l.TLS.ACME].Manager
 
-			ensureHosts[mox.Conf.Static.HostnameDomain] = struct{}{}
+			hosts := map[dns.Domain]struct{}{
+				mox.Conf.Static.HostnameDomain: {},
+			}
 			if l.HostnameDomain.ASCII != "" {
-				ensureHosts[l.HostnameDomain] = struct{}{}
+				hosts[l.HostnameDomain] = struct{}{}
+			}
+			// All domains are served on all listeners.
+			for _, name := range mox.Conf.Domains() {
+				dom, err := dns.ParseDomain("autoconfig." + name)
+				if err != nil {
+					xlog.Errorx("parsing domain from config for autoconfig", err)
+				} else {
+					hosts[dom] = struct{}{}
+				}
 			}
 
-			go func() {
-				// Just in case someone adds quite some domains to their config. We don't want to
-				// hit any ACME rate limits.
-				if len(ensureHosts) > 10 {
-					return
-				}
-
-				time.Sleep(1 * time.Second)
-				i := 0
-				for hostname := range ensureHosts {
-					if i > 0 {
-						// Sleep just a little. We don't want to hammer our ACME provider, e.g. Let's Encrypt.
-						time.Sleep(10 * time.Second)
-					}
-					i++
-
-					hello := &tls.ClientHelloInfo{
-						ServerName: hostname.ASCII,
-
-						// Make us fetch an ECDSA P256 cert.
-						// We add TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 to get around the ecDSA check in autocert.
-						CipherSuites:      []uint16{tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, tls.TLS_AES_128_GCM_SHA256},
-						SupportedCurves:   []tls.CurveID{tls.CurveP256},
-						SignatureSchemes:  []tls.SignatureScheme{tls.ECDSAWithP256AndSHA256},
-						SupportedVersions: []uint16{tls.VersionTLS13},
-					}
-					xlog.Print("ensuring certificate availability", mlog.Field("hostname", hostname))
-					if _, err := m.Manager.GetCertificate(hello); err != nil {
-						xlog.Errorx("requesting automatic certificate", err, mlog.Field("hostname", hostname))
-					}
-				}
-			}()
+			ensureManagerHosts[m] = hosts
 		}
 
 		for port, srv := range portServe {
@@ -485,6 +467,7 @@ func adminIndex(w http.ResponseWriter, r *http.Request) {
 
 // functions to be launched in goroutine that will serve on a listener.
 var servers []func()
+var ensureManagerHosts map[*autotls.Manager]map[dns.Domain]struct{}
 
 // listen prepares a listener, and adds it to "servers", to be launched (if not running as root) through Serve.
 func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, handler http.Handler) {
@@ -535,4 +518,38 @@ func Serve() {
 		go serve()
 	}
 	servers = nil
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		i := 0
+		for m, hosts := range ensureManagerHosts {
+			for host := range hosts {
+				if i >= 10 {
+					// Just in case someone adds quite some domains to their config. We don't want to
+					// hit any ACME rate limits.
+					return
+				}
+				if i > 0 {
+					// Sleep just a little. We don't want to hammer our ACME provider, e.g. Let's Encrypt.
+					time.Sleep(10 * time.Second)
+				}
+				i++
+
+				hello := &tls.ClientHelloInfo{
+					ServerName: host.ASCII,
+
+					// Make us fetch an ECDSA P256 cert.
+					// We add TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 to get around the ecDSA check in autocert.
+					CipherSuites:      []uint16{tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, tls.TLS_AES_128_GCM_SHA256},
+					SupportedCurves:   []tls.CurveID{tls.CurveP256},
+					SignatureSchemes:  []tls.SignatureScheme{tls.ECDSAWithP256AndSHA256},
+					SupportedVersions: []uint16{tls.VersionTLS13},
+				}
+				xlog.Print("ensuring certificate availability", mlog.Field("hostname", host))
+				if _, err := m.Manager.GetCertificate(hello); err != nil {
+					xlog.Errorx("requesting automatic certificate", err, mlog.Field("hostname", host))
+				}
+			}
+		}
+	}()
 }

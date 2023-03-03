@@ -1,6 +1,7 @@
 # Before launching mox, run the quickstart to create config files for running as
 # user the mox user (create it on the host system first, e.g. "useradd -d $PWD mox"):
 #
+#	mkdir config data web
 # 	docker-compose run mox mox quickstart you@yourdomain.example $(id -u mox)
 #
 # After following the quickstart instructions you can start mox:
@@ -13,7 +14,7 @@ services:
     # Replace latest with the version you want to run.
     image: docker.io/moxmail/mox:latest
     environment:
-      - MOX_DOCKER=... # Quickstart won't try to write systemd service file.
+      - MOX_DOCKER=yes # Quickstart won't try to write systemd service file.
     # Mox needs host networking because it needs access to the IPs of the
     # machine, and the IPs of incoming connections for spam filtering.
     network_mode: 'host'

@@ -298,13 +298,15 @@ func (r Ruleset) Equal(o Ruleset) bool {
 	return true
 }
 
+type KeyCert struct {
+	CertFile string `sconf-doc:"Certificate including intermediate CA certificates, in PEM format."`
+	KeyFile  string `sconf-doc:"Private key for certificate, in PEM format. PKCS8 is recommended, but PKCS1 and EC private keys are recognized as well."`
+}
+
 type TLS struct {
-	ACME     string `sconf:"optional" sconf-doc:"Name of provider from top-level configuration to use for ACME, e.g. letsencrypt."`
-	KeyCerts []struct {
-		CertFile string `sconf-doc:"Certificate including intermediate CA certificates, in PEM format."`
-		KeyFile  string `sconf-doc:"Private key for certificate, in PEM format. PKCS8 is recommended, but PKCS1 and EC private keys are recognized as well."`
-	} `sconf:"optional"`
-	MinVersion string `sconf:"optional" sconf-doc:"Minimum TLS version. Default: TLSv1.2."`
+	ACME       string    `sconf:"optional" sconf-doc:"Name of provider from top-level configuration to use for ACME, e.g. letsencrypt."`
+	KeyCerts   []KeyCert `sconf:"optional"`
+	MinVersion string    `sconf:"optional" sconf-doc:"Minimum TLS version. Default: TLSv1.2."`
 
 	Config     *tls.Config `sconf:"-" json:"-"` // TLS config for non-ACME-verification connections, i.e. SMTP and IMAP, and not port 443.
 	ACMEConfig *tls.Config `sconf:"-" json:"-"` // TLS config that handles ACME verification, for serving on port 443.
