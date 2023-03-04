@@ -24,7 +24,7 @@ func (c *Conn) Capability() (untagged []Untagged, result Result, rerr error) {
 // responses for new message delivery and changes to mailboxes.
 func (c *Conn) Noop() (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
-	return c.Transactf("capability")
+	return c.Transactf("noop")
 }
 
 // Logout ends the IMAP session by writing a LOGOUT command. Close must still be
