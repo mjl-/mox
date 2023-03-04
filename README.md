@@ -257,3 +257,11 @@ to mechiel@ueber.net.
 Congrats and welcome to the club! Running an email server on the internet comes
 with some responsibilities so you should understand how it works. See
 https://explained-from-first-principles.com/email/ for a thorough explanation.
+
+## What are the minimum requirements to run mox?
+
+Mox does not need much. Nowadays most machines are larger than mox needs. You
+can start with a machine with 512MB RAM, any CPU will do. For storage you
+should account for the size of the email messages (no compression currently),
+an additional 15% overhead for the meta data, and add some more headroom.
+Expand as necessary.
