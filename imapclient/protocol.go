@@ -148,7 +148,7 @@ func astring(s string) string {
 	}
 	for _, c := range s {
 		if c <= ' ' || c >= 0x7f || c == '(' || c == ')' || c == '{' || c == '%' || c == '*' || c == '"' || c == '\\' {
-			stringx(s)
+			return stringx(s)
 		}
 	}
 	return s
