@@ -28,7 +28,7 @@ func TestAutotls(t *testing.T) {
 	if err := m.HostPolicy(context.Background(), "mox.example"); err == nil || !errors.Is(err, errHostNotAllowed) {
 		t.Fatalf("hostpolicy, got err %v, expected errHostNotAllowed", err)
 	}
-	m.SetAllowedHostnames(map[dns.Domain]struct{}{{ASCII: "mox.example"}: {}})
+	m.SetAllowedHostnames(dns.StrictResolver{}, map[dns.Domain]struct{}{{ASCII: "mox.example"}: {}}, nil)
 	l = m.Hostnames()
 	if !reflect.DeepEqual(l, []dns.Domain{{ASCII: "mox.example"}}) {
 		t.Fatalf("hostnames, got %v, expected single mox.example", l)
@@ -79,7 +79,7 @@ func TestAutotls(t *testing.T) {
 		t.Fatalf("private key changed after reload")
 	}
 	m.shutdown = make(chan struct{})
-	m.SetAllowedHostnames(map[dns.Domain]struct{}{{ASCII: "mox.example"}: {}})
+	m.SetAllowedHostnames(dns.StrictResolver{}, map[dns.Domain]struct{}{{ASCII: "mox.example"}: {}}, nil)
 	if err := m.HostPolicy(context.Background(), "mox.example"); err != nil {
 		t.Fatalf("hostpolicy, got err %v, expected no error", err)
 	}

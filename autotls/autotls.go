@@ -22,11 +22,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -182,7 +184,11 @@ func Load(name, acmeDir, contactEmail, directoryURL string, shutdown <-chan stru
 }
 
 // SetAllowedHostnames sets a new list of allowed hostnames for automatic TLS.
-func (m *Manager) SetAllowedHostnames(hostnames map[dns.Domain]struct{}) {
+// After setting the host names, a goroutine is start to check that new host names
+// are fully served by publicIPs (only if non-empty and there is no unspecified
+// address in the list). If no, log an error with a warning that ACME validation
+// may fail.
+func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.Domain]struct{}, publicIPs []string) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -195,8 +201,44 @@ func (m *Manager) SetAllowedHostnames(hostnames map[dns.Domain]struct{}) {
 		return l[i].Name() < l[j].Name()
 	})
 
-	xlog.Debug("autotls setting allowed hostnames", mlog.Field("hostnames", l))
+	xlog.Debug("autotls setting allowed hostnames", mlog.Field("hostnames", l), mlog.Field("publicips", publicIPs))
+	var added []dns.Domain
+	for h := range hostnames {
+		if _, ok := m.hosts[h]; !ok {
+			added = append(added, h)
+		}
+	}
 	m.hosts = hostnames
+
+	if len(added) > 0 && len(publicIPs) > 0 {
+		for _, ip := range publicIPs {
+			if net.ParseIP(ip).IsUnspecified() {
+				return
+			}
+		}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			publicIPstrs := map[string]struct{}{}
+			for _, ip := range publicIPs {
+				publicIPstrs[ip] = struct{}{}
+			}
+
+			for _, h := range added {
+				ips, err := resolver.LookupIP(ctx, "ip", h.ASCII+".")
+				if err != nil {
+					xlog.Errorx("warning: acme tls cert validation for host may fail due to dns lookup error", err, mlog.Field("host", h))
+					continue
+				}
+				for _, ip := range ips {
+					if _, ok := publicIPstrs[ip.String()]; !ok {
+						xlog.Error("warning: acme tls cert validation for host is likely to fail because not all its ips are being listened on", mlog.Field("hostname", h), mlog.Field("listenedips", publicIPs), mlog.Field("hostips", ips), mlog.Field("missingip", ip))
+					}
+				}
+			}
+		}()
+	}
 }
 
 // Hostnames returns the allowed host names for use with ACME.

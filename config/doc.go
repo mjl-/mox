@@ -89,7 +89,9 @@ describe-static" and "mox config describe-domains":
 	# Listeners are groups of IP addresses and services enabled on those IP addresses,
 	# such as SMTP/IMAP or internal endpoints for administration or Prometheus
 	# metrics. All listeners with SMTP/IMAP services enabled will serve all configured
-	# domains.
+	# domains. If the listener is named 'public', it will get a few helpful additional
+	# configuration checks, for acme automatic tls certificates and monitoring of ips
+	# in dnsbls if those are configured.
 	Listeners:
 		x:
 

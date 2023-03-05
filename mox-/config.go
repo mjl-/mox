@@ -227,12 +227,6 @@ func (c *Config) allowACMEHosts() {
 				} else {
 					hostnames[d] = struct{}{}
 				}
-
-				if d, err := dns.ParseDomain("autodiscover." + dom.Domain.ASCII); err != nil {
-					xlog.Errorx("parsing autodiscover domain", err, mlog.Field("domain", dom.Domain))
-				} else {
-					hostnames[d] = struct{}{}
-				}
 			}
 
 			if l.MTASTSHTTPS.Enabled && dom.MTASTS != nil && !l.MTASTSHTTPS.NonTLS {
@@ -254,7 +248,7 @@ func (c *Config) allowACMEHosts() {
 			}
 		}
 
-		m.SetAllowedHostnames(hostnames)
+		m.SetAllowedHostnames(dns.StrictResolver{Pkg: "autotls"}, hostnames, c.Static.Listeners["public"].IPs)
 	}
 }
 
