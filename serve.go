@@ -263,8 +263,9 @@ requested, other TLS certificates are requested on demand.
 
 			var cl string
 			for _, c := range changelog.Changes {
-				cl += c.Text + "\n\n"
+				cl += "----\n\n" + strings.TrimSpace(c.Text)
 			}
+			cl += "----"
 
 			a, err := store.OpenAccount(mox.Conf.Static.Postmaster.Account)
 			if err != nil {
@@ -280,18 +281,26 @@ requested, other TLS certificates are requested on demand.
 				log.Infox("making temporary message file for changelog delivery", err)
 				return next
 			}
+			defer func() {
+				if f != nil {
+					err := os.Remove(f.Name())
+					log.Check(err, "removing temp changelog file")
+					err = f.Close()
+					log.Check(err, "closing temp changelog file")
+				}
+			}()
 			m := &store.Message{Received: time.Now(), Flags: store.Flags{Flagged: true}}
-			n, err := fmt.Fprintf(f, "Date: %s\r\nSubject: mox update %s available, changelog\r\n\r\nHi!\r\n\r\nVersion %s of mox is available.\r\nThe changes compared to the previous update notification email:\r\n\r\n%s\r\n\r\nDon't forget to update, this install is at %s.\r\nPlease report any issues at https://github.com/mjl-/mox\r\n", time.Now().Format(message.RFC5322Z), latest, latest, strings.ReplaceAll(cl, "\n", "\r\n"), current)
+			n, err := fmt.Fprintf(f, "Date: %s\r\nSubject: mox %s available\r\n\r\nHi!\r\n\r\nVersion %s of mox is available, this is install is at %s.\r\n\r\nChanges:\r\n\r\n%s\r\n\r\nPlease report any issues at https://github.com/mjl-/mox, thanks!\r\n\r\nCheers,\r\nmox\r\n", time.Now().Format(message.RFC5322Z), latest, latest, current, strings.ReplaceAll(cl, "\n", "\r\n"))
 			if err != nil {
 				log.Infox("writing temporary message file for changelog delivery", err)
 				return next
 			}
 			m.Size = int64(n)
 			if err := a.DeliverMailbox(log, mox.Conf.Static.Postmaster.Mailbox, m, f, true); err != nil {
-				log.Infox("changelog delivery", err)
-				err := os.Remove(f.Name())
-				log.Check(err, "removing temporary changelog message after delivery failure")
+				log.Errorx("changelog delivery", err)
+				return next
 			}
+			f = nil
 			log.Info("delivered changelog", mlog.Field("current", current), mlog.Field("lastknown", lastknown), mlog.Field("latest", latest))
 			if err := mox.StoreLastKnown(latest); err != nil {
 				// This will be awkward, we'll keep notifying the postmaster once every 24h...
