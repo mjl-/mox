@@ -193,7 +193,7 @@ describe-static" and "mox config describe-domains":
 				Port: 0
 
 			# Account web interface, for email users wanting to change their accounts, e.g.
-			# set new password, set new delivery rulesets. (optional)
+			# set new password, set new delivery rulesets. Served at /. (optional)
 			AccountHTTP:
 				Enabled: false
 
@@ -208,7 +208,9 @@ describe-static" and "mox config describe-domains":
 				Port: 0
 
 			# Admin web interface, for managing domains, accounts, etc. Served at /admin/.
-			# Preferrably only enable on non-public IPs. (optional)
+			# Preferrably only enable on non-public IPs. Hint: use 'ssh -L 8080:localhost:80
+			# you@yourmachine' and open http://localhost:8080/admin/, or set up a tunnel (e.g.
+			# WireGuard) and add its IP to the mox 'internal' listener. (optional)
 			AdminHTTP:
 				Enabled: false
 

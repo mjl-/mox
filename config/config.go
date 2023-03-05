@@ -123,7 +123,7 @@ type Listener struct {
 	AccountHTTP struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 80."`
-	} `sconf:"optional" sconf-doc:"Account web interface, for email users wanting to change their accounts, e.g. set new password, set new delivery rulesets."`
+	} `sconf:"optional" sconf-doc:"Account web interface, for email users wanting to change their accounts, e.g. set new password, set new delivery rulesets. Served at /."`
 	AccountHTTPS struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 80."`
@@ -131,7 +131,7 @@ type Listener struct {
 	AdminHTTP struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 80."`
-	} `sconf:"optional" sconf-doc:"Admin web interface, for managing domains, accounts, etc. Served at /admin/. Preferrably only enable on non-public IPs."`
+	} `sconf:"optional" sconf-doc:"Admin web interface, for managing domains, accounts, etc. Served at /admin/. Preferrably only enable on non-public IPs. Hint: use 'ssh -L 8080:localhost:80 you@yourmachine' and open http://localhost:8080/admin/, or set up a tunnel (e.g. WireGuard) and add its IP to the mox 'internal' listener."`
 	AdminHTTPS struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 443."`
