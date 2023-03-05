@@ -145,6 +145,7 @@ var commands = []struct {
 	{"updates addsigned", cmdUpdatesAddSigned},
 	{"updates genkey", cmdUpdatesGenkey},
 	{"updates pubkey", cmdUpdatesPubkey},
+	{"updates serve", cmdUpdatesServe},
 	{"updates verify", cmdUpdatesVerify},
 }
 
