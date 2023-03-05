@@ -616,7 +616,7 @@ listed in more DNS block lists, visit:
 
 	// Verify config.
 	skipCheckTLSKeyCerts := existingWebserver
-	mc, errs := mox.ParseConfig(context.Background(), "config/mox.conf", true, skipCheckTLSKeyCerts)
+	mc, errs := mox.ParseConfig(context.Background(), "config/mox.conf", true, skipCheckTLSKeyCerts, false)
 	if len(errs) > 0 {
 		if len(errs) > 1 {
 			log.Printf("checking generated config, multiple errors:")

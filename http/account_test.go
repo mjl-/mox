@@ -33,7 +33,7 @@ func TestAccount(t *testing.T) {
 	os.RemoveAll("../testdata/httpaccount/data")
 	mox.ConfigStaticPath = "../testdata/httpaccount/mox.conf"
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
-	mox.MustLoadConfig()
+	mox.MustLoadConfig(false)
 	acc, err := store.OpenAccount("mjl")
 	tcheck(t, err, "open account")
 	defer acc.Close()

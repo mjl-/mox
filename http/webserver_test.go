@@ -17,7 +17,7 @@ func TestWebserver(t *testing.T) {
 	os.RemoveAll("../testdata/webserver/data")
 	mox.ConfigStaticPath = "../testdata/webserver/mox.conf"
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
-	mox.MustLoadConfig()
+	mox.MustLoadConfig(false)
 
 	srv := &serve{Webserver: true}
 

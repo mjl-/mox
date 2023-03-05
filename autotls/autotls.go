@@ -188,7 +188,7 @@ func Load(name, acmeDir, contactEmail, directoryURL string, shutdown <-chan stru
 // are fully served by publicIPs (only if non-empty and there is no unspecified
 // address in the list). If no, log an error with a warning that ACME validation
 // may fail.
-func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.Domain]struct{}, publicIPs []string) {
+func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.Domain]struct{}, publicIPs []string, checkHosts bool) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -210,7 +210,7 @@ func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.D
 	}
 	m.hosts = hostnames
 
-	if len(added) > 0 && len(publicIPs) > 0 {
+	if checkHosts && len(added) > 0 && len(publicIPs) > 0 {
 		for _, ip := range publicIPs {
 			if net.ParseIP(ip).IsUnspecified() {
 				return
@@ -225,6 +225,7 @@ func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.D
 				publicIPstrs[ip] = struct{}{}
 			}
 
+			xlog.Debug("checking ips of hosts configured for acme tls cert validation")
 			for _, h := range added {
 				ips, err := resolver.LookupIP(ctx, "ip", h.ASCII+".")
 				if err != nil {

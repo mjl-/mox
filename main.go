@@ -355,7 +355,7 @@ var loglevel string
 // restores any loglevel specified on the command-line, instead of using the
 // loglevels from the config file.
 func mustLoadConfig() {
-	mox.MustLoadConfig()
+	mox.MustLoadConfig(false)
 	if level, ok := mlog.Levels[loglevel]; ok && loglevel != "" {
 		mox.Conf.Log[""] = level
 		mlog.SetConfig(mox.Conf.Log)
@@ -478,7 +478,7 @@ are printed.
 		c.Usage()
 	}
 
-	_, errs := mox.ParseConfig(context.Background(), mox.ConfigStaticPath, true, false)
+	_, errs := mox.ParseConfig(context.Background(), mox.ConfigStaticPath, true, false, false)
 	if len(errs) > 1 {
 		log.Printf("multiple errors:")
 		for _, err := range errs {

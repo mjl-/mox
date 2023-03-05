@@ -145,7 +145,8 @@ requested, other TLS certificates are requested on demand.
 	mox.Conf.Log[""] = mlog.LevelDebug
 	mlog.SetConfig(mox.Conf.Log)
 
-	mox.MustLoadConfig()
+	checkACMEHosts := os.Getuid() != 0
+	mox.MustLoadConfig(checkACMEHosts)
 
 	log := mlog.New("serve")
 

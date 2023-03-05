@@ -26,7 +26,7 @@ func tcheck(t *testing.T, err error, msg string) {
 func TestMailbox(t *testing.T) {
 	os.RemoveAll("../testdata/store/data")
 	mox.ConfigStaticPath = "../testdata/store/mox.conf"
-	mox.MustLoadConfig()
+	mox.MustLoadConfig(false)
 	acc, err := OpenAccount("mjl")
 	tcheck(t, err, "open account")
 	defer acc.Close()

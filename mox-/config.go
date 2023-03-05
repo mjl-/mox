@@ -139,7 +139,7 @@ func (c *Config) loadDynamic() []error {
 	c.Dynamic = d
 	c.dynamicMtime = mtime
 	c.accountDestinations = accDests
-	c.allowACMEHosts()
+	c.allowACMEHosts(true)
 	return nil
 }
 
@@ -206,7 +206,7 @@ func (c *Config) WebServer() (r map[dns.Domain]dns.Domain, l []config.WebHandler
 	return r, l
 }
 
-func (c *Config) allowACMEHosts() {
+func (c *Config) allowACMEHosts(checkACMEHosts bool) {
 	for _, l := range c.Static.Listeners {
 		if l.TLS == nil || l.TLS.ACME == "" {
 			continue
@@ -248,7 +248,7 @@ func (c *Config) allowACMEHosts() {
 			}
 		}
 
-		m.SetAllowedHostnames(dns.StrictResolver{Pkg: "autotls"}, hostnames, c.Static.Listeners["public"].IPs)
+		m.SetAllowedHostnames(dns.StrictResolver{Pkg: "autotls"}, hostnames, c.Static.Listeners["public"].IPs, checkACMEHosts)
 	}
 }
 
@@ -305,17 +305,17 @@ func writeDynamic(ctx context.Context, log *mlog.Log, c config.Dynamic) error {
 	Conf.Dynamic = c
 	Conf.accountDestinations = accDests
 
-	Conf.allowACMEHosts()
+	Conf.allowACMEHosts(true)
 
 	return nil
 }
 
 // MustLoadConfig loads the config, quitting on errors.
-func MustLoadConfig() {
+func MustLoadConfig(checkACMEHosts bool) {
 	Shutdown, ShutdownCancel = context.WithCancel(context.Background())
 	Context, ContextCancel = context.WithCancel(context.Background())
 
-	errs := LoadConfig(context.Background())
+	errs := LoadConfig(context.Background(), checkACMEHosts)
 	if len(errs) > 1 {
 		xlog.Error("loading config file: multiple errors")
 		for _, err := range errs {
@@ -329,8 +329,8 @@ func MustLoadConfig() {
 
 // LoadConfig attempts to parse and load a config, returning any errors
 // encountered.
-func LoadConfig(ctx context.Context) []error {
-	c, errs := ParseConfig(ctx, ConfigStaticPath, false, false)
+func LoadConfig(ctx context.Context, checkACMEHosts bool) []error {
+	c, errs := ParseConfig(ctx, ConfigStaticPath, false, false, checkACMEHosts)
 	if len(errs) > 0 {
 		return errs
 	}
@@ -350,7 +350,9 @@ func SetConfig(c *Config) {
 // are made, such as registering ACME identities. If skipCheckTLSKeyCerts is true,
 // the TLS KeyCerts configuration is not checked. This is used during the
 // quickstart in the case the user is going to provide their own certificates.
-func ParseConfig(ctx context.Context, p string, checkOnly, skipCheckTLSKeyCerts bool) (c *Config, errs []error) {
+// If checkACMEHosts is true, the hosts allowed for acme are compared with the
+// explicitly configured ips we are listening on.
+func ParseConfig(ctx context.Context, p string, checkOnly, skipCheckTLSKeyCerts, checkACMEHosts bool) (c *Config, errs []error) {
 	c = &Config{
 		Static: config.Static{
 			DataDir: ".",
@@ -377,7 +379,7 @@ func ParseConfig(ctx context.Context, p string, checkOnly, skipCheckTLSKeyCerts 
 	c.Dynamic, c.dynamicMtime, c.accountDestinations, errs = ParseDynamicConfig(ctx, pp, c.Static)
 
 	if !checkOnly {
-		c.allowACMEHosts()
+		c.allowACMEHosts(checkACMEHosts)
 	}
 
 	return c, errs
