@@ -957,7 +957,16 @@ The password is read from stdin. Its bcrypt hash is stored in a file named
 }
 
 func xreadpassword() string {
-	fmt.Println("Type new password. Password WILL echo.")
+	fmt.Printf(`
+Type new password. Password WILL echo.
+
+WARNING: Bots will try to bruteforce your password. Connections with failed
+authentication attempts will be rate limited but attackers WILL find weak
+passwords. If your account is compromised, spammers are likely to abuse your
+system, spamming your address and the wider internet in your name. So please
+pick a random, unguessable password, preferrably at least 12 characters.
+
+`)
 	fmt.Printf("password: ")
 	buf := make([]byte, 64)
 	n, err := os.Stdin.Read(buf)
