@@ -28,7 +28,7 @@ func (c *Conn) Noop() (untagged []Untagged, result Result, rerr error) {
 }
 
 // Logout ends the IMAP session by writing a LOGOUT command. Close must still be
-// closed on this client to close the socket.
+// called on this client to close the socket.
 func (c *Conn) Logout() (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
 	return c.Transactf("logout")
@@ -229,7 +229,7 @@ func (c *Conn) Expunge() (untagged []Untagged, result Result, rerr error) {
 	return c.Transactf("expunge")
 }
 
-// UIDExpunge is like expunge, but only removes messages matched uidSet.
+// UIDExpunge is like expunge, but only removes messages matching uidSet.
 func (c *Conn) UIDExpunge(uidSet NumSet) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
 	return c.Transactf("uid expunge %s", uidSet.String())
