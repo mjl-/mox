@@ -14,7 +14,7 @@ low-maintenance self-hosted email.
 
 	mox [-config config/mox.conf] ...
 	mox serve
-	mox quickstart [-existing-webserver] user@domain [user | uid]
+	mox quickstart [-existing-webserver] [-hostname host] user@domain [user | uid]
 	mox stop
 	mox setaccountpassword address
 	mox setadminpassword
@@ -91,6 +91,14 @@ systemd service file and prints commands to enable and start mox as service.
 The user or uid is optional, defaults to "mox", and is the user or uid/gid mox
 will run as after initialization.
 
+Quickstart assumes mox will run on the machine you run quickstart on and uses
+its host name and public IPs. On many systems the hostname is not a fully
+qualified domain name, but only the first dns "label", e.g. "mail" in case of
+"mail.example.org". If so, quickstart does a reverse DNS lookup to find the
+hostname, and as fallback uses the label plus the domain of the email address
+you specified. Use flag -hostname to explicitly specify the hostname mox will
+run on.
+
 Mox is by far easiest to operate if you let it listen on port 443 (HTTPS) and
 80 (HTTP). TLS will be fully automatic with ACME with Let's Encrypt.
 
@@ -107,9 +115,11 @@ traffic to your existing backend applications. Look for "WebHandlers:" in the
 output of "mox config describe-domains" and see the output of "mox example
 webhandlers".
 
-	usage: mox quickstart [-existing-webserver] user@domain [user | uid]
+	usage: mox quickstart [-existing-webserver] [-hostname host] user@domain [user | uid]
 	  -existing-webserver
 	    	use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.
+	  -hostname string
+	    	hostname mox will run on, by default the hostname of the machine quickstart runs on; if specified, the IPs for the hostname are configured for the public listener
 
 # mox stop
 

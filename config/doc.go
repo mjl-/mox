@@ -93,7 +93,9 @@ describe-static" and "mox config describe-domains":
 	Listeners:
 		x:
 
-			# Use 0.0.0.0 to listen on all IPv4 and/or :: to listen on all IPv6 addresses.
+			# Use 0.0.0.0 to listen on all IPv4 and/or :: to listen on all IPv6 addresses, but
+			# it is better to explicitly specify the IPs you want to use for email, as mox
+			# will make sure outgoing connections will only be made from one of those IPs.
 			IPs:
 				-
 

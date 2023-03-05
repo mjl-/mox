@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/dnsbl"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
@@ -41,7 +43,7 @@ func pwgen() string {
 }
 
 func cmdQuickstart(c *cmd) {
-	c.params = "[-existing-webserver] user@domain [user | uid]"
+	c.params = "[-existing-webserver] [-hostname host] user@domain [user | uid]"
 	c.help = `Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
 
 Quickstart writes configuration files, prints initial admin and account
@@ -50,6 +52,14 @@ systemd service file and prints commands to enable and start mox as service.
 
 The user or uid is optional, defaults to "mox", and is the user or uid/gid mox
 will run as after initialization.
+
+Quickstart assumes mox will run on the machine you run quickstart on and uses
+its host name and public IPs. On many systems the hostname is not a fully
+qualified domain name, but only the first dns "label", e.g. "mail" in case of
+"mail.example.org". If so, quickstart does a reverse DNS lookup to find the
+hostname, and as fallback uses the label plus the domain of the email address
+you specified. Use flag -hostname to explicitly specify the hostname mox will
+run on.
 
 Mox is by far easiest to operate if you let it listen on port 443 (HTTPS) and
 80 (HTTP). TLS will be fully automatic with ACME with Let's Encrypt.
@@ -68,7 +78,9 @@ output of "mox config describe-domains" and see the output of "mox example
 webhandlers".
 `
 	var existingWebserver bool
+	var hostname string
 	c.flag.BoolVar(&existingWebserver, "existing-webserver", false, "use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.")
+	c.flag.StringVar(&hostname, "hostname", "", "hostname mox will run on, by default the hostname of the machine quickstart runs on; if specified, the IPs for the hostname are configured for the public listener")
 	args := c.Parse()
 	if len(args) != 1 && len(args) != 2 {
 		c.Usage()
@@ -127,153 +139,180 @@ logging in with IMAP.
 		}
 	}
 
-	// Gather IP addresses for public and private listeners.
-	// If we cannot find addresses for a category we fallback to all ips or localhost ips.
-	// We look at each network interface. If an interface has a private address, we
-	// conservatively assume all addresses on that interface are private.
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		fatalf("listing network interfaces: %s", err)
-	}
-	var privateIPs, publicIPs []string
-	parseAddrIP := func(s string) net.IP {
-		if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
-			s = s[1 : len(s)-1]
-		}
-		ip, _, _ := net.ParseCIDR(s)
-		return ip
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			fatalf("listing address for network interface: %s", err)
-		}
-		if len(addrs) == 0 {
-			continue
-		}
+	resolver := dns.StrictResolver{}
+	// We don't want to spend too much total time on the DNS lookups. Because DNS may
+	// not work during quickstart, and we don't want to loop doing requests and having
+	// to wait for a timeout each time.
+	resolveCtx, resolveCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer resolveCancel()
 
-		// todo: should we detect temporary/ephemeral ipv6 addresses and not add them?
-		var nonpublic bool
-		for _, addr := range addrs {
-			ip := parseAddrIP(addr.String())
-			if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
-				continue
-			}
-			if ip.IsLoopback() || ip.IsPrivate() {
-				nonpublic = true
-				break
-			}
-		}
+	// We are going to find the (public) IPs to listen on and possibly the host name.
 
-		for _, addr := range addrs {
-			ip := parseAddrIP(addr.String())
-			if ip == nil {
-				continue
-			}
-			if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
-				continue
-			}
-			if nonpublic {
-				privateIPs = append(privateIPs, ip.String())
-			} else {
-				publicIPs = append(publicIPs, ip.String())
-			}
-		}
-	}
-
+	// Start with reasonable defaults. We'll replace them specific IPs, if we can find them.
 	publicListenerIPs := []string{"0.0.0.0", "::"}
 	privateListenerIPs := []string{"127.0.0.1", "::1"}
-	if len(publicIPs) > 0 {
-		publicListenerIPs = publicIPs
-	}
-	if len(privateIPs) > 0 {
-		privateListenerIPs = privateIPs
-	}
 
-	resolver := dns.StrictResolver{}
+	// If we find IPs based on network interfaces, {public,private}ListenerIPs are set
+	// based on these values.
+	var privateIPs, publicIPs []string
 
-	var hostname dns.Domain
-	hostnameStr, err := os.Hostname()
-	if err != nil {
-		fatalf("hostname: %s", err)
-	}
-	if strings.Contains(hostnameStr, ".") {
-		hostname, err = dns.ParseDomain(hostnameStr)
+	var dnshostname dns.Domain
+	if hostname == "" {
+		// Gather IP addresses for public and private listeners.
+		// If we cannot find addresses for a category we fallback to all ips or localhost ips.
+		// We look at each network interface. If an interface has a private address, we
+		// conservatively assume all addresses on that interface are private.
+		ifaces, err := net.Interfaces()
 		if err != nil {
-			fatalf("parsing hostname: %v", err)
+			fatalf("listing network interfaces: %s", err)
 		}
-	} else {
-		// It seems Linux machines don't have a single FQDN configured. E.g. /etc/hostname
-		// is just the name without domain. We'll look up the names for all IPs, and hope
-		// to find a single FQDN name (with at least 1 dot).
-		names := map[string]struct{}{}
-		if len(publicIPs) > 0 {
-			fmt.Printf("Trying to find hostname by reverse lookup of public IPs %s...", strings.Join(publicIPs, ", "))
-		}
-		var warned bool
-		warnf := func(format string, args ...any) {
-			warned = true
-			fmt.Printf("\n%s", fmt.Sprintf(format, args...))
-		}
-		for _, ip := range publicIPs {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			l, err := resolver.LookupAddr(ctx, ip)
-			if err != nil {
-				warnf("WARNING: looking up reverse name(s) for %s: %v", ip, err)
+		parseAddrIP := func(s string) net.IP {
+			if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
+				s = s[1 : len(s)-1]
 			}
-			for _, name := range l {
-				if strings.Contains(name, ".") {
-					names[name] = struct{}{}
+			ip, _, _ := net.ParseCIDR(s)
+			return ip
+		}
+		for _, iface := range ifaces {
+			if iface.Flags&net.FlagUp == 0 {
+				continue
+			}
+			addrs, err := iface.Addrs()
+			if err != nil {
+				fatalf("listing address for network interface: %s", err)
+			}
+			if len(addrs) == 0 {
+				continue
+			}
+
+			// todo: should we detect temporary/ephemeral ipv6 addresses and not add them?
+			var nonpublic bool
+			for _, addr := range addrs {
+				ip := parseAddrIP(addr.String())
+				if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
+					continue
+				}
+				if ip.IsLoopback() || ip.IsPrivate() {
+					nonpublic = true
+					break
+				}
+			}
+
+			for _, addr := range addrs {
+				ip := parseAddrIP(addr.String())
+				if ip == nil {
+					continue
+				}
+				if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
+					continue
+				}
+				if nonpublic {
+					privateIPs = append(privateIPs, ip.String())
+				} else {
+					publicIPs = append(publicIPs, ip.String())
 				}
 			}
 		}
-		var nameList []string
-		for k := range names {
-			nameList = append(nameList, strings.TrimRight(k, "."))
+
+		if len(publicIPs) > 0 {
+			publicListenerIPs = publicIPs
 		}
-		sort.Slice(nameList, func(i, j int) bool {
-			return nameList[i] < nameList[j]
-		})
-		if len(nameList) == 0 {
-			hostname, err = dns.ParseDomain(hostnameStr + "." + domain.Name())
+		if len(privateIPs) > 0 {
+			privateListenerIPs = privateIPs
+		}
+
+		hostnameStr, err := os.Hostname()
+		if err != nil {
+			fatalf("hostname: %s", err)
+		}
+		if strings.Contains(hostnameStr, ".") {
+			dnshostname, err = dns.ParseDomain(hostnameStr)
 			if err != nil {
-				fmt.Println()
 				fatalf("parsing hostname: %v", err)
 			}
-			warnf(`WARNING: cannot determine hostname because the system name is not an FQDN and
-no public IPs resolving to an FQDN were found. Quickstart will continue with the
-following hostname, please replace it in the suggested DNS records and config
-files if this is not correct:
-
-	%s
-`, hostname)
 		} else {
-			if len(nameList) > 1 {
-				warnf("WARNING: multiple hostnames found for the public IPs, using the first of: %s", strings.Join(nameList, ", "))
+			// It seems Linux machines don't have a single FQDN configured. E.g. /etc/hostname
+			// is just the name without domain. We'll look up the names for all IPs, and hope
+			// to find a single FQDN name (with at least 1 dot).
+			names := map[string]struct{}{}
+			if len(publicIPs) > 0 {
+				fmt.Printf("Trying to find hostname by reverse lookup of public IPs %s...", strings.Join(publicIPs, ", "))
 			}
-			hostname, err = dns.ParseDomain(nameList[0])
-			if err != nil {
-				fmt.Println()
-				fatalf("parsing hostname %s: %v", nameList[0], err)
+			var warned bool
+			warnf := func(format string, args ...any) {
+				warned = true
+				fmt.Printf("\n%s", fmt.Sprintf(format, args...))
+			}
+			for _, ip := range publicIPs {
+				revctx, revcancel := context.WithTimeout(resolveCtx, 5*time.Second)
+				defer revcancel()
+				l, err := resolver.LookupAddr(revctx, ip)
+				if err != nil {
+					warnf("WARNING: looking up reverse name(s) for %s: %v", ip, err)
+				}
+				for _, name := range l {
+					if strings.Contains(name, ".") {
+						names[name] = struct{}{}
+					}
+				}
+			}
+			var nameList []string
+			for k := range names {
+				nameList = append(nameList, strings.TrimRight(k, "."))
+			}
+			sort.Slice(nameList, func(i, j int) bool {
+				return nameList[i] < nameList[j]
+			})
+			if len(nameList) == 0 {
+				dnshostname, err = dns.ParseDomain(hostnameStr + "." + domain.Name())
+				if err != nil {
+					fmt.Println()
+					fatalf("parsing hostname: %v", err)
+				}
+				warnf(`WARNING: cannot determine hostname because the system name is not an FQDN and
+no public IPs resolving to an FQDN were found. Quickstart guessed the host name
+below. If it is not correct, please remove the generated config files and run
+quickstart again with the -hostname flag.
+
+		%s
+`, dnshostname)
+			} else {
+				if len(nameList) > 1 {
+					warnf(`WARNING: multiple hostnames found for the public IPs, using the first of: %s
+If this is not correct, remove the generated config files and run quickstart
+again with the -hostname flag.
+`, strings.Join(nameList, ", "))
+				}
+				dnshostname, err = dns.ParseDomain(nameList[0])
+				if err != nil {
+					fmt.Println()
+					fatalf("parsing hostname %s: %v", nameList[0], err)
+				}
+			}
+			if warned {
+				fmt.Printf("\n\n")
+			} else {
+				fmt.Printf(" found %s\n", dnshostname)
 			}
 		}
-		if warned {
-			fmt.Printf("\n\n")
-		} else {
-			fmt.Printf(" found %s\n", hostname)
+	} else {
+		// Host name was explicitly configured on command-line. We'll try to use its public
+		// IPs below.
+		var err error
+		dnshostname, err = dns.ParseDomain(hostname)
+		if err != nil {
+			fatalf("parsing hostname: %v", err)
 		}
 	}
 
 	// todo: lookup without going through /etc/hosts, because a machine typically has its name configured there, and LookupIPAddr will return it, but we care about DNS settings that the rest of the world uses to find us. perhaps we should check if the address resolves to 127.0.0.0/8?
-	fmt.Printf("Looking up IPs for hostname %s...", hostname)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	ips, err := resolver.LookupIPAddr(ctx, hostname.ASCII+".")
+	fmt.Printf("Looking up IPs for hostname %s...", dnshostname)
+	ipctx, ipcancel := context.WithTimeout(resolveCtx, 5*time.Second)
+	defer ipcancel()
+	ips, err := resolver.LookupIPAddr(ipctx, dnshostname.ASCII+".")
+	ipcancel()
 	var xips []net.IPAddr
+	var xipstrs []string
 	for _, ip := range ips {
 		// During linux install, you may get an alias for you full hostname in /etc/hosts
 		// resolving to 127.0.1.1, which would result in a false positive about the
@@ -281,12 +320,18 @@ files if this is not correct:
 		// otherwise know their FQDN.
 		if !ip.IP.IsLoopback() {
 			xips = append(xips, ip)
+			xipstrs = append(xipstrs, ip.String())
 		}
 	}
 	if err == nil && len(xips) == 0 {
 		err = errors.New("hostname not in dns, probably only in /etc/hosts")
 	}
 	ips = xips
+	if hostname != "" {
+		// Host name was specified, assume we will run on a machine with those IPs.
+		publicListenerIPs = xipstrs
+		publicIPs = xipstrs
+	}
 	if err != nil {
 		fmt.Printf(`
 
@@ -305,7 +350,7 @@ This likely means one of two things:
    your public IPs resolve back (reverse) to your hostname.
 
 
-`, hostname, err)
+`, dnshostname, err)
 	} else {
 		fmt.Printf(" OK\n")
 
@@ -320,7 +365,9 @@ This likely means one of two things:
 			s := ip.String()
 			l = append(l, s)
 			go func() {
-				addrs, err := resolver.LookupAddr(ctx, s)
+				revctx, revcancel := context.WithTimeout(resolveCtx, 5*time.Second)
+				defer revcancel()
+				addrs, err := resolver.LookupAddr(revctx, s)
 				results <- result{s, addrs, err}
 			}()
 		}
@@ -347,21 +394,61 @@ This likely means one of two things:
 				if err != nil {
 					warnf("parsing reverse name %q for %s: %v", a, r.IP, err)
 				}
-				if d == hostname {
+				if d == dnshostname {
 					match = true
 				}
 			}
 			if !match {
-				warnf("reverse name(s) %s for ip %s do not match hostname %s, which will cause other mail servers to reject incoming messages from this IP", strings.Join(r.Addrs, ","), r.IP, hostname)
+				warnf("reverse name(s) %s for ip %s do not match hostname %s, which will cause other mail servers to reject incoming messages from this IP", strings.Join(r.Addrs, ","), r.IP, dnshostname)
 			}
 		}
 		if warned {
-			fmt.Printf("\n\n\n")
+			fmt.Printf("\n\n")
 		} else {
-			fmt.Printf(" OK\n\n")
+			fmt.Printf(" OK\n")
 		}
 	}
-	cancel()
+
+	zones := []dns.Domain{
+		{ASCII: "sbl.spamhaus.org"},
+		{ASCII: "bl.spamcop.net"},
+	}
+	if len(publicIPs) > 0 {
+		fmt.Printf("Checking whether your public IPs are listed in popular DNS block lists...")
+		var listed bool
+		for _, zone := range zones {
+			for _, ip := range publicIPs {
+				dnsblctx, dnsblcancel := context.WithTimeout(resolveCtx, 5*time.Second)
+				status, expl, err := dnsbl.Lookup(dnsblctx, resolver, zone, net.ParseIP(ip))
+				dnsblcancel()
+				if status == dnsbl.StatusPass {
+					continue
+				}
+				errstr := ""
+				if err != nil {
+					errstr = fmt.Sprintf(" (%s)", err)
+				}
+				fmt.Printf("\nWARNING: checking your public IP %s in DNS block list %s: %v %s%s", ip, zone.Name(), status, expl, errstr)
+				listed = true
+			}
+		}
+		if listed {
+			log.Printf(`
+Other mail servers are likely to reject email from IPs that are in a blocklist.
+If all your IPs are in block lists, you will encounter problems delivering
+email. Your IP may be in block lists only temporarily. To see if your IPs are
+listed in more DNS block lists, visit:
+
+`)
+			for _, ip := range publicIPs {
+				fmt.Printf("- https://multirbl.valli.org/lookup/%s.html\n", url.PathEscape(ip))
+			}
+			fmt.Printf("\n")
+		} else {
+			fmt.Printf(" OK\n")
+		}
+	}
+	fmt.Printf("\n")
 
 	user := "mox"
 	if len(args) == 2 {
@@ -373,7 +460,7 @@ This likely means one of two things:
 		DataDir:           "../data",
 		User:              user,
 		LogLevel:          "debug", // Help new users, they'll bring it back to info when it all works.
-		Hostname:          hostname.Name(),
+		Hostname:          dnshostname.Name(),
 		AdminPasswordFile: "adminpasswd",
 	}
 	if !existingWebserver {
@@ -402,7 +489,7 @@ This likely means one of two things:
 	public.IMAPS.Enabled = true
 
 	if existingWebserver {
-		hostbase := fmt.Sprintf("path/to/%s", hostname.Name())
+		hostbase := fmt.Sprintf("path/to/%s", dnshostname.Name())
 		mtastsbase := fmt.Sprintf("path/to/mta-sts.%s", domain.Name())
 		autoconfigbase := fmt.Sprintf("path/to/autoconfig.%s", domain.Name())
 		public.TLS = &config.TLS{
@@ -423,7 +510,9 @@ This likely means one of two things:
 	}
 
 	// Suggest blocklists, but we'll comment them out after generating the config.
-	public.SMTP.DNSBLs = []string{"sbl.spamhaus.org", "bl.spamcop.net"}
+	for _, zone := range zones {
+		public.SMTP.DNSBLs = append(public.SMTP.DNSBLs, zone.Name())
+	}
 
 	internal := config.Listener{
 		IPs:      privateListenerIPs,
@@ -459,7 +548,7 @@ This likely means one of two things:
 
 	accountConf := mox.MakeAccountConfig(addr)
 	const withMTASTS = true
-	confDomain, keyPaths, err := mox.MakeDomainConfig(context.Background(), domain, hostname, username, withMTASTS)
+	confDomain, keyPaths, err := mox.MakeDomainConfig(context.Background(), domain, dnshostname, username, withMTASTS)
 	if err != nil {
 		fatalf("making domain config: %s", err)
 	}
@@ -592,7 +681,7 @@ The paths are relative to config/ directory that holds mox.conf! To test if your
 config is valid, run:
 
 	./mox config test
-`, domain.ASCII, domain.ASCII, hostname.ASCII)
+`, domain.ASCII, domain.ASCII, dnshostname.ASCII)
 	} else {
 		fmt.Printf(`
 Configuration files have been written to config/mox.conf and

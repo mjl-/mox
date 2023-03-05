@@ -4,6 +4,9 @@
 #	mkdir config data web
 # 	docker-compose run mox mox quickstart you@yourdomain.example $(id -u mox)
 #
+# note: if you are running quickstart on a different machine than you will deploy
+# mox to, use the "quickstart -hostname ..." flag.
+#
 # After following the quickstart instructions you can start mox:
 #
 # 	docker-compose up
