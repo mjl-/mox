@@ -8,6 +8,8 @@ FROM alpine:latest
 WORKDIR /mox
 COPY --from=build /build/mox /bin/mox
 
+RUN apk add --no-cache tzdata
+
 # SMTP for incoming message delivery.
 EXPOSE 25/tcp
 # SMTP/submission with TLS.
