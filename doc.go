@@ -50,6 +50,7 @@ low-maintenance self-hosted email.
 	mox dkim lookup selector domain
 	mox dkim txt <$selector._domainkey.$domain.key.pkcs8.pem
 	mox dkim verify message
+	mox dkim sign message
 	mox dmarc lookup domain
 	mox dmarc parsereportmsg message ...
 	mox dmarc verify remoteip mailfromaddress helodomain < message
@@ -502,6 +503,16 @@ by now, or because the signature header may have specified an expiration time
 that was passed.
 
 	usage: mox dkim verify message
+
+# mox dkim sign
+
+Sign a message, adding DKIM-Signature headers based on the domain in the From header.
+
+The message is parsed, the domain looked up in the configuration files, and
+DKIM-Signature headers generated. The message is printed with the DKIM-Signature
+headers prepended.
+
+	usage: mox dkim sign message
 
 # mox dmarc lookup
 

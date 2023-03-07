@@ -116,6 +116,7 @@ var commands = []struct {
 	{"dkim lookup", cmdDKIMLookup},
 	{"dkim txt", cmdDKIMTXT},
 	{"dkim verify", cmdDKIMVerify},
+	{"dkim sign", cmdDKIMSign},
 	{"dmarc lookup", cmdDMARCLookup},
 	{"dmarc parsereportmsg", cmdDMARCParsereportmsg},
 	{"dmarc verify", cmdDMARCVerify},
@@ -1270,6 +1271,51 @@ that was passed.
 		}
 		fmt.Printf("status %q, err %v\nrecord %q\nheader %s\n", result.Status, result.Err, txt, sigh)
 	}
+}
+
+func cmdDKIMSign(c *cmd) {
+	c.params = "message"
+	c.help = `Sign a message, adding DKIM-Signature headers based on the domain in the From header.
+
+The message is parsed, the domain looked up in the configuration files, and
+DKIM-Signature headers generated. The message is printed with the DKIM-Signature
+headers prepended.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	msgf, err := os.Open(args[0])
+	xcheckf(err, "open message")
+	defer msgf.Close()
+
+	p, err := message.Parse(msgf)
+	xcheckf(err, "parsing message")
+
+	if len(p.Envelope.From) != 1 {
+		log.Fatalf("found %d from headers, need exactly 1", len(p.Envelope.From))
+	}
+	localpart := smtp.Localpart(p.Envelope.From[0].User)
+	dom, err := dns.ParseDomain(p.Envelope.From[0].Host)
+	xcheckf(err, "parsing domain in from header")
+
+	mustLoadConfig()
+
+	domConf, ok := mox.Conf.Domain(dom)
+	if !ok {
+		log.Fatalf("domain %s not configured", dom)
+	}
+
+	headers, err := dkim.Sign(context.Background(), localpart, dom, domConf.DKIM, false, msgf)
+	xcheckf(err, "signing message with dkim")
+	if headers == "" {
+		log.Fatalf("no DKIM configured for domain %s", dom)
+	}
+	_, err = fmt.Fprint(os.Stdout, headers)
+	xcheckf(err, "write headers")
+	_, err = io.Copy(os.Stdout, msgf)
+	xcheckf(err, "write message")
 }
 
 func cmdDKIMLookup(c *cmd) {
