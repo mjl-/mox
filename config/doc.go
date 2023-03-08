@@ -570,10 +570,10 @@ describe-static" and "mox config describe-domains":
 
 	# Handle webserver requests by serving static files, redirecting or
 	# reverse-proxying HTTP(s). The first matching WebHandler will handle the request.
-	# Built-in handlers for autoconfig and mta-sts always run first. If no handler
-	# matches, the response status code is file not found (404). If functionality you
-	# need is missng, simply forward the requests to an application that can provide
-	# the needed functionality. (optional)
+	# Built-in handlers, e.g. for account, admin, autoconfig and mta-sts always run
+	# first. If no handler matches, the response status code is file not found (404).
+	# If functionality you need is missng, simply forward the requests to an
+	# application that can provide the needed functionality. (optional)
 	WebHandlers:
 		-
 
@@ -637,7 +637,10 @@ describe-static" and "mox config describe-domains":
 				# fragment stay intact, and query strings are combined. If empty, the response
 				# redirects to a different path through OrigPathRegexp and ReplacePath, which must
 				# then be set. Use a URL without scheme to redirect without changing the protocol,
-				# e.g. //newdomain/. (optional)
+				# e.g. //newdomain/. If a redirect would send a request to a URL with the same
+				# scheme, host and path, the WebRedirect does not match so a next WebHandler can
+				# be tried. This can be used to redirect all plain http traffic to https.
+				# (optional)
 				BaseURL:
 
 				# Regular expression for matching path. If set and path does not match, a 404 is
@@ -689,6 +692,20 @@ examples with "mox example", and print a specific example with "mox example
 
 	# Each request is matched against these handlers until one matches and serves it.
 	WebHandlers:
+		-
+			# Redirect all plain http requests to https, leaving path, query strings, etc
+			# intact. When the request is already to https, the destination URL would have the
+			# same scheme, host and path, causing this redirect handler to not match the
+			# request (and not cause a redirect loop) and the webserver to serve the request
+			# with a later handler.
+			LogName: redirhttps
+			Domain: www.mox.example
+			PathRegexp: ^/
+			# Could leave DontRedirectPlainHTTP at false if it wasn't for this being an
+			# example for doing this redirect.
+			DontRedirectPlainHTTP: true
+			WebRedirect:
+				BaseURL: https://www.mox.example
 		-
 			# The name of the handler, used in logging and metrics.
 			LogName: staticmjl

@@ -73,7 +73,7 @@ type Dynamic struct {
 	Domains            map[string]Domain  `sconf-doc:"Domains for which email is accepted. For internationalized domains, use their IDNA names in UTF-8."`
 	Accounts           map[string]Account `sconf-doc:"Accounts to which email can be delivered. An account can accept email for multiple domains, for multiple localparts, and deliver to multiple mailboxes."`
 	WebDomainRedirects map[string]string  `sconf:"optional" sconf-doc:"Redirect all requests from domain (key) to domain (value). Always redirects to HTTPS. For plain HTTP redirects, use a WebHandler with a WebRedirect."`
-	WebHandlers        []WebHandler       `sconf:"optional" sconf-doc:"Handle webserver requests by serving static files, redirecting or reverse-proxying HTTP(s). The first matching WebHandler will handle the request. Built-in handlers for autoconfig and mta-sts always run first. If no handler matches, the response status code is file not found (404). If functionality you need is missng, simply forward the requests to an application that can provide the needed functionality."`
+	WebHandlers        []WebHandler       `sconf:"optional" sconf-doc:"Handle webserver requests by serving static files, redirecting or reverse-proxying HTTP(s). The first matching WebHandler will handle the request. Built-in handlers, e.g. for account, admin, autoconfig and mta-sts always run first. If no handler matches, the response status code is file not found (404). If functionality you need is missng, simply forward the requests to an application that can provide the needed functionality."`
 
 	WebDNSDomainRedirects map[dns.Domain]dns.Domain `sconf:"-"`
 }
@@ -366,7 +366,7 @@ type WebStatic struct {
 }
 
 type WebRedirect struct {
-	BaseURL        string `sconf:"optional" sconf-doc:"Base URL to redirect to. The path must be empty and will be replaced, either by the request URL path, or by OrigPathRegexp/ReplacePath. Scheme, host, port and fragment stay intact, and query strings are combined. If empty, the response redirects to a different path through OrigPathRegexp and ReplacePath, which must then be set. Use a URL without scheme to redirect without changing the protocol, e.g. //newdomain/."`
+	BaseURL        string `sconf:"optional" sconf-doc:"Base URL to redirect to. The path must be empty and will be replaced, either by the request URL path, or by OrigPathRegexp/ReplacePath. Scheme, host, port and fragment stay intact, and query strings are combined. If empty, the response redirects to a different path through OrigPathRegexp and ReplacePath, which must then be set. Use a URL without scheme to redirect without changing the protocol, e.g. //newdomain/. If a redirect would send a request to a URL with the same scheme, host and path, the WebRedirect does not match so a next WebHandler can be tried. This can be used to redirect all plain http traffic to https."`
 	OrigPathRegexp string `sconf:"optional" sconf-doc:"Regular expression for matching path. If set and path does not match, a 404 is returned. The HTTP path used for matching always starts with a slash."`
 	ReplacePath    string `sconf:"optional" sconf-doc:"Replacement path for destination URL based on OrigPathRegexp. Implemented with Go's Regexp.ReplaceAllString: $1 is replaced with the text of the first submatch, etc. If both OrigPathRegexp and ReplacePath are empty, BaseURL must be set and all paths are redirected unaltered."`
 	StatusCode     int    `sconf:"optional" sconf-doc:"Status code to use in redirect, e.g. 307. By default, a permanent redirect (308) is returned."`

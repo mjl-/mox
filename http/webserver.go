@@ -341,6 +341,19 @@ func HandleRedirect(h *config.WebRedirect, w http.ResponseWriter, r *http.Reques
 	if h.StatusCode != 0 {
 		code = h.StatusCode
 	}
+
+	// If we would be redirecting to the same scheme,host,path, we would get here again
+	// causing a redirect loop. Instead, this causes this redirect to not match,
+	// allowing to try the next WebHandler. This can be used to redirect all plain http
+	// requests to https.
+	reqscheme := "http"
+	if r.TLS != nil {
+		reqscheme = "https"
+	}
+	if reqscheme == u.Scheme && r.Host == u.Host && r.URL.Path == u.Path {
+		return false
+	}
+
 	http.Redirect(w, r, u.String(), code)
 	return true
 }

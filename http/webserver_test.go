@@ -50,6 +50,10 @@ func TestWebserver(t *testing.T) {
 
 	test("GET", "http://redir.mox.example", nil, http.StatusPermanentRedirect, "", map[string]string{"Location": "https://mox.example/"})
 
+	// http to https redirect, and stay on https afterwards without redirect loop.
+	test("GET", "http://schemeredir.example", nil, http.StatusPermanentRedirect, "", map[string]string{"Location": "https://schemeredir.example/"})
+	test("GET", "https://schemeredir.example", nil, http.StatusNotFound, "", nil)
+
 	test("GET", "http://mox.example/static/", nil, http.StatusOK, "", map[string]string{"X-Test": "mox"})                              // index.html
 	test("GET", "http://mox.example/static/dir/", nil, http.StatusOK, "", map[string]string{"X-Test": "mox"})                          // listing
 	test("GET", "http://mox.example/static/dir", nil, http.StatusTemporaryRedirect, "", map[string]string{"Location": "/static/dir/"}) // redirect to dir

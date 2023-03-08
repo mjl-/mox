@@ -777,6 +777,20 @@ WebDomainRedirects:
 # Each request is matched against these handlers until one matches and serves it.
 WebHandlers:
 	-
+		# Redirect all plain http requests to https, leaving path, query strings, etc
+		# intact. When the request is already to https, the destination URL would have the
+		# same scheme, host and path, causing this redirect handler to not match the
+		# request (and not cause a redirect loop) and the webserver to serve the request
+		# with a later handler.
+		LogName: redirhttps
+		Domain: www.mox.example
+		PathRegexp: ^/
+		# Could leave DontRedirectPlainHTTP at false if it wasn't for this being an
+		# example for doing this redirect.
+		DontRedirectPlainHTTP: true
+		WebRedirect:
+			BaseURL: https://www.mox.example
+	-
 		# The name of the handler, used in logging and metrics.
 		LogName: staticmjl
 		# With ACME configured, each configured domain will automatically get a TLS
