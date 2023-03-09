@@ -235,10 +235,13 @@ through a DNS TXT request for `_updates.xmox.nl` once per 24h. Only if a new
 version is published will the changelog be fetched and delivered to the
 postmaster mailbox.
 
-The changelog is at https://updates.xmox.nl/changelog.
+The changelog, including latest update instructions, is at
+https://updates.xmox.nl/changelog.
 
-You could also monitor newly added tags on this repository, or for the docker
-image, but update instructions are in the changelog.
+You can also monitor newly added releases on this repository with the github
+"watch" feature, or use the github RSS feed for tags
+(https://github.com/mjl-/mox/tags.atom) or releases
+(https://github.com/mjl-/mox/releases.atom), or monitor the docker images.
 
 Keep in mind you have a responsibility to keep the internect-connected software
 you run up to date and secure.
