@@ -102,11 +102,17 @@ func (a Address) IsZero() bool {
 // formatted with non-ASCII characters. If localpart has non-ASCII characters,
 // they are returned regardless of smtputf8.
 func (a Address) Pack(smtputf8 bool) string {
+	if a.IsZero() {
+		return ""
+	}
 	return a.Localpart.String() + "@" + a.Domain.XName(smtputf8)
 }
 
 // String returns the address in string form with non-ASCII characters.
 func (a Address) String() string {
+	if a.IsZero() {
+		return ""
+	}
 	return a.Localpart.String() + "@" + a.Domain.Name()
 }
 

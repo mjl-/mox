@@ -2193,7 +2193,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				}
 			}
 
-			log.Info("incoming message rejected", mlog.Field("reason", a.reason))
+			log.Info("incoming message rejected", mlog.Field("reason", a.reason), mlog.Field("msgfrom", msgFrom))
 			metricDelivery.WithLabelValues("reject", a.reason).Inc()
 			c.setSlow(true)
 			addError(rcptAcc, a.code, a.secode, a.userError, a.errmsg)
