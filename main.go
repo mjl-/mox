@@ -1442,7 +1442,7 @@ can be found in message headers.
 			} else {
 				spfIdentity = heloDomain
 			}
-			fmt.Printf("spf result: %q: %q\n", spfDomain, spfStatus)
+			fmt.Printf("spf result: %s: %s\n", spfDomain, spfStatus)
 		}
 	}
 

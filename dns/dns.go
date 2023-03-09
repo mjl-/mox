@@ -56,6 +56,12 @@ func (d Domain) ASCIIExtra(smtputf8 bool) string {
 // Strings returns a human-readable string.
 // For IDNA names, the string contains both the unicode and ASCII name.
 func (d Domain) String() string {
+	return d.LogString()
+}
+
+// LogString returns a domain for logging.
+// For IDNA names, the string contains both the unicode and ASCII name.
+func (d Domain) LogString() string {
 	if d.Unicode == "" {
 		return d.ASCII
 	}

@@ -695,14 +695,14 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		if err != nil {
 			addErrorf("bad domain %q: %s", d, err)
 		} else if dnsdomain.Name() != d {
-			addErrorf("domain %q must be specified in IDNA form, %q", d, dnsdomain.Name())
+			addErrorf("domain %s must be specified in IDNA form, %s", d, dnsdomain.Name())
 		}
 
 		domain.Domain = dnsdomain
 
 		for _, sign := range domain.DKIM.Sign {
 			if _, ok := domain.DKIM.Selectors[sign]; !ok {
-				addErrorf("selector %q for signing is missing in domain %q", sign, d)
+				addErrorf("selector %s for signing is missing in domain %s", sign, d)
 			}
 		}
 		for name, sel := range domain.DKIM.Selectors {
@@ -731,22 +731,22 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 				log.Error("using sha1 with DKIM is deprecated as not secure enough, switch to sha256")
 			case "sha256":
 			default:
-				addErrorf("unsupported hash %q for selector %q in domain %q", sel.HashEffective, name, d)
+				addErrorf("unsupported hash %q for selector %q in domain %s", sel.HashEffective, name, d)
 			}
 
 			pemBuf, err := os.ReadFile(configDirPath(dynamicPath, sel.PrivateKeyFile))
 			if err != nil {
-				addErrorf("reading private key for selector %q in domain %q: %s", name, d, err)
+				addErrorf("reading private key for selector %s in domain %s: %s", name, d, err)
 				continue
 			}
 			p, _ := pem.Decode(pemBuf)
 			if p == nil {
-				addErrorf("private key for selector %q in domain %q has no PEM block", name, d)
+				addErrorf("private key for selector %s in domain %s has no PEM block", name, d)
 				continue
 			}
 			key, err := x509.ParsePKCS8PrivateKey(p.Bytes)
 			if err != nil {
-				addErrorf("parsing private key for selector %q in domain %q: %s", name, d, err)
+				addErrorf("parsing private key for selector %s in domain %s: %s", name, d, err)
 				continue
 			}
 			switch k := key.(type) {
@@ -763,7 +763,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 				}
 				sel.Key = k
 			default:
-				addErrorf("private key type %T not yet supported, at selector %q in domain %q", key, name, d)
+				addErrorf("private key type %T not yet supported, at selector %s in domain %s", key, name, d)
 			}
 
 			if len(sel.Headers) == 0 {
@@ -816,7 +816,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		var err error
 		acc.DNSDomain, err = dns.ParseDomain(acc.Domain)
 		if err != nil {
-			addErrorf("parsing domain %q for account %q: %s", acc.Domain, accName, err)
+			addErrorf("parsing domain %s for account %q: %s", acc.Domain, accName, err)
 		}
 
 		if strings.EqualFold(acc.RejectsMailbox, "Inbox") {
@@ -924,7 +924,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 				}
 				address = smtp.NewAddress(localpart, acc.DNSDomain)
 				if _, ok := c.Domains[acc.DNSDomain.Name()]; !ok {
-					addErrorf("unknown domain %q for account %q", acc.DNSDomain.Name(), accName)
+					addErrorf("unknown domain %s for account %q", acc.DNSDomain.Name(), accName)
 					continue
 				}
 			}

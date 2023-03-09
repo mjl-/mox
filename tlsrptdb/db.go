@@ -133,7 +133,7 @@ func AddReport(ctx context.Context, verifiedFromDomain dns.Domain, mailFrom stri
 			return fmt.Errorf("unknown domain")
 		}
 		if reportdom != zerodom && d != reportdom {
-			return fmt.Errorf("multiple domains in report %v and %v", reportdom, d)
+			return fmt.Errorf("multiple domains in report %s and %s", reportdom, d)
 		}
 		reportdom = d
 

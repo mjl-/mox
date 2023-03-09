@@ -3,6 +3,7 @@ package smtp
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/mjl-/mox/dns"
@@ -51,6 +52,17 @@ func (lp Localpart) String() string {
 	}
 	r += `"`
 	return r
+}
+
+// LogString returns the localpart as string for use in smtp, and an escaped
+// representation if it has non-ascii characters.
+func (lp Localpart) LogString() string {
+	s := lp.String()
+	qs := strconv.QuoteToASCII(s)
+	if qs != `"`+s+`"` {
+		s = "/" + qs
+	}
+	return s
 }
 
 // DSNString returns the localpart as string for use in a DSN.
@@ -114,6 +126,26 @@ func (a Address) String() string {
 		return ""
 	}
 	return a.Localpart.String() + "@" + a.Domain.Name()
+}
+
+// LogString returns the address with with utf-8 in localpart and/or domain. In
+// case of an IDNA domain and/or quotable characters in the localpart, an address
+// with quoted/escaped localpart and ASCII domain is also returned.
+func (a Address) LogString() string {
+	if a.IsZero() {
+		return ""
+	}
+	s := a.Pack(true)
+	lp := a.Localpart.String()
+	qlp := strconv.QuoteToASCII(lp)
+	escaped := qlp != `"`+lp+`"`
+	if a.Domain.Unicode != "" || escaped {
+		if escaped {
+			lp = qlp
+		}
+		s += "/" + lp + "@" + a.Domain.ASCII
+	}
+	return s
 }
 
 // ParseAddress parses an email address. UTF-8 is allowed.

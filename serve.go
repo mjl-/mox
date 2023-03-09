@@ -107,7 +107,7 @@ func monitorDNSBL(log *mlog.Log) {
 							Name: "mox_dnsbl_ips_success",
 							Help: "DNSBL lookups to configured DNSBLs of our IPs.",
 							ConstLabels: prometheus.Labels{
-								"zone": zone.String(),
+								"zone": zone.LogString(),
 								"ip":   k.ip,
 							},
 						},

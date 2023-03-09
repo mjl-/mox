@@ -24,6 +24,15 @@ func (d IPDomain) String() string {
 	return d.Domain.Name()
 }
 
+// LogString returns a string with both ASCII-only and optional UTF-8
+// representation.
+func (d IPDomain) LogString() string {
+	if len(d.IP) > 0 {
+		return d.IP.String()
+	}
+	return d.Domain.LogString()
+}
+
 // XString is like String, but only returns UTF-8 domains if utf8 is true.
 func (d IPDomain) XString(utf8 bool) string {
 	if d.IsIP() {

@@ -511,7 +511,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 		mxs, err := resolver.LookupMX(ctx, domain.ASCII+".")
 		if err != nil {
-			addf(&r.MX.Errors, "Looking up MX records for %q: %s", domain, err)
+			addf(&r.MX.Errors, "Looking up MX records for %s: %s", domain, err)
 		}
 		r.MX.Records = make([]MX, len(mxs))
 		for i, mx := range mxs {
@@ -1397,7 +1397,7 @@ func dnsblsStatus(ctx context.Context, resolver dns.Resolver) map[string]map[str
 			if expl != "" {
 				result += ": " + expl
 			}
-			r[ipstr][zone.String()] = result
+			r[ipstr][zone.LogString()] = result
 		}
 	}
 	return r

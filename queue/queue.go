@@ -551,7 +551,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 
 		// ../rfc/8461:913
 		if policy != nil && policy.Mode == mtasts.ModeEnforce && !policy.Matches(h.Domain) {
-			errmsg = fmt.Sprintf("mx host %v does not match enforced mta-sts policy", h.Domain)
+			errmsg = fmt.Sprintf("mx host %s does not match enforced mta-sts policy", h.Domain)
 			qlog.Error("mx host does not match enforce mta-sts policy, skipping", mlog.Field("host", h.Domain))
 			continue
 		}
@@ -665,9 +665,9 @@ func gatherHosts(resolver dns.Resolver, m Msg, cid int64, qlog *mlog.Log) (hosts
 			_, err = resolver.LookupHost(ctx, effectiveDomain.ASCII+".")
 			cancel()
 			if dns.IsNotFound(err) {
-				return nil, effectiveDomain, true, fmt.Errorf("%w: recipient domain/host %v", errNoRecord, effectiveDomain)
+				return nil, effectiveDomain, true, fmt.Errorf("%w: recipient domain/host %s", errNoRecord, effectiveDomain)
 			} else if err != nil {
-				return nil, effectiveDomain, false, fmt.Errorf("%w: looking up host %v because of no mx record: %v", errDNS, effectiveDomain, err)
+				return nil, effectiveDomain, false, fmt.Errorf("%w: looking up host %s because of no mx record: %v", errDNS, effectiveDomain, err)
 			}
 			hosts = []dns.IPDomain{{Domain: effectiveDomain}}
 		} else if err != nil {

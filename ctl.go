@@ -397,7 +397,7 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 			if qm.LastAttempt != nil {
 				lastAttempt = time.Since(*qm.LastAttempt).Round(time.Second).String()
 			}
-			fmt.Fprintf(xw, "%5d %s from:%s@%s to:%s@%s next %s last %s error %q\n", qm.ID, qm.Queued.Format(time.RFC3339), qm.SenderLocalpart, qm.SenderDomain, qm.RecipientLocalpart, qm.RecipientDomain, -time.Since(qm.NextAttempt).Round(time.Second), lastAttempt, qm.LastError)
+			fmt.Fprintf(xw, "%5d %s from:%s to:%s next %s last %s error %q\n", qm.ID, qm.Queued.Format(time.RFC3339), qm.Sender().LogString(), qm.Recipient().LogString(), -time.Since(qm.NextAttempt).Round(time.Second), lastAttempt, qm.LastError)
 		}
 		if len(qmsgs) == 0 {
 			fmt.Fprint(xw, "(empty)\n")

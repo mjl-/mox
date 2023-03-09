@@ -1,6 +1,7 @@
 package smtp
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/mjl-/mox/dns"
@@ -20,6 +21,24 @@ func (p Path) IsZero() bool {
 // String returns a string representation with ASCII-only domain name.
 func (p Path) String() string {
 	return p.XString(false)
+}
+
+// LogString returns both the ASCII-only and optional UTF-8 representation.
+func (p Path) LogString() string {
+	if p.Localpart == "" && p.IPDomain.IsZero() {
+		return ""
+	}
+	s := p.XString(true)
+	lp := p.Localpart.String()
+	qlp := strconv.QuoteToASCII(lp)
+	escaped := qlp != `"`+lp+`"`
+	if p.IPDomain.Domain.Unicode != "" || escaped {
+		if escaped {
+			lp = qlp
+		}
+		s += "/" + lp + "@" + p.IPDomain.XString(false)
+	}
+	return s
 }
 
 // XString is like String, but returns unicode UTF-8 domain names if utf8 is

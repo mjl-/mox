@@ -75,6 +75,12 @@ const (
 	LevelTracedata Level = 7
 )
 
+// LogStringer is used when formatting field values during logging. If a value
+// implements it, LogString is called for the value to log.
+type LogStringer interface {
+	LogString() string
+}
+
 // Holds a map[string]Level, mapping a package (field pkg in logs) to a log level.
 // The empty string is the default/fallback log level.
 var config atomic.Value
@@ -262,6 +268,9 @@ func stringValue(iscid, nested bool, v any) string {
 		return ""
 	}
 
+	if r, ok := v.(LogStringer); ok {
+		return r.LogString()
+	}
 	if r, ok := v.(fmt.Stringer); ok {
 		return r.String()
 	}
