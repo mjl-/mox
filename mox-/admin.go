@@ -870,6 +870,10 @@ func IPs(ctx context.Context) ([]net.IP, error) {
 	var ips []net.IP
 	var ipv4all, ipv6all bool
 	for _, l := range Conf.Static.Listeners {
+		// If NATed, we don't know our external IPs.
+		if l.IPsNATed {
+			return nil, nil
+		}
 		for _, s := range l.IPs {
 			ip := net.ParseIP(s)
 			if ip.IsUnspecified() {

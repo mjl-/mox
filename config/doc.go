@@ -101,6 +101,11 @@ describe-static" and "mox config describe-domains":
 			IPs:
 				-
 
+			# Set this if the specified IPs are not the public IPs, but are NATed. This makes
+			# the DNS check skip a few checks related to IPs, such as for iprev, mx, spf,
+			# autoconfig, autodiscover. (optional)
+			IPsNATed: false
+
 			# If empty, the config global Hostname is used. (optional)
 			Hostname:
 

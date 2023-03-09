@@ -416,6 +416,16 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		}
 	}
 
+	// If at least one listener with SMTP enabled has specified NATed IPs, we'll skip
+	// some checks related to these IPs.
+	var isNAT bool
+	for _, l := range mox.Conf.Static.Listeners {
+		if l.IPsNATed && l.SMTP.Enabled {
+			isNAT = true
+			break
+		}
+	}
+
 	var wg sync.WaitGroup
 
 	// IPRev
@@ -431,14 +441,16 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		if err != nil {
 			addf(&r.IPRev.Errors, "Looking up IPs for hostname: %s", err)
 		}
-	nextip:
-		for _, ip := range mox.Conf.Static.SpecifiedSMTPListenIPs {
-			for _, xip := range ips {
-				if ip.Equal(xip) {
-					continue nextip
+		if !isNAT {
+		nextip:
+			for _, ip := range mox.Conf.Static.SpecifiedSMTPListenIPs {
+				for _, xip := range ips {
+					if ip.Equal(xip) {
+						continue nextip
+					}
 				}
+				ips = append(ips, ip)
 			}
-			ips = append(ips, ip)
 		}
 
 		type result struct {
@@ -512,9 +524,12 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		for i, mx := range mxs {
 			ips, ourIPs, notOurIPs, err := lookupIPs(&r.MX.Errors, mx.Host)
 			if err != nil {
-				addf(&r.MX.Errors, "Looking up IP addresses for mx host %q: %s", mx.Host, err)
+				addf(&r.MX.Errors, "Looking up IPs for mx host %q: %s", mx.Host, err)
 			}
 			r.MX.Records[i].IPs = ips
+			if isNAT {
+				continue
+			}
 			if len(ourIPs) == 0 {
 				addf(&r.MX.Errors, "None of the IPs that mx %q points to is ours: %v", mx.Host, notOurIPs)
 			} else if len(notOurIPs) > 0 {
@@ -643,7 +658,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 				Version: "spf1",
 			}
 			for _, l := range mox.Conf.Static.Listeners {
-				if !l.SMTP.Enabled {
+				if !l.SMTP.Enabled || l.IPsNATed {
 					continue
 				}
 				for _, ipstr := range l.IPs {
@@ -668,9 +683,9 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 					}
 					status, mechanism, expl, err := spf.Evaluate(ctx, record, resolver, args)
 					if err != nil {
-						addf(&r.SPF.Errors, "Evaluating IP address %q against %s SPF record: %s", ip, kind, err)
+						addf(&r.SPF.Errors, "Evaluating IP %q against %s SPF record: %s", ip, kind, err)
 					} else if status != spf.StatusPass {
-						addf(&r.SPF.Errors, "IP address %q does not pass %s SPF evaluation, status not \"pass\" but %q (mechanism %q, explanation %q)", ip, kind, status, mechanism, expl)
+						addf(&r.SPF.Errors, "IP %q does not pass %s SPF evaluation, status not \"pass\" but %q (mechanism %q, explanation %q)", ip, kind, status, mechanism, expl)
 					}
 				}
 			}
@@ -1001,7 +1016,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		r.SRVConf.SRVs = map[string][]*net.SRV{}
 		for _, req := range reqs {
 			name := req.name + "_.tcp." + domain.ASCII
-			instr += fmt.Sprintf("\t%s._tcp.%s IN SRV 0 1 %d %s\n", req.name, domain.ASCII+".", req.port, req.host)
+			instr += fmt.Sprintf("\t%s._tcp.%-*s IN SRV 0 1 %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", req.port, req.host)
 			r.SRVConf.SRVs[req.name] = req.srvs
 			if err != nil {
 				addf(&r.SRVConf.Errors, "Looking up SRV record %q: %s", name, err)
@@ -1030,10 +1045,12 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		}
 
 		r.Autoconf.IPs = ips
-		if len(ourIPs) == 0 {
-			addf(&r.Autoconf.Errors, "Autoconfig does not point to one of our IP addresses.")
-		} else if len(notOurIPs) > 0 {
-			addf(&r.Autoconf.Errors, "Autoconfig does not point to some IP addresses that are not ours: %v", notOurIPs)
+		if !isNAT {
+			if len(ourIPs) == 0 {
+				addf(&r.Autoconf.Errors, "Autoconfig does not point to one of our IPs.")
+			} else if len(notOurIPs) > 0 {
+				addf(&r.Autoconf.Errors, "Autoconfig points to some IPs that are not ours: %v", notOurIPs)
+			}
 		}
 
 		checkTLS(&r.Autoconf.Errors, "autoconfig."+domain.ASCII, ips, "443")
@@ -1064,10 +1081,12 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 			}
 			match = true
 			r.Autodiscover.Records = append(r.Autodiscover.Records, AutodiscoverSRV{*srv, ips})
-			if len(ourIPs) == 0 {
-				addf(&r.Autodiscover.Errors, "SRV target %q does not point to our IPs.", srv.Target)
-			} else if len(notOurIPs) > 0 {
-				addf(&r.Autodiscover.Errors, "SRV target %q points to some IPs that are not ours: %v", srv.Target, notOurIPs)
+			if !isNAT {
+				if len(ourIPs) == 0 {
+					addf(&r.Autodiscover.Errors, "SRV target %q does not point to our IPs.", srv.Target)
+				} else if len(notOurIPs) > 0 {
+					addf(&r.Autodiscover.Errors, "SRV target %q points to some IPs that are not ours: %v", srv.Target, notOurIPs)
+				}
 			}
 
 			checkTLS(&r.Autodiscover.Errors, strings.TrimSuffix(srv.Target, "."), ips, "443")
