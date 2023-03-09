@@ -847,6 +847,9 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		}
 		c.Accounts[accName] = acc
 
+		// todo deprecated: only localpart as keys for Destinations, we are replacing them with full addresses. if domains.conf is written, we won't have to do this again.
+		replaceLocalparts := map[string]string{}
+
 		for addrName, dest := range acc.Destinations {
 			checkMailboxNormf(dest.Mailbox, "account %q, destination %q", accName, addrName)
 
@@ -906,6 +909,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 				}
 			}
 
+			// todo deprecated: remove support for parsing destination as just a localpart instead full address.
 			var address smtp.Address
 			localpart, err := smtp.ParseLocalpart(addrName)
 			if err != nil && errors.Is(err, smtp.ErrBadLocalpart) {
@@ -927,12 +931,24 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 					addErrorf("unknown domain %s for account %q", acc.DNSDomain.Name(), accName)
 					continue
 				}
+				replaceLocalparts[addrName] = address.Pack(true)
 			}
 			addrFull := address.Pack(true)
 			if _, ok := accDests[addrFull]; ok {
 				addErrorf("duplicate destination address %q", addrFull)
 			}
 			accDests[addrFull] = AccountDestination{address.Localpart, accName, dest}
+		}
+
+		for lp, addr := range replaceLocalparts {
+			dest, ok := acc.Destinations[lp]
+			if !ok {
+				addErrorf("could not find localpart %q to replace with address in destinations", lp)
+			} else {
+				log.Error("deprecated: destination with localpart-only key will be removed in the future, replace it with a full email address, by appending the default domain", mlog.Field("localpart", lp), mlog.Field("address", addr), mlog.Field("account", accName))
+				acc.Destinations[addr] = dest
+				delete(acc.Destinations, lp)
+			}
 		}
 	}
 

@@ -125,16 +125,16 @@ webhandlers".
 	if err != nil {
 		fatalf("parsing email address: %s", err)
 	}
-	username := addr.Localpart.String()
+	accountName := addr.Localpart.String()
 	domain := addr.Domain
 
-	for _, c := range username {
+	for _, c := range accountName {
 		if c > 0x7f {
 			fmt.Printf(`NOTE: Username %q is not ASCII-only. It is recommended you also configure an
 ASCII-only alias. Both for delivery of email from other systems, and for
 logging in with IMAP.
 
-`, username)
+`, accountName)
 			break
 		}
 	}
@@ -538,7 +538,7 @@ listed in more DNS block lists, visit:
 		"public":   public,
 		"internal": internal,
 	}
-	sc.Postmaster.Account = username
+	sc.Postmaster.Account = accountName
 	sc.Postmaster.Mailbox = "Postmaster"
 
 	mox.ConfigStaticPath = "config/mox.conf"
@@ -548,7 +548,7 @@ listed in more DNS block lists, visit:
 
 	accountConf := mox.MakeAccountConfig(addr)
 	const withMTASTS = true
-	confDomain, keyPaths, err := mox.MakeDomainConfig(context.Background(), domain, dnshostname, username, withMTASTS)
+	confDomain, keyPaths, err := mox.MakeDomainConfig(context.Background(), domain, dnshostname, accountName, withMTASTS)
 	if err != nil {
 		fatalf("making domain config: %s", err)
 	}
@@ -558,7 +558,7 @@ listed in more DNS block lists, visit:
 		domain.Name(): confDomain,
 	}
 	dc.Accounts = map[string]config.Account{
-		username: accountConf,
+		accountName: accountConf,
 	}
 
 	// Build config in memory, so we can easily comment out the DNSBLs config.
@@ -584,12 +584,12 @@ listed in more DNS block lists, visit:
 	// This approach is a bit horrible, but it generates a convenient
 	// example that includes the comments. Though it is gone by the first
 	// write of the file by mox.
-	odests := fmt.Sprintf("\t\tDestinations:\n\t\t\t%s: nil\n", addr.Localpart.String())
+	odests := fmt.Sprintf("\t\tDestinations:\n\t\t\t%s: nil\n", addr.String())
 	var destsExample = struct {
 		Destinations map[string]config.Destination
 	}{
 		Destinations: map[string]config.Destination{
-			addr.Localpart.String(): {
+			addr.String(): {
 				Rulesets: []config.Ruleset{
 					{
 						VerifiedDomain: "list.example.org",
@@ -641,7 +641,7 @@ listed in more DNS block lists, visit:
 	if err != nil {
 		fatalf("open account: %s", err)
 	}
-	cleanupPaths = append(cleanupPaths, dataDir, filepath.Join(dataDir, "accounts"), filepath.Join(dataDir, "accounts", username), filepath.Join(dataDir, "accounts", username, "index.db"))
+	cleanupPaths = append(cleanupPaths, dataDir, filepath.Join(dataDir, "accounts"), filepath.Join(dataDir, "accounts", accountName), filepath.Join(dataDir, "accounts", accountName, "index.db"))
 
 	password := pwgen()
 	if err := acc.SetPassword(password); err != nil {

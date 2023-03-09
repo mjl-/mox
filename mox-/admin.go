@@ -115,7 +115,7 @@ func MakeAccountConfig(addr smtp.Address) config.Account {
 	account := config.Account{
 		Domain: addr.Domain.Name(),
 		Destinations: map[string]config.Destination{
-			addr.Localpart.String(): {},
+			addr.String(): {},
 		},
 		RejectsMailbox: "Rejects",
 		JunkFilter: &config.JunkFilter{
@@ -676,13 +676,7 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 	for name, d := range a.Destinations {
 		nd[name] = d
 	}
-	var k string
-	if addr.Domain == a.DNSDomain {
-		k = addr.Localpart.String()
-	} else {
-		k = addr.String()
-	}
-	nd[k] = config.Destination{}
+	nd[addr.String()] = config.Destination{}
 	a.Destinations = nd
 	nc.Accounts[account] = a
 
@@ -727,6 +721,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	na.Destinations = map[string]config.Destination{}
 	var dropped bool
 	for name, d := range a.Destinations {
+		// todo deprecated: remove support for localpart-only with default domain as destination address.
 		if !(name == addr.Localpart.String() && a.DNSDomain == addr.Domain || name == addrStr) {
 			na.Destinations[name] = d
 		} else {

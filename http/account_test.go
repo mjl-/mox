@@ -67,7 +67,7 @@ func TestAccount(t *testing.T) {
 	test(authBad, "")
 
 	_, dests := Account{}.Destinations(authCtx)
-	Account{}.DestinationSave(authCtx, "mjl", dests["mjl"], dests["mjl"]) // todo: save modified value and compare it afterwards
+	Account{}.DestinationSave(authCtx, "mjl@mox.example", dests["mjl@mox.example"], dests["mjl@mox.example"]) // todo: save modified value and compare it afterwards
 
 	go importManage()
 

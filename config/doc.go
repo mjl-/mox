@@ -436,15 +436,16 @@ describe-static" and "mox config describe-domains":
 	Accounts:
 		x:
 
-			# Default domain for addresses specified in Destinations. An address can specify a
-			# domain override.
+			# Default domain for account. Deprecated behaviour: If a destination is not a full
+			# address but only a localpart, this domain is added to form a full address.
 			Domain:
 
 			# Free form description, e.g. full name or alternative contact info. (optional)
 			Description:
 
-			# Destinations, specified as (encoded) localpart for Domain, or a full address
-			# including domain override.
+			# Destinations, keys are email addresses (with IDNA domains). Deprecated
+			# behaviour: If the address is not a full address but a localpart, it is combined
+			# with Domain to form a full address.
 			Destinations:
 				x:
 
