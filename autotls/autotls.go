@@ -2,11 +2,9 @@
 // requesting certificates with ACME, typically from Let's Encrypt.
 package autotls
 
-// We only do tls-alpn-01. For http-01, we would have to start another
-// listener. For DNS we would need a third party tool with an API that can make
-// the DNS changes, as we don't want to link in dozens of bespoke API's for DNS
-// record manipulation into mox. We can do http-01 relatively easily. It could
-// be useful to not depend on a single mechanism.
+// We do tls-alpn-01, and also http-01. For DNS we would need a third party tool
+// with an API that can make the DNS changes, as we don't want to link in dozens of
+// bespoke API's for DNS record manipulation into mox.
 
 import (
 	"bytes"
@@ -270,6 +268,12 @@ func (m *Manager) HostPolicy(ctx context.Context, host string) (rerr error) {
 	case <-m.shutdown:
 		return fmt.Errorf("shutting down")
 	default:
+	}
+
+	xhost, _, err := net.SplitHostPort(host)
+	if err == nil {
+		// For http-01, host may include a port number.
+		host = xhost
 	}
 
 	d, err := dns.ParseDomain(host)

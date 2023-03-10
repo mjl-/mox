@@ -189,7 +189,7 @@ type pathHandler struct {
 	Handle    http.HandlerFunc
 }
 type serve struct {
-	Kinds        []string // Type of handler and protocol (http/https).
+	Kinds        []string // Type of handler and protocol (e.g. acme-tls-alpn-01, account-http, admin-https).
 	TLSConfig    *tls.Config
 	PathHandlers []pathHandler // Sorted, longest first.
 	Webserver    bool          // Whether serving WebHandler. PathHandlers are always evaluated before WebHandlers.
@@ -319,7 +319,7 @@ func Listen() {
 
 		if l.TLS != nil && l.TLS.ACME != "" && (l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.IMAPS.Enabled) {
 			port := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
-			ensureServe(true, port, "acme-tls-alpn01")
+			ensureServe(true, port, "acme-tls-alpn-01")
 		}
 
 		if l.AccountHTTP.Enabled {
@@ -405,15 +405,15 @@ func Listen() {
 			srv.Webserver = true
 		}
 
-		// We'll explicitly ensure these TLS certs exist (e.g. are created with ACME)
-		// immediately after startup. We only do so for our explicit listener hostnames,
-		// not for mta-sts DNS records, it can be requested on demand (perhaps never). We
-		// do request autoconfig, otherwise clients may run into their timeouts waiting for
-		// the certificate to be given during the first https connection.
-		ensureManagerHosts = map[*autotls.Manager]map[dns.Domain]struct{}{}
-
 		if l.TLS != nil && l.TLS.ACME != "" {
 			m := mox.Conf.Static.ACME[l.TLS.ACME].Manager
+
+			// If we are listening on port 80 for plain http, also register acme http-01
+			// validation handler.
+			if srv, ok := portServe[80]; ok && srv.TLSConfig == nil {
+				srv.Kinds = append(srv.Kinds, "acme-http-01")
+				srv.HandleFunc("acme-http-01", nil, "/.well-known/acme-challenge/", m.Manager.HTTPHandler(nil).ServeHTTP)
+			}
 
 			hosts := map[dns.Domain]struct{}{
 				mox.Conf.Static.HostnameDomain: {},
@@ -467,7 +467,13 @@ func adminIndex(w http.ResponseWriter, r *http.Request) {
 
 // functions to be launched in goroutine that will serve on a listener.
 var servers []func()
-var ensureManagerHosts map[*autotls.Manager]map[dns.Domain]struct{}
+
+// We'll explicitly ensure these TLS certs exist (e.g. are created with ACME)
+// immediately after startup. We only do so for our explicit listener hostnames,
+// not for mta-sts DNS records, it can be requested on demand (perhaps never). We
+// do request autoconfig, otherwise clients may run into their timeouts waiting for
+// the certificate to be given during the first https connection.
+var ensureManagerHosts = map[*autotls.Manager]map[dns.Domain]struct{}{}
 
 // listen prepares a listener, and adds it to "servers", to be launched (if not running as root) through Serve.
 func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, handler http.Handler) {

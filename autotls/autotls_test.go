@@ -36,6 +36,9 @@ func TestAutotls(t *testing.T) {
 	if err := m.HostPolicy(context.Background(), "mox.example"); err != nil {
 		t.Fatalf("hostpolicy, got err %v, expected no error", err)
 	}
+	if err := m.HostPolicy(context.Background(), "mox.example:80"); err != nil {
+		t.Fatalf("hostpolicy, got err %v, expected no error", err)
+	}
 	if err := m.HostPolicy(context.Background(), "other.mox.example"); err == nil || !errors.Is(err, errHostNotAllowed) {
 		t.Fatalf("hostpolicy, got err %v, expected errHostNotAllowed", err)
 	}
