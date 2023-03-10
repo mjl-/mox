@@ -760,14 +760,21 @@ func (c *conn) command() {
 				c.writelinef("* BYE please try again speaking imap")
 				panic(errIO)
 			}
-			c.log.Debugx("imap command syntax error", err, logFields...)
+			c.log.Debugx("imap command syntax error", sxerr.err, logFields...)
 			c.log.Info("imap syntax error", mlog.Field("lastline", c.lastLine))
 			fatal := strings.HasSuffix(c.lastLine, "+}")
 			if fatal {
 				err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 				c.log.Check(err, "setting write deadline")
 			}
-			c.bwriteresultf("%s BAD %s unrecognized syntax/command: %v", tag, cmd, err)
+			if sxerr.line != "" {
+				c.bwritelinef("%s", sxerr.line)
+			}
+			code := ""
+			if sxerr.code != "" {
+				code = "[" + sxerr.code + "] "
+			}
+			c.bwriteresultf("%s BAD %s%s unrecognized syntax/command: %v", tag, code, cmd, sxerr.errmsg)
 			if fatal {
 				c.xflush()
 				panic(fmt.Errorf("aborting connection after syntax error for command with non-sync literal: %w", errProtocol))
@@ -1618,7 +1625,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		c0 := xreadInitial()
 		ss, err := scram.NewServer(h, c0)
 		if err != nil {
-			xsyntaxErrorf("starting scram: %w", err)
+			xsyntaxErrorf("starting scram: %s", err)
 		}
 		c.log.Debug("scram auth", mlog.Field("authentication", ss.Authentication))
 		acc, _, err := store.OpenEmail(ss.Authentication)

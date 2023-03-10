@@ -1,6 +1,7 @@
 package imapserver
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -36,13 +37,14 @@ func xserverErrorf(format string, args ...any) {
 }
 
 type syntaxError struct {
-	line string // Optional line to write before BAD result. For untagged response. CRLF will be added.
-	code string // Optional result code (between []) to write in BAD result.
-	err  error  // BAD response message.
+	line   string // Optional line to write before BAD result. For untagged response. CRLF will be added.
+	code   string // Optional result code (between []) to write in BAD result.
+	errmsg string // BAD response message.
+	err    error  // Typically with same info as errmsg, but sometimes more.
 }
 
 func (e syntaxError) Error() string {
-	s := "bad syntax: " + e.err.Error()
+	s := "bad syntax: " + e.errmsg
 	if e.code != "" {
 		s += " [" + e.code + "]"
 	}
@@ -51,5 +53,7 @@ func (e syntaxError) Error() string {
 func (e syntaxError) Unwrap() error { return e.err }
 
 func xsyntaxErrorf(format string, args ...any) {
-	panic(syntaxError{"", "", fmt.Errorf(format, args...)})
+	errmsg := fmt.Sprintf(format, args...)
+	err := errors.New(errmsg)
+	panic(syntaxError{"", "", errmsg, err})
 }

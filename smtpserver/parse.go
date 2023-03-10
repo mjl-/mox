@@ -1,6 +1,7 @@
 package smtpserver
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -40,8 +41,19 @@ func newParser(s string, smtputf8 bool, conn *conn) *parser {
 }
 
 func (p *parser) xerrorf(format string, args ...any) {
+	// For submission, send the remaining unparsed line. Otherwise, only log it.
+	var err error
+	errmsg := "bad syntax: " + fmt.Sprintf(format, args...)
+	remaining := fmt.Sprintf(" (remaining %q)", p.orig[p.o:])
+	if p.conn.account != nil {
+		errmsg += remaining
+		err = errors.New(errmsg)
+	} else {
+		err = errors.New(errmsg + remaining)
+	}
+
 	// ../rfc/5321:2377
-	xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5Syntax2, "%s (remaining: %q)", fmt.Sprintf(format, args...), p.orig[p.o:])
+	panic(smtpError{smtp.C501BadParamSyntax, smtp.SeProto5Syntax2, errmsg, err, false, true})
 }
 
 func (p *parser) xutf8localparterrorf() {

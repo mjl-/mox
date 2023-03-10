@@ -1,6 +1,7 @@
 package imapserver
 
 import (
+	"errors"
 	"fmt"
 	"net/textproto"
 	"strconv"
@@ -74,11 +75,20 @@ func newParser(s string, conn *conn) *parser {
 }
 
 func (p *parser) xerrorf(format string, args ...any) {
-	var context string
+	var err error
+	errmsg := fmt.Sprintf(format, args...)
+	remaining := fmt.Sprintf("remaining %q", p.orig[p.o:])
 	if len(p.contexts) > 0 {
-		context = strings.Join(p.contexts, ",")
+		remaining += ", context " + strings.Join(p.contexts, ",")
 	}
-	panic(syntaxError{"", "", fmt.Errorf("%s (%sremaining data %q)", fmt.Sprintf(format, args...), context, p.orig[p.o:])})
+	remaining = " (" + remaining + ")"
+	if p.conn.account != nil {
+		errmsg += remaining
+		err = errors.New(errmsg)
+	} else {
+		err = errors.New(errmsg + remaining)
+	}
+	panic(syntaxError{"", "", errmsg, err})
 }
 
 func (p *parser) context(s string) func() {
@@ -724,7 +734,8 @@ func (p *parser) xliteralSize(maxSize int64, lit8 bool) (size int64, sync bool) 
 	if maxSize > 0 && size > maxSize {
 		// ../rfc/7888:249
 		line := fmt.Sprintf("* BYE [ALERT] Max literal size %d is larger than allowed %d in this context", size, maxSize)
-		panic(syntaxError{line, "TOOBIG", fmt.Errorf("literal too big")})
+		err := errors.New("literal too big")
+		panic(syntaxError{line, "TOOBIG", err.Error(), err})
 	}
 
 	sync = !p.take("+")

@@ -669,7 +669,7 @@ func command(c *conn) {
 
 		var serr smtpError
 		if errors.As(err, &serr) {
-			c.writecodeline(serr.code, serr.secode, fmt.Sprintf("%s (%s)", serr.err, mox.ReceivedID(c.cid)), serr.err)
+			c.writecodeline(serr.code, serr.secode, fmt.Sprintf("%s (%s)", serr.errmsg, mox.ReceivedID(c.cid)), serr.err)
 			if serr.printStack {
 				debug.PrintStack()
 			}
