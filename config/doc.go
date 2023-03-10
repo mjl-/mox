@@ -49,8 +49,8 @@ describe-static" and "mox config describe-domains":
 	# (optional)
 	CheckUpdates: false
 
-	# Global TLS configuration, e.g. for additional Certificate Authorities.
-	# (optional)
+	# Global TLS configuration, e.g. for additional Certificate Authorities. Used for
+	# outgoing SMTP connections, HTTPS requests. (optional)
 	TLS:
 
 		# (optional)

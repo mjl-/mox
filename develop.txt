@@ -1,0 +1,158 @@
+This file has notes useful for mox developers.
+
+# TLS certificates
+
+https://github.com/cloudflare/cfssl is useful for testing with TLS
+certificates. Create a CA and configure it in mox.conf TLS.CA.CertFiles, and
+sign host certificates and configure them in the listeners TLS.KeyCerts.
+
+Setup a local CA with cfssl, run once:
+
+```sh
+go install github.com/cloudflare/cfssl/cmd/cfssl@latest
+go install github.com/cloudflare/cfssl/cmd/cfssljson@latest
+
+mkdir -p local/cfssl
+cd local/cfssl
+
+cfssl print-defaults config > ca-config.json # defaults are fine
+
+# Based on: cfssl print-defaults csr > ca-csr.json
+cat <<EOF >ca-csr.json
+{
+    "CN": "mox ca",
+    "key": {
+        "algo": "ecdsa",
+        "size": 256
+    },
+    "names": [
+        {
+            "C": "NL"
+        }
+    ]
+}
+EOF
+
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca - # Generate ca key and cert.
+
+# Generate wildcard certificates for one or more domains, add localhost for use with pebble, see below.
+domains="moxtest.example localhost"
+for domain in $domains; do
+	cat <<EOF >wildcard.$domain.csr.json
+{
+  "key": {
+    "algo": "ecdsa",
+    "size": 256
+  },
+  "names": [
+  {
+    "O": "mox"
+  }
+  ],
+  "hosts": [
+    "$domain",
+    "*.$domain"
+  ]
+}
+EOF
+	cfssl gencert -ca ca.pem -ca-key ca-key.pem -profile=www wildcard.$domain.csr.json | cfssljson -bare wildcard.$domain
+done
+```
+
+Now configure mox.conf to add the cfssl CA root certificate:
+
+```
+TLS:
+	CA:
+		AdditionalToSystem: true
+		CertFiles:
+			# Assuming local/<env>/config/mox.conf and local/cfssl/.
+			- ../../cfssl/ca.pem
+
+[...]
+
+Listeners:
+	public:
+                TLS:
+			KeyCerts:
+				# Assuming local/<env>/config/mox.conf and local/cfssl/.
+				CertFile: ../../cfssl/wildcard.$domain.pem
+				KeyFile: ../../cfssl/wildcard.$domain-key.pem
+```
+
+# ACME
+
+https://github.com/letsencrypt/pebble is useful for testing with ACME. Start a
+pebble instance that uses the localhost TLS cert/key created by cfssl for its
+TLS serving. Pebble generates a new CA certificate for its own use each time it
+is started. Fetch it from https://localhost:14000/root, write it to a file, and
+add it to mox.conf TLS.CA.CertFiles. See below.
+
+Setup pebble, run once:
+
+```sh
+go install github.com/letsencrypt/pebble/cmd/pebble@latest
+
+mkdir -p local/pebble
+cat <<EOF >local/pebble/config.json
+{
+  "pebble": {
+    "listenAddress": "localhost:14000",
+    "managementListenAddress": "localhost:15000",
+    "certificate": "local/cfssl/localhost.pem",
+    "privateKey": "local/cfssl/localhost-key.pem",
+    "httpPort": 80,
+    "tlsPort": 443,
+    "ocspResponderURL": "",
+    "externalAccountBindingRequired": false
+  }
+}
+EOF
+```
+
+Start pebble, this generates a new temporary pebble CA certificate:
+
+```sh
+pebble -config local/pebble/config.json
+```
+
+Write new CA bundle that includes pebble's temporary CA cert:
+
+```sh
+export CURL_CA_BUNDLE=local/ca-bundle.pem # for curl
+export SSL_CERT_FILE=local/ca-bundle.pem # for go apps
+cat /etc/ssl/certs/ca-certificates.crt local/cfssl/ca.pem >local/ca-bundle.pem
+curl https://localhost:14000/root >local/pebble/ca.pem # fetch temp pebble ca, DO THIS EVERY TIME PEBBLE IS RESTARTED!
+cat /etc/ssl/certs/ca-certificates.crt local/cfssl/ca.pem local/pebble/ca.pem >local/ca-bundle.pem # create new list that includes cfssl ca and temp pebble ca.
+rm -r local/*/data/acme/keycerts/pebble # remove existing pebble-signed certs in acme cert/key cache, they are invalid due to newly generated temp pebble ca.
+```
+
+Edit mox.conf, adding pebble ACME and its ca.pem:
+
+```
+ACME:
+	pebble:
+		DirectoryURL: https://localhost:14000/dir
+		ContactEmail: root@mox.example
+TLS:
+	CA:
+		AdditionalToSystem: true
+		CertFiles:
+			# Assuming local/<env>/config/mox.conf and local/pebble/ca.pem and local/cfssl/ca.pem.
+			- ../../pebble/ca.pem
+			- ../../cfssl/ca.pem
+
+[...]
+
+Listeners:
+	public:
+                TLS:
+                        ACME: pebble
+```
+
+For mail clients and browsers to accept pebble-signed certificates, you must add
+the temporary pebble CA cert to their trusted root CA store each time pebble is
+started (e.g. to your thunderbird/firefox testing profile). Pebble has no option
+to not regenerate its CA certificate, presumably for fear of people using it for
+non-testing purposes. Unfortunately, this also makes it inconvenient to use for
+testing purposes.

@@ -44,7 +44,7 @@ type Static struct {
 			CertFiles          []string `sconf:"optional"`
 		} `sconf:"optional"`
 		CertPool *x509.CertPool `sconf:"-" json:"-"`
-	} `sconf:"optional" sconf-doc:"Global TLS configuration, e.g. for additional Certificate Authorities."`
+	} `sconf:"optional" sconf-doc:"Global TLS configuration, e.g. for additional Certificate Authorities. Used for outgoing SMTP connections, HTTPS requests."`
 	ACME              map[string]ACME     `sconf:"optional" sconf-doc:"Automatic TLS configuration with ACME, e.g. through Let's Encrypt. The key is a name referenced in TLS configs, e.g. letsencrypt."`
 	AdminPasswordFile string              `sconf:"optional" sconf-doc:"File containing hash of admin password, for authentication in the web admin pages (if enabled)."`
 	Listeners         map[string]Listener `sconf-doc:"Listeners are groups of IP addresses and services enabled on those IP addresses, such as SMTP/IMAP or internal endpoints for administration or Prometheus metrics. All listeners with SMTP/IMAP services enabled will serve all configured domains. If the listener is named 'public', it will get a few helpful additional configuration checks, for acme automatic tls certificates and monitoring of ips in dnsbls if those are configured."`

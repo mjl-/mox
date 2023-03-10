@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"os/user"
@@ -344,6 +345,13 @@ func LoadConfig(ctx context.Context, checkACMEHosts bool) []error {
 func SetConfig(c *Config) {
 	// Cannot just assign *c to Conf, it would copy the mutex.
 	Conf = Config{c.Static, sync.Mutex{}, c.Log, sync.Mutex{}, c.Dynamic, c.dynamicMtime, c.DynamicLastCheck, c.accountDestinations}
+
+	// If we have non-standard CA roots, use them for all HTTPS requests.
+	if Conf.Static.TLS.CertPool != nil {
+		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
+			RootCAs: Conf.Static.TLS.CertPool,
+		}
+	}
 }
 
 // ParseConfig parses the static config at path p. If checkOnly is true, no changes

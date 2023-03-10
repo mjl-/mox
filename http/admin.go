@@ -404,6 +404,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 			Config: &tls.Config{
 				ServerName: host,
 				MinVersion: tls.VersionTLS12, // ../rfc/8996:31 ../rfc/8997:66
+				RootCAs:    mox.Conf.Static.TLS.CertPool,
 			},
 		}
 		for _, ip := range ips {
@@ -600,7 +601,11 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 			if !strings.HasPrefix(line, "220 ") {
 				return fmt.Errorf("SMTP STARTTLS response from remote not 220 OK: %q", strings.TrimSuffix(line, "\r\n"))
 			}
-			tlsconn := tls.Client(conn, &tls.Config{ServerName: host})
+			config := &tls.Config{
+				ServerName: host,
+				RootCAs:    mox.Conf.Static.TLS.CertPool,
+			}
+			tlsconn := tls.Client(conn, config)
 			if err := tlsconn.HandshakeContext(cctx); err != nil {
 				return fmt.Errorf("TLS handshake after SMTP STARTTLS: %s", err)
 			}
