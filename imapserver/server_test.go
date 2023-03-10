@@ -26,6 +26,7 @@ func init() {
 
 	// Don't slow down tests.
 	badClientDelay = 0
+	authFailDelay = 0
 }
 
 func tocrlf(s string) string {
@@ -397,8 +398,6 @@ func TestLogin(t *testing.T) {
 func TestState(t *testing.T) {
 	tc := start(t)
 
-	tc.transactf("bad", "boguscommand")
-
 	notAuthenticated := []string{"starttls", "authenticate", "login"}
 	authenticatedOrSelected := []string{"enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub"}
 	selected := []string{"close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge"}
@@ -420,6 +419,21 @@ func TestState(t *testing.T) {
 	tc.transactf("ok", "login mjl@mox.example testtest")
 	for _, cmd := range append(append([]string{}, notAuthenticated...), selected...) {
 		tc.transactf("no", "%s", cmd)
+	}
+
+	tc.transactf("bad", "boguscommand")
+}
+
+func TestNonIMAP(t *testing.T) {
+	tc := start(t)
+	defer tc.close()
+
+	// imap greeting has already been read, we sidestep the imapclient.
+	_, err := fmt.Fprintf(tc.conn, "bogus\r\n")
+	tc.check(err, "write bogus command")
+	tc.readprefixline("* BYE ")
+	if _, err := tc.conn.Read(make([]byte, 1)); err == nil {
+		t.Fatalf("connection not closed after initial bad command")
 	}
 }
 

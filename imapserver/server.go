@@ -130,9 +130,9 @@ func limitersInit() {
 	}
 }
 
-// Delay before reads and after 1-byte writes for probably spammers. Tests set this
-// to zero.
-var badClientDelay = time.Second
+// Delay after bad/suspicious behaviour. Tests set these to zero.
+var badClientDelay = time.Second // Before reads and after 1-byte writes for probably spammers.
+var authFailDelay = time.Second  // After authentication failure.
 
 // Capabilities (extensions) the server supports. Connections will add a few more, e.g. STARTTLS, LOGINDISABLED, AUTH=PLAIN.
 // ENABLE: ../rfc/5161
@@ -175,6 +175,7 @@ type conn struct {
 	cmd               string // Currently executing, for deciding to applyChanges and logging.
 	cmdMetric         string // Currently executing, for metrics.
 	cmdStart          time.Time
+	ncmds             int // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
 	log               *mlog.Log
 	enabled           map[capability]bool // All upper-case.
 
@@ -666,7 +667,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	case <-mox.Shutdown.Done():
 		// ../rfc/9051:5381
 		c.writelinef("* BYE mox shutting down")
-		panic(errIO)
+		return
 	default:
 	}
 
@@ -752,6 +753,13 @@ func (c *conn) command() {
 		var serr serverError
 		if errors.As(err, &sxerr) {
 			result = "badsyntax"
+			if c.ncmds == 0 {
+				// Other side is likely speaking something else than IMAP, send error message and
+				// stop processing because there is a good chance whatever they sent has multiple
+				// lines.
+				c.writelinef("* BYE please try again speaking imap")
+				panic(errIO)
+			}
 			c.log.Debugx("imap command syntax error", err, logFields...)
 			c.log.Info("imap syntax error", mlog.Field("lastline", c.lastLine))
 			fatal := strings.HasSuffix(c.lastLine, "+}")
@@ -806,6 +814,7 @@ func (c *conn) command() {
 		xsyntaxErrorf("unknown command %q", cmd)
 	}
 	c.cmdMetric = c.cmd
+	c.ncmds++
 
 	// Check if command is allowed in this state.
 	if _, ok1 := commandsStateAny[cmdlow]; ok1 {
@@ -1425,8 +1434,8 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	// Examples: ../rfc/9051:1520 ../rfc/3501:1631
 
 	// For many failed auth attempts, slow down verification attempts.
-	if c.authFailed > 3 {
-		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*time.Second)
+	if c.authFailed > 3 && authFailDelay > 0 {
+		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*authFailDelay)
 	}
 	c.authFailed++ // Compensated on success.
 	defer func() {
@@ -1709,8 +1718,8 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 	}
 
 	// For many failed auth attempts, slow down verification attempts.
-	if c.authFailed > 3 {
-		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*time.Second)
+	if c.authFailed > 3 && authFailDelay > 0 {
+		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*authFailDelay)
 	}
 	c.authFailed++ // Compensated on success.
 	defer func() {

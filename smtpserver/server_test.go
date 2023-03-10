@@ -42,6 +42,8 @@ func init() {
 	// Don't make tests slow.
 	badClientDelay = 0
 	reputationlessSenderDeliveryDelay = 0
+	authFailDelay = 0
+	unknownRecipientsDelay = 0
 }
 
 func tcheck(t *testing.T, err error, msg string) {
@@ -876,4 +878,47 @@ func TestRatelimitDelivery(t *testing.T) {
 			t.Fatalf("got err %v, expected smtpclient error with code 452 for storage full", err)
 		}
 	})
+}
+
+func TestNonSMTP(t *testing.T) {
+	ts := newTestServer(t, "../testdata/smtp/mox.conf", dns.MockResolver{})
+	defer ts.close()
+	ts.cid += 2
+
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	serverdone := make(chan struct{})
+	defer func() { <-serverdone }()
+
+	go func() {
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{fakeCert(ts.t)},
+		}
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, 100<<20, false, false, ts.dnsbls)
+		close(serverdone)
+	}()
+
+	defer clientConn.Close()
+
+	buf := make([]byte, 128)
+
+	// Read and ignore hello.
+	if _, err := clientConn.Read(buf); err != nil {
+		t.Fatalf("reading hello: %v", err)
+	}
+
+	if _, err := fmt.Fprintf(clientConn, "bogus\r\n"); err != nil {
+		t.Fatalf("write command: %v", err)
+	}
+	n, err := clientConn.Read(buf)
+	if err != nil {
+		t.Fatalf("read response line: %v", err)
+	}
+	s := string(buf[:n])
+	if !strings.HasPrefix(s, "500 5.5.2 ") {
+		t.Fatalf(`got %q, expected "500 5.5.2 ...`, s)
+	}
+	if _, err := clientConn.Read(buf); err == nil {
+		t.Fatalf("connection not closed after bogus command")
+	}
 }

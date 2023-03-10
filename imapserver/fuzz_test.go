@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"testing"
@@ -106,7 +107,7 @@ func FuzzServer(f *testing.F) {
 						return
 					}
 					err, ok := x.(error)
-					if !ok || !errors.Is(err, os.ErrDeadlineExceeded) {
+					if !ok || (!errors.Is(err, os.ErrDeadlineExceeded) && !errors.Is(err, io.EOF)) {
 						panic(x)
 					}
 				}()

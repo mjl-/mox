@@ -94,11 +94,11 @@ func limitersInit() {
 }
 
 var (
-	// Delay before reads and after 1-byte writes for probably spammers. Zero during tests.
-	badClientDelay = time.Second
-
-	// Delay before accepting message from sender without reputation. Zero during tests.
-	reputationlessSenderDeliveryDelay = 15 * time.Second
+	// Delays for bad/suspicious behaviour. Zero during tests.
+	badClientDelay                    = time.Second      // Before reads and after 1-byte writes for probably spammers.
+	authFailDelay                     = time.Second      // Response to authentication failure.
+	reputationlessSenderDeliveryDelay = 15 * time.Second // Before accepting message from first-time sender.
+	unknownRecipientsDelay            = 5 * time.Second  // Response when all recipients are unknown.
 )
 
 type codes struct {
@@ -276,6 +276,7 @@ type conn struct {
 	requireTLSForDelivery bool
 	cmd                   string    // Current command.
 	cmdStart              time.Time // Start of current command.
+	ncmds                 int       // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
 	dnsBLs                []dns.Domain
 
 	// todo future: add a flag for "pedantic" mode, causing us to be strict. e.g. interpreting some SHOULD as MUST. ../rfc/5321:4076
@@ -706,10 +707,18 @@ func command(c *conn) {
 	p := newParser(args, c.smtputf8, c)
 	fn, ok := commands[cmdl]
 	if !ok {
+		if c.ncmds == 0 {
+			// Other side is likely speaking something else than SMTP, send error message and
+			// stop processing because there is a good chance whatever they sent has multiple
+			// lines.
+			c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Syntax2, "please try again speaking smtp", nil)
+			panic(errIO)
+		}
 		c.cmd = "(unknown)"
 		// note: not "command not implemented", see ../rfc/5321:2934 ../rfc/5321:2539
 		xsmtpUserErrorf(smtp.C500BadSyntax, smtp.SeProto5BadCmdOrSeq1, "unknown command")
 	}
+	c.ncmds++
 	fn(c, p)
 }
 
@@ -867,9 +876,9 @@ func (c *conn) cmdAuth(p *parser) {
 	// For many failed auth attempts, slow down verification attempts.
 	// Dropping the connection could also work, but more so when we have a connection rate limiter.
 	// ../rfc/4954:770
-	if c.authFailed > 3 {
+	if c.authFailed > 3 && authFailDelay > 0 {
 		// ../rfc/4954:770
-		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*time.Second)
+		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*authFailDelay)
 	}
 	c.authFailed++ // Compensated on success.
 	defer func() {
@@ -1803,7 +1812,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 		// Crude attempt to slow down someone trying to guess names. Would work better
 		// with connection rate limiter.
-		mox.Sleep(ctx, 5*time.Second)
+		if unknownRecipientsDelay > 0 {
+			mox.Sleep(ctx, unknownRecipientsDelay)
+		}
 
 		// todo future: if remote does not look like a properly configured mail system, respond with generic 451 error? to prevent any random internet system from discovering accounts. we could give proper response if spf for ehlo or mailfrom passes.
 		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "no such user(s)")
