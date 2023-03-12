@@ -156,3 +156,26 @@ started (e.g. to your thunderbird/firefox testing profile). Pebble has no option
 to not regenerate its CA certificate, presumably for fear of people using it for
 non-testing purposes. Unfortunately, this also makes it inconvenient to use for
 testing purposes.
+
+
+# Release proces
+
+- Gather feedback on recent changes.
+- Check if dependencies need updates.
+- Check code if there are deprecated features that can be removed.
+- Update features & roadmap in README.md
+- Write release notes, use instructions from updating.txt.
+- Build and run tests with previous major Go release.
+- Run all (integration) tests, including with race detector.
+- Run fuzzing tests for a while.
+- Deploy to test environment. Test the update instructions.
+- Generate a config with quickstart, check if it results in a working setup.
+- Send and receive email through the major webmail providers, check headers.
+- Send and receive email with imap4/smtp clients.
+- Check DNS check admin page.
+- Check with https://internet.nl
+- Clear updating.txt.
+- Create git tag, push code.
+- Publish new docker image.
+- Publish signed release notes for updates.xmox.nl and update DNS record.
+- Create new release on the github page, so watchers get a notification.
