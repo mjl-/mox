@@ -28,7 +28,9 @@ directory) through the -config flag or MOXCONF environment variable.
 
 EOF
 
-./mox helpall 2>&1
+# setting XDG_CONFIG_HOME ensures "mox localserve" has reasonable default
+# values in its help output.
+XDG_CONFIG_HOME='$userconfigdir' ./mox helpall 2>&1
 
 cat <<EOF
 */

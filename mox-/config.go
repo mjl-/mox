@@ -313,9 +313,6 @@ func writeDynamic(ctx context.Context, log *mlog.Log, c config.Dynamic) error {
 
 // MustLoadConfig loads the config, quitting on errors.
 func MustLoadConfig(checkACMEHosts bool) {
-	Shutdown, ShutdownCancel = context.WithCancel(context.Background())
-	Context, ContextCancel = context.WithCancel(context.Background())
-
 	errs := LoadConfig(context.Background(), checkACMEHosts)
 	if len(errs) > 1 {
 		xlog.Error("loading config file: multiple errors")
@@ -331,6 +328,9 @@ func MustLoadConfig(checkACMEHosts bool) {
 // LoadConfig attempts to parse and load a config, returning any errors
 // encountered.
 func LoadConfig(ctx context.Context, checkACMEHosts bool) []error {
+	Shutdown, ShutdownCancel = context.WithCancel(context.Background())
+	Context, ContextCancel = context.WithCancel(context.Background())
+
 	c, errs := ParseConfig(ctx, ConfigStaticPath, false, false, checkACMEHosts)
 	if len(errs) > 0 {
 		return errs

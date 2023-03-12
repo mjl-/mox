@@ -72,6 +72,9 @@ var jitter = mox.NewRand()
 
 var queueDB *bstore.DB
 
+// Set for mox localserve, to prevent queueing.
+var Localserve bool
+
 // Msg is a message in the queue.
 type Msg struct {
 	ID                 int64
@@ -178,6 +181,11 @@ func Count() (int, error) {
 // the regular non-utf8 message is delivered.
 func Add(log *mlog.Log, senderAccount string, mailFrom, rcptTo smtp.Path, has8bit, smtputf8 bool, size int64, msgPrefix []byte, msgFile *os.File, dsnutf8Opt []byte, consumeFile bool) error {
 	// todo: Add should accept multiple rcptTo if they are for the same domain. so we can queue them for delivery in one (or just a few) session(s), transferring the data only once. ../rfc/5321:3759
+
+	if Localserve {
+		// Safety measure, shouldn't happen.
+		return fmt.Errorf("no queuing with localserve")
+	}
 
 	tx, err := queueDB.Begin(true)
 	if err != nil {

@@ -127,6 +127,7 @@ func monitorDNSBL(log *mlog.Log) {
 	}
 }
 
+// also see localserve.go, code is similar or even shared.
 func cmdServe(c *cmd) {
 	c.help = `Start mox, serving SMTP/IMAP/HTTPS.
 
@@ -320,38 +321,6 @@ requested, other TLS certificates are requested on demand.
 
 	go monitorDNSBL(log)
 
-	shutdown := func() {
-		// We indicate we are shutting down. Causes new connections and new SMTP commands
-		// to be rejected. Should stop active connections pretty quickly.
-		mox.ShutdownCancel()
-
-		// Now we are going to wait for all connections to be gone, up to a timeout.
-		done := mox.Connections.Done()
-		second := time.Tick(time.Second)
-		select {
-		case <-done:
-			log.Print("connections shutdown, waiting until 1 second passed")
-			<-second
-
-		case <-time.Tick(3 * time.Second):
-			// We now cancel all pending operations, and set an immediate deadline on sockets.
-			// Should get us a clean shutdown relatively quickly.
-			mox.ContextCancel()
-			mox.Connections.Shutdown()
-
-			second := time.Tick(time.Second)
-			select {
-			case <-done:
-				log.Print("no more connections, shutdown is clean, waiting until 1 second passed")
-				<-second // Still wait for second, giving processes like imports a chance to clean up.
-			case <-second:
-				log.Print("shutting down with pending sockets")
-			}
-		}
-		err := os.Remove(mox.DataDirPath("ctl"))
-		log.Check(err, "removing ctl unix domain socket during shutdown")
-	}
-
 	ctlpath := mox.DataDirPath("ctl")
 	_ = os.Remove(ctlpath)
 	ctl, err := net.Listen("unix", ctlpath)
@@ -367,7 +336,7 @@ requested, other TLS certificates are requested on demand.
 			}
 			cid := mox.Cid()
 			ctx := context.WithValue(mox.Context, mlog.CidKey, cid)
-			go servectl(ctx, log.WithCid(cid), conn, shutdown)
+			go servectl(ctx, log.WithCid(cid), conn, func() { shutdown(log) })
 		}
 	}()
 
@@ -398,12 +367,44 @@ requested, other TLS certificates are requested on demand.
 	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 	sig := <-sigc
 	log.Print("shutting down, waiting max 3s for existing connections", mlog.Field("signal", sig))
-	shutdown()
+	shutdown(log)
 	if num, ok := sig.(syscall.Signal); ok {
 		os.Exit(int(num))
 	} else {
 		os.Exit(1)
 	}
+}
+
+func shutdown(log *mlog.Log) {
+	// We indicate we are shutting down. Causes new connections and new SMTP commands
+	// to be rejected. Should stop active connections pretty quickly.
+	mox.ShutdownCancel()
+
+	// Now we are going to wait for all connections to be gone, up to a timeout.
+	done := mox.Connections.Done()
+	second := time.Tick(time.Second)
+	select {
+	case <-done:
+		log.Print("connections shutdown, waiting until 1 second passed")
+		<-second
+
+	case <-time.Tick(3 * time.Second):
+		// We now cancel all pending operations, and set an immediate deadline on sockets.
+		// Should get us a clean shutdown relatively quickly.
+		mox.ContextCancel()
+		mox.Connections.Shutdown()
+
+		second := time.Tick(time.Second)
+		select {
+		case <-done:
+			log.Print("no more connections, shutdown is clean, waiting until 1 second passed")
+			<-second // Still wait for second, giving processes like imports a chance to clean up.
+		case <-second:
+			log.Print("shutting down with pending sockets")
+		}
+	}
+	err := os.Remove(mox.DataDirPath("ctl"))
+	log.Check(err, "removing ctl unix domain socket during shutdown")
 }
 
 // Set correct permissions for mox working directory, binary, config and data and service file.

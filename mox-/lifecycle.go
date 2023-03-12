@@ -111,11 +111,15 @@ func CleanupPassedSockets() {
 	}
 }
 
+// Make Listen listen immediately, regardless of running as root or other user, in
+// case ForkExecUnprivileged is not used.
+var ListenImmediate bool
+
 // Listen returns a newly created network listener when starting as root, and
 // otherwise (not root) returns a network listener from a file descriptor that was
 // passed by the parent root process.
 func Listen(network, addr string) (net.Listener, error) {
-	if os.Getuid() != 0 {
+	if os.Getuid() != 0 && !ListenImmediate {
 		f, ok := listens[addr]
 		if !ok {
 			return nil, fmt.Errorf("no file descriptor for listener %s", addr)

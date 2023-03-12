@@ -34,6 +34,8 @@ See Quickstart below to get started.
 - Webserver with serving static files and forwarding requests (reverse
   proxy), so port 443 can also be used to serve websites.
 - Prometheus metrics and structured logging for operational insight.
+- "localserve" subcommand for running mox locally for email-related
+  testing/developing.
 
 Mox is available under the MIT-license and was created by Mechiel Lukkien,
 mechiel@ueber.net. Mox includes the Public Suffix List by Mozilla, under Mozilla
@@ -109,8 +111,6 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 
 - Strict vs lax mode, defaulting to lax when receiving from the internet, and
   strict when sending.
-- "developer server" mode, to easily launch a local SMTP/IMAP server to test
-  your apps mail sending capabilities.
 - Rate limiting and spam detection for submitted/outgoing messages, to reduce
   impact when an account gets compromised.
 - Privilege separation, isolating parts of the application to more restricted
@@ -118,7 +118,6 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 - DANE and DNSSEC.
 - Sending DMARC and TLS reports (currently only receiving).
 - OAUTH2 support, for single sign on.
-- ACME verification over HTTP (in addition to current tls-alpn01).
 - Add special IMAP mailbox ("Queue?") that contains queued but
   not-yet-delivered messages.
 - Sieve for filtering (for now see Rulesets in the account config)

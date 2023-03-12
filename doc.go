@@ -27,6 +27,7 @@ low-maintenance self-hosted email.
 	mox import mbox accountname mailboxname mbox
 	mox export maildir dst-dir account-path [mailbox]
 	mox export mbox dst-dir account-path [mailbox]
+	mox localserve
 	mox help [command ...]
 	mox config test
 	mox config dnscheck domain
@@ -290,6 +291,36 @@ For mbox export, "mboxrd" is used where message lines starting with the magic
 otherwise reconstructing the original could lose a ">".
 
 	usage: mox export mbox dst-dir account-path [mailbox]
+
+# mox localserve
+
+Start a local SMTP/IMAP server that accepts all messages, useful when testing/developing software that sends email.
+
+Localserve starts mox with a configuration suitable for local email-related
+software development/testing. It listens for SMTP/Submission(s), IMAP(s) and
+HTTP(s), on the regular port numbers + 1000.
+
+Data is stored in the system user's configuration directory under
+"mox-localserve", e.g. $HOME/.config/mox-localserve/ on linux, but can be
+overridden with the -dir flag. If the directory does not yet exist, it is
+automatically initialized with configuration files, an account with email
+address mox@localhost and password moxmoxmox, and a newly generated self-signed
+TLS certificate.
+
+All incoming email is accepted (if checks pass), unless the recipient localpart
+ends with:
+
+- "temperror": fail with a temporary error code
+- "permerror": fail with a permanent error code
+- [45][0-9][0-9]: fail with the specific error code
+- "timeout": no response (for an hour)
+
+If the localpart begins with "mailfrom" or "rcptto", the error is returned
+during those commands instead of during "data".
+
+	usage: mox localserve
+	  -dir string
+	    	configuration storage directory (default "$userconfigdir/mox-localserve")
 
 # mox help
 

@@ -55,17 +55,7 @@ func TestReputation(t *testing.T) {
 			}
 		}
 
-		var ipmasked1, ipmasked2, ipmasked3 string
-		var xip = net.ParseIP(ip)
-		if xip.To4() != nil {
-			ipmasked1 = xip.String()
-			ipmasked2 = xip.Mask(net.CIDRMask(26, 32)).String()
-			ipmasked3 = xip.Mask(net.CIDRMask(21, 32)).String()
-		} else {
-			ipmasked1 = xip.Mask(net.CIDRMask(64, 128)).String()
-			ipmasked2 = xip.Mask(net.CIDRMask(48, 128)).String()
-			ipmasked3 = xip.Mask(net.CIDRMask(32, 128)).String()
-		}
+		ipmasked1, ipmasked2, ipmasked3 := ipmasked(net.ParseIP(ip))
 
 		uidgen++
 		m := store.Message{

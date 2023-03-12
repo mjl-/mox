@@ -39,8 +39,6 @@ func tcheck(t *testing.T, err error, msg string) {
 // We check if we receive the message.
 func TestDeliver(t *testing.T) {
 	mlog.Logfmt = true
-	mox.Context, mox.ContextCancel = context.WithCancel(context.Background())
-	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
 
 	// Remove state.
 	os.RemoveAll("testdata/integration/data")
@@ -53,7 +51,7 @@ func TestDeliver(t *testing.T) {
 	// Load mox config.
 	mox.ConfigStaticPath = "testdata/integration/config/mox.conf"
 	filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
-	if errs := mox.LoadConfig(mox.Context, false); len(errs) > 0 {
+	if errs := mox.LoadConfig(context.Background(), false); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}
 

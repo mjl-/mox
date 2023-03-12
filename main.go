@@ -90,6 +90,7 @@ var commands = []struct {
 	{"import mbox", cmdImportMbox},
 	{"export maildir", cmdExportMaildir},
 	{"export mbox", cmdExportMbox},
+	{"localserve", cmdLocalserve},
 	{"help", cmdHelp},
 
 	{"config test", cmdConfigTest},
