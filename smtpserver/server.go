@@ -2401,7 +2401,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					return
 				}
 				metricDelivery.WithLabelValues("delivered", a.reason).Inc()
-				log.Info("incoming message delivered", mlog.Field("reason", a.reason))
+				log.Info("incoming message delivered", mlog.Field("reason", a.reason), mlog.Field("msgfrom", msgFrom))
 
 				conf, _ := acc.Conf()
 				if conf.RejectsMailbox != "" && messageID != "" {
