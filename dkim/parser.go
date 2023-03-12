@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -194,11 +195,12 @@ func (p *parser) xcanonical() string {
 	return s
 }
 
-func (p *parser) xdomain() dns.Domain {
+func (p *parser) xdomainselector(isselector bool) dns.Domain {
 	subdomain := func(c rune, i int) bool {
 		// domain names must always be a-labels, ../rfc/6376:1115 ../rfc/6376:1187 ../rfc/6376:1303
-		// todo: add a "lax" mode where underscore is allowed if this is a selector? seen in the wild, but invalid: ../rfc/6376:581 ../rfc/5321:2303
-		return isalphadigit(c) || (i > 0 && c == '-' && p.o+1 < len(p.s))
+		// dkim selectors with underscores happen in the wild, accept them when not in
+		// pedantic mode. ../rfc/6376:581 ../rfc/5321:2303
+		return isalphadigit(c) || (i > 0 && (c == '-' || isselector && !moxvar.Pedantic && c == '_') && p.o+1 < len(p.s))
 	}
 	s := p.xtakefn1(false, subdomain)
 	for p.hasPrefix(".") {
@@ -206,9 +208,21 @@ func (p *parser) xdomain() dns.Domain {
 	}
 	d, err := dns.ParseDomain(s)
 	if err != nil {
+		// ParseDomain does not allow underscore, work around it.
+		if strings.Contains(s, "_") && isselector && !moxvar.Pedantic {
+			return dns.Domain{ASCII: strings.ToLower(s)}
+		}
 		p.xerrorf("parsing domain %q: %s", s, err)
 	}
 	return d
+}
+
+func (p *parser) xdomain() dns.Domain {
+	return p.xdomainselector(false)
+}
+
+func (p *parser) xselector() dns.Domain {
+	return p.xdomainselector(true)
 }
 
 func (p *parser) xhdrName(ignoreFWS bool) string {
@@ -258,8 +272,8 @@ func (p *parser) xlocalpart() smtp.Localpart {
 			s += "." + p.xatom()
 		}
 	}
-	// todo: have a strict parser that only allows the actual max of 64 bytes. some services have large localparts because of generated (bounce) addresses.
-	if len(s) > 128 {
+	// In the wild, some services use large localparts for generated (bounce) addresses.
+	if moxvar.Pedantic && len(s) > 64 || len(s) > 128 {
 		// ../rfc/5321:3486
 		p.xerrorf("localpart longer than 64 octets")
 	}
@@ -456,10 +470,6 @@ func (p *parser) xqp(pipeEncoded, colonEncoded, ignoreFWS bool) string {
 		s += x
 	}
 	return s
-}
-
-func (p *parser) xselector() dns.Domain {
-	return p.xdomain()
 }
 
 func (p *parser) xtimestamp() int64 {

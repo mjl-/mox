@@ -49,6 +49,10 @@ describe-static" and "mox config describe-domains":
 	# (optional)
 	CheckUpdates: false
 
+	# In pedantic mode protocol violations (that happen in the wild) for SMTP/IMAP/etc
+	# result in errors instead of accepting such behaviour. (optional)
+	Pedantic: false
+
 	# Global TLS configuration, e.g. for additional Certificate Authorities. Used for
 	# outgoing SMTP connections, HTTPS requests. (optional)
 	TLS:

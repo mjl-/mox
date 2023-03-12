@@ -284,8 +284,6 @@ type conn struct {
 	ncmds                 int       // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
 	dnsBLs                []dns.Domain
 
-	// todo future: add a flag for "pedantic" mode, causing us to be strict. e.g. interpreting some SHOULD as MUST. ../rfc/5321:4076
-
 	// If non-zero, taken into account during Read and Write. Set while processing DATA
 	// command, we don't want the entire delivery to take too long.
 	deadline time.Time
@@ -1509,8 +1507,9 @@ func (c *conn) cmdData(p *parser) {
 			// ../rfc/6409:541
 			xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeMsg6Other0, "message requires both header and body section")
 		}
-		// todo: check disabled because ios mail will attempt to send smtputf8 with non-ascii in message from localpart without using 8bitmime. we should have a non-lax mode that disallows this behaviour.
-		if false && msgWriter.Has8bit && !c.has8bitmime {
+		// Check only for pedantic mode because ios mail will attempt to send smtputf8 with
+		// non-ascii in message from localpart without using 8bitmime.
+		if moxvar.Pedantic && msgWriter.Has8bit && !c.has8bitmime {
 			// ../rfc/5321:906
 			xsmtpUserErrorf(smtp.C500BadSyntax, smtp.SeMsg6Other0, "message with non-us-ascii requires 8bitmime extension")
 		}

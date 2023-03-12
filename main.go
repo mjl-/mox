@@ -143,6 +143,7 @@ var commands = []struct {
 	{"bumpuidvalidity", cmdBumpUIDValidity},
 	{"dmarcdb addreport", cmdDMARCDBAddReport},
 	{"ensureparsed", cmdEnsureParsed},
+	{"message parse", cmdMessageParse},
 	{"tlsrptdb addreport", cmdTLSRPTDBAddReport},
 	{"updates addsigned", cmdUpdatesAddSigned},
 	{"updates genkey", cmdUpdatesGenkey},
@@ -326,7 +327,7 @@ Used to generate documentation.
 func usage(l []cmd, unlisted bool) {
 	var lines []string
 	if !unlisted {
-		lines = append(lines, "mox [-config config/mox.conf] ...")
+		lines = append(lines, "mox [-config config/mox.conf] [-pedantic] ...")
 	}
 	for _, c := range l {
 		c.gather()
@@ -352,6 +353,7 @@ func usage(l []cmd, unlisted bool) {
 }
 
 var loglevel string
+var pedantic bool
 
 // subcommands that are not "serve" should use this function to load the config, it
 // restores any loglevel specified on the command-line, instead of using the
@@ -361,6 +363,9 @@ func mustLoadConfig() {
 	if level, ok := mlog.Levels[loglevel]; ok && loglevel != "" {
 		mox.Conf.Log[""] = level
 		mlog.SetConfig(mox.Conf.Log)
+	}
+	if pedantic {
+		moxvar.Pedantic = true
 	}
 }
 
@@ -380,12 +385,16 @@ func main() {
 
 	flag.StringVar(&mox.ConfigStaticPath, "config", envString("MOXCONF", "config/mox.conf"), "configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf")
 	flag.StringVar(&loglevel, "loglevel", "", "if non-empty, this log level is set early in startup")
+	flag.BoolVar(&pedantic, "pedantic", false, "protocol violations result in errors instead of accepting/working around them")
 
 	flag.Usage = func() { usage(cmds, false) }
 	flag.Parse()
 	args := flag.Args()
 	if len(args) == 0 {
 		usage(cmds, false)
+	}
+	if pedantic {
+		moxvar.Pedantic = true
 	}
 
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
@@ -1896,6 +1905,30 @@ func cmdEnsureParsed(c *cmd) {
 	})
 	xcheckf(err, "update messages with parsed mime structure")
 	fmt.Printf("%d messages updated\n", n)
+}
+
+func cmdMessageParse(c *cmd) {
+	c.unlisted = true
+	c.params = "message.eml"
+	c.help = "Parse message, print JSON representation."
+
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	f, err := os.Open(args[0])
+	xcheckf(err, "open")
+	defer f.Close()
+
+	part, err := message.Parse(f)
+	xcheckf(err, "parsing message")
+	err = part.Walk(nil)
+	xcheckf(err, "parsing nested parts")
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "\t")
+	err = enc.Encode(part)
+	xcheckf(err, "write")
 }
 
 func cmdBumpUIDValidity(c *cmd) {

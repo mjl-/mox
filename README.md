@@ -35,7 +35,7 @@ See Quickstart below to get started.
   proxy), so port 443 can also be used to serve websites.
 - Prometheus metrics and structured logging for operational insight.
 - "localserve" subcommand for running mox locally for email-related
-  testing/developing.
+  testing/developing, including pedantic mode.
 
 Mox is available under the MIT-license and was created by Mechiel Lukkien,
 mechiel@ueber.net. Mox includes the Public Suffix List by Mozilla, under Mozilla
@@ -109,8 +109,6 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 
 ## Roadmap
 
-- Strict vs lax mode, defaulting to lax when receiving from the internet, and
-  strict when sending.
 - Rate limiting and spam detection for submitted/outgoing messages, to reduce
   impact when an account gets compromised.
 - Privilege separation, isolating parts of the application to more restricted

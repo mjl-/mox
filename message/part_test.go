@@ -123,7 +123,7 @@ func TestBasic2(t *testing.T) {
 	r = strings.NewReader(basicMsg2)
 	p, err = Parse(r)
 	tcheck(t, err, "new reader")
-	err = p.Walk()
+	err = p.Walk(nil)
 	tcheck(t, err, "walk")
 	if p.RawLineCount != 2 {
 		t.Fatalf("basic message, got %d lines, expected 2", p.RawLineCount)
@@ -224,7 +224,7 @@ test
 	tfail(t, err, errMissingClosingBoundary)
 
 	msg, _ = Parse(strings.NewReader(message))
-	err = msg.Walk()
+	err = msg.Walk(nil)
 	tfail(t, err, errMissingClosingBoundary)
 }
 
@@ -277,7 +277,7 @@ test
 	tcheck(t, err, "walkmsg")
 
 	msg, _ = Parse(strings.NewReader(message))
-	err = msg.Walk()
+	err = msg.Walk(nil)
 	tcheck(t, err, "msg.Walk")
 }
 
@@ -380,7 +380,7 @@ Content-Transfer-Encoding: Quoted-printable
 	}
 
 	msg, _ = Parse(strings.NewReader(nestedMessage))
-	err = msg.Walk()
+	err = msg.Walk(nil)
 	tcheck(t, err, "msg.Walk")
 
 }
@@ -497,5 +497,5 @@ func TestEmbedded2(t *testing.T) {
 	buf = bytes.ReplaceAll(buf, []byte("\n"), []byte("\r\n"))
 
 	_, err = EnsurePart(bytes.NewReader(buf), int64(len(buf)))
-	tfail(t, err, errUnexpectedEOF) // todo: be able to parse this without an error? truncate message/rfc822 in dsn.
+	tfail(t, err, nil)
 }

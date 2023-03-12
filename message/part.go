@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -115,34 +116,39 @@ func Parse(r io.ReaderAt) (Part, error) {
 func EnsurePart(r io.ReaderAt, size int64) (Part, error) {
 	p, err := Parse(r)
 	if err == nil {
-		err = p.Walk()
+		err = p.Walk(nil)
 	}
 	if err != nil {
-		np := Part{
-			HeaderOffset:            p.HeaderOffset,
-			BodyOffset:              p.BodyOffset,
-			EndOffset:               size,
-			MediaType:               "APPLICATION",
-			MediaSubType:            "OCTET-STREAM",
-			ContentTypeParams:       p.ContentTypeParams,
-			ContentID:               p.ContentID,
-			ContentDescription:      p.ContentDescription,
-			ContentTransferEncoding: p.ContentTransferEncoding,
-			Envelope:                p.Envelope,
-			// We don't keep:
-			//   - BoundaryOffset: irrelevant for top-level message.
-			//   - RawLineCount and DecodedSize: set below.
-			//   - Parts: we are not treating this as a multipart message.
-		}
-		p = np
-		p.SetReaderAt(r)
-		// By reading body, the number of lines and decoded size will be set.
-		_, err2 := io.Copy(io.Discard, p.Reader())
+		np, err2 := fallbackPart(p, r, size)
 		if err2 != nil {
 			err = err2
 		}
+		p = np
 	}
 	return p, err
+}
+
+func fallbackPart(p Part, r io.ReaderAt, size int64) (Part, error) {
+	np := Part{
+		HeaderOffset:            p.HeaderOffset,
+		BodyOffset:              p.BodyOffset,
+		EndOffset:               size,
+		MediaType:               "APPLICATION",
+		MediaSubType:            "OCTET-STREAM",
+		ContentTypeParams:       p.ContentTypeParams,
+		ContentID:               p.ContentID,
+		ContentDescription:      p.ContentDescription,
+		ContentTransferEncoding: p.ContentTransferEncoding,
+		Envelope:                p.Envelope,
+		// We don't keep:
+		//   - BoundaryOffset: irrelevant for top-level message.
+		//   - RawLineCount and DecodedSize: set below.
+		//   - Parts: we are not treating this as a multipart message.
+	}
+	np.SetReaderAt(r)
+	// By reading body, the number of lines and decoded size will be set.
+	_, err := io.Copy(io.Discard, np.Reader())
+	return np, err
 }
 
 // SetReaderAt sets r as reader for this part and all its sub parts, recursively.
@@ -170,7 +176,7 @@ func (p *Part) SetMessageReaderAt() error {
 }
 
 // Walk through message, decoding along the way, and collecting mime part offsets and sizes, and line counts.
-func (p *Part) Walk() error {
+func (p *Part) Walk(parent *Part) error {
 	if len(p.bound) == 0 {
 		if p.MediaType == "MESSAGE" && (p.MediaSubType == "RFC822" || p.MediaSubType == "GLOBAL") {
 			// todo: don't read whole submessage in memory...
@@ -178,13 +184,23 @@ func (p *Part) Walk() error {
 			if err != nil {
 				return err
 			}
-			mp, err := Parse(bytes.NewReader(buf))
+			br := bytes.NewReader(buf)
+			mp, err := Parse(br)
 			if err != nil {
 				return fmt.Errorf("parsing embedded message: %w", err)
 			}
-			// todo: if this is a DSN, we should have a lax parser that doesn't fail on unexpected end of file. this is quite common because MTA's can just truncate the original message.
-			if err := mp.Walk(); err != nil {
-				return fmt.Errorf("parsing parts of embedded message: %w", err)
+			if err := mp.Walk(nil); err != nil {
+				// If this is a DSN and we are not in pedantic mode, accept unexpected end of
+				// message. This is quite common because MTA's sometimes just truncate the original
+				// message in a place that makes the message invalid.
+				if errors.Is(err, errUnexpectedEOF) && !moxvar.Pedantic && parent != nil && len(parent.Parts) >= 3 && p == &parent.Parts[2] && parent.MediaType == "MULTIPART" && parent.MediaSubType == "REPORT" {
+					mp, err = fallbackPart(mp, br, int64(len(buf)))
+					if err != nil {
+						return fmt.Errorf("parsing invalid embedded message: %w", err)
+					}
+				} else {
+					return fmt.Errorf("parsing parts of embedded message: %w", err)
+				}
 			}
 			// todo: if mp does not contain any non-identity content-transfer-encoding, we should set an offsetReader of p.r on mp, recursively.
 			p.Message = &mp
@@ -202,7 +218,7 @@ func (p *Part) Walk() error {
 		if err != nil {
 			return err
 		}
-		if err := pp.Walk(); err != nil {
+		if err := pp.Walk(p); err != nil {
 			return err
 		}
 	}

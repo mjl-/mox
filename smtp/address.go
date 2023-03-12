@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/moxvar"
 )
 
 var ErrBadAddress = errors.New("invalid email address")
@@ -256,8 +257,8 @@ func (p *parser) xlocalpart() Localpart {
 			s += "." + p.xatom()
 		}
 	}
-	// todo: have a strict parser that only allows the actual max of 64 bytes. some services have large localparts because of generated (bounce) addresses.
-	if len(s) > 128 {
+	// In the wild, some services use large localparts for generated (bounce) addresses.
+	if moxvar.Pedantic && len(s) > 64 || len(s) > 128 {
 		// ../rfc/5321:3486
 		p.xerrorf("localpart longer than 64 octets")
 	}

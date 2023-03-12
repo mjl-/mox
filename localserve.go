@@ -296,6 +296,7 @@ func writeLocalConfig(log *mlog.Log, dir string) (rerr error) {
 		Hostname:          "localhost",
 		User:              fmt.Sprintf("%d", os.Getuid()),
 		AdminPasswordFile: "adminpasswd",
+		Pedantic:          true,
 		Listeners: map[string]config.Listener{
 			"local": local,
 		},

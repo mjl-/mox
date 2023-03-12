@@ -32,6 +32,7 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/smtp"
 )
@@ -352,6 +353,8 @@ func SetConfig(c *Config) {
 			RootCAs: Conf.Static.TLS.CertPool,
 		}
 	}
+
+	moxvar.Pedantic = c.Static.Pedantic
 }
 
 // ParseConfig parses the static config at path p. If checkOnly is true, no changes

@@ -32,7 +32,7 @@ func Parse(r io.ReaderAt) (*Message, *message.Part, error) {
 	if part.MediaType != "MULTIPART" || part.MediaSubType != "REPORT" {
 		return nil, nil, fmt.Errorf(`message has content-type %q, must have "message/report"`, strings.ToLower(part.MediaType+"/"+part.MediaSubType))
 	}
-	err = part.Walk()
+	err = part.Walk(nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parsing message parts: %v", err)
 	}
