@@ -604,6 +604,15 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 			}
 			l.SMTP.DNSBLZones = append(l.SMTP.DNSBLZones, d)
 		}
+		checkPath := func(kind string, enabled bool, path string) {
+			if enabled && path != "" && !strings.HasPrefix(path, "/") {
+				addErrorf("listener %q has %s with path %q that must start with a slash", name, kind, path)
+			}
+		}
+		checkPath("AccountHTTP", l.AccountHTTP.Enabled, l.AccountHTTP.Path)
+		checkPath("AccountHTTPS", l.AccountHTTPS.Enabled, l.AccountHTTPS.Path)
+		checkPath("AdminHTTP", l.AdminHTTP.Enabled, l.AdminHTTP.Path)
+		checkPath("AdminHTTPS", l.AdminHTTPS.Enabled, l.AdminHTTPS.Path)
 		c.Listeners[name] = l
 	}
 	if haveUnspecifiedSMTPListener {

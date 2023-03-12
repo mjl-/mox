@@ -123,19 +123,23 @@ type Listener struct {
 	} `sconf:"optional" sconf-doc:"IMAP over TLS for reading email, by email applications. Requires a TLS config."`
 	AccountHTTP struct {
 		Enabled bool
-		Port    int `sconf:"optional" sconf-doc:"Default 80."`
+		Port    int    `sconf:"optional" sconf-doc:"Default 80."`
+		Path    string `sconf:"optional" sconf-doc:"Path to serve account requests on, e.g. /mox/. Useful if domain serves other resources. Default is /."`
 	} `sconf:"optional" sconf-doc:"Account web interface, for email users wanting to change their accounts, e.g. set new password, set new delivery rulesets. Served at /."`
 	AccountHTTPS struct {
 		Enabled bool
-		Port    int `sconf:"optional" sconf-doc:"Default 80."`
+		Port    int    `sconf:"optional" sconf-doc:"Default 80."`
+		Path    string `sconf:"optional" sconf-doc:"Path to serve account requests on, e.g. /mox/. Useful if domain serves other resources. Default is /."`
 	} `sconf:"optional" sconf-doc:"Account web interface listener for HTTPS. Requires a TLS config."`
 	AdminHTTP struct {
 		Enabled bool
-		Port    int `sconf:"optional" sconf-doc:"Default 80."`
+		Port    int    `sconf:"optional" sconf-doc:"Default 80."`
+		Path    string `sconf:"optional" sconf-doc:"Path to serve admin requests on, e.g. /moxadmin/. Useful if domain serves other resources. Default is /admin/."`
 	} `sconf:"optional" sconf-doc:"Admin web interface, for managing domains, accounts, etc. Served at /admin/. Preferrably only enable on non-public IPs. Hint: use 'ssh -L 8080:localhost:80 you@yourmachine' and open http://localhost:8080/admin/, or set up a tunnel (e.g. WireGuard) and add its IP to the mox 'internal' listener."`
 	AdminHTTPS struct {
 		Enabled bool
-		Port    int `sconf:"optional" sconf-doc:"Default 443."`
+		Port    int    `sconf:"optional" sconf-doc:"Default 443."`
+		Path    string `sconf:"optional" sconf-doc:"Path to serve admin requests on, e.g. /moxadmin/. Useful if domain serves other resources. Default is /admin/."`
 	} `sconf:"optional" sconf-doc:"Admin web interface listener for HTTPS. Requires a TLS config. Preferrably only enable on non-public IPs."`
 	MetricsHTTP struct {
 		Enabled bool

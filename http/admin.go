@@ -77,14 +77,14 @@ func init() {
 		xlog.Fatalx("creating sherpa prometheus collector", err)
 	}
 
-	adminSherpaHandler, err = sherpa.NewHandler("/admin/api/", moxvar.Version, Admin{}, &adminDoc, &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none"})
+	adminSherpaHandler, err = sherpa.NewHandler("/api/", moxvar.Version, Admin{}, &adminDoc, &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none"})
 	if err != nil {
 		xlog.Fatalx("sherpa handler", err)
 	}
 }
 
 // Admin exports web API functions for the admin web interface. All its methods are
-// exported under /admin/api/. Function calls require valid HTTP Authentication
+// exported under api/. Function calls require valid HTTP Authentication
 // credentials of a user.
 type Admin struct{}
 
@@ -183,7 +183,7 @@ func adminHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == "GET" && r.URL.Path == "/admin/" {
+	if r.Method == "GET" && r.URL.Path == "/" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache; max-age=0")
 		// We typically return the embedded admin.html, but during development it's handy

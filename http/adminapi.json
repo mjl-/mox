@@ -1,6 +1,6 @@
 {
 	"Name": "Admin",
-	"Docs": "Admin exports web API functions for the admin web interface. All its methods are\nexported under /admin/api/. Function calls require valid HTTP Authentication\ncredentials of a user.",
+	"Docs": "Admin exports web API functions for the admin web interface. All its methods are\nexported under api/. Function calls require valid HTTP Authentication\ncredentials of a user.",
 	"Functions": [
 		{
 			"Name": "CheckDomain",

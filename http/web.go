@@ -170,15 +170,15 @@ func (w *loggingWriter) Done() {
 }
 
 // Set some http headers that should prevent potential abuse. Better safe than sorry.
-func safeHeaders(fn http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func safeHeaders(fn http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Frame-Options", "deny")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline' data:")
 		h.Set("Referrer-Policy", "same-origin")
-		fn(w, r)
-	}
+		fn.ServeHTTP(w, r)
+	})
 }
 
 // Built-in handlers, e.g. mta-sts and autoconfig.
@@ -186,7 +186,7 @@ type pathHandler struct {
 	Name      string                    // For logging/metrics.
 	HostMatch func(dom dns.Domain) bool // If not nil, called to see if domain of requests matches. Only called if requested host is a valid domain.
 	Path      string                    // Path to register, like on http.ServeMux.
-	Handle    http.HandlerFunc
+	Handler   http.Handler
 }
 type serve struct {
 	Kinds        []string // Type of handler and protocol (e.g. acme-tls-alpn-01, account-http, admin-https).
@@ -195,9 +195,10 @@ type serve struct {
 	Webserver    bool          // Whether serving WebHandler. PathHandlers are always evaluated before WebHandlers.
 }
 
-// HandleFunc registers a named handler for a path and optional host. If path ends with a slash, it
-// is used as prefix match, otherwise a full path match is required. If hostOpt is set, only requests to those host are handled by this handler.
-func (s *serve) HandleFunc(name string, hostMatch func(dns.Domain) bool, path string, fn http.HandlerFunc) {
+// Handle registers a named handler for a path and optional host. If path ends with
+// a slash, it is used as prefix match, otherwise a full path match is required. If
+// hostOpt is set, only requests to those host are handled by this handler.
+func (s *serve) Handle(name string, hostMatch func(dns.Domain) bool, path string, fn http.Handler) {
 	s.PathHandlers = append(s.PathHandlers, pathHandler{name, hostMatch, path, fn})
 }
 
@@ -278,7 +279,7 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 		}
 		if r.URL.Path == h.Path || strings.HasSuffix(h.Path, "/") && strings.HasPrefix(r.URL.Path, h.Path) {
 			nw.Handler = h.Name
-			h.Handle(nw, r)
+			h.Handler.ServeHTTP(nw, r)
 			return
 		}
 	}
@@ -325,35 +326,49 @@ func Listen() {
 		if l.AccountHTTP.Enabled {
 			port := config.Port(l.AccountHTTP.Port, 80)
 			srv := ensureServe(false, port, "account-http")
-			srv.HandleFunc("account", nil, "/", safeHeaders(accountHandle))
+			path := "/"
+			if l.AccountHTTP.Path != "" {
+				path = l.AccountHTTP.Path
+			}
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(accountHandle)))
+			srv.Handle("account", nil, path, handler)
 		}
 		if l.AccountHTTPS.Enabled {
 			port := config.Port(l.AccountHTTPS.Port, 443)
 			srv := ensureServe(true, port, "account-https")
-			srv.HandleFunc("account", nil, "/", safeHeaders(accountHandle))
+			path := "/"
+			if l.AccountHTTPS.Path != "" {
+				path = l.AccountHTTPS.Path
+			}
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(accountHandle)))
+			srv.Handle("account", nil, path, handler)
 		}
 
 		if l.AdminHTTP.Enabled {
 			port := config.Port(l.AdminHTTP.Port, 80)
 			srv := ensureServe(false, port, "admin-http")
-			if !l.AccountHTTP.Enabled {
-				srv.HandleFunc("admin", nil, "/", safeHeaders(adminIndex))
+			path := "/admin/"
+			if l.AdminHTTP.Path != "" {
+				path = l.AdminHTTP.Path
 			}
-			srv.HandleFunc("admin", nil, "/admin/", safeHeaders(adminHandle))
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(adminHandle)))
+			srv.Handle("admin", nil, path, handler)
 		}
 		if l.AdminHTTPS.Enabled {
 			port := config.Port(l.AdminHTTPS.Port, 443)
 			srv := ensureServe(true, port, "admin-https")
-			if !l.AccountHTTPS.Enabled {
-				srv.HandleFunc("admin", nil, "/", safeHeaders(adminIndex))
+			path := "/admin/"
+			if l.AdminHTTPS.Path != "" {
+				path = l.AdminHTTPS.Path
 			}
-			srv.HandleFunc("admin", nil, "/admin/", safeHeaders(adminHandle))
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(adminHandle)))
+			srv.Handle("admin", nil, path, handler)
 		}
 		if l.MetricsHTTP.Enabled {
 			port := config.Port(l.MetricsHTTP.Port, 8010)
 			srv := ensureServe(false, port, "metrics-http")
-			srv.HandleFunc("metrics", nil, "/metrics", safeHeaders(promhttp.Handler().ServeHTTP))
-			srv.HandleFunc("metrics", nil, "/", safeHeaders(func(w http.ResponseWriter, r *http.Request) {
+			srv.Handle("metrics", nil, "/metrics", safeHeaders(promhttp.Handler()))
+			srv.Handle("metrics", nil, "/", safeHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/" {
 					http.NotFound(w, r)
 					return
@@ -363,7 +378,7 @@ func Listen() {
 				}
 				w.Header().Set("Content-Type", "text/html")
 				fmt.Fprint(w, `<html><body>see <a href="/metrics">/metrics</a></body></html>`)
-			}))
+			})))
 		}
 		if l.AutoconfigHTTPS.Enabled {
 			port := config.Port(l.AutoconfigHTTPS.Port, 443)
@@ -372,8 +387,8 @@ func Listen() {
 				// todo: may want to check this against the configured domains, could in theory be just a webserver.
 				return strings.HasPrefix(dom.ASCII, "autoconfig.")
 			}
-			srv.HandleFunc("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", safeHeaders(autoconfHandle))
-			srv.HandleFunc("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", safeHeaders(autodiscoverHandle))
+			srv.Handle("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", safeHeaders(http.HandlerFunc(autoconfHandle)))
+			srv.Handle("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", safeHeaders(http.HandlerFunc(autodiscoverHandle)))
 		}
 		if l.MTASTSHTTPS.Enabled {
 			port := config.Port(l.MTASTSHTTPS.Port, 443)
@@ -382,7 +397,7 @@ func Listen() {
 				// todo: may want to check this against the configured domains, could in theory be just a webserver.
 				return strings.HasPrefix(dom.ASCII, "mta-sts.")
 			}
-			srv.HandleFunc("mtasts", mtastsMatch, "/.well-known/mta-sts.txt", safeHeaders(mtastsPolicyHandle))
+			srv.Handle("mtasts", mtastsMatch, "/.well-known/mta-sts.txt", safeHeaders(http.HandlerFunc(mtastsPolicyHandle)))
 		}
 		if l.PprofHTTP.Enabled {
 			// Importing net/http/pprof registers handlers on the default serve mux.
@@ -392,7 +407,7 @@ func Listen() {
 			}
 			srv := &serve{[]string{"pprof-http"}, nil, nil, false}
 			portServe[port] = srv
-			srv.HandleFunc("pprof", nil, "/", http.DefaultServeMux.ServeHTTP)
+			srv.Handle("pprof", nil, "/", http.DefaultServeMux)
 		}
 		if l.WebserverHTTP.Enabled {
 			port := config.Port(l.WebserverHTTP.Port, 80)
@@ -412,7 +427,7 @@ func Listen() {
 			// validation handler.
 			if srv, ok := portServe[80]; ok && srv.TLSConfig == nil {
 				srv.Kinds = append(srv.Kinds, "acme-http-01")
-				srv.HandleFunc("acme-http-01", nil, "/.well-known/acme-challenge/", m.Manager.HTTPHandler(nil).ServeHTTP)
+				srv.Handle("acme-http-01", nil, "/.well-known/acme-challenge/", m.Manager.HTTPHandler(nil))
 			}
 
 			hosts := map[dns.Domain]struct{}{
@@ -450,19 +465,6 @@ func Listen() {
 			}
 		}
 	}
-}
-
-// Only used when the account page is not active on the same listener.
-func adminIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	if r.Method != "GET" {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
 }
 
 // functions to be launched in goroutine that will serve on a listener.

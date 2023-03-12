@@ -214,12 +214,20 @@ describe-static" and "mox config describe-domains":
 				# Default 80. (optional)
 				Port: 0
 
+				# Path to serve account requests on, e.g. /mox/. Useful if domain serves other
+				# resources. Default is /. (optional)
+				Path:
+
 			# Account web interface listener for HTTPS. Requires a TLS config. (optional)
 			AccountHTTPS:
 				Enabled: false
 
 				# Default 80. (optional)
 				Port: 0
+
+				# Path to serve account requests on, e.g. /mox/. Useful if domain serves other
+				# resources. Default is /. (optional)
+				Path:
 
 			# Admin web interface, for managing domains, accounts, etc. Served at /admin/.
 			# Preferrably only enable on non-public IPs. Hint: use 'ssh -L 8080:localhost:80
@@ -231,6 +239,10 @@ describe-static" and "mox config describe-domains":
 				# Default 80. (optional)
 				Port: 0
 
+				# Path to serve admin requests on, e.g. /moxadmin/. Useful if domain serves other
+				# resources. Default is /admin/. (optional)
+				Path:
+
 			# Admin web interface listener for HTTPS. Requires a TLS config. Preferrably only
 			# enable on non-public IPs. (optional)
 			AdminHTTPS:
@@ -238,6 +250,10 @@ describe-static" and "mox config describe-domains":
 
 				# Default 443. (optional)
 				Port: 0
+
+				# Path to serve admin requests on, e.g. /moxadmin/. Useful if domain serves other
+				# resources. Default is /admin/. (optional)
+				Path:
 
 			# Serve prometheus metrics, for monitoring. You should not enable this on a public
 			# IP. (optional)

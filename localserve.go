@@ -129,15 +129,15 @@ during those commands instead of during "data".
 	golog.Print("")
 	golog.Printf(`if the localpart begins with "mailfrom" or "rcptto", the error is returned during those commands instead of during "data"`)
 	golog.Print("")
-	golog.Print(" smtp://localhost:1025                            - receive email")
-	golog.Print("smtps://mox%40localhost:moxmoxmox@localhost:1465  - send email")
-	golog.Print(" smtp://mox%40localhost:moxmoxmox@localhost:1587  - send email (without tls)")
-	golog.Print("imaps://mox%40localhost:moxmoxmox@localhost:1993  - read email")
-	golog.Print(" imap://mox%40localhost:moxmoxmox@localhost:1143  - read email (without tls)")
-	golog.Print("https://mox%40localhost:moxmoxmox@localhost:1443  - account https")
-	golog.Print(" http://mox%40localhost:moxmoxmox@localhost:1080  - account http (without tls)")
-	golog.Print("https://admin:moxadmin@localhost:1443/admin/      - admin https")
-	golog.Print(" http://admin:moxadmin@localhost:1080/admin/      - admin http (without tls)")
+	golog.Print(" smtp://localhost:1025                                    - receive email")
+	golog.Print("smtps://mox%40localhost:moxmoxmox@localhost:1465          - send email")
+	golog.Print(" smtp://mox%40localhost:moxmoxmox@localhost:1587          - send email (without tls)")
+	golog.Print("imaps://mox%40localhost:moxmoxmox@localhost:1993          - read email")
+	golog.Print(" imap://mox%40localhost:moxmoxmox@localhost:1143          - read email (without tls)")
+	golog.Print("https://mox%40localhost:moxmoxmox@localhost:1443/account/ - account https")
+	golog.Print(" http://mox%40localhost:moxmoxmox@localhost:1080/account/ - account http (without tls)")
+	golog.Print("https://admin:moxadmin@localhost:1443/admin/              - admin https")
+	golog.Print(" http://admin:moxadmin@localhost:1080/admin/              - admin http (without tls)")
 	golog.Print("")
 	golog.Printf("serving from %s", dir)
 
@@ -275,8 +275,10 @@ func writeLocalConfig(log *mlog.Log, dir string) (rerr error) {
 	local.IMAPS.Port = 1993
 	local.AccountHTTP.Enabled = true
 	local.AccountHTTP.Port = 1080
+	local.AccountHTTP.Path = "/account/"
 	local.AccountHTTPS.Enabled = true
 	local.AccountHTTPS.Port = 1443
+	local.AccountHTTPS.Path = "/account/"
 	local.AdminHTTP.Enabled = true
 	local.AdminHTTP.Port = 1080
 	local.AdminHTTPS.Enabled = true

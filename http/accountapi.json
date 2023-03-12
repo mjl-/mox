@@ -1,6 +1,6 @@
 {
 	"Name": "Account",
-	"Docs": "Account exports web API functions for the account web interface. All its\nmethods are exported under /api/. Function calls require valid HTTP\nAuthentication credentials of a user.",
+	"Docs": "Account exports web API functions for the account web interface. All its\nmethods are exported under api/. Function calls require valid HTTP\nAuthentication credentials of a user.",
 	"Functions": [
 		{
 			"Name": "SetPassword",

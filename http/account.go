@@ -52,7 +52,7 @@ func init() {
 }
 
 // Account exports web API functions for the account web interface. All its
-// methods are exported under /api/. Function calls require valid HTTP
+// methods are exported under api/. Function calls require valid HTTP
 // Authentication credentials of a user.
 type Account struct{}
 

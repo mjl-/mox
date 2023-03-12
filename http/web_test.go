@@ -26,9 +26,9 @@ func TestServeHTTP(t *testing.T) {
 					return strings.HasPrefix(dom.ASCII, "mta-sts.")
 				},
 				Path: "/.well-known/mta-sts.txt",
-				Handle: func(w http.ResponseWriter, r *http.Request) {
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.Write([]byte("mta-sts!"))
-				},
+				}),
 			},
 		},
 		Webserver: true,
