@@ -1,0 +1,58 @@
+# example prometheus alerting rules file for mox.
+
+groups:
+- name: mox
+  rules:
+  - alert: mox-panic
+    expr: increase(mox_panic_total[1h]) > 0
+    annotations:
+      summary: unhandled panic
+
+  - alert: mox-ip-on-dns-blocklist
+    expr: mox_dnsbl_ips_success < 1
+    annotations:
+      summary: ip is on dns blocklist
+
+  - alert: mox-queue-failing-delivery
+    expr: increase(mox_queue_delivery_duration_seconds_count{attempt!~"[123]",result!="ok"}[1h]) > 0
+    annotations:
+      summary: delivery from queue had a 4th or later attempt fail
+
+  - alert: mox-smtpserver-errors
+    expr: increase(mox_smtpserver_errors_total[1h]) > 0
+    annotations:
+      summary: errors in smtpserver operation
+
+  - alert: mox-webserver-errors
+    expr: increase(mox_httpserver_request_duration_seconds_count{code=~"5.."}[1h]) > 0
+    annotations:
+      summary: http 5xx responses from webserver
+
+  # the alerts below can be used to keep a closer eye or when starting to use mox,
+  # but can be noisy, or you may not be able to prevent them.
+
+  # change period to match your expected incoming message rate.
+  - alert: mox-no-deliveries
+    expr: sum(rate(mox_smtpserver_delivery_total{result="delivered"}[6h])) == 0
+    annotations:
+      summary: no mail delivered for 6 hours
+
+  # may be noisy. anyone can send these reports. you may want to silence it.
+  - alert: mox-tlsrpt-errors
+    expr: increase(mox_tlsrptdb_session_total{type!="success"}[1h]) > 0
+    annotations:
+      summary: tls reports about unsuccessful tls connections
+
+  # may be noisy. can be caused by someone trying to send email as you. and
+  # anyone can send these reports. you are not in control over when this fires,
+  # so you may want to silence it.
+  - alert: mox-dmarc-rejects
+    expr: increase(mox_dmarcdb_policy_evaluated_total{disposition!="none"}[1h]) > 0
+    annotations:
+      summary: dmarc reports about rejects/quarantines due to failing dmarc check
+
+  # may be noisy
+  - alert: mox-ratelimited
+    expr: increase(mox_authentication_ratelimited_total[1h]) > 0
+    annotations:
+      summary: connections/requests were rate limited
