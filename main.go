@@ -312,11 +312,11 @@ Used to generate documentation.
 
 		fmt.Fprintf(os.Stderr, "# mox %s\n\n", strings.Join(c.words, " "))
 		if c.help != "" {
-			fmt.Println(c.help + "\n")
+			fmt.Fprintln(os.Stderr, c.help+"\n")
 		}
 		s := c.makeUsage()
 		s = "\t" + strings.ReplaceAll(s, "\n", "\n\t")
-		fmt.Println(s)
+		fmt.Fprintln(os.Stderr, s)
 	}
 }
 
