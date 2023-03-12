@@ -307,8 +307,8 @@ automatically initialized with configuration files, an account with email
 address mox@localhost and password moxmoxmox, and a newly generated self-signed
 TLS certificate.
 
-All incoming email is accepted (if checks pass), unless the recipient localpart
-ends with:
+All incoming email to any address is accepted (if checks pass), unless the
+recipient localpart ends with:
 
 - "temperror": fail with a temporary error code
 - "permerror": fail with a permanent error code

@@ -47,8 +47,8 @@ automatically initialized with configuration files, an account with email
 address mox@localhost and password moxmoxmox, and a newly generated self-signed
 TLS certificate.
 
-All incoming email is accepted (if checks pass), unless the recipient localpart
-ends with:
+All incoming email to any address is accepted (if checks pass), unless the
+recipient localpart ends with:
 
 - "temperror": fail with a temporary error code
 - "permerror": fail with a permanent error code
@@ -120,7 +120,7 @@ during those commands instead of during "data".
 	golog.Printf("the default admin password is moxadmin")
 	golog.Printf("port numbers are those common for the services + 1000")
 	golog.Printf("tls uses generated self-signed certificate %s", filepath.Join(dir, "localhost.crt"))
-	golog.Printf("all incoming email is accepted (if checks pass), unless the recipient localpart ends with:")
+	golog.Printf("all incoming email to any address is accepted (if checks pass), unless the recipient localpart ends with:")
 	golog.Print("")
 	golog.Printf(`- "temperror": fail with a temporary error code.`)
 	golog.Printf(`- "permerror": fail with a permanent error code.`)

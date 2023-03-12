@@ -1515,6 +1515,18 @@ func (c *conn) cmdData(p *parser) {
 		}
 	}
 
+	if Localserve {
+		// Require that message can be parsed fully.
+		p, err := message.Parse(dataFile)
+		if err == nil {
+			err = p.Walk(nil)
+		}
+		if err != nil {
+			// ../rfc/6409:541
+			xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeMsg6Other0, "malformed message: %v", err)
+		}
+	}
+
 	// Prepare "Received" header.
 	// ../rfc/5321:2051 ../rfc/5321:3302
 	// ../rfc/5321:3311 ../rfc/6531:578
