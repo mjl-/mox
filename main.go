@@ -356,9 +356,11 @@ var pedantic bool
 // loglevels from the config file.
 func mustLoadConfig() {
 	mox.MustLoadConfig(false)
-	if level, ok := mlog.Levels[loglevel]; ok && loglevel != "" {
+	if level, ok := mlog.Levels[loglevel]; loglevel != "" && ok {
 		mox.Conf.Log[""] = level
 		mlog.SetConfig(mox.Conf.Log)
+	} else if loglevel != "" && !ok {
+		log.Fatal("unknown loglevel", mlog.Field("loglevel", loglevel))
 	}
 	if pedantic {
 		moxvar.Pedantic = true

@@ -86,6 +86,13 @@ during those commands instead of during "data".
 		log.Fatalx("loading mox localserve config (hint: when creating a new config with -dir, the directory must not yet exist)", err, mlog.Field("dir", dir))
 	}
 
+	if level, ok := mlog.Levels[loglevel]; loglevel != "" && ok {
+		mox.Conf.Log[""] = level
+		mlog.SetConfig(mox.Conf.Log)
+	} else if loglevel != "" && !ok {
+		log.Fatal("unknown loglevel", mlog.Field("loglevel", loglevel))
+	}
+
 	// Initialize receivedid.
 	recvidbuf, err := os.ReadFile(filepath.Join(dir, "receivedid.key"))
 	if err == nil && len(recvidbuf) != 16+8 {
