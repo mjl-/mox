@@ -36,19 +36,20 @@ echo Building with $goversion and $alpineversion
 # needed because the platform in "FROM --platform <image>" in the first stage
 # seems to override the TARGET* variables.
 test -d empty || mkdir empty
-(podman manifest rm moxmail/mox:$moxversion-$goversion-$alpineversion || exit 0)
+((rm -r tmp/gomod || exit 0); mkdir -p tmp/gomod) # fetch modules through goproxy just once
+(podman manifest rm mox:$moxversion-$goversion-$alpineversion || exit 0)
 for platform in $(echo $platforms | sed 's/,/ /g'); do
 	goos=$(echo $platform | sed 's,/.*$,,')
 	goarch=$(echo $platform | sed 's,^.*/,,')
-	podman build --platform $platform -f Dockerfile.release -v $HOME/go/pkg/sumdb:/go/pkg/sumbd:ro --build-arg goos=$goos --build-arg goarch=$goarch --build-arg moxversion=$moxversion --manifest moxmail/mox:$moxversion-$goversion-$alpineversion empty
+	podman build --platform $platform -f Dockerfile.release -v $HOME/go/pkg/sumdb:/go/pkg/sumbd:ro -v $PWD/tmp/gomod:/go/pkg/mod --build-arg goos=$goos --build-arg goarch=$goarch --build-arg moxversion=$moxversion --manifest mox:$moxversion-$goversion-$alpineversion empty
 done
 
 cat <<EOF
 
 # Suggested commands to push images:
 
-podman manifest push --all moxmail/mox:$moxversion-$goversion-$alpineversion docker.io/moxmail/mox:$moxversion-$goversion-$alpineversion
+podman manifest push --all mox:$moxversion-$goversion-$alpineversion \$host/mox:$moxversion-$goversion-$alpineversion
 
-podman manifest push --all moxmail/mox:$moxversion-$goversion-$alpineversion docker.io/moxmail/mox:$moxversion
-podman manifest push --all moxmail/mox:$moxversion-$goversion-$alpineversion docker.io/moxmail/mox:latest
+podman manifest push --all mox:$moxversion-$goversion-$alpineversion \$host/mox:$moxversion
+podman manifest push --all mox:$moxversion-$goversion-$alpineversion \$host/mox:latest
 EOF
