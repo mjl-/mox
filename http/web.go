@@ -325,42 +325,42 @@ func Listen() {
 
 		if l.AccountHTTP.Enabled {
 			port := config.Port(l.AccountHTTP.Port, 80)
-			srv := ensureServe(false, port, "account-http")
 			path := "/"
 			if l.AccountHTTP.Path != "" {
 				path = l.AccountHTTP.Path
 			}
+			srv := ensureServe(false, port, "account-http at "+path)
 			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(accountHandle)))
 			srv.Handle("account", nil, path, handler)
 		}
 		if l.AccountHTTPS.Enabled {
 			port := config.Port(l.AccountHTTPS.Port, 443)
-			srv := ensureServe(true, port, "account-https")
 			path := "/"
 			if l.AccountHTTPS.Path != "" {
 				path = l.AccountHTTPS.Path
 			}
+			srv := ensureServe(true, port, "account-https at "+path)
 			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(accountHandle)))
 			srv.Handle("account", nil, path, handler)
 		}
 
 		if l.AdminHTTP.Enabled {
 			port := config.Port(l.AdminHTTP.Port, 80)
-			srv := ensureServe(false, port, "admin-http")
 			path := "/admin/"
 			if l.AdminHTTP.Path != "" {
 				path = l.AdminHTTP.Path
 			}
+			srv := ensureServe(false, port, "admin-http at "+path)
 			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(adminHandle)))
 			srv.Handle("admin", nil, path, handler)
 		}
 		if l.AdminHTTPS.Enabled {
 			port := config.Port(l.AdminHTTPS.Port, 443)
-			srv := ensureServe(true, port, "admin-https")
 			path := "/admin/"
 			if l.AdminHTTPS.Path != "" {
 				path = l.AdminHTTPS.Path
 			}
+			srv := ensureServe(true, port, "admin-https at "+path)
 			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(adminHandle)))
 			srv.Handle("admin", nil, path, handler)
 		}

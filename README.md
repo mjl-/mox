@@ -211,8 +211,16 @@ For bug reports, please file an issue at https://github.com/mjl-/mox/issues/new.
 ## How do I change my password?
 
 Regular users (doing IMAP/SMTP with authentication) can change their password
-at the account page, e.g. http://127.0.0.1/. Or you can set a password with "mox
+at the account page, e.g. http://localhost/. Or you can set a password with "mox
 setaccountpassword".
+
+The admin can change the password of any account through the admin page, at
+http://localhost/admin/ by default (leave username empty when logging in).
+
+The account and admin pages are served on localhost on your mail server.
+To access these from your browser, run
+`ssh -L 8080:localhost:80 you@yourmachine` locally and open
+http://localhost:8080/[...].
 
 The admin password can be changed with "mox setadminpassword".
 

@@ -650,10 +650,10 @@ listed in more DNS block lists, visit:
 	if err := acc.Close(); err != nil {
 		fatalf("closing account: %s", err)
 	}
-	fmt.Printf("IMAP and SMTP submission password for %s: %s\n\n", args[0], password)
-	fmt.Println(`When configuring your email client, use the email address as username. If
-autoconfig/autodiscover does not work, use the settings below.`)
-	fmt.Println("")
+	fmt.Printf("IMAP, SMTP submission and HTTP account password for %s: %s\n\n", args[0], password)
+	fmt.Printf(`When configuring your email client, use the email address as username. If
+autoconfig/autodiscover does not work, use these settings:
+`)
 	printClientConfig(domain)
 
 	if existingWebserver {
@@ -739,11 +739,20 @@ starting up. On linux, you may want to enable mox as a systemd service.
 	sudo systemctl enable $PWD/mox.service
 	sudo systemctl start mox.service
 	sudo journalctl -f -u mox.service # See logs
-
 `)
 	}
 
-	fmt.Printf(`For secure email exchange you should have a strictly validating DNSSEC
+	fmt.Printf(`
+After starting mox, the web interfaces are served at:
+
+http://localhost/       - account (email address as username)
+http://localhost/admin/ - admin (empty username)
+
+To access these from your browser, run
+"ssh -L 8080:localhost:80 you@yourmachine" locally and open
+http://localhost:8080/[...].
+
+For secure email exchange you should have a strictly validating DNSSEC
 resolver. An easy and the recommended way is to install unbound.
 
 If you run into problem, have questions/feedback or found a bug, please let us
