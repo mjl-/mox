@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"fmt"
 	htmltemplate "html/template"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mjl-/mox/config"
@@ -160,6 +162,8 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 	} else {
 		fspath = filepath.Join(h.Root, r.URL.Path)
 	}
+	// fspath will not have a trailing slash anymore, we'll correct for it
+	// later when the path turns out to be file instead of a directory.
 
 	serveFile := func(name string, mtime time.Time, content *os.File) {
 		// ServeContent only sets a content-type if not already present in the response headers.
@@ -172,7 +176,7 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 
 	f, err := os.Open(fspath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 			if h.ContinueNotFound {
 				// We haven't handled this request, try a next WebHandler in the list.
 				return false
@@ -214,6 +218,12 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 	// Redirect if the local path is a directory.
 	if fi.IsDir() && !strings.HasSuffix(r.URL.Path, "/") {
 		http.Redirect(w, r, r.URL.Path+"/", http.StatusTemporaryRedirect)
+		return true
+	} else if !fi.IsDir() && strings.HasSuffix(r.URL.Path, "/") {
+		if h.ContinueNotFound {
+			return false
+		}
+		http.NotFound(w, r)
 		return true
 	}
 
