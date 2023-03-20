@@ -633,7 +633,9 @@ If submitting an email fails, it is added to a directory moxsubmit.failures in
 the user's home directory.
 
 Most flags are ignored to fake compatibility with other sendmail
-implementations. A single recipient is required, or the tflag.
+implementations. A single recipient or the -t flag with a To-header is required.
+With the -t flag, Cc and Bcc headers are not handled specially, so Bcc is not
+removed and the addresses do not receive the email.
 
 /etc/moxsubmit.conf should be group-readable and not readable by others and this
 binary should be setgid that group:
