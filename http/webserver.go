@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	htmltemplate "html/template"
@@ -415,6 +416,10 @@ func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request,
 	proxy.FlushInterval = time.Duration(-1) // Flush after each write.
 	proxy.ErrorLog = golog.New(mlog.ErrWriter(mlog.New("net/http/httputil").WithContext(r.Context()), mlog.LevelDebug, "reverseproxy error"), "", 0)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		if errors.Is(err, context.Canceled) {
+			log().Debugx("forwarding request to backend webserver", err, mlog.Field("url", r.URL))
+			return
+		}
 		log().Errorx("forwarding request to backend webserver", err, mlog.Field("url", r.URL))
 		if os.IsTimeout(err) {
 			http.Error(w, "504 - gateway timeout"+recvid(), http.StatusGatewayTimeout)

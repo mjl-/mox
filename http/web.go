@@ -152,7 +152,11 @@ func (w *loggingWriter) Done() {
 			tlsinfo = "(other)"
 		}
 	}
-	xlog.WithContext(w.R.Context()).Debugx("http request", w.WriteErr,
+	err := w.WriteErr
+	if err == nil {
+		err = w.R.Context().Err()
+	}
+	xlog.WithContext(w.R.Context()).Debugx("http request", err,
 		mlog.Field("httpaccess", ""),
 		mlog.Field("handler", w.Handler),
 		mlog.Field("method", method),
