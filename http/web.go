@@ -510,9 +510,11 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 	}
 
 	server := &http.Server{
-		Handler:   handler,
-		TLSConfig: tlsConfig,
-		ErrorLog:  golog.New(mlog.ErrWriter(xlog.Fields(mlog.Field("pkg", "net/http")), mlog.LevelInfo, protocol+" error"), "", 0),
+		Handler:           handler,
+		TLSConfig:         tlsConfig,
+		ReadHeaderTimeout: 30 * time.Second,
+		IdleTimeout:       65 * time.Second, // Chrome closes connections after 60 seconds, firefox after 115 seconds.
+		ErrorLog:          golog.New(mlog.ErrWriter(xlog.Fields(mlog.Field("pkg", "net/http")), mlog.LevelInfo, protocol+" error"), "", 0),
 	}
 	serve := func() {
 		err := server.Serve(ln)
