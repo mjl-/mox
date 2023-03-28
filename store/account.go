@@ -370,6 +370,14 @@ type Recipient struct {
 	Sent      time.Time      `bstore:"nonzero"`
 }
 
+// Outgoing is a message submitted for delivery from the queue. Used to enforce
+// maximum outgoing messages.
+type Outgoing struct {
+	ID        int64
+	Recipient string    `bstore:"nonzero,index"` // Canonical international address with utf8 domain.
+	Submitted time.Time `bstore:"nonzero,default now"`
+}
+
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.
 type Account struct {
 	Name   string     // Name, according to configuration.
@@ -455,7 +463,7 @@ func openAccount(name string) (a *Account, rerr error) {
 		os.MkdirAll(dir, 0770)
 	}
 
-	db, err := bstore.Open(dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Password{}, Subjectpass{})
+	db, err := bstore.Open(dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{})
 	if err != nil {
 		return nil, err
 	}

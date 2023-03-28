@@ -519,6 +519,31 @@
 			"Returns": []
 		},
 		{
+			"Name": "SetAccountLimits",
+			"Docs": "SetAccountLimits set new limits on outgoing messages for an account.",
+			"Params": [
+				{
+					"Name": "accountName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "maxOutgoingMessagesPerDay",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "maxFirstTimeRecipientsPerDay",
+					"Typewords": [
+						"int32"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "ClientConfigDomain",
 			"Docs": "ClientConfigDomain returns configurations for email clients, IMAP and\nSubmission (SMTP) for the domain.",
 			"Params": [

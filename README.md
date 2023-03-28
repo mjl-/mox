@@ -108,8 +108,6 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 
 ## Roadmap
 
-- Rate limiting and spam detection for submitted/outgoing messages, to reduce
-  impact when an account gets compromised.
 - Privilege separation, isolating parts of the application to more restricted
   sandbox (e.g. new unauthenticated connections).
 - DANE and DNSSEC.

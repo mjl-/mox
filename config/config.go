@@ -243,7 +243,9 @@ type Account struct {
 		NeutralMailboxRegexp string `sconf:"optional" sconf-doc:"Example: ^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects), and you may wish to add trash depending on how you use it, or leave this empty."`
 		NotJunkMailboxRegexp string `sconf:"optional" sconf-doc:"Example: .* or an empty string."`
 	} `sconf:"optional" sconf-doc:"Automatically set $Junk and $NotJunk flags based on mailbox messages are delivered/moved/copied to. Email clients typically have too limited functionality to conveniently set these flags, especially $NonJunk, but they can all move messages to a different mailbox, so this helps them."`
-	JunkFilter *JunkFilter `sconf:"optional" sconf-doc:"Content-based filtering, using the junk-status of individual messages to rank words in such messages as spam or ham. It is recommended you always set the applicable (non)-junk status on messages, and that you do not empty your Trash because those messages contain valuable ham/spam training information."` // todo: sane defaults for junkfilter
+	JunkFilter                   *JunkFilter `sconf:"optional" sconf-doc:"Content-based filtering, using the junk-status of individual messages to rank words in such messages as spam or ham. It is recommended you always set the applicable (non)-junk status on messages, and that you do not empty your Trash because those messages contain valuable ham/spam training information."` // todo: sane defaults for junkfilter
+	MaxOutgoingMessagesPerDay    int         `sconf:"optional" sconf-doc:"Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000."`
+	MaxFirstTimeRecipientsPerDay int         `sconf:"optional" sconf-doc:"Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200."`
 
 	DNSDomain      dns.Domain     `sconf:"-"` // Parsed form of Domain.
 	JunkMailbox    *regexp.Regexp `sconf:"-" json:"-"`

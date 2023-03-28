@@ -476,6 +476,7 @@ const account = async (name) => {
 	const config = await api.Account(name)
 
 	let form, fieldset, email
+	let formSendlimits, fieldsetSendlimits, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay
 	let formPassword, fieldsetPassword, password, passwordHint
 
 	const page = document.getElementById('page')
@@ -574,6 +575,42 @@ const account = async (name) => {
 				' ',
 				dom.button('Add address'),
 			),
+		),
+		dom.br(),
+		dom.h2('Send limits'),
+		formSendlimits=dom.form(
+			fieldsetSendlimits=dom.fieldset(
+				dom.label(
+					style({display: 'inline-block'}),
+					dom.span('Maximum outgoing messages per day', attr({title: 'Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.'})),
+					dom.br(),
+					maxOutgoingMessagesPerDay=dom.input(attr({type: 'number', required: '', value: config.MaxOutgoingMessagesPerDay || 1000})),
+				),
+				' ',
+				dom.label(
+					style({display: 'inline-block'}),
+					dom.span('Maximum first-time recipients per day', attr({title: 'Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.'})),
+					dom.br(),
+					maxFirstTimeRecipientsPerDay=dom.input(attr({type: 'number', required: '', value: config.MaxFirstTimeRecipientsPerDay || 200})),
+				),
+				' ',
+				dom.button('Save'),
+			),
+			async function submit(e) {
+				e.stopPropagation()
+				e.preventDefault()
+				fieldsetSendlimits.disabled = true
+				try {
+					await api.SetAccountLimits(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0)
+					window.alert('Send limits saved.')
+				} catch (err) {
+					console.log({err})
+					window.alert('Error: ' + err.message)
+					return
+				} finally {
+					fieldsetSendlimits.disabled = false
+				}
+			},
 		),
 		dom.br(),
 		dom.h2('Set new password'),

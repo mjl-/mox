@@ -922,3 +922,39 @@ func TestNonSMTP(t *testing.T) {
 		t.Fatalf("connection not closed after bogus command")
 	}
 }
+
+// Test limits on outgoing messages.
+func TestLimitOutgoing(t *testing.T) {
+	ts := newTestServer(t, "../testdata/smtp/sendlimit/mox.conf", dns.MockResolver{})
+	defer ts.close()
+
+	ts.user = "mjl@mox.example"
+	ts.pass = "testtest"
+	ts.submission = true
+
+	err := ts.acc.DB.Insert(&store.Outgoing{Recipient: "a@other.example", Submitted: time.Now().Add(-24*time.Hour - time.Minute)})
+	tcheck(t, err, "inserting outgoing/recipient past 24h window")
+
+	testSubmit := func(rcptTo string, expErr *smtpclient.Error) {
+		t.Helper()
+		ts.run(func(err error, client *smtpclient.Client) {
+			t.Helper()
+			mailFrom := "mjl@mox.example"
+			if err == nil {
+				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false)
+			}
+			var cerr smtpclient.Error
+			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
+				t.Fatalf("got err %#v, expected %#v", err, expErr)
+			}
+		})
+	}
+
+	// Limits are set to 4 messages a day, 2 first-time recipients.
+	testSubmit("b@other.example", nil)
+	testSubmit("c@other.example", nil)
+	testSubmit("d@other.example", &smtpclient.Error{Code: smtp.C451LocalErr, Secode: smtp.SePol7DeliveryUnauth1}) // Would be 3rd recipient.
+	testSubmit("b@other.example", nil)
+	testSubmit("b@other.example", nil)
+	testSubmit("b@other.example", &smtpclient.Error{Code: smtp.C451LocalErr, Secode: smtp.SePol7DeliveryUnauth1}) // Would be 5th message.
+}

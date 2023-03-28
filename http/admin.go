@@ -1481,6 +1481,12 @@ func (Admin) SetPassword(ctx context.Context, accountName, password string) {
 	xcheckf(ctx, err, "setting password")
 }
 
+// SetAccountLimits set new limits on outgoing messages for an account.
+func (Admin) SetAccountLimits(ctx context.Context, accountName string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int) {
+	err := mox.AccountLimitsSave(ctx, accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay)
+	xcheckf(ctx, err, "saving account limits")
+}
+
 // ClientConfigDomain returns configurations for email clients, IMAP and
 // Submission (SMTP) for the domain.
 func (Admin) ClientConfigDomain(ctx context.Context, domain string) mox.ClientConfig {

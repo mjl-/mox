@@ -594,6 +594,16 @@ describe-static" and "mox config describe-domains":
 					# in calculating probability reduced. E.g. 1 or 2. (optional)
 					RareWords: 0
 
+			# Maximum number of outgoing messages for this account in a 24 hour window. This
+			# limits the damage to recipients and the reputation of this mail server in case
+			# of account compromise. Default 1000. (optional)
+			MaxOutgoingMessagesPerDay: 0
+
+			# Maximum number of first-time recipients in outgoing messages for this account in
+			# a 24 hour window. This limits the damage to recipients and the reputation of
+			# this mail server in case of account compromise. Default 200. (optional)
+			MaxFirstTimeRecipientsPerDay: 0
+
 	# Redirect all requests from domain (key) to domain (value). Always redirects to
 	# HTTPS. For plain HTTP redirects, use a WebHandler with a WebRedirect. (optional)
 	WebDomainRedirects:

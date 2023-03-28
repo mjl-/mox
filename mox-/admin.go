@@ -790,6 +790,42 @@ func DestinationSave(ctx context.Context, account, destName string, newDest conf
 	return nil
 }
 
+// AccountLimitsSave saves new message sending limits for an account.
+func AccountLimitsSave(ctx context.Context, account string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int) (rerr error) {
+	log := xlog.WithContext(ctx)
+	defer func() {
+		if rerr != nil {
+			log.Errorx("saving account limits", rerr, mlog.Field("account", account))
+		}
+	}()
+
+	Conf.dynamicMutex.Lock()
+	defer Conf.dynamicMutex.Unlock()
+
+	c := Conf.Dynamic
+	acc, ok := c.Accounts[account]
+	if !ok {
+		return fmt.Errorf("account not present")
+	}
+
+	// Compose new config without modifying existing data structures. If we fail, we
+	// leave no trace.
+	nc := c
+	nc.Accounts = map[string]config.Account{}
+	for name, a := range c.Accounts {
+		nc.Accounts[name] = a
+	}
+	acc.MaxOutgoingMessagesPerDay = maxOutgoingMessagesPerDay
+	acc.MaxFirstTimeRecipientsPerDay = maxFirstTimeRecipientsPerDay
+	nc.Accounts[account] = acc
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %v", err)
+	}
+	log.Info("account limits saved", mlog.Field("account", account))
+	return nil
+}
+
 // ClientConfig holds the client configuration for IMAP/Submission for a
 // domain.
 type ClientConfig struct {

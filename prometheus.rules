@@ -28,6 +28,16 @@ groups:
     annotations:
       summary: http 5xx responses from webserver
 
+  - alert: mox-submission-errors
+    expr: increase(mox_smtpserver_submission_total{result=~".*error"}[1h]) > 0
+    annotations:
+      summary: smtp submission errors
+
+  - alert: mox-delivery-errors
+    expr: increase(mox_smtpserver_delivery_total{result=~".*error"}[1h]) > 0
+    annotations:
+      summary: smtp delivery errors
+
   # the alerts below can be used to keep a closer eye or when starting to use mox,
   # but can be noisy, or you may not be able to prevent them.
 

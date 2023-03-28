@@ -1669,6 +1669,71 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		msgPrefix = append(msgPrefix, "Date: "+time.Now().Format(message.RFC5322Z)+"\r\n"...)
 	}
 
+	// Limit damage to the internet and our reputation in case of account compromise by
+	// limiting the max number of messages sent in a 24 hour window, both total number
+	// of messages and number of first-time recipients.
+	err = c.account.DB.Read(func(tx *bstore.Tx) error {
+		conf, _ := c.account.Conf()
+		msgmax := conf.MaxOutgoingMessagesPerDay
+		if msgmax == 0 {
+			// For human senders, 1000 recipients in a day is quite a lot.
+			msgmax = 1000
+		}
+		rcptmax := conf.MaxFirstTimeRecipientsPerDay
+		if rcptmax == 0 {
+			// Human senders may address a new human-sized list of people once in a while. In
+			// case of a compromise, a spammer will probably try to send to many new addresses.
+			rcptmax = 200
+		}
+
+		rcpts := map[string]time.Time{}
+		n := 0
+		err := bstore.QueryTx[store.Outgoing](tx).FilterGreater("Submitted", time.Now().Add(-24*time.Hour)).ForEach(func(o store.Outgoing) error {
+			n++
+			if rcpts[o.Recipient].IsZero() || o.Submitted.Before(rcpts[o.Recipient]) {
+				rcpts[o.Recipient] = o.Submitted
+			}
+			return nil
+		})
+		xcheckf(err, "querying message recipients in past 24h")
+		if n+len(c.recipients) > msgmax {
+			metricSubmission.WithLabelValues("messagelimiterror").Inc()
+			xsmtpUserErrorf(smtp.C451LocalErr, smtp.SePol7DeliveryUnauth1, "max number of messages (%d) over past 24h reached, try increasing per-account setting MaxOutgoingMessagesPerDay", msgmax)
+		}
+
+		// Only check if max first-time recipients is reached if there are enough messages
+		// to trigger the limit.
+		if n+len(c.recipients) < rcptmax {
+			return nil
+		}
+
+		isFirstTime := func(rcpt string, before time.Time) bool {
+			exists, err := bstore.QueryTx[store.Outgoing](tx).FilterNonzero(store.Outgoing{Recipient: rcpt}).FilterLess("Submitted", before).Exists()
+			xcheckf(err, "checking in database whether recipient is first-time")
+			return !exists
+		}
+
+		firsttime := 0
+		now := time.Now()
+		for _, rcptAcc := range c.recipients {
+			r := rcptAcc.rcptTo
+			if isFirstTime(r.XString(true), now) {
+				firsttime++
+			}
+		}
+		for r, t := range rcpts {
+			if isFirstTime(r, t) {
+				firsttime++
+			}
+		}
+		if firsttime > rcptmax {
+			metricSubmission.WithLabelValues("recipientlimiterror").Inc()
+			xsmtpUserErrorf(smtp.C451LocalErr, smtp.SePol7DeliveryUnauth1, "max number of new/first-time recipients (%d) over past 24h reached, try increasing per-account setting MaxFirstTimeRecipientsPerDay", rcptmax)
+		}
+		return nil
+	})
+	xcheckf(err, "read-only transaction")
+
 	// todo future: in a pedantic mode, we can parse the headers, and return an error if rcpt is only in To or Cc header, and not in the non-empty Bcc header. indicates a client that doesn't blind those bcc's.
 
 	// Add DKIM signatures.
@@ -1763,6 +1828,9 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 				}
 				metricSubmission.WithLabelValues("ok").Inc()
 				c.log.Info("submitted message delivered", mlog.Field("mailfrom", *c.mailFrom), mlog.Field("rcptto", rcptAcc.rcptTo), mlog.Field("smtputf8", c.smtputf8), mlog.Field("msgsize", msgSize))
+
+				err := c.account.DB.Insert(&store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)})
+				xcheckf(err, "adding outgoing message")
 			}
 		})
 
@@ -1794,6 +1862,9 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 			}
 			metricSubmission.WithLabelValues("ok").Inc()
 			c.log.Info("message queued for delivery", mlog.Field("mailfrom", *c.mailFrom), mlog.Field("rcptto", rcptAcc.rcptTo), mlog.Field("smtputf8", c.smtputf8), mlog.Field("msgsize", msgSize))
+
+			err := c.account.DB.Insert(&store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)})
+			xcheckf(err, "adding outgoing message")
 		}
 	}
 	err = dataFile.Close()
