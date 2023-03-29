@@ -136,7 +136,6 @@ But perhaps in the future...
 - Autoresponders
 - POP3
 - Delivery to (unix) OS system users
-- PGP or S/MIME
 - Mailing list manager
 - Support for pluggable delivery mechanisms
 
