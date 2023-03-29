@@ -60,8 +60,9 @@ type Config struct {
 	Dynamic          config.Dynamic // Can only be accessed directly by tests. Use methods on Config for locked access.
 	dynamicMtime     time.Time
 	DynamicLastCheck time.Time // For use by quickstart only to skip checks.
-	// From correctly-cased full address (localpart@domain) to account and
-	// address. Domains are IDNA names in utf8.
+	// From canonical full address (localpart@domain, lower-cased when
+	// case-insensitive, stripped of catchall separator) to account and address.
+	// Domains are IDNA names in utf8.
 	accountDestinations map[string]AccountDestination
 }
 
@@ -830,7 +831,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		c.Domains[d] = domain
 	}
 
-	// Post-process email addresses for fast lookups.
+	// Validate email addresses.
 	accDests = map[string]AccountDestination{}
 	for accName, acc := range c.Accounts {
 		var err error
@@ -953,9 +954,18 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 				}
 				replaceLocalparts[addrName] = address.Pack(true)
 			}
+
+			dc := c.Domains[address.Domain.Name()]
+			if lp, err := CanonicalLocalpart(address.Localpart, dc); err != nil {
+				addErrorf("canonicalizing localpart %s: %v", address.Localpart, err)
+			} else if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(address.Localpart), dc.LocalpartCatchallSeparator) {
+				addErrorf("localpart of address %s includes domain catchall separator %s", address, dc.LocalpartCatchallSeparator)
+			} else {
+				address.Localpart = lp
+			}
 			addrFull := address.Pack(true)
 			if _, ok := accDests[addrFull]; ok {
-				addErrorf("duplicate destination address %q", addrFull)
+				addErrorf("duplicate canonicalized destination address %s", addrFull)
 			}
 			accDests[addrFull] = AccountDestination{address.Localpart, accName, dest}
 		}
