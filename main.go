@@ -655,7 +655,11 @@ these addresses will be rejected.
 
 func cmdConfigAddressAdd(c *cmd) {
 	c.params = "address account"
-	c.help = "Adds an address to an account and reloads the configuration."
+	c.help = `Adds an address to an account and reloads the configuration.
+
+If address starts with a @ (i.e. a missing localpart), this is a catchall
+address for the domain.
+`
 	args := c.Parse()
 	if len(args) != 2 {
 		c.Usage()
@@ -675,7 +679,7 @@ func cmdConfigAddressRemove(c *cmd) {
 	c.params = "address"
 	c.help = `Remove an address and reload the configuration.
 
-Incoming email for this address will be rejected.
+Incoming email for this address will be rejected after removing an address.
 `
 	args := c.Parse()
 	if len(args) != 1 {

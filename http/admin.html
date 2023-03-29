@@ -509,6 +509,9 @@ const account = async (name) => {
 							lp, '@',
 							dom.a(d, attr({href: '#domains/'+d})),
 						]
+						if (lp === '') {
+							v.unshift('(catchall) ')
+						}
 					}
 					return dom.tr(
 						dom.td(v),
@@ -568,9 +571,9 @@ const account = async (name) => {
 			fieldset=dom.fieldset(
 				dom.label(
 					style({display: 'inline-block'}),
-					'Email address or localpart',
+					dom.span('Email address or localpart', attr({title: 'If empty, or localpart is empty, a catchall address is configured for the domain.'})),
 					dom.br(),
-					email=dom.input(attr({required: ''})),
+					email=dom.input(),
 				),
 				' ',
 				dom.button('Add address'),
@@ -748,7 +751,7 @@ const domain = async (d) => {
 			dom.tbody(
 				Object.entries(localpartAccounts).map(t =>
 					dom.tr(
-						dom.td(t[0]),
+						dom.td(t[0] || '(catchall)'),
 						dom.td(dom.a(t[1], attr({href: '#accounts/'+t[1]}))),
 						dom.td(
 							dom.button('Remove address', async function click(e) {
@@ -758,7 +761,7 @@ const domain = async (d) => {
 								}
 								e.target.disabled = true
 								try {
-									await api.AddressRemove(t[0] + '@'+d)
+									await api.AddressRemove(t[0] + '@' + d)
 								} catch (err) {
 									console.log({err})
 									window.alert('Error: ' + err.message)
@@ -795,9 +798,9 @@ const domain = async (d) => {
 			fieldset=dom.fieldset(
 				dom.label(
 					style({display: 'inline-block'}),
-					'Localpart',
+					dom.span('Localpart', attr({title: 'An empty localpart is the catchall destination/address for the domain.'})),
 					dom.br(),
-					localpart=dom.input(attr({required: ''})),
+					localpart=dom.input(),
 				),
 				' ',
 				dom.label(

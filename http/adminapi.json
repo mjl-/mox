@@ -58,7 +58,7 @@
 		},
 		{
 			"Name": "DomainLocalparts",
-			"Docs": "DomainLocalparts returns the localparts and accounts configured in domain.",
+			"Docs": "DomainLocalparts returns the encoded localparts and accounts configured in domain.",
 			"Params": [
 				{
 					"Name": "domain",
@@ -3238,11 +3238,6 @@
 			]
 		},
 		{
-			"Name": "Localpart",
-			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.",
-			"Values": null
-		},
-		{
 			"Name": "ResultType",
 			"Docs": "ResultType represents a TLS error.",
 			"Values": [
@@ -3489,6 +3484,11 @@
 					"Docs": ""
 				}
 			]
+		},
+		{
+			"Name": "Localpart",
+			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.",
+			"Values": null
 		},
 		{
 			"Name": "IP",

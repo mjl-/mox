@@ -43,7 +43,10 @@ func FindAccount(localpart smtp.Localpart, domain dns.Domain, allowPostmaster bo
 
 	accAddr, ok := Conf.AccountDestination(canonical)
 	if !ok {
-		return "", "", config.Destination{}, ErrAccountNotFound
+		if accAddr, ok = Conf.AccountDestination("@" + domain.Name()); !ok {
+			return "", "", config.Destination{}, ErrAccountNotFound
+		}
+		canonical = "@" + domain.Name()
 	}
 	return accAddr.Account, canonical, accAddr.Destination, nil
 }

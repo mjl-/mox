@@ -232,7 +232,7 @@ type DKIM struct {
 type Account struct {
 	Domain       string                 `sconf-doc:"Default domain for account. Deprecated behaviour: If a destination is not a full address but only a localpart, this domain is added to form a full address."`
 	Description  string                 `sconf:"optional" sconf-doc:"Free form description, e.g. full name or alternative contact info."`
-	Destinations map[string]Destination `sconf-doc:"Destinations, keys are email addresses (with IDNA domains). Deprecated behaviour: If the address is not a full address but a localpart, it is combined with Domain to form a full address."`
+	Destinations map[string]Destination `sconf-doc:"Destinations, keys are email addresses (with IDNA domains). If the address is of the form '@domain', i.e. with localpart missing, it serves as a catchall for the domain, matching all messages that are not explicitly configured. Deprecated behaviour: If the address is not a full address but a localpart, it is combined with Domain to form a full address."`
 	SubjectPass  struct {
 		Period time.Duration `sconf-doc:"How long unique values are accepted after generating, e.g. 12h."` // todo: have a reasonable default for this?
 	} `sconf:"optional" sconf-doc:"If configured, messages classified as weakly spam are rejected with instructions to retry delivery, but this time with a signed token added to the subject. During the next delivery attempt, the signed token will bypass the spam filter. Messages with a clear spam signal, such as a known bad reputation, are rejected/delayed without a signed token."`

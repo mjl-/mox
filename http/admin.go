@@ -1126,8 +1126,8 @@ func (Admin) Domain(ctx context.Context, domain string) dns.Domain {
 	return d
 }
 
-// DomainLocalparts returns the localparts and accounts configured in domain.
-func (Admin) DomainLocalparts(ctx context.Context, domain string) (localpartAccounts map[smtp.Localpart]string) {
+// DomainLocalparts returns the encoded localparts and accounts configured in domain.
+func (Admin) DomainLocalparts(ctx context.Context, domain string) (localpartAccounts map[string]string) {
 	d, err := dns.ParseDomain(domain)
 	xcheckf(ctx, err, "parsing domain")
 	_, ok := mox.Conf.Domain(d)

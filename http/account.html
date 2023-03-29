@@ -273,6 +273,7 @@ const index = async () => {
 			Object.entries(destinations).sort().map(t =>
 				dom.li(
 					dom.a(t[0], attr({href: '#destinations/'+t[0]})),
+					t[0].startsWith('@') ? ' (catchall)' : [],
 				),
 			),
 		),

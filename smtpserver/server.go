@@ -1625,7 +1625,7 @@ func messageHeaderCommentDomain(domain dns.Domain, smtputf8 bool) string {
 	return s
 }
 
-// submit is used for incoming mail from authenticated users.
+// submit is used for mail from authenticated users that we will try to deliver.
 func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, pdataFile **os.File) {
 	dataFile := *pdataFile
 

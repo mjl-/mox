@@ -468,7 +468,9 @@ describe-static" and "mox config describe-domains":
 			# Free form description, e.g. full name or alternative contact info. (optional)
 			Description:
 
-			# Destinations, keys are email addresses (with IDNA domains). Deprecated
+			# Destinations, keys are email addresses (with IDNA domains). If the address is of
+			# the form '@domain', i.e. with localpart missing, it serves as a catchall for the
+			# domain, matching all messages that are not explicitly configured. Deprecated
 			# behaviour: If the address is not a full address but a localpart, it is combined
 			# with Domain to form a full address.
 			Destinations:

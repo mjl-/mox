@@ -555,6 +555,8 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 //
 // The new account does not have a password, so cannot yet log in. Email can be
 // delivered.
+//
+// Catchall addresses are not supported for AccountAdd. Add separately with AddressAdd.
 func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 	log := xlog.WithContext(ctx)
 	defer func() {
@@ -648,8 +650,8 @@ func checkAddressAvailable(addr smtp.Address) error {
 	return nil
 }
 
-// AddressAdd adds an email address to an account and reloads the
-// configuration.
+// AddressAdd adds an email address to an account and reloads the configuration. If
+// address starts with an @ it is treated as a catchall address for the domain.
 func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 	log := xlog.WithContext(ctx)
 	defer func() {
@@ -657,11 +659,6 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 			log.Errorx("adding address", rerr, mlog.Field("address", address), mlog.Field("account", account))
 		}
 	}()
-
-	addr, err := smtp.ParseAddress(address)
-	if err != nil {
-		return fmt.Errorf("parsing email address: %v", err)
-	}
 
 	Conf.dynamicMutex.Lock()
 	defer Conf.dynamicMutex.Unlock()
@@ -672,8 +669,29 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 		return fmt.Errorf("account does not exist")
 	}
 
-	if err := checkAddressAvailable(addr); err != nil {
-		return fmt.Errorf("address not available: %v", err)
+	var destAddr string
+	if strings.HasPrefix(address, "@") {
+		d, err := dns.ParseDomain(address[1:])
+		if err != nil {
+			return fmt.Errorf("parsing domain: %v", err)
+		}
+		dname := d.Name()
+		destAddr = "@" + dname
+		if _, ok := Conf.Dynamic.Domains[dname]; !ok {
+			return fmt.Errorf("domain does not exist")
+		} else if _, ok := Conf.accountDestinations[destAddr]; ok {
+			return fmt.Errorf("catchall address already configured for domain")
+		}
+	} else {
+		addr, err := smtp.ParseAddress(address)
+		if err != nil {
+			return fmt.Errorf("parsing email address: %v", err)
+		}
+
+		if err := checkAddressAvailable(addr); err != nil {
+			return fmt.Errorf("address not available: %v", err)
+		}
+		destAddr = addr.String()
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -687,14 +705,14 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 	for name, d := range a.Destinations {
 		nd[name] = d
 	}
-	nd[addr.String()] = config.Destination{}
+	nd[destAddr] = config.Destination{}
 	a.Destinations = nd
 	nc.Accounts[account] = a
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("address added", mlog.Field("address", addr), mlog.Field("account", account))
+	log.Info("address added", mlog.Field("address", address), mlog.Field("account", account))
 	return nil
 }
 
@@ -710,31 +728,23 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	Conf.dynamicMutex.Lock()
 	defer Conf.dynamicMutex.Unlock()
 
-	c := Conf.Dynamic
-
-	addr, err := smtp.ParseAddress(address)
-	if err != nil {
-		return fmt.Errorf("parsing email address: %v", err)
-	}
-	ad, ok := Conf.accountDestinations[addr.String()]
+	ad, ok := Conf.accountDestinations[address]
 	if !ok {
 		return fmt.Errorf("address does not exists")
 	}
-	addrStr := addr.String()
 
 	// Compose new config without modifying existing data structures. If we fail, we
 	// leave no trace.
-	a, ok := c.Accounts[ad.Account]
+	a, ok := Conf.Dynamic.Accounts[ad.Account]
 	if !ok {
 		return fmt.Errorf("internal error: cannot find account")
 	}
 	na := a
 	na.Destinations = map[string]config.Destination{}
 	var dropped bool
-	for name, d := range a.Destinations {
-		// todo deprecated: remove support for localpart-only with default domain as destination address.
-		if !(name == addr.Localpart.String() && a.DNSDomain == addr.Domain || name == addrStr) {
-			na.Destinations[name] = d
+	for destAddr, d := range a.Destinations {
+		if destAddr != address {
+			na.Destinations[destAddr] = d
 		} else {
 			dropped = true
 		}
@@ -742,9 +752,9 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	if !dropped {
 		return fmt.Errorf("address not removed, likely a postmaster/reporting address")
 	}
-	nc := c
+	nc := Conf.Dynamic
 	nc.Accounts = map[string]config.Account{}
-	for name, a := range c.Accounts {
+	for name, a := range Conf.Dynamic.Accounts {
 		nc.Accounts[name] = a
 	}
 	nc.Accounts[ad.Account] = na
@@ -752,7 +762,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("address removed", mlog.Field("address", addr), mlog.Field("account", ad.Account))
+	log.Info("address removed", mlog.Field("address", address), mlog.Field("account", ad.Account))
 	return nil
 }
 

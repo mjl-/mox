@@ -67,7 +67,8 @@ type Config struct {
 }
 
 type AccountDestination struct {
-	Localpart   smtp.Localpart
+	Catchall    bool           // If catchall destination for its domain.
+	Localpart   smtp.Localpart // In original casing as written in config file.
 	Account     string
 	Destination config.Destination
 }
@@ -167,13 +168,19 @@ func (c *Config) Accounts() (l []string) {
 	return
 }
 
-func (c *Config) DomainLocalparts(d dns.Domain) map[smtp.Localpart]string {
+// DomainLocalparts returns a mapping of encoded localparts to account names for a
+// domain. An empty localpart is a catchall destination for a domain.
+func (c *Config) DomainLocalparts(d dns.Domain) map[string]string {
 	suffix := "@" + d.Name()
-	m := map[smtp.Localpart]string{}
+	m := map[string]string{}
 	c.withDynamicLock(func() {
 		for addr, ad := range c.accountDestinations {
 			if strings.HasSuffix(addr, suffix) {
-				m[ad.Localpart] = ad.Account
+				if ad.Catchall {
+					m[""] = ad.Account
+				} else {
+					m[ad.Localpart.String()] = ad.Account
+				}
 			}
 		}
 	})
@@ -685,7 +692,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
 
-	// check that mailbox is in unicode NFC normalized form.
+	// Check that mailbox is in unicode NFC normalized form.
 	checkMailboxNormf := func(mailbox string, format string, args ...any) {
 		s := norm.NFC.String(mailbox)
 		if mailbox != s {
@@ -930,10 +937,27 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 				}
 			}
 
+			// Catchall destination for domain.
+			if strings.HasPrefix(addrName, "@") {
+				d, err := dns.ParseDomain(addrName[1:])
+				if err != nil {
+					addErrorf("parsing domain %q in account %q", addrName[1:], accName)
+					continue
+				} else if _, ok := c.Domains[d.Name()]; !ok {
+					addErrorf("unknown domain for address %q in account %q", addrName, accName)
+					continue
+				}
+				addrFull := "@" + d.Name()
+				if _, ok := accDests[addrFull]; ok {
+					addErrorf("duplicate canonicalized catchall destination address %s", addrFull)
+				}
+				accDests[addrFull] = AccountDestination{true, "", accName, dest}
+				continue
+			}
+
 			// todo deprecated: remove support for parsing destination as just a localpart instead full address.
 			var address smtp.Address
-			localpart, err := smtp.ParseLocalpart(addrName)
-			if err != nil && errors.Is(err, smtp.ErrBadLocalpart) {
+			if localpart, err := smtp.ParseLocalpart(addrName); err != nil && errors.Is(err, smtp.ErrBadLocalpart) {
 				address, err = smtp.ParseAddress(addrName)
 				if err != nil {
 					addErrorf("invalid email address %q in account %q", addrName, accName)
@@ -955,6 +979,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 				replaceLocalparts[addrName] = address.Pack(true)
 			}
 
+			origLP := address.Localpart
 			dc := c.Domains[address.Domain.Name()]
 			if lp, err := CanonicalLocalpart(address.Localpart, dc); err != nil {
 				addErrorf("canonicalizing localpart %s: %v", address.Localpart, err)
@@ -967,7 +992,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			if _, ok := accDests[addrFull]; ok {
 				addErrorf("duplicate canonicalized destination address %s", addrFull)
 			}
-			accDests[addrFull] = AccountDestination{address.Localpart, accName, dest}
+			accDests[addrFull] = AccountDestination{false, origLP, accName, dest}
 		}
 
 		for lp, addr := range replaceLocalparts {
@@ -1007,7 +1032,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			DMARCReports: true,
 		}
 		checkMailboxNormf(dmarc.Mailbox, "DMARC mailbox for account %q", dmarc.Account)
-		accDests[addrFull] = AccountDestination{lp, dmarc.Account, dest}
+		accDests[addrFull] = AccountDestination{false, lp, dmarc.Account, dest}
 	}
 
 	// Set TLSRPT destinations.
@@ -1036,7 +1061,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			TLSReports: true,
 		}
 		checkMailboxNormf(tlsrpt.Mailbox, "TLSRPT mailbox for account %q", tlsrpt.Account)
-		accDests[addrFull] = AccountDestination{lp, tlsrpt.Account, dest}
+		accDests[addrFull] = AccountDestination{false, lp, tlsrpt.Account, dest}
 	}
 
 	// Check webserver configs.

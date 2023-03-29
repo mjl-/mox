@@ -958,3 +958,48 @@ func TestLimitOutgoing(t *testing.T) {
 	testSubmit("b@other.example", nil)
 	testSubmit("b@other.example", &smtpclient.Error{Code: smtp.C451LocalErr, Secode: smtp.SePol7DeliveryUnauth1}) // Would be 5th message.
 }
+
+// Test with catchall destination address.
+func TestCatchall(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"other.example.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"other.example."},
+		},
+	}
+	ts := newTestServer(t, "../testdata/smtp/catchall/mox.conf", resolver)
+	defer ts.close()
+
+	testDeliver := func(rcptTo string, expErr *smtpclient.Error) {
+		t.Helper()
+		ts.run(func(err error, client *smtpclient.Client) {
+			t.Helper()
+			mailFrom := "mjl@other.example"
+			if err == nil {
+				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false)
+			}
+			var cerr smtpclient.Error
+			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
+				t.Fatalf("got err %#v, expected %#v", err, expErr)
+			}
+		})
+	}
+
+	testDeliver("mjl@mox.example", nil)      // Exact match.
+	testDeliver("mjl+test@mox.example", nil) // Domain localpart catchall separator.
+	testDeliver("MJL+TEST@mox.example", nil) // Again, and case insensitive.
+	testDeliver("unknown@mox.example", nil)  // Catchall address, to account catchall.
+
+	n, err := bstore.QueryDB[store.Message](ts.acc.DB).Count()
+	tcheck(t, err, "checking delivered messages")
+	tcompare(t, n, 3)
+
+	acc, err := store.OpenAccount("catchall")
+	tcheck(t, err, "open account")
+	defer acc.Close()
+	n, err = bstore.QueryDB[store.Message](acc.DB).Count()
+	tcheck(t, err, "checking delivered messages to catchall account")
+	tcompare(t, n, 1)
+}

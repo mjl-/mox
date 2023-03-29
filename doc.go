@@ -404,13 +404,16 @@ these addresses will be rejected.
 
 Adds an address to an account and reloads the configuration.
 
+If address starts with a @ (i.e. a missing localpart), this is a catchall
+address for the domain.
+
 	usage: mox config address add address account
 
 # mox config address rm
 
 Remove an address and reload the configuration.
 
-Incoming email for this address will be rejected.
+Incoming email for this address will be rejected after removing an address.
 
 	usage: mox config address rm address
 
