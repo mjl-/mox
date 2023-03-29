@@ -344,7 +344,7 @@ const index = async () => {
 		),
 		dom.br(),
 		dom.h2('Export'),
-		dom.p('Export all messages in all mailboxes. Either in maildir format (with flags like Replied, Forwarded, Junk, etc) or in mbox format (without flags). And either as .zip file or .tgz file.'),
+		dom.p('Export all messages in all mailboxes. In maildir or mbox format, as .zip or .tgz file.'),
 		dom.ul(
 			dom.li(dom.a('mail-export-maildir.tgz', attr({href: 'mail-export-maildir.tgz'}))),
 			dom.li(dom.a('mail-export-maildir.zip', attr({href: 'mail-export-maildir.zip'}))),
