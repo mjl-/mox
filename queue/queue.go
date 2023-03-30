@@ -331,8 +331,13 @@ func Drop(ID int64, toDomain string, recipient string) (int, error) {
 	return n, nil
 }
 
+type ReadReaderAtCloser interface {
+	io.ReadCloser
+	io.ReaderAt
+}
+
 // OpenMessage opens a message present in the queue.
-func OpenMessage(id int64) (io.ReadCloser, error) {
+func OpenMessage(id int64) (ReadReaderAtCloser, error) {
 	qm := Msg{ID: id}
 	err := queueDB.Get(&qm)
 	if err != nil {

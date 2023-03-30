@@ -1737,19 +1737,18 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// todo future: in a pedantic mode, we can parse the headers, and return an error if rcpt is only in To or Cc header, and not in the non-empty Bcc header. indicates a client that doesn't blind those bcc's.
 
 	// Add DKIM signatures.
-	domain := c.mailFrom.IPDomain.Domain
-	confDom, ok := mox.Conf.Domain(domain)
+	confDom, ok := mox.Conf.Domain(msgFrom.Domain)
 	if !ok {
-		c.log.Error("domain disappeared", mlog.Field("domain", domain))
+		c.log.Error("domain disappeared", mlog.Field("domain", msgFrom.Domain))
 		xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "internal error")
 	}
 
 	dkimConfig := confDom.DKIM
 	if len(dkimConfig.Sign) > 0 {
-		if canonical, err := mox.CanonicalLocalpart(c.mailFrom.Localpart, confDom); err != nil {
-			c.log.Errorx("determining canonical localpart for dkim signing", err, mlog.Field("localpart", c.mailFrom.Localpart))
-		} else if dkimHeaders, err := dkim.Sign(ctx, canonical, domain, dkimConfig, c.smtputf8, dataFile); err != nil {
-			c.log.Errorx("dkim sign for domain", err, mlog.Field("domain", domain))
+		if canonical, err := mox.CanonicalLocalpart(msgFrom.Localpart, confDom); err != nil {
+			c.log.Errorx("determining canonical localpart for dkim signing", err, mlog.Field("localpart", msgFrom.Localpart))
+		} else if dkimHeaders, err := dkim.Sign(ctx, canonical, msgFrom.Domain, dkimConfig, c.smtputf8, dataFile); err != nil {
+			c.log.Errorx("dkim sign for domain", err, mlog.Field("domain", msgFrom.Domain))
 			metricServerErrors.WithLabelValues("dkimsign").Inc()
 		} else {
 			msgPrefix = append(msgPrefix, []byte(dkimHeaders)...)

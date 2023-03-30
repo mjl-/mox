@@ -18,6 +18,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -1002,4 +1003,97 @@ func TestCatchall(t *testing.T) {
 	n, err = bstore.QueryDB[store.Message](acc.DB).Count()
 	tcheck(t, err, "checking delivered messages to catchall account")
 	tcompare(t, n, 1)
+}
+
+// Test DKIM signing for outgoing messages.
+func TestDKIMSign(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"mox.example.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"mox.example."},
+		},
+	}
+
+	ts := newTestServer(t, "../testdata/smtp/mox.conf", resolver)
+	defer ts.close()
+
+	// Set DKIM signing config.
+	var gen byte
+	genDKIM := func(domain string) string {
+		dom, _ := mox.Conf.Domain(dns.Domain{ASCII: domain})
+
+		privkey := make([]byte, ed25519.SeedSize) // Fake key, don't use for real.
+		gen++
+		privkey[0] = byte(gen)
+
+		sel := config.Selector{
+			HashEffective:    "sha256",
+			HeadersEffective: []string{"From", "To", "Subject"},
+			Key:              ed25519.NewKeyFromSeed(privkey),
+			Domain:           dns.Domain{ASCII: "testsel"},
+		}
+		dom.DKIM = config.DKIM{
+			Selectors: map[string]config.Selector{"testsel": sel},
+			Sign:      []string{"testsel"},
+		}
+		mox.Conf.Dynamic.Domains[domain] = dom
+		pubkey := sel.Key.Public().(ed25519.PublicKey)
+		return "v=DKIM1;k=ed25519;p=" + base64.StdEncoding.EncodeToString(pubkey)
+	}
+
+	dkimtxt := genDKIM("mox.example")
+	dkimtxt2 := genDKIM("mox2.example")
+
+	// DKIM verify needs to find the key.
+	resolver.TXT = map[string][]string{
+		"testsel._domainkey.mox.example.":  {dkimtxt},
+		"testsel._domainkey.mox2.example.": {dkimtxt2},
+	}
+
+	ts.submission = true
+	ts.user = "mjl@mox.example"
+	ts.pass = "testtest"
+
+	n := 0
+	testSubmit := func(mailFrom, msgFrom string) {
+		t.Helper()
+		ts.run(func(err error, client *smtpclient.Client) {
+			t.Helper()
+
+			msg := strings.ReplaceAll(fmt.Sprintf(`From: <%s>
+To: <remote@example.org>
+Subject: test
+Message-Id: <test@mox.example>
+
+test email
+`, msgFrom), "\n", "\r\n")
+
+			rcptTo := "remote@example.org"
+			if err == nil {
+				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false)
+			}
+			tcheck(t, err, "deliver")
+
+			msgs, err := queue.List()
+			tcheck(t, err, "listing queue")
+			n++
+			tcompare(t, len(msgs), n)
+			sort.Slice(msgs, func(i, j int) bool {
+				return msgs[i].ID > msgs[j].ID
+			})
+			f, err := queue.OpenMessage(msgs[0].ID)
+			tcheck(t, err, "open message in queue")
+			defer f.Close()
+			results, err := dkim.Verify(context.Background(), resolver, false, dkim.DefaultPolicy, f, false)
+			tcheck(t, err, "verifying dkim message")
+			tcompare(t, len(results), 1)
+			tcompare(t, results[0].Status, dkim.StatusPass)
+			tcompare(t, results[0].Sig.Domain.ASCII, strings.Split(msgFrom, "@")[1])
+		})
+	}
+
+	testSubmit("mjl@mox.example", "mjl@mox.example")
+	testSubmit("mjl@mox.example", "mjl@mox2.example") // DKIM signature will be for mox2.example.
 }
