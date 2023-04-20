@@ -269,3 +269,16 @@ can start with a machine with 512MB RAM, any CPU will do. For storage you
 should account for the size of the email messages (no compression currently),
 an additional 15% overhead for the meta data, and add some more headroom.
 Expand as necessary.
+
+## Can I see some screenshots?
+
+Yes, see https://www.xmox.nl/screenshots/.
+
+Mox has an "account" web interface where users can view their account and
+manage their address configuration, such as rules for automatically delivering
+certain incoming messages to a specific mailbox.
+
+Mox also has an "admin" web interface where the mox instance administrator can
+make changes, e.g. add/remove/modify domains/accounts/addresses.
+
+Mox does not have a webmail yet, so there are no screenshots of actual email.
