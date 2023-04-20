@@ -201,16 +201,26 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, rem
 // xbotchf generates a temporary error and marks the client as botched. e.g. for
 // i/o errors or invalid protocol messages.
 func (c *Client) xbotchf(code int, secode string, lastLine, format string, args ...any) {
-	c.botched = true
-	c.xerrorf(false, code, secode, lastLine, format, args...)
+	panic(c.botchf(code, secode, lastLine, format, args...))
 }
 
-func (c *Client) xerrorf(permanent bool, code int, secode, lastLine, format string, args ...any) {
+// botchf generates a temporary error and marks the client as botched. e.g. for
+// i/o errors or invalid protocol messages.
+func (c *Client) botchf(code int, secode string, lastLine, format string, args ...any) error {
+	c.botched = true
+	return c.errorf(false, code, secode, lastLine, format, args...)
+}
+
+func (c *Client) errorf(permanent bool, code int, secode, lastLine, format string, args ...any) error {
 	var cmd string
 	if len(c.cmds) > 0 {
 		cmd = c.cmds[0]
 	}
-	panic(Error{permanent, code, secode, cmd, lastLine, fmt.Errorf(format, args...)})
+	return Error{permanent, code, secode, cmd, lastLine, fmt.Errorf(format, args...)}
+}
+
+func (c *Client) xerrorf(permanent bool, code int, secode, lastLine, format string, args ...any) {
+	panic(c.errorf(permanent, code, secode, lastLine, format, args...))
 }
 
 // timeoutWriter passes each Write on to conn after setting a write deadline on conn based on
@@ -231,7 +241,7 @@ func (w timeoutWriter) Write(buf []byte) (int, error) {
 
 var bufs = moxio.NewBufpool(8, 2*1024)
 
-func (c *Client) xreadline() string {
+func (c *Client) readline() (string, error) {
 	// todo: could have per-operation timeouts. and rfc suggests higher minimum timeouts. ../rfc/5321:3610
 	if err := c.conn.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
 		c.log.Errorx("setting read deadline", err)
@@ -239,9 +249,9 @@ func (c *Client) xreadline() string {
 
 	line, err := bufs.Readline(c.r)
 	if err != nil {
-		c.xbotchf(0, "", "", "%s: %w", strings.Join(c.cmds, ","), err)
+		return line, c.botchf(0, "", "", "%s: %w", strings.Join(c.cmds, ","), err)
 	}
-	return line
+	return line, nil
 }
 
 func (c *Client) xtrace(level mlog.Level) func() {
@@ -285,18 +295,32 @@ func (c *Client) xflush() {
 
 // read response, possibly multiline, with supporting extended codes based on configuration in client.
 func (c *Client) xread() (code int, secode, lastLine string, texts []string) {
-	return c.xreadecode(c.extEcodes)
+	var err error
+	code, secode, lastLine, texts, err = c.read()
+	if err != nil {
+		panic(err)
+	}
+	return
+}
+
+func (c *Client) read() (code int, secode, lastLine string, texts []string, rerr error) {
+	return c.readecode(c.extEcodes)
 }
 
 // read response, possibly multiline.
 // if ecodes, extended codes are parsed.
-func (c *Client) xreadecode(ecodes bool) (code int, secode, lastLine string, texts []string) {
+func (c *Client) readecode(ecodes bool) (code int, secode, lastLine string, texts []string, rerr error) {
 	for {
-		co, sec, text, line, last := c.xread1(ecodes)
+		co, sec, text, line, last, err := c.read1(ecodes)
+		if err != nil {
+			rerr = err
+			return
+		}
 		texts = append(texts, text)
 		if code != 0 && co != code {
 			// ../rfc/5321:2771
-			c.xbotchf(0, "", line, "%w: multiline response with different codes, previous %d, last %d", ErrProtocol, code, co)
+			err := c.botchf(0, "", line, "%w: multiline response with different codes, previous %d, last %d", ErrProtocol, code, co)
+			return 0, "", "", nil, err
 		}
 		code = co
 		if last {
@@ -310,24 +334,38 @@ func (c *Client) xreadecode(ecodes bool) (code int, secode, lastLine string, tex
 			}
 			metricCommands.WithLabelValues(cmd, fmt.Sprintf("%d", co), sec).Observe(float64(time.Since(c.cmdStart)) / float64(time.Second))
 			c.log.Debug("smtpclient command result", mlog.Field("cmd", cmd), mlog.Field("code", co), mlog.Field("secode", sec), mlog.Field("duration", time.Since(c.cmdStart)))
-			return co, sec, line, texts
+			return co, sec, line, texts, nil
 		}
 	}
 }
 
+func (c *Client) xreadecode(ecodes bool) (code int, secode, lastLine string, texts []string) {
+	var err error
+	code, secode, lastLine, texts, err = c.readecode(ecodes)
+	if err != nil {
+		panic(err)
+	}
+	return
+}
+
 // read single response line.
 // if ecodes, extended codes are parsed.
-func (c *Client) xread1(ecodes bool) (code int, secode, text, line string, last bool) {
-	line = c.xreadline()
+func (c *Client) read1(ecodes bool) (code int, secode, text, line string, last bool, rerr error) {
+	line, rerr = c.readline()
+	if rerr != nil {
+		return
+	}
 	i := 0
 	for ; i < len(line) && line[i] >= '0' && line[i] <= '9'; i++ {
 	}
 	if i != 3 {
-		c.xbotchf(0, "", line, "%w: expected response code: %s", ErrProtocol, line)
+		rerr = c.botchf(0, "", line, "%w: expected response code: %s", ErrProtocol, line)
+		return
 	}
 	v, err := strconv.ParseInt(line[:i], 10, 32)
 	if err != nil {
-		c.xbotchf(0, "", line, "%w: bad response code (%s): %s", ErrProtocol, err, line)
+		rerr = c.botchf(0, "", line, "%w: bad response code (%s): %s", ErrProtocol, err, line)
+		return
 	}
 	code = int(v)
 	major := code / 100
@@ -339,14 +377,15 @@ func (c *Client) xread1(ecodes bool) (code int, secode, text, line string, last 
 		// Allow missing space. ../rfc/5321:2570 ../rfc/5321:2612
 		last = true
 	} else {
-		c.xbotchf(0, "", line, "%w: expected space or dash after response code: %s", ErrProtocol, line)
+		rerr = c.botchf(0, "", line, "%w: expected space or dash after response code: %s", ErrProtocol, line)
+		return
 	}
 
 	if ecodes {
 		secode, s = parseEcode(major, s)
 	}
 
-	return code, secode, s, line, last
+	return code, secode, s, line, last, nil
 }
 
 func parseEcode(major int, s string) (secode string, remain string) {
@@ -633,15 +672,27 @@ func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, ms
 		c.xbwriteline("DATA")
 		c.xflush()
 
+		// We read the response to RCPT TO and DATA without panic on read error. Servers
+		// may be aborting the connection after a failed MAIL FROM, e.g. outlook when it
+		// has blocklisted your IP. We don't want the read for the response to RCPT TO to
+		// cause a read error as it would result in an unhelpful error message and a
+		// temporary instead of permanent error code.
+
 		mfcode, mfsecode, mflastline, _ := c.xread()
-		rtcode, rtsecode, rtlastline, _ := c.xread()
-		datacode, datasecode, datalastline, _ := c.xread()
+		rtcode, rtsecode, rtlastline, _, rterr := c.read()
+		datacode, datasecode, datalastline, _, dataerr := c.read()
 
 		if mfcode != smtp.C250Completed {
 			c.xerrorf(mfcode/100 == 5, mfcode, mfsecode, mflastline, "%w: got %d, expected 2xx", ErrStatus, mfcode)
 		}
+		if rterr != nil {
+			panic(rterr)
+		}
 		if rtcode != smtp.C250Completed {
 			c.xerrorf(rtcode/100 == 5, rtcode, rtsecode, rtlastline, "%w: got %d, expected 2xx", ErrStatus, rtcode)
+		}
+		if dataerr != nil {
+			panic(dataerr)
 		}
 		if datacode != smtp.C354Continue {
 			c.xerrorf(datacode/100 == 5, datacode, datasecode, datalastline, "%w: got %d, expected 354", ErrStatus, datacode)

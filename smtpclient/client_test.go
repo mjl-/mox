@@ -510,6 +510,30 @@ func TestErrors(t *testing.T) {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with Permanent", err))
 		}
 	})
+
+	// Remote closes connection after 550 response to MAIL FROM in pipelined
+	// connection. Should result in permanent error, not temporary read error.
+	// E.g. outlook.com that has your IP blocklisted.
+	run(t, func(s xserver) {
+		s.writeline("220 mox.example")
+		s.readline("EHLO")
+		s.writeline("250-mox.example")
+		s.writeline("250 PIPELINING")
+		s.readline("MAIL FROM:")
+		s.writeline("550 ok")
+	}, func(conn net.Conn) {
+		c, err := New(ctx, log, conn, TLSOpportunistic, "", "")
+		if err != nil {
+			panic(err)
+		}
+
+		msg := ""
+		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false)
+		var xerr Error
+		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || !xerr.Permanent {
+			panic(fmt.Errorf("got %#v, expected ErrStatus with Permanent", err))
+		}
+	})
 }
 
 type xserver struct {
