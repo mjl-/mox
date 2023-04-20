@@ -82,7 +82,7 @@ func FuzzServer(f *testing.F) {
 
 	var fl *os.File
 	if false {
-		fl, err = os.Create("fuzz.log")
+		fl, err = os.OpenFile("fuzz.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			f.Fatalf("fuzz log")
 		}
@@ -96,6 +96,7 @@ func FuzzServer(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, s string) {
 		run := func(cmds []string) {
+			limitersInit() // Reset rate limiters.
 			serverConn, clientConn := net.Pipe()
 			defer serverConn.Close()
 
@@ -132,6 +133,8 @@ func FuzzServer(f *testing.F) {
 			cid++
 		}
 
+		// Each command brings the connection state one step further. We try the fuzzing
+		// input for each state.
 		run([]string{})
 		run([]string{"login mjl@mox.example testtest"})
 		run([]string{"login mjl@mox.example testtest", "select inbox"})

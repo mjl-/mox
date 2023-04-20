@@ -73,6 +73,7 @@ func FuzzServer(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, s string) {
 		run := func(cmds []string) {
+			limitersInit() // Reset rate limiters.
 			serverConn, clientConn := net.Pipe()
 			defer serverConn.Close()
 			defer clientConn.Close()
