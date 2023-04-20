@@ -128,7 +128,9 @@ func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Ar
 	name2id := map[string]int64{}
 
 	mailboxes, err := bstore.QueryTx[Mailbox](tx).List()
-	xcheckf(err, "query mailboxes")
+	if err != nil {
+		return fmt.Errorf("query mailboxes: %w", err)
+	}
 	for _, mb := range mailboxes {
 		id2name[mb.ID] = mb.Name
 		name2id[mb.Name] = mb.ID

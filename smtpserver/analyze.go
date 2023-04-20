@@ -2,6 +2,7 @@ package smtpserver
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"time"
@@ -172,7 +173,10 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 			if rs != nil {
 				mailbox = rs.Mailbox
 			}
-			mb := d.acc.MailboxFindX(tx, mailbox)
+			mb, err := d.acc.MailboxFind(tx, mailbox)
+			if err != nil {
+				return fmt.Errorf("finding destination mailbox: %w", err)
+			}
 			if mb != nil {
 				// We want to deliver to mb.ID, but this message may be rejected and sent to the
 				// Rejects mailbox instead, which MailboxID overwritten. Record the ID in
@@ -187,7 +191,6 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 				log.Debug("mailbox not found in database", mlog.Field("mailbox", mailbox))
 			}
 
-			var err error
 			isjunk, conclusive, method, err = reputation(tx, log, d.m)
 			reason = string(method)
 			return err

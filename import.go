@@ -192,7 +192,6 @@ func importctl(ctl *ctl, mbox bool) {
 	// We will be delivering messages. If we fail halfway, we need to remove the created msg files.
 	var deliveredIDs []int64
 
-	// Handle errors from store.*X calls.
 	defer func() {
 		x := recover()
 		if x == nil {
@@ -225,7 +224,8 @@ func importctl(ctl *ctl, mbox bool) {
 		isSent := mailbox == "Sent"
 		const sync = false
 		const notrain = true
-		a.DeliverX(ctl.log, tx, m, mf, consumeFile, isSent, sync, notrain)
+		err := a.DeliverMessage(ctl.log, tx, m, mf, consumeFile, isSent, sync, notrain)
+		ctl.xcheck(err, "delivering message")
 		deliveredIDs = append(deliveredIDs, m.ID)
 		ctl.log.Debug("delivered message", mlog.Field("id", m.ID))
 		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, Flags: m.Flags})
@@ -236,7 +236,8 @@ func importctl(ctl *ctl, mbox bool) {
 	a.WithWLock(func() {
 		// Ensure mailbox exists.
 		var mb store.Mailbox
-		mb, changes = a.MailboxEnsureX(tx, mailbox, true)
+		mb, changes, err = a.MailboxEnsure(tx, mailbox, true)
+		ctl.xcheck(err, "ensuring mailbox exists")
 
 		jf, _, err := a.OpenJunkFilter(ctl.log)
 		if err != nil && !errors.Is(err, store.ErrNoJunkFilter) {

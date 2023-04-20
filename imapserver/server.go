@@ -654,10 +654,10 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		x := recover()
 		if x == nil || x == cleanClose {
 			c.log.Info("connection closed")
-		} else if err, ok := x.(error); ok || isClosed(err) {
+		} else if err, ok := x.(error); ok && isClosed(err) {
 			c.log.Infox("connection closed", err)
 		} else {
-			c.log.Error("unhandled error", mlog.Field("err", x))
+			c.log.Error("unhandled panic", mlog.Field("err", x))
 			debug.PrintStack()
 			metrics.PanicInc("imapserver")
 		}
@@ -739,6 +739,9 @@ func (c *conn) command() {
 			panic(x)
 		}
 
+		var sxerr syntaxError
+		var uerr userError
+		var serr serverError
 		if isClosed(err) {
 			c.log.Infox("imap command ioerror", err, logFields...)
 			result = "ioerror"
@@ -746,12 +749,7 @@ func (c *conn) command() {
 				debug.PrintStack()
 			}
 			panic(err)
-		}
-
-		var sxerr syntaxError
-		var uerr userError
-		var serr serverError
-		if errors.As(err, &sxerr) {
+		} else if errors.As(err, &sxerr) {
 			result = "badsyntax"
 			if c.ncmds == 0 {
 				// Other side is likely speaking something else than IMAP, send error message and
@@ -793,11 +791,10 @@ func (c *conn) command() {
 				c.bwriteresultf("%s NO %s %v", tag, cmd, err)
 			}
 		} else {
-			result = "error"
-			c.log.Infox("imap command error", err, logFields...)
-			// todo: introduce a store.Error, and check for that, don't blindly pass on errors?
-			debug.PrintStack()
-			c.bwriteresultf("%s NO %s %v", tag, cmd, err)
+			// Other type of panic, we pass it on, aborting the connection.
+			result = "panic"
+			c.log.Errorx("imap command panic", err, logFields...)
+			panic(err)
 		}
 	}()
 
@@ -1148,7 +1145,8 @@ func xcheckmailboxname(name string, allowInbox bool) string {
 // If the mailbox does not exist, panic is called with a user error.
 // Must be called with account rlock held.
 func (c *conn) xmailbox(tx *bstore.Tx, name string, missingErrCode string) store.Mailbox {
-	mb := c.account.MailboxFindX(tx, name)
+	mb, err := c.account.MailboxFind(tx, name)
+	xcheckf(err, "finding mailbox")
 	if mb == nil {
 		// missingErrCode can be empty, or e.g. TRYCREATE or ALREADYEXISTS.
 		xusercodeErrorf(missingErrCode, "%w", store.ErrUnknownMailbox)
@@ -1909,14 +1907,17 @@ func (c *conn) cmdCreate(tag, cmd string, p *parser) {
 					p += "/"
 				}
 				p += elem
-				if c.account.MailboxExistsX(tx, p) {
+				exists, err := c.account.MailboxExists(tx, p)
+				xcheckf(err, "checking if mailbox exists")
+				if exists {
 					if i == len(elems)-1 {
 						// ../rfc/9051:1914
 						xuserErrorf("mailbox already exists")
 					}
 					continue
 				}
-				_, nchanges := c.account.MailboxEnsureX(tx, p, true)
+				_, nchanges, err := c.account.MailboxEnsure(tx, p, true)
+				xcheckf(err, "ensuring mailbox exists")
 				changes = append(changes, nchanges...)
 				created = append(created, p)
 			}
@@ -2050,10 +2051,13 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 			// We do indeed create a new destination mailbox and actually move the messages.
 			// ../rfc/9051:2101
 			if src == "Inbox" {
-				if c.account.MailboxExistsX(tx, dst) {
+				exists, err := c.account.MailboxExists(tx, dst)
+				xcheckf(err, "checking if destination mailbox exists")
+				if exists {
 					xusercodeErrorf("ALREADYEXISTS", "destination mailbox %q already exists", dst)
 				}
-				srcMB := c.account.MailboxFindX(tx, src)
+				srcMB, err := c.account.MailboxFind(tx, src)
+				xcheckf(err, "finding source mailbox")
 				if srcMB == nil {
 					xserverErrorf("inbox not found")
 				}
@@ -2066,7 +2070,7 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 					UIDValidity: uidval,
 					UIDNext:     1,
 				}
-				err := tx.Insert(&dstMB)
+				err = tx.Insert(&dstMB)
 				xcheckf(err, "create new destination mailbox")
 
 				var messages []store.Message
@@ -2207,7 +2211,9 @@ func (c *conn) cmdSubscribe(tag, cmd string, p *parser) {
 		var changes []store.Change
 
 		c.xdbwrite(func(tx *bstore.Tx) {
-			changes = c.account.SubscriptionEnsureX(tx, name)
+			var err error
+			changes, err = c.account.SubscriptionEnsure(tx, name)
+			xcheckf(err, "ensuring subscription")
 		})
 
 		c.broadcast(changes)
@@ -2235,7 +2241,9 @@ func (c *conn) cmdUnsubscribe(tag, cmd string, p *parser) {
 			// It's OK if not currently subscribed, ../rfc/9051:2215
 			err := tx.Delete(&store.Subscription{Name: name})
 			if err == bstore.ErrAbsent {
-				if !c.account.MailboxExistsX(tx, name) {
+				exists, err := c.account.MailboxExists(tx, name)
+				xcheckf(err, "checking if mailbox exists")
+				if !exists {
 					xuserErrorf("mailbox does not exist")
 				}
 				return
@@ -2561,7 +2569,8 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				MsgPrefix:     msgPrefix,
 			}
 			isSent := name == "Sent"
-			c.account.DeliverX(c.log, tx, &msg, msgFile, true, isSent, true, false)
+			err := c.account.DeliverMessage(c.log, tx, &msg, msgFile, true, isSent, true, false)
+			xcheckf(err, "delivering message")
 		})
 
 		// Fetch pending changes, possibly with new UIDs, so we can apply them before adding our own new UID.

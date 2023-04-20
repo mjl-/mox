@@ -72,13 +72,15 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "sent mailbox")
 			msent.MailboxID = mbsent.ID
 			msent.MailboxOrigID = mbsent.ID
-			acc.DeliverX(xlog, tx, &msent, msgFile, false, true, true, false)
+			err = acc.DeliverMessage(xlog, tx, &msent, msgFile, false, true, true, false)
+			tcheck(t, err, "deliver message")
 
 			err = tx.Insert(&mbrejects)
 			tcheck(t, err, "insert rejects mailbox")
 			mreject.MailboxID = mbrejects.ID
 			mreject.MailboxOrigID = mbrejects.ID
-			acc.DeliverX(xlog, tx, &mreject, msgFile, false, false, true, false)
+			err = acc.DeliverMessage(xlog, tx, &mreject, msgFile, false, false, true, false)
+			tcheck(t, err, "deliver message")
 
 			return nil
 		})
@@ -133,44 +135,50 @@ func TestMailbox(t *testing.T) {
 
 	acc.WithWLock(func() {
 		err := acc.DB.Write(func(tx *bstore.Tx) error {
-			acc.MailboxEnsureX(tx, "Testbox", true)
-			return nil
+			_, _, err := acc.MailboxEnsure(tx, "Testbox", true)
+			return err
 		})
 		tcheck(t, err, "ensure mailbox exists")
 		err = acc.DB.Read(func(tx *bstore.Tx) error {
-			acc.MailboxEnsureX(tx, "Testbox", true)
-			return nil
+			_, _, err := acc.MailboxEnsure(tx, "Testbox", true)
+			return err
 		})
 		tcheck(t, err, "ensure mailbox exists")
 
 		err = acc.DB.Write(func(tx *bstore.Tx) error {
-			acc.MailboxEnsureX(tx, "Testbox2", false)
+			_, _, err := acc.MailboxEnsure(tx, "Testbox2", false)
 			tcheck(t, err, "create mailbox")
 
-			exists := acc.MailboxExistsX(tx, "Testbox2")
+			exists, err := acc.MailboxExists(tx, "Testbox2")
+			tcheck(t, err, "checking that mailbox exists")
 			if !exists {
 				t.Fatalf("mailbox does not exist")
 			}
 
-			exists = acc.MailboxExistsX(tx, "Testbox3")
+			exists, err = acc.MailboxExists(tx, "Testbox3")
+			tcheck(t, err, "checking that mailbox does not exist")
 			if exists {
 				t.Fatalf("mailbox does exist")
 			}
 
-			xmb := acc.MailboxFindX(tx, "Testbox3")
+			xmb, err := acc.MailboxFind(tx, "Testbox3")
+			tcheck(t, err, "finding non-existing mailbox")
 			if xmb != nil {
 				t.Fatalf("did find Testbox3: %v", xmb)
 			}
-			xmb = acc.MailboxFindX(tx, "Testbox2")
+			xmb, err = acc.MailboxFind(tx, "Testbox2")
+			tcheck(t, err, "finding existing mailbox")
 			if xmb == nil {
 				t.Fatalf("did not find Testbox2")
 			}
 
-			changes := acc.SubscriptionEnsureX(tx, "Testbox2")
+			changes, err := acc.SubscriptionEnsure(tx, "Testbox2")
+			tcheck(t, err, "ensuring new subscription")
 			if len(changes) == 0 {
 				t.Fatalf("new subscription did not result in changes")
 			}
-			changes = acc.SubscriptionEnsureX(tx, "Testbox2")
+			changes, err = acc.SubscriptionEnsure(tx, "Testbox2")
+			tcheck(t, err, "ensuring already present subscription")
 			if len(changes) != 0 {
 				t.Fatalf("already present subscription resulted in changes")
 			}

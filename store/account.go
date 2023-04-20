@@ -20,7 +20,6 @@ database.
 package store
 
 // todo: make up a function naming scheme that indicates whether caller should broadcast changes.
-// todo: fewer (no?) "X" functions, but only explicit error handling.
 
 import (
 	"context"
@@ -394,13 +393,6 @@ type Account struct {
 	nused int // Reference count, while >0, this account is alive and shared.
 }
 
-func xcheckf(err error, format string, args ...any) {
-	if err != nil {
-		msg := fmt.Sprintf(format, args...)
-		panic(fmt.Errorf("%s: %w", msg, err))
-	}
-}
-
 // InitialUIDValidity returns a UIDValidity used for initializing an account.
 // It can be replaced during tests with a predictable value.
 var InitialUIDValidity = func() uint32 {
@@ -576,7 +568,7 @@ func (a *Account) WithRLock(fn func()) {
 	fn()
 }
 
-// DeliverX delivers a mail message to the account.
+// DeliverMessage delivers a mail message to the account.
 //
 // If consumeFile is set, the original msgFile is moved/renamed or copied and
 // removed as part of delivery.
@@ -594,14 +586,16 @@ func (a *Account) WithRLock(fn func()) {
 // Must be called with account rlock or wlock.
 //
 // Caller must broadcast new message.
-func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, isSent, sync, notrain bool) {
+func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, isSent, sync, notrain bool) error {
 	mb := Mailbox{ID: m.MailboxID}
-	err := tx.Get(&mb)
-	xcheckf(err, "get mailbox")
+	if err := tx.Get(&mb); err != nil {
+		return fmt.Errorf("get mailbox: %w", err)
+	}
 	m.UID = mb.UIDNext
 	mb.UIDNext++
-	err = tx.Update(&mb)
-	xcheckf(err, "updating mailbox nextuid")
+	if err := tx.Update(&mb); err != nil {
+		return fmt.Errorf("updating mailbox nextuid: %w", err)
+	}
 
 	conf, _ := a.Conf()
 	m.JunkFlagsForMailbox(mb.Name, conf)
@@ -616,7 +610,9 @@ func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os
 		}
 		part = &p
 		buf, err := json.Marshal(part)
-		xcheckf(err, "marshal parsed message")
+		if err != nil {
+			return fmt.Errorf("marshal parsed message: %w", err)
+		}
 		m.ParsedBuf = buf
 	}
 
@@ -625,8 +621,9 @@ func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os
 		m.MailboxDestinedID = 0
 	}
 
-	err = tx.Insert(m)
-	xcheckf(err, "inserting message")
+	if err := tx.Insert(m); err != nil {
+		return fmt.Errorf("inserting message: %w", err)
+	}
 
 	if isSent {
 		// Attempt to parse the message for its To/Cc/Bcc headers, which we insert into Recipient.
@@ -666,8 +663,9 @@ func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os
 					OrgDomain: publicsuffix.Lookup(context.TODO(), d).Name(),
 					Sent:      sent,
 				}
-				err = tx.Insert(&mr)
-				xcheckf(err, "inserting sent message recipients")
+				if err := tx.Insert(&mr); err != nil {
+					return fmt.Errorf("inserting sent message recipients: %w", err)
+				}
 			}
 		}
 	}
@@ -678,30 +676,37 @@ func (a *Account) DeliverX(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os
 
 	// Sync file data to disk.
 	if sync {
-		err = msgFile.Sync()
-		xcheckf(err, "fsync message file")
+		if err := msgFile.Sync(); err != nil {
+			return fmt.Errorf("fsync message file: %w", err)
+		}
 	}
 
 	if consumeFile {
-		err := os.Rename(msgFile.Name(), msgPath)
-		xcheckf(err, "moving msg file to destination directory")
+		if err := os.Rename(msgFile.Name(), msgPath); err != nil {
+			return fmt.Errorf("moving msg file to destination directory: %w", err)
+		}
 	} else if err := os.Link(msgFile.Name(), msgPath); err != nil {
 		// Assume file system does not support hardlinks. Copy it instead.
-		err := writeFile(msgPath, &moxio.AtReader{R: msgFile})
-		xcheckf(err, "copying message to new file")
+		if err := writeFile(msgPath, &moxio.AtReader{R: msgFile}); err != nil {
+			return fmt.Errorf("copying message to new file: %w", err)
+		}
 	}
 
 	if sync {
-		err = moxio.SyncDir(msgDir)
-		xcheckf(err, "sync directory")
+		if err := moxio.SyncDir(msgDir); err != nil {
+			return fmt.Errorf("sync directory: %w", err)
+		}
 	}
 
 	if !notrain && m.NeedsTraining() {
 		l := []Message{*m}
-		err = a.RetrainMessages(log, tx, l, false)
-		xcheckf(err, "training junkfilter")
+		if err := a.RetrainMessages(log, tx, l, false); err != nil {
+			return fmt.Errorf("training junkfilter: %w", err)
+		}
 		*m = l[0]
 	}
+
+	return nil
 }
 
 // write contents of r to new file dst, for delivering a message.
@@ -877,65 +882,50 @@ func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool) (mb 
 	return mb, changes, nil
 }
 
-// MailboxEnsureX calls MailboxEnsure, panicing with the error if it is not nil.
-func (a *Account) MailboxEnsureX(tx *bstore.Tx, name string, subscribe bool) (Mailbox, []Change) {
-	mb, changes, err := a.MailboxEnsure(tx, name, subscribe)
-	if err != nil {
-		panic(err)
-	}
-	return mb, changes
-}
-
-// Check if mailbox exists.
+// MailboxExists checks if mailbox exists.
 // Caller must hold account rlock.
-func (a *Account) MailboxExistsX(tx *bstore.Tx, name string) bool {
+func (a *Account) MailboxExists(tx *bstore.Tx, name string) (bool, error) {
 	q := bstore.QueryTx[Mailbox](tx)
 	q.FilterEqual("Name", name)
-	exists, err := q.Exists()
-	xcheckf(err, "checking existence")
-	return exists
+	return q.Exists()
 }
 
-// MailboxFindX finds a mailbox by name.
-func (a *Account) MailboxFindX(tx *bstore.Tx, name string) *Mailbox {
+// MailboxFind finds a mailbox by name, returning a nil mailbox and nil error if mailbox does not exist.
+func (a *Account) MailboxFind(tx *bstore.Tx, name string) (*Mailbox, error) {
 	q := bstore.QueryTx[Mailbox](tx)
 	q.FilterEqual("Name", name)
 	mb, err := q.Get()
 	if err == bstore.ErrAbsent {
-		return nil
+		return nil, nil
 	}
-	xcheckf(err, "lookup mailbox")
-	return &mb
+	if err != nil {
+		return nil, fmt.Errorf("looking up mailbox: %w", err)
+	}
+	return &mb, nil
 }
 
-// SubscriptionEnsureX ensures a subscription for name exists. The mailbox does not
+// SubscriptionEnsure ensures a subscription for name exists. The mailbox does not
 // have to exist. Any parents are not automatically subscribed.
-// Changes are broadcasted.
-func (a *Account) SubscriptionEnsureX(tx *bstore.Tx, name string) []Change {
-	err := tx.Get(&Subscription{name})
-	if err == nil {
-		return nil
+// Changes are returned and must be broadcasted by the caller.
+func (a *Account) SubscriptionEnsure(tx *bstore.Tx, name string) ([]Change, error) {
+	if err := tx.Get(&Subscription{name}); err == nil {
+		return nil, nil
 	}
 
-	err = tx.Insert(&Subscription{name})
-	xcheckf(err, "inserting subscription")
+	if err := tx.Insert(&Subscription{name}); err != nil {
+		return nil, fmt.Errorf("inserting subscription: %w", err)
+	}
 
 	q := bstore.QueryTx[Mailbox](tx)
 	q.FilterEqual("Name", name)
 	exists, err := q.Exists()
-	xcheckf(err, "looking up mailbox for subscription")
-	if exists {
-		return []Change{ChangeAddSubscription{name}}
+	if err != nil {
+		return nil, fmt.Errorf("looking up mailbox for subscription: %w", err)
 	}
-	return []Change{ChangeAddMailbox{Name: name, Flags: []string{`\Subscribed`, `\NonExistent`}}}
-}
-
-// List mailboxes. Only those that exist, so names with only a subscription are not returned.
-// Caller must have account rlock held.
-func (a *Account) MailboxesX(tx *bstore.Tx) []Mailbox {
-	l, err := bstore.QueryTx[Mailbox](tx).List()
-	xcheckf(err, "fetching mailboxes")
-	return l
+	if exists {
+		return []Change{ChangeAddSubscription{name}}, nil
+	}
+	return []Change{ChangeAddMailbox{Name: name, Flags: []string{`\Subscribed`, `\NonExistent`}}}, nil
 }
 
 // MessageRuleset returns the first ruleset (if any) that message the message
@@ -1046,14 +1036,16 @@ func (a *Account) Deliver(log *mlog.Log, dest config.Destination, m *Message, ms
 // Message delivery and possible mailbox creation are broadcasted.
 func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgFile *os.File, consumeFile bool) error {
 	var changes []Change
-	err := extransact(a.DB, true, func(tx *bstore.Tx) error {
-		mb, chl := a.MailboxEnsureX(tx, mailbox, true)
+	err := a.DB.Write(func(tx *bstore.Tx) error {
+		mb, chl, err := a.MailboxEnsure(tx, mailbox, true)
+		if err != nil {
+			return fmt.Errorf("ensuring mailbox: %w", err)
+		}
 		m.MailboxID = mb.ID
 		m.MailboxOrigID = mb.ID
 		changes = append(changes, chl...)
 
-		a.DeliverX(log, tx, m, msgFile, consumeFile, mb.Sent, true, false)
-		return nil
+		return a.DeliverMessage(log, tx, m, msgFile, consumeFile, mb.Sent, true, false)
 	})
 	// todo: if rename succeeded but transaction failed, we should remove the file.
 	if err != nil {
@@ -1083,8 +1075,11 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 		}
 	}()
 
-	err := extransact(a.DB, true, func(tx *bstore.Tx) error {
-		mb := a.MailboxFindX(tx, rejectsMailbox)
+	err := a.DB.Write(func(tx *bstore.Tx) error {
+		mb, err := a.MailboxFind(tx, rejectsMailbox)
+		if err != nil {
+			return fmt.Errorf("finding mailbox: %w", err)
+		}
 		if mb == nil {
 			// No messages have been delivered yet.
 			hasSpace = true
@@ -1096,18 +1091,24 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 		qdel := bstore.QueryTx[Message](tx)
 		qdel.FilterNonzero(Message{MailboxID: mb.ID})
 		qdel.FilterLess("Received", old)
-		var err error
 		remove, err = qdel.List()
-		xcheckf(err, "listing old messages")
+		if err != nil {
+			return fmt.Errorf("listing old messages: %w", err)
+		}
 
-		changes = a.xremoveMessages(log, tx, mb, remove)
+		changes, err = a.removeMessages(log, tx, mb, remove)
+		if err != nil {
+			return fmt.Errorf("removing messages: %w", err)
+		}
 
 		// We allow up to n messages.
 		qcount := bstore.QueryTx[Message](tx)
 		qcount.FilterNonzero(Message{MailboxID: mb.ID})
 		qcount.Limit(1000)
 		n, err := qcount.Count()
-		xcheckf(err, "counting rejects")
+		if err != nil {
+			return fmt.Errorf("counting rejects: %w", err)
+		}
 		hasSpace = n < 1000
 
 		return nil
@@ -1124,9 +1125,9 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 	return hasSpace, nil
 }
 
-func (a *Account) xremoveMessages(log *mlog.Log, tx *bstore.Tx, mb *Mailbox, l []Message) []Change {
+func (a *Account) removeMessages(log *mlog.Log, tx *bstore.Tx, mb *Mailbox, l []Message) ([]Change, error) {
 	if len(l) == 0 {
-		return nil
+		return nil, nil
 	}
 	ids := make([]int64, len(l))
 	anyids := make([]any, len(l))
@@ -1139,30 +1140,33 @@ func (a *Account) xremoveMessages(log *mlog.Log, tx *bstore.Tx, mb *Mailbox, l [
 	// from a Sent mailbox to the rejects mailbox...
 	qdmr := bstore.QueryTx[Recipient](tx)
 	qdmr.FilterEqual("MessageID", anyids...)
-	_, err := qdmr.Delete()
-	xcheckf(err, "deleting from message recipient")
+	if _, err := qdmr.Delete(); err != nil {
+		return nil, fmt.Errorf("deleting from message recipient: %w", err)
+	}
 
 	// Actually remove the messages.
 	qdm := bstore.QueryTx[Message](tx)
 	qdm.FilterIDs(ids)
 	var deleted []Message
 	qdm.Gather(&deleted)
-	_, err = qdm.Delete()
-	xcheckf(err, "deleting from messages")
+	if _, err := qdm.Delete(); err != nil {
+		return nil, fmt.Errorf("deleting from messages: %w", err)
+	}
 
 	// Mark as neutral and train so junk filter gets untrained with these (junk) messages.
 	for i := range deleted {
 		deleted[i].Junk = false
 		deleted[i].Notjunk = false
 	}
-	err = a.RetrainMessages(log, tx, deleted, true)
-	xcheckf(err, "training deleted messages")
+	if err := a.RetrainMessages(log, tx, deleted, true); err != nil {
+		return nil, fmt.Errorf("training deleted messages: %w", err)
+	}
 
 	changes := make([]Change, len(l))
 	for i, m := range l {
 		changes[i] = ChangeRemoveUIDs{mb.ID, []UID{m.UID}}
 	}
-	return changes
+	return changes, nil
 }
 
 // RejectsRemove removes a message from the rejects mailbox if present.
@@ -1180,19 +1184,26 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 		}
 	}()
 
-	err := extransact(a.DB, true, func(tx *bstore.Tx) error {
-		mb := a.MailboxFindX(tx, rejectsMailbox)
+	err := a.DB.Write(func(tx *bstore.Tx) error {
+		mb, err := a.MailboxFind(tx, rejectsMailbox)
+		if err != nil {
+			return fmt.Errorf("finding mailbox: %w", err)
+		}
 		if mb == nil {
 			return nil
 		}
 
 		q := bstore.QueryTx[Message](tx)
 		q.FilterNonzero(Message{MailboxID: mb.ID, MessageID: messageID})
-		var err error
 		remove, err = q.List()
-		xcheckf(err, "listing messages to remove")
+		if err != nil {
+			return fmt.Errorf("listing messages to remove: %w", err)
+		}
 
-		changes = a.xremoveMessages(log, tx, mb, remove)
+		changes, err = a.removeMessages(log, tx, mb, remove)
+		if err != nil {
+			return fmt.Errorf("removing messages: %w", err)
+		}
 
 		return nil
 	})

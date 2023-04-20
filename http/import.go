@@ -467,11 +467,6 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 				err = f.Close()
 				log.Check(err, "closing temporary message file for delivery")
 			}
-			x := recover()
-			if x != nil {
-				// todo: get a variant of DeliverX that returns an error instead of panicking.
-				log.Error("delivery panic", mlog.Field("err", x))
-			}
 		}()
 		m.MailboxID = mb.ID
 		m.MailboxOrigID = mb.ID
@@ -503,7 +498,10 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		const consumeFile = true
 		const sync = false
 		const notrain = true
-		acc.DeliverX(log, tx, m, f, consumeFile, mb.Sent, sync, notrain) // todo: need a deliver that returns an error.
+		if err := acc.DeliverMessage(log, tx, m, f, consumeFile, mb.Sent, sync, notrain); err != nil {
+			problemf("delivering message %s: %s (continuing)", pos, err)
+			return
+		}
 		deliveredIDs = append(deliveredIDs, m.ID)
 		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, Flags: m.Flags})
 		messages[mb.Name]++

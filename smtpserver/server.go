@@ -577,7 +577,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		} else if err, ok := x.(error); ok && isClosed(err) {
 			c.log.Infox("connection closed", err)
 		} else {
-			c.log.Error("unhandled error", mlog.Field("err", x))
+			c.log.Error("unhandled panic", mlog.Field("err", x))
 			debug.PrintStack()
 			metrics.PanicInc("smtpserver")
 		}
@@ -679,7 +679,7 @@ func command(c *conn) {
 		} else {
 			// Other type of panic, we pass it on, aborting the connection.
 			c.log.Errorx("command panic", err)
-			panic(x)
+			panic(err)
 		}
 	}()
 
