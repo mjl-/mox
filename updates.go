@@ -125,8 +125,7 @@ func cmdUpdatesPubkey(c *cmd) {
 	}
 
 	seed := make([]byte, ed25519.SeedSize)
-	n, err := io.ReadFull(base64.NewDecoder(base64.StdEncoding, os.Stdin), seed)
-	log.Printf("n %d", n)
+	_, err := io.ReadFull(base64.NewDecoder(base64.StdEncoding, os.Stdin), seed)
 	xcheckf(err, "reading private key")
 	privKey := ed25519.NewKeyFromSeed(seed)
 	pubKey := []byte(privKey.Public().(ed25519.PublicKey))
