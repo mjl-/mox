@@ -1,4 +1,3 @@
 work in progress: update instructions for the next release
 
-- In domains.conf, for an account, the Destinations map will now always use full email addresses, no longer localparts relative to the Domain configured for the account. The old form with just a localpart is still accepted. When writing domains.conf through the cli commands or admin web pages, the destinations will automatically be written with full email addresses. In the future, support for the localpart-only form will be removed.
-- If you run mox behind a NAT, you can now specify "IPsNATed: true" in the SMTP listener to skip a few DNS checks that previously would always fail due to the IPs being NATed.
+- ...
