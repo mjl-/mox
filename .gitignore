@@ -17,6 +17,7 @@
 /testdata/smtp/datajunk/
 /testdata/smtp/sendlimit/data/
 /testdata/smtp/catchall/data/
+/testdata/smtp/postmaster/
 /testdata/store/data/
 /testdata/train/
 /cover.out

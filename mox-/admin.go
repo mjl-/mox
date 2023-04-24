@@ -270,7 +270,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 // DomainAdd adds the domain to the domains config, rewriting domains.conf and
 // marking it loaded.
 //
-// accountName is used for DMARC/TLS report.
+// accountName is used for DMARC/TLS report and potentially for the postmaster address.
 // If the account does not exist, it is created with localpart. Localpart must be
 // set only if the account does not yet exist.
 func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, localpart smtp.Localpart) (rerr error) {
@@ -325,6 +325,16 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 		return fmt.Errorf("account name is empty")
 	} else if !ok {
 		nc.Accounts[accountName] = MakeAccountConfig(smtp.Address{Localpart: localpart, Domain: domain})
+	} else if accountName != Conf.Static.Postmaster.Account {
+		nacc := nc.Accounts[accountName]
+		nd := map[string]config.Destination{}
+		for k, v := range nacc.Destinations {
+			nd[k] = v
+		}
+		pmaddr := smtp.Address{Localpart: "postmaster", Domain: domain}
+		nd[pmaddr.String()] = config.Destination{}
+		nacc.Destinations = nd
+		nc.Accounts[accountName] = nacc
 	}
 
 	nc.Domains[domain.Name()] = confDomain

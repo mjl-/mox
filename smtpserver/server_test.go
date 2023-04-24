@@ -1097,3 +1097,37 @@ test email
 	testSubmit("mjl@mox.example", "mjl@mox.example")
 	testSubmit("mjl@mox.example", "mjl@mox2.example") // DKIM signature will be for mox2.example.
 }
+
+// Test to postmaster addresses.
+func TestPostmaster(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"other.example.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"other.example."},
+		},
+	}
+	ts := newTestServer(t, "../testdata/smtp/postmaster/mox.conf", resolver)
+	defer ts.close()
+
+	testDeliver := func(rcptTo string, expErr *smtpclient.Error) {
+		t.Helper()
+		ts.run(func(err error, client *smtpclient.Client) {
+			t.Helper()
+			mailFrom := "mjl@other.example"
+			if err == nil {
+				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			}
+			var cerr smtpclient.Error
+			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
+				t.Fatalf("got err %#v, expected %#v", err, expErr)
+			}
+		})
+	}
+
+	testDeliver("postmaster", nil)                  // Plain postmaster address without domain.
+	testDeliver("postmaster@host.mox.example", nil) // Postmaster address with configured mail server hostname.
+	testDeliver("postmaster@mox.example", nil)      // Postmaster address without explicitly configured destination.
+	testDeliver("postmaster@unknown.example", &smtpclient.Error{Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
+}

@@ -52,7 +52,7 @@ type Static struct {
 	Postmaster        struct {
 		Account string
 		Mailbox string `sconf-doc:"E.g. Postmaster or Inbox."`
-	} `sconf-doc:"Destination for emails delivered to postmaster address."`
+	} `sconf-doc:"Destination for emails delivered to postmaster addresses: a plain 'postmaster' without domain, 'postmaster@<hostname>' (also for each listener with SMTP enabled), and as fallback for each domain without explicitly configured postmaster destination."`
 	DefaultMailboxes []string `sconf:"optional" sconf-doc:"Mailboxes to create when adding an account. Inbox is always created. If no mailboxes are specified, the following are automatically created: Sent, Archive, Trash, Drafts and Junk."`
 
 	// All IPs that were explicitly listen on for external SMTP. Only set when there

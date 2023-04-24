@@ -321,7 +321,10 @@ describe-static" and "mox config describe-domains":
 				# Port for HTTPS webserver. (optional)
 				Port: 0
 
-	# Destination for emails delivered to postmaster address.
+	# Destination for emails delivered to postmaster addresses: a plain 'postmaster'
+	# without domain, 'postmaster@<hostname>' (also for each listener with SMTP
+	# enabled), and as fallback for each domain without explicitly configured
+	# postmaster destination.
 	Postmaster:
 		Account:
 

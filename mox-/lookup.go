@@ -22,8 +22,21 @@ func FindAccount(localpart smtp.Localpart, domain dns.Domain, allowPostmaster bo
 	if strings.EqualFold(string(localpart), "postmaster") {
 		localpart = "postmaster"
 	}
-	var zerodomain dns.Domain
-	if localpart == "postmaster" && domain == zerodomain {
+
+	postmasterDomain := func() bool {
+		var zerodomain dns.Domain
+		if domain == zerodomain || domain == Conf.Static.HostnameDomain {
+			return true
+		}
+		for _, l := range Conf.Static.Listeners {
+			if l.SMTP.Enabled && domain == l.HostnameDomain {
+				return true
+			}
+		}
+		return false
+	}
+
+	if localpart == "postmaster" && postmasterDomain() {
 		if !allowPostmaster {
 			return "", "", config.Destination{}, ErrAccountNotFound
 		}
@@ -44,6 +57,9 @@ func FindAccount(localpart smtp.Localpart, domain dns.Domain, allowPostmaster bo
 	accAddr, ok := Conf.AccountDestination(canonical)
 	if !ok {
 		if accAddr, ok = Conf.AccountDestination("@" + domain.Name()); !ok {
+			if localpart == "postmaster" && allowPostmaster {
+				return Conf.Static.Postmaster.Account, "postmaster", config.Destination{Mailbox: Conf.Static.Postmaster.Mailbox}, nil
+			}
 			return "", "", config.Destination{}, ErrAccountNotFound
 		}
 		canonical = "@" + domain.Name()
