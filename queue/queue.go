@@ -658,7 +658,10 @@ func gatherHosts(resolver dns.Resolver, m Msg, cid int64, qlog *mlog.Log) (hosts
 			}
 
 			// No MX record. First attempt CNAME lookup. ../rfc/5321:3838 ../rfc/3974:197
+			ctx, cancel = context.WithTimeout(cidctx, 30*time.Second)
+			defer cancel()
 			cname, err := resolver.LookupCNAME(ctx, effectiveDomain.ASCII+".")
+			cancel()
 			if err != nil && !dns.IsNotFound(err) {
 				return nil, effectiveDomain, false, fmt.Errorf("%w: cname lookup for %s: %v", errDNS, effectiveDomain, err)
 			}
