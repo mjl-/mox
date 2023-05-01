@@ -62,7 +62,7 @@ groups:
       summary: dmarc reports about rejects/quarantines due to failing dmarc check
 
   # may be noisy
-  - alert: mox-ratelimited
+  - alert: mox-auth-ratelimited
     expr: increase(mox_authentication_ratelimited_total[1h]) > 0
     annotations:
-      summary: connections/requests were rate limited
+      summary: authentication connections/requests were rate limited
