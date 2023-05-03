@@ -396,7 +396,7 @@ func Listen() {
 		}
 		if l.MTASTSHTTPS.Enabled {
 			port := config.Port(l.MTASTSHTTPS.Port, 443)
-			srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, port, "mtasts-https")
+			srv := ensureServe(!l.MTASTSHTTPS.NonTLS, port, "mtasts-https")
 			mtastsMatch := func(dom dns.Domain) bool {
 				// todo: may want to check this against the configured domains, could in theory be just a webserver.
 				return strings.HasPrefix(dom.ASCII, "mta-sts.")
