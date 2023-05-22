@@ -1500,21 +1500,21 @@ func (Admin) ClientConfigDomain(ctx context.Context, domain string) mox.ClientCo
 
 // QueueList returns the messages currently in the outgoing queue.
 func (Admin) QueueList(ctx context.Context) []queue.Msg {
-	l, err := queue.List()
+	l, err := queue.List(ctx)
 	xcheckf(ctx, err, "listing messages in queue")
 	return l
 }
 
 // QueueSize returns the number of messages currently in the outgoing queue.
 func (Admin) QueueSize(ctx context.Context) int {
-	n, err := queue.Count()
+	n, err := queue.Count(ctx)
 	xcheckf(ctx, err, "listing messages in queue")
 	return n
 }
 
 // QueueKick initiates delivery of a message from the queue.
 func (Admin) QueueKick(ctx context.Context, id int64) {
-	n, err := queue.Kick(id, "", "")
+	n, err := queue.Kick(ctx, id, "", "")
 	if err == nil && n == 0 {
 		err = errors.New("message not found")
 	}
@@ -1523,7 +1523,7 @@ func (Admin) QueueKick(ctx context.Context, id int64) {
 
 // QueueDrop removes a message from the queue.
 func (Admin) QueueDrop(ctx context.Context, id int64) {
-	n, err := queue.Drop(id, "", "")
+	n, err := queue.Drop(ctx, id, "", "")
 	if err == nil && n == 0 {
 		err = errors.New("message not found")
 	}

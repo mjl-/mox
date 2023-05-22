@@ -10,6 +10,8 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
+// todo optimize: do not fetch full record if we can apply the filters with just the values we glean from the index key.
+
 // exec represents the execution of a query plan.
 type exec[T any] struct {
 	q    *Query[T]
@@ -94,6 +96,13 @@ func (e *exec[T]) nextKey(write, value bool) ([]byte, T, error) {
 
 	q := e.q
 
+	if q.err == nil {
+		select {
+		case <-q.ctxDone:
+			q.error(q.ctx.Err())
+		default:
+		}
+	}
 	if q.err != nil {
 		return nil, zero, q.err
 	}
@@ -424,6 +433,25 @@ func (e *exec[T]) checkFilter(p *pair[T]) (rok bool, rerr error) {
 					return
 				}
 			}
+		case filterInSlice[T]:
+			v, err := p.Value(e)
+			if err != nil {
+				q.error(err)
+				return false, err
+			}
+			rv := reflect.ValueOf(v)
+			frv := rv.FieldByIndex(f.field.structField.Index)
+			n := frv.Len()
+			var have bool
+			for i := 0; i < n; i++ {
+				if f.field.Type.ListElem.equal(frv.Index(i), f.rvalue) {
+					have = true
+					break
+				}
+			}
+			if !have {
+				return
+			}
 		case filterCompare[T]:
 			v, err := p.Value(e)
 			if err != nil {
@@ -531,10 +559,10 @@ func compare(k kind, a, b reflect.Value) int {
 }
 
 func (e *exec[T]) sort() {
-	// todo: We should check whether we actually need to load values. We're just
-	// always it now for the time being because SortStableFunc isn't going to
-	// give us a *pair (even though it could because of the slice) so we
-	// couldn't set/cache the value T during sorting.
+	// todo: We should check whether we actually need to load values. We're
+	// always loading it for the time being because SortStableFunc isn't
+	// going to give us a *pair (even though it could because of the slice)
+	// so we couldn't set/cache the value T during sorting.
 	q := e.q
 
 	for i := range e.data {

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -21,7 +22,7 @@ var ErrNoJunkFilter = errors.New("junkfilter: not configured")
 // If the account does not have a junk filter enabled, ErrNotConfigured is returned.
 // Do not forget to save the filter after modifying, and to always close the filter when done.
 // An empty filter is initialized on first access of the filter.
-func (a *Account) OpenJunkFilter(log *mlog.Log) (*junk.Filter, *config.JunkFilter, error) {
+func (a *Account) OpenJunkFilter(ctx context.Context, log *mlog.Log) (*junk.Filter, *config.JunkFilter, error) {
 	conf, ok := mox.Conf.Account(a.Name)
 	if !ok {
 		return nil, nil, ErrAccountUnknown
@@ -36,16 +37,16 @@ func (a *Account) OpenJunkFilter(log *mlog.Log) (*junk.Filter, *config.JunkFilte
 	bloomPath := filepath.Join(basePath, a.Name, "junkfilter.bloom")
 
 	if _, xerr := os.Stat(dbPath); xerr != nil && os.IsNotExist(xerr) {
-		f, err := junk.NewFilter(log, jf.Params, dbPath, bloomPath)
+		f, err := junk.NewFilter(ctx, log, jf.Params, dbPath, bloomPath)
 		return f, jf, err
 	}
-	f, err := junk.OpenFilter(log, jf.Params, dbPath, bloomPath, false)
+	f, err := junk.OpenFilter(ctx, log, jf.Params, dbPath, bloomPath, false)
 	return f, jf, err
 }
 
 // RetrainMessages (un)trains messages, if relevant given their flags. Updates
 // m.TrainedJunk after retraining.
-func (a *Account) RetrainMessages(log *mlog.Log, tx *bstore.Tx, msgs []Message, absentOK bool) (rerr error) {
+func (a *Account) RetrainMessages(ctx context.Context, log *mlog.Log, tx *bstore.Tx, msgs []Message, absentOK bool) (rerr error) {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -60,7 +61,7 @@ func (a *Account) RetrainMessages(log *mlog.Log, tx *bstore.Tx, msgs []Message, 
 		// Lazy open the junk filter.
 		if jf == nil {
 			var err error
-			jf, _, err = a.OpenJunkFilter(log)
+			jf, _, err = a.OpenJunkFilter(ctx, log)
 			if err != nil && errors.Is(err, ErrNoJunkFilter) {
 				// No junk filter configured. Nothing more to do.
 				return nil
@@ -76,7 +77,7 @@ func (a *Account) RetrainMessages(log *mlog.Log, tx *bstore.Tx, msgs []Message, 
 				}
 			}()
 		}
-		if err := a.RetrainMessage(log, tx, jf, &msgs[i], absentOK); err != nil {
+		if err := a.RetrainMessage(ctx, log, tx, jf, &msgs[i], absentOK); err != nil {
 			return err
 		}
 	}
@@ -85,7 +86,7 @@ func (a *Account) RetrainMessages(log *mlog.Log, tx *bstore.Tx, msgs []Message, 
 
 // RetrainMessage untrains and/or trains a message, if relevant given m.TrainedJunk
 // and m.Junk/m.Notjunk. Updates m.TrainedJunk after retraining.
-func (a *Account) RetrainMessage(log *mlog.Log, tx *bstore.Tx, jf *junk.Filter, m *Message, absentOK bool) error {
+func (a *Account) RetrainMessage(ctx context.Context, log *mlog.Log, tx *bstore.Tx, jf *junk.Filter, m *Message, absentOK bool) error {
 	untrain := m.TrainedJunk != nil
 	untrainJunk := untrain && *m.TrainedJunk
 	train := m.Junk || m.Notjunk && !(m.Junk && m.Notjunk)
@@ -116,14 +117,14 @@ func (a *Account) RetrainMessage(log *mlog.Log, tx *bstore.Tx, jf *junk.Filter, 
 	}
 
 	if untrain {
-		err := jf.Untrain(!untrainJunk, words)
+		err := jf.Untrain(ctx, !untrainJunk, words)
 		if err != nil {
 			return err
 		}
 		m.TrainedJunk = nil
 	}
 	if train {
-		err := jf.Train(!trainJunk, words)
+		err := jf.Train(ctx, !trainJunk, words)
 		if err != nil {
 			return err
 		}
@@ -137,7 +138,7 @@ func (a *Account) RetrainMessage(log *mlog.Log, tx *bstore.Tx, jf *junk.Filter, 
 
 // TrainMessage trains the junk filter based on the current m.Junk/m.Notjunk flags,
 // disregarding m.TrainedJunk and not updating that field.
-func (a *Account) TrainMessage(log *mlog.Log, jf *junk.Filter, m Message) (bool, error) {
+func (a *Account) TrainMessage(ctx context.Context, log *mlog.Log, jf *junk.Filter, m Message) (bool, error) {
 	if !m.Junk && !m.Notjunk || (m.Junk && m.Notjunk) {
 		return false, nil
 	}
@@ -160,5 +161,5 @@ func (a *Account) TrainMessage(log *mlog.Log, jf *junk.Filter, m Message) (bool,
 		return false, nil
 	}
 
-	return true, jf.Train(m.Notjunk, words)
+	return true, jf.Train(ctx, m.Notjunk, words)
 }

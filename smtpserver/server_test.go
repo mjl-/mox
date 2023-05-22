@@ -39,6 +39,8 @@ import (
 	"github.com/mjl-/mox/tlsrptdb"
 )
 
+var ctxbg = context.Background()
+
 func init() {
 	// Don't make tests slow.
 	badClientDelay = 0
@@ -88,7 +90,7 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 
 	ts := testserver{t: t, cid: 1, resolver: resolver, tlsmode: smtpclient.TLSOpportunistic}
 
-	mox.Context = context.Background()
+	mox.Context = ctxbg
 	mox.ConfigStaticPath = configPath
 	mox.MustLoadConfig(false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
@@ -138,7 +140,7 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 		authLine = fmt.Sprintf("AUTH PLAIN %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("\u0000%s\u0000%s", ts.user, ts.pass))))
 	}
 
-	client, err := smtpclient.New(context.Background(), xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, "mox.example", authLine)
+	client, err := smtpclient.New(ctxbg, xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, "mox.example", authLine)
 	if err != nil {
 		clientConn.Close()
 	} else {
@@ -199,7 +201,7 @@ func TestSubmission(t *testing.T) {
 			mailFrom := "mjl@mox.example"
 			rcptTo := "remote@example.org"
 			if err == nil {
-				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false)
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false)
 			}
 			var cerr smtpclient.Error
 			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
@@ -230,7 +232,7 @@ func TestDelivery(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@127.0.0.10"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
@@ -242,7 +244,7 @@ func TestDelivery(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@test.example" // Not configured as destination.
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
@@ -254,7 +256,7 @@ func TestDelivery(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "unknown@mox.example" // User unknown.
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
@@ -266,7 +268,7 @@ func TestDelivery(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
@@ -280,7 +282,7 @@ func TestDelivery(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		tcheck(t, err, "deliver to remote")
 
@@ -319,12 +321,12 @@ func tretrain(t *testing.T, acc *store.Account) {
 	bloomPath := filepath.Join(basePath, acc.Name, "junkfilter.bloom")
 	os.Remove(dbPath)
 	os.Remove(bloomPath)
-	jf, _, err := acc.OpenJunkFilter(xlog)
+	jf, _, err := acc.OpenJunkFilter(ctxbg, xlog)
 	tcheck(t, err, "open junk filter")
 	defer jf.Close()
 
 	// Fetch messags to retrain on.
-	q := bstore.QueryDB[store.Message](acc.DB)
+	q := bstore.QueryDB[store.Message](ctxbg, acc.DB)
 	q.FilterFn(func(m store.Message) bool {
 		return m.Flags.Junk || m.Flags.Notjunk
 	})
@@ -339,7 +341,7 @@ func tretrain(t *testing.T, acc *store.Account) {
 		tcheck(t, err, "open message")
 		r := store.FileMsgReader(m.MsgPrefix, f)
 
-		jf.TrainMessage(r, m.Size, ham)
+		jf.TrainMessage(ctxbg, r, m.Size, ham)
 
 		err = r.Close()
 		tcheck(t, err, "close message")
@@ -388,11 +390,11 @@ func TestSpam(t *testing.T) {
 
 	checkRejectsCount := func(expect int) {
 		t.Helper()
-		q := bstore.QueryDB[store.Mailbox](ts.acc.DB)
+		q := bstore.QueryDB[store.Mailbox](ctxbg, ts.acc.DB)
 		q.FilterNonzero(store.Mailbox{Name: "Rejects"})
 		mb, err := q.Get()
 		tcheck(t, err, "get rejects mailbox")
-		qm := bstore.QueryDB[store.Message](ts.acc.DB)
+		qm := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
 		qm.FilterNonzero(store.Message{MailboxID: mb.ID})
 		n, err := qm.Count()
 		tcheck(t, err, "count messages in rejects mailbox")
@@ -406,7 +408,7 @@ func TestSpam(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
@@ -418,7 +420,7 @@ func TestSpam(t *testing.T) {
 	})
 
 	// Mark the messages as having good reputation.
-	q := bstore.QueryDB[store.Message](ts.acc.DB)
+	q := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
 	_, err := q.UpdateFields(map[string]any{"Junk": false, "Notjunk": true})
 	tcheck(t, err, "update junkiness")
 
@@ -427,7 +429,7 @@ func TestSpam(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		tcheck(t, err, "deliver")
 
@@ -437,7 +439,7 @@ func TestSpam(t *testing.T) {
 
 	// Undo dmarc pass, mark messages as junk, and train the filter.
 	resolver.TXT = nil
-	q = bstore.QueryDB[store.Message](ts.acc.DB)
+	q = bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
 	_, err = q.UpdateFields(map[string]any{"Junk": true, "Notjunk": false})
 	tcheck(t, err, "update junkiness")
 	tretrain(t, ts.acc)
@@ -447,7 +449,7 @@ func TestSpam(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
@@ -488,7 +490,7 @@ func TestDMARCSent(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
@@ -499,7 +501,7 @@ func TestDMARCSent(t *testing.T) {
 	// Insert a message that we sent to the address that is about to send to us.
 	var sentMsg store.Message
 	tinsertmsg(t, ts.acc, "Sent", &sentMsg, deliverMessage)
-	err := ts.acc.DB.Insert(&store.Recipient{MessageID: sentMsg.ID, Localpart: "remote", Domain: "example.org", OrgDomain: "example.org", Sent: time.Now()})
+	err := ts.acc.DB.Insert(ctxbg, &store.Recipient{MessageID: sentMsg.ID, Localpart: "remote", Domain: "example.org", OrgDomain: "example.org", Sent: time.Now()})
 	tcheck(t, err, "inserting message recipient")
 
 	// We should now be accepting the message because we recently sent a message.
@@ -507,7 +509,7 @@ func TestDMARCSent(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		tcheck(t, err, "deliver")
 	})
@@ -540,7 +542,7 @@ func TestBlocklistedSubjectpass(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
@@ -559,7 +561,7 @@ func TestBlocklistedSubjectpass(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
@@ -577,7 +579,7 @@ func TestBlocklistedSubjectpass(t *testing.T) {
 		rcptTo := "mjl@mox.example"
 		passMessage := strings.Replace(deliverMessage, "Subject: test", "Subject: test "+pass, 1)
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(passMessage)), strings.NewReader(passMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(passMessage)), strings.NewReader(passMessage), false, false)
 		}
 		tcheck(t, err, "deliver with subjectpass")
 	})
@@ -619,11 +621,11 @@ func TestDMARCReport(t *testing.T) {
 			msg := msgb.String()
 
 			if err == nil {
-				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false)
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false)
 			}
 			tcheck(t, err, "deliver")
 
-			records, err := dmarcdb.Records(context.Background())
+			records, err := dmarcdb.Records(ctxbg)
 			tcheck(t, err, "dmarcdb records")
 			if len(records) != n {
 				t.Fatalf("got %d dmarcdb records, expected %d or more", len(records), n)
@@ -736,16 +738,16 @@ func TestTLSReport(t *testing.T) {
 			tcheck(t, xerr, "write msg")
 			msg := msgb.String()
 
-			headers, xerr := dkim.Sign(context.Background(), "remote", dns.Domain{ASCII: "example.org"}, dkimConf, false, strings.NewReader(msg))
+			headers, xerr := dkim.Sign(ctxbg, "remote", dns.Domain{ASCII: "example.org"}, dkimConf, false, strings.NewReader(msg))
 			tcheck(t, xerr, "dkim sign")
 			msg = headers + msg
 
 			if err == nil {
-				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false)
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false)
 			}
 			tcheck(t, err, "deliver")
 
-			records, err := tlsrptdb.Records(context.Background())
+			records, err := tlsrptdb.Records(ctxbg)
 			tcheck(t, err, "tlsrptdb records")
 			if len(records) != n {
 				t.Fatalf("got %d tlsrptdb records, expected %d", len(records), n)
@@ -840,11 +842,11 @@ func TestRatelimitDelivery(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		tcheck(t, err, "deliver to remote")
 
-		err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C452StorageFull {
 			t.Fatalf("got err %v, expected smtpclient error with code 452 for storage full", err)
@@ -857,7 +859,7 @@ func TestRatelimitDelivery(t *testing.T) {
 	// Message was already delivered once. We'll do another one. But the 3rd will fail.
 	// We need the actual size with prepended headers, since that is used in the
 	// calculations.
-	msg, err := bstore.QueryDB[store.Message](ts.acc.DB).Get()
+	msg, err := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).Get()
 	if err != nil {
 		t.Fatalf("getting delivered message for its size: %v", err)
 	}
@@ -869,11 +871,11 @@ func TestRatelimitDelivery(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
 		if err == nil {
-			err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		}
 		tcheck(t, err, "deliver to remote")
 
-		err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C452StorageFull {
 			t.Fatalf("got err %v, expected smtpclient error with code 452 for storage full", err)
@@ -933,7 +935,7 @@ func TestLimitOutgoing(t *testing.T) {
 	ts.pass = "testtest"
 	ts.submission = true
 
-	err := ts.acc.DB.Insert(&store.Outgoing{Recipient: "a@other.example", Submitted: time.Now().Add(-24*time.Hour - time.Minute)})
+	err := ts.acc.DB.Insert(ctxbg, &store.Outgoing{Recipient: "a@other.example", Submitted: time.Now().Add(-24*time.Hour - time.Minute)})
 	tcheck(t, err, "inserting outgoing/recipient past 24h window")
 
 	testSubmit := func(rcptTo string, expErr *smtpclient.Error) {
@@ -942,7 +944,7 @@ func TestLimitOutgoing(t *testing.T) {
 			t.Helper()
 			mailFrom := "mjl@mox.example"
 			if err == nil {
-				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false)
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false)
 			}
 			var cerr smtpclient.Error
 			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
@@ -979,7 +981,7 @@ func TestCatchall(t *testing.T) {
 			t.Helper()
 			mailFrom := "mjl@other.example"
 			if err == nil {
-				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false)
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false)
 			}
 			var cerr smtpclient.Error
 			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
@@ -993,14 +995,14 @@ func TestCatchall(t *testing.T) {
 	testDeliver("MJL+TEST@mox.example", nil) // Again, and case insensitive.
 	testDeliver("unknown@mox.example", nil)  // Catchall address, to account catchall.
 
-	n, err := bstore.QueryDB[store.Message](ts.acc.DB).Count()
+	n, err := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).Count()
 	tcheck(t, err, "checking delivered messages")
 	tcompare(t, n, 3)
 
 	acc, err := store.OpenAccount("catchall")
 	tcheck(t, err, "open account")
 	defer acc.Close()
-	n, err = bstore.QueryDB[store.Message](acc.DB).Count()
+	n, err = bstore.QueryDB[store.Message](ctxbg, acc.DB).Count()
 	tcheck(t, err, "checking delivered messages to catchall account")
 	tcompare(t, n, 1)
 }
@@ -1072,21 +1074,21 @@ test email
 
 			rcptTo := "remote@example.org"
 			if err == nil {
-				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false)
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false)
 			}
 			tcheck(t, err, "deliver")
 
-			msgs, err := queue.List()
+			msgs, err := queue.List(ctxbg)
 			tcheck(t, err, "listing queue")
 			n++
 			tcompare(t, len(msgs), n)
 			sort.Slice(msgs, func(i, j int) bool {
 				return msgs[i].ID > msgs[j].ID
 			})
-			f, err := queue.OpenMessage(msgs[0].ID)
+			f, err := queue.OpenMessage(ctxbg, msgs[0].ID)
 			tcheck(t, err, "open message in queue")
 			defer f.Close()
-			results, err := dkim.Verify(context.Background(), resolver, false, dkim.DefaultPolicy, f, false)
+			results, err := dkim.Verify(ctxbg, resolver, false, dkim.DefaultPolicy, f, false)
 			tcheck(t, err, "verifying dkim message")
 			tcompare(t, len(results), 1)
 			tcompare(t, results[0].Status, dkim.StatusPass)
@@ -1117,7 +1119,7 @@ func TestPostmaster(t *testing.T) {
 			t.Helper()
 			mailFrom := "mjl@other.example"
 			if err == nil {
-				err = client.Deliver(context.Background(), mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
 			}
 			var cerr smtpclient.Error
 			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {

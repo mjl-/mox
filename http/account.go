@@ -222,7 +222,7 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 			err := archiver.Close()
 			log.Check(err, "exporting mail close")
 		}()
-		if err := store.ExportMessages(log, acc.DB, acc.Dir, archiver, maildir, ""); err != nil {
+		if err := store.ExportMessages(r.Context(), log, acc.DB, acc.Dir, archiver, maildir, ""); err != nil {
 			log.Errorx("exporting mail", err)
 		}
 

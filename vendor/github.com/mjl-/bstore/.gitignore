@@ -1,3 +1,4 @@
 /cover.out
 /cover.html
-/testdata/*.db
+/testdata/tmp.*.db
+/testdata/mail.db

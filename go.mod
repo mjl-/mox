@@ -3,7 +3,7 @@ module github.com/mjl-/mox
 go 1.18
 
 require (
-	github.com/mjl-/bstore v0.0.0-20230211204415-a9899ef6e782
+	github.com/mjl-/bstore v0.0.1
 	github.com/mjl-/sconf v0.0.4
 	github.com/mjl-/sherpa v0.6.5
 	github.com/mjl-/sherpadoc v0.0.10

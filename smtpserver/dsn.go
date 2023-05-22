@@ -1,6 +1,7 @@
 package smtpserver
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -11,7 +12,7 @@ import (
 )
 
 // compose dsn message and add it to the queue for delivery to rcptTo.
-func queueDSN(c *conn, rcptTo smtp.Path, m dsn.Message) error {
+func queueDSN(ctx context.Context, c *conn, rcptTo smtp.Path, m dsn.Message) error {
 	buf, err := m.Compose(c.log, false)
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func queueDSN(c *conn, rcptTo smtp.Path, m dsn.Message) error {
 	// ../rfc/3464:433
 	const has8bit = false
 	const smtputf8 = false
-	if err := queue.Add(c.log, "", smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), nil, f, bufUTF8, true); err != nil {
+	if err := queue.Add(ctx, c.log, "", smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), nil, f, bufUTF8, true); err != nil {
 		return err
 	}
 	err = f.Close()

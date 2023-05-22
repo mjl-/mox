@@ -17,8 +17,8 @@ version is added to the "types" subbucket. Data is always inserted/updated with
 the most recent type version. But the database may still hold data records
 referencing older type versions. Bstore decodes a packed data record with the
 referenced type version. For storage efficiency: the type version is reused for
-many stored records, a self-describing format (like JSON) would duplicate the
-field names in each stored record.
+many stored records, a self-describing format (like JSON) for each stored
+record would duplicate the field names in each stored record.
 
 # Record storage
 
@@ -51,6 +51,8 @@ more space than the single bit and are stored consecutively after the fieldmap:
     the zero value marked in the fieldmap.
   - Slices use a uvarint for the number of elements, followed by a bitmap for
     nonzero values, followed by the encoded nonzero elements.
+  - Arrays (fixed length) start with a bitmap for nonzero values, followed by
+    the encoded nonzero elements.
   - Maps use a uvariant for the number of key/value pairs, followed by a
     fieldmap for the values (the keys are always present), followed by each
     pair: key (always present), value (only if nonzero); key, value; etc.
@@ -71,7 +73,7 @@ unsigned integer, or between string and []byte.
 Indexes are stored in subbuckets, named starting with "index." followed by the
 index name. Keys are a self-delimiting encodings of the fields that make up the
 key, followed by the primary key for the "records" bucket. Values are always
-empty in index buckets. For bool and integer types, the same fixed with
+empty in index buckets. For bool and integer types, the same fixed width
 encoding as for primary keys in the "records" subbucket is used. Strings are
 encoded by their bytes (no \0 allowed) followed by a delimiting \0. Unlike
 primary keys, an index can cover a field with type time.Time. Times are encoded

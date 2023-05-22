@@ -386,7 +386,7 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 		< "ok"
 		< stream
 		*/
-		qmsgs, err := queue.List()
+		qmsgs, err := queue.List(ctx)
 		ctl.xcheck(err, "listing queue")
 		ctl.xwriteok()
 
@@ -425,10 +425,10 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 
 		var count int
 		if cmd == "queuekick" {
-			count, err = queue.Kick(id, todomain, recipient)
+			count, err = queue.Kick(ctx, id, todomain, recipient)
 			ctl.xcheck(err, "kicking queue")
 		} else {
-			count, err = queue.Drop(id, todomain, recipient)
+			count, err = queue.Drop(ctx, id, todomain, recipient)
 			ctl.xcheck(err, "dropping messages from queue")
 		}
 		ctl.xwrite(fmt.Sprintf("%d", count))
@@ -447,7 +447,7 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 		if err != nil {
 			ctl.xcheck(err, "parsing id")
 		}
-		mr, err := queue.OpenMessage(id)
+		mr, err := queue.OpenMessage(ctx, id)
 		ctl.xcheck(err, "opening message")
 		defer func() {
 			err := mr.Close()
@@ -458,7 +458,7 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 
 	case "importmaildir", "importmbox":
 		mbox := cmd == "importmbox"
-		importctl(ctl, mbox)
+		importctl(ctx, ctl, mbox)
 
 	case "domainadd":
 		/* protocol:
@@ -609,7 +609,7 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 			log.Check(err, "removing old junkfilter bloom filter file", mlog.Field("path", bloomPath))
 
 			// Open junk filter, this creates new files.
-			jf, _, err := acc.OpenJunkFilter(ctl.log)
+			jf, _, err := acc.OpenJunkFilter(ctx, ctl.log)
 			ctl.xcheck(err, "open new junk filter")
 			defer func() {
 				if jf == nil {
@@ -621,10 +621,10 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 
 			// Read through messages with junk or nonjunk flag set, and train them.
 			var total, trained int
-			q := bstore.QueryDB[store.Message](acc.DB)
+			q := bstore.QueryDB[store.Message](ctx, acc.DB)
 			err = q.ForEach(func(m store.Message) error {
 				total++
-				ok, err := acc.TrainMessage(ctl.log, jf, m)
+				ok, err := acc.TrainMessage(ctx, ctl.log, jf, m)
 				if ok {
 					trained++
 				}

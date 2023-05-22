@@ -28,6 +28,8 @@ import (
 	"github.com/mjl-/mox/store"
 )
 
+var ctxbg = context.Background()
+
 func tcheck(t *testing.T, err error, msg string) {
 	t.Helper()
 	if err != nil {
@@ -51,7 +53,7 @@ func TestDeliver(t *testing.T) {
 	// Load mox config.
 	mox.ConfigStaticPath = "testdata/integration/config/mox.conf"
 	filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
-	if errs := mox.LoadConfig(context.Background(), false); len(errs) > 0 {
+	if errs := mox.LoadConfig(ctxbg, false); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}
 
@@ -80,7 +82,7 @@ func TestDeliver(t *testing.T) {
 	latestMsgID := func(username string) int64 {
 		// We open the account index database created by mox for the test user. And we keep looking for the email we sent.
 		dbpath := fmt.Sprintf("testdata/integration/data/accounts/%s/index.db", username)
-		db, err := bstore.Open(dbpath, &bstore.Options{Timeout: 3 * time.Second}, store.Message{}, store.Recipient{}, store.Mailbox{}, store.Password{})
+		db, err := bstore.Open(ctxbg, dbpath, &bstore.Options{Timeout: 3 * time.Second}, store.Message{}, store.Recipient{}, store.Mailbox{}, store.Password{})
 		if err != nil && errors.Is(err, bolt.ErrTimeout) {
 			log.Printf("db open timeout (normal delay for new sender with account and db file kept open)")
 			return 0
@@ -88,7 +90,7 @@ func TestDeliver(t *testing.T) {
 		tcheck(t, err, "open test account database")
 		defer db.Close()
 
-		q := bstore.QueryDB[store.Mailbox](db)
+		q := bstore.QueryDB[store.Mailbox](ctxbg, db)
 		q.FilterNonzero(store.Mailbox{Name: "Inbox"})
 		inbox, err := q.Get()
 		if err != nil {
@@ -96,7 +98,7 @@ func TestDeliver(t *testing.T) {
 			return 0
 		}
 
-		qm := bstore.QueryDB[store.Message](db)
+		qm := bstore.QueryDB[store.Message](ctxbg, db)
 		qm.FilterNonzero(store.Message{MailboxID: inbox.ID})
 		qm.SortDesc("ID")
 		qm.Limit(1)

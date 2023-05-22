@@ -26,7 +26,10 @@ import (
 	"github.com/mjl-/mox/mtasts"
 )
 
+var ctxbg = context.Background()
+
 func TestRefresh(t *testing.T) {
+	mox.Shutdown = ctxbg
 	mox.ConfigStaticPath = "../testdata/mtasts/fake.conf"
 	mox.Conf.Static.DataDir = "."
 
@@ -40,7 +43,7 @@ func TestRefresh(t *testing.T) {
 	}
 	defer Close()
 
-	db, err := database()
+	db, err := database(ctxbg)
 	if err != nil {
 		t.Fatalf("database: %s", err)
 	}
@@ -66,7 +69,7 @@ func TestRefresh(t *testing.T) {
 		}
 
 		pr := PolicyRecord{domain, time.Time{}, validEnd, lastUpdate, lastUse, backoff, recordID, policy}
-		if err := db.Insert(&pr); err != nil {
+		if err := db.Insert(ctxbg, &pr); err != nil {
 			t.Fatalf("insert policy: %s", err)
 		}
 	}
@@ -132,7 +135,7 @@ func TestRefresh(t *testing.T) {
 			t.Fatalf("bad sleep duration %v", d)
 		}
 	}
-	if n, err := refresh1(context.Background(), resolver, sleep); err != nil || n != 3 {
+	if n, err := refresh1(ctxbg, resolver, sleep); err != nil || n != 3 {
 		t.Fatalf("refresh1: err %s, n %d, expected no error, 3", err, n)
 	}
 	if slept != 2 {
@@ -141,19 +144,19 @@ func TestRefresh(t *testing.T) {
 	time.Sleep(time.Second / 10) // Give goroutine time to write result, before we cleanup the database.
 
 	// Should not do any more refreshes and return immediately.
-	q := bstore.QueryDB[PolicyRecord](db)
+	q := bstore.QueryDB[PolicyRecord](ctxbg, db)
 	q.FilterNonzero(PolicyRecord{Domain: "policybad.mox.example"})
 	if _, err := q.Delete(); err != nil {
 		t.Fatalf("delete record that would be refreshed: %v", err)
 	}
-	mox.Context = context.Background()
-	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
+	mox.Context = ctxbg
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 	mox.ShutdownCancel()
 	n := refresh()
 	if n != 0 {
 		t.Fatalf("refresh found unexpected work, n %d", n)
 	}
-	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 }
 
 type pipeListener struct {

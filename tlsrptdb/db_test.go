@@ -15,6 +15,8 @@ import (
 	"github.com/mjl-/mox/tlsrpt"
 )
 
+var ctxbg = context.Background()
+
 const reportJSON = `{
      "organization-name": "Company-X",
      "date-range": {
@@ -59,6 +61,8 @@ const reportJSON = `{
    }`
 
 func TestReport(t *testing.T) {
+	mox.Context = ctxbg
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 	mox.ConfigStaticPath = "../testdata/tlsrpt/fake.conf"
 	mox.Conf.Static.DataDir = "."
 	// Recognize as configured domain.
@@ -89,7 +93,7 @@ func TestReport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parsing TLSRPT from message %q: %s", file.Name(), err)
 		}
-		if err := AddReport(context.Background(), dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", report); err != nil {
+		if err := AddReport(ctxbg, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", report); err != nil {
 			t.Fatalf("adding report to database: %s", err)
 		}
 	}
@@ -97,11 +101,11 @@ func TestReport(t *testing.T) {
 	report, err := tlsrpt.Parse(strings.NewReader(reportJSON))
 	if err != nil {
 		t.Fatalf("parsing report: %v", err)
-	} else if err := AddReport(context.Background(), dns.Domain{ASCII: "company-y.example"}, "tlsrpt@company-y.example", report); err != nil {
+	} else if err := AddReport(ctxbg, dns.Domain{ASCII: "company-y.example"}, "tlsrpt@company-y.example", report); err != nil {
 		t.Fatalf("adding report to database: %s", err)
 	}
 
-	records, err := Records(context.Background())
+	records, err := Records(ctxbg)
 	if err != nil {
 		t.Fatalf("fetching records: %s", err)
 	}
@@ -112,14 +116,14 @@ func TestReport(t *testing.T) {
 		if !reflect.DeepEqual(&r.Report, report) {
 			t.Fatalf("report, got %#v, expected %#v", r.Report, report)
 		}
-		if _, err := RecordID(context.Background(), r.ID); err != nil {
+		if _, err := RecordID(ctxbg, r.ID); err != nil {
 			t.Fatalf("get record by id: %v", err)
 		}
 	}
 
 	start, _ := time.Parse(time.RFC3339, "2016-04-01T00:00:00Z")
 	end, _ := time.Parse(time.RFC3339, "2016-04-01T23:59:59Z")
-	records, err = RecordsPeriodDomain(context.Background(), start, end, "test.xmox.nl")
+	records, err = RecordsPeriodDomain(ctxbg, start, end, "test.xmox.nl")
 	if err != nil || len(records) != 1 {
 		t.Fatalf("got err %v, records %#v, expected no error with 1 record", err, records)
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"path/filepath"
 	"time"
@@ -56,7 +57,7 @@ func xcmdExport(mbox bool, args []string, c *cmd) {
 	}
 
 	dbpath := filepath.Join(accountDir, "index.db")
-	db, err := bstore.Open(dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, store.Message{}, store.Recipient{}, store.Mailbox{})
+	db, err := bstore.Open(context.Background(), dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, store.Message{}, store.Recipient{}, store.Mailbox{})
 	xcheckf(err, "open database %q", dbpath)
 	defer func() {
 		if err := db.Close(); err != nil {
@@ -65,7 +66,7 @@ func xcmdExport(mbox bool, args []string, c *cmd) {
 	}()
 
 	a := store.DirArchiver{Dir: dst}
-	err = store.ExportMessages(mlog.New("export"), db, accountDir, a, !mbox, mailbox)
+	err = store.ExportMessages(context.Background(), mlog.New("export"), db, accountDir, a, !mbox, mailbox)
 	xcheckf(err, "exporting messages")
 	err = a.Close()
 	xcheckf(err, "closing archiver")

@@ -152,14 +152,15 @@ func Listen(network, addr string) (net.Listener, error) {
 }
 
 // Shutdown is canceled when a graceful shutdown is initiated. SMTP, IMAP, periodic
-// processes should check this before starting a new operation. If true, the
-// operation should be aborted, and new connections should receive a message that
-// the service is currently not available.
+// processes should check this before starting a new operation. If this context is
+// canaceled, the operation should not be started, and new connections/commands should
+// receive a message that the service is currently not available.
 var Shutdown context.Context
 var ShutdownCancel func()
 
-// Context should be used as parent by all operations. It is canceled when mox is
-// shutdown, aborting all pending operations.
+// This context should be used as parent by most operations. It is canceled 1
+// second after graceful shutdown was initiated with the cancelation of the
+// Shutdown context. This should abort active operations.
 //
 // Operations typically have context timeouts, 30s for single i/o like DNS queries,
 // and 1 minute for operations with more back and forth. These are set through a
@@ -167,6 +168,7 @@ var ShutdownCancel func()
 // when shutting down.
 //
 // HTTP servers don't get graceful shutdown, their connections are just aborted.
+// todo: should shut down http connections as well, and shut down the listener and/or return 503 for new requests.
 var Context context.Context
 var ContextCancel func()
 

@@ -24,7 +24,7 @@ func (f field) applyDefault(rv reflect.Value) error {
 	case kindBytes, kindBinaryMarshal, kindMap:
 		return nil
 
-	case kindSlice, kindStruct:
+	case kindSlice, kindStruct, kindArray:
 		return f.Type.applyDefault(rv)
 
 	case kindBool, kindInt, kindInt8, kindInt16, kindInt32, kindInt64, kindUint, kindUint8, kindUint16, kindUint32, kindUint64, kindFloat32, kindFloat64, kindString, kindTime:
@@ -53,9 +53,9 @@ func (f field) applyDefault(rv reflect.Value) error {
 }
 
 // only for recursing. we do not support recursing into maps because it would
-// involve more work making values settable. and how sensible it it anyway?
+// involve more work making values settable. and how sensible is it anyway?
 func (ft fieldType) applyDefault(rv reflect.Value) error {
-	if ft.Ptr && (rv.IsZero() || rv.IsNil()) {
+	if ft.Ptr && rv.IsZero() {
 		return nil
 	} else if ft.Ptr {
 		rv = rv.Elem()
@@ -64,12 +64,19 @@ func (ft fieldType) applyDefault(rv reflect.Value) error {
 	case kindSlice:
 		n := rv.Len()
 		for i := 0; i < n; i++ {
-			if err := ft.List.applyDefault(rv.Index(i)); err != nil {
+			if err := ft.ListElem.applyDefault(rv.Index(i)); err != nil {
+				return err
+			}
+		}
+	case kindArray:
+		n := ft.ArrayLength
+		for i := 0; i < n; i++ {
+			if err := ft.ListElem.applyDefault(rv.Index(i)); err != nil {
 				return err
 			}
 		}
 	case kindStruct:
-		for _, nf := range ft.Fields {
+		for _, nf := range ft.structFields {
 			nfv := rv.FieldByIndex(nf.structField.Index)
 			if err := nf.applyDefault(nfv); err != nil {
 				return err

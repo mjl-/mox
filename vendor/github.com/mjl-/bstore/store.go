@@ -1,7 +1,9 @@
 package bstore
 
 import (
+	"context"
 	"encoding"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +15,18 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 )
+
+/*
+- todo: should thoroughly review guarantees, where some of the bstore struct tags are allowed (e.g. top-level fields vs deeper struct fields), check that all features work well when combined (cyclic types, embed structs, default values, nonzero checks, type equality, zero values with fieldmap, skipping values (hidden due to later typeversions) and having different type versions), write more extensive tests.
+- todo: write tests for invalid (meta)data inside the boltdb buckets (not for invalid boltdb files). we should detect the error properly, give a reasonable message. we shouldn't panic (nil deref, out of bounds index, consume too much memory). typeVersions, records, indices.
+- todo: add benchmarks. is there a standard dataset databases use for benchmarking?
+- todo optimize: profile and see if we can optimize for some quick wins.
+- todo: should we add a way for ad-hoc data manipulation? e.g. with sql-like queries, e.g. update, delete, insert; and export results of queries to csv.
+- todo: should we have a function that returns records in a map? eg Map() that is like List() but maps a key to T (too bad we cannot have a type for the key!).
+- todo: better error messages (ordering of description & error; mention typename, fields (path), field types and offending value & type more often)
+- todo: should we add types for dates and numerics?
+- todo: struct tag for enums? where we check if the values match.
+*/
 
 var (
 	ErrAbsent       = errors.New("absent") // If a function can return an ErrAbsent, it can be compared directly, without errors.Is.
@@ -26,6 +40,7 @@ var (
 	ErrFinished     = errors.New("query finished")
 	ErrStore        = errors.New("internal/storage error") // E.g. when buckets disappear, possibly by external users of the underlying BoltDB database.
 	ErrParam        = errors.New("bad parameters")
+	ErrTxBotched    = errors.New("botched transaction") // Set on transactions after failed and aborted write operations.
 
 	errTxClosed    = errors.New("transaction is closed")
 	errNestedIndex = errors.New("struct tags index/unique only allowed at top-level structs")
@@ -42,7 +57,7 @@ type DB struct {
 	// needs a wlock.
 	typesMutex sync.RWMutex
 	types      map[reflect.Type]storeType
-	typeNames  map[string]storeType // Go type name to store type, for checking duplicates.
+	typeNames  map[string]storeType // Type name to store type, for checking duplicates.
 
 	statsMutex sync.Mutex
 	stats      Stats
@@ -52,7 +67,9 @@ type DB struct {
 //
 // A Tx is not safe for concurrent use.
 type Tx struct {
-	db  *DB // If nil, this transaction is closed.
+	ctx context.Context // Check before starting operations, query next calls, and during foreach.
+	err error           // If not nil, operations return this error. Set when write operations fail, e.g. insert with constraint violations.
+	db  *DB             // If nil, this transaction is closed.
 	btx *bolt.Tx
 
 	bucketCache map[bucketKey]*bolt.Bucket
@@ -109,9 +126,9 @@ type typeVersion struct {
 type field struct {
 	Name       string
 	Type       fieldType
-	Nonzero    bool
-	References []string // Referenced fields. Only for the top-level struct fields, not for nested structs.
-	Default    string   // As specified in struct tag. Processed version is defaultValue.
+	Nonzero    bool     `json:",omitempty"`
+	References []string `json:",omitempty"` // Referenced fields. Only for the top-level struct fields, not for nested structs.
+	Default    string   `json:",omitempty"` // As specified in struct tag. Processed version is defaultValue.
 
 	// If not the zero reflect.Value, set this value instead of a zero value on insert.
 	// This is always a non-pointer value. Only set for the current typeVersion
@@ -123,6 +140,9 @@ type field struct {
 	// if this field is no longer in the type, or if it has been removed and
 	// added again in later schema versions.
 	structField reflect.StructField
+	// Whether this field has been prepared for parsing into, i.e.
+	// structField set if needed.
+	prepared bool
 
 	indices map[string]*index
 }
@@ -134,79 +154,135 @@ type embed struct {
 	structField reflect.StructField
 }
 
-type kind int
+type kind string
+
+func (k kind) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(k))
+}
+
+func (k *kind) UnmarshalJSON(buf []byte) error {
+	if string(buf) == "null" {
+		return nil
+	}
+	if len(buf) > 0 && buf[0] == '"' {
+		var s string
+		if err := json.Unmarshal(buf, &s); err != nil {
+			return fmt.Errorf("parsing fieldType.Kind string value %q: %v", buf, err)
+		}
+		nk, ok := kindsMap[s]
+		if !ok {
+			return fmt.Errorf("unknown fieldType.Kind value %q", s)
+		}
+		*k = nk
+		return nil
+	}
+
+	// In ondiskVersion1, the kinds were integers, starting at 1.
+	var i int
+	if err := json.Unmarshal(buf, &i); err != nil {
+		return fmt.Errorf("parsing fieldType.Kind int value %q: %v", buf, err)
+	}
+	if i <= 0 || i-1 >= len(kinds) {
+		return fmt.Errorf("unknown fieldType.Kind value %d", i)
+	}
+	*k = kinds[i-1]
+	return nil
+}
 
 const (
-	kindInvalid kind = iota
-	kindBytes
-	kindBool
-	kindInt
-	kindInt8
-	kindInt16
-	kindInt32
-	kindInt64
-	kindUint
-	kindUint8
-	kindUint16
-	kindUint32
-	kindUint64
-	kindFloat32
-	kindFloat64
-	kindMap
-	kindSlice
-	kindString
-	kindTime
-	kindBinaryMarshal
-	kindStruct
+	kindBytes         kind = "bytes" // 1, etc
+	kindBool          kind = "bool"
+	kindInt           kind = "int"
+	kindInt8          kind = "int8"
+	kindInt16         kind = "int16"
+	kindInt32         kind = "int32"
+	kindInt64         kind = "int64"
+	kindUint          kind = "uint"
+	kindUint8         kind = "uint8"
+	kindUint16        kind = "uint16"
+	kindUint32        kind = "uint32"
+	kindUint64        kind = "uint64"
+	kindFloat32       kind = "float32"
+	kindFloat64       kind = "float64"
+	kindMap           kind = "map"
+	kindSlice         kind = "slice"
+	kindString        kind = "string"
+	kindTime          kind = "time"
+	kindBinaryMarshal kind = "binarymarshal"
+	kindStruct        kind = "struct"
+	kindArray         kind = "array"
 )
 
-var kindStrings = []string{
-	"(invalid)",
-	"bytes",
-	"bool",
-	"int",
-	"int8",
-	"int16",
-	"int32",
-	"int64",
-	"uint",
-	"uint8",
-	"uint16",
-	"uint32",
-	"uint64",
-	"float32",
-	"float64",
-	"map",
-	"slice",
-	"string",
-	"time",
-	"binarymarshal",
-	"struct",
+// In ondiskVersion1, the kinds were integers, starting at 1.
+// Do not change the order. Add new values at the end.
+var kinds = []kind{
+	kindBytes,
+	kindBool,
+	kindInt,
+	kindInt8,
+	kindInt16,
+	kindInt32,
+	kindInt64,
+	kindUint,
+	kindUint8,
+	kindUint16,
+	kindUint32,
+	kindUint64,
+	kindFloat32,
+	kindFloat64,
+	kindMap,
+	kindSlice,
+	kindString,
+	kindTime,
+	kindBinaryMarshal,
+	kindStruct,
+	kindArray,
 }
 
-func (k kind) String() string {
-	return kindStrings[k]
+func makeKindsMap() map[string]kind {
+	m := map[string]kind{}
+	for _, k := range kinds {
+		m[string(k)] = k
+	}
+	return m
 }
+
+var kindsMap = makeKindsMap()
 
 type fieldType struct {
-	Ptr              bool       // If type is a pointer.
-	Kind             kind       // Type with possible Ptr deferenced.
-	Fields           []field    // For kindStruct.
-	MapKey, MapValue *fieldType // For kindMap.
-	List             *fieldType // For kindSlice.
-}
+	Ptr  bool `json:",omitempty"` // If type is a pointer.
+	Kind kind // Type with possible Ptr deferenced.
 
-func (ft fieldType) String() string {
-	s := ft.Kind.String()
-	if ft.Ptr {
-		return s + "ptr"
-	}
-	return s
+	MapKey      *fieldType `json:",omitempty"`
+	MapValue    *fieldType `json:",omitempty"`     // For kindMap.
+	ListElem    *fieldType `json:"List,omitempty"` // For kindSlice and kindArray. Named List in JSON for compatibility.
+	ArrayLength int        `json:",omitempty"`     // For kindArray.
+
+	// For kindStruct, the fields of the struct. Only set for the first use of the type
+	// within a registered type. Code dealing with fields should use structFields
+	// (below) most of the time instead, it has the effective fields after resolving
+	// the type reference.
+	// Named "Fields" in JSON to stay compatible with ondiskVersion1, named
+	// DefinitionFields in Go for clarity.
+	DefinitionFields []field `json:"Fields,omitempty"`
+
+	// For struct types, the sequence number of this type (within the registered type).
+	// Needed for supporting cyclic types.  Each struct type is assigned the next
+	// sequence number. The registered type implicitly has sequence 1. If positive,
+	// this defines a type (i.e. when it is first encountered analyzing fields
+	// depth-first). If negative, it references the type with positive seq (when a
+	// field is encountered of a type that was seen before). New since ondiskVersion2,
+	// structs in ondiskVersion1 will have zero value 0.
+	FieldsTypeSeq int `json:",omitempty"`
+
+	// Fields after taking cyclic types into account. Set when registering/loading a
+	// type. Not stored on disk because of potential cyclic data.
+	structFields []field
 }
 
 // Options configure how a database should be opened or initialized.
 type Options struct {
-	Timeout   time.Duration // Abort if opening DB takes longer than Timeout.
+	Timeout   time.Duration // Abort if opening DB takes longer than Timeout. If not set, the deadline from the context is used.
 	Perm      fs.FileMode   // Permissions for new file if created. If zero, 0600 is used.
 	MustExist bool          // Before opening, check that file exists. If not, io/fs.ErrNotExist is returned.
 }
@@ -219,10 +295,19 @@ type Options struct {
 //
 // Only one DB instance can be open for a file at a time. Use opts.Timeout to
 // specify a timeout during open to prevent indefinite blocking.
-func Open(path string, opts *Options, typeValues ...any) (*DB, error) {
+//
+// The context is used for opening and initializing the database, not for further
+// operations. If the context is canceled while waiting on the database file lock,
+// the operation is not aborted other than when the deadline/timeout is reached.
+//
+// See function Register for checks for changed/unchanged schema during open
+// based on environment variable "bstore_schema_check".
+func Open(ctx context.Context, path string, opts *Options, typeValues ...any) (*DB, error) {
 	var bopts *bolt.Options
 	if opts != nil && opts.Timeout > 0 {
 		bopts = &bolt.Options{Timeout: opts.Timeout}
+	} else if end, ok := ctx.Deadline(); ok {
+		bopts = &bolt.Options{Timeout: time.Until(end)}
 	}
 	var mode fs.FileMode = 0600
 	if opts != nil && opts.Perm != 0 {
@@ -241,7 +326,7 @@ func Open(path string, opts *Options, typeValues ...any) (*DB, error) {
 	typeNames := map[string]storeType{}
 	types := map[reflect.Type]storeType{}
 	db := &DB{bdb: bdb, typeNames: typeNames, types: types}
-	if err := db.Register(typeValues...); err != nil {
+	if err := db.Register(ctx, typeValues...); err != nil {
 		bdb.Close()
 		return nil, err
 	}
@@ -272,6 +357,9 @@ func (tx *Tx) Stats() Stats {
 
 // WriteTo writes the entire database to w, not including changes made during this transaction.
 func (tx *Tx) WriteTo(w io.Writer) (n int64, err error) {
+	if err := tx.error(); err != nil {
+		return 0, err
+	}
 	return tx.btx.WriteTo(w)
 }
 
@@ -328,58 +416,67 @@ func (tx *Tx) indexBucket(idx *index) (*bolt.Bucket, error) {
 // If a type is still referenced by another type, eg through a "ref" struct tag,
 // ErrReference is returned.
 // If the type does not exist, ErrAbsent is returned.
-func (db *DB) Drop(name string) error {
-	return db.Write(func(tx *Tx) error {
+func (db *DB) Drop(ctx context.Context, name string) error {
+	var st storeType
+	var ok bool
+	err := db.Write(ctx, func(tx *Tx) error {
 		tx.stats.Bucket.Get++
 		if tx.btx.Bucket([]byte(name)) == nil {
 			return ErrAbsent
 		}
 
-		if st, ok := db.typeNames[name]; ok && len(st.Current.referencedBy) > 0 {
+		st, ok = db.typeNames[name]
+		if ok && len(st.Current.referencedBy) > 0 {
 			return fmt.Errorf("%w: type is still referenced", ErrReference)
-		} else if ok {
-			for ref := range st.Current.references {
-				var n []*index
-				for _, idx := range db.typeNames[ref].Current.referencedBy {
-					if idx.tv != st.Current {
-						n = append(n, idx)
-					}
-				}
-				db.typeNames[ref].Current.referencedBy = n
-			}
-			delete(db.typeNames, name)
-			delete(db.types, st.Type)
 		}
 
 		tx.stats.Bucket.Delete++
 		return tx.btx.DeleteBucket([]byte(name))
 	})
+	if err != nil {
+		return err
+	}
+
+	if ok {
+		for ref := range st.Current.references {
+			var n []*index
+			for _, idx := range db.typeNames[ref].Current.referencedBy {
+				if idx.tv != st.Current {
+					n = append(n, idx)
+				}
+			}
+			db.typeNames[ref].Current.referencedBy = n
+		}
+		delete(db.typeNames, name)
+		delete(db.types, st.Type)
+	}
+	return nil
 }
 
 // Delete calls Delete on a new writable Tx.
-func (db *DB) Delete(values ...any) error {
-	return db.Write(func(tx *Tx) error {
+func (db *DB) Delete(ctx context.Context, values ...any) error {
+	return db.Write(ctx, func(tx *Tx) error {
 		return tx.Delete(values...)
 	})
 }
 
 // Get calls Get on a new read-only Tx.
-func (db *DB) Get(values ...any) error {
-	return db.Read(func(tx *Tx) error {
+func (db *DB) Get(ctx context.Context, values ...any) error {
+	return db.Read(ctx, func(tx *Tx) error {
 		return tx.Get(values...)
 	})
 }
 
 // Insert calls Insert on a new writable Tx.
-func (db *DB) Insert(values ...any) error {
-	return db.Write(func(tx *Tx) error {
+func (db *DB) Insert(ctx context.Context, values ...any) error {
+	return db.Write(ctx, func(tx *Tx) error {
 		return tx.Insert(values...)
 	})
 }
 
 // Update calls Update on a new writable Tx.
-func (db *DB) Update(values ...any) error {
-	return db.Write(func(tx *Tx) error {
+func (db *DB) Update(ctx context.Context, values ...any) error {
+	return db.Write(ctx, func(tx *Tx) error {
 		return tx.Update(values...)
 	})
 }
@@ -401,6 +498,7 @@ var typeKinds = map[reflect.Kind]kind{
 	reflect.Map:     kindMap,
 	reflect.Slice:   kindSlice,
 	reflect.String:  kindString,
+	reflect.Array:   kindArray,
 }
 
 func typeKind(t reflect.Type) (kind, error) {
@@ -424,7 +522,10 @@ func typeKind(t reflect.Type) (kind, error) {
 	if t.Kind() == reflect.Struct {
 		return kindStruct, nil
 	}
-	return kind(0), fmt.Errorf("%w: unsupported type %v", ErrType, t)
+	if t.Kind() == reflect.Ptr {
+		return "", fmt.Errorf("%w: pointer to pointers not supported: %v", ErrType, t.Elem())
+	}
+	return "", fmt.Errorf("%w: unsupported type %v", ErrType, t)
 }
 
 func typeName(t reflect.Type) (string, error) {
@@ -509,27 +610,39 @@ func (tv typeVersion) keyValue(tx *Tx, rv reflect.Value, insert bool, rb *bolt.B
 }
 
 // Read calls function fn with a new read-only transaction, ensuring transaction rollback.
-func (db *DB) Read(fn func(*Tx) error) error {
+func (db *DB) Read(ctx context.Context, fn func(*Tx) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	db.typesMutex.RLock()
 	defer db.typesMutex.RUnlock()
 	return db.bdb.View(func(btx *bolt.Tx) error {
-		tx := &Tx{db: db, btx: btx}
+		tx := &Tx{ctx: ctx, db: db, btx: btx}
 		tx.stats.Reads++
 		defer tx.addStats()
-		return fn(tx)
+		if err := fn(tx); err != nil {
+			return err
+		}
+		return tx.err
 	})
 }
 
 // Write calls function fn with a new read-write transaction. If fn returns
 // nil, the transaction is committed. Otherwise the transaction is rolled back.
-func (db *DB) Write(fn func(*Tx) error) error {
+func (db *DB) Write(ctx context.Context, fn func(*Tx) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	db.typesMutex.RLock()
 	defer db.typesMutex.RUnlock()
 	return db.bdb.Update(func(btx *bolt.Tx) error {
-		tx := &Tx{db: db, btx: btx}
+		tx := &Tx{ctx: ctx, db: db, btx: btx}
 		tx.stats.Writes++
 		defer tx.addStats()
-		return fn(tx)
+		if err := fn(tx); err != nil {
+			return err
+		}
+		return tx.err
 	})
 }
 

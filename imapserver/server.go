@@ -371,7 +371,7 @@ func (c *conn) utf8strings() bool {
 }
 
 func (c *conn) xdbwrite(fn func(tx *bstore.Tx)) {
-	err := c.account.DB.Write(func(tx *bstore.Tx) error {
+	err := c.account.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
 		fn(tx)
 		return nil
 	})
@@ -379,7 +379,7 @@ func (c *conn) xdbwrite(fn func(tx *bstore.Tx)) {
 }
 
 func (c *conn) xdbread(fn func(tx *bstore.Tx)) {
-	err := c.account.DB.Read(func(tx *bstore.Tx) error {
+	err := c.account.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 		fn(tx)
 		return nil
 	})
@@ -1574,7 +1574,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		}()
 		var ipadhash, opadhash hash.Hash
 		acc.WithRLock(func() {
-			err := acc.DB.Read(func(tx *bstore.Tx) error {
+			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
 				if err == bstore.ErrAbsent {
 					xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
@@ -1644,7 +1644,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		}
 		var xscram store.SCRAM
 		acc.WithRLock(func() {
-			err := acc.DB.Read(func(tx *bstore.Tx) error {
+			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
 				if authVariant == "scram-sha-1" {
 					xscram = password.SCRAMSHA1
@@ -1998,7 +1998,7 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 					remove[i].Junk = false
 					remove[i].Notjunk = false
 				}
-				err = c.account.RetrainMessages(c.log, tx, remove, true)
+				err = c.account.RetrainMessages(context.TODO(), c.log, tx, remove, true)
 				xcheckf(err, "untraining deleted messages")
 			}
 
@@ -2743,7 +2743,7 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) []store.Message {
 				remove[i].Junk = false
 				remove[i].Notjunk = false
 			}
-			err = c.account.RetrainMessages(c.log, tx, remove, true)
+			err = c.account.RetrainMessages(context.TODO(), c.log, tx, remove, true)
 			xcheckf(err, "untraining deleted messages")
 		})
 
@@ -3030,7 +3030,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				createdIDs = append(createdIDs, newMsgIDs[i])
 			}
 
-			err = c.account.RetrainMessages(c.log, tx, nmsgs, false)
+			err = c.account.RetrainMessages(context.TODO(), c.log, tx, nmsgs, false)
 			xcheckf(err, "train copied messages")
 		})
 
@@ -3169,7 +3169,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 				xcheckf(err, "updating moved message in database")
 			}
 
-			err = c.account.RetrainMessages(c.log, tx, msgs, false)
+			err = c.account.RetrainMessages(context.TODO(), c.log, tx, msgs, false)
 			xcheckf(err, "retraining messages after move")
 
 			// Prepare broadcast changes to other connections.
@@ -3269,7 +3269,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 				xcheckf(err, "updating flags")
 			}
 
-			err := c.account.RetrainMessages(c.log, tx, updated, false)
+			err := c.account.RetrainMessages(context.TODO(), c.log, tx, updated, false)
 			xcheckf(err, "training messages")
 		})
 

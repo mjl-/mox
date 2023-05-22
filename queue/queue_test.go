@@ -21,6 +21,8 @@ import (
 	"github.com/mjl-/mox/store"
 )
 
+var ctxbg = context.Background()
+
 func tcheck(t *testing.T, err error, msg string) {
 	if err != nil {
 		t.Helper()
@@ -31,7 +33,7 @@ func tcheck(t *testing.T, err error, msg string) {
 func setup(t *testing.T) (*store.Account, func()) {
 	// Prepare config so email can be delivered to mjl@mox.example.
 	os.RemoveAll("../testdata/queue/data")
-	mox.Context = context.Background()
+	mox.Context = ctxbg
 	mox.ConfigStaticPath = "../testdata/queue/mox.conf"
 	mox.MustLoadConfig(false)
 	acc, err := store.OpenAccount("mjl")
@@ -39,11 +41,11 @@ func setup(t *testing.T) (*store.Account, func()) {
 	err = acc.SetPassword("testtest")
 	tcheck(t, err, "set password")
 	switchDone := store.Switchboard()
-	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 	return acc, func() {
 		acc.Close()
 		mox.ShutdownCancel()
-		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
+		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 		Shutdown()
 		close(switchDone)
 	}
@@ -71,22 +73,22 @@ func TestQueue(t *testing.T) {
 	err := Init()
 	tcheck(t, err, "queue init")
 
-	msgs, err := List()
+	msgs, err := List(ctxbg)
 	tcheck(t, err, "listing messages in queue")
 	if len(msgs) != 0 {
 		t.Fatalf("got %d messages in queue, expected 0", len(msgs))
 	}
 
 	path := smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "mox.example"}}}
-	err = Add(xlog, "mjl", path, path, false, false, int64(len(testmsg)), nil, prepareFile(t), nil, true)
+	err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), nil, prepareFile(t), nil, true)
 	tcheck(t, err, "add message to queue for delivery")
 
 	mf2 := prepareFile(t)
-	err = Add(xlog, "mjl", path, path, false, false, int64(len(testmsg)), nil, mf2, nil, false)
+	err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), nil, mf2, nil, false)
 	tcheck(t, err, "add message to queue for delivery")
 	os.Remove(mf2.Name())
 
-	msgs, err = List()
+	msgs, err = List(ctxbg)
 	tcheck(t, err, "listing queue")
 	if len(msgs) != 2 {
 		t.Fatalf("got msgs %v, expected 1", msgs)
@@ -95,18 +97,18 @@ func TestQueue(t *testing.T) {
 	if msg.Attempts != 0 {
 		t.Fatalf("msg attempts %d, expected 0", msg.Attempts)
 	}
-	n, err := Drop(msgs[1].ID, "", "")
+	n, err := Drop(ctxbg, msgs[1].ID, "", "")
 	tcheck(t, err, "drop")
 	if n != 1 {
 		t.Fatalf("dropped %d, expected 1", n)
 	}
 
-	next := nextWork(nil)
+	next := nextWork(ctxbg, nil)
 	if next > 0 {
 		t.Fatalf("nextWork in %s, should be now", next)
 	}
 	busy := map[string]struct{}{"mox.example": {}}
-	if x := nextWork(busy); x != 24*time.Hour {
+	if x := nextWork(ctxbg, busy); x != 24*time.Hour {
 		t.Fatalf("nextWork in %s for busy domain, should be in 24 hours", x)
 	}
 	if nn := launchWork(nil, busy); nn != 0 {
@@ -133,7 +135,7 @@ func TestQueue(t *testing.T) {
 	case <-dialed:
 		i := 0
 		for {
-			m, err := bstore.QueryDB[Msg](queueDB).Get()
+			m, err := bstore.QueryDB[Msg](ctxbg, queueDB).Get()
 			tcheck(t, err, "get")
 			if m.Attempts == 1 {
 				break
@@ -149,11 +151,11 @@ func TestQueue(t *testing.T) {
 	}
 	<-deliveryResult // Deliver sends here.
 
-	_, err = OpenMessage(msg.ID + 1)
+	_, err = OpenMessage(ctxbg, msg.ID+1)
 	if err != bstore.ErrAbsent {
 		t.Fatalf("OpenMessage, got %v, expected ErrAbsent", err)
 	}
-	reader, err := OpenMessage(msg.ID)
+	reader, err := OpenMessage(ctxbg, msg.ID)
 	tcheck(t, err, "open message")
 	defer reader.Close()
 	msgbuf, err := io.ReadAll(reader)
@@ -162,12 +164,12 @@ func TestQueue(t *testing.T) {
 		t.Fatalf("message mismatch, got %q, expected %q", string(msgbuf), testmsg)
 	}
 
-	n, err = Kick(msg.ID+1, "", "")
+	n, err = Kick(ctxbg, msg.ID+1, "", "")
 	tcheck(t, err, "kick")
 	if n != 0 {
 		t.Fatalf("kick %d, expected 0", n)
 	}
-	n, err = Kick(msg.ID, "", "")
+	n, err = Kick(ctxbg, msg.ID, "", "")
 	tcheck(t, err, "kick")
 	if n != 1 {
 		t.Fatalf("kicked %d, expected 1", n)
@@ -215,7 +217,7 @@ func TestQueue(t *testing.T) {
 		case <-smtpdone:
 			i := 0
 			for {
-				xmsgs, err := List()
+				xmsgs, err := List(ctxbg)
 				tcheck(t, err, "list queue")
 				if len(xmsgs) == 0 {
 					break
@@ -235,10 +237,10 @@ func TestQueue(t *testing.T) {
 	<-deliveryResult // Deliver sends here.
 
 	// Add another message that we'll fail to deliver entirely.
-	err = Add(xlog, "mjl", path, path, false, false, int64(len(testmsg)), nil, prepareFile(t), nil, true)
+	err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), nil, prepareFile(t), nil, true)
 	tcheck(t, err, "add message to queue for delivery")
 
-	msgs, err = List()
+	msgs, err = List(ctxbg)
 	tcheck(t, err, "list queue")
 	if len(msgs) != 1 {
 		t.Fatalf("queue has %d messages, expected 1", len(msgs))
@@ -283,7 +285,7 @@ func TestQueue(t *testing.T) {
 	for i := 1; i < 8; i++ {
 		go func() { <-deliveryResult }() // Deliver sends here.
 		deliver(resolver, msg)
-		err = queueDB.Get(&msg)
+		err = queueDB.Get(ctxbg, &msg)
 		tcheck(t, err, "get msg")
 		if msg.Attempts != i {
 			t.Fatalf("got attempt %d, expected %d", msg.Attempts, i)
@@ -306,7 +308,7 @@ func TestQueue(t *testing.T) {
 	// Trigger final failure.
 	go func() { <-deliveryResult }() // Deliver sends here.
 	deliver(resolver, msg)
-	err = queueDB.Get(&msg)
+	err = queueDB.Get(ctxbg, &msg)
 	if err != bstore.ErrAbsent {
 		t.Fatalf("attempt to fetch delivered and removed message from queue, got err %v, expected ErrAbsent", err)
 	}
@@ -343,7 +345,7 @@ func TestQueueStart(t *testing.T) {
 	defer func() {
 		mox.ShutdownCancel()
 		<-done
-		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(context.Background())
+		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 	}()
 	err := Start(resolver, done)
 	tcheck(t, err, "queue start")
@@ -369,7 +371,7 @@ func TestQueueStart(t *testing.T) {
 	}
 
 	path := smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "mox.example"}}}
-	err = Add(xlog, "mjl", path, path, false, false, int64(len(testmsg)), nil, prepareFile(t), nil, true)
+	err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), nil, prepareFile(t), nil, true)
 	tcheck(t, err, "add message to queue for delivery")
 	checkDialed(true)
 
@@ -378,7 +380,7 @@ func TestQueueStart(t *testing.T) {
 	checkDialed(false)
 
 	// Kick for real, should see another attempt.
-	n, err := Kick(0, "mox.example", "")
+	n, err := Kick(ctxbg, 0, "mox.example", "")
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -402,7 +404,7 @@ func TestWriteFile(t *testing.T) {
 }
 
 func TestGatherHosts(t *testing.T) {
-	mox.Context = context.Background()
+	mox.Context = ctxbg
 
 	// Test basic MX lookup case, but also following CNAME, detecting CNAME loops and
 	// having a CNAME limit, connecting directly to a host, and domain that does not
@@ -524,11 +526,11 @@ func TestDialHost(t *testing.T) {
 	}
 
 	m := Msg{DialedIPs: map[string][]net.IP{}}
-	_, ip, dualstack, err := dialHost(context.Background(), xlog, resolver, ipdomain("dualstack.example"), &m)
+	_, ip, dualstack, err := dialHost(ctxbg, xlog, resolver, ipdomain("dualstack.example"), &m)
 	if err != nil || ip.String() != "10.0.0.1" || !dualstack {
 		t.Fatalf("expected err nil, address 10.0.0.1, dualstack true, got %v %v %v", err, ip, dualstack)
 	}
-	_, ip, dualstack, err = dialHost(context.Background(), xlog, resolver, ipdomain("dualstack.example"), &m)
+	_, ip, dualstack, err = dialHost(ctxbg, xlog, resolver, ipdomain("dualstack.example"), &m)
 	if err != nil || ip.String() != "2001:db8::1" || !dualstack {
 		t.Fatalf("expected err nil, address 2001:db8::1, dualstack true, got %v %v %v", err, ip, dualstack)
 	}

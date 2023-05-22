@@ -11,7 +11,7 @@ github.com/golang/protobuf/ptypes/timestamp
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 ## explicit
 github.com/matttproud/golang_protobuf_extensions/pbutil
-# github.com/mjl-/bstore v0.0.0-20230211204415-a9899ef6e782
+# github.com/mjl-/bstore v0.0.1
 ## explicit; go 1.19
 github.com/mjl-/bstore
 # github.com/mjl-/sconf v0.0.4

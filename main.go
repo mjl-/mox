@@ -1879,7 +1879,7 @@ func cmdEnsureParsed(c *cmd) {
 	}()
 
 	n := 0
-	err = a.DB.Write(func(tx *bstore.Tx) error {
+	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
 		q := bstore.QueryTx[store.Message](tx)
 		q.FilterFn(func(m store.Message) bool {
 			return all || m.ParsedBuf == nil
@@ -1952,7 +1952,7 @@ func cmdBumpUIDValidity(c *cmd) {
 	}()
 
 	var uidvalidity uint32
-	err = a.DB.Write(func(tx *bstore.Tx) error {
+	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
 		mb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Name", args[1]).Get()
 		if err != nil {
 			return fmt.Errorf("looking up mailbox: %v", err)

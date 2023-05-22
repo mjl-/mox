@@ -2,11 +2,38 @@ package bstore
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 
 	bolt "go.etcd.io/bbolt"
 )
+
+// Mark a tx as botched, mentioning last actual error.
+// Used when write operations fail. The transaction can be in inconsistent
+// state, e.g. only some of a type's indicies may have been updated. We never
+// want to commit such transactions.
+func (tx *Tx) markError(err *error) {
+	if *err != nil && tx.err == nil {
+		tx.err = fmt.Errorf("%w (after %v)", ErrTxBotched, *err)
+	}
+}
+
+// Return if an error condition is set on on the transaction. To be called before
+// starting an operation.
+func (tx *Tx) error() error {
+	if tx.err != nil {
+		return tx.err
+	}
+	if tx.db == nil {
+		return errTxClosed
+	}
+	if err := tx.ctx.Err(); err != nil {
+		tx.err = err
+		return err
+	}
+	return nil
+}
 
 func (tx *Tx) structptr(value any) (reflect.Value, error) {
 	rv := reflect.ValueOf(value)
@@ -42,10 +69,23 @@ func (tx *Tx) updateIndices(tv *typeVersion, pk []byte, ov, v reflect.Value) err
 
 	changed := func(idx *index) bool {
 		for _, f := range idx.Fields {
-			rofv := ov.FieldByIndex(f.structField.Index)
-			nofv := v.FieldByIndex(f.structField.Index)
-			// note: checking the interface values is enough, we only allow comparable types as index fields.
-			if rofv.Interface() != nofv.Interface() {
+			ofv := ov.FieldByIndex(f.structField.Index)
+			nfv := v.FieldByIndex(f.structField.Index)
+			if f.Type.Kind == kindSlice {
+				// Index field is a slice type, cannot use direct interface comparison.
+				on := ofv.Len()
+				nn := nfv.Len()
+				if on != nn {
+					return true
+				}
+				for i := 0; i < nn; i++ {
+					// Slice elements are comparable.
+					if ofv.Index(i) != nfv.Index(i) {
+						return true
+					}
+				}
+			} else if ofv.Interface() != nfv.Interface() {
+				// note: checking the interface values is enough.
 				return true
 			}
 		}
@@ -69,36 +109,40 @@ func (tx *Tx) updateIndices(tv *typeVersion, pk []byte, ov, v reflect.Value) err
 			return err
 		}
 		if remove {
-			_, ik, err := idx.packKey(ov, pk)
+			ikl, err := idx.packKey(ov, pk)
 			if err != nil {
 				return err
 			}
-			tx.stats.Index.Delete++
-			if sanityChecks {
-				tx.stats.Index.Get++
-				if ib.Get(ik) == nil {
-					return fmt.Errorf("internal error: key missing from index")
+			for _, ik := range ikl {
+				tx.stats.Index.Delete++
+				if sanityChecks {
+					tx.stats.Index.Get++
+					if ib.Get(ik.full) == nil {
+						return fmt.Errorf("%w: key missing from index", ErrStore)
+					}
 				}
-			}
-			if err := ib.Delete(ik); err != nil {
-				return fmt.Errorf("%w: removing from index: %s", ErrStore, err)
+				if err := ib.Delete(ik.full); err != nil {
+					return fmt.Errorf("%w: removing from index: %s", ErrStore, err)
+				}
 			}
 		}
 		if add {
-			prek, ik, err := idx.packKey(v, pk)
+			ikl, err := idx.packKey(v, pk)
 			if err != nil {
 				return err
 			}
-			if idx.Unique {
-				tx.stats.Index.Cursor++
-				if xk, _ := ib.Cursor().Seek(prek); xk != nil && bytes.HasPrefix(xk, prek) {
-					return fmt.Errorf("%w: %q", ErrUnique, idx.Name)
+			for _, ik := range ikl {
+				if idx.Unique {
+					tx.stats.Index.Cursor++
+					if xk, _ := ib.Cursor().Seek(ik.pre); xk != nil && bytes.HasPrefix(xk, ik.pre) {
+						return fmt.Errorf("%w: %q", ErrUnique, idx.Name)
+					}
 				}
-			}
 
-			tx.stats.Index.Put++
-			if err := ib.Put(ik, []byte{}); err != nil {
-				return fmt.Errorf("inserting into index: %w", err)
+				tx.stats.Index.Put++
+				if err := ib.Put(ik.full, []byte{}); err != nil {
+					return fmt.Errorf("inserting into index: %w", err)
+				}
 			}
 		}
 	}
@@ -124,7 +168,7 @@ func (tx *Tx) checkReferences(tv *typeVersion, pk []byte, ov, rv reflect.Value) 
 				return err
 			}
 			if rb.Get(k) == nil {
-				return fmt.Errorf("%w: value %v from field %q to %q", ErrReference, frv.Interface(), f.Name, name)
+				return fmt.Errorf("%w: value %v from %q to %q", ErrReference, frv.Interface(), tv.name+"."+f.Name, name)
 			}
 		}
 	}
@@ -143,8 +187,8 @@ func (tx *Tx) addStats() {
 //
 // ErrAbsent is returned if the record does not exist.
 func (tx *Tx) Get(values ...any) error {
-	if tx.db == nil {
-		return errTxClosed
+	if err := tx.error(); err != nil {
+		return err
 	}
 
 	for _, value := range values {
@@ -184,8 +228,8 @@ func (tx *Tx) Get(values ...any) error {
 // ErrAbsent is returned if the record does not exist.
 // ErrReference is returned if another record still references this record.
 func (tx *Tx) Delete(values ...any) error {
-	if tx.db == nil {
-		return errTxClosed
+	if err := tx.error(); err != nil {
+		return err
 	}
 
 	for _, value := range values {
@@ -222,7 +266,7 @@ func (tx *Tx) Delete(values ...any) error {
 	return nil
 }
 
-func (tx *Tx) delete(rb *bolt.Bucket, st storeType, k []byte, rov reflect.Value) error {
+func (tx *Tx) delete(rb *bolt.Bucket, st storeType, k []byte, rov reflect.Value) (rerr error) {
 	// Check that anyone referencing this type does not reference this record.
 	for _, refBy := range st.Current.referencedBy {
 		if ib, err := tx.indexBucket(refBy); err != nil {
@@ -236,6 +280,7 @@ func (tx *Tx) delete(rb *bolt.Bucket, st storeType, k []byte, rov reflect.Value)
 	}
 
 	// Delete value from indices.
+	defer tx.markError(&rerr)
 	if err := tx.updateIndices(st.Current, k, rov, reflect.Value{}); err != nil {
 		return fmt.Errorf("removing from indices: %w", err)
 	}
@@ -250,8 +295,8 @@ func (tx *Tx) delete(rb *bolt.Bucket, st storeType, k []byte, rov reflect.Value)
 //
 // ErrAbsent is returned if the record does not exist.
 func (tx *Tx) Update(values ...any) error {
-	if tx.db == nil {
-		return errTxClosed
+	if err := tx.error(); err != nil {
+		return err
 	}
 
 	for _, value := range values {
@@ -282,8 +327,8 @@ func (tx *Tx) Update(values ...any) error {
 // ErrZero is returned if a nonzero constraint would be violated.
 // ErrReference is returned if another record is referenced that does not exist.
 func (tx *Tx) Insert(values ...any) error {
-	if tx.db == nil {
-		return errTxClosed
+	if err := tx.error(); err != nil {
+		return err
 	}
 
 	for _, value := range values {
@@ -298,6 +343,7 @@ func (tx *Tx) Insert(values ...any) error {
 			return err
 		}
 
+		// todo optimize: should track per field whether it (or a child) has a default value, and only applyDefault if so.
 		if err := st.Current.applyDefault(rv); err != nil {
 			return err
 		}
@@ -344,7 +390,7 @@ func (tx *Tx) put(st storeType, rv reflect.Value, insert bool) error {
 	}
 }
 
-func (tx *Tx) insert(rb *bolt.Bucket, st storeType, rv, krv reflect.Value, k []byte) error {
+func (tx *Tx) insert(rb *bolt.Bucket, st storeType, rv, krv reflect.Value, k []byte) (rerr error) {
 	v, err := st.pack(rv)
 	if err != nil {
 		return err
@@ -352,6 +398,7 @@ func (tx *Tx) insert(rb *bolt.Bucket, st storeType, rv, krv reflect.Value, k []b
 	if err := tx.checkReferences(st.Current, k, reflect.Value{}, rv); err != nil {
 		return err
 	}
+	defer tx.markError(&rerr)
 	if err := tx.updateIndices(st.Current, k, reflect.Value{}, rv); err != nil {
 		return fmt.Errorf("updating indices for inserted value: %w", err)
 	}
@@ -363,7 +410,7 @@ func (tx *Tx) insert(rb *bolt.Bucket, st storeType, rv, krv reflect.Value, k []b
 	return nil
 }
 
-func (tx *Tx) update(rb *bolt.Bucket, st storeType, rv, rov reflect.Value, k []byte) error {
+func (tx *Tx) update(rb *bolt.Bucket, st storeType, rv, rov reflect.Value, k []byte) (rerr error) {
 	if st.Current.equal(rov, rv) {
 		return nil
 	}
@@ -375,6 +422,7 @@ func (tx *Tx) update(rb *bolt.Bucket, st storeType, rv, rov reflect.Value, k []b
 	if err := tx.checkReferences(st.Current, k, rov, rv); err != nil {
 		return err
 	}
+	defer tx.markError(&rerr)
 	if err := tx.updateIndices(st.Current, k, rov, rv); err != nil {
 		return fmt.Errorf("updating indices for updated record: %w", err)
 	}
@@ -391,13 +439,16 @@ func (tx *Tx) update(rb *bolt.Bucket, st storeType, rv, rov reflect.Value, k []b
 //
 // A writable Tx can be committed or rolled back. A read-only transaction must
 // always be rolled back.
-func (db *DB) Begin(writable bool) (*Tx, error) {
+func (db *DB) Begin(ctx context.Context, writable bool) (*Tx, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	btx, err := db.bdb.Begin(writable)
 	if err != nil {
 		return nil, err
 	}
 	db.typesMutex.RLock()
-	tx := &Tx{db: db, btx: btx}
+	tx := &Tx{ctx: ctx, db: db, btx: btx}
 	if writable {
 		tx.stats.Writes++
 	} else {
@@ -422,9 +473,14 @@ func (tx *Tx) Rollback() error {
 
 // Commit commits changes made in the transaction to the database.
 // Statistics are added to its DB.
+// If the commit fails, or the transaction was botched, the transaction is
+// rolled back.
 func (tx *Tx) Commit() error {
 	if tx.db == nil {
 		return errTxClosed
+	} else if tx.err != nil {
+		tx.Rollback()
+		return tx.err
 	}
 
 	tx.addStats()

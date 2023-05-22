@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -104,13 +105,13 @@ func (a DirArchiver) Close() error {
 // Some errors are not fatal and result in skipped messages. In that happens, a
 // file "errors.txt" is added to the archive describing the errors. The goal is to
 // let users export (hopefully) most messages even in the face of errors.
-func ExportMessages(log *mlog.Log, db *bstore.DB, accountDir string, archiver Archiver, maildir bool, mailboxOpt string) error {
+func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDir string, archiver Archiver, maildir bool, mailboxOpt string) error {
 	// todo optimize: should prepare next file to add to archive (can be an mbox with many messages) while writing a file to the archive (which typically compresses, which takes time).
 
 	// Start transaction without closure, we are going to close it early, but don't
 	// want to deal with declaring many variables now to be able to assign them in a
 	// closure and use them afterwards.
-	tx, err := db.Begin(false)
+	tx, err := db.Begin(ctx, false)
 	if err != nil {
 		return fmt.Errorf("transaction: %v", err)
 	}

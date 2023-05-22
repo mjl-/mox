@@ -1,7 +1,6 @@
 package smtpserver
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -30,7 +29,7 @@ func FuzzServer(f *testing.F) {
 	f.Add("NOOP")
 	f.Add("QUIT")
 
-	mox.Context = context.Background()
+	mox.Context = ctxbg
 	mox.ConfigStaticPath = "../testdata/smtp/mox.conf"
 	mox.MustLoadConfig(false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)

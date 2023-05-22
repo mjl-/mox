@@ -272,16 +272,8 @@ func reputation(tx *bstore.Tx, log *mlog.Log, m *store.Message) (rjunk *bool, rc
 	dkimspfsignals := []float64{}
 	dkimspfmsgs := 0
 	for _, dom := range m.DKIMDomains {
-		// todo: should get dkimdomains in an index for faster lookup. bstore does not yet support "in" indexes.
 		q := messageQuery(nil, year/2, 50)
-		q.FilterFn(func(m store.Message) bool {
-			for _, d := range m.DKIMDomains {
-				if d == dom {
-					return true
-				}
-			}
-			return false
-		})
+		q.FilterIn("DKIMDomains", dom)
 		msgs := xmessageList(q, "dkimdomain")
 		if len(msgs) > 0 {
 			nspam := 0

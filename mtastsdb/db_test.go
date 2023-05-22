@@ -1,7 +1,6 @@
 package mtastsdb
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -24,6 +23,7 @@ func tcheckf(t *testing.T, err error, format string, args ...any) {
 }
 
 func TestDB(t *testing.T) {
+	mox.Shutdown = ctxbg
 	mox.ConfigStaticPath = "../testdata/mtasts/fake.conf"
 	mox.Conf.Static.DataDir = "."
 
@@ -37,14 +37,12 @@ func TestDB(t *testing.T) {
 	}
 	defer Close()
 
-	ctx := context.Background()
-
 	// Mock time.
 	now := time.Now().Round(0)
 	timeNow = func() time.Time { return now }
 	defer func() { timeNow = time.Now }()
 
-	if p, err := lookup(ctx, dns.Domain{ASCII: "example.com"}); err != ErrNotFound {
+	if p, err := lookup(ctxbg, dns.Domain{ASCII: "example.com"}); err != ErrNotFound {
 		t.Fatalf("expected not found, got %v, %#v", err, p)
 	}
 
@@ -58,10 +56,10 @@ func TestDB(t *testing.T) {
 		},
 		MaxAgeSeconds: 1296000,
 	}
-	if err := Upsert(dns.Domain{ASCII: "example.com"}, "123", &policy1); err != nil {
+	if err := Upsert(ctxbg, dns.Domain{ASCII: "example.com"}, "123", &policy1); err != nil {
 		t.Fatalf("upsert record: %s", err)
 	}
-	if got, err := lookup(ctx, dns.Domain{ASCII: "example.com"}); err != nil {
+	if got, err := lookup(ctxbg, dns.Domain{ASCII: "example.com"}); err != nil {
 		t.Fatalf("lookup after insert: %s", err)
 	} else if !reflect.DeepEqual(got.Policy, policy1) {
 		t.Fatalf("mismatch between inserted and retrieved: got %#v, want %#v", got, policy1)
@@ -75,17 +73,17 @@ func TestDB(t *testing.T) {
 		},
 		MaxAgeSeconds: 360000,
 	}
-	if err := Upsert(dns.Domain{ASCII: "example.com"}, "124", &policy2); err != nil {
+	if err := Upsert(ctxbg, dns.Domain{ASCII: "example.com"}, "124", &policy2); err != nil {
 		t.Fatalf("upsert record: %s", err)
 	}
-	if got, err := lookup(ctx, dns.Domain{ASCII: "example.com"}); err != nil {
+	if got, err := lookup(ctxbg, dns.Domain{ASCII: "example.com"}); err != nil {
 		t.Fatalf("lookup after insert: %s", err)
 	} else if !reflect.DeepEqual(got.Policy, policy2) {
 		t.Fatalf("mismatch between inserted and retrieved: got %v, want %v", got, policy2)
 	}
 
 	// Check if database holds expected record.
-	records, err := PolicyRecords(context.Background())
+	records, err := PolicyRecords(ctxbg)
 	tcheckf(t, err, "policyrecords")
 	expRecords := []PolicyRecord{
 		{"example.com", now, now.Add(time.Duration(policy2.MaxAgeSeconds) * time.Second), now, now, false, "124", policy2},
@@ -96,10 +94,10 @@ func TestDB(t *testing.T) {
 		t.Fatalf("records mismatch, got %#v, expected %#v", records, expRecords)
 	}
 
-	if err := Upsert(dns.Domain{ASCII: "other.example.com"}, "", nil); err != nil {
+	if err := Upsert(ctxbg, dns.Domain{ASCII: "other.example.com"}, "", nil); err != nil {
 		t.Fatalf("upsert record: %s", err)
 	}
-	records, err = PolicyRecords(context.Background())
+	records, err = PolicyRecords(ctxbg)
 	tcheckf(t, err, "policyrecords")
 	expRecords = []PolicyRecord{
 		{"other.example.com", now, now.Add(5 * 60 * time.Second), now, now, true, "", mtasts.Policy{Mode: mtasts.ModeNone, MaxAgeSeconds: 5 * 60}},
@@ -109,7 +107,7 @@ func TestDB(t *testing.T) {
 		t.Fatalf("records mismatch, got %#v, expected %#v", records, expRecords)
 	}
 
-	if _, err := lookup(context.Background(), dns.Domain{ASCII: "other.example.com"}); err != ErrBackoff {
+	if _, err := lookup(ctxbg, dns.Domain{ASCII: "other.example.com"}); err != ErrBackoff {
 		t.Fatalf("got %#v, expected ErrBackoff", err)
 	}
 
@@ -126,7 +124,7 @@ func TestDB(t *testing.T) {
 
 	testGet := func(domain string, expPolicy *mtasts.Policy, expFresh bool, expErr error) {
 		t.Helper()
-		p, fresh, err := Get(context.Background(), resolver, dns.Domain{ASCII: domain})
+		p, fresh, err := Get(ctxbg, resolver, dns.Domain{ASCII: domain})
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("got err %v, expected %v", err, expErr)
 		}

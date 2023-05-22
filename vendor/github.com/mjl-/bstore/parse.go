@@ -119,7 +119,7 @@ func (st storeType) parse(rv reflect.Value, buf []byte) (rerr error) {
 	tv.parse(p, rv)
 
 	if len(p.buf) != 0 {
-		return fmt.Errorf("%w: leftover data after parsing", ErrStore)
+		return fmt.Errorf("%w: leftover data after parsing (%d, %x %q)", ErrStore, len(p.buf), p.buf, p.buf)
 	}
 
 	return nil
@@ -173,7 +173,8 @@ func (tv typeVersion) parse(p *parser, rv reflect.Value) {
 
 // parse a nonzero fieldType.
 func (ft fieldType) parse(p *parser, rv reflect.Value) {
-	// Because we allow schema changes from ptr to nonptr, rv can be a pointer or direct value regardless of ft.Ptr.
+	// Because we allow schema changes from ptr to nonptr, rv can be a
+	// pointer or direct value regardless of ft.Ptr.
 	if rv.Kind() == reflect.Ptr {
 		nrv := reflect.New(rv.Type().Elem())
 		rv.Set(nrv)
@@ -239,10 +240,18 @@ func (ft fieldType) parse(p *parser, rv reflect.Value) {
 		slc := reflect.MakeSlice(rv.Type(), n, n)
 		for i := 0; i < int(n); i++ {
 			if fm.Nonzero(i) {
-				ft.List.parse(p, slc.Index(i))
+				ft.ListElem.parse(p, slc.Index(i))
 			}
 		}
 		rv.Set(slc)
+	case kindArray:
+		n := ft.ArrayLength
+		fm := p.Fieldmap(n)
+		for i := 0; i < n; i++ {
+			if fm.Nonzero(i) {
+				ft.ListElem.parse(p, rv.Index(i))
+			}
+		}
 	case kindMap:
 		un := p.Uvarint()
 		n := p.checkInt(un)
@@ -259,11 +268,13 @@ func (ft fieldType) parse(p *parser, rv reflect.Value) {
 		}
 		rv.Set(mp)
 	case kindStruct:
-		fm := p.Fieldmap(len(ft.Fields))
+		fm := p.Fieldmap(len(ft.structFields))
 		strct := reflect.New(rv.Type()).Elem()
-		for i, f := range ft.Fields {
+		for i, f := range ft.structFields {
 			if f.structField.Type == nil {
-				f.Type.skip(p)
+				if fm.Nonzero(i) {
+					f.Type.skip(p)
+				}
 				continue
 			}
 			if fm.Nonzero(i) {
@@ -303,7 +314,15 @@ func (ft fieldType) skip(p *parser) {
 		fm := p.Fieldmap(n)
 		for i := 0; i < n; i++ {
 			if fm.Nonzero(i) {
-				ft.List.skip(p)
+				ft.ListElem.skip(p)
+			}
+		}
+	case kindArray:
+		n := ft.ArrayLength
+		fm := p.Fieldmap(n)
+		for i := 0; i < n; i++ {
+			if fm.Nonzero(i) {
+				ft.ListElem.skip(p)
 			}
 		}
 	case kindMap:
@@ -317,8 +336,8 @@ func (ft fieldType) skip(p *parser) {
 			}
 		}
 	case kindStruct:
-		fm := p.Fieldmap(len(ft.Fields))
-		for i, f := range ft.Fields {
+		fm := p.Fieldmap(len(ft.structFields))
+		for i, f := range ft.structFields {
 			if fm.Nonzero(i) {
 				f.Type.skip(p)
 			}

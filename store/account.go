@@ -278,7 +278,7 @@ type Message struct {
 	MsgFromValidation  Validation // Desirable validations: Strict, DMARC, Relaxed. Will not be just Pass.
 
 	// todo: needs an "in" index, which bstore does not yet support. for performance while checking reputation.
-	DKIMDomains []string // Domains with verified DKIM signatures. Unicode string.
+	DKIMDomains []string `bstore:"index DKIMDomains+Received"` // Domains with verified DKIM signatures. Unicode string.
 
 	// Value of Message-Id header. Only set for messages that were
 	// delivered to the rejects mailbox. For ensuring such messages are
@@ -455,7 +455,7 @@ func openAccount(name string) (a *Account, rerr error) {
 		os.MkdirAll(dir, 0770)
 	}
 
-	db, err := bstore.Open(dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{})
+	db, err := bstore.Open(context.TODO(), dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{})
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +484,7 @@ func openAccount(name string) (a *Account, rerr error) {
 }
 
 func initAccount(db *bstore.DB) error {
-	return db.Write(func(tx *bstore.Tx) error {
+	return db.Write(context.TODO(), func(tx *bstore.Tx) error {
 		uidvalidity := InitialUIDValidity()
 
 		mailboxes := InitialMailboxes
@@ -700,7 +700,7 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 
 	if !notrain && m.NeedsTraining() {
 		l := []Message{*m}
-		if err := a.RetrainMessages(log, tx, l, false); err != nil {
+		if err := a.RetrainMessages(context.TODO(), log, tx, l, false); err != nil {
 			return fmt.Errorf("training junkfilter: %w", err)
 		}
 		*m = l[0]
@@ -739,7 +739,7 @@ func (a *Account) SetPassword(password string) error {
 		return fmt.Errorf("generating password hash: %w", err)
 	}
 
-	err = a.DB.Write(func(tx *bstore.Tx) error {
+	err = a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
 		if _, err := bstore.QueryTx[Password](tx).Delete(); err != nil {
 			return fmt.Errorf("deleting existing password: %v", err)
 		}
@@ -793,7 +793,7 @@ func (a *Account) SetPassword(password string) error {
 // Subjectpass returns the signing key for use with subjectpass for the given
 // email address with canonical localpart.
 func (a *Account) Subjectpass(email string) (key string, err error) {
-	return key, a.DB.Write(func(tx *bstore.Tx) error {
+	return key, a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
 		v := Subjectpass{Email: email}
 		err := tx.Get(&v)
 		if err == nil {
@@ -1036,7 +1036,7 @@ func (a *Account) Deliver(log *mlog.Log, dest config.Destination, m *Message, ms
 // Message delivery and possible mailbox creation are broadcasted.
 func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgFile *os.File, consumeFile bool) error {
 	var changes []Change
-	err := a.DB.Write(func(tx *bstore.Tx) error {
+	err := a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
 		mb, chl, err := a.MailboxEnsure(tx, mailbox, true)
 		if err != nil {
 			return fmt.Errorf("ensuring mailbox: %w", err)
@@ -1075,7 +1075,7 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 		}
 	}()
 
-	err := a.DB.Write(func(tx *bstore.Tx) error {
+	err := a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
 		mb, err := a.MailboxFind(tx, rejectsMailbox)
 		if err != nil {
 			return fmt.Errorf("finding mailbox: %w", err)
@@ -1096,7 +1096,7 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 			return fmt.Errorf("listing old messages: %w", err)
 		}
 
-		changes, err = a.removeMessages(log, tx, mb, remove)
+		changes, err = a.removeMessages(context.TODO(), log, tx, mb, remove)
 		if err != nil {
 			return fmt.Errorf("removing messages: %w", err)
 		}
@@ -1125,7 +1125,7 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 	return hasSpace, nil
 }
 
-func (a *Account) removeMessages(log *mlog.Log, tx *bstore.Tx, mb *Mailbox, l []Message) ([]Change, error) {
+func (a *Account) removeMessages(ctx context.Context, log *mlog.Log, tx *bstore.Tx, mb *Mailbox, l []Message) ([]Change, error) {
 	if len(l) == 0 {
 		return nil, nil
 	}
@@ -1158,7 +1158,7 @@ func (a *Account) removeMessages(log *mlog.Log, tx *bstore.Tx, mb *Mailbox, l []
 		deleted[i].Junk = false
 		deleted[i].Notjunk = false
 	}
-	if err := a.RetrainMessages(log, tx, deleted, true); err != nil {
+	if err := a.RetrainMessages(ctx, log, tx, deleted, true); err != nil {
 		return nil, fmt.Errorf("training deleted messages: %w", err)
 	}
 
@@ -1184,7 +1184,7 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 		}
 	}()
 
-	err := a.DB.Write(func(tx *bstore.Tx) error {
+	err := a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
 		mb, err := a.MailboxFind(tx, rejectsMailbox)
 		if err != nil {
 			return fmt.Errorf("finding mailbox: %w", err)
@@ -1200,7 +1200,7 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 			return fmt.Errorf("listing messages to remove: %w", err)
 		}
 
-		changes, err = a.removeMessages(log, tx, mb, remove)
+		changes, err = a.removeMessages(context.TODO(), log, tx, mb, remove)
 		if err != nil {
 			return fmt.Errorf("removing messages: %w", err)
 		}
@@ -1262,7 +1262,7 @@ func OpenEmailAuth(email string, password string) (acc *Account, rerr error) {
 		}
 	}()
 
-	pw, err := bstore.QueryDB[Password](acc.DB).Get()
+	pw, err := bstore.QueryDB[Password](context.TODO(), acc.DB).Get()
 	if err != nil {
 		if err == bstore.ErrAbsent {
 			return acc, ErrUnknownCredentials

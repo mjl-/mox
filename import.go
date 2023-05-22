@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -107,7 +108,7 @@ func xcmdImport(mbox bool, args []string, c *cmd) {
 	fmt.Fprintf(os.Stderr, "%s imported\n", count)
 }
 
-func importctl(ctl *ctl, mbox bool) {
+func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	/* protocol:
 	> "importmaildir" or "importmbox"
 	> account
@@ -177,7 +178,7 @@ func importctl(ctl *ctl, mbox bool) {
 		msgreader = store.NewMaildirReader(store.CreateMessageTemp, mdnewf, mdcurf, ctl.log)
 	}
 
-	tx, err := a.DB.Begin(true)
+	tx, err := a.DB.Begin(ctx, true)
 	ctl.xcheck(err, "begin transaction")
 	defer func() {
 		if tx != nil {
@@ -239,7 +240,7 @@ func importctl(ctl *ctl, mbox bool) {
 		mb, changes, err = a.MailboxEnsure(tx, mailbox, true)
 		ctl.xcheck(err, "ensuring mailbox exists")
 
-		jf, _, err := a.OpenJunkFilter(ctl.log)
+		jf, _, err := a.OpenJunkFilter(ctx, ctl.log)
 		if err != nil && !errors.Is(err, store.ErrNoJunkFilter) {
 			ctl.xcheck(err, "open junk filter")
 		}
@@ -287,7 +288,7 @@ func importctl(ctl *ctl, mbox bool) {
 				if words, err := jf.ParseMessage(p); err != nil {
 					ctl.log.Infox("parsing message for updating junk filter", err, mlog.Field("parse", ""), mlog.Field("path", origPath))
 				} else {
-					err = jf.Train(!m.Junk, words)
+					err = jf.Train(ctx, !m.Junk, words)
 					ctl.xcheck(err, "training junk filter")
 					m.TrainedJunk = &m.Junk
 				}

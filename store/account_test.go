@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"os"
 	"regexp"
 	"strings"
@@ -15,6 +16,8 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 )
+
+var ctxbg = context.Background()
 
 func tcheck(t *testing.T, err error, msg string) {
 	t.Helper()
@@ -66,7 +69,7 @@ func TestMailbox(t *testing.T) {
 		err := acc.Deliver(xlog, conf.Destinations["mjl"], &m, msgFile, false)
 		tcheck(t, err, "deliver without consume")
 
-		err = acc.DB.Write(func(tx *bstore.Tx) error {
+		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 			var err error
 			mbsent, err = bstore.QueryTx[Mailbox](tx).FilterNonzero(Mailbox{Name: "Sent"}).Get()
 			tcheck(t, err, "sent mailbox")
@@ -89,10 +92,10 @@ func TestMailbox(t *testing.T) {
 		err = acc.Deliver(xlog, conf.Destinations["mjl"], &mconsumed, msgFile, true)
 		tcheck(t, err, "deliver with consume")
 
-		err = acc.DB.Write(func(tx *bstore.Tx) error {
+		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 			m.Junk = true
 			l := []Message{m}
-			err = acc.RetrainMessages(log, tx, l, false)
+			err = acc.RetrainMessages(ctxbg, log, tx, l, false)
 			tcheck(t, err, "train as junk")
 			m = l[0]
 			return nil
@@ -102,18 +105,18 @@ func TestMailbox(t *testing.T) {
 
 	m.Junk = false
 	m.Notjunk = true
-	jf, _, err := acc.OpenJunkFilter(log)
+	jf, _, err := acc.OpenJunkFilter(ctxbg, log)
 	tcheck(t, err, "open junk filter")
-	err = acc.DB.Write(func(tx *bstore.Tx) error {
-		return acc.RetrainMessage(log, tx, jf, &m, false)
+	err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
+		return acc.RetrainMessage(ctxbg, log, tx, jf, &m, false)
 	})
 	tcheck(t, err, "retraining as non-junk")
 	err = jf.Close()
 	tcheck(t, err, "close junk filter")
 
 	m.Notjunk = false
-	err = acc.DB.Write(func(tx *bstore.Tx) error {
-		return acc.RetrainMessages(log, tx, []Message{m}, false)
+	err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
+		return acc.RetrainMessages(ctxbg, log, tx, []Message{m}, false)
 	})
 	tcheck(t, err, "untraining non-junk")
 
@@ -134,18 +137,18 @@ func TestMailbox(t *testing.T) {
 	}
 
 	acc.WithWLock(func() {
-		err := acc.DB.Write(func(tx *bstore.Tx) error {
+		err := acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 			_, _, err := acc.MailboxEnsure(tx, "Testbox", true)
 			return err
 		})
 		tcheck(t, err, "ensure mailbox exists")
-		err = acc.DB.Read(func(tx *bstore.Tx) error {
+		err = acc.DB.Read(ctxbg, func(tx *bstore.Tx) error {
 			_, _, err := acc.MailboxEnsure(tx, "Testbox", true)
 			return err
 		})
 		tcheck(t, err, "ensure mailbox exists")
 
-		err = acc.DB.Write(func(tx *bstore.Tx) error {
+		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 			_, _, err := acc.MailboxEnsure(tx, "Testbox2", false)
 			tcheck(t, err, "create mailbox")
 

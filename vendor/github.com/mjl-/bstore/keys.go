@@ -10,7 +10,7 @@ import (
 
 /*
 The records buckets map a primary key to the record data. The primary key is of
-a form that we can scan/range over. So fixed with for integers. For strings and
+a form that we can scan/range over. So fixed width for integers. For strings and
 bytes they are just their byte representation. We do not store the PK in the
 record data. This means we cannot store a time.Time as primary key, because we
 cannot have the timezone encoded for comparison reasons.
@@ -150,7 +150,12 @@ fields:
 		if err != nil {
 			break
 		}
-		switch f.Type.Kind {
+		ft := f.Type
+		if ft.Kind == kindSlice {
+			// For an index on a slice, we store each value in the slice in a separate index key.
+			ft = *ft.ListElem
+		}
+		switch ft.Kind {
 		case kindString:
 			for i, b := range buf {
 				if b == 0 {
@@ -174,6 +179,8 @@ fields:
 			take(8)
 		case kindTime:
 			take(8 + 4)
+		default:
+			err = fmt.Errorf("%w: unhandled kind %v for index key", ErrStore, ft.Kind)
 		}
 	}
 	if err != nil {
@@ -203,9 +210,14 @@ fields:
 	return pk, nil, nil
 }
 
-// packKey returns a key to store in an index: first the prefix without pk, then
-// the prefix including pk.
-func (idx *index) packKey(rv reflect.Value, pk []byte) ([]byte, []byte, error) {
+type indexkey struct {
+	pre  []byte // Packed fields excluding PK, a slice of full.
+	full []byte // Packed fields including PK.
+}
+
+// packKey returns keys to store in an index: first the key prefixes without pk, then
+// the prefixes including pk.
+func (idx *index) packKey(rv reflect.Value, pk []byte) ([]indexkey, error) {
 	var l []reflect.Value
 	for _, f := range idx.Fields {
 		frv := rv.FieldByIndex(f.structField.Index)
@@ -215,68 +227,108 @@ func (idx *index) packKey(rv reflect.Value, pk []byte) ([]byte, []byte, error) {
 }
 
 // packIndexKeys packs values from l, followed by the pk.
-// It returns the key prefix (without pk), and full key with pk.
-func packIndexKeys(l []reflect.Value, pk []byte) ([]byte, []byte, error) {
-	var prek, ik []byte
+// It returns the key prefixes (without pk), and full keys with pk.
+func packIndexKeys(l []reflect.Value, pk []byte) ([]indexkey, error) {
+	ikl := []indexkey{{}}
 	for _, frv := range l {
-		k, err := typeKind(frv.Type())
+		bufs, err := packIndexKey(frv)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		var buf []byte
-		switch k {
-		case kindBool:
-			buf = []byte{0}
-			if frv.Bool() {
-				buf[0] = 1
+
+		if len(bufs) == 1 {
+			for i := range ikl {
+				ikl[i].full = append(ikl[i].full, bufs[0]...)
 			}
-		case kindInt8:
-			buf = []byte{byte(int8(frv.Int()) + math.MinInt8)}
-		case kindInt16:
-			buf = binary.BigEndian.AppendUint16(nil, uint16(int16(frv.Int())+math.MinInt16))
-		case kindInt32:
-			buf = binary.BigEndian.AppendUint32(nil, uint32(int32(frv.Int())+math.MinInt32))
-		case kindInt:
-			i := frv.Int()
-			if i < math.MinInt32 || i > math.MaxInt32 {
-				return nil, nil, fmt.Errorf("%w: int value %d does not fit in int32", ErrParam, i)
+		} else if len(ikl) == 1 && len(bufs) > 1 {
+			nikl := make([]indexkey, len(bufs))
+			for i, buf := range bufs {
+				nikl[i] = indexkey{full: append(append([]byte{}, ikl[0].full...), buf...)}
 			}
-			buf = binary.BigEndian.AppendUint32(nil, uint32(int32(i)+math.MinInt32))
-		case kindInt64:
-			buf = binary.BigEndian.AppendUint64(nil, uint64(frv.Int()+math.MinInt64))
-		case kindUint8:
-			buf = []byte{byte(frv.Uint())}
-		case kindUint16:
-			buf = binary.BigEndian.AppendUint16(nil, uint16(frv.Uint()))
-		case kindUint32:
-			buf = binary.BigEndian.AppendUint32(nil, uint32(frv.Uint()))
-		case kindUint:
-			i := frv.Uint()
-			if i > math.MaxUint32 {
-				return nil, nil, fmt.Errorf("%w: uint value %d does not fit in uint32", ErrParam, i)
-			}
-			buf = binary.BigEndian.AppendUint32(nil, uint32(i))
-		case kindUint64:
-			buf = binary.BigEndian.AppendUint64(nil, uint64(frv.Uint()))
-		case kindString:
-			buf = []byte(frv.String())
-			for _, c := range buf {
-				if c == 0 {
-					return nil, nil, fmt.Errorf("%w: string used as index key cannot have \\0", ErrParam)
-				}
-			}
-			buf = append(buf, 0)
-		case kindTime:
-			tm := frv.Interface().(time.Time)
-			buf = binary.BigEndian.AppendUint64(nil, uint64(tm.Unix()+math.MinInt64))
-			buf = binary.BigEndian.AppendUint32(buf, uint32(tm.Nanosecond()))
-		default:
-			return nil, nil, fmt.Errorf("internal error: bad type %v for index", frv.Type()) // todo: should be caught when making index type
+			ikl = nikl
+		} else if len(bufs) == 0 {
+			return nil, nil
+		} else {
+			return nil, fmt.Errorf("%w: multiple index fields that result in multiple values, or no data for index key, %d keys so far, %d new buffers", ErrStore, len(ikl), len(bufs))
 		}
-		ik = append(ik, buf...)
 	}
-	n := len(ik)
-	ik = append(ik, pk...)
-	prek = ik[:n]
-	return prek, ik, nil
+	for i := range ikl {
+		n := len(ikl[i].full)
+		ikl[i].full = append(ikl[i].full, pk...)
+		ikl[i].pre = ikl[i].full[:n]
+	}
+	return ikl, nil
+}
+
+func packIndexKey(frv reflect.Value) ([][]byte, error) {
+	k, err := typeKind(frv.Type())
+	if err != nil {
+		return nil, err
+	}
+
+	var buf []byte
+	switch k {
+	case kindBool:
+		buf = []byte{0}
+		if frv.Bool() {
+			buf[0] = 1
+		}
+	case kindInt8:
+		buf = []byte{byte(int8(frv.Int()) + math.MinInt8)}
+	case kindInt16:
+		buf = binary.BigEndian.AppendUint16(nil, uint16(int16(frv.Int())+math.MinInt16))
+	case kindInt32:
+		buf = binary.BigEndian.AppendUint32(nil, uint32(int32(frv.Int())+math.MinInt32))
+	case kindInt:
+		i := frv.Int()
+		if i < math.MinInt32 || i > math.MaxInt32 {
+			return nil, fmt.Errorf("%w: int value %d does not fit in int32", ErrParam, i)
+		}
+		buf = binary.BigEndian.AppendUint32(nil, uint32(int32(i)+math.MinInt32))
+	case kindInt64:
+		buf = binary.BigEndian.AppendUint64(nil, uint64(frv.Int()+math.MinInt64))
+	case kindUint8:
+		buf = []byte{byte(frv.Uint())}
+	case kindUint16:
+		buf = binary.BigEndian.AppendUint16(nil, uint16(frv.Uint()))
+	case kindUint32:
+		buf = binary.BigEndian.AppendUint32(nil, uint32(frv.Uint()))
+	case kindUint:
+		i := frv.Uint()
+		if i > math.MaxUint32 {
+			return nil, fmt.Errorf("%w: uint value %d does not fit in uint32", ErrParam, i)
+		}
+		buf = binary.BigEndian.AppendUint32(nil, uint32(i))
+	case kindUint64:
+		buf = binary.BigEndian.AppendUint64(nil, uint64(frv.Uint()))
+	case kindString:
+		buf = []byte(frv.String())
+		for _, c := range buf {
+			if c == 0 {
+				return nil, fmt.Errorf("%w: string used as index key cannot have \\0", ErrParam)
+			}
+		}
+		buf = append(buf, 0)
+	case kindTime:
+		tm := frv.Interface().(time.Time)
+		buf = binary.BigEndian.AppendUint64(nil, uint64(tm.Unix()+math.MinInt64))
+		buf = binary.BigEndian.AppendUint32(buf, uint32(tm.Nanosecond()))
+	case kindSlice:
+		n := frv.Len()
+		bufs := make([][]byte, n)
+		for i := 0; i < n; i++ {
+			nbufs, err := packIndexKey(frv.Index(i))
+			if err != nil {
+				return nil, fmt.Errorf("packing element from slice field: %w", err)
+			}
+			if len(nbufs) != 1 {
+				return nil, fmt.Errorf("packing element from slice field resulted in multiple buffers (%d)", len(bufs))
+			}
+			bufs[i] = nbufs[0]
+		}
+		return bufs, nil
+	default:
+		return nil, fmt.Errorf("internal error: bad type %v for index", frv.Type()) // todo: should be caught when making index type
+	}
+	return [][]byte{buf}, nil
 }

@@ -52,19 +52,19 @@ func refresh() int {
 // jitter to the timing. Each refresh is done in a new goroutine, so a single slow
 // refresh doesn't mess up the timing.
 func refresh1(ctx context.Context, resolver dns.Resolver, sleep func(d time.Duration)) (int, error) {
-	db, err := database()
+	db, err := database(ctx)
 	if err != nil {
 		return 0, err
 	}
 
 	now := timeNow()
-	qdel := bstore.QueryDB[PolicyRecord](db)
+	qdel := bstore.QueryDB[PolicyRecord](ctx, db)
 	qdel.FilterLess("LastUse", now.Add(-180*24*time.Hour))
 	if _, err := qdel.Delete(); err != nil {
 		return 0, fmt.Errorf("deleting old unused policies: %s", err)
 	}
 
-	qup := bstore.QueryDB[PolicyRecord](db)
+	qup := bstore.QueryDB[PolicyRecord](ctx, db)
 	qup.FilterLess("LastUpdate", now.Add(-12*time.Hour))
 	prs, err := qup.List()
 	if err != nil {
@@ -127,7 +127,7 @@ func refreshDomain(ctx context.Context, db *bstore.DB, resolver dns.Resolver, pr
 	log.Debug("refreshing mta-sts policy for domain", mlog.Field("domain", d))
 	record, _, _, err := mtasts.LookupRecord(ctx, resolver, d)
 	if err == nil && record.ID == pr.RecordID {
-		qup := bstore.QueryDB[PolicyRecord](db)
+		qup := bstore.QueryDB[PolicyRecord](ctx, db)
 		qup.FilterNonzero(PolicyRecord{Domain: pr.Domain, LastUpdate: pr.LastUpdate})
 		now := timeNow()
 		update := PolicyRecord{
@@ -166,7 +166,7 @@ func refreshDomain(ctx context.Context, db *bstore.DB, resolver dns.Resolver, pr
 	if record != nil {
 		update["RecordID"] = record.ID
 	}
-	qup := bstore.QueryDB[PolicyRecord](db)
+	qup := bstore.QueryDB[PolicyRecord](ctx, db)
 	qup.FilterNonzero(PolicyRecord{Domain: pr.Domain, LastUpdate: pr.LastUpdate})
 	if n, err := qup.UpdateFields(update); err != nil {
 		log.Errorx("updating refreshed, modified policy in database", err)

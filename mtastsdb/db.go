@@ -63,13 +63,13 @@ var (
 var mtastsDB *bstore.DB
 var mutex sync.Mutex
 
-func database() (rdb *bstore.DB, rerr error) {
+func database(ctx context.Context) (rdb *bstore.DB, rerr error) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	if mtastsDB == nil {
 		p := mox.DataDirPath("mtasts.db")
 		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, PolicyRecord{})
+		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, PolicyRecord{})
 		if err != nil {
 			return nil, err
 		}
@@ -81,7 +81,7 @@ func database() (rdb *bstore.DB, rerr error) {
 // Init opens the database and starts a goroutine that refreshes policies in
 // the database, and keeps doing so periodically.
 func Init(refresher bool) error {
-	_, err := database()
+	_, err := database(mox.Shutdown)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func Close() {
 // Only non-expired records are returned.
 func lookup(ctx context.Context, domain dns.Domain) (*PolicyRecord, error) {
 	log := xlog.WithContext(ctx)
-	db, err := database()
+	db, err := database(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func lookup(ctx context.Context, domain dns.Domain) (*PolicyRecord, error) {
 		return nil, fmt.Errorf("empty domain")
 	}
 	now := timeNow()
-	q := bstore.QueryDB[PolicyRecord](db)
+	q := bstore.QueryDB[PolicyRecord](ctx, db)
 	q.FilterNonzero(PolicyRecord{Domain: domain.Name()})
 	q.FilterGreater("ValidEnd", now)
 	pr, err := q.Get()
@@ -130,7 +130,7 @@ func lookup(ctx context.Context, domain dns.Domain) (*PolicyRecord, error) {
 	}
 
 	pr.LastUse = now
-	if err := db.Update(&pr); err != nil {
+	if err := db.Update(ctx, &pr); err != nil {
 		log.Errorx("marking cached mta-sts policy as used in database", err)
 	}
 	if pr.Backoff {
@@ -141,13 +141,13 @@ func lookup(ctx context.Context, domain dns.Domain) (*PolicyRecord, error) {
 
 // Upsert adds the policy to the database, overwriting an existing policy for the domain.
 // Policy can be nil, indicating a failure to fetch the policy.
-func Upsert(domain dns.Domain, recordID string, policy *mtasts.Policy) error {
-	db, err := database()
+func Upsert(ctx context.Context, domain dns.Domain, recordID string, policy *mtasts.Policy) error {
+	db, err := database(ctx)
 	if err != nil {
 		return err
 	}
 
-	return db.Write(func(tx *bstore.Tx) error {
+	return db.Write(ctx, func(tx *bstore.Tx) error {
 		pr := PolicyRecord{Domain: domain.Name()}
 		err := tx.Get(&pr)
 		if err != nil && err != bstore.ErrAbsent {
@@ -185,11 +185,11 @@ func Upsert(domain dns.Domain, recordID string, policy *mtasts.Policy) error {
 // PolicyRecords returns all policies in the database, sorted descending by last
 // use, domain.
 func PolicyRecords(ctx context.Context) ([]PolicyRecord, error) {
-	db, err := database()
+	db, err := database(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return bstore.QueryDB[PolicyRecord](db).SortDesc("LastUse", "Domain").List()
+	return bstore.QueryDB[PolicyRecord](ctx, db).SortDesc("LastUse", "Domain").List()
 }
 
 // Get retrieves an MTA-STS policy for domain and whether it is fresh.
@@ -244,7 +244,7 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 			if record != nil {
 				recordID = record.ID
 			}
-			if err := Upsert(domain, recordID, p); err != nil {
+			if err := Upsert(ctx, domain, recordID, p); err != nil {
 				log.Errorx("inserting policy into cache, continuing", err)
 			}
 		}
@@ -259,9 +259,9 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 
 	// Policy was found in database. Check in DNS it is still fresh.
 	policy = &cachedPolicy.Policy
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	nctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	record, _, _, err := mtasts.LookupRecord(ctx, resolver, domain)
+	record, _, _, err := mtasts.LookupRecord(nctx, resolver, domain)
 	if err != nil {
 		if !errors.Is(err, mtasts.ErrNoRecord) {
 			// Could be a temporary DNS or configuration error.
@@ -271,15 +271,16 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 	} else if record.ID == cachedPolicy.RecordID {
 		return policy, true, nil
 	}
+
 	// New policy should be available.
-	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+	nctx, cancel = context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	p, _, err := mtasts.FetchPolicy(ctx, domain)
+	p, _, err := mtasts.FetchPolicy(nctx, domain)
 	if err != nil {
 		log.Errorx("fetching updated policy for domain, continuing with previously cached policy", err)
 		return policy, false, nil
 	}
-	if err := Upsert(domain, record.ID, p); err != nil {
+	if err := Upsert(ctx, domain, record.ID, p); err != nil {
 		log.Errorx("inserting refreshed policy into cache, continuing with fresh policy", err)
 	}
 	return p, true, nil

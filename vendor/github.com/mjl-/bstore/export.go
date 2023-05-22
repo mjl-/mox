@@ -13,15 +13,17 @@ import (
 // Types returns the types present in the database, regardless of whether they
 // are currently registered using Open or Register. Useful for exporting data
 // with Keys and Records.
-func (db *DB) Types() ([]string, error) {
-	var types []string
-	err := db.Read(func(tx *Tx) error {
-		return tx.btx.ForEach(func(bname []byte, b *bolt.Bucket) error {
-			// note: we do not track stats for types operations.
+func (tx *Tx) Types() ([]string, error) {
+	if err := tx.ctx.Err(); err != nil {
+		return nil, err
+	}
 
-			types = append(types, string(bname))
-			return nil
-		})
+	var types []string
+	err := tx.btx.ForEach(func(bname []byte, b *bolt.Bucket) error {
+		// note: we do not track stats for types operations.
+
+		types = append(types, string(bname))
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -31,9 +33,12 @@ func (db *DB) Types() ([]string, error) {
 
 // prepareType prepares typeName for export/introspection with DB.Keys,
 // DB.Record, DB.Records. It is different in that it does not require a
-// reflect.Type to parse into. It parses to a map, e.g. for export to JSON. The
-// returned typeVersion has no structFields set in its fields.
+// reflect.Type to parse into. It parses to a map, e.g. for export to JSON.
 func (db *DB) prepareType(tx *Tx, typeName string) (map[uint32]*typeVersion, *typeVersion, *bolt.Bucket, []string, error) {
+	if err := tx.ctx.Err(); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
 	rb, err := tx.recordsBucket(typeName, 0.5)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -51,6 +56,7 @@ func (db *DB) prepareType(tx *Tx, typeName string) (map[uint32]*typeVersion, *ty
 		if err != nil {
 			return err
 		}
+
 		versions[ntv.Version] = ntv
 		if tv == nil || ntv.Version > tv.Version {
 			tv = ntv
@@ -74,23 +80,28 @@ func (db *DB) prepareType(tx *Tx, typeName string) (map[uint32]*typeVersion, *ty
 // Keys returns the parsed primary keys for the type "typeName". The type does
 // not have to be registered with Open or Register. For use with Record(s) to
 // export data.
-func (db *DB) Keys(typeName string, fn func(pk any) error) error {
-	return db.Read(func(tx *Tx) error {
-		_, tv, rb, _, err := db.prepareType(tx, typeName)
-		if err != nil {
-			return err
+func (tx *Tx) Keys(typeName string, fn func(pk any) error) error {
+	_, tv, rb, _, err := tx.db.prepareType(tx, typeName)
+	if err != nil {
+		return err
+	}
+
+	ctxDone := tx.ctx.Done()
+
+	v := reflect.New(reflect.TypeOf(tv.Fields[0].Type.zeroKey())).Elem()
+	return rb.ForEach(func(bk, bv []byte) error {
+		tx.stats.Records.Cursor++
+
+		select {
+		case <-ctxDone:
+			return tx.ctx.Err()
+		default:
 		}
 
-		// todo: do not pass nil parser?
-		v := reflect.New(reflect.TypeOf(tv.Fields[0].Type.zero(nil))).Elem()
-		return rb.ForEach(func(bk, bv []byte) error {
-			tx.stats.Records.Cursor++
-
-			if err := parsePK(v, bk); err != nil {
-				return err
-			}
-			return fn(v.Interface())
-		})
+		if err := parsePK(v, bk); err != nil {
+			return err
+		}
+		return fn(v.Interface())
 	})
 }
 
@@ -98,108 +109,109 @@ func (db *DB) Keys(typeName string, fn func(pk any) error) error {
 // "Fields" is set to the fields of the type. The type does not have to be
 // registered with Open or Register.  Record parses the data without the Go
 // type present. BinaryMarshal fields are returned as bytes.
-func (db *DB) Record(typeName, key string, fields *[]string) (map[string]any, error) {
-	var r map[string]any
-	err := db.Read(func(tx *Tx) error {
-		versions, tv, rb, xfields, err := db.prepareType(tx, typeName)
-		if err != nil {
-			return err
-		}
-		*fields = xfields
+func (tx *Tx) Record(typeName, key string, fields *[]string) (map[string]any, error) {
+	versions, tv, rb, xfields, err := tx.db.prepareType(tx, typeName)
+	if err != nil {
+		return nil, err
+	}
+	*fields = xfields
 
-		var kv any
-		switch tv.Fields[0].Type.Kind {
-		case kindBool:
-			switch key {
-			case "true":
-				kv = true
-			case "false":
-				kv = false
-			default:
-				err = fmt.Errorf("%w: invalid bool %q", ErrParam, key)
-			}
-		case kindInt8:
-			kv, err = strconv.ParseInt(key, 10, 8)
-		case kindInt16:
-			kv, err = strconv.ParseInt(key, 10, 16)
-		case kindInt32:
-			kv, err = strconv.ParseInt(key, 10, 32)
-		case kindInt:
-			kv, err = strconv.ParseInt(key, 10, 32)
-		case kindInt64:
-			kv, err = strconv.ParseInt(key, 10, 64)
-		case kindUint8:
-			kv, err = strconv.ParseUint(key, 10, 8)
-		case kindUint16:
-			kv, err = strconv.ParseUint(key, 10, 16)
-		case kindUint32:
-			kv, err = strconv.ParseUint(key, 10, 32)
-		case kindUint:
-			kv, err = strconv.ParseUint(key, 10, 32)
-		case kindUint64:
-			kv, err = strconv.ParseUint(key, 10, 64)
-		case kindString:
-			kv = key
-		case kindBytes:
-			kv = []byte(key) // todo: or decode from base64?
+	var kv any
+	switch tv.Fields[0].Type.Kind {
+	case kindBool:
+		switch key {
+		case "true":
+			kv = true
+		case "false":
+			kv = false
 		default:
-			return fmt.Errorf("internal error: unknown primary key kind %v", tv.Fields[0].Type.Kind)
+			err = fmt.Errorf("%w: invalid bool %q", ErrParam, key)
 		}
-		if err != nil {
-			return err
-		}
-		pkv := reflect.ValueOf(kv)
-		kind, err := typeKind(pkv.Type())
-		if err != nil {
-			return err
-		}
-		if kind != tv.Fields[0].Type.Kind {
-			// Convert from various int types above to required type. The ParseInt/ParseUint
-			// calls already validated that the values fit.
-			pkt := reflect.TypeOf(tv.Fields[0].Type.zero(nil))
-			pkv = pkv.Convert(pkt)
-		}
-		k, err := packPK(pkv)
-		if err != nil {
-			return err
-		}
+	case kindInt8:
+		kv, err = strconv.ParseInt(key, 10, 8)
+	case kindInt16:
+		kv, err = strconv.ParseInt(key, 10, 16)
+	case kindInt32:
+		kv, err = strconv.ParseInt(key, 10, 32)
+	case kindInt:
+		kv, err = strconv.ParseInt(key, 10, 32)
+	case kindInt64:
+		kv, err = strconv.ParseInt(key, 10, 64)
+	case kindUint8:
+		kv, err = strconv.ParseUint(key, 10, 8)
+	case kindUint16:
+		kv, err = strconv.ParseUint(key, 10, 16)
+	case kindUint32:
+		kv, err = strconv.ParseUint(key, 10, 32)
+	case kindUint:
+		kv, err = strconv.ParseUint(key, 10, 32)
+	case kindUint64:
+		kv, err = strconv.ParseUint(key, 10, 64)
+	case kindString:
+		kv = key
+	case kindBytes:
+		kv = []byte(key) // todo: or decode from base64?
+	default:
+		return nil, fmt.Errorf("internal error: unknown primary key kind %v", tv.Fields[0].Type.Kind)
+	}
+	if err != nil {
+		return nil, err
+	}
+	pkv := reflect.ValueOf(kv)
+	kind, err := typeKind(pkv.Type())
+	if err != nil {
+		return nil, err
+	}
+	if kind != tv.Fields[0].Type.Kind {
+		// Convert from various int types above to required type. The ParseInt/ParseUint
+		// calls already validated that the values fit.
+		pkt := reflect.TypeOf(tv.Fields[0].Type.zeroKey())
+		pkv = pkv.Convert(pkt)
+	}
+	k, err := packPK(pkv)
+	if err != nil {
+		return nil, err
+	}
 
-		tx.stats.Records.Get++
-		bv := rb.Get(k)
-		if bv == nil {
-			return ErrAbsent
-		}
-		record, err := parseMap(versions, k, bv)
-		if err != nil {
-			return err
-		}
-		r = record
-		return nil
-	})
-	return r, err
+	tx.stats.Records.Get++
+	bv := rb.Get(k)
+	if bv == nil {
+		return nil, ErrAbsent
+	}
+	record, err := parseMap(versions, k, bv)
+	if err != nil {
+		return nil, err
+	}
+	return record, nil
 }
 
 // Records calls "fn" for each record of "typeName". Records sets "fields" to
 // the fields of the type. The type does not have to be registered with Open or
 // Register.  Record parses the data without the Go type present. BinaryMarshal
 // fields are returned as bytes.
-func (db *DB) Records(typeName string, fields *[]string, fn func(map[string]any) error) error {
-	return db.Read(func(tx *Tx) error {
-		versions, _, rb, xfields, err := db.prepareType(tx, typeName)
+func (tx *Tx) Records(typeName string, fields *[]string, fn func(map[string]any) error) error {
+	versions, _, rb, xfields, err := tx.db.prepareType(tx, typeName)
+	if err != nil {
+		return err
+	}
+	*fields = xfields
+
+	ctxDone := tx.ctx.Done()
+
+	return rb.ForEach(func(bk, bv []byte) error {
+		tx.stats.Records.Cursor++
+
+		select {
+		case <-ctxDone:
+			return tx.ctx.Err()
+		default:
+		}
+
+		record, err := parseMap(versions, bk, bv)
 		if err != nil {
 			return err
 		}
-		*fields = xfields
-
-		return rb.ForEach(func(bk, bv []byte) error {
-			tx.stats.Records.Cursor++
-
-			record, err := parseMap(versions, bk, bv)
-			if err != nil {
-				return err
-			}
-			return fn(record)
-		})
+		return fn(record)
 	})
 }
 
@@ -228,7 +240,7 @@ func parseMap(versions map[uint32]*typeVersion, bk, bv []byte) (record map[strin
 
 	r := map[string]any{}
 
-	v := reflect.New(reflect.TypeOf(tv.Fields[0].Type.zero(p))).Elem()
+	v := reflect.New(reflect.TypeOf(tv.Fields[0].Type.zeroKey())).Elem()
 	err := parsePK(v, bk)
 	if err != nil {
 		return nil, err
@@ -243,12 +255,12 @@ func parseMap(versions map[uint32]*typeVersion, bk, bv []byte) (record map[strin
 		if fm.Nonzero(i) {
 			r[f.Name] = f.Type.parseValue(p)
 		} else {
-			r[f.Name] = f.Type.zero(p)
+			r[f.Name] = f.Type.zeroExportValue()
 		}
 	}
 
 	if len(p.buf) != 0 {
-		return nil, fmt.Errorf("%w: leftover data after parsing", ErrStore)
+		return nil, fmt.Errorf("%w: leftover data after parsing (%d %x %q)", ErrStore, len(p.buf), p.buf, p.buf)
 	}
 
 	return r, nil
@@ -315,12 +327,19 @@ func (ft fieldType) parseValue(p *parser) any {
 		var l []any
 		for i := 0; i < n; i++ {
 			if fm.Nonzero(i) {
-				l = append(l, ft.List.parseValue(p))
+				l = append(l, ft.ListElem.parseValue(p))
 			} else {
 				// Always add non-zero elements, or we would
 				// change the number of elements in a list.
-				l = append(l, ft.List.zero(p))
+				l = append(l, ft.ListElem.zeroExportValue())
 			}
+		}
+		return l
+	case kindArray:
+		n := ft.ArrayLength
+		var l []any
+		for i := 0; i < n; i++ {
+			l = append(l, ft.ListElem.parseValue(p))
 		}
 		return l
 	case kindMap:
@@ -338,19 +357,19 @@ func (ft fieldType) parseValue(p *parser) any {
 			if fm.Nonzero(i) {
 				v = ft.MapValue.parseValue(p)
 			} else {
-				v = ft.MapValue.zero(p)
+				v = ft.MapValue.zeroExportValue()
 			}
 			m[k] = v
 		}
 		return m
 	case kindStruct:
-		fm := p.Fieldmap(len(ft.Fields))
+		fm := p.Fieldmap(len(ft.structFields))
 		m := map[string]any{}
-		for i, f := range ft.Fields {
+		for i, f := range ft.structFields {
 			if fm.Nonzero(i) {
 				m[f.Name] = f.Type.parseValue(p)
 			} else {
-				m[f.Name] = f.Type.zero(p)
+				m[f.Name] = f.Type.zeroExportValue()
 			}
 		}
 		return m
@@ -359,7 +378,7 @@ func (ft fieldType) parseValue(p *parser) any {
 	panic("cannot happen")
 }
 
-var zerovalues = map[kind]any{
+var zeroExportValues = map[kind]any{
 	kindBytes:         []byte(nil),
 	kindBinaryMarshal: []byte(nil), // We don't have the actual type available, so we just return binary data.
 	kindBool:          false,
@@ -380,12 +399,53 @@ var zerovalues = map[kind]any{
 	kindSlice:         []any(nil),
 	kindMap:           map[string]any(nil),
 	kindStruct:        map[string]any(nil),
+	// kindArray handled in zeroExportValue()
 }
 
-func (ft fieldType) zero(p *parser) any {
-	v, ok := zerovalues[ft.Kind]
+// zeroExportValue returns the zero value for a fieldType for use with exporting.
+func (ft fieldType) zeroExportValue() any {
+	if ft.Kind == kindArray {
+		ev := ft.ListElem.zeroExportValue()
+		l := make([]any, ft.ArrayLength)
+		for i := 0; i < ft.ArrayLength; i++ {
+			l[i] = ev
+		}
+		return l
+	}
+	v, ok := zeroExportValues[ft.Kind]
 	if !ok {
-		p.Errorf("internal error: unhandled zero value for field type %v", ft.Kind)
+		panic(fmt.Errorf("internal error: unhandled zero value for field type %v", ft.Kind))
+	}
+	return v
+}
+
+var zeroKeys = map[kind]any{
+	kindBytes:  []byte(nil),
+	kindBool:   false,
+	kindInt8:   int8(0),
+	kindInt16:  int16(0),
+	kindInt32:  int32(0),
+	kindInt:    int(0),
+	kindInt64:  int64(0),
+	kindUint8:  uint8(0),
+	kindUint16: uint16(0),
+	kindUint32: uint32(0),
+	kindUint:   uint(0),
+	kindUint64: uint64(0),
+	kindString: "",
+	kindTime:   zerotime,
+	// kindSlice handled in zeroKeyValue()
+}
+
+// zeroKeyValue returns the zero value for a fieldType for use with exporting.
+func (ft fieldType) zeroKey() any {
+	k := ft.Kind
+	if k == kindSlice {
+		k = ft.ListElem.Kind
+	}
+	v, ok := zeroKeys[k]
+	if !ok {
+		panic(fmt.Errorf("internal error: unhandled zero value for field type %v", ft.Kind))
 	}
 	return v
 }

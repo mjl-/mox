@@ -249,7 +249,7 @@ func importStart(log *mlog.Log, accName string, f *os.File, skipMailboxPrefix st
 	}
 	acc.Lock() // Not using WithWLock because importMessage is responsible for unlocking.
 
-	tx, err := acc.DB.Begin(true)
+	tx, err := acc.DB.Begin(context.Background(), true)
 	if err != nil {
 		acc.Unlock()
 		xerr := acc.Close()
@@ -346,7 +346,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 
 	conf, _ := acc.Conf()
 
-	jf, _, err := acc.OpenJunkFilter(log)
+	jf, _, err := acc.OpenJunkFilter(ctx, log)
 	if err != nil && !errors.Is(err, store.ErrNoJunkFilter) {
 		ximportcheckf(err, "open junk filter")
 	}
@@ -376,7 +376,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 			problemf("parsing message %s for updating junk filter: %v (continuing)", pos, err)
 			return
 		}
-		err = jf.Train(!m.Junk, words)
+		err = jf.Train(ctx, !m.Junk, words)
 		if err != nil {
 			problemf("training junk filter for message %s: %v (continuing)", pos, err)
 			return

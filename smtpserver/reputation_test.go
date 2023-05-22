@@ -1,7 +1,6 @@
 package smtpserver
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -77,7 +76,7 @@ func TestReputation(t *testing.T) {
 
 			MsgFromLocalpart: msgFrom.Localpart,
 			MsgFromDomain:    msgFrom.Domain.Name(),
-			MsgFromOrgDomain: publicsuffix.Lookup(context.Background(), msgFrom.Domain).Name(),
+			MsgFromOrgDomain: publicsuffix.Lookup(ctxbg, msgFrom.Domain).Name(),
 
 			MailFromValidated: mailfromValid,
 			EHLOValidated:     ehloValid,
@@ -103,11 +102,11 @@ func TestReputation(t *testing.T) {
 		p := "../testdata/smtpserver-reputation.db"
 		defer os.Remove(p)
 
-		db, err := bstore.Open(p, &bstore.Options{Timeout: 5 * time.Second}, store.Message{}, store.Recipient{}, store.Mailbox{})
+		db, err := bstore.Open(ctxbg, p, &bstore.Options{Timeout: 5 * time.Second}, store.Message{}, store.Recipient{}, store.Mailbox{})
 		tcheck(t, err, "open db")
 		defer db.Close()
 
-		err = db.Write(func(tx *bstore.Tx) error {
+		err = db.Write(ctxbg, func(tx *bstore.Tx) error {
 			err = tx.Insert(&store.Mailbox{ID: 1, Name: "Inbox"})
 			tcheck(t, err, "insert into db")
 
@@ -117,7 +116,7 @@ func TestReputation(t *testing.T) {
 
 				rcptToDomain, err := dns.ParseDomain(hm.RcptToDomain)
 				tcheck(t, err, "parse rcptToDomain")
-				rcptToOrgDomain := publicsuffix.Lookup(context.Background(), rcptToDomain)
+				rcptToOrgDomain := publicsuffix.Lookup(ctxbg, rcptToDomain)
 				r := store.Recipient{MessageID: hm.ID, Localpart: hm.RcptToLocalpart, Domain: hm.RcptToDomain, OrgDomain: rcptToOrgDomain.Name(), Sent: hm.Received}
 				err = tx.Insert(&r)
 				tcheck(t, err, "insert recipient")
@@ -130,7 +129,7 @@ func TestReputation(t *testing.T) {
 		var isjunk *bool
 		var conclusive bool
 		var method reputationMethod
-		err = db.Read(func(tx *bstore.Tx) error {
+		err = db.Read(ctxbg, func(tx *bstore.Tx) error {
 			var err error
 			isjunk, conclusive, method, err = reputation(tx, xlog, &m)
 			return err

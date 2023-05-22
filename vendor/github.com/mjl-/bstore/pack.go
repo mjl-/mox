@@ -17,14 +17,14 @@ type fieldmap struct {
 	buf    []byte // Bitmap, we write the next 0/1 at bit n.
 	n      int    // Fields seen so far.
 	offset int    // In final output, we write buf back after finish. Only relevant for packing.
-	Errorf func(format string, args ...any)
+	errorf func(format string, args ...any)
 }
 
 // add bit to fieldmap indicating if the field is nonzero.
 func (f *fieldmap) Field(nonzero bool) {
 	o := f.n / 8
 	if f.n >= f.max {
-		f.Errorf("internal error: too many fields, max %d", f.max)
+		f.errorf("internal error: too many fields, max %d", f.max)
 	}
 	if nonzero {
 		f.buf[o] |= 1 << (7 - f.n%8)
@@ -46,7 +46,7 @@ type packer struct {
 	popped    []*fieldmap // Completed fieldmaps, to be written back during finish.
 }
 
-func (p *packer) Errorf(format string, args ...any) {
+func (p *packer) errorf(format string, args ...any) {
 	panic(packErr{fmt.Errorf(format, args...)})
 }
 
@@ -54,7 +54,7 @@ func (p *packer) Errorf(format string, args ...any) {
 func (p *packer) PushFieldmap(n int) {
 	p.fieldmaps = append(p.fieldmaps, p.fieldmap)
 	buf := make([]byte, (n+7)/8)
-	p.fieldmap = &fieldmap{max: n, buf: buf, offset: p.offset, Errorf: p.Errorf}
+	p.fieldmap = &fieldmap{max: n, buf: buf, offset: p.offset, errorf: p.errorf}
 	p.Write(buf) // Updates offset. Write errors cause panic.
 }
 
@@ -62,7 +62,7 @@ func (p *packer) PushFieldmap(n int) {
 // bytes during finish.
 func (p *packer) PopFieldmap() {
 	if p.fieldmap.n != p.fieldmap.max {
-		p.Errorf("internal error: fieldmap n %d != max %d", p.fieldmap.n, p.fieldmap.max)
+		p.errorf("internal error: fieldmap n %d != max %d", p.fieldmap.n, p.fieldmap.max)
 	}
 	p.popped = append(p.popped, p.fieldmap)
 	p.fieldmap = p.fieldmaps[len(p.fieldmaps)-1]
@@ -73,7 +73,7 @@ func (p *packer) PopFieldmap() {
 // returning the final bytes representation of this record.
 func (p *packer) Finish() []byte {
 	if p.fieldmap != nil {
-		p.Errorf("internal error: leftover fieldmap during finish")
+		p.errorf("internal error: leftover fieldmap during finish")
 	}
 	buf := p.b.Bytes()
 	for _, f := range p.popped {
@@ -90,7 +90,7 @@ func (p *packer) Field(nonzero bool) {
 func (p *packer) Write(buf []byte) (int, error) {
 	n, err := p.b.Write(buf)
 	if err != nil {
-		p.Errorf("write: %w", err)
+		p.errorf("write: %w", err)
 	}
 	if n > 0 {
 		p.offset += n
@@ -149,11 +149,12 @@ func (tv typeVersion) pack(p *packer, rv reflect.Value) {
 		nrv := rv.FieldByIndex(f.structField.Index)
 		if f.Type.isZero(nrv) {
 			if f.Nonzero {
-				p.Errorf("%w: %q", ErrZero, f.Name)
+				p.errorf("%w: %q", ErrZero, f.Name)
 			}
 			p.Field(false)
 			// Pretend to pack to get the nonzero checks.
-			if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsNil()) {
+			// todo: we should be able to do nonzero-check without pretending to pack.
+			if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsZero()) {
 				f.Type.pack(&packer{b: &bytes.Buffer{}}, nrv)
 			}
 		} else {
@@ -176,7 +177,7 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 		v := rv
 		buf, err := v.Interface().(encoding.BinaryMarshaler).MarshalBinary()
 		if err != nil {
-			p.Errorf("marshalbinary: %w", err)
+			p.errorf("marshalbinary: %w", err)
 		}
 		p.AddBytes(buf)
 	case kindBool:
@@ -192,7 +193,7 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 	case kindInt:
 		v := rv.Int()
 		if v < math.MinInt32 || v > math.MaxInt32 {
-			p.Errorf("%w: int %d does not fit in int32", ErrParam, v)
+			p.errorf("%w: int %d does not fit in int32", ErrParam, v)
 		}
 		p.Varint(v)
 	case kindInt8, kindInt16, kindInt32, kindInt64:
@@ -202,7 +203,7 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 	case kindUint:
 		v := rv.Uint()
 		if v > math.MaxUint32 {
-			p.Errorf("%w: uint %d does not fit in uint32", ErrParam, v)
+			p.errorf("%w: uint %d does not fit in uint32", ErrParam, v)
 		}
 		p.Uvarint(v)
 	case kindFloat32:
@@ -214,7 +215,7 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 	case kindTime:
 		buf, err := rv.Interface().(time.Time).MarshalBinary()
 		if err != nil {
-			p.Errorf("%w: pack time: %s", ErrParam, err)
+			p.errorf("%w: pack time: %s", ErrParam, err)
 		}
 		p.AddBytes(buf)
 	case kindSlice:
@@ -223,15 +224,32 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 		p.PushFieldmap(n)
 		for i := 0; i < n; i++ {
 			nrv := rv.Index(i)
-			if ft.List.isZero(nrv) {
+			if ft.ListElem.isZero(nrv) {
 				p.Field(false)
 				// Pretend to pack to get the nonzero checks of the element.
-				if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsNil()) {
-					ft.List.pack(&packer{b: &bytes.Buffer{}}, nrv)
+				if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsZero()) {
+					ft.ListElem.pack(&packer{b: &bytes.Buffer{}}, nrv)
 				}
 			} else {
 				p.Field(true)
-				ft.List.pack(p, nrv)
+				ft.ListElem.pack(p, nrv)
+			}
+		}
+		p.PopFieldmap()
+	case kindArray:
+		n := ft.ArrayLength
+		p.PushFieldmap(n)
+		for i := 0; i < n; i++ {
+			nrv := rv.Index(i)
+			if ft.ListElem.isZero(nrv) {
+				p.Field(false)
+				// Pretend to pack to get the nonzero checks of the element.
+				if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsZero()) {
+					ft.ListElem.pack(&packer{b: &bytes.Buffer{}}, nrv)
+				}
+			} else {
+				p.Field(true)
+				ft.ListElem.pack(p, nrv)
 			}
 		}
 		p.PopFieldmap()
@@ -249,7 +267,7 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 			if ft.MapValue.isZero(v) {
 				p.Field(false)
 				// Pretend to pack to get the nonzero checks of the key type.
-				if v.IsValid() && (v.Kind() != reflect.Ptr || !v.IsNil()) {
+				if v.IsValid() && (v.Kind() != reflect.Ptr || !v.IsZero()) {
 					ft.MapValue.pack(&packer{b: &bytes.Buffer{}}, v)
 				}
 			} else {
@@ -259,16 +277,16 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 		}
 		p.PopFieldmap()
 	case kindStruct:
-		p.PushFieldmap(len(ft.Fields))
-		for _, f := range ft.Fields {
+		p.PushFieldmap(len(ft.structFields))
+		for _, f := range ft.structFields {
 			nrv := rv.FieldByIndex(f.structField.Index)
 			if f.Type.isZero(nrv) {
 				if f.Nonzero {
-					p.Errorf("%w: %q", ErrZero, f.Name)
+					p.errorf("%w: %q", ErrZero, f.Name)
 				}
 				p.Field(false)
 				// Pretend to pack to get the nonzero checks.
-				if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsNil()) {
+				if nrv.IsValid() && (nrv.Kind() != reflect.Ptr || !nrv.IsZero()) {
 					f.Type.pack(&packer{b: &bytes.Buffer{}}, nrv)
 				}
 			} else {
@@ -278,6 +296,6 @@ func (ft fieldType) pack(p *packer, rv reflect.Value) {
 		}
 		p.PopFieldmap()
 	default:
-		p.Errorf("internal error: unhandled field type") // should be prevented when registering type
+		p.errorf("internal error: unhandled field type") // should be prevented when registering type
 	}
 }

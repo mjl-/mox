@@ -1,22 +1,42 @@
-bstore is a database library for storing and quering Go struct data.
+Bstore is a database library for storing and quering Go values.
 
-See https://pkg.go.dev/github.com/mjl-/bstore
+Bstore is designed as a small, pure Go library that still provides most of
+the common data consistency requirements for modest database use cases. Bstore
+aims to make basic use of cgo-based libraries, such as sqlite, unnecessary.
+
+See https://pkg.go.dev/github.com/mjl-/bstore for features, examples and full
+documentation.
 
 MIT-licensed
 
-# Comparison
 
-Bstore is designed as a small, pure Go library that still provides most of the
-common data consistency requirements for modest database use cases. Bstore aims
-to make basic use of cgo-based libraries, such as sqlite, unnecessary.  Sqlite
-is a great library, but Go applications that require cgo are hard to
+# FAQ - Frequently Asked Questions
+
+## Is bstore an ORM?
+
+No. The API for bstore may look like an ORM. But instead of mapping bstore
+"queries" (function calls) to an SQL query string, bstore executes them
+directly without converting to a query language, storing the data itself.
+
+## How does bstore store its data?
+
+A bstore database is a single-file BoltDB database. BoltDB provides ACID
+properties. Bstore uses a BoltDB "bucket" (key/value store) for each Go type
+stored, with multiple subbuckets: one for type definitions, one for the actual
+data, and one bucket per index. BoltDB stores data in a B+tree. See format.md
+for details.
+
+## How does bstore compare to sqlite?
+
+Sqlite is a great library, but Go applications that require cgo are hard to
 cross-compile. With bstore, cross-compiling to most Go-supported platforms
-stays trivial. Although bstore is much more limited in so many aspects than
-sqlite, bstore also offers some advantages as well.
+stays trivial (though not plan9, unfortunately). Although bstore is much more
+limited in so many aspects than sqlite, bstore also offers some advantages as
+well. Some points of comparison:
 
 - Cross-compilation and reproducibility: Trivial with bstore due to pure Go,
   much harder with sqlite because of cgo.
-- Code complexity: low with bstore (6k lines including comments/docs), high
+- Code complexity: low with bstore (7k lines including comments/docs), high
   with sqlite.
 - Query language: mostly-type-checked function calls in bstore, free-form query
   strings only checked at runtime with sqlite.
@@ -33,19 +53,3 @@ sqlite, bstore also offers some advantages as well.
   WAL or journal files).
 - Test coverage: decent coverage but limited real-world for bstore, versus
   extremely thoroughly tested and with enormous real-world use.
-
-# FAQ
-
-Q: Is bstore an ORM?
-
-A: No. The API for bstore may look like an ORM. But instead of mapping bstore
-"queries" (function calls) to an SQL query string, bstore executes them
-directly without converting to a query language.
-
-Q: How does bstore store its data?
-
-A bstore database is a single-file BoltDB database. BoltDB provides ACID
-properties. Bstore uses a BoltDB "bucket" (key/value store) for each Go type
-stored, with multiple subbuckets: one for type definitions, one for the actual
-data, and one bucket per index. BoltDB stores data in a B+tree. See format.md
-for details.

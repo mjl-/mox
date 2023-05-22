@@ -14,6 +14,7 @@ own ham/spam emails.
 */
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -134,7 +135,7 @@ func cmdJunkTrain(c *cmd) {
 	defer a.Profile()()
 	a.SetLogLevel()
 
-	f := must(junk.NewFilter(mlog.New("junktrain"), a.params, a.databasePath, a.bloomfilterPath))
+	f := must(junk.NewFilter(context.Background(), mlog.New("junktrain"), a.params, a.databasePath, a.bloomfilterPath))
 	defer func() {
 		if err := f.Close(); err != nil {
 			log.Printf("closing junk filter: %v", err)
@@ -164,14 +165,14 @@ func cmdJunkCheck(c *cmd) {
 	defer a.Profile()()
 	a.SetLogLevel()
 
-	f := must(junk.OpenFilter(mlog.New("junkcheck"), a.params, a.databasePath, a.bloomfilterPath, false))
+	f := must(junk.OpenFilter(context.Background(), mlog.New("junkcheck"), a.params, a.databasePath, a.bloomfilterPath, false))
 	defer func() {
 		if err := f.Close(); err != nil {
 			log.Printf("closing junk filter: %v", err)
 		}
 	}()
 
-	prob, _, _, _, err := f.ClassifyMessagePath(args[0])
+	prob, _, _, _, err := f.ClassifyMessagePath(context.Background(), args[0])
 	xcheckf(err, "testing mail")
 
 	fmt.Printf("%.6f\n", prob)
@@ -189,7 +190,7 @@ func cmdJunkTest(c *cmd) {
 	defer a.Profile()()
 	a.SetLogLevel()
 
-	f := must(junk.OpenFilter(mlog.New("junktest"), a.params, a.databasePath, a.bloomfilterPath, false))
+	f := must(junk.OpenFilter(context.Background(), mlog.New("junktest"), a.params, a.databasePath, a.bloomfilterPath, false))
 	defer func() {
 		if err := f.Close(); err != nil {
 			log.Printf("closing junk filter: %v", err)
@@ -202,7 +203,7 @@ func cmdJunkTest(c *cmd) {
 		xcheckf(err, "readdir %q", dir)
 		for _, fi := range files {
 			path := dir + "/" + fi.Name()
-			prob, _, _, _, err := f.ClassifyMessagePath(path)
+			prob, _, _, _, err := f.ClassifyMessagePath(context.Background(), path)
 			if err != nil {
 				log.Printf("classify message %q: %s", path, err)
 				continue
@@ -246,7 +247,7 @@ messages are shuffled, with optional random seed.`
 	defer a.Profile()()
 	a.SetLogLevel()
 
-	f := must(junk.NewFilter(mlog.New("junkanalyze"), a.params, a.databasePath, a.bloomfilterPath))
+	f := must(junk.NewFilter(context.Background(), mlog.New("junkanalyze"), a.params, a.databasePath, a.bloomfilterPath))
 	defer func() {
 		if err := f.Close(); err != nil {
 			log.Printf("closing junk filter: %v", err)
@@ -295,7 +296,7 @@ messages are shuffled, with optional random seed.`
 	testDir := func(dir string, files []string, ham bool) (ok, bad, malformed int) {
 		for _, name := range files {
 			path := dir + "/" + name
-			prob, _, _, _, err := f.ClassifyMessagePath(path)
+			prob, _, _, _, err := f.ClassifyMessagePath(context.Background(), path)
 			if err != nil {
 				// log.Infof("%s: %s", path, err)
 				malformed++
@@ -338,7 +339,7 @@ func cmdJunkPlay(c *cmd) {
 	defer a.Profile()()
 	a.SetLogLevel()
 
-	f := must(junk.NewFilter(mlog.New("junkplay"), a.params, a.databasePath, a.bloomfilterPath))
+	f := must(junk.NewFilter(context.Background(), mlog.New("junkplay"), a.params, a.databasePath, a.bloomfilterPath))
 	defer func() {
 		if err := f.Close(); err != nil {
 			log.Printf("closing junk filter: %v", err)
@@ -414,7 +415,7 @@ func cmdJunkPlay(c *cmd) {
 		if !msg.sent {
 			var prob float64
 			var err error
-			prob, words, _, _, err = f.ClassifyMessagePath(path)
+			prob, words, _, _, err = f.ClassifyMessagePath(context.Background(), path)
 			if err != nil {
 				nbad++
 				return
@@ -455,7 +456,7 @@ func cmdJunkPlay(c *cmd) {
 			}
 		}
 
-		if err := f.Train(msg.ham, words); err != nil {
+		if err := f.Train(context.Background(), msg.ham, words); err != nil {
 			log.Printf("train: %s", err)
 		}
 	}

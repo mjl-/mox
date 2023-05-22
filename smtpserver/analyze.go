@@ -161,7 +161,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	var reason string
 	var err error
 	d.acc.WithRLock(func() {
-		err = d.acc.DB.Read(func(tx *bstore.Tx) error {
+		err = d.acc.DB.Read(ctx, func(tx *bstore.Tx) error {
 			// Set message MailboxID to which mail will be delivered. Reputation is
 			// per-mailbox. If referenced mailbox is not found (e.g. does not yet exist), we
 			// can still determine a reputation because we also base it on outgoing
@@ -251,13 +251,13 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	reason = reasonNoBadSignals
 	accept := true
 	var junkSubjectpass bool
-	f, jf, err := d.acc.OpenJunkFilter(log)
+	f, jf, err := d.acc.OpenJunkFilter(ctx, log)
 	if err == nil {
 		defer func() {
 			err := f.Close()
 			log.Check(err, "closing junkfilter")
 		}()
-		contentProb, _, _, _, err := f.ClassifyMessageReader(store.FileMsgReader(d.m.MsgPrefix, d.dataFile), d.m.Size)
+		contentProb, _, _, _, err := f.ClassifyMessageReader(ctx, store.FileMsgReader(d.m.MsgPrefix, d.dataFile), d.m.Size)
 		if err != nil {
 			log.Errorx("testing for spam", err)
 			return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonJunkClassifyError)

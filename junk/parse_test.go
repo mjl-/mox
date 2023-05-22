@@ -23,7 +23,7 @@ func FuzzParseMessage(f *testing.F) {
 	os.Remove(dbPath)
 	os.Remove(bloomPath)
 	params := Params{Twograms: true}
-	jf, err := NewFilter(xlog, params, dbPath, bloomPath)
+	jf, err := NewFilter(ctxbg, xlog, params, dbPath, bloomPath)
 	if err != nil {
 		f.Fatalf("new filter: %v", err)
 	}

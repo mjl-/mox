@@ -1,6 +1,7 @@
 package junk
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"os"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/mjl-/mox/mlog"
 )
+
+var ctxbg = context.Background()
 
 func tcheck(t *testing.T, err error, msg string) {
 	t.Helper()
@@ -43,12 +46,12 @@ func TestFilter(t *testing.T) {
 	bloomPath := "../testdata/junk/filter.bloom"
 	os.Remove(dbPath)
 	os.Remove(bloomPath)
-	f, err := NewFilter(log, params, dbPath, bloomPath)
+	f, err := NewFilter(ctxbg, log, params, dbPath, bloomPath)
 	tcheck(t, err, "new filter")
 	err = f.Close()
 	tcheck(t, err, "close filter")
 
-	f, err = OpenFilter(log, params, dbPath, bloomPath, true)
+	f, err = OpenFilter(ctxbg, log, params, dbPath, bloomPath, true)
 	tcheck(t, err, "open filter")
 
 	// Ensure these dirs exist. Developers should bring their own ham/spam example
@@ -75,13 +78,13 @@ func TestFilter(t *testing.T) {
 		return
 	}
 
-	prob, _, _, _, err := f.ClassifyMessagePath(filepath.Join(hamdir, hamfiles[0]))
+	prob, _, _, _, err := f.ClassifyMessagePath(ctxbg, filepath.Join(hamdir, hamfiles[0]))
 	tcheck(t, err, "classify ham message")
 	if prob > 0.1 {
 		t.Fatalf("trained ham file has prob %v, expected <= 0.1", prob)
 	}
 
-	prob, _, _, _, err = f.ClassifyMessagePath(filepath.Join(spamdir, spamfiles[0]))
+	prob, _, _, _, err = f.ClassifyMessagePath(ctxbg, filepath.Join(spamdir, spamfiles[0]))
 	tcheck(t, err, "classify spam message")
 	if prob < 0.9 {
 		t.Fatalf("trained spam file has prob %v, expected > 0.9", prob)
@@ -94,7 +97,7 @@ func TestFilter(t *testing.T) {
 	// classified as ham/spam. Then we untrain to see they are no longer classified.
 	os.Remove(dbPath)
 	os.Remove(bloomPath)
-	f, err = NewFilter(log, params, dbPath, bloomPath)
+	f, err = NewFilter(ctxbg, log, params, dbPath, bloomPath)
 	tcheck(t, err, "open filter")
 
 	hamf, err := os.Open(filepath.Join(hamdir, hamfiles[0]))
@@ -112,18 +115,18 @@ func TestFilter(t *testing.T) {
 	spamsize := spamstat.Size()
 
 	// Train each message twice, to prevent single occurrences from being ignored.
-	err = f.TrainMessage(hamf, hamsize, true)
+	err = f.TrainMessage(ctxbg, hamf, hamsize, true)
 	tcheck(t, err, "train ham message")
 	_, err = hamf.Seek(0, 0)
 	tcheck(t, err, "seek ham message")
-	err = f.TrainMessage(hamf, hamsize, true)
+	err = f.TrainMessage(ctxbg, hamf, hamsize, true)
 	tcheck(t, err, "train ham message")
 
-	err = f.TrainMessage(spamf, spamsize, false)
+	err = f.TrainMessage(ctxbg, spamf, spamsize, false)
 	tcheck(t, err, "train spam message")
 	_, err = spamf.Seek(0, 0)
 	tcheck(t, err, "seek spam message")
-	err = f.TrainMessage(spamf, spamsize, true)
+	err = f.TrainMessage(ctxbg, spamf, spamsize, true)
 	tcheck(t, err, "train spam message")
 
 	if !f.modified {
@@ -142,7 +145,7 @@ func TestFilter(t *testing.T) {
 	// Classify and verify.
 	_, err = hamf.Seek(0, 0)
 	tcheck(t, err, "seek ham message")
-	prob, _, _, _, err = f.ClassifyMessageReader(hamf, hamsize)
+	prob, _, _, _, err = f.ClassifyMessageReader(ctxbg, hamf, hamsize)
 	tcheck(t, err, "classify ham")
 	if prob > 0.1 {
 		t.Fatalf("got prob %v, expected <= 0.1", prob)
@@ -150,7 +153,7 @@ func TestFilter(t *testing.T) {
 
 	_, err = spamf.Seek(0, 0)
 	tcheck(t, err, "seek spam message")
-	prob, _, _, _, err = f.ClassifyMessageReader(spamf, spamsize)
+	prob, _, _, _, err = f.ClassifyMessageReader(ctxbg, spamf, spamsize)
 	tcheck(t, err, "classify spam")
 	if prob < 0.9 {
 		t.Fatalf("got prob %v, expected >= 0.9", prob)
@@ -159,20 +162,20 @@ func TestFilter(t *testing.T) {
 	// Untrain ham & spam.
 	_, err = hamf.Seek(0, 0)
 	tcheck(t, err, "seek ham message")
-	err = f.UntrainMessage(hamf, hamsize, true)
+	err = f.UntrainMessage(ctxbg, hamf, hamsize, true)
 	tcheck(t, err, "untrain ham message")
 	_, err = hamf.Seek(0, 0)
 	tcheck(t, err, "seek ham message")
-	err = f.UntrainMessage(hamf, spamsize, true)
+	err = f.UntrainMessage(ctxbg, hamf, spamsize, true)
 	tcheck(t, err, "untrain ham message")
 
 	_, err = spamf.Seek(0, 0)
 	tcheck(t, err, "seek spam message")
-	err = f.UntrainMessage(spamf, spamsize, true)
+	err = f.UntrainMessage(ctxbg, spamf, spamsize, true)
 	tcheck(t, err, "untrain spam message")
 	_, err = spamf.Seek(0, 0)
 	tcheck(t, err, "seek spam message")
-	err = f.UntrainMessage(spamf, spamsize, true)
+	err = f.UntrainMessage(ctxbg, spamf, spamsize, true)
 	tcheck(t, err, "untrain spam message")
 
 	if !f.modified {
@@ -182,7 +185,7 @@ func TestFilter(t *testing.T) {
 	// Classify again, should be unknown.
 	_, err = hamf.Seek(0, 0)
 	tcheck(t, err, "seek ham message")
-	prob, _, _, _, err = f.ClassifyMessageReader(hamf, hamsize)
+	prob, _, _, _, err = f.ClassifyMessageReader(ctxbg, hamf, hamsize)
 	tcheck(t, err, "classify ham")
 	if math.Abs(prob-0.5) > 0.1 {
 		t.Fatalf("got prob %v, expected 0.5 +-0.1", prob)
@@ -190,7 +193,7 @@ func TestFilter(t *testing.T) {
 
 	_, err = spamf.Seek(0, 0)
 	tcheck(t, err, "seek spam message")
-	prob, _, _, _, err = f.ClassifyMessageReader(spamf, spamsize)
+	prob, _, _, _, err = f.ClassifyMessageReader(ctxbg, spamf, spamsize)
 	tcheck(t, err, "classify spam")
 	if math.Abs(prob-0.5) > 0.1 {
 		t.Fatalf("got prob %v, expected 0.5 +-0.1", prob)

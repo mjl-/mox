@@ -67,13 +67,13 @@ type DomainFeedback struct {
 	dmarcrpt.Feedback
 }
 
-func database() (rdb *bstore.DB, rerr error) {
+func database(ctx context.Context) (rdb *bstore.DB, rerr error) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	if dmarcDB == nil {
 		p := mox.DataDirPath("dmarcrpt.db")
 		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DomainFeedback{})
+		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DomainFeedback{})
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +84,7 @@ func database() (rdb *bstore.DB, rerr error) {
 
 // Init opens the database.
 func Init() error {
-	_, err := database()
+	_, err := database(mox.Shutdown)
 	return err
 }
 
@@ -93,7 +93,7 @@ func Init() error {
 //
 // fromDomain is the domain in the report message From header.
 func AddReport(ctx context.Context, f *dmarcrpt.Feedback, fromDomain dns.Domain) error {
-	db, err := database()
+	db, err := database(ctx)
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func AddReport(ctx context.Context, f *dmarcrpt.Feedback, fromDomain dns.Domain)
 	}
 
 	df := DomainFeedback{0, d.Name(), fromDomain.Name(), *f}
-	if err := db.Insert(&df); err != nil {
+	if err := db.Insert(ctx, &df); err != nil {
 		return err
 	}
 
@@ -143,30 +143,30 @@ func AddReport(ctx context.Context, f *dmarcrpt.Feedback, fromDomain dns.Domain)
 
 // Records returns all reports in the database.
 func Records(ctx context.Context) ([]DomainFeedback, error) {
-	db, err := database()
+	db, err := database(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return bstore.QueryDB[DomainFeedback](db).List()
+	return bstore.QueryDB[DomainFeedback](ctx, db).List()
 }
 
 // RecordID returns the report for the ID.
 func RecordID(ctx context.Context, id int64) (DomainFeedback, error) {
-	db, err := database()
+	db, err := database(ctx)
 	if err != nil {
 		return DomainFeedback{}, err
 	}
 
 	e := DomainFeedback{ID: id}
-	err = db.Get(&e)
+	err = db.Get(ctx, &e)
 	return e, err
 }
 
 // RecordsPeriodDomain returns the reports overlapping start and end, for the given
 // domain. If domain is empty, all records match for domain.
 func RecordsPeriodDomain(ctx context.Context, start, end time.Time, domain string) ([]DomainFeedback, error) {
-	db, err := database()
+	db, err := database(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func RecordsPeriodDomain(ctx context.Context, start, end time.Time, domain strin
 	s := start.Unix()
 	e := end.Unix()
 
-	q := bstore.QueryDB[DomainFeedback](db)
+	q := bstore.QueryDB[DomainFeedback](ctx, db)
 	if domain != "" {
 		q.FilterNonzero(DomainFeedback{Domain: domain})
 	}

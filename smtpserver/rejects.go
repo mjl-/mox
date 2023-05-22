@@ -2,6 +2,7 @@ package smtpserver
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -40,7 +41,7 @@ func rejectPresent(log *mlog.Log, acc *store.Account, rejectsMailbox string, m *
 	var exists bool
 	var err error
 	acc.WithRLock(func() {
-		err = acc.DB.Read(func(tx *bstore.Tx) error {
+		err = acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 			mbq := bstore.QueryTx[store.Mailbox](tx)
 			mbq.FilterNonzero(store.Mailbox{Name: rejectsMailbox})
 			mb, err := mbq.Get()

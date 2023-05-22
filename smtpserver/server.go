@@ -1028,7 +1028,7 @@ func (c *conn) cmdAuth(p *parser) {
 		}()
 		var ipadhash, opadhash hash.Hash
 		acc.WithRLock(func() {
-			err := acc.DB.Read(func(tx *bstore.Tx) error {
+			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
 				if err == bstore.ErrAbsent {
 					xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
@@ -1101,7 +1101,7 @@ func (c *conn) cmdAuth(p *parser) {
 		}
 		var xscram store.SCRAM
 		acc.WithRLock(func() {
-			err := acc.DB.Read(func(tx *bstore.Tx) error {
+			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
 				if authVariant == "scram-sha-1" {
 					xscram = password.SCRAMSHA1
@@ -1672,7 +1672,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// Limit damage to the internet and our reputation in case of account compromise by
 	// limiting the max number of messages sent in a 24 hour window, both total number
 	// of messages and number of first-time recipients.
-	err = c.account.DB.Read(func(tx *bstore.Tx) error {
+	err = c.account.DB.Read(ctx, func(tx *bstore.Tx) error {
 		conf, _ := c.account.Conf()
 		msgmax := conf.MaxOutgoingMessagesPerDay
 		if msgmax == 0 {
@@ -1828,7 +1828,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 				metricSubmission.WithLabelValues("ok").Inc()
 				c.log.Info("submitted message delivered", mlog.Field("mailfrom", *c.mailFrom), mlog.Field("rcptto", rcptAcc.rcptTo), mlog.Field("smtputf8", c.smtputf8), mlog.Field("msgsize", msgSize))
 
-				err := c.account.DB.Insert(&store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)})
+				err := c.account.DB.Insert(ctx, &store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)})
 				xcheckf(err, "adding outgoing message")
 			}
 		})
@@ -1852,7 +1852,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 			}
 
 			msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-			if err := queue.Add(c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, xmsgPrefix, dataFile, nil, i == len(c.recipients)-1); err != nil {
+			if err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, xmsgPrefix, dataFile, nil, i == len(c.recipients)-1); err != nil {
 				// Aborting the transaction is not great. But continuing and generating DSNs will
 				// probably result in errors as well...
 				metricSubmission.WithLabelValues("queueerror").Inc()
@@ -1862,7 +1862,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 			metricSubmission.WithLabelValues("ok").Inc()
 			c.log.Info("message queued for delivery", mlog.Field("mailfrom", *c.mailFrom), mlog.Field("rcptto", rcptAcc.rcptTo), mlog.Field("smtputf8", c.smtputf8), mlog.Field("msgsize", msgSize))
 
-			err := c.account.DB.Insert(&store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)})
+			err := c.account.DB.Insert(ctx, &store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)})
 			xcheckf(err, "adding outgoing message")
 		}
 	}
@@ -2267,7 +2267,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		// account. They may fill up the mailbox, either with messages that have to be
 		// purged, or by filling the disk. We check both cases for IP's and networks.
 		var rateError bool // Whether returned error represents a rate error.
-		err = acc.DB.Read(func(tx *bstore.Tx) (retErr error) {
+		err = acc.DB.Read(ctx, func(tx *bstore.Tx) (retErr error) {
 			now := time.Now()
 			defer func() {
 				log.Debugx("checking message and size delivery rates", retErr, mlog.Field("duration", time.Since(now)))
@@ -2575,7 +2575,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 		if Localserve {
 			c.log.Error("not queueing dsn for incoming delivery due to localserve")
-		} else if err := queueDSN(c, *c.mailFrom, dsnMsg); err != nil {
+		} else if err := queueDSN(context.TODO(), c, *c.mailFrom, dsnMsg); err != nil {
 			metricServerErrors.WithLabelValues("queuedsn").Inc()
 			c.log.Errorx("queuing DSN for incoming delivery, no DSN sent", err)
 		}
