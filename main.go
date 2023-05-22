@@ -1935,10 +1935,10 @@ func cmdMessageParse(c *cmd) {
 
 func cmdBumpUIDValidity(c *cmd) {
 	c.unlisted = true
-	c.params = "account mailbox"
+	c.params = "account [mailbox]"
 	c.help = "Change the IMAP UID validity of the mailbox, causing IMAP clients to refetch messages."
 	args := c.Parse()
-	if len(args) != 2 {
+	if len(args) != 1 && len(args) != 2 {
 		c.Usage()
 	}
 
@@ -1953,20 +1953,29 @@ func cmdBumpUIDValidity(c *cmd) {
 
 	var uidvalidity uint32
 	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
-		mb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Name", args[1]).Get()
+		q := bstore.QueryTx[store.Mailbox](tx)
+		if len(args) == 2 {
+			q.FilterEqual("Name", args[1])
+		}
+		mbl, err := q.SortAsc("Name").List()
 		if err != nil {
 			return fmt.Errorf("looking up mailbox: %v", err)
 		}
-		mb.UIDValidity++
-		uidvalidity = mb.UIDValidity
-		err = tx.Update(&mb)
-		if err != nil {
-			return fmt.Errorf("updating uid validity for mailbox: %v", err)
+		if len(args) == 2 && len(mbl) != 1 {
+			return fmt.Errorf("looking up mailbox %q, found %d mailboxes", args[1], len(mbl))
+		}
+		for _, mb := range mbl {
+			mb.UIDValidity++
+			uidvalidity = mb.UIDValidity
+			err = tx.Update(&mb)
+			if err != nil {
+				return fmt.Errorf("updating uid validity for mailbox: %v", err)
+			}
+			fmt.Printf("uid validity for %q updated to %d\n", mb.Name, uidvalidity)
 		}
 		return nil
 	})
-	xcheckf(err, "updating uidvalidity for mailbox: %v", err)
-	fmt.Printf("uid validity for %q is now %d\n", args[1], uidvalidity)
+	xcheckf(err, "updating database")
 }
 
 var submitconf struct {
