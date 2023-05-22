@@ -84,7 +84,7 @@ func (l *Limiter) checkAdd(add bool, ip net.IP, tm time.Time, n int64) bool {
 	return true
 }
 
-// Reset sets the counter to 0 for key and ip, and substracts from the ipmasked counts.
+// Reset sets the counter to 0 for key and ip, and subtracts from the ipmasked counts.
 func (l *Limiter) Reset(ip net.IP, tm time.Time) {
 	l.Lock()
 	defer l.Unlock()

@@ -234,7 +234,7 @@ describe-static" and "mox config describe-domains":
 				Path:
 
 			# Admin web interface, for managing domains, accounts, etc. Served at /admin/.
-			# Preferrably only enable on non-public IPs. Hint: use 'ssh -L 8080:localhost:80
+			# Preferably only enable on non-public IPs. Hint: use 'ssh -L 8080:localhost:80
 			# you@yourmachine' and open http://localhost:8080/admin/, or set up a tunnel (e.g.
 			# WireGuard) and add its IP to the mox 'internal' listener. (optional)
 			AdminHTTP:
@@ -247,7 +247,7 @@ describe-static" and "mox config describe-domains":
 				# resources. Default is /admin/. (optional)
 				Path:
 
-			# Admin web interface listener for HTTPS. Requires a TLS config. Preferrably only
+			# Admin web interface listener for HTTPS. Requires a TLS config. Preferably only
 			# enable on non-public IPs. (optional)
 			AdminHTTPS:
 				Enabled: false
