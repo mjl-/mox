@@ -540,10 +540,9 @@ func deliver(resolver dns.Resolver, m Msg) {
 			// No need to refuse to deliver if we have some mtasts error.
 			qlog.Infox("mtasts failed, continuing with strict tls requirement", err, mlog.Field("domain", effectiveDomain))
 			tlsModeDefault = smtpclient.TLSStrict
-			return
 		}
 		// note: policy can be nil, if a domain does not implement MTA-STS or its the first
-		// time we fetch the policy and it we encountered an error.
+		// time we fetch the policy and if we encountered an error.
 	}
 
 	// We try delivery to each record until we have success or a permanent failure. So
