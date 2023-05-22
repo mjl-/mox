@@ -102,6 +102,9 @@ func TestQueue(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("dropped %d, expected 1", n)
 	}
+	if _, err := os.Stat(msgs[1].MessagePath()); err == nil || !os.IsNotExist(err) {
+		t.Fatalf("dropped message not removed from file system")
+	}
 
 	next := nextWork(ctxbg, nil)
 	if next > 0 {

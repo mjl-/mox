@@ -206,7 +206,7 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 		return err
 	}
 
-	dst := mox.DataDirPath(filepath.Join("queue", store.MessagePath(qm.ID)))
+	dst := qm.MessagePath()
 	defer func() {
 		if dst != "" {
 			err := os.Remove(dst)
@@ -324,9 +324,17 @@ func Drop(ctx context.Context, ID int64, toDomain string, recipient string) (int
 			return qm.Recipient().XString(true) == recipient
 		})
 	}
+	var msgs []Msg
+	q.Gather(&msgs)
 	n, err := q.Delete()
 	if err != nil {
 		return 0, fmt.Errorf("selecting and deleting messages from queue: %v", err)
+	}
+	for _, m := range msgs {
+		p := m.MessagePath()
+		if err := os.Remove(p); err != nil {
+			xlog.WithContext(ctx).Errorx("removing queue message from file system", err, mlog.Field("queuemsgid", m.ID), mlog.Field("path", p))
+		}
 	}
 	return n, nil
 }
