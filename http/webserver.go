@@ -6,15 +6,19 @@ import (
 	"fmt"
 	htmltemplate "html/template"
 	"io"
+	"io/fs"
 	golog "log"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/net/websocket"
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
@@ -187,7 +191,8 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 		} else if os.IsPermission(err) {
 			// If we tried opening a directory, we may not have permission to read it, but
 			// still access files inside it (execute bit), such as index.html. So try to serve it.
-			index, err := os.Open(filepath.Join(fspath, "index.html"))
+			var index *os.File
+			index, err = os.Open(filepath.Join(fspath, "index.html"))
 			if err == nil {
 				defer index.Close()
 				var ifi os.FileInfo
@@ -239,15 +244,14 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 			}
 			http.Error(w, "403 - permission denied", http.StatusForbidden)
 			return true
-		} else if err == nil {
-			defer index.Close()
-			var ifi os.FileInfo
-			ifi, err = index.Stat()
-			if err == nil {
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				serveFile("index.html", ifi.ModTime(), index)
-				return true
-			}
+		}
+		defer index.Close()
+		var ifi os.FileInfo
+		ifi, err = index.Stat()
+		if err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			serveFile("index.html", ifi.ModTime(), index)
+			return true
 		}
 		if !os.IsNotExist(err) {
 			log().Errorx("stat for static file serving", err, mlog.Field("url", r.URL), mlog.Field("fspath", fspath))
@@ -266,8 +270,9 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 		if r.URL.Path != "/" {
 			files = append(files, File{"..", 0, "", false, ""})
 		}
+		var l []fs.FileInfo
 		for {
-			l, err := f.Readdir(1000)
+			l, err = f.Readdir(1000)
 			for _, e := range l {
 				mb := float64(e.Size()) / (1024 * 1024)
 				var size string
@@ -409,7 +414,40 @@ func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request,
 		proto = "https"
 	}
 	r.Header["X-Forwarded-Proto"] = []string{proto}
-	// todo: add Forwarded header? is anyone using it?
+	if isWebSocketRequest(r) {
+		// Create a new websocket server
+		websocketHandler := websocket.Handler(func(ws *websocket.Conn) {
+			remoteURL := *h.TargetURL
+			remoteURL.Scheme = "ws"
+
+			proxyURL := url.URL{Scheme: remoteURL.Scheme, Host: remoteURL.Host, Path: r.URL.Path}
+			targetConn, err := websocket.Dial(proxyURL.String(), "", "http://localhost/")
+			if err != nil {
+				log().Errorx("websocket connect to backend failed", err, mlog.Field("url", proxyURL.String()))
+				return
+			}
+			defer targetConn.Close()
+
+			// Start copying data between client and target server
+			errc := make(chan error, 2)
+			go func() {
+				_, err = io.Copy(targetConn, ws)
+				errc <- err
+			}()
+			go func() {
+				_, err = io.Copy(ws, targetConn)
+				errc <- err
+			}()
+
+			// Wait for the first error then close the other connection
+			err = <-errc
+			if err != nil {
+				log().Errorx("websocket proxying failed", err, mlog.Field("url", proxyURL.String()))
+			}
+		})
+
+		upgradeToWebsocket(&websocketHandler, w, r)
+	}
 
 	// ReverseProxy will append any remaining path to the configured target URL.
 	proxy := httputil.NewSingleHostReverseProxy(h.TargetURL)
@@ -433,4 +471,12 @@ func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request,
 	}
 	proxy.ServeHTTP(w, r)
 	return true
+}
+
+func upgradeToWebsocket(h *websocket.Handler, w http.ResponseWriter, r *http.Request) {
+	h.ServeHTTP(w, r)
+}
+
+func isWebSocketRequest(r *http.Request) bool {
+	return r.Header.Get("Connection") == "Upgrade" && r.Header.Get("Upgrade") == "websocket"
 }
