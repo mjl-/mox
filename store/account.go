@@ -277,7 +277,6 @@ type Message struct {
 	MailFromValidation Validation // Can have SPF-specific validations like ValidationSoftfail.
 	MsgFromValidation  Validation // Desirable validations: Strict, DMARC, Relaxed. Will not be just Pass.
 
-	// todo: needs an "in" index, which bstore does not yet support. for performance while checking reputation.
 	DKIMDomains []string `bstore:"index DKIMDomains+Received"` // Domains with verified DKIM signatures. Unicode string.
 
 	// Value of Message-Id header. Only set for messages that were
