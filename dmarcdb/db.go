@@ -28,7 +28,8 @@ import (
 var xlog = mlog.New("dmarcdb")
 
 var (
-	dmarcDB *bstore.DB
+	DBTypes = []any{DomainFeedback{}} // Types stored in DB.
+	DB      *bstore.DB                // Exported for backups.
 	mutex   sync.Mutex
 )
 
@@ -70,16 +71,16 @@ type DomainFeedback struct {
 func database(ctx context.Context) (rdb *bstore.DB, rerr error) {
 	mutex.Lock()
 	defer mutex.Unlock()
-	if dmarcDB == nil {
+	if DB == nil {
 		p := mox.DataDirPath("dmarcrpt.db")
 		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DomainFeedback{})
+		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
 		if err != nil {
 			return nil, err
 		}
-		dmarcDB = db
+		DB = db
 	}
-	return dmarcDB, nil
+	return DB, nil
 }
 
 // Init opens the database.

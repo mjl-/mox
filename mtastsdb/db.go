@@ -60,22 +60,23 @@ var (
 	ErrBackoff = errors.New("mtastsdb: policy fetch failed recently")
 )
 
-var mtastsDB *bstore.DB
+var DBTypes = []any{PolicyRecord{}} // Types stored in DB.
+var DB *bstore.DB                   // Exported for backups.
 var mutex sync.Mutex
 
 func database(ctx context.Context) (rdb *bstore.DB, rerr error) {
 	mutex.Lock()
 	defer mutex.Unlock()
-	if mtastsDB == nil {
+	if DB == nil {
 		p := mox.DataDirPath("mtasts.db")
 		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, PolicyRecord{})
+		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
 		if err != nil {
 			return nil, err
 		}
-		mtastsDB = db
+		DB = db
 	}
-	return mtastsDB, nil
+	return DB, nil
 }
 
 // Init opens the database and starts a goroutine that refreshes policies in
@@ -98,10 +99,10 @@ func Init(refresher bool) error {
 func Close() {
 	mutex.Lock()
 	defer mutex.Unlock()
-	if mtastsDB != nil {
-		err := mtastsDB.Close()
+	if DB != nil {
+		err := DB.Close()
 		xlog.Check(err, "closing database")
-		mtastsDB = nil
+		DB = nil
 	}
 }
 

@@ -102,7 +102,7 @@ func TestReputation(t *testing.T) {
 		p := "../testdata/smtpserver-reputation.db"
 		defer os.Remove(p)
 
-		db, err := bstore.Open(ctxbg, p, &bstore.Options{Timeout: 5 * time.Second}, store.Message{}, store.Recipient{}, store.Mailbox{})
+		db, err := bstore.Open(ctxbg, p, &bstore.Options{Timeout: 5 * time.Second}, store.DBTypes...)
 		tcheck(t, err, "open db")
 		defer db.Close()
 

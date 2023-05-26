@@ -377,6 +377,9 @@ type Outgoing struct {
 	Submitted time.Time `bstore:"nonzero,default now"`
 }
 
+// Types stored in DB.
+var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}}
+
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.
 type Account struct {
 	Name   string     // Name, according to configuration.
@@ -455,7 +458,7 @@ func openAccount(name string) (a *Account, rerr error) {
 		os.MkdirAll(dir, 0770)
 	}
 
-	db, err := bstore.Open(context.TODO(), dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{})
+	db, err := bstore.Open(context.TODO(), dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
 	if err != nil {
 		return nil, err
 	}

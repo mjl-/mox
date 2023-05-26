@@ -138,7 +138,7 @@ func TestQueue(t *testing.T) {
 	case <-dialed:
 		i := 0
 		for {
-			m, err := bstore.QueryDB[Msg](ctxbg, queueDB).Get()
+			m, err := bstore.QueryDB[Msg](ctxbg, DB).Get()
 			tcheck(t, err, "get")
 			if m.Attempts == 1 {
 				break
@@ -288,7 +288,7 @@ func TestQueue(t *testing.T) {
 	for i := 1; i < 8; i++ {
 		go func() { <-deliveryResult }() // Deliver sends here.
 		deliver(resolver, msg)
-		err = queueDB.Get(ctxbg, &msg)
+		err = DB.Get(ctxbg, &msg)
 		tcheck(t, err, "get msg")
 		if msg.Attempts != i {
 			t.Fatalf("got attempt %d, expected %d", msg.Attempts, i)
@@ -311,7 +311,7 @@ func TestQueue(t *testing.T) {
 	// Trigger final failure.
 	go func() { <-deliveryResult }() // Deliver sends here.
 	deliver(resolver, msg)
-	err = queueDB.Get(ctxbg, &msg)
+	err = DB.Get(ctxbg, &msg)
 	if err != bstore.ErrAbsent {
 		t.Fatalf("attempt to fetch delivered and removed message from queue, got err %v, expected ErrAbsent", err)
 	}

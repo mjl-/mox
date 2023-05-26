@@ -167,6 +167,7 @@ testing purposes.
 - Write release notes, use instructions from updating.txt.
 - Build and run tests with previous major Go release.
 - Run all (integration) tests, including with race detector.
+- Test upgrades.
 - Run fuzzing tests for a while.
 - Deploy to test environment. Test the update instructions.
 - Generate a config with quickstart, check if it results in a working setup.

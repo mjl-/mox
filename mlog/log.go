@@ -96,8 +96,8 @@ func SetConfig(c map[string]Level) {
 
 // Pair is a field/value pair, for use in logged lines.
 type Pair struct {
-	key   string
-	value any
+	Key   string
+	Value any
 }
 
 // Field is a shorthand for making a Pair.
@@ -339,7 +339,7 @@ func (l *Log) plog(level Level, err error, text string, fields ...Pair) {
 		}
 		for i := 0; i < len(fields); i++ {
 			kv := fields[i]
-			fmt.Fprintf(b, " %s=%s", kv.key, logfmtValue(stringValue(kv.key == "cid", false, kv.value)))
+			fmt.Fprintf(b, " %s=%s", kv.Key, logfmtValue(stringValue(kv.Key == "cid", false, kv.Value)))
 		}
 		b.WriteString("\n")
 	} else {
@@ -354,7 +354,7 @@ func (l *Log) plog(level Level, err error, text string, fields ...Pair) {
 					fmt.Fprint(b, "; ")
 				}
 				kv := fields[i]
-				fmt.Fprintf(b, "%s: %s", kv.key, logfmtValue(stringValue(kv.key == "cid", false, kv.value)))
+				fmt.Fprintf(b, "%s: %s", kv.Key, logfmtValue(stringValue(kv.Key == "cid", false, kv.Value)))
 			}
 			fmt.Fprint(b, ")")
 		}
@@ -373,10 +373,10 @@ func (l *Log) match(level Level) (bool, Level) {
 	seen := false
 	var high Level
 	for _, kv := range l.fields {
-		if kv.key != "pkg" {
+		if kv.Key != "pkg" {
 			continue
 		}
-		pkg, ok := kv.value.(string)
+		pkg, ok := kv.Value.(string)
 		if !ok {
 			continue
 		}

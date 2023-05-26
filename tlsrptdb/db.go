@@ -23,8 +23,9 @@ import (
 var (
 	xlog = mlog.New("tlsrptdb")
 
-	tlsrptDB *bstore.DB
-	mutex    sync.Mutex
+	DBTypes = []any{TLSReportRecord{}}
+	DB      *bstore.DB
+	mutex   sync.Mutex
 
 	metricSession = promauto.NewCounterVec(
 		prometheus.CounterOpts{
@@ -64,16 +65,16 @@ type TLSReportRecord struct {
 func database(ctx context.Context) (rdb *bstore.DB, rerr error) {
 	mutex.Lock()
 	defer mutex.Unlock()
-	if tlsrptDB == nil {
+	if DB == nil {
 		p := mox.DataDirPath("tlsrpt.db")
 		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, TLSReportRecord{})
+		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
 		if err != nil {
 			return nil, err
 		}
-		tlsrptDB = db
+		DB = db
 	}
-	return tlsrptDB, nil
+	return DB, nil
 }
 
 // Init opens and possibly initializes the database.
@@ -86,10 +87,10 @@ func Init() error {
 func Close() {
 	mutex.Lock()
 	defer mutex.Unlock()
-	if tlsrptDB != nil {
-		err := tlsrptDB.Close()
+	if DB != nil {
+		err := DB.Close()
 		xlog.Check(err, "closing database")
-		tlsrptDB = nil
+		DB = nil
 	}
 }
 

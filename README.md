@@ -282,3 +282,34 @@ Mox also has an "admin" web interface where the mox instance administrator can
 make changes, e.g. add/remove/modify domains/accounts/addresses.
 
 Mox does not have a webmail yet, so there are no screenshots of actual email.
+
+## How do I upgrade my mox installation?
+
+We try to make upgrades effortless and you can typically just put a new binary
+in place and restart. If manual actions are required, the release notes mention
+them. Check the release notes of all version between your current installation
+and the release you're upgrading to.
+
+Before upgrading, make a backup of the data directory with `mox backup
+<destdir>`. This writes consistent snapshots of the database files, and
+duplicates message files from the queue and accounts.  Using the new mox
+binary, run `mox verifydata <backupdir>` (do NOT use the "live" data
+directory!) for a dry run. If this fails, an upgrade will probably fail too.
+Important: verifydata with the new mox binary can modify the database files
+(due to automatic schema upgrades). So make a fresh backup again before the
+actual upgrade. See the help output of the "backup" and "verifydata" commands
+for more details.
+
+During backup, message files are hardlinked if possible. Using a destination
+directory like `data/tmp/backup` increases the odds hardlinking succeeds: the
+default systemd service file specifically mounts the data directory, causing
+attempts to outside it to fail with an error about cross-device linking.
+
+If an upgrade fails and you have to restore (parts) of the data directory, you
+should run `mox verifydata <datadir>` (with the original binary) on the
+restored directory before starting mox again. If problematic files are found,
+for example queue or account message files that are not in the database, run
+`mox verifydata -fix <datadir>` to move away those files. After a restore, you may
+also want to run `mox bumpuidvalidity <account>` for each account for which
+messages in a mailbox changed, to force IMAP clients to synchronize mailbox
+state.

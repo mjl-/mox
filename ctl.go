@@ -30,6 +30,7 @@ import (
 // ctl represents a connection to the ctl unix domain socket of a running mox instance.
 // ctl provides functions to read/write commands/responses/data streams.
 type ctl struct {
+	cmd  string // Set for server-side of commands.
 	conn net.Conn
 	r    *bufio.Reader // Set for first reader.
 	x    any           // If set, errors are handled by calling panic(x) instead of log.Fatal.
@@ -57,7 +58,7 @@ func (c *ctl) xerror(msg string) {
 	if c.x == nil {
 		log.Fatalln(msg)
 	}
-	c.log.Debugx("ctl error", fmt.Errorf("%s", msg))
+	c.log.Debugx("ctl error", fmt.Errorf("%s", msg), mlog.Field("cmd", c.cmd))
 	c.xwrite(msg)
 	panic(c.x)
 }
@@ -72,7 +73,7 @@ func (c *ctl) xcheck(err error, msg string) {
 	if c.x == nil {
 		log.Fatalf("%s: %s", msg, err)
 	}
-	c.log.Debugx(msg, err)
+	c.log.Debugx(msg, err, mlog.Field("cmd", c.cmd))
 	fmt.Fprintf(c.conn, "%s: %s\n", msg, err)
 	panic(c.x)
 }
@@ -124,7 +125,7 @@ func (c *ctl) xstreamfrom(src io.Reader) {
 // When done writing, caller must call xclose to signal the end of the stream.
 // Behaviour of "x" is copied from ctl.
 func (c *ctl) writer() *ctlwriter {
-	return &ctlwriter{conn: c.conn, x: c.x, log: c.log}
+	return &ctlwriter{cmd: c.cmd, conn: c.conn, x: c.x, log: c.log}
 }
 
 // Reader returns an io.Reader for a data stream from ctl.
@@ -133,7 +134,7 @@ func (c *ctl) reader() *ctlreader {
 	if c.r == nil {
 		c.r = bufio.NewReader(c.conn)
 	}
-	return &ctlreader{conn: c.conn, r: c.r, x: c.x, log: c.log}
+	return &ctlreader{cmd: c.cmd, conn: c.conn, r: c.r, x: c.x, log: c.log}
 }
 
 /*
@@ -154,6 +155,7 @@ Followed by a end of stream indicated by zero data bytes message:
 */
 
 type ctlwriter struct {
+	cmd  string   // Set for server-side of commands.
 	conn net.Conn // Ctl socket from which messages are read.
 	buf  []byte   // Scratch buffer, for reading response.
 	x    any      // If not nil, errors in Write and xcheckf are handled with panic(x), otherwise with a log.Fatal.
@@ -181,7 +183,7 @@ func (s *ctlwriter) xerror(msg string) {
 	if s.x == nil {
 		log.Fatalln(msg)
 	} else {
-		s.log.Debugx("error", fmt.Errorf("%s", msg))
+		s.log.Debugx("error", fmt.Errorf("%s", msg), mlog.Field("cmd", s.cmd))
 		panic(s.x)
 	}
 }
@@ -193,7 +195,7 @@ func (s *ctlwriter) xcheck(err error, msg string) {
 	if s.x == nil {
 		log.Fatalf("%s: %s", msg, err)
 	} else {
-		s.log.Debugx(msg, err)
+		s.log.Debugx(msg, err, mlog.Field("cmd", s.cmd))
 		panic(s.x)
 	}
 }
@@ -204,6 +206,7 @@ func (s *ctlwriter) xclose() {
 }
 
 type ctlreader struct {
+	cmd      string        // Set for server-side of command.
 	conn     net.Conn      // For writing "ok" after reading.
 	r        *bufio.Reader // Buffered ctl socket.
 	err      error         // If set, returned for each read. can also be io.EOF.
@@ -246,7 +249,7 @@ func (s *ctlreader) xerror(msg string) {
 	if s.x == nil {
 		log.Fatalln(msg)
 	} else {
-		s.log.Debugx("error", fmt.Errorf("%s", msg))
+		s.log.Debugx("error", fmt.Errorf("%s", msg), mlog.Field("cmd", s.cmd))
 		panic(s.x)
 	}
 }
@@ -258,7 +261,7 @@ func (s *ctlreader) xcheck(err error, msg string) {
 	if s.x == nil {
 		log.Fatalf("%s: %s", msg, err)
 	} else {
-		s.log.Debugx(msg, err)
+		s.log.Debugx(msg, err, mlog.Field("cmd", s.cmd))
 		panic(s.x)
 	}
 }
@@ -267,33 +270,30 @@ func (s *ctlreader) xcheck(err error, msg string) {
 func servectl(ctx context.Context, log *mlog.Log, conn net.Conn, shutdown func()) {
 	log.Debug("ctl connection")
 
-	var cmd string
-
 	var stop = struct{}{} // Sentinel value for panic and recover.
+	ctl := &ctl{conn: conn, x: stop, log: log}
 	defer func() {
 		x := recover()
 		if x == nil || x == stop {
 			return
 		}
-		log.Error("servectl panic", mlog.Field("err", x), mlog.Field("cmd", cmd))
+		log.Error("servectl panic", mlog.Field("err", x), mlog.Field("cmd", ctl.cmd))
 		debug.PrintStack()
 		metrics.PanicInc("ctl")
 	}()
 
 	defer conn.Close()
 
-	ctl := &ctl{conn: conn, x: stop, log: log}
 	ctl.xwrite("ctlv0")
-
 	for {
-		servectlcmd(ctx, log, ctl, &cmd, shutdown)
+		servectlcmd(ctx, log, ctl, shutdown)
 	}
 }
 
-func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shutdown func()) {
+func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, shutdown func()) {
 	cmd := ctl.xread()
+	ctl.cmd = cmd
 	log.Info("ctl command", mlog.Field("cmd", cmd))
-	*xcmd = cmd
 	switch cmd {
 	case "stop":
 		shutdown()
@@ -640,6 +640,9 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, xcmd *string, shu
 		})
 
 		ctl.xwriteok()
+
+	case "backup":
+		backupctl(ctx, ctl)
 
 	default:
 		log.Info("unrecognized command", mlog.Field("cmd", cmd))

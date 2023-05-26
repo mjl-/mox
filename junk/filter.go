@@ -56,6 +56,8 @@ type Params struct {
 	RareWords   int     `sconf:"optional" sconf-doc:"Occurrences in word database until a word is considered rare and its influence in calculating probability reduced. E.g. 1 or 2."`
 }
 
+var DBTypes = []any{wordscore{}} // Stored in DB.
+
 type Filter struct {
 	Params
 
@@ -228,7 +230,7 @@ func newDB(ctx context.Context, log *mlog.Log, path string) (db *bstore.DB, rerr
 		}
 	}()
 
-	db, err := bstore.Open(ctx, path, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, wordscore{})
+	db, err := bstore.Open(ctx, path, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
 	if err != nil {
 		return nil, fmt.Errorf("open new database: %w", err)
 	}
@@ -239,7 +241,7 @@ func openDB(ctx context.Context, path string) (*bstore.DB, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, fmt.Errorf("stat db file: %w", err)
 	}
-	return bstore.Open(ctx, path, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, wordscore{})
+	return bstore.Open(ctx, path, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
 }
 
 // Save stores modifications, e.g. from training, to the database and bloom
@@ -743,4 +745,9 @@ func (f *Filter) fileSize(p string) int {
 		return 0
 	}
 	return int(fi.Size())
+}
+
+// DB returns the database, for backups.
+func (f *Filter) DB() *bstore.DB {
+	return f.db
 }

@@ -82,7 +82,7 @@ func TestDeliver(t *testing.T) {
 	latestMsgID := func(username string) int64 {
 		// We open the account index database created by mox for the test user. And we keep looking for the email we sent.
 		dbpath := fmt.Sprintf("testdata/integration/data/accounts/%s/index.db", username)
-		db, err := bstore.Open(ctxbg, dbpath, &bstore.Options{Timeout: 3 * time.Second}, store.Message{}, store.Recipient{}, store.Mailbox{}, store.Password{})
+		db, err := bstore.Open(ctxbg, dbpath, &bstore.Options{Timeout: 3 * time.Second}, store.DBTypes...)
 		if err != nil && errors.Is(err, bolt.ErrTimeout) {
 			log.Printf("db open timeout (normal delay for new sender with account and db file kept open)")
 			return 0

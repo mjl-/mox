@@ -18,6 +18,9 @@ test-race:
 	CGO_ENABLED=1 go test -race -shuffle=on -covermode atomic -coverprofile cover.out ./...
 	go tool cover -html=cover.out -o cover.html
 
+test-upgrade:
+	./test-upgrade.sh
+
 check:
 	staticcheck ./...
 	staticcheck -tags integration

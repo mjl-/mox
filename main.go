@@ -88,6 +88,8 @@ var commands = []struct {
 	{"export mbox", cmdExportMbox},
 	{"localserve", cmdLocalserve},
 	{"help", cmdHelp},
+	{"backup", cmdBackup},
+	{"verifydata", cmdVerifydata},
 
 	{"config test", cmdConfigTest},
 	{"config dnscheck", cmdConfigDNSCheck},
@@ -146,6 +148,7 @@ var commands = []struct {
 	{"updates pubkey", cmdUpdatesPubkey},
 	{"updates serve", cmdUpdatesServe},
 	{"updates verify", cmdUpdatesVerify},
+	{"gentestdata", cmdGentestdata},
 }
 
 var cmds []cmd
@@ -959,6 +962,67 @@ new mail deliveries.
 		log.Fatalf("expected eof after graceful shutdown, got error %v", err)
 	}
 	fmt.Println("mox stopped")
+}
+
+func cmdBackup(c *cmd) {
+	c.params = "dest-dir"
+	c.help = `Creates a backup of the data directory.
+
+Backup creates consistent snapshots of the databases and message files and
+copies other files in the data directory. Empty directories are not copied.
+These files can then be stored elsewhere for long-term storage, or used to fall
+back to should an upgrade fail. Simply copying files in the data directory
+while mox is running can result in unusable database files.
+
+Message files never change (they are read-only, though can be removed) and are
+hardlinked so they don't consume additional space. If hardlinking fails, for
+example when the backup destination directory is on a different file system, a
+regular copy is made. Using a destination directory like "data/tmp/backup"
+increases the odds hardlinking succeeds: the default systemd service file
+specifically mounts the data directory, causing attempts to hardlink outside it
+to fail with an error about cross-device linking.
+
+All files in the data directory that aren't recognized (i.e. other than known
+database files, message files, an acme directory, etc), are stored, but with a
+warning.
+
+A clean successful backup does not print any output by default. Use the
+-verbose flag for details, including timing.
+
+To restore a backup, first shut down mox, move away the old data directory and
+move an earlier backed up directory in its place, run "mox verifydata",
+possibly with the "-fix" option, and restart mox. After the restore, you may
+also want to run "mox bumpuidvalidity" for each account for which messages in a
+mailbox changed, to force IMAP clients to synchronize mailbox state.
+
+Before upgrading, to check if the upgrade will likely succeed, first make a
+backup, then use the new mox binary to run "mox verifydata" on the backup. This
+can change the backup files (e.g. upgrade database files, move away
+unrecognized message files), so you should make a new backup before actually
+upgrading.
+`
+
+	var verbose bool
+	c.flag.BoolVar(&verbose, "verbose", false, "print progress")
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+	mustLoadConfig()
+
+	dstDataDir, err := filepath.Abs(args[0])
+	xcheckf(err, "making path absolute")
+
+	ctl := xctl()
+	ctl.xwrite("backup")
+	ctl.xwrite(dstDataDir)
+	if verbose {
+		ctl.xwrite("verbose")
+	} else {
+		ctl.xwrite("")
+	}
+	ctl.xstreamto(os.Stdout)
+	ctl.xreadok()
 }
 
 func cmdSetadminpassword(c *cmd) {
