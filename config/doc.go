@@ -715,6 +715,11 @@ describe-static" and "mox config describe-domains":
 				# unmodified. New X-Forwarded-{For,Host,Proto} headers are set. Any query string
 				# in the URL is ignored. Requests are made using Go's net/http.DefaultTransport
 				# that takes environment variables HTTP_PROXY and HTTPS_PROXY into account.
+				# Websocket connections are forwarded and data is copied between client and
+				# backend without looking at the framing. The websocket 'version' and
+				# 'key'/'accept' headers are verified during the handshake, but other websocket
+				# headers, including 'origin', 'protocol' and 'extensions' headers, are not
+				# inspected and the backend is responsible for verifying/interpreting them.
 				URL:
 
 				# Headers to add to the response. Useful for adding security- and cache-related

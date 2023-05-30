@@ -297,6 +297,16 @@ and many more, see http://sieve.info/documents
 9157	Revised IANA Considerations for DNSSEC
 9276	Guidance for NSEC3 Parameter Settings
 
+# HTTP
+
+2616	Hypertext Transfer Protocol -- HTTP/1.1
+7230	Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
+9110	HTTP Semantics
+
+# Websockets
+
+6455	The WebSocket Protocol
+
 # More
 
 3339	Date and Time on the Internet: Timestamps
