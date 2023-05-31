@@ -138,6 +138,8 @@ But perhaps in the future...
 - Delivery to (unix) OS system users
 - Mailing list manager
 - Support for pluggable delivery mechanisms
+- iOS Mail push notifications (with XAPPLEPUSHSERVICE undocumened imap
+  extension and hard to get APNS certificate)
 
 
 # FAQ - Frequently Asked Questions
