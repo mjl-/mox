@@ -226,6 +226,7 @@ func TestWebsocket(t *testing.T) {
 		t.Helper()
 
 		req, err := http.NewRequest(method, httpurl, nil)
+		tcheck(t, err, "http newrequest")
 		for k, v := range reqhdrs {
 			req.Header.Add(k, v)
 		}
