@@ -730,6 +730,9 @@ func (c *conn) command() {
 		if x == nil || x == cleanClose {
 			c.log.Debug("imap command done", logFields...)
 			result = "ok"
+			if x == cleanClose {
+				panic(x)
+			}
 			return
 		}
 		err, ok := x.(error)
