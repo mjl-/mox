@@ -115,7 +115,7 @@ during those commands instead of during "data".
 	// Tell queue it shouldn't be queuing/delivering.
 	queue.Localserve = true
 
-	mox.ListenImmediate = true
+	mox.FilesImmediate = true
 	const mtastsdbRefresher = false
 	const skipForkExec = true
 	if err := start(mtastsdbRefresher, skipForkExec); err != nil {

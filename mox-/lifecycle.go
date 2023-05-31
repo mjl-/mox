@@ -19,14 +19,17 @@ import (
 	"github.com/mjl-/mox/mlog"
 )
 
-// We start up as root, bind to sockets, and fork and exec as unprivileged user.
-// During startup as root, we gather the fd's for the listen addresses in listens,
-// and pass their addresses in an environment variable to the new process.
-var listens = map[string]*os.File{}
+// We start up as root, bind to sockets, open private key/cert files and fork and
+// exec as unprivileged user. During startup as root, we gather the fd's for the
+// listen addresses in passedListeners and files in passedFiles, and pass their
+// addresses and paths in environment variables to the new process.
+var passedListeners = map[string]*os.File{} // Listen address to file descriptor.
+var passedFiles = map[string][]*os.File{}   // Path to file descriptors.
 
-// RestorePassedSockets reads addresses from $MOX_SOCKETS and prepares an os.File
-// for each file descriptor, which are used by later calls of Listen.
-func RestorePassedSockets() {
+// RestorePassedFiles reads addresses from $MOX_SOCKETS and paths from $MOX_FILES
+// and prepares an os.File for each file descriptor, which are used by later calls
+// of Listen or opening files.
+func RestorePassedFiles() {
 	s := os.Getenv("MOX_SOCKETS")
 	if s == "" {
 		var linuxhint string
@@ -35,11 +38,21 @@ func RestorePassedSockets() {
 		}
 		xlog.Fatal("mox must be started as root, and will drop privileges after binding required sockets (missing environment variable MOX_SOCKETS)." + linuxhint)
 	}
-	addrs := strings.Split(s, ",")
-	for i, addr := range addrs {
-		// 0,1,2 are stdin,stdout,stderr, 3 is the network/address fd.
-		f := os.NewFile(3+uintptr(i), addr)
-		listens[addr] = f
+
+	// 0,1,2 are stdin,stdout,stderr, 3 is the first passed fd (first listeners, then files).
+	var o uintptr = 3
+	for _, addr := range strings.Split(s, ",") {
+		passedListeners[addr] = os.NewFile(o, addr)
+		o++
+	}
+
+	files := os.Getenv("MOX_FILES")
+	if files == "" {
+		return
+	}
+	for _, path := range strings.Split(files, ",") {
+		passedFiles[path] = append(passedFiles[path], os.NewFile(o, path))
+		o++
 	}
 }
 
@@ -56,12 +69,19 @@ func ForkExecUnprivileged() {
 
 	files := []*os.File{os.Stdin, os.Stdout, os.Stderr}
 	var addrs []string
-	for addr, f := range listens {
+	for addr, f := range passedListeners {
 		files = append(files, f)
 		addrs = append(addrs, addr)
 	}
+	var paths []string
+	for path, fl := range passedFiles {
+		for _, f := range fl {
+			files = append(files, f)
+			paths = append(paths, path)
+		}
+	}
 	env := os.Environ()
-	env = append(env, "MOX_SOCKETS="+strings.Join(addrs, ","))
+	env = append(env, "MOX_SOCKETS="+strings.Join(addrs, ","), "MOX_FILES="+strings.Join(paths, ","))
 
 	p, err := os.StartProcess(prog, os.Args, &os.ProcAttr{
 		Env:   env,
@@ -76,10 +96,7 @@ func ForkExecUnprivileged() {
 	if err != nil {
 		xlog.Fatalx("fork and exec", err)
 	}
-	for _, f := range listens {
-		err := f.Close()
-		xlog.Check(err, "closing socket after passing to unprivileged child")
-	}
+	CleanupPassedFiles()
 
 	// If we get a interrupt/terminate signal, pass it on to the child. For interrupt,
 	// the child probably already got it.
@@ -101,26 +118,34 @@ func ForkExecUnprivileged() {
 	os.Exit(code)
 }
 
-// CleanupPassedSockets closes the listening socket file descriptors passed in by
-// the parent process. To be called after listeners have been recreated (they dup
-// the file descriptor).
-func CleanupPassedSockets() {
-	for _, f := range listens {
+// CleanupPassedFiles closes the listening socket file descriptors and files passed
+// in by the parent process. To be called by the unprivileged child after listeners
+// have been recreated (they dup the file descriptor), and by the privileged
+// process after starting its child.
+func CleanupPassedFiles() {
+	for _, f := range passedListeners {
 		err := f.Close()
 		xlog.Check(err, "closing listener socket file descriptor")
 	}
+	for _, fl := range passedFiles {
+		for _, f := range fl {
+			err := f.Close()
+			xlog.Check(err, "closing path file descriptor")
+		}
+	}
 }
 
-// Make Listen listen immediately, regardless of running as root or other user, in
-// case ForkExecUnprivileged is not used.
-var ListenImmediate bool
+// For privileged file descriptor operations (listen and opening privileged files),
+// perform them immediately, regardless of running as root or other user, in case
+// ForkExecUnprivileged is not used.
+var FilesImmediate bool
 
 // Listen returns a newly created network listener when starting as root, and
 // otherwise (not root) returns a network listener from a file descriptor that was
 // passed by the parent root process.
 func Listen(network, addr string) (net.Listener, error) {
-	if os.Getuid() != 0 && !ListenImmediate {
-		f, ok := listens[addr]
+	if os.Getuid() != 0 && !FilesImmediate {
+		f, ok := passedListeners[addr]
 		if !ok {
 			return nil, fmt.Errorf("no file descriptor for listener %s", addr)
 		}
@@ -131,7 +156,7 @@ func Listen(network, addr string) (net.Listener, error) {
 		return ln, nil
 	}
 
-	if _, ok := listens[addr]; ok {
+	if _, ok := passedListeners[addr]; ok {
 		return nil, fmt.Errorf("duplicate listener: %s", addr)
 	}
 
@@ -147,8 +172,34 @@ func Listen(network, addr string) (net.Listener, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dup listener: %v", err)
 	}
-	listens[addr] = f
+	passedListeners[addr] = f
 	return ln, err
+}
+
+// Open a privileged file, such as a TLS private key. When running as root
+// (during startup), the file is opened and the file descriptor is stored.
+// These file descriptors are passed to the unprivileged process. When in the
+// unprivileged processed, we lookup a passed file descriptor.
+// The same calls should be made in the privileged and unprivileged process.
+func OpenPrivileged(path string) (*os.File, error) {
+	if os.Getuid() != 0 && !FilesImmediate {
+		fl := passedFiles[path]
+		if len(fl) == 0 {
+			return nil, fmt.Errorf("no file descriptor for file %s", path)
+		}
+		f := fl[0]
+		passedFiles[path] = fl[1:]
+		return f, nil
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	passedFiles[path] = append(passedFiles[path], f)
+
+	// Open again, the caller will be closing this file.
+	return os.Open(path)
 }
 
 // Shutdown is canceled when a graceful shutdown is initiated. SMTP, IMAP, periodic

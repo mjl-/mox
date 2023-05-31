@@ -147,11 +147,12 @@ requested, other TLS certificates are requested on demand.
 	mlog.SetConfig(mox.Conf.Log)
 
 	checkACMEHosts := os.Getuid() != 0
-	mox.MustLoadConfig(checkACMEHosts)
 
 	log := mlog.New("serve")
 
 	if os.Getuid() == 0 {
+		mox.MustLoadConfig(checkACMEHosts)
+
 		// No need to potentially start and keep multiple processes. As root, we just need
 		// to start the child process.
 		runtime.GOMAXPROCS(1)
@@ -159,6 +160,9 @@ requested, other TLS certificates are requested on demand.
 		log.Print("starting as root, initializing network listeners", mlog.Field("version", moxvar.Version), mlog.Field("pid", os.Getpid()))
 		if os.Getenv("MOX_SOCKETS") != "" {
 			log.Fatal("refusing to start as root with $MOX_SOCKETS set")
+		}
+		if os.Getenv("MOX_FILES") != "" {
+			log.Fatal("refusing to start as root with $MOX_FILES set")
 		}
 
 		if !mox.Conf.Static.NoFixPermissions {
@@ -178,7 +182,8 @@ requested, other TLS certificates are requested on demand.
 		}
 	} else {
 		log.Print("starting as unprivileged user", mlog.Field("user", mox.Conf.Static.User), mlog.Field("uid", mox.Conf.Static.UID), mlog.Field("gid", mox.Conf.Static.GID), mlog.Field("pid", os.Getpid()))
-		mox.RestorePassedSockets()
+		mox.RestorePassedFiles()
+		mox.MustLoadConfig(checkACMEHosts)
 	}
 
 	syscall.Umask(syscall.Umask(007) | 007)
@@ -584,7 +589,7 @@ func start(mtastsdbRefresher, skipForkExec bool) error {
 			mox.ForkExecUnprivileged()
 			panic("cannot happen")
 		} else {
-			mox.CleanupPassedSockets()
+			mox.CleanupPassedFiles()
 		}
 	}
 

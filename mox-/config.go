@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -1188,7 +1189,7 @@ func loadTLSKeyCerts(configFile, kind string, ctls *config.TLS) error {
 	for _, kp := range ctls.KeyCerts {
 		certPath := configDirPath(configFile, kp.CertFile)
 		keyPath := configDirPath(configFile, kp.KeyFile)
-		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		cert, err := loadX509KeyPairPrivileged(certPath, keyPath)
 		if err != nil {
 			return fmt.Errorf("tls config for %q: parsing x509 key pair: %v", kind, err)
 		}
@@ -1198,4 +1199,28 @@ func loadTLSKeyCerts(configFile, kind string, ctls *config.TLS) error {
 		Certificates: certs,
 	}
 	return nil
+}
+
+// load x509 key/cert files from file descriptor possibly passed in by privileged
+// process.
+func loadX509KeyPairPrivileged(certPath, keyPath string) (tls.Certificate, error) {
+	certBuf, err := readFilePrivileged(certPath)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("reading tls certificate: %v", err)
+	}
+	keyBuf, err := readFilePrivileged(keyPath)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("reading tls key: %v", err)
+	}
+	return tls.X509KeyPair(certBuf, keyBuf)
+}
+
+// like os.ReadFile, but open privileged file possibly passed in by root process.
+func readFilePrivileged(path string) ([]byte, error) {
+	f, err := OpenPrivileged(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }

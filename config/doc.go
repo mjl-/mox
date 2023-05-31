@@ -125,6 +125,8 @@ describe-static" and "mox config describe-domains":
 				# (optional)
 				ACME:
 
+				# Key and certificate files are opened by the privileged root process and passed
+				# to the unprivileged mox process, so no special permissions are required.
 				# (optional)
 				KeyCerts:
 					-

@@ -313,7 +313,7 @@ type KeyCert struct {
 
 type TLS struct {
 	ACME       string    `sconf:"optional" sconf-doc:"Name of provider from top-level configuration to use for ACME, e.g. letsencrypt."`
-	KeyCerts   []KeyCert `sconf:"optional"`
+	KeyCerts   []KeyCert `sconf:"optional" sconf-doc:"Key and certificate files are opened by the privileged root process and passed to the unprivileged mox process, so no special permissions are required."`
 	MinVersion string    `sconf:"optional" sconf-doc:"Minimum TLS version. Default: TLSv1.2."`
 
 	Config     *tls.Config `sconf:"-" json:"-"` // TLS config for non-ACME-verification connections, i.e. SMTP and IMAP, and not port 443.
