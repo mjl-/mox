@@ -70,11 +70,14 @@ func checkAccountAuth(ctx context.Context, log *mlog.Log, w http.ResponseWriter,
 	}()
 
 	var err error
+	var remoteIP net.IP
 	addr, err = net.ResolveTCPAddr("tcp", r.RemoteAddr)
 	if err != nil {
 		log.Errorx("parsing remote address", err, mlog.Field("addr", r.RemoteAddr))
+	} else if addr != nil {
+		remoteIP = addr.IP
 	}
-	if addr != nil && !mox.LimiterFailedAuth.Add(addr.IP, start, 1) {
+	if remoteIP != nil && !mox.LimiterFailedAuth.Add(remoteIP, start, 1) {
 		metrics.AuthenticationRatelimitedInc("httpaccount")
 		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
 		return ""
@@ -89,6 +92,7 @@ func checkAccountAuth(ctx context.Context, log *mlog.Log, w http.ResponseWriter,
 	} else if acc, err := store.OpenEmailAuth(t[0], t[1]); err != nil {
 		if errors.Is(err, store.ErrUnknownCredentials) {
 			authResult = "badcreds"
+			log.Info("failed authentication attempt", mlog.Field("username", t[0]), mlog.Field("remote", remoteIP))
 		}
 		log.Errorx("open account", err)
 	} else {

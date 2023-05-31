@@ -132,11 +132,14 @@ func checkAdminAuth(ctx context.Context, passwordfile string, w http.ResponseWri
 	}()
 
 	var err error
+	var remoteIP net.IP
 	addr, err = net.ResolveTCPAddr("tcp", r.RemoteAddr)
 	if err != nil {
 		log.Errorx("parsing remote address", err, mlog.Field("addr", r.RemoteAddr))
+	} else if addr != nil {
+		remoteIP = addr.IP
 	}
-	if addr != nil && !mox.LimiterFailedAuth.Add(addr.IP, start, 1) {
+	if remoteIP != nil && !mox.LimiterFailedAuth.Add(remoteIP, start, 1) {
 		metrics.AuthenticationRatelimitedInc("httpadmin")
 		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
 		return false
@@ -164,10 +167,12 @@ func checkAdminAuth(ctx context.Context, passwordfile string, w http.ResponseWri
 	}
 	t := strings.SplitN(string(auth), ":", 2)
 	if len(t) != 2 || len(t[1]) < 8 {
+		log.Info("failed authentication attempt", mlog.Field("username", "admin"), mlog.Field("remote", remoteIP))
 		return respondAuthFail()
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordhash), []byte(t[1])); err != nil {
 		authResult = "badcreds"
+		log.Info("failed authentication attempt", mlog.Field("username", "admin"), mlog.Field("remote", remoteIP))
 		return respondAuthFail()
 	}
 	authCache.lastSuccessHash = passwordhash

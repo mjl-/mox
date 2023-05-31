@@ -1538,6 +1538,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
 				authResult = "badcreds"
+				c.log.Info("authentication failed", mlog.Field("username", authc))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			}
 			xusercodeErrorf("", "error")
@@ -1565,6 +1566,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		acc, _, err := store.OpenEmail(addr)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
+				c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			}
 			xserverErrorf("looking up address: %v", err)
@@ -1580,6 +1582,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
 				if err == bstore.ErrAbsent {
+					c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
 					xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 				}
 				if err != nil {
@@ -1593,7 +1596,8 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xcheckf(err, "tx read")
 		})
 		if ipadhash == nil || opadhash == nil {
-			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", mlog.Field("address", addr))
+			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", mlog.Field("username", addr))
+			c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
 			xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 		}
 
@@ -1602,6 +1606,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		opadhash.Write(ipadhash.Sum(nil))
 		digest := fmt.Sprintf("%x", opadhash.Sum(nil))
 		if digest != t[1] {
+			c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
 			xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 		}
 
@@ -1675,6 +1680,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			c.readline(false) // Should be "*" for cancellation.
 			if errors.Is(err, scram.ErrInvalidProof) {
 				authResult = "badcreds"
+				c.log.Info("failed authentication attempt", mlog.Field("username", ss.Authentication), mlog.Field("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			}
 			xuserErrorf("server final: %w", err)
@@ -1744,6 +1750,7 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 		var code string
 		if errors.Is(err, store.ErrUnknownCredentials) {
 			code = "AUTHENTICATIONFAILED"
+			c.log.Info("failed authentication attempt", mlog.Field("username", userid), mlog.Field("remote", c.remoteIP))
 		}
 		xusercodeErrorf(code, "login failed")
 	}
