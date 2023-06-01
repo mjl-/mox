@@ -572,8 +572,12 @@ func deliver(resolver dns.Resolver, m Msg) {
 
 		// ../rfc/8461:913
 		if policy != nil && policy.Mode == mtasts.ModeEnforce && !policy.Matches(h.Domain) {
-			errmsg = fmt.Sprintf("mx host %s does not match enforced mta-sts policy", h.Domain)
-			qlog.Error("mx host does not match enforce mta-sts policy, skipping", mlog.Field("host", h.Domain))
+			var policyHosts []string
+			for _, mx := range policy.MX {
+				policyHosts = append(policyHosts, mx.LogString())
+			}
+			errmsg = fmt.Sprintf("mx host %s does not match enforced mta-sts policy with hosts %s", h.Domain, strings.Join(policyHosts, ","))
+			qlog.Error("mx host does not match enforce mta-sts policy, skipping", mlog.Field("host", h.Domain), mlog.Field("policyhosts", policyHosts))
 			continue
 		}
 

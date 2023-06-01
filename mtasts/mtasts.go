@@ -96,6 +96,19 @@ type STSMX struct {
 	Domain dns.Domain
 }
 
+// LogString returns a loggable string representing the host, with both unicode
+// and ascii version for IDNA domains.
+func (s STSMX) LogString() string {
+	pre := ""
+	if s.Wildcard {
+		pre = "*."
+	}
+	if s.Domain.Unicode == "" {
+		return pre + s.Domain.ASCII
+	}
+	return pre + s.Domain.Unicode + "/" + pre + s.Domain.ASCII
+}
+
 // Policy is an MTA-STS policy as served at "https://mta-sts.<domain>/.well-known/mta-sts.txt".
 type Policy struct {
 	Version       string // "STSv1"
