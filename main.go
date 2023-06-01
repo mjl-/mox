@@ -983,8 +983,8 @@ specifically mounts the data directory, causing attempts to hardlink outside it
 to fail with an error about cross-device linking.
 
 All files in the data directory that aren't recognized (i.e. other than known
-database files, message files, an acme directory, etc), are stored, but with a
-warning.
+database files, message files, an acme directory, the "tmp" directory, etc),
+are stored, but with a warning.
 
 A clean successful backup does not print any output by default. Use the
 -verbose flag for details, including timing.

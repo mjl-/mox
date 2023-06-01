@@ -509,9 +509,6 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 		p := srcpath[len(srcDataDir)+1:]
 		if p == "queue" || p == "acme" || p == "tmp" {
-			if p == "tmp" {
-				xwarnx("skipping entire tmp directory", nil, mlog.Field("path", p))
-			}
 			return fs.SkipDir
 		}
 		l := strings.Split(p, string(filepath.Separator))
