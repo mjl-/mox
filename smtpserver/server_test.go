@@ -1133,3 +1133,34 @@ func TestPostmaster(t *testing.T) {
 	testDeliver("postmaster@mox.example", nil)      // Postmaster address without explicitly configured destination.
 	testDeliver("postmaster@unknown.example", &smtpclient.Error{Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
 }
+
+// Test to address with empty localpart.
+func TestEmptylocalpart(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"other.example.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"other.example."},
+		},
+	}
+	ts := newTestServer(t, "../testdata/smtp/mox.conf", resolver)
+	defer ts.close()
+
+	testDeliver := func(rcptTo string, expErr *smtpclient.Error) {
+		t.Helper()
+		ts.run(func(err error, client *smtpclient.Client) {
+			t.Helper()
+			mailFrom := `""@other.example`
+			if err == nil {
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false)
+			}
+			var cerr smtpclient.Error
+			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
+				t.Fatalf("got err %#v, expected %#v", err, expErr)
+			}
+		})
+	}
+
+	testDeliver(`""@mox.example`, nil)
+}

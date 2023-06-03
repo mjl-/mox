@@ -387,8 +387,12 @@ func TestLogin(t *testing.T) {
 	tc.close()
 
 	tc = start(t)
-	defer tc.close()
 	tc.transactf("ok", `login "mjl@mox.example" "testtest"`)
+	tc.close()
+
+	tc = start(t)
+	tc.transactf("ok", `login "\"\"@mox.example" "testtest"`)
+	defer tc.close()
 
 	tc.transactf("bad", "logout badarg")
 	tc.transactf("ok", "logout")

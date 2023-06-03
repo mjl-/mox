@@ -336,6 +336,7 @@ func (p *parser) xlocalpart() smtp.Localpart {
 
 // ../rfc/5321:2324
 func (p *parser) xquotedString(islocalpart bool) string {
+	p.xtake(`"`)
 	var s string
 	var esc bool
 	for {
