@@ -3,5 +3,8 @@
 	"key": {
 		"algo": "ecdsa",
 		"size": 256
+	},
+	"ca": {
+		"expiry": "262800h"
 	}
 }
