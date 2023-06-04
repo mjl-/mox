@@ -22,6 +22,8 @@
 /testdata/smtpserverfuzz/data/
 /testdata/store/data/
 /testdata/train/
+/testdata/quickstart/example-quickstart.zone
+/testdata/quickstart/tmp-pebble-ca.pem
 /cover.out
 /cover.html
 /.go/

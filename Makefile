@@ -3,7 +3,8 @@ default: build
 build:
 	# build early to catch syntax errors
 	CGO_ENABLED=0 go build
-	CGO_ENABLED=0 go vet -tags integration ./...
+	CGO_ENABLED=0 go vet -tags quickstart ./...
+	CGO_ENABLED=0 go vet -tags quickstart quickstart_test.go
 	./gendoc.sh
 	(cd http && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Admin) >http/adminapi.json
 	(cd http && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Account) >http/accountapi.json
@@ -24,6 +25,8 @@ test-upgrade:
 check:
 	staticcheck ./...
 	staticcheck -tags integration
+	staticcheck -tags quickstart
+	GOARCH=386 CGO_ENABLED=0 go vet -tags integration ./...
 
 # having "err" shadowed is common, best to not have others
 check-shadow:
@@ -43,8 +46,15 @@ fuzz:
 	go test -fuzz FuzzParseRecord -fuzztime 5m ./tlsrpt
 	go test -fuzz FuzzParseMessage -fuzztime 5m ./tlsrpt
 
+test-integration:
+	docker-compose -f docker-compose-integration.yml build --no-cache --pull moxmail
+	-rm -r testdata/integration/data
+	docker-compose -f docker-compose-integration.yml run moxmail sh -c 'CGO_ENABLED=0 go test -tags integration'
+	docker-compose -f docker-compose-integration.yml down
+
+# like test-integration, but in separate steps
 integration-build:
-	docker-compose -f docker-compose-integration.yml build --no-cache moxmail
+	docker-compose -f docker-compose-integration.yml build --no-cache --pull moxmail
 
 integration-start:
 	-rm -r testdata/integration/data
@@ -55,14 +65,26 @@ integration-start:
 integration-test:
 	CGO_ENABLED=0 go test -tags integration
 
+
+test-quickstart:
+	docker image build --pull -f Dockerfile -t mox_quickstart_moxmail .
+	docker image build --pull -f testdata/quickstart/Dockerfile.test -t mox_quickstart_test testdata/quickstart
+	-rm -rf testdata/quickstart/moxacmepebble/data
+	-rm -rf testdata/quickstart/moxmail2/data
+	-rm -f testdata/quickstart/tmp-pebble-ca.pem
+	MOX_UID=$$(id -u) docker-compose -f docker-compose-quickstart.yml run test
+	docker-compose -f docker-compose-quickstart.yml down --timeout 1
+
+
 imaptest-build:
-	-docker-compose -f docker-compose-imaptest.yml build --no-cache mox
+	-docker-compose -f docker-compose-imaptest.yml build --no-cache --pull mox
 
 imaptest-run:
 	-rm -r testdata/imaptest/data
 	mkdir testdata/imaptest/data
 	docker-compose -f docker-compose-imaptest.yml run --entrypoint /usr/local/bin/imaptest imaptest host=mox port=1143 user=mjl@mox.example pass=testtest mbox=imaptest.mbox
 	docker-compose -f docker-compose-imaptest.yml down
+
 
 fmt:
 	go fmt ./...
