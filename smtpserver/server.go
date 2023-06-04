@@ -1755,7 +1755,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	if len(dkimConfig.Sign) > 0 {
 		if canonical, err := mox.CanonicalLocalpart(msgFrom.Localpart, confDom); err != nil {
 			c.log.Errorx("determining canonical localpart for dkim signing", err, mlog.Field("localpart", msgFrom.Localpart))
-		} else if dkimHeaders, err := dkim.Sign(ctx, canonical, msgFrom.Domain, dkimConfig, c.smtputf8, dataFile); err != nil {
+		} else if dkimHeaders, err := dkim.Sign(ctx, canonical, msgFrom.Domain, dkimConfig, c.smtputf8, store.FileMsgReader(msgPrefix, dataFile)); err != nil {
 			c.log.Errorx("dkim sign for domain", err, mlog.Field("domain", msgFrom.Domain))
 			metricServerErrors.WithLabelValues("dkimsign").Inc()
 		} else {
