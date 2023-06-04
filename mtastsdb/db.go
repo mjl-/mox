@@ -233,6 +233,7 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 			switch {
 			case errors.Is(err, mtasts.ErrNoRecord) || errors.Is(err, mtasts.ErrMultipleRecords) || errors.Is(err, mtasts.ErrRecordSyntax) || errors.Is(err, mtasts.ErrNoPolicy) || errors.Is(err, mtasts.ErrPolicyFetch) || errors.Is(err, mtasts.ErrPolicySyntax):
 				// Remote is not doing MTA-STS, continue below. ../rfc/8461:333 ../rfc/8461:574
+				log.Debugx("interpreting mtasts error to mean remote is not doing mta-sts", err)
 			default:
 				// Interpret as temporary error, e.g. mtasts.ErrDNS, try again later.
 				return nil, false, fmt.Errorf("lookup up mta-sts policy: %w", err)

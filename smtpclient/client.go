@@ -509,7 +509,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, remoteHostname, aut
 
 	// Attempt TLS if remote understands STARTTLS or if caller requires it.
 	if c.extStartTLS && tlsMode != TLSSkip || tlsMode == TLSStrict {
-		c.log.Debug("starting tls client")
+		c.log.Debug("starting tls client", mlog.Field("tlsmode", tlsMode), mlog.Field("servername", remoteHostname))
 		c.cmds[0] = "starttls"
 		c.cmdStart = time.Now()
 		c.xwritelinef("STARTTLS")
@@ -556,7 +556,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, remoteHostname, aut
 		c.w = bufio.NewWriter(c.tw)
 
 		tlsversion, ciphersuite := mox.TLSInfo(nconn)
-		c.log.Debug("tls client handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite))
+		c.log.Debug("tls client handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite), mlog.Field("servername", remoteHostname), mlog.Field("insecureskipverify", tlsConfig.InsecureSkipVerify))
 
 		hello(false)
 	}
