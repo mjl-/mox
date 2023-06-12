@@ -170,6 +170,7 @@ testing purposes.
 - Test upgrades.
 - Run fuzzing tests for a while.
 - Deploy to test environment. Test the update instructions.
+- Test localserve.
 - Generate a config with quickstart, check if it results in a working setup.
 - Send and receive email through the major webmail providers, check headers.
 - Send and receive email with imap4/smtp clients.

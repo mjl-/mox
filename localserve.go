@@ -74,6 +74,8 @@ during those commands instead of during "data".
 
 	log := mlog.New("localserve")
 
+	mox.FilesImmediate = true
+
 	// Load config, creating a new one if needed.
 	if _, err := os.Stat(dir); err != nil && os.IsNotExist(err) {
 		err := writeLocalConfig(log, dir)
@@ -115,7 +117,6 @@ during those commands instead of during "data".
 	// Tell queue it shouldn't be queuing/delivering.
 	queue.Localserve = true
 
-	mox.FilesImmediate = true
 	const mtastsdbRefresher = false
 	const skipForkExec = true
 	if err := start(mtastsdbRefresher, skipForkExec); err != nil {
