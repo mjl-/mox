@@ -335,6 +335,10 @@ often-used blocklists. It's typically not a good idea to host an email server
 on the cheapest or largest cloud providers: They often don't spend the
 resources necessary for a good reputation, or they simply block all outgoing
 SMTP traffic. It's better to look for a technically-focused local provider.
+They too may initially block outgoing SMTP connections on new machines to
+prevent spam from their networks. But they will either automatically open up
+outgoing SMTP traffic after a cool down period (e.g. 24 hours), or after you've
+contacted their support.
 
 After you get past the IP blocklist checks, email servers use many more signals
 to determine if your email message could be spam and should be rejected. Mox
