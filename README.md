@@ -315,3 +315,34 @@ Mox also has an "admin" web interface where the mox instance administrator can
 make changes, e.g. add/remove/modify domains/accounts/addresses.
 
 Mox does not have a webmail yet, so there are no screenshots of actual email.
+
+## Won't the big email providers block my email?
+
+It is a common misconception that it is impossible to run your own email server
+nowadays. The claim is that the handful big email providers will simply block
+your email. However, you can run your own email server just fine, and your
+email will be accepted, provided you are doing it right.
+
+If your email is rejected, it is often because your IP address has a bad email
+sending reputation. Email servers often use IP blocklists to reject email
+networks with a bad email sending reputation. These blocklists often work at
+the level of whole network ranges. So if you try to run an email server from a
+hosting provider with a bad reputation (which happens if they don't monitor
+their network or don't act on abuse/spam reports), your IP too will have a bad
+reputation and other mail servers (both large and small) may reject messages
+coming from you. During the quickstart, mox checks if your IPs are on a few
+often-used blocklists. It's typically not a good idea to host an email server
+on the cheapest or largest cloud providers: They often don't spend the
+resources necessary for a good reputation, or they simply block all outgoing
+SMTP traffic. It's better to look for a technically-focused local provider.
+
+After you get past the IP blocklist checks, email servers use many more signals
+to determine if your email message could be spam and should be rejected. Mox
+helps you set up a system that doesn't trigger most of the technical signals
+(e.g. with SPF/DKIM/DMARC). But there are more signals, for example: Sending to
+a mail server or address for the first time. Sending from a newly registered
+domain. Sending messages with content that resembles known spam messages.
+
+Should your email be rejected, you will typically get an error message that
+explains why. In the case of big email providers the error message often has
+instructions on how to prove to them you are a legimate sender.
