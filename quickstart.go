@@ -305,7 +305,6 @@ again with the -hostname flag.
 		}
 	}
 
-	// todo: lookup without going through /etc/hosts, because a machine typically has its name configured there, and LookupIPAddr will return it, but we care about DNS settings that the rest of the world uses to find us. perhaps we should check if the address resolves to 127.0.0.0/8?
 	fmt.Printf("Looking up IPs for hostname %s...", dnshostname)
 	ipctx, ipcancel := context.WithTimeout(resolveCtx, 5*time.Second)
 	defer ipcancel()
@@ -313,17 +312,22 @@ again with the -hostname flag.
 	ipcancel()
 	var xips []net.IPAddr
 	var xipstrs []string
+	var dnswarned bool
 	for _, ip := range ips {
 		// During linux install, you may get an alias for you full hostname in /etc/hosts
 		// resolving to 127.0.1.1, which would result in a false positive about the
 		// hostname having a record. Filter it out. It is a bit surprising that hosts don't
 		// otherwise know their FQDN.
-		if !ip.IP.IsLoopback() {
-			xips = append(xips, ip)
-			xipstrs = append(xipstrs, ip.String())
+		if ip.IP.IsLoopback() {
+			dnswarned = true
+			fmt.Printf("\n\nWARNING: Your hostname is resolving to a loopback IP address %s. This likely breaks email delivery to local accounts. /etc/hosts likely contains a line like %q. Either replace it with your actual IP(s), or remove the line.\n", ip.IP, fmt.Sprintf("%s %s", ip.IP, dnshostname.ASCII))
+			continue
 		}
+		xips = append(xips, ip)
+		xipstrs = append(xipstrs, ip.String())
 	}
 	if err == nil && len(xips) == 0 {
+		// todo: possibly check this by trying to resolve without using /etc/hosts?
 		err = errors.New("hostname not in dns, probably only in /etc/hosts")
 	}
 	ips = xips
@@ -333,8 +337,11 @@ again with the -hostname flag.
 		publicIPs = xipstrs
 	}
 	if err != nil {
+		if !dnswarned {
+			fmt.Printf("\n")
+		}
+		dnswarned = true
 		fmt.Printf(`
-
 WARNING: Quickstart assumed the hostname of this machine is %s and generates a
 config for that host, but could not retrieve that name from DNS:
 
@@ -351,7 +358,9 @@ This likely means one of two things:
 
 
 `, dnshostname, err)
-	} else {
+	}
+
+	if !dnswarned {
 		fmt.Printf(" OK\n")
 
 		var l []string
