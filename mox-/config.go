@@ -217,6 +217,19 @@ func (c *Config) WebServer() (r map[dns.Domain]dns.Domain, l []config.WebHandler
 	return r, l
 }
 
+func (c *Config) Routes(accountName string, domain dns.Domain) (accountRoutes, domainRoutes, globalRoutes []config.Route) {
+	c.withDynamicLock(func() {
+		acc := c.Dynamic.Accounts[accountName]
+		accountRoutes = acc.Routes
+
+		dom := c.Dynamic.Domains[domain.Name()]
+		domainRoutes = dom.Routes
+
+		globalRoutes = c.Dynamic.Routes
+	})
+	return
+}
+
 func (c *Config) allowACMEHosts(checkACMEHosts bool) {
 	for _, l := range c.Static.Listeners {
 		if l.TLS == nil || l.TLS.ACME == "" {
@@ -408,12 +421,12 @@ func ParseConfig(ctx context.Context, p string, checkOnly, doLoadTLSKeyCerts, ch
 // PrepareStaticConfig parses the static config file and prepares data structures
 // for starting mox. If checkOnly is set no substantial changes are made, like
 // creating an ACME registration.
-func PrepareStaticConfig(ctx context.Context, configFile string, config *Config, checkOnly, doLoadTLSKeyCerts bool) (errs []error) {
+func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, checkOnly, doLoadTLSKeyCerts bool) (errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
 
-	c := &config.Static
+	c := &conf.Static
 
 	// check that mailbox is in unicode NFC normalized form.
 	checkMailboxNormf := func(mailbox string, format string, args ...any) {
@@ -426,13 +439,13 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 
 	// Post-process logging config.
 	if logLevel, ok := mlog.Levels[c.LogLevel]; ok {
-		config.Log = map[string]mlog.Level{"": logLevel}
+		conf.Log = map[string]mlog.Level{"": logLevel}
 	} else {
 		addErrorf("invalid log level %q", c.LogLevel)
 	}
 	for pkg, s := range c.PackageLogLevels {
 		if logLevel, ok := mlog.Levels[s]; ok {
-			config.Log[pkg] = logLevel
+			conf.Log[pkg] = logLevel
 		} else {
 			addErrorf("invalid package log level %q", s)
 		}
@@ -635,6 +648,87 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 		checkMailboxNormf(mb, "default mailbox")
 	}
 
+	checkTransportSMTP := func(name string, isTLS bool, t *config.TransportSMTP) {
+		var err error
+		t.DNSHost, err = dns.ParseDomain(t.Host)
+		if err != nil {
+			addErrorf("transport %s: bad host %s: %v", name, t.Host, err)
+		}
+
+		if isTLS && t.STARTTLSInsecureSkipVerify {
+			addErrorf("transport %s: cannot have STARTTLSInsecureSkipVerify with immediate TLS")
+		}
+		if isTLS && t.NoSTARTTLS {
+			addErrorf("transport %s: cannot have NoSTARTTLS with immediate TLS")
+		}
+
+		if t.Auth == nil {
+			return
+		}
+		seen := map[string]bool{}
+		for _, m := range t.Auth.Mechanisms {
+			if seen[m] {
+				addErrorf("transport %s: duplicate authentication mechanism %s", name, m)
+			}
+			seen[m] = true
+			switch m {
+			case "SCRAM-SHA-256":
+			case "SCRAM-SHA-1":
+			case "CRAM-MD5":
+			case "PLAIN":
+			default:
+				addErrorf("transport %s: unknown authentication mechanism %s", name, m)
+			}
+		}
+
+		t.Auth.EffectiveMechanisms = t.Auth.Mechanisms
+		if len(t.Auth.EffectiveMechanisms) == 0 {
+			t.Auth.EffectiveMechanisms = []string{"SCRAM-SHA-256", "SCRAM-SHA-1", "CRAM-MD5"}
+		}
+	}
+
+	checkTransportSocks := func(name string, t *config.TransportSocks) {
+		_, _, err := net.SplitHostPort(t.Address)
+		if err != nil {
+			addErrorf("transport %s: bad address %s: %v", name, t.Address, err)
+		}
+		for _, ipstr := range t.RemoteIPs {
+			ip := net.ParseIP(ipstr)
+			if ip == nil {
+				addErrorf("transport %s: bad ip %s", name, ipstr)
+			} else {
+				t.IPs = append(t.IPs, ip)
+			}
+		}
+		t.Hostname, err = dns.ParseDomain(t.RemoteHostname)
+		if err != nil {
+			addErrorf("transport %s: bad hostname %s: %v", name, t.RemoteHostname, err)
+		}
+	}
+
+	for name, t := range c.Transports {
+		n := 0
+		if t.Submissions != nil {
+			n++
+			checkTransportSMTP(name, true, t.Submissions)
+		}
+		if t.Submission != nil {
+			n++
+			checkTransportSMTP(name, false, t.Submission)
+		}
+		if t.SMTP != nil {
+			n++
+			checkTransportSMTP(name, false, t.SMTP)
+		}
+		if t.Socks != nil {
+			n++
+			checkTransportSocks(name, t.Socks)
+		}
+		if n > 1 {
+			addErrorf("transport %s: cannot have multiple methods in a transport", name)
+		}
+	}
+
 	// Load CA certificate pool.
 	if c.TLS.CA != nil {
 		if c.TLS.CA.AdditionalToSystem {
@@ -717,6 +811,41 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			haveWebserverListener = true
 		}
 	}
+
+	checkRoutes := func(descr string, routes []config.Route) {
+		parseRouteDomains := func(l []string) []string {
+			var r []string
+			for _, e := range l {
+				if e == "." {
+					r = append(r, e)
+					continue
+				}
+				prefix := ""
+				if strings.HasPrefix(e, ".") {
+					prefix = "."
+					e = e[1:]
+				}
+				d, err := dns.ParseDomain(e)
+				if err != nil {
+					addErrorf("%s: invalid domain %s: %v", descr, e, err)
+				}
+				r = append(r, prefix+d.ASCII)
+			}
+			return r
+		}
+
+		for i := range routes {
+			routes[i].FromDomainASCII = parseRouteDomains(routes[i].FromDomain)
+			routes[i].ToDomainASCII = parseRouteDomains(routes[i].ToDomain)
+			var ok bool
+			routes[i].ResolvedTransport, ok = static.Transports[routes[i].Transport]
+			if !ok {
+				addErrorf("%s: route references undefined transport %s", descr, routes[i].Transport)
+			}
+		}
+	}
+
+	checkRoutes("global routes", c.Routes)
 
 	// Validate domains.
 	for d, domain := range c.Domains {
@@ -835,6 +964,8 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 				addErrorf("invalid mtasts mode %q", sts.Mode)
 			}
 		}
+
+		checkRoutes("routes for domain", domain.Routes)
 
 		c.Domains[d] = domain
 	}
@@ -1006,6 +1137,8 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 				delete(acc.Destinations, lp)
 			}
 		}
+
+		checkRoutes("routes for account", acc.Routes)
 	}
 
 	// Set DMARC destinations.

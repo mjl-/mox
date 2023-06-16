@@ -80,7 +80,7 @@ func monitorDNSBL(log *mlog.Log) {
 		time.Sleep(sleep)
 		sleep = 3 * time.Hour
 
-		ips, err := mox.IPs(mox.Context)
+		ips, err := mox.IPs(mox.Context, false)
 		if err != nil {
 			log.Errorx("listing ips for dnsbl monitor", err)
 			continue

@@ -592,12 +592,18 @@
 		},
 		{
 			"Name": "QueueKick",
-			"Docs": "QueueKick initiates delivery of a message from the queue.",
+			"Docs": "QueueKick initiates delivery of a message from the queue and sets the transport\nto use for delivery.",
 			"Params": [
 				{
 					"Name": "id",
 					"Typewords": [
 						"int64"
+					]
+				},
+				{
+					"Name": "transport",
+					"Typewords": [
+						"string"
 					]
 				}
 			],
@@ -710,6 +716,20 @@
 					"Name": "savedConf",
 					"Typewords": [
 						"WebserverConfig"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Transports",
+			"Docs": "Transports returns the configured transports, for sending email.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"{}",
+						"Transport"
 					]
 				}
 			]
@@ -2826,7 +2846,7 @@
 				},
 				{
 					"Name": "SenderAccount",
-					"Docs": "Failures are delivered back to this local account.",
+					"Docs": "Failures are delivered back to this local account. Also used for routing.",
 					"Typewords": [
 						"string"
 					]
@@ -2939,6 +2959,13 @@
 					"Typewords": [
 						"[]",
 						"uint8"
+					]
+				},
+				{
+					"Name": "Transport",
+					"Docs": "If non-empty, the transport to use for this message. Can be set through cli or admin interface. If empty (the default for a submitted message), regular routing rules apply.",
+					"Typewords": [
+						"string"
 					]
 				}
 			]
@@ -3166,6 +3193,142 @@
 					"Docs": "",
 					"Typewords": [
 						"{}",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Transport",
+			"Docs": "Transport is a method to delivery a message. At most one of the fields can\nbe non-nil. The non-nil field represents the type of transport. For a\ntransport with all fields nil, regular email delivery is done.",
+			"Fields": [
+				{
+					"Name": "Submissions",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"TransportSMTP"
+					]
+				},
+				{
+					"Name": "Submission",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"TransportSMTP"
+					]
+				},
+				{
+					"Name": "SMTP",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"TransportSMTP"
+					]
+				},
+				{
+					"Name": "Socks",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"TransportSocks"
+					]
+				}
+			]
+		},
+		{
+			"Name": "TransportSMTP",
+			"Docs": "TransportSMTP delivers messages by \"submission\" (SMTP, typically\nauthenticated) to the queue of a remote host (smarthost), or by relaying\n(SMTP, typically unauthenticated).",
+			"Fields": [
+				{
+					"Name": "Host",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Port",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "STARTTLSInsecureSkipVerify",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "NoSTARTTLS",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Auth",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"SMTPAuth"
+					]
+				}
+			]
+		},
+		{
+			"Name": "SMTPAuth",
+			"Docs": "SMTPAuth hold authentication credentials used when delivering messages\nthrough a smarthost.",
+			"Fields": [
+				{
+					"Name": "Username",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Password",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Mechanisms",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "TransportSocks",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Address",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RemoteIPs",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "RemoteHostname",
+					"Docs": "",
+					"Typewords": [
 						"string"
 					]
 				}

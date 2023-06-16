@@ -3,8 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -17,11 +15,36 @@ import (
 
 	"github.com/mjl-/sconf"
 
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 )
+
+var submitconf struct {
+	LocalHostname      string `sconf-doc:"Hosts don't always have an FQDN, set it explicitly, for EHLO."`
+	Host               string `sconf-doc:"Host to dial for delivery, e.g. mail.<domain>."`
+	Port               int    `sconf-doc:"Port to dial for delivery, e.g. 465 for submissions, 587 for submission, or perhaps 25 for smtp."`
+	TLS                bool   `sconf-doc:"Connect with TLS. Usually for connections to port 465."`
+	STARTTLS           bool   `sconf-doc:"After starting in plain text, use STARTTLS to enable TLS. For port 587 and 25."`
+	Username           string `sconf-doc:"For SMTP authentication."`
+	Password           string `sconf-doc:"For password-based SMTP authentication, e.g. SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5, PLAIN."`
+	AuthMethod         string `sconf-doc:"If set, only attempt this authentication mechanism. E.g. SCRAM-SHA-256. If not set, any mutually supported algorithm can be used, in order of most to least secure."`
+	From               string `sconf-doc:"Address for MAIL FROM in SMTP and From-header in message."`
+	DefaultDestination string `sconf:"optional" sconf-doc:"Used when specified address does not contain an @ and may be a local user (eg root)."`
+}
+
+func cmdConfigDescribeSendmail(c *cmd) {
+	c.params = ">/etc/moxsubmit.conf"
+	c.help = `Describe configuration for mox when invoked as sendmail.`
+	if len(c.Parse()) != 0 {
+		c.Usage()
+	}
+
+	err := sconf.Describe(os.Stdout, submitconf)
+	xcheckf(err, "describe config")
+}
 
 func cmdSendmail(c *cmd) {
 	c.params = "[-Fname] [ignoredflags] [-t] [<message]"
@@ -213,26 +236,49 @@ binary should be setgid that group:
 		os.Exit(1)
 	}
 
-	var conn net.Conn
 	addr := net.JoinHostPort(submitconf.Host, fmt.Sprintf("%d", submitconf.Port))
 	d := net.Dialer{Timeout: 30 * time.Second}
-	if submitconf.TLS {
-		conn, err = tls.DialWithDialer(&d, "tcp", addr, nil)
-	} else {
-		conn, err = d.Dial("tcp", addr)
-	}
+	conn, err := d.Dial("tcp", addr)
 	xcheckf(err, "dial submit server")
+
+	var auth []sasl.Client
+	switch submitconf.AuthMethod {
+	case "SCRAM-SHA-256":
+		auth = []sasl.Client{sasl.NewClientSCRAMSHA256(submitconf.Username, submitconf.Password)}
+	case "SCRAM-SHA-1":
+		auth = []sasl.Client{sasl.NewClientSCRAMSHA1(submitconf.Username, submitconf.Password)}
+	case "CRAM-MD5":
+		auth = []sasl.Client{sasl.NewClientCRAMMD5(submitconf.Username, submitconf.Password)}
+	case "PLAIN":
+		auth = []sasl.Client{sasl.NewClientPlain(submitconf.Username, submitconf.Password)}
+	default:
+		auth = []sasl.Client{
+			sasl.NewClientSCRAMSHA256(submitconf.Username, submitconf.Password),
+			sasl.NewClientSCRAMSHA1(submitconf.Username, submitconf.Password),
+			sasl.NewClientCRAMMD5(submitconf.Username, submitconf.Password),
+			sasl.NewClientPlain(submitconf.Username, submitconf.Password),
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	tlsMode := smtpclient.TLSStrict
-	if !submitconf.STARTTLS {
-		tlsMode = smtpclient.TLSSkip
+	tlsMode := smtpclient.TLSSkip
+	if submitconf.TLS {
+		tlsMode = smtpclient.TLSStrictImmediate
+	} else if submitconf.STARTTLS {
+		tlsMode = smtpclient.TLSStrictStartTLS
 	}
-	// todo: should have more auth options, scram-sha-256 at least, perhaps cram-md5 for compatibility as well.
-	authLine := fmt.Sprintf("AUTH PLAIN %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("\u0000%s\u0000%s", submitconf.Username, submitconf.Password))))
-	mox.Conf.Static.HostnameDomain.ASCII = submitconf.LocalHostname
-	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, submitconf.Host, authLine)
+
+	ourHostname, err := dns.ParseDomain(submitconf.LocalHostname)
+	xcheckf(err, "parsing our local hostname")
+
+	var remoteHostname dns.Domain
+	if net.ParseIP(submitconf.Host) != nil {
+		remoteHostname, err = dns.ParseDomain(submitconf.Host)
+		xcheckf(err, "parsing remote hostname")
+	}
+
+	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, ourHostname, remoteHostname, auth)
 	xcheckf(err, "open smtp session")
 
 	err = client.Deliver(ctx, submitconf.From, recipient, int64(len(msg)), strings.NewReader(msg), true, false)

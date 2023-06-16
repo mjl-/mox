@@ -799,7 +799,7 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 	if c.submission {
 		// ../rfc/4954:123
 		if c.tls || !c.requireTLSForAuth {
-			c.bwritelinef("250-AUTH PLAIN SCRAM-SHA-256 SCRAM-SHA-1 CRAM-MD5")
+			c.bwritelinef("250-AUTH SCRAM-SHA-256 SCRAM-SHA-1 CRAM-MD5 PLAIN")
 		} else {
 			c.bwritelinef("250-AUTH ")
 		}
@@ -1860,7 +1860,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 			}
 
 			msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-			if err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, xmsgPrefix, dataFile, nil, i == len(c.recipients)-1); err != nil {
+			if _, err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, xmsgPrefix, dataFile, nil, i == len(c.recipients)-1); err != nil {
 				// Aborting the transaction is not great. But continuing and generating DSNs will
 				// probably result in errors as well...
 				metricSubmission.WithLabelValues("queueerror").Inc()

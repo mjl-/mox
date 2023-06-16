@@ -5,18 +5,18 @@
 package main
 
 import (
-	"bytes"
 	"crypto/tls"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/imapclient"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtpclient"
 )
 
@@ -32,10 +32,10 @@ func tcheck(t *testing.T, err error, msg string) {
 func TestDeliver(t *testing.T) {
 	mlog.Logfmt = true
 
-	// smtpclient uses the hostname for outgoing connections.
-	var err error
-	mox.Conf.Static.HostnameDomain.ASCII, err = os.Hostname()
+	hostname, err := os.Hostname()
 	tcheck(t, err, "hostname")
+	ourHostname, err := dns.ParseDomain(hostname)
+	tcheck(t, err, "parse hostname")
 
 	// Deliver submits a message over submissions, and checks with imap idle if the
 	// message is received by the destination mail server.
@@ -120,9 +120,8 @@ Subject: test message
 This is the message.
 `, mailfrom, rcptto)
 		msg = strings.ReplaceAll(msg, "\n", "\r\n")
-		auth := bytes.Join([][]byte{nil, []byte(mailfrom), []byte(password)}, []byte{0})
-		authLine := fmt.Sprintf("AUTH PLAIN %s", base64.StdEncoding.EncodeToString(auth))
-		c, err := smtpclient.New(mox.Context, xlog, conn, smtpclient.TLSSkip, desthost, authLine)
+		auth := []sasl.Client{sasl.NewClientPlain(mailfrom, password)}
+		c, err := smtpclient.New(mox.Context, xlog, conn, smtpclient.TLSSkip, ourHostname, dns.Domain{ASCII: desthost}, auth)
 		tcheck(t, err, "smtp hello")
 		err = c.Deliver(mox.Context, mailfrom, rcptto, int64(len(msg)), strings.NewReader(msg), false, false)
 		tcheck(t, err, "deliver with smtp")

@@ -20,7 +20,7 @@ low-maintenance self-hosted email.
 	mox setadminpassword
 	mox loglevels [level [pkg]]
 	mox queue list
-	mox queue kick [-id id] [-todomain domain] [-recipient address]
+	mox queue kick [-id id] [-todomain domain] [-recipient address] [-transport transport]
 	mox queue drop [-id id] [-todomain domain] [-recipient address]
 	mox queue dump id
 	mox import maildir accountname mailboxname maildir
@@ -192,13 +192,19 @@ retry after 7.5 minutes, and doubling each time. Kicking messages sets their
 next scheduled attempt to now, it can cause delivery to fail earlier than
 without rescheduling.
 
-	usage: mox queue kick [-id id] [-todomain domain] [-recipient address]
+With the -transport flag, future delivery attempts are done using the specified
+transport. Transports can be configured in mox.conf, e.g. to submit to a remote
+queue over SMTP.
+
+	usage: mox queue kick [-id id] [-todomain domain] [-recipient address] [-transport transport]
 	  -id int
 	    	id of message in queue
 	  -recipient string
 	    	recipient email address
 	  -todomain string
 	    	destination domain of messages
+	  -transport string
+	    	transport to use for the next delivery
 
 # mox queue drop
 

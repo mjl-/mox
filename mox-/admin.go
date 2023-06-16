@@ -923,8 +923,8 @@ func ClientConfigDomain(d dns.Domain) (ClientConfig, error) {
 	return c, nil
 }
 
-// return IPs we may be listening on or connecting from to the outside.
-func IPs(ctx context.Context) ([]net.IP, error) {
+// return IPs we may be listening/receiving mail on or connecting/sending from to the outside.
+func IPs(ctx context.Context, receiveOnly bool) ([]net.IP, error) {
 	log := xlog.WithContext(ctx)
 
 	// Try to gather all IPs we are listening on by going through the config.
@@ -982,5 +982,16 @@ func IPs(ctx context.Context) ([]net.IP, error) {
 			}
 		}
 	}
+
+	if receiveOnly {
+		return ips, nil
+	}
+
+	for _, t := range Conf.Static.Transports {
+		if t.Socks != nil {
+			ips = append(ips, t.Socks.IPs...)
+		}
+	}
+
 	return ips, nil
 }

@@ -404,9 +404,39 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, shutdown func()) 
 		}
 		xw.xclose()
 
-	case "queuekick", "queuedrop":
+	case "queuekick":
 		/* protocol:
-		> "queuekick" or "queuedrop"
+		> "queuekick"
+		> id
+		> todomain
+		> recipient
+		> transport // if empty, transport is left unchanged; in future, we may want to differtiate between "leave unchanged" and "set to empty string".
+		< count
+		< "ok" or error
+		*/
+
+		idstr := ctl.xread()
+		todomain := ctl.xread()
+		recipient := ctl.xread()
+		transport := ctl.xread()
+		id, err := strconv.ParseInt(idstr, 10, 64)
+		if err != nil {
+			ctl.xwrite("0")
+			ctl.xcheck(err, "parsing id")
+		}
+
+		var xtransport *string
+		if transport != "" {
+			xtransport = &transport
+		}
+		count, err := queue.Kick(ctx, id, todomain, recipient, xtransport)
+		ctl.xcheck(err, "kicking queue")
+		ctl.xwrite(fmt.Sprintf("%d", count))
+		ctl.xwriteok()
+
+	case "queuedrop":
+		/* protocol:
+		> "queuedrop"
 		> id
 		> todomain
 		> recipient
@@ -423,14 +453,8 @@ func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, shutdown func()) 
 			ctl.xcheck(err, "parsing id")
 		}
 
-		var count int
-		if cmd == "queuekick" {
-			count, err = queue.Kick(ctx, id, todomain, recipient)
-			ctl.xcheck(err, "kicking queue")
-		} else {
-			count, err = queue.Drop(ctx, id, todomain, recipient)
-			ctl.xcheck(err, "dropping messages from queue")
-		}
+		count, err := queue.Drop(ctx, id, todomain, recipient)
+		ctl.xcheck(err, "dropping messages from queue")
 		ctl.xwrite(fmt.Sprintf("%d", count))
 		ctl.xwriteok()
 

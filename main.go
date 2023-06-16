@@ -1140,19 +1140,24 @@ error.
 }
 
 func cmdQueueKick(c *cmd) {
-	c.params = "[-id id] [-todomain domain] [-recipient address]"
+	c.params = "[-id id] [-todomain domain] [-recipient address] [-transport transport]"
 	c.help = `Schedule matching messages in the queue for immediate delivery.
 
 Messages deliveries are normally attempted with exponential backoff. The first
 retry after 7.5 minutes, and doubling each time. Kicking messages sets their
 next scheduled attempt to now, it can cause delivery to fail earlier than
 without rescheduling.
+
+With the -transport flag, future delivery attempts are done using the specified
+transport. Transports can be configured in mox.conf, e.g. to submit to a remote
+queue over SMTP.
 `
 	var id int64
-	var todomain, recipient string
+	var todomain, recipient, transport string
 	c.flag.Int64Var(&id, "id", 0, "id of message in queue")
 	c.flag.StringVar(&todomain, "todomain", "", "destination domain of messages")
 	c.flag.StringVar(&recipient, "recipient", "", "recipient email address")
+	c.flag.StringVar(&transport, "transport", "", "transport to use for the next delivery")
 	if len(c.Parse()) != 0 {
 		c.Usage()
 	}
@@ -1163,6 +1168,7 @@ without rescheduling.
 	ctl.xwrite(fmt.Sprintf("%d", id))
 	ctl.xwrite(todomain)
 	ctl.xwrite(recipient)
+	ctl.xwrite(transport)
 	count := ctl.xread()
 	line := ctl.xread()
 	if line == "ok" {
@@ -2040,28 +2046,4 @@ func cmdBumpUIDValidity(c *cmd) {
 		return nil
 	})
 	xcheckf(err, "updating database")
-}
-
-var submitconf struct {
-	LocalHostname      string `sconf-doc:"Hosts don't always have an FQDN, set it explicitly, for EHLO."`
-	Host               string `sconf-doc:"Host to dial for delivery, e.g. mail.<domain>."`
-	Port               int    `sconf-doc:"Port to dial for delivery, e.g. 465 for submissions, 587 for submission, or perhaps 25 for smtp."`
-	TLS                bool   `sconf-doc:"Connect with TLS. Usually for connections to port 465."`
-	STARTTLS           bool   `sconf-doc:"After starting in plain text, use STARTTLS to enable TLS. For port 587 and 25."`
-	Username           string `sconf-doc:"For SMTP plain auth."`
-	Password           string `sconf-doc:"For SMTP plain auth."`
-	AuthMethod         string `sconf-doc:"Ignored for now, regardless of value, AUTH PLAIN is done. This will change in the future."`
-	From               string `sconf-doc:"Address for MAIL FROM in SMTP and From-header in message."`
-	DefaultDestination string `sconf:"optional" sconf-doc:"Used when specified address does not contain an @ and may be a local user (eg root)."`
-}
-
-func cmdConfigDescribeSendmail(c *cmd) {
-	c.params = ">/etc/moxsubmit.conf"
-	c.help = `Describe configuration for mox when invoked as sendmail.`
-	if len(c.Parse()) != 0 {
-		c.Usage()
-	}
-
-	err := sconf.Describe(os.Stdout, submitconf)
-	xcheckf(err, "describe config")
 }

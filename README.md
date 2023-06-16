@@ -5,7 +5,7 @@ See Quickstart below to get started.
 ## Features
 
 - Quick and easy to start/maintain mail server, for your own domain(s).
-- SMTP (with extensions) for receiving and submitting email.
+- SMTP (with extensions) for receiving, submitting and delivering email.
 - IMAP4 (with extensions) for giving email clients access to email.
 - Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
 - SPF, verifying that a remote host is allowed to sent email for a domain.

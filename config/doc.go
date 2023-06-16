@@ -339,6 +339,130 @@ describe-static" and "mox config describe-domains":
 	DefaultMailboxes:
 		-
 
+	# Transport are mechanisms for delivering messages. Transports can be referenced
+	# from Routes in accounts, domains and the global configuration. There is always
+	# an implicit/fallback delivery transport doing direct delivery with SMTP from the
+	# outgoing message queue. Transports are typically only configured when using
+	# smarthosts, i.e. when delivering through another SMTP server. Zero or one
+	# transport methods must be set in a transport, never multiple. When using an
+	# external party to send email for a domain, keep in mind you may have to add
+	# their IP address to your domain's SPF record, and possibly additional DKIM
+	# records. (optional)
+	Transports:
+		x:
+
+			# Submission SMTP over a TLS connection to submit email to a remote queue.
+			# (optional)
+			Submissions:
+
+				# Host name to connect to and for verifying its TLS certificate.
+				Host:
+
+				# If unset or 0, the default port for submission(s)/smtp is used: 25 for SMTP, 465
+				# for submissions (with TLS), 587 for submission (possibly with STARTTLS).
+				# (optional)
+				Port: 0
+
+				# If set an unverifiable remote TLS certificate during STARTTLS is accepted.
+				# (optional)
+				STARTTLSInsecureSkipVerify: false
+
+				# If set for submission or smtp transport, do not attempt STARTTLS on the
+				# connection. Authentication credentials and messages will be transferred in clear
+				# text. (optional)
+				NoSTARTTLS: false
+
+				# If set, authentication credentials for the remote server. (optional)
+				Auth:
+					Username:
+					Password:
+
+					# Allowed authentication mechanisms. Defaults to SCRAM-SHA-256, SCRAM-SHA-1,
+					# CRAM-MD5. Not included by default: PLAIN. (optional)
+					Mechanisms:
+						-
+
+			# Submission SMTP over a plain TCP connection (possibly with STARTTLS) to submit
+			# email to a remote queue. (optional)
+			Submission:
+
+				# Host name to connect to and for verifying its TLS certificate.
+				Host:
+
+				# If unset or 0, the default port for submission(s)/smtp is used: 25 for SMTP, 465
+				# for submissions (with TLS), 587 for submission (possibly with STARTTLS).
+				# (optional)
+				Port: 0
+
+				# If set an unverifiable remote TLS certificate during STARTTLS is accepted.
+				# (optional)
+				STARTTLSInsecureSkipVerify: false
+
+				# If set for submission or smtp transport, do not attempt STARTTLS on the
+				# connection. Authentication credentials and messages will be transferred in clear
+				# text. (optional)
+				NoSTARTTLS: false
+
+				# If set, authentication credentials for the remote server. (optional)
+				Auth:
+					Username:
+					Password:
+
+					# Allowed authentication mechanisms. Defaults to SCRAM-SHA-256, SCRAM-SHA-1,
+					# CRAM-MD5. Not included by default: PLAIN. (optional)
+					Mechanisms:
+						-
+
+			# SMTP over a plain connection (possibly with STARTTLS), typically for
+			# old-fashioned unauthenticated relaying to a remote queue. (optional)
+			SMTP:
+
+				# Host name to connect to and for verifying its TLS certificate.
+				Host:
+
+				# If unset or 0, the default port for submission(s)/smtp is used: 25 for SMTP, 465
+				# for submissions (with TLS), 587 for submission (possibly with STARTTLS).
+				# (optional)
+				Port: 0
+
+				# If set an unverifiable remote TLS certificate during STARTTLS is accepted.
+				# (optional)
+				STARTTLSInsecureSkipVerify: false
+
+				# If set for submission or smtp transport, do not attempt STARTTLS on the
+				# connection. Authentication credentials and messages will be transferred in clear
+				# text. (optional)
+				NoSTARTTLS: false
+
+				# If set, authentication credentials for the remote server. (optional)
+				Auth:
+					Username:
+					Password:
+
+					# Allowed authentication mechanisms. Defaults to SCRAM-SHA-256, SCRAM-SHA-1,
+					# CRAM-MD5. Not included by default: PLAIN. (optional)
+					Mechanisms:
+						-
+
+			# Like regular direct delivery, but makes outgoing connections through a SOCKS
+			# proxy. (optional)
+			Socks:
+
+				# Address of SOCKS proxy, of the form host:port or ip:port.
+				Address:
+
+				# IP addresses connections from the SOCKS server will originate from. This IP
+				# addresses should be configured in the SPF record (keep in mind DNS record time
+				# to live (TTL) when adding a SOCKS proxy). Reverse DNS should be set up for these
+				# address, resolving to RemoteHostname. These are typically the IPv4 and IPv6
+				# address for the host in the Address field.
+				RemoteIPs:
+					-
+
+				# Hostname belonging to RemoteIPs. This name is used during in SMTP EHLO. This is
+				# typically the hostname of the host in the Address field.
+				RemoteHostname:
+
 # domains.conf
 
 	# Domains for which email is accepted. For internationalized domains, use their
@@ -460,6 +584,30 @@ describe-static" and "mox config describe-domains":
 
 				# Mailbox to deliver to, e.g. TLSRPT.
 				Mailbox:
+
+			# Routes for delivering outgoing messages through the queue. Each delivery attempt
+			# evaluates account routes, these domain routes and finally global routes. The
+			# transport of the first matching route is used in the delivery attempt. If no
+			# routes match, which is the default with no configured routes, messages are
+			# delivered directly from the queue. (optional)
+			Routes:
+				-
+
+					# Matches if the envelope from domain matches one of the configured domains, or if
+					# the list is empty. If a domain starts with a dot, prefixes of the domain also
+					# match. (optional)
+					FromDomain:
+						-
+
+					# Like FromDomain, but matching against the envelope to domain. (optional)
+					ToDomain:
+						-
+
+					# Matches if at least this many deliveries have already been attempted. This can
+					# be used to attempt sending through a smarthost when direct delivery has failed
+					# for several times. (optional)
+					MinimumAttempts: 0
+					Transport:
 
 	# Accounts to which email can be delivered. An account can accept email for
 	# multiple domains, for multiple localparts, and deliver to multiple mailboxes.
@@ -611,6 +759,30 @@ describe-static" and "mox config describe-domains":
 			# this mail server in case of account compromise. Default 200. (optional)
 			MaxFirstTimeRecipientsPerDay: 0
 
+			# Routes for delivering outgoing messages through the queue. Each delivery attempt
+			# evaluates these account routes, domain routes and finally global routes. The
+			# transport of the first matching route is used in the delivery attempt. If no
+			# routes match, which is the default with no configured routes, messages are
+			# delivered directly from the queue. (optional)
+			Routes:
+				-
+
+					# Matches if the envelope from domain matches one of the configured domains, or if
+					# the list is empty. If a domain starts with a dot, prefixes of the domain also
+					# match. (optional)
+					FromDomain:
+						-
+
+					# Like FromDomain, but matching against the envelope to domain. (optional)
+					ToDomain:
+						-
+
+					# Matches if at least this many deliveries have already been attempted. This can
+					# be used to attempt sending through a smarthost when direct delivery has failed
+					# for several times. (optional)
+					MinimumAttempts: 0
+					Transport:
+
 	# Redirect all requests from domain (key) to domain (value). Always redirects to
 	# HTTPS. For plain HTTP redirects, use a WebHandler with a WebRedirect. (optional)
 	WebDomainRedirects:
@@ -728,6 +900,30 @@ describe-static" and "mox config describe-domains":
 				# headers. (optional)
 				ResponseHeaders:
 					x:
+
+	# Routes for delivering outgoing messages through the queue. Each delivery attempt
+	# evaluates account routes, domain routes and finally these global routes. The
+	# transport of the first matching route is used in the delivery attempt. If no
+	# routes match, which is the default with no configured routes, messages are
+	# delivered directly from the queue. (optional)
+	Routes:
+		-
+
+			# Matches if the envelope from domain matches one of the configured domains, or if
+			# the list is empty. If a domain starts with a dot, prefixes of the domain also
+			# match. (optional)
+			FromDomain:
+				-
+
+			# Like FromDomain, but matching against the envelope to domain. (optional)
+			ToDomain:
+				-
+
+			# Matches if at least this many deliveries have already been attempted. This can
+			# be used to attempt sending through a smarthost when direct delivery has failed
+			# for several times. (optional)
+			MinimumAttempts: 0
+			Transport:
 
 # Examples
 

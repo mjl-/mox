@@ -5,9 +5,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -22,8 +20,10 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
 )
@@ -133,8 +133,6 @@ func TestDeliver(t *testing.T) {
 		tcheck(t, err, "dial submission")
 		defer conn.Close()
 
-		// todo: this is "aware" (hopefully) of the config smtpclient/client.go sets up... tricky
-		mox.Conf.Static.HostnameDomain.ASCII = desthost
 		msg := fmt.Sprintf(`From: <%s>
 To: <%s>
 Subject: test message
@@ -142,9 +140,8 @@ Subject: test message
 This is the message.
 `, mailfrom, rcptto)
 		msg = strings.ReplaceAll(msg, "\n", "\r\n")
-		auth := bytes.Join([][]byte{nil, []byte(mailfrom), []byte(password)}, []byte{0})
-		authLine := fmt.Sprintf("AUTH PLAIN %s", base64.StdEncoding.EncodeToString(auth))
-		c, err := smtpclient.New(mox.Context, mlog.New("test"), conn, smtpclient.TLSOpportunistic, desthost, authLine)
+		auth := []sasl.Client{sasl.NewClientPlain(mailfrom, password)}
+		c, err := smtpclient.New(mox.Context, mlog.New("test"), conn, smtpclient.TLSOpportunistic, mox.Conf.Static.HostnameDomain, dns.Domain{ASCII: desthost}, auth)
 		tcheck(t, err, "smtp hello")
 		err = c.Deliver(mox.Context, mailfrom, rcptto, int64(len(msg)), strings.NewReader(msg), false, false)
 		tcheck(t, err, "deliver with smtp")

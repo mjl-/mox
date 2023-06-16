@@ -32,6 +32,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/queue"
+	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
@@ -79,6 +80,7 @@ type testserver struct {
 	comm       *store.Comm
 	cid        int64
 	resolver   dns.Resolver
+	auth       []sasl.Client
 	user, pass string
 	submission bool
 	dnsbls     []dns.Domain
@@ -135,12 +137,16 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 		close(serverdone)
 	}()
 
-	var authLine string
-	if ts.user != "" {
-		authLine = fmt.Sprintf("AUTH PLAIN %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("\u0000%s\u0000%s", ts.user, ts.pass))))
+	var auth []sasl.Client
+	if len(ts.auth) > 0 {
+		auth = ts.auth
+	} else if ts.user != "" {
+		auth = append(auth, sasl.NewClientPlain(ts.user, ts.pass))
 	}
 
-	client, err := smtpclient.New(ctxbg, xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, "mox.example", authLine)
+	ourHostname := mox.Conf.Static.HostnameDomain
+	remoteHostname := dns.Domain{ASCII: "mox.example"}
+	client, err := smtpclient.New(ctxbg, xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, ourHostname, remoteHostname, auth)
 	if err != nil {
 		clientConn.Close()
 	} else {
@@ -192,10 +198,13 @@ func TestSubmission(t *testing.T) {
 	}
 	mox.Conf.Dynamic.Domains["mox.example"] = dom
 
-	testAuth := func(user, pass string, expErr *smtpclient.Error) {
+	testAuth := func(authfn func(user, pass string) sasl.Client, user, pass string, expErr *smtpclient.Error) {
 		t.Helper()
-		ts.user = user
-		ts.pass = pass
+		if authfn != nil {
+			ts.auth = []sasl.Client{authfn(user, pass)}
+		} else {
+			ts.auth = nil
+		}
 		ts.run(func(err error, client *smtpclient.Client) {
 			t.Helper()
 			mailFrom := "mjl@mox.example"
@@ -205,16 +214,24 @@ func TestSubmission(t *testing.T) {
 			}
 			var cerr smtpclient.Error
 			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
+				t.Fatalf("got err %#v (%q), expected %#v", err, err, expErr)
 			}
 		})
 	}
 
 	ts.submission = true
-	testAuth("", "", &smtpclient.Error{Permanent: true, Code: smtp.C530SecurityRequired, Secode: smtp.SePol7Other0})
-	testAuth("mjl@mox.example", "test", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8})         // Bad (short) password.
-	testAuth("mjl@mox.example", "testtesttest", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8}) // Bad password.
-	testAuth("mjl@mox.example", "testtest", nil)
+	testAuth(nil, "", "", &smtpclient.Error{Permanent: true, Code: smtp.C530SecurityRequired, Secode: smtp.SePol7Other0})
+	authfns := []func(user, pass string) sasl.Client{
+		sasl.NewClientPlain,
+		sasl.NewClientCRAMMD5,
+		sasl.NewClientSCRAMSHA1,
+		sasl.NewClientSCRAMSHA256,
+	}
+	for _, fn := range authfns {
+		testAuth(fn, "mjl@mox.example", "test", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8})         // Bad (short) password.
+		testAuth(fn, "mjl@mox.example", "testtesttest", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8}) // Bad password.
+		testAuth(fn, "mjl@mox.example", "testtest", nil)
+	}
 }
 
 // Test delivery from external MTA.

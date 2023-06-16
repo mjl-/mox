@@ -195,9 +195,9 @@ const formatSize = n => {
 
 const index = async () => {
 	const [domains, queueSize, checkUpdatesEnabled] = await Promise.all([
-		await api.Domains(),
-		await api.QueueSize(),
-		await api.CheckUpdatesEnabled(),
+		api.Domains(),
+		api.QueueSize(),
+		api.CheckUpdatesEnabled(),
 	])
 
 	let fieldset, domain, account, localpart
@@ -265,6 +265,7 @@ const index = async () => {
 		dom.div(dom.a('MTA-STS policies', attr({href: '#mtasts'}))),
 		// todo: outgoing DMARC findings
 		// todo: outgoing TLSRPT findings
+		// todo: routing, globally, per domain and per account
 		dom.br(),
 		dom.h2('DNS blocklist status'),
 		dom.div(dom.a('DNSBL status', attr({href: '#dnsbl'}))),
@@ -1525,9 +1526,13 @@ const dnsbl = async () => {
 }
 
 const queueList = async () => {
-	const msgs = await api.QueueList()
+	const [msgs, transports] = await Promise.all([
+		api.QueueList(),
+		api.Transports(),
+	])
 
 	const nowSecs = new Date().getTime()/1000
+	let transport
 
 	const page = document.getElementById('page')
 	dom._kids(page,
@@ -1550,7 +1555,8 @@ const queueList = async () => {
 						dom.th('Next attempt'),
 						dom.th('Last attempt'),
 						dom.th('Last error'),
-						dom.th('Action'),
+						dom.th('Transport/Retry'),
+						dom.th('Remove'),
 					),
 				),
 				dom.tbody(
@@ -1565,11 +1571,17 @@ const queueList = async () => {
 						dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'),
 						dom.td(m.LastError || '-'),
 						dom.td(
-							dom.button('Try now', async function click(e) {
+							transport=dom.select(
+								attr({title: 'Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'}),
+								dom.option('(default)', attr({value: ''})),
+								Object.keys(transports).sort().map(t => dom.option(t, m.Transport === t ? attr({checked: ''}) : [])),
+							),
+							' ',
+							dom.button('Retry now', async function click(e) {
 								e.preventDefault()
 								try {
 									e.target.disabled = true
-									await api.QueueKick(m.ID)
+									await api.QueueKick(m.ID, transport.value)
 								} catch (err) {
 									console.log({err})
 									window.alert('Error: ' + err.message)
@@ -1579,7 +1591,8 @@ const queueList = async () => {
 								}
 								window.location.reload() // todo: only refresh the list
 							}),
-							' ',
+						),
+						dom.td(
 							dom.button('Remove', async function click(e) {
 								e.preventDefault()
 								if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
