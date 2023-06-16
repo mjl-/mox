@@ -31,7 +31,7 @@ func FuzzServer(f *testing.F) {
 
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = "../testdata/smtpserverfuzz/mox.conf"
-	mox.MustLoadConfig(false)
+	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)
 	acc, err := store.OpenAccount("mjl")

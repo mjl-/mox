@@ -402,7 +402,7 @@ func writeLocalConfig(log *mlog.Log, dir string) (rerr error) {
 func localLoadConfig(log *mlog.Log, dir string) error {
 	mox.ConfigStaticPath = filepath.Join(dir, "mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(dir, "domains.conf")
-	errs := mox.LoadConfig(context.Background(), false)
+	errs := mox.LoadConfig(context.Background(), true, false)
 	if len(errs) > 1 {
 		log.Error("loading config generated config file: multiple errors")
 		for _, err := range errs {

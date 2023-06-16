@@ -53,7 +53,7 @@ func TestDeliver(t *testing.T) {
 	// Load mox config.
 	mox.ConfigStaticPath = "testdata/integration/config/mox.conf"
 	filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
-	if errs := mox.LoadConfig(ctxbg, false); len(errs) > 0 {
+	if errs := mox.LoadConfig(ctxbg, true, false); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}
 

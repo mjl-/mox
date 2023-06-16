@@ -151,7 +151,7 @@ requested, other TLS certificates are requested on demand.
 	log := mlog.New("serve")
 
 	if os.Getuid() == 0 {
-		mox.MustLoadConfig(checkACMEHosts)
+		mox.MustLoadConfig(true, checkACMEHosts)
 
 		// No need to potentially start and keep multiple processes. As root, we just need
 		// to start the child process.
@@ -183,7 +183,7 @@ requested, other TLS certificates are requested on demand.
 	} else {
 		log.Print("starting as unprivileged user", mlog.Field("user", mox.Conf.Static.User), mlog.Field("uid", mox.Conf.Static.UID), mlog.Field("gid", mox.Conf.Static.GID), mlog.Field("pid", os.Getpid()))
 		mox.RestorePassedFiles()
-		mox.MustLoadConfig(checkACMEHosts)
+		mox.MustLoadConfig(true, checkACMEHosts)
 	}
 
 	syscall.Umask(syscall.Umask(007) | 007)

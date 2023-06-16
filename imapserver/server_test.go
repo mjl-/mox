@@ -311,7 +311,7 @@ func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn 
 	}
 	mox.Context = context.Background()
 	mox.ConfigStaticPath = "../testdata/imap/mox.conf"
-	mox.MustLoadConfig(false)
+	mox.MustLoadConfig(true, false)
 	acc, err := store.OpenAccount("mjl")
 	tcheck(t, err, "open account")
 	if first {

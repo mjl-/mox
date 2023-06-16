@@ -60,7 +60,7 @@ func FuzzServer(f *testing.F) {
 
 	mox.Context = context.Background()
 	mox.ConfigStaticPath = "../testdata/imapserverfuzz/mox.conf"
-	mox.MustLoadConfig(false)
+	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)
 	acc, err := store.OpenAccount("mjl")

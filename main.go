@@ -356,9 +356,9 @@ var pedantic bool
 
 // subcommands that are not "serve" should use this function to load the config, it
 // restores any loglevel specified on the command-line, instead of using the
-// loglevels from the config file.
+// loglevels from the config file and it does not load files like TLS keys/certs.
 func mustLoadConfig() {
-	mox.MustLoadConfig(false)
+	mox.MustLoadConfig(false, false)
 	if level, ok := mlog.Levels[loglevel]; loglevel != "" && ok {
 		mox.Conf.Log[""] = level
 		mlog.SetConfig(mox.Conf.Log)

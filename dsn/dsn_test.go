@@ -130,7 +130,7 @@ func TestDSN(t *testing.T) {
 	// Test for valid DKIM signature.
 	mox.Context = context.Background()
 	mox.ConfigStaticPath = "../testdata/dsn/mox.conf"
-	mox.MustLoadConfig(false)
+	mox.MustLoadConfig(true, false)
 	msgbuf, err = m.Compose(log, false)
 	if err != nil {
 		t.Fatalf("composing utf-8 dsn with utf-8 support: %v", err)

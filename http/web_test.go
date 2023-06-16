@@ -17,7 +17,7 @@ func TestServeHTTP(t *testing.T) {
 	os.RemoveAll("../testdata/web/data")
 	mox.ConfigStaticPath = "../testdata/web/mox.conf"
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
-	mox.MustLoadConfig(false)
+	mox.MustLoadConfig(true, false)
 
 	srv := &serve{
 		PathHandlers: []pathHandler{

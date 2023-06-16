@@ -322,8 +322,8 @@ func writeDynamic(ctx context.Context, log *mlog.Log, c config.Dynamic) error {
 }
 
 // MustLoadConfig loads the config, quitting on errors.
-func MustLoadConfig(checkACMEHosts bool) {
-	errs := LoadConfig(context.Background(), checkACMEHosts)
+func MustLoadConfig(doLoadTLSKeyCerts, checkACMEHosts bool) {
+	errs := LoadConfig(context.Background(), doLoadTLSKeyCerts, checkACMEHosts)
 	if len(errs) > 1 {
 		xlog.Error("loading config file: multiple errors")
 		for _, err := range errs {
@@ -337,11 +337,11 @@ func MustLoadConfig(checkACMEHosts bool) {
 
 // LoadConfig attempts to parse and load a config, returning any errors
 // encountered.
-func LoadConfig(ctx context.Context, checkACMEHosts bool) []error {
+func LoadConfig(ctx context.Context, doLoadTLSKeyCerts, checkACMEHosts bool) []error {
 	Shutdown, ShutdownCancel = context.WithCancel(context.Background())
 	Context, ContextCancel = context.WithCancel(context.Background())
 
-	c, errs := ParseConfig(ctx, ConfigStaticPath, false, false, checkACMEHosts)
+	c, errs := ParseConfig(ctx, ConfigStaticPath, false, doLoadTLSKeyCerts, checkACMEHosts)
 	if len(errs) > 0 {
 		return errs
 	}
@@ -367,12 +367,12 @@ func SetConfig(c *Config) {
 }
 
 // ParseConfig parses the static config at path p. If checkOnly is true, no changes
-// are made, such as registering ACME identities. If skipCheckTLSKeyCerts is true,
-// the TLS KeyCerts configuration is not checked. This is used during the
+// are made, such as registering ACME identities. If doLoadTLSKeyCerts is true,
+// the TLS KeyCerts configuration is loaded and checked. This is used during the
 // quickstart in the case the user is going to provide their own certificates.
 // If checkACMEHosts is true, the hosts allowed for acme are compared with the
 // explicitly configured ips we are listening on.
-func ParseConfig(ctx context.Context, p string, checkOnly, skipCheckTLSKeyCerts, checkACMEHosts bool) (c *Config, errs []error) {
+func ParseConfig(ctx context.Context, p string, checkOnly, doLoadTLSKeyCerts, checkACMEHosts bool) (c *Config, errs []error) {
 	c = &Config{
 		Static: config.Static{
 			DataDir: ".",
@@ -391,7 +391,7 @@ func ParseConfig(ctx context.Context, p string, checkOnly, skipCheckTLSKeyCerts,
 		return nil, []error{fmt.Errorf("parsing %s: %v", p, err)}
 	}
 
-	if xerrs := PrepareStaticConfig(ctx, p, c, checkOnly, skipCheckTLSKeyCerts); len(xerrs) > 0 {
+	if xerrs := PrepareStaticConfig(ctx, p, c, checkOnly, doLoadTLSKeyCerts); len(xerrs) > 0 {
 		return nil, xerrs
 	}
 
@@ -408,7 +408,7 @@ func ParseConfig(ctx context.Context, p string, checkOnly, skipCheckTLSKeyCerts,
 // PrepareStaticConfig parses the static config file and prepares data structures
 // for starting mox. If checkOnly is set no substantial changes are made, like
 // creating an ACME registration.
-func PrepareStaticConfig(ctx context.Context, configFile string, config *Config, checkOnly, skipCheckTLSKeyCerts bool) (errs []error) {
+func PrepareStaticConfig(ctx context.Context, configFile string, config *Config, checkOnly, doLoadTLSKeyCerts bool) (errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
@@ -532,7 +532,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, config *Config,
 				}
 				l.TLS.Config = tlsconfig
 			} else if len(l.TLS.KeyCerts) != 0 {
-				if !skipCheckTLSKeyCerts {
+				if doLoadTLSKeyCerts {
 					if err := loadTLSKeyCerts(configFile, "listener "+name, l.TLS); err != nil {
 						addErrorf("%w", err)
 					}

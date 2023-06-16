@@ -92,7 +92,7 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = configPath
-	mox.MustLoadConfig(false)
+	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)
 	var err error

@@ -35,7 +35,7 @@ func setup(t *testing.T) (*store.Account, func()) {
 	os.RemoveAll("../testdata/queue/data")
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = "../testdata/queue/mox.conf"
-	mox.MustLoadConfig(false)
+	mox.MustLoadConfig(true, false)
 	acc, err := store.OpenAccount("mjl")
 	tcheck(t, err, "open account")
 	err = acc.SetPassword("testtest")
