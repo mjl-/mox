@@ -262,7 +262,11 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 		status("Status", statusLine) // ../rfc/3464:975
 		if !r.RemoteMTA.IsZero() {
 			// ../rfc/3464:1015
-			status("Remote-MTA", fmt.Sprintf("dns;%s (%s)", r.RemoteMTA.Name, smtp.AddressLiteral(r.RemoteMTA.IP)))
+			s := "dns;" + r.RemoteMTA.Name
+			if len(r.RemoteMTA.IP) > 0 {
+				s += " (" + smtp.AddressLiteral(r.RemoteMTA.IP) + ")"
+			}
+			status("Remote-MTA", s)
 		}
 		// Presence of Diagnostic-Code indicates the code is from Remote-MTA. ../rfc/3464:1053
 		if r.DiagnosticCode != "" {
