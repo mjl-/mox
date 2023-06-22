@@ -105,7 +105,7 @@ func TestDeliver(t *testing.T) {
 			case <-timer.C:
 				err = fmt.Errorf("nothing within %v", period)
 			}
-			xcheck(err, "waiting for imap untagged repsonse to idle")
+			xcheck(err, "waiting for imap untagged response to idle")
 			imaperr <- nil
 		}()
 

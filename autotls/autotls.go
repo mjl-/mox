@@ -255,8 +255,8 @@ var errHostNotAllowed = errors.New("autotls: host not in allowlist")
 
 // HostPolicy decides if a host is allowed for use with ACME, i.e. whether a
 // certificate will be returned if present and/or will be requested if not yet
-// present. Only hosts added with AllowHostname are allowed. During shutdown, no
-// new connections are allowed.
+// present. Only hosts added with SetAllowedHostnames are allowed. During shutdown,
+// no new connections are allowed.
 func (m *Manager) HostPolicy(ctx context.Context, host string) (rerr error) {
 	log := xlog.WithContext(ctx)
 	defer func() {
