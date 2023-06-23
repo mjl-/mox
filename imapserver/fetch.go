@@ -189,12 +189,12 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 		err := cmd.tx.Update(m)
 		xcheckf(err, "marking message as seen")
 
-		cmd.changes = append(cmd.changes, store.ChangeFlags{MailboxID: cmd.mailboxID, UID: cmd.uid, Mask: store.Flags{Seen: true}, Flags: m.Flags})
+		cmd.changes = append(cmd.changes, store.ChangeFlags{MailboxID: cmd.mailboxID, UID: cmd.uid, Mask: store.Flags{Seen: true}, Flags: m.Flags, Keywords: m.Keywords})
 	}
 
 	if cmd.needFlags {
 		m := cmd.xensureMessage()
-		data = append(data, bare("FLAGS"), flaglist(m.Flags))
+		data = append(data, bare("FLAGS"), flaglist(m.Flags, m.Keywords))
 	}
 
 	// Write errors are turned into panics because we write through c.

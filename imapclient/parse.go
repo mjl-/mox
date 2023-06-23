@@ -178,9 +178,9 @@ func (c *Conn) xrespCode() (string, CodeArg) {
 		l := []string{} // Must be non-nil.
 		if c.take(' ') {
 			c.xtake("(")
-			l = []string{c.xflag()}
+			l = []string{c.xflagPerm()}
 			for c.take(' ') {
-				l = append(l, c.xflag())
+				l = append(l, c.xflagPerm())
 			}
 			c.xtake(")")
 		}
@@ -694,15 +694,26 @@ func (c *Conn) xliteral() []byte {
 
 // ../rfc/9051:6565
 // todo: stricter
-func (c *Conn) xflag() string {
+func (c *Conn) xflag0(allowPerm bool) string {
 	s := ""
 	if c.take('\\') {
-		s = "\\"
+		s = `\`
+		if allowPerm && c.take('*') {
+			return `\*`
+		}
 	} else if c.take('$') {
 		s = "$"
 	}
 	s += c.xatom()
 	return s
+}
+
+func (c *Conn) xflag() string {
+	return c.xflag0(false)
+}
+
+func (c *Conn) xflagPerm() string {
+	return c.xflag0(true)
 }
 
 func (c *Conn) xsection() string {

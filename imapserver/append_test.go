@@ -44,14 +44,14 @@ func TestAppend(t *testing.T) {
 	tc2.transactf("no", "append nobox (\\Seen) \" 1-Jan-2022 10:10:00 +0100\" {1}")
 	tc2.xcode("TRYCREATE")
 
-	tc2.transactf("ok", "append inbox (\\Seen) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
+	tc2.transactf("ok", "append inbox (\\Seen Label1 $label2) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc2.xuntagged(imapclient.UntaggedExists(1))
 	tc2.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UID: 1})
 
 	tc.transactf("ok", "noop")
 	uid1 := imapclient.FetchUID(1)
-	flagsSeen := imapclient.FetchFlags{`\Seen`}
-	tc.xuntagged(imapclient.UntaggedExists(1), imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
+	flags := imapclient.FetchFlags{`\Seen`, "label1", "$label2"}
+	tc.xuntagged(imapclient.UntaggedExists(1), imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flags}})
 	tc3.transactf("ok", "noop")
 	tc3.xuntagged() // Inbox is not selected, nothing to report.
 

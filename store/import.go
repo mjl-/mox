@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	"github.com/mjl-/mox/mlog"
 )
 
@@ -92,6 +94,7 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 	fromLine := mr.fromLine
 	bf := bufio.NewWriter(f)
 	var flags Flags
+	keywords := map[string]bool{}
 	var size int64
 	for {
 		line, err := mr.r.ReadBytes('\n')
@@ -132,7 +135,23 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 				} else if bytes.HasPrefix(line, []byte("X-Keywords:")) {
 					s := strings.TrimSpace(strings.SplitN(string(line), ":", 2)[1])
 					for _, t := range strings.Split(s, ",") {
-						flagSet(&flags, strings.ToLower(strings.TrimSpace(t)))
+						word := strings.ToLower(strings.TrimSpace(t))
+						switch word {
+						case "forwarded", "$forwarded":
+							flags.Forwarded = true
+						case "junk", "$junk":
+							flags.Junk = true
+						case "notjunk", "$notjunk", "nonjunk", "$nonjunk":
+							flags.Notjunk = true
+						case "phishing", "$phishing":
+							flags.Phishing = true
+						case "mdnsent", "$mdnsent":
+							flags.MDNSent = true
+						default:
+							if ValidLowercaseKeyword(word) {
+								keywords[word] = true
+							}
+						}
 					}
 				}
 			}
@@ -165,7 +184,7 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 		return nil, nil, mr.Position(), fmt.Errorf("flush: %v", err)
 	}
 
-	m := &Message{Flags: flags, Size: size}
+	m := &Message{Flags: flags, Keywords: maps.Keys(keywords), Size: size}
 
 	if t := strings.SplitN(fromLine, " ", 3); len(t) == 3 {
 		layouts := []string{time.ANSIC, time.UnixDate, time.RubyDate}
@@ -297,6 +316,7 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 
 	// Parse flags. See https://cr.yp.to/proto/maildir.html.
 	flags := Flags{}
+	keywords := map[string]bool{}
 	t = strings.SplitN(filepath.Base(sf.Name()), ":2,", 2)
 	if len(t) == 2 {
 		for _, c := range t[1] {
@@ -319,26 +339,29 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 					if index >= len(mr.dovecotKeywords) {
 						continue
 					}
-					kw := mr.dovecotKeywords[index]
+					kw := strings.ToLower(mr.dovecotKeywords[index])
 					switch kw {
-					case "$Forwarded", "Forwarded":
+					case "$forwarded", "forwarded":
 						flags.Forwarded = true
-					case "$Junk", "Junk":
+					case "$junk", "junk":
 						flags.Junk = true
-					case "$NotJunk", "NotJunk", "NonJunk":
+					case "$notjunk", "notjunk", "nonjunk":
 						flags.Notjunk = true
-					case "$MDNSent":
+					case "$mdnsent", "mdnsent":
 						flags.MDNSent = true
-					case "$Phishing", "Phishing":
+					case "$phishing", "phishing":
 						flags.Phishing = true
+					default:
+						if ValidLowercaseKeyword(kw) {
+							keywords[kw] = true
+						}
 					}
-					// todo: custom labels, e.g. $label1, JunkRecorded?
 				}
 			}
 		}
 	}
 
-	m := &Message{Received: received, Flags: flags, Size: size}
+	m := &Message{Received: received, Flags: flags, Keywords: maps.Keys(keywords), Size: size}
 
 	// Prevent cleanup by defer.
 	mf := f
@@ -396,19 +419,4 @@ func ParseDovecotKeywords(r io.Reader, log *mlog.Log) ([]string, error) {
 		err = errors.New(strings.Join(errs, "; "))
 	}
 	return keywords[:end], err
-}
-
-func flagSet(flags *Flags, word string) {
-	switch word {
-	case "forwarded", "$forwarded":
-		flags.Forwarded = true
-	case "junk", "$junk":
-		flags.Junk = true
-	case "notjunk", "$notjunk", "nonjunk", "$nonjunk":
-		flags.Notjunk = true
-	case "phishing", "$phishing":
-		flags.Phishing = true
-	case "mdnsent", "$mdnsent":
-		flags.MDNSent = true
-	}
 }

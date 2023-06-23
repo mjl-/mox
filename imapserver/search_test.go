@@ -79,6 +79,8 @@ func TestSearch(t *testing.T) {
 		`$Notjunk`,
 		`$Phishing`,
 		`$MDNSent`,
+		`custom1`,
+		`Custom2`,
 	}
 	tc.client.Append("inbox", mostFlags, &received, []byte(searchMsg))
 
@@ -123,6 +125,12 @@ func TestSearch(t *testing.T) {
 	tc.transactf("ok", `search keyword $Forwarded`)
 	tc.xsearch(3)
 
+	tc.transactf("ok", `search keyword Custom1`)
+	tc.xsearch(3)
+
+	tc.transactf("ok", `search keyword custom2`)
+	tc.xsearch(3)
+
 	tc.transactf("ok", `search new`)
 	tc.xsearch() // New requires a message to be recent. We pretend all messages are not recent.
 
@@ -160,6 +168,9 @@ func TestSearch(t *testing.T) {
 	tc.xsearch(1, 2)
 
 	tc.transactf("ok", `search unkeyword $Junk`)
+	tc.xsearch(1, 2)
+
+	tc.transactf("ok", `search unkeyword custom1`)
 	tc.xsearch(1, 2)
 
 	tc.transactf("ok", `search unseen`)

@@ -376,8 +376,18 @@ func (p *parser) remainder() string {
 	return p.orig[p.o:]
 }
 
+// ../rfc/9051:6565
 func (p *parser) xflag() string {
-	return p.xtakelist(`\`, "$") + p.xatom()
+	w, _ := p.takelist(`\`, "$")
+	s := w + p.xatom()
+	if s[0] == '\\' {
+		switch strings.ToLower(s) {
+		case `\answered`, `\flagged`, `\deleted`, `\seen`, `\draft`:
+		default:
+			p.xerrorf("unknown system flag %s", s)
+		}
+	}
+	return s
 }
 
 func (p *parser) xflagList() (l []string) {

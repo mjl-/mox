@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
@@ -229,7 +231,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		ctl.xcheck(err, "delivering message")
 		deliveredIDs = append(deliveredIDs, m.ID)
 		ctl.log.Debug("delivered message", mlog.Field("id", m.ID))
-		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, Flags: m.Flags})
+		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, Flags: m.Flags, Keywords: m.Keywords})
 	}
 
 	// todo: one goroutine for reading messages, one for parsing the message, one adding to database, one for junk filter training.
@@ -239,6 +241,9 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		var mb store.Mailbox
 		mb, changes, err = a.MailboxEnsure(tx, mailbox, true)
 		ctl.xcheck(err, "ensuring mailbox exists")
+
+		// We ensure keywords in messages make it to the mailbox as well.
+		mailboxKeywords := map[string]bool{}
 
 		jf, _, err := a.OpenJunkFilter(ctx, ctl.log)
 		if err != nil && !errors.Is(err, store.ErrNoJunkFilter) {
@@ -263,6 +268,10 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 				err = msgf.Close()
 				ctl.log.Check(err, "closing temporary message after failing to import")
 			}()
+
+			for _, kw := range m.Keywords {
+				mailboxKeywords[kw] = true
+			}
 
 			// Parse message and store parsed information for later fast retrieval.
 			p, err := message.EnsurePart(msgf, m.Size)
@@ -315,6 +324,14 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			ctl.xcheck(err, "reading next message")
 
 			process(m, msgf, origPath)
+		}
+
+		// If there are any new keywords, update the mailbox.
+		var changed bool
+		mb.Keywords, changed = store.MergeKeywords(mb.Keywords, maps.Keys(mailboxKeywords))
+		if changed {
+			err := tx.Update(&mb)
+			ctl.xcheck(err, "updating keywords in mailbox")
 		}
 
 		err = tx.Commit()

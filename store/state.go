@@ -26,7 +26,8 @@ type Change any
 type ChangeAddUID struct {
 	MailboxID int64
 	UID       UID
-	Flags     Flags
+	Flags     Flags    // System flags.
+	Keywords  []string // Other flags.
 }
 
 // ChangeRemoveUIDs is sent for removal of one or more messages from a mailbox.
@@ -39,8 +40,9 @@ type ChangeRemoveUIDs struct {
 type ChangeFlags struct {
 	MailboxID int64
 	UID       UID
-	Mask      Flags // Which flags are actually modified.
-	Flags     Flags // New flag values. All are set, not just mask.
+	Mask      Flags    // Which flags are actually modified.
+	Flags     Flags    // New flag values. All are set, not just mask.
+	Keywords  []string // Other flags.
 }
 
 // ChangeRemoveMailbox is sent for a removed mailbox.

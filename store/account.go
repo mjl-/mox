@@ -39,6 +39,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/exp/slices"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/mjl-/bstore"
@@ -172,6 +173,11 @@ type Mailbox struct {
 	Junk    bool
 	Sent    bool
 	Trash   bool
+
+	// Keywords as used in messages. Storing a non-system keyword for a message
+	// automatically adds it to this list. Used in the IMAP FLAGS response. Only
+	// "atoms", stored in lower case.
+	Keywords []string
 }
 
 // Subscriptions are separate from existence of mailboxes.
@@ -286,6 +292,7 @@ type Message struct {
 
 	MessageHash []byte // Hash of message. For rejects delivery, so optional like MessageID.
 	Flags
+	Keywords    []string `bstore:"index"` // Non-system or well-known $-flags. Only in "atom" syntax, stored in lower case.
 	Size        int64
 	TrainedJunk *bool  // If nil, no training done yet. Otherwise, true is trained as junk, false trained as nonjunk.
 	MsgPrefix   []byte // Typically holds received headers and/or header separator.
@@ -1054,7 +1061,7 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 		return err
 	}
 
-	changes = append(changes, ChangeAddUID{m.MailboxID, m.UID, m.Flags})
+	changes = append(changes, ChangeAddUID{m.MailboxID, m.UID, m.Flags, m.Keywords})
 	comm := RegisterComm(a)
 	defer comm.Unregister()
 	comm.Broadcast(changes)
@@ -1348,24 +1355,44 @@ func (f Flags) Set(mask, flags Flags) Flags {
 	return r
 }
 
-// FlagsQuerySet returns a map with the flags that are true in mask, with
-// values from flags.
-func FlagsQuerySet(mask, flags Flags) map[string]any {
-	r := map[string]any{}
-	set := func(f string, m, v bool) {
-		if m {
-			r[f] = v
+// RemoveKeywords removes keywords from l, modifying and returning it. Should only
+// be used with lower-case keywords, not with system flags like \Seen.
+func RemoveKeywords(l, remove []string) []string {
+	for _, k := range remove {
+		if i := slices.Index(l, k); i >= 0 {
+			copy(l[i:], l[i+1:])
+			l = l[:len(l)-1]
 		}
 	}
-	set("Seen", mask.Seen, flags.Seen)
-	set("Answered", mask.Answered, flags.Answered)
-	set("Flagged", mask.Flagged, flags.Flagged)
-	set("Forwarded", mask.Forwarded, flags.Forwarded)
-	set("Junk", mask.Junk, flags.Junk)
-	set("Notjunk", mask.Notjunk, flags.Notjunk)
-	set("Deleted", mask.Deleted, flags.Deleted)
-	set("Draft", mask.Draft, flags.Draft)
-	set("Phishing", mask.Phishing, flags.Phishing)
-	set("MDNSent", mask.MDNSent, flags.MDNSent)
-	return r
+	return l
+}
+
+// MergeKeywords adds keywords from add into l, updating and returning it along
+// with whether it added any keyword. Keywords are only added if they aren't
+// already present. Should only be used with lower-case keywords, not with system
+// flags like \Seen.
+func MergeKeywords(l, add []string) ([]string, bool) {
+	var changed bool
+	for _, k := range add {
+		if slices.Index(l, k) < 0 {
+			l = append(l, k)
+			changed = true
+		}
+	}
+	return l, changed
+}
+
+// ValidLowercaseKeyword returns whether s is a valid, lower-case, keyword.
+func ValidLowercaseKeyword(s string) bool {
+	for _, c := range s {
+		if c >= 'a' && c <= 'z' {
+			continue
+		}
+		// ../rfc/9051:6334
+		const atomspecials = `(){%*"\]`
+		if c <= ' ' || c > 0x7e || strings.ContainsRune(atomspecials, c) {
+			return false
+		}
+	}
+	return len(s) > 0
 }

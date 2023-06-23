@@ -309,19 +309,24 @@ func (s *search) match(sk searchKey) bool {
 	case "FLAGGED":
 		return s.m.Flagged
 	case "KEYWORD":
-		switch sk.atom {
-		case "$Forwarded":
+		kw := strings.ToLower(sk.atom)
+		switch kw {
+		case "$forwarded":
 			return s.m.Forwarded
-		case "$Junk":
+		case "$junk":
 			return s.m.Junk
-		case "$NotJunk":
+		case "$notjunk":
 			return s.m.Notjunk
-		case "$Phishing":
+		case "$phishing":
 			return s.m.Phishing
-		case "$MDNSent":
+		case "$mdnsent":
 			return s.m.MDNSent
 		default:
-			c.log.Info("search with unknown keyword", mlog.Field("keyword", sk.atom))
+			for _, k := range s.m.Keywords {
+				if k == kw {
+					return true
+				}
+			}
 			return false
 		}
 	case "SEEN":
@@ -333,20 +338,25 @@ func (s *search) match(sk searchKey) bool {
 	case "UNFLAGGED":
 		return !s.m.Flagged
 	case "UNKEYWORD":
-		switch sk.atom {
-		case "$Forwarded":
+		kw := strings.ToLower(sk.atom)
+		switch kw {
+		case "$forwarded":
 			return !s.m.Forwarded
-		case "$Junk":
+		case "$junk":
 			return !s.m.Junk
-		case "$NotJunk":
+		case "$notjunk":
 			return !s.m.Notjunk
-		case "$Phishing":
+		case "$phishing":
 			return !s.m.Phishing
-		case "$MDNSent":
+		case "$mdnsent":
 			return !s.m.MDNSent
 		default:
-			c.log.Info("search with unknown keyword", mlog.Field("keyword", sk.atom))
-			return false
+			for _, k := range s.m.Keywords {
+				if k == kw {
+					return false
+				}
+			}
+			return true
 		}
 	case "UNSEEN":
 		return !s.m.Seen

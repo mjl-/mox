@@ -32,8 +32,9 @@ func testSelectExamine(t *testing.T, examine bool) {
 
 	uclosed := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "CLOSED", More: "x"}}
 	flags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent`, " ")
+	permflags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent \*`, " ")
 	uflags := imapclient.UntaggedFlags(flags)
-	upermflags := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "PERMANENTFLAGS", CodeArg: imapclient.CodeList{Code: "PERMANENTFLAGS", Args: flags}, More: "x"}}
+	upermflags := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "PERMANENTFLAGS", CodeArg: imapclient.CodeList{Code: "PERMANENTFLAGS", Args: permflags}, More: "x"}}
 	urecent := imapclient.UntaggedRecent(0)
 	uexists0 := imapclient.UntaggedExists(0)
 	uexists1 := imapclient.UntaggedExists(1)

@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"crypto/ed25519"
 	"net"
 	"net/http/httptest"
@@ -29,7 +28,7 @@ func TestAdminAuth(t *testing.T) {
 		if authHdr != "" {
 			r.Header.Add("Authorization", authHdr)
 		}
-		ok := checkAdminAuth(context.Background(), passwordfile, w, r)
+		ok := checkAdminAuth(ctxbg, passwordfile, w, r)
 		if ok != expect {
 			t.Fatalf("got %v, expected %v", ok, expect)
 		}
@@ -125,9 +124,9 @@ func TestCheckDomain(t *testing.T) {
 	close(done)
 	dialer := &net.Dialer{Deadline: time.Now().Add(-time.Second), Cancel: done}
 
-	checkDomain(context.Background(), resolver, dialer, "mox.example")
+	checkDomain(ctxbg, resolver, dialer, "mox.example")
 	// todo: check returned data
 
-	Admin{}.Domains(context.Background())        // todo: check results
-	dnsblsStatus(context.Background(), resolver) // todo: check results
+	Admin{}.Domains(ctxbg)        // todo: check results
+	dnsblsStatus(ctxbg, resolver) // todo: check results
 }

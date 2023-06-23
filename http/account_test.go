@@ -14,13 +14,18 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
+
+	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/store"
 )
+
+var ctxbg = context.Background()
 
 func tcheck(t *testing.T, err error, msg string) {
 	t.Helper()
@@ -50,7 +55,7 @@ func TestAccount(t *testing.T) {
 		if authHdr != "" {
 			r.Header.Add("Authorization", authHdr)
 		}
-		ok := checkAccountAuth(context.Background(), log, w, r)
+		ok := checkAccountAuth(ctxbg, log, w, r)
 		if ok != expect {
 			t.Fatalf("got %v, expected %v", ok, expect)
 		}
@@ -59,7 +64,7 @@ func TestAccount(t *testing.T) {
 	const authOK = "Basic bWpsQG1veC5leGFtcGxlOnRlc3QxMjM0"      // mjl@mox.example:test1234
 	const authBad = "Basic bWpsQG1veC5leGFtcGxlOmJhZHBhc3N3b3Jk" // mjl@mox.example:badpassword
 
-	authCtx := context.WithValue(context.Background(), authCtxKey, "mjl")
+	authCtx := context.WithValue(ctxbg, authCtxKey, "mjl")
 
 	test(authOK, "") // No password set yet.
 	Account{}.SetPassword(authCtx, "test1234")
@@ -131,6 +136,39 @@ func TestAccount(t *testing.T) {
 	}
 	testImport("../testdata/importtest.mbox.zip", 2)
 	testImport("../testdata/importtest.maildir.tgz", 2)
+
+	// Check there are messages, with the right flags.
+	acc.DB.Read(ctxbg, func(tx *bstore.Tx) error {
+		_, err = bstore.QueryTx[store.Message](tx).FilterIn("Keywords", "other").FilterIn("Keywords", "test").Get()
+		tcheck(t, err, `fetching message with keywords "other" and "test"`)
+
+		mb, err := acc.MailboxFind(tx, "importtest")
+		tcheck(t, err, "looking up mailbox importtest")
+		if mb == nil {
+			t.Fatalf("missing mailbox importtest")
+		}
+		sort.Strings(mb.Keywords)
+		if strings.Join(mb.Keywords, " ") != "other test" {
+			t.Fatalf(`expected mailbox keywords "other" and "test", got %v`, mb.Keywords)
+		}
+
+		n, err := bstore.QueryTx[store.Message](tx).FilterIn("Keywords", "custom").Count()
+		tcheck(t, err, `fetching message with keyword "custom"`)
+		if n != 2 {
+			t.Fatalf(`got %d messages with keyword "custom", expected 2`, n)
+		}
+
+		mb, err = acc.MailboxFind(tx, "maildir")
+		tcheck(t, err, "looking up mailbox maildir")
+		if mb == nil {
+			t.Fatalf("missing mailbox maildir")
+		}
+		if strings.Join(mb.Keywords, " ") != "custom" {
+			t.Fatalf(`expected mailbox keywords "custom", got %v`, mb.Keywords)
+		}
+
+		return nil
+	})
 
 	testExport := func(httppath string, iszip bool, expectFiles int) {
 		t.Helper()

@@ -191,6 +191,10 @@ func (tc *testconn) xcodeArg(v any) {
 }
 
 func (tc *testconn) xuntagged(exps ...any) {
+	tc.xuntaggedCheck(true, exps...)
+}
+
+func (tc *testconn) xuntaggedCheck(all bool, exps ...any) {
 	tc.t.Helper()
 	last := append([]imapclient.Untagged{}, tc.lastUntagged...)
 next:
@@ -212,7 +216,7 @@ next:
 		}
 		tc.t.Fatalf("did not find untagged response %#v %T (%d) in %v%s", exp, exp, ei, tc.lastUntagged, next)
 	}
-	if len(last) > 0 {
+	if len(last) > 0 && all {
 		tc.t.Fatalf("leftover untagged responses %v", last)
 	}
 }
@@ -525,7 +529,7 @@ func TestScenario(t *testing.T) {
 	tc.transactf("ok", `store 1 flags.silent (\seen \answered)`)
 	tc.transactf("ok", `store 1 -flags.silent (\answered)`)
 	tc.transactf("ok", `store 1 +flags.silent (\answered)`)
-	tc.transactf("no", `store 1 flags (\badflag)`)
+	tc.transactf("bad", `store 1 flags (\badflag)`)
 	tc.transactf("ok", "noop")
 
 	tc.transactf("ok", "copy 1 Trash")

@@ -1,6 +1,7 @@
 package imapserver
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/mjl-/mox/imapclient"
@@ -54,15 +55,30 @@ func TestStore(t *testing.T) {
 	tc.transactf("ok", "uid store 1 flags ()")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, noflags}})
 
-	tc.transactf("bad", "store")                 // Need numset, flags and args.
-	tc.transactf("bad", "store 1")               // Need flags.
-	tc.transactf("bad", "store 1 +")             // Need flags.
-	tc.transactf("bad", "store 1 -")             // Need flags.
-	tc.transactf("bad", "store 1 flags ")        // Need flags.
-	tc.transactf("bad", "store 1 flags ")        // Need flags.
-	tc.transactf("bad", "store 1 flags (bogus)") // Unknown flag.
+	tc.transactf("ok", "store 1 flags (new)") // New flag.
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"new"}}})
+	tc.transactf("ok", "store 1 flags (new new a b c)") // Duplicates are ignored.
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"new", "a", "b", "c"}}})
+	tc.transactf("ok", "store 1 +flags (new new c d e)")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"new", "a", "b", "c", "d", "e"}}})
+	tc.transactf("ok", "store 1 -flags (new new e a c)")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"b", "d"}}})
+	tc.transactf("ok", "store 1 flags ($Forwarded Different)")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"$Forwarded", "different"}}})
+
+	tc.transactf("bad", "store")          // Need numset, flags and args.
+	tc.transactf("bad", "store 1")        // Need flags.
+	tc.transactf("bad", "store 1 +")      // Need flags.
+	tc.transactf("bad", "store 1 -")      // Need flags.
+	tc.transactf("bad", "store 1 flags ") // Need flags.
+	tc.transactf("bad", "store 1 flags ") // Need flags.
 
 	tc.client.Unselect()
-	tc.client.Examine("inbox")             // Open read-only.
+	tc.transactf("ok", "examine inbox") // Open read-only.
+
+	// Flags are added to mailbox, not removed.
+	flags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent new a b c d e different`, " ")
+	tc.xuntaggedCheck(false, imapclient.UntaggedFlags(flags))
+
 	tc.transactf("no", `store 1 flags ()`) // No permission to set flags.
 }
