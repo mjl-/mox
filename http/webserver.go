@@ -634,10 +634,10 @@ func forwardWebsocket(h *config.WebForward, w http.ResponseWriter, r *http.Reque
 	// Close connections so other goroutine stops as well.
 	cconn.Close()
 	beconn.Close()
-	cconn = nil
 	// Wait for goroutine so it has updated the logWriter.Size*Client fields before we
 	// continue with logging.
 	<-errc
+	cconn = nil
 	return true
 }
 
