@@ -165,8 +165,8 @@ Also see IANA assignments, https://www.iana.org/protocols
 4550	(obsoleted by RFC 5550) Internet Email to Support Diverse Service Environments (Lemonade) Profile
 4551	(obsoleted by RFC 7162) IMAP Extension for Conditional STORE Operation or Quick Flag Changes Resynchronization
 4731	IMAP4 Extension to SEARCH Command for Controlling What Kind of Information Is Returned
-4978	The IMAP COMPRESS Extension
 4959	IMAP Extension for Simple Authentication and Security Layer (SASL) Initial Client Response
+4978	The IMAP COMPRESS Extension
 5032	WITHIN Search Extension to the IMAP Protocol
 5092	IMAP URL Scheme
 5161	The IMAP ENABLE Extension
@@ -198,12 +198,15 @@ Also see IANA assignments, https://www.iana.org/protocols
 7888	IMAP4 Non-synchronizing Literals
 7889	The IMAP APPENDLIMIT Extension
 8437	IMAP UNAUTHENTICATE Extension for Connection Reuse
-8474	IMAP Extension for Object Identifiers
 8438	IMAP Extension for STATUS=SIZE
+8440	IMAP4 Extension for Returning MYRIGHTS Information in Extended LIST
 8457	IMAP "$Important" Keyword and "\Important" Special-Use Attribute
+8474	IMAP Extension for Object Identifiers
 8508	IMAP REPLACE Extension
 8514	Internet Message Access Protocol (IMAP) - SAVEDATE Extension
 8970	IMAP4 Extension: Message Preview Generation
+9208	IMAP QUOTA Extension
+9394	IMAP PARTIAL Extension for Paged SEARCH and FETCH
 
 5198 	Unicode Format for Network Interchange
 
@@ -212,9 +215,41 @@ Also see IANA assignments, https://www.iana.org/protocols
 2919	List-Id: A Structured Field and Namespace for the Identification of Mailing Lists
 
 # Sieve
+3028	(obsoleted by RFC 5228) Sieve: A Mail Filtering Language
 5228	Sieve: An Email Filtering Language
-and many more, see http://sieve.info/documents
+5804	A Protocol for Remotely Managing Sieve Scripts
 
+3894	Sieve Extension: Copying Without Side Effects
+5173	Sieve Email Filtering: Body Extension
+5183	Sieve Email Filtering: Environment Extension
+5229	Sieve Email Filtering: Variables Extension
+5230	Sieve Email Filtering: Vacation Extension
+5231	Sieve Email Filtering: Relational Extension
+5232	Sieve Email Filtering: Imap4flags Extension
+5233	Sieve Email Filtering: Subaddress Extension
+5235	Sieve Email Filtering: Spamtest and Virustest Extensions
+5260	Sieve Email Filtering: Date and Index Extensions
+5293	Sieve Email Filtering: Editheader Extension
+5429	Sieve Email Filtering: Reject and Extended Reject Extensions
+5435	Sieve Email Filtering: Extension for Notifications
+5437	Sieve Notification Mechanism: Extensible Messaging and Presence Protocol (XMPP)
+5463	Sieve Email Filtering:  Ihave Extension
+5490	The Sieve Mail-Filtering Language -- Extensions for Checking Mailbox Status and Accessing Mailbox Metadata
+5703	Sieve Email Filtering: MIME Part Tests, Iteration, Extraction, Replacement, and Enclosure
+5784	Sieve Email Filtering:  Sieves and Display Directives in XML
+6131	Sieve Vacation Extension: "Seconds" Parameter
+6558	Sieve Extension for Converting Messages before Delivery
+6609	Sieve Email Filtering: Include Extension
+6785	Support for Internet Message Access Protocol (IMAP) Events in Sieve
+8579	Sieve Email Filtering: Delivering to Special-Use Mailboxes
+8580	Sieve Extension: File Carbon Copy (FCC)
+9042	Sieve Email Filtering: Delivery by MAILBOXID
+
+3431	(obsoleted by RFC 5231) Relational Extension
+3598	(obsoleted by RFC 5233) Subaddress Extension
+3685	(obsoleted by RFC 5235) Spamtest and VirusTest Extensions
+
+Also see http://sieve.info/documents
 
 # Vouch by reference
 5518	Vouch By Reference

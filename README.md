@@ -123,6 +123,8 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 - Old-style internationalization in messages.
 - JMAP
 - Webmail
+- Autoresponder (out of office/vacation)
+- HTTP-based API for sending messages and receiving delivery feedback
 
 There are many smaller improvements to make as well, search for "todo" in the code.
 
@@ -130,10 +132,8 @@ There are many smaller improvements to make as well, search for "todo" in the co
 
 But perhaps in the future...
 
-- HTTP-based API for sending messages and receiving delivery feedback
 - Functioning as SMTP relay
 - Forwarding (to an external address)
-- Autoresponders
 - POP3
 - Delivery to (unix) OS system users
 - Mailing list manager
