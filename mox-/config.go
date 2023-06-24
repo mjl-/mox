@@ -401,7 +401,7 @@ func ParseConfig(ctx context.Context, p string, checkOnly, doLoadTLSKeyCerts, ch
 	}
 	defer f.Close()
 	if err := sconf.Parse(f, &c.Static); err != nil {
-		return nil, []error{fmt.Errorf("parsing %s: %v", p, err)}
+		return nil, []error{fmt.Errorf("parsing %s%v", p, err)}
 	}
 
 	if xerrs := PrepareStaticConfig(ctx, p, c, checkOnly, doLoadTLSKeyCerts); len(xerrs) > 0 {
