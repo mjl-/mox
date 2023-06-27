@@ -30,7 +30,7 @@ func main() {
 	xcheckf(err, "write")
 
 	// We will visit the html nodes. We skip <form>'s. We turn on text
-	// output when we encounter an h3, and we stop again when we see a div
+	// output when we encounter an h4, and we stop again when we see a div
 	// or form. This works at the moment, but may break in the future.
 	output := false
 	var walk func(*html.Node)
@@ -39,7 +39,7 @@ func main() {
 			if n.Data == "form" {
 				return
 			}
-			if !output && n.Data == "h3" {
+			if !output && n.Data == "h4" {
 				output = true
 			} else if output && (n.Data == "div" || n.Data == "form") {
 				output = false

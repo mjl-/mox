@@ -194,6 +194,7 @@ Also see IANA assignments, https://www.iana.org/protocols
 6855	IMAP Support for UTF-8
 6858	Simplified POP and IMAP Downgrading for Internationalized Email
 7162	IMAP Extensions: Quick Flag Changes Resynchronization (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC)
+7162-eid5055	errata: space after untagged OK
 7377	IMAP4 Multimailbox SEARCH Extension
 7888	IMAP4 Non-synchronizing Literals
 7889	The IMAP APPENDLIMIT Extension
