@@ -212,6 +212,9 @@ func TestSearch(t *testing.T) {
 	tc.transactf("ok", `search uid 5`)
 	tc.xsearch(1)
 
+	tc.transactf("ok", `search or larger 1000000 smaller 1`)
+	tc.xsearch()
+
 	tc.transactf("ok", `search undraft`)
 	tc.xsearch(1, 2)
 

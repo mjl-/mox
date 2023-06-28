@@ -191,6 +191,7 @@ func (tc *testconn) xcodeArg(v any) {
 }
 
 func (tc *testconn) xuntagged(exps ...any) {
+	tc.t.Helper()
 	tc.xuntaggedCheck(true, exps...)
 }
 
