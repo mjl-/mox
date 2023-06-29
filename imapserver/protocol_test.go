@@ -48,6 +48,9 @@ func TestNumSetContains(t *testing.T) {
 	check(!ss2.containsUID(2, []store.UID{4, 5}, nil))
 	check(!ss2.containsUID(2, []store.UID{1}, nil))
 
+	check(ss2.containsUID(2, []store.UID{2, 6}, nil))
+	check(ss2.containsUID(6, []store.UID{2, 6}, nil))
+
 	// *:2
 	ss3 := numSet{false, []numRange{{*star, num(2)}}}
 	check(ss3.containsSeq(1, []store.UID{2}, nil))

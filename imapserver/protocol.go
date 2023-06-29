@@ -63,7 +63,7 @@ func (ss numSet) containsUID(uid store.UID, uids []store.UID, searchResult []sto
 			last = store.UID(r.last.number)
 			if r.last.star {
 				last = uids[len(uids)-1]
-				if last > first {
+				if first > last {
 					first = last
 				}
 			} else if r.first.star && last < first {
