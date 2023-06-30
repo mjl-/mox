@@ -66,11 +66,21 @@ func TestRename(t *testing.T) {
 	tc.transactf("ok", `list "" "k*" return (subscribed)`)
 	tc.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "k"}, imapclient.UntaggedList{Flags: []string{"\\Subscribed"}, Separator: '/', Mailbox: "k/l"}, imapclient.UntaggedList{Separator: '/', Mailbox: "k/l/m"})
 
-	// Renaming inbox keeps inbox in existence and does not rename children.
+	// Renaming inbox keeps inbox in existence, moves messages, and does not rename children.
 	tc.transactf("ok", "create inbox/a")
+	// To check if UIDs are renumbered properly, we add UIDs 1 and 2. Expunge 1,
+	// keeping only 2. Then rename the inbox, which should renumber UID 2 in the old
+	// inbox to UID 1 in the newly created mailbox.
+	tc.transactf("ok", "append inbox (\\deleted) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
+	tc.transactf("ok", "append inbox (label1) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
+	tc.transactf("ok", `select inbox`)
+	tc.transactf("ok", "expunge")
 	tc.transactf("ok", "rename inbox minbox")
 	tc.transactf("ok", `list "" (inbox inbox/a minbox)`)
 	tc.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox"}, imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox/a"}, imapclient.UntaggedList{Separator: '/', Mailbox: "minbox"})
+	tc.transactf("ok", `select minbox`)
+	tc.transactf("ok", `uid fetch 1:* flags`)
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(1), imapclient.FetchFlags{"label1"}}})
 
 	// Renaming to new hiearchy that does not have any subscribes.
 	tc.transactf("ok", "rename minbox w/w")

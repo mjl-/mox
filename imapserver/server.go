@@ -2060,9 +2060,9 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 			uidval, err := c.account.NextUIDValidity(tx)
 			xcheckf(err, "next uid validity")
 
-			// Inbox is very special case. Unlike other mailboxes, its children are not moved. And
-			// unlike a regular move, its messages are moved to a newly created mailbox.
-			// We do indeed create a new destination mailbox and actually move the messages.
+			// Inbox is very special. Unlike other mailboxes, its children are not moved. And
+			// unlike a regular move, its messages are moved to a newly created mailbox. We do
+			// indeed create a new destination mailbox and actually move the messages.
 			// ../rfc/9051:2101
 			if src == "Inbox" {
 				exists, err := c.account.MailboxExists(tx, dst)
@@ -2087,23 +2087,33 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 				err = tx.Insert(&dstMB)
 				xcheckf(err, "create new destination mailbox")
 
-				var messages []store.Message
+				// Move existing messages, with their ID's and on-disk files intact, to the new
+				// mailbox.
+				var oldUIDs []store.UID
 				q := bstore.QueryTx[store.Message](tx)
 				q.FilterNonzero(store.Message{MailboxID: srcMB.ID})
-				q.Gather(&messages)
-				_, err = q.UpdateNonzero(store.Message{MailboxID: dstMB.ID})
+				q.SortAsc("UID")
+				err = q.ForEach(func(m store.Message) error {
+					oldUIDs = append(oldUIDs, m.UID)
+					m.MailboxID = dstMB.ID
+					m.UID = dstMB.UIDNext
+					dstMB.UIDNext++
+					if err := tx.Update(&m); err != nil {
+						return fmt.Errorf("updating message to move to new mailbox: %w", err)
+					}
+					return nil
+				})
 				xcheckf(err, "moving messages from inbox to destination mailbox")
 
-				uids := make([]store.UID, len(messages))
-				for i, m := range messages {
-					uids[i] = m.UID
-				}
+				err = tx.Update(&dstMB)
+				xcheckf(err, "updating uidnext in destination mailbox")
+
 				var dstFlags []string
 				if tx.Get(&store.Subscription{Name: dstMB.Name}) == nil {
 					dstFlags = []string{`\Subscribed`}
 				}
 				changes = []store.Change{
-					store.ChangeRemoveUIDs{MailboxID: srcMB.ID, UIDs: uids},
+					store.ChangeRemoveUIDs{MailboxID: srcMB.ID, UIDs: oldUIDs},
 					store.ChangeAddMailbox{Name: dstMB.Name, Flags: dstFlags},
 					// todo: in future, we could announce all messages. no one is listening now though.
 				}

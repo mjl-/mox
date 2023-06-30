@@ -390,6 +390,8 @@ on-disk message file and there are no unrecognized files. If option -fix is
 specified, unrecognized message files are moved away. This may be needed after
 a restore, because messages enqueued or delivered in the future may get those
 message sequence numbers assigned and writing the message file would fail.
+Consistency of message/mailbox UID, UIDNEXT and UIDVALIDITY is verified as
+well.
 
 Because verifydata opens the database files, schema upgrades may automatically
 be applied. This can happen if you use a new mox release. It is useful to run

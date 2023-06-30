@@ -34,6 +34,8 @@ on-disk message file and there are no unrecognized files. If option -fix is
 specified, unrecognized message files are moved away. This may be needed after
 a restore, because messages enqueued or delivered in the future may get those
 message sequence numbers assigned and writing the message file would fail.
+Consistency of message/mailbox UID, UIDNEXT and UIDVALIDITY is verified as
+well.
 
 Because verifydata opens the database files, schema upgrades may automatically
 be applied. This can happen if you use a new mox release. It is useful to run
@@ -218,12 +220,32 @@ possibly making them potentially no longer readable by the previous version.
 		// todo: add some kind of check for the bloom filter?
 
 		// Check that all messages in the database have a message file on disk.
+		// And check consistency of UIDs with the mailbox UIDNext, and check UIDValidity.
 		seen := map[string]struct{}{}
 		dbpath := filepath.Join(accdir, "index.db")
 		db, err := bstore.Open(ctxbg, dbpath, &bstore.Options{MustExist: true}, store.DBTypes...)
 		checkf(err, dbpath, "opening account database to check messages")
 		if err == nil {
-			err := bstore.QueryDB[store.Message](ctxbg, db).ForEach(func(m store.Message) error {
+			uidvalidity := store.NextUIDValidity{ID: 1}
+			if err := db.Get(ctxbg, &uidvalidity); err != nil {
+				checkf(err, dbpath, "missing nextuidvalidity")
+			}
+
+			mailboxUIDNexts := map[int64]store.UID{}
+			err := bstore.QueryDB[store.Mailbox](ctxbg, db).ForEach(func(mb store.Mailbox) error {
+				mailboxUIDNexts[mb.ID] = mb.UIDNext
+
+				if mb.UIDValidity >= uidvalidity.Next {
+					checkf(errors.New(`inconsistent uidvalidity for mailbox/account, see "mox fixuidmeta"`), dbpath, "mailbox id %d has uidvalidity %d >= account nextuidvalidity %d", mb.ID, mb.UIDValidity, uidvalidity.Next)
+				}
+				return nil
+			})
+			checkf(err, dbpath, "reading mailboxes to check uidnext consistency")
+
+			err = bstore.QueryDB[store.Message](ctxbg, db).ForEach(func(m store.Message) error {
+				if uidnext := mailboxUIDNexts[m.MailboxID]; m.UID >= uidnext {
+					checkf(errors.New(`inconsistent uidnext for message/mailbox, see "mox fixuidmeta"`), dbpath, "message id %d in mailbox id %d has uid %d >= mailbox uidnext %d", m.ID, m.MailboxID, m.UID, uidnext)
+				}
 				mp := store.MessagePath(m.ID)
 				seen[mp] = struct{}{}
 				p := filepath.Join(accdir, "msg", mp)

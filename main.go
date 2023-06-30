@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -139,6 +140,8 @@ var commands = []struct {
 	{"junk test", cmdJunkTest},
 	{"junk train", cmdJunkTrain},
 	{"bumpuidvalidity", cmdBumpUIDValidity},
+	{"reassignuids", cmdReassignUIDs},
+	{"fixuidmeta", cmdFixUIDMeta},
 	{"dmarcdb addreport", cmdDMARCDBAddReport},
 	{"ensureparsed", cmdEnsureParsed},
 	{"message parse", cmdMessageParse},
@@ -2043,6 +2046,168 @@ func cmdBumpUIDValidity(c *cmd) {
 			}
 			fmt.Printf("uid validity for %q updated to %d\n", mb.Name, uidvalidity)
 		}
+		return nil
+	})
+	xcheckf(err, "updating database")
+}
+
+func cmdReassignUIDs(c *cmd) {
+	c.unlisted = true
+	c.params = "account [mailboxid]"
+	c.help = `Reassign UIDs in one mailbox or all mailboxes in an account and bump UID validity, causing IMAP clients to refetch messages.
+
+Opens account database file directly. Ensure mox does not have the account
+open, or is not running.
+`
+	args := c.Parse()
+	if len(args) != 1 && len(args) != 2 {
+		c.Usage()
+	}
+
+	var mailboxID int64
+	if len(args) == 2 {
+		var err error
+		mailboxID, err = strconv.ParseInt(args[1], 10, 64)
+		xcheckf(err, "parsing mailbox id")
+	}
+
+	mustLoadConfig()
+	a, err := store.OpenAccount(args[0])
+	xcheckf(err, "open account")
+	defer func() {
+		if err := a.Close(); err != nil {
+			log.Printf("closing account: %v", err)
+		}
+	}()
+
+	// Gather the last-assigned UIDs per mailbox.
+	uidlasts := map[int64]store.UID{}
+
+	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
+		// Reassign UIDs, going per mailbox. We assign starting at 1, only changing the
+		// message if it isn't already at the intended UID. Doing it in this order ensures
+		// we don't get into trouble with duplicate UIDs for a mailbox.
+		q := bstore.QueryTx[store.Message](tx)
+		if len(args) == 2 {
+			q.FilterNonzero(store.Message{MailboxID: mailboxID})
+		}
+		q.SortAsc("MailboxID", "UID")
+		err := q.ForEach(func(m store.Message) error {
+			uidlasts[m.MailboxID]++
+			uid := uidlasts[m.MailboxID]
+			if m.UID != uid {
+				m.UID = uid
+				if err := tx.Update(&m); err != nil {
+					return fmt.Errorf("updating uid for message: %v", err)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("reading through messages: %v", err)
+		}
+
+		// Now update the uidnext and uidvalidity for each mailbox.
+		err = bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
+			// Assign each mailbox a completely new uidvalidity.
+			uidvalidity, err := a.NextUIDValidity(tx)
+			if err != nil {
+				return fmt.Errorf("assigning next uid validity: %v", err)
+			}
+
+			if mb.UIDValidity >= uidvalidity {
+				// This should not happen, but since we're fixing things up after a hypothetical
+				// mishap, might as well account for inconsistent uidvalidity.
+				next := store.NextUIDValidity{ID: 1, Next: mb.UIDValidity + 2}
+				if err := tx.Update(&next); err != nil {
+					log.Printf("updating nextuidvalidity: %v, continuing", err)
+				}
+				mb.UIDValidity++
+			} else {
+				mb.UIDValidity = uidvalidity
+			}
+			mb.UIDNext = uidlasts[mb.ID] + 1
+			if err := tx.Update(&mb); err != nil {
+				return fmt.Errorf("updating uidvalidity and uidnext for mailbox: %v", err)
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("updating mailboxes: %v", err)
+		}
+		return nil
+	})
+	xcheckf(err, "updating database")
+}
+
+func cmdFixUIDMeta(c *cmd) {
+	c.unlisted = true
+	c.params = "account"
+	c.help = `Fix inconsistent UIDVALIDITY and UIDNEXT in messages/mailboxes/account.
+
+The next UID to use for a message in a mailbox should always be higher than any
+existing message UID in the mailbox. If it is not, the mailbox UIDNEXT is
+updated.
+
+Each mailbox has a UIDVALIDITY sequence number, which should always be lower
+than the per-account next UIDVALIDITY to use. If it is not, the account next
+UIDVALIDITY is updated.
+
+Opens account database file directly. Ensure mox does not have the account
+open, or is not running.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	a, err := store.OpenAccount(args[0])
+	xcheckf(err, "open account")
+	defer func() {
+		if err := a.Close(); err != nil {
+			log.Printf("closing account: %v", err)
+		}
+	}()
+
+	var maxUIDValidity uint32
+
+	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
+		// We look at each mailbox, retrieve its max UID and compare against the mailbox
+		// UIDNEXT.
+		err := bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
+			if mb.UIDValidity > maxUIDValidity {
+				maxUIDValidity = mb.UIDValidity
+			}
+			m, err := bstore.QueryTx[store.Message](tx).FilterNonzero(store.Message{MailboxID: mb.ID}).SortDesc("UID").Limit(1).Get()
+			if err == bstore.ErrAbsent || err == nil && m.UID < mb.UIDNext {
+				return nil
+			} else if err != nil {
+				return fmt.Errorf("finding message with max uid in mailbox: %w", err)
+			}
+			mb.UIDNext = m.UID + 1
+			if err := tx.Update(&mb); err != nil {
+				log.Printf("fixing uidnext to %d (max uid is %d) for mailbox id %d", mb.UIDNext, m.UID, mb.ID)
+				return fmt.Errorf("updating mailbox uidnext: %v", err)
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("processing mailboxes: %v", err)
+		}
+
+		uidvalidity := store.NextUIDValidity{ID: 1}
+		if err := tx.Get(&uidvalidity); err != nil {
+			return fmt.Errorf("reading account next uidvalidity: %v", err)
+		}
+		if maxUIDValidity >= uidvalidity.Next {
+			log.Printf("account next uidvalidity %d <= highest uidvalidity %d found in mailbox, resetting account next uidvalidity to %d", uidvalidity.Next, maxUIDValidity, maxUIDValidity+1)
+			uidvalidity.Next = maxUIDValidity + 1
+			if err := tx.Update(&uidvalidity); err != nil {
+				return fmt.Errorf("updating account next uidvalidity: %v", err)
+			}
+		}
+
 		return nil
 	})
 	xcheckf(err, "updating database")
