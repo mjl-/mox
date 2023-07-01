@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -15,9 +17,11 @@ import (
 
 	"golang.org/x/exp/maps"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/store"
 )
 
@@ -89,6 +93,77 @@ func xcmdImport(mbox bool, args []string, c *cmd) {
 
 	ctl := xctl()
 	ctl.xwrite(ctlcmd)
+	xcmdImportCtl(ctl, account, mailbox, src)
+}
+
+func cmdXImportMaildir(c *cmd) {
+	c.unlisted = true
+	c.params = "accountdir mailboxname maildir"
+	c.help = `Import a maildir into an account by directly accessing the data directory.
+
+
+See "mox help import maildir" for details.
+`
+	xcmdXImport(false, c)
+}
+
+func cmdXImportMbox(c *cmd) {
+	c.unlisted = true
+	c.params = "accountdir mailboxname mbox"
+	c.help = `Import an mbox into an account by directly accessing the data directory.
+
+See "mox help import mbox" for details.
+`
+	xcmdXImport(true, c)
+}
+
+func xcmdXImport(mbox bool, c *cmd) {
+	args := c.Parse()
+	if len(args) != 3 {
+		c.Usage()
+	}
+
+	accountdir := args[0]
+	mailbox := args[1]
+	if strings.EqualFold(mailbox, "inbox") {
+		mailbox = "Inbox"
+	}
+	src := args[2]
+
+	var ctlcmd string
+	if mbox {
+		ctlcmd = "importmbox"
+	} else {
+		ctlcmd = "importmaildir"
+	}
+
+	account := filepath.Base(accountdir)
+
+	// Set up the mox config so the account can be opened.
+	if filepath.Base(filepath.Dir(accountdir)) != "accounts" {
+		log.Fatalf("accountdir must be of the form .../accounts/<name>")
+	}
+	var err error
+	mox.Conf.Static.DataDir, err = filepath.Abs(filepath.Dir(filepath.Dir(accountdir)))
+	xcheckf(err, "making absolute datadir")
+	mox.ConfigStaticPath = "fake.conf"
+	mox.Conf.DynamicLastCheck = time.Now().Add(time.Hour) // Silence errors about config file.
+	mox.Conf.Dynamic.Accounts = map[string]config.Account{
+		account: {},
+	}
+	switchDone := store.Switchboard()
+	defer close(switchDone)
+
+	xlog := mlog.New("import")
+	cconn, sconn := net.Pipe()
+	clientctl := ctl{conn: cconn, r: bufio.NewReader(cconn), log: xlog}
+	serverctl := ctl{cmd: ctlcmd, conn: sconn, r: bufio.NewReader(sconn), log: xlog}
+	go importctl(context.Background(), &serverctl, true)
+
+	xcmdImportCtl(&clientctl, account, mailbox, src)
+}
+
+func xcmdImportCtl(ctl *ctl, account, mailbox, src string) {
 	ctl.xwrite(account)
 	ctl.xwrite(mailbox)
 	ctl.xwrite(src)

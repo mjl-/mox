@@ -152,6 +152,8 @@ var commands = []struct {
 	{"updates serve", cmdUpdatesServe},
 	{"updates verify", cmdUpdatesVerify},
 	{"gentestdata", cmdGentestdata},
+	{"ximport maildir", cmdXImportMaildir},
+	{"ximport mbox", cmdXImportMbox},
 }
 
 var cmds []cmd
@@ -391,12 +393,19 @@ func main() {
 	flag.StringVar(&loglevel, "loglevel", "", "if non-empty, this log level is set early in startup")
 	flag.BoolVar(&pedantic, "pedantic", false, "protocol violations result in errors instead of accepting/working around them")
 
+	var cpuprofile, memprofile string
+	flag.StringVar(&cpuprofile, "cpuprof", "", "store cpu profile to file")
+	flag.StringVar(&memprofile, "memprof", "", "store mem profile to file")
+
 	flag.Usage = func() { usage(cmds, false) }
 	flag.Parse()
 	args := flag.Args()
 	if len(args) == 0 {
 		usage(cmds, false)
 	}
+
+	defer profile(cpuprofile, memprofile)()
+
 	if pedantic {
 		moxvar.Pedantic = true
 	}

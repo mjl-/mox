@@ -20,8 +20,6 @@ import (
 	"log"
 	mathrand "math/rand"
 	"os"
-	"runtime"
-	"runtime/pprof"
 	"sort"
 	"time"
 
@@ -33,50 +31,12 @@ import (
 
 type junkArgs struct {
 	params                        junk.Params
-	cpuprofile, memprofile        string
 	spamThreshold                 float64
 	trainRatio                    float64
 	seed                          bool
 	sentDir                       string
 	databasePath, bloomfilterPath string
 	debug                         bool
-}
-
-func (a junkArgs) Memprofile() {
-	if a.memprofile == "" {
-		return
-	}
-
-	f, err := os.Create(a.memprofile)
-	xcheckf(err, "creating memory profile")
-	defer func() {
-		if err := f.Close(); err != nil {
-			log.Printf("closing memory profile: %v", err)
-		}
-	}()
-	runtime.GC() // get up-to-date statistics
-	err = pprof.WriteHeapProfile(f)
-	xcheckf(err, "writing memory profile")
-}
-
-func (a junkArgs) Profile() func() {
-	if a.cpuprofile == "" {
-		return func() {
-			a.Memprofile()
-		}
-	}
-
-	f, err := os.Create(a.cpuprofile)
-	xcheckf(err, "creating CPU profile")
-	err = pprof.StartCPUProfile(f)
-	xcheckf(err, "start CPU profile")
-	return func() {
-		pprof.StopCPUProfile()
-		if err := f.Close(); err != nil {
-			log.Printf("closing cpu profile: %v", err)
-		}
-		a.Memprofile()
-	}
 }
 
 func (a junkArgs) SetLogLevel() {
@@ -104,8 +64,6 @@ func junkFlags(fs *flag.FlagSet) (a junkArgs) {
 	fs.StringVar(&a.databasePath, "dbpath", "filter.db", "database file for ham/spam words")
 	fs.StringVar(&a.bloomfilterPath, "bloompath", "filter.bloom", "bloom filter for ignoring unique strings")
 
-	fs.StringVar(&a.cpuprofile, "cpuprof", "", "store cpu profile to file")
-	fs.StringVar(&a.memprofile, "memprof", "", "store mem profile to file")
 	return
 }
 
@@ -132,7 +90,6 @@ func cmdJunkTrain(c *cmd) {
 	if len(args) != 2 {
 		c.Usage()
 	}
-	defer a.Profile()()
 	a.SetLogLevel()
 
 	f := must(junk.NewFilter(context.Background(), mlog.New("junktrain"), a.params, a.databasePath, a.bloomfilterPath))
@@ -162,7 +119,6 @@ func cmdJunkCheck(c *cmd) {
 	if len(args) != 1 {
 		c.Usage()
 	}
-	defer a.Profile()()
 	a.SetLogLevel()
 
 	f := must(junk.OpenFilter(context.Background(), mlog.New("junkcheck"), a.params, a.databasePath, a.bloomfilterPath, false))
@@ -187,7 +143,6 @@ func cmdJunkTest(c *cmd) {
 	if len(args) != 2 {
 		c.Usage()
 	}
-	defer a.Profile()()
 	a.SetLogLevel()
 
 	f := must(junk.OpenFilter(context.Background(), mlog.New("junktest"), a.params, a.databasePath, a.bloomfilterPath, false))
@@ -244,7 +199,6 @@ messages are shuffled, with optional random seed.`
 	if len(args) != 2 {
 		c.Usage()
 	}
-	defer a.Profile()()
 	a.SetLogLevel()
 
 	f := must(junk.NewFilter(context.Background(), mlog.New("junkanalyze"), a.params, a.databasePath, a.bloomfilterPath))
@@ -336,7 +290,6 @@ func cmdJunkPlay(c *cmd) {
 	if len(args) != 2 {
 		c.Usage()
 	}
-	defer a.Profile()()
 	a.SetLogLevel()
 
 	f := must(junk.NewFilter(context.Background(), mlog.New("junkplay"), a.params, a.databasePath, a.bloomfilterPath))
