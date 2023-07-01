@@ -132,12 +132,12 @@ This is the message.
 		tcheck(t, err, "imap idle")
 	}
 
-	xlog.Print("submitting email to moxacmepebble, waiting for imap notification at moxmail2, takes time because first-time sender")
+	xlog.Print("submitting email to moxacmepebble, waiting for imap notification at moxmail2")
 	t0 := time.Now()
 	deliver("moxacmepebble.mox1.example", "moxtest1@mox1.example", "accountpass1234", "moxtest2@mox2.example", "moxmail2.mox2.example", "moxtest2@mox2.example", "accountpass4321")
 	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
 
-	xlog.Print("submitting email to moxmail2, waiting for imap notification at moxacmepebble, takes time because first-time sender")
+	xlog.Print("submitting email to moxmail2, waiting for imap notification at moxacmepebble")
 	t0 = time.Now()
 	deliver("moxmail2.mox2.example", "moxtest2@mox2.example", "accountpass4321", "moxtest1@mox1.example", "moxacmepebble.mox1.example", "moxtest1@mox1.example", "accountpass1234")
 	xlog.Print("success", mlog.Field("duration", time.Since(t0)))

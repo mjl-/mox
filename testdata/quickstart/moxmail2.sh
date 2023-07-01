@@ -9,7 +9,7 @@ mkdir /tmp/mox
 cd /tmp/mox
 mox quickstart moxtest2@mox2.example "$MOX_UID" > output.txt
 
-sed -i -e '/- 172.28.1.20/d' -e 's/- 0.0.0.0/- 172.28.1.20/' -e '/- ::/d' -e 's,ACME: .*$,KeyCerts:\n\t\t\t\t-\n\t\t\t\t\tCertFile: /quickstart/tls/moxmail2.pem\n\t\t\t\t\tKeyFile: /quickstart/tls/moxmail2-key.pem\n\t\t\t\t-\n\t\t\t\t\tCertFile: /quickstart/tls/mox2-autoconfig.pem\n\t\t\t\t\tKeyFile: /quickstart/tls/mox2-autoconfig-key.pem\n\t\t\t\t-\n\t\t\t\t\tCertFile: /quickstart/tls/mox2-mtasts.pem\n\t\t\t\t\tKeyFile: /quickstart/tls/mox2-mtasts-key.pem\n,' config/mox.conf
+sed -i -e '/- 172.28.1.20/d' -e 's/- 0.0.0.0/- 172.28.1.20/' -e '/- ::/d' -e 's,ACME: .*$,KeyCerts:\n\t\t\t\t-\n\t\t\t\t\tCertFile: /quickstart/tls/moxmail2.pem\n\t\t\t\t\tKeyFile: /quickstart/tls/moxmail2-key.pem\n\t\t\t\t-\n\t\t\t\t\tCertFile: /quickstart/tls/mox2-autoconfig.pem\n\t\t\t\t\tKeyFile: /quickstart/tls/mox2-autoconfig-key.pem\n\t\t\t\t-\n\t\t\t\t\tCertFile: /quickstart/tls/mox2-mtasts.pem\n\t\t\t\t\tKeyFile: /quickstart/tls/mox2-mtasts-key.pem\n,' -e 's/SMTP:$/SMTP:\n\t\t\tFirstTimeSenderDelay: 1s/' config/mox.conf
 cat <<EOF >>config/mox.conf
 
 TLS:

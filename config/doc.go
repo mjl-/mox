@@ -170,6 +170,10 @@ describe-static" and "mox config describe-domains":
 				DNSBLs:
 					-
 
+				# Delay before accepting a message from a first-time sender for the destination
+				# account. Default: 15s. (optional)
+				FirstTimeSenderDelay: 0s
+
 			# SMTP for submitting email, e.g. by email applications. Starts out in plain text,
 			# can be upgraded to TLS with the STARTTLS command. Prefer using Submissions which
 			# is always a TLS connection. (optional)

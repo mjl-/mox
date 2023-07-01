@@ -45,7 +45,6 @@ var ctxbg = context.Background()
 func init() {
 	// Don't make tests slow.
 	badClientDelay = 0
-	reputationlessSenderDeliveryDelay = 0
 	authFailDelay = 0
 	unknownRecipientsDelay = 0
 }
@@ -133,7 +132,7 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{fakeCert(ts.t)},
 		}
-		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, 100<<20, false, false, ts.dnsbls)
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, 100<<20, false, false, ts.dnsbls, 0)
 		close(serverdone)
 	}()
 
@@ -914,7 +913,7 @@ func TestNonSMTP(t *testing.T) {
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{fakeCert(ts.t)},
 		}
-		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, 100<<20, false, false, ts.dnsbls)
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, 100<<20, false, false, ts.dnsbls, 0)
 		close(serverdone)
 	}()
 

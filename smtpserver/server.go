@@ -100,10 +100,10 @@ func limitersInit() {
 
 var (
 	// Delays for bad/suspicious behaviour. Zero during tests.
-	badClientDelay                    = time.Second      // Before reads and after 1-byte writes for probably spammers.
-	authFailDelay                     = time.Second      // Response to authentication failure.
-	reputationlessSenderDeliveryDelay = 15 * time.Second // Before accepting message from first-time sender.
-	unknownRecipientsDelay            = 5 * time.Second  // Response when all recipients are unknown.
+	badClientDelay              = time.Second      // Before reads and after 1-byte writes for probably spammers.
+	authFailDelay               = time.Second      // Response to authentication failure.
+	unknownRecipientsDelay      = 5 * time.Second  // Response when all recipients are unknown.
+	firstTimeSenderDelayDefault = 15 * time.Second // Before accepting message from first-time sender.
 )
 
 type codes struct {
@@ -166,6 +166,13 @@ var (
 
 var jitterRand = mox.NewRand()
 
+func durationDefault(delay *time.Duration, def time.Duration) time.Duration {
+	if delay == nil {
+		return def
+	}
+	return *delay
+}
+
 // Listen initializes network listeners for incoming SMTP connection.
 // The listeners are stored for a later call to Serve.
 func Listen() {
@@ -187,7 +194,8 @@ func Listen() {
 			}
 			port := config.Port(listener.SMTP.Port, 25)
 			for _, ip := range listener.IPs {
-				listen1("smtp", name, ip, port, hostname, tlsConfig, false, false, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, listener.SMTP.DNSBLZones)
+				firstTimeSenderDelay := durationDefault(listener.SMTP.FirstTimeSenderDelay, firstTimeSenderDelayDefault)
+				listen1("smtp", name, ip, port, hostname, tlsConfig, false, false, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay)
 			}
 		}
 		if listener.Submission.Enabled {
@@ -197,7 +205,7 @@ func Listen() {
 			}
 			port := config.Port(listener.Submission.Port, 587)
 			for _, ip := range listener.IPs {
-				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, nil)
+				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, nil, 0)
 			}
 		}
 
@@ -208,7 +216,7 @@ func Listen() {
 			}
 			port := config.Port(listener.Submissions.Port, 465)
 			for _, ip := range listener.IPs {
-				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, maxMsgSize, true, true, nil)
+				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, maxMsgSize, true, true, nil, 0)
 			}
 		}
 	}
@@ -216,7 +224,7 @@ func Listen() {
 
 var servers []func()
 
-func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery bool, dnsBLs []dns.Domain) {
+func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
 		xlog.Print("listening for smtp", mlog.Field("listener", name), mlog.Field("address", addr), mlog.Field("protocol", protocol))
@@ -238,7 +246,7 @@ func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig
 				continue
 			}
 			resolver := dns.StrictResolver{} // By leaving Pkg empty, it'll be set by each package that uses the resolver, e.g. spf/dkim/dmarc.
-			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, dnsBLs)
+			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, dnsBLs, firstTimeSenderDelay)
 		}
 	}
 
@@ -283,6 +291,7 @@ type conn struct {
 	cmdStart              time.Time // Start of current command.
 	ncmds                 int       // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
 	dnsBLs                []dns.Domain
+	firstTimeSenderDelay  time.Duration
 
 	// If non-zero, taken into account during Read and Write. Set while processing DATA
 	// command, we don't want the entire delivery to take too long.
@@ -509,7 +518,7 @@ func (c *conn) writelinef(format string, args ...any) {
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
-func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, tls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery bool, dnsBLs []dns.Domain) {
+func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, tls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
 	var localIP, remoteIP net.IP
 	if a, ok := nc.LocalAddr().(*net.TCPAddr); ok {
 		localIP = a.IP
@@ -540,6 +549,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		requireTLSForAuth:     requireTLSForAuth,
 		requireTLSForDelivery: requireTLSForDelivery,
 		dnsBLs:                dnsBLs,
+		firstTimeSenderDelay:  firstTimeSenderDelay,
 	}
 	c.log = xlog.MoreFields(func() []mlog.Pair {
 		now := time.Now()
@@ -2454,9 +2464,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		// If not dmarc or tls report (Seen set above), and this is a first-time sender,
 		// wait before actually delivering. If this turns out to be a spammer, we've kept
 		// one of their connections busy.
-		if !m.Flags.Seen && a.reason == reasonNoBadSignals && reputationlessSenderDeliveryDelay > 0 {
-			log.Debug("delaying before delivering from sender without reputation", mlog.Field("delay", reputationlessSenderDeliveryDelay))
-			mox.Sleep(mox.Context, reputationlessSenderDeliveryDelay)
+		if !m.Flags.Seen && a.reason == reasonNoBadSignals && c.firstTimeSenderDelay > 0 {
+			log.Debug("delaying before delivering from sender without reputation", mlog.Field("delay", c.firstTimeSenderDelay))
+			mox.Sleep(mox.Context, c.firstTimeSenderDelay)
 		}
 
 		// Gather the message-id before we deliver and the file may be consumed.

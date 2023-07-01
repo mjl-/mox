@@ -6,9 +6,7 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -16,11 +14,8 @@ import (
 	"testing"
 	"time"
 
-	bolt "go.etcd.io/bbolt"
-
-	"github.com/mjl-/bstore"
-
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/imapclient"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/sasl"
@@ -78,56 +73,46 @@ func TestDeliver(t *testing.T) {
 	err := start(mtastsdbRefresher, skipForkExec)
 	tcheck(t, err, "starting mox")
 
-	// todo: we should probably hook store.Comm to get updates.
-	latestMsgID := func(username string) int64 {
-		// We open the account index database created by mox for the test user. And we keep looking for the email we sent.
-		dbpath := fmt.Sprintf("testdata/integration/data/accounts/%s/index.db", username)
-		db, err := bstore.Open(ctxbg, dbpath, &bstore.Options{Timeout: 3 * time.Second}, store.DBTypes...)
-		if err != nil && errors.Is(err, bolt.ErrTimeout) {
-			log.Printf("db open timeout (normal delay for new sender with account and db file kept open)")
-			return 0
-		}
-		tcheck(t, err, "open test account database")
-		defer db.Close()
-
-		q := bstore.QueryDB[store.Mailbox](ctxbg, db)
-		q.FilterNonzero(store.Mailbox{Name: "Inbox"})
-		inbox, err := q.Get()
-		if err != nil {
-			log.Printf("inbox for finding latest message id: %v", err)
-			return 0
-		}
-
-		qm := bstore.QueryDB[store.Message](ctxbg, db)
-		qm.FilterNonzero(store.Message{MailboxID: inbox.ID})
-		qm.SortDesc("ID")
-		qm.Limit(1)
-		m, err := qm.Get()
-		if err != nil {
-			log.Printf("finding latest message id: %v", err)
-			return 0
-		}
-		return m.ID
+	// Single update from IMAP IDLE.
+	type idleResponse struct {
+		untagged imapclient.Untagged
+		err      error
 	}
 
-	waitForMsg := func(prevMsgID int64, username string) int64 {
+	deliver := func(username, desthost, mailfrom, password, rcptto, imapuser string) {
 		t.Helper()
 
-		for i := 0; i < 10; i++ {
-			msgID := latestMsgID(username)
-			if msgID > prevMsgID {
-				return msgID
+		// Make IMAP connection, we'll wait for a delivery notification with IDLE.
+		imapconn, err := net.Dial("tcp", "moxmail1.mox1.example:143")
+		tcheck(t, err, "dial imap server")
+		defer imapconn.Close()
+		client, err := imapclient.New(imapconn, false)
+		tcheck(t, err, "new imapclient")
+		_, _, err = client.Login(imapuser, "pass1234")
+		tcheck(t, err, "imap client login")
+		_, _, err = client.Select("inbox")
+		tcheck(t, err, "imap select inbox")
+
+		err = client.Commandf("", "idle")
+		tcheck(t, err, "imap idle command")
+
+		_, _, _, err = client.ReadContinuation()
+		tcheck(t, err, "read imap continuation")
+
+		idle := make(chan idleResponse)
+		go func() {
+			for {
+				untagged, err := client.ReadUntagged()
+				idle <- idleResponse{untagged, err}
+				if err != nil {
+					return
+				}
 			}
-			time.Sleep(500 * time.Millisecond)
-		}
-		t.Fatalf("timeout waiting for message")
-		return 0 // not reached
-	}
-
-	deliver := func(username, desthost, mailfrom, password, rcptto string) {
-		t.Helper()
-
-		prevMsgID := latestMsgID(username)
+		}()
+		defer func() {
+			err := client.Writelinef("done")
+			tcheck(t, err, "aborting idle")
+		}()
 
 		conn, err := net.Dial("tcp", desthost+":587")
 		tcheck(t, err, "dial submission")
@@ -143,14 +128,28 @@ This is the message.
 		auth := []sasl.Client{sasl.NewClientPlain(mailfrom, password)}
 		c, err := smtpclient.New(mox.Context, mlog.New("test"), conn, smtpclient.TLSOpportunistic, mox.Conf.Static.HostnameDomain, dns.Domain{ASCII: desthost}, auth)
 		tcheck(t, err, "smtp hello")
+		t0 := time.Now()
 		err = c.Deliver(mox.Context, mailfrom, rcptto, int64(len(msg)), strings.NewReader(msg), false, false)
 		tcheck(t, err, "deliver with smtp")
 		err = c.Close()
 		tcheck(t, err, "close smtpclient")
 
-		waitForMsg(prevMsgID, username)
+		// Wait for notification of delivery.
+		select {
+		case resp := <-idle:
+			tcheck(t, resp.err, "idle notification")
+			_, ok := resp.untagged.(imapclient.UntaggedExists)
+			if !ok {
+				t.Fatalf("got idle %#v, expected untagged exists", resp.untagged)
+			}
+			if d := time.Since(t0); d < 1*time.Second {
+				t.Fatalf("delivery took %v, bt should have taken at least 1 second, the first-time sender delay", d)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timeout after 5s waiting for IMAP IDLE notification of new message, should take about 1 second")
+		}
 	}
 
-	deliver("moxtest1", "moxmail1.mox1.example", "moxtest1@mox1.example", "pass1234", "root@postfix.example")
-	deliver("moxtest3", "moxmail2.mox2.example", "moxtest2@mox2.example", "pass1234", "moxtest3@mox3.example")
+	deliver("moxtest1", "moxmail1.mox1.example", "moxtest1@mox1.example", "pass1234", "root@postfix.example", "moxtest1@mox1.example")
+	deliver("moxtest3", "moxmail2.mox2.example", "moxtest2@mox2.example", "pass1234", "moxtest3@mox3.example", "moxtest3@mox3.example")
 }
