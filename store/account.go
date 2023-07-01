@@ -300,6 +300,7 @@ type Message struct {
 	// ParsedBuf message structure. Currently saved as JSON of message.Part because bstore
 	// cannot yet store recursive types. Created when first needed, and saved in the
 	// database.
+	// todo: once replaced with non-json storage, remove date fixup in ../message/part.go.
 	ParsedBuf []byte
 }
 

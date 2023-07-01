@@ -356,6 +356,18 @@ func parseHeader(r io.Reader) (textproto.MIMEHeader, error) {
 
 func parseEnvelope(h mail.Header) (*Envelope, error) {
 	date, _ := h.Date()
+
+	// We currently marshal this field to JSON. But JSON cannot represent all
+	// time.Time. Time zone of 24:00 was seen in the wild. We won't try for extreme
+	// years, but we can readjust timezones.
+	// todo: remove this once we no longer store using json.
+	_, offset := date.Zone()
+	if date.Year() > 9999 {
+		date = time.Time{}
+	} else if offset <= -24*3600 || offset >= 24*3600 {
+		date = time.Unix(date.Unix(), 0).UTC()
+	}
+
 	env := &Envelope{
 		date,
 		h.Get("Subject"),
