@@ -3,7 +3,7 @@ default: build
 build:
 	# build early to catch syntax errors
 	CGO_ENABLED=0 go build
-	CGO_ENABLED=0 go vet -tags integration ./...
+	CGO_ENABLED=0 go vet -tags integration
 	CGO_ENABLED=0 go vet -tags quickstart quickstart_test.go
 	./gendoc.sh
 	(cd http && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Admin) >http/adminapi.json

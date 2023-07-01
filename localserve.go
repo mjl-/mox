@@ -65,8 +65,9 @@ during those commands instead of during "data".
 		userConfDir = "."
 	}
 
-	var dir string
+	var dir, ip string
 	c.flag.StringVar(&dir, "dir", filepath.Join(userConfDir, "mox-localserve"), "configuration storage directory")
+	c.flag.StringVar(&ip, "ip", "", "serve on this ip instead of default 127.0.0.1 and ::1. only used when writing configuration, at first launch.")
 	args := c.Parse()
 	if len(args) != 0 {
 		c.Usage()
@@ -78,7 +79,7 @@ during those commands instead of during "data".
 
 	// Load config, creating a new one if needed.
 	if _, err := os.Stat(dir); err != nil && os.IsNotExist(err) {
-		err := writeLocalConfig(log, dir)
+		err := writeLocalConfig(log, dir, ip)
 		if err != nil {
 			log.Fatalx("creating mox localserve config", err, mlog.Field("dir", dir))
 		}
@@ -86,6 +87,8 @@ during those commands instead of during "data".
 		log.Fatalx("stat config dir", err, mlog.Field("dir", dir))
 	} else if err := localLoadConfig(log, dir); err != nil {
 		log.Fatalx("loading mox localserve config (hint: when creating a new config with -dir, the directory must not yet exist)", err, mlog.Field("dir", dir))
+	} else if ip != "" {
+		log.Fatal("can only use -ip when writing a new config file")
 	}
 
 	if level, ok := mlog.Levels[loglevel]; loglevel != "" && ok {
@@ -181,7 +184,7 @@ during those commands instead of during "data".
 	}
 }
 
-func writeLocalConfig(log *mlog.Log, dir string) (rerr error) {
+func writeLocalConfig(log *mlog.Log, dir, ip string) (rerr error) {
 	defer func() {
 		x := recover()
 		if x != nil {
@@ -257,9 +260,13 @@ func writeLocalConfig(log *mlog.Log, dir string) (rerr error) {
 	xcheck(err, "writing adminpasswd file")
 
 	// Write mox.conf.
+	ips := []string{"127.0.0.1", "::1"}
+	if ip != "" {
+		ips = []string{ip}
+	}
 
 	local := config.Listener{
-		IPs: []string{"127.0.0.1", "::1"},
+		IPs: ips,
 		TLS: &config.TLS{
 			KeyCerts: []config.KeyCert{
 				{

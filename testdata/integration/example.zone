@@ -10,6 +10,7 @@ moxmail2.mox2       IN A 172.28.2.10
 moxmail3.mox3       IN A 172.28.3.10
 postfixmail.postfix IN A 172.28.1.20
 dns                 IN A 172.28.1.30
+localserve.mox1     IN A 172.28.1.50
 
 mox1    MX 10 moxmail1.mox1.example.
 mox2    MX 10 moxmail2.mox2.example.

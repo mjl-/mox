@@ -10,6 +10,7 @@ services:
     volumes:
       - ./.go:/.go
       - ./testdata/integration/resolv.conf:/etc/resolv.conf
+      - ./testdata/integration/moxsubmit.conf:/etc/moxsubmit.conf
       - .:/mox
     environment:
       GOCACHE: /.go/.cache/go-build
@@ -22,6 +23,8 @@ services:
       dns:
         condition: service_healthy
       postfixmail:
+        condition: service_healthy
+      localserve:
         condition: service_healthy
     networks:
       mailnet1:
@@ -52,6 +55,31 @@ services:
     networks:
       mailnet1:
         ipv4_address: 172.28.1.20
+
+  localserve:
+    hostname: localserve.mox1.example
+    domainname: mox1.example
+    build:
+      dockerfile: Dockerfile.moxmail
+      context: testdata/integration
+    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; go run . -- localserve -ip 172.28.1.50"]
+    volumes:
+      - ./.go:/.go
+      - ./testdata/integration/resolv.conf:/etc/resolv.conf
+      - .:/mox
+    environment:
+      GOCACHE: /.go/.cache/go-build
+    healthcheck:
+      test: netstat -nlt | grep ':1025 '
+      interval: 1s
+      timeout: 1s
+      retries: 10
+    depends_on:
+      dns:
+        condition: service_healthy
+    networks:
+      mailnet1:
+        ipv4_address: 172.28.1.50
 
   dns:
     hostname: dns.example

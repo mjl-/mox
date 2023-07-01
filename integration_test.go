@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -36,6 +37,7 @@ func tcheck(t *testing.T, err error, msg string) {
 // We check if we receive the message.
 func TestDeliver(t *testing.T) {
 	mlog.Logfmt = true
+	log := mlog.New("test")
 
 	// Remove state.
 	os.RemoveAll("testdata/integration/data")
@@ -79,16 +81,16 @@ func TestDeliver(t *testing.T) {
 		err      error
 	}
 
-	deliver := func(username, desthost, mailfrom, password, rcptto, imapuser string) {
+	testDeliver := func(checkTime bool, imapaddr, imapuser, imappass string, fn func()) {
 		t.Helper()
 
 		// Make IMAP connection, we'll wait for a delivery notification with IDLE.
-		imapconn, err := net.Dial("tcp", "moxmail1.mox1.example:143")
+		imapconn, err := net.Dial("tcp", imapaddr)
 		tcheck(t, err, "dial imap server")
 		defer imapconn.Close()
 		client, err := imapclient.New(imapconn, false)
 		tcheck(t, err, "new imapclient")
-		_, _, err = client.Login(imapuser, "pass1234")
+		_, _, err = client.Login(imapuser, imappass)
 		tcheck(t, err, "imap client login")
 		_, _, err = client.Select("inbox")
 		tcheck(t, err, "imap select inbox")
@@ -114,7 +116,27 @@ func TestDeliver(t *testing.T) {
 			tcheck(t, err, "aborting idle")
 		}()
 
-		conn, err := net.Dial("tcp", desthost+":587")
+		t0 := time.Now()
+		fn()
+
+		// Wait for notification of delivery.
+		select {
+		case resp := <-idle:
+			tcheck(t, resp.err, "idle notification")
+			_, ok := resp.untagged.(imapclient.UntaggedExists)
+			if !ok {
+				t.Fatalf("got idle %#v, expected untagged exists", resp.untagged)
+			}
+			if d := time.Since(t0); checkTime && d < 1*time.Second {
+				t.Fatalf("delivery took %v, but should have taken at least 1 second, the first-time sender delay", d)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timeout after 5s waiting for IMAP IDLE notification of new message, should take about 1 second")
+		}
+	}
+
+	submit := func(smtphost, smtpport, mailfrom, password, rcptto string) {
+		conn, err := net.Dial("tcp", net.JoinHostPort(smtphost, smtpport))
 		tcheck(t, err, "dial submission")
 		defer conn.Close()
 
@@ -126,30 +148,36 @@ This is the message.
 `, mailfrom, rcptto)
 		msg = strings.ReplaceAll(msg, "\n", "\r\n")
 		auth := []sasl.Client{sasl.NewClientPlain(mailfrom, password)}
-		c, err := smtpclient.New(mox.Context, mlog.New("test"), conn, smtpclient.TLSOpportunistic, mox.Conf.Static.HostnameDomain, dns.Domain{ASCII: desthost}, auth)
+		c, err := smtpclient.New(mox.Context, log, conn, smtpclient.TLSOpportunistic, mox.Conf.Static.HostnameDomain, dns.Domain{ASCII: smtphost}, auth)
 		tcheck(t, err, "smtp hello")
-		t0 := time.Now()
 		err = c.Deliver(mox.Context, mailfrom, rcptto, int64(len(msg)), strings.NewReader(msg), false, false)
 		tcheck(t, err, "deliver with smtp")
 		err = c.Close()
 		tcheck(t, err, "close smtpclient")
-
-		// Wait for notification of delivery.
-		select {
-		case resp := <-idle:
-			tcheck(t, resp.err, "idle notification")
-			_, ok := resp.untagged.(imapclient.UntaggedExists)
-			if !ok {
-				t.Fatalf("got idle %#v, expected untagged exists", resp.untagged)
-			}
-			if d := time.Since(t0); d < 1*time.Second {
-				t.Fatalf("delivery took %v, bt should have taken at least 1 second, the first-time sender delay", d)
-			}
-		case <-time.After(5 * time.Second):
-			t.Fatalf("timeout after 5s waiting for IMAP IDLE notification of new message, should take about 1 second")
-		}
 	}
 
-	deliver("moxtest1", "moxmail1.mox1.example", "moxtest1@mox1.example", "pass1234", "root@postfix.example", "moxtest1@mox1.example")
-	deliver("moxtest3", "moxmail2.mox2.example", "moxtest2@mox2.example", "pass1234", "moxtest3@mox3.example", "moxtest3@mox3.example")
+	testDeliver(true, "moxmail1.mox1.example:143", "moxtest1@mox1.example", "pass1234", func() {
+		submit("moxmail1.mox1.example", "587", "moxtest1@mox1.example", "pass1234", "root@postfix.example")
+	})
+	testDeliver(true, "moxmail1.mox1.example:143", "moxtest3@mox3.example", "pass1234", func() {
+		submit("moxmail2.mox2.example", "587", "moxtest2@mox2.example", "pass1234", "moxtest3@mox3.example")
+	})
+
+	testDeliver(false, "localserve.mox1.example:1143", "mox@localhost", "moxmoxmox", func() {
+		submit("localserve.mox1.example", "1587", "mox@localhost", "moxmoxmox", "any@any.example")
+	})
+
+	testDeliver(false, "localserve.mox1.example:1143", "mox@localhost", "moxmoxmox", func() {
+		cmd := exec.Command("go", "run", ".", "sendmail", "mox@localhost")
+		const msg = `Subject: test
+
+a message.
+`
+		cmd.Stdin = strings.NewReader(msg)
+		var out strings.Builder
+		cmd.Stdout = &out
+		err := cmd.Run()
+		log.Print("sendmail", mlog.Field("output", out.String()))
+		tcheck(t, err, "sendmail")
+	})
 }

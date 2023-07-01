@@ -329,6 +329,8 @@ during those commands instead of during "data".
 	usage: mox localserve
 	  -dir string
 	    	configuration storage directory (default "$userconfigdir/mox-localserve")
+	  -ip string
+	    	serve on this ip instead of default 127.0.0.1 and ::1. only used when writing configuration, at first launch.
 
 # mox help
 
