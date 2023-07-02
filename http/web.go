@@ -328,6 +328,16 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 // Listen binds to sockets for HTTP listeners, including those required for ACME to
 // generate TLS certificates. It stores the listeners so Serve can start serving them.
 func Listen() {
+	redirectToTrailingSlash := func(srv *serve, name, path string) {
+		// Helpfully redirect user to version with ending slash.
+		if path != "/" && strings.HasSuffix(path, "/") {
+			handler := safeHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, path, http.StatusSeeOther)
+			}))
+			srv.Handle(name, nil, path[:len(path)-1], handler)
+		}
+	}
+
 	for name, l := range mox.Conf.Static.Listeners {
 		portServe := map[int]*serve{}
 
@@ -365,6 +375,7 @@ func Listen() {
 			srv := ensureServe(false, port, "account-http at "+path)
 			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(accountHandle)))
 			srv.Handle("account", nil, path, handler)
+			redirectToTrailingSlash(srv, "account", path)
 		}
 		if l.AccountHTTPS.Enabled {
 			port := config.Port(l.AccountHTTPS.Port, 443)
@@ -375,6 +386,7 @@ func Listen() {
 			srv := ensureServe(true, port, "account-https at "+path)
 			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(accountHandle)))
 			srv.Handle("account", nil, path, handler)
+			redirectToTrailingSlash(srv, "account", path)
 		}
 
 		if l.AdminHTTP.Enabled {
@@ -386,6 +398,7 @@ func Listen() {
 			srv := ensureServe(false, port, "admin-http at "+path)
 			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(adminHandle)))
 			srv.Handle("admin", nil, path, handler)
+			redirectToTrailingSlash(srv, "admin", path)
 		}
 		if l.AdminHTTPS.Enabled {
 			port := config.Port(l.AdminHTTPS.Port, 443)
@@ -396,6 +409,7 @@ func Listen() {
 			srv := ensureServe(true, port, "admin-https at "+path)
 			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(adminHandle)))
 			srv.Handle("admin", nil, path, handler)
+			redirectToTrailingSlash(srv, "admin", path)
 		}
 		if l.MetricsHTTP.Enabled {
 			port := config.Port(l.MetricsHTTP.Port, 8010)
