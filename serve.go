@@ -157,7 +157,12 @@ requested, other TLS certificates are requested on demand.
 		// to start the child process.
 		runtime.GOMAXPROCS(1)
 
-		log.Print("starting as root, initializing network listeners", mlog.Field("version", moxvar.Version), mlog.Field("pid", os.Getpid()))
+		moxconf, err := filepath.Abs(mox.ConfigStaticPath)
+		log.Check(err, "finding absolute mox.conf path")
+		domainsconf, err := filepath.Abs(mox.ConfigDynamicPath)
+		log.Check(err, "finding absolute domains.conf path")
+
+		log.Print("starting as root, initializing network listeners", mlog.Field("version", moxvar.Version), mlog.Field("pid", os.Getpid()), mlog.Field("moxconf", moxconf), mlog.Field("domainsconf", domainsconf))
 		if os.Getenv("MOX_SOCKETS") != "" {
 			log.Fatal("refusing to start as root with $MOX_SOCKETS set")
 		}
