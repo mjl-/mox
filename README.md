@@ -350,3 +350,26 @@ domain. Sending messages with content that resembles known spam messages.
 Should your email be rejected, you will typically get an error message that
 explains why. In the case of big email providers the error message often has
 instructions on how to prove to them you are a legimate sender.
+
+## Can I use existing TLS certificates/keys?
+
+Yes. The quickstart command creates a config that uses ACME with Let's Encrypt,
+but you can change the config file to use existing certificate and key files.
+
+You'll see "ACME: letsencrypt" in the "TLS" section of the "public" Listener.
+Remove or comment out the ACME-line, and add a "KeyCerts" section like in the
+example config file in
+https://pkg.go.dev/github.com/mjl-/mox/config#hdr-mox_conf. You can have
+multiple certificates and keys: The line with the "-" (dash) is the start of a
+list item. Duplicate that line up to and including the line with KeyFile for
+each certificate/key you have. Mox makes a TLS config that holds all specified
+certificates/keys, and uses it for all services for that Listener (including a
+webserver), choosing the correct certificate for incoming requests.
+
+Keep in mind that for each email domain you host, you will need a certificate
+for `mta-sts.<domain>` and `autoconfig.<domain>`, unless you disable MTA-STS
+and autoconfig for that domain.
+
+Mox opens the key and certificate files during initial startup, as root (and
+passes file descriptors to the unprivileged process).  No special permissions
+are needed on the key and certificate files.
