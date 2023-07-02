@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -26,10 +25,9 @@ import (
 
 var ctxbg = context.Background()
 
-func tcheck(t *testing.T, err error, msg string) {
-	t.Helper()
+func tcheck(t *testing.T, err error, errmsg string) {
 	if err != nil {
-		t.Fatalf("%s: %s", msg, err)
+		t.Fatalf("%s: %s", errmsg, err)
 	}
 }
 
@@ -49,7 +47,6 @@ func TestDeliver(t *testing.T) {
 
 	// Load mox config.
 	mox.ConfigStaticPath = "testdata/integration/config/mox.conf"
-	filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	if errs := mox.LoadConfig(ctxbg, true, false); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}

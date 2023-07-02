@@ -49,9 +49,12 @@ dovecot-keywords file can specify additional flags, like Forwarded/Junk/NotJunk.
 The maildir files/directories are read by the mox process, so make sure it has
 access to the maildir directories/files.
 `
-
 	args := c.Parse()
-	xcmdImport(false, args, c)
+	if len(args) != 3 {
+		c.Usage()
+	}
+	mustLoadConfig()
+	ctlcmdImport(xctl(), false, args[0], args[1], args[2])
 }
 
 func cmdImportMbox(c *cmd) {
@@ -65,35 +68,12 @@ Using mbox is not recommended, maildir is a better defined format.
 The mailbox is read by the mox process, so make sure it has access to the
 maildir directories/files.
 `
-
 	args := c.Parse()
-	xcmdImport(true, args, c)
-}
-
-func xcmdImport(mbox bool, args []string, c *cmd) {
 	if len(args) != 3 {
 		c.Usage()
 	}
-
 	mustLoadConfig()
-
-	account := args[0]
-	mailbox := args[1]
-	if strings.EqualFold(mailbox, "inbox") {
-		mailbox = "Inbox"
-	}
-	src := args[2]
-
-	var ctlcmd string
-	if mbox {
-		ctlcmd = "importmbox"
-	} else {
-		ctlcmd = "importmaildir"
-	}
-
-	ctl := xctl()
-	ctl.xwrite(ctlcmd)
-	xcmdImportCtl(ctl, account, mailbox, src)
+	ctlcmdImport(xctl(), true, args[0], args[1], args[2])
 }
 
 func cmdXImportMaildir(c *cmd) {
@@ -124,19 +104,6 @@ func xcmdXImport(mbox bool, c *cmd) {
 	}
 
 	accountdir := args[0]
-	mailbox := args[1]
-	if strings.EqualFold(mailbox, "inbox") {
-		mailbox = "Inbox"
-	}
-	src := args[2]
-
-	var ctlcmd string
-	if mbox {
-		ctlcmd = "importmbox"
-	} else {
-		ctlcmd = "importmaildir"
-	}
-
 	account := filepath.Base(accountdir)
 
 	// Set up the mox config so the account can be opened.
@@ -157,14 +124,22 @@ func xcmdXImport(mbox bool, c *cmd) {
 	xlog := mlog.New("import")
 	cconn, sconn := net.Pipe()
 	clientctl := ctl{conn: cconn, r: bufio.NewReader(cconn), log: xlog}
-	serverctl := ctl{cmd: ctlcmd, conn: sconn, r: bufio.NewReader(sconn), log: xlog}
-	go importctl(context.Background(), &serverctl, true)
+	serverctl := ctl{conn: sconn, r: bufio.NewReader(sconn), log: xlog}
+	go servectlcmd(context.Background(), &serverctl, func() {})
 
-	xcmdImportCtl(&clientctl, account, mailbox, src)
+	ctlcmdImport(&clientctl, mbox, account, args[1], args[2])
 }
 
-func xcmdImportCtl(ctl *ctl, account, mailbox, src string) {
+func ctlcmdImport(ctl *ctl, mbox bool, account, mailbox, src string) {
+	if mbox {
+		ctl.xwrite("importmbox")
+	} else {
+		ctl.xwrite("importmaildir")
+	}
 	ctl.xwrite(account)
+	if strings.EqualFold(mailbox, "Inbox") {
+		mailbox = "Inbox"
+	}
 	ctl.xwrite(mailbox)
 	ctl.xwrite(src)
 	ctl.xreadok()

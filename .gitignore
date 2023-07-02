@@ -2,6 +2,8 @@
 /rfc/[0-9][0-9]*
 /local/
 /testdata/check/
+/testdata/ctl/data/
+/testdata/ctl/dkim/
 /testdata/empty/
 /testdata/exportmaildir/
 /testdata/exportmbox/

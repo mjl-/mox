@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"os"
@@ -20,16 +21,16 @@ import (
 	"github.com/mjl-/mox/smtpclient"
 )
 
-var xlog = mlog.New("quickstart")
+var ctxbg = context.Background()
 
-func tcheck(t *testing.T, err error, msg string) {
-	t.Helper()
+func tcheck(t *testing.T, err error, errmsg string) {
 	if err != nil {
-		t.Fatalf("%s: %s", msg, err)
+		t.Fatalf("%s: %s", errmsg, err)
 	}
 }
 
 func TestDeliver(t *testing.T) {
+	xlog := mlog.New("quickstart")
 	mlog.Logfmt = true
 
 	hostname, err := os.Hostname()

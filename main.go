@@ -592,17 +592,20 @@ must be set if and only if account does not yet exist.
 
 	d := xparseDomain(args[0], "domain")
 	mustLoadConfig()
+	var localpart string
+	if len(args) == 3 {
+		localpart = args[2]
+	}
+	ctlcmdConfigDomainAdd(xctl(), d, args[1], localpart)
+}
 
-	if len(args) == 2 {
-		args = append(args, "")
-	}
-	ctl := xctl()
+func ctlcmdConfigDomainAdd(ctl *ctl, domain dns.Domain, account, localpart string) {
 	ctl.xwrite("domainadd")
-	for _, s := range args {
-		ctl.xwrite(s)
-	}
+	ctl.xwrite(domain.Name())
+	ctl.xwrite(account)
+	ctl.xwrite(localpart)
 	ctl.xreadok()
-	fmt.Printf("domain added, remember to add dns records, see:\n\nmox config dnsrecords %s\nmox config dnscheck %s\n", d.Name(), d.Name())
+	fmt.Printf("domain added, remember to add dns records, see:\n\nmox config dnsrecords %s\nmox config dnscheck %s\n", domain.Name(), domain.Name())
 }
 
 func cmdConfigDomainRemove(c *cmd) {
@@ -619,9 +622,12 @@ rejected.
 
 	d := xparseDomain(args[0], "domain")
 	mustLoadConfig()
-	ctl := xctl()
+	ctlcmdConfigDomainRemove(xctl(), d)
+}
+
+func ctlcmdConfigDomainRemove(ctl *ctl, d dns.Domain) {
 	ctl.xwrite("domainrm")
-	ctl.xwrite(args[0])
+	ctl.xwrite(d.Name())
 	ctl.xreadok()
 	fmt.Printf("domain removed, remember to remove dns records for %s\n", d)
 }
@@ -639,13 +645,15 @@ explicitly, see the setaccountpassword command.
 	}
 
 	mustLoadConfig()
-	ctl := xctl()
+	ctlcmdConfigAccountAdd(xctl(), args[0], args[1])
+}
+
+func ctlcmdConfigAccountAdd(ctl *ctl, account, address string) {
 	ctl.xwrite("accountadd")
-	for _, s := range args {
-		ctl.xwrite(s)
-	}
+	ctl.xwrite(account)
+	ctl.xwrite(address)
 	ctl.xreadok()
-	fmt.Printf("account added, set a password with \"mox setaccountpassword %s\"\n", args[1])
+	fmt.Printf("account added, set a password with \"mox setaccountpassword %s\"\n", address)
 }
 
 func cmdConfigAccountRemove(c *cmd) {
@@ -661,9 +669,12 @@ these addresses will be rejected.
 	}
 
 	mustLoadConfig()
-	ctl := xctl()
+	ctlcmdConfigAccountRemove(xctl(), args[0])
+}
+
+func ctlcmdConfigAccountRemove(ctl *ctl, account string) {
 	ctl.xwrite("accountrm")
-	ctl.xwrite(args[0])
+	ctl.xwrite(account)
 	ctl.xreadok()
 	fmt.Println("account removed")
 }
@@ -681,11 +692,13 @@ address for the domain.
 	}
 
 	mustLoadConfig()
-	ctl := xctl()
+	ctlcmdConfigAddressAdd(xctl(), args[0], args[1])
+}
+
+func ctlcmdConfigAddressAdd(ctl *ctl, address, account string) {
 	ctl.xwrite("addressadd")
-	for _, s := range args {
-		ctl.xwrite(s)
-	}
+	ctl.xwrite(address)
+	ctl.xwrite(account)
 	ctl.xreadok()
 	fmt.Println("address added")
 }
@@ -702,9 +715,12 @@ Incoming email for this address will be rejected after removing an address.
 	}
 
 	mustLoadConfig()
-	ctl := xctl()
+	ctlcmdConfigAddressRemove(xctl(), args[0])
+}
+
+func ctlcmdConfigAddressRemove(ctl *ctl, address string) {
 	ctl.xwrite("addressrm")
-	ctl.xwrite(args[0])
+	ctl.xwrite(address)
 	ctl.xreadok()
 	fmt.Println("address removed")
 }
@@ -931,21 +947,26 @@ Valid labels: error, info, debug, trace, traceauth, tracedata.
 	mustLoadConfig()
 
 	if len(args) == 0 {
-		ctl := xctl()
-		ctl.xwrite("loglevels")
-		ctl.xreadok()
-		ctl.xstreamto(os.Stdout)
-		return
-	}
-
-	ctl := xctl()
-	ctl.xwrite("setloglevels")
-	if len(args) == 2 {
-		ctl.xwrite(args[1])
+		ctlcmdLoglevels(xctl())
 	} else {
-		ctl.xwrite("")
+		var pkg string
+		if len(args) == 2 {
+			pkg = args[1]
+		}
+		ctlcmdSetLoglevels(xctl(), pkg, args[0])
 	}
-	ctl.xwrite(args[0])
+}
+
+func ctlcmdLoglevels(ctl *ctl) {
+	ctl.xwrite("loglevels")
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
+func ctlcmdSetLoglevels(ctl *ctl, pkg, level string) {
+	ctl.xwrite("setloglevels")
+	ctl.xwrite(pkg)
+	ctl.xwrite(level)
 	ctl.xreadok()
 }
 
@@ -1025,7 +1046,10 @@ upgrading.
 	dstDataDir, err := filepath.Abs(args[0])
 	xcheckf(err, "making path absolute")
 
-	ctl := xctl()
+	ctlcmdBackup(xctl(), dstDataDir, verbose)
+}
+
+func ctlcmdBackup(ctl *ctl, dstDataDir string, verbose bool) {
 	ctl.xwrite("backup")
 	ctl.xwrite(dstDataDir)
 	if verbose {
@@ -1102,10 +1126,13 @@ Any email address configured for the account can be used.
 
 	pw := xreadpassword()
 
-	ctl := xctl()
+	ctlcmdSetaccountpassword(xctl(), args[0], pw)
+}
+
+func ctlcmdSetaccountpassword(ctl *ctl, address, password string) {
 	ctl.xwrite("setaccountpassword")
-	ctl.xwrite(args[0])
-	ctl.xwrite(pw)
+	ctl.xwrite(address)
+	ctl.xwrite(password)
 	ctl.xreadok()
 }
 
@@ -1118,10 +1145,12 @@ func cmdDeliver(c *cmd) {
 		c.Usage()
 	}
 	mustLoadConfig()
+	ctlcmdDeliver(xctl(), args[0])
+}
 
-	ctl := xctl()
+func ctlcmdDeliver(ctl *ctl, address string) {
 	ctl.xwrite("deliver")
-	ctl.xwrite(args[0])
+	ctl.xwrite(address)
 	ctl.xreadok()
 	ctl.xstreamfrom(os.Stdin)
 	line := ctl.xread()
@@ -1142,8 +1171,10 @@ error.
 		c.Usage()
 	}
 	mustLoadConfig()
+	ctlcmdQueueList(xctl())
+}
 
-	ctl := xctl()
+func ctlcmdQueueList(ctl *ctl) {
 	ctl.xwrite("queue")
 	ctl.xreadok()
 	if _, err := io.Copy(os.Stdout, ctl.reader()); err != nil {
@@ -1174,8 +1205,10 @@ queue over SMTP.
 		c.Usage()
 	}
 	mustLoadConfig()
+	ctlcmdQueueKick(xctl(), id, todomain, recipient, transport)
+}
 
-	ctl := xctl()
+func ctlcmdQueueKick(ctl *ctl, id int64, todomain, recipient, transport string) {
 	ctl.xwrite("queuekick")
 	ctl.xwrite(fmt.Sprintf("%d", id))
 	ctl.xwrite(todomain)
@@ -1206,8 +1239,10 @@ the message, use "queue dump" before removing.
 		c.Usage()
 	}
 	mustLoadConfig()
+	ctlcmdQueueDrop(xctl(), id, todomain, recipient)
+}
 
-	ctl := xctl()
+func ctlcmdQueueDrop(ctl *ctl, id int64, todomain, recipient string) {
 	ctl.xwrite("queuedrop")
 	ctl.xwrite(fmt.Sprintf("%d", id))
 	ctl.xwrite(todomain)
@@ -1232,10 +1267,12 @@ The message is printed to stdout and is in standard internet mail format.
 		c.Usage()
 	}
 	mustLoadConfig()
+	ctlcmdQueueDump(xctl(), args[0])
+}
 
-	ctl := xctl()
+func ctlcmdQueueDump(ctl *ctl, id string) {
 	ctl.xwrite("queuedump")
-	ctl.xwrite(args[0])
+	ctl.xwrite(id)
 	ctl.xreadok()
 	if _, err := io.Copy(os.Stdout, ctl.reader()); err != nil {
 		log.Fatalf("%s", err)
@@ -1786,9 +1823,12 @@ implementation has changed.
 	}
 
 	mustLoadConfig()
-	ctl := xctl()
+	ctlcmdRetrain(xctl(), args[0])
+}
+
+func ctlcmdRetrain(ctl *ctl, account string) {
 	ctl.xwrite("retrain")
-	ctl.xwrite(args[0])
+	ctl.xwrite(account)
 	ctl.xreadok()
 }
 

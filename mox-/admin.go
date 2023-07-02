@@ -186,7 +186,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 	addSelector := func(kind, name string, privKey []byte) error {
 		record := fmt.Sprintf("%s._domainkey.%s", name, domain.ASCII)
 		keyPath := filepath.Join("dkim", fmt.Sprintf("%s.%s.%skey.pkcs8.pem", record, timestamp, kind))
-		p := ConfigDirPath(keyPath)
+		p := configDirPath(ConfigDynamicPath, keyPath)
 		if err := writeFile(p, privKey); err != nil {
 			return err
 		}

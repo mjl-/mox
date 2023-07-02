@@ -232,8 +232,6 @@ func (s *ctlreader) Read(buf []byte) (N int, Err error) {
 			return 0, s.err
 		}
 		s.npending = int(n)
-		_, err = fmt.Fprintln(s.conn, "ok")
-		s.xcheck(err, "writing ok after reading")
 	}
 	rn := len(buf)
 	if rn > s.npending {
@@ -242,6 +240,10 @@ func (s *ctlreader) Read(buf []byte) (N int, Err error) {
 	n, err := s.r.Read(buf[:rn])
 	s.xcheck(err, "read from ctl")
 	s.npending -= n
+	if s.npending == 0 {
+		_, err = fmt.Fprintln(s.conn, "ok")
+		s.xcheck(err, "writing ok after reading")
+	}
 	return n, err
 }
 
@@ -286,11 +288,12 @@ func servectl(ctx context.Context, log *mlog.Log, conn net.Conn, shutdown func()
 
 	ctl.xwrite("ctlv0")
 	for {
-		servectlcmd(ctx, log, ctl, shutdown)
+		servectlcmd(ctx, ctl, shutdown)
 	}
 }
 
-func servectlcmd(ctx context.Context, log *mlog.Log, ctl *ctl, shutdown func()) {
+func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
+	log := ctl.log
 	cmd := ctl.xread()
 	ctl.cmd = cmd
 	log.Info("ctl command", mlog.Field("cmd", cmd))
