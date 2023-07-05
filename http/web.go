@@ -67,9 +67,14 @@ var (
 
 // todo: automatic gzip on responses, if client supports it, content is not already compressed. in case of static file only if it isn't too large. skip for certain response content-types (image/*, video/*), or file extensions if there is no identifying content-type. if cpu load isn't too high. if first N kb look compressible and come in quickly enough after first byte (e.g. within 100ms). always flush after 100ms to prevent stalled real-time connections.
 
+type responseWriterFlusher interface {
+	http.ResponseWriter
+	http.Flusher
+}
+
 // http.ResponseWriter that writes access log and tracks metrics at end of response.
 type loggingWriter struct {
-	W                http.ResponseWriter // Calls are forwarded.
+	W                responseWriterFlusher // Calls are forwarded.
 	Start            time.Time
 	R                *http.Request
 	WebsocketRequest bool // Whether request from was websocket.
@@ -82,6 +87,10 @@ type loggingWriter struct {
 	Err                          error
 	WebsocketResponse            bool  // If this was a successful websocket connection with backend.
 	SizeFromClient, SizeToClient int64 // Websocket data.
+}
+
+func (w *loggingWriter) Flush() {
+	w.W.Flush()
 }
 
 func (w *loggingWriter) Header() http.Header {
@@ -277,8 +286,14 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
 	r = r.WithContext(ctx)
 
+	wf, ok := xw.(responseWriterFlusher)
+	if !ok {
+		http.Error(xw, "500 - internal server error - cannot access underlying connection"+recvid(r), http.StatusInternalServerError)
+		return
+	}
+
 	nw := &loggingWriter{
-		W:     xw,
+		W:     wf,
 		Start: now,
 		R:     r,
 	}

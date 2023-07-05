@@ -129,7 +129,7 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			log.Error("internal error: ResponseWriter not a http.Flusher")
-			http.Error(w, "500 - internal error - cannot sync to http connection", 500)
+			http.Error(w, "500 - internal error - cannot access underlying connection", 500)
 			return
 		}
 
