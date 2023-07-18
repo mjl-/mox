@@ -8,7 +8,7 @@ See Quickstart below to get started.
 - SMTP (with extensions) for receiving, submitting and delivering email.
 - IMAP4 (with extensions) for giving email clients access to email.
 - Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
-- SPF, verifying that a remote host is allowed to sent email for a domain.
+- SPF, verifying that a remote host is allowed to send email for a domain.
 - DKIM, verifying that a message is signed by the claimed sender domain,
   and for signing emails sent by mox for others to verify.
 - DMARC, for enforcing SPF/DKIM policies set by domains. Incoming DMARC
@@ -51,8 +51,8 @@ https://go.dev/doc/manage-install and $HOME/go/bin):
 	GOBIN=$PWD CGO_ENABLED=0 go install github.com/mjl-/mox@latest
 
 Or you can download a binary built with the latest Go toolchain from
-https://beta.gobuilds.org/github.com/mjl-/mox, and symlink or rename it to
-"mox".
+https://beta.gobuilds.org/github.com/mjl-/mox@latest/linux-amd64-latest/, and
+symlink or rename it to "mox".
 
 Verify you have a working mox binary:
 
