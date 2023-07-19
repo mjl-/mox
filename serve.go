@@ -186,9 +186,9 @@ requested, other TLS certificates are requested on demand.
 			}
 		}
 	} else {
-		log.Print("starting as unprivileged user", mlog.Field("user", mox.Conf.Static.User), mlog.Field("uid", mox.Conf.Static.UID), mlog.Field("gid", mox.Conf.Static.GID), mlog.Field("pid", os.Getpid()))
 		mox.RestorePassedFiles()
 		mox.MustLoadConfig(true, checkACMEHosts)
+		log.Print("starting as unprivileged user", mlog.Field("user", mox.Conf.Static.User), mlog.Field("uid", mox.Conf.Static.UID), mlog.Field("gid", mox.Conf.Static.GID), mlog.Field("pid", os.Getpid()))
 	}
 
 	syscall.Umask(syscall.Umask(007) | 007)
