@@ -270,7 +270,7 @@ func (p *parser) xsubdomain() string {
 func (p *parser) xmailbox() smtp.Path {
 	localpart := p.xlocalpart()
 	p.xtake("@")
-	return smtp.Path{Localpart: localpart, IPDomain: p.xipdomain()}
+	return smtp.Path{Localpart: localpart, IPDomain: p.xipdomain(false)}
 }
 
 // ../rfc/5321:2307
@@ -281,7 +281,7 @@ func (p *parser) xldhstr() string {
 }
 
 // parse address-literal or domain.
-func (p *parser) xipdomain() dns.IPDomain {
+func (p *parser) xipdomain(isehlo bool) dns.IPDomain {
 	// ../rfc/5321:2309
 	// ../rfc/5321:2397
 	if p.take("[") {
@@ -304,10 +304,20 @@ func (p *parser) xipdomain() dns.IPDomain {
 			p.xerrorf("invalid ip in address: %q", ipaddr)
 		}
 		isv4 := ip.To4() != nil
+		isAllowedSloppyIPv6Submission := func() bool {
+			// Mail user agents that submit are relatively likely to use IPs in EHLO and forget
+			// that an IPv6 address needs to be tagged as such. We can forgive them. For
+			// SMTP servers we are strict.
+			return isehlo && p.conn.submission && !moxvar.Pedantic && ip.To16() != nil
+		}
 		if ipv6 && isv4 {
-			p.xerrorf("ip is not ipv6")
-		} else if !ipv6 && !isv4 {
-			p.xerrorf("ip is not ipv4")
+			p.xerrorf("ip address is not ipv6")
+		} else if !ipv6 && !isv4 && !isAllowedSloppyIPv6Submission() {
+			if ip.To16() != nil {
+				p.xerrorf("ip address is ipv6, must use syntax [IPv6:...]")
+			} else {
+				p.xerrorf("ip address is not ipv4")
+			}
 		}
 		return dns.IPDomain{IP: ip}
 	}

@@ -772,7 +772,7 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 	p.xspace()
 	var remote dns.IPDomain
 	if ehlo {
-		remote = p.xipdomain()
+		remote = p.xipdomain(true)
 	} else {
 		remote = dns.IPDomain{Domain: p.xdomain()}
 		if !c.submission {
