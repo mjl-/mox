@@ -3,6 +3,7 @@ default: build
 build:
 	# build early to catch syntax errors
 	CGO_ENABLED=0 go build
+	CGO_ENABLED=0 go vet ./...
 	CGO_ENABLED=0 go vet -tags integration
 	CGO_ENABLED=0 go vet -tags quickstart
 	./gendoc.sh
@@ -26,7 +27,7 @@ check:
 	staticcheck ./...
 	staticcheck -tags integration
 	staticcheck -tags quickstart
-	GOARCH=386 CGO_ENABLED=0 go vet -tags integration ./...
+	GOARCH=386 CGO_ENABLED=0 go vet ./...
 
 # having "err" shadowed is common, best to not have others
 check-shadow:
