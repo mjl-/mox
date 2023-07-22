@@ -692,6 +692,10 @@ describe-static" and "mox config describe-domains":
 			# mailbox that has messages you want to keep. (optional)
 			RejectsMailbox:
 
+			# If you'd like to retain the rejects described above instead of automatically 
+			# cleaning them (e.g. to train spam filters), you can set this to true. (optional)
+			KeepRejects:
+
 			# Automatically set $Junk and $NotJunk flags based on mailbox messages are
 			# delivered/moved/copied to. Email clients typically have too limited
 			# functionality to conveniently set these flags, especially $NonJunk, but they can

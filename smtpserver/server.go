@@ -2418,10 +2418,15 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					m.MessageID = messageid
 					m.MessageHash = messagehash
 					acc.WithWLock(func() {
-						if hasSpace, err := acc.TidyRejectsMailbox(c.log, conf.RejectsMailbox); err != nil {
-							log.Errorx("tidying rejects mailbox", err)
-						} else if hasSpace {
-							if err := acc.DeliverMailbox(log, conf.RejectsMailbox, m, dataFile, false); err != nil {
+						hasSpace := true
+						var err error = nil
+						if !conf.KeepRejects {
+							if hasSpace, err = acc.TidyRejectsMailbox(c.log, conf.RejectsMailbox); err != nil {
+								log.Errorx("tidying rejects mailbox", err)
+							}
+						}
+						if hasSpace {
+							if err = acc.DeliverMailbox(log, conf.RejectsMailbox, m, dataFile, false); err != nil {
 								log.Errorx("delivering spammy mail to rejects mailbox", err)
 							} else {
 								log.Info("delivered spammy mail to rejects mailbox")
