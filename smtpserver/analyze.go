@@ -72,7 +72,10 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	// check it for a pass.
 	// todo: should use this evaluation for final delivery as well
 	rs := store.MessageRuleset(log, d.rcptAcc.destination, d.m, d.m.MsgPrefix, d.dataFile)
-	softReject := rs.SoftReject
+	var softReject bool
+	if rs != nil {
+		softReject = rs.SoftReject
+	}
 
 	reject := func(code int, secode string, errmsg string, err error, reason string) analysis {
 		return analysis{false, softReject, code, secode, err == nil, errmsg, err, nil, nil, reason}
