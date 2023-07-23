@@ -2419,7 +2419,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					m.MessageHash = messagehash
 					acc.WithWLock(func() {
 						hasSpace := true
-						var err error = nil
+						var err error
 						if !conf.KeepRejects {
 							hasSpace, err = acc.TidyRejectsMailbox(c.log, conf.RejectsMailbox)
 						}
