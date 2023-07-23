@@ -353,7 +353,7 @@ type Ruleset struct {
 	ListAllowDomain string `sconf:"optional" sconf-doc:"Influence the spam filtering, this does not change whether this ruleset applies to a message. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation."`
 
 	Mailbox    string `sconf:"optional" sconf-doc:"Mailbox to deliver to if this ruleset matches."`
-	SoftReject bool   `sconf:"optional" sconf-doc:"Emails matching this rule will be accepted but not put in the rejects folder. This can be used for incoming mail forwards from a user's account at another provider."`
+	SoftReject bool   `sconf:"optional" sconf-doc:"Emails matching this rule will be accepted but can still be put in the rejects folder. This can be used for incoming mail forwards from a user's account at another provider: spam will still be rejected but the forwarding host will treat it as accepted."`
 
 	SMTPMailFromRegexpCompiled *regexp.Regexp      `sconf:"-" json:"-"`
 	VerifiedDNSDomain          dns.Domain          `sconf:"-"`
