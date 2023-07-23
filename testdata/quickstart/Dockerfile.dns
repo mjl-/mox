@@ -1,2 +1,0 @@
-FROM alpine:3.17
-RUN apk add unbound bind-tools mailx

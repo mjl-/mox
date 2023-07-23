@@ -3,8 +3,10 @@ $TTL 5m
 
 @ IN SOA dns.example. hostmaster.example. (1 0m 0m 0m 5m)
 
-10.1 IN PTR moxmail1.mox1.example.
-10.2 IN PTR moxmail2.mox2.example.
-10.3 IN PTR moxmail3.mox3.example.
-20.1 IN PTR postfixmail.postfix.example.
+10.1 IN PTR moxacmepebble.mox1.example.
+20.1 IN PTR moxmail2.mox2.example.
 30.1 IN PTR dns.example.
+40.1 IN PTR acmepebble.example.
+50.1 IN PTR test.example.
+60.1 IN PTR localserve.mox1.example.
+70.1 IN PTR postfixmail.postfix.example.

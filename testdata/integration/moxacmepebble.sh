@@ -16,13 +16,18 @@ TLS:
 	CA:
 		CertFiles:
                         # So certificates from moxmail2 are trusted, and pebble's certificate is trusted.
-			- /quickstart/tls/ca.pem
+			- /integration/tls/ca.pem
 EOF
 
-(cat /quickstart/example.zone; sed -n '/^;/,/IN CAA/p' output.txt) >/quickstart/example-quickstart.zone
+(
+	cat /integration/example.zone;
+	sed -n '/^;/,/IN CAA/p' output.txt |
+		# allow sending from postfix for mox1.example.
+		sed 's/mox1.example.  *IN TXT "v=spf1 mx ~all"/mox1.example. IN TXT "v=spf1 mx ip4:172.28.1.70 ~all"/'
+) >/integration/example-integration.zone
 unbound-control -s 172.28.1.30 reload # reload unbound with zone file changes
 
-CURL_CA_BUNDLE=/quickstart/tls/ca.pem curl -o /quickstart/tmp-pebble-ca.pem https://acmepebble.example:15000/roots/0
+CURL_CA_BUNDLE=/integration/tls/ca.pem curl -o /integration/tmp-pebble-ca.pem https://acmepebble.example:15000/roots/0
 
 mox serve &
 while true; do

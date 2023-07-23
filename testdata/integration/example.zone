@@ -5,29 +5,14 @@ $TTL 5m
 
 @ NS dns.example.
 
-moxmail1.mox1       IN A 172.28.1.10
-moxmail2.mox2       IN A 172.28.2.10
-moxmail3.mox3       IN A 172.28.3.10
-postfixmail.postfix IN A 172.28.1.20
+moxacmepebble.mox1  IN A 172.28.1.10
+moxmail2.mox2       IN A 172.28.1.20
 dns                 IN A 172.28.1.30
-localserve.mox1     IN A 172.28.1.50
+acmepebble          IN A 172.28.1.40
+test                IN A 172.28.1.50
+localserve.mox1     IN A 172.28.1.60
+postfixmail.postfix IN A 172.28.1.70
 
-mox1    MX 10 moxmail1.mox1.example.
-mox2    MX 10 moxmail2.mox2.example.
-mox3    MX 10 moxmail3.mox3.example.
 postfix MX 10 postfixmail.postfix.example.
-
-mox1dkim0._domainkey.mox1       IN TXT "v=DKIM1;h=sha256;t=s;k=ed25519;p=nNs/2BSurEunCKJjfE61p0r2C4OMv/S8IDU/p7nL91c="
-mox2dkim0._domainkey.mox2       IN TXT "v=DKIM1;h=sha256;t=s;k=ed25519;p=gVAOjqEeNS2e6jjGX1c61zhCOPXMcX6o5If/AVI5STk="
-mox3dkim0._domainkey.mox3       IN TXT "v=DKIM1;h=sha256;t=s;k=ed25519;p=vzv50BpMhk6moYWq9jBNR+oHmlZcL2LARgL9144nJfk="
 postfixdkim0._domainkey.postfix IN TXT "v=DKIM1;h=sha256;t=s;k=ed25519;p=a4IsBTuMsSQjU+xVyx8KEd8eObis4FrCiV72OaEkvDY="
-
-mox1    IN TXT "v=spf1 ip4:172.28.1.10 ip4:172.28.1.20 -all"
-mox2    IN TXT "v=spf1 ip4:172.28.2.10 ip4:172.28.3.10 -all" ; 172.28.3.10 because that's where connections from mox to mox3 are going from. perhaps linux prefers to use same source ip if possible?
-mox3    IN TXT "v=spf1 ip4:172.28.3.10 -all"
 postfix IN TXT "v=spf1 ip4:172.28.1.20 -all"
-
-_dmarc.mox1 IN TXT "v=DMARC1; p=reject; rua=mailto:dmarc-reports@mox1.example"
-_dmarc.mox2 IN TXT "v=DMARC1; p=reject; rua=mailto:dmarc-reports@mox2.example"
-_dmarc.mox3 IN TXT "v=DMARC1; p=reject; rua=mailto:dmarc-reports@mox3.example"
-; _dmarc.mox4 IN TXT "v=DMARC1; p=reject; rua=mailto:dmarc-reports@postfix.example"

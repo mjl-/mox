@@ -1,11 +1,10 @@
 //go:build integration
 
-// Run this using docker-compose.yml, see Makefile.
-
 package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"os"
@@ -20,57 +19,25 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtpclient"
-	"github.com/mjl-/mox/store"
 )
 
 var ctxbg = context.Background()
 
 func tcheck(t *testing.T, err error, errmsg string) {
 	if err != nil {
+		t.Helper()
 		t.Fatalf("%s: %s", errmsg, err)
 	}
 }
 
-// Submit a message to mox, which sends it to postfix, which forwards back to mox.
-// We check if we receive the message.
 func TestDeliver(t *testing.T) {
+	xlog := mlog.New("integration")
 	mlog.Logfmt = true
-	log := mlog.New("test")
 
-	// Remove state.
-	os.RemoveAll("testdata/integration/data")
-	os.MkdirAll("testdata/integration/data", 0750)
-
-	// Cleanup afterwards, these are owned by root, annoying to have around due to
-	// permission errors.
-	defer os.RemoveAll("testdata/integration/data")
-
-	// Load mox config.
-	mox.ConfigStaticPath = "testdata/integration/config/mox.conf"
-	if errs := mox.LoadConfig(ctxbg, true, false); len(errs) > 0 {
-		t.Fatalf("loading mox config: %v", errs)
-	}
-
-	// Create new accounts
-	createAccount := func(email, password string) {
-		t.Helper()
-		acc, _, err := store.OpenEmail(email)
-		tcheck(t, err, "open account")
-		err = acc.SetPassword(password)
-		tcheck(t, err, "setting password")
-		err = acc.Close()
-		tcheck(t, err, "closing account")
-	}
-
-	createAccount("moxtest1@mox1.example", "pass1234")
-	createAccount("moxtest2@mox2.example", "pass1234")
-	createAccount("moxtest3@mox3.example", "pass1234")
-
-	// Start mox.
-	const mtastsdbRefresher = false
-	const skipForkExec = true
-	err := start(mtastsdbRefresher, skipForkExec)
-	tcheck(t, err, "starting mox")
+	hostname, err := os.Hostname()
+	tcheck(t, err, "hostname")
+	ourHostname, err := dns.ParseDomain(hostname)
+	tcheck(t, err, "parse hostname")
 
 	// Single update from IMAP IDLE.
 	type idleResponse struct {
@@ -78,30 +45,42 @@ func TestDeliver(t *testing.T) {
 		err      error
 	}
 
-	testDeliver := func(checkTime bool, imapaddr, imapuser, imappass string, fn func()) {
+	// Deliver submits a message over submissions, and checks with imap idle if the
+	// message is received by the destination mail server.
+	deliver := func(checkTime bool, dialtls bool, imaphost, imapuser, imappassword string, send func()) {
 		t.Helper()
 
-		// Make IMAP connection, we'll wait for a delivery notification with IDLE.
-		imapconn, err := net.Dial("tcp", imapaddr)
-		tcheck(t, err, "dial imap server")
+		// Connect to IMAP, execute IDLE command, which will return on deliver message.
+		// TLS certificates work because the container has the CA certificates configured.
+		var imapconn net.Conn
+		var err error
+		if dialtls {
+			imapconn, err = tls.Dial("tcp", imaphost, nil)
+		} else {
+			imapconn, err = net.Dial("tcp", imaphost)
+		}
+		tcheck(t, err, "dial imap")
 		defer imapconn.Close()
-		client, err := imapclient.New(imapconn, false)
+
+		imapc, err := imapclient.New(imapconn, false)
 		tcheck(t, err, "new imapclient")
-		_, _, err = client.Login(imapuser, imappass)
-		tcheck(t, err, "imap client login")
-		_, _, err = client.Select("inbox")
+
+		_, _, err = imapc.Login(imapuser, imappassword)
+		tcheck(t, err, "imap login")
+
+		_, _, err = imapc.Select("Inbox")
 		tcheck(t, err, "imap select inbox")
 
-		err = client.Commandf("", "idle")
-		tcheck(t, err, "imap idle command")
+		err = imapc.Commandf("", "idle")
+		tcheck(t, err, "write imap idle command")
 
-		_, _, _, err = client.ReadContinuation()
+		_, _, _, err = imapc.ReadContinuation()
 		tcheck(t, err, "read imap continuation")
 
 		idle := make(chan idleResponse)
 		go func() {
 			for {
-				untagged, err := client.ReadUntagged()
+				untagged, err := imapc.ReadUntagged()
 				idle <- idleResponse{untagged, err}
 				if err != nil {
 					return
@@ -109,12 +88,12 @@ func TestDeliver(t *testing.T) {
 			}
 		}()
 		defer func() {
-			err := client.Writelinef("done")
+			err := imapc.Writelinef("done")
 			tcheck(t, err, "aborting idle")
 		}()
 
 		t0 := time.Now()
-		fn()
+		send()
 
 		// Wait for notification of delivery.
 		select {
@@ -127,13 +106,19 @@ func TestDeliver(t *testing.T) {
 			if d := time.Since(t0); checkTime && d < 1*time.Second {
 				t.Fatalf("delivery took %v, but should have taken at least 1 second, the first-time sender delay", d)
 			}
-		case <-time.After(5 * time.Second):
+		case <-time.After(30 * time.Second):
 			t.Fatalf("timeout after 5s waiting for IMAP IDLE notification of new message, should take about 1 second")
 		}
 	}
 
-	submit := func(smtphost, smtpport, mailfrom, password, rcptto string) {
-		conn, err := net.Dial("tcp", net.JoinHostPort(smtphost, smtpport))
+	submit := func(dialtls bool, mailfrom, password, desthost, rcptto string) {
+		var conn net.Conn
+		var err error
+		if dialtls {
+			conn, err = tls.Dial("tcp", desthost, nil)
+		} else {
+			conn, err = net.Dial("tcp", desthost)
+		}
 		tcheck(t, err, "dial submission")
 		defer conn.Close()
 
@@ -145,7 +130,7 @@ This is the message.
 `, mailfrom, rcptto)
 		msg = strings.ReplaceAll(msg, "\n", "\r\n")
 		auth := []sasl.Client{sasl.NewClientPlain(mailfrom, password)}
-		c, err := smtpclient.New(mox.Context, log, conn, smtpclient.TLSOpportunistic, mox.Conf.Static.HostnameDomain, dns.Domain{ASCII: smtphost}, auth)
+		c, err := smtpclient.New(mox.Context, xlog, conn, smtpclient.TLSSkip, ourHostname, dns.Domain{ASCII: desthost}, auth)
 		tcheck(t, err, "smtp hello")
 		err = c.Deliver(mox.Context, mailfrom, rcptto, int64(len(msg)), strings.NewReader(msg), false, false)
 		tcheck(t, err, "deliver with smtp")
@@ -153,18 +138,42 @@ This is the message.
 		tcheck(t, err, "close smtpclient")
 	}
 
-	testDeliver(true, "moxmail1.mox1.example:143", "moxtest1@mox1.example", "pass1234", func() {
-		submit("moxmail1.mox1.example", "587", "moxtest1@mox1.example", "pass1234", "root@postfix.example")
-	})
-	testDeliver(true, "moxmail1.mox1.example:143", "moxtest3@mox3.example", "pass1234", func() {
-		submit("moxmail2.mox2.example", "587", "moxtest2@mox2.example", "pass1234", "moxtest3@mox3.example")
-	})
+	// Make sure moxacmepebble has a TLS certificate.
+	conn, err := tls.Dial("tcp", "moxacmepebble.mox1.example:465", nil)
+	tcheck(t, err, "dial submission")
+	defer conn.Close()
 
-	testDeliver(false, "localserve.mox1.example:1143", "mox@localhost", "moxmoxmox", func() {
-		submit("localserve.mox1.example", "1587", "mox@localhost", "moxmoxmox", "any@any.example")
+	xlog.Print("submitting email to moxacmepebble, waiting for imap notification at moxmail2")
+	t0 := time.Now()
+	deliver(true, true, "moxmail2.mox2.example:993", "moxtest2@mox2.example", "accountpass4321", func() {
+		submit(true, "moxtest1@mox1.example", "accountpass1234", "moxacmepebble.mox1.example:465", "moxtest2@mox2.example")
 	})
+	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
 
-	testDeliver(false, "localserve.mox1.example:1143", "mox@localhost", "moxmoxmox", func() {
+	xlog.Print("submitting email to moxmail2, waiting for imap notification at moxacmepebble")
+	t0 = time.Now()
+	deliver(true, true, "moxacmepebble.mox1.example:993", "moxtest1@mox1.example", "accountpass1234", func() {
+		submit(true, "moxtest2@mox2.example", "accountpass4321", "moxmail2.mox2.example:465", "moxtest1@mox1.example")
+	})
+	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
+
+	xlog.Print("submitting email to postfix, waiting for imap notification at moxacmepebble")
+	t0 = time.Now()
+	deliver(true, true, "moxacmepebble.mox1.example:993", "moxtest1@mox1.example", "accountpass1234", func() {
+		submit(true, "moxtest1@mox1.example", "accountpass1234", "moxacmepebble.mox1.example:465", "root@postfix.example")
+	})
+	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
+
+	xlog.Print("submitting email to localserve")
+	t0 = time.Now()
+	deliver(false, false, "localserve.mox1.example:1143", "mox@localhost", "moxmoxmox", func() {
+		submit(false, "mox@localhost", "moxmoxmox", "localserve.mox1.example:1587", "moxtest1@mox1.example")
+	})
+	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
+
+	xlog.Print("submitting email to localserve")
+	t0 = time.Now()
+	deliver(false, false, "localserve.mox1.example:1143", "mox@localhost", "moxmoxmox", func() {
 		cmd := exec.Command("go", "run", ".", "sendmail", "mox@localhost")
 		const msg = `Subject: test
 
@@ -174,7 +183,9 @@ a message.
 		var out strings.Builder
 		cmd.Stdout = &out
 		err := cmd.Run()
-		log.Print("sendmail", mlog.Field("output", out.String()))
+		xlog.Print("sendmail", mlog.Field("output", out.String()))
 		tcheck(t, err, "sendmail")
 	})
+	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
+
 }
