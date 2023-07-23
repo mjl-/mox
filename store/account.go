@@ -1006,7 +1006,7 @@ func (a *Account) MessageReader(m Message) *MsgReader {
 func (a *Account) Deliver(log *mlog.Log, dest config.Destination, m *Message, msgFile *os.File, consumeFile bool) error {
 	var mailbox string
 	rs := MessageRuleset(log, dest, m, m.MsgPrefix, msgFile)
-	if rs != nil {
+	if rs != nil && rs.Mailbox != "" {
 		mailbox = rs.Mailbox
 	} else if dest.Mailbox == "" {
 		mailbox = "Inbox"
