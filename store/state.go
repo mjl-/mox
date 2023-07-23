@@ -1,6 +1,7 @@
 package store
 
 import (
+	"sync"
 	"sync/atomic"
 )
 
@@ -8,12 +9,13 @@ var (
 	register   = make(chan *Comm)
 	unregister = make(chan *Comm)
 	broadcast  = make(chan changeReq)
-	get        = make(chan *Comm)
 )
 
 type changeReq struct {
-	comm    *Comm
+	acc     *Account
+	comm    *Comm // Can be nil.
 	changes []Change
+	done    chan struct{}
 }
 
 type UID uint32 // IMAP UID.
@@ -72,7 +74,7 @@ var switchboardBusy atomic.Bool
 
 // Switchboard distributes changes to accounts to interested listeners. See Comm and Change.
 func Switchboard() chan struct{} {
-	regs := map[*Account]map[*Comm][]Change{}
+	regs := map[*Account]map[*Comm]struct{}{}
 	done := make(chan struct{})
 
 	if !switchboardBusy.CompareAndSwap(false, true) {
@@ -84,32 +86,36 @@ func Switchboard() chan struct{} {
 			select {
 			case c := <-register:
 				if _, ok := regs[c.acc]; !ok {
-					regs[c.acc] = map[*Comm][]Change{}
+					regs[c.acc] = map[*Comm]struct{}{}
 				}
-				regs[c.acc][c] = nil
+				regs[c.acc][c] = struct{}{}
+
 			case c := <-unregister:
 				delete(regs[c.acc], c)
 				if len(regs[c.acc]) == 0 {
 					delete(regs, c.acc)
 				}
+
 			case chReq := <-broadcast:
-				acc := chReq.comm.acc
-				for c, changes := range regs[acc] {
-					// Do not send the broadcaster back their own changes.
+				acc := chReq.acc
+				for c := range regs[acc] {
+					// Do not send the broadcaster back their own changes. chReq.comm is nil if not
+					// originating from a comm, so won't match in that case.
 					if c == chReq.comm {
 						continue
 					}
-					regs[acc][c] = append(changes, chReq.changes...)
+
+					c.Lock()
+					c.changes = append(c.changes, chReq.changes...)
+					c.Unlock()
+
 					select {
-					case c.Changes <- regs[acc][c]:
-						regs[acc][c] = nil
+					case c.Pending <- struct{}{}:
 					default:
 					}
 				}
-				chReq.comm.r <- struct{}{}
-			case c := <-get:
-				c.Changes <- regs[c.acc][c]
-				regs[c.acc][c] = nil
+				chReq.done <- struct{}{}
+
 			case <-done:
 				if !switchboardBusy.CompareAndSwap(true, false) {
 					panic("switchboard already unregistered?")
@@ -124,14 +130,20 @@ func Switchboard() chan struct{} {
 // Comm handles communication with the goroutine that maintains the
 // account/mailbox/message state.
 type Comm struct {
-	Changes chan []Change // Receives block until changes come in, e.g. for IMAP IDLE.
-	acc     *Account
-	r       chan struct{}
+	Pending chan struct{} // Receives block until changes come in, e.g. for IMAP IDLE.
+
+	acc *Account
+
+	sync.Mutex
+	changes []Change
 }
 
 // Register starts a Comm for the account. Unregister must be called.
 func RegisterComm(acc *Account) *Comm {
-	c := &Comm{make(chan []Change), acc, make(chan struct{})}
+	c := &Comm{
+		Pending: make(chan struct{}, 1), // Bufferend so Switchboard can just do a non-blocking send.
+		acc:     acc,
+	}
 	register <- c
 	return c
 }
@@ -146,14 +158,27 @@ func (c *Comm) Broadcast(ch []Change) {
 	if len(ch) == 0 {
 		return
 	}
-	broadcast <- changeReq{c, ch}
-	<-c.r
+	done := make(chan struct{}, 1)
+	broadcast <- changeReq{c.acc, c, ch, done}
+	<-done
 }
 
-// Get retrieves pending changes. If no changes are pending a nil or empty list
+// Get retrieves all pending changes. If no changes are pending a nil or empty list
 // is returned.
 func (c *Comm) Get() []Change {
-	get <- c
-	changes := <-c.Changes
-	return changes
+	c.Lock()
+	defer c.Unlock()
+	l := c.changes
+	c.changes = nil
+	return l
+}
+
+// BroadcastChanges ensures changes are sent to all listeners on the accoount.
+func BroadcastChanges(acc *Account, ch []Change) {
+	if len(ch) == 0 {
+		return
+	}
+	done := make(chan struct{}, 1)
+	broadcast <- changeReq{acc, nil, ch, done}
+	<-done
 }

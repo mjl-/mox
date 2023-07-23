@@ -1039,9 +1039,7 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 	}
 
 	changes = append(changes, ChangeAddUID{m.MailboxID, m.UID, m.Flags, m.Keywords})
-	comm := RegisterComm(a)
-	defer comm.Unregister()
-	comm.Broadcast(changes)
+	BroadcastChanges(a, changes)
 	return nil
 }
 
@@ -1104,9 +1102,7 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 		return false, err
 	}
 
-	comm := RegisterComm(a)
-	defer comm.Unregister()
-	comm.Broadcast(changes)
+	BroadcastChanges(a, changes)
 
 	return hasSpace, nil
 }
@@ -1198,9 +1194,7 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 		return err
 	}
 
-	comm := RegisterComm(a)
-	defer comm.Unregister()
-	comm.Broadcast(changes)
+	BroadcastChanges(a, changes)
 
 	return nil
 }

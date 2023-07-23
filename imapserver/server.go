@@ -2660,8 +2660,8 @@ wait:
 			xcheckf(le.err, "get line")
 			line = le.line
 			break wait
-		case changes := <-c.comm.Changes:
-			c.applyChanges(changes, false)
+		case <-c.comm.Pending:
+			c.applyChanges(c.comm.Get(), false)
 			c.xflush()
 		case <-mox.Shutdown.Done():
 			// ../rfc/9051:5375

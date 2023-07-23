@@ -802,9 +802,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		jf = nil
 	}
 
-	comm := store.RegisterComm(acc)
-	defer comm.Unregister()
-	comm.Broadcast(changes)
+	store.BroadcastChanges(acc, changes)
 	acc.Unlock()
 	err = acc.Close()
 	log.Check(err, "closing account after import")

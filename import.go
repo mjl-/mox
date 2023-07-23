@@ -390,9 +390,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		ctl.log.Info("delivered messages through import", mlog.Field("count", len(deliveredIDs)))
 		deliveredIDs = nil
 
-		comm := store.RegisterComm(a)
-		defer comm.Unregister()
-		comm.Broadcast(changes)
+		store.BroadcastChanges(a, changes)
 	})
 
 	err = a.Close()
