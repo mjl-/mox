@@ -35,7 +35,7 @@ var accountapiJSON []byte
 //go:embed account.html
 var accountHTML []byte
 
-var accountDoc = mustParseAPI(accountapiJSON)
+var accountDoc = mustParseAPI("account", accountapiJSON)
 
 var accountSherpaHandler http.Handler
 

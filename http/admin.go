@@ -59,14 +59,14 @@ var adminapiJSON []byte
 //go:embed admin.html
 var adminHTML []byte
 
-var adminDoc = mustParseAPI(adminapiJSON)
+var adminDoc = mustParseAPI("admin", adminapiJSON)
 
 var adminSherpaHandler http.Handler
 
-func mustParseAPI(buf []byte) (doc sherpadoc.Section) {
+func mustParseAPI(api string, buf []byte) (doc sherpadoc.Section) {
 	err := json.Unmarshal(buf, &doc)
 	if err != nil {
-		xlog.Fatalx("parsing api docs", err)
+		xlog.Fatalx("parsing api docs", err, mlog.Field("api", api))
 	}
 	return doc
 }

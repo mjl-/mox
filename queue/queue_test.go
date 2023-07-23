@@ -491,20 +491,6 @@ func TestQueueStart(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Racy... we won't get notified when work is done...
 }
 
-func TestWriteFile(t *testing.T) {
-	name := "../testdata/queue.test"
-	os.Remove(name)
-	defer os.Remove(name)
-	err := writeFile(name, strings.NewReader("test"))
-	if err != nil {
-		t.Fatalf("writeFile, unexpected error %v", err)
-	}
-	buf, err := os.ReadFile(name)
-	if err != nil || string(buf) != "test" {
-		t.Fatalf("writeFile, read file, got err %v, data %q", err, buf)
-	}
-}
-
 func TestGatherHosts(t *testing.T) {
 	mox.Context = ctxbg
 

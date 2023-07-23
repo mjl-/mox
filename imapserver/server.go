@@ -3065,13 +3065,23 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			}
 
 			// Copy message files to new message ID's.
+			syncDirs := map[string]struct{}{}
 			for i := range origMsgIDs {
 				src := c.account.MessagePath(origMsgIDs[i])
 				dst := c.account.MessagePath(newMsgIDs[i])
-				os.MkdirAll(filepath.Dir(dst), 0770) // todo optimization: keep track of dirs we already created, don't create them again
-				err := c.linkOrCopyFile(dst, src)
+				dstdir := filepath.Dir(dst)
+				if _, ok := syncDirs[dstdir]; !ok {
+					os.MkdirAll(dstdir, 0770)
+					syncDirs[dstdir] = struct{}{}
+				}
+				err := moxio.LinkOrCopy(c.log, dst, src, nil, true)
 				xcheckf(err, "link or copy file %q to %q", src, dst)
 				createdIDs = append(createdIDs, newMsgIDs[i])
+			}
+
+			for dir := range syncDirs {
+				err := moxio.SyncDir(dir)
+				xcheckf(err, "sync directory")
 			}
 
 			err = c.account.RetrainMessages(context.TODO(), c.log, tx, nmsgs, false)
@@ -3093,49 +3103,6 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 
 	// ../rfc/9051:6881 ../rfc/4315:183
 	c.writeresultf("%s OK [COPYUID %d %s %s] copied", tag, mbDst.UIDValidity, compactUIDSet(origUIDs).String(), compactUIDSet(newUIDs).String())
-}
-
-func (c *conn) linkOrCopyFile(dst, src string) error {
-	// Try hardlink first.
-	if err := os.Link(src, dst); err == nil {
-		return nil
-	}
-
-	// File system may not support hardlinks, or link would cross file systems. Do a regular file copy.
-	sf, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		err := sf.Close()
-		c.xsanity(err, "closing copied src file")
-	}()
-
-	df, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0660)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if df != nil {
-			err = os.Remove(df.Name())
-			c.xsanity(err, "removing unfinished dst file")
-			err = df.Close()
-			c.xsanity(err, "closing unfinished dst file")
-		}
-	}()
-
-	if _, err := io.Copy(df, sf); err != nil {
-		return err
-	}
-	if err := df.Close(); err != nil {
-		xerr := os.Remove(df.Name())
-		c.xsanity(xerr, "removing unfinished dst file")
-		df = nil
-		return err
-	}
-	// todo: may need to do a file/dir sync to flush to disk. better to do it once after multiple linkOrCopyFile calls.
-	df = nil
-	return nil
 }
 
 // Move moves messages from the currently selected/active mailbox to a named mailbox.

@@ -231,20 +231,6 @@ func TestMailbox(t *testing.T) {
 	}
 }
 
-func TestWriteFile(t *testing.T) {
-	name := "../testdata/account.test"
-	os.Remove(name)
-	defer os.Remove(name)
-	err := writeFile(name, strings.NewReader("test"))
-	if err != nil {
-		t.Fatalf("writeFile, unexpected error %v", err)
-	}
-	buf, err := os.ReadFile(name)
-	if err != nil || string(buf) != "test" {
-		t.Fatalf("writeFile, read file, got err %v, data %q", err, buf)
-	}
-}
-
 func TestMessageRuleset(t *testing.T) {
 	f, err := os.Open("/dev/null")
 	tcheck(t, err, "open")

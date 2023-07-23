@@ -693,13 +693,11 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 
 	if consumeFile {
 		if err := os.Rename(msgFile.Name(), msgPath); err != nil {
+			// Could be due to cross-filesystem rename. Users shouldn't configure their systems that way.
 			return fmt.Errorf("moving msg file to destination directory: %w", err)
 		}
-	} else if err := os.Link(msgFile.Name(), msgPath); err != nil {
-		// Assume file system does not support hardlinks. Copy it instead.
-		if err := writeFile(msgPath, &moxio.AtReader{R: msgFile}); err != nil {
-			return fmt.Errorf("copying message to new file: %w", err)
-		}
+	} else if err := moxio.LinkOrCopy(log, msgPath, msgFile.Name(), &moxio.AtReader{R: msgFile}, true); err != nil {
+		return fmt.Errorf("linking/copying message to new file: %w", err)
 	}
 
 	if sync {
@@ -716,28 +714,6 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 		*m = l[0]
 	}
 
-	return nil
-}
-
-// write contents of r to new file dst, for delivering a message.
-func writeFile(dst string, r io.Reader) error {
-	df, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0660)
-	if err != nil {
-		return fmt.Errorf("create: %w", err)
-	}
-	defer func() {
-		if df != nil {
-			df.Close()
-		}
-	}()
-	if _, err := io.Copy(df, r); err != nil {
-		return fmt.Errorf("copy: %s", err)
-	} else if err := df.Sync(); err != nil {
-		return fmt.Errorf("sync: %s", err)
-	} else if err := df.Close(); err != nil {
-		return fmt.Errorf("close: %s", err)
-	}
-	df = nil
 	return nil
 }
 

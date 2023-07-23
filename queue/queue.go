@@ -240,14 +240,9 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 			// Could be due to cross-filesystem rename. Users shouldn't configure their systems that way.
 			return 0, fmt.Errorf("move message into queue dir: %w", err)
 		}
-	} else if err := os.Link(msgFile.Name(), dst); err != nil {
-		// Assume file system does not support hardlinks. Copy it instead.
-		if err := writeFile(dst, &moxio.AtReader{R: msgFile}); err != nil {
-			return 0, fmt.Errorf("copying message to new file: %s", err)
-		}
-	}
-
-	if err := moxio.SyncDir(dstDir); err != nil {
+	} else if err := moxio.LinkOrCopy(log, dst, msgFile.Name(), nil, true); err != nil {
+		return 0, fmt.Errorf("linking/copying message to new file: %s", err)
+	} else if err := moxio.SyncDir(dstDir); err != nil {
 		return 0, fmt.Errorf("sync directory: %v", err)
 	}
 
@@ -259,29 +254,6 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 
 	queuekick()
 	return qm.ID, nil
-}
-
-// write contents of r to new file dst, for delivering a message.
-func writeFile(dst string, r io.Reader) error {
-	df, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0660)
-	if err != nil {
-		return fmt.Errorf("create: %w", err)
-	}
-	defer func() {
-		if df != nil {
-			err := df.Close()
-			xlog.Check(err, "closing file after failed write")
-		}
-	}()
-	if _, err := io.Copy(df, r); err != nil {
-		return fmt.Errorf("copy: %s", err)
-	} else if err := df.Sync(); err != nil {
-		return fmt.Errorf("sync: %s", err)
-	} else if err := df.Close(); err != nil {
-		return fmt.Errorf("close: %s", err)
-	}
-	df = nil
-	return nil
 }
 
 func formatIPDomain(d dns.IPDomain) string {

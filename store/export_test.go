@@ -30,7 +30,7 @@ func TestExport(t *testing.T) {
 
 	log := mlog.New("export")
 
-	msgFile, err := os.CreateTemp("", "mox-test-export")
+	msgFile, err := CreateMessageTemp("mox-test-export")
 	tcheck(t, err, "create temp")
 	defer os.Remove(msgFile.Name()) // To be sure.
 	const msg = "test: test\r\n\r\ntest\r\n"

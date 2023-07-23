@@ -6,10 +6,12 @@ import (
 	"github.com/mjl-/mox/mox-"
 )
 
-// CreateMessageTemp creates a temporary file for a message to be delivered.
-// Caller is responsible for removing the temporary file on error, and for closing the file.
-// Caller should ensure the contents of the file are synced to disk before
-// attempting to deliver the message.
+// CreateMessageTemp creates a temporary file, e.g. for delivery. The is created in
+// subdirectory tmp of the data directory, so the file is on the same file system
+// as the accounts directory, so renaming files can succeed. The caller is
+// responsible for closing and possibly removing the file. The caller should ensure
+// the contents of the file are synced to disk before attempting to deliver the
+// message.
 func CreateMessageTemp(pattern string) (*os.File, error) {
 	dir := mox.DataDirPath("tmp")
 	os.MkdirAll(dir, 0770)
