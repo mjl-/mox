@@ -364,9 +364,9 @@ func (m *Message) JunkFlagsForMailbox(mailbox string, conf config.Account) {
 // first-time incoming replies from users this account has sent messages to. On
 // IMAP append to Sent, the message is parsed and recipients are inserted as
 // recipient. Recipients are never removed other than for removing the message. On
-// IMAP move/copy, recipients aren't modified either. don't modify anything either.
-// This works by the assumption that an IMAP client simply appends messages to the
-// Sent mailbox (as opposed to copying messages from some place).
+// IMAP move/copy, recipients aren't modified either. This assumes an IMAP client
+// simply appends messages to the Sent mailbox (as opposed to copying messages from
+// some place).
 type Recipient struct {
 	ID        int64
 	MessageID int64          `bstore:"nonzero,ref Message"` // Ref gives it its own index, useful for fast removal as well.
