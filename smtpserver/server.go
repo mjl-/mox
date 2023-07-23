@@ -1678,8 +1678,10 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 
 	// Add Message-Id header if missing.
 	// ../rfc/5321:4131 ../rfc/6409:751
-	if header.Get("Message-Id") == "" {
-		msgPrefix = append(msgPrefix, fmt.Sprintf("Message-Id: <%s>\r\n", mox.MessageIDGen(c.smtputf8))...)
+	messageID := header.Get("Message-Id")
+	if messageID == "" {
+		messageID = mox.MessageIDGen(c.smtputf8)
+		msgPrefix = append(msgPrefix, fmt.Sprintf("Message-Id: <%s>\r\n", messageID)...)
 	}
 
 	// ../rfc/6409:745
@@ -1870,7 +1872,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 			}
 
 			msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-			if _, err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, xmsgPrefix, dataFile, nil, i == len(c.recipients)-1); err != nil {
+			if _, err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, dataFile, nil, i == len(c.recipients)-1); err != nil {
 				// Aborting the transaction is not great. But continuing and generating DSNs will
 				// probably result in errors as well...
 				metricSubmission.WithLabelValues("queueerror").Inc()
@@ -2560,10 +2562,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	if len(deliverErrors) > 0 {
 		now := time.Now()
 		dsnMsg := dsn.Message{
-			SMTPUTF8: c.smtputf8,
-			From:     smtp.Path{Localpart: "postmaster", IPDomain: deliverErrors[0].rcptTo.IPDomain},
-			To:       *c.mailFrom,
-			Subject:  "mail delivery failure",
+			SMTPUTF8:   c.smtputf8,
+			From:       smtp.Path{Localpart: "postmaster", IPDomain: deliverErrors[0].rcptTo.IPDomain},
+			To:         *c.mailFrom,
+			Subject:    "mail delivery failure",
+			References: messageID,
 
 			// Per-message details.
 			ReportingMTA:    mox.Conf.Static.HostnameDomain.ASCII,

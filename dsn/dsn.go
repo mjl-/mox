@@ -45,6 +45,13 @@ type Message struct {
 	// Message subject header, e.g. describing mail delivery failure.
 	Subject string
 
+	// Set when message is composed.
+	MessageID string
+
+	// References header, with Message-ID of original message this DSN is about. So
+	// mail user-agents will thread the DSN with the original message.
+	References string
+
 	// Human-readable text explaining the failure. Line endings should be
 	// bare newlines, not \r\n. They are converted to \r\n when composing.
 	TextBody string
@@ -158,7 +165,11 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 	header("From", fmt.Sprintf("<%s>", m.From.XString(smtputf8))) // todo: would be good to have a local ascii-only name for this address.
 	header("To", fmt.Sprintf("<%s>", m.To.XString(smtputf8)))     // todo: we could just leave this out if it has utf-8 and remote does not support utf-8.
 	header("Subject", m.Subject)
-	header("Message-Id", fmt.Sprintf("<%s>", mox.MessageIDGen(smtputf8)))
+	m.MessageID = mox.MessageIDGen(smtputf8)
+	header("Message-Id", fmt.Sprintf("<%s>", m.MessageID))
+	if m.References != "" {
+		header("References", m.References)
+	}
 	header("Date", time.Now().Format(message.RFC5322Z))
 	header("MIME-Version", "1.0")
 	mp := multipart.NewWriter(msgw)

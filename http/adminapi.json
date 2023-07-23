@@ -2946,6 +2946,13 @@
 					]
 				},
 				{
+					"Name": "MessageID",
+					"Docs": "Used when composing a DSN, in its References header.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "MsgPrefix",
 					"Docs": "",
 					"Typewords": [

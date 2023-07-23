@@ -101,11 +101,12 @@ func queueDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg stri
 	}
 
 	dsnMsg := &dsn.Message{
-		SMTPUTF8: m.SMTPUTF8,
-		From:     smtp.Path{Localpart: "postmaster", IPDomain: dns.IPDomain{Domain: mox.Conf.Static.HostnameDomain}},
-		To:       m.Sender(),
-		Subject:  subject,
-		TextBody: textBody,
+		SMTPUTF8:   m.SMTPUTF8,
+		From:       smtp.Path{Localpart: "postmaster", IPDomain: dns.IPDomain{Domain: mox.Conf.Static.HostnameDomain}},
+		To:         m.Sender(),
+		Subject:    subject,
+		References: m.MessageID,
+		TextBody:   textBody,
 
 		ReportingMTA: mox.Conf.Static.HostnameDomain.ASCII,
 		ArrivalDate:  m.Queued,

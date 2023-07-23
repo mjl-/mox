@@ -101,9 +101,10 @@ type Msg struct {
 	NextAttempt        time.Time           // For scheduling.
 	LastAttempt        *time.Time
 	LastError          string
-	Has8bit            bool  // Whether message contains bytes with high bit set, determines whether 8BITMIME SMTP extension is needed.
-	SMTPUTF8           bool  // Whether message requires use of SMTPUTF8.
-	Size               int64 // Full size of message, combined MsgPrefix with contents of message file.
+	Has8bit            bool   // Whether message contains bytes with high bit set, determines whether 8BITMIME SMTP extension is needed.
+	SMTPUTF8           bool   // Whether message requires use of SMTPUTF8.
+	Size               int64  // Full size of message, combined MsgPrefix with contents of message file.
+	MessageID          string // Used when composing a DSN, in its References header.
 	MsgPrefix          []byte
 
 	// If set, this message is a DSN and this is a version using utf-8, for the case
@@ -199,7 +200,7 @@ func Count(ctx context.Context) (int, error) {
 // this data is used as the message when delivering the DSN and the remote SMTP
 // server supports SMTPUTF8. If the remote SMTP server does not support SMTPUTF8,
 // the regular non-utf8 message is delivered.
-func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcptTo smtp.Path, has8bit, smtputf8 bool, size int64, msgPrefix []byte, msgFile *os.File, dsnutf8Opt []byte, consumeFile bool) (int64, error) {
+func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcptTo smtp.Path, has8bit, smtputf8 bool, size int64, messageID string, msgPrefix []byte, msgFile *os.File, dsnutf8Opt []byte, consumeFile bool) (int64, error) {
 	// todo: Add should accept multiple rcptTo if they are for the same domain. so we can queue them for delivery in one (or just a few) session(s), transferring the data only once. ../rfc/5321:3759
 
 	if Localserve {
@@ -220,7 +221,7 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 	}()
 
 	now := time.Now()
-	qm := Msg{0, now, senderAccount, mailFrom.Localpart, mailFrom.IPDomain, rcptTo.Localpart, rcptTo.IPDomain, formatIPDomain(rcptTo.IPDomain), 0, nil, now, nil, "", has8bit, smtputf8, size, msgPrefix, dsnutf8Opt, ""}
+	qm := Msg{0, now, senderAccount, mailFrom.Localpart, mailFrom.IPDomain, rcptTo.Localpart, rcptTo.IPDomain, formatIPDomain(rcptTo.IPDomain), 0, nil, now, nil, "", has8bit, smtputf8, size, messageID, msgPrefix, dsnutf8Opt, ""}
 
 	if err := tx.Insert(&qm); err != nil {
 		return 0, err
