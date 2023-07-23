@@ -2418,7 +2418,12 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					m.MessageID = messageid
 					m.MessageHash = messagehash
 					acc.WithWLock(func() {
-						if hasSpace, err := acc.TidyRejectsMailbox(c.log, conf.RejectsMailbox); err != nil {
+						hasSpace := true
+						var err error
+						if !conf.KeepRejects {
+							hasSpace, err = acc.TidyRejectsMailbox(c.log, conf.RejectsMailbox)
+						}
+						if err != nil {
 							log.Errorx("tidying rejects mailbox", err)
 						} else if hasSpace {
 							if err := acc.DeliverMailbox(log, conf.RejectsMailbox, m, dataFile, false); err != nil {
