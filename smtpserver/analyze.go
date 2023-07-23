@@ -38,6 +38,7 @@ type delivery struct {
 
 type analysis struct {
 	accept      bool
+	softReject  bool
 	code        int
 	secode      string
 	userError   bool
@@ -67,14 +68,16 @@ const (
 )
 
 func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delivery) analysis {
-	reject := func(code int, secode string, errmsg string, err error, reason string) analysis {
-		return analysis{false, code, secode, err == nil, errmsg, err, nil, nil, reason}
-	}
-
 	// If destination mailbox has a mailing list domain (for SPF/DKIM) configured,
 	// check it for a pass.
 	// todo: should use this evaluation for final delivery as well
 	rs := store.MessageRuleset(log, d.rcptAcc.destination, d.m, d.m.MsgPrefix, d.dataFile)
+	softReject := rs.SoftReject
+
+	reject := func(code int, secode string, errmsg string, err error, reason string) analysis {
+		return analysis{false, softReject, code, secode, err == nil, errmsg, err, nil, nil, reason}
+	}
+
 	if rs != nil && !rs.ListAllowDNSDomain.IsZero() {
 		ld := rs.ListAllowDNSDomain
 		// todo: on temporary failures, reject temporarily?
