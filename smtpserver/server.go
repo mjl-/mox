@@ -2446,7 +2446,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			metricDelivery.WithLabelValues("reject", a.reason).Inc()
 			c.setSlow(true)
 
-			if !a.softReject {
+			if a.softReject {
+				log.Info("silently rejecting message due to soft reject rule")
+			} else {
 				addError(rcptAcc, a.code, a.secode, a.userError, a.errmsg)
 			}
 			continue
