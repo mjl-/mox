@@ -2425,9 +2425,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 						}
 						if err != nil {
 							log.Errorx("tidying rejects mailbox", err)
-						}
-						if hasSpace {
-							if err = acc.DeliverMailbox(log, conf.RejectsMailbox, m, dataFile, false); err != nil {
+						} else if hasSpace {
+							if err := acc.DeliverMailbox(log, conf.RejectsMailbox, m, dataFile, false); err != nil {
 								log.Errorx("delivering spammy mail to rejects mailbox", err)
 							} else {
 								log.Info("delivered spammy mail to rejects mailbox")
