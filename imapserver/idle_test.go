@@ -23,7 +23,7 @@ func TestIdle(t *testing.T) {
 	// todo: test with delivery through smtp
 
 	tc2.cmdf("", "idle")
-	tc2.readprefixline("+")
+	tc2.readprefixline("+ ")
 	done := make(chan error)
 	go func() {
 		defer func() {

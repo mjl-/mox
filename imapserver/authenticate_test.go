@@ -54,7 +54,7 @@ func TestAuthenticatePlain(t *testing.T) {
 	tc.readstatus("bad")
 
 	tc.cmdf("", "authenticate plain")
-	tc.readprefixline("+")
+	tc.readprefixline("+ ")
 	tc.writelinef("%s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000testtest")))
 	tc.readstatus("ok")
 }

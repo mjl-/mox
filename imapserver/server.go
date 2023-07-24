@@ -566,7 +566,7 @@ func (c *conn) readCommand(tag *string) (cmd string, p *parser) {
 
 func (c *conn) xreadliteral(size int64, sync bool) string {
 	if sync {
-		c.writelinef("+")
+		c.writelinef("+ ")
 	}
 	buf := make([]byte, size)
 	if size > 0 {
@@ -2541,7 +2541,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		c.xmailbox(tx, name, "TRYCREATE")
 	})
 	if sync {
-		c.writelinef("+")
+		c.writelinef("+ ")
 	}
 
 	// Read the message into a temporary file.

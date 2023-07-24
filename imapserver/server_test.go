@@ -512,7 +512,7 @@ func TestScenario(t *testing.T) {
 	tc.transactf("ok", "append inbox (\\seen) {%d+}\r\n%s", len(exampleMsg), exampleMsg)
 	tc.transactf("no", "append bogus () {%d}", len(exampleMsg))
 	tc.cmdf("", "append inbox () {%d}", len(exampleMsg))
-	tc.readprefixline("+")
+	tc.readprefixline("+ ")
 	_, err := tc.conn.Write([]byte(exampleMsg + "\r\n"))
 	tc.check(err, "write message")
 	tc.response("ok")
