@@ -207,8 +207,9 @@ binary should be setgid that group:
 
 	// Message seems acceptable. We'll try to deliver it from here. If that fails, we
 	// store the message in the users home directory.
+	// Must only use xsavecheckf for error checking in the code below.
 
-	xcheckf := func(err error, format string, args ...any) {
+	xsavecheckf := func(err error, format string, args ...any) {
 		if err == nil {
 			return
 		}
@@ -239,7 +240,7 @@ binary should be setgid that group:
 	addr := net.JoinHostPort(submitconf.Host, fmt.Sprintf("%d", submitconf.Port))
 	d := net.Dialer{Timeout: 30 * time.Second}
 	conn, err := d.Dial("tcp", addr)
-	xcheckf(err, "dial submit server")
+	xsavecheckf(err, "dial submit server")
 
 	var auth []sasl.Client
 	switch submitconf.AuthMethod {
@@ -270,19 +271,19 @@ binary should be setgid that group:
 	}
 
 	ourHostname, err := dns.ParseDomain(submitconf.LocalHostname)
-	xcheckf(err, "parsing our local hostname")
+	xsavecheckf(err, "parsing our local hostname")
 
 	var remoteHostname dns.Domain
 	if net.ParseIP(submitconf.Host) != nil {
 		remoteHostname, err = dns.ParseDomain(submitconf.Host)
-		xcheckf(err, "parsing remote hostname")
+		xsavecheckf(err, "parsing remote hostname")
 	}
 
 	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, ourHostname, remoteHostname, auth)
-	xcheckf(err, "open smtp session")
+	xsavecheckf(err, "open smtp session")
 
 	err = client.Deliver(ctx, submitconf.From, recipient, int64(len(msg)), strings.NewReader(msg), true, false)
-	xcheckf(err, "submit message")
+	xsavecheckf(err, "submit message")
 
 	if err := client.Close(); err != nil {
 		log.Printf("closing smtp session after message was sent: %v", err)
