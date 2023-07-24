@@ -108,23 +108,24 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 
 ## Roadmap
 
-- Privilege separation, isolating parts of the application to more restricted
-  sandbox (e.g. new unauthenticated connections).
-- DANE and DNSSEC.
-- Sending DMARC and TLS reports (currently only receiving).
-- OAUTH2 support, for single sign on.
+- IMAP CONDSTORE and QRESYNC extensions
+- Webmail
+- IMAP THREAD extension
+- DANE and DNSSEC
+- Sending DMARC and TLS reports (currently only receiving)
+- OAUTH2 support, for single sign on
 - Add special IMAP mailbox ("Queue?") that contains queued but
-  not-yet-delivered messages.
+  not-yet-delivered messages
 - Sieve for filtering (for now see Rulesets in the account config)
 - Calendaring
-- IMAP CONDSTORE and QRESYNC extensions
-- IMAP THREAD extension
-- Using mox as backup MX.
-- Old-style internationalization in messages.
+- Privilege separation, isolating parts of the application to more restricted
+  sandbox (e.g. new unauthenticated connections)
+- Using mox as backup MX
+- Old-style internationalization in messages
 - JMAP
-- Webmail
 - Autoresponder (out of office/vacation)
 - HTTP-based API for sending messages and receiving delivery feedback
+- Milter support, for integration with external tools
 
 There are many smaller improvements to make as well, search for "todo" in the code.
 
