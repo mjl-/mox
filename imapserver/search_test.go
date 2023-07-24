@@ -36,10 +36,6 @@ this is html.
 func (tc *testconn) xsearch(nums ...uint32) {
 	tc.t.Helper()
 
-	if len(nums) == 0 {
-		tc.xnountagged()
-		return
-	}
 	tc.xuntagged(imapclient.UntaggedSearch(nums))
 }
 

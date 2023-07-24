@@ -128,6 +128,11 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 	})
 
 	if eargs == nil {
+		// In IMAP4rev1, an untagged SEARCH response is required. ../rfc/3501:2728
+		if len(uids) == 0 {
+			c.bwritelinef("* SEARCH")
+		}
+
 		// Old-style SEARCH response. We must spell out each number. So we may be splitting
 		// into multiple responses. ../rfc/9051:6809 ../rfc/3501:4833
 		for len(uids) > 0 {
