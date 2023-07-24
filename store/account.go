@@ -292,7 +292,7 @@ type Message struct {
 
 	MessageHash []byte // Hash of message. For rejects delivery, so optional like MessageID.
 	Flags
-	Keywords    []string `bstore:"index"` // Non-system or well-known $-flags. Only in "atom" syntax, stored in lower case.
+	Keywords    []string `bstore:"index"` // For keywords other than system flags or the basic well-known $-flags. Only in "atom" syntax, stored in lower case.
 	Size        int64
 	TrainedJunk *bool  // If nil, no training done yet. Otherwise, true is trained as junk, false trained as nonjunk.
 	MsgPrefix   []byte // Typically holds received headers and/or header separator.
@@ -1345,7 +1345,7 @@ func RemoveKeywords(l, remove []string) []string {
 func MergeKeywords(l, add []string) ([]string, bool) {
 	var changed bool
 	for _, k := range add {
-		if slices.Index(l, k) < 0 {
+		if !slices.Contains(l, k) {
 			l = append(l, k)
 			changed = true
 		}

@@ -60,6 +60,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"golang.org/x/exp/slices"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/mjl-/bstore"
@@ -2083,6 +2084,7 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 					Name:        dst,
 					UIDValidity: uidval,
 					UIDNext:     1,
+					Keywords:    srcMB.Keywords,
 				}
 				err = tx.Insert(&dstMB)
 				xcheckf(err, "create new destination mailbox")
@@ -3001,8 +3003,6 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			// Reserve the uids in the destination mailbox.
 			uidFirst := mbDst.UIDNext
 			mbDst.UIDNext += store.UID(len(uidargs))
-			err := tx.Update(&mbDst)
-			xcheckf(err, "reserve uid in destination mailbox")
 
 			// Fetch messages from database.
 			q := bstore.QueryTx[store.Message](tx)
@@ -3022,6 +3022,8 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			nmsgs := make([]store.Message, len(xmsgs))
 
 			conf, _ := c.account.Conf()
+
+			mbKeywords := map[string]struct{}{}
 
 			// Insert new messages into database.
 			var origMsgIDs, newMsgIDs []int64
@@ -3051,6 +3053,9 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				newMsgIDs = append(newMsgIDs, m.ID)
 				flags = append(flags, m.Flags)
 				keywords = append(keywords, m.Keywords)
+				for _, kw := range m.Keywords {
+					mbKeywords[kw] = struct{}{}
+				}
 
 				qmr := bstore.QueryTx[store.Recipient](tx)
 				qmr.FilterNonzero(store.Recipient{MessageID: origID})
@@ -3063,6 +3068,16 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 					xcheckf(err, "inserting message recipient")
 				}
 			}
+
+			// Ensure destination mailbox has keywords of the moved messages.
+			for kw := range mbKeywords {
+				if !slices.Contains(mbDst.Keywords, kw) {
+					mbDst.Keywords = append(mbDst.Keywords, kw)
+				}
+			}
+
+			err = tx.Update(&mbDst)
+			xcheckf(err, "updating destination mailbox for uids and keywords")
 
 			// Copy message files to new message ID's.
 			syncDirs := map[string]struct{}{}
@@ -3146,8 +3161,6 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 			uidFirst := mbDst.UIDNext
 			uidnext := uidFirst
 			mbDst.UIDNext += store.UID(len(uids))
-			err := tx.Update(&mbDst)
-			xcheckf(err, "reserve uids in destination mailbox")
 
 			// Update UID and MailboxID in database for messages.
 			q := bstore.QueryTx[store.Message](tx)
@@ -3160,6 +3173,8 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 			if len(msgs) != len(uidargs) {
 				xserverErrorf("uid and message mismatch")
 			}
+
+			keywords := map[string]struct{}{}
 
 			conf, _ := c.account.Conf()
 			for i := range msgs {
@@ -3178,7 +3193,21 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 				uidnext++
 				err := tx.Update(m)
 				xcheckf(err, "updating moved message in database")
+
+				for _, kw := range m.Keywords {
+					keywords[kw] = struct{}{}
+				}
 			}
+
+			// Ensure destination mailbox has keywords of the moved messages.
+			for kw := range keywords {
+				if !slices.Contains(mbDst.Keywords, kw) {
+					mbDst.Keywords = append(mbDst.Keywords, kw)
+				}
+			}
+
+			err = tx.Update(&mbDst)
+			xcheckf(err, "updating destination mailbox for uids and keywords")
 
 			err = c.account.RetrainMessages(context.TODO(), c.log, tx, msgs, false)
 			xcheckf(err, "retraining messages after move")
