@@ -246,6 +246,10 @@ possibly making them potentially no longer readable by the previous version.
 				if uidnext := mailboxUIDNexts[m.MailboxID]; m.UID >= uidnext {
 					checkf(errors.New(`inconsistent uidnext for message/mailbox, see "mox fixuidmeta"`), dbpath, "message id %d in mailbox id %d has uid %d >= mailbox uidnext %d", m.ID, m.MailboxID, m.UID, uidnext)
 				}
+
+				if m.Expunged {
+					return nil
+				}
 				mp := store.MessagePath(m.ID)
 				seen[mp] = struct{}{}
 				p := filepath.Join(accdir, "msg", mp)

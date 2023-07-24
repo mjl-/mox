@@ -1,7 +1,6 @@
 package imapserver
 
 import (
-	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -58,7 +57,7 @@ func FuzzServer(f *testing.F) {
 		f.Add(tag + cmd)
 	}
 
-	mox.Context = context.Background()
+	mox.Context = ctxbg
 	mox.ConfigStaticPath = "../testdata/imapserverfuzz/mox.conf"
 	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)

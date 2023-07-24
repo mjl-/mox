@@ -108,7 +108,6 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 
 ## Roadmap
 
-- IMAP CONDSTORE and QRESYNC extensions
 - Webmail
 - IMAP THREAD extension
 - DANE and DNSSEC

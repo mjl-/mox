@@ -9,9 +9,11 @@
 set -e
 # set -x
 
-# We'll allow max 256mb of memory during upgrades. We modify the softlimit when
+# We'll set a max memory limit during upgrades. We modify the softlimit when
 # importing the potentially large mbox file.
-ulimit -S -d 256000
+# Currently at 768MB, needed for upgrading with 500k messages from v0.0.5 to
+# v0.0.6 (two new indexes on store.Message).
+ulimit -S -d 768000
 
 (rm -r testdata/upgrade 2>/dev/null || exit 0)
 mkdir testdata/upgrade
@@ -59,7 +61,7 @@ for tag in $tags; do
 			echo 'Importing bulk data for upgrading.'
 			gunzip < ../upgradetest.mbox.gz | time ./$tag/mox ximport mbox ./stepdata/accounts/test0 upgradetest /dev/stdin
 			echo
-			ulimit -S -d 256000
+			ulimit -S -d 768000
 		fi
 
 		echo "Upgrade data to $tag."

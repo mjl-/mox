@@ -343,6 +343,7 @@ func tretrain(t *testing.T, acc *store.Account) {
 
 	// Fetch messags to retrain on.
 	q := bstore.QueryDB[store.Message](ctxbg, acc.DB)
+	q.FilterEqual("Expunged", false)
 	q.FilterFn(func(m store.Message) bool {
 		return m.Flags.Junk || m.Flags.Notjunk
 	})
@@ -412,6 +413,7 @@ func TestSpam(t *testing.T) {
 		tcheck(t, err, "get rejects mailbox")
 		qm := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
 		qm.FilterNonzero(store.Message{MailboxID: mb.ID})
+		qm.FilterEqual("Expunged", false)
 		n, err := qm.Count()
 		tcheck(t, err, "count messages in rejects mailbox")
 		if n != expect {
@@ -437,6 +439,7 @@ func TestSpam(t *testing.T) {
 
 	// Mark the messages as having good reputation.
 	q := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
+	q.FilterEqual("Expunged", false)
 	_, err := q.UpdateFields(map[string]any{"Junk": false, "Notjunk": true})
 	tcheck(t, err, "update junkiness")
 
@@ -456,6 +459,7 @@ func TestSpam(t *testing.T) {
 	// Undo dmarc pass, mark messages as junk, and train the filter.
 	resolver.TXT = nil
 	q = bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
+	q.FilterEqual("Expunged", false)
 	_, err = q.UpdateFields(map[string]any{"Junk": true, "Notjunk": false})
 	tcheck(t, err, "update junkiness")
 	tretrain(t, ts.acc)

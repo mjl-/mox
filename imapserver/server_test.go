@@ -21,6 +21,8 @@ import (
 	"github.com/mjl-/mox/store"
 )
 
+var ctxbg = context.Background()
+
 func init() {
 	sanityChecks = true
 
@@ -156,6 +158,7 @@ type testconn struct {
 	client     *imapclient.Conn
 	done       chan struct{}
 	serverConn net.Conn
+	account    *store.Account
 
 	// Result of last command.
 	lastUntagged []imapclient.Untagged
@@ -190,14 +193,15 @@ func (tc *testconn) xcodeArg(v any) {
 	}
 }
 
-func (tc *testconn) xuntagged(exps ...any) {
+func (tc *testconn) xuntagged(exps ...imapclient.Untagged) {
 	tc.t.Helper()
-	tc.xuntaggedCheck(true, exps...)
+	tc.xuntaggedOpt(true, exps...)
 }
 
-func (tc *testconn) xuntaggedCheck(all bool, exps ...any) {
+func (tc *testconn) xuntaggedOpt(all bool, exps ...imapclient.Untagged) {
 	tc.t.Helper()
 	last := append([]imapclient.Untagged{}, tc.lastUntagged...)
+	var mismatch any
 next:
 	for ei, exp := range exps {
 		for i, l := range last {
@@ -205,11 +209,15 @@ next:
 				continue
 			}
 			if !reflect.DeepEqual(l, exp) {
-				tc.t.Fatalf("untagged data mismatch, got:\n\t%T %#v\nexpected:\n\t%T %#v", l, l, exp, exp)
+				mismatch = l
+				continue
 			}
 			copy(last[i:], last[i+1:])
 			last = last[:len(last)-1]
 			continue next
+		}
+		if mismatch != nil {
+			tc.t.Fatalf("untagged data mismatch, got:\n\t%T %#v\nexpected:\n\t%T %#v", mismatch, mismatch, exp, exp)
 		}
 		var next string
 		if len(tc.lastUntagged) > 0 {
@@ -293,9 +301,19 @@ func (tc *testconn) waitDone() {
 }
 
 func (tc *testconn) close() {
+	err := tc.account.Close()
+	tc.check(err, "close account")
 	tc.client.Close()
 	tc.serverConn.Close()
 	tc.waitDone()
+}
+
+func xparseNumSet(s string) imapclient.NumSet {
+	ns, err := imapclient.ParseNumSet(s)
+	if err != nil {
+		panic(fmt.Sprintf("parsing numset %s: %s", s, err))
+	}
+	return ns
 }
 
 var connCounter int64
@@ -314,7 +332,7 @@ func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn 
 	if first {
 		os.RemoveAll("../testdata/imap/data")
 	}
-	mox.Context = context.Background()
+	mox.Context = ctxbg
 	mox.ConfigStaticPath = "../testdata/imap/mox.conf"
 	mox.MustLoadConfig(true, false)
 	acc, err := store.OpenAccount("mjl")
@@ -323,8 +341,6 @@ func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn 
 		err = acc.SetPassword("testtest")
 		tcheck(t, err, "set password")
 	}
-	err = acc.Close()
-	tcheck(t, err, "close account")
 	var switchDone chan struct{}
 	if first {
 		switchDone = store.Switchboard()
@@ -352,7 +368,7 @@ func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn 
 	}()
 	client, err := imapclient.New(clientConn, true)
 	tcheck(t, err, "new client")
-	return &testconn{t: t, conn: clientConn, client: client, done: done, serverConn: serverConn}
+	return &testconn{t: t, conn: clientConn, client: client, done: done, serverConn: serverConn, account: acc}
 }
 
 func fakeCert(t *testing.T) tls.Certificate {

@@ -2297,6 +2297,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				q := bstore.QueryTx[store.Message](tx)
 				q.FilterNonzero(msg)
 				q.FilterGreater("Received", now.Add(-window))
+				q.FilterEqual("Expunged", false)
 				n, err := q.Count()
 				if err != nil {
 					retErr = err
@@ -2315,6 +2316,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				q := bstore.QueryTx[store.Message](tx)
 				q.FilterNonzero(msg)
 				q.FilterGreater("Received", now.Add(-window))
+				q.FilterEqual("Expunged", false)
 				size := msgWriter.Size
 				err := q.ForEach(func(v store.Message) error {
 					size += v.Size

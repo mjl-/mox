@@ -54,6 +54,7 @@ func rejectPresent(log *mlog.Log, acc *store.Account, rejectsMailbox string, m *
 
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterNonzero(store.Message{MailboxID: mb.ID})
+			q.FilterEqual("Expunged", false)
 			q.FilterFn(func(m store.Message) bool {
 				return msgID != "" && m.MessageID == msgID || len(hash) > 0 && bytes.Equal(m.MessageHash, hash)
 			})

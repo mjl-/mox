@@ -78,7 +78,7 @@ func TestStore(t *testing.T) {
 
 	// Flags are added to mailbox, not removed.
 	flags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent new a b c d e different`, " ")
-	tc.xuntaggedCheck(false, imapclient.UntaggedFlags(flags))
+	tc.xuntaggedOpt(false, imapclient.UntaggedFlags(flags))
 
 	tc.transactf("no", `store 1 flags ()`) // No permission to set flags.
 }

@@ -377,6 +377,8 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 	// finally at the end as a closing statement.
 	var prevMailbox string
 
+	var modseq store.ModSeq // Assigned on first message, used for all messages.
+
 	trainMessage := func(m *store.Message, p message.Part, pos string) {
 		words, err := jf.ParseMessage(p)
 		if err != nil {
@@ -478,6 +480,14 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		m.MailboxID = mb.ID
 		m.MailboxOrigID = mb.ID
 
+		if modseq == 0 {
+			var err error
+			modseq, err = acc.NextModSeq(tx)
+			ximportcheckf(err, "assigning next modseq")
+		}
+		m.CreateSeq = modseq
+		m.ModSeq = modseq
+
 		if len(m.Keywords) > 0 {
 			if destMailboxKeywords[mb.ID] == nil {
 				destMailboxKeywords[mb.ID] = map[string]bool{}
@@ -519,7 +529,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 			return
 		}
 		deliveredIDs = append(deliveredIDs, m.ID)
-		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, Flags: m.Flags, Keywords: m.Keywords})
+		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, ModSeq: modseq, Flags: m.Flags, Keywords: m.Keywords})
 		messages[mb.Name]++
 		if messages[mb.Name]%100 == 0 || prevMailbox != mb.Name {
 			prevMailbox = mb.Name
@@ -726,7 +736,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 					}
 					err = tx.Update(&m)
 					ximportcheckf(err, "updating message after flag update")
-					changes = append(changes, store.ChangeFlags{MailboxID: m.MailboxID, UID: m.UID, Mask: flags, Flags: flags, Keywords: m.Keywords})
+					changes = append(changes, store.ChangeFlags{MailboxID: m.MailboxID, UID: m.UID, ModSeq: modseq, Mask: flags, Flags: flags, Keywords: m.Keywords})
 				}
 				delete(mailboxMissingKeywordMessages, mailbox)
 			} else {

@@ -246,9 +246,17 @@ func (p *parser) xnumber64() int64 {
 	if s == "" {
 		p.xerrorf("expected number64")
 	}
-	v, err := strconv.ParseInt(s, 10, 64)
+	v, err := strconv.ParseInt(s, 10, 63) // ../rfc/9051:6794 ../rfc/7162:297
 	if err != nil {
 		p.xerrorf("parsing number64 %q: %v", s, err)
+	}
+	return v
+}
+
+func (p *parser) xnznumber64() int64 {
+	v := p.xnumber64()
+	if v == 0 {
+		p.xerrorf("expected non-zero number64")
 	}
 	return v
 }
@@ -423,36 +431,43 @@ func (p *parser) xmboxOrPat() ([]string, bool) {
 	return l, true
 }
 
-// ../rfc/9051:7056
-// RECENT only in ../rfc/3501:5047
-// APPENDLIMIT is from ../rfc/7889:252
+// ../rfc/9051:7056, RECENT ../rfc/3501:5047, APPENDLIMIT ../rfc/7889:252, HIGHESTMODSEQ ../rfc/7162:2452
 func (p *parser) xstatusAtt() string {
-	return p.xtakelist("MESSAGES", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "DELETED", "SIZE", "RECENT", "APPENDLIMIT")
+	w := p.xtakelist("MESSAGES", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "DELETED", "SIZE", "RECENT", "APPENDLIMIT", "HIGHESTMODSEQ")
+	if w == "HIGHESTMODSEQ" {
+		// HIGHESTMODSEQ is a CONDSTORE-enabling parameter. ../rfc/7162:375
+		p.conn.enabled[capCondstore] = true
+	}
+	return w
 }
 
 // ../rfc/9051:7133 ../rfc/9051:7034
-func (p *parser) xnumSet() (r numSet) {
+func (p *parser) xnumSet0(allowStar, allowSearch bool) (r numSet) {
 	defer p.context("numSet")()
-	if p.take("$") {
+	if allowSearch && p.take("$") {
 		return numSet{searchResult: true}
 	}
-	r.ranges = append(r.ranges, p.xnumRange())
+	r.ranges = append(r.ranges, p.xnumRange0(allowStar))
 	for p.take(",") {
-		r.ranges = append(r.ranges, p.xnumRange())
+		r.ranges = append(r.ranges, p.xnumRange0(allowStar))
 	}
 	return r
 }
 
+func (p *parser) xnumSet() (r numSet) {
+	return p.xnumSet0(true, true)
+}
+
 // parse numRange, which can be just a setNumber.
-func (p *parser) xnumRange() (r numRange) {
-	if p.take("*") {
+func (p *parser) xnumRange0(allowStar bool) (r numRange) {
+	if allowStar && p.take("*") {
 		r.first.star = true
 	} else {
 		r.first.number = p.xnznumber()
 	}
 	if p.take(":") {
 		r.last = &setNumber{}
-		if p.take("*") {
+		if allowStar && p.take("*") {
 			r.last.star = true
 		} else {
 			r.last.number = p.xnznumber()
@@ -550,14 +565,16 @@ func (p *parser) xsectionBinary() (r []uint32) {
 	return r
 }
 
-// ../rfc/9051:6557 ../rfc/3501:4751
-func (p *parser) xfetchAtt() (r fetchAtt) {
+var fetchAttWords = []string{
+	"ENVELOPE", "FLAGS", "INTERNALDATE", "RFC822.SIZE", "BODYSTRUCTURE", "UID", "BODY.PEEK", "BODY", "BINARY.PEEK", "BINARY.SIZE", "BINARY",
+	"RFC822.HEADER", "RFC822.TEXT", "RFC822", // older IMAP
+	"MODSEQ", // CONDSTORE extension.
+}
+
+// ../rfc/9051:6557 ../rfc/3501:4751 ../rfc/7162:2483
+func (p *parser) xfetchAtt(isUID bool) (r fetchAtt) {
 	defer p.context("fetchAtt")()
-	words := []string{
-		"ENVELOPE", "FLAGS", "INTERNALDATE", "RFC822.SIZE", "BODYSTRUCTURE", "UID", "BODY.PEEK", "BODY", "BINARY.PEEK", "BINARY.SIZE", "BINARY",
-		"RFC822.HEADER", "RFC822.TEXT", "RFC822", // older IMAP
-	}
-	f := p.xtakelist(words...)
+	f := p.xtakelist(fetchAttWords...)
 	r.peek = strings.HasSuffix(f, ".PEEK")
 	r.field = strings.TrimSuffix(f, ".PEEK")
 
@@ -576,12 +593,19 @@ func (p *parser) xfetchAtt() (r fetchAtt) {
 		}
 	case "BINARY.SIZE":
 		r.sectionBinary = p.xsectionBinary()
+	case "MODSEQ":
+		// The RFC text mentions MODSEQ is only for FETCH, not UID FETCH, but the ABNF adds
+		// the attribute to the shared syntax, so UID FETCH also implements it.
+		// ../rfc/7162:905
+		// The wording about when to respond with a MODSEQ attribute could be more clear. ../rfc/7162:923 ../rfc/7162:388
+		// MODSEQ attribute is a CONDSTORE-enabling parameter. ../rfc/7162:377
+		p.conn.xensureCondstore(nil)
 	}
 	return
 }
 
 // ../rfc/9051:6553 ../rfc/3501:4748
-func (p *parser) xfetchAtts() []fetchAtt {
+func (p *parser) xfetchAtts(isUID bool) []fetchAtt {
 	defer p.context("fetchAtts")()
 
 	fields := func(l ...string) []fetchAtt {
@@ -605,13 +629,13 @@ func (p *parser) xfetchAtts() []fetchAtt {
 	}
 
 	if !p.hasPrefix("(") {
-		return []fetchAtt{p.xfetchAtt()}
+		return []fetchAtt{p.xfetchAtt(isUID)}
 	}
 
 	l := []fetchAtt{}
 	p.xtake("(")
 	for {
-		l = append(l, p.xfetchAtt())
+		l = append(l, p.xfetchAtt(isUID))
 		if !p.take(" ") {
 			break
 		}
@@ -748,9 +772,10 @@ var searchKeyWords = []string{
 	"SENTBEFORE", "SENTON",
 	"SENTSINCE", "SMALLER",
 	"UID", "UNDRAFT",
+	"MODSEQ", // CONDSTORE extension.
 }
 
-// ../rfc/9051:6923 ../rfc/3501:4957
+// ../rfc/9051:6923 ../rfc/3501:4957, MODSEQ ../rfc/7162:2492
 // differences: rfc 9051 removes NEW, OLD, RECENT and makes SMALLER and LARGER number64 instead of number.
 func (p *parser) xsearchKey() *searchKey {
 	if p.take("(") {
@@ -852,10 +877,48 @@ func (p *parser) xsearchKey() *searchKey {
 		p.xspace()
 		sk.uidSet = p.xnumSet()
 	case "UNDRAFT":
+	case "MODSEQ":
+		// ../rfc/7162:1045 ../rfc/7162:2499
+		p.xspace()
+		if p.take(`"`) {
+			// We don't do anything with this field, so parse and ignore.
+			p.xtake(`/FLAGS/`)
+			if p.take(`\`) {
+				p.xtake(`\`) // ../rfc/7162:1072
+			}
+			p.xatom()
+			p.xtake(`"`)
+			p.xspace()
+			p.xtakelist("PRIV", "SHARED", "ALL")
+			p.xspace()
+		}
+		v := p.xnumber64()
+		sk.clientModseq = &v
+		// MODSEQ is a CONDSTORE-enabling parameter. ../rfc/7162:377
+		p.conn.enabled[capCondstore] = true
 	default:
 		p.xerrorf("missing case for op %q", sk.op)
 	}
 	return sk
+}
+
+// hasModseq returns whether there is a modseq filter anywhere in the searchkey.
+func (sk searchKey) hasModseq() bool {
+	if sk.clientModseq != nil {
+		return true
+	}
+	for _, e := range sk.searchKeys {
+		if e.hasModseq() {
+			return true
+		}
+	}
+	if sk.searchKey != nil && sk.searchKey.hasModseq() {
+		return true
+	}
+	if sk.searchKey2 != nil && sk.searchKey2.hasModseq() {
+		return true
+	}
+	return false
 }
 
 // ../rfc/9051:6489 ../rfc/3501:4692

@@ -184,5 +184,4 @@ a message.
 		tcheck(t, err, "sendmail")
 	})
 	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
-
 }

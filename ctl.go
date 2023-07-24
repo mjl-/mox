@@ -649,6 +649,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			// Read through messages with junk or nonjunk flag set, and train them.
 			var total, trained int
 			q := bstore.QueryDB[store.Message](ctx, acc.DB)
+			q.FilterEqual("Expunged", false)
 			err = q.ForEach(func(m store.Message) error {
 				total++
 				ok, err := acc.TrainMessage(ctx, ctl.log, jf, m)

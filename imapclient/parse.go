@@ -119,6 +119,7 @@ var knownCodes = stringMap(
 	"ALERT", "PARSE", "READ-ONLY", "READ-WRITE", "TRYCREATE", "UIDNOTSTICKY", "UNAVAILABLE", "AUTHENTICATIONFAILED", "AUTHORIZATIONFAILED", "EXPIRED", "PRIVACYREQUIRED", "CONTACTADMIN", "NOPERM", "INUSE", "EXPUNGEISSUED", "CORRUPTION", "SERVERBUG", "CLIENTBUG", "CANNOT", "LIMIT", "OVERQUOTA", "ALREADYEXISTS", "NONEXISTENT", "NOTSAVED", "HASCHILDREN", "CLOSED", "UNKNOWN-CTE",
 	// With parameters.
 	"BADCHARSET", "CAPABILITY", "PERMANENTFLAGS", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "APPENDUID", "COPYUID",
+	"HIGHESTMODSEQ", "MODIFIED",
 )
 
 func stringMap(l ...string) map[string]struct{} {
@@ -202,6 +203,13 @@ func (c *Conn) xrespCode() (string, CodeArg) {
 		c.xspace()
 		to := c.xuidset()
 		codeArg = CodeCopyUID{destUIDValidity, from, to}
+	case "HIGHESTMODSEQ":
+		c.xspace()
+		codeArg = CodeHighestModSeq(c.xint64())
+	case "MODIFIED":
+		c.xspace()
+		modified := c.xuidset()
+		codeArg = CodeModified(NumSet{Ranges: modified})
 	}
 	return W, codeArg
 }
@@ -248,7 +256,7 @@ func (c *Conn) xint32() int32 {
 
 func (c *Conn) xint64() int64 {
 	s := c.xdigits()
-	num, err := strconv.ParseInt(s, 10, 64)
+	num, err := strconv.ParseInt(s, 10, 63)
 	c.xcheckf(err, "parsing int64")
 	return num
 }
@@ -386,6 +394,8 @@ func (c *Conn) xuntagged() Untagged {
 				} else {
 					num = c.xint64()
 				}
+			case "HIGHESTMODSEQ":
+				num = c.xint64()
 			default:
 				c.xerrorf("status: unknown attribute %q", s)
 			}
@@ -415,6 +425,15 @@ func (c *Conn) xuntagged() Untagged {
 		c.xneedDisabled("untagged SEARCH response", CapIMAP4rev2)
 		var nums []uint32
 		for c.take(' ') {
+			// ../rfc/7162:2557
+			if c.take('(') {
+				c.xtake("MODSEQ")
+				c.xspace()
+				modseq := c.xint64()
+				c.xtake(")")
+				c.xcrlf()
+				return UntaggedSearchModSeq{nums, modseq}
+			}
 			nums = append(nums, c.xnzuint32())
 		}
 		r := UntaggedSearch(nums)
@@ -455,6 +474,20 @@ func (c *Conn) xuntagged() Untagged {
 		}
 		c.xcrlf()
 		return UntaggedID(params)
+
+	// ../rfc/7162:2623
+	case "VANISHED":
+		c.xspace()
+		var earlier bool
+		if c.take('(') {
+			c.xtake("EARLIER")
+			c.xtake(")")
+			c.xspace()
+			earlier = true
+		}
+		uids := c.xuidset()
+		c.xcrlf()
+		return UntaggedVanished{earlier, NumSet{Ranges: uids}}
 
 	default:
 		v, err := strconv.ParseUint(w, 10, 32)
@@ -605,6 +638,14 @@ func (c *Conn) xmsgatt1() FetchAttr {
 	case "UID":
 		c.xspace()
 		return FetchUID(c.xuint32())
+
+	case "MODSEQ":
+		// ../rfc/7162:2488
+		c.xspace()
+		c.xtake("(")
+		modseq := c.xint64()
+		c.xtake(")")
+		return FetchModSeq(modseq)
 	}
 	c.xerrorf("unknown fetch attribute %q", f)
 	panic("not reached")
@@ -963,7 +1004,7 @@ func (c *Conn) xtaggedExtVal() TaggedExtVal {
 		return TaggedExtVal{SeqSet: &ss}
 	}
 	s := c.xdigits()
-	num, err := strconv.ParseInt(s, 10, 64)
+	num, err := strconv.ParseInt(s, 10, 63)
 	c.xcheckf(err, "parsing int")
 	if !c.peek(':') && !c.peek(',') {
 		// not a larger sequence-set
@@ -1145,6 +1186,11 @@ func (c *Conn) xesearchResponse() (r UntaggedEsearch) {
 			c.xspace()
 			num := c.xuint32()
 			r.Count = &num
+
+		// ../rfc/7162:1211 ../rfc/4731:273
+		case "MODSEQ":
+			c.xspace()
+			r.ModSeq = c.xint64()
 
 		default:
 			// Validate ../rfc/9051:7090

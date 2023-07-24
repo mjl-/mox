@@ -139,7 +139,7 @@ func TestAccount(t *testing.T) {
 
 	// Check there are messages, with the right flags.
 	acc.DB.Read(ctxbg, func(tx *bstore.Tx) error {
-		_, err = bstore.QueryTx[store.Message](tx).FilterIn("Keywords", "other").FilterIn("Keywords", "test").Get()
+		_, err = bstore.QueryTx[store.Message](tx).FilterEqual("Expunged", false).FilterIn("Keywords", "other").FilterIn("Keywords", "test").Get()
 		tcheck(t, err, `fetching message with keywords "other" and "test"`)
 
 		mb, err := acc.MailboxFind(tx, "importtest")
@@ -152,7 +152,7 @@ func TestAccount(t *testing.T) {
 			t.Fatalf(`expected mailbox keywords "other" and "test", got %v`, mb.Keywords)
 		}
 
-		n, err := bstore.QueryTx[store.Message](tx).FilterIn("Keywords", "custom").Count()
+		n, err := bstore.QueryTx[store.Message](tx).FilterEqual("Expunged", false).FilterIn("Keywords", "custom").Count()
 		tcheck(t, err, `fetching message with keyword "custom"`)
 		if n != 2 {
 			t.Fatalf(`got %d messages with keyword "custom", expected 2`, n)

@@ -24,15 +24,14 @@ not in IMAP4rev2). ../rfc/3501:964
 - When handling commands that modify the selected mailbox, always check that the mailbox is not opened readonly. And always revalidate the selected mailbox, another session may have deleted the mailbox.
 - After making changes to an account/mailbox/message, you must broadcast changes. You must do this with the account lock held. Otherwise, other later changes (e.g. message deliveries) may be made and broadcast before changes that were made earlier. Make sure to commit changes in the database first, because the commit may fail.
 - Mailbox hierarchies are slash separated, no leading slash. We keep the case, except INBOX is renamed to Inbox, also for submailboxes in INBOX. We don't allow existence of a child where its parent does not exist. We have no \NoInferiors or \NoSelect. Newly created mailboxes are automatically subscribed.
+- For CONDSTORE and QRESYNC support, we set "modseq" for each change/expunge. Once expunged, a modseq doesn't change anymore. We don't yet remove old expunged records. The records aren't too big. Next step may be to let an admin reclaim space manually.
 */
 
 /*
 - todo: do not return binary data for a fetch body. at least not for imap4rev1. we should be encoding it as base64?
 - todo: on expunge we currently remove the message even if other sessions still have a reference to the uid. if they try to query the uid, they'll get an error. we could be nicer and only actually remove the message when the last reference has gone. we could add a new flag to store.Message marking the message as expunged, not give new session access to such messages, and make store remove them at startup, and clean them when the last session referencing the session goes. however, it will get much more complicated. renaming messages would need special handling. and should we do the same for removed mailboxes?
-- todo: CONDSTORE, QRESYNC. Add fields modseq on mailbox and each message. Keep (log of) deleted messages and their modseqs.
 - todo: try to recover from syntax errors when the last command line ends with a }, i.e. a literal. we currently abort the entire connection. we may want to read some amount of literal data and continue with a next command.
 - future: more extensions: STATUS=SIZE, OBJECTID, MULTISEARCH, REPLACE, NOTIFY, CATENATE, MULTIAPPEND, SORT, THREAD, CREATE-SPECIAL-USE.
-- future: implement user-defined keyword flags? ../rfc/9051:566
 */
 
 import (
@@ -60,6 +59,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 	"golang.org/x/text/unicode/norm"
 
@@ -155,7 +155,9 @@ var authFailDelay = time.Second  // After authentication failure.
 // AUTH=SCRAM-SHA-1: ../rfc/5802
 // AUTH=CRAM-MD5: ../rfc/2195
 // APPENDLIMIT, we support the max possible size, 1<<63 - 1: ../rfc/7889:129
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ONLY LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807"
+// CONDSTORE: ../rfc/7162:411
+// QRESYNC: ../rfc/7162:1323
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ONLY LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC"
 
 type conn struct {
 	cid               int64
@@ -207,6 +209,8 @@ type capability string
 const (
 	capIMAP4rev2  capability = "IMAP4REV2"
 	capUTF8Accept capability = "UTF8=ACCEPT"
+	capCondstore  capability = "CONDSTORE"
+	capQresync    capability = "QRESYNC"
 )
 
 type lineErr struct {
@@ -444,6 +448,7 @@ func (c *conn) xtrace(level mlog.Level) func() {
 }
 
 // Cache of line buffers for reading commands.
+// QRESYNC recommends 8k max line lengths. ../rfc/7162:2159
 var bufpool = moxio.NewBufpool(8, 16*1024)
 
 // read line from connection, not going through line channel.
@@ -524,11 +529,11 @@ func (c *conn) writeresultf(format string, args ...any) {
 	c.xflush()
 }
 
-// write buffered taggedcommand response, but first write pending changes.
+// write buffered tagged command response, but first write pending changes.
 func (c *conn) bwriteresultf(format string, args ...any) {
 	switch c.cmd {
 	case "fetch", "store", "search":
-		// ../rfc/9051:5862
+		// ../rfc/9051:5862 ../rfc/7162:2033
 	default:
 		if c.comm != nil {
 			c.applyChanges(c.comm.Get(), false)
@@ -581,6 +586,19 @@ func (c *conn) xreadliteral(size int64, sync bool) string {
 		}
 	}
 	return string(buf)
+}
+
+func (c *conn) xhighestModSeq(tx *bstore.Tx, mailboxID int64) store.ModSeq {
+	qms := bstore.QueryTx[store.Message](tx)
+	qms.FilterNonzero(store.Message{MailboxID: mailboxID})
+	qms.SortDesc("ModSeq")
+	qms.Limit(1)
+	m, err := qms.Get()
+	if err == bstore.ErrAbsent {
+		return store.ModSeq(0)
+	}
+	xcheckf(err, "looking up highest modseq for mailbox")
+	return m.ModSeq
 }
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
@@ -1208,6 +1226,9 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 	}
 	changes = n
 
+	qresync := c.enabled[capQresync]
+	condstore := c.enabled[capCondstore]
+
 	i := 0
 	for i < len(changes) {
 		// First process all new uids. So we only send a single EXISTS.
@@ -1234,7 +1255,11 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 			c.bwritelinef("* %d EXISTS", len(c.uids))
 			for _, add := range adds {
 				seq := c.xsequence(add.UID)
-				c.bwritelinef("* %d FETCH (UID %d FLAGS %s)", seq, add.UID, flaglist(add.Flags, add.Keywords).pack(c))
+				var modseqStr string
+				if condstore {
+					modseqStr = fmt.Sprintf(" MODSEQ (%d)", add.ModSeq.Client())
+				}
+				c.bwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, add.UID, flaglist(add.Flags, add.Keywords).pack(c), modseqStr)
 			}
 			continue
 		}
@@ -1244,6 +1269,7 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 
 		switch ch := change.(type) {
 		case store.ChangeRemoveUIDs:
+			var vanishedUIDs numSet
 			for _, uid := range ch.UIDs {
 				var seq msgseq
 				if initial {
@@ -1256,7 +1282,17 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 				}
 				c.sequenceRemove(seq, uid)
 				if !initial {
-					c.bwritelinef("* %d EXPUNGE", seq)
+					if qresync {
+						vanishedUIDs.append(uint32(uid))
+					} else {
+						c.bwritelinef("* %d EXPUNGE", seq)
+					}
+				}
+			}
+			if qresync {
+				// VANISHED without EARLIER. ../rfc/7162:2004
+				for _, s := range vanishedUIDs.Strings(4*1024 - 32) {
+					c.bwritelinef("* VANISHED %s", s)
 				}
 			}
 		case store.ChangeFlags:
@@ -1266,7 +1302,11 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 				continue
 			}
 			if !initial {
-				c.bwritelinef("* %d FETCH (UID %d FLAGS %s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c))
+				var modseqStr string
+				if condstore {
+					modseqStr = fmt.Sprintf(" MODSEQ (%d)", ch.ModSeq.Client())
+				}
+				c.bwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
 			}
 		case store.ChangeRemoveMailbox:
 			// Only announce \NonExistent to modern clients, otherwise they may ignore the
@@ -1786,18 +1826,54 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 	// Clients should only send capabilities that need enabling.
 	// We should only echo that we recognize as needing enabling.
 	var enabled string
+	var qresync bool
 	for _, s := range caps {
 		cap := capability(strings.ToUpper(s))
 		switch cap {
-		case capIMAP4rev2, capUTF8Accept:
+		case capIMAP4rev2,
+			capUTF8Accept,
+			capCondstore: // ../rfc/7162:384
 			c.enabled[cap] = true
 			enabled += " " + s
+		case capQresync:
+			c.enabled[cap] = true
+			enabled += " " + s
+			qresync = true
 		}
+	}
+	// QRESYNC enabled CONDSTORE too ../rfc/7162:1391
+	if qresync && !c.enabled[capCondstore] {
+		c.xensureCondstore(nil)
+		enabled += " CONDSTORE"
 	}
 
 	// Response syntax: ../rfc/9051:6520 ../rfc/5161:211
 	c.bwritelinef("* ENABLED%s", enabled)
 	c.ok(tag, cmd)
+}
+
+// The CONDSTORE extension can be enabled in many different ways. ../rfc/7162:368
+// If a mailbox is selected, an untagged OK with HIGHESTMODSEQ is written to the
+// client. If tx is non-nil, it is used to read the HIGHESTMODSEQ from the
+// database. Otherwise a new read-only transaction is created.
+func (c *conn) xensureCondstore(tx *bstore.Tx) {
+	if !c.enabled[capCondstore] {
+		c.enabled[capCondstore] = true
+		// todo spec: can we send an untagged enabled response?
+		// ../rfc/7162:603
+		if c.mailboxID <= 0 {
+			return
+		}
+		var modseq store.ModSeq
+		if tx != nil {
+			modseq = c.xhighestModSeq(tx, c.mailboxID)
+		} else {
+			c.xdbread(func(tx *bstore.Tx) {
+				modseq = c.xhighestModSeq(tx, c.mailboxID)
+			})
+		}
+		c.bwritelinef("* OK [HIGHESTMODSEQ %d] after condstore-enabling command", modseq.Client())
+	}
 }
 
 // State: Authenticated and selected.
@@ -1815,27 +1891,82 @@ func (c *conn) cmdExamine(tag, cmd string, p *parser) {
 //
 // State: Authenticated and selected.
 func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
-	// Select command: ../rfc/9051:1754 ../rfc/3501:1743
+	// Select command: ../rfc/9051:1754 ../rfc/3501:1743 ../rfc/7162:1146 ../rfc/7162:1432
 	// Examine command: ../rfc/9051:1868 ../rfc/3501:1855
-	// Select examples: ../rfc/9051:1831 ../rfc/3501:1826
+	// Select examples: ../rfc/9051:1831 ../rfc/3501:1826 ../rfc/7162:1159 ../rfc/7162:1479
 
-	// Select request syntax: ../rfc/9051:7005 ../rfc/3501:4996
+	// Select request syntax: ../rfc/9051:7005 ../rfc/3501:4996 ../rfc/4466:652 ../rfc/7162:2559 ../rfc/7162:2598
 	// Examine request syntax: ../rfc/9051:6551 ../rfc/3501:4746
 	p.xspace()
 	name := p.xmailbox()
+
+	var qruidvalidity uint32
+	var qrmodseq int64                                    // QRESYNC required parameters.
+	var qrknownUIDs, qrknownSeqSet, qrknownUIDSet *numSet // QRESYNC optional parameters.
+	if p.space() {
+		seen := map[string]bool{}
+		p.xtake("(")
+		for len(seen) == 0 || !p.take(")") {
+			w := p.xtakelist("CONDSTORE", "QRESYNC")
+			if seen[w] {
+				xsyntaxErrorf("duplicate select parameter %s", w)
+			}
+			seen[w] = true
+
+			switch w {
+			case "CONDSTORE":
+				// ../rfc/7162:363
+				c.xensureCondstore(nil) // ../rfc/7162:373
+			case "QRESYNC":
+				// ../rfc/7162:2598
+				// Note: unlike with CONDSTORE, there are no QRESYNC-related commands/parameters
+				// that enable capabilities.
+				if !c.enabled[capQresync] {
+					// ../rfc/7162:1446
+					xsyntaxErrorf("QRESYNC must first be enabled")
+				}
+				p.xspace()
+				p.xtake("(")
+				qruidvalidity = p.xnznumber() // ../rfc/7162:2606
+				p.xspace()
+				qrmodseq = p.xnznumber64()
+				if p.take(" ") {
+					seqMatchData := p.take("(")
+					if !seqMatchData {
+						ss := p.xnumSet0(false, false) // ../rfc/7162:2608
+						qrknownUIDs = &ss
+						seqMatchData = p.take(" (")
+					}
+					if seqMatchData {
+						ss0 := p.xnumSet0(false, false)
+						qrknownSeqSet = &ss0
+						p.xspace()
+						ss1 := p.xnumSet0(false, false)
+						qrknownUIDSet = &ss1
+						p.xtake(")")
+					}
+				}
+				p.xtake(")")
+			default:
+				panic("missing case for select param " + w)
+			}
+		}
+	}
 	p.xempty()
 
 	// Deselect before attempting the new select. This means we will deselect when an
 	// error occurs during select.
 	// ../rfc/9051:1809
 	if c.state == stateSelected {
-		// ../rfc/9051:1812
+		// ../rfc/9051:1812 ../rfc/7162:2111
 		c.bwritelinef("* OK [CLOSED] x")
 		c.unselect()
 	}
 
 	name = xcheckmailboxname(name, true)
 
+	var highestModSeq store.ModSeq
+	var highDeletedModSeq store.ModSeq
 	var firstUnseen msgseq = 0
 	var mb store.Mailbox
 	c.account.WithRLock(func() {
@@ -1844,6 +1975,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterNonzero(store.Message{MailboxID: mb.ID})
+			q.FilterEqual("Expunged", false)
 			q.SortAsc("UID")
 			c.uids = []store.UID{}
 			var seq msgseq = 1
@@ -1859,6 +1991,17 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 				checkUIDs(c.uids)
 			}
 			xcheckf(err, "fetching uids")
+
+			// Condstore extension, find the highest modseq.
+			if c.enabled[capCondstore] {
+				highestModSeq = c.xhighestModSeq(tx, mb.ID)
+			}
+			// For QRESYNC, we need to know the highest modset of deleted expunged records to
+			// maintain synchronization.
+			if c.enabled[capQresync] {
+				highDeletedModSeq, err = c.account.HighestDeletedModSeq(tx)
+				xcheckf(err, "getting highest deleted modseq")
+			}
 		})
 	})
 	c.applyChanges(c.comm.Get(), true)
@@ -1880,6 +2023,151 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 	c.bwritelinef(`* OK [UIDVALIDITY %d] x`, mb.UIDValidity)
 	c.bwritelinef(`* OK [UIDNEXT %d] x`, mb.UIDNext)
 	c.bwritelinef(`* LIST () "/" %s`, astring(mb.Name).pack(c))
+	if c.enabled[capCondstore] {
+		// ../rfc/7162:417
+		// ../rfc/7162-eid5055 ../rfc/7162:484 ../rfc/7162:1167
+		c.bwritelinef(`* OK [HIGHESTMODSEQ %d] x`, highestModSeq.Client())
+	}
+
+	// If QRESYNC uidvalidity matches, we send any changes. ../rfc/7162:1509
+	if qruidvalidity == mb.UIDValidity {
+		// We send the vanished UIDs at the end, so we can easily combine the modseq
+		// changes and vanished UIDs that result from that, with the vanished UIDs from the
+		// case where we don't store enough history.
+		vanishedUIDs := map[store.UID]struct{}{}
+
+		var preVanished store.UID
+		var oldClientUID store.UID
+		// If samples of known msgseq and uid pairs are given (they must be in order), we
+		// use them to determine the earliest UID for which we send VANISHED responses.
+		// ../rfc/7162:1579
+		if qrknownSeqSet != nil {
+			if !qrknownSeqSet.isBasicIncreasing() {
+				xuserErrorf("QRESYNC known message sequence set must be numeric and strictly increasing")
+			}
+			if !qrknownUIDSet.isBasicIncreasing() {
+				xuserErrorf("QRESYNC known uid set must be numeric and strictly increasing")
+			}
+			seqiter := qrknownSeqSet.newIter()
+			uiditer := qrknownUIDSet.newIter()
+			for {
+				msgseq, ok0 := seqiter.Next()
+				uid, ok1 := uiditer.Next()
+				if !ok0 && !ok1 {
+					break
+				} else if !ok0 || !ok1 {
+					xsyntaxErrorf("invalid combination of known sequence set and uid set, must be of equal length")
+				}
+				i := int(msgseq - 1)
+				if i < 0 || i >= len(c.uids) || c.uids[i] != store.UID(uid) {
+					if uidSearch(c.uids, store.UID(uid)) <= 0 {
+						// We will check this old client UID for consistency below.
+						oldClientUID = store.UID(uid)
+					}
+					break
+				}
+				preVanished = store.UID(uid + 1)
+			}
+		}
+
+		// We gather vanished UIDs and report them at the end. This seems OK because we
+		// already sent HIGHESTMODSEQ, and a client should know not to commit that value
+		// until after it has seen the tagged OK of this command. The RFC has a remark
+		// about ordering of some untagged responses, it's not immediately clear what it
+		// means, but given the examples appears to allude to servers that decide to not
+		// send expunge/vanished before the tagged OK.
+		// ../rfc/7162:1340
+
+		// We are reading without account lock. Similar to when we process FETCH/SEARCH
+		// requests. We don't have to reverify existence of the mailbox, so we don't
+		// rlock, even briefly.
+		c.xdbread(func(tx *bstore.Tx) {
+			if oldClientUID > 0 {
+				// The client sent a UID that is now removed. This is typically fine. But we check
+				// that it is consistent with the modseq the client sent. If the UID already didn't
+				// exist at that modseq, the client may be missing some information.
+				q := bstore.QueryTx[store.Message](tx)
+				q.FilterNonzero(store.Message{MailboxID: mb.ID, UID: oldClientUID})
+				m, err := q.Get()
+				if err == nil {
+					// If client claims to be up to date up to and including qrmodseq, and the message
+					// was deleted at or before that time, we send changes from just before that
+					// modseq, and we send vanished for all UIDs.
+					if m.Expunged && qrmodseq >= m.ModSeq.Client() {
+						qrmodseq = m.ModSeq.Client() - 1
+						preVanished = 0
+						qrknownUIDs = nil
+						c.bwritelinef("* OK [ALERT] Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full syncronization recommended.")
+					}
+				} else if err != bstore.ErrAbsent {
+					xcheckf(err, "checking old client uid")
+				}
+			}
+
+			q := bstore.QueryTx[store.Message](tx)
+			q.FilterNonzero(store.Message{MailboxID: mb.ID})
+			// Note: we don't filter by Expunged.
+			q.FilterGreater("ModSeq", store.ModSeqFromClient(qrmodseq))
+			q.FilterLessEqual("ModSeq", highestModSeq)
+			q.SortAsc("ModSeq")
+			err := q.ForEach(func(m store.Message) error {
+				if m.Expunged && m.UID < preVanished {
+					return nil
+				}
+				// If known UIDs was specified, we only report about those UIDs. ../rfc/7162:1523
+				if qrknownUIDs != nil && !qrknownUIDs.contains(uint32(m.UID)) {
+					return nil
+				}
+				if m.Expunged {
+					vanishedUIDs[m.UID] = struct{}{}
+					return nil
+				}
+				msgseq := c.sequence(m.UID)
+				if msgseq > 0 {
+					c.bwritelinef("* %d FETCH (UID %d FLAGS %s MODSEQ (%d))", msgseq, m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
+				}
+				return nil
+			})
+			xcheckf(err, "listing changed messages")
+		})
+
+		// Add UIDs from client's known UID set to vanished list if we don't have enough history.
+		if qrmodseq < highDeletedModSeq.Client() {
+			// If no known uid set was in the request, we substitute 1:max or the empty set.
+			// ../rfc/7162:1524
+			if qrknownUIDs == nil {
+				if len(c.uids) > 0 {
+					qrknownUIDs = &numSet{ranges: []numRange{{first: setNumber{number: 1}, last: &setNumber{number: uint32(c.uids[len(c.uids)-1])}}}}
+				} else {
+					qrknownUIDs = &numSet{}
+				}
+			}
+
+			iter := qrknownUIDs.newIter()
+			for {
+				v, ok := iter.Next()
+				if !ok {
+					break
+				}
+				if c.sequence(store.UID(v)) <= 0 {
+					vanishedUIDs[store.UID(v)] = struct{}{}
+				}
+			}
+		}
+
+		// Now that we have all vanished UIDs, send them over compactly.
+		if len(vanishedUIDs) > 0 {
+			l := maps.Keys(vanishedUIDs)
+			sort.Slice(l, func(i, j int) bool {
+				return l[i] < l[j]
+			})
+			// ../rfc/7162:1985
+			for _, s := range compactUIDSet(l).Strings(4*1024 - 32) {
+				c.bwritelinef("* VANISHED (EARLIER) %s", s)
+			}
+		}
+	}
+
 	if isselect {
 		c.bwriteresultf("%s OK [READ-WRITE] x", tag)
 		c.readonly = false
@@ -2008,7 +2296,7 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 				_, err = qm.Delete()
 				xcheckf(err, "removing messages")
 
-				// Mark messages as not needing training. Then retrain them, so that are untrained if they were.
+				// Mark messages as not needing training. Then retrain them, so they are untrained if they were.
 				for i := range remove {
 					remove[i].Junk = false
 					remove[i].Notjunk = false
@@ -2089,19 +2377,35 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 				err = tx.Insert(&dstMB)
 				xcheckf(err, "create new destination mailbox")
 
+				modseq, err := c.account.NextModSeq(tx)
+				xcheckf(err, "assigning next modseq")
+
 				// Move existing messages, with their ID's and on-disk files intact, to the new
-				// mailbox.
+				// mailbox. We keep the expunged messages, the destination mailbox doesn't care
+				// about them.
 				var oldUIDs []store.UID
 				q := bstore.QueryTx[store.Message](tx)
 				q.FilterNonzero(store.Message{MailboxID: srcMB.ID})
+				q.FilterEqual("Expunged", false)
 				q.SortAsc("UID")
 				err = q.ForEach(func(m store.Message) error {
-					oldUIDs = append(oldUIDs, m.UID)
+					om := m
+					om.ID = 0
+					om.ModSeq = modseq
+					om.PrepareExpunge()
+					oldUIDs = append(oldUIDs, om.UID)
+
 					m.MailboxID = dstMB.ID
 					m.UID = dstMB.UIDNext
 					dstMB.UIDNext++
+					m.CreateSeq = modseq
+					m.ModSeq = modseq
 					if err := tx.Update(&m); err != nil {
 						return fmt.Errorf("updating message to move to new mailbox: %w", err)
+					}
+
+					if err := tx.Insert(&om); err != nil {
+						return fmt.Errorf("adding empty expunge message record to inbox: %w", err)
 					}
 					return nil
 				})
@@ -2115,7 +2419,7 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 					dstFlags = []string{`\Subscribed`}
 				}
 				changes = []store.Change{
-					store.ChangeRemoveUIDs{MailboxID: srcMB.ID, UIDs: oldUIDs},
+					store.ChangeRemoveUIDs{MailboxID: srcMB.ID, UIDs: oldUIDs, ModSeq: modseq},
 					store.ChangeAddMailbox{Name: dstMB.Name, Flags: dstFlags},
 					// todo: in future, we could announce all messages. no one is listening now though.
 				}
@@ -2373,8 +2677,8 @@ func (c *conn) cmdNamespace(tag, cmd string, p *parser) {
 //
 // State: Authenticated and selected.
 func (c *conn) cmdStatus(tag, cmd string, p *parser) {
-	// Command: ../rfc/9051:3328 ../rfc/3501:2424
-	// Examples: ../rfc/9051:3400 ../rfc/3501:2501
+	// Command: ../rfc/9051:3328 ../rfc/3501:2424 ../rfc/7162:1127
+	// Examples: ../rfc/9051:3400 ../rfc/3501:2501 ../rfc/7162:1139
 
 	// Request syntax: ../rfc/9051:7053 ../rfc/3501:5036
 	p.xspace()
@@ -2409,8 +2713,11 @@ func (c *conn) xstatusLine(tx *bstore.Tx, mb store.Mailbox, attrs []string) stri
 	var count, unseen, deleted int
 	var size int64
 
+	// todo optimize: should probably cache the values instead of reading through the database. must then be careful to keep it consistent...
+
 	q := bstore.QueryTx[store.Message](tx)
 	q.FilterNonzero(store.Message{MailboxID: mb.ID})
+	q.FilterEqual("Expunged", false)
 	err := q.ForEach(func(m store.Message) error {
 		count++
 		if !m.Seen {
@@ -2445,6 +2752,9 @@ func (c *conn) xstatusLine(tx *bstore.Tx, mb store.Mailbox, attrs []string) stri
 		case "APPENDLIMIT":
 			// ../rfc/7889:255
 			status = append(status, A, "NIL")
+		case "HIGHESTMODSEQ":
+			// ../rfc/7162:366
+			status = append(status, A, fmt.Sprintf("%d", c.xhighestModSeq(tx, mb.ID).Client()))
 		default:
 			xsyntaxErrorf("unknown attribute %q", a)
 		}
@@ -2623,7 +2933,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		}
 
 		// Broadcast the change to other connections.
-		c.broadcast([]store.Change{store.ChangeAddUID{MailboxID: mb.ID, UID: msg.UID, Flags: msg.Flags, Keywords: msg.Keywords}})
+		c.broadcast([]store.Change{store.ChangeAddUID{MailboxID: mb.ID, UID: msg.UID, ModSeq: msg.ModSeq, Flags: msg.Flags, Keywords: msg.Keywords}})
 	})
 
 	err = msgFile.Close()
@@ -2633,6 +2943,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 	if c.mailboxID == mb.ID {
 		c.applyChanges(pendingChanges, false)
 		c.uidAppend(msg.UID)
+		// todo spec: with condstore/qresync, is there a mechanism to the client know the modseq for the appended uid? in theory an untagged fetch with the modseq after the OK APPENDUID could make sense, but this probably isn't allowed.
 		c.bwritelinef("* %d EXISTS", len(c.uids))
 	}
 
@@ -2708,7 +3019,7 @@ func (c *conn) cmdCheck(tag, cmd string, p *parser) {
 //
 // State: Selected
 func (c *conn) cmdClose(tag, cmd string, p *parser) {
-	// Command: ../rfc/9051:3636 ../rfc/3501:2652
+	// Command: ../rfc/9051:3636 ../rfc/3501:2652 ../rfc/7162:1836
 
 	// Request syntax: ../rfc/9051:6476 ../rfc/3501:4679
 	p.xempty()
@@ -2719,7 +3030,7 @@ func (c *conn) cmdClose(tag, cmd string, p *parser) {
 		return
 	}
 
-	remove := c.xexpunge(nil, true)
+	remove, _ := c.xexpunge(nil, true)
 
 	defer func() {
 		for _, m := range remove {
@@ -2735,9 +3046,15 @@ func (c *conn) cmdClose(tag, cmd string, p *parser) {
 
 // expunge messages marked for deletion in currently selected/active mailbox.
 // if uidSet is not nil, only messages matching the set are deleted.
-// messages that have been deleted from the database returned, but the corresponding files still have to be removed.
-func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) []store.Message {
-	var remove []store.Message
+//
+// messages that have been marked expunged from the database are returned, but the
+// corresponding files still have to be removed.
+//
+// the highest modseq in the mailbox is returned, typically associated with the
+// removal of the messages, but if no messages were expunged the current latest max
+// modseq for the mailbox is returned.
+func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.Message, highestModSeq store.ModSeq) {
+	var modseq store.ModSeq
 
 	c.account.WithWLock(func() {
 		c.xdbwrite(func(tx *bstore.Tx) {
@@ -2753,6 +3070,7 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) []store.Message {
 			qm := bstore.QueryTx[store.Message](tx)
 			qm.FilterNonzero(store.Message{MailboxID: c.mailboxID})
 			qm.FilterEqual("Deleted", true)
+			qm.FilterEqual("Expunged", false)
 			qm.FilterFn(func(m store.Message) bool {
 				// Only remove if this session knows about the message and if present in optional uidSet.
 				return uidSearch(c.uids, m.UID) > 0 && (uidSet == nil || uidSet.containsUID(m.UID, c.uids, c.searchResult))
@@ -2762,8 +3080,14 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) []store.Message {
 			xcheckf(err, "listing messages to delete")
 
 			if len(remove) == 0 {
+				highestModSeq = c.xhighestModSeq(tx, c.mailboxID)
 				return
 			}
+
+			// Assign new modseq.
+			modseq, err = c.account.NextModSeq(tx)
+			xcheckf(err, "assigning next modseq")
+			highestModSeq = modseq
 
 			removeIDs := make([]int64, len(remove))
 			anyIDs := make([]any, len(remove))
@@ -2778,17 +3102,17 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) []store.Message {
 
 			qm = bstore.QueryTx[store.Message](tx)
 			qm.FilterIDs(removeIDs)
-			_, err = qm.Delete()
-			xcheckf(err, "removing messages marked for deletion")
+			_, err = qm.UpdateNonzero(store.Message{Expunged: true, ModSeq: modseq})
+			xcheckf(err, "marking messages marked for deleted as expunged")
 
-			// Mark removed messages as not needing training, then retrain them, so if they
+			// Mark expunged messages as not needing training, then retrain them, so if they
 			// were trained, they get untrained.
 			for i := range remove {
 				remove[i].Junk = false
 				remove[i].Notjunk = false
 			}
 			err = c.account.RetrainMessages(context.TODO(), c.log, tx, remove, true)
-			xcheckf(err, "untraining deleted messages")
+			xcheckf(err, "untraining expunged messages")
 		})
 
 		// Broadcast changes to other connections. We may not have actually removed any
@@ -2798,11 +3122,11 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) []store.Message {
 			for i, m := range remove {
 				ouids[i] = m.UID
 			}
-			changes := []store.Change{store.ChangeRemoveUIDs{MailboxID: c.mailboxID, UIDs: ouids}}
+			changes := []store.Change{store.ChangeRemoveUIDs{MailboxID: c.mailboxID, UIDs: ouids, ModSeq: modseq}}
 			c.broadcast(changes)
 		}
 	})
-	return remove
+	return remove, highestModSeq
 }
 
 // Unselect is similar to close in that it closes the currently active mailbox, but
@@ -2825,7 +3149,7 @@ func (c *conn) cmdUnselect(tag, cmd string, p *parser) {
 //
 // State: Selected
 func (c *conn) cmdExpunge(tag, cmd string, p *parser) {
-	// Command: ../rfc/9051:3687 ../rfc/3501:2695
+	// Command: ../rfc/9051:3687 ../rfc/3501:2695 ../rfc/7162:1770
 
 	// Request syntax: ../rfc/9051:6476 ../rfc/3501:4679
 	p.xempty()
@@ -2842,7 +3166,7 @@ func (c *conn) cmdExpunge(tag, cmd string, p *parser) {
 //
 // State: Selected
 func (c *conn) cmdUIDExpunge(tag, cmd string, p *parser) {
-	// Command: ../rfc/9051:4775 ../rfc/4315:75
+	// Command: ../rfc/9051:4775 ../rfc/4315:75 ../rfc/7162:1873
 
 	// Request syntax: ../rfc/9051:7125 ../rfc/9051:7129 ../rfc/4315:298
 	p.xspace()
@@ -2862,7 +3186,7 @@ func (c *conn) cmdUIDExpunge(tag, cmd string, p *parser) {
 func (c *conn) cmdxExpunge(tag, cmd string, uidSet *numSet) {
 	// Command: ../rfc/9051:3687 ../rfc/3501:2695
 
-	remove := c.xexpunge(uidSet, false)
+	remove, highestModSeq := c.xexpunge(uidSet, false)
 
 	defer func() {
 		for _, m := range remove {
@@ -2873,13 +3197,29 @@ func (c *conn) cmdxExpunge(tag, cmd string, uidSet *numSet) {
 	}()
 
 	// Response syntax: ../rfc/9051:6742 ../rfc/3501:4864
+	var vanishedUIDs numSet
+	qresync := c.enabled[capQresync]
 	for _, m := range remove {
 		seq := c.xsequence(m.UID)
 		c.sequenceRemove(seq, m.UID)
-		c.bwritelinef("* %d EXPUNGE", seq)
+		if qresync {
+			vanishedUIDs.append(uint32(m.UID))
+		} else {
+			c.bwritelinef("* %d EXPUNGE", seq)
+		}
+	}
+	if !vanishedUIDs.empty() {
+		// VANISHED without EARLIER. ../rfc/7162:2004
+		for _, s := range vanishedUIDs.Strings(4*1024 - 32) {
+			c.bwritelinef("* VANISHED %s", s)
+		}
 	}
 
-	c.ok(tag, cmd)
+	if c.enabled[capCondstore] {
+		c.writeresultf("%s OK [HIGHESTMODSEQ %d] expunged", tag, highestModSeq.Client())
+	} else {
+		c.ok(tag, cmd)
+	}
 }
 
 // State: Selected
@@ -2987,6 +3327,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 	var origUIDs, newUIDs []store.UID
 	var flags []store.Flags
 	var keywords [][]string
+	var modseq store.ModSeq // For messages in new mailbox, assigned when first message is copied.
 
 	c.account.WithWLock(func() {
 		c.xdbwrite(func(tx *bstore.Tx) {
@@ -3000,6 +3341,10 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				xuserErrorf("no matching messages to copy")
 			}
 
+			var err error
+			modseq, err = c.account.NextModSeq(tx)
+			xcheckf(err, "assigning next modseq")
+
 			// Reserve the uids in the destination mailbox.
 			uidFirst := mbDst.UIDNext
 			mbDst.UIDNext += store.UID(len(uidargs))
@@ -3008,6 +3353,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
 			q.FilterEqual("UID", uidargs...)
+			q.FilterEqual("Expunged", false)
 			xmsgs, err := q.List()
 			xcheckf(err, "fetching messages")
 
@@ -3036,6 +3382,8 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				origMsgIDs = append(origMsgIDs, origID)
 				m.ID = 0
 				m.UID = uidFirst + store.UID(i)
+				m.CreateSeq = modseq
+				m.ModSeq = modseq
 				m.MailboxID = mbDst.ID
 				if mbSrc.Name == conf.RejectsMailbox && m.MailboxDestinedID != 0 {
 					// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
@@ -3107,7 +3455,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 		if len(newUIDs) > 0 {
 			changes := make([]store.Change, len(newUIDs))
 			for i, uid := range newUIDs {
-				changes[i] = store.ChangeAddUID{MailboxID: mbDst.ID, UID: uid, Flags: flags[i], Keywords: keywords[i]}
+				changes[i] = store.ChangeAddUID{MailboxID: mbDst.ID, UID: uid, ModSeq: modseq, Flags: flags[i], Keywords: keywords[i]}
 			}
 			c.broadcast(changes)
 		}
@@ -3124,9 +3472,9 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 //
 // State: Selected
 func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
-	// Command: ../rfc/9051:4650 ../rfc/6851:119
+	// Command: ../rfc/9051:4650 ../rfc/6851:119 ../rfc/6851:265
 
-	// Request syntax: ../rfc/6851:320 ../rfc/9051:6744
+	// Request syntax: ../rfc/6851:320
 	p.xspace()
 	nums := p.xnumSet()
 	p.xspace()
@@ -3144,6 +3492,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 	var mbDst store.Mailbox
 	var changes []store.Change
 	var newUIDs []store.UID
+	var modseq store.ModSeq
 
 	c.account.WithWLock(func() {
 		c.xdbwrite(func(tx *bstore.Tx) {
@@ -3162,10 +3511,19 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 			uidnext := uidFirst
 			mbDst.UIDNext += store.UID(len(uids))
 
-			// Update UID and MailboxID in database for messages.
+			// Assign a new modseq, for the new records and for the expunged records.
+			var err error
+			modseq, err = c.account.NextModSeq(tx)
+			xcheckf(err, "assigning next modseq")
+
+			// Update existing record with new UID and MailboxID in database for messages. We
+			// add a new but expunged record again in the original/source mailbox, for qresync.
+			// Keeping the original ID for the live message means we don't have to move the
+			// on-disk message contents file.
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
 			q.FilterEqual("UID", uidargs...)
+			q.FilterEqual("Expunged", false)
 			q.SortAsc("UID")
 			msgs, err := q.List()
 			xcheckf(err, "listing messages to move")
@@ -3182,6 +3540,13 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 				if m.UID != uids[i] {
 					xserverErrorf("internal error: got uid %d, expected %d, for index %d", m.UID, uids[i], i)
 				}
+
+				// Copy of message record that we'll insert when UID is freed up.
+				om := *m
+				om.PrepareExpunge()
+				om.ID = 0 // Assign new ID.
+				om.ModSeq = modseq
+
 				m.MailboxID = mbDst.ID
 				if mbSrc.Name == conf.RejectsMailbox && m.MailboxDestinedID != 0 {
 					// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
@@ -3189,10 +3554,15 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 					m.MailboxOrigID = m.MailboxDestinedID
 				}
 				m.UID = uidnext
+				m.ModSeq = modseq
 				m.JunkFlagsForMailbox(mbDst.Name, conf)
 				uidnext++
 				err := tx.Update(m)
 				xcheckf(err, "updating moved message in database")
+
+				// Now that UID is unused, we can insert the old record again.
+				err = tx.Insert(&om)
+				xcheckf(err, "inserting record for expunge after moving message")
 
 				for _, kw := range m.Keywords {
 					keywords[kw] = struct{}{}
@@ -3214,10 +3584,10 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 
 			// Prepare broadcast changes to other connections.
 			changes = make([]store.Change, 0, 1+len(msgs))
-			changes = append(changes, store.ChangeRemoveUIDs{MailboxID: c.mailboxID, UIDs: uids})
+			changes = append(changes, store.ChangeRemoveUIDs{MailboxID: c.mailboxID, UIDs: uids, ModSeq: modseq})
 			for _, m := range msgs {
 				newUIDs = append(newUIDs, m.UID)
-				changes = append(changes, store.ChangeAddUID{MailboxID: mbDst.ID, UID: m.UID, Flags: m.Flags, Keywords: m.Keywords})
+				changes = append(changes, store.ChangeAddUID{MailboxID: mbDst.ID, UID: m.UID, ModSeq: modseq, Flags: m.Flags, Keywords: m.Keywords})
 			}
 		})
 
@@ -3227,13 +3597,30 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 	// ../rfc/9051:4708 ../rfc/6851:254
 	// ../rfc/9051:4713
 	c.bwritelinef("* OK [COPYUID %d %s %s] moved", mbDst.UIDValidity, compactUIDSet(uids).String(), compactUIDSet(newUIDs).String())
+	qresync := c.enabled[capQresync]
+	var vanishedUIDs numSet
 	for i := 0; i < len(uids); i++ {
 		seq := c.xsequence(uids[i])
 		c.sequenceRemove(seq, uids[i])
-		c.bwritelinef("* %d EXPUNGE", seq)
+		if qresync {
+			vanishedUIDs.append(uint32(uids[i]))
+		} else {
+			c.bwritelinef("* %d EXPUNGE", seq)
+		}
+	}
+	if !vanishedUIDs.empty() {
+		// VANISHED without EARLIER. ../rfc/7162:2004
+		for _, s := range vanishedUIDs.Strings(4*1024 - 32) {
+			c.bwritelinef("* VANISHED %s", s)
+		}
 	}
 
-	c.ok(tag, cmd)
+	if c.enabled[capQresync] {
+		// ../rfc/9051:6744 ../rfc/7162:1334
+		c.writeresultf("%s OK [HIGHESTMODSEQ %d] move", tag, modseq.Client())
+	} else {
+		c.ok(tag, cmd)
+	}
 }
 
 // Store sets a full set of flags, or adds/removes specific flags.
@@ -3242,10 +3629,22 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 	// Command: ../rfc/9051:4543 ../rfc/3501:3214
 
-	// Request syntax: ../rfc/9051:7076 ../rfc/3501:5052
+	// Request syntax: ../rfc/9051:7076 ../rfc/3501:5052 ../rfc/4466:691 ../rfc/7162:2471
 	p.xspace()
 	nums := p.xnumSet()
 	p.xspace()
+	var unchangedSince *int64
+	if p.take("(") {
+		// ../rfc/7162:2471
+		p.xtake("UNCHANGEDSINCE")
+		p.xspace()
+		v := p.xnumber64()
+		unchangedSince = &v
+		p.xtake(")")
+		p.xspace()
+		// UNCHANGEDSINCE is a CONDSTORE-enabling parameter ../rfc/7162:382
+		c.xensureCondstore(nil)
+	}
 	var plus, minus bool
 	if p.take("+") {
 		plus = true
@@ -3281,6 +3680,9 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 	}
 
 	var updated []store.Message
+	var changed []store.Message // ModSeq more recent than unchangedSince, will be in MODIFIED response code, and we will send untagged fetch responses so client is up to date.
+	var modseq store.ModSeq     // Assigned when needed.
+	modified := map[int64]bool{}
 
 	c.account.WithWLock(func() {
 		c.xdbwrite(func(tx *bstore.Tx) {
@@ -3305,8 +3707,16 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
 			q.FilterEqual("UID", uidargs...)
+			q.FilterEqual("Expunged", false)
 			err := q.ForEach(func(m store.Message) error {
+				// Client may specify a message multiple times, but we only process it once. ../rfc/7162:823
+				if modified[m.ID] {
+					return nil
+				}
+
+				origFlags := m.Flags
 				m.Flags = m.Flags.Set(mask, flags)
+				oldKeywords := append([]string{}, m.Keywords...)
 				if minus {
 					m.Keywords = store.RemoveKeywords(m.Keywords, keywords)
 				} else if plus {
@@ -3314,6 +3724,49 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 				} else {
 					m.Keywords = keywords
 				}
+
+				keywordsChanged := func() bool {
+					sort.Strings(oldKeywords)
+					n := append([]string{}, m.Keywords...)
+					sort.Strings(n)
+					return !slices.Equal(oldKeywords, n)
+				}
+
+				// If the message has a more recent modseq than the check requires, we won't modify
+				// it and report in the final command response.
+				// ../rfc/7162:555
+				//
+				// unchangedSince 0 always fails the check, we don't turn it into 1 like with our
+				// internal modseqs. RFC implies that is not required for non-system flags, but we
+				// don't have per-flag modseq and this seems reasonable. ../rfc/7162:640
+				if unchangedSince != nil && m.ModSeq.Client() > *unchangedSince {
+					changed = append(changed, m)
+					return nil
+				}
+
+				// Note: we don't perform the optimization described in ../rfc/7162:1258
+				// It requires that we keep track of the flags we think the client knows (but only
+				// on this connection). We don't track that. It also isn't clear why this is
+				// allowed because it is skipping the condstore conditional check, and the new
+				// combination of flags could be unintended.
+
+				// We do not assign a new modseq if nothing actually changed. ../rfc/7162:1246 ../rfc/7162:312
+				if origFlags == m.Flags && !keywordsChanged() {
+					// Note: since we didn't update the modseq, we are not adding m.ID to "modified",
+					// it would skip the modseq check above. We still add m to list of updated, so we
+					// send an untagged fetch response. But we don't broadcast it.
+					updated = append(updated, m)
+					return nil
+				}
+
+				// Assign new modseq for first actual change.
+				if modseq == 0 {
+					var err error
+					modseq, err = c.account.NextModSeq(tx)
+					xcheckf(err, "next modseq")
+				}
+				m.ModSeq = modseq
+				modified[m.ID] = true
 				updated = append(updated, m)
 				return tx.Update(&m)
 			})
@@ -3324,19 +3777,71 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 		})
 
 		// Broadcast changes to other connections.
-		changes := make([]store.Change, len(updated))
-		for i, m := range updated {
-			changes[i] = store.ChangeFlags{MailboxID: m.MailboxID, UID: m.UID, Mask: mask, Flags: m.Flags, Keywords: m.Keywords}
+		changes := make([]store.Change, 0, len(updated))
+		for _, m := range updated {
+			// We only notify about flags that actually changed.
+			if m.ModSeq == modseq {
+				ch := store.ChangeFlags{MailboxID: m.MailboxID, UID: m.UID, ModSeq: modseq, Mask: mask, Flags: m.Flags, Keywords: m.Keywords}
+				changes = append(changes, ch)
+			}
 		}
-		c.broadcast(changes)
+		if len(changes) > 0 {
+			c.broadcast(changes)
+		}
 	})
 
-	for _, m := range updated {
-		if !silent {
-			// ../rfc/9051:6749 ../rfc/3501:4869
-			c.bwritelinef("* %d FETCH (UID %d FLAGS %s)", c.xsequence(m.UID), m.UID, flaglist(m.Flags, m.Keywords).pack(c))
+	// In the RFC, the section about STORE/UID STORE says we must return MODSEQ when
+	// UNCHANGEDSINCE was specified. It does not specify it in case UNCHANGEDSINCE
+	// isn't specified. For that case it does say MODSEQ is needed in unsolicited
+	// untagged fetch responses. Implying that solicited untagged fetch responses
+	// should not include MODSEQ (why else mention unsolicited explicitly?). But, in
+	// the introduction to CONDSTORE it does explicitly specify MODSEQ should be
+	// included in untagged fetch responses at all times with CONDSTORE-enabled
+	// connections. It would have been better if the command behaviour was specified in
+	// the command section, not the introduction to the extension.
+	// ../rfc/7162:388 ../rfc/7162:852
+	// ../rfc/7162:549
+	if !silent || c.enabled[capCondstore] {
+		for _, m := range updated {
+			var flags string
+			if !silent {
+				flags = fmt.Sprintf(" FLAGS %s", flaglist(m.Flags, m.Keywords).pack(c))
+			}
+			var modseqStr string
+			if c.enabled[capCondstore] {
+				modseqStr = fmt.Sprintf(" MODSEQ (%d)", m.ModSeq.Client())
+			}
+			// ../rfc/9051:6749 ../rfc/3501:4869 ../rfc/7162:2490
+			c.bwritelinef("* %d FETCH (UID %d%s%s)", c.xsequence(m.UID), m.UID, flags, modseqStr)
 		}
 	}
 
-	c.ok(tag, cmd)
+	// We don't explicitly send flags for failed updated with silent set. The regular
+	// notification will get the flags to the client.
+	// ../rfc/7162:630 ../rfc/3501:3233
+
+	if len(changed) == 0 {
+		c.ok(tag, cmd)
+		return
+	}
+
+	// Write unsolicited untagged fetch responses for messages that didn't pass the
+	// unchangedsince check. ../rfc/7162:679
+	// Also gather UIDs or sequences for the MODIFIED response below. ../rfc/7162:571
+	var mnums []store.UID
+	for _, m := range changed {
+		c.bwritelinef("* %d FETCH (UID %d FLAGS %s MODSEQ (%d))", c.xsequence(m.UID), m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
+		if isUID {
+			mnums = append(mnums, m.UID)
+		} else {
+			mnums = append(mnums, store.UID(c.xsequence(m.UID)))
+		}
+	}
+
+	sort.Slice(mnums, func(i, j int) bool {
+		return mnums[i] < mnums[j]
+	})
+	set := compactUIDSet(mnums)
+	// ../rfc/7162:2506
+	c.writeresultf("%s OK [MODIFIED %s] conditional store did not modify all", tag, set.String())
 }

@@ -96,6 +96,7 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 	}
 
 	var expungeIssued bool
+	var maxModSeq store.ModSeq
 
 	var uids []store.UID
 	c.xdbread(func(tx *bstore.Tx) {
@@ -108,8 +109,11 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 		if eargs == nil || max == 0 || len(eargs) != 1 {
 			for i, uid := range c.uids {
 				lastIndex = i
-				if c.searchMatch(tx, msgseq(i+1), uid, *sk, &expungeIssued) {
+				if match, modseq := c.searchMatch(tx, msgseq(i+1), uid, *sk, &expungeIssued); match {
 					uids = append(uids, uid)
+					if modseq > maxModSeq {
+						maxModSeq = modseq
+					}
 					if min == 1 && min+max == len(eargs) {
 						break
 					}
@@ -119,8 +123,11 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 		// And reverse search for MAX if we have only MAX or MAX combined with MIN.
 		if max == 1 && (len(eargs) == 1 || min+max == len(eargs)) {
 			for i := len(c.uids) - 1; i > lastIndex; i-- {
-				if c.searchMatch(tx, msgseq(i+1), c.uids[i], *sk, &expungeIssued) {
+				if match, modseq := c.searchMatch(tx, msgseq(i+1), c.uids[i], *sk, &expungeIssued); match {
 					uids = append(uids, c.uids[i])
+					if modseq > maxModSeq {
+						maxModSeq = modseq
+					}
 					break
 				}
 			}
@@ -147,11 +154,24 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 				}
 				s += " " + fmt.Sprintf("%d", v)
 			}
+
+			// Since we don't have the max modseq for the possibly partial uid range we're
+			// writing here within hand reach, we conveniently interpret the ambiguous "for all
+			// messages being returned" in ../rfc/7162:1107 as meaning over all lines that we
+			// write. And that clients only commit this value after they have seen the tagged
+			// end of the command. Appears to be recommended behaviour, ../rfc/7162:2323.
+			// ../rfc/7162:1077 ../rfc/7162:1101
+			var modseq string
+			if sk.hasModseq() {
+				// ../rfc/7162:2557
+				modseq = fmt.Sprintf(" (MODSEQ %d)", maxModSeq.Client())
+			}
+
+			c.bwritelinef("* SEARCH%s%s", s, modseq)
 			uids = uids[n:]
-			c.bwritelinef("* SEARCH%s", s)
 		}
 	} else {
-		// New-style ESEARCH response. ../rfc/9051:6546 ../rfc/4466:522
+		// New-style ESEARCH response syntax: ../rfc/9051:6546 ../rfc/4466:522
 
 		if save {
 			// ../rfc/9051:3784 ../rfc/5182:13
@@ -195,6 +215,13 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 			if eargs["ALL"] && len(uids) > 0 {
 				resp += fmt.Sprintf(" ALL %s", compactUIDSet(uids).String())
 			}
+
+			// Interaction between ESEARCH and CONDSTORE: ../rfc/7162:1211 ../rfc/4731:273
+			// Summary: send the highest modseq of the returned messages.
+			if sk.hasModseq() && len(uids) > 0 {
+				resp += fmt.Sprintf(" MODSEQ %d", maxModSeq.Client())
+			}
+
 			c.bwritelinef("%s", resp)
 		}
 	}
@@ -215,10 +242,11 @@ type search struct {
 	m             store.Message
 	p             *message.Part
 	expungeIssued *bool
+	hasModseq     bool
 }
 
-func (c *conn) searchMatch(tx *bstore.Tx, seq msgseq, uid store.UID, sk searchKey, expungeIssued *bool) bool {
-	s := search{c: c, tx: tx, seq: seq, uid: uid, expungeIssued: expungeIssued}
+func (c *conn) searchMatch(tx *bstore.Tx, seq msgseq, uid store.UID, sk searchKey, expungeIssued *bool) (bool, store.ModSeq) {
+	s := search{c: c, tx: tx, seq: seq, uid: uid, expungeIssued: expungeIssued, hasModseq: sk.hasModseq()}
 	defer func() {
 		if s.mr != nil {
 			err := s.mr.Close()
@@ -229,12 +257,42 @@ func (c *conn) searchMatch(tx *bstore.Tx, seq msgseq, uid store.UID, sk searchKe
 	return s.match(sk)
 }
 
-func (s *search) match(sk searchKey) bool {
+func (s *search) match(sk searchKey) (match bool, modseq store.ModSeq) {
+	// Instead of littering all the cases in match0 with calls to get modseq, we do it once
+	// here in case of a match.
+	defer func() {
+		if match && s.hasModseq {
+			if s.m.ID == 0 {
+				match = s.xloadMessage()
+			}
+			modseq = s.m.ModSeq
+		}
+	}()
+
+	match = s.match0(sk)
+	return
+}
+
+func (s *search) xloadMessage() bool {
+	q := bstore.QueryTx[store.Message](s.tx)
+	q.FilterNonzero(store.Message{MailboxID: s.c.mailboxID, UID: s.uid})
+	m, err := q.Get()
+	if err == bstore.ErrAbsent || err == nil && m.Expunged {
+		// ../rfc/2180:607
+		*s.expungeIssued = true
+		return false
+	}
+	xcheckf(err, "get message")
+	s.m = m
+	return true
+}
+
+func (s *search) match0(sk searchKey) bool {
 	c := s.c
 
 	if sk.searchKeys != nil {
 		for _, ssk := range sk.searchKeys {
-			if !s.match(ssk) {
+			if !s.match0(ssk) {
 				return false
 			}
 		}
@@ -273,33 +331,26 @@ func (s *search) match(sk searchKey) bool {
 		// We do not implement the RECENT flag. All messages are not recent.
 		return false
 	case "NOT":
-		return !s.match(*sk.searchKey)
+		return !s.match0(*sk.searchKey)
 	case "OR":
-		return s.match(*sk.searchKey) || s.match(*sk.searchKey2)
+		return s.match0(*sk.searchKey) || s.match0(*sk.searchKey2)
 	case "UID":
 		return sk.uidSet.containsUID(s.uid, c.uids, c.searchResult)
 	}
 
 	// Parsed message.
 	if s.mr == nil {
-		q := bstore.QueryTx[store.Message](s.tx)
-		q.FilterNonzero(store.Message{MailboxID: c.mailboxID, UID: s.uid})
-		m, err := q.Get()
-		if err == bstore.ErrAbsent {
-			// ../rfc/2180:607
-			*s.expungeIssued = true
+		if !s.xloadMessage() {
 			return false
 		}
-		xcheckf(err, "get message")
-		s.m = m
 
 		// Closed by searchMatch after all (recursive) search.match calls are finished.
-		s.mr = c.account.MessageReader(m)
+		s.mr = c.account.MessageReader(s.m)
 
-		if m.ParsedBuf == nil {
+		if s.m.ParsedBuf == nil {
 			c.log.Error("missing parsed message")
 		} else {
-			p, err := m.LoadPart(s.mr)
+			p, err := s.m.LoadPart(s.mr)
 			xcheckf(err, "load parsed message")
 			s.p = &p
 		}
@@ -385,6 +436,9 @@ func (s *search) match(sk searchKey) bool {
 		return s.m.Size > sk.number
 	case "SMALLER":
 		return s.m.Size < sk.number
+	case "MODSEQ":
+		// ../rfc/7162:1045
+		return s.m.ModSeq.Client() >= *sk.clientModseq
 	}
 
 	if s.p == nil {

@@ -62,3 +62,30 @@ func TestNumSetContains(t *testing.T) {
 	check(!ss3.containsUID(1, []store.UID{2, 3}, nil))
 	check(!ss3.containsUID(3, []store.UID{1, 2, 3}, nil))
 }
+
+func TestNumSetInterpret(t *testing.T) {
+	parseNumSet := func(s string) numSet {
+		p := parser{upper: s}
+		return p.xnumSet0(true, false)
+	}
+
+	checkEqual := func(uids []store.UID, a, s string) {
+		t.Helper()
+		n := parseNumSet(a).interpretStar(uids)
+		ns := n.String()
+		if ns != s {
+			t.Fatalf("%s != %s", ns, s)
+		}
+	}
+
+	checkEqual([]store.UID{}, "1:*", "")
+	checkEqual([]store.UID{1}, "1:*", "1")
+	checkEqual([]store.UID{1, 3}, "1:*", "1:3")
+	checkEqual([]store.UID{1, 3}, "4:*", "3")
+	checkEqual([]store.UID{2, 3}, "*:4", "2:4")
+	checkEqual([]store.UID{2, 3}, "*:1", "2")
+	checkEqual([]store.UID{1, 2, 3}, "1,2,3", "1,2,3")
+	checkEqual([]store.UID{}, "1,2,3", "1,2,3")
+	checkEqual([]store.UID{}, "1:3", "1:3")
+	checkEqual([]store.UID{}, "3:1", "1:3")
+}

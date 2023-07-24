@@ -2003,6 +2003,7 @@ func cmdEnsureParsed(c *cmd) {
 	n := 0
 	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
 		q := bstore.QueryTx[store.Message](tx)
+		q.FilterEqual("Expunged", false)
 		q.FilterFn(func(m store.Message) bool {
 			return all || m.ParsedBuf == nil
 		})
@@ -2135,17 +2136,22 @@ open, or is not running.
 	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
 		// Reassign UIDs, going per mailbox. We assign starting at 1, only changing the
 		// message if it isn't already at the intended UID. Doing it in this order ensures
-		// we don't get into trouble with duplicate UIDs for a mailbox.
+		// we don't get into trouble with duplicate UIDs for a mailbox. We assign a new
+		// modseq. Not strictly needed, for doesn't hurt.
+		modseq, err := a.NextModSeq(tx)
+		xcheckf(err, "assigning next modseq")
+
 		q := bstore.QueryTx[store.Message](tx)
 		if len(args) == 2 {
 			q.FilterNonzero(store.Message{MailboxID: mailboxID})
 		}
 		q.SortAsc("MailboxID", "UID")
-		err := q.ForEach(func(m store.Message) error {
+		err = q.ForEach(func(m store.Message) error {
 			uidlasts[m.MailboxID]++
 			uid := uidlasts[m.MailboxID]
 			if m.UID != uid {
 				m.UID = uid
+				m.ModSeq = modseq
 				if err := tx.Update(&m); err != nil {
 					return fmt.Errorf("updating uid for message: %v", err)
 				}

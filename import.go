@@ -270,6 +270,8 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 
 	var changes []store.Change
 
+	var modseq store.ModSeq // Assigned on first delivered messages, used for all messages.
+
 	xdeliver := func(m *store.Message, mf *os.File) {
 		// todo: possibly set dmarcdomain to the domain of the from address? at least for non-spams that have been seen. otherwise user would start without any reputations. the assumption would be that the user has accepted email and deemed it legit, coming from the indicated sender.
 
@@ -281,7 +283,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		ctl.xcheck(err, "delivering message")
 		deliveredIDs = append(deliveredIDs, m.ID)
 		ctl.log.Debug("delivered message", mlog.Field("id", m.ID))
-		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, Flags: m.Flags, Keywords: m.Keywords})
+		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, ModSeq: modseq, Flags: m.Flags, Keywords: m.Keywords})
 	}
 
 	// todo: one goroutine for reading messages, one for parsing the message, one adding to database, one for junk filter training.
@@ -353,8 +355,16 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 				}
 			}
 
+			if modseq == 0 {
+				var err error
+				modseq, err = a.NextModSeq(tx)
+				ctl.xcheck(err, "assigning next modseq")
+			}
+
 			m.MailboxID = mb.ID
 			m.MailboxOrigID = mb.ID
+			m.CreateSeq = modseq
+			m.ModSeq = modseq
 			xdeliver(m, msgf)
 			err = msgf.Close()
 			ctl.log.Check(err, "closing message after delivery")

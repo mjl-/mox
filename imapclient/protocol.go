@@ -1,6 +1,7 @@
 package imapclient
 
 import (
+	"bufio"
 	"fmt"
 	"strings"
 )
@@ -134,6 +135,20 @@ func (c CodeCopyUID) CodeString() string {
 	return fmt.Sprintf("COPYUID %d %s %s", c.DestUIDValidity, str(c.From), str(c.To))
 }
 
+// For CONDSTORE.
+type CodeModified NumSet
+
+func (c CodeModified) CodeString() string {
+	return fmt.Sprintf("MODIFIED %s", NumSet(c).String())
+}
+
+// For CONDSTORE.
+type CodeHighestModSeq int64
+
+func (c CodeHighestModSeq) CodeString() string {
+	return fmt.Sprintf("HIGHESTMODSEQ %d", c)
+}
+
 // RespText represents a response line minus the leading tag.
 type RespText struct {
 	Code    string  // The first word between [] after the status.
@@ -201,6 +216,12 @@ type UntaggedFetch struct {
 	Attrs []FetchAttr
 }
 type UntaggedSearch []uint32
+
+// ../rfc/7162:1101
+type UntaggedSearchModSeq struct {
+	Nums   []uint32
+	ModSeq int64
+}
 type UntaggedStatus struct {
 	Mailbox string
 	Attrs   map[string]int64 // Upper case status attributes. ../rfc/9051:7059
@@ -224,7 +245,14 @@ type UntaggedEsearch struct {
 	Max        uint32
 	All        NumSet
 	Count      *uint32
+	ModSeq     int64
 	Exts       []EsearchDataExt
+}
+
+// UntaggedVanished is used in QRESYNC to send UIDs that have been removed.
+type UntaggedVanished struct {
+	Earlier bool
+	UIDs    NumSet
 }
 
 // ../rfc/2971:184
@@ -276,6 +304,13 @@ func (ns NumSet) String() string {
 		r += x.String()
 	}
 	return r
+}
+
+func ParseNumSet(s string) (ns NumSet, rerr error) {
+	c := Conn{r: bufio.NewReader(strings.NewReader(s))}
+	defer c.recover(&rerr)
+	ns = c.xsequenceSet()
+	return
 }
 
 // NumRange is a single number or range.
@@ -450,3 +485,8 @@ func (f FetchBinarySize) Attr() string { return f.RespAttr }
 type FetchUID uint32
 
 func (f FetchUID) Attr() string { return "UID" }
+
+// "MODSEQ" fetch response.
+type FetchModSeq int64
+
+func (f FetchModSeq) Attr() string { return "MODSEQ" }

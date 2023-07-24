@@ -124,6 +124,7 @@ func reputation(tx *bstore.Tx, log *mlog.Log, m *store.Message) (rjunk *bool, rc
 	messageQuery := func(fm *store.Message, maxAge time.Duration, maxCount int) *bstore.Query[store.Message] {
 		q := bstore.QueryTx[store.Message](tx)
 		q.FilterEqual("MailboxOrigID", m.MailboxID)
+		q.FilterEqual("Expunged", false)
 		q.FilterFn(func(m store.Message) bool {
 			return m.Junk || m.Notjunk
 		})

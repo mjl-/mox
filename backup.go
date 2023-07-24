@@ -424,7 +424,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		tmMsgs := time.Now()
 		seen := map[string]struct{}{}
 		var nlinked, ncopied int
-		err = bstore.QueryDB[store.Message](ctx, db).ForEach(func(m store.Message) error {
+		err = bstore.QueryDB[store.Message](ctx, db).FilterEqual("Expunged", false).ForEach(func(m store.Message) error {
 			mp := store.MessagePath(m.ID)
 			seen[mp] = struct{}{}
 			amp := filepath.Join("accounts", acc.Name, "msg", mp)

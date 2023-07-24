@@ -150,6 +150,24 @@ type NextUIDValidity struct {
 	Next uint32
 }
 
+// SyncState track ModSeqs.
+type SyncState struct {
+	ID int // Just a single record with ID 1.
+
+	// Last used, next assigned will be one higher. The first value we hand out is 2.
+	// That's because 0 (the default value for old existing messages, from before the
+	// Message.ModSeq field) is special in IMAP, so we return it as 1.
+	LastModSeq ModSeq `bstore:"nonzero"`
+
+	// Highest ModSeq of expunged record that we deleted. When a clients synchronizes
+	// and requests changes based on a modseq before this one, we don't have the
+	// history to provide information about deletions. We normally keep these expunged
+	// records around, but we may periodically truly delete them to reclaim storage
+	// space. Initially set to -1 because we don't want to match with any ModSeq in the
+	// database, which can be zero values.
+	HighestDeletedModSeq ModSeq
+}
+
 // Mailbox is collection of messages, e.g. Inbox or Sent.
 type Mailbox struct {
 	ID int64
@@ -232,7 +250,23 @@ type Message struct {
 	ID int64
 
 	UID       UID   `bstore:"nonzero"` // UID, for IMAP. Set during deliver.
-	MailboxID int64 `bstore:"nonzero,unique MailboxID+UID,index MailboxID+Received,ref Mailbox"`
+	MailboxID int64 `bstore:"nonzero,unique MailboxID+UID,index MailboxID+Received,index MailboxID+ModSeq,ref Mailbox"`
+
+	// Modification sequence, for faster syncing with IMAP QRESYNC and JMAP.
+	// ModSeq is the last modification. CreateSeq is the Seq the message was inserted,
+	// always <= ModSeq. If Expunged is set, the message has been removed and should not
+	// be returned to the user. In this case, ModSeq is the Seq where the message is
+	// removed, and will never be changed again.
+	// We have an index on both ModSeq (for JMAP that synchronizes per account) and
+	// MailboxID+ModSeq (for IMAP that synchronizes per mailbox).
+	// The index on CreateSeq helps efficiently finding created messages for JMAP.
+	// The value of ModSeq is special for IMAP. Messages that existed before ModSeq was
+	// added have 0 as value. But modseq 0 in IMAP is special, so we return it as 1. If
+	// we get modseq 1 from a client, the IMAP server will translate it to 0. When we
+	// return modseq to clients, we turn 0 into 1.
+	ModSeq    ModSeq `bstore:"index"`
+	CreateSeq ModSeq `bstore:"index"`
+	Expunged  bool
 
 	// MailboxOrigID is the mailbox the message was originally delivered to. Typically
 	// Inbox or Rejects, but can also be Postmaster and TLS/DMARC reporting addresses.
@@ -290,7 +324,9 @@ type Message struct {
 	// delivered only once. Value includes <>.
 	MessageID string `bstore:"index"`
 
-	MessageHash []byte // Hash of message. For rejects delivery, so optional like MessageID.
+	// Hash of message. For rejects delivery, so optional like MessageID.
+	MessageHash []byte
+
 	Flags
 	Keywords    []string `bstore:"index"` // For keywords other than system flags or the basic well-known $-flags. Only in "atom" syntax, stored in lower case.
 	Size        int64
@@ -302,6 +338,41 @@ type Message struct {
 	// database.
 	// todo: once replaced with non-json storage, remove date fixup in ../message/part.go.
 	ParsedBuf []byte
+}
+
+// ModSeq represents a modseq as stored in the database. ModSeq 0 in the
+// database is sent to the client as 1, because modseq 0 is special in IMAP.
+// ModSeq coming from the client are of type int64.
+type ModSeq int64
+
+func (ms ModSeq) Client() int64 {
+	if ms == 0 {
+		return 1
+	}
+	return int64(ms)
+}
+
+// ModSeqFromClient converts a modseq from a client to a modseq for internal
+// use, e.g. in a database query.
+// ModSeq 1 is turned into 0 (the Go zero value for ModSeq).
+func ModSeqFromClient(modseq int64) ModSeq {
+	if modseq == 1 {
+		return 0
+	}
+	return ModSeq(modseq)
+}
+
+// PrepareExpunge clears fields that are no longer needed after an expunge, so
+// almost all fields. Does not change ModSeq, but does set Expunged.
+func (m *Message) PrepareExpunge() {
+	*m = Message{
+		ID:        m.ID,
+		UID:       m.UID,
+		MailboxID: m.MailboxID,
+		CreateSeq: m.CreateSeq,
+		ModSeq:    m.ModSeq,
+		Expunged:  true,
+	}
 }
 
 // LoadPart returns a message.Part by reading from m.ParsedBuf.
@@ -385,7 +456,7 @@ type Outgoing struct {
 }
 
 // Types stored in DB.
-var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}}
+var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}, SyncState{}}
 
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.
 type Account struct {
@@ -564,6 +635,33 @@ func (a *Account) NextUIDValidity(tx *bstore.Tx) (uint32, error) {
 	return v, nil
 }
 
+// NextModSeq returns the next modification sequence, which is global per account,
+// over all types.
+func (a *Account) NextModSeq(tx *bstore.Tx) (ModSeq, error) {
+	v := SyncState{ID: 1}
+	if err := tx.Get(&v); err == bstore.ErrAbsent {
+		// We start assigning from modseq 2. Modseq 0 is not usable, so returned as 1, so
+		// already used.
+		// HighestDeletedModSeq is -1 so comparison against the default ModSeq zero value
+		// makes sense.
+		v = SyncState{1, 2, -1}
+		return v.LastModSeq, tx.Insert(&v)
+	} else if err != nil {
+		return 0, err
+	}
+	v.LastModSeq++
+	return v.LastModSeq, tx.Update(&v)
+}
+
+func (a *Account) HighestDeletedModSeq(tx *bstore.Tx) (ModSeq, error) {
+	v := SyncState{ID: 1}
+	err := tx.Get(&v)
+	if err == bstore.ErrAbsent {
+		return 0, nil
+	}
+	return v.HighestDeletedModSeq, err
+}
+
 // WithWLock runs fn with account writelock held. Necessary for account/mailbox modification. For message delivery, a read lock is required.
 func (a *Account) WithWLock(fn func()) {
 	a.Lock()
@@ -593,10 +691,16 @@ func (a *Account) WithRLock(fn func()) {
 // If sync is true, the message file and its directory are synced. Should be true
 // for regular mail delivery, but can be false when importing many messages.
 //
+// If CreateSeq/ModSeq is not set, it is assigned automatically.
+//
 // Must be called with account rlock or wlock.
 //
 // Caller must broadcast new message.
 func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, isSent, sync, notrain bool) error {
+	if m.Expunged {
+		return fmt.Errorf("cannot deliver expunged message")
+	}
+
 	mb := Mailbox{ID: m.MailboxID}
 	if err := tx.Get(&mb); err != nil {
 		return fmt.Errorf("get mailbox: %w", err)
@@ -629,6 +733,14 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 	// If we are delivering to the originally intended mailbox, no need to store the mailbox ID again.
 	if m.MailboxDestinedID != 0 && m.MailboxDestinedID == m.MailboxOrigID {
 		m.MailboxDestinedID = 0
+	}
+	if m.CreateSeq == 0 || m.ModSeq == 0 {
+		modseq, err := a.NextModSeq(tx)
+		if err != nil {
+			return fmt.Errorf("assigning next modseq: %w", err)
+		}
+		m.CreateSeq = modseq
+		m.ModSeq = modseq
 	}
 
 	if err := tx.Insert(m); err != nil {
@@ -1038,7 +1150,7 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 		return err
 	}
 
-	changes = append(changes, ChangeAddUID{m.MailboxID, m.UID, m.Flags, m.Keywords})
+	changes = append(changes, ChangeAddUID{m.MailboxID, m.UID, m.ModSeq, m.Flags, m.Keywords})
 	BroadcastChanges(a, changes)
 	return nil
 }
@@ -1126,27 +1238,33 @@ func (a *Account) removeMessages(ctx context.Context, log *mlog.Log, tx *bstore.
 		return nil, fmt.Errorf("deleting from message recipient: %w", err)
 	}
 
+	// Assign new modseq.
+	modseq, err := a.NextModSeq(tx)
+	if err != nil {
+		return nil, fmt.Errorf("assign next modseq: %w", err)
+	}
+
 	// Actually remove the messages.
-	qdm := bstore.QueryTx[Message](tx)
-	qdm.FilterIDs(ids)
-	var deleted []Message
-	qdm.Gather(&deleted)
-	if _, err := qdm.Delete(); err != nil {
-		return nil, fmt.Errorf("deleting from messages: %w", err)
+	qx := bstore.QueryTx[Message](tx)
+	qx.FilterIDs(ids)
+	var expunged []Message
+	qx.Gather(&expunged)
+	if _, err := qx.UpdateNonzero(Message{ModSeq: modseq, Expunged: true}); err != nil {
+		return nil, fmt.Errorf("expunging messages: %w", err)
 	}
 
 	// Mark as neutral and train so junk filter gets untrained with these (junk) messages.
-	for i := range deleted {
-		deleted[i].Junk = false
-		deleted[i].Notjunk = false
+	for i := range expunged {
+		expunged[i].Junk = false
+		expunged[i].Notjunk = false
 	}
-	if err := a.RetrainMessages(ctx, log, tx, deleted, true); err != nil {
-		return nil, fmt.Errorf("training deleted messages: %w", err)
+	if err := a.RetrainMessages(ctx, log, tx, expunged, true); err != nil {
+		return nil, fmt.Errorf("retraining expunged messages: %w", err)
 	}
 
 	changes := make([]Change, len(l))
 	for i, m := range l {
-		changes[i] = ChangeRemoveUIDs{mb.ID, []UID{m.UID}}
+		changes[i] = ChangeRemoveUIDs{mb.ID, []UID{m.UID}, modseq}
 	}
 	return changes, nil
 }

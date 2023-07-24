@@ -28,6 +28,7 @@ type Change any
 type ChangeAddUID struct {
 	MailboxID int64
 	UID       UID
+	ModSeq    ModSeq
 	Flags     Flags    // System flags.
 	Keywords  []string // Other flags.
 }
@@ -36,12 +37,14 @@ type ChangeAddUID struct {
 type ChangeRemoveUIDs struct {
 	MailboxID int64
 	UIDs      []UID
+	ModSeq    ModSeq
 }
 
 // ChangeFlags is sent for an update to flags for a message, e.g. "Seen".
 type ChangeFlags struct {
 	MailboxID int64
 	UID       UID
+	ModSeq    ModSeq
 	Mask      Flags    // Which flags are actually modified.
 	Flags     Flags    // New flag values. All are set, not just mask.
 	Keywords  []string // Other flags.
