@@ -536,6 +536,16 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 			}
 			r.IPRev.IPNames[ip] = addrs
 		}
+
+		// Linux machines are often initially set up with a loopback IP for the hostname in
+		// /etc/hosts, presumably because it isn't known if their external IPs are static.
+		// For mail servers, they should certainly be static. The quickstart would also
+		// have warned about this, but could have been missed/ignored.
+		for _, ip := range ips {
+			if ip.IsLoopback() {
+				addf(&r.IPRev.Errors, "Hostname %s resolves to loopback IP %s, this will likely prevent email delivery to local accounts from working. The loopback IP was probably configured in /etc/hosts at system installation time. Replace the loopback IP with your actual external IPs in /etc/hosts.", mox.Conf.Static.HostnameDomain, ip.String())
+			}
+		}
 	}()
 
 	// MX
