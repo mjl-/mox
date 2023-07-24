@@ -1072,16 +1072,6 @@ func (c *Conn) xnamespaceDescr() NamespaceDescr {
 	return NamespaceDescr{prefix, b, exts}
 }
 
-// require one of caps to be enabled.
-func (c *Conn) xneedEnabled(msg string, caps ...Capability) {
-	for _, cap := range caps {
-		if _, ok := c.CapEnabled[cap]; ok {
-			return
-		}
-	}
-	c.xerrorf("%s: need one of following enabled capabilities: %v", msg, caps)
-}
-
 // require all of caps to be disabled.
 func (c *Conn) xneedDisabled(msg string, caps ...Capability) {
 	for _, cap := range caps {

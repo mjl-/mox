@@ -29,8 +29,8 @@ import (
 var (
 	xlog = mlog.New("junk")
 
-	errBadContentType = errors.New("bad content-type") // sure sign of spam
-	errClosed         = errors.New("filter is closed")
+	// errBadContentType = errors.New("bad content-type") // sure sign of spam, todo: use this error
+	errClosed = errors.New("filter is closed")
 )
 
 type word struct {

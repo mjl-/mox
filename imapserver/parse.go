@@ -146,23 +146,6 @@ func (p *parser) xtake1n(n int, what string) string {
 	return p.xtaken(n)
 }
 
-func (p *parser) xtake1fn(fn func(i int, c rune) bool) string {
-	i := 0
-	s := ""
-	for _, c := range p.upper[p.o:] {
-		if !fn(i, c) {
-			break
-		}
-		s += string(c)
-		i++
-	}
-	if s == "" {
-		p.xerrorf("expected at least one character")
-	}
-	p.o += len(s)
-	return s
-}
-
 func (p *parser) xtakechars(s string, what string) string {
 	p.xnonempty()
 	for i, c := range p.orig[p.o:] {
@@ -180,13 +163,6 @@ func (p *parser) xtaken(n int) string {
 	r := p.orig[p.o : p.o+n]
 	p.o += n
 	return r
-}
-
-func (p *parser) peekn(n int) (string, bool) {
-	if len(p.upper[p.o:]) < n {
-		return "", false
-	}
-	return p.upper[p.o : p.o+n], true
 }
 
 func (p *parser) space() bool {
@@ -903,63 +879,4 @@ func (p *parser) xdate() time.Time {
 		p.take(`"`)
 	}
 	return time.Date(year, mon, day, 0, 0, 0, 0, time.UTC)
-}
-
-// ../rfc/9051:7090 ../rfc/4466:716
-func (p *parser) xtaggedExtLabel() string {
-	return p.xtake1fn(func(i int, c rune) bool {
-		return c >= 'A' && c <= 'Z' || c == '-' || c == '_' || c == '.' || i > 0 && (c >= '0' && c <= '9' || c == ':')
-	})
-}
-
-// no return value since we don't currently use the value.
-// ../rfc/9051:7111 ../rfc/4466:749
-func (p *parser) xtaggedExtVal() {
-	if p.take("(") {
-		if p.take(")") {
-			return
-		}
-		p.xtaggedExtComp()
-		p.xtake(")")
-	} else {
-		p.xtaggedExtSimple()
-	}
-}
-
-// ../rfc/9051:7109 ../rfc/4466:747
-func (p *parser) xtaggedExtSimple() {
-	s := p.digits()
-	if s == "" {
-		p.xnumSet()
-	}
-
-	// This can be a number64, or the start of a sequence-set. A sequence-set can also
-	// start with a number, but only an uint32. After the number we'll try to continue
-	// parsing as a sequence-set.
-	_, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		p.xerrorf("parsing int: %v", err)
-	}
-
-	if p.take(":") {
-		if !p.take("*") {
-			p.xnznumber()
-		}
-	}
-	for p.take(",") {
-		p.xnumRange()
-	}
-}
-
-// ../rfc/9051:7111 ../rfc/4466:735
-func (p *parser) xtaggedExtComp() {
-	if p.take("(") {
-		p.xtaggedExtComp()
-		p.xtake(")")
-		return
-	}
-	p.xastring()
-	for p.space() {
-		p.xtaggedExtComp()
-	}
 }

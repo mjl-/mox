@@ -1340,13 +1340,10 @@ func (c *conn) cmdRcpt(p *parser) {
 	for p.space() {
 		// ../rfc/5321:2275
 		key := p.xparamKeyword()
-		K := strings.ToUpper(key)
-		switch K {
+		// K := strings.ToUpper(key)
 		// todo future: DSN, ../rfc/3461, with "NOTIFY"
-		default:
-			// ../rfc/5321:2230
-			xsmtpUserErrorf(smtp.C555UnrecognizedAddrParams, smtp.SeSys3NotSupported3, "unrecognized parameter %q", key)
-		}
+		// ../rfc/5321:2230
+		xsmtpUserErrorf(smtp.C555UnrecognizedAddrParams, smtp.SeSys3NotSupported3, "unrecognized parameter %q", key)
 	}
 	p.xend()
 

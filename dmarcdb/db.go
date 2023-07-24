@@ -21,11 +21,8 @@ import (
 
 	"github.com/mjl-/mox/dmarcrpt"
 	"github.com/mjl-/mox/dns"
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 )
-
-var xlog = mlog.New("dmarcdb")
 
 var (
 	DBTypes = []any{DomainFeedback{}} // Types stored in DB.

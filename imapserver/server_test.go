@@ -648,7 +648,7 @@ func TestSequence(t *testing.T) {
 // Test that a message that is expunged by another session can be read as long as a
 // reference is held by a session. New sessions do not see the expunged message.
 // todo: possibly implement the additional reference counting. so far it hasn't been worth the trouble.
-func disabledTestReference(t *testing.T) {
+func DisabledTestReference(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
 	tc.client.Login("mjl@mox.example", "testtest")

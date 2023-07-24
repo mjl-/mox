@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -20,8 +19,6 @@ import (
 	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtpclient"
 )
-
-var ctxbg = context.Background()
 
 func tcheck(t *testing.T, err error, errmsg string) {
 	if err != nil {

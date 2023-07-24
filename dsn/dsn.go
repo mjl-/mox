@@ -310,10 +310,8 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 			headers = m.Original
 		} else if err != nil {
 			return nil, err
-		} else {
-			// This is a whole message. We still only include the headers.
-			// todo: include the whole body.
 		}
+		// Else, this is a whole message. We still only include the headers. todo: include the whole body.
 
 		origHdr := textproto.MIMEHeader{}
 		if smtputf8 {
