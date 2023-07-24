@@ -180,6 +180,9 @@ and copy or move messages from one account to the other.
 Similarly, see the export functionality on the accounts web page and the "mox
 export maildir" and "mox export mbox" subcommands to export email.
 
+Importing large mailboxes may require a lot of memory (a limitation of the
+current database). Splitting up mailboxes in smaller parts would help.
+
 ## How can I help?
 
 Mox needs users and testing in real-life setups! So just give it a try, send

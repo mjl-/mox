@@ -158,6 +158,39 @@ non-testing purposes. Unfortunately, this also makes it inconvenient to use for
 testing purposes.
 
 
+# Messages for testing
+
+For compatibility and preformance testing, it helps to have many messages,
+created a long time ago and recently, by different mail user agents. A helpful
+source is the Linux kernel mailing list. Archives are available as multiple git
+repositories (split due to size) at
+https://lore.kernel.org/lkml/_/text/mirror/.  The git repo's can be converted
+to compressed mbox files (about 800MB each) with:
+
+```
+# 0 is the first epoch (with over half a million messages), 12 is last
+# already-complete epoch at the time of writing (with a quarter million
+# messages). The archives are large, converting will take some time.
+for i in 0 12; do
+        git clone --mirror http://lore.kernel.org/lkml/$i lkml-$i.git
+        (cd lkml-$i.git && time ./tombox.sh | gzip >../lkml-$i.mbox.gz)
+done
+```
+
+With the following "tobmox.sh" script:
+
+```
+#!/bin/sh
+pre=''
+for rev in $(git rev-list master | reverse); do
+        printf "$pre"
+        echo "From sender@host  $(date '+%a %b %e %H:%M:%S %Y' -d @$(git show -s --format=%ct $rev))"
+        git show ${rev}:m | sed 's/^>*From />&/'
+        pre='\n'
+done
+```
+
+
 # Release proces
 
 - Gather feedback on recent changes.
