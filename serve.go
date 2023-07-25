@@ -305,7 +305,7 @@ requested, other TLS certificates are requested on demand.
 				Received: time.Now(),
 				Flags:    store.Flags{Flagged: true},
 			}
-			n, err := fmt.Fprintf(f, "Date: %s\r\nSubject: mox %s available\r\n\r\nHi!\r\n\r\nVersion %s of mox is available, this install is at %s.\r\n\r\nChanges:\r\n\r\n%s\r\n\r\nRemember to make a backup with \"mox backup\" before upgrading.\r\nPlease report any issues at https://github.com/mjl-/mox, thanks!\r\n\r\nCheers,\r\nmox\r\n", time.Now().Format(message.RFC5322Z), latest, latest, current, strings.ReplaceAll(cl, "\n", "\r\n"))
+			n, err := fmt.Fprintf(f, "Date: %s\r\nSubject: mox %s available\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8-bit\r\n\r\nHi!\r\n\r\nVersion %s of mox is available, this install is at %s.\r\n\r\nChanges:\r\n\r\n%s\r\n\r\nRemember to make a backup with \"mox backup\" before upgrading.\r\nPlease report any issues at https://github.com/mjl-/mox, thanks!\r\n\r\nCheers,\r\nmox\r\n", time.Now().Format(message.RFC5322Z), latest, latest, current, strings.ReplaceAll(cl, "\n", "\r\n"))
 			if err != nil {
 				log.Infox("writing temporary message file for changelog delivery", err)
 				return next
