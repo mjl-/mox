@@ -16,6 +16,7 @@ Also see IANA assignments, https://www.iana.org/protocols
 5598	Internet Mail Architecture
 6854	Update to Internet Message Format to Allow Group Syntax in the "From:" and "Sender:" Header Fields
 7405	Case-Sensitive String Support in ABNF
+9228	Delivered-To Email Header Field
 
 # SMTP
 

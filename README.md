@@ -116,11 +116,13 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 - Add special IMAP mailbox ("Queue?") that contains queued but
   not-yet-delivered messages
 - Sieve for filtering (for now see Rulesets in the account config)
+- Accepting/processing/monitoring DMARC reports for external domains
 - Calendaring
 - Privilege separation, isolating parts of the application to more restricted
   sandbox (e.g. new unauthenticated connections)
 - Using mox as backup MX
 - Old-style internationalization in messages
+- ARC, with forwarded email from trusted source
 - JMAP
 - Autoresponder (out of office/vacation)
 - HTTP-based API for sending messages and receiving delivery feedback

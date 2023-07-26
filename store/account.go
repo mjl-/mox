@@ -269,9 +269,10 @@ type Message struct {
 	Expunged  bool
 
 	// MailboxOrigID is the mailbox the message was originally delivered to. Typically
-	// Inbox or Rejects, but can also be Postmaster and TLS/DMARC reporting addresses.
-	// MailboxOrigID is not changed when the message is moved to another mailbox, e.g.
-	// Archive/Trash/Junk. Used for per-mailbox reputation.
+	// Inbox or Rejects, but can also be a mailbox configured in a Ruleset, or
+	// Postmaster, TLS/DMARC reporting addresses. MailboxOrigID is not changed when the
+	// message is moved to another mailbox, e.g. Archive/Trash/Junk. Used for
+	// per-mailbox reputation.
 	//
 	// MailboxDestinedID is normally 0, but when a message is delivered to the Rejects
 	// mailbox, it is set to the intended mailbox according to delivery rules,

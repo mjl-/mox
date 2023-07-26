@@ -2414,7 +2414,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				} else if !present {
 					m.Seen = true // We don't want to draw attention.
 					// Regular automatic junk flags configuration applies to these messages. The
-					// default is to treat these are neutral, so they won't cause outright rejections
+					// default is to treat these as neutral, so they won't cause outright rejections
 					// due to reputation for later delivery attempts.
 					m.MessageID = messageid
 					m.MessageHash = messagehash
