@@ -619,6 +619,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		account := ctl.xread()
 		acc, err := store.OpenAccount(account)
 		ctl.xcheck(err, "open account")
+		defer func() {
+			if acc != nil {
+				err := acc.Close()
+				log.Check(err, "closing account after retraining")
+			}
+		}()
 
 		acc.WithWLock(func() {
 			conf, _ := acc.Conf()
