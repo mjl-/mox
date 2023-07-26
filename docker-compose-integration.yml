@@ -1,6 +1,6 @@
 version: '3.7'
 services:
-  # We run integration_test.go from this container, it connects to both mox instances.
+  # We run integration_test.go from this container, it connects to the other mox instances.
   test:
     hostname: test.mox1.example
     image: mox_integration_test
@@ -86,10 +86,8 @@ services:
   localserve:
     hostname: localserve.mox1.example
     domainname: mox1.example
-    build:
-      dockerfile: Dockerfile.moxmail
-      context: testdata/integration
-    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; go run . -- localserve -ip 172.28.1.60"]
+    image: mox_integration_moxmail
+    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; mox localserve -ip 172.28.1.60"]
     volumes:
       - ./.go:/.go
       - ./testdata/integration/resolv.conf:/etc/resolv.conf
