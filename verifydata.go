@@ -231,20 +231,20 @@ possibly making them potentially no longer readable by the previous version.
 				checkf(err, dbpath, "missing nextuidvalidity")
 			}
 
-			mailboxUIDNexts := map[int64]store.UID{}
+			mailboxes := map[int64]store.Mailbox{}
 			err := bstore.QueryDB[store.Mailbox](ctxbg, db).ForEach(func(mb store.Mailbox) error {
-				mailboxUIDNexts[mb.ID] = mb.UIDNext
+				mailboxes[mb.ID] = mb
 
 				if mb.UIDValidity >= uidvalidity.Next {
-					checkf(errors.New(`inconsistent uidvalidity for mailbox/account, see "mox fixuidmeta"`), dbpath, "mailbox id %d has uidvalidity %d >= account nextuidvalidity %d", mb.ID, mb.UIDValidity, uidvalidity.Next)
+					checkf(errors.New(`inconsistent uidvalidity for mailbox/account, see "mox fixuidmeta"`), dbpath, "mailbox %q (id %d) has uidvalidity %d >= account nextuidvalidity %d", mb.Name, mb.ID, mb.UIDValidity, uidvalidity.Next)
 				}
 				return nil
 			})
 			checkf(err, dbpath, "reading mailboxes to check uidnext consistency")
 
 			err = bstore.QueryDB[store.Message](ctxbg, db).ForEach(func(m store.Message) error {
-				if uidnext := mailboxUIDNexts[m.MailboxID]; m.UID >= uidnext {
-					checkf(errors.New(`inconsistent uidnext for message/mailbox, see "mox fixuidmeta"`), dbpath, "message id %d in mailbox id %d has uid %d >= mailbox uidnext %d", m.ID, m.MailboxID, m.UID, uidnext)
+				if mb := mailboxes[m.MailboxID]; m.UID >= mb.UIDNext {
+					checkf(errors.New(`inconsistent uidnext for message/mailbox, see "mox fixuidmeta"`), dbpath, "message id %d in mailbox %q (id %d) has uid %d >= mailbox uidnext %d", m.ID, mb.Name, mb.ID, m.UID, mb.UIDNext)
 				}
 
 				if m.Expunged {

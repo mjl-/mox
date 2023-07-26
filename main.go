@@ -2240,9 +2240,10 @@ open, or is not running.
 			} else if err != nil {
 				return fmt.Errorf("finding message with max uid in mailbox: %w", err)
 			}
+			olduidnext := mb.UIDNext
 			mb.UIDNext = m.UID + 1
+			log.Printf("fixing uidnext to %d (max uid is %d, old uidnext was %d) for mailbox %q (id %d)", mb.UIDNext, m.UID, olduidnext, mb.Name, mb.ID)
 			if err := tx.Update(&mb); err != nil {
-				log.Printf("fixing uidnext to %d (max uid is %d) for mailbox id %d", mb.UIDNext, m.UID, mb.ID)
 				return fmt.Errorf("updating mailbox uidnext: %v", err)
 			}
 			return nil

@@ -386,6 +386,10 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			process(m, msgf, origPath)
 		}
 
+		// Load the mailbox again after delivering, its uidnext has been updated.
+		err = tx.Get(&mb)
+		ctl.xcheck(err, "fetching mailbox")
+
 		// If there are any new keywords, update the mailbox.
 		var changed bool
 		mb.Keywords, changed = store.MergeKeywords(mb.Keywords, maps.Keys(mailboxKeywords))
