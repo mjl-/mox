@@ -76,7 +76,7 @@ func Parse(r io.ReaderAt) (*Message, *message.Part, error) {
 		}
 	}
 	m.Subject = part.Envelope.Subject
-	buf, err := io.ReadAll(p0.Reader())
+	buf, err := io.ReadAll(p0.ReaderUTF8OrBinary())
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading human-readable text part: %v", err)
 	}

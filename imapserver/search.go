@@ -2,7 +2,6 @@ package imapserver
 
 import (
 	"fmt"
-	"io"
 	"net/textproto"
 	"strings"
 
@@ -77,6 +76,45 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 		c.searchResult = []store.UID{}
 	}
 
+	// We gather word and not-word searches from the top-level, turn them
+	// into a WordSearch for a more efficient search.
+	// todo optimize: also gather them out of AND searches.
+	var textWords, textNotWords, bodyWords, bodyNotWords []string
+	n := 0
+	for _, xsk := range sk.searchKeys {
+		switch xsk.op {
+		case "BODY":
+			bodyWords = append(bodyWords, xsk.astring)
+			continue
+		case "TEXT":
+			textWords = append(textWords, xsk.astring)
+			continue
+		case "NOT":
+			switch xsk.searchKey.op {
+			case "BODY":
+				bodyNotWords = append(bodyNotWords, xsk.searchKey.astring)
+				continue
+			case "TEXT":
+				textNotWords = append(textNotWords, xsk.searchKey.astring)
+				continue
+			}
+		}
+		sk.searchKeys[n] = xsk
+		n++
+	}
+	// We may be left with an empty but non-nil sk.searchKeys, which is important for
+	// matching.
+	sk.searchKeys = sk.searchKeys[:n]
+	var bodySearch, textSearch *store.WordSearch
+	if len(bodyWords) > 0 || len(bodyNotWords) > 0 {
+		ws := store.PrepareWordSearch(bodyWords, bodyNotWords)
+		bodySearch = &ws
+	}
+	if len(textWords) > 0 || len(textNotWords) > 0 {
+		ws := store.PrepareWordSearch(textWords, textNotWords)
+		textSearch = &ws
+	}
+
 	// Note: we only hold the account rlock for verifying the mailbox at the start.
 	c.account.RLock()
 	runlock := c.account.RUnlock
@@ -109,7 +147,7 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 		if eargs == nil || max == 0 || len(eargs) != 1 {
 			for i, uid := range c.uids {
 				lastIndex = i
-				if match, modseq := c.searchMatch(tx, msgseq(i+1), uid, *sk, &expungeIssued); match {
+				if match, modseq := c.searchMatch(tx, msgseq(i+1), uid, *sk, bodySearch, textSearch, &expungeIssued); match {
 					uids = append(uids, uid)
 					if modseq > maxModSeq {
 						maxModSeq = modseq
@@ -123,7 +161,7 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 		// And reverse search for MAX if we have only MAX or MAX combined with MIN.
 		if max == 1 && (len(eargs) == 1 || min+max == len(eargs)) {
 			for i := len(c.uids) - 1; i > lastIndex; i-- {
-				if match, modseq := c.searchMatch(tx, msgseq(i+1), c.uids[i], *sk, &expungeIssued); match {
+				if match, modseq := c.searchMatch(tx, msgseq(i+1), c.uids[i], *sk, bodySearch, textSearch, &expungeIssued); match {
 					uids = append(uids, c.uids[i])
 					if modseq > maxModSeq {
 						maxModSeq = modseq
@@ -245,7 +283,7 @@ type search struct {
 	hasModseq     bool
 }
 
-func (c *conn) searchMatch(tx *bstore.Tx, seq msgseq, uid store.UID, sk searchKey, expungeIssued *bool) (bool, store.ModSeq) {
+func (c *conn) searchMatch(tx *bstore.Tx, seq msgseq, uid store.UID, sk searchKey, bodySearch, textSearch *store.WordSearch, expungeIssued *bool) (bool, store.ModSeq) {
 	s := search{c: c, tx: tx, seq: seq, uid: uid, expungeIssued: expungeIssued, hasModseq: sk.hasModseq()}
 	defer func() {
 		if s.mr != nil {
@@ -254,26 +292,48 @@ func (c *conn) searchMatch(tx *bstore.Tx, seq msgseq, uid store.UID, sk searchKe
 			s.mr = nil
 		}
 	}()
-	return s.match(sk)
+	return s.match(sk, bodySearch, textSearch)
 }
 
-func (s *search) match(sk searchKey) (match bool, modseq store.ModSeq) {
+func (s *search) match(sk searchKey, bodySearch, textSearch *store.WordSearch) (match bool, modseq store.ModSeq) {
 	// Instead of littering all the cases in match0 with calls to get modseq, we do it once
 	// here in case of a match.
 	defer func() {
 		if match && s.hasModseq {
 			if s.m.ID == 0 {
-				match = s.xloadMessage()
+				match = s.xensureMessage()
 			}
 			modseq = s.m.ModSeq
 		}
 	}()
 
 	match = s.match0(sk)
+	if match && bodySearch != nil {
+		if !s.xensurePart() {
+			match = false
+			return
+		}
+		var err error
+		match, err = bodySearch.MatchPart(s.c.log, s.p, false)
+		xcheckf(err, "search words in bodies")
+	}
+	if match && textSearch != nil {
+		if !s.xensurePart() {
+			match = false
+			return
+		}
+		var err error
+		match, err = textSearch.MatchPart(s.c.log, s.p, true)
+		xcheckf(err, "search words in headers and bodies")
+	}
 	return
 }
 
-func (s *search) xloadMessage() bool {
+func (s *search) xensureMessage() bool {
+	if s.m.ID > 0 {
+		return true
+	}
+
 	q := bstore.QueryTx[store.Message](s.tx)
 	q.FilterNonzero(store.Message{MailboxID: s.c.mailboxID, UID: s.uid})
 	m, err := q.Get()
@@ -287,9 +347,35 @@ func (s *search) xloadMessage() bool {
 	return true
 }
 
+// ensure message, reader and part are loaded. returns whether that was
+// successful.
+func (s *search) xensurePart() bool {
+	if s.mr != nil {
+		return s.p != nil
+	}
+
+	if !s.xensureMessage() {
+		return false
+	}
+
+	// Closed by searchMatch after all (recursive) search.match calls are finished.
+	s.mr = s.c.account.MessageReader(s.m)
+
+	if s.m.ParsedBuf == nil {
+		s.c.log.Error("missing parsed message")
+		return false
+	}
+	p, err := s.m.LoadPart(s.mr)
+	xcheckf(err, "load parsed message")
+	s.p = &p
+	return true
+}
+
 func (s *search) match0(sk searchKey) bool {
 	c := s.c
 
+	// Difference between sk.searchKeys nil and length 0 is important. Because we take
+	// out word/notword searches, the list may be empty but non-nil.
 	if sk.searchKeys != nil {
 		for _, ssk := range sk.searchKeys {
 			if !s.match0(ssk) {
@@ -338,22 +424,9 @@ func (s *search) match0(sk searchKey) bool {
 		return sk.uidSet.containsUID(s.uid, c.uids, c.searchResult)
 	}
 
-	// Parsed message.
-	if s.mr == nil {
-		if !s.xloadMessage() {
-			return false
-		}
-
-		// Closed by searchMatch after all (recursive) search.match calls are finished.
-		s.mr = c.account.MessageReader(s.m)
-
-		if s.m.ParsedBuf == nil {
-			c.log.Error("missing parsed message")
-		} else {
-			p, err := s.m.LoadPart(s.mr)
-			xcheckf(err, "load parsed message")
-			s.p = &p
-		}
+	// Parsed part.
+	if !s.xensurePart() {
+		return false
 	}
 
 	// Parsed message, basic info.
@@ -451,9 +524,13 @@ func (s *search) match0(sk searchKey) bool {
 	case "BCC":
 		return filterHeader("Bcc", sk.astring)
 	case "BODY", "TEXT":
+		// We gathered word/notword searches from the top-level, but we can also get them
+		// nested.
+		// todo optimize: handle deeper nested word/not-word searches more efficiently.
 		headerToo := sk.op == "TEXT"
-		lower := strings.ToLower(sk.astring)
-		return mailContains(c, s.uid, s.p, lower, headerToo)
+		match, err := store.PrepareWordSearch([]string{sk.astring}, nil).MatchPart(s.c.log, s.p, headerToo)
+		xcheckf(err, "word search")
+		return match
 	case "CC":
 		return filterHeader("Cc", sk.astring)
 	case "FROM":
@@ -494,39 +571,4 @@ func (s *search) match0(sk searchKey) bool {
 		panic("missing case")
 	}
 	panic(serverError{fmt.Errorf("missing case for search key op %q", sk.op)})
-}
-
-// mailContains returns whether the mail message or part represented by p contains (case-insensitive) string lower.
-// The (decoded) text bodies are tested for a match.
-// If headerToo is set, the header part of the message is checked as well.
-func mailContains(c *conn, uid store.UID, p *message.Part, lower string, headerToo bool) bool {
-	if headerToo && mailContainsReader(c, uid, p.HeaderReader(), lower) {
-		return true
-	}
-
-	if len(p.Parts) == 0 {
-		if p.MediaType != "TEXT" {
-			// todo: for types we could try to find a library for parsing and search in there too
-			return false
-		}
-		// todo: for html and perhaps other types, we could try to parse as text and filter on the text.
-		return mailContainsReader(c, uid, p.Reader(), lower)
-	}
-	for _, pp := range p.Parts {
-		headerToo = pp.MediaType == "MESSAGE" && (pp.MediaSubType == "RFC822" || pp.MediaSubType == "GLOBAL")
-		if mailContains(c, uid, &pp, lower, headerToo) {
-			return true
-		}
-	}
-	return false
-}
-
-func mailContainsReader(c *conn, uid store.UID, r io.Reader, lower string) bool {
-	// todo: match as we read
-	buf, err := io.ReadAll(r)
-	if err != nil {
-		c.log.Errorx("reading for search text match", err, mlog.Field("uid", uid))
-		return false
-	}
-	return strings.Contains(strings.ToLower(string(buf)), lower)
 }

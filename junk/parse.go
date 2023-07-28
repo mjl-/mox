@@ -87,12 +87,12 @@ func (f *Filter) mailParse(p message.Part, metaWords, textWords, htmlWords map[s
 	ct := p.MediaType + "/" + p.MediaSubType
 
 	if ct == "TEXT/HTML" {
-		err := f.tokenizeHTML(p.Reader(), metaWords, htmlWords)
+		err := f.tokenizeHTML(p.ReaderUTF8OrBinary(), metaWords, htmlWords)
 		// log.Printf("html parsed, words %v", htmlWords)
 		return err
 	}
 	if ct == "" || strings.HasPrefix(ct, "TEXT/") {
-		err := f.tokenizeText(p.Reader(), textWords)
+		err := f.tokenizeText(p.ReaderUTF8OrBinary(), textWords)
 		// log.Printf("text parsed, words %v", textWords)
 		return err
 	}

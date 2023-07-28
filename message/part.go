@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 )
@@ -472,6 +473,14 @@ func (p *Part) ParseNextPart() (*Part, error) {
 // Reader returns a reader for the decoded body content.
 func (p *Part) Reader() io.Reader {
 	return p.bodyReader(p.RawReader())
+}
+
+// ReaderUTF8OrBinary returns a reader for the decode body content, transformed to
+// utf-8 for known mime/iana encodings (only if they aren't us-ascii or utf-8
+// already). For unknown or missing character sets/encodings, the original reader
+// is returned.
+func (p *Part) ReaderUTF8OrBinary() io.Reader {
+	return moxio.DecodeReader(p.ContentTypeParams["charset"], p.Reader())
 }
 
 func (p *Part) bodyReader(r io.Reader) io.Reader {
