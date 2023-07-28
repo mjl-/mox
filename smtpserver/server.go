@@ -1203,6 +1203,11 @@ func (c *conn) cmdMail(p *parser) {
 	}()
 	p.xtake(" FROM:")
 	// note: no space after colon. ../rfc/5321:1093
+	// Allow illegal space for submission only, not for regular SMTP. Microsoft Outlook
+	// 365 Apps for Enterprise sends it.
+	if c.submission && !moxvar.Pedantic {
+		p.space()
+	}
 	rawRevPath := p.xrawReversePath()
 	paramSeen := map[string]bool{}
 	for p.space() {
@@ -1331,6 +1336,11 @@ func (c *conn) cmdRcpt(p *parser) {
 	// ../rfc/5321:1985
 	p.xtake(" TO:")
 	// note: no space after colon. ../rfc/5321:1093
+	// Allow illegal space for submission only, not for regular SMTP. Microsoft Outlook
+	// 365 Apps for Enterprise sends it.
+	if c.submission && !moxvar.Pedantic {
+		p.space()
+	}
 	var fpath smtp.Path
 	if p.take("<POSTMASTER>") {
 		fpath = smtp.Path{Localpart: "postmaster"}
