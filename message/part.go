@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/encoding/ianaindex"
+
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
@@ -352,7 +354,32 @@ func (p *Part) HeaderReader() io.Reader {
 }
 
 func parseHeader(r io.Reader) (textproto.MIMEHeader, error) {
-	return textproto.NewReader(bufio.NewReader(r)).ReadMIMEHeader()
+	// We read using mail.ReadMessage instead of textproto.ReadMIMEHeaders because the
+	// first handles email messages properly, while the second only works for HTTP
+	// headers.
+	var zero textproto.MIMEHeader
+	msg, err := mail.ReadMessage(bufio.NewReader(r))
+	if err != nil {
+		return zero, err
+	}
+	return textproto.MIMEHeader(msg.Header), nil
+}
+
+var wordDecoder = mime.WordDecoder{
+	CharsetReader: func(charset string, r io.Reader) (io.Reader, error) {
+		switch strings.ToLower(charset) {
+		case "", "us-ascii", "utf-8":
+			return r, nil
+		}
+		enc, _ := ianaindex.MIME.Encoding(charset)
+		if enc == nil {
+			enc, _ = ianaindex.IANA.Encoding(charset)
+		}
+		if enc == nil {
+			return r, fmt.Errorf("unknown charset %q", charset)
+		}
+		return enc.NewDecoder().Reader(r), nil
+	},
 }
 
 func parseEnvelope(h mail.Header) (*Envelope, error) {
@@ -369,9 +396,14 @@ func parseEnvelope(h mail.Header) (*Envelope, error) {
 		date = time.Unix(date.Unix(), 0).UTC()
 	}
 
+	subject := h.Get("Subject")
+	if s, err := wordDecoder.DecodeHeader(subject); err == nil {
+		subject = s
+	}
+
 	env := &Envelope{
 		date,
-		h.Get("Subject"),
+		subject,
 		parseAddressList(h, "from"),
 		parseAddressList(h, "sender"),
 		parseAddressList(h, "reply-to"),
