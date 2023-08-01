@@ -2470,8 +2470,9 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 				}
 				err = tx.Insert(&mb)
 				xcheckf(err, "creating parent mailbox")
-				err = tx.Insert(&store.Subscription{Name: parent})
-				if err != nil && !errors.Is(err, bstore.ErrUnique) {
+
+				if tx.Get(&store.Subscription{Name: parent}) != nil {
+					err := tx.Insert(&store.Subscription{Name: parent})
 					xcheckf(err, "creating subscription")
 				}
 				changes = append(changes, store.ChangeAddMailbox{Name: parent, Flags: []string{`\Subscribed`}})

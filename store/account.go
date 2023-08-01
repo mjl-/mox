@@ -970,9 +970,11 @@ func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool) (mb 
 
 		change := ChangeAddMailbox{Name: p}
 		if subscribe {
-			err := tx.Insert(&Subscription{p})
-			if err != nil && !errors.Is(err, bstore.ErrUnique) {
-				return Mailbox{}, nil, fmt.Errorf("subscribing to mailbox: %v", err)
+			if tx.Get(&Subscription{p}) != nil {
+				err := tx.Insert(&Subscription{p})
+				if err != nil {
+					return Mailbox{}, nil, fmt.Errorf("subscribing to mailbox: %v", err)
+				}
 			}
 			change.Flags = []string{`\Subscribed`}
 		}
