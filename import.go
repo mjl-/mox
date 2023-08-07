@@ -118,8 +118,7 @@ func xcmdXImport(mbox bool, c *cmd) {
 	mox.Conf.Dynamic.Accounts = map[string]config.Account{
 		account: {},
 	}
-	switchDone := store.Switchboard()
-	defer close(switchDone)
+	defer store.Switchboard()()
 
 	xlog := mlog.New("import")
 	cconn, sconn := net.Pipe()

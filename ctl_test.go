@@ -38,8 +38,7 @@ func TestCtl(t *testing.T) {
 	if errs := mox.LoadConfig(ctxbg, true, false); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}
-	switchDone := store.Switchboard()
-	defer close(switchDone)
+	defer store.Switchboard()()
 
 	xlog := mlog.New("ctl")
 

@@ -46,8 +46,7 @@ func TestAccount(t *testing.T) {
 		err = acc.Close()
 		tcheck(t, err, "closing account")
 	}()
-	switchDone := store.Switchboard()
-	defer close(switchDone)
+	defer store.Switchboard()()
 
 	log := mlog.New("store")
 

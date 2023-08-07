@@ -43,8 +43,7 @@ func FuzzServer(f *testing.F) {
 	if err != nil {
 		f.Fatalf("set password: %v", err)
 	}
-	done := store.Switchboard()
-	defer close(done)
+	defer store.Switchboard()()
 	err = queue.Init()
 	if err != nil {
 		f.Fatalf("queue init: %v", err)

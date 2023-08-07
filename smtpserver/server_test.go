@@ -75,7 +75,7 @@ test email
 type testserver struct {
 	t          *testing.T
 	acc        *store.Account
-	switchDone chan struct{}
+	switchStop func()
 	comm       *store.Comm
 	cid        int64
 	resolver   dns.Resolver
@@ -101,7 +101,7 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 	tcheck(t, err, "open account")
 	err = ts.acc.SetPassword("testtest")
 	tcheck(t, err, "set password")
-	ts.switchDone = store.Switchboard()
+	ts.switchStop = store.Switchboard()
 	err = queue.Init()
 	tcheck(t, err, "queue init")
 
@@ -116,7 +116,7 @@ func (ts *testserver) close() {
 	}
 	ts.comm.Unregister()
 	queue.Shutdown()
-	close(ts.switchDone)
+	ts.switchStop()
 	err := ts.acc.Close()
 	tcheck(ts.t, err, "closing account")
 	ts.acc = nil

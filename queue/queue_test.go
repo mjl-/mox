@@ -45,14 +45,14 @@ func setup(t *testing.T) (*store.Account, func()) {
 	tcheck(t, err, "open account")
 	err = acc.SetPassword("testtest")
 	tcheck(t, err, "set password")
-	switchDone := store.Switchboard()
+	switchStop := store.Switchboard()
 	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 	return acc, func() {
 		acc.Close()
 		mox.ShutdownCancel()
 		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 		Shutdown()
-		close(switchDone)
+		switchStop()
 	}
 }
 

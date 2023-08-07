@@ -25,8 +25,7 @@ func TestExport(t *testing.T) {
 	acc, err := OpenAccount("mjl")
 	tcheck(t, err, "open account")
 	defer acc.Close()
-	switchDone := Switchboard()
-	defer close(switchDone)
+	defer Switchboard()()
 
 	log := mlog.New("export")
 

@@ -624,7 +624,8 @@ func start(mtastsdbRefresher, skipForkExec bool) error {
 	http.Serve()
 
 	go func() {
-		<-store.Switchboard()
+		store.Switchboard()
+		<-make(chan struct{})
 	}()
 	return nil
 }

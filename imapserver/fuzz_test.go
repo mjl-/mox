@@ -71,8 +71,7 @@ func FuzzServer(f *testing.F) {
 	if err != nil {
 		f.Fatalf("set password: %v", err)
 	}
-	done := store.Switchboard()
-	defer close(done)
+	defer store.Switchboard()()
 
 	comm := store.RegisterComm(acc)
 	defer comm.Unregister()

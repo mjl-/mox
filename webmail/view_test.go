@@ -25,8 +25,7 @@ func TestView(t *testing.T) {
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = "../testdata/webmail/mox.conf"
 	mox.MustLoadConfig(true, false)
-	switchDone := store.Switchboard()
-	defer close(switchDone)
+	defer store.Switchboard()()
 
 	acc, err := store.OpenAccount("mjl")
 	tcheck(t, err, "open account")

@@ -101,7 +101,7 @@ type ChangeMailboxKeywords struct {
 var switchboardBusy atomic.Bool
 
 // Switchboard distributes changes to accounts to interested listeners. See Comm and Change.
-func Switchboard() chan struct{} {
+func Switchboard() (stop func()) {
 	regs := map[*Account]map[*Comm]struct{}{}
 	done := make(chan struct{})
 
@@ -145,14 +145,18 @@ func Switchboard() chan struct{} {
 				chReq.done <- struct{}{}
 
 			case <-done:
-				if !switchboardBusy.CompareAndSwap(true, false) {
-					panic("switchboard already unregistered?")
-				}
+				done <- struct{}{}
 				return
 			}
 		}
 	}()
-	return done
+	return func() {
+		done <- struct{}{}
+		<-done
+		if !switchboardBusy.CompareAndSwap(true, false) {
+			panic("switchboard already unregistered?")
+		}
+	}
 }
 
 // Comm handles communication with the goroutine that maintains the

@@ -36,8 +36,7 @@ func TestMailbox(t *testing.T) {
 		err = acc.Close()
 		tcheck(t, err, "closing account")
 	}()
-	switchDone := Switchboard()
-	defer close(switchDone)
+	defer Switchboard()()
 
 	log := mlog.New("store")
 

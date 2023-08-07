@@ -346,11 +346,9 @@ func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn 
 		err = acc.SetPassword("testtest")
 		tcheck(t, err, "set password")
 	}
-	var switchDone chan struct{}
+	switchStop := func() {}
 	if first {
-		switchDone = store.Switchboard()
-	} else {
-		switchDone = make(chan struct{}) // Dummy, that can be closed.
+		switchStop = store.Switchboard()
 	}
 
 	serverConn, clientConn := net.Pipe()
@@ -368,7 +366,7 @@ func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn 
 	cid := connCounter
 	go func() {
 		serve("test", cid, tlsConfig, serverConn, isTLS, allowLoginWithoutTLS)
-		close(switchDone)
+		switchStop()
 		close(done)
 	}()
 	client, err := imapclient.New(clientConn, true)
