@@ -301,8 +301,13 @@ func (tc *testconn) waitDone() {
 }
 
 func (tc *testconn) close() {
+	if tc.account == nil {
+		// Already closed, we are not strict about closing multiple times.
+		return
+	}
 	err := tc.account.Close()
 	tc.check(err, "close account")
+	tc.account = nil
 	tc.client.Close()
 	tc.serverConn.Close()
 	tc.waitDone()

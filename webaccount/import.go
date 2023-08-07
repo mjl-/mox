@@ -1,4 +1,4 @@
-package http
+package webaccount
 
 import (
 	"archive/tar"
@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -60,8 +61,8 @@ var importers = struct {
 	make(chan importAbortRequest),
 }
 
-// manage imports, run in a goroutine before serving.
-func importManage() {
+// ImportManage should be run as a goroutine, it manages imports of mboxes/maildirs, propagating progress over SSE connections.
+func ImportManage() {
 	log := mlog.New("httpimport")
 	defer func() {
 		if x := recover(); x != nil {
@@ -369,7 +370,8 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 	mailboxKeywords := map[string]map[rune]string{}                // Mailbox to 'a'-'z' to flag name.
 	mailboxMissingKeywordMessages := map[string]map[int64]string{} // Mailbox to message id to string consisting of the unrecognized flags.
 
-	// We keep the mailboxes we deliver to up to date with their keywords (non-system flags).
+	// We keep the mailboxes we deliver to up to date with count and keywords (non-system flags).
+	destMailboxCounts := map[int64]store.MailboxCounts{}
 	destMailboxKeywords := map[int64]map[string]bool{}
 
 	// Previous mailbox an event was sent for. We send an event for new mailboxes, when
@@ -445,6 +447,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 					Name:        p,
 					UIDValidity: uidvalidity,
 					UIDNext:     1,
+					HaveCounts:  true,
 					// Do not assign special-use flags. This existing account probably already has such mailboxes.
 				}
 				err = tx.Insert(&mb)
@@ -454,7 +457,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 					err := tx.Insert(&store.Subscription{Name: p})
 					ximportcheckf(err, "subscribing to imported mailbox")
 				}
-				changes = append(changes, store.ChangeAddMailbox{Name: p, Flags: []string{`\Subscribed`}})
+				changes = append(changes, store.ChangeAddMailbox{Mailbox: mb, Flags: []string{`\Subscribed`}})
 			} else if err != nil {
 				ximportcheckf(err, "creating mailbox %s (aborting)", p)
 			}
@@ -487,6 +490,10 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		}
 		m.CreateSeq = modseq
 		m.ModSeq = modseq
+
+		mc := destMailboxCounts[mb.ID]
+		mc.Add(m.MailboxCounts())
+		destMailboxCounts[mb.ID] = mc
 
 		if len(m.Keywords) > 0 {
 			if destMailboxKeywords[mb.ID] == nil {
@@ -529,7 +536,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 			return
 		}
 		deliveredIDs = append(deliveredIDs, m.ID)
-		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, ModSeq: modseq, Flags: m.Flags, Keywords: m.Keywords})
+		changes = append(changes, m.ChangeAddUID())
 		messages[mb.Name]++
 		if messages[mb.Name]%100 == 0 || prevMailbox != mb.Name {
 			prevMailbox = mb.Name
@@ -634,7 +641,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 							// No keywords file seen yet, we'll try later if it comes in.
 							keepFlags += string(c)
 						} else if kw, ok := dovecotKeywords[c]; ok {
-							flagSet(&flags, keywords, strings.ToLower(kw))
+							flagSet(&flags, keywords, kw)
 						}
 					}
 				}
@@ -692,7 +699,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 			if path.Base(name) == "dovecot-keywords" {
 				mailbox := path.Dir(name)
 				dovecotKeywords := map[rune]string{}
-				words, err := store.ParseDovecotKeywords(r, log)
+				words, err := store.ParseDovecotKeywordsFlags(r, log)
 				log.Check(err, "parsing dovecot keywords for mailbox", mlog.Field("mailbox", mailbox))
 				for i, kw := range words {
 					dovecotKeywords['a'+rune(i)] = kw
@@ -708,7 +715,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 							problemf("unspecified dovecot message flag %c for message id %d (continuing)", c, id)
 							continue
 						}
-						flagSet(&flags, keywords, strings.ToLower(kw))
+						flagSet(&flags, keywords, kw)
 					}
 					if flags == zeroflags && len(keywords) == 0 {
 						continue
@@ -718,8 +725,16 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 					err := tx.Get(&m)
 					ximportcheckf(err, "get imported message for flag update")
 
+					mc := destMailboxCounts[m.MailboxID]
+					mc.Sub(m.MailboxCounts())
+
+					oflags := m.Flags
 					m.Flags = m.Flags.Set(flags, flags)
 					m.Keywords = maps.Keys(keywords)
+					sort.Strings(m.Keywords)
+
+					mc.Add(m.MailboxCounts())
+					destMailboxCounts[m.MailboxID] = mc
 
 					if len(m.Keywords) > 0 {
 						if destMailboxKeywords[m.MailboxID] == nil {
@@ -736,7 +751,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 					}
 					err = tx.Update(&m)
 					ximportcheckf(err, "updating message after flag update")
-					changes = append(changes, store.ChangeFlags{MailboxID: m.MailboxID, UID: m.UID, ModSeq: modseq, Mask: flags, Flags: flags, Keywords: m.Keywords})
+					changes = append(changes, m.ChangeFlags(oflags))
 				}
 				delete(mailboxMissingKeywordMessages, mailbox)
 			} else {
@@ -786,16 +801,25 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		sendEvent("count", importCount{prevMailbox, messages[prevMailbox]})
 	}
 
-	// Update mailboxes with keywords.
-	for mbID, keywords := range destMailboxKeywords {
+	// Update mailboxes with counts and keywords.
+	for mbID, mc := range destMailboxCounts {
 		mb := store.Mailbox{ID: mbID}
 		err := tx.Get(&mb)
-		ximportcheckf(err, "loading mailbox for updating keywords")
-		var changed bool
-		mb.Keywords, changed = store.MergeKeywords(mb.Keywords, maps.Keys(keywords))
-		if changed {
-			err = tx.Update(&mb)
-			ximportcheckf(err, "updating mailbox with keywords")
+		ximportcheckf(err, "loading mailbox for counts and keywords")
+
+		if mb.MailboxCounts != mc {
+			mb.MailboxCounts = mc
+			changes = append(changes, mb.ChangeCounts())
+		}
+
+		keywords := destMailboxKeywords[mb.ID]
+		var mbKwChanged bool
+		mb.Keywords, mbKwChanged = store.MergeKeywords(mb.Keywords, maps.Keys(keywords))
+
+		err = tx.Update(&mb)
+		ximportcheckf(err, "updating mailbox count and keywords")
+		if mbKwChanged {
+			changes = append(changes, mb.ChangeKeywords())
 		}
 	}
 
@@ -834,7 +858,7 @@ func flagSet(flags *store.Flags, keywords map[string]bool, word string) {
 	case "mdnsent", "$mdnsent":
 		flags.MDNSent = true
 	default:
-		if store.ValidLowercaseKeyword(word) {
+		if err := store.CheckKeyword(word); err == nil {
 			keywords[word] = true
 		}
 	}

@@ -141,7 +141,7 @@ describe-static" and "mox config describe-domains":
 				# Minimum TLS version. Default: TLSv1.2. (optional)
 				MinVersion:
 
-			# Maximum size in bytes accepted incoming and outgoing messages. Default is 100MB.
+			# Maximum size in bytes for incoming and outgoing messages. Default is 100MB.
 			# (optional)
 			SMTPMaxMessageSize: 0
 
@@ -263,6 +263,28 @@ describe-static" and "mox config describe-domains":
 
 				# Path to serve admin requests on, e.g. /moxadmin/. Useful if domain serves other
 				# resources. Default is /admin/. (optional)
+				Path:
+
+			# Webmail client, for reading email. (optional)
+			WebmailHTTP:
+				Enabled: false
+
+				# Default 80. (optional)
+				Port: 0
+
+				# Path to serve account requests on. Useful if domain serves other resources.
+				# Default is /webmail/. (optional)
+				Path:
+
+			# Webmail client, for reading email. (optional)
+			WebmailHTTPS:
+				Enabled: false
+
+				# Default 443. (optional)
+				Port: 0
+
+				# Path to serve account requests on. Useful if domain serves other resources.
+				# Default is /webmail/. (optional)
 				Path:
 
 			# Serve prometheus metrics, for monitoring. You should not enable this on a public
@@ -625,6 +647,10 @@ describe-static" and "mox config describe-domains":
 			# Free form description, e.g. full name or alternative contact info. (optional)
 			Description:
 
+			# Full name, to use in message From header when composing messages in webmail. Can
+			# be overridden per destination. (optional)
+			FullName:
+
 			# Destinations, keys are email addresses (with IDNA domains). If the address is of
 			# the form '@domain', i.e. with localpart missing, it serves as a catchall for the
 			# domain, matching all messages that are not explicitly configured. Deprecated
@@ -673,6 +699,10 @@ describe-static" and "mox config describe-domains":
 
 							# Mailbox to deliver to if this ruleset matches.
 							Mailbox:
+
+					# Full name to use in message From header when composing messages coming from this
+					# address with webmail. (optional)
+					FullName:
 
 			# If configured, messages classified as weakly spam are rejected with instructions
 			# to retry delivery, but this time with a signed token added to the subject.

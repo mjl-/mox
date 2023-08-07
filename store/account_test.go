@@ -32,7 +32,10 @@ func TestMailbox(t *testing.T) {
 	mox.MustLoadConfig(true, false)
 	acc, err := OpenAccount("mjl")
 	tcheck(t, err, "open account")
-	defer acc.Close()
+	defer func() {
+		err = acc.Close()
+		tcheck(t, err, "closing account")
+	}()
 	switchDone := Switchboard()
 	defer close(switchDone)
 
@@ -57,7 +60,7 @@ func TestMailbox(t *testing.T) {
 	}
 	msent := m
 	var mbsent Mailbox
-	mbrejects := Mailbox{Name: "Rejects", UIDValidity: 1, UIDNext: 1}
+	mbrejects := Mailbox{Name: "Rejects", UIDValidity: 1, UIDNext: 1, HaveCounts: true}
 	mreject := m
 	mconsumed := Message{
 		Received:  m.Received,
@@ -78,12 +81,24 @@ func TestMailbox(t *testing.T) {
 			err = acc.DeliverMessage(xlog, tx, &msent, msgFile, false, true, true, false)
 			tcheck(t, err, "deliver message")
 
+			err = tx.Get(&mbsent)
+			tcheck(t, err, "get mbsent")
+			mbsent.Add(msent.MailboxCounts())
+			err = tx.Update(&mbsent)
+			tcheck(t, err, "update mbsent")
+
 			err = tx.Insert(&mbrejects)
 			tcheck(t, err, "insert rejects mailbox")
 			mreject.MailboxID = mbrejects.ID
 			mreject.MailboxOrigID = mbrejects.ID
 			err = acc.DeliverMessage(xlog, tx, &mreject, msgFile, false, false, true, false)
 			tcheck(t, err, "deliver message")
+
+			err = tx.Get(&mbrejects)
+			tcheck(t, err, "get mbrejects")
+			mbrejects.Add(mreject.MailboxCounts())
+			err = tx.Update(&mbrejects)
+			tcheck(t, err, "update mbrejects")
 
 			return nil
 		})

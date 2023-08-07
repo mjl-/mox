@@ -31,11 +31,12 @@ type fetchCmd struct {
 	changes         []store.Change // For updated Seen flag.
 	markSeen        bool
 	needFlags       bool
-	needModseq      bool         // Whether untagged responses needs modseq.
-	expungeIssued   bool         // Set if a message cannot be read. Can happen for expunged messages.
-	modseq          store.ModSeq // Initialized on first change, for marking messages as seen.
-	isUID           bool         // If this is a UID FETCH command.
-	hasChangedSince bool         // Whether CHANGEDSINCE was set. Enables MODSEQ in response.
+	needModseq      bool                // Whether untagged responses needs modseq.
+	expungeIssued   bool                // Set if a message cannot be read. Can happen for expunged messages.
+	modseq          store.ModSeq        // Initialized on first change, for marking messages as seen.
+	isUID           bool                // If this is a UID FETCH command.
+	hasChangedSince bool                // Whether CHANGEDSINCE was set. Enables MODSEQ in response.
+	deltaCounts     store.MailboxCounts // By marking \Seen, the number of unread/unseen messages will go down. We update counts at the end.
 
 	// Loaded when first needed, closed when message was processed.
 	m    *store.Message // Message currently being processed.
@@ -140,7 +141,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 		cmd.tx = tx
 
 		// Ensure the mailbox still exists.
-		c.xmailboxID(tx, c.mailboxID)
+		mb := c.xmailboxID(tx, c.mailboxID)
 
 		var uids []store.UID
 
@@ -234,6 +235,14 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 			cmd.uid = uid
 			mlog.Field("processing uid", mlog.Field("uid", uid))
 			cmd.process(atts)
+		}
+
+		var zeromc store.MailboxCounts
+		if cmd.deltaCounts != zeromc {
+			mb.Add(cmd.deltaCounts) // Unseen/Unread will be <= 0.
+			err := tx.Update(&mb)
+			xcheckf(err, "updating mailbox counts")
+			cmd.changes = append(cmd.changes, mb.ChangeCounts())
 		}
 	})
 
@@ -333,12 +342,15 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 
 	if cmd.markSeen {
 		m := cmd.xensureMessage()
+		cmd.deltaCounts.Sub(m.MailboxCounts())
+		origFlags := m.Flags
 		m.Seen = true
+		cmd.deltaCounts.Add(m.MailboxCounts())
 		m.ModSeq = cmd.xmodseq()
 		err := cmd.tx.Update(m)
 		xcheckf(err, "marking message as seen")
 
-		cmd.changes = append(cmd.changes, store.ChangeFlags{MailboxID: cmd.mailboxID, UID: cmd.uid, ModSeq: m.ModSeq, Mask: store.Flags{Seen: true}, Flags: m.Flags, Keywords: m.Keywords})
+		cmd.changes = append(cmd.changes, m.ChangeFlags(origFlags))
 	}
 
 	if cmd.needFlags {

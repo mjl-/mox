@@ -158,27 +158,27 @@ func (tx *Tx) Record(typeName, key string, fields *[]string) (map[string]any, er
 		return nil, err
 	}
 	pkv := reflect.ValueOf(kv)
-	kind, err := typeKind(pkv.Type())
+	k, err := typeKind(pkv.Type())
 	if err != nil {
 		return nil, err
 	}
-	if kind != tv.Fields[0].Type.Kind {
+	if k != tv.Fields[0].Type.Kind {
 		// Convert from various int types above to required type. The ParseInt/ParseUint
 		// calls already validated that the values fit.
 		pkt := reflect.TypeOf(tv.Fields[0].Type.zeroKey())
 		pkv = pkv.Convert(pkt)
 	}
-	k, err := packPK(pkv)
+	pk, err := packPK(pkv)
 	if err != nil {
 		return nil, err
 	}
 
 	tx.stats.Records.Get++
-	bv := rb.Get(k)
+	bv := rb.Get(pk)
 	if bv == nil {
 		return nil, ErrAbsent
 	}
-	record, err := parseMap(versions, k, bv)
+	record, err := parseMap(versions, pk, bv)
 	if err != nil {
 		return nil, err
 	}

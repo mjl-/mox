@@ -1,6 +1,7 @@
-package http
+package webadmin
 
 import (
+	"context"
 	"crypto/ed25519"
 	"net"
 	"net/http/httptest"
@@ -14,6 +15,8 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mox-"
 )
+
+var ctxbg = context.Background()
 
 func init() {
 	mox.LimitersInit()

@@ -6,9 +6,11 @@ build:
 	CGO_ENABLED=0 go vet ./...
 	CGO_ENABLED=0 go vet -tags integration
 	./gendoc.sh
-	(cd http && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Admin) >http/adminapi.json
-	(cd http && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Account) >http/accountapi.json
-	# build again, files above are embedded
+	(cd webadmin && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Admin) >webadmin/adminapi.json
+	(cd webaccount && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Account) >webaccount/accountapi.json
+	(cd webmail && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Webmail) >webmail/api.json
+	go run vendor/github.com/mjl-/sherpats/cmd/sherpats/main.go -bytes-to-string -slices-nullable -maps-nullable -nullable-optional -namespace api api <webmail/api.json >webmail/api.ts
+	# build again, api json files above are embedded
 	CGO_ENABLED=0 go build
 
 test:
@@ -73,11 +75,32 @@ fmt:
 	gofmt -w -s *.go */*.go
 
 jswatch:
-	inotifywait -m -e close_write http/admin.html http/account.html | xargs -n2 sh -c 'echo changed; ./checkhtmljs http/admin.html http/account.html'
+	bash -c 'while true; do inotifywait -q -e close_write webadmin/*.html webaccount/*.html webmail/*.ts; make frontend; done'
 
 jsinstall:
 	-mkdir -p node_modules/.bin
-	npm install jshint@2.13.2
+	npm ci
+
+jsinstall0:
+	-mkdir -p node_modules/.bin
+	npm install --save-dev --save-exact jshint@2.13.6 typescript@5.1.6
+
+webmail/webmail.js: webmail/api.ts webmail/lib.ts webmail/webmail.ts
+	./tsc.sh $@ $^
+
+webmail/msg.js: webmail/api.ts webmail/lib.ts webmail/msg.ts
+	./tsc.sh $@ $^
+
+webmail/text.js: webmail/api.ts webmail/lib.ts webmail/text.ts
+	./tsc.sh $@ $^
+
+webadmin/admin.htmlx:
+	./node_modules/.bin/jshint --extract always webadmin/admin.html | ./fixjshintlines.sh
+
+webaccount/account.htmlx:
+	./node_modules/.bin/jshint --extract always webaccount/account.html | ./fixjshintlines.sh
+
+frontend: webadmin/admin.htmlx webaccount/account.htmlx webmail/webmail.js webmail/msg.js webmail/text.js
 
 docker:
 	docker build -t mox:dev .

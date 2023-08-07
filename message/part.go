@@ -85,6 +85,10 @@ type Part struct {
 	bound           []byte               // Only set if valid multipart with boundary, includes leading --, excludes \r\n.
 }
 
+// todo: have all Content* fields in Part?
+// todo: make Address contain a type Localpart and dns.Domain?
+// todo: if we ever make a major change and reparse all parts, switch to lower-case values if not too troublesome.
+
 // Envelope holds the basic/common message headers as used in IMAP4.
 type Envelope struct {
 	Date      time.Time

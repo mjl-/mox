@@ -283,7 +283,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		ctl.xcheck(err, "delivering message")
 		deliveredIDs = append(deliveredIDs, m.ID)
 		ctl.log.Debug("delivered message", mlog.Field("id", m.ID))
-		changes = append(changes, store.ChangeAddUID{MailboxID: m.MailboxID, UID: m.UID, ModSeq: modseq, Flags: m.Flags, Keywords: m.Keywords})
+		changes = append(changes, m.ChangeAddUID())
 	}
 
 	// todo: one goroutine for reading messages, one for parsing the message, one adding to database, one for junk filter training.
@@ -324,6 +324,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			for _, kw := range m.Keywords {
 				mailboxKeywords[kw] = true
 			}
+			mb.Add(m.MailboxCounts())
 
 			// Parse message and store parsed information for later fast retrieval.
 			p, err := message.EnsurePart(msgf, m.Size)
@@ -386,17 +387,22 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			process(m, msgf, origPath)
 		}
 
-		// Load the mailbox again after delivering, its uidnext has been updated.
+		// Get mailbox again, uidnext is likely updated.
+		mc := mb.MailboxCounts
 		err = tx.Get(&mb)
-		ctl.xcheck(err, "fetching mailbox")
+		ctl.xcheck(err, "get mailbox")
+		mb.MailboxCounts = mc
 
 		// If there are any new keywords, update the mailbox.
-		var changed bool
-		mb.Keywords, changed = store.MergeKeywords(mb.Keywords, maps.Keys(mailboxKeywords))
-		if changed {
-			err := tx.Update(&mb)
-			ctl.xcheck(err, "updating keywords in mailbox")
+		var mbKwChanged bool
+		mb.Keywords, mbKwChanged = store.MergeKeywords(mb.Keywords, maps.Keys(mailboxKeywords))
+		if mbKwChanged {
+			changes = append(changes, mb.ChangeKeywords())
 		}
+
+		err = tx.Update(&mb)
+		ctl.xcheck(err, "updating message counts and keywords in mailbox")
+		changes = append(changes, mb.ChangeCounts())
 
 		err = tx.Commit()
 		ctl.xcheck(err, "commit")

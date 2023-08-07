@@ -19,6 +19,10 @@ import (
 
 // todo: better default values, so less has to be specified in the config file.
 
+// DefaultMaxMsgSize is the maximum message size for incoming and outgoing
+// messages, in bytes. Can be overridden per listener.
+const DefaultMaxMsgSize = 100 * 1024 * 1024
+
 // Port returns port if non-zero, and fallback otherwise.
 func Port(port, fallback int) int {
 	if port == 0 {
@@ -97,7 +101,7 @@ type Listener struct {
 	HostnameDomain dns.Domain `sconf:"-" json:"-"` // Set when parsing config.
 
 	TLS                *TLS  `sconf:"optional" sconf-doc:"For SMTP/IMAP STARTTLS, direct TLS and HTTPS connections."`
-	SMTPMaxMessageSize int64 `sconf:"optional" sconf-doc:"Maximum size in bytes accepted incoming and outgoing messages. Default is 100MB."`
+	SMTPMaxMessageSize int64 `sconf:"optional" sconf-doc:"Maximum size in bytes for incoming and outgoing messages. Default is 100MB."`
 	SMTP               struct {
 		Enabled         bool
 		Port            int      `sconf:"optional" sconf-doc:"Default 25."`
@@ -147,6 +151,16 @@ type Listener struct {
 		Port    int    `sconf:"optional" sconf-doc:"Default 443."`
 		Path    string `sconf:"optional" sconf-doc:"Path to serve admin requests on, e.g. /moxadmin/. Useful if domain serves other resources. Default is /admin/."`
 	} `sconf:"optional" sconf-doc:"Admin web interface listener for HTTPS. Requires a TLS config. Preferably only enable on non-public IPs."`
+	WebmailHTTP struct {
+		Enabled bool
+		Port    int    `sconf:"optional" sconf-doc:"Default 80."`
+		Path    string `sconf:"optional" sconf-doc:"Path to serve account requests on. Useful if domain serves other resources. Default is /webmail/."`
+	} `sconf:"optional" sconf-doc:"Webmail client, for reading email."`
+	WebmailHTTPS struct {
+		Enabled bool
+		Port    int    `sconf:"optional" sconf-doc:"Default 443."`
+		Path    string `sconf:"optional" sconf-doc:"Path to serve account requests on. Useful if domain serves other resources. Default is /webmail/."`
+	} `sconf:"optional" sconf-doc:"Webmail client, for reading email."`
 	MetricsHTTP struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 8010."`
@@ -295,6 +309,7 @@ type Route struct {
 type Account struct {
 	Domain       string                 `sconf-doc:"Default domain for account. Deprecated behaviour: If a destination is not a full address but only a localpart, this domain is added to form a full address."`
 	Description  string                 `sconf:"optional" sconf-doc:"Free form description, e.g. full name or alternative contact info."`
+	FullName     string                 `sconf:"optional" sconf-doc:"Full name, to use in message From header when composing messages in webmail. Can be overridden per destination."`
 	Destinations map[string]Destination `sconf-doc:"Destinations, keys are email addresses (with IDNA domains). If the address is of the form '@domain', i.e. with localpart missing, it serves as a catchall for the domain, matching all messages that are not explicitly configured. Deprecated behaviour: If the address is not a full address but a localpart, it is combined with Domain to form a full address."`
 	SubjectPass  struct {
 		Period time.Duration `sconf-doc:"How long unique values are accepted after generating, e.g. 12h."` // todo: have a reasonable default for this?
@@ -326,6 +341,7 @@ type JunkFilter struct {
 type Destination struct {
 	Mailbox  string    `sconf:"optional" sconf-doc:"Mailbox to deliver to if none of Rulesets match. Default: Inbox."`
 	Rulesets []Ruleset `sconf:"optional" sconf-doc:"Delivery rules based on message and SMTP transaction. You may want to match each mailing list by SMTP MailFrom address, VerifiedDomain and/or List-ID header (typically <listname.example.org> if the list address is listname@example.org), delivering them to their own mailbox."`
+	FullName string    `sconf:"optional" sconf-doc:"Full name to use in message From header when composing messages coming from this address with webmail."`
 
 	DMARCReports bool `sconf:"-" json:"-"`
 	TLSReports   bool `sconf:"-" json:"-"`

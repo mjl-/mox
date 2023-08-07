@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Mox Webmail</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1" />
+		<link rel="icon" href="noNeedlessFaviconRequestsPlease:" />
+		<style>
+* { font-size: inherit; font-family: 'ubuntu', 'lato', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+.mono, .mono * { font-family: 'ubuntu mono', monospace; }
+h1, h2 { margin-bottom: 1ex; }
+h1 { font-size: 1.1rem; }
+table td, table th { padding: .15em .25em; }
+[title] { text-decoration: underline; text-decoration-style: dotted; }
+.silenttitle { text-decoration: none; }
+fieldset { border: 0; }
+.loading { opacity: 0.1; animation: fadeout 1s ease-out; }
+@keyframes fadeout { 0% { opacity: 1 } 100% { opacity: 0.1 } }
+.button { display: inline-block; }
+button, .button { border-radius: .15em; background-color: #eee; border: 1px solid #888; padding: 0 .15em; color: inherit; /* for ipad, which shows blue or white text */ }
+button.active, .button.active, button.active:hover, .button.active:hover { background-color: gold; }
+button:hover, .button:hover { background-color: #ddd; }
+button.keyword:hover { background-color: #ffbd21; }
+button.keyword { cursor: pointer; }
+.btngroup button, .btngroup .button { border-radius: 0; border-right-width: 0; }
+.btngroup button:first-child, .btngroup .button:first-child { border-radius: .15em 0 0 .15em; }
+.btngroup button:last-child, .btngroup .button:last-child { border-radius: 0 .15em .15em 0; border-right-width: 1px; }
+iframe { border: 0; }
+.pad { padding: .5em; }
+.invert { filter: invert(100%); }
+.scriptswitch { text-decoration: underline #dca053 2px; }
+
+.msgitem { display: flex; user-select: none; }
+.msgitemcell { padding: 2px 4px; }
+/* note: we assign widths to .msgitemflags, .msgitemfrom, .msgitemsubject, .msgitemage, and offsets through a stylesheet created in js */
+.msgitemage { text-align: right; }
+.msgitemfromtext { white-space: nowrap; overflow: hidden; }
+.msgitemsubjecttext { white-space: nowrap; overflow: hidden; }
+.msgitemsubjectsnippet { font-weight: normal; color: #666; }
+.msgitemmailbox { background-color: #999; color: white; border: 1px solid #777; padding: 0 .15em; margin-left: .15em; border-radius: .15em; font-weight: normal; font-size: .9em; white-space: nowrap; }
+.msgitemidentity { background-color: #999; color: white; border: 1px solid #777; padding: 0 .15em; margin-left: .15em; border-radius: .15em; font-weight: normal; font-size: .9em; white-space: nowrap; }
+
+.topbar, .mailboxesbar { background-color: #fdfdf1; }
+.msglist { background-color: #f5ffff; }
+table.search td { padding: .25em; }
+.keyword { background-color: gold; color: black; border: 1px solid #8c7600; padding: 0 .15em; border-radius: .15em; font-weight: normal; font-size: .9em; margin: 0 .15em; white-space: nowrap; }
+.mailbox { padding: .15em .25em; }
+.mailboxitem { cursor: pointer; border-radius: .15em; }
+.mailboxitem.dropping { background-color: gold !important; }
+.mailboxitem:hover { background-color: #eee; }
+.mailboxitem.active { background: linear-gradient(135deg, #ffc7ab 0%, #ffdeab 100%); }
+.mailboxhoveronly { visibility: hidden; }
+.mailboxitem:hover .mailboxhoveronly, .mailboxitem:focus .mailboxhoveronly { visibility: visible; }
+.mailboxcollapse { visibility: hidden; }
+.mailboxitem:hover .mailboxcollapse, .mailboxitem:focus .mailboxcollapse { visibility: visible; }
+.msgitem { cursor: pointer; border-radius: .15em; border: 1px solid transparent; }
+.msgitem.focus { border: 1px solid #2685ff; }
+.msgitem:hover { background-color: #eee; }
+.msgitem.active { background: linear-gradient(135deg, #8bc8ff 0%, #8ee5ff 100%); }
+.msgitemsubject { position: relative; }
+.msgitemflag { margin-right: 1px; font-weight: normal; font-size: .9em; }
+.quoted1 { color: #03828f; }
+.quoted2 { color: #c7445c; }
+.quoted3 { color: #417c10; }
+
+.scrollparent { position: relative; }
+.yscroll { overflow-y: scroll; position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+.yscrollauto { overflow-y: auto; position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+		</style>
+	</head>
+	<body>
+		<div id="page"><div style="padding: 1em">Loading...</div></div>
+		<script>/* placeholder */</script>
+	</body>
+</html>

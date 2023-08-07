@@ -50,7 +50,7 @@ func TestAppend(t *testing.T) {
 
 	tc.transactf("ok", "noop")
 	uid1 := imapclient.FetchUID(1)
-	flags := imapclient.FetchFlags{`\Seen`, "label1", "$label2"}
+	flags := imapclient.FetchFlags{`\Seen`, "$label2", "label1"}
 	tc.xuntagged(imapclient.UntaggedExists(1), imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flags}})
 	tc3.transactf("ok", "noop")
 	tc3.xuntagged() // Inbox is not selected, nothing to report.

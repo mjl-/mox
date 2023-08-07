@@ -31,6 +31,7 @@ See Quickstart below to get started.
   accounts/domains, and modifying the configuration file.
 - Autodiscovery (with SRV records, Microsoft-style and Thunderbird-style) for
   easy account setup (though not many clients support it).
+- Webmail for reading/sending email from the browser.
 - Webserver with serving static files and forwarding requests (reverse
   proxy), so port 443 can also be used to serve websites.
 - Prometheus metrics and structured logging for operational insight.
@@ -108,16 +109,19 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 
 ## Roadmap
 
-- Webmail
+- Improve message parsing, more lenient for imported messages
+- Ruleset config option for accepting incoming forwarded messages
+- Rewrite account and admin javascript to typescript
+- Prepare data storage for JMAP
 - IMAP THREAD extension
 - DANE and DNSSEC
 - Sending DMARC and TLS reports (currently only receiving)
+- Accepting/processing/monitoring DMARC reports for external domains
+- Calendaring
 - OAUTH2 support, for single sign on
 - Add special IMAP mailbox ("Queue?") that contains queued but
   not-yet-delivered messages
 - Sieve for filtering (for now see Rulesets in the account config)
-- Accepting/processing/monitoring DMARC reports for external domains
-- Calendaring
 - Privilege separation, isolating parts of the application to more restricted
   sandbox (e.g. new unauthenticated connections)
 - Using mox as backup MX

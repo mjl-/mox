@@ -1,9 +1,7 @@
-package smtpserver
+package message
 
 import (
 	"fmt"
-
-	"github.com/mjl-/mox/message"
 )
 
 // ../rfc/8601:577
@@ -46,6 +44,11 @@ type AuthProp struct {
 	Comment    string // If not empty, header comment withtout "()", added after Value.
 }
 
+// MakeAuthProp is a convenient way to make an AuthProp.
+func MakeAuthProp(typ, property, value string, isAddrLike bool, Comment string) AuthProp {
+	return AuthProp{typ, property, value, isAddrLike, Comment}
+}
+
 // todo future: we could store fields as dns.Domain, and when we encode as non-ascii also add the ascii version as a comment.
 
 // Header returns an Authentication-Results header, possibly spanning multiple
@@ -60,7 +63,7 @@ func (h AuthResults) Header() string {
 		return s
 	}
 
-	w := &message.HeaderWriter{}
+	w := &HeaderWriter{}
 	w.Add("", "Authentication-Results:"+optComment(h.Comment)+" "+value(h.Hostname)+";")
 	for i, m := range h.Methods {
 		tokens := []string{}

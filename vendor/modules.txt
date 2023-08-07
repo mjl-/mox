@@ -11,22 +11,26 @@ github.com/golang/protobuf/ptypes/timestamp
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 ## explicit
 github.com/matttproud/golang_protobuf_extensions/pbutil
-# github.com/mjl-/bstore v0.0.1
+# github.com/mjl-/bstore v0.0.2
 ## explicit; go 1.19
 github.com/mjl-/bstore
 # github.com/mjl-/sconf v0.0.4
 ## explicit; go 1.12
 github.com/mjl-/sconf
-# github.com/mjl-/sherpa v0.6.5
+# github.com/mjl-/sherpa v0.6.6
 ## explicit; go 1.12
 github.com/mjl-/sherpa
-# github.com/mjl-/sherpadoc v0.0.10
+# github.com/mjl-/sherpadoc v0.0.12
 ## explicit; go 1.16
 github.com/mjl-/sherpadoc
 github.com/mjl-/sherpadoc/cmd/sherpadoc
 # github.com/mjl-/sherpaprom v0.0.2
 ## explicit; go 1.12
 github.com/mjl-/sherpaprom
+# github.com/mjl-/sherpats v0.0.4
+## explicit; go 1.12
+github.com/mjl-/sherpats
+github.com/mjl-/sherpats/cmd/sherpats
 # github.com/mjl-/xfmt v0.0.0-20190521151243-39d9c00752ce
 ## explicit; go 1.12
 github.com/mjl-/xfmt
@@ -71,7 +75,7 @@ golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/modfile
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.12.0
+# golang.org/x/net v0.13.0
 ## explicit; go 1.17
 golang.org/x/net/html
 golang.org/x/net/html/atom

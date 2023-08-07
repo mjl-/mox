@@ -33,7 +33,6 @@ import (
 	"github.com/mjl-/mox/dmarcrpt"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dnsbl"
-	"github.com/mjl-/mox/http"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -45,6 +44,7 @@ import (
 	"github.com/mjl-/mox/tlsrpt"
 	"github.com/mjl-/mox/tlsrptdb"
 	"github.com/mjl-/mox/updates"
+	"github.com/mjl-/mox/webadmin"
 )
 
 var (
@@ -143,6 +143,7 @@ var commands = []struct {
 	{"reassignuids", cmdReassignUIDs},
 	{"fixuidmeta", cmdFixUIDMeta},
 	{"dmarcdb addreport", cmdDMARCDBAddReport},
+	{"reparse", cmdReparse},
 	{"ensureparsed", cmdEnsureParsed},
 	{"message parse", cmdMessageParse},
 	{"tlsrptdb addreport", cmdTLSRPTDBAddReport},
@@ -154,6 +155,7 @@ var commands = []struct {
 	{"gentestdata", cmdGentestdata},
 	{"ximport maildir", cmdXImportMaildir},
 	{"ximport mbox", cmdXImportMbox},
+	{"recalculatemailboxcounts", cmdRecalculateMailboxCounts},
 }
 
 var cmds []cmd
@@ -376,6 +378,11 @@ func mustLoadConfig() {
 }
 
 func main() {
+	// CheckConsistencyOnClose is true by default, for all the test packages. A regular
+	// mox server should never use it. But integration tests enable it again with a
+	// flag.
+	store.CheckConsistencyOnClose = false
+
 	log.SetFlags(0)
 
 	// If invoked as sendmail, e.g. /usr/sbin/sendmail, we do enough so cron can get a
@@ -392,6 +399,7 @@ func main() {
 	flag.StringVar(&mox.ConfigStaticPath, "config", envString("MOXCONF", "config/mox.conf"), "configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf")
 	flag.StringVar(&loglevel, "loglevel", "", "if non-empty, this log level is set early in startup")
 	flag.BoolVar(&pedantic, "pedantic", false, "protocol violations result in errors instead of accepting/working around them")
+	flag.BoolVar(&store.CheckConsistencyOnClose, "checkconsistency", false, "dangerous option for testing only, enables data checks that abort/panic when inconsistencies are found")
 
 	var cpuprofile, memprofile string
 	flag.StringVar(&cpuprofile, "cpuprof", "", "store cpu profile to file")
@@ -777,7 +785,7 @@ func cmdConfigDNSCheck(c *cmd) {
 		log.Fatalf("%s", err)
 	}()
 
-	printResult := func(name string, r http.Result) {
+	printResult := func(name string, r webadmin.Result) {
 		if len(r.Errors) == 0 && len(r.Warnings) == 0 {
 			return
 		}
@@ -790,7 +798,7 @@ func cmdConfigDNSCheck(c *cmd) {
 		}
 	}
 
-	result := http.Admin{}.CheckDomain(context.Background(), args[0])
+	result := webadmin.Admin{}.CheckDomain(context.Background(), args[0])
 	printResult("IPRev", result.IPRev.Result)
 	printResult("MX", result.MX.Result)
 	printResult("TLS", result.TLS.Result)
@@ -1980,6 +1988,30 @@ func cmdVersion(c *cmd) {
 	fmt.Println(moxvar.Version)
 }
 
+func cmdReparse(c *cmd) {
+	c.unlisted = true
+	c.params = "[account]"
+	c.help = "Ensure messages in the database have a ParsedBuf."
+	args := c.Parse()
+	if len(args) > 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	var account string
+	if len(args) == 1 {
+		account = args[0]
+	}
+	ctlcmdReparse(xctl(), account)
+}
+
+func ctlcmdReparse(ctl *ctl, account string) {
+	ctl.xwrite("reparse")
+	ctl.xwrite(account)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
 func cmdEnsureParsed(c *cmd) {
 	c.unlisted = true
 	c.params = "account"
@@ -2267,4 +2299,30 @@ open, or is not running.
 		return nil
 	})
 	xcheckf(err, "updating database")
+}
+
+func cmdRecalculateMailboxCounts(c *cmd) {
+	c.unlisted = true
+	c.params = "account"
+	c.help = `Recalculate message counts for all mailboxes in the account.
+
+When a message is added to/removed from a mailbox, or when message flags change,
+the total, unread, unseen and deleted messages are accounted, and the total size
+of the mailbox. In case of a bug in this accounting, the numbers could become
+incorrect. This command will find, fix and print them.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdRecalculateMailboxCounts(xctl(), args[0])
+}
+
+func ctlcmdRecalculateMailboxCounts(ctl *ctl, account string) {
+	ctl.xwrite("recalculatemailboxcounts")
+	ctl.xwrite(account)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
 }

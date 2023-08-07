@@ -1,0 +1,2415 @@
+{
+	"Name": "Webmail",
+	"Docs": "",
+	"Functions": [
+		{
+			"Name": "Token",
+			"Docs": "Token returns a token to use for an SSE connection. A token can only be used for\na single SSE connection. Tokens are stored in memory for a maximum of 1 minute,\nwith at most 10 unused tokens (the most recently created) per account.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Request",
+			"Docs": "Requests sends a new request for an open SSE connection. Any currently active\nrequest for the connection will be canceled, but this is done asynchrously, so\nthe SSE connection may still send results for the previous request. Callers\nshould take care to ignore such results. If req.Cancel is set, no new request is\nstarted.",
+			"Params": [
+				{
+					"Name": "req",
+					"Typewords": [
+						"Request"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "ParsedMessage",
+			"Docs": "ParsedMessage returns enough to render the textual body of a message. It is\nassumed the client already has other fields through MessageItem.",
+			"Params": [
+				{
+					"Name": "msgID",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "pm",
+					"Typewords": [
+						"ParsedMessage"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MessageSubmit",
+			"Docs": "MessageSubmit sends a message by submitting it the outgoing email queue. The\nmessage is sent to all addresses listed in the To, Cc and Bcc addresses, without\nBcc message header.\n\nIf a Sent mailbox is configured, messages are added to it after submitting\nto the delivery queue.",
+			"Params": [
+				{
+					"Name": "m",
+					"Typewords": [
+						"SubmitMessage"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "MessageMove",
+			"Docs": "MessageMove moves messages to another mailbox. If the message is already in\nthe mailbox an error is returned.",
+			"Params": [
+				{
+					"Name": "messageIDs",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "mailboxID",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "MessageDelete",
+			"Docs": "MessageDelete permanently deletes messages, without moving them to the Trash mailbox.",
+			"Params": [
+				{
+					"Name": "messageIDs",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "FlagsAdd",
+			"Docs": "FlagsAdd adds flags, either system flags like \\Seen or custom keywords. The\nflags should be lower-case, but will be converted and verified.",
+			"Params": [
+				{
+					"Name": "messageIDs",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "flaglist",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "FlagsClear",
+			"Docs": "FlagsClear clears flags, either system flags like \\Seen or custom keywords.",
+			"Params": [
+				{
+					"Name": "messageIDs",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "flaglist",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "MailboxCreate",
+			"Docs": "MailboxCreate creates a new mailbox.",
+			"Params": [
+				{
+					"Name": "name",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "MailboxDelete",
+			"Docs": "MailboxDelete deletes a mailbox and all its messages.",
+			"Params": [
+				{
+					"Name": "mailboxID",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "MailboxEmpty",
+			"Docs": "MailboxEmpty empties a mailbox, removing all messages from the mailbox, but not\nits child mailboxes.",
+			"Params": [
+				{
+					"Name": "mailboxID",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "MailboxRename",
+			"Docs": "MailboxRename renames a mailbox, possibly moving it to a new parent. The mailbox\nID and its messages are unchanged.",
+			"Params": [
+				{
+					"Name": "mailboxID",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "newName",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "CompleteRecipient",
+			"Docs": "CompleteRecipient returns autocomplete matches for a recipient, returning the\nmatches, most recently used first, and whether this is the full list and further\nrequests for longer prefixes aren't necessary.",
+			"Params": [
+				{
+					"Name": "search",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "r1",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MailboxSetSpecialUse",
+			"Docs": "MailboxSetSpecialUse sets the special use flags of a mailbox.",
+			"Params": [
+				{
+					"Name": "mb",
+					"Typewords": [
+						"Mailbox"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "SSETypes",
+			"Docs": "SSETypes exists to ensure the generated API contains the types, for use in SSE events.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "start",
+					"Typewords": [
+						"EventStart"
+					]
+				},
+				{
+					"Name": "viewErr",
+					"Typewords": [
+						"EventViewErr"
+					]
+				},
+				{
+					"Name": "viewReset",
+					"Typewords": [
+						"EventViewReset"
+					]
+				},
+				{
+					"Name": "viewMsgs",
+					"Typewords": [
+						"EventViewMsgs"
+					]
+				},
+				{
+					"Name": "viewChanges",
+					"Typewords": [
+						"EventViewChanges"
+					]
+				},
+				{
+					"Name": "msgAdd",
+					"Typewords": [
+						"ChangeMsgAdd"
+					]
+				},
+				{
+					"Name": "msgRemove",
+					"Typewords": [
+						"ChangeMsgRemove"
+					]
+				},
+				{
+					"Name": "msgFlags",
+					"Typewords": [
+						"ChangeMsgFlags"
+					]
+				},
+				{
+					"Name": "mailboxRemove",
+					"Typewords": [
+						"ChangeMailboxRemove"
+					]
+				},
+				{
+					"Name": "mailboxAdd",
+					"Typewords": [
+						"ChangeMailboxAdd"
+					]
+				},
+				{
+					"Name": "mailboxRename",
+					"Typewords": [
+						"ChangeMailboxRename"
+					]
+				},
+				{
+					"Name": "mailboxCounts",
+					"Typewords": [
+						"ChangeMailboxCounts"
+					]
+				},
+				{
+					"Name": "mailboxSpecialUse",
+					"Typewords": [
+						"ChangeMailboxSpecialUse"
+					]
+				},
+				{
+					"Name": "mailboxKeywords",
+					"Typewords": [
+						"ChangeMailboxKeywords"
+					]
+				},
+				{
+					"Name": "flags",
+					"Typewords": [
+						"Flags"
+					]
+				}
+			]
+		}
+	],
+	"Sections": [],
+	"Structs": [
+		{
+			"Name": "Request",
+			"Docs": "Request is a request to an SSE connection to send messages, either for a new\nview, to continue with an existing view, or to a cancel an ongoing request.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "SSEID",
+					"Docs": "SSE connection.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "ViewID",
+					"Docs": "To indicate a request is a continuation (more results) of the previous view. Echoed in events, client checks if it is getting results for the latest request.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Cancel",
+					"Docs": "If set, this request and its view are canceled. A new view must be started.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Query",
+					"Docs": "",
+					"Typewords": [
+						"Query"
+					]
+				},
+				{
+					"Name": "Page",
+					"Docs": "",
+					"Typewords": [
+						"Page"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Query",
+			"Docs": "Query is a request for messages that match filters, in a given order.",
+			"Fields": [
+				{
+					"Name": "OrderAsc",
+					"Docs": "Order by received ascending or desending.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Filter",
+					"Docs": "",
+					"Typewords": [
+						"Filter"
+					]
+				},
+				{
+					"Name": "NotFilter",
+					"Docs": "",
+					"Typewords": [
+						"NotFilter"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Filter",
+			"Docs": "Filter selects the messages to return. Fields that are set must all match,\nfor slices each element by match (\"and\").",
+			"Fields": [
+				{
+					"Name": "MailboxID",
+					"Docs": "If -1, then all mailboxes except Trash/Junk/Rejects. Otherwise, only active if \u003e 0.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MailboxChildrenIncluded",
+					"Docs": "If true, also submailboxes are included in the search.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MailboxName",
+					"Docs": "In case client doesn't know mailboxes and their IDs yet. Only used during sse connection setup, where it is turned into a MailboxID. Filtering only looks at MailboxID.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Words",
+					"Docs": "Case insensitive substring match for each string.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "From",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "Including Cc and Bcc.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Oldest",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Newest",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Attachments",
+					"Docs": "",
+					"Typewords": [
+						"AttachmentType"
+					]
+				},
+				{
+					"Name": "Labels",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Headers",
+					"Docs": "Header values can be empty, it's a check if the header is present, regardless of value.",
+					"Typewords": [
+						"[]",
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "SizeMin",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "SizeMax",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
+			"Name": "NotFilter",
+			"Docs": "NotFilter matches messages that don't match these fields.",
+			"Fields": [
+				{
+					"Name": "Words",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "From",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Attachments",
+					"Docs": "",
+					"Typewords": [
+						"AttachmentType"
+					]
+				},
+				{
+					"Name": "Labels",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Page",
+			"Docs": "Page holds pagination parameters for a request.",
+			"Fields": [
+				{
+					"Name": "AnchorMessageID",
+					"Docs": "Start returning messages after this ID, if \u003e 0. For pagination, fetching the next set of messages.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Count",
+					"Docs": "Number of messages to return, must be \u003e= 1, we never return more than 10000 for one request.",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "DestMessageID",
+					"Docs": "If \u003e 0, return messages until DestMessageID is found. More than Count messages can be returned. For long-running searches, it may take a while before this message if found.",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ParsedMessage",
+			"Docs": "ParsedMessage has more parsed/derived information about a message, intended\nfor rendering the (contents of the) message. Information from MessageItem is\nnot duplicated.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Part",
+					"Docs": "",
+					"Typewords": [
+						"Part"
+					]
+				},
+				{
+					"Name": "Headers",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Texts",
+					"Docs": "Text parts, can be empty.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "HasHTML",
+					"Docs": "Whether there is an HTML part. The webclient renders HTML message parts through an iframe and a separate request with strict CSP headers to prevent script execution and loading of external resources, which isn't possible when loading in iframe with inline HTML because not all browsers support the iframe csp attribute.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ListReplyAddress",
+					"Docs": "From List-Post.",
+					"Typewords": [
+						"nullable",
+						"MessageAddress"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Part",
+			"Docs": "Part represents a whole mail message, or a part of a multipart message. It\nis designed to handle IMAP requirements efficiently.",
+			"Fields": [
+				{
+					"Name": "BoundaryOffset",
+					"Docs": "Offset in message where bound starts. -1 for top-level message.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "HeaderOffset",
+					"Docs": "Offset in message file where header starts.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "BodyOffset",
+					"Docs": "Offset in message file where body starts.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "EndOffset",
+					"Docs": "Where body of part ends. Set when part is fully read.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "RawLineCount",
+					"Docs": "Number of lines in raw, undecoded, body of part. Set when part is fully read.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "DecodedSize",
+					"Docs": "Number of octets when decoded. If this is a text mediatype, lines ending only in LF are changed end in CRLF and DecodedSize reflects that.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MediaType",
+					"Docs": "From Content-Type, upper case. E.g. \"TEXT\". Can be empty because content-type may be absent. In this case, the part may be treated as TEXT/PLAIN.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MediaSubType",
+					"Docs": "From Content-Type, upper case. E.g. \"PLAIN\".",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ContentTypeParams",
+					"Docs": "E.g. holds \"boundary\" for multipart messages. Has lower-case keys, and original case values.",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				},
+				{
+					"Name": "ContentID",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ContentDescription",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ContentTransferEncoding",
+					"Docs": "In upper case.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Envelope",
+					"Docs": "Email message headers. Not for non-message parts.",
+					"Typewords": [
+						"nullable",
+						"Envelope"
+					]
+				},
+				{
+					"Name": "Parts",
+					"Docs": "Parts if this is a multipart.",
+					"Typewords": [
+						"[]",
+						"Part"
+					]
+				},
+				{
+					"Name": "Message",
+					"Docs": "Only for message/rfc822 and message/global. This part may have a buffer as backing io.ReaderAt, because a message/global can have a non-identity content-transfer-encoding. This part has a nil parent.",
+					"Typewords": [
+						"nullable",
+						"Part"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Envelope",
+			"Docs": "Envelope holds the basic/common message headers as used in IMAP4.",
+			"Fields": [
+				{
+					"Name": "Date",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "From",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Address"
+					]
+				},
+				{
+					"Name": "Sender",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Address"
+					]
+				},
+				{
+					"Name": "ReplyTo",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Address"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Address"
+					]
+				},
+				{
+					"Name": "CC",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Address"
+					]
+				},
+				{
+					"Name": "BCC",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Address"
+					]
+				},
+				{
+					"Name": "InReplyTo",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MessageID",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Address",
+			"Docs": "Address as used in From and To headers.",
+			"Fields": [
+				{
+					"Name": "Name",
+					"Docs": "Free-form name for display in mail applications.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "User",
+					"Docs": "Localpart.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Host",
+					"Docs": "Domain in ASCII.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MessageAddress",
+			"Docs": "MessageAddress is like message.Address, but with a dns.Domain, with unicode name\nincluded.",
+			"Fields": [
+				{
+					"Name": "Name",
+					"Docs": "Free-form name for display in mail applications.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "User",
+					"Docs": "Localpart, encoded.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Domain",
+			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups.",
+			"Fields": [
+				{
+					"Name": "ASCII",
+					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Unicode",
+					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "SubmitMessage",
+			"Docs": "SubmitMessage is an email message to be sent to one or more recipients.\nAddresses are formatted as just email address, or with a name like \"name\n\u003cuser@host\u003e\".",
+			"Fields": [
+				{
+					"Name": "From",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Cc",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Bcc",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "TextBody",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Attachments",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"File"
+					]
+				},
+				{
+					"Name": "ForwardAttachments",
+					"Docs": "",
+					"Typewords": [
+						"ForwardAttachments"
+					]
+				},
+				{
+					"Name": "IsForward",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ResponseMessageID",
+					"Docs": "If set, this was a reply or forward, based on IsForward.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "ReplyTo",
+					"Docs": "If non-empty, Reply-To header to add to message.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "UserAgent",
+					"Docs": "User-Agent header added if not empty.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "File",
+			"Docs": "File is a new attachment (not from an existing message that is being\nforwarded) to send with a SubmitMessage.",
+			"Fields": [
+				{
+					"Name": "Filename",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "DataURI",
+					"Docs": "Full data of the attachment, with base64 encoding and including content-type.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ForwardAttachments",
+			"Docs": "ForwardAttachments references attachments by a list of message.Part paths.",
+			"Fields": [
+				{
+					"Name": "MessageID",
+					"Docs": "Only relevant if MessageID is not 0.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Paths",
+					"Docs": "List of attachments, each path is a list of indices into the top-level message.Part.Parts.",
+					"Typewords": [
+						"[]",
+						"[]",
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Mailbox",
+			"Docs": "Mailbox is collection of messages, e.g. Inbox or Sent.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Name",
+					"Docs": "\"Inbox\" is the name for the special IMAP \"INBOX\". Slash separated for hierarchy.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "UIDValidity",
+					"Docs": "If UIDs are invalidated, e.g. when renaming a mailbox to a previously existing name, UIDValidity must be changed. Used by IMAP for synchronization.",
+					"Typewords": [
+						"uint32"
+					]
+				},
+				{
+					"Name": "UIDNext",
+					"Docs": "UID likely to be assigned to next message. Used by IMAP to detect messages delivered to a mailbox.",
+					"Typewords": [
+						"UID"
+					]
+				},
+				{
+					"Name": "Archive",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Draft",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Junk",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Sent",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Trash",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Keywords",
+					"Docs": "Keywords as used in messages. Storing a non-system keyword for a message automatically adds it to this list. Used in the IMAP FLAGS response. Only \"atoms\" are allowed (IMAP syntax), keywords are case-insensitive, only stored in lower case (for JMAP), sorted.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "HaveCounts",
+					"Docs": "Whether MailboxCounts have been initialized.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Total",
+					"Docs": "Total number of messages, excluding \\Deleted. For JMAP.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Deleted",
+					"Docs": "Number of messages with \\Deleted flag. Used for IMAP message count that includes messages with \\Deleted.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Unread",
+					"Docs": "Messages without \\Seen, excluding those with \\Deleted, for JMAP.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Unseen",
+					"Docs": "Messages without \\Seen, including those with \\Deleted, for IMAP.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Size",
+					"Docs": "Number of bytes for all messages.",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
+			"Name": "EventStart",
+			"Docs": "EventStart is the first message sent on an SSE connection, giving the client\nbasic data to populate its UI. After this event, messages will follow quickly in\nan EventViewMsgs event.",
+			"Fields": [
+				{
+					"Name": "SSEID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "LoginAddress",
+					"Docs": "",
+					"Typewords": [
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "Addresses",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "DomainAddressConfigs",
+					"Docs": "ASCII domain to address config.",
+					"Typewords": [
+						"{}",
+						"DomainAddressConfig"
+					]
+				},
+				{
+					"Name": "MailboxName",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Mailboxes",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Mailbox"
+					]
+				}
+			]
+		},
+		{
+			"Name": "DomainAddressConfig",
+			"Docs": "DomainAddressConfig has the address (localpart) configuration for a domain, so\nthe webmail client can decide if an address matches the addresses of the\naccount.",
+			"Fields": [
+				{
+					"Name": "LocalpartCatchallSeparator",
+					"Docs": "Can be empty.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LocalpartCaseSensitive",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "EventViewErr",
+			"Docs": "EventViewErr indicates an error during a query for messages. The request is\naborted, no more request-related messages will be sent until the next request.",
+			"Fields": [
+				{
+					"Name": "ViewID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "RequestID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Err",
+					"Docs": "To be displayed in client.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "EventViewReset",
+			"Docs": "EventViewReset indicates that a request for the next set of messages in a few\ncould not be fulfilled, e.g. because the anchor message does not exist anymore.\nThe client should clear its list of messages. This can happen before\nEventViewMsgs events are sent.",
+			"Fields": [
+				{
+					"Name": "ViewID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "RequestID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
+			"Name": "EventViewMsgs",
+			"Docs": "EventViewMsgs contains messages for a view, possibly a continuation of an\nearlier list of messages.",
+			"Fields": [
+				{
+					"Name": "ViewID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "RequestID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MessageItems",
+					"Docs": "If empty, this was the last message for the request.",
+					"Typewords": [
+						"[]",
+						"MessageItem"
+					]
+				},
+				{
+					"Name": "ParsedMessage",
+					"Docs": "If set, will match the target page.DestMessageID from the request.",
+					"Typewords": [
+						"nullable",
+						"ParsedMessage"
+					]
+				},
+				{
+					"Name": "ViewEnd",
+					"Docs": "If set, there are no more messages in this view at this moment. Messages can be added, typically via Change messages, e.g. for new deliveries.",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MessageItem",
+			"Docs": "MessageItem is sent by queries, it has derived information analyzed from\nmessage.Part, made for the needs of the message items in the message list.\nmessages.",
+			"Fields": [
+				{
+					"Name": "Message",
+					"Docs": "Without ParsedBuf and MsgPrefix, for size.",
+					"Typewords": [
+						"Message"
+					]
+				},
+				{
+					"Name": "Envelope",
+					"Docs": "",
+					"Typewords": [
+						"MessageEnvelope"
+					]
+				},
+				{
+					"Name": "Attachments",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Attachment"
+					]
+				},
+				{
+					"Name": "IsSigned",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IsEncrypted",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "FirstLine",
+					"Docs": "Of message body, for showing as preview.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Message",
+			"Docs": "Message stored in database and per-message file on disk.\n\nContents are always the combined data from MsgPrefix and the on-disk file named\nbased on ID.\n\nMessages always have a header section, even if empty. Incoming messages without\nheader section must get an empty header section added before inserting.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "ID, unchanged over lifetime, determines path to on-disk msg file. Set during deliver.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "UID",
+					"Docs": "UID, for IMAP. Set during deliver.",
+					"Typewords": [
+						"UID"
+					]
+				},
+				{
+					"Name": "MailboxID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "ModSeq",
+					"Docs": "Modification sequence, for faster syncing with IMAP QRESYNC and JMAP. ModSeq is the last modification. CreateSeq is the Seq the message was inserted, always \u003c= ModSeq. If Expunged is set, the message has been removed and should not be returned to the user. In this case, ModSeq is the Seq where the message is removed, and will never be changed again. We have an index on both ModSeq (for JMAP that synchronizes per account) and MailboxID+ModSeq (for IMAP that synchronizes per mailbox). The index on CreateSeq helps efficiently finding created messages for JMAP. The value of ModSeq is special for IMAP. Messages that existed before ModSeq was added have 0 as value. But modseq 0 in IMAP is special, so we return it as 1. If we get modseq 1 from a client, the IMAP server will translate it to 0. When we return modseq to clients, we turn 0 into 1.",
+					"Typewords": [
+						"ModSeq"
+					]
+				},
+				{
+					"Name": "CreateSeq",
+					"Docs": "",
+					"Typewords": [
+						"ModSeq"
+					]
+				},
+				{
+					"Name": "Expunged",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MailboxOrigID",
+					"Docs": "MailboxOrigID is the mailbox the message was originally delivered to. Typically Inbox or Rejects, but can also be a mailbox configured in a Ruleset, or Postmaster, TLS/DMARC reporting addresses. MailboxOrigID is not changed when the message is moved to another mailbox, e.g. Archive/Trash/Junk. Used for per-mailbox reputation.  MailboxDestinedID is normally 0, but when a message is delivered to the Rejects mailbox, it is set to the intended mailbox according to delivery rules, typically that of Inbox. When such a message is moved out of Rejects, the MailboxOrigID is corrected by setting it to MailboxDestinedID. This ensures the message is used for reputation calculation for future deliveries to that mailbox.  These are not bstore references to prevent having to update all messages in a mailbox when the original mailbox is removed. Use of these fields requires checking if the mailbox still exists.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MailboxDestinedID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Received",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "RemoteIP",
+					"Docs": "Full IP address of remote SMTP server. Empty if not delivered over SMTP.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RemoteIPMasked1",
+					"Docs": "For IPv4 /32, for IPv6 /64, for reputation.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RemoteIPMasked2",
+					"Docs": "For IPv4 /26, for IPv6 /48.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RemoteIPMasked3",
+					"Docs": "For IPv4 /21, for IPv6 /32.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "EHLODomain",
+					"Docs": "Only set if present and not an IP address. Unicode string.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MailFrom",
+					"Docs": "With localpart and domain. Can be empty.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MailFromLocalpart",
+					"Docs": "SMTP \"MAIL FROM\", can be empty.",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "MailFromDomain",
+					"Docs": "Only set if it is a domain, not an IP. Unicode string.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RcptToLocalpart",
+					"Docs": "SMTP \"RCPT TO\", can be empty.",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "RcptToDomain",
+					"Docs": "Unicode string.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MsgFromLocalpart",
+					"Docs": "Parsed \"From\" message header, used for reputation along with domain validation.",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "MsgFromDomain",
+					"Docs": "Unicode string.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MsgFromOrgDomain",
+					"Docs": "Unicode string.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "EHLOValidated",
+					"Docs": "Simplified statements of the Validation fields below, used for incoming messages to check reputation.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MailFromValidated",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MsgFromValidated",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "EHLOValidation",
+					"Docs": "Validation can also take reverse IP lookup into account, not only SPF.",
+					"Typewords": [
+						"Validation"
+					]
+				},
+				{
+					"Name": "MailFromValidation",
+					"Docs": "Can have SPF-specific validations like ValidationSoftfail.",
+					"Typewords": [
+						"Validation"
+					]
+				},
+				{
+					"Name": "MsgFromValidation",
+					"Docs": "Desirable validations: Strict, DMARC, Relaxed. Will not be just Pass.",
+					"Typewords": [
+						"Validation"
+					]
+				},
+				{
+					"Name": "DKIMDomains",
+					"Docs": "Domains with verified DKIM signatures. Unicode string.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "MessageID",
+					"Docs": "Value of Message-Id header. Only set for messages that were delivered to the rejects mailbox. For ensuring such messages are delivered only once. Value includes \u003c\u003e.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MessageHash",
+					"Docs": "Hash of message. For rejects delivery, so optional like MessageID.",
+					"Typewords": [
+						"[]",
+						"uint8"
+					]
+				},
+				{
+					"Name": "Seen",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Answered",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Flagged",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Forwarded",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Junk",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Notjunk",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Deleted",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Draft",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Phishing",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MDNSent",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Keywords",
+					"Docs": "For keywords other than system flags or the basic well-known $-flags. Only in \"atom\" syntax (IMAP), they are case-insensitive, always stored in lower-case (for JMAP), sorted.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Size",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "TrainedJunk",
+					"Docs": "If nil, no training done yet. Otherwise, true is trained as junk, false trained as nonjunk.",
+					"Typewords": [
+						"nullable",
+						"bool"
+					]
+				},
+				{
+					"Name": "MsgPrefix",
+					"Docs": "Typically holds received headers and/or header separator.",
+					"Typewords": [
+						"[]",
+						"uint8"
+					]
+				},
+				{
+					"Name": "ParsedBuf",
+					"Docs": "ParsedBuf message structure. Currently saved as JSON of message.Part because bstore cannot yet store recursive types. Created when first needed, and saved in the database. todo: once replaced with non-json storage, remove date fixup in ../message/part.go.",
+					"Typewords": [
+						"[]",
+						"uint8"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MessageEnvelope",
+			"Docs": "MessageEnvelope is like message.Envelope, as used in message.Part, but including\nunicode host names for IDNA names.",
+			"Fields": [
+				{
+					"Name": "Date",
+					"Docs": "todo: should get sherpadoc to understand type embeds and embed the non-MessageAddress fields from message.Envelope.",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "From",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "Sender",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "ReplyTo",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "CC",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "BCC",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MessageAddress"
+					]
+				},
+				{
+					"Name": "InReplyTo",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MessageID",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Attachment",
+			"Docs": "Attachment is a MIME part is an existing message that is not intended as\nviewable text or HTML part.",
+			"Fields": [
+				{
+					"Name": "Path",
+					"Docs": "Indices into top-level message.Part.Parts.",
+					"Typewords": [
+						"[]",
+						"int32"
+					]
+				},
+				{
+					"Name": "Filename",
+					"Docs": "File name based on \"name\" attribute of \"Content-Type\", or the \"filename\" attribute of \"Content-Disposition\".",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Part",
+					"Docs": "",
+					"Typewords": [
+						"Part"
+					]
+				}
+			]
+		},
+		{
+			"Name": "EventViewChanges",
+			"Docs": "EventViewChanges contain one or more changes relevant for the client, either\nwith new mailbox total/unseen message counts, or messages added/removed/modified\n(flags) for the current view.",
+			"Fields": [
+				{
+					"Name": "ViewID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Changes",
+					"Docs": "The first field of [2]any is a string, the second of the Change types below.",
+					"Typewords": [
+						"[]",
+						"[]",
+						"any"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ChangeMsgAdd",
+			"Docs": "ChangeMsgAdd adds a new message to the view.",
+			"Fields": [
+				{
+					"Name": "MailboxID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "UID",
+					"Docs": "",
+					"Typewords": [
+						"UID"
+					]
+				},
+				{
+					"Name": "ModSeq",
+					"Docs": "",
+					"Typewords": [
+						"ModSeq"
+					]
+				},
+				{
+					"Name": "Flags",
+					"Docs": "System flags.",
+					"Typewords": [
+						"Flags"
+					]
+				},
+				{
+					"Name": "Keywords",
+					"Docs": "Other flags.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "MessageItem",
+					"Docs": "",
+					"Typewords": [
+						"MessageItem"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Flags",
+			"Docs": "Flags for a mail message.",
+			"Fields": [
+				{
+					"Name": "Seen",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Answered",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Flagged",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Forwarded",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Junk",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Notjunk",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Deleted",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Draft",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Phishing",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MDNSent",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ChangeMsgRemove",
+			"Docs": "ChangeMsgRemove removes one or more messages from the view.",
+			"Fields": [
+				{
+					"Name": "MailboxID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "UIDs",
+					"Docs": "Must be in increasing UID order, for IMAP.",
+					"Typewords": [
+						"[]",
+						"UID"
+					]
+				},
+				{
+					"Name": "ModSeq",
+					"Docs": "",
+					"Typewords": [
+						"ModSeq"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ChangeMsgFlags",
+			"Docs": "ChangeMsgFlags updates flags for one message.",
+			"Fields": [
+				{
+					"Name": "MailboxID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "UID",
+					"Docs": "",
+					"Typewords": [
+						"UID"
+					]
+				},
+				{
+					"Name": "ModSeq",
+					"Docs": "",
+					"Typewords": [
+						"ModSeq"
+					]
+				},
+				{
+					"Name": "Mask",
+					"Docs": "Which flags are actually modified.",
+					"Typewords": [
+						"Flags"
+					]
+				},
+				{
+					"Name": "Flags",
+					"Docs": "New flag values. All are set, not just mask.",
+					"Typewords": [
+						"Flags"
+					]
+				},
+				{
+					"Name": "Keywords",
+					"Docs": "Non-system/well-known flags/keywords/labels.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ChangeMailboxRemove",
+			"Docs": "ChangeMailboxRemove indicates a mailbox was removed, including all its messages.",
+			"Fields": [
+				{
+					"Name": "MailboxID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Name",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ChangeMailboxAdd",
+			"Docs": "ChangeMailboxAdd indicates a new mailbox was added, initially without any messages.",
+			"Fields": [
+				{
+					"Name": "Mailbox",
+					"Docs": "",
+					"Typewords": [
+						"Mailbox"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ChangeMailboxRename",
+			"Docs": "ChangeMailboxRename indicates a mailbox was renamed. Its ID stays the same.\nIt could be under a new parent.",
+			"Fields": [
+				{
+					"Name": "MailboxID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "OldName",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "NewName",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Flags",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ChangeMailboxCounts",
+			"Docs": "ChangeMailboxCounts set new total and unseen message counts for a mailbox.",
+			"Fields": [
+				{
+					"Name": "MailboxID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MailboxName",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Total",
+					"Docs": "Total number of messages, excluding \\Deleted. For JMAP.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Deleted",
+					"Docs": "Number of messages with \\Deleted flag. Used for IMAP message count that includes messages with \\Deleted.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Unread",
+					"Docs": "Messages without \\Seen, excluding those with \\Deleted, for JMAP.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Unseen",
+					"Docs": "Messages without \\Seen, including those with \\Deleted, for IMAP.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Size",
+					"Docs": "Number of bytes for all messages.",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ChangeMailboxSpecialUse",
+			"Docs": "ChangeMailboxSpecialUse has updated special-use flags for a mailbox.",
+			"Fields": [
+				{
+					"Name": "MailboxID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MailboxName",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "SpecialUse",
+					"Docs": "",
+					"Typewords": [
+						"SpecialUse"
+					]
+				}
+			]
+		},
+		{
+			"Name": "SpecialUse",
+			"Docs": "SpecialUse identifies a specific role for a mailbox, used by clients to\nunderstand where messages should go.",
+			"Fields": [
+				{
+					"Name": "Archive",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Draft",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Junk",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Sent",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Trash",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ChangeMailboxKeywords",
+			"Docs": "ChangeMailboxKeywords has an updated list of keywords for a mailbox, e.g. after\na message was added with a keyword that wasn't in the mailbox yet.",
+			"Fields": [
+				{
+					"Name": "MailboxID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MailboxName",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Keywords",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		}
+	],
+	"Ints": [
+		{
+			"Name": "UID",
+			"Docs": "IMAP UID.",
+			"Values": null
+		},
+		{
+			"Name": "ModSeq",
+			"Docs": "ModSeq represents a modseq as stored in the database. ModSeq 0 in the\ndatabase is sent to the client as 1, because modseq 0 is special in IMAP.\nModSeq coming from the client are of type int64.",
+			"Values": null
+		},
+		{
+			"Name": "Validation",
+			"Docs": "Validation of \"message From\" domain.",
+			"Values": [
+				{
+					"Name": "ValidationUnknown",
+					"Value": 0,
+					"Docs": ""
+				},
+				{
+					"Name": "ValidationStrict",
+					"Value": 1,
+					"Docs": "Like DMARC, with strict policies."
+				},
+				{
+					"Name": "ValidationDMARC",
+					"Value": 2,
+					"Docs": "Actual DMARC policy."
+				},
+				{
+					"Name": "ValidationRelaxed",
+					"Value": 3,
+					"Docs": "Like DMARC, with relaxed policies."
+				},
+				{
+					"Name": "ValidationPass",
+					"Value": 4,
+					"Docs": "For SPF."
+				},
+				{
+					"Name": "ValidationNeutral",
+					"Value": 5,
+					"Docs": "For SPF."
+				},
+				{
+					"Name": "ValidationTemperror",
+					"Value": 6,
+					"Docs": ""
+				},
+				{
+					"Name": "ValidationPermerror",
+					"Value": 7,
+					"Docs": ""
+				},
+				{
+					"Name": "ValidationFail",
+					"Value": 8,
+					"Docs": ""
+				},
+				{
+					"Name": "ValidationSoftfail",
+					"Value": 9,
+					"Docs": "For SPF."
+				},
+				{
+					"Name": "ValidationNone",
+					"Value": 10,
+					"Docs": "E.g. No records."
+				}
+			]
+		}
+	],
+	"Strings": [
+		{
+			"Name": "AttachmentType",
+			"Docs": "AttachmentType is for filtering by attachment type.",
+			"Values": [
+				{
+					"Name": "AttachmentIndifferent",
+					"Value": "",
+					"Docs": ""
+				},
+				{
+					"Name": "AttachmentNone",
+					"Value": "none",
+					"Docs": ""
+				},
+				{
+					"Name": "AttachmentAny",
+					"Value": "any",
+					"Docs": ""
+				},
+				{
+					"Name": "AttachmentImage",
+					"Value": "image",
+					"Docs": "png, jpg, gif, ..."
+				},
+				{
+					"Name": "AttachmentPDF",
+					"Value": "pdf",
+					"Docs": ""
+				},
+				{
+					"Name": "AttachmentArchive",
+					"Value": "archive",
+					"Docs": "zip files, tgz, ..."
+				},
+				{
+					"Name": "AttachmentSpreadsheet",
+					"Value": "spreadsheet",
+					"Docs": "ods, xlsx, ..."
+				},
+				{
+					"Name": "AttachmentDocument",
+					"Value": "document",
+					"Docs": "odt, docx, ..."
+				},
+				{
+					"Name": "AttachmentPresentation",
+					"Value": "presentation",
+					"Docs": "odp, pptx, ..."
+				}
+			]
+		},
+		{
+			"Name": "Localpart",
+			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.",
+			"Values": null
+		}
+	],
+	"SherpaVersion": 0,
+	"SherpadocVersion": 1
+}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="icon" href="noNeedlessFaviconRequestsPlease:" />
+		<style>
+* { font-size: inherit; font-family: 'ubuntu', 'lato', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+.mono, .mono * { font-family: 'ubuntu mono', monospace; }
+.pad { padding: 1ex; }
+.scriptswitch { text-decoration: underline #dca053 2px; }
+.quoted1 { color: #03828f; }
+.quoted2 { color: #c7445c; }
+.quoted3 { color: #417c10; }
+		</style>
+	</head>
+	<body>
+		<div id="page" style="opacity: .1">Loading...</div>
+
+		<!-- Load message data synchronously to generate a meaningful 'loaded' event, used by webmailmsg.html for updating the iframe height . -->
+		<script src="parsedmessage.js"></script>
+
+		<script src="../../text.js"></script>
+	</body>
+</html>

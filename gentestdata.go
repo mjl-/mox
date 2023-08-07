@@ -54,6 +54,7 @@ func cmdGentestdata(c *cmd) {
 		return f
 	}
 
+	log := mlog.New("gentestdata")
 	ctxbg := context.Background()
 	mox.Shutdown = ctxbg
 	mox.Context = ctxbg
@@ -233,7 +234,7 @@ Accounts:
 	const qmsg = "From: <test0@mox.example>\r\nTo: <other@remote.example>\r\nSubject: test\r\n\r\nthe message...\r\n"
 	_, err = fmt.Fprint(mf, qmsg)
 	xcheckf(err, "writing message")
-	_, err = queue.Add(ctxbg, mlog.New("gentestdata"), "test0", mailfrom, rcptto, false, false, int64(len(qmsg)), "<test@localhost>", prefix, mf, nil, true)
+	_, err = queue.Add(ctxbg, log, "test0", mailfrom, rcptto, false, false, int64(len(qmsg)), "<test@localhost>", prefix, mf, nil, true)
 	xcheckf(err, "enqueue message")
 
 	// Create three accounts.
@@ -280,10 +281,17 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf, msg)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest1.DeliverMessage(mlog.New("gentestdata"), tx, &m, mf, true, false, false, true)
+		err = accTest1.DeliverMessage(log, tx, &m, mf, true, false, false, true)
 		xcheckf(err, "add message to account test1")
 		err = mf.Close()
 		xcheckf(err, "closing file")
+
+		err = tx.Get(&inbox)
+		xcheckf(err, "get inbox")
+		inbox.Add(m.MailboxCounts())
+		err = tx.Update(&inbox)
+		xcheckf(err, "update inbox")
+
 		return nil
 	})
 	xcheckf(err, "write transaction with new message")
@@ -327,10 +335,16 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf0, msg0)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(mlog.New("gentestdata"), tx, &m0, mf0, true, false, false, false)
+		err = accTest2.DeliverMessage(log, tx, &m0, mf0, true, false, false, false)
 		xcheckf(err, "add message to account test2")
 		err = mf0.Close()
 		xcheckf(err, "closing file")
+
+		err = tx.Get(&inbox)
+		xcheckf(err, "get inbox")
+		inbox.Add(m0.MailboxCounts())
+		err = tx.Update(&inbox)
+		xcheckf(err, "update inbox")
 
 		sent, err := bstore.QueryTx[store.Mailbox](tx).FilterNonzero(store.Mailbox{Name: "Sent"}).Get()
 		xcheckf(err, "looking up inbox")
@@ -348,10 +362,16 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf1, msg1)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(mlog.New("gentestdata"), tx, &m1, mf1, true, true, false, false)
+		err = accTest2.DeliverMessage(log, tx, &m1, mf1, true, true, false, false)
 		xcheckf(err, "add message to account test2")
 		err = mf1.Close()
 		xcheckf(err, "closing file")
+
+		err = tx.Get(&sent)
+		xcheckf(err, "get sent")
+		sent.Add(m1.MailboxCounts())
+		err = tx.Update(&sent)
+		xcheckf(err, "update sent")
 
 		return nil
 	})

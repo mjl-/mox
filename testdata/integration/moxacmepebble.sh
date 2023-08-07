@@ -29,7 +29,7 @@ unbound-control -s 172.28.1.30 reload # reload unbound with zone file changes
 
 CURL_CA_BUNDLE=/integration/tls/ca.pem curl -o /integration/tmp-pebble-ca.pem https://acmepebble.example:15000/roots/0
 
-mox serve &
+mox -checkconsistency serve &
 while true; do
 	if test -e data/ctl; then
 		echo -n accountpass1234 | mox setaccountpassword moxtest1@mox1.example

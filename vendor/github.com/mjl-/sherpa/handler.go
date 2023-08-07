@@ -336,7 +336,7 @@ func adjustFunctionNameCapitals(s string, opts HandlerOpts) string {
 
 func gatherFunctions(functions map[string]reflect.Value, t reflect.Type, v reflect.Value, opts HandlerOpts) error {
 	if t.Kind() != reflect.Struct {
-		return fmt.Errorf("sherpa sections must be a struct (not a ptr)")
+		return fmt.Errorf("sherpa sections must be a struct (is %v)", t)
 	}
 	for i := 0; i < t.NumMethod(); i++ {
 		name := adjustFunctionNameCapitals(t.Method(i).Name, opts)
@@ -347,7 +347,11 @@ func gatherFunctions(functions map[string]reflect.Value, t reflect.Type, v refle
 		functions[name] = m
 	}
 	for i := 0; i < t.NumField(); i++ {
-		err := gatherFunctions(functions, t.Field(i).Type, v.Field(i), opts)
+		f := t.Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		err := gatherFunctions(functions, f.Type, v.Field(i), opts)
 		if err != nil {
 			return err
 		}
@@ -492,7 +496,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			collector.JSON()
 			hdr.Set("Content-Type", "application/json; charset=utf-8")
 			hdr.Set("Cache-Control", "no-cache")
-			sherpaJSON := &*h.sherpaJSON
+			sherpaJSON := *h.sherpaJSON
 			sherpaJSON.BaseURL = getBaseURL(r) + h.path
 			err := json.NewEncoder(w).Encode(sherpaJSON)
 			if err != nil {
@@ -508,11 +512,16 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		collector.JavaScript()
-		hdr.Set("Content-Type", "text/javascript; charset=utf-8")
-		hdr.Set("Cache-Control", "no-cache")
-		sherpaJSON := &*h.sherpaJSON
+		sherpaJSON := *h.sherpaJSON
 		sherpaJSON.BaseURL = getBaseURL(r) + h.path
 		buf, err := json.Marshal(sherpaJSON)
+		if err != nil {
+			log.Println("marshal sherpa.json:", err)
+			http.Error(w, "500 - internal server error - marshal sherpa json failed", http.StatusInternalServerError)
+			return
+		}
+		hdr.Set("Content-Type", "text/javascript; charset=utf-8")
+		hdr.Set("Cache-Control", "no-cache")
 		js := strings.Replace(sherpaJS, "{{.sherpaJSON}}", string(buf), -1)
 		_, err = w.Write([]byte(js))
 		if err != nil {
@@ -538,7 +547,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			ct := r.Header.Get("Content-Type")
 			if ct == "" {
 				collector.ProtocolError()
-				respondJSON(w, 200, &response{Error: &Error{Code: SherpaBadRequest, Message: fmt.Sprintf("missing content-type")}})
+				respondJSON(w, 200, &response{Error: &Error{Code: SherpaBadRequest, Message: "missing content-type"}})
 				return
 			}
 			mt, mtparams, err := mime.ParseMediaType(ct)
@@ -552,8 +561,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				respondJSON(w, 200, &response{Error: &Error{Code: SherpaBadRequest, Message: fmt.Sprintf(`unrecognized content-type %q, expecting "application/json"`, mt)}})
 				return
 			}
-			charset, ok := mtparams["charset"]
-			if ok && strings.ToLower(charset) != "utf-8" {
+			if charset, chok := mtparams["charset"]; chok && strings.ToLower(charset) != "utf-8" {
 				collector.ProtocolError()
 				respondJSON(w, 200, &response{Error: &Error{Code: SherpaBadRequest, Message: fmt.Sprintf(`unexpected charset %q, expecting "utf-8"`, charset)}})
 				return
@@ -561,7 +569,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			t0 := time.Now()
 			r, xerr := h.call(r.Context(), name, fn, r.Body)
-			durationSec := float64(time.Now().Sub(t0)) / float64(time.Second)
+			durationSec := float64(time.Since(t0)) / float64(time.Second)
 			if xerr != nil {
 				switch err := xerr.(type) {
 				case *InternalServerError:
@@ -576,7 +584,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			} else {
 				var v interface{}
-				if raw, ok := r.(Raw); ok {
+				if raw, rok := r.(Raw); rok {
 					v = raw
 				} else {
 					v = &response{Result: r}
@@ -598,7 +606,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			err := r.ParseForm()
 			if err != nil {
 				collector.ProtocolError()
-				respondJSON(w, 200, &response{Error: &Error{Code: SherpaBadRequest, Message: fmt.Sprintf("could not parse query string")}})
+				respondJSON(w, 200, &response{Error: &Error{Code: SherpaBadRequest, Message: "could not parse query string"}})
 				return
 			}
 
@@ -622,7 +630,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			t0 := time.Now()
 			r, xerr := h.call(r.Context(), name, fn, strings.NewReader(body))
-			durationSec := float64(time.Now().Sub(t0)) / float64(time.Second)
+			durationSec := float64(time.Since(t0)) / float64(time.Second)
 			if xerr != nil {
 				switch err := xerr.(type) {
 				case *InternalServerError:

@@ -148,7 +148,7 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 						case "mdnsent", "$mdnsent":
 							flags.MDNSent = true
 						default:
-							if ValidLowercaseKeyword(word) {
+							if err := CheckKeyword(word); err == nil {
 								keywords[word] = true
 							}
 						}
@@ -205,13 +205,13 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 }
 
 type MaildirReader struct {
-	createTemp      func(pattern string) (*os.File, error)
-	newf, curf      *os.File
-	f               *os.File // File we are currently reading from. We first read newf, then curf.
-	dir             string   // Name of directory for f. Can be empty on first call.
-	entries         []os.DirEntry
-	dovecotKeywords []string
-	log             *mlog.Log
+	createTemp   func(pattern string) (*os.File, error)
+	newf, curf   *os.File
+	f            *os.File // File we are currently reading from. We first read newf, then curf.
+	dir          string   // Name of directory for f. Can be empty on first call.
+	entries      []os.DirEntry
+	dovecotFlags []string // Lower-case flags/keywords.
+	log          *mlog.Log
 }
 
 func NewMaildirReader(createTemp func(pattern string) (*os.File, error), newf, curf *os.File, log *mlog.Log) *MaildirReader {
@@ -226,7 +226,7 @@ func NewMaildirReader(createTemp func(pattern string) (*os.File, error), newf, c
 	// Best-effort parsing of dovecot keywords.
 	kf, err := os.Open(filepath.Join(filepath.Dir(newf.Name()), "dovecot-keywords"))
 	if err == nil {
-		mr.dovecotKeywords, err = ParseDovecotKeywords(kf, log)
+		mr.dovecotFlags, err = ParseDovecotKeywordsFlags(kf, log)
 		log.Check(err, "parsing dovecot keywords file")
 		err = kf.Close()
 		log.Check(err, "closing dovecot-keywords file")
@@ -336,10 +336,10 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 			default:
 				if c >= 'a' && c <= 'z' {
 					index := int(c - 'a')
-					if index >= len(mr.dovecotKeywords) {
+					if index >= len(mr.dovecotFlags) {
 						continue
 					}
-					kw := strings.ToLower(mr.dovecotKeywords[index])
+					kw := mr.dovecotFlags[index]
 					switch kw {
 					case "$forwarded", "forwarded":
 						flags.Forwarded = true
@@ -352,9 +352,7 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 					case "$phishing", "phishing":
 						flags.Phishing = true
 					default:
-						if ValidLowercaseKeyword(kw) {
-							keywords[kw] = true
-						}
+						keywords[kw] = true
 					}
 				}
 			}
@@ -370,7 +368,11 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 	return m, mf, p, nil
 }
 
-func ParseDovecotKeywords(r io.Reader, log *mlog.Log) ([]string, error) {
+// ParseDovecotKeywordsFlags attempts to parse a dovecot-keywords file. It only
+// returns valid flags/keywords, as lower-case. If an error is encountered and
+// returned, any keywords that were found are still returned. The returned list has
+// both system/well-known flags and custom keywords.
+func ParseDovecotKeywordsFlags(r io.Reader, log *mlog.Log) ([]string, error) {
 	/*
 		If the dovecot-keywords file is present, we parse its additional flags, see
 		https://doc.dovecot.org/admin_manual/mailbox_formats/maildir/
@@ -406,7 +408,14 @@ func ParseDovecotKeywords(r io.Reader, log *mlog.Log) ([]string, error) {
 			errs = append(errs, fmt.Sprintf("duplicate dovecot keyword: %q", s))
 			continue
 		}
-		keywords[index] = t[1]
+		kw := strings.ToLower(t[1])
+		if !systemWellKnownFlags[kw] {
+			if err := CheckKeyword(kw); err != nil {
+				errs = append(errs, fmt.Sprintf("invalid keyword %q", kw))
+				continue
+			}
+		}
+		keywords[index] = kw
 		if index >= end {
 			end = index + 1
 		}

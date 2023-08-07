@@ -4,10 +4,12 @@ Also see IANA assignments, https://www.iana.org/protocols
 
 # Mail, message format, MIME
 822	Standard for ARPA Internet Text Messages
+1847	Security Multiparts for MIME: Multipart/Signed and Multipart/Encrypted
 2045	Multipurpose Internet Mail Extensions (MIME) Part One: Format of Internet Message Bodies
 2046	Multipurpose Internet Mail Extensions (MIME) Part Two: Media Types
 2047	MIME (Multipurpose Internet Mail Extensions) Part Three: Message Header Extensions for Non-ASCII Text
 2049	Multipurpose Internet Mail Extensions (MIME) Part Five: Conformance Criteria and Examples
+2183	Communicating Presentation Information in Internet Messages: The Content-Disposition Header Field
 2231	MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
 3629	UTF-8, a transformation format of ISO 10646
 3834	Recommendations for Automatic Responses to Electronic Mail
@@ -17,6 +19,8 @@ Also see IANA assignments, https://www.iana.org/protocols
 6854	Update to Internet Message Format to Allow Group Syntax in the "From:" and "Sender:" Header Fields
 7405	Case-Sensitive String Support in ABNF
 9228	Delivered-To Email Header Field
+
+https://www.iana.org/assignments/message-headers/message-headers.xhtml
 
 # SMTP
 

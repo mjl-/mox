@@ -155,7 +155,7 @@ BoltDB returns Go values that are memory mapped to the database file.  This
 means BoltDB/bstore database files cannot be transferred between machines with
 different endianness.  BoltDB uses explicit widths for its types, so files can
 be transferred between 32bit and 64bit machines of same endianness. While
-BoltDB returns read-only memory mapped Go values, bstore only ever returns
+BoltDB returns read-only memory mapped byte slices, bstore only ever returns
 parsed/copied regular writable Go values that require no special programmer
 attention.
 

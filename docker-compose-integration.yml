@@ -87,7 +87,7 @@ services:
     hostname: localserve.mox1.example
     domainname: mox1.example
     image: mox_integration_moxmail
-    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; mox localserve -ip 172.28.1.60"]
+    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; mox -checkconsistency localserve -ip 172.28.1.60"]
     volumes:
       - ./.go:/.go
       - ./testdata/integration/resolv.conf:/etc/resolv.conf

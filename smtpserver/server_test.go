@@ -111,10 +111,15 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 }
 
 func (ts *testserver) close() {
+	if ts.acc == nil {
+		return
+	}
 	ts.comm.Unregister()
 	queue.Shutdown()
 	close(ts.switchDone)
-	ts.acc.Close()
+	err := ts.acc.Close()
+	tcheck(ts.t, err, "closing account")
+	ts.acc = nil
 }
 
 func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {

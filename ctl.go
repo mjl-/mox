@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -672,8 +673,131 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			jf = nil
 			ctl.xcheck(err, "closing junk filter")
 		})
-
 		ctl.xwriteok()
+
+	case "recalculatemailboxcounts":
+		/* protocol:
+		> "recalculatemailboxcounts"
+		> account
+		< "ok" or error
+		< stream
+		*/
+		account := ctl.xread()
+		acc, err := store.OpenAccount(account)
+		ctl.xcheck(err, "open account")
+		defer func() {
+			if acc != nil {
+				err := acc.Close()
+				log.Check(err, "closing account after recalculating mailbox counts")
+			}
+		}()
+		ctl.xwriteok()
+
+		w := ctl.writer()
+
+		acc.WithWLock(func() {
+			var changes []store.Change
+			err = acc.DB.Write(ctx, func(tx *bstore.Tx) error {
+				return bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
+					mc, err := mb.CalculateCounts(tx)
+					if err != nil {
+						return fmt.Errorf("calculating counts for mailbox %q: %w", mb.Name, err)
+					}
+
+					if !mb.HaveCounts || mc != mb.MailboxCounts {
+						_, err := fmt.Fprintf(w, "for %s setting new counts %s (was %s)\n", mb.Name, mc, mb.MailboxCounts)
+						ctl.xcheck(err, "write")
+						mb.HaveCounts = true
+						mb.MailboxCounts = mc
+						if err := tx.Update(&mb); err != nil {
+							return fmt.Errorf("storing new counts for %q: %v", mb.Name, err)
+						}
+						changes = append(changes, mb.ChangeCounts())
+					}
+					return nil
+				})
+			})
+			ctl.xcheck(err, "write transaction for mailbox counts")
+
+			store.BroadcastChanges(acc, changes)
+		})
+		w.xclose()
+
+	case "reparse":
+		/* protocol:
+		> "reparse"
+		> account or empty
+		< "ok" or error
+		< stream
+		*/
+
+		accountOpt := ctl.xread()
+		ctl.xwriteok()
+		w := ctl.writer()
+
+		xreparseAccount := func(accName string) {
+			acc, err := store.OpenAccount(accName)
+			ctl.xcheck(err, "open account")
+			defer func() {
+				err := acc.Close()
+				log.Check(err, "closing account after reparsing messages")
+			}()
+
+			total := 0
+			var lastID int64
+			for {
+				var n int
+				// Batch in transactions of 100 messages, so we don't block the account too long.
+				err := acc.DB.Write(ctx, func(tx *bstore.Tx) error {
+					q := bstore.QueryTx[store.Message](tx)
+					q.FilterEqual("Expunged", false)
+					q.FilterGreater("ID", lastID)
+					q.Limit(100)
+					q.SortAsc("ID")
+					return q.ForEach(func(m store.Message) error {
+						lastID = m.ID
+						mr := acc.MessageReader(m)
+						p, err := message.EnsurePart(mr, m.Size)
+						if err != nil {
+							_, err := fmt.Fprintf(w, "parsing message %d: %v (continuing)\n", m.ID, err)
+							ctl.xcheck(err, "write")
+						}
+						m.ParsedBuf, err = json.Marshal(p)
+						if err != nil {
+							return fmt.Errorf("marshal parsed message: %v", err)
+						}
+						total++
+						n++
+						if err := tx.Update(&m); err != nil {
+							return fmt.Errorf("update message: %v", err)
+						}
+						return nil
+					})
+
+				})
+				ctl.xcheck(err, "update messages with parsed mime structure")
+				if n < 100 {
+					break
+				}
+			}
+			_, err = fmt.Fprintf(w, "%d messages reparsed for account %s\n", total, accName)
+			ctl.xcheck(err, "write")
+		}
+
+		if accountOpt != "" {
+			xreparseAccount(accountOpt)
+		} else {
+			for i, accName := range mox.Conf.Accounts() {
+				var line string
+				if i > 0 {
+					line = "\n"
+				}
+				_, err := fmt.Fprintf(w, "%sreparsing account %s\n", line, accName)
+				ctl.xcheck(err, "write")
+				xreparseAccount(accName)
+			}
+		}
+		w.xclose()
 
 	case "backup":
 		backupctl(ctx, ctl)

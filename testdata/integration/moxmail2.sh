@@ -25,7 +25,7 @@ EOF
 sed -n '/^;/,/IN CAA/p' output.txt >>/integration/example-integration.zone
 unbound-control -s 172.28.1.30 reload # reload unbound with zone file changes
 
-mox serve &
+mox -checkconsistency serve &
 while true; do
 	if test -e data/ctl; then
 		echo -n accountpass4321 | mox setaccountpassword moxtest2@mox2.example

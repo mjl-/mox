@@ -1,4 +1,4 @@
-package http
+package webadmin
 
 import (
 	"bufio"
@@ -53,6 +53,8 @@ import (
 	"github.com/mjl-/mox/tlsrptdb"
 )
 
+var xlog = mlog.New("webadmin")
+
 //go:embed adminapi.json
 var adminapiJSON []byte
 
@@ -98,7 +100,7 @@ var authCache struct {
 
 // started when we start serving. not at package init time, because we don't want
 // to make goroutines that early.
-func manageAuthCache() {
+func ManageAuthCache() {
 	for {
 		authCache.Lock()
 		authCache.lastSuccessHash = ""
@@ -125,7 +127,7 @@ func checkAdminAuth(ctx context.Context, passwordfile string, w http.ResponseWri
 	start := time.Now()
 	var addr *net.TCPAddr
 	defer func() {
-		metrics.AuthenticationInc("httpadmin", "httpbasic", authResult)
+		metrics.AuthenticationInc("webadmin", "httpbasic", authResult)
 		if authResult == "ok" && addr != nil {
 			mox.LimiterFailedAuth.Reset(addr.IP, start)
 		}
@@ -140,7 +142,7 @@ func checkAdminAuth(ctx context.Context, passwordfile string, w http.ResponseWri
 		remoteIP = addr.IP
 	}
 	if remoteIP != nil && !mox.LimiterFailedAuth.Add(remoteIP, start, 1) {
-		metrics.AuthenticationRatelimitedInc("httpadmin")
+		metrics.AuthenticationRatelimitedInc("webadmin")
 		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
 		return false
 	}
@@ -181,11 +183,15 @@ func checkAdminAuth(ctx context.Context, passwordfile string, w http.ResponseWri
 	return true
 }
 
-func adminHandle(w http.ResponseWriter, r *http.Request) {
+func Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
 	if !checkAdminAuth(ctx, mox.ConfigDirPath(mox.Conf.Static.AdminPasswordFile), w, r) {
 		// Response already sent.
 		return
+	}
+
+	if lw, ok := w.(interface{ AddField(f mlog.Pair) }); ok {
+		lw.AddField(mlog.Field("authadmin", true))
 	}
 
 	if r.Method == "GET" && r.URL.Path == "/" {
@@ -193,7 +199,7 @@ func adminHandle(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache; max-age=0")
 		// We typically return the embedded admin.html, but during development it's handy
 		// to load from disk.
-		f, err := os.Open("http/admin.html")
+		f, err := os.Open("webadmin/admin.html")
 		if err == nil {
 			defer f.Close()
 			_, _ = io.Copy(w, f)
@@ -1237,8 +1243,7 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 	}
 	msg := fmt.Sprintf(format, args...)
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
-	log := xlog.WithContext(ctx)
-	log.Errorx(msg, err)
+	xlog.WithContext(ctx).Errorx(msg, err)
 	panic(&sherpa.Error{Code: "server:error", Message: errmsg})
 }
 

@@ -36,7 +36,7 @@ type ChangeAddUID struct {
 // ChangeRemoveUIDs is sent for removal of one or more messages from a mailbox.
 type ChangeRemoveUIDs struct {
 	MailboxID int64
-	UIDs      []UID
+	UIDs      []UID // Must be in increasing UID order, for IMAP.
 	ModSeq    ModSeq
 }
 
@@ -47,30 +47,55 @@ type ChangeFlags struct {
 	ModSeq    ModSeq
 	Mask      Flags    // Which flags are actually modified.
 	Flags     Flags    // New flag values. All are set, not just mask.
-	Keywords  []string // Other flags.
+	Keywords  []string // Non-system/well-known flags/keywords/labels.
 }
 
 // ChangeRemoveMailbox is sent for a removed mailbox.
 type ChangeRemoveMailbox struct {
-	Name string
+	MailboxID int64
+	Name      string
 }
 
 // ChangeAddMailbox is sent for a newly created mailbox.
 type ChangeAddMailbox struct {
-	Name  string
-	Flags []string
+	Mailbox Mailbox
+	Flags   []string // For flags like \Subscribed.
 }
 
 // ChangeRenameMailbox is sent for a rename mailbox.
 type ChangeRenameMailbox struct {
-	OldName string
-	NewName string
-	Flags   []string
+	MailboxID int64
+	OldName   string
+	NewName   string
+	Flags     []string
 }
 
 // ChangeAddSubscription is sent for an added subscription to a mailbox.
 type ChangeAddSubscription struct {
-	Name string
+	Name  string
+	Flags []string // For additional IMAP flags like \NonExistent.
+}
+
+// ChangeMailboxCounts is sent when the number of total/deleted/unseen/unread messages changes.
+type ChangeMailboxCounts struct {
+	MailboxID   int64
+	MailboxName string
+	MailboxCounts
+}
+
+// ChangeMailboxSpecialUse is sent when a special-use flag changes.
+type ChangeMailboxSpecialUse struct {
+	MailboxID   int64
+	MailboxName string
+	SpecialUse  SpecialUse
+}
+
+// ChangeMailboxKeywords is sent when keywords are changed for a mailbox. For
+// example, when a message is added with a previously unseen keyword.
+type ChangeMailboxKeywords struct {
+	MailboxID   int64
+	MailboxName string
+	Keywords    []string
 }
 
 var switchboardBusy atomic.Bool

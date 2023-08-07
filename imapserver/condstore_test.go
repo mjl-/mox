@@ -84,6 +84,7 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 	// Later on, we'll update the second, and delete the third, leaving the first
 	// unmodified. Those messages have modseq 0 in the database. We use append for
 	// convenience, then adjust the records in the database.
+	// We have a workaround below to prevent triggering the consistency checker.
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
@@ -103,7 +104,7 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 	tc2.client.Login("mjl@mox.example", "testtest")
 	tc2.client.Select("inbox")
 
-	// tc2 is a client with condstore, so with modseq responses.
+	// tc3 is a client with condstore, so with modseq responses.
 	tc3 := startNoSwitchboard(t)
 	defer tc3.close()
 	tc3.client.Login("mjl@mox.example", "testtest")
@@ -349,7 +350,13 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 		t.Helper()
 
 		xtc := startNoSwitchboard(t)
-		defer xtc.close()
+		// We have modified modseq & createseq to 0 above for testing that case. Don't
+		// trigger the consistency checker.
+		store.CheckConsistencyOnClose = false
+		defer func() {
+			xtc.close()
+			store.CheckConsistencyOnClose = true
+		}()
 		xtc.client.Login("mjl@mox.example", "testtest")
 		fn(xtc)
 		tagcount++
@@ -475,6 +482,12 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 		imapclient.UntaggedExists(2),
 		imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(2), noflags, imapclient.FetchModSeq(clientModseq)}},
 	)
+
+	// Restore valid modseq/createseq for the consistency checker.
+	_, err = bstore.QueryDB[store.Message](ctxbg, tc.account.DB).FilterEqual("CreateSeq", int64(0)).UpdateNonzero(store.Message{CreateSeq: 2})
+	tcheck(t, err, "updating modseq/createseq to valid values")
+	_, err = bstore.QueryDB[store.Message](ctxbg, tc.account.DB).FilterEqual("ModSeq", int64(0)).UpdateNonzero(store.Message{ModSeq: 2})
+	tcheck(t, err, "updating modseq/createseq to valid values")
 	tc2o.close()
 	tc2o = nil
 	tc3o.close()
@@ -519,7 +532,10 @@ func testQresync(t *testing.T, tc *testconn, clientModseq int64) {
 	xtc.client.Login("mjl@mox.example", "testtest")
 	xtc.transactf("ok", "Select inbox (Condstore)")
 	xtc.transactf("bad", "Uid Fetch 1:* (Flags) (Changedsince 1 Vanished)")
+	// Prevent triggering the consistency checker, we still have modseq/createseq at 0.
+	store.CheckConsistencyOnClose = false
 	xtc.close()
+	store.CheckConsistencyOnClose = true
 	xtc = nil
 
 	// Check that we get proper vanished responses.
@@ -539,7 +555,10 @@ func testQresync(t *testing.T, tc *testconn, clientModseq int64) {
 	xtc = startNoSwitchboard(t)
 	xtc.client.Login("mjl@mox.example", "testtest")
 	xtc.transactf("bad", "Select inbox (Qresync 1 0)")
+	// Prevent triggering the consistency checker, we still have modseq/createseq at 0.
+	store.CheckConsistencyOnClose = false
 	xtc.close()
+	store.CheckConsistencyOnClose = true
 	xtc = nil
 
 	tc.transactf("bad", "Select inbox (Qresync (0 1))")               // Both args must be > 0.
@@ -551,7 +570,7 @@ func testQresync(t *testing.T, tc *testconn, clientModseq int64) {
 	tc.transactf("bad", "Select inbox (Qresync (1 1 1:6 (1:6 1:*)))") // Known uidset cannot have *.
 	tc.transactf("bad", "Select inbox (Qresync (1 1) qresync (1 1))") // Duplicate qresync.
 
-	flags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent label1 l1 l2 l3 l4 l5 l6 l7 l8`, " ")
+	flags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent l1 l2 l3 l4 l5 l6 l7 l8 label1`, " ")
 	permflags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent \*`, " ")
 	uflags := imapclient.UntaggedFlags(flags)
 	upermflags := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "PERMANENTFLAGS", CodeArg: imapclient.CodeList{Code: "PERMANENTFLAGS", Args: permflags}, More: "x"}}
@@ -681,7 +700,7 @@ func testQresync(t *testing.T, tc *testconn, clientModseq int64) {
 	tc.transactf("ok", "Select inbox (Qresync (1 9 (1,3,6 1,3,6)))")
 	tc.xuntagged(
 		makeUntagged(
-			imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "ALERT", More: "Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full syncronization recommended."}},
+			imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "ALERT", More: "Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full synchronization recommended."}},
 			imapclient.UntaggedVanished{Earlier: true, UIDs: xparseNumSet("3:4")},
 			imapclient.UntaggedFetch{Seq: 4, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(6), noflags, imapclient.FetchModSeq(clientModseq)}},
 		)...,
@@ -694,7 +713,7 @@ func testQresync(t *testing.T, tc *testconn, clientModseq int64) {
 	tc.transactf("ok", "Select inbox (Qresync (1 18 (1,3,6 1,3,6)))")
 	tc.xuntagged(
 		makeUntagged(
-			imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "ALERT", More: "Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full syncronization recommended."}},
+			imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "ALERT", More: "Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full synchronization recommended."}},
 			imapclient.UntaggedVanished{Earlier: true, UIDs: xparseNumSet("3:4")},
 			imapclient.UntaggedFetch{Seq: 4, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(6), noflags, imapclient.FetchModSeq(clientModseq)}},
 		)...,

@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+	<head>
+		<title>Message</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="icon" href="noNeedlessFaviconRequestsPlease:" />
+		<style>
+* { font-size: inherit; font-family: 'ubuntu', 'lato', sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+table td, table th { padding: .25ex .5ex; }
+
+.pad { padding: 1ex; }
+.scriptswitch { text-decoration: underline #dca053 2px; }
+		</style>
+	</head>
+	<body>
+		<div id="page"><div style="padding: 1em">Loading...</div></div>
+
+		<!-- Load message data synchronously like in text.html, which needs it to generate a meaningful 'loaded' event, used for updating the iframe height. -->
+		<script src="parsedmessage.js"></script>
+
+		<script src="../../msg.js"></script>
+	</body>
+</html>

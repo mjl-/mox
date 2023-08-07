@@ -233,8 +233,23 @@ func (e *exec[T]) nextKey(write, value bool) ([]byte, T, error) {
 	if collect {
 		e.data = []pair[T]{} // Must be non-nil to get into e.data branch on function restart.
 	}
+	// Every 1k keys we've seen, we'll check if the context has been canceled. If we
+	// wouldn't do this, a query that doesn't return any matches won't get canceled
+	// until it is finished.
+	keysSeen := 0
 	for {
 		var xk, xv []byte
+		keysSeen++
+		if keysSeen == 1024 {
+			select {
+			case <-q.ctxDone:
+				err := q.ctx.Err()
+				q.error(err)
+				return nil, zero, err
+			default:
+			}
+			keysSeen = 0
+		}
 		if e.forward == nil {
 			// First time we are in this loop, we set up a cursor and e.forward.
 

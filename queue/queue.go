@@ -204,8 +204,28 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 	// todo: Add should accept multiple rcptTo if they are for the same domain. so we can queue them for delivery in one (or just a few) session(s), transferring the data only once. ../rfc/5321:3759
 
 	if Localserve {
-		// Safety measure, shouldn't happen.
-		return 0, fmt.Errorf("no queuing with localserve")
+		if senderAccount == "" {
+			return 0, fmt.Errorf("cannot queue with localserve without local account")
+		}
+		acc, err := store.OpenAccount(senderAccount)
+		if err != nil {
+			return 0, fmt.Errorf("opening sender account for immediate delivery with localserve: %v", err)
+		}
+		defer func() {
+			err := acc.Close()
+			log.Check(err, "closing account")
+		}()
+		m := store.Message{Size: size}
+		conf, _ := acc.Conf()
+		dest := conf.Destinations[mailFrom.String()]
+		acc.WithWLock(func() {
+			err = acc.Deliver(log, dest, &m, msgFile, consumeFile)
+		})
+		if err != nil {
+			return 0, fmt.Errorf("delivering message: %v", err)
+		}
+		log.Debug("immediately delivered from queue to sender")
+		return 0, nil
 	}
 
 	tx, err := DB.Begin(ctx, true)

@@ -38,6 +38,16 @@ groups:
     annotations:
       summary: smtp delivery errors
 
+  - alert: mox-webmail-errors
+    expr: increase(mox_webmail_errors_total[1h]) > 0
+    annotations:
+      summary: errors in webmail operation
+
+  - alert: mox-webmailsubmission-errors
+    expr: increase(mox_webmail_submission_total{result=~".*error"}[1h]) > 0
+    annotations:
+      summary: webmail submission errors
+
   # the alerts below can be used to keep a closer eye or when starting to use mox,
   # but can be noisy, or you may not be able to prevent them.
 

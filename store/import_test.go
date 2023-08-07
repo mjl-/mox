@@ -85,14 +85,14 @@ func TestParseDovecotKeywords(t *testing.T) {
 3 $Forwarded
 4 $Junk
 `
-	keywords, err := ParseDovecotKeywords(strings.NewReader(data), mlog.New("dovecotkeywords"))
+	flags, err := ParseDovecotKeywordsFlags(strings.NewReader(data), mlog.New("dovecotkeywords"))
 	if err != nil {
 		t.Fatalf("parsing dovecot-keywords: %v", err)
 	}
-	got := strings.Join(keywords, ",")
-	want := "Old,Junk,NonJunk,$Forwarded,$Junk"
+	got := strings.Join(flags, ",")
+	want := "old,junk,nonjunk,$forwarded,$junk"
 	if got != want {
-		t.Fatalf("parsing dovecot keywords, got %q, want %q", got, want)
+		t.Fatalf("parsing dovecot keywords, got %q, expect %q", got, want)
 
 	}
 }

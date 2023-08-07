@@ -1,4 +1,4 @@
-package http
+package webaccount
 
 import (
 	"archive/tar"
@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -41,28 +42,30 @@ func TestAccount(t *testing.T) {
 	mox.MustLoadConfig(true, false)
 	acc, err := store.OpenAccount("mjl")
 	tcheck(t, err, "open account")
-	defer acc.Close()
+	defer func() {
+		err = acc.Close()
+		tcheck(t, err, "closing account")
+	}()
 	switchDone := store.Switchboard()
 	defer close(switchDone)
 
 	log := mlog.New("store")
 
-	test := func(authHdr string, expect string) {
+	test := func(userpass string, expect string) {
 		t.Helper()
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("GET", "/ignored", nil)
-		if authHdr != "" {
-			r.Header.Add("Authorization", authHdr)
-		}
-		ok := checkAccountAuth(ctxbg, log, w, r)
-		if ok != expect {
-			t.Fatalf("got %v, expected %v", ok, expect)
+		authhdr := "Basic " + base64.StdEncoding.EncodeToString([]byte(userpass))
+		r.Header.Add("Authorization", authhdr)
+		_, accName := CheckAuth(ctxbg, log, "webaccount", w, r)
+		if accName != expect {
+			t.Fatalf("got %q, expected %q", accName, expect)
 		}
 	}
 
-	const authOK = "Basic bWpsQG1veC5leGFtcGxlOnRlc3QxMjM0"      // mjl@mox.example:test1234
-	const authBad = "Basic bWpsQG1veC5leGFtcGxlOmJhZHBhc3N3b3Jk" // mjl@mox.example:badpassword
+	const authOK = "mjl@mox.example:test1234"
+	const authBad = "mjl@mox.example:badpassword"
 
 	authCtx := context.WithValue(ctxbg, authCtxKey, "mjl")
 
@@ -71,10 +74,13 @@ func TestAccount(t *testing.T) {
 	test(authOK, "mjl")
 	test(authBad, "")
 
-	_, dests := Account{}.Destinations(authCtx)
+	fullName, _, dests := Account{}.Account(authCtx)
 	Account{}.DestinationSave(authCtx, "mjl@mox.example", dests["mjl@mox.example"], dests["mjl@mox.example"]) // todo: save modified value and compare it afterwards
 
-	go importManage()
+	Account{}.AccountSaveFullName(authCtx, fullName+" changed") // todo: check if value was changed
+	Account{}.AccountSaveFullName(authCtx, fullName)
+
+	go ImportManage()
 
 	// Import mbox/maildir tgz/zip.
 	testImport := func(filename string, expect int) {
@@ -93,9 +99,9 @@ func TestAccount(t *testing.T) {
 
 		r := httptest.NewRequest("POST", "/import", &reqBody)
 		r.Header.Add("Content-Type", mpw.FormDataContentType())
-		r.Header.Add("Authorization", authOK)
+		r.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(authOK)))
 		w := httptest.NewRecorder()
-		accountHandle(w, r)
+		Handle(w, r)
 		if w.Code != http.StatusOK {
 			t.Fatalf("import, got status code %d, expected 200: %s", w.Code, w.Body.Bytes())
 		}
@@ -174,9 +180,9 @@ func TestAccount(t *testing.T) {
 		t.Helper()
 
 		r := httptest.NewRequest("GET", httppath, nil)
-		r.Header.Add("Authorization", authOK)
+		r.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(authOK)))
 		w := httptest.NewRecorder()
-		accountHandle(w, r)
+		Handle(w, r)
 		if w.Code != http.StatusOK {
 			t.Fatalf("export, got status code %d, expected 200: %s", w.Code, w.Body.Bytes())
 		}

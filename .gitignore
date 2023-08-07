@@ -23,6 +23,7 @@
 /testdata/smtpserverfuzz/data/
 /testdata/store/data/
 /testdata/train/
+/testdata/webmail/data/
 /testdata/upgradetest.mbox.gz
 /testdata/integration/example-integration.zone
 /testdata/integration/tmp-pebble-ca.pem
@@ -30,5 +31,3 @@
 /cover.html
 /.go/
 /node_modules/
-/package.json
-/package-lock.json

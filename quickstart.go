@@ -530,9 +530,11 @@ listed in more DNS block lists, visit:
 	internal.AccountHTTP.Enabled = true
 	internal.AdminHTTP.Enabled = true
 	internal.MetricsHTTP.Enabled = true
+	internal.WebmailHTTP.Enabled = true
 	if existingWebserver {
 		internal.AccountHTTP.Port = 1080
 		internal.AdminHTTP.Port = 1080
+		internal.WebmailHTTP.Port = 1080
 		internal.AutoconfigHTTPS.Enabled = true
 		internal.AutoconfigHTTPS.Port = 81
 		internal.AutoconfigHTTPS.NonTLS = true
@@ -754,8 +756,9 @@ starting up. On linux, you may want to enable mox as a systemd service.
 	fmt.Printf(`
 After starting mox, the web interfaces are served at:
 
-http://localhost/       - account (email address as username)
-http://localhost/admin/ - admin (empty username)
+http://localhost/         - account (email address as username)
+http://localhost/webmail/ - webmail (email address as username)
+http://localhost/admin/   - admin (empty username)
 
 To access these from your browser, run
 "ssh -L 8080:localhost:80 you@yourmachine" locally and open

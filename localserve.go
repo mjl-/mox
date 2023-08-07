@@ -78,6 +78,7 @@ during those commands instead of during "data".
 	mox.FilesImmediate = true
 
 	// Load config, creating a new one if needed.
+	var existingConfig bool
 	if _, err := os.Stat(dir); err != nil && os.IsNotExist(err) {
 		err := writeLocalConfig(log, dir, ip)
 		if err != nil {
@@ -89,6 +90,8 @@ during those commands instead of during "data".
 		log.Fatalx("loading mox localserve config (hint: when creating a new config with -dir, the directory must not yet exist)", err, mlog.Field("dir", dir))
 	} else if ip != "" {
 		log.Fatal("can only use -ip when writing a new config file")
+	} else {
+		existingConfig = true
 	}
 
 	if level, ok := mlog.Levels[loglevel]; loglevel != "" && ok {
@@ -147,10 +150,17 @@ during those commands instead of during "data".
 	golog.Print(" imap://mox%40localhost:moxmoxmox@localhost:1143          - read email (without tls)")
 	golog.Print("https://mox%40localhost:moxmoxmox@localhost:1443/account/ - account https")
 	golog.Print(" http://mox%40localhost:moxmoxmox@localhost:1080/account/ - account http (without tls)")
+	golog.Print("https://mox%40localhost:moxmoxmox@localhost:1443/webmail/ - webmail https")
+	golog.Print(" http://mox%40localhost:moxmoxmox@localhost:1080/webmail/ - webmail http (without tls)")
 	golog.Print("https://admin:moxadmin@localhost:1443/admin/              - admin https")
 	golog.Print(" http://admin:moxadmin@localhost:1080/admin/              - admin http (without tls)")
 	golog.Print("")
-	golog.Printf("serving from %s", dir)
+	if existingConfig {
+		golog.Printf("serving from existing config dir %s/", dir)
+		golog.Printf("if urls above don't work, consider resetting by removing config dir")
+	} else {
+		golog.Printf("serving from newly created config dir %s/", dir)
+	}
 
 	ctlpath := mox.DataDirPath("ctl")
 	_ = os.Remove(ctlpath)
@@ -294,6 +304,12 @@ func writeLocalConfig(log *mlog.Log, dir, ip string) (rerr error) {
 	local.AccountHTTPS.Enabled = true
 	local.AccountHTTPS.Port = 1443
 	local.AccountHTTPS.Path = "/account/"
+	local.WebmailHTTP.Enabled = true
+	local.WebmailHTTP.Port = 1080
+	local.WebmailHTTP.Path = "/webmail/"
+	local.WebmailHTTPS.Enabled = true
+	local.WebmailHTTPS.Port = 1443
+	local.WebmailHTTPS.Path = "/webmail/"
 	local.AdminHTTP.Enabled = true
 	local.AdminHTTP.Port = 1080
 	local.AdminHTTPS.Enabled = true

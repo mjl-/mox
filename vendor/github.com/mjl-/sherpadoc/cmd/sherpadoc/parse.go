@@ -162,7 +162,7 @@ func parseSection(t *doc.Type, pp *parsedPackage) *section {
 	st := expr.(*ast.StructType)
 	for _, f := range st.Fields.List {
 		ident, ok := f.Type.(*ast.Ident)
-		if !ok {
+		if !ok || !ast.IsExported(ident.Name) {
 			continue
 		}
 		name := ident.Name
@@ -299,7 +299,7 @@ func ensureNamedType(t *doc.Type, sec *section, pp *parsedPackage) {
 
 		tt.Text = t.Doc + ts.Comment.Text()
 		switch nt.Name {
-		case "byte", "int16", "uint16", "int32", "uint32", "int", "uint":
+		case "byte", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "int", "uint":
 			tt.Kind = typeInts
 		case "string":
 			tt.Kind = typeStrings
@@ -331,13 +331,14 @@ func ensureNamedType(t *doc.Type, sec *section, pp *parsedPackage) {
 					if tt.Kind != typeInts {
 						logFatalLinef(pp, lit.Pos(), "int value for for non-int-enum %q", t.Name)
 					}
-					v, err := strconv.ParseInt(lit.Value, 10, 64)
+					// Given JSON/JS lack of integers, restrict to what it can represent in its float.
+					v, err := strconv.ParseInt(lit.Value, 10, 52)
 					check(err, "parse int literal")
 					iv := struct {
 						Name  string
-						Value int
+						Value int64
 						Docs  string
-					}{name, int(v), strings.TrimSpace(comment)}
+					}{name, v, strings.TrimSpace(comment)}
 					tt.IntValues = append(tt.IntValues, iv)
 				case token.STRING:
 					if tt.Kind != typeStrings {

@@ -4,6 +4,7 @@
 		<title>Mox Account</title>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="icon" href="noNeedlessFaviconRequestsPlease:" />
 		<style>
 body, html { padding: 1em; font-size: 16px; }
 * { font-size: inherit; font-family: ubuntu, lato, sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
@@ -152,8 +153,9 @@ const red = '#ff7443'
 const blue = '#8bc8ff'
 
 const index = async () => {
-	const [domain, destinations] = await api.Destinations()
+	const [accountFullName, domain, destinations] = await api.Account()
 
+	let fullNameForm, fullNameFieldset, fullName
 	let passwordForm, passwordFieldset, password1, password2, passwordHint
 
 	let importForm, importFieldset, mailboxFile, mailboxFileHint, mailboxPrefix, mailboxPrefixHint, importProgress, importAbortBox, importAbort
@@ -268,6 +270,37 @@ const index = async () => {
 			domain.ASCII ? domainString(domain) : '(none)',
 		),
 		dom.br(),
+
+		fullNameForm=dom.form(
+			fullNameFieldset=dom.fieldset(
+				dom.label(
+					style({display: 'inline-block'}),
+					'Full name',
+					dom.br(),
+					fullName=dom.input(attr({value: accountFullName, title: 'Name to use in From header when composing messages. Can be overridden per configured address.'})),
+
+				),
+				' ',
+				dom.button('Save'),
+			),
+			async function submit(e) {
+				e.preventDefault()
+				fullNameFieldset.disabled = true
+				try {
+					await api.AccountSaveFullName(fullName.value)
+					fullName.setAttribute('value', fullName.value)
+					fullNameForm.reset()
+					window.alert('Full name has been changed.')
+				} catch (err) {
+					console.log({err})
+					window.alert('Error: ' + err.message)
+				} finally {
+					fullNameFieldset.disabled = false
+				}
+			},
+		),
+		dom.br(),
+
 		dom.h2('Addresses'),
 		dom.ul(
 			Object.entries(destinations).sort().map(t =>
@@ -486,7 +519,7 @@ const index = async () => {
 }
 
 const destination = async (name) => {
-	const [domain, destinations] = await api.Destinations()
+	const [_, domain, destinations] = await api.Account()
 	let dest = destinations[name]
 	if (!dest) {
 		throw new Error('destination not found')
@@ -558,6 +591,7 @@ const destination = async (name) => {
 	})
 
 	let defaultMailbox
+	let fullName
 	let saveButton
 
 	const page = document.getElementById('page')
@@ -570,7 +604,12 @@ const destination = async (name) => {
 			dom.span('Default mailbox', attr({title: 'Default mailbox where email for this recipient is delivered to if it does not match any ruleset. Default is Inbox.'})),
 			dom.br(),
 			defaultMailbox=dom.input(attr({value: dest.Mailbox, placeholder: 'Inbox'})),
-			dom
+		),
+		dom.br(),
+		dom.div(
+			dom.span('Full name', attr({title: 'Name to use in From header when composing messages. If not set, the account default full name is used.'})),
+			dom.br(),
+			fullName=dom.input(attr({value: dest.FullName})),
 		),
 		dom.br(),
 		dom.h2('Rulesets'),
@@ -605,6 +644,7 @@ const destination = async (name) => {
 			try {
 				const newDest = {
 					Mailbox: defaultMailbox.value,
+					FullName: fullName.value,
 					Rulesets: rulesetsRows.map(row => {
 						return {
 							SMTPMailFromRegexp: row.SMTPMailFromRegexp.value,

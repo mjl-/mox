@@ -11,12 +11,29 @@ jobs:
         go-version: ['stable', 'oldstable']
     steps:
       - uses: actions/checkout@v3
+
       - uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go-version }}
       - run: make build
+
       # Need to run tests with a temp dir on same file system for os.Rename to succeed.
       - run: 'mkdir -p tmp && TMPDIR=$PWD/tmp make test'
+
       - uses: actions/upload-artifact@v3
         with:
           path: cover.html
+
+      # Rebuild webmail frontend code, should be the same as committed.
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+          cache: 'npm'
+      - run: npm ci
+      - run: 'touch webmail/*.ts && make frontend'
+
+      # Format code, we check below if nothing changed.
+      - run: 'make fmt'
+
+      # Enforce the steps above didn't make any changes.
+      - run: git diff --exit-code

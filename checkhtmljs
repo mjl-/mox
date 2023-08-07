@@ -1,2 +1,0 @@
-#!/bin/sh
-exec ./node_modules/.bin/jshint --extract always $@ | fixjshintlines

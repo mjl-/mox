@@ -58,9 +58,9 @@ func TestStore(t *testing.T) {
 	tc.transactf("ok", "store 1 flags (new)") // New flag.
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"new"}}})
 	tc.transactf("ok", "store 1 flags (new new a b c)") // Duplicates are ignored.
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"new", "a", "b", "c"}}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"a", "b", "c", "new"}}})
 	tc.transactf("ok", "store 1 +flags (new new c d e)")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"new", "a", "b", "c", "d", "e"}}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"a", "b", "c", "d", "e", "new"}}})
 	tc.transactf("ok", "store 1 -flags (new new e a c)")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchFlags{"b", "d"}}})
 	tc.transactf("ok", "store 1 flags ($Forwarded Different)")
@@ -77,7 +77,7 @@ func TestStore(t *testing.T) {
 	tc.transactf("ok", "examine inbox") // Open read-only.
 
 	// Flags are added to mailbox, not removed.
-	flags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent new a b c d e different`, " ")
+	flags := strings.Split(`\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent a b c d different e new`, " ")
 	tc.xuntaggedOpt(false, imapclient.UntaggedFlags(flags))
 
 	tc.transactf("no", `store 1 flags ()`) // No permission to set flags.

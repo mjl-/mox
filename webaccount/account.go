@@ -1,4 +1,4 @@
-package http
+package webaccount
 
 import (
 	"archive/tar"
@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	_ "embed"
 
 	"github.com/mjl-/sherpa"
+	"github.com/mjl-/sherpadoc"
 	"github.com/mjl-/sherpaprom"
 
 	"github.com/mjl-/mox/config"
@@ -29,6 +31,12 @@ import (
 	"github.com/mjl-/mox/store"
 )
 
+func init() {
+	mox.LimitersInit()
+}
+
+var xlog = mlog.New("webaccount")
+
 //go:embed accountapi.json
 var accountapiJSON []byte
 
@@ -38,6 +46,14 @@ var accountHTML []byte
 var accountDoc = mustParseAPI("account", accountapiJSON)
 
 var accountSherpaHandler http.Handler
+
+func mustParseAPI(api string, buf []byte) (doc sherpadoc.Section) {
+	err := json.Unmarshal(buf, &doc)
+	if err != nil {
+		xlog.Fatalx("parsing api docs", err, mlog.Field("api", api))
+	}
+	return doc
+}
 
 func init() {
 	collector, err := sherpaprom.NewCollector("moxaccount", nil)
@@ -51,19 +67,29 @@ func init() {
 	}
 }
 
+func xcheckf(ctx context.Context, err error, format string, args ...any) {
+	if err == nil {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	errmsg := fmt.Sprintf("%s: %s", msg, err)
+	xlog.WithContext(ctx).Errorx(msg, err)
+	panic(&sherpa.Error{Code: "server:error", Message: errmsg})
+}
+
 // Account exports web API functions for the account web interface. All its
 // methods are exported under api/. Function calls require valid HTTP
 // Authentication credentials of a user.
 type Account struct{}
 
-// check http basic auth, returns account name if valid, and writes http response
-// and returns empty string otherwise.
-func checkAccountAuth(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *http.Request) string {
+// CheckAuth checks http basic auth, returns login address and account name if
+// valid, and writes http response and returns empty string otherwise.
+func CheckAuth(ctx context.Context, log *mlog.Log, kind string, w http.ResponseWriter, r *http.Request) (address, account string) {
 	authResult := "error"
 	start := time.Now()
 	var addr *net.TCPAddr
 	defer func() {
-		metrics.AuthenticationInc("httpaccount", "httpbasic", authResult)
+		metrics.AuthenticationInc(kind, "httpbasic", authResult)
 		if authResult == "ok" && addr != nil {
 			mox.LimiterFailedAuth.Reset(addr.IP, start)
 		}
@@ -78,13 +104,13 @@ func checkAccountAuth(ctx context.Context, log *mlog.Log, w http.ResponseWriter,
 		remoteIP = addr.IP
 	}
 	if remoteIP != nil && !mox.LimiterFailedAuth.Add(remoteIP, start, 1) {
-		metrics.AuthenticationRatelimitedInc("httpaccount")
+		metrics.AuthenticationRatelimitedInc(kind)
 		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
-		return ""
+		return "", ""
 	}
 
 	// store.OpenEmailAuth has an auth cache, so we don't bcrypt for every auth attempt.
-	if auth := r.Header.Get("Authorization"); auth == "" || !strings.HasPrefix(auth, "Basic ") {
+	if auth := r.Header.Get("Authorization"); !strings.HasPrefix(auth, "Basic ") {
 	} else if authBuf, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err != nil {
 		log.Debugx("parsing base64", err)
 	} else if t := strings.SplitN(string(authBuf), ":", 2); len(t) != 2 {
@@ -100,15 +126,15 @@ func checkAccountAuth(ctx context.Context, log *mlog.Log, w http.ResponseWriter,
 		accName := acc.Name
 		err := acc.Close()
 		log.Check(err, "closing account")
-		return accName
+		return t[0], accName
 	}
 	// note: browsers don't display the realm to prevent users getting confused by malicious realm messages.
-	w.Header().Set("WWW-Authenticate", `Basic realm="mox account - login with email address and password"`)
-	http.Error(w, "http 401 - unauthorized - mox account - login with email address and password", http.StatusUnauthorized)
-	return ""
+	w.Header().Set("WWW-Authenticate", `Basic realm="mox account - login with account email address and password"`)
+	http.Error(w, "http 401 - unauthorized - mox account - login with account email address and password", http.StatusUnauthorized)
+	return "", ""
 }
 
-func accountHandle(w http.ResponseWriter, r *http.Request) {
+func Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
 	log := xlog.WithContext(ctx).Fields(mlog.Field("userauth", ""))
 
@@ -169,10 +195,14 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	accName := checkAccountAuth(ctx, log, w, r)
+	_, accName := CheckAuth(ctx, log, "webaccount", w, r)
 	if accName == "" {
 		// Response already sent.
 		return
+	}
+
+	if lw, ok := w.(interface{ AddField(p mlog.Pair) }); ok {
+		lw.AddField(mlog.Field("authaccount", accName))
 	}
 
 	switch r.URL.Path {
@@ -185,7 +215,7 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache; max-age=0")
 		// We typically return the embedded admin.html, but during development it's handy
 		// to load from disk.
-		f, err := os.Open("http/account.html")
+		f, err := os.Open("webaccount/account.html")
 		if err == nil {
 			defer f.Close()
 			_, _ = io.Copy(w, f)
@@ -284,7 +314,8 @@ func accountHandle(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			accountSherpaHandler.ServeHTTP(w, r.WithContext(context.WithValue(ctx, authCtxKey, accName)))
+			ctx = context.WithValue(ctx, authCtxKey, accName)
+			accountSherpaHandler.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 		http.NotFound(w, r)
@@ -313,16 +344,27 @@ func (Account) SetPassword(ctx context.Context, password string) {
 	xcheckf(ctx, err, "setting password")
 }
 
-// Destinations returns the default domain, and the destinations (keys are email
-// addresses, or localparts to the default domain).
-// todo: replace with a function that returns the whole account, when sherpadoc understands unnamed struct fields.
-func (Account) Destinations(ctx context.Context) (dns.Domain, map[string]config.Destination) {
+// Account returns information about the account: full name, the default domain,
+// and the destinations (keys are email addresses, or localparts to the default
+// domain). todo: replace with a function that returns the whole account, when
+// sherpadoc understands unnamed struct fields.
+func (Account) Account(ctx context.Context) (string, dns.Domain, map[string]config.Destination) {
 	accountName := ctx.Value(authCtxKey).(string)
 	accConf, ok := mox.Conf.Account(accountName)
 	if !ok {
 		xcheckf(ctx, errors.New("not found"), "looking up account")
 	}
-	return accConf.DNSDomain, accConf.Destinations
+	return accConf.FullName, accConf.DNSDomain, accConf.Destinations
+}
+
+func (Account) AccountSaveFullName(ctx context.Context, fullName string) {
+	accountName := ctx.Value(authCtxKey).(string)
+	_, ok := mox.Conf.Account(accountName)
+	if !ok {
+		xcheckf(ctx, errors.New("not found"), "looking up account")
+	}
+	err := mox.AccountFullNameSave(ctx, accountName, fullName)
+	xcheckf(ctx, err, "saving account full name")
 }
 
 // DestinationSave updates a destination.

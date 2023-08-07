@@ -107,12 +107,14 @@ func TestReputation(t *testing.T) {
 		defer db.Close()
 
 		err = db.Write(ctxbg, func(tx *bstore.Tx) error {
-			err = tx.Insert(&store.Mailbox{ID: 1, Name: "Inbox"})
+			inbox := store.Mailbox{ID: 1, Name: "Inbox", HaveCounts: true}
+			err = tx.Insert(&inbox)
 			tcheck(t, err, "insert into db")
 
 			for _, hm := range history {
 				err := tx.Insert(&hm)
 				tcheck(t, err, "insert message")
+				inbox.Add(hm.MailboxCounts())
 
 				rcptToDomain, err := dns.ParseDomain(hm.RcptToDomain)
 				tcheck(t, err, "parse rcptToDomain")
@@ -121,6 +123,8 @@ func TestReputation(t *testing.T) {
 				err = tx.Insert(&r)
 				tcheck(t, err, "insert recipient")
 			}
+			err = tx.Update(&inbox)
+			tcheck(t, err, "update mailbox counts")
 
 			return nil
 		})

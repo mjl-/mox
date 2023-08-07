@@ -67,7 +67,7 @@ type Ints struct {
 	Docs   string
 	Values []struct {
 		Name  string
-		Value int
+		Value int64
 		Docs  string
 	}
 }

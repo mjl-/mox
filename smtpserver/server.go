@@ -52,8 +52,6 @@ import (
 	"github.com/mjl-/mox/tlsrptdb"
 )
 
-const defaultMaxMsgSize = 100 * 1024 * 1024
-
 // Most logging should be done through conn.log* functions.
 // Only use log in contexts without connection.
 var xlog = mlog.New("smtpserver")
@@ -144,10 +142,11 @@ var (
 			"reason",
 		},
 	)
+	// Similar between ../webmail/webmail.go:/metricSubmission and ../smtpserver/server.go:/metricSubmission
 	metricSubmission = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "mox_smtpserver_submission_total",
-			Help: "SMTP server incoming message submissions queue.",
+			Help: "SMTP server incoming submission results, known values (those ending with error are server errors): ok, badmessage, badfrom, badheader, messagelimiterror, recipientlimiterror, localserveerror, queueerror.",
 		},
 		[]string{
 			"result",
@@ -156,7 +155,7 @@ var (
 	metricServerErrors = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "mox_smtpserver_errors_total",
-			Help: "SMTP server errors, known error values: dkimsign, queuedsn.",
+			Help: "SMTP server errors, known values: dkimsign, queuedsn.",
 		},
 		[]string{
 			"error",
@@ -184,7 +183,7 @@ func Listen() {
 
 		maxMsgSize := listener.SMTPMaxMessageSize
 		if maxMsgSize == 0 {
-			maxMsgSize = defaultMaxMsgSize
+			maxMsgSize = config.DefaultMaxMsgSize
 		}
 
 		if listener.SMTP.Enabled {
@@ -1228,7 +1227,7 @@ func (c *conn) cmdMail(p *parser) {
 			if size > c.maxMessageSize {
 				// ../rfc/1870:136 ../rfc/3463:382
 				ecode := smtp.SeSys3MsgLimitExceeded4
-				if size < defaultMaxMsgSize {
+				if size < config.DefaultMaxMsgSize {
 					ecode = smtp.SeMailbox2MsgLimitExceeded3
 				}
 				xsmtpUserErrorf(smtp.C552MailboxFull, ecode, "message too large")
@@ -1507,7 +1506,7 @@ func (c *conn) cmdData(p *parser) {
 		if errors.Is(err, errMessageTooLarge) {
 			// ../rfc/1870:136 and ../rfc/3463:382
 			ecode := smtp.SeSys3MsgLimitExceeded4
-			if n < defaultMaxMsgSize {
+			if n < config.DefaultMaxMsgSize {
 				ecode = smtp.SeMailbox2MsgLimitExceeded3
 			}
 			c.writecodeline(smtp.C451LocalErr, ecode, fmt.Sprintf("error copying data to file (%s)", mox.ReceivedID(c.cid)), err)
@@ -1560,7 +1559,7 @@ func (c *conn) cmdData(p *parser) {
 	if c.submission {
 		// Hide internal hosts.
 		// todo future: make this a config option, where admins specify ip ranges that they don't want exposed. also see ../rfc/5321:4321
-		recvFrom = messageHeaderCommentDomain(mox.Conf.Static.HostnameDomain, c.smtputf8)
+		recvFrom = message.HeaderCommentDomain(mox.Conf.Static.HostnameDomain, c.smtputf8)
 	} else {
 		if len(c.hello.IP) > 0 {
 			recvFrom = smtp.AddressLiteral(c.hello.IP)
@@ -1595,7 +1594,7 @@ func (c *conn) cmdData(p *parser) {
 		}
 	}
 	recvBy := mox.Conf.Static.HostnameDomain.XName(c.smtputf8)
-	recvBy += " (" + smtp.AddressLiteral(c.localIP) + ")"
+	recvBy += " (" + smtp.AddressLiteral(c.localIP) + ")" // todo: hide ip if internal?
 	if c.smtputf8 && mox.Conf.Static.HostnameDomain.Unicode != "" {
 		// This syntax is part of "VIA".
 		recvBy += " (" + mox.Conf.Static.HostnameDomain.ASCII + ")"
@@ -1624,7 +1623,11 @@ func (c *conn) cmdData(p *parser) {
 		// For additional Received-header clauses, see:
 		// https://www.iana.org/assignments/mail-parameters/mail-parameters.xhtml#table-mail-parameters-8
 		recvHdr.Add(" ", "Received:", "from", recvFrom, "by", recvBy, "via", "tcp", "with", with, "id", mox.ReceivedID(c.cid)) // ../rfc/5321:3158
-		recvHdr.Add(" ", c.tlsReceivedComment()...)
+		if c.tls {
+			tlsConn := c.conn.(*tls.Conn)
+			tlsComment := message.TLSReceivedComment(c.log, tlsConn.ConnectionState())
+			recvHdr.Add(" ", tlsComment...)
+		}
 		recvHdr.Add(" ", "for", "<"+rcptTo+">;", time.Now().Format(message.RFC5322Z))
 		return recvHdr.String()
 	}
@@ -1639,19 +1642,10 @@ func (c *conn) cmdData(p *parser) {
 	}
 }
 
-// returns domain name optionally followed by message header comment with ascii-only name.
-// The comment is only present when smtputf8 is true and the domain name is unicode.
-// Caller should make sure the comment is allowed in the syntax. E.g. for Received, it is often allowed before the next field, so make sure such a next field is present.
-func messageHeaderCommentDomain(domain dns.Domain, smtputf8 bool) string {
-	s := domain.XName(smtputf8)
-	if smtputf8 && domain.Unicode != "" {
-		s += " (" + domain.ASCII + ")"
-	}
-	return s
-}
-
 // submit is used for mail from authenticated users that we will try to deliver.
 func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, pdataFile **os.File) {
+	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/webmail.go:/MessageSubmit\(
+
 	dataFile := *pdataFile
 
 	var msgPrefix []byte
@@ -1696,66 +1690,20 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		msgPrefix = append(msgPrefix, "Date: "+time.Now().Format(message.RFC5322Z)+"\r\n"...)
 	}
 
-	// Limit damage to the internet and our reputation in case of account compromise by
-	// limiting the max number of messages sent in a 24 hour window, both total number
-	// of messages and number of first-time recipients.
+	// Check outoging message rate limit.
 	err = c.account.DB.Read(ctx, func(tx *bstore.Tx) error {
-		conf, _ := c.account.Conf()
-		msgmax := conf.MaxOutgoingMessagesPerDay
-		if msgmax == 0 {
-			// For human senders, 1000 recipients in a day is quite a lot.
-			msgmax = 1000
+		rcpts := make([]smtp.Path, len(c.recipients))
+		for i, r := range c.recipients {
+			rcpts[i] = r.rcptTo
 		}
-		rcptmax := conf.MaxFirstTimeRecipientsPerDay
-		if rcptmax == 0 {
-			// Human senders may address a new human-sized list of people once in a while. In
-			// case of a compromise, a spammer will probably try to send to many new addresses.
-			rcptmax = 200
-		}
-
-		rcpts := map[string]time.Time{}
-		n := 0
-		err := bstore.QueryTx[store.Outgoing](tx).FilterGreater("Submitted", time.Now().Add(-24*time.Hour)).ForEach(func(o store.Outgoing) error {
-			n++
-			if rcpts[o.Recipient].IsZero() || o.Submitted.Before(rcpts[o.Recipient]) {
-				rcpts[o.Recipient] = o.Submitted
-			}
-			return nil
-		})
-		xcheckf(err, "querying message recipients in past 24h")
-		if n+len(c.recipients) > msgmax {
+		msglimit, rcptlimit, err := c.account.SendLimitReached(tx, rcpts)
+		xcheckf(err, "checking sender limit")
+		if msglimit >= 0 {
 			metricSubmission.WithLabelValues("messagelimiterror").Inc()
-			xsmtpUserErrorf(smtp.C451LocalErr, smtp.SePol7DeliveryUnauth1, "max number of messages (%d) over past 24h reached, try increasing per-account setting MaxOutgoingMessagesPerDay", msgmax)
-		}
-
-		// Only check if max first-time recipients is reached if there are enough messages
-		// to trigger the limit.
-		if n+len(c.recipients) < rcptmax {
-			return nil
-		}
-
-		isFirstTime := func(rcpt string, before time.Time) bool {
-			exists, err := bstore.QueryTx[store.Outgoing](tx).FilterNonzero(store.Outgoing{Recipient: rcpt}).FilterLess("Submitted", before).Exists()
-			xcheckf(err, "checking in database whether recipient is first-time")
-			return !exists
-		}
-
-		firsttime := 0
-		now := time.Now()
-		for _, rcptAcc := range c.recipients {
-			r := rcptAcc.rcptTo
-			if isFirstTime(r.XString(true), now) {
-				firsttime++
-			}
-		}
-		for r, t := range rcpts {
-			if isFirstTime(r, t) {
-				firsttime++
-			}
-		}
-		if firsttime > rcptmax {
+			xsmtpUserErrorf(smtp.C451LocalErr, smtp.SePol7DeliveryUnauth1, "max number of messages (%d) over past 24h reached, try increasing per-account setting MaxOutgoingMessagesPerDay", msglimit)
+		} else if rcptlimit >= 0 {
 			metricSubmission.WithLabelValues("recipientlimiterror").Inc()
-			xsmtpUserErrorf(smtp.C451LocalErr, smtp.SePol7DeliveryUnauth1, "max number of new/first-time recipients (%d) over past 24h reached, try increasing per-account setting MaxFirstTimeRecipientsPerDay", rcptmax)
+			xsmtpUserErrorf(smtp.C451LocalErr, smtp.SePol7DeliveryUnauth1, "max number of new/first-time recipients (%d) over past 24h reached, try increasing per-account setting MaxFirstTimeRecipientsPerDay", rcptlimit)
 		}
 		return nil
 	})
@@ -1782,15 +1730,15 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		}
 	}
 
-	authResults := AuthResults{
+	authResults := message.AuthResults{
 		Hostname: mox.Conf.Static.HostnameDomain.XName(c.smtputf8),
 		Comment:  mox.Conf.Static.HostnameDomain.ASCIIExtra(c.smtputf8),
-		Methods: []AuthMethod{
+		Methods: []message.AuthMethod{
 			{
 				Method: "auth",
 				Result: "pass",
-				Props: []AuthProp{
-					{"smtp", "mailfrom", c.mailFrom.XString(c.smtputf8), true, c.mailFrom.ASCIIExtra(c.smtputf8)},
+				Props: []message.AuthProp{
+					message.MakeAuthProp("smtp", "mailfrom", c.mailFrom.XString(c.smtputf8), true, c.mailFrom.ASCIIExtra(c.smtputf8)),
 				},
 			},
 		},
@@ -1971,18 +1919,18 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	}
 
 	// We'll be building up an Authentication-Results header.
-	authResults := AuthResults{
+	authResults := message.AuthResults{
 		Hostname: mox.Conf.Static.HostnameDomain.XName(c.smtputf8),
 	}
 
 	// Reverse IP lookup results.
 	// todo future: how useful is this?
 	// ../rfc/5321:2481
-	authResults.Methods = append(authResults.Methods, AuthMethod{
+	authResults.Methods = append(authResults.Methods, message.AuthMethod{
 		Method: "iprev",
 		Result: string(iprevStatus),
-		Props: []AuthProp{
-			{"policy", "iprev", c.remoteIP.String(), false, ""},
+		Props: []message.AuthProp{
+			message.MakeAuthProp("policy", "iprev", c.remoteIP.String(), false, ""),
 		},
 	})
 
@@ -2071,8 +2019,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	}
 
 	// Add DKIM results to Authentication-Results header.
-	authResAddDKIM := func(result, comment, reason string, props []AuthProp) {
-		dm := AuthMethod{
+	authResAddDKIM := func(result, comment, reason string, props []message.AuthProp) {
+		dm := message.AuthMethod{
 			Method:  "dkim",
 			Result:  result,
 			Comment: comment,
@@ -2092,7 +2040,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		var domain, selector dns.Domain
 		var identity *dkim.Identity
 		var comment string
-		var props []AuthProp
+		var props []message.AuthProp
 		if r.Sig != nil {
 			// todo future: also specify whether dns record was dnssec-signed.
 			if r.Record != nil && r.Record.PublicKey != nil {
@@ -2103,16 +2051,16 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 			sig := base64.StdEncoding.EncodeToString(r.Sig.Signature)
 			sig = sig[:12] // Must be at least 8 characters and unique among the signatures.
-			props = []AuthProp{
-				{"header", "d", r.Sig.Domain.XName(c.smtputf8), true, r.Sig.Domain.ASCIIExtra(c.smtputf8)},
-				{"header", "s", r.Sig.Selector.XName(c.smtputf8), true, r.Sig.Selector.ASCIIExtra(c.smtputf8)},
-				{"header", "a", r.Sig.Algorithm(), false, ""},
-				{"header", "b", sig, false, ""}, // ../rfc/6008:147
+			props = []message.AuthProp{
+				message.MakeAuthProp("header", "d", r.Sig.Domain.XName(c.smtputf8), true, r.Sig.Domain.ASCIIExtra(c.smtputf8)),
+				message.MakeAuthProp("header", "s", r.Sig.Selector.XName(c.smtputf8), true, r.Sig.Selector.ASCIIExtra(c.smtputf8)),
+				message.MakeAuthProp("header", "a", r.Sig.Algorithm(), false, ""),
+				message.MakeAuthProp("header", "b", sig, false, ""), // ../rfc/6008:147
 			}
 			domain = r.Sig.Domain
 			selector = r.Sig.Selector
 			if r.Sig.Identity != nil {
-				props = append(props, AuthProp{"header", "i", r.Sig.Identity.String(), true, ""})
+				props = append(props, message.MakeAuthProp("header", "i", r.Sig.Identity.String(), true, ""))
 				identity = r.Sig.Identity
 			}
 		}
@@ -2138,11 +2086,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		spfIdentity = &spfArgs.MailFromDomain
 		mailFromValidation = store.SPFValidation(receivedSPF.Result)
 	}
-	var props []AuthProp
+	var props []message.AuthProp
 	if spfIdentity != nil {
-		props = []AuthProp{{"smtp", string(receivedSPF.Identity), spfIdentity.XName(c.smtputf8), true, spfIdentity.ASCIIExtra(c.smtputf8)}}
+		props = []message.AuthProp{message.MakeAuthProp("smtp", string(receivedSPF.Identity), spfIdentity.XName(c.smtputf8), true, spfIdentity.ASCIIExtra(c.smtputf8))}
 	}
-	authResults.Methods = append(authResults.Methods, AuthMethod{
+	authResults.Methods = append(authResults.Methods, message.AuthMethod{
 		Method: "spf",
 		Result: string(receivedSPF.Result),
 		Props:  props,
@@ -2184,11 +2132,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	var dmarcUse bool
 	var dmarcResult dmarc.Result
 	const applyRandomPercentage = true
-	var dmarcMethod AuthMethod
+	var dmarcMethod message.AuthMethod
 	var msgFromValidation = store.ValidationNone
 	if msgFrom.IsZero() {
 		dmarcResult.Status = dmarc.StatusNone
-		dmarcMethod = AuthMethod{
+		dmarcMethod = message.AuthMethod{
 			Method: "dmarc",
 			Result: string(dmarcResult.Status),
 		}
@@ -2199,12 +2147,12 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		defer dmarccancel()
 		dmarcUse, dmarcResult = dmarc.Verify(dmarcctx, c.resolver, msgFrom.Domain, dkimResults, receivedSPF.Result, spfIdentity, applyRandomPercentage)
 		dmarccancel()
-		dmarcMethod = AuthMethod{
+		dmarcMethod = message.AuthMethod{
 			Method: "dmarc",
 			Result: string(dmarcResult.Status),
-			Props: []AuthProp{
+			Props: []message.AuthProp{
 				// ../rfc/7489:1489
-				{"header", "from", msgFrom.Domain.ASCII, true, msgFrom.Domain.ASCIIExtra(c.smtputf8)},
+				message.MakeAuthProp("header", "from", msgFrom.Domain.ASCII, true, msgFrom.Domain.ASCIIExtra(c.smtputf8)),
 			},
 		}
 
@@ -2722,48 +2670,4 @@ func (c *conn) cmdQuit(p *parser) {
 
 	c.writecodeline(smtp.C221Closing, smtp.SeOther00, "okay thanks bye", nil)
 	panic(cleanClose)
-}
-
-// return tokens representing comment in Received header that documents the TLS connection.
-func (c *conn) tlsReceivedComment() []string {
-	if !c.tls {
-		return nil
-	}
-
-	// todo future: we could use the "tls" clause for the Received header as specified in ../rfc/8314:496. however, the text implies it is only for submission, not regular smtp. and it cannot specify the tls version. for now, not worth the trouble.
-
-	// Comments from other mail servers:
-	// gmail.com: (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128)
-	// yahoo.com: (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256)
-	// proton.me: (using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits) key-exchange X25519 server-signature RSA-PSS (4096 bits) server-digest SHA256) (No client certificate requested)
-	// outlook.com: (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384)
-
-	var l []string
-	add := func(s string) {
-		l = append(l, s)
-	}
-
-	versions := map[uint16]string{
-		tls.VersionTLS10: "TLS1.0",
-		tls.VersionTLS11: "TLS1.1",
-		tls.VersionTLS12: "TLS1.2",
-		tls.VersionTLS13: "TLS1.3",
-	}
-
-	tlsc := c.conn.(*tls.Conn)
-	st := tlsc.ConnectionState()
-	if version, ok := versions[st.Version]; ok {
-		add(version)
-	} else {
-		c.log.Info("unknown tls version identifier", mlog.Field("version", st.Version))
-		add(fmt.Sprintf("TLS identifier %x", st.Version))
-	}
-
-	add(tls.CipherSuiteName(st.CipherSuite))
-
-	// Make it a comment.
-	l[0] = "(" + l[0]
-	l[len(l)-1] = l[len(l)-1] + ")"
-
-	return l
 }

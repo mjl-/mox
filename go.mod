@@ -3,16 +3,17 @@ module github.com/mjl-/mox
 go 1.18
 
 require (
-	github.com/mjl-/bstore v0.0.1
+	github.com/mjl-/bstore v0.0.2
 	github.com/mjl-/sconf v0.0.4
-	github.com/mjl-/sherpa v0.6.5
-	github.com/mjl-/sherpadoc v0.0.10
+	github.com/mjl-/sherpa v0.6.6
+	github.com/mjl-/sherpadoc v0.0.12
 	github.com/mjl-/sherpaprom v0.0.2
+	github.com/mjl-/sherpats v0.0.4
 	github.com/prometheus/client_golang v1.14.0
 	go.etcd.io/bbolt v1.3.7
 	golang.org/x/crypto v0.11.0
 	golang.org/x/exp v0.0.0-20230728194245-b0cb94b80691
-	golang.org/x/net v0.12.0
+	golang.org/x/net v0.13.0
 	golang.org/x/text v0.11.0
 )
 

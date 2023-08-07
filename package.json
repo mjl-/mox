@@ -1,0 +1,6 @@
+{
+  "devDependencies": {
+    "jshint": "2.13.6",
+    "typescript": "5.1.6"
+  }
+}

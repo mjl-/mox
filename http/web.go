@@ -28,6 +28,9 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/ratelimit"
+	"github.com/mjl-/mox/webaccount"
+	"github.com/mjl-/mox/webadmin"
+	"github.com/mjl-/mox/webmail"
 )
 
 var xlog = mlog.New("http")
@@ -85,8 +88,13 @@ type loggingWriter struct {
 	StatusCode                   int
 	Size                         int64 // Of data served, for non-websocket responses.
 	Err                          error
-	WebsocketResponse            bool  // If this was a successful websocket connection with backend.
-	SizeFromClient, SizeToClient int64 // Websocket data.
+	WebsocketResponse            bool        // If this was a successful websocket connection with backend.
+	SizeFromClient, SizeToClient int64       // Websocket data.
+	Fields                       []mlog.Pair // Additional fields to log.
+}
+
+func (w *loggingWriter) AddField(p mlog.Pair) {
+	w.Fields = append(w.Fields, p)
 }
 
 func (w *loggingWriter) Flush() {
@@ -208,6 +216,7 @@ func (w *loggingWriter) Done() {
 			mlog.Field("size", w.Size),
 		)
 	}
+	fields = append(fields, w.Fields...)
 	xlog.WithContext(w.R.Context()).Debugx("http request", err, fields...)
 }
 
@@ -388,7 +397,7 @@ func Listen() {
 				path = l.AccountHTTP.Path
 			}
 			srv := ensureServe(false, port, "account-http at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(accountHandle)))
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handle)))
 			srv.Handle("account", nil, path, handler)
 			redirectToTrailingSlash(srv, "account", path)
 		}
@@ -399,7 +408,7 @@ func Listen() {
 				path = l.AccountHTTPS.Path
 			}
 			srv := ensureServe(true, port, "account-https at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(accountHandle)))
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handle)))
 			srv.Handle("account", nil, path, handler)
 			redirectToTrailingSlash(srv, "account", path)
 		}
@@ -411,7 +420,7 @@ func Listen() {
 				path = l.AdminHTTP.Path
 			}
 			srv := ensureServe(false, port, "admin-http at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(adminHandle)))
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handle)))
 			srv.Handle("admin", nil, path, handler)
 			redirectToTrailingSlash(srv, "admin", path)
 		}
@@ -422,10 +431,36 @@ func Listen() {
 				path = l.AdminHTTPS.Path
 			}
 			srv := ensureServe(true, port, "admin-https at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(adminHandle)))
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handle)))
 			srv.Handle("admin", nil, path, handler)
 			redirectToTrailingSlash(srv, "admin", path)
 		}
+
+		maxMsgSize := l.SMTPMaxMessageSize
+		if maxMsgSize == 0 {
+			maxMsgSize = config.DefaultMaxMsgSize
+		}
+		if l.WebmailHTTP.Enabled {
+			port := config.Port(l.WebmailHTTP.Port, 80)
+			path := "/webmail/"
+			if l.WebmailHTTP.Path != "" {
+				path = l.WebmailHTTP.Path
+			}
+			srv := ensureServe(false, port, "webmail-http at "+path)
+			srv.Handle("webmail", nil, path, http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize))))
+			redirectToTrailingSlash(srv, "webmail", path)
+		}
+		if l.WebmailHTTPS.Enabled {
+			port := config.Port(l.WebmailHTTPS.Port, 443)
+			path := "/webmail/"
+			if l.WebmailHTTPS.Path != "" {
+				path = l.WebmailHTTPS.Path
+			}
+			srv := ensureServe(true, port, "webmail-https at "+path)
+			srv.Handle("webmail", nil, path, http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize))))
+			redirectToTrailingSlash(srv, "webmail", path)
+		}
+
 		if l.MetricsHTTP.Enabled {
 			port := config.Port(l.MetricsHTTP.Port, 8010)
 			srv := ensureServe(false, port, "metrics-http")
@@ -583,8 +618,8 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 
 // Serve starts serving on the initialized listeners.
 func Serve() {
-	go manageAuthCache()
-	go importManage()
+	go webadmin.ManageAuthCache()
+	go webaccount.ImportManage()
 
 	for _, serve := range servers {
 		go serve()

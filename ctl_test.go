@@ -157,6 +157,17 @@ func TestCtl(t *testing.T) {
 		ctlcmdImport(ctl, false, "mjl", "inbox", "testdata/ctl/data/tmp/export/maildir/Inbox")
 	})
 
+	testctl(func(ctl *ctl) {
+		ctlcmdRecalculateMailboxCounts(ctl, "mjl")
+	})
+
+	testctl(func(ctl *ctl) {
+		ctlcmdReparse(ctl, "mjl")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdReparse(ctl, "")
+	})
+
 	// "backup", backup account.
 	err = dmarcdb.Init()
 	tcheck(t, err, "dmarcdb init")

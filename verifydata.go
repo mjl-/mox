@@ -242,10 +242,20 @@ possibly making them potentially no longer readable by the previous version.
 			})
 			checkf(err, dbpath, "reading mailboxes to check uidnext consistency")
 
+			mbCounts := map[int64]store.MailboxCounts{}
 			err = bstore.QueryDB[store.Message](ctxbg, db).ForEach(func(m store.Message) error {
-				if mb := mailboxes[m.MailboxID]; m.UID >= mb.UIDNext {
+				mb := mailboxes[m.MailboxID]
+				if m.UID >= mb.UIDNext {
 					checkf(errors.New(`inconsistent uidnext for message/mailbox, see "mox fixuidmeta"`), dbpath, "message id %d in mailbox %q (id %d) has uid %d >= mailbox uidnext %d", m.ID, mb.Name, mb.ID, m.UID, mb.UIDNext)
 				}
+
+				if m.ModSeq < m.CreateSeq {
+					checkf(errors.New(`inconsistent modseq/createseq for message`), dbpath, "message id %d in mailbox %q (id %d) has modseq %d < createseq %d", m.ID, mb.Name, mb.ID, m.ModSeq, m.CreateSeq)
+				}
+
+				mc := mbCounts[mb.ID]
+				mc.Add(m.MailboxCounts())
+				mbCounts[mb.ID] = mc
 
 				if m.Expunged {
 					return nil
@@ -257,6 +267,13 @@ possibly making them potentially no longer readable by the previous version.
 				return nil
 			})
 			checkf(err, dbpath, "reading messages in account database to check files")
+
+			for _, mb := range mailboxes {
+				// We only check if database doesn't have zero values, i.e. not yet set.
+				if mb.HaveCounts && mb.MailboxCounts != mbCounts[mb.ID] {
+					checkf(errors.New(`wrong mailbox counts, see "mox recalculatemailboxcounts"`), dbpath, "mailbox %q (id %d) has wrong counts %s, should be %s", mb.Name, mb.ID, mb.MailboxCounts, mbCounts[mb.ID])
+				}
+			}
 		}
 
 		// Walk through all files in the msg directory. Warn about files that weren't in

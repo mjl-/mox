@@ -104,7 +104,7 @@ type namedType struct {
 	// For kind is typeInts
 	IntValues []struct {
 		Name  string
-		Value int
+		Value int64
 		Docs  string
 	}
 	// For kind is typeStrings
