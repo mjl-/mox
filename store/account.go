@@ -759,7 +759,7 @@ func initAccount(db *bstore.DB) error {
 // it was the last user.
 func (a *Account) Close() error {
 	if CheckConsistencyOnClose {
-		xerr := a.checkConsistency()
+		xerr := a.CheckConsistency()
 		err := closeAccount(a)
 		if xerr != nil {
 			panic(xerr)
@@ -769,17 +769,20 @@ func (a *Account) Close() error {
 	return closeAccount(a)
 }
 
-// checkConsistency checks the consistency of the database and returns a non-nil
+// CheckConsistency checks the consistency of the database and returns a non-nil
 // error for these cases:
 //
+// - Missing on-disk file for message.
+// - Mismatch between message size and length of MsgPrefix and on-disk file.
 // - Missing HaveCounts.
 // - Incorrect mailbox counts.
 // - Message with UID >= mailbox uid next.
 // - Mailbox uidvalidity >= account uid validity.
 // - ModSeq > 0, CreateSeq > 0, CreateSeq <= ModSeq.
-func (a *Account) checkConsistency() error {
+func (a *Account) CheckConsistency() error {
 	var uiderrors []string    // With a limit, could be many.
 	var modseqerrors []string // With limit.
+	var fileerrors []string   // With limit.
 	var errors []string
 
 	err := a.DB.Read(context.Background(), func(tx *bstore.Tx) error {
@@ -819,6 +822,18 @@ func (a *Account) checkConsistency() error {
 				uiderr := fmt.Sprintf("message %d in mailbox %q (id %d) has uid %d >= mailbox uidnext %d", m.ID, mb.Name, mb.ID, m.UID, mb.UIDNext)
 				uiderrors = append(uiderrors, uiderr)
 			}
+			if m.Expunged {
+				return nil
+			}
+			p := a.MessagePath(m.ID)
+			st, err := os.Stat(p)
+			if err != nil {
+				existserr := fmt.Sprintf("message %d in mailbox %q (id %d) on-disk file %s: %v", m.ID, mb.Name, mb.ID, p, err)
+				fileerrors = append(fileerrors, existserr)
+			} else if len(fileerrors) < 20 && m.Size != int64(len(m.MsgPrefix))+st.Size() {
+				sizeerr := fmt.Sprintf("message %d in mailbox %q (id %d) has size %d != len msgprefix %d + on-disk file size %d = %d", m.ID, mb.Name, mb.ID, m.Size, len(m.MsgPrefix), st.Size(), int64(len(m.MsgPrefix))+st.Size())
+				fileerrors = append(fileerrors, sizeerr)
+			}
 			return nil
 		})
 		if err != nil {
@@ -842,6 +857,7 @@ func (a *Account) checkConsistency() error {
 	}
 	errors = append(errors, uiderrors...)
 	errors = append(errors, modseqerrors...)
+	errors = append(errors, fileerrors...)
 	if len(errors) > 0 {
 		return fmt.Errorf("%s", strings.Join(errors, "; "))
 	}

@@ -156,10 +156,60 @@ func TestCtl(t *testing.T) {
 		ctlcmdImport(ctl, false, "mjl", "inbox", "testdata/ctl/data/tmp/export/maildir/Inbox")
 	})
 
+	// "recalculatemailboxcounts"
 	testctl(func(ctl *ctl) {
 		ctlcmdRecalculateMailboxCounts(ctl, "mjl")
 	})
 
+	// "fixmsgsize"
+	testctl(func(ctl *ctl) {
+		ctlcmdFixmsgsize(ctl, "mjl")
+	})
+	testctl(func(ctl *ctl) {
+		acc, err := store.OpenAccount("mjl")
+		tcheck(t, err, "open account")
+		defer acc.Close()
+
+		content := []byte("Subject: hi\r\n\r\nbody\r\n")
+
+		deliver := func(m *store.Message) {
+			t.Helper()
+			m.Size = int64(len(content))
+			msgf, err := store.CreateMessageTemp("ctltest")
+			tcheck(t, err, "create temp file")
+			_, err = msgf.Write(content)
+			tcheck(t, err, "write message file")
+			err = acc.DeliverMailbox(xlog, "Inbox", m, msgf, true)
+			tcheck(t, err, "deliver message")
+			err = msgf.Close()
+			tcheck(t, err, "close message file")
+		}
+
+		var msgBadSize store.Message
+		deliver(&msgBadSize)
+
+		msgBadSize.Size = 1
+		err = acc.DB.Update(ctxbg, &msgBadSize)
+		tcheck(t, err, "update message to bad size")
+		mb := store.Mailbox{ID: msgBadSize.MailboxID}
+		err = acc.DB.Get(ctxbg, &mb)
+		tcheck(t, err, "get db")
+		mb.Size -= int64(len(content))
+		mb.Size += 1
+		err = acc.DB.Update(ctxbg, &mb)
+		tcheck(t, err, "update mailbox size")
+
+		// Fix up the size.
+		ctlcmdFixmsgsize(ctl, "")
+
+		err = acc.DB.Get(ctxbg, &msgBadSize)
+		tcheck(t, err, "get message")
+		if msgBadSize.Size != int64(len(content)) {
+			t.Fatalf("after fixing, message size is %d, should be %d", msgBadSize.Size, len(content))
+		}
+	})
+
+	// "reparse"
 	testctl(func(ctl *ctl) {
 		ctlcmdReparse(ctl, "mjl")
 	})

@@ -215,7 +215,7 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 			err := acc.Close()
 			log.Check(err, "closing account")
 		}()
-		m := store.Message{Size: size}
+		m := store.Message{Size: size, MsgPrefix: msgPrefix}
 		conf, _ := acc.Conf()
 		dest := conf.Destinations[mailFrom.String()]
 		acc.WithWLock(func() {

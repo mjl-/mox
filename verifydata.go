@@ -137,9 +137,13 @@ possibly making them potentially no longer readable by the previous version.
 		checkf(err, path, "checking database file")
 	}
 
-	checkFile := func(path string) {
-		_, err := os.Stat(path)
+	checkFile := func(dbpath, path string, prefixSize int, size int64) {
+		st, err := os.Stat(path)
 		checkf(err, path, "checking if file exists")
+		if err == nil && int64(prefixSize)+st.Size() != size {
+			filesize := st.Size()
+			checkf(fmt.Errorf("%s: message size is %d, should be %d (length of MsgPrefix %d + file size %d), see \"mox fixmsgsize\"", path, size, int64(prefixSize)+st.Size(), prefixSize, filesize), dbpath, "checking message size")
+		}
 	}
 
 	checkQueue := func() {
@@ -155,7 +159,7 @@ possibly making them potentially no longer readable by the previous version.
 				mp := store.MessagePath(m.ID)
 				seen[mp] = struct{}{}
 				p := filepath.Join(dataDir, "queue", mp)
-				checkFile(p)
+				checkFile(dbpath, p, len(m.MsgPrefix), m.Size)
 				return nil
 			})
 			checkf(err, dbpath, "reading messages in queue database to check files")
@@ -263,7 +267,7 @@ possibly making them potentially no longer readable by the previous version.
 				mp := store.MessagePath(m.ID)
 				seen[mp] = struct{}{}
 				p := filepath.Join(accdir, "msg", mp)
-				checkFile(p)
+				checkFile(dbpath, p, len(m.MsgPrefix), m.Size)
 				return nil
 			})
 			checkf(err, dbpath, "reading messages in account database to check files")

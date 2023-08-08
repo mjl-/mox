@@ -2731,7 +2731,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				Received:      tm,
 				Flags:         storeFlags,
 				Keywords:      keywords,
-				Size:          size,
+				Size:          size + int64(len(msgPrefix)),
 				MsgPrefix:     msgPrefix,
 			}
 

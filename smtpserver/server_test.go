@@ -404,6 +404,7 @@ func TestSpam(t *testing.T) {
 		MsgFromValidated:  true,
 		MsgFromValidation: store.ValidationStrict,
 		Flags:             store.Flags{Seen: true, Junk: true},
+		Size:              int64(len(deliverMessage)),
 	}
 	for i := 0; i < 3; i++ {
 		nm := m
@@ -503,6 +504,7 @@ func TestDMARCSent(t *testing.T) {
 		RcptToLocalpart: smtp.Localpart("mjl"),
 		RcptToDomain:    "mox.example",
 		Flags:           store.Flags{Seen: true, Junk: true},
+		Size:            int64(len(deliverMessage)),
 	}
 	for i := 0; i < 3; i++ {
 		nm := m
@@ -524,7 +526,7 @@ func TestDMARCSent(t *testing.T) {
 	})
 
 	// Insert a message that we sent to the address that is about to send to us.
-	var sentMsg store.Message
+	sentMsg := store.Message{Size: int64(len(deliverMessage))}
 	tinsertmsg(t, ts.acc, "Sent", &sentMsg, deliverMessage)
 	err := ts.acc.DB.Insert(ctxbg, &store.Recipient{MessageID: sentMsg.ID, Localpart: "remote", Domain: "example.org", OrgDomain: "example.org", Sent: time.Now()})
 	tcheck(t, err, "inserting message recipient")

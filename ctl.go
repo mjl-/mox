@@ -723,6 +723,142 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		})
 		w.xclose()
 
+	case "fixmsgsize":
+		/* protocol:
+		> "fixmsgsize"
+		> account or empty
+		< "ok" or error
+		< stream
+		*/
+
+		accountOpt := ctl.xread()
+		ctl.xwriteok()
+		w := ctl.writer()
+
+		var foundProblem bool
+		const batchSize = 10000
+
+		xfixmsgsize := func(accName string) {
+			acc, err := store.OpenAccount(accName)
+			ctl.xcheck(err, "open account")
+			defer func() {
+				err := acc.Close()
+				log.Check(err, "closing account after fixing message sizes")
+			}()
+
+			total := 0
+			var lastID int64
+			for {
+				var n int
+
+				acc.WithRLock(func() {
+					mailboxCounts := map[int64]store.Mailbox{} // For broadcasting.
+
+					// Don't process all message in one transaction, we could block the account for too long.
+					err := acc.DB.Write(ctx, func(tx *bstore.Tx) error {
+						q := bstore.QueryTx[store.Message](tx)
+						q.FilterEqual("Expunged", false)
+						q.FilterGreater("ID", lastID)
+						q.Limit(batchSize)
+						q.SortAsc("ID")
+						return q.ForEach(func(m store.Message) error {
+							lastID = m.ID
+
+							p := acc.MessagePath(m.ID)
+							st, err := os.Stat(p)
+							if err != nil {
+								mb := store.Mailbox{ID: m.MailboxID}
+								if xerr := tx.Get(&mb); xerr != nil {
+									_, werr := fmt.Fprintf(w, "get mailbox id %d for message with file error: %v\n", mb.ID, xerr)
+									ctl.xcheck(werr, "write")
+								}
+								_, werr := fmt.Fprintf(w, "checking file %s for message %d in mailbox %q (id %d): %v (continuing)\n", p, m.ID, mb.Name, mb.ID, err)
+								ctl.xcheck(werr, "write")
+								return nil
+							}
+							filesize := st.Size()
+							correctSize := int64(len(m.MsgPrefix)) + filesize
+							if m.Size == correctSize {
+								return nil
+							}
+
+							foundProblem = true
+
+							mb := store.Mailbox{ID: m.MailboxID}
+							if err := tx.Get(&mb); err != nil {
+								_, werr := fmt.Fprintf(w, "get mailbox id %d for message with file size mismatch: %v\n", mb.ID, err)
+								ctl.xcheck(werr, "write")
+							}
+							_, err = fmt.Fprintf(w, "fixing message %d in mailbox %q (id %d) with incorrect size %d, should be %d (len msg prefix %d + on-disk file %s size %d)\n", m.ID, mb.Name, mb.ID, m.Size, correctSize, len(m.MsgPrefix), p, filesize)
+							ctl.xcheck(err, "write")
+
+							// We assume that the original message size was accounted as stored in the mailbox
+							// total size. If this isn't correct, the user can always run
+							// recalculatemailboxcounts.
+							mb.Size -= m.Size
+							mb.Size += correctSize
+							if err := tx.Update(&mb); err != nil {
+								return fmt.Errorf("update mailbox counts: %v", err)
+							}
+							mailboxCounts[mb.ID] = mb
+
+							m.Size = correctSize
+
+							mr := acc.MessageReader(m)
+							part, err := message.EnsurePart(mr, m.Size)
+							if err != nil {
+								_, werr := fmt.Fprintf(w, "parsing message %d again: %v (continuing)\n", m.ID, err)
+								ctl.xcheck(werr, "write")
+							}
+							m.ParsedBuf, err = json.Marshal(part)
+							if err != nil {
+								return fmt.Errorf("marshal parsed message: %v", err)
+							}
+							total++
+							n++
+							if err := tx.Update(&m); err != nil {
+								return fmt.Errorf("update message: %v", err)
+							}
+							return nil
+						})
+
+					})
+					ctl.xcheck(err, "find and fix wrong message sizes")
+
+					var changes []store.Change
+					for _, mb := range mailboxCounts {
+						changes = append(changes, mb.ChangeCounts())
+					}
+					store.BroadcastChanges(acc, changes)
+				})
+				if n < batchSize {
+					break
+				}
+			}
+			_, err = fmt.Fprintf(w, "%d message size(s) fixed for account %s\n", total, accName)
+			ctl.xcheck(err, "write")
+		}
+
+		if accountOpt != "" {
+			xfixmsgsize(accountOpt)
+		} else {
+			for i, accName := range mox.Conf.Accounts() {
+				var line string
+				if i > 0 {
+					line = "\n"
+				}
+				_, err := fmt.Fprintf(w, "%sFixing message sizes in account %s...\n", line, accName)
+				ctl.xcheck(err, "write")
+				xfixmsgsize(accName)
+			}
+		}
+		if foundProblem {
+			_, err := fmt.Fprintf(w, "\nProblems were found and fixed. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n")
+			ctl.xcheck(err, "write")
+		}
+
+		w.xclose()
+
 	case "reparse":
 		/* protocol:
 		> "reparse"
@@ -734,6 +870,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		accountOpt := ctl.xread()
 		ctl.xwriteok()
 		w := ctl.writer()
+
+		const batchSize = 100
 
 		xreparseAccount := func(accName string) {
 			acc, err := store.OpenAccount(accName)
@@ -747,12 +885,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			var lastID int64
 			for {
 				var n int
-				// Batch in transactions of 100 messages, so we don't block the account too long.
+				// Don't process all message in one transaction, we could block the account for too long.
 				err := acc.DB.Write(ctx, func(tx *bstore.Tx) error {
 					q := bstore.QueryTx[store.Message](tx)
 					q.FilterEqual("Expunged", false)
 					q.FilterGreater("ID", lastID)
-					q.Limit(100)
+					q.Limit(batchSize)
 					q.SortAsc("ID")
 					return q.ForEach(func(m store.Message) error {
 						lastID = m.ID
@@ -776,11 +914,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 
 				})
 				ctl.xcheck(err, "update messages with parsed mime structure")
-				if n < 100 {
+				if n < batchSize {
 					break
 				}
 			}
-			_, err = fmt.Fprintf(w, "%d messages reparsed for account %s\n", total, accName)
+			_, err = fmt.Fprintf(w, "%d message(s) reparsed for account %s\n", total, accName)
 			ctl.xcheck(err, "write")
 		}
 
@@ -792,7 +930,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 				if i > 0 {
 					line = "\n"
 				}
-				_, err := fmt.Fprintf(w, "%sreparsing account %s\n", line, accName)
+				_, err := fmt.Fprintf(w, "%sReparsing account %s...\n", line, accName)
 				ctl.xcheck(err, "write")
 				xreparseAccount(accName)
 			}

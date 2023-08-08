@@ -143,6 +143,7 @@ var commands = []struct {
 	{"reassignuids", cmdReassignUIDs},
 	{"fixuidmeta", cmdFixUIDMeta},
 	{"dmarcdb addreport", cmdDMARCDBAddReport},
+	{"fixmsgsize", cmdFixmsgsize},
 	{"reparse", cmdReparse},
 	{"ensureparsed", cmdEnsureParsed},
 	{"message parse", cmdMessageParse},
@@ -1986,6 +1987,37 @@ func cmdVersion(c *cmd) {
 		c.Usage()
 	}
 	fmt.Println(moxvar.Version)
+}
+
+func cmdFixmsgsize(c *cmd) {
+	c.unlisted = true
+	c.params = "[account]"
+	c.help = `Ensure message sizes in the database matching the sum of the message prefix length and on-disk file size.
+
+Messages with an inconsistent size are also parsed again.
+
+If an inconsistency is found, you should probably also run "mox
+bumpuidvalidity" on the mailboxes or entire account to force IMAP clients to
+refetch messages.
+`
+	args := c.Parse()
+	if len(args) > 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	var account string
+	if len(args) == 1 {
+		account = args[0]
+	}
+	ctlcmdFixmsgsize(xctl(), account)
+}
+
+func ctlcmdFixmsgsize(ctl *ctl, account string) {
+	ctl.xwrite("fixmsgsize")
+	ctl.xwrite(account)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
 }
 
 func cmdReparse(c *cmd) {
