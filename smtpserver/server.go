@@ -2324,9 +2324,14 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		}
 
 		// ../rfc/5321:3204
-		// ../rfc/5321:3300
 		// Received-SPF header goes before Received. ../rfc/7208:2038
-		msgPrefix := []byte("Return-Path: <" + c.mailFrom.String() + ">\r\n" + authResults.Header() + receivedSPF.Header() + recvHdrFor(rcptAcc.rcptTo.String()))
+		msgPrefix := []byte(
+			"Delivered-To: " + rcptAcc.rcptTo.XString(c.smtputf8) + "\r\n" + // ../rfc/9228:274
+				"Return-Path: <" + c.mailFrom.String() + ">\r\n" + // ../rfc/5321:3300
+				authResults.Header() +
+				receivedSPF.Header() +
+				recvHdrFor(rcptAcc.rcptTo.String()),
+		)
 		if !msgWriter.HaveHeaders {
 			msgPrefix = append(msgPrefix, "\r\n"...)
 		}
