@@ -719,6 +719,7 @@ func command(c *conn) {
 	p := newParser(args, c.smtputf8, c)
 	fn, ok := commands[cmdl]
 	if !ok {
+		c.cmd = "(unknown)"
 		if c.ncmds == 0 {
 			// Other side is likely speaking something else than SMTP, send error message and
 			// stop processing because there is a good chance whatever they sent has multiple
@@ -726,7 +727,6 @@ func command(c *conn) {
 			c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Syntax2, "please try again speaking smtp", nil)
 			panic(errIO)
 		}
-		c.cmd = "(unknown)"
 		// note: not "command not implemented", see ../rfc/5321:2934 ../rfc/5321:2539
 		xsmtpUserErrorf(smtp.C500BadSyntax, smtp.SeProto5BadCmdOrSeq1, "unknown command")
 	}
