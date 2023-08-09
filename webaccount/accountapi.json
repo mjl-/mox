@@ -177,6 +177,13 @@
 					]
 				},
 				{
+					"Name": "AcceptRejectsToMailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "Mailbox",
 					"Docs": "",
 					"Typewords": [

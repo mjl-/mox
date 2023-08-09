@@ -2463,7 +2463,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 		} else {
 			acc.WithWLock(func() {
-				if err := acc.Deliver(log, rcptAcc.destination, m, dataFile, false); err != nil {
+				if err := acc.DeliverMailbox(log, a.mailbox, m, dataFile, false); err != nil {
 					log.Errorx("delivering", err)
 					metricDelivery.WithLabelValues("delivererror", a.reason).Inc()
 					addError(rcptAcc, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")

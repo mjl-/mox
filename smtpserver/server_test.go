@@ -72,6 +72,14 @@ Message-Id: <test@example.org>
 test email
 `, "\n", "\r\n")
 
+var deliverMessage2 = strings.ReplaceAll(`From: <remote@example.org>
+To: <mjl@mox.example>
+Subject: test
+Message-Id: <test2@example.org>
+
+test email, unique.
+`, "\n", "\r\n")
+
 type testserver struct {
 	t          *testing.T
 	acc        *store.Account
@@ -411,10 +419,10 @@ func TestSpam(t *testing.T) {
 		tinsertmsg(t, ts.acc, "Inbox", &nm, deliverMessage)
 	}
 
-	checkRejectsCount := func(expect int) {
+	checkCount := func(mailboxName string, expect int) {
 		t.Helper()
 		q := bstore.QueryDB[store.Mailbox](ctxbg, ts.acc.DB)
-		q.FilterNonzero(store.Mailbox{Name: "Rejects"})
+		q.FilterNonzero(store.Mailbox{Name: mailboxName})
 		mb, err := q.Get()
 		tcheck(t, err, "get rejects mailbox")
 		qm := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
@@ -439,8 +447,21 @@ func TestSpam(t *testing.T) {
 			t.Fatalf("delivery by bad sender, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 		}
 
-		// Message should now be in Rejects mailbox.
-		checkRejectsCount(1)
+		checkCount("Rejects", 1)
+	})
+
+	// Delivery from sender with bad reputation matching AcceptRejectsToMailbox should
+	// result in accepted delivery to the mailbox.
+	ts.run(func(err error, client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl2@mox.example"
+		if err == nil {
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage2)), strings.NewReader(deliverMessage2), false, false)
+		}
+		tcheck(t, err, "deliver")
+
+		checkCount("mjl2junk", 1) // In ruleset rejects mailbox.
+		checkCount("Rejects", 1)  // Same as before.
 	})
 
 	// Mark the messages as having good reputation.
@@ -458,8 +479,9 @@ func TestSpam(t *testing.T) {
 		}
 		tcheck(t, err, "deliver")
 
-		// Message should now be removed from Rejects mailbox.
-		checkRejectsCount(0)
+		// Message should now be removed from Rejects mailboxes.
+		checkCount("Rejects", 0)
+		checkCount("mjl2junk", 1)
 	})
 
 	// Undo dmarc pass, mark messages as junk, and train the filter.

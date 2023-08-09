@@ -1039,6 +1039,10 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 
 			for i, rs := range dest.Rulesets {
 				checkMailboxNormf(rs.Mailbox, "account %q, destination %q, ruleset %d", accName, addrName, i+1)
+				checkMailboxNormf(rs.AcceptRejectsToMailbox, "account %q, destination %q, ruleset %d, rejects mailbox", accName, addrName, i+1)
+				if strings.EqualFold(rs.AcceptRejectsToMailbox, "inbox") {
+					addErrorf("account %q, destination %q, ruleset %d: AcceptRejectsToMailbox cannot be set to Inbox", accName, addrName, i+1)
+				}
 
 				n := 0
 

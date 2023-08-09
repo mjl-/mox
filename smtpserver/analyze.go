@@ -38,6 +38,7 @@ type delivery struct {
 
 type analysis struct {
 	accept      bool
+	mailbox     string
 	code        int
 	secode      string
 	userError   bool
@@ -67,25 +68,41 @@ const (
 )
 
 func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delivery) analysis {
-	reject := func(code int, secode string, errmsg string, err error, reason string) analysis {
-		return analysis{false, code, secode, err == nil, errmsg, err, nil, nil, reason}
+	mailbox := d.rcptAcc.destination.Mailbox
+	if mailbox == "" {
+		mailbox = "Inbox"
 	}
 
 	// If destination mailbox has a mailing list domain (for SPF/DKIM) configured,
 	// check it for a pass.
-	// todo: should use this evaluation for final delivery as well
 	rs := store.MessageRuleset(log, d.rcptAcc.destination, d.m, d.m.MsgPrefix, d.dataFile)
+	if rs != nil {
+		mailbox = rs.Mailbox
+	}
 	if rs != nil && !rs.ListAllowDNSDomain.IsZero() {
 		ld := rs.ListAllowDNSDomain
 		// todo: on temporary failures, reject temporarily?
 		if d.m.MailFromValidated && ld.Name() == d.m.MailFromDomain {
-			return analysis{accept: true, reason: reasonListAllow}
+			return analysis{accept: true, mailbox: mailbox, reason: reasonListAllow}
 		}
 		for _, r := range d.dkimResults {
 			if r.Status == dkim.StatusPass && r.Sig.Domain == ld {
-				return analysis{accept: true, reason: reasonListAllow}
+				return analysis{accept: true, mailbox: mailbox, reason: reasonListAllow}
 			}
 		}
+	}
+
+	reject := func(code int, secode string, errmsg string, err error, reason string) analysis {
+		accept := false
+		if rs != nil && rs.AcceptRejectsToMailbox != "" {
+			accept = true
+			mailbox = rs.AcceptRejectsToMailbox
+			d.m.IsReject = true
+			// Don't draw attention, but don't go so far as to mark as junk.
+			d.m.Seen = true
+			log.Info("accepting reject to configured mailbox due to ruleset")
+		}
+		return analysis{accept, mailbox, code, secode, err == nil, errmsg, err, nil, nil, reason}
 	}
 
 	if d.dmarcUse && d.dmarcResult.Reject {
@@ -166,20 +183,13 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 			// per-mailbox. If referenced mailbox is not found (e.g. does not yet exist), we
 			// can still determine a reputation because we also base it on outgoing
 			// messages and those are account-global.
-			mailbox := d.rcptAcc.destination.Mailbox
-			if mailbox == "" {
-				mailbox = "Inbox"
-			}
-			if rs != nil {
-				mailbox = rs.Mailbox
-			}
 			mb, err := d.acc.MailboxFind(tx, mailbox)
 			if err != nil {
 				return fmt.Errorf("finding destination mailbox: %w", err)
 			}
 			if mb != nil {
 				// We want to deliver to mb.ID, but this message may be rejected and sent to the
-				// Rejects mailbox instead, which MailboxID overwritten. Record the ID in
+				// Rejects mailbox instead, with MailboxID overwritten. Record the ID in
 				// MailboxDestinedID too. If the message is later moved out of the Rejects mailbox,
 				// we'll adjust the MailboxOrigID so it gets taken into account during reputation
 				// calculating in future deliveries. If we end up delivering to the intended
@@ -203,12 +213,12 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	log.Info("reputation analyzed", mlog.Field("conclusive", conclusive), mlog.Field("isjunk", isjunk), mlog.Field("method", string(method)))
 	if conclusive {
 		if !*isjunk {
-			return analysis{accept: true, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reason}
+			return analysis{accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reason}
 		}
 		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, string(method))
 	} else if dmarcReport != nil || tlsReport != nil {
 		log.Info("accepting dmarc reporting or tlsrpt message without reputation")
-		return analysis{accept: true, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reasonReporting}
+		return analysis{accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reasonReporting}
 	}
 	// If there was no previous message from sender or its domain, and we have an SPF
 	// (soft)fail, reject the message.
@@ -244,7 +254,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		pass := err == nil
 		log.Infox("pass by subject token", err, mlog.Field("pass", pass))
 		if pass {
-			return analysis{accept: true, reason: reasonSubjectpass}
+			return analysis{accept: true, mailbox: mailbox, reason: reasonSubjectpass}
 		}
 	}
 
@@ -324,7 +334,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	}
 
 	if accept {
-		return analysis{accept: true, reason: reasonNoBadSignals}
+		return analysis{accept: true, mailbox: mailbox, reason: reasonNoBadSignals}
 	}
 
 	if subjectpassKey != "" && d.dmarcResult.Status == dmarc.StatusPass && method == methodNone && (dnsblocklisted || junkSubjectpass) {

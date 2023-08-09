@@ -715,15 +715,24 @@ describe-static" and "mox config describe-domains":
 							HeadersRegexp:
 								x:
 
-							# Influence the spam filtering, this does not change whether this ruleset applies
-							# to a message. If this domain matches an SPF- and/or DKIM-verified (sub)domain,
-							# the message is accepted without further spam checks, such as a junk filter or
-							# DMARC reject evaluation. DMARC rejects should not apply for mailing lists that
-							# are not configured to rewrite the From-header of messages that don't have a
-							# passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you
-							# may be automatically unsubscribed from the mailing list. The assumption is that
-							# mailing lists do their own spam filtering/moderation. (optional)
+							# Influence spam filtering only, this option does not change whether a message
+							# matches this ruleset. If this domain matches an SPF- and/or DKIM-verified
+							# (sub)domain, the message is accepted without further spam checks, such as a junk
+							# filter or DMARC reject evaluation. DMARC rejects should not apply for mailing
+							# lists that are not configured to rewrite the From-header of messages that don't
+							# have a passing DKIM signature of the From-domain. Otherwise, by rejecting
+							# messages, you may be automatically unsubscribed from the mailing list. The
+							# assumption is that mailing lists do their own spam filtering/moderation.
+							# (optional)
 							ListAllowDomain:
+
+							# Influence spam filtering only, this option does not change whether a message
+							# matches this ruleset. If a message is classified as spam, it isn't rejected
+							# during the SMTP transaction (the normal behaviour), but accepted during the SMTP
+							# transaction and delivered to the specified mailbox. The specified mailbox is not
+							# automatically cleaned up like the account global Rejects mailbox, unless set to
+							# that Rejects mailbox. (optional)
+							AcceptRejectsToMailbox:
 
 							# Mailbox to deliver to if this ruleset matches.
 							Mailbox:
