@@ -71,7 +71,11 @@ func TestListExtended(t *testing.T) {
 	}
 
 	uidvals := map[string]uint32{}
-	for _, name := range store.InitialMailboxes {
+	use := store.DefaultInitialMailboxes.SpecialUse
+	for _, name := range []string{"Inbox", use.Archive, use.Draft, use.Junk, use.Sent, use.Trash} {
+		uidvals[name] = 1
+	}
+	for _, name := range store.DefaultInitialMailboxes.Regular {
 		uidvals[name] = 1
 	}
 	var uidvalnext uint32 = 2

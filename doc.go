@@ -236,9 +236,9 @@ Import a maildir into an account.
 By default, messages will train the junk filter based on their flags and, if
 "automatic junk flags" configuration is set, based on mailbox naming.
 
-If the destination mailbox is "Sent", the recipients of the messages are added
-to the message metadata, causing later incoming messages from these recipients
-to be accepted, unless other reputation signals prevent that.
+If the destination mailbox is the Sent mailbox, the recipients of the messages
+are added to the message metadata, causing later incoming messages from these
+recipients to be accepted, unless other reputation signals prevent that.
 
 Users can also import mailboxes/messages through the account web page by
 uploading a zip or tgz file with mbox and/or maildirs.
@@ -260,9 +260,9 @@ Using mbox is not recommended, maildir is a better defined format.
 By default, messages will train the junk filter based on their flags and, if
 "automatic junk flags" configuration is set, based on mailbox naming.
 
-If the destination mailbox is "Sent", the recipients of the messages are added
-to the message metadata, causing later incoming messages from these recipients
-to be accepted, unless other reputation signals prevent that.
+If the destination mailbox is the Sent mailbox, the recipients of the messages
+are added to the message metadata, causing later incoming messages from these
+recipients to be accepted, unless other reputation signals prevent that.
 
 Users can also import mailboxes/messages through the account web page by
 uploading a zip or tgz file with mbox and/or maildirs.

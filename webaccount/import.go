@@ -531,7 +531,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		const consumeFile = true
 		const sync = false
 		const notrain = true
-		if err := acc.DeliverMessage(log, tx, m, f, consumeFile, mb.Sent, sync, notrain); err != nil {
+		if err := acc.DeliverMessage(log, tx, m, f, consumeFile, sync, notrain); err != nil {
 			problemf("delivering message %s: %s (continuing)", pos, err)
 			return
 		}

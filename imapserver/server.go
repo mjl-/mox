@@ -2741,8 +2741,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			err = tx.Update(&mb)
 			xcheckf(err, "updating mailbox counts")
 
-			isSent := name == "Sent"
-			err := c.account.DeliverMessage(c.log, tx, &m, msgFile, true, isSent, true, false)
+			err := c.account.DeliverMessage(c.log, tx, &m, msgFile, true, true, false)
 			xcheckf(err, "delivering message")
 		})
 

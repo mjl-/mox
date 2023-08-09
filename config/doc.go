@@ -359,9 +359,37 @@ describe-static" and "mox config describe-domains":
 		# E.g. Postmaster or Inbox.
 		Mailbox:
 
-	# Mailboxes to create when adding an account. Inbox is always created. If no
-	# mailboxes are specified, the following are automatically created: Sent, Archive,
-	# Trash, Drafts and Junk. (optional)
+	# Mailboxes to create for new accounts. Inbox is always created. Mailboxes can be
+	# given a 'special-use' role, which are understood by most mail clients. If
+	# absent/empty, the following mailboxes are created: Sent, Archive, Trash, Drafts
+	# and Junk. (optional)
+	InitialMailboxes:
+
+		# Special-use roles to mailbox to create. (optional)
+		SpecialUse:
+
+			# (optional)
+			Sent:
+
+			# (optional)
+			Archive:
+
+			# (optional)
+			Trash:
+
+			# (optional)
+			Draft:
+
+			# (optional)
+			Junk:
+
+		# Regular, non-special-use mailboxes to create. (optional)
+		Regular:
+			-
+
+	# Deprecated in favor of InitialMailboxes. Mailboxes to create when adding an
+	# account. Inbox is always created. If no mailboxes are specified, the following
+	# are automatically created: Sent, Archive, Trash, Drafts and Junk. (optional)
 	DefaultMailboxes:
 		-
 

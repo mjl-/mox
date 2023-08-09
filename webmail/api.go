@@ -748,7 +748,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			err = tx.Update(&sentmb)
 			xcheckf(ctx, err, "updating sent mailbox for counts")
 
-			err = acc.DeliverMessage(log, tx, &sentm, dataFile, true, true, true, false)
+			err = acc.DeliverMessage(log, tx, &sentm, dataFile, true, true, false)
 			if err != nil {
 				metricSubmission.WithLabelValues("storesenterror").Inc()
 				metricked = true

@@ -73,7 +73,15 @@ var (
 
 var subjectpassRand = mox.NewRand()
 
-var InitialMailboxes = []string{"Inbox", "Sent", "Archive", "Trash", "Drafts", "Junk"}
+var DefaultInitialMailboxes = config.InitialMailboxes{
+	SpecialUse: config.SpecialUseMailboxes{
+		Sent:    "Sent",
+		Archive: "Archive",
+		Trash:   "Trash",
+		Draft:   "Drafts",
+		Junk:    "Junk",
+	},
+}
 
 type SCRAM struct {
 	Salt           []byte
@@ -714,36 +722,79 @@ func initAccount(db *bstore.DB) error {
 	return db.Write(context.TODO(), func(tx *bstore.Tx) error {
 		uidvalidity := InitialUIDValidity()
 
-		mailboxes := InitialMailboxes
-		defaultMailboxes := mox.Conf.Static.DefaultMailboxes
-		if len(defaultMailboxes) > 0 {
-			mailboxes = []string{"Inbox"}
+		if len(mox.Conf.Static.DefaultMailboxes) > 0 {
+			// Deprecated in favor of InitialMailboxes.
+			defaultMailboxes := mox.Conf.Static.DefaultMailboxes
+			mailboxes := []string{"Inbox"}
 			for _, name := range defaultMailboxes {
 				if strings.EqualFold(name, "Inbox") {
 					continue
 				}
 				mailboxes = append(mailboxes, name)
 			}
-		}
-		for _, name := range mailboxes {
-			mb := Mailbox{Name: name, UIDValidity: uidvalidity, UIDNext: 1, HaveCounts: true}
-			if strings.HasPrefix(name, "Archive") {
-				mb.Archive = true
-			} else if strings.HasPrefix(name, "Drafts") {
-				mb.Draft = true
-			} else if strings.HasPrefix(name, "Junk") {
-				mb.Junk = true
-			} else if strings.HasPrefix(name, "Sent") {
-				mb.Sent = true
-			} else if strings.HasPrefix(name, "Trash") {
-				mb.Trash = true
+			for _, name := range mailboxes {
+				mb := Mailbox{Name: name, UIDValidity: uidvalidity, UIDNext: 1, HaveCounts: true}
+				if strings.HasPrefix(name, "Archive") {
+					mb.Archive = true
+				} else if strings.HasPrefix(name, "Drafts") {
+					mb.Draft = true
+				} else if strings.HasPrefix(name, "Junk") {
+					mb.Junk = true
+				} else if strings.HasPrefix(name, "Sent") {
+					mb.Sent = true
+				} else if strings.HasPrefix(name, "Trash") {
+					mb.Trash = true
+				}
+				if err := tx.Insert(&mb); err != nil {
+					return fmt.Errorf("creating mailbox: %w", err)
+				}
+				if err := tx.Insert(&Subscription{name}); err != nil {
+					return fmt.Errorf("adding subscription: %w", err)
+				}
 			}
-			if err := tx.Insert(&mb); err != nil {
-				return fmt.Errorf("creating mailbox: %w", err)
+		} else {
+			mailboxes := mox.Conf.Static.InitialMailboxes
+			var zerouse config.SpecialUseMailboxes
+			if mailboxes.SpecialUse == zerouse && len(mailboxes.Regular) == 0 {
+				mailboxes = DefaultInitialMailboxes
 			}
 
-			if err := tx.Insert(&Subscription{name}); err != nil {
-				return fmt.Errorf("adding subscription: %w", err)
+			add := func(name string, use SpecialUse) error {
+				mb := Mailbox{Name: name, UIDValidity: uidvalidity, UIDNext: 1, SpecialUse: use, HaveCounts: true}
+				if err := tx.Insert(&mb); err != nil {
+					return fmt.Errorf("creating mailbox: %w", err)
+				}
+				if err := tx.Insert(&Subscription{name}); err != nil {
+					return fmt.Errorf("adding subscription: %w", err)
+				}
+				return nil
+			}
+			addSpecialOpt := func(nameOpt string, use SpecialUse) error {
+				if nameOpt == "" {
+					return nil
+				}
+				return add(nameOpt, use)
+			}
+			l := []struct {
+				nameOpt string
+				use     SpecialUse
+			}{
+				{"Inbox", SpecialUse{}},
+				{mailboxes.SpecialUse.Archive, SpecialUse{Archive: true}},
+				{mailboxes.SpecialUse.Draft, SpecialUse{Draft: true}},
+				{mailboxes.SpecialUse.Junk, SpecialUse{Junk: true}},
+				{mailboxes.SpecialUse.Sent, SpecialUse{Sent: true}},
+				{mailboxes.SpecialUse.Trash, SpecialUse{Trash: true}},
+			}
+			for _, e := range l {
+				if err := addSpecialOpt(e.nameOpt, e.use); err != nil {
+					return err
+				}
+			}
+			for _, name := range mailboxes.Regular {
+				if err := add(name, SpecialUse{}); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -934,8 +985,9 @@ func (a *Account) WithRLock(fn func()) {
 // section. The caller is responsible for adding a header separator to
 // msg.MsgPrefix if missing from an incoming message.
 //
-// If isSent is true, the message is parsed for its recipients (to/cc/bcc). Their
-// domains are added to Recipients for use in dmarc reputation.
+// If the destination mailbox has the Sent special-use flag, the message is parsed
+// for its recipients (to/cc/bcc). Their domains are added to Recipients for use in
+// dmarc reputation.
 //
 // If sync is true, the message file and its directory are synced. Should be true
 // for regular mail delivery, but can be false when importing many messages.
@@ -947,7 +999,7 @@ func (a *Account) WithRLock(fn func()) {
 // Caller must broadcast new message.
 //
 // Caller must update mailbox counts.
-func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, isSent, sync, notrain bool) error {
+func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, sync, notrain bool) error {
 	if m.Expunged {
 		return fmt.Errorf("cannot deliver expunged message")
 	}
@@ -999,7 +1051,7 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 	}
 
 	// todo: perhaps we should match the recipients based on smtp submission and a matching message-id? we now miss the addresses in bcc's. for webmail, we could insert the recipients directly.
-	if isSent {
+	if mb.Sent {
 		// Attempt to parse the message for its To/Cc/Bcc headers, which we insert into Recipient.
 		if part == nil {
 			var p message.Part
@@ -1405,7 +1457,7 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 			return fmt.Errorf("updating mailbox for delivery: %w", err)
 		}
 
-		if err := a.DeliverMessage(log, tx, m, msgFile, consumeFile, mb.Sent, true, false); err != nil {
+		if err := a.DeliverMessage(log, tx, m, msgFile, consumeFile, true, false); err != nil {
 			return err
 		}
 

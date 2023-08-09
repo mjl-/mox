@@ -30,9 +30,9 @@ import (
 const importCommonHelp = `By default, messages will train the junk filter based on their flags and, if
 "automatic junk flags" configuration is set, based on mailbox naming.
 
-If the destination mailbox is "Sent", the recipients of the messages are added
-to the message metadata, causing later incoming messages from these recipients
-to be accepted, unless other reputation signals prevent that.
+If the destination mailbox is the Sent mailbox, the recipients of the messages
+are added to the message metadata, causing later incoming messages from these
+recipients to be accepted, unless other reputation signals prevent that.
 
 Users can also import mailboxes/messages through the account web page by
 uploading a zip or tgz file with mbox and/or maildirs.
@@ -275,10 +275,9 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		// todo: possibly set dmarcdomain to the domain of the from address? at least for non-spams that have been seen. otherwise user would start without any reputations. the assumption would be that the user has accepted email and deemed it legit, coming from the indicated sender.
 
 		const consumeFile = true
-		isSent := mailbox == "Sent"
 		const sync = false
 		const notrain = true
-		err := a.DeliverMessage(ctl.log, tx, m, mf, consumeFile, isSent, sync, notrain)
+		err := a.DeliverMessage(ctl.log, tx, m, mf, consumeFile, sync, notrain)
 		ctl.xcheck(err, "delivering message")
 		deliveredIDs = append(deliveredIDs, m.ID)
 		ctl.log.Debug("delivered message", mlog.Field("id", m.ID))

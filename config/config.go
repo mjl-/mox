@@ -57,7 +57,8 @@ type Static struct {
 		Account string
 		Mailbox string `sconf-doc:"E.g. Postmaster or Inbox."`
 	} `sconf-doc:"Destination for emails delivered to postmaster addresses: a plain 'postmaster' without domain, 'postmaster@<hostname>' (also for each listener with SMTP enabled), and as fallback for each domain without explicitly configured postmaster destination."`
-	DefaultMailboxes []string             `sconf:"optional" sconf-doc:"Mailboxes to create when adding an account. Inbox is always created. If no mailboxes are specified, the following are automatically created: Sent, Archive, Trash, Drafts and Junk."`
+	InitialMailboxes InitialMailboxes     `sconf:"optional" sconf-doc:"Mailboxes to create for new accounts. Inbox is always created. Mailboxes can be given a 'special-use' role, which are understood by most mail clients. If absent/empty, the following mailboxes are created: Sent, Archive, Trash, Drafts and Junk."`
+	DefaultMailboxes []string             `sconf:"optional" sconf-doc:"Deprecated in favor of InitialMailboxes. Mailboxes to create when adding an account. Inbox is always created. If no mailboxes are specified, the following are automatically created: Sent, Archive, Trash, Drafts and Junk."`
 	Transports       map[string]Transport `sconf:"optional" sconf-doc:"Transport are mechanisms for delivering messages. Transports can be referenced from Routes in accounts, domains and the global configuration. There is always an implicit/fallback delivery transport doing direct delivery with SMTP from the outgoing message queue. Transports are typically only configured when using smarthosts, i.e. when delivering through another SMTP server. Zero or one transport methods must be set in a transport, never multiple. When using an external party to send email for a domain, keep in mind you may have to add their IP address to your domain's SPF record, and possibly additional DKIM records."`
 
 	// All IPs that were explicitly listen on for external SMTP. Only set when there
@@ -72,6 +73,23 @@ type Static struct {
 	// To switch to after initialization as root.
 	UID uint32 `sconf:"-" json:"-"`
 	GID uint32 `sconf:"-" json:"-"`
+}
+
+// InitialMailboxes are mailboxes created for a new account.
+type InitialMailboxes struct {
+	SpecialUse SpecialUseMailboxes `sconf:"optional" sconf-doc:"Special-use roles to mailbox to create."`
+	Regular    []string            `sconf:"optional" sconf-doc:"Regular, non-special-use mailboxes to create."`
+}
+
+// SpecialUseMailboxes holds mailbox names for special-use roles. Mail clients
+// recognize these special-use roles, e.g. appending sent messages to whichever
+// mailbox has the Sent special-use flag.
+type SpecialUseMailboxes struct {
+	Sent    string `sconf:"optional"`
+	Archive string `sconf:"optional"`
+	Trash   string `sconf:"optional"`
+	Draft   string `sconf:"optional"`
+	Junk    string `sconf:"optional"`
 }
 
 // Dynamic is the parsed form of domains.conf, and is automatically reloaded when changed.

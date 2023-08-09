@@ -77,7 +77,7 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "sent mailbox")
 			msent.MailboxID = mbsent.ID
 			msent.MailboxOrigID = mbsent.ID
-			err = acc.DeliverMessage(xlog, tx, &msent, msgFile, false, true, true, false)
+			err = acc.DeliverMessage(xlog, tx, &msent, msgFile, false, true, false)
 			tcheck(t, err, "deliver message")
 
 			err = tx.Get(&mbsent)
@@ -90,7 +90,7 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "insert rejects mailbox")
 			mreject.MailboxID = mbrejects.ID
 			mreject.MailboxOrigID = mbrejects.ID
-			err = acc.DeliverMessage(xlog, tx, &mreject, msgFile, false, false, true, false)
+			err = acc.DeliverMessage(xlog, tx, &mreject, msgFile, false, true, false)
 			tcheck(t, err, "deliver message")
 
 			err = tx.Get(&mbrejects)

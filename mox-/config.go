@@ -644,8 +644,32 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 		c.SpecifiedSMTPListenIPs = nil
 	}
 
+	var zerouse config.SpecialUseMailboxes
+	if len(c.DefaultMailboxes) > 0 && (c.InitialMailboxes.SpecialUse != zerouse || len(c.InitialMailboxes.Regular) > 0) {
+		addErrorf("cannot have both DefaultMailboxes and InitialMailboxes")
+	}
+	// DefaultMailboxes is deprecated.
 	for _, mb := range c.DefaultMailboxes {
 		checkMailboxNormf(mb, "default mailbox")
+	}
+	checkSpecialUseMailbox := func(nameOpt string) {
+		if nameOpt != "" {
+			checkMailboxNormf(nameOpt, "special-use initial mailbox")
+			if strings.EqualFold(nameOpt, "inbox") {
+				addErrorf("initial mailbox cannot be set to Inbox (Inbox is always created)")
+			}
+		}
+	}
+	checkSpecialUseMailbox(c.InitialMailboxes.SpecialUse.Archive)
+	checkSpecialUseMailbox(c.InitialMailboxes.SpecialUse.Draft)
+	checkSpecialUseMailbox(c.InitialMailboxes.SpecialUse.Junk)
+	checkSpecialUseMailbox(c.InitialMailboxes.SpecialUse.Sent)
+	checkSpecialUseMailbox(c.InitialMailboxes.SpecialUse.Trash)
+	for _, name := range c.InitialMailboxes.Regular {
+		checkMailboxNormf(name, "regular initial mailbox")
+		if strings.EqualFold(name, "inbox") {
+			addErrorf("initial regular mailbox cannot be set to Inbox (Inbox is always created)")
+		}
 	}
 
 	checkTransportSMTP := func(name string, isTLS bool, t *config.TransportSMTP) {
