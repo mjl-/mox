@@ -211,6 +211,26 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 	adminSherpaHandler.ServeHTTP(w, r.WithContext(ctx))
 }
 
+func xcheckf(ctx context.Context, err error, format string, args ...any) {
+	if err == nil {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	errmsg := fmt.Sprintf("%s: %s", msg, err)
+	xlog.WithContext(ctx).Errorx(msg, err)
+	panic(&sherpa.Error{Code: "server:error", Message: errmsg})
+}
+
+func xcheckuserf(ctx context.Context, err error, format string, args ...any) {
+	if err == nil {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	errmsg := fmt.Sprintf("%s: %s", msg, err)
+	xlog.WithContext(ctx).Errorx(msg, err)
+	panic(&sherpa.Error{Code: "user:error", Message: errmsg})
+}
+
 type Result struct {
 	Errors       []string
 	Warnings     []string
@@ -372,7 +392,7 @@ func (Admin) CheckDomain(ctx context.Context, domainName string) (r CheckResult)
 
 func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer, domainName string) (r CheckResult) {
 	domain, err := dns.ParseDomain(domainName)
-	xcheckf(ctx, err, "parsing domain")
+	xcheckuserf(ctx, err, "parsing domain")
 
 	domConf, ok := mox.Conf.Domain(domain)
 	if !ok {
@@ -1183,10 +1203,10 @@ func (Admin) Domains(ctx context.Context) []dns.Domain {
 // Domain returns the dns domain for a (potentially unicode as IDNA) domain name.
 func (Admin) Domain(ctx context.Context, domain string) dns.Domain {
 	d, err := dns.ParseDomain(domain)
-	xcheckf(ctx, err, "parse domain")
+	xcheckuserf(ctx, err, "parse domain")
 	_, ok := mox.Conf.Domain(d)
 	if !ok {
-		xcheckf(ctx, errors.New("no such domain"), "looking up domain")
+		xcheckuserf(ctx, errors.New("no such domain"), "looking up domain")
 	}
 	return d
 }
@@ -1194,10 +1214,10 @@ func (Admin) Domain(ctx context.Context, domain string) dns.Domain {
 // DomainLocalparts returns the encoded localparts and accounts configured in domain.
 func (Admin) DomainLocalparts(ctx context.Context, domain string) (localpartAccounts map[string]string) {
 	d, err := dns.ParseDomain(domain)
-	xcheckf(ctx, err, "parsing domain")
+	xcheckuserf(ctx, err, "parsing domain")
 	_, ok := mox.Conf.Domain(d)
 	if !ok {
-		xcheckf(ctx, errors.New("no such domain"), "looking up domain")
+		xcheckuserf(ctx, errors.New("no such domain"), "looking up domain")
 	}
 	return mox.Conf.DomainLocalparts(d)
 }
@@ -1215,7 +1235,7 @@ func (Admin) Accounts(ctx context.Context) []string {
 func (Admin) Account(ctx context.Context, account string) map[string]any {
 	ac, ok := mox.Conf.Account(account)
 	if !ok {
-		xcheckf(ctx, errors.New("no such account"), "looking up account")
+		xcheckuserf(ctx, errors.New("no such account"), "looking up account")
 	}
 
 	// todo: should change sherpa to understand config.Account directly, with its anonymous structs.
@@ -1235,16 +1255,6 @@ func (Admin) ConfigFiles(ctx context.Context) (staticPath, dynamicPath, static, 
 	buf1, err := os.ReadFile(mox.ConfigDynamicPath)
 	xcheckf(ctx, err, "read dynamic config file")
 	return mox.ConfigStaticPath, mox.ConfigDynamicPath, string(buf0), string(buf1)
-}
-
-func xcheckf(ctx context.Context, err error, format string, args ...any) {
-	if err == nil {
-		return
-	}
-	msg := fmt.Sprintf(format, args...)
-	errmsg := fmt.Sprintf("%s: %s", msg, err)
-	xlog.WithContext(ctx).Errorx(msg, err)
-	panic(&sherpa.Error{Code: "server:error", Message: errmsg})
 }
 
 // MTASTSPolicies returns all mtasts policies from the cache.
@@ -1276,6 +1286,9 @@ func (Admin) TLSReportID(ctx context.Context, domain string, reportID int64) tls
 	record, err := tlsrptdb.RecordID(ctx, reportID)
 	if err == nil && record.Domain != domain {
 		err = bstore.ErrAbsent
+	}
+	if err == bstore.ErrAbsent {
+		xcheckuserf(ctx, err, "fetching tls report from database")
 	}
 	xcheckf(ctx, err, "fetching tls report from database")
 	return record
@@ -1344,6 +1357,9 @@ func (Admin) DMARCReportID(ctx context.Context, domain string, reportID int64) (
 	report, err := dmarcdb.RecordID(ctx, reportID)
 	if err == nil && report.Domain != domain {
 		err = bstore.ErrAbsent
+	}
+	if err == bstore.ErrAbsent {
+		xcheckuserf(ctx, err, "fetching dmarc report from database")
 	}
 	xcheckf(ctx, err, "fetching dmarc report from database")
 	return report
@@ -1421,9 +1437,9 @@ type Reverse struct {
 
 // LookupIP does a reverse lookup of ip.
 func (Admin) LookupIP(ctx context.Context, ip string) Reverse {
-	resolver := dns.StrictResolver{Pkg: "adminapi"}
+	resolver := dns.StrictResolver{Pkg: "webadmin"}
 	names, err := resolver.LookupAddr(ctx, ip)
-	xcheckf(ctx, err, "looking up ip")
+	xcheckuserf(ctx, err, "looking up ip")
 	return Reverse{names}
 }
 
@@ -1476,10 +1492,10 @@ func dnsblsStatus(ctx context.Context, resolver dns.Resolver) map[string]map[str
 // configured domain.
 func (Admin) DomainRecords(ctx context.Context, domain string) []string {
 	d, err := dns.ParseDomain(domain)
-	xcheckf(ctx, err, "parsing domain")
+	xcheckuserf(ctx, err, "parsing domain")
 	dc, ok := mox.Conf.Domain(d)
 	if !ok {
-		xcheckf(ctx, errors.New("unknown domain"), "lookup domain")
+		xcheckuserf(ctx, errors.New("unknown domain"), "lookup domain")
 	}
 	records, err := mox.DomainRecords(dc, d)
 	xcheckf(ctx, err, "dns records")
@@ -1489,7 +1505,7 @@ func (Admin) DomainRecords(ctx context.Context, domain string) []string {
 // DomainAdd adds a new domain and reloads the configuration.
 func (Admin) DomainAdd(ctx context.Context, domain, accountName, localpart string) {
 	d, err := dns.ParseDomain(domain)
-	xcheckf(ctx, err, "parsing domain")
+	xcheckuserf(ctx, err, "parsing domain")
 
 	err = mox.DomainAdd(ctx, d, accountName, smtp.Localpart(localpart))
 	xcheckf(ctx, err, "adding domain")
@@ -1498,7 +1514,7 @@ func (Admin) DomainAdd(ctx context.Context, domain, accountName, localpart strin
 // DomainRemove removes an existing domain and reloads the configuration.
 func (Admin) DomainRemove(ctx context.Context, domain string) {
 	d, err := dns.ParseDomain(domain)
-	xcheckf(ctx, err, "parsing domain")
+	xcheckuserf(ctx, err, "parsing domain")
 
 	err = mox.DomainRemove(ctx, d)
 	xcheckf(ctx, err, "removing domain")
@@ -1555,7 +1571,7 @@ func (Admin) SetAccountLimits(ctx context.Context, accountName string, maxOutgoi
 // Submission (SMTP) for the domain.
 func (Admin) ClientConfigDomain(ctx context.Context, domain string) mox.ClientConfig {
 	d, err := dns.ParseDomain(domain)
-	xcheckf(ctx, err, "parsing domain")
+	xcheckuserf(ctx, err, "parsing domain")
 
 	cc, err := mox.ClientConfigDomain(d)
 	xcheckf(ctx, err, "client config for domain")
@@ -1608,7 +1624,7 @@ func (Admin) LogLevels(ctx context.Context) map[string]string {
 func (Admin) LogLevelSet(ctx context.Context, pkg string, levelStr string) {
 	level, ok := mlog.Levels[levelStr]
 	if !ok {
-		xcheckf(ctx, errors.New("unknown"), "lookup level")
+		xcheckuserf(ctx, errors.New("unknown"), "lookup level")
 	}
 	mox.Conf.LogLevelSet(pkg, level)
 }
@@ -1671,7 +1687,7 @@ func (Admin) WebserverConfigSave(ctx context.Context, oldConf, newConf Webserver
 		return true
 	}
 	if !reflect.DeepEqual(oldConf.WebDNSDomainRedirects, current.WebDNSDomainRedirects) || !webhandlersEqual() {
-		xcheckf(ctx, errors.New("config has changed"), "comparing old/current config")
+		xcheckuserf(ctx, errors.New("config has changed"), "comparing old/current config")
 	}
 
 	// Convert to map, check that there are no duplicates here. The canonicalized
@@ -1680,7 +1696,7 @@ func (Admin) WebserverConfigSave(ctx context.Context, oldConf, newConf Webserver
 	domainRedirects := map[string]string{}
 	for _, x := range newConf.WebDomainRedirects {
 		if _, ok := domainRedirects[x[0]]; ok {
-			xcheckf(ctx, errors.New("already present"), "checking redirect %s", x[0])
+			xcheckuserf(ctx, errors.New("already present"), "checking redirect %s", x[0])
 		}
 		domainRedirects[x[0]] = x[1]
 	}

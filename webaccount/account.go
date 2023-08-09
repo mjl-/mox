@@ -77,6 +77,16 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 	panic(&sherpa.Error{Code: "server:error", Message: errmsg})
 }
 
+func xcheckuserf(ctx context.Context, err error, format string, args ...any) {
+	if err == nil {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	errmsg := fmt.Sprintf("%s: %s", msg, err)
+	xlog.WithContext(ctx).Errorx(msg, err)
+	panic(&sherpa.Error{Code: "user:error", Message: errmsg})
+}
+
 // Account exports web API functions for the account web interface. All its
 // methods are exported under api/. Function calls require valid HTTP
 // Authentication credentials of a user.
@@ -378,11 +388,11 @@ func (Account) DestinationSave(ctx context.Context, destName string, oldDest, ne
 	}
 	curDest, ok := accConf.Destinations[destName]
 	if !ok {
-		xcheckf(ctx, errors.New("not found"), "looking up destination")
+		xcheckuserf(ctx, errors.New("not found"), "looking up destination")
 	}
 
 	if !curDest.Equal(oldDest) {
-		xcheckf(ctx, errors.New("modified"), "checking stored destination")
+		xcheckuserf(ctx, errors.New("modified"), "checking stored destination")
 	}
 
 	// Keep fields we manage.
