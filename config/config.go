@@ -379,13 +379,15 @@ func (d Destination) Equal(o Destination) bool {
 }
 
 type Ruleset struct {
-	SMTPMailFromRegexp string            `sconf:"optional" sconf-doc:"Matches if this regular expression matches (a substring of) the SMTP MAIL FROM address (not the message From-header). E.g. user@example.org."`
+	SMTPMailFromRegexp string            `sconf:"optional" sconf-doc:"Matches if this regular expression matches (a substring of) the SMTP MAIL FROM address (not the message From-header). E.g. '^user@example\\.org$'."`
 	VerifiedDomain     string            `sconf:"optional" sconf-doc:"Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain."`
 	HeadersRegexp      map[string]string `sconf:"optional" sconf-doc:"Matches if these header field/value regular expressions all match (substrings of) the message headers. Header fields and valuees are converted to lower case before matching. Whitespace is trimmed from the value before matching. A header field can occur multiple times in a message, only one instance has to match. For mailing lists, you could match on ^list-id$ with the value typically the mailing list address in angled brackets with @ replaced with a dot, e.g. <name\\.lists\\.example\\.org>."`
 	// todo: add a SMTPRcptTo check, and MessageFrom that works on a properly parsed From header.
 
-	ListAllowDomain        string `sconf:"optional" sconf-doc:"Influence spam filtering only, this option does not change whether a message matches this ruleset. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation."`
-	AcceptRejectsToMailbox string `sconf:"optional" sconf-doc:"Influence spam filtering only, this option does not change whether a message matches this ruleset. If a message is classified as spam, it isn't rejected during the SMTP transaction (the normal behaviour), but accepted during the SMTP transaction and delivered to the specified mailbox. The specified mailbox is not automatically cleaned up like the account global Rejects mailbox, unless set to that Rejects mailbox."`
+	// todo: once we implement ARC, we can use dkim domains that we cannot verify but that the arc-verified forwarding mail server was able to verify.
+	IsForward              bool   `sconf:"optional" sconf-doc:"Influences spam filtering only, this option does not change whether a message matches this ruleset. Can only be used together with SMTPMailFromRegexp and VerifiedDomain. SMTPMailFromRegexp must be set to the address used to deliver the forwarded message, e.g. '^user(|\\+.*)@forward\\.example$'. Changes to junk analysis: 1. Messages are not rejects for failing a DMARC policy, because a legitimate forwarded message without valid/intact/aligned DKIM signature would be rejected because any verified SPF domain will be 'unaligned', of the forwarding mail server. 2. The sending mail server IP address, and sending EHLO and MAIL FROM domains and matching DKIM domain aren't used in future reputation-based spam classifications (but other verified DKIM domains are) because the forwarding server is not a useful spam signal for future messages."`
+	ListAllowDomain        string `sconf:"optional" sconf-doc:"Influences spam filtering only, this option does not change whether a message matches this ruleset. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation."`
+	AcceptRejectsToMailbox string `sconf:"optional" sconf-doc:"Influences spam filtering only, this option does not change whether a message matches this ruleset. If a message is classified as spam, it isn't rejected during the SMTP transaction (the normal behaviour), but accepted during the SMTP transaction and delivered to the specified mailbox. The specified mailbox is not automatically cleaned up like the account global Rejects mailbox, unless set to that Rejects mailbox."`
 
 	Mailbox string `sconf-doc:"Mailbox to deliver to if this ruleset matches."`
 
@@ -397,7 +399,7 @@ type Ruleset struct {
 
 // Equal returns whether r and o are equal, only looking at their user-changeable fields.
 func (r Ruleset) Equal(o Ruleset) bool {
-	if r.SMTPMailFromRegexp != o.SMTPMailFromRegexp || r.VerifiedDomain != o.VerifiedDomain || r.ListAllowDomain != o.ListAllowDomain || r.AcceptRejectsToMailbox != o.AcceptRejectsToMailbox || r.Mailbox != o.Mailbox {
+	if r.SMTPMailFromRegexp != o.SMTPMailFromRegexp || r.VerifiedDomain != o.VerifiedDomain || r.IsForward != o.IsForward || r.ListAllowDomain != o.ListAllowDomain || r.AcceptRejectsToMailbox != o.AcceptRejectsToMailbox || r.Mailbox != o.Mailbox {
 		return false
 	}
 	if !reflect.DeepEqual(r.HeadersRegexp, o.HeadersRegexp) {

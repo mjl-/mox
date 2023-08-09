@@ -1039,10 +1039,6 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 
 			for i, rs := range dest.Rulesets {
 				checkMailboxNormf(rs.Mailbox, "account %q, destination %q, ruleset %d", accName, addrName, i+1)
-				checkMailboxNormf(rs.AcceptRejectsToMailbox, "account %q, destination %q, ruleset %d, rejects mailbox", accName, addrName, i+1)
-				if strings.EqualFold(rs.AcceptRejectsToMailbox, "inbox") {
-					addErrorf("account %q, destination %q, ruleset %d: AcceptRejectsToMailbox cannot be set to Inbox", accName, addrName, i+1)
-				}
 
 				n := 0
 
@@ -1088,12 +1084,25 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 					addErrorf("ruleset must have at least one rule")
 				}
 
+				if rs.IsForward && rs.ListAllowDomain != "" {
+					addErrorf("ruleset cannot have both IsForward and ListAllowDomain")
+				}
+				if rs.IsForward {
+					if rs.SMTPMailFromRegexp == "" || rs.VerifiedDomain == "" {
+						addErrorf("ruleset with IsForward must have both SMTPMailFromRegexp and VerifiedDomain too")
+					}
+				}
 				if rs.ListAllowDomain != "" {
 					d, err := dns.ParseDomain(rs.ListAllowDomain)
 					if err != nil {
 						addErrorf("invalid ListAllowDomain %q: %v", rs.ListAllowDomain, err)
 					}
 					c.Accounts[accName].Destinations[addrName].Rulesets[i].ListAllowDNSDomain = d
+				}
+
+				checkMailboxNormf(rs.AcceptRejectsToMailbox, "account %q, destination %q, ruleset %d, rejects mailbox", accName, addrName, i+1)
+				if strings.EqualFold(rs.AcceptRejectsToMailbox, "inbox") {
+					addErrorf("account %q, destination %q, ruleset %d: AcceptRejectsToMailbox cannot be set to Inbox", accName, addrName, i+1)
 				}
 			}
 

@@ -372,6 +372,14 @@ type Message struct {
 	// flag cleared.
 	IsReject bool
 
+	// If set, this is a forwarded message (through a ruleset with IsForward). This
+	// causes fields used during junk analysis to be moved to their Orig variants, and
+	// masked IP fields cleared, so they aren't used in junk classifications for
+	// incoming messages. This ensures the forwarded messages don't cause negative
+	// reputation for the forwarding mail server, which may also be sending regular
+	// messages.
+	IsForward bool
+
 	// MailboxOrigID is the mailbox the message was originally delivered to. Typically
 	// Inbox or Rejects, but can also be a mailbox configured in a Ruleset, or
 	// Postmaster, TLS/DMARC reporting addresses. MailboxOrigID is not changed when the
@@ -393,19 +401,24 @@ type Message struct {
 
 	Received time.Time `bstore:"default now,index"`
 
-	// Full IP address of remote SMTP server. Empty if not delivered over
-	// SMTP.
+	// Full IP address of remote SMTP server. Empty if not delivered over SMTP. The
+	// masked IPs are used to classify incoming messages. They are left empty for
+	// messages matching a ruleset for forwarded messages.
 	RemoteIP        string
 	RemoteIPMasked1 string `bstore:"index RemoteIPMasked1+Received"` // For IPv4 /32, for IPv6 /64, for reputation.
 	RemoteIPMasked2 string `bstore:"index RemoteIPMasked2+Received"` // For IPv4 /26, for IPv6 /48.
 	RemoteIPMasked3 string `bstore:"index RemoteIPMasked3+Received"` // For IPv4 /21, for IPv6 /32.
 
-	EHLODomain        string         `bstore:"index EHLODomain+Received"` // Only set if present and not an IP address. Unicode string.
+	// Only set if present and not an IP address. Unicode string. Empty for forwarded
+	// messages.
+	EHLODomain        string         `bstore:"index EHLODomain+Received"`
 	MailFrom          string         // With localpart and domain. Can be empty.
 	MailFromLocalpart smtp.Localpart // SMTP "MAIL FROM", can be empty.
-	MailFromDomain    string         `bstore:"index MailFromDomain+Received"` // Only set if it is a domain, not an IP. Unicode string.
-	RcptToLocalpart   smtp.Localpart // SMTP "RCPT TO", can be empty.
-	RcptToDomain      string         // Unicode string.
+	// Only set if it is a domain, not an IP. Unicode string. Empty for forwarded
+	// messages, but see OrigMailFromDomain.
+	MailFromDomain  string         `bstore:"index MailFromDomain+Received"`
+	RcptToLocalpart smtp.Localpart // SMTP "RCPT TO", can be empty.
+	RcptToDomain    string         // Unicode string.
 
 	// Parsed "From" message header, used for reputation along with domain validation.
 	MsgFromLocalpart smtp.Localpart
@@ -422,7 +435,14 @@ type Message struct {
 	MailFromValidation Validation // Can have SPF-specific validations like ValidationSoftfail.
 	MsgFromValidation  Validation // Desirable validations: Strict, DMARC, Relaxed. Will not be just Pass.
 
-	DKIMDomains []string `bstore:"index DKIMDomains+Received"` // Domains with verified DKIM signatures. Unicode string.
+	// Domains with verified DKIM signatures. Unicode string. For forwarded messages, a
+	// DKIM domain that matched a ruleset's verified domain is left out, but included
+	// in OrigDKIMDomains.
+	DKIMDomains []string `bstore:"index DKIMDomains+Received"`
+
+	// For forwarded messages,
+	OrigEHLODomain  string
+	OrigDKIMDomains []string
 
 	// Value of Message-Id header. Only set for messages that were
 	// delivered to the rejects mailbox. For ensuring such messages are

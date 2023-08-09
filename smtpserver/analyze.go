@@ -92,6 +92,30 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		}
 	}
 
+	// For forwarded messages, we have different junk analysis. We don't reject for
+	// failing DMARC, and we clear fields that could implicate the forwarding mail
+	// server during future classifications on incoming messages (the forwarding mail
+	// server isn't responsible for the message).
+	if rs != nil && rs.IsForward {
+		d.dmarcUse = false
+		d.m.IsForward = true
+		d.m.RemoteIPMasked1 = ""
+		d.m.RemoteIPMasked2 = ""
+		d.m.RemoteIPMasked3 = ""
+		d.m.OrigEHLODomain = d.m.EHLODomain
+		d.m.EHLODomain = ""
+		d.m.MailFromDomain = "" // Still available in MailFrom.
+		d.m.OrigDKIMDomains = d.m.DKIMDomains
+		dkimdoms := []string{}
+		for _, dom := range d.m.DKIMDomains {
+			if dom != rs.VerifiedDNSDomain.Name() {
+				dkimdoms = append(dkimdoms, dom)
+			}
+		}
+		d.m.DKIMDomains = dkimdoms
+		log.Info("forwarded message, clearing identifying signals of forwarding mail server")
+	}
+
 	reject := func(code int, secode string, errmsg string, err error, reason string) analysis {
 		accept := false
 		if rs != nil && rs.AcceptRejectsToMailbox != "" {

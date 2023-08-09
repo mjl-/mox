@@ -618,7 +618,7 @@ listed in more DNS block lists, visit:
 	if err := sconf.Describe(&destBuf, destsExample); err != nil {
 		fatalf("describing destination example: %v", err)
 	}
-	ndests := odests + "#\t\t\tIf you receive email from mailing lists, you probably want to configure them like the example below.\n"
+	ndests := odests + "# If you receive email from mailing lists, you may want to configure them like the\n# example below (remove the empty/false SMTPMailRegexp and IsForward).\n# If you are receiving forwarded email, see the IsForwarded option in a Ruleset.\n"
 	for _, line := range strings.Split(destBuf.String(), "\n")[1:] {
 		ndests += "#\t\t" + line + "\n"
 	}

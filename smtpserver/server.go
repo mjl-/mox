@@ -2291,6 +2291,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 
 			// todo future: make these configurable
+			// todo: should we have a limit for forwarded messages? they are stored with empty RemoteIPMasked*
 
 			const day = 24 * time.Hour
 			checkCount(store.Message{RemoteIPMasked1: ipmasked1}, time.Minute, limitIPMasked1MessagesPerMinute)
@@ -2412,6 +2413,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			continue
 		}
 
+		delayFirstTime := true
 		if a.dmarcReport != nil {
 			// todo future: add rate limiting to prevent DoS attacks. ../rfc/7489:2570
 			if err := dmarcdb.AddReport(ctx, a.dmarcReport, msgFrom.Domain); err != nil {
@@ -2419,6 +2421,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			} else {
 				log.Info("dmarc report processed")
 				m.Flags.Seen = true
+				delayFirstTime = false
 			}
 		}
 		if a.tlsReport != nil {
@@ -2428,13 +2431,14 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			} else {
 				log.Info("tlsrpt report processed")
 				m.Flags.Seen = true
+				delayFirstTime = false
 			}
 		}
 
-		// If not dmarc or tls report (Seen set above), and this is a first-time sender,
-		// wait before actually delivering. If this turns out to be a spammer, we've kept
-		// one of their connections busy.
-		if !m.Flags.Seen && a.reason == reasonNoBadSignals && c.firstTimeSenderDelay > 0 {
+		// If a forwarded message and this is a first-time sender, wait before actually
+		// delivering. If this turns out to be a spammer, we've kept one of their
+		// connections busy.
+		if delayFirstTime && !m.IsForward && a.reason == reasonNoBadSignals && c.firstTimeSenderDelay > 0 {
 			log.Debug("delaying before delivering from sender without reputation", mlog.Field("delay", c.firstTimeSenderDelay))
 			mox.Sleep(mox.Context, c.firstTimeSenderDelay)
 		}

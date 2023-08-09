@@ -338,17 +338,22 @@ func reputation(tx *bstore.Tx, log *mlog.Log, m *store.Message) (rjunk *bool, rc
 
 	// IP-based. A wider mask needs more messages to be conclusive.
 	// We require the resulting signal to be strong, i.e. likely ham or likely spam.
-	q := messageQuery(&store.Message{RemoteIPMasked1: m.RemoteIPMasked1}, year/4, 50)
-	msgs := xmessageList(q, "ip1")
-	need := 2
-	method := methodIP1
-	if len(msgs) == 0 {
+	var msgs []store.Message
+	var need int
+	var method reputationMethod
+	if m.RemoteIPMasked1 != "" {
+		q := messageQuery(&store.Message{RemoteIPMasked1: m.RemoteIPMasked1}, year/4, 50)
+		msgs = xmessageList(q, "ip1")
+		need = 2
+		method = methodIP1
+	}
+	if len(msgs) == 0 && m.RemoteIPMasked2 != "" {
 		q := messageQuery(&store.Message{RemoteIPMasked2: m.RemoteIPMasked2}, year/4, 50)
 		msgs = xmessageList(q, "ip2")
 		need = 5
 		method = methodIP2
 	}
-	if len(msgs) == 0 {
+	if len(msgs) == 0 && m.RemoteIPMasked3 != "" {
 		q := messageQuery(&store.Message{RemoteIPMasked3: m.RemoteIPMasked3}, year/4, 50)
 		msgs = xmessageList(q, "ip3")
 		need = 10

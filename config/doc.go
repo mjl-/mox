@@ -698,7 +698,7 @@ describe-static" and "mox config describe-domains":
 						-
 
 							# Matches if this regular expression matches (a substring of) the SMTP MAIL FROM
-							# address (not the message From-header). E.g. user@example.org. (optional)
+							# address (not the message From-header). E.g. '^user@example\.org$'. (optional)
 							SMTPMailFromRegexp:
 
 							# Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain.
@@ -715,7 +715,21 @@ describe-static" and "mox config describe-domains":
 							HeadersRegexp:
 								x:
 
-							# Influence spam filtering only, this option does not change whether a message
+							# Influences spam filtering only, this option does not change whether a message
+							# matches this ruleset. Can only be used together with SMTPMailFromRegexp and
+							# VerifiedDomain. SMTPMailFromRegexp must be set to the address used to deliver
+							# the forwarded message, e.g. '^user(|\+.*)@forward\.example$'. Changes to junk
+							# analysis: 1. Messages are not rejects for failing a DMARC policy, because a
+							# legitimate forwarded message without valid/intact/aligned DKIM signature would
+							# be rejected because any verified SPF domain will be 'unaligned', of the
+							# forwarding mail server. 2. The sending mail server IP address, and sending EHLO
+							# and MAIL FROM domains and matching DKIM domain aren't used in future
+							# reputation-based spam classifications (but other verified DKIM domains are)
+							# because the forwarding server is not a useful spam signal for future messages.
+							# (optional)
+							IsForward: false
+
+							# Influences spam filtering only, this option does not change whether a message
 							# matches this ruleset. If this domain matches an SPF- and/or DKIM-verified
 							# (sub)domain, the message is accepted without further spam checks, such as a junk
 							# filter or DMARC reject evaluation. DMARC rejects should not apply for mailing
@@ -726,7 +740,7 @@ describe-static" and "mox config describe-domains":
 							# (optional)
 							ListAllowDomain:
 
-							# Influence spam filtering only, this option does not change whether a message
+							# Influences spam filtering only, this option does not change whether a message
 							# matches this ruleset. If a message is classified as spam, it isn't rejected
 							# during the SMTP transaction (the normal behaviour), but accepted during the SMTP
 							# transaction and delivered to the specified mailbox. The specified mailbox is not

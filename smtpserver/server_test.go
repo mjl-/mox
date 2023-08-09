@@ -506,6 +506,134 @@ func TestSpam(t *testing.T) {
 	})
 }
 
+// Test accept/reject with forwarded messages, DMARC ignored, no IP/EHLO/MAIL
+// FROM-based reputation.
+func TestForward(t *testing.T) {
+	// Do a run without forwarding, and with.
+	check := func(forward bool) {
+
+		resolver := &dns.MockResolver{
+			A: map[string][]string{
+				"bad.example.":     {"127.0.0.1"},  // For mx check.
+				"good.example.":    {"127.0.0.1"},  // For mx check.
+				"forward.example.": {"127.0.0.10"}, // For mx check.
+			},
+			TXT: map[string][]string{
+				"bad.example.":            {"v=spf1 ip4:127.0.0.1 -all"},
+				"good.example.":           {"v=spf1 ip4:127.0.0.1 -all"},
+				"forward.example.":        {"v=spf1 ip4:127.0.0.10 -all"},
+				"_dmarc.bad.example.":     {"v=DMARC1;p=reject"},
+				"_dmarc.good.example.":    {"v=DMARC1;p=reject"},
+				"_dmarc.forward.example.": {"v=DMARC1;p=reject"},
+			},
+			PTR: map[string][]string{
+				"127.0.0.10": {"forward.example."}, // For iprev check.
+			},
+		}
+		rcptTo := "mjl3@mox.example"
+		if !forward {
+			// For SPF and DMARC pass, otherwise the test ends quickly.
+			resolver.TXT["bad.example."] = []string{"v=spf1 ip4:127.0.0.10 -all"}
+			resolver.TXT["good.example."] = []string{"v=spf1 ip4:127.0.0.10 -all"}
+			rcptTo = "mjl@mox.example" // Without IsForward rule.
+		}
+
+		ts := newTestServer(t, "../testdata/smtp/junk/mox.conf", resolver)
+		defer ts.close()
+
+		var msgBad = strings.ReplaceAll(`From: <remote@bad.example>
+To: <mjl3@mox.example>
+Subject: test
+Message-Id: <bad@example.org>
+
+test email
+`, "\n", "\r\n")
+		var msgOK = strings.ReplaceAll(`From: <remote@good.example>
+To: <mjl3@mox.example>
+Subject: other
+Message-Id: <good@example.org>
+
+unrelated message.
+`, "\n", "\r\n")
+		var msgOK2 = strings.ReplaceAll(`From: <other@forward.example>
+To: <mjl3@mox.example>
+Subject: non-forward
+Message-Id: <regular@example.org>
+
+happens to come from forwarding mail server.
+`, "\n", "\r\n")
+
+		// Deliver forwarded messages, then classify as junk. Normally enough to treat
+		// other unrelated messages from IP as junk, but not for forwarded messages.
+		ts.run(func(err error, client *smtpclient.Client) {
+			tcheck(t, err, "connect")
+
+			mailFrom := "remote@forward.example"
+			if !forward {
+				mailFrom = "remote@bad.example"
+			}
+
+			for i := 0; i < 10; i++ {
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgBad)), strings.NewReader(msgBad), false, false)
+				tcheck(t, err, "deliver message")
+			}
+
+			n, err := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).UpdateFields(map[string]any{"Junk": true, "MsgFromValidated": true})
+			tcheck(t, err, "marking messages as junk")
+			tcompare(t, n, 10)
+
+			// Next delivery will fail, with negative "message From" signal.
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgBad)), strings.NewReader(msgBad), false, false)
+			var cerr smtpclient.Error
+			if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
+				t.Fatalf("delivery by bad sender, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
+			}
+		})
+
+		// Delivery from different "message From" without reputation, but from same
+		// forwarding email server, should succeed under forwarding, not as regular sending
+		// server.
+		ts.run(func(err error, client *smtpclient.Client) {
+			tcheck(t, err, "connect")
+
+			mailFrom := "remote@forward.example"
+			if !forward {
+				mailFrom = "remote@good.example"
+			}
+
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgOK)), strings.NewReader(msgOK), false, false)
+			if forward {
+				tcheck(t, err, "deliver")
+			} else {
+				var cerr smtpclient.Error
+				if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
+					t.Fatalf("delivery by bad ip, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
+				}
+			}
+		})
+
+		// Delivery from forwarding server that isn't a forward should get same treatment.
+		ts.run(func(err error, client *smtpclient.Client) {
+			tcheck(t, err, "connect")
+
+			mailFrom := "other@forward.example"
+
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgOK2)), strings.NewReader(msgOK2), false, false)
+			if forward {
+				tcheck(t, err, "deliver")
+			} else {
+				var cerr smtpclient.Error
+				if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
+					t.Fatalf("delivery by bad ip, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
+				}
+			}
+		})
+	}
+
+	check(true)
+	check(false)
+}
+
 // Messages that we sent to, that have passing DMARC, but that are otherwise spammy, should be accepted.
 func TestDMARCSent(t *testing.T) {
 	resolver := &dns.MockResolver{
