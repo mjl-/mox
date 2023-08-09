@@ -367,6 +367,11 @@ type Message struct {
 	CreateSeq ModSeq `bstore:"index"`
 	Expunged  bool
 
+	// If set, this message was delivered to a Rejects mailbox. When it is moved to a
+	// different mailbox, its MailboxOrigID is set to the destination mailbox and this
+	// flag cleared.
+	IsReject bool
+
 	// MailboxOrigID is the mailbox the message was originally delivered to. Typically
 	// Inbox or Rejects, but can also be a mailbox configured in a Ruleset, or
 	// Postmaster, TLS/DMARC reporting addresses. MailboxOrigID is not changed when the

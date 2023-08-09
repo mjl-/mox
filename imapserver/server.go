@@ -3215,10 +3215,11 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				m.CreateSeq = modseq
 				m.ModSeq = modseq
 				m.MailboxID = mbDst.ID
-				if mbSrc.Name == conf.RejectsMailbox && m.MailboxDestinedID != 0 {
+				if m.IsReject && m.MailboxDestinedID != 0 {
 					// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
 					// is used for reputation calculation during future deliveries.
 					m.MailboxOrigID = m.MailboxDestinedID
+					m.IsReject = false
 				}
 				m.TrainedJunk = nil
 				m.JunkFlagsForMailbox(mbDst.Name, conf)
@@ -3383,10 +3384,11 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 				om.ModSeq = modseq
 
 				m.MailboxID = mbDst.ID
-				if mbSrc.Name == conf.RejectsMailbox && m.MailboxDestinedID != 0 {
+				if m.IsReject && m.MailboxDestinedID != 0 {
 					// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
 					// is used for reputation calculation during future deliveries.
 					m.MailboxOrigID = m.MailboxDestinedID
+					m.IsReject = false
 				}
 				m.UID = uidnext
 				m.ModSeq = modseq

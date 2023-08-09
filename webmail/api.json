@@ -1438,6 +1438,13 @@
 					]
 				},
 				{
+					"Name": "IsReject",
+					"Docs": "If set, this message was delivered to a Rejects mailbox. When it is moved to a different mailbox, its MailboxOrigID is set to the destination mailbox and this flag cleared.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
 					"Name": "MailboxOrigID",
 					"Docs": "MailboxOrigID is the mailbox the message was originally delivered to. Typically Inbox or Rejects, but can also be a mailbox configured in a Ruleset, or Postmaster, TLS/DMARC reporting addresses. MailboxOrigID is not changed when the message is moved to another mailbox, e.g. Archive/Trash/Junk. Used for per-mailbox reputation.  MailboxDestinedID is normally 0, but when a message is delivered to the Rejects mailbox, it is set to the intended mailbox according to delivery rules, typically that of Inbox. When such a message is moved out of Rejects, the MailboxOrigID is corrected by setting it to MailboxDestinedID. This ensures the message is used for reputation calculation for future deliveries to that mailbox.  These are not bstore references to prevent having to update all messages in a mailbox when the original mailbox is removed. Use of these fields requires checking if the mailbox still exists.",
 					"Typewords": [

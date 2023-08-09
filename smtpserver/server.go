@@ -2375,6 +2375,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				if err != nil {
 					log.Errorx("checking whether reject is already present", err)
 				} else if !present {
+					m.IsReject = true
 					m.Seen = true // We don't want to draw attention.
 					// Regular automatic junk flags configuration applies to these messages. The
 					// default is to treat these as neutral, so they won't cause outright rejections

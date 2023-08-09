@@ -838,10 +838,11 @@ func (Webmail) MessageMove(ctx context.Context, messageIDs []int64, mailboxID in
 				}
 				conf, _ := acc.Conf()
 				m.MailboxID = mbDst.ID
-				if mbSrc.Name == conf.RejectsMailbox && m.MailboxDestinedID != 0 {
+				if m.IsReject && m.MailboxDestinedID != 0 {
 					// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
 					// is used for reputation calculation during future deliveries.
 					m.MailboxOrigID = m.MailboxDestinedID
+					m.IsReject = false
 				}
 				m.UID = mbDst.UIDNext
 				m.ModSeq = modseq
