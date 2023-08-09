@@ -2055,7 +2055,6 @@ const compose = (opts) => {
 	let haveFrom = false;
 	const fromOptions = accountAddresses.map(a => {
 		const selected = opts.from && opts.from.length === 1 && equalAddress(a, opts.from[0]) || loginAddress && equalAddress(a, loginAddress) && (!opts.from || envelopeIdentity(opts.from));
-		log('fromOptions', a, selected, loginAddress, equalAddress(a, loginAddress));
 		const o = dom.option(formatAddressFull(a), selected ? attr.selected('') : []);
 		if (selected) {
 			haveFrom = true;
@@ -2608,7 +2607,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		// text to use when writing a reply. We still set url so the text content can be
 		// opened in a separate tab, even though it will look differently.
 		urlType = 'text';
-		const elem = dom.div(dom._class('mono'), style({ whiteSpace: 'pre-wrap' }), join((pm.Texts || []).map(t => renderText(t)), () => dom.hr(style({ margin: '2ex 0' }))));
+		const elem = dom.div(dom._class('mono'), style({ whiteSpace: 'pre-wrap' }), join((pm.Texts || []).map(t => renderText(t.replace(/\r\n/g, '\n'))), () => dom.hr(style({ margin: '2ex 0' }))));
 		dom._kids(msgcontentElem);
 		dom._kids(msgscrollElem, elem);
 		dom._kids(msgcontentElem, msgscrollElem);
@@ -2701,6 +2700,13 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 					await withStatus('Marking current message as read', client.FlagsAdd([miv.messageitem.Message.ID], ['\\seen']));
 				}
 			}, 500);
+		}
+		if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk) {
+			window.setTimeout(async () => {
+				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.ID === msglistView.activeMessageID()) {
+					await withStatus('Marking current message as not junk', client.FlagsAdd([miv.messageitem.Message.ID], ['$notjunk']));
+				}
+			}, 5 * 1000);
 		}
 	})();
 	return mv;

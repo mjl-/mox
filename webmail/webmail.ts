@@ -1319,7 +1319,6 @@ const compose = (opts: ComposeOptions) => {
 	let haveFrom = false
 	const fromOptions = accountAddresses.map(a => {
 		const selected = opts.from && opts.from.length === 1 && equalAddress(a, opts.from[0]) || loginAddress && equalAddress(a, loginAddress) && (!opts.from || envelopeIdentity(opts.from))
-		log('fromOptions', a, selected, loginAddress, equalAddress(a, loginAddress!))
 		const o = dom.option(formatAddressFull(a), selected ? attr.selected('') : [])
 		if (selected) {
 			haveFrom = true
@@ -2206,7 +2205,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		urlType = 'text'
 		const elem = dom.div(dom._class('mono'),
 			style({whiteSpace: 'pre-wrap'}),
-			join((pm.Texts || []).map(t => renderText(t)), () => dom.hr(style({margin: '2ex 0'}))),
+			join((pm.Texts || []).map(t => renderText(t.replace(/\r\n/g, '\n'))), () => dom.hr(style({margin: '2ex 0'}))),
 		)
 		dom._kids(msgcontentElem)
 		dom._kids(msgscrollElem, elem)
@@ -2335,6 +2334,13 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 					await withStatus('Marking current message as read', client.FlagsAdd([miv.messageitem.Message.ID], ['\\seen']))
 				}
 			}, 500)
+		}
+		if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk) {
+			window.setTimeout(async () => {
+				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.ID === msglistView.activeMessageID()) {
+					await withStatus('Marking current message as not junk', client.FlagsAdd([miv.messageitem.Message.ID], ['$notjunk']))
+				}
+			}, 5*1000)
 		}
 	})()
 
