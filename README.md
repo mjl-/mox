@@ -110,7 +110,6 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 ## Roadmap
 
 - Improve message parsing, more lenient for imported messages
-- Ruleset config option for accepting incoming forwarded messages
 - Rewrite account and admin javascript to typescript
 - Prepare data storage for JMAP
 - IMAP THREAD extension
@@ -125,7 +124,6 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 - Privilege separation, isolating parts of the application to more restricted
   sandbox (e.g. new unauthenticated connections)
 - Using mox as backup MX
-- Old-style internationalization in messages
 - ARC, with forwarded email from trusted source
 - JMAP
 - Autoresponder (out of office/vacation)
