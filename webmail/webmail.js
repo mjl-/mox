@@ -2397,11 +2397,13 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 	let textbtn, htmlbtn, htmlextbtn;
 	const activeBtn = (b) => {
 		for (const xb of [textbtn, htmlbtn, htmlextbtn]) {
-			xb.classList.toggle('active', xb === b);
+			if (xb) {
+				xb.classList.toggle('active', xb === b);
+			}
 		}
 	};
 	const cmdShowText = async () => {
-		if (!textbtn || !htmlbtn || !htmlextbtn) {
+		if (!textbtn) {
 			return;
 		}
 		loadText(await parsedMessagePromise);
@@ -2409,14 +2411,14 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		activeBtn(textbtn);
 	};
 	const cmdShowHTML = async () => {
-		if (!textbtn || !htmlbtn || !htmlextbtn) {
+		if (!htmlbtn || !htmlextbtn) {
 			return;
 		}
 		loadHTML();
 		activeBtn(htmlbtn);
 	};
 	const cmdShowHTMLExternal = async () => {
-		if (!textbtn || !htmlbtn || !htmlextbtn) {
+		if (!htmlbtn || !htmlextbtn) {
 			return;
 		}
 		loadHTMLexternal();
@@ -2676,21 +2678,18 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			loadText(pm);
 			dom._kids(msgmodeElem);
 		}
-		else if (!haveText && pm.HasHTML) {
-			loadHTML();
-			dom._kids(msgmodeElem, dom.div(dom._class('pad'), style({ borderTop: '1px solid #ccc' }), dom.span('HTML-only message', attr.title(htmlNote), style({ backgroundColor: '#ffca91', padding: '0 .15em' }))));
-		}
 		else {
-			dom._kids(msgmodeElem, dom.div(dom._class('pad'), style({ borderTop: '1px solid #ccc' }), dom.span(dom._class('btngroup'), textbtn = dom.clickbutton(settings.showHTML ? [] : dom._class('active'), 'Text', clickCmd(cmdShowText, shortcuts)), htmlbtn = dom.clickbutton(!settings.showHTML ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
+			const text = haveText && !settings.showHTML;
+			dom._kids(msgmodeElem, dom.div(dom._class('pad'), style({ borderTop: '1px solid #ccc' }), !haveText ? dom.span('HTML-only message', attr.title(htmlNote), style({ backgroundColor: '#ffca91', padding: '0 .15em', marginRight: '.25em' })) : [], dom.span(dom._class('btngroup'), haveText ? textbtn = dom.clickbutton(text ? dom._class('active') : [], 'Text', clickCmd(cmdShowText, shortcuts)) : [], htmlbtn = dom.clickbutton(text ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
 				// Shortcuts has a function that cycles through html and htmlexternal.
 				showShortcut('X');
 				await cmdShowHTML();
 			}), htmlextbtn = dom.clickbutton('HTML with external resources', attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)))));
-			if (settings.showHTML) {
-				loadHTML();
+			if (text) {
+				loadText(pm);
 			}
 			else {
-				loadText(pm);
+				loadHTML();
 			}
 		}
 		messageLoaded();
