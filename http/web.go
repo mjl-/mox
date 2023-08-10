@@ -18,6 +18,8 @@ import (
 
 	_ "net/http/pprof"
 
+	"golang.org/x/exp/maps"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -362,7 +364,13 @@ func Listen() {
 		}
 	}
 
-	for name, l := range mox.Conf.Static.Listeners {
+	// Initialize listeners in deterministic order for the same potential error
+	// messages.
+	names := maps.Keys(mox.Conf.Static.Listeners)
+	sort.Strings(names)
+	for _, name := range names {
+		l := mox.Conf.Static.Listeners[name]
+
 		portServe := map[int]*serve{}
 
 		var ensureServe func(https bool, port int, kind string) *serve
@@ -546,7 +554,10 @@ func Listen() {
 			ensureManagerHosts[m] = hosts
 		}
 
-		for port, srv := range portServe {
+		ports := maps.Keys(portServe)
+		sort.Ints(ports)
+		for _, port := range ports {
+			srv := portServe[port]
 			sort.Slice(srv.PathHandlers, func(i, j int) bool {
 				a := srv.PathHandlers[i].Path
 				b := srv.PathHandlers[j].Path

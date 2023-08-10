@@ -457,6 +457,17 @@ listed in more DNS block lists, visit:
 			fmt.Printf(" OK\n")
 		}
 	}
+
+	if len(publicIPs) == 0 {
+		log.Printf(`WARNING: Could not find your public IP address(es). The "public" listener is
+configured to listen on 0.0.0.0 (IPv4) and :: (IPv6). If you don't change these
+to your actual public IP addresses, you will likely get "address in use" errors
+when starting mox because the "internal" listener binds to a specific IP
+address on the same port(s).
+
+`)
+	}
+
 	fmt.Printf("\n")
 
 	user := "mox"

@@ -57,10 +57,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/mjl-/bstore"
 
@@ -307,7 +308,11 @@ type msgseq uint32
 
 // Listen initializes all imap listeners for the configuration, and stores them for Serve to start them.
 func Listen() {
-	for name, listener := range mox.Conf.Static.Listeners {
+	names := maps.Keys(mox.Conf.Static.Listeners)
+	sort.Strings(names)
+	for _, name := range names {
+		listener := mox.Conf.Static.Listeners[name]
+
 		var tlsConfig *tls.Config
 		if listener.TLS != nil {
 			tlsConfig = listener.TLS.Config
