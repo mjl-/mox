@@ -2743,11 +2743,6 @@ const newMsglistView = (msgElem: HTMLElement, listMailboxes: listMailboxes, setL
 		},
 
 		key: async (k: string, e: KeyboardEvent) => {
-			if (attachmentView) {
-				attachmentView.key(k, e)
-				return
-			}
-
 			const moveKeys = [
 				' ', 'ArrowUp', 'ArrowDown',
 				'PageUp', 'h', 'H',
@@ -4469,6 +4464,10 @@ const init = async () => {
 		l.push(e.key)
 		const k = l.join(' ')
 
+		if (attachmentView) {
+			attachmentView.key(k, e)
+			return
+		}
 		if (composeView) {
 			await composeView.key(k, e)
 			return

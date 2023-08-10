@@ -3029,10 +3029,6 @@ const newMsglistView = (msgElem, listMailboxes, setLocationHash, otherMailbox, p
 			updateState(oldstate);
 		},
 		key: async (k, e) => {
-			if (attachmentView) {
-				attachmentView.key(k, e);
-				return;
-			}
 			const moveKeys = [
 				' ', 'ArrowUp', 'ArrowDown',
 				'PageUp', 'h', 'H',
@@ -4228,6 +4224,10 @@ const init = async () => {
 		}
 		l.push(e.key);
 		const k = l.join(' ');
+		if (attachmentView) {
+			attachmentView.key(k, e);
+			return;
+		}
 		if (composeView) {
 			await composeView.key(k, e);
 			return;
