@@ -3993,7 +3993,7 @@ const init = async () => {
 				await selectLabel();
 			}));
 		}), labels.length === 0 ? dom.div('No labels yet, set one on a message first.') : []));
-	})), ' ', dom.clickbutton('x', style({ padding: '0 .25em' }), attr.arialabel('Clear refinement filters'), attr.title('Clear refinement filters.'), async function click(e) {
+	})), ' ', dom.clickbutton('x', style({ padding: '0 .25em' }), attr.arialabel('Clear refinement filters.'), attr.title('Clear refinement filters.'), async function click(e) {
 		settingsPut({ ...settings, refine: '' });
 		refineToggleActive(e.target);
 		await withStatus('Requesting messages', requestNewView(false));
@@ -4162,38 +4162,20 @@ const init = async () => {
 			ensureSearchView();
 		}
 		searchView.updateForm();
-	}), dom.clickbutton('x', attr.arialabel('Cancel and clear search.'), attr.title('Cancel and clear search.'), style({ marginLeft: '.25em', padding: '0 .3em' }), async function click() {
+	}), dom.clickbutton('x', attr.arialabel('Cancel and clear search and open Inbox.'), attr.title('Cancel and clear search and open Inbox.'), style({ marginLeft: '.25em', padding: '0 .3em' }), async function click() {
 		searchbarElem.value = '';
 		if (!search.active) {
 			return;
 		}
-		clearList();
-		unloadSearch();
-		updatePageTitle();
-		setLocationHash();
-		if (requestID) {
-			requestSequence++;
-			requestID = requestSequence;
-			const query = {
-				OrderAsc: settings.orderAsc,
-				Filter: newFilter(),
-				NotFilter: newNotFilter()
-			};
-			const page = { AnchorMessageID: 0, Count: 0, DestMessageID: 0 };
-			const request = {
-				ID: requestID,
-				SSEID: sseID,
-				ViewID: viewID,
-				Cancel: true,
-				Query: query,
-				Page: page,
-			};
-			dom._kids(queryactivityElem);
-			await withStatus('Canceling query', client.Request(request));
+		const mb = mailboxlistView.findMailboxByName('Inbox');
+		if (!mb) {
+			window.alert('Cannot find inbox.');
+			return;
 		}
-		else {
-			dom._kids(queryactivityElem);
-		}
+		await mailboxlistView.openMailboxID(mb.ID, true);
+		const f = newFilter();
+		f.MailboxID = mb.ID;
+		await withStatus('Requesting messages', requestNewView(true, f, newNotFilter()));
 	}), async function submit(e) {
 		e.preventDefault();
 		await searchView.submit();
