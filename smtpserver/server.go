@@ -1659,6 +1659,8 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 
 	// Check that user is only sending email as one of its configured identities. Not
 	// for other users.
+	// We don't check the Sender field, there is no expectation of verification, ../rfc/7489:2948
+	// and with Resent headers it seems valid to have someone else as Sender. ../rfc/5322:1578
 	msgFrom, header, err := message.From(dataFile)
 	if err != nil {
 		metricSubmission.WithLabelValues("badmessage").Inc()
