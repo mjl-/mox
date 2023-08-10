@@ -132,6 +132,15 @@ var commands = []struct {
 	{"tlsrpt parsereportmsg", cmdTLSRPTParsereportmsg},
 	{"version", cmdVersion},
 
+	{"bumpuidvalidity", cmdBumpUIDValidity},
+	{"reassignuids", cmdReassignUIDs},
+	{"fixuidmeta", cmdFixUIDMeta},
+	{"fixmsgsize", cmdFixmsgsize},
+	{"reparse", cmdReparse},
+	{"ensureparsed", cmdEnsureParsed},
+	{"recalculatemailboxcounts", cmdRecalculateMailboxCounts},
+	{"message parse", cmdMessageParse},
+
 	// Not listed.
 	{"helpall", cmdHelpall},
 	{"junk analyze", cmdJunkAnalyze},
@@ -139,14 +148,7 @@ var commands = []struct {
 	{"junk play", cmdJunkPlay},
 	{"junk test", cmdJunkTest},
 	{"junk train", cmdJunkTrain},
-	{"bumpuidvalidity", cmdBumpUIDValidity},
-	{"reassignuids", cmdReassignUIDs},
-	{"fixuidmeta", cmdFixUIDMeta},
 	{"dmarcdb addreport", cmdDMARCDBAddReport},
-	{"fixmsgsize", cmdFixmsgsize},
-	{"reparse", cmdReparse},
-	{"ensureparsed", cmdEnsureParsed},
-	{"message parse", cmdMessageParse},
 	{"tlsrptdb addreport", cmdTLSRPTDBAddReport},
 	{"updates addsigned", cmdUpdatesAddSigned},
 	{"updates genkey", cmdUpdatesGenkey},
@@ -156,7 +158,6 @@ var commands = []struct {
 	{"gentestdata", cmdGentestdata},
 	{"ximport maildir", cmdXImportMaildir},
 	{"ximport mbox", cmdXImportMbox},
-	{"recalculatemailboxcounts", cmdRecalculateMailboxCounts},
 }
 
 var cmds []cmd
@@ -1989,141 +1990,15 @@ func cmdVersion(c *cmd) {
 	fmt.Println(moxvar.Version)
 }
 
-func cmdFixmsgsize(c *cmd) {
-	c.unlisted = true
-	c.params = "[account]"
-	c.help = `Ensure message sizes in the database matching the sum of the message prefix length and on-disk file size.
-
-Messages with an inconsistent size are also parsed again.
-
-If an inconsistency is found, you should probably also run "mox
-bumpuidvalidity" on the mailboxes or entire account to force IMAP clients to
-refetch messages.
-`
-	args := c.Parse()
-	if len(args) > 1 {
-		c.Usage()
-	}
-
-	mustLoadConfig()
-	var account string
-	if len(args) == 1 {
-		account = args[0]
-	}
-	ctlcmdFixmsgsize(xctl(), account)
-}
-
-func ctlcmdFixmsgsize(ctl *ctl, account string) {
-	ctl.xwrite("fixmsgsize")
-	ctl.xwrite(account)
-	ctl.xreadok()
-	ctl.xstreamto(os.Stdout)
-}
-
-func cmdReparse(c *cmd) {
-	c.unlisted = true
-	c.params = "[account]"
-	c.help = "Ensure messages in the database have a ParsedBuf."
-	args := c.Parse()
-	if len(args) > 1 {
-		c.Usage()
-	}
-
-	mustLoadConfig()
-	var account string
-	if len(args) == 1 {
-		account = args[0]
-	}
-	ctlcmdReparse(xctl(), account)
-}
-
-func ctlcmdReparse(ctl *ctl, account string) {
-	ctl.xwrite("reparse")
-	ctl.xwrite(account)
-	ctl.xreadok()
-	ctl.xstreamto(os.Stdout)
-}
-
-func cmdEnsureParsed(c *cmd) {
-	c.unlisted = true
-	c.params = "account"
-	c.help = "Ensure messages in the database have a ParsedBuf."
-	var all bool
-	c.flag.BoolVar(&all, "all", false, "store new parsed message for all messages")
-	args := c.Parse()
-	if len(args) != 1 {
-		c.Usage()
-	}
-
-	mustLoadConfig()
-	a, err := store.OpenAccount(args[0])
-	xcheckf(err, "open account")
-	defer func() {
-		if err := a.Close(); err != nil {
-			log.Printf("closing account: %v", err)
-		}
-	}()
-
-	n := 0
-	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
-		q := bstore.QueryTx[store.Message](tx)
-		q.FilterEqual("Expunged", false)
-		q.FilterFn(func(m store.Message) bool {
-			return all || m.ParsedBuf == nil
-		})
-		l, err := q.List()
-		if err != nil {
-			return fmt.Errorf("list messages: %v", err)
-		}
-		for _, m := range l {
-			mr := a.MessageReader(m)
-			p, err := message.EnsurePart(mr, m.Size)
-			if err != nil {
-				log.Printf("parsing message %d: %v (continuing)", m.ID, err)
-			}
-			m.ParsedBuf, err = json.Marshal(p)
-			if err != nil {
-				return fmt.Errorf("marshal parsed message: %v", err)
-			}
-			if err := tx.Update(&m); err != nil {
-				return fmt.Errorf("update message: %v", err)
-			}
-			n++
-		}
-		return nil
-	})
-	xcheckf(err, "update messages with parsed mime structure")
-	fmt.Printf("%d messages updated\n", n)
-}
-
-func cmdMessageParse(c *cmd) {
-	c.unlisted = true
-	c.params = "message.eml"
-	c.help = "Parse message, print JSON representation."
-
-	args := c.Parse()
-	if len(args) != 1 {
-		c.Usage()
-	}
-
-	f, err := os.Open(args[0])
-	xcheckf(err, "open")
-	defer f.Close()
-
-	part, err := message.Parse(f)
-	xcheckf(err, "parsing message")
-	err = part.Walk(nil)
-	xcheckf(err, "parsing nested parts")
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "\t")
-	err = enc.Encode(part)
-	xcheckf(err, "write")
-}
-
 func cmdBumpUIDValidity(c *cmd) {
-	c.unlisted = true
 	c.params = "account [mailbox]"
-	c.help = "Change the IMAP UID validity of the mailbox, causing IMAP clients to refetch messages."
+	c.help = `Change the IMAP UID validity of the mailbox, causing IMAP clients to refetch messages.
+
+This can be useful after manually repairing metadata about the account/mailbox.
+
+Opens account database file directly. Ensure mox does not have the account
++open, or is not running.
+`
 	args := c.Parse()
 	if len(args) != 1 && len(args) != 2 {
 		c.Usage()
@@ -2166,7 +2041,6 @@ func cmdBumpUIDValidity(c *cmd) {
 }
 
 func cmdReassignUIDs(c *cmd) {
-	c.unlisted = true
 	c.params = "account [mailboxid]"
 	c.help = `Reassign UIDs in one mailbox or all mailboxes in an account and bump UID validity, causing IMAP clients to refetch messages.
 
@@ -2260,7 +2134,6 @@ open, or is not running.
 }
 
 func cmdFixUIDMeta(c *cmd) {
-	c.unlisted = true
 	c.params = "account"
 	c.help = `Fix inconsistent UIDVALIDITY and UIDNEXT in messages/mailboxes/account.
 
@@ -2333,8 +2206,116 @@ open, or is not running.
 	xcheckf(err, "updating database")
 }
 
+func cmdFixmsgsize(c *cmd) {
+	c.params = "[account]"
+	c.help = `Ensure message sizes in the database matching the sum of the message prefix length and on-disk file size.
+
+Messages with an inconsistent size are also parsed again.
+
+If an inconsistency is found, you should probably also run "mox
+bumpuidvalidity" on the mailboxes or entire account to force IMAP clients to
+refetch messages.
+`
+	args := c.Parse()
+	if len(args) > 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	var account string
+	if len(args) == 1 {
+		account = args[0]
+	}
+	ctlcmdFixmsgsize(xctl(), account)
+}
+
+func ctlcmdFixmsgsize(ctl *ctl, account string) {
+	ctl.xwrite("fixmsgsize")
+	ctl.xwrite(account)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
+func cmdReparse(c *cmd) {
+	c.params = "[account]"
+	c.help = `Parse all messages in the account or all accounts again
+
+Can be useful after upgrading mox with improved message parsing. Messages are
+parsed in batches, so other access to the mailboxes/messages are not blocked
+while reparsing all messages.
+`
+	args := c.Parse()
+	if len(args) > 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	var account string
+	if len(args) == 1 {
+		account = args[0]
+	}
+	ctlcmdReparse(xctl(), account)
+}
+
+func ctlcmdReparse(ctl *ctl, account string) {
+	ctl.xwrite("reparse")
+	ctl.xwrite(account)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
+func cmdEnsureParsed(c *cmd) {
+	c.params = "account"
+	c.help = "Ensure messages in the database have a pre-parsed MIME form in the database."
+	var all bool
+	c.flag.BoolVar(&all, "all", false, "store new parsed message for all messages")
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	a, err := store.OpenAccount(args[0])
+	xcheckf(err, "open account")
+	defer func() {
+		if err := a.Close(); err != nil {
+			log.Printf("closing account: %v", err)
+		}
+	}()
+
+	n := 0
+	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
+		q := bstore.QueryTx[store.Message](tx)
+		q.FilterEqual("Expunged", false)
+		q.FilterFn(func(m store.Message) bool {
+			return all || m.ParsedBuf == nil
+		})
+		l, err := q.List()
+		if err != nil {
+			return fmt.Errorf("list messages: %v", err)
+		}
+		for _, m := range l {
+			mr := a.MessageReader(m)
+			p, err := message.EnsurePart(mr, m.Size)
+			if err != nil {
+				log.Printf("parsing message %d: %v (continuing)", m.ID, err)
+			}
+			m.ParsedBuf, err = json.Marshal(p)
+			if err != nil {
+				return fmt.Errorf("marshal parsed message: %v", err)
+			}
+			if err := tx.Update(&m); err != nil {
+				return fmt.Errorf("update message: %v", err)
+			}
+			n++
+		}
+		return nil
+	})
+	xcheckf(err, "update messages with parsed mime structure")
+	fmt.Printf("%d messages updated\n", n)
+}
+
 func cmdRecalculateMailboxCounts(c *cmd) {
-	c.unlisted = true
 	c.params = "account"
 	c.help = `Recalculate message counts for all mailboxes in the account.
 
@@ -2357,4 +2338,27 @@ func ctlcmdRecalculateMailboxCounts(ctl *ctl, account string) {
 	ctl.xwrite(account)
 	ctl.xreadok()
 	ctl.xstreamto(os.Stdout)
+}
+
+func cmdMessageParse(c *cmd) {
+	c.params = "message.eml"
+	c.help = "Parse message, print JSON representation."
+
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	f, err := os.Open(args[0])
+	xcheckf(err, "open")
+	defer f.Close()
+
+	part, err := message.Parse(f)
+	xcheckf(err, "parsing message")
+	err = part.Walk(nil)
+	xcheckf(err, "parsing nested parts")
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "\t")
+	err = enc.Encode(part)
+	xcheckf(err, "write")
 }

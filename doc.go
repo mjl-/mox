@@ -68,6 +68,14 @@ low-maintenance self-hosted email.
 	mox tlsrpt lookup domain
 	mox tlsrpt parsereportmsg message ...
 	mox version
+	mox bumpuidvalidity account [mailbox]
+	mox reassignuids account [mailboxid]
+	mox fixuidmeta account
+	mox fixmsgsize [account]
+	mox reparse [account]
+	mox ensureparsed account
+	mox recalculatemailboxcounts account
+	mox message parse message.eml
 
 Many commands talk to a running mox instance, through the ctl file in the data
 directory. Specify the configuration file (that holds the path to the data
@@ -775,6 +783,90 @@ The report is printed in formatted JSON.
 Prints this mox version.
 
 	usage: mox version
+
+# mox bumpuidvalidity
+
+Change the IMAP UID validity of the mailbox, causing IMAP clients to refetch messages.
+
+This can be useful after manually repairing metadata about the account/mailbox.
+
+Opens account database file directly. Ensure mox does not have the account
++open, or is not running.
+
+	usage: mox bumpuidvalidity account [mailbox]
+
+# mox reassignuids
+
+Reassign UIDs in one mailbox or all mailboxes in an account and bump UID validity, causing IMAP clients to refetch messages.
+
+Opens account database file directly. Ensure mox does not have the account
+open, or is not running.
+
+	usage: mox reassignuids account [mailboxid]
+
+# mox fixuidmeta
+
+Fix inconsistent UIDVALIDITY and UIDNEXT in messages/mailboxes/account.
+
+The next UID to use for a message in a mailbox should always be higher than any
+existing message UID in the mailbox. If it is not, the mailbox UIDNEXT is
+updated.
+
+Each mailbox has a UIDVALIDITY sequence number, which should always be lower
+than the per-account next UIDVALIDITY to use. If it is not, the account next
+UIDVALIDITY is updated.
+
+Opens account database file directly. Ensure mox does not have the account
+open, or is not running.
+
+	usage: mox fixuidmeta account
+
+# mox fixmsgsize
+
+Ensure message sizes in the database matching the sum of the message prefix length and on-disk file size.
+
+Messages with an inconsistent size are also parsed again.
+
+If an inconsistency is found, you should probably also run "mox
+bumpuidvalidity" on the mailboxes or entire account to force IMAP clients to
+refetch messages.
+
+	usage: mox fixmsgsize [account]
+
+# mox reparse
+
+# Parse all messages in the account or all accounts again
+
+Can be useful after upgrading mox with improved message parsing. Messages are
+parsed in batches, so other access to the mailboxes/messages are not blocked
+while reparsing all messages.
+
+	usage: mox reparse [account]
+
+# mox ensureparsed
+
+Ensure messages in the database have a pre-parsed MIME form in the database.
+
+	usage: mox ensureparsed account
+	  -all
+	    	store new parsed message for all messages
+
+# mox recalculatemailboxcounts
+
+Recalculate message counts for all mailboxes in the account.
+
+When a message is added to/removed from a mailbox, or when message flags change,
+the total, unread, unseen and deleted messages are accounted, and the total size
+of the mailbox. In case of a bug in this accounting, the numbers could become
+incorrect. This command will find, fix and print them.
+
+	usage: mox recalculatemailboxcounts account
+
+# mox message parse
+
+Parse message, print JSON representation.
+
+	usage: mox message parse message.eml
 */
 package main
 
