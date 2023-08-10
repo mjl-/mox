@@ -2208,7 +2208,8 @@ const newMsgitemView = (mi, msglistView, othermb) => {
 		const e = dom.span(dom._class('msgitemmailbox'), name === othermb.Name ? [] : attr.title(othermb.Name), name);
 		mailboxtag.push(e);
 	}
-	const updateFlags = (mask, flags, keywords) => {
+	const updateFlags = (modseq, mask, flags, keywords) => {
+		msgitemView.messageitem.Message.ModSeq = modseq;
 		const maskobj = mask;
 		const flagsobj = flags;
 		const mobj = msgitemView.messageitem.Message;
@@ -2412,7 +2413,6 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			return;
 		}
 		loadHTML();
-		settingsPut({ ...settings, showHTML: true });
 		activeBtn(htmlbtn);
 	};
 	const cmdShowHTMLExternal = async () => {
@@ -2420,7 +2420,6 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			return;
 		}
 		loadHTMLexternal();
-		settingsPut({ ...settings, showHTML: true });
 		activeBtn(htmlextbtn);
 	};
 	const cmdShowHTMLCycle = async () => {
@@ -2591,10 +2590,10 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		const eye = '👁';
 		const dl = '⤓'; // \u2913, actually ⭳ \u2b73 would be better, but in fewer fonts (at least macos)
 		const dlurl = 'msg/' + m.ID + '/download/' + [0].concat(a.Path || []).join('.');
-		const viewbtn = dom.clickbutton(eye, viewable ? ' ' + name : [], attr.title('View this file. Size: ' + size), style({ lineHeight: '1.5' }), function click() {
+		const viewbtn = dom.clickbutton(eye, viewable ? ' ' + name : style({ padding: '0px 0.25em' }), attr.title('View this file. Size: ' + size), style({ lineHeight: '1.5' }), function click() {
 			view(a);
 		});
-		const dlbtn = dom.a(dom._class('button'), attr.download(''), attr.href(dlurl), dl, viewable ? [] : ' ' + name, attr.title('Download this file. Size: ' + size), style({ lineHeight: '1.5' }));
+		const dlbtn = dom.a(dom._class('button'), attr.download(''), attr.href(dlurl), dl, viewable ? style({ padding: '0px 0.25em' }) : ' ' + name, attr.title('Download this file. Size: ' + size), style({ lineHeight: '1.5' }));
 		if (viewable) {
 			return [dom.span(dom._class('btngroup'), viewbtn, dlbtn), ' '];
 		}
@@ -2625,7 +2624,8 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		messageitem: mi,
 		key: keyHandler(shortcuts),
 		aborter: { abort: () => { } },
-		updateKeywords: (keywords) => {
+		updateKeywords: (modseq, keywords) => {
+			mi.Message.ModSeq = modseq;
 			mi.Message.Keywords = keywords;
 			loadMsgheaderView(msgheaderElem, miv.messageitem, refineKeyword);
 		},
@@ -2846,7 +2846,7 @@ const newMsglistView = (msgElem, listMailboxes, setLocationHash, otherMailbox, p
 	};
 	const mlv = {
 		root: dom.div(),
-		updateFlags: (mailboxID, uid, mask, flags, keywords) => {
+		updateFlags: (mailboxID, uid, modseq, mask, flags, keywords) => {
 			// todo optimize: keep mapping of uid to msgitemView for performance. instead of using Array.find
 			const miv = msgitemViews.find(miv => miv.messageitem.Message.MailboxID === mailboxID && miv.messageitem.Message.UID === uid);
 			if (!miv) {
@@ -2854,9 +2854,9 @@ const newMsglistView = (msgElem, listMailboxes, setLocationHash, otherMailbox, p
 				log('could not find msgitemView for uid', uid);
 				return;
 			}
-			miv.updateFlags(mask, flags, keywords);
+			miv.updateFlags(modseq, mask, flags, keywords);
 			if (msgView && msgView.messageitem.Message.ID === miv.messageitem.Message.ID) {
-				msgView.updateKeywords(keywords);
+				msgView.updateKeywords(modseq, keywords);
 			}
 		},
 		addMessageItems: (messageItems) => {
@@ -4662,7 +4662,7 @@ const init = async () => {
 					}
 					else if (tag === 'ChangeMsgFlags') {
 						const c = api.parser.ChangeMsgFlags(x);
-						msglistView.updateFlags(c.MailboxID, c.UID, c.Mask, c.Flags, c.Keywords || []);
+						msglistView.updateFlags(c.MailboxID, c.UID, c.ModSeq, c.Mask, c.Flags, c.Keywords || []);
 					}
 					else if (tag === 'ChangeMailboxRemove') {
 						const c = api.parser.ChangeMailboxRemove(x);

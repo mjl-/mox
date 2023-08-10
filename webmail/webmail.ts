@@ -1553,7 +1553,7 @@ interface MsgitemView {
 	root: HTMLElement // MsglistView toggles active/focus classes on the root element.
 	messageitem: api.MessageItem
 	// Called when flags/keywords change for a message.
-	updateFlags: (mask: api.Flags, flags: api.Flags, keywords: string[]) => void
+	updateFlags: (modseq: number, mask: api.Flags, flags: api.Flags, keywords: string[]) => void
 
 	// Must be called when MsgitemView is no longer needed. Typically through
 	// msglistView.clear(). This cleans up the timer that updates the message age.
@@ -1605,7 +1605,8 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, othermb: 
 		mailboxtag.push(e)
 	}
 
-	const updateFlags = (mask: api.Flags, flags: api.Flags, keywords: string[]) => {
+	const updateFlags = (modseq: number, mask: api.Flags, flags: api.Flags, keywords: string[]) => {
+		msgitemView.messageitem.Message.ModSeq = modseq
 		const maskobj = mask as unknown as {[key: string]: boolean}
 		const flagsobj = flags as unknown as {[key: string]: boolean}
 		const mobj = msgitemView.messageitem.Message as unknown as {[key: string]: boolean}
@@ -1740,7 +1741,7 @@ interface MsgView {
 	root: HTMLElement
 	messageitem: api.MessageItem
 	// Called when keywords for a message have changed, to rerender them.
-	updateKeywords: (keywords: string[]) => void
+	updateKeywords: (modseq: number, keywords: string[]) => void
 	// Abort loading the message.
 	aborter: { abort: () => void }
 	key: (key: string, e: KeyboardEvent) => Promise<void>
@@ -1863,7 +1864,6 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			return
 		}
 		loadHTML()
-		settingsPut({...settings, showHTML: true})
 		activeBtn(htmlbtn)
 	}
 	const cmdShowHTMLExternal = async () => {
@@ -1871,7 +1871,6 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			return
 		}
 		loadHTMLexternal()
-		settingsPut({...settings, showHTML: true})
 		activeBtn(htmlextbtn)
 	}
 	const cmdShowHTMLCycle = async () => {
@@ -2181,10 +2180,10 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 					const eye = '👁'
 					const dl = '⤓' // \u2913, actually ⭳ \u2b73 would be better, but in fewer fonts (at least macos)
 					const dlurl = 'msg/'+m.ID+'/download/'+[0].concat(a.Path || []).join('.')
-					const viewbtn = dom.clickbutton(eye, viewable ? ' '+name : [], attr.title('View this file. Size: '+size), style({lineHeight: '1.5'}), function click() {
+					const viewbtn = dom.clickbutton(eye, viewable ? ' '+name : style({padding: '0px 0.25em'}), attr.title('View this file. Size: '+size), style({lineHeight: '1.5'}), function click() {
 						view(a)
 					})
-					const dlbtn = dom.a(dom._class('button'), attr.download(''), attr.href(dlurl), dl, viewable ? [] : ' '+name, attr.title('Download this file. Size: '+size), style({lineHeight: '1.5'}))
+					const dlbtn = dom.a(dom._class('button'), attr.download(''), attr.href(dlurl), dl, viewable ? style({padding: '0px 0.25em'}) : ' '+name, attr.title('Download this file. Size: '+size), style({lineHeight: '1.5'}))
 					if (viewable) {
 						return [dom.span(dom._class('btngroup'), viewbtn, dlbtn), ' ']
 					}
@@ -2239,7 +2238,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		messageitem: mi,
 		key: keyHandler(shortcuts),
 		aborter: { abort: () => {} },
-		updateKeywords: (keywords: string[]) => {
+		updateKeywords: (modseq: number, keywords: string[]) => {
+			mi.Message.ModSeq = modseq
 			mi.Message.Keywords = keywords
 			loadMsgheaderView(msgheaderElem, miv.messageitem, refineKeyword)
 		},
@@ -2357,7 +2357,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 // different mailbox/search query is opened.
 interface MsglistView {
 	root: HTMLElement
-	updateFlags: (mailboxID: number, uid: number, mask: api.Flags, flags: api.Flags, keywords: string[]) => void
+	updateFlags: (mailboxID: number, uid: number, modseq: number, mask: api.Flags, flags: api.Flags, keywords: string[]) => void
 	addMessageItems: (messageItems: api.MessageItem[]) => void
 	removeUIDs: (mailboxID: number, uids: number[]) => void
 	activeMessageID: () => number // For single message selected, otherwise returns 0.
@@ -2553,7 +2553,7 @@ const newMsglistView = (msgElem: HTMLElement, listMailboxes: listMailboxes, setL
 	const mlv: MsglistView = {
 		root: dom.div(),
 
-		updateFlags: (mailboxID: number, uid: number, mask: api.Flags, flags: api.Flags, keywords: string[]) => {
+		updateFlags: (mailboxID: number, uid: number, modseq: number, mask: api.Flags, flags: api.Flags, keywords: string[]) => {
 			// todo optimize: keep mapping of uid to msgitemView for performance. instead of using Array.find
 			const miv = msgitemViews.find(miv => miv.messageitem.Message.MailboxID === mailboxID && miv.messageitem.Message.UID === uid)
 			if (!miv) {
@@ -2561,9 +2561,9 @@ const newMsglistView = (msgElem: HTMLElement, listMailboxes: listMailboxes, setL
 				log('could not find msgitemView for uid', uid)
 				return
 			}
-			miv.updateFlags(mask, flags, keywords)
+			miv.updateFlags(modseq, mask, flags, keywords)
 			if (msgView && msgView.messageitem.Message.ID === miv.messageitem.Message.ID) {
-				msgView.updateKeywords(keywords)
+				msgView.updateKeywords(modseq, keywords)
 			}
 		},
 
@@ -4966,7 +4966,7 @@ const init = async () => {
 						msglistView.removeUIDs(c.MailboxID, c.UIDs || [])
 					} else if (tag === 'ChangeMsgFlags') {
 						const c = api.parser.ChangeMsgFlags(x)
-						msglistView.updateFlags(c.MailboxID, c.UID, c.Mask, c.Flags, c.Keywords || [])
+						msglistView.updateFlags(c.MailboxID, c.UID, c.ModSeq, c.Mask, c.Flags, c.Keywords || [])
 					} else if (tag === 'ChangeMailboxRemove') {
 						const c = api.parser.ChangeMailboxRemove(x)
 						mailboxlistView.removeMailbox(c.MailboxID)
