@@ -39,8 +39,8 @@ var (
 
 // Resolver is the interface strict resolver implements.
 type Resolver interface {
-	LookupAddr(ctx context.Context, addr string) ([]string, error)
-	LookupCNAME(ctx context.Context, host string) (string, error) // NOTE: returns an error if no CNAME record is present.
+	LookupAddr(ctx context.Context, addr string) ([]string, error) // Always returns absolute names, with trailing dot.
+	LookupCNAME(ctx context.Context, host string) (string, error)  // NOTE: returns an error if no CNAME record is present.
 	LookupHost(ctx context.Context, host string) (addrs []string, err error)
 	LookupIP(ctx context.Context, network, host string) ([]net.IP, error)
 	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
@@ -131,6 +131,12 @@ func (r StrictResolver) LookupAddr(ctx context.Context, addr string) (resp []str
 	defer resolveErrorHint(&err)
 
 	resp, err = r.resolver().LookupAddr(ctx, addr)
+	// For addresses from /etc/hosts without dot, we add the missing trailing dot.
+	for i, s := range resp {
+		if !strings.HasSuffix(s, ".") {
+			resp[i] = s + "."
+		}
+	}
 	return
 }
 
