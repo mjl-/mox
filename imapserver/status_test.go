@@ -25,10 +25,10 @@ func TestStatus(t *testing.T) {
 	// Again, now with a message in the mailbox.
 	tc.transactf("ok", "append inbox {4+}\r\ntest")
 	tc.transactf("ok", "status inbox (messages uidnext uidvalidity unseen deleted size recent appendlimit)")
-	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"MESSAGES": 1, "UIDVALIDITY": 1, "UIDNEXT": 2, "UNSEEN": 1, "DELETED": 0, "SIZE": 6, "RECENT": 0, "APPENDLIMIT": 0}})
+	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"MESSAGES": 1, "UIDVALIDITY": 1, "UIDNEXT": 2, "UNSEEN": 1, "DELETED": 0, "SIZE": 4, "RECENT": 0, "APPENDLIMIT": 0}})
 
 	tc.client.Select("inbox")
 	tc.client.StoreFlagsSet("1", true, `\Deleted`)
 	tc.transactf("ok", "status inbox (messages uidnext uidvalidity unseen deleted size recent appendlimit)")
-	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"MESSAGES": 1, "UIDVALIDITY": 1, "UIDNEXT": 2, "UNSEEN": 1, "DELETED": 1, "SIZE": 6, "RECENT": 0, "APPENDLIMIT": 0}})
+	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"MESSAGES": 1, "UIDVALIDITY": 1, "UIDNEXT": 2, "UNSEEN": 1, "DELETED": 1, "SIZE": 4, "RECENT": 0, "APPENDLIMIT": 0}})
 }

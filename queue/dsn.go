@@ -162,7 +162,7 @@ func queueDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg stri
 		}
 	}()
 
-	msgWriter := &message.Writer{Writer: msgFile}
+	msgWriter := message.NewWriter(msgFile)
 	if _, err := msgWriter.Write(msgData); err != nil {
 		qlog("writing dsn message", err)
 		return

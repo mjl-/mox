@@ -45,7 +45,7 @@ func TestMailbox(t *testing.T) {
 		t.Fatalf("creating temp msg file: %s", err)
 	}
 	defer msgFile.Close()
-	msgWriter := &message.Writer{Writer: msgFile}
+	msgWriter := message.NewWriter(msgFile)
 	if _, err := msgWriter.Write([]byte(" message")); err != nil {
 		t.Fatalf("writing to temp message: %s", err)
 	}

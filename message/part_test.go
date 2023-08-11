@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mjl-/mox/moxvar"
 )
 
 func tcheck(t *testing.T, err error, msg string) {
@@ -204,11 +206,29 @@ func TestLongLine(t *testing.T) {
 }
 
 func TestHalfCrLf(t *testing.T) {
-	_, err := Parse(strings.NewReader("test\rtest"))
-	tfail(t, err, errHalfLineSep)
+	parse := func(s string) error {
+		p, err := Parse(strings.NewReader(s))
+		if err != nil {
+			return err
+		}
+		return p.Walk(nil)
+	}
+	err := parse("subject: test\ntest\r\n")
+	tfail(t, err, errBareLF)
+	err = parse("\r\ntest\ntest\r\n")
+	tfail(t, err, errBareLF)
 
-	_, err = Parse(strings.NewReader("test\ntest"))
-	tfail(t, err, errHalfLineSep)
+	moxvar.Pedantic = true
+	err = parse("subject: test\rtest\r\n")
+	tfail(t, err, errBareCR)
+	err = parse("\r\ntest\rtest\r\n")
+	tfail(t, err, errBareCR)
+	moxvar.Pedantic = false
+
+	err = parse("subject: test\rtest\r\n")
+	tcheck(t, err, "header with bare cr")
+	err = parse("\r\ntest\rtest\r\n")
+	tcheck(t, err, "body with bare cr")
 }
 
 func TestMissingClosingBoundary(t *testing.T) {

@@ -327,21 +327,16 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 				log.Check(err, "closing temporary message file")
 			}
 		}()
-		mw := &message.Writer{Writer: msgFile}
+		mw := message.NewWriter(msgFile)
 		ctl.xwriteok()
 
 		ctl.xstreamto(mw)
 		err = msgFile.Sync()
 		ctl.xcheck(err, "syncing message to storage")
-		msgPrefix := []byte{}
-		if !mw.HaveHeaders {
-			msgPrefix = []byte("\r\n\r\n")
-		}
 
 		m := &store.Message{
-			Received:  time.Now(),
-			Size:      int64(len(msgPrefix)) + mw.Size,
-			MsgPrefix: msgPrefix,
+			Received: time.Now(),
+			Size:     mw.Size,
 		}
 
 		a.WithWLock(func() {

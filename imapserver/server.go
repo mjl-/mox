@@ -2683,7 +2683,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		}
 	}()
 	defer c.xtrace(mlog.LevelTracedata)()
-	mw := &message.Writer{Writer: msgFile}
+	mw := message.NewWriter(msgFile)
 	msize, err := io.Copy(mw, io.LimitReader(c.br, size))
 	c.xtrace(mlog.LevelTrace) // Restore.
 	if err != nil {
@@ -2692,11 +2692,6 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 	}
 	if msize != size {
 		xserverErrorf("read %d bytes for message, expected %d (%w)", msize, size, errIO)
-	}
-	msgPrefix := []byte{}
-	// todo: should we treat the message as body? i believe headers are required in messages, and bodies are optional. so would make more sense to treat the data as headers. perhaps only if the headers are valid?
-	if !mw.HaveHeaders {
-		msgPrefix = []byte("\r\n")
 	}
 
 	if utf8 {
@@ -2736,8 +2731,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				Received:      tm,
 				Flags:         storeFlags,
 				Keywords:      keywords,
-				Size:          size + int64(len(msgPrefix)),
-				MsgPrefix:     msgPrefix,
+				Size:          size,
 			}
 
 			mb.Add(m.MailboxCounts())

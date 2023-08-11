@@ -4,7 +4,6 @@ package message
 // todo: allow more invalid content-type values, we now stop parsing on: empty media type (eg "content-type: ; name=..."), empty value for property (eg "charset=", missing quotes for characters that should be quoted (eg boundary containing "=" but without quotes), duplicate properties (two charsets), empty pairs (eg "text/html;;").
 // todo: what should our max line length be? rfc says 1000. messages exceed that. we should enforce 1000 for outgoing messages.
 // todo: should we be forgiving when closing boundary in multipart message is missing? seems like spam messages do this...
-// todo: allow bare \r (without \n)? this does happen in messages.
 // todo: should we allow base64 messages where a line starts with a space? and possibly more whitespace. is happening in messages. coreutils base64 accepts it, encoding/base64 does not.
 // todo: handle comments in headers?
 // todo: should we just always store messages with \n instead of \r\n? \r\n seems easier for use with imap.
@@ -45,7 +44,8 @@ var (
 	errLineTooLong            = errors.New("line too long")
 	errMissingBoundaryParam   = errors.New("missing/empty boundary content-type parameter")
 	errMissingClosingBoundary = errors.New("eof without closing boundary")
-	errHalfLineSep            = errors.New("invalid CR or LF without the other")
+	errBareLF                 = errors.New("invalid bare line feed")
+	errBareCR                 = errors.New("invalid bare carriage return")
 	errUnexpectedEOF          = errors.New("unexpected eof")
 )
 
@@ -269,8 +269,12 @@ func newPart(r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
 	hb := &bytes.Buffer{}
 	for {
 		line, _, err := b.ReadLine(true)
+		if err == io.EOF {
+			// No body is valid.
+			break
+		}
 		if err != nil {
-			return p, err
+			return p, fmt.Errorf("reading header line: %w", err)
 		}
 		hb.Write(line)
 		if len(line) == 2 {
@@ -279,13 +283,18 @@ func newPart(r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
 	}
 	p.BodyOffset = b.offset
 
-	h, err := parseHeader(hb)
-	if err != nil {
-		return p, fmt.Errorf("parsing header: %w", err)
+	// Don't attempt to parse empty header, mail.ReadMessage doesn't like it.
+	if p.HeaderOffset == p.BodyOffset {
+		p.header = textproto.MIMEHeader{}
+	} else {
+		h, err := parseHeader(hb)
+		if err != nil {
+			return p, fmt.Errorf("parsing header: %w", err)
+		}
+		p.header = h
 	}
-	p.header = h
 
-	ct := h.Get("Content-Type")
+	ct := p.header.Get("Content-Type")
 	mt, params, err := mime.ParseMediaType(ct)
 	if err != nil && ct != "" {
 		return p, fmt.Errorf("%w: %s: %q", ErrBadContentType, err, ct)
@@ -300,12 +309,12 @@ func newPart(r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
 		p.ContentTypeParams = params
 	}
 
-	p.ContentID = h.Get("Content-Id")
-	p.ContentDescription = h.Get("Content-Description")
-	p.ContentTransferEncoding = strings.ToUpper(h.Get("Content-Transfer-Encoding"))
+	p.ContentID = p.header.Get("Content-Id")
+	p.ContentDescription = p.header.Get("Content-Description")
+	p.ContentTransferEncoding = strings.ToUpper(p.header.Get("Content-Transfer-Encoding"))
 
 	if parent == nil {
-		p.Envelope, err = parseEnvelope(mail.Header(h))
+		p.Envelope, err = parseEnvelope(mail.Header(p.header))
 		if err != nil {
 			return p, err
 		}
@@ -347,6 +356,10 @@ func (p *Part) Header() (textproto.MIMEHeader, error) {
 	if p.header != nil {
 		return p.header, nil
 	}
+	if p.HeaderOffset == p.BodyOffset {
+		p.header = textproto.MIMEHeader{}
+		return p.header, nil
+	}
 	h, err := parseHeader(p.HeaderReader())
 	p.header = h
 	return h, err
@@ -357,6 +370,7 @@ func (p *Part) HeaderReader() io.Reader {
 	return io.NewSectionReader(p.r, p.HeaderOffset, p.BodyOffset-p.HeaderOffset)
 }
 
+// parse a header, only call this on non-empty input (even though that is a valid header).
 func parseHeader(r io.Reader) (textproto.MIMEHeader, error) {
 	// We read using mail.ReadMessage instead of textproto.ReadMIMEHeaders because the
 	// first handles email messages properly, while the second only works for HTTP
@@ -444,7 +458,7 @@ func parseAddressList(h mail.Header, k string) []Address {
 
 // ParseNextPart parses the next (sub)part of this multipart message.
 // ParseNextPart returns io.EOF and a nil part when there are no more parts.
-// Only use for initial parsing of message. Once parsed, use p.Parts.
+// Only used for initial parsing of message. Once parsed, use p.Parts.
 func (p *Part) ParseNextPart() (*Part, error) {
 	if len(p.bound) == 0 {
 		return nil, errNotMultipart
@@ -602,14 +616,15 @@ func (p *Part) RawReader() io.Reader {
 	}
 	p.RawLineCount = 0
 	if p.parent == nil {
-		return &offsetReader{p, p.BodyOffset, true}
+		return &offsetReader{p, p.BodyOffset, true, false}
 	}
-	return &boundReader{p: p, b: &bufAt{r: p.r, offset: p.BodyOffset}, lastnewline: true}
+	return &boundReader{p: p, b: &bufAt{r: p.r, offset: p.BodyOffset}, prevlf: true}
 }
 
 // bufAt is a buffered reader on an underlying ReaderAt.
+// bufAt verifies that lines end with crlf.
 type bufAt struct {
-	offset int64 // Offset in r currently consumed, i.e. ignoring any buffered data.
+	offset int64 // Offset in r currently consumed, i.e. not including any buffered data.
 
 	r       io.ReaderAt
 	buf     []byte // Buffered data.
@@ -649,7 +664,7 @@ func (b *bufAt) ensure() error {
 }
 
 // ReadLine reads a line until \r\n is found, returning the line including \r\n.
-// If not found, or a single \r or \n is encountered, ReadLine returns an error, e.g. io.EOF.
+// If not found, or a bare \n is encountered, or a bare \r is enountered in pedantic mode, ReadLine returns an error.
 func (b *bufAt) ReadLine(requirecrlf bool) (buf []byte, crlf bool, err error) {
 	return b.line(true, requirecrlf)
 }
@@ -664,14 +679,18 @@ func (b *bufAt) line(consume, requirecrlf bool) (buf []byte, crlf bool, err erro
 	}
 	for i, c := range b.buf[:b.nbuf] {
 		if c == '\n' {
-			return nil, false, errHalfLineSep
+			// Should have seen a \r, which should have been handled below.
+			return nil, false, errBareLF
 		}
 		if c != '\r' {
 			continue
 		}
 		i++
 		if i >= b.nbuf || b.buf[i] != '\n' {
-			return nil, false, errHalfLineSep
+			if moxvar.Pedantic {
+				return nil, false, errBareCR
+			}
+			continue
 		}
 		b.scratch = b.scratch[:i+1]
 		copy(b.scratch, b.buf[:i+1])
@@ -708,10 +727,13 @@ func (b *bufAt) PeekByte() (byte, error) {
 	return b.buf[0], nil
 }
 
+// offsetReader reads from p.r starting from offset, and RawLineCount on p.
+// offsetReader validates lines end with \r\n.
 type offsetReader struct {
-	p           *Part
-	offset      int64
-	lastnewline bool
+	p      *Part
+	offset int64
+	prevlf bool
+	prevcr bool
 }
 
 func (r *offsetReader) Read(buf []byte) (int, error) {
@@ -720,10 +742,18 @@ func (r *offsetReader) Read(buf []byte) (int, error) {
 		r.offset += int64(n)
 
 		for _, c := range buf[:n] {
-			if r.lastnewline {
+			if r.prevlf {
 				r.p.RawLineCount++
 			}
-			r.lastnewline = c == '\n'
+			if err == nil || err == io.EOF {
+				if c == '\n' && !r.prevcr {
+					err = errBareLF
+				} else if c != '\n' && r.prevcr && moxvar.Pedantic {
+					err = errBareCR
+				}
+			}
+			r.prevlf = c == '\n'
+			r.prevcr = c == '\r'
 		}
 	}
 	if err == io.EOF {
@@ -735,13 +765,15 @@ func (r *offsetReader) Read(buf []byte) (int, error) {
 var crlf = []byte("\r\n")
 
 // boundReader is a reader that stops at a closing multipart boundary.
+// boundReader ensures lines end with crlf through its use of bufAt.
 type boundReader struct {
-	p           *Part
-	b           *bufAt
-	buf         []byte // Data from previous line, to be served first.
-	nbuf        int    // Number of valid bytes in buf.
-	crlf        []byte // Possible crlf, to be returned if we do not yet encounter a boundary.
-	lastnewline bool   // If last char return was a newline. For counting lines.
+	p      *Part
+	b      *bufAt
+	buf    []byte // Data from previous line, to be served first.
+	nbuf   int    // Number of valid bytes in buf.
+	crlf   []byte // Possible crlf, to be returned if we do not yet encounter a boundary.
+	prevlf bool   // If last char returned was a newline. For counting lines.
+	prevcr bool
 }
 
 func (b *boundReader) Read(buf []byte) (count int, rerr error) {
@@ -749,10 +781,18 @@ func (b *boundReader) Read(buf []byte) (count int, rerr error) {
 	defer func() {
 		if count > 0 {
 			for _, c := range origBuf[:count] {
-				if b.lastnewline {
+				if b.prevlf {
 					b.p.RawLineCount++
 				}
-				b.lastnewline = c == '\n'
+				if rerr == nil || rerr == io.EOF {
+					if c == '\n' && !b.prevcr {
+						rerr = errBareLF
+					} else if c != '\n' && b.prevcr && moxvar.Pedantic {
+						rerr = errBareCR
+					}
+				}
+				b.prevlf = c == '\n'
+				b.prevcr = c == '\r'
 			}
 		}
 	}()

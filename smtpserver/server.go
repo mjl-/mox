@@ -1505,7 +1505,7 @@ func (c *conn) cmdData(p *parser) {
 			c.log.Check(err, "removing temporary message file")
 		}
 	}()
-	msgWriter := &message.Writer{Writer: dataFile}
+	msgWriter := message.NewWriter(dataFile)
 	dr := smtp.NewDataReader(c.r)
 	n, err := io.Copy(&limitWriter{maxSize: c.maxMessageSize, w: msgWriter}, dr)
 	c.xtrace(mlog.LevelTrace) // Restore.
@@ -1534,7 +1534,7 @@ func (c *conn) cmdData(p *parser) {
 	// Basic sanity checks on messages before we send them out to the world. Just
 	// trying to be strict in what we do to others and liberal in what we accept.
 	if c.submission {
-		if !msgWriter.HaveHeaders {
+		if !msgWriter.HaveBody {
 			// ../rfc/6409:541
 			xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeMsg6Other0, "message requires both header and body section")
 		}
@@ -1771,10 +1771,6 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		}
 
 		xmsgPrefix := append([]byte(recvHdrFor(rcptAcc.rcptTo.String())), msgPrefix...)
-		// todo: don't convert the headers to a body? it seems the body part is optional. does this have consequences for us in other places? ../rfc/5322:343
-		if !msgWriter.HaveHeaders {
-			xmsgPrefix = append(xmsgPrefix, "\r\n"...)
-		}
 
 		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
 		if _, err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, dataFile, nil, i == len(c.recipients)-1); err != nil {
@@ -2283,9 +2279,6 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				receivedSPF.Header() +
 				recvHdrFor(rcptAcc.rcptTo.String()),
 		)
-		if !msgWriter.HaveHeaders {
-			msgPrefix = append(msgPrefix, "\r\n"...)
-		}
 
 		m := &store.Message{
 			Received:           time.Now(),

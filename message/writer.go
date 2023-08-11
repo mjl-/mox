@@ -7,17 +7,24 @@ import (
 // Writer is a write-through helper, collecting properties about the written
 // message.
 type Writer struct {
-	Writer      io.Writer
-	HaveHeaders bool
-	Has8bit     bool // Whether a byte with the high/8bit has been read. So whether this is 8BITMIME instead of 7BIT.
-	Size        int64
-	tail        [3]byte // For detecting crlfcrlf.
+	writer io.Writer
+
+	HaveBody bool // Body is optional. ../rfc/5322:343
+	Has8bit  bool // Whether a byte with the high/8bit has been read. So whether this is 8BITMIME instead of 7BIT.
+	Size     int64
+
+	tail [3]byte // For detecting header/body-separating crlf.
 	// todo: should be parsing headers here, as we go
+}
+
+func NewWriter(w io.Writer) *Writer {
+	// Pretend we already saw \r\n, for handling empty header.
+	return &Writer{writer: w, tail: [3]byte{0, '\r', '\n'}}
 }
 
 // Write implements io.Writer.
 func (w *Writer) Write(buf []byte) (int, error) {
-	if !w.HaveHeaders && len(buf) > 0 {
+	if !w.HaveBody && len(buf) > 0 {
 		get := func(i int) byte {
 			if i < 0 {
 				return w.tail[3+i]
@@ -27,7 +34,7 @@ func (w *Writer) Write(buf []byte) (int, error) {
 
 		for i, b := range buf {
 			if b == '\n' && get(i-3) == '\r' && get(i-2) == '\n' && get(i-1) == '\r' {
-				w.HaveHeaders = true
+				w.HaveBody = true
 				break
 			}
 		}
@@ -47,7 +54,7 @@ func (w *Writer) Write(buf []byte) (int, error) {
 			}
 		}
 	}
-	n, err := w.Writer.Write(buf)
+	n, err := w.writer.Write(buf)
 	if n > 0 {
 		w.Size += int64(n)
 	}
