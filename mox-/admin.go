@@ -959,7 +959,8 @@ func ClientConfigDomain(d dns.Domain) (ClientConfig, error) {
 	return c, nil
 }
 
-// return IPs we may be listening/receiving mail on or connecting/sending from to the outside.
+// IPs returns ip addresses we may be listening/receiving mail on or
+// connecting/sending from to the outside.
 func IPs(ctx context.Context, receiveOnly bool) ([]net.IP, error) {
 	log := xlog.WithContext(ctx)
 
@@ -972,7 +973,11 @@ func IPs(ctx context.Context, receiveOnly bool) ([]net.IP, error) {
 		if l.IPsNATed {
 			return nil, nil
 		}
-		for _, s := range l.IPs {
+		check := l.IPs
+		if len(l.NATIPs) > 0 {
+			check = l.NATIPs
+		}
+		for _, s := range check {
 			ip := net.ParseIP(s)
 			if ip.IsUnspecified() {
 				if ip.To4() != nil {

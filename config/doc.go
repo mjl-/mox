@@ -110,9 +110,15 @@ describe-static" and "mox config describe-domains":
 			IPs:
 				-
 
-			# Set this if the specified IPs are not the public IPs, but are NATed. This makes
-			# the DNS check skip a few checks related to IPs, such as for iprev, mx, spf,
-			# autoconfig, autodiscover. (optional)
+			# If set, the mail server is configured behind a NAT and field IPs are internal
+			# instead of the public IPs, while NATIPs lists the public IPs. Used during
+			# IP-related DNS self-checks, such as for iprev, mx, spf, autoconfig,
+			# autodiscover, and for autotls. (optional)
+			NATIPs:
+				-
+
+			# Deprecated, use NATIPs instead. If set, IPs are not the public IPs, but are
+			# NATed. Skips IP-related DNS self-checks. (optional)
 			IPsNATed: false
 
 			# If empty, the config global Hostname is used. (optional)

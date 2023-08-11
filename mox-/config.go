@@ -272,7 +272,15 @@ func (c *Config) allowACMEHosts(checkACMEHosts bool) {
 			}
 		}
 
-		m.SetAllowedHostnames(dns.StrictResolver{Pkg: "autotls"}, hostnames, c.Static.Listeners["public"].IPs, checkACMEHosts)
+		public := c.Static.Listeners["public"]
+		ips := public.IPs
+		if len(public.NATIPs) > 0 {
+			ips = public.NATIPs
+		}
+		if public.IPsNATed {
+			ips = nil
+		}
+		m.SetAllowedHostnames(dns.StrictResolver{Pkg: "autotls"}, hostnames, ips, checkACMEHosts)
 	}
 }
 
@@ -628,6 +636,17 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 				continue
 			}
 			l.SMTP.DNSBLZones = append(l.SMTP.DNSBLZones, d)
+		}
+		if l.IPsNATed && len(l.NATIPs) > 0 {
+			addErrorf("listener %q has both IPsNATed and NATIPs (remove deprecated IPsNATed)", name)
+		}
+		for _, ipstr := range l.NATIPs {
+			ip := net.ParseIP(ipstr)
+			if ip == nil {
+				addErrorf("listener %q has invalid ip %q", name, ipstr)
+			} else if ip.IsUnspecified() || ip.IsLoopback() {
+				addErrorf("listener %q has NAT ip that is the unspecified or loopback address %s", name, ipstr)
+			}
 		}
 		checkPath := func(kind string, enabled bool, path string) {
 			if enabled && path != "" && !strings.HasPrefix(path, "/") {

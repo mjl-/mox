@@ -455,13 +455,19 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		}
 	}
 
-	// If at least one listener with SMTP enabled has specified NATed IPs, we'll skip
+	// If at least one listener with SMTP enabled has unspecified NATed IPs, we'll skip
 	// some checks related to these IPs.
-	var isNAT bool
+	var isNAT, isUnspecifiedNAT bool
 	for _, l := range mox.Conf.Static.Listeners {
-		if l.IPsNATed && l.SMTP.Enabled {
+		if !l.SMTP.Enabled {
+			continue
+		}
+		if l.IPsNATed {
+			isUnspecifiedNAT = true
 			isNAT = true
-			break
+		}
+		if len(l.NATIPs) > 0 {
+			isNAT = true
 		}
 	}
 
@@ -473,16 +479,17 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		// For each mox.Conf.SpecifiedSMTPListenIPs, and each address for
+		// For each mox.Conf.SpecifiedSMTPListenIPs and all NATIPs, and each IP for
 		// mox.Conf.HostnameDomain, check if they resolve back to the host name.
 		hostIPs := map[dns.Domain][]net.IP{}
 		ips, err := resolver.LookupIP(ctx, "ip", mox.Conf.Static.HostnameDomain.ASCII+".")
 		if err != nil {
 			addf(&r.IPRev.Errors, "Looking up IPs for hostname: %s", err)
 		}
-		if !isNAT {
+
+		gatherMoreIPs := func(publicIPs []net.IP) {
 		nextip:
-			for _, ip := range mox.Conf.Static.SpecifiedSMTPListenIPs {
+			for _, ip := range publicIPs {
 				for _, xip := range ips {
 					if ip.Equal(xip) {
 						continue nextip
@@ -490,6 +497,19 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 				}
 				ips = append(ips, ip)
 			}
+		}
+		if !isNAT {
+			gatherMoreIPs(mox.Conf.Static.SpecifiedSMTPListenIPs)
+		}
+		for _, l := range mox.Conf.Static.Listeners {
+			if !l.SMTP.Enabled {
+				continue
+			}
+			var natips []net.IP
+			for _, ip := range l.NATIPs {
+				natips = append(natips, net.ParseIP(ip))
+			}
+			gatherMoreIPs(natips)
 		}
 		hostIPs[mox.Conf.Static.HostnameDomain] = ips
 
@@ -598,7 +618,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 				addf(&r.MX.Errors, "Looking up IPs for mx host %q: %s", mx.Host, err)
 			}
 			r.MX.Records[i].IPs = ips
-			if isNAT {
+			if isUnspecifiedNAT {
 				continue
 			}
 			if len(ourIPs) == 0 {
@@ -765,7 +785,11 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 				if !l.SMTP.Enabled || l.IPsNATed {
 					continue
 				}
-				for _, ipstr := range l.IPs {
+				ips := l.IPs
+				if len(l.NATIPs) > 0 {
+					ips = l.NATIPs
+				}
+				for _, ipstr := range ips {
 					ip := net.ParseIP(ipstr)
 					checkSPFIP(ip)
 				}
@@ -1135,7 +1159,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		}
 
 		r.Autoconf.IPs = ips
-		if !isNAT {
+		if !isUnspecifiedNAT {
 			if len(ourIPs) == 0 {
 				addf(&r.Autoconf.Errors, "Autoconfig does not point to one of our IPs.")
 			} else if len(notOurIPs) > 0 {
@@ -1171,7 +1195,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 			}
 			match = true
 			r.Autodiscover.Records = append(r.Autodiscover.Records, AutodiscoverSRV{*srv, ips})
-			if !isNAT {
+			if !isUnspecifiedNAT {
 				if len(ourIPs) == 0 {
 					addf(&r.Autodiscover.Errors, "SRV target %q does not point to our IPs.", srv.Target)
 				} else if len(notOurIPs) > 0 {

@@ -463,7 +463,15 @@ listed in more DNS block lists, visit:
 configured to listen on 0.0.0.0 (IPv4) and :: (IPv6). If you don't change these
 to your actual public IP addresses, you will likely get "address in use" errors
 when starting mox because the "internal" listener binds to a specific IP
-address on the same port(s).
+address on the same port(s). If you are behind a NAT, instead configure the
+actual public IPs in the listener's "NATIPs" option.
+
+If you are behind a NAT that does not preserve the remote IPs of connections,
+you will likely experience problems accepting email due to IP-based policies.
+For example, SPF is a mechanism that checks if an IP address is allowed to send
+email for a domain, and mox uses IP-based (non)junk classification, and IP-based
+rate-limiting both for accepting email and blocking bad actors (such as with
+too many authentication failures).
 
 `)
 	}
