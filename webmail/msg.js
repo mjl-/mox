@@ -912,7 +912,7 @@ const equalAddress = (a, b) => {
 // loadMsgheaderView loads the common message headers into msgheaderelem.
 // if refineKeyword is set, labels are shown and a click causes a call to
 // refineKeyword.
-const loadMsgheaderView = (msgheaderelem, mi, refineKeyword) => {
+const loadMsgheaderView = (msgheaderelem, mi, moreHeaders, refineKeyword) => {
 	const msgenv = mi.Envelope;
 	const received = mi.Message.Received;
 	const receivedlocal = new Date(received.getTime() - received.getTimezoneOffset() * 60 * 1000);
@@ -920,7 +920,7 @@ const loadMsgheaderView = (msgheaderelem, mi, refineKeyword) => {
 	// todo: make addresses clickable, start search (keep current mailbox if any)
 	dom.tr(dom.td('From:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(style({ width: '100%' }), dom.div(style({ display: 'flex', justifyContent: 'space-between' }), dom.div(join((msgenv.From || []).map(a => formatAddressFull(a)), () => ', ')), dom.div(attr.title('Received: ' + received.toString() + ';\nDate header in message: ' + (msgenv.Date ? msgenv.Date.toString() : '(missing/invalid)')), receivedlocal.toDateString() + ' ' + receivedlocal.toTimeString().split(' ')[0])))), (msgenv.ReplyTo || []).length === 0 ? [] : dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(join((msgenv.ReplyTo || []).map(a => formatAddressFull(a)), () => ', '))), dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(join((msgenv.To || []).map(a => formatAddressFull(a)), () => ', '))), (msgenv.CC || []).length === 0 ? [] : dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(join((msgenv.CC || []).map(a => formatAddressFull(a)), () => ', '))), (msgenv.BCC || []).length === 0 ? [] : dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(join((msgenv.BCC || []).map(a => formatAddressFull(a)), () => ', '))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(dom.div(style({ display: 'flex', justifyContent: 'space-between' }), dom.div(msgenv.Subject || ''), dom.div(mi.IsSigned ? dom.span(style({ backgroundColor: '#666', padding: '0px 0.15em', fontSize: '.9em', color: 'white', borderRadius: '.15em' }), 'Message has a signature') : [], mi.IsEncrypted ? dom.span(style({ backgroundColor: '#666', padding: '0px 0.15em', fontSize: '.9em', color: 'white', borderRadius: '.15em' }), 'Message is encrypted') : [], refineKeyword ? (mi.Message.Keywords || []).map(kw => dom.clickbutton(dom._class('keyword'), kw, async function click() {
 		await refineKeyword(kw);
-	})) : [])))));
+	})) : [])))), moreHeaders.map(k => dom.tr(dom.td(k + ':', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td())));
 };
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 const init = () => {
@@ -930,7 +930,7 @@ const init = () => {
 		dom._kids(msgattachmentview, dom.div(style({ borderTop: '1px solid #ccc' }), dom.div(dom._class('pad'), 'Attachments: ', join(mi.Attachments.map(a => a.Filename || '(unnamed)'), () => ', '))));
 	}
 	const msgheaderview = dom.table(style({ marginBottom: '1ex', width: '100%' }));
-	loadMsgheaderView(msgheaderview, mi, null);
+	loadMsgheaderView(msgheaderview, mi, [], null);
 	const l = window.location.pathname.split('/');
 	const w = l[l.length - 1];
 	let iframepath;

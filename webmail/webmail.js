@@ -912,7 +912,7 @@ const equalAddress = (a, b) => {
 // loadMsgheaderView loads the common message headers into msgheaderelem.
 // if refineKeyword is set, labels are shown and a click causes a call to
 // refineKeyword.
-const loadMsgheaderView = (msgheaderelem, mi, refineKeyword) => {
+const loadMsgheaderView = (msgheaderelem, mi, moreHeaders, refineKeyword) => {
 	const msgenv = mi.Envelope;
 	const received = mi.Message.Received;
 	const receivedlocal = new Date(received.getTime() - received.getTimezoneOffset() * 60 * 1000);
@@ -920,7 +920,7 @@ const loadMsgheaderView = (msgheaderelem, mi, refineKeyword) => {
 	// todo: make addresses clickable, start search (keep current mailbox if any)
 	dom.tr(dom.td('From:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(style({ width: '100%' }), dom.div(style({ display: 'flex', justifyContent: 'space-between' }), dom.div(join((msgenv.From || []).map(a => formatAddressFull(a)), () => ', ')), dom.div(attr.title('Received: ' + received.toString() + ';\nDate header in message: ' + (msgenv.Date ? msgenv.Date.toString() : '(missing/invalid)')), receivedlocal.toDateString() + ' ' + receivedlocal.toTimeString().split(' ')[0])))), (msgenv.ReplyTo || []).length === 0 ? [] : dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(join((msgenv.ReplyTo || []).map(a => formatAddressFull(a)), () => ', '))), dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(join((msgenv.To || []).map(a => formatAddressFull(a)), () => ', '))), (msgenv.CC || []).length === 0 ? [] : dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(join((msgenv.CC || []).map(a => formatAddressFull(a)), () => ', '))), (msgenv.BCC || []).length === 0 ? [] : dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(join((msgenv.BCC || []).map(a => formatAddressFull(a)), () => ', '))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(dom.div(style({ display: 'flex', justifyContent: 'space-between' }), dom.div(msgenv.Subject || ''), dom.div(mi.IsSigned ? dom.span(style({ backgroundColor: '#666', padding: '0px 0.15em', fontSize: '.9em', color: 'white', borderRadius: '.15em' }), 'Message has a signature') : [], mi.IsEncrypted ? dom.span(style({ backgroundColor: '#666', padding: '0px 0.15em', fontSize: '.9em', color: 'white', borderRadius: '.15em' }), 'Message is encrypted') : [], refineKeyword ? (mi.Message.Keywords || []).map(kw => dom.clickbutton(dom._class('keyword'), kw, async function click() {
 		await refineKeyword(kw);
-	})) : [])))));
+	})) : [])))), moreHeaders.map(k => dom.tr(dom.td(k + ':', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td())));
 };
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 /*
@@ -2392,7 +2392,8 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 	};
 	const cmdToggleHeaders = async () => {
 		settingsPut({ ...settings, showAllHeaders: !settings.showAllHeaders });
-		loadHeaderDetails(await parsedMessagePromise);
+		const pm = await parsedMessagePromise;
+		loadHeaderDetails(pm);
 	};
 	let textbtn, htmlbtn, htmlextbtn;
 	const activeBtn = (b) => {
@@ -2497,7 +2498,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		})));
 	};
 	loadButtons(parsedMessageOpt || null);
-	loadMsgheaderView(msgheaderElem, miv.messageitem, refineKeyword);
+	loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword);
 	const loadHeaderDetails = (pm) => {
 		if (msgheaderdetailsElem) {
 			msgheaderdetailsElem.remove();
@@ -2621,15 +2622,34 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		urlType = 'htmlexternal';
 		dom._kids(msgcontentElem, dom.iframe(attr.tabindex('0'), attr.title('HTML version of message with images inlined and with external resources loaded.'), attr.src('msg/' + m.ID + '/' + urlType), style({ border: '0', position: 'absolute', width: '100%', height: '100%', backgroundColor: 'white' })));
 	};
+	const loadMoreHeaders = (pm) => {
+		if (settings.showHeaders.length === 0) {
+			return;
+		}
+		for (let i = 0; i < settings.showHeaders.length; i++) {
+			msgheaderElem.children[msgheaderElem.children.length - 1].remove();
+		}
+		settings.showHeaders.forEach(k => {
+			const vl = pm.Headers?.[k];
+			if (!vl || vl.length === 0) {
+				return;
+			}
+			vl.forEach(v => {
+				const e = dom.tr(dom.td(k + ':', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(v));
+				msgheaderElem.appendChild(e);
+			});
+		});
+	};
 	const mv = {
 		root: root,
 		messageitem: mi,
 		key: keyHandler(shortcuts),
 		aborter: { abort: () => { } },
-		updateKeywords: (modseq, keywords) => {
+		updateKeywords: async (modseq, keywords) => {
 			mi.Message.ModSeq = modseq;
 			mi.Message.Keywords = keywords;
-			loadMsgheaderView(msgheaderElem, miv.messageitem, refineKeyword);
+			loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword);
+			loadMoreHeaders(await parsedMessagePromise);
 		},
 	};
 	(async () => {
@@ -2656,18 +2676,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		}
 		loadButtons(pm);
 		loadHeaderDetails(pm);
-		if (settings.showHeaders.length > 0) {
-			settings.showHeaders.forEach(k => {
-				const vl = pm.Headers?.[k];
-				if (!vl || vl.length === 0) {
-					return;
-				}
-				vl.forEach(v => {
-					const e = dom.tr(dom.td(k + ':', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(v));
-					msgheaderElem.appendChild(e);
-				});
-			});
-		}
+		loadMoreHeaders(pm);
 		const htmlNote = 'In the HTML viewer, the following potentially dangerous functionality is disabled: submitting forms, starting a download from a link, navigating away from this page by clicking a link. If a link does not work, try explicitly opening it in a new tab.';
 		const haveText = pm.Texts && pm.Texts.length > 0;
 		if (!haveText && !pm.HasHTML) {

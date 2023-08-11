@@ -1741,7 +1741,7 @@ interface MsgView {
 	root: HTMLElement
 	messageitem: api.MessageItem
 	// Called when keywords for a message have changed, to rerender them.
-	updateKeywords: (modseq: number, keywords: string[]) => void
+	updateKeywords: (modseq: number, keywords: string[]) => Promise<void>
 	// Abort loading the message.
 	aborter: { abort: () => void }
 	key: (key: string, e: KeyboardEvent) => Promise<void>
@@ -1841,7 +1841,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 
 	const cmdToggleHeaders = async () => {
 		settingsPut({...settings, showAllHeaders: !settings.showAllHeaders})
-		loadHeaderDetails(await parsedMessagePromise)
+		const pm = await parsedMessagePromise
+		loadHeaderDetails(pm)
 	}
 
 	let textbtn: HTMLButtonElement, htmlbtn: HTMLButtonElement, htmlextbtn: HTMLButtonElement
@@ -2004,7 +2005,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	}
 	loadButtons(parsedMessageOpt || null)
 
-	loadMsgheaderView(msgheaderElem, miv.messageitem, refineKeyword)
+	loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword)
 
 	const loadHeaderDetails = (pm: api.ParsedMessage) => {
 		if (msgheaderdetailsElem) {
@@ -2235,15 +2236,38 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		)
 	}
 
+	const loadMoreHeaders = (pm: api.ParsedMessage) => {
+		if (settings.showHeaders.length === 0) {
+			return
+		}
+		for (let i = 0; i < settings.showHeaders.length; i++) {
+			msgheaderElem.children[msgheaderElem.children.length-1].remove()
+		}
+		settings.showHeaders.forEach(k => {
+			const vl = pm.Headers?.[k]
+			if (!vl || vl.length === 0) {
+				return
+			}
+			vl.forEach(v => {
+				const e = dom.tr(
+					dom.td(k+':', style({textAlign: 'right', color: '#555', whiteSpace: 'nowrap'})),
+					dom.td(v),
+				)
+				msgheaderElem.appendChild(e)
+			})
+		})
+	}
+
 	const mv: MsgView = {
 		root: root,
 		messageitem: mi,
 		key: keyHandler(shortcuts),
 		aborter: { abort: () => {} },
-		updateKeywords: (modseq: number, keywords: string[]) => {
+		updateKeywords: async (modseq: number, keywords: string[]) => {
 			mi.Message.ModSeq = modseq
 			mi.Message.Keywords = keywords
-			loadMsgheaderView(msgheaderElem, miv.messageitem, refineKeyword)
+			loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword)
+			loadMoreHeaders(await parsedMessagePromise)
 		},
 	}
 
@@ -2269,21 +2293,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 
 		loadButtons(pm)
 		loadHeaderDetails(pm)
-		if (settings.showHeaders.length > 0) {
-			settings.showHeaders.forEach(k => {
-				const vl = pm.Headers?.[k]
-				if (!vl || vl.length === 0) {
-					return
-				}
-				vl.forEach(v => {
-					const e = dom.tr(
-						dom.td(k+':', style({textAlign: 'right', color: '#555', whiteSpace: 'nowrap'})),
-						dom.td(v),
-					)
-					msgheaderElem.appendChild(e)
-				})
-			})
-		}
+		loadMoreHeaders(pm)
 
 		const htmlNote = 'In the HTML viewer, the following potentially dangerous functionality is disabled: submitting forms, starting a download from a link, navigating away from this page by clicking a link. If a link does not work, try explicitly opening it in a new tab.'
 		const haveText = pm.Texts && pm.Texts.length > 0

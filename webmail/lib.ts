@@ -327,7 +327,7 @@ const equalAddress = (a: api.MessageAddress, b: api.MessageAddress) => {
 // loadMsgheaderView loads the common message headers into msgheaderelem.
 // if refineKeyword is set, labels are shown and a click causes a call to
 // refineKeyword.
-const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, refineKeyword: null | ((kw: string) => Promise<void>)) => {
+const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, moreHeaders: string[], refineKeyword: null | ((kw: string) => Promise<void>)) => {
 	const msgenv = mi.Envelope
 	const received = mi.Message.Received
 	const receivedlocal = new Date(received.getTime() - received.getTimezoneOffset()*60*1000)
@@ -378,6 +378,12 @@ const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, refi
 					),
 				)
 			),
+		),
+		moreHeaders.map(k =>
+			dom.tr(
+				dom.td(k+':', style({textAlign: 'right', color: '#555', whiteSpace: 'nowrap'})),
+				dom.td(),
+			)
 		),
 	)
 }
