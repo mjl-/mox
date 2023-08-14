@@ -376,7 +376,18 @@ func parseHeader(r io.Reader) (textproto.MIMEHeader, error) {
 	// first handles email messages properly, while the second only works for HTTP
 	// headers.
 	var zero textproto.MIMEHeader
-	msg, err := mail.ReadMessage(bufio.NewReader(r))
+
+	// We read the header and add the optional \r\n header/body separator. If the \r\n
+	// is missing, parsing with Go <1.21 results in an EOF error.
+	// todo: directly parse from reader r when Go 1.20 is no longer supported.
+	buf, err := io.ReadAll(r)
+	if err != nil {
+		return zero, err
+	}
+	if bytes.HasSuffix(buf, []byte("\r\n")) && !bytes.HasSuffix(buf, []byte("\r\n\r\n")) {
+		buf = append(buf, "\r\n"...)
+	}
+	msg, err := mail.ReadMessage(bytes.NewReader(buf))
 	if err != nil {
 		return zero, err
 	}
