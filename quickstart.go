@@ -645,8 +645,8 @@ too many authentication failures).
 	xwritefile("config/domains.conf", []byte(dconfstr), 0660)
 
 	// Verify config.
-	skipCheckTLSKeyCerts := existingWebserver
-	mc, errs := mox.ParseConfig(context.Background(), "config/mox.conf", true, skipCheckTLSKeyCerts, false)
+	loadTLSKeyCerts := !existingWebserver
+	mc, errs := mox.ParseConfig(context.Background(), "config/mox.conf", true, loadTLSKeyCerts, false)
 	if len(errs) > 0 {
 		if len(errs) > 1 {
 			log.Printf("checking generated config, multiple errors:")

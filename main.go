@@ -512,7 +512,9 @@ are printed.
 		c.Usage()
 	}
 
-	_, errs := mox.ParseConfig(context.Background(), mox.ConfigStaticPath, true, false, false)
+	mox.FilesImmediate = true
+
+	_, errs := mox.ParseConfig(context.Background(), mox.ConfigStaticPath, true, true, false)
 	if len(errs) > 1 {
 		log.Printf("multiple errors:")
 		for _, err := range errs {
