@@ -1,8 +1,6 @@
 package message
 
-// todo: we should be more forgiving when parsing, at least as an option for imported messages, possibly incoming as well, but not for submitted/outgoing messages.
 // todo: allow more invalid content-type values, we now stop parsing on: empty media type (eg "content-type: ; name=..."), empty value for property (eg "charset=", missing quotes for characters that should be quoted (eg boundary containing "=" but without quotes), duplicate properties (two charsets), empty pairs (eg "text/html;;").
-// todo: what should our max line length be? rfc says 1000. messages exceed that. we should enforce 1000 for outgoing messages.
 // todo: should we be forgiving when closing boundary in multipart message is missing? seems like spam messages do this...
 // todo: should we allow base64 messages where a line starts with a space? and possibly more whitespace. is happening in messages. coreutils base64 accepts it, encoding/base64 does not.
 // todo: handle comments in headers?
@@ -662,7 +660,7 @@ func (p *Part) RawReader() io.Reader {
 	}
 	p.RawLineCount = 0
 	if p.parent == nil {
-		return &offsetReader{p, p.BodyOffset, p.strict, true, false}
+		return &offsetReader{p, p.BodyOffset, p.strict, true, false, 0}
 	}
 	return &boundReader{p: p, b: &bufAt{strict: p.strict, r: p.r, offset: p.BodyOffset}, prevlf: true}
 }
@@ -703,8 +701,19 @@ type bufAt struct {
 	scratch []byte
 }
 
-// todo: lower max line length? at least have a mode where we refuse anything beyong 1000 bytes. ../rfc/5321:3512
+// Messages should not have lines longer than 78+2 bytes, and must not have
+// lines longer than 998+2 bytes. But in practice they have longer lines. We
+// have a higher limit, but for when parsing with strict we check for the 1000
+// bytes limit.
+// ../rfc/5321:3512
 const maxLineLength = 8 * 1024
+
+func (b *bufAt) maxLineLength() int {
+	if b.strict || moxvar.Pedantic {
+		return 1000
+	}
+	return maxLineLength
+}
 
 // ensure makes sure b.nbuf is up to maxLineLength, unless eof is encountered.
 func (b *bufAt) ensure() error {
@@ -714,12 +723,12 @@ func (b *bufAt) ensure() error {
 		}
 	}
 	if b.scratch == nil {
-		b.scratch = make([]byte, maxLineLength)
+		b.scratch = make([]byte, b.maxLineLength())
 	}
 	if b.buf == nil {
-		b.buf = make([]byte, maxLineLength)
+		b.buf = make([]byte, b.maxLineLength())
 	}
-	for b.nbuf < maxLineLength {
+	for b.nbuf < b.maxLineLength() {
 		n, err := b.r.ReadAt(b.buf[b.nbuf:], b.offset+int64(b.nbuf))
 		if n > 0 {
 			b.nbuf += n
@@ -772,7 +781,7 @@ func (b *bufAt) line(consume, requirecrlf bool) (buf []byte, crlf bool, err erro
 		}
 		return b.scratch, true, nil
 	}
-	if b.nbuf >= maxLineLength {
+	if b.nbuf >= b.maxLineLength() {
 		return nil, false, errLineTooLong
 	}
 	if requirecrlf {
@@ -801,17 +810,22 @@ func (b *bufAt) PeekByte() (byte, error) {
 // offsetReader reads from p.r starting from offset, and RawLineCount on p.
 // offsetReader validates lines end with \r\n.
 type offsetReader struct {
-	p      *Part
-	offset int64
-	strict bool
-	prevlf bool
-	prevcr bool
+	p          *Part
+	offset     int64
+	strict     bool
+	prevlf     bool
+	prevcr     bool
+	linelength int
 }
 
 func (r *offsetReader) Read(buf []byte) (int, error) {
 	n, err := r.p.r.ReadAt(buf, r.offset)
 	if n > 0 {
 		r.offset += int64(n)
+		max := maxLineLength
+		if r.strict || moxvar.Pedantic {
+			max = 1000
+		}
 
 		for _, c := range buf[:n] {
 			if r.prevlf {
@@ -826,6 +840,12 @@ func (r *offsetReader) Read(buf []byte) (int, error) {
 			}
 			r.prevlf = c == '\n'
 			r.prevcr = c == '\r'
+			r.linelength++
+			if c == '\n' {
+				r.linelength = 0
+			} else if r.linelength > max && err == nil {
+				err = errLineTooLong
+			}
 		}
 	}
 	if err == io.EOF {
@@ -924,7 +944,7 @@ func (b *boundReader) Read(buf []byte) (count int, rerr error) {
 		line = line[n:]
 		if len(line) > 0 {
 			if b.buf == nil {
-				b.buf = make([]byte, maxLineLength)
+				b.buf = make([]byte, b.b.maxLineLength())
 			}
 			copy(b.buf, line)
 			b.nbuf = len(line)

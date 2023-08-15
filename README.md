@@ -109,7 +109,6 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 
 ## Roadmap
 
-- Improve message parsing, more lenient for imported messages
 - Rewrite account and admin javascript to typescript
 - Prepare data storage for JMAP
 - IMAP THREAD extension
