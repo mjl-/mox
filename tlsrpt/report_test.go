@@ -109,19 +109,19 @@ func TestReport(t *testing.T) {
 		t.Fatalf("parsing report: %s", err)
 	}
 
-	if _, err := ParseMessage(strings.NewReader(tlsrptMessage)); err != nil {
+	if _, err := ParseMessage(xlog, strings.NewReader(tlsrptMessage)); err != nil {
 		t.Fatalf("parsing TLSRPT from message: %s", err)
 	}
 
-	if _, err := ParseMessage(strings.NewReader(tlsrptMessage2)); err != nil {
+	if _, err := ParseMessage(xlog, strings.NewReader(tlsrptMessage2)); err != nil {
 		t.Fatalf("parsing TLSRPT from message: %s", err)
 	}
 
-	if _, err := ParseMessage(strings.NewReader(strings.ReplaceAll(tlsrptMessage, "multipart/report", "multipart/related"))); err != ErrNoReport {
+	if _, err := ParseMessage(xlog, strings.NewReader(strings.ReplaceAll(tlsrptMessage, "multipart/report", "multipart/related"))); err != ErrNoReport {
 		t.Fatalf("got err %v, expected ErrNoReport", err)
 	}
 
-	if _, err := ParseMessage(strings.NewReader(strings.ReplaceAll(tlsrptMessage, "application/tlsrpt+json", "application/json"))); err != ErrNoReport {
+	if _, err := ParseMessage(xlog, strings.NewReader(strings.ReplaceAll(tlsrptMessage, "application/tlsrpt+json", "application/json"))); err != ErrNoReport {
 		t.Fatalf("got err %v, expected ErrNoReport", err)
 	}
 
@@ -134,7 +134,7 @@ func TestReport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open %q: %s", file, err)
 		}
-		if _, err := ParseMessage(f); err != nil {
+		if _, err := ParseMessage(xlog, f); err != nil {
 			t.Fatalf("parsing TLSRPT from message %q: %s", file.Name(), err)
 		}
 		f.Close()
@@ -144,6 +144,6 @@ func TestReport(t *testing.T) {
 func FuzzParseMessage(f *testing.F) {
 	f.Add(tlsrptMessage)
 	f.Fuzz(func(t *testing.T, s string) {
-		ParseMessage(strings.NewReader(s))
+		ParseMessage(xlog, strings.NewReader(s))
 	})
 }

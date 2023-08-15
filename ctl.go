@@ -800,7 +800,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 							m.Size = correctSize
 
 							mr := acc.MessageReader(m)
-							part, err := message.EnsurePart(mr, m.Size)
+							part, err := message.EnsurePart(log, false, mr, m.Size)
 							if err != nil {
 								_, werr := fmt.Fprintf(w, "parsing message %d again: %v (continuing)\n", m.ID, err)
 								ctl.xcheck(werr, "write")
@@ -890,7 +890,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 					return q.ForEach(func(m store.Message) error {
 						lastID = m.ID
 						mr := acc.MessageReader(m)
-						p, err := message.EnsurePart(mr, m.Size)
+						p, err := message.EnsurePart(log, false, mr, m.Size)
 						if err != nil {
 							_, err := fmt.Fprintf(w, "parsing message %d: %v (continuing)\n", m.ID, err)
 							ctl.xcheck(err, "write")

@@ -5,7 +5,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mjl-/mox/mlog"
 )
+
+var xlog = mlog.New("dmarcrpt")
 
 const reportExample = `<?xml version="1.0" encoding="UTF-8" ?>
 <feedback>
@@ -130,7 +134,7 @@ func TestParseMessageReport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open %q: %s", p, err)
 		}
-		_, err = ParseMessageReport(f)
+		_, err = ParseMessageReport(xlog, f)
 		if err != nil {
 			t.Fatalf("ParseMessageReport: %q: %s", p, err)
 		}
@@ -138,7 +142,7 @@ func TestParseMessageReport(t *testing.T) {
 	}
 
 	// No report in a non-multipart message.
-	_, err = ParseMessageReport(strings.NewReader("From: <mjl@mox.example>\r\n\r\nNo report.\r\n"))
+	_, err = ParseMessageReport(xlog, strings.NewReader("From: <mjl@mox.example>\r\n\r\nNo report.\r\n"))
 	if err != ErrNoReport {
 		t.Fatalf("message without report, got err %#v, expected ErrNoreport", err)
 	}
@@ -164,7 +168,7 @@ MIME-Version: 1.0
 
 --===============5735553800636657282==--
 `, "\n", "\r\n")
-	_, err = ParseMessageReport(strings.NewReader(multipartNoreport))
+	_, err = ParseMessageReport(xlog, strings.NewReader(multipartNoreport))
 	if err != ErrNoReport {
 		t.Fatalf("message without report, got err %#v, expected ErrNoreport", err)
 	}

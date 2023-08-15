@@ -76,7 +76,7 @@ func Generate(mailFrom smtp.Address, key []byte, tm time.Time) string {
 
 // Verify parses "message" and checks if it includes a subjectpass token in its
 // Subject header that is still valid (within "period") and signed with "key".
-func Verify(r io.ReaderAt, key []byte, period time.Duration) (rerr error) {
+func Verify(log *mlog.Log, r io.ReaderAt, key []byte, period time.Duration) (rerr error) {
 	var token string
 
 	defer func() {
@@ -89,7 +89,7 @@ func Verify(r io.ReaderAt, key []byte, period time.Duration) (rerr error) {
 		log.Debugx("subjectpass verify result", rerr, mlog.Field("token", token), mlog.Field("period", period))
 	}()
 
-	p, err := message.Parse(r)
+	p, err := message.Parse(log, true, r)
 	if err != nil {
 		return fmt.Errorf("%w: parse message: %s", ErrMessage, err)
 	}

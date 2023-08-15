@@ -1443,11 +1443,13 @@ headers prepended.
 		c.Usage()
 	}
 
+	clog := mlog.New("dkimsign")
+
 	msgf, err := os.Open(args[0])
 	xcheckf(err, "open message")
 	defer msgf.Close()
 
-	p, err := message.Parse(msgf)
+	p, err := message.Parse(clog, true, msgf)
 	xcheckf(err, "parsing message")
 
 	if len(p.Envelope.From) != 1 {
@@ -1591,7 +1593,7 @@ can be found in message headers.
 
 	data, err := io.ReadAll(os.Stdin)
 	xcheckf(err, "read message")
-	dmarcFrom, _, err := message.From(bytes.NewReader(data))
+	dmarcFrom, _, err := message.From(mlog.New("dmarcverify"), false, bytes.NewReader(data))
 	xcheckf(err, "extract dmarc from message")
 
 	const ignoreTestMode = false
@@ -1621,10 +1623,12 @@ understand email deliverability problems.
 		c.Usage()
 	}
 
+	clog := mlog.New("dmarcparsereportmsg")
+
 	for _, arg := range args {
 		f, err := os.Open(arg)
 		xcheckf(err, "open %q", arg)
-		feedback, err := dmarcrpt.ParseMessageReport(f)
+		feedback, err := dmarcrpt.ParseMessageReport(clog, f)
 		xcheckf(err, "parse report in %q", arg)
 		meta := feedback.ReportMetadata
 		fmt.Printf("Report: period %s-%s, organisation %q, reportID %q, %s\n", time.Unix(meta.DateRange.Begin, 0).UTC().String(), time.Unix(meta.DateRange.End, 0).UTC().String(), meta.OrgName, meta.ReportID, meta.Email)
@@ -1673,9 +1677,11 @@ func cmdDMARCDBAddReport(c *cmd) {
 
 	mustLoadConfig()
 
+	clog := mlog.New("dmarcdbaddreport")
+
 	fromdomain := xparseDomain(args[0], "domain")
 	fmt.Fprintln(os.Stderr, "reading report message from stdin")
-	report, err := dmarcrpt.ParseMessageReport(os.Stdin)
+	report, err := dmarcrpt.ParseMessageReport(clog, os.Stdin)
 	xcheckf(err, "parse message")
 	err = dmarcdb.AddReport(context.Background(), report, fromdomain)
 	xcheckf(err, "add dmarc report")
@@ -1712,10 +1718,12 @@ The report is printed in formatted JSON.
 		c.Usage()
 	}
 
+	clog := mlog.New("tlsrptparsereportmsg")
+
 	for _, arg := range args {
 		f, err := os.Open(arg)
 		xcheckf(err, "open %q", arg)
-		report, err := tlsrpt.ParseMessage(f)
+		report, err := tlsrpt.ParseMessage(clog, f)
 		xcheckf(err, "parse report in %q", arg)
 		// todo future: only print the highlights?
 		enc := json.NewEncoder(os.Stdout)
@@ -1855,11 +1863,13 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 
 	mustLoadConfig()
 
+	clog := mlog.New("tlsrptdbaddreport")
+
 	// First read message, to get the From-header. Then parse it as TLSRPT.
 	fmt.Fprintln(os.Stderr, "reading report message from stdin")
 	buf, err := io.ReadAll(os.Stdin)
 	xcheckf(err, "reading message")
-	part, err := message.Parse(bytes.NewReader(buf))
+	part, err := message.Parse(clog, true, bytes.NewReader(buf))
 	xcheckf(err, "parsing message")
 	if part.Envelope == nil || len(part.Envelope.From) != 1 {
 		log.Fatalf("message must have one From-header")
@@ -1867,7 +1877,7 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 	from := part.Envelope.From[0]
 	domain := xparseDomain(from.Host, "domain")
 
-	report, err := tlsrpt.ParseMessage(bytes.NewReader(buf))
+	report, err := tlsrpt.ParseMessage(clog, bytes.NewReader(buf))
 	xcheckf(err, "parsing tls report in message")
 
 	mailfrom := from.User + "@" + from.Host // todo future: should escape and such
@@ -2276,6 +2286,8 @@ func cmdEnsureParsed(c *cmd) {
 		c.Usage()
 	}
 
+	clog := mlog.New("ensureparsed")
+
 	mustLoadConfig()
 	a, err := store.OpenAccount(args[0])
 	xcheckf(err, "open account")
@@ -2298,7 +2310,7 @@ func cmdEnsureParsed(c *cmd) {
 		}
 		for _, m := range l {
 			mr := a.MessageReader(m)
-			p, err := message.EnsurePart(mr, m.Size)
+			p, err := message.EnsurePart(clog, false, mr, m.Size)
 			if err != nil {
 				log.Printf("parsing message %d: %v (continuing)", m.ID, err)
 			}
@@ -2351,13 +2363,15 @@ func cmdMessageParse(c *cmd) {
 		c.Usage()
 	}
 
+	clog := mlog.New("messageparse")
+
 	f, err := os.Open(args[0])
 	xcheckf(err, "open")
 	defer f.Close()
 
-	part, err := message.Parse(f)
+	part, err := message.Parse(clog, false, f)
 	xcheckf(err, "parsing message")
-	err = part.Walk(nil)
+	err = part.Walk(clog, nil)
 	xcheckf(err, "parsing nested parts")
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "\t")

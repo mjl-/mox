@@ -7,7 +7,6 @@ package message
 // todo: should we allow base64 messages where a line starts with a space? and possibly more whitespace. is happening in messages. coreutils base64 accepts it, encoding/base64 does not.
 // todo: handle comments in headers?
 // todo: should we just always store messages with \n instead of \r\n? \r\n seems easier for use with imap.
-// todo: is a header always \r\n\r\n-separated? or is \r\n enough at the beginning of a file? because what would this mean: "\r\ndata"? data isn't a header.
 // todo: can use a cleanup
 
 import (
@@ -31,8 +30,6 @@ import (
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 )
-
-var xlog = mlog.New("message")
 
 var (
 	ErrBadContentType = errors.New("bad content-type")
@@ -83,6 +80,7 @@ type Part struct {
 	lastBoundOffset int64                // Start of header of last/previous part. Used to skip a part if ParseNextPart is called and nextBoundOffset is -1.
 	parent          *Part                // Parent part, for getting bound from, and setting nextBoundOffset when a part has finished reading. Only for subparts, not top-level parts.
 	bound           []byte               // Only set if valid multipart with boundary, includes leading --, excludes \r\n.
+	strict          bool                 // If set, valid crlf line endings are verified when reading body.
 }
 
 // todo: have all Content* fields in Part?
@@ -112,18 +110,24 @@ type Address struct {
 
 // Parse reads the headers of the mail message and returns a part.
 // A part provides access to decoded and raw contents of a message and its multiple parts.
-func Parse(r io.ReaderAt) (Part, error) {
-	return newPart(r, 0, nil)
+//
+// If strict is set, fewer attempts are made to continue parsing when errors are
+// encountered, such as with invalid content-type headers or bare carriage returns.
+func Parse(log *mlog.Log, strict bool, r io.ReaderAt) (Part, error) {
+	return newPart(log, strict, r, 0, nil)
 }
 
 // EnsurePart parses a part as with Parse, but ensures a usable part is always
 // returned, even if error is non-nil. If a parse error occurs, the message is
 // returned as application/octet-stream, and headers can still be read if they
 // were valid.
-func EnsurePart(r io.ReaderAt, size int64) (Part, error) {
-	p, err := Parse(r)
+//
+// If strict is set, fewer attempts are made to continue parsing when errors are
+// encountered, such as with invalid content-type headers or bare carriage returns.
+func EnsurePart(log *mlog.Log, strict bool, r io.ReaderAt, size int64) (Part, error) {
+	p, err := Parse(log, strict, r)
 	if err == nil {
-		err = p.Walk(nil)
+		err = p.Walk(log, nil)
 	}
 	if err != nil {
 		np, err2 := fallbackPart(p, r, size)
@@ -183,7 +187,7 @@ func (p *Part) SetMessageReaderAt() error {
 }
 
 // Walk through message, decoding along the way, and collecting mime part offsets and sizes, and line counts.
-func (p *Part) Walk(parent *Part) error {
+func (p *Part) Walk(log *mlog.Log, parent *Part) error {
 	if len(p.bound) == 0 {
 		if p.MediaType == "MESSAGE" && (p.MediaSubType == "RFC822" || p.MediaSubType == "GLOBAL") {
 			// todo: don't read whole submessage in memory...
@@ -192,11 +196,11 @@ func (p *Part) Walk(parent *Part) error {
 				return err
 			}
 			br := bytes.NewReader(buf)
-			mp, err := Parse(br)
+			mp, err := Parse(log, p.strict, br)
 			if err != nil {
 				return fmt.Errorf("parsing embedded message: %w", err)
 			}
-			if err := mp.Walk(nil); err != nil {
+			if err := mp.Walk(log, nil); err != nil {
 				// If this is a DSN and we are not in pedantic mode, accept unexpected end of
 				// message. This is quite common because MTA's sometimes just truncate the original
 				// message in a place that makes the message invalid.
@@ -218,14 +222,14 @@ func (p *Part) Walk(parent *Part) error {
 	}
 
 	for {
-		pp, err := p.ParseNextPart()
+		pp, err := p.ParseNextPart(log)
 		if err == io.EOF {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		if err := pp.Walk(p); err != nil {
+		if err := pp.Walk(log, p); err != nil {
 			return err
 		}
 	}
@@ -239,7 +243,7 @@ func (p *Part) String() string {
 // newPart parses a new part, which can be the top-level message.
 // offset is the bound offset for parts, and the start of message for top-level messages. parent indicates if this is a top-level message or sub-part.
 // If an error occurs, p's exported values can still be relevant. EnsurePart uses these values.
-func newPart(r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
+func newPart(log *mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
 	if r == nil {
 		panic("nil reader")
 	}
@@ -248,9 +252,10 @@ func newPart(r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
 		EndOffset:      -1,
 		r:              r,
 		parent:         parent,
+		strict:         strict,
 	}
 
-	b := &bufAt{r: r, offset: offset}
+	b := &bufAt{strict: strict, r: r, offset: offset}
 
 	if parent != nil {
 		p.BoundaryOffset = offset
@@ -297,16 +302,46 @@ func newPart(r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
 	ct := p.header.Get("Content-Type")
 	mt, params, err := mime.ParseMediaType(ct)
 	if err != nil && ct != "" {
-		return p, fmt.Errorf("%w: %s: %q", ErrBadContentType, err, ct)
-	}
-	if mt != "" {
+		if moxvar.Pedantic || strict {
+			return p, fmt.Errorf("%w: %s: %q", ErrBadContentType, err, ct)
+		}
+
+		// Try parsing just a content-type, ignoring parameters.
+		// ../rfc/2045:628
+		ct = strings.TrimSpace(strings.SplitN(ct, ";", 2)[0])
+		t := strings.SplitN(ct, "/", 2)
+		isToken := func(s string) bool {
+			const separators = `()<>@,;:\\"/[]?= ` // ../rfc/2045:663
+			for _, c := range s {
+				if c < 0x20 || c >= 0x80 || strings.ContainsRune(separators, c) {
+					return false
+				}
+			}
+			return len(s) > 0
+		}
+		// We cannot recover content-type of multipart, we won't have a boundary.
+		if len(t) == 2 && isToken(t[0]) && !strings.EqualFold(t[0], "multipart") && isToken(t[1]) {
+			p.MediaType = strings.ToUpper(t[0])
+			p.MediaSubType = strings.ToUpper(t[1])
+		} else {
+			p.MediaType = "APPLICATION"
+			p.MediaSubType = "OCTET-STREAM"
+		}
+		log.Debugx("malformed content-type, attempting to recover and continuing", err, mlog.Field("contenttype", p.header.Get("Content-Type")), mlog.Field("mediatype", p.MediaType), mlog.Field("mediasubtype", p.MediaSubType))
+	} else if mt != "" {
 		t := strings.SplitN(strings.ToUpper(mt), "/", 2)
 		if len(t) != 2 {
-			return p, fmt.Errorf("bad content-type: %q (content-type %q)", mt, ct)
+			if moxvar.Pedantic || strict {
+				return p, fmt.Errorf("bad content-type: %q (content-type %q)", mt, ct)
+			}
+			log.Debug("malformed media-type, ignoring and continuing", mlog.Field("type", mt))
+			p.MediaType = "APPLICATION"
+			p.MediaSubType = "OCTET-STREAM"
+		} else {
+			p.MediaType = t[0]
+			p.MediaSubType = t[1]
+			p.ContentTypeParams = params
 		}
-		p.MediaType = t[0]
-		p.MediaSubType = t[1]
-		p.ContentTypeParams = params
 	}
 
 	p.ContentID = p.header.Get("Content-Id")
@@ -314,7 +349,7 @@ func newPart(r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
 	p.ContentTransferEncoding = strings.ToUpper(p.header.Get("Content-Transfer-Encoding"))
 
 	if parent == nil {
-		p.Envelope, err = parseEnvelope(mail.Header(p.header))
+		p.Envelope, err = parseEnvelope(log, mail.Header(p.header))
 		if err != nil {
 			return p, err
 		}
@@ -411,7 +446,7 @@ var wordDecoder = mime.WordDecoder{
 	},
 }
 
-func parseEnvelope(h mail.Header) (*Envelope, error) {
+func parseEnvelope(log *mlog.Log, h mail.Header) (*Envelope, error) {
 	date, _ := h.Date()
 
 	// We currently marshal this field to JSON. But JSON cannot represent all
@@ -433,19 +468,19 @@ func parseEnvelope(h mail.Header) (*Envelope, error) {
 	env := &Envelope{
 		date,
 		subject,
-		parseAddressList(h, "from"),
-		parseAddressList(h, "sender"),
-		parseAddressList(h, "reply-to"),
-		parseAddressList(h, "to"),
-		parseAddressList(h, "cc"),
-		parseAddressList(h, "bcc"),
+		parseAddressList(log, h, "from"),
+		parseAddressList(log, h, "sender"),
+		parseAddressList(log, h, "reply-to"),
+		parseAddressList(log, h, "to"),
+		parseAddressList(log, h, "cc"),
+		parseAddressList(log, h, "bcc"),
 		h.Get("In-Reply-To"),
 		h.Get("Message-Id"),
 	}
 	return env, nil
 }
 
-func parseAddressList(h mail.Header, k string) []Address {
+func parseAddressList(log *mlog.Log, h mail.Header, k string) []Address {
 	l, err := h.AddressList(k)
 	if err != nil {
 		return nil
@@ -457,7 +492,7 @@ func parseAddressList(h mail.Header, k string) []Address {
 		addr, err := smtp.ParseAddress(a.Address)
 		if err != nil {
 			// todo: pass a ctx to this function so we can log with cid.
-			xlog.Infox("parsing address", err, mlog.Field("address", a.Address))
+			log.Infox("parsing address (continuing)", err, mlog.Field("address", a.Address))
 		} else {
 			user = addr.Localpart.String()
 			host = addr.Domain.ASCII
@@ -470,7 +505,7 @@ func parseAddressList(h mail.Header, k string) []Address {
 // ParseNextPart parses the next (sub)part of this multipart message.
 // ParseNextPart returns io.EOF and a nil part when there are no more parts.
 // Only used for initial parsing of message. Once parsed, use p.Parts.
-func (p *Part) ParseNextPart() (*Part, error) {
+func (p *Part) ParseNextPart(log *mlog.Log) (*Part, error) {
 	if len(p.bound) == 0 {
 		return nil, errNotMultipart
 	}
@@ -479,7 +514,7 @@ func (p *Part) ParseNextPart() (*Part, error) {
 			panic("access not sequential")
 		}
 		// Set nextBoundOffset by fully reading the last part.
-		last, err := newPart(p.r, p.lastBoundOffset, p)
+		last, err := newPart(log, p.strict, p.r, p.lastBoundOffset, p)
 		if err != nil {
 			return nil, err
 		}
@@ -490,7 +525,7 @@ func (p *Part) ParseNextPart() (*Part, error) {
 			return nil, fmt.Errorf("internal error: reading part did not set nextBoundOffset")
 		}
 	}
-	b := &bufAt{r: p.r, offset: p.nextBoundOffset}
+	b := &bufAt{strict: p.strict, r: p.r, offset: p.nextBoundOffset}
 	// todo: should we require a crlf on final closing bound? we don't require it because some message/rfc822 don't have a crlf after their closing boundary, so those messages don't end in crlf.
 	line, crlf, err := b.ReadLine(false)
 	if err != nil {
@@ -523,7 +558,7 @@ func (p *Part) ParseNextPart() (*Part, error) {
 	boundOffset := p.nextBoundOffset
 	p.lastBoundOffset = boundOffset
 	p.nextBoundOffset = -1
-	np, err := newPart(p.r, boundOffset, p)
+	np, err := newPart(log, p.strict, p.r, boundOffset, p)
 	if err != nil {
 		return nil, err
 	}
@@ -623,13 +658,37 @@ func (p *Part) RawReader() io.Reader {
 		panic("missing reader")
 	}
 	if p.EndOffset >= 0 {
-		return io.NewSectionReader(p.r, p.BodyOffset, p.EndOffset-p.BodyOffset)
+		return &crlfReader{strict: p.strict, r: io.NewSectionReader(p.r, p.BodyOffset, p.EndOffset-p.BodyOffset)}
 	}
 	p.RawLineCount = 0
 	if p.parent == nil {
-		return &offsetReader{p, p.BodyOffset, true, false}
+		return &offsetReader{p, p.BodyOffset, p.strict, true, false}
 	}
-	return &boundReader{p: p, b: &bufAt{r: p.r, offset: p.BodyOffset}, prevlf: true}
+	return &boundReader{p: p, b: &bufAt{strict: p.strict, r: p.r, offset: p.BodyOffset}, prevlf: true}
+}
+
+// crlfReader verifies there are no bare newlines and optionally no bare carriage returns.
+type crlfReader struct {
+	r      io.Reader
+	strict bool
+	prevcr bool
+}
+
+func (r *crlfReader) Read(buf []byte) (int, error) {
+	n, err := r.r.Read(buf)
+	if err == nil || err == io.EOF {
+		for _, b := range buf[:n] {
+			if b == '\n' && !r.prevcr {
+				err = errBareLF
+				break
+			} else if b != '\n' && r.prevcr && (r.strict || moxvar.Pedantic) {
+				err = errBareCR
+				break
+			}
+			r.prevcr = b == '\r'
+		}
+	}
+	return n, err
 }
 
 // bufAt is a buffered reader on an underlying ReaderAt.
@@ -637,6 +696,7 @@ func (p *Part) RawReader() io.Reader {
 type bufAt struct {
 	offset int64 // Offset in r currently consumed, i.e. not including any buffered data.
 
+	strict  bool
 	r       io.ReaderAt
 	buf     []byte // Buffered data.
 	nbuf    int    // Valid bytes in buf.
@@ -698,7 +758,7 @@ func (b *bufAt) line(consume, requirecrlf bool) (buf []byte, crlf bool, err erro
 		}
 		i++
 		if i >= b.nbuf || b.buf[i] != '\n' {
-			if moxvar.Pedantic {
+			if b.strict || moxvar.Pedantic {
 				return nil, false, errBareCR
 			}
 			continue
@@ -743,6 +803,7 @@ func (b *bufAt) PeekByte() (byte, error) {
 type offsetReader struct {
 	p      *Part
 	offset int64
+	strict bool
 	prevlf bool
 	prevcr bool
 }
@@ -759,7 +820,7 @@ func (r *offsetReader) Read(buf []byte) (int, error) {
 			if err == nil || err == io.EOF {
 				if c == '\n' && !r.prevcr {
 					err = errBareLF
-				} else if c != '\n' && r.prevcr && moxvar.Pedantic {
+				} else if c != '\n' && r.prevcr && (r.strict || moxvar.Pedantic) {
 					err = errBareCR
 				}
 			}
@@ -784,7 +845,6 @@ type boundReader struct {
 	nbuf   int    // Number of valid bytes in buf.
 	crlf   []byte // Possible crlf, to be returned if we do not yet encounter a boundary.
 	prevlf bool   // If last char returned was a newline. For counting lines.
-	prevcr bool
 }
 
 func (b *boundReader) Read(buf []byte) (count int, rerr error) {
@@ -795,15 +855,7 @@ func (b *boundReader) Read(buf []byte) (count int, rerr error) {
 				if b.prevlf {
 					b.p.RawLineCount++
 				}
-				if rerr == nil || rerr == io.EOF {
-					if c == '\n' && !b.prevcr {
-						rerr = errBareLF
-					} else if c != '\n' && b.prevcr && moxvar.Pedantic {
-						rerr = errBareCR
-					}
-				}
 				b.prevlf = c == '\n'
-				b.prevcr = c == '\r'
 			}
 		}
 	}()

@@ -55,7 +55,7 @@ func TestAppend(t *testing.T) {
 	tc3.transactf("ok", "noop")
 	tc3.xuntagged() // Inbox is not selected, nothing to report.
 
-	tc2.transactf("ok", "append inbox (\\Seen) \" 1-Jan-2022 10:10:00 +0100\" UTF8 ({34+}\r\ncontent-type: text/plain;;\r\n\r\ntest)")
+	tc2.transactf("ok", "append inbox (\\Seen) \" 1-Jan-2022 10:10:00 +0100\" UTF8 ({47+}\r\ncontent-type: just completely invalid;;\r\n\r\ntest)")
 	tc2.xuntagged(imapclient.UntaggedExists(2))
 	tc2.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UID: 2})
 

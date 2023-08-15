@@ -11,6 +11,7 @@ import (
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -22,17 +23,17 @@ import (
 // The first return value is the machine-parsed DSN message. The second value is
 // the entire MIME multipart message. Use its Parts field to access the
 // human-readable text and optional original message/headers.
-func Parse(r io.ReaderAt) (*Message, *message.Part, error) {
+func Parse(log *mlog.Log, r io.ReaderAt) (*Message, *message.Part, error) {
 	// DSNs can mix and match subtypes with and without utf-8. ../rfc/6533:441
 
-	part, err := message.Parse(r)
+	part, err := message.Parse(log, false, r)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parsing message: %v", err)
 	}
 	if part.MediaType != "MULTIPART" || part.MediaSubType != "REPORT" {
 		return nil, nil, fmt.Errorf(`message has content-type %q, must have "message/report"`, strings.ToLower(part.MediaType+"/"+part.MediaSubType))
 	}
-	err = part.Walk(nil)
+	err = part.Walk(log, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parsing message parts: %v", err)
 	}

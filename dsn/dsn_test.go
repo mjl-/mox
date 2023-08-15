@@ -19,6 +19,8 @@ import (
 	"github.com/mjl-/mox/smtp"
 )
 
+var xlog = mlog.New("dsn")
+
 func xparseDomain(s string) dns.Domain {
 	d, err := dns.ParseDomain(s)
 	if err != nil {
@@ -33,7 +35,7 @@ func xparseIPDomain(s string) dns.IPDomain {
 
 func tparseMessage(t *testing.T, data []byte, nparts int) (*Message, *message.Part) {
 	t.Helper()
-	m, p, err := Parse(bytes.NewReader(data))
+	m, p, err := Parse(xlog, bytes.NewReader(data))
 	if err != nil {
 		t.Fatalf("parsing dsn: %v", err)
 	}

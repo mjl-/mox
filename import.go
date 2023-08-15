@@ -325,7 +325,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			mb.Add(m.MailboxCounts())
 
 			// Parse message and store parsed information for later fast retrieval.
-			p, err := message.EnsurePart(msgf, m.Size)
+			p, err := message.EnsurePart(ctl.log, false, msgf, m.Size)
 			if err != nil {
 				ctl.log.Infox("parsing message, continuing", err, mlog.Field("path", origPath))
 			}

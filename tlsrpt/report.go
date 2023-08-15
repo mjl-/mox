@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mjl-/mox/message"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
 )
 
@@ -137,9 +138,9 @@ func Parse(r io.Reader) (*Report, error) {
 // ParseMessage parses a Report from a mail message.
 // The maximum size of the message is 15MB, the maximum size of the
 // decompressed report is 20MB.
-func ParseMessage(r io.ReaderAt) (*Report, error) {
+func ParseMessage(log *mlog.Log, r io.ReaderAt) (*Report, error) {
 	// ../rfc/8460:905
-	p, err := message.Parse(&moxio.LimitAtReader{R: r, Limit: 15 * 1024 * 1024})
+	p, err := message.Parse(log, true, &moxio.LimitAtReader{R: r, Limit: 15 * 1024 * 1024})
 	if err != nil {
 		return nil, fmt.Errorf("parsing mail message: %s", err)
 	}
@@ -147,10 +148,10 @@ func ParseMessage(r io.ReaderAt) (*Report, error) {
 	// Using multipart appears optional, and similar to DMARC someone may decide to
 	// send it like that, so accept a report if it's the entire message.
 	const allow = true
-	return parseMessageReport(p, allow)
+	return parseMessageReport(log, p, allow)
 }
 
-func parseMessageReport(p message.Part, allow bool) (*Report, error) {
+func parseMessageReport(log *mlog.Log, p message.Part, allow bool) (*Report, error) {
 	if p.MediaType != "MULTIPART" {
 		if !allow {
 			return nil, ErrNoReport
@@ -159,7 +160,7 @@ func parseMessageReport(p message.Part, allow bool) (*Report, error) {
 	}
 
 	for {
-		sp, err := p.ParseNextPart()
+		sp, err := p.ParseNextPart(log)
 		if err == io.EOF {
 			return nil, ErrNoReport
 		}
@@ -169,7 +170,7 @@ func parseMessageReport(p message.Part, allow bool) (*Report, error) {
 		if p.MediaSubType == "REPORT" && p.ContentTypeParams["report-type"] != "tlsrpt" {
 			return nil, fmt.Errorf("unknown report-type parameter %q", p.ContentTypeParams["report-type"])
 		}
-		report, err := parseMessageReport(*sp, p.MediaSubType == "REPORT")
+		report, err := parseMessageReport(log, *sp, p.MediaSubType == "REPORT")
 		if err == ErrNoReport {
 			continue
 		} else if err != nil || report != nil {

@@ -309,6 +309,8 @@ func cmdJunkPlay(c *cmd) {
 
 	var nbad, nnodate, nham, nspam, nsent int
 
+	jlog := mlog.New("junkplay")
+
 	scanDir := func(dir string, ham, sent bool) {
 		for _, name := range listDir(dir) {
 			path := dir + "/" + name
@@ -316,7 +318,7 @@ func cmdJunkPlay(c *cmd) {
 			xcheckf(err, "open %q", path)
 			fi, err := mf.Stat()
 			xcheckf(err, "stat %q", path)
-			p, err := message.EnsurePart(mf, fi.Size())
+			p, err := message.EnsurePart(jlog, false, mf, fi.Size())
 			if err != nil {
 				nbad++
 				if err := mf.Close(); err != nil {
@@ -396,7 +398,7 @@ func cmdJunkPlay(c *cmd) {
 			}()
 			fi, err := mf.Stat()
 			xcheckf(err, "stat %q", path)
-			p, err := message.EnsurePart(mf, fi.Size())
+			p, err := message.EnsurePart(jlog, false, mf, fi.Size())
 			if err != nil {
 				log.Printf("bad sent message %q: %s", path, err)
 				return

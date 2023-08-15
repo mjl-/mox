@@ -88,7 +88,7 @@ func TestReport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open %q: %s", file, err)
 		}
-		report, err := tlsrpt.ParseMessage(f)
+		report, err := tlsrpt.ParseMessage(xlog, f)
 		f.Close()
 		if err != nil {
 			t.Fatalf("parsing TLSRPT from message %q: %s", file.Name(), err)

@@ -1045,7 +1045,7 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 	var part *message.Part
 	if m.ParsedBuf == nil {
 		mr := FileMsgReader(m.MsgPrefix, msgFile) // We don't close, it would close the msgFile.
-		p, err := message.EnsurePart(mr, m.Size)
+		p, err := message.EnsurePart(log, false, mr, m.Size)
 		if err != nil {
 			log.Infox("parsing delivered message", err, mlog.Field("parse", ""), mlog.Field("message", m.ID))
 			// We continue, p is still valid.
@@ -1365,7 +1365,7 @@ func MessageRuleset(log *mlog.Log, dest config.Destination, m *Message, msgPrefi
 	}
 
 	mr := FileMsgReader(msgPrefix, msgFile) // We don't close, it would close the msgFile.
-	p, err := message.Parse(mr)
+	p, err := message.Parse(log, false, mr)
 	if err != nil {
 		log.Errorx("parsing message for evaluating rulesets, continuing with headers", err, mlog.Field("parse", ""))
 		// note: part is still set.

@@ -141,7 +141,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		// Messages with DMARC aggregate reports must have a dmarc pass. ../rfc/7489:1866
 		if d.dmarcResult.Status != dmarc.StatusPass {
 			log.Info("received dmarc report without dmarc pass, not processing as dmarc report")
-		} else if report, err := dmarcrpt.ParseMessageReport(store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
+		} else if report, err := dmarcrpt.ParseMessageReport(log, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
 			log.Infox("parsing dmarc report", err)
 		} else if d, err := dns.ParseDomain(report.PolicyPublished.Domain); err != nil {
 			log.Infox("parsing domain in dmarc report", err)
@@ -173,7 +173,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 
 		if !ok {
 			log.Info("received mail to tlsrpt without acceptable DKIM signature, not processing as tls report")
-		} else if report, err := tlsrpt.ParseMessage(store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
+		} else if report, err := tlsrpt.ParseMessage(log, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
 			log.Infox("parsing tls report", err)
 		} else {
 			var known bool
@@ -274,7 +274,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 			log.Errorx("get key for verifying subject token", err)
 			return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonSubjectpassError)
 		}
-		err = subjectpass.Verify(d.dataFile, []byte(subjectpassKey), conf.SubjectPass.Period)
+		err = subjectpass.Verify(log, d.dataFile, []byte(subjectpassKey), conf.SubjectPass.Period)
 		pass := err == nil
 		log.Infox("pass by subject token", err, mlog.Field("pass", pass))
 		if pass {

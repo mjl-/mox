@@ -505,7 +505,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		}
 
 		// Parse message and store parsed information for later fast retrieval.
-		p, err := message.EnsurePart(f, m.Size)
+		p, err := message.EnsurePart(log, false, f, m.Size)
 		if err != nil {
 			problemf("parsing message %s: %s (continuing)", pos, err)
 		}

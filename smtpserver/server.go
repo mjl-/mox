@@ -1548,9 +1548,9 @@ func (c *conn) cmdData(p *parser) {
 
 	if Localserve {
 		// Require that message can be parsed fully.
-		p, err := message.Parse(dataFile)
+		p, err := message.Parse(c.log, false, dataFile)
 		if err == nil {
-			err = p.Walk(nil)
+			err = p.Walk(c.log, nil)
 		}
 		if err != nil {
 			// ../rfc/6409:541
@@ -1661,7 +1661,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// for other users.
 	// We don't check the Sender field, there is no expectation of verification, ../rfc/7489:2948
 	// and with Resent headers it seems valid to have someone else as Sender. ../rfc/5322:1578
-	msgFrom, header, err := message.From(dataFile)
+	msgFrom, header, err := message.From(c.log, true, dataFile)
 	if err != nil {
 		metricSubmission.WithLabelValues("badmessage").Inc()
 		c.log.Infox("parsing message From address", err, mlog.Field("user", c.username))
@@ -1854,7 +1854,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 	// todo: in decision making process, if we run into (some) temporary errors, attempt to continue. if we decide to accept, all good. if we decide to reject, we'll make it a temporary reject.
 
-	msgFrom, headers, err := message.From(dataFile)
+	msgFrom, headers, err := message.From(c.log, false, dataFile)
 	if err != nil {
 		c.log.Infox("parsing message for From address", err)
 	}
@@ -2388,7 +2388,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 		// Gather the message-id before we deliver and the file may be consumed.
 		if !parsedMessageID {
-			if p, err := message.Parse(store.FileMsgReader(m.MsgPrefix, dataFile)); err != nil {
+			if p, err := message.Parse(c.log, false, store.FileMsgReader(m.MsgPrefix, dataFile)); err != nil {
 				log.Infox("parsing message for message-id", err)
 			} else if header, err := p.Header(); err != nil {
 				log.Infox("parsing message header for message-id", err)

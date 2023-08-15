@@ -501,7 +501,7 @@ func (f *Filter) ClassifyMessagePath(ctx context.Context, path string) (probabil
 }
 
 func (f *Filter) ClassifyMessageReader(ctx context.Context, mf io.ReaderAt, size int64) (probability float64, words map[string]struct{}, nham, nspam int, rerr error) {
-	m, err := message.EnsurePart(mf, size)
+	m, err := message.EnsurePart(f.log, false, mf, size)
 	if err != nil && errors.Is(err, message.ErrBadContentType) {
 		// Invalid content-type header is a sure sign of spam.
 		//f.log.Infox("parsing content", err)
@@ -567,7 +567,7 @@ func (f *Filter) Train(ctx context.Context, ham bool, words map[string]struct{})
 }
 
 func (f *Filter) TrainMessage(ctx context.Context, r io.ReaderAt, size int64, ham bool) error {
-	p, _ := message.EnsurePart(r, size)
+	p, _ := message.EnsurePart(f.log, false, r, size)
 	words, err := f.ParseMessage(p)
 	if err != nil {
 		return fmt.Errorf("parsing mail contents: %v", err)
@@ -576,7 +576,7 @@ func (f *Filter) TrainMessage(ctx context.Context, r io.ReaderAt, size int64, ha
 }
 
 func (f *Filter) UntrainMessage(ctx context.Context, r io.ReaderAt, size int64, ham bool) error {
-	p, _ := message.EnsurePart(r, size)
+	p, _ := message.EnsurePart(f.log, false, r, size)
 	words, err := f.ParseMessage(p)
 	if err != nil {
 		return fmt.Errorf("parsing mail contents: %v", err)
