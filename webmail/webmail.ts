@@ -3706,7 +3706,7 @@ const newSearchView = (searchbarElem: HTMLInputElement, mailboxlistView: Mailbox
 						),
 					),
 					dom.tr(
-						dom.td(dom.label('Search', attr.for('searchSubject'))),
+						dom.td(dom.label('Subject', attr.for('searchSubject'))),
 						dom.td(
 							subject=dom.input(attr.id('searchSubject'), style({width: '100%'}), focusPlaceholder('"exact match"'), changeHandlers)
 						),
