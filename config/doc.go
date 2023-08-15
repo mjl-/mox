@@ -172,7 +172,8 @@ describe-static" and "mox config describe-domains":
 				# block list provider. If any of the listed DNSBLs contains a requested IP
 				# address, the message is rejected as spam. The DNSBLs are checked for healthiness
 				# before use, at most once per 4 hours. Example DNSBLs: sbl.spamhaus.org,
-				# bl.spamcop.net (optional)
+				# bl.spamcop.net. See https://www.spamhaus.org/sbl/ and https://www.spamcop.net/
+				# for more information and terms of use. (optional)
 				DNSBLs:
 					-
 
