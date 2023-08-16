@@ -197,7 +197,7 @@ done
 - Check if dependencies need updates.
 - Check code if there are deprecated features that can be removed.
 - Update features & roadmap in README.md
-- Write release notes, use instructions from updating.txt.
+- Write release notes.
 - Build and run tests with previous major Go release.
 - Run tests, including with race detector.
 - Run integration and upgrade tests.
@@ -207,7 +207,6 @@ done
 - Send and receive email with imap4/smtp clients.
 - Check DNS check admin page.
 - Check with https://internet.nl
-- Clear updating.txt.
 - Create git tag, push code.
 - Publish new docker image.
 - Publish signed release notes for updates.xmox.nl and update DNS record.

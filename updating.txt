@@ -1,3 +1,0 @@
-work in progress: update instructions for the next release
-
-- ...

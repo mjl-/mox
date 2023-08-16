@@ -313,14 +313,14 @@ Expand as necessary.
 
 Yes, see https://www.xmox.nl/screenshots/.
 
-Mox has an "account" web interface where users can view their account and
+Mox has a webmail for reading/writing messages.
+
+Mox also has an "account" web interface where users can view their account and
 manage their address configuration, such as rules for automatically delivering
 certain incoming messages to a specific mailbox.
 
-Mox also has an "admin" web interface where the mox instance administrator can
-make changes, e.g. add/remove/modify domains/accounts/addresses.
-
-Mox does not have a webmail yet, so there are no screenshots of actual email.
+And mox has an "admin" web interface where the administrator can make changes,
+e.g. add/remove/modify domains/accounts/addresses.
 
 ## Won't the big email providers block my email?
 
