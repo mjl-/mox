@@ -391,7 +391,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			if v != "" && linelen+1+len(s) > 77 {
 				v += "\r\n\t"
 				linelen = 1
-			} else {
+			} else if v != "" {
 				v += " "
 				linelen++
 			}
