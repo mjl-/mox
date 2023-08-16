@@ -46,6 +46,12 @@ possibly making them potentially no longer readable by the previous version.
 `
 	var fix bool
 	c.flag.BoolVar(&fix, "fix", false, "fix fixable problems, such as moving away message files not referenced by their database")
+
+	// To prevent aborting the upgrade test with v0.0.[45] that had a message with
+	// incorrect Size.
+	var skipSizeCheck bool
+	c.flag.BoolVar(&skipSizeCheck, "skip-size-check", false, "skip the check for message size")
+
 	args := c.Parse()
 	if len(args) != 1 {
 		c.Usage()
@@ -140,7 +146,7 @@ possibly making them potentially no longer readable by the previous version.
 	checkFile := func(dbpath, path string, prefixSize int, size int64) {
 		st, err := os.Stat(path)
 		checkf(err, path, "checking if file exists")
-		if err == nil && int64(prefixSize)+st.Size() != size {
+		if !skipSizeCheck && err == nil && int64(prefixSize)+st.Size() != size {
 			filesize := st.Size()
 			checkf(fmt.Errorf("%s: message size is %d, should be %d (length of MsgPrefix %d + file size %d), see \"mox fixmsgsize\"", path, size, int64(prefixSize)+st.Size(), prefixSize, filesize), dbpath, "checking message size")
 		}

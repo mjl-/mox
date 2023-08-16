@@ -677,7 +677,6 @@ func OpenAccount(name string) (*Account, error) {
 	if err != nil {
 		return nil, err
 	}
-	acc.nused++
 	openAccounts.names[name] = acc
 	return acc, nil
 }
@@ -685,13 +684,20 @@ func OpenAccount(name string) (*Account, error) {
 // openAccount opens an existing account, or creates it if it is missing.
 func openAccount(name string) (a *Account, rerr error) {
 	dir := filepath.Join(mox.DataDirPath("accounts"), name)
-	dbpath := filepath.Join(dir, "index.db")
+	return OpenAccountDB(dir, name)
+}
+
+// OpenAccountDB opens an account database file and returns an initialized account
+// or error. Only exported for use by subcommands that verify the database file.
+// Almost all account opens must go through OpenAccount/OpenEmail/OpenEmailAuth.
+func OpenAccountDB(accountDir, accountName string) (a *Account, rerr error) {
+	dbpath := filepath.Join(accountDir, "index.db")
 
 	// Create account if it doesn't exist yet.
 	isNew := false
 	if _, err := os.Stat(dbpath); err != nil && os.IsNotExist(err) {
 		isNew = true
-		os.MkdirAll(dir, 0770)
+		os.MkdirAll(accountDir, 0770)
 	}
 
 	db, err := bstore.Open(context.TODO(), dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
@@ -719,7 +725,7 @@ func openAccount(name string) (a *Account, rerr error) {
 			return bstore.QueryTx[Mailbox](tx).FilterEqual("HaveCounts", false).ForEach(func(mb Mailbox) error {
 				if !mentioned {
 					mentioned = true
-					xlog.Info("first calculation of mailbox counts for account", mlog.Field("account", name))
+					xlog.Info("first calculation of mailbox counts for account", mlog.Field("account", accountName))
 				}
 				mc, err := mb.CalculateCounts(tx)
 				if err != nil {
@@ -736,10 +742,11 @@ func openAccount(name string) (a *Account, rerr error) {
 	}
 
 	return &Account{
-		Name:   name,
-		Dir:    dir,
+		Name:   accountName,
+		Dir:    accountDir,
 		DBPath: dbpath,
 		DB:     db,
+		nused:  1,
 	}, nil
 }
 

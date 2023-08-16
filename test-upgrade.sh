@@ -22,6 +22,7 @@ cd testdata/upgrade
 # Check that we can upgrade what we currently generate.
 ../../mox gentestdata data
 ../../mox verifydata data
+../../mox openaccounts data test0 test1 test2
 rm -r data
 echo
 
@@ -38,8 +39,13 @@ for tag in $tagsrev; do
 	(CGO_ENABLED=0 GOBIN=$PWD/$tag go install github.com/mjl-/mox@$tag)
 	# Generate with historic release.
 	./$tag/mox gentestdata $tag/data
-	# Verify with current code.
-	../../mox verifydata $tag/data
+	# Verify with current code. v0.0.[45] had a message with wrong Size. We don't
+	# want to abort the upgrade check because of it.
+	if test $tag = v0.0.4 -o $tag = v0.0.5; then
+		../../mox verifydata -skip-size-check $tag/data
+	else
+		../../mox verifydata $tag/data
+	fi
 	echo
 	rm -r $tag/data
 done
@@ -65,12 +71,18 @@ for tag in $tags; do
 		fi
 
 		echo "Upgrade data to $tag."
-		time ./$tag/mox verifydata stepdata
+		if test $tag = v0.0.4 -o $tag = v0.0.5; then
+			time ./$tag/mox verifydata stepdata
+		else
+			time ./$tag/mox verifydata -skip-size-check stepdata
+			time ./$tag/mox openaccounts stepdata test0 test1 test2
+		fi
 		echo
 	fi
 done
 echo "Testing final upgrade to current."
-time ../../mox verifydata stepdata
+time ../../mox verifydata -skip-size-check stepdata
+time ../../mox openaccounts stepdata test0 test1 test2
 rm -r stepdata
 rm */mox
 cd ../..

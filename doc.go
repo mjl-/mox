@@ -413,6 +413,8 @@ possibly making them potentially no longer readable by the previous version.
 	usage: mox verifydata data-dir
 	  -fix
 	    	fix fixable problems, such as moving away message files not referenced by their database
+	  -skip-size-check
+	    	skip the check for message size
 
 # mox config test
 

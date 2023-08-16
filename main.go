@@ -158,6 +158,7 @@ var commands = []struct {
 	{"gentestdata", cmdGentestdata},
 	{"ximport maildir", cmdXImportMaildir},
 	{"ximport mbox", cmdXImportMbox},
+	{"openaccounts", cmdOpenaccounts},
 }
 
 var cmds []cmd
@@ -2377,4 +2378,28 @@ func cmdMessageParse(c *cmd) {
 	enc.SetIndent("", "\t")
 	err = enc.Encode(part)
 	xcheckf(err, "write")
+}
+
+func cmdOpenaccounts(c *cmd) {
+	c.unlisted = true
+	c.params = "datadir account ..."
+	c.help = `Open and close accounts, for triggering data upgrades, for tests.
+
+Opens database files directly, not going through a running mox instance.
+`
+
+	args := c.Parse()
+	if len(args) <= 1 {
+		c.Usage()
+	}
+
+	dataDir := filepath.Clean(args[0])
+	for _, accName := range args[1:] {
+		accDir := filepath.Join(dataDir, "accounts", accName)
+		log.Printf("opening account %s...", filepath.Join(accDir, accName))
+		a, err := store.OpenAccountDB(accDir, accName)
+		xcheckf(err, "open account %s", accName)
+		err = a.Close()
+		xcheckf(err, "close account %s", accName)
+	}
 }
