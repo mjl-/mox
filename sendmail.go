@@ -274,7 +274,7 @@ binary should be setgid that group:
 	xsavecheckf(err, "parsing our local hostname")
 
 	var remoteHostname dns.Domain
-	if net.ParseIP(submitconf.Host) != nil {
+	if net.ParseIP(submitconf.Host) == nil {
 		remoteHostname, err = dns.ParseDomain(submitconf.Host)
 		xsavecheckf(err, "parsing remote hostname")
 	}
