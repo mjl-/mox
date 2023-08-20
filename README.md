@@ -62,7 +62,7 @@ Verify you have a working mox binary:
 Note: Mox only compiles for/works on unix systems, not on Plan 9 or Windows.
 
 You can also run mox with docker image `r.xmox.nl/mox`, with tags like `v0.0.1`
-and `v0.0.1-go1.20.1-alpine3.17.2`, see https://r.xmox.nl/repo/mox/.  See
+and `v0.0.1-go1.20.1-alpine3.17.2`, see https://r.xmox.nl/r/mox/.  See
 docker-compose.yml in this repository for instructions on starting. You must run
 docker with host networking, because mox needs to find your actual public IP's
 and get the remote IPs for incoming connections, not a local/internal NAT IP.
