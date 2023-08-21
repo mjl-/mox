@@ -428,6 +428,7 @@ type WebHandler struct {
 	Domain                string       `sconf-doc:"Both Domain and PathRegexp must match for this WebHandler to match a request. Exactly one of WebStatic, WebRedirect, WebForward must be set."`
 	PathRegexp            string       `sconf-doc:"Regular expression matched against request path, must always start with ^ to ensure matching from the start of the path. The matching prefix can optionally be stripped by WebForward. The regular expression does not have to end with $."`
 	DontRedirectPlainHTTP bool         `sconf:"optional" sconf-doc:"If set, plain HTTP requests are not automatically permanently redirected (308) to HTTPS. If you don't have a HTTPS webserver configured, set this to true."`
+	Compress              bool         `sconf:"optional" sconf-doc:"Transparently compress responses (currently with gzip) if the client supports it, the status is 200 OK, no Content-Encoding is set on the response yet and the Content-Type of the response hints that the data is compressible (text/..., specific application/... and .../...+json and .../...+xml). For static files only, a cache with compressed files is kept."`
 	WebStatic             *WebStatic   `sconf:"optional" sconf-doc:"Serve static files."`
 	WebRedirect           *WebRedirect `sconf:"optional" sconf-doc:"Redirect requests to configured URL."`
 	WebForward            *WebForward  `sconf:"optional" sconf-doc:"Forward requests to another webserver, i.e. reverse proxy."`

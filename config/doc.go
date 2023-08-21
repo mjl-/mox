@@ -910,6 +910,13 @@ describe-static" and "mox config describe-domains":
 			# (optional)
 			DontRedirectPlainHTTP: false
 
+			# Transparently compress responses (currently with gzip) if the client supports
+			# it, the status is 200 OK, no Content-Encoding is set on the response yet and the
+			# Content-Type of the response hints that the data is compressible (text/...,
+			# specific application/... and .../...+json and .../...+xml). For static files
+			# only, a cache with compressed files is kept. (optional)
+			Compress: false
+
 			# Serve static files. (optional)
 			WebStatic:
 

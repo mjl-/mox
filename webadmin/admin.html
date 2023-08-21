@@ -1938,7 +1938,8 @@ const webserver = async () => {
 						dom.td('LogName', attr({title: 'Name used during logging for requests matching this handler. If empty, the index of the handler in the list is used.'})),
 						dom.td('Domain', attr({title: 'Request must be for this domain to match this handler.'})),
 						dom.td('Path Regexp', attr({title: 'Request must match this path regular expression to match this handler. Must start with with a ^.'})),
-						dom.td('To HTTPS', attr({title: 'Redirect plain HTTP (non-TLS) requests to HTTPS'})),
+						dom.td('To HTTPS', attr({title: 'Redirect plain HTTP (non-TLS) requests to HTTPS.'})),
+						dom.td('Compress', attr({title: 'Transparently compress responses (currently with gzip) if the client supports it, the status is 200 OK, no Content-Encoding is set on the response yet and the Content-Type of the response hints that the data is compressible (text/..., specific application/... and .../...+json and .../...+xml). For static files only, a cache with compressed files is kept.'})),
 					),
 					dom.tr(
 						dom.td(
@@ -1952,6 +1953,9 @@ const webserver = async () => {
 						),
 						dom.td(
 							row.ToHTTPS=dom.input(attr({type: 'checkbox', title: 'Redirect plain HTTP (non-TLS) requests to HTTPS'}), !wh.DontRedirectPlainHTTP ? attr({checked: ''}) : []),
+						),
+						dom.td(
+							row.Compress=dom.input(attr({type: 'checkbox', title: 'Transparently compress responses.'}), wh.Compress ? attr({checked: ''}) : []),
 						),
 					),
 				),
@@ -2008,6 +2012,7 @@ const webserver = async () => {
 				Domain: row.Domain.value,
 				PathRegexp: row.PathRegexp.value,
 				DontRedirectPlainHTTP: !row.ToHTTPS.checked,
+				Compress: row.Compress.checked,
 			}
 			const s = row.type.value
 			const details = row.getDetails()

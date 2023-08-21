@@ -31,6 +31,8 @@ func TestWebserver(t *testing.T) {
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
 
+	loadStaticGzipCache(mox.DataDirPath("tmp/httpstaticcompresscache"), 1024*1024)
+
 	srv := &serve{Webserver: true}
 
 	test := func(method, target string, reqhdrs map[string]string, expCode int, expContent string, expHeaders map[string]string) {
@@ -66,10 +68,12 @@ func TestWebserver(t *testing.T) {
 	test("GET", "http://schemeredir.example", nil, http.StatusPermanentRedirect, "", map[string]string{"Location": "https://schemeredir.example/"})
 	test("GET", "https://schemeredir.example", nil, http.StatusNotFound, "", nil)
 
-	test("GET", "http://mox.example/static/", nil, http.StatusOK, "", map[string]string{"X-Test": "mox"})                              // index.html
-	test("GET", "http://mox.example/static/dir/", nil, http.StatusOK, "", map[string]string{"X-Test": "mox"})                          // listing
-	test("GET", "http://mox.example/static/dir", nil, http.StatusTemporaryRedirect, "", map[string]string{"Location": "/static/dir/"}) // redirect to dir
-	test("GET", "http://mox.example/static/bogus", nil, http.StatusNotFound, "", nil)
+	accgzip := map[string]string{"Accept-Encoding": "gzip"}
+	test("GET", "http://mox.example/static/", accgzip, http.StatusOK, "", map[string]string{"X-Test": "mox", "Content-Encoding": "gzip"})       // index.html
+	test("GET", "http://mox.example/static/dir/hi.txt", accgzip, http.StatusOK, "", map[string]string{"X-Test": "mox", "Content-Encoding": ""}) // too small to compress
+	test("GET", "http://mox.example/static/dir/", accgzip, http.StatusOK, "", map[string]string{"X-Test": "mox", "Content-Encoding": "gzip"})   // listing
+	test("GET", "http://mox.example/static/dir", accgzip, http.StatusTemporaryRedirect, "", map[string]string{"Location": "/static/dir/"})      // redirect to dir
+	test("GET", "http://mox.example/static/bogus", accgzip, http.StatusNotFound, "", map[string]string{"Content-Encoding": ""})
 
 	test("GET", "http://mox.example/nolist/", nil, http.StatusOK, "", nil)            // index.html
 	test("GET", "http://mox.example/nolist/dir/", nil, http.StatusForbidden, "", nil) // no listing
@@ -130,6 +134,26 @@ func TestWebserver(t *testing.T) {
 
 	test("GET", "http://mox.example/bogus", nil, http.StatusNotFound, "", nil)         // path not registered.
 	test("GET", "http://bogus.mox.example/static/", nil, http.StatusNotFound, "", nil) // domain not registered.
+
+	npaths := len(staticgzcache.paths)
+	if npaths != 1 {
+		t.Fatalf("%d file(s) in staticgzcache, expected 1", npaths)
+	}
+	loadStaticGzipCache(mox.DataDirPath("tmp/httpstaticcompresscache"), 1024*1024)
+	npaths = len(staticgzcache.paths)
+	if npaths != 1 {
+		t.Fatalf("%d file(s) in staticgzcache after loading from disk, expected 1", npaths)
+	}
+	loadStaticGzipCache(mox.DataDirPath("tmp/httpstaticcompresscache"), 0)
+	npaths = len(staticgzcache.paths)
+	if npaths != 0 {
+		t.Fatalf("%d file(s) in staticgzcache after setting max size to 0, expected 0", npaths)
+	}
+	loadStaticGzipCache(mox.DataDirPath("tmp/httpstaticcompresscache"), 0)
+	npaths = len(staticgzcache.paths)
+	if npaths != 0 {
+		t.Fatalf("%d file(s) in staticgzcache after setting max size to 0 and reloading from disk, expected 0", npaths)
+	}
 }
 
 func TestWebsocket(t *testing.T) {

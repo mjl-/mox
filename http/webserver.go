@@ -11,6 +11,7 @@ import (
 	"fmt"
 	htmltemplate "html/template"
 	"io"
+	"io/fs"
 	golog "log"
 	"net"
 	"net/http"
@@ -76,11 +77,14 @@ func WebHandle(w *loggingWriter, r *http.Request, host dns.Domain) (handled bool
 			u.Scheme = "https"
 			u.Host = h.DNSDomain.Name()
 			w.Handler = h.Name
+			w.Compress = h.Compress
 			http.Redirect(w, r, u.String(), http.StatusPermanentRedirect)
 			return true
 		}
 
-		if h.WebStatic != nil && HandleStatic(h.WebStatic, w, r) {
+		// We don't want the loggingWriter to override the static handler's decisions to compress.
+		w.Compress = h.Compress
+		if h.WebStatic != nil && HandleStatic(h.WebStatic, h.Compress, w, r) {
 			w.Handler = h.Name
 			return true
 		}
@@ -93,6 +97,7 @@ func WebHandle(w *loggingWriter, r *http.Request, host dns.Domain) (handled bool
 			return true
 		}
 	}
+	w.Compress = false
 	return false
 }
 
@@ -143,7 +148,7 @@ table > tbody > tr:nth-child(odd) { background-color: #f8f8f8; }
 // slash is written. If a directory is requested and an index.html exists, that
 // file is returned. Otherwise, for directories with ListFiles configured, a
 // directory listing is returned.
-func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (handled bool) {
+func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *http.Request) (handled bool) {
 	log := func() *mlog.Log {
 		return xlog.WithContext(r.Context())
 	}
@@ -174,13 +179,24 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 	// fspath will not have a trailing slash anymore, we'll correct for it
 	// later when the path turns out to be file instead of a directory.
 
-	serveFile := func(name string, mtime time.Time, content *os.File) {
+	serveFile := func(name string, fi fs.FileInfo, content *os.File) {
 		// ServeContent only sets a content-type if not already present in the response headers.
 		hdr := w.Header()
 		for k, v := range h.ResponseHeaders {
 			hdr.Add(k, v)
 		}
-		http.ServeContent(w, r, name, mtime, content)
+		// We transparently compress here, but still use ServeContent, because it handles
+		// conditional requests, range requests. It's a bit of a hack, but on first write
+		// to staticgzcacheReplacer where we are compressing, we write the full compressed
+		// file instead, and return an error to ServeContent so it stops. We still have all
+		// the useful behaviour (status code and headers) from ServeContent.
+		xw := w
+		if compress && acceptsGzip(r) && compressibleContent(content) {
+			xw = &staticgzcacheReplacer{w, r, content.Name(), content, fi.ModTime(), fi.Size(), 0, false}
+		} else {
+			w.(*loggingWriter).Compress = false
+		}
+		http.ServeContent(xw, r, name, fi.ModTime(), content)
 	}
 
 	f, err := os.Open(fspath)
@@ -206,7 +222,7 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 					return true
 				}
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				serveFile("index.html", ifi.ModTime(), index)
+				serveFile("index.html", ifi, index)
 				return true
 			}
 			http.Error(w, "403 - permission denied", http.StatusForbidden)
@@ -253,7 +269,7 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 			ifi, err = index.Stat()
 			if err == nil {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				serveFile("index.html", ifi.ModTime(), index)
+				serveFile("index.html", ifi, index)
 				return true
 			}
 		}
@@ -321,7 +337,7 @@ func HandleStatic(h *config.WebStatic, w http.ResponseWriter, r *http.Request) (
 		return true
 	}
 
-	serveFile(fspath, fi.ModTime(), f)
+	serveFile(fspath, fi, f)
 	return true
 }
 

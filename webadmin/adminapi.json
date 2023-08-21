@@ -3062,6 +3062,13 @@
 					]
 				},
 				{
+					"Name": "Compress",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
 					"Name": "WebStatic",
 					"Docs": "",
 					"Typewords": [

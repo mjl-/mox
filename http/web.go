@@ -4,9 +4,11 @@
 package http
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	golog "log"
 	"net"
 	"net/http"
@@ -70,8 +72,6 @@ var (
 	)
 )
 
-// todo: automatic gzip on responses, if client supports it, content is not already compressed. in case of static file only if it isn't too large. skip for certain response content-types (image/*, video/*), or file extensions if there is no identifying content-type. if cpu load isn't too high. if first N kb look compressible and come in quickly enough after first byte (e.g. within 100ms). always flush after 100ms to prevent stalled real-time connections.
-
 type responseWriterFlusher interface {
 	http.ResponseWriter
 	http.Flusher
@@ -84,11 +84,15 @@ type loggingWriter struct {
 	R                *http.Request
 	WebsocketRequest bool // Whether request from was websocket.
 
-	Handler string // Set by router.
+	// Set by router.
+	Handler  string
+	Compress bool
 
 	// Set by handlers.
 	StatusCode                   int
-	Size                         int64 // Of data served, for non-websocket responses.
+	Size                         int64        // Of data served to client, for non-websocket responses.
+	UncompressedSize             int64        // Can be set by a handler that already serves compressed data, and we update it while compressing.
+	Gzip                         *gzip.Writer // Only set if we transparently compress within loggingWriter (static handlers handle compression themselves, with a cache).
 	Err                          error
 	WebsocketResponse            bool        // If this was a successful websocket connection with backend.
 	SizeFromClient, SizeToClient int64       // Websocket data.
@@ -119,6 +123,36 @@ func (w *loggingWriter) proto(websocket bool) string {
 	return proto
 }
 
+func (w *loggingWriter) Write(buf []byte) (int, error) {
+	if w.StatusCode == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+
+	var n int
+	var err error
+	if w.Gzip == nil {
+		n, err = w.W.Write(buf)
+		if n > 0 {
+			w.Size += int64(n)
+		}
+	} else {
+		// We flush after each write. Probably takes a few more bytes, but prevents any
+		// issues due to buffering.
+		// w.Gzip.Write updates w.Size with the compressed byte count.
+		n, err = w.Gzip.Write(buf)
+		if err != nil {
+			err = w.Gzip.Flush()
+		}
+		if n > 0 {
+			w.UncompressedSize += int64(n)
+		}
+	}
+	if err != nil {
+		w.error(err)
+	}
+	return n, err
+}
+
 func (w *loggingWriter) setStatusCode(statusCode int) {
 	if w.StatusCode != 0 {
 		return
@@ -129,24 +163,106 @@ func (w *loggingWriter) setStatusCode(statusCode int) {
 	metricRequest.WithLabelValues(w.Handler, w.proto(w.WebsocketRequest), method, fmt.Sprintf("%d", w.StatusCode)).Observe(float64(time.Since(w.Start)) / float64(time.Second))
 }
 
-func (w *loggingWriter) Write(buf []byte) (int, error) {
-	if w.Size == 0 {
-		w.setStatusCode(http.StatusOK)
-	}
-
-	n, err := w.W.Write(buf)
-	if n > 0 {
-		w.Size += int64(n)
-	}
-	if err != nil {
-		w.error(err)
-	}
-	return n, err
+// SetUncompressedSize is used through an interface by
+// ../webmail/webmail.go:/WriteHeader, preventing an import cycle.
+func (w *loggingWriter) SetUncompressedSize(origSize int64) {
+	w.UncompressedSize = origSize
 }
 
 func (w *loggingWriter) WriteHeader(statusCode int) {
+	if w.StatusCode != 0 {
+		return
+	}
+
 	w.setStatusCode(statusCode)
+
+	// We transparently gzip-compress responses for requests under these conditions, all must apply:
+	//
+	// - Enabled for handler (static handlers make their own decisions).
+	// - Not a websocket request.
+	// - Regular success responses (not errors, or partial content or redirects or "not modified", etc).
+	// - Not already compressed, or any other Content-Encoding header (including "identity").
+	// - Client accepts gzip encoded responses.
+	// - The response has a content-type that is compressible (text/*, */*+{json,xml}, and a few common files (e.g. json, xml, javascript).
+	if w.Compress && !w.WebsocketRequest && statusCode == http.StatusOK && w.W.Header().Values("Content-Encoding") == nil && acceptsGzip(w.R) && compressibleContentType(w.W.Header().Get("Content-Type")) {
+		// todo: we should gather the first kb of data, see if it is compressible. if not, just return original. should set timer so we flush if it takes too long to gather 1kb. for smaller data we shouldn't compress at all.
+
+		// We track the gzipped output for the access log.
+		cw := countWriter{Writer: w.W, Size: &w.Size}
+		w.Gzip, _ = gzip.NewWriterLevel(cw, gzip.BestSpeed)
+		w.W.Header().Set("Content-Encoding", "gzip")
+		w.W.Header().Del("Content-Length") // No longer valid, set again for small responses by net/http.
+	}
 	w.W.WriteHeader(statusCode)
+}
+
+func acceptsGzip(r *http.Request) bool {
+	s := r.Header.Get("Accept-Encoding")
+	t := strings.Split(s, ",")
+	for _, e := range t {
+		e = strings.TrimSpace(e)
+		tt := strings.Split(e, ";")
+		if len(tt) > 1 && t[1] == "q=0" {
+			continue
+		}
+		if tt[0] == "gzip" {
+			return true
+		}
+	}
+	return false
+}
+
+var compressibleTypes = map[string]bool{
+	"application/csv":          true,
+	"application/javascript":   true,
+	"application/json":         true,
+	"application/x-javascript": true,
+	"application/xml":          true,
+	"image/vnd.microsoft.icon": true,
+	"image/x-icon":             true,
+	"font/ttf":                 true,
+	"font/eot":                 true,
+	"font/otf":                 true,
+	"font/opentype":            true,
+}
+
+func compressibleContentType(ct string) bool {
+	ct = strings.SplitN(ct, ";", 2)[0]
+	ct = strings.TrimSpace(ct)
+	ct = strings.ToLower(ct)
+	if compressibleTypes[ct] {
+		return true
+	}
+	t, st, _ := strings.Cut(ct, "/")
+	return t == "text" || strings.HasSuffix(st, "+json") || strings.HasSuffix(st, "+xml")
+}
+
+func compressibleContent(f *os.File) bool {
+	// We don't want to store many small files. They take up too much disk overhead.
+	if fi, err := f.Stat(); err != nil || fi.Size() < 1024 || fi.Size() > 10*1024*1024 {
+		return false
+	}
+
+	buf := make([]byte, 512)
+	n, err := f.ReadAt(buf, 0)
+	if err != nil && err != io.EOF {
+		return false
+	}
+	ct := http.DetectContentType(buf[:n])
+	return compressibleContentType(ct)
+}
+
+type countWriter struct {
+	Writer io.Writer
+	Size   *int64
+}
+
+func (w countWriter) Write(buf []byte) (int, error) {
+	n, err := w.Writer.Write(buf)
+	if n > 0 {
+		*w.Size += int64(n)
+	}
+	return n, err
 }
 
 var tlsVersions = map[uint16]string{
@@ -173,6 +289,12 @@ func (w *loggingWriter) error(err error) {
 }
 
 func (w *loggingWriter) Done() {
+	if w.Err == nil && w.Gzip != nil {
+		if err := w.Gzip.Close(); err != nil {
+			w.error(err)
+		}
+	}
+
 	method := metricHTTPMethod(w.R.Method)
 	metricResponse.WithLabelValues(w.Handler, w.proto(w.WebsocketResponse), method, fmt.Sprintf("%d", w.StatusCode)).Observe(float64(time.Since(w.Start)) / float64(time.Second))
 
@@ -212,6 +334,11 @@ func (w *loggingWriter) Done() {
 			mlog.Field("websocket", true),
 			mlog.Field("sizetoclient", w.SizeToClient),
 			mlog.Field("sizefromclient", w.SizeFromClient),
+		)
+	} else if w.UncompressedSize > 0 {
+		fields = append(fields,
+			mlog.Field("size", w.Size),
+			mlog.Field("uncompressedsize", w.UncompressedSize),
 		)
 	} else {
 		fields = append(fields,
@@ -338,6 +465,7 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 		}
 		if r.URL.Path == h.Path || strings.HasSuffix(h.Path, "/") && strings.HasPrefix(r.URL.Path, h.Path) {
 			nw.Handler = h.Name
+			nw.Compress = true
 			h.Handler.ServeHTTP(nw, r)
 			return
 		}
@@ -629,6 +757,8 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 
 // Serve starts serving on the initialized listeners.
 func Serve() {
+	loadStaticGzipCache(mox.DataDirPath("tmp/httpstaticcompresscache"), 512*1024*1024)
+
 	go webadmin.ManageAuthCache()
 	go webaccount.ImportManage()
 
