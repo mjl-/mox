@@ -23,7 +23,7 @@ const (
 type URI struct {
 	Address string // Should start with "mailto:".
 	MaxSize uint64 // Optional maximum message size, subject to Unit.
-	Unit    string // "" (b), "k", "g", "t" (case insensitive), unit size, where k is 2^10 etc.
+	Unit    string // "" (b), "k", "m", "g", "t" (case insensitive), unit size, where k is 2^10 etc.
 }
 
 // String returns a string representation of the URI for inclusion in a DMARC
@@ -33,7 +33,7 @@ func (u URI) String() string {
 	s = strings.ReplaceAll(s, ",", "%2C")
 	s = strings.ReplaceAll(s, "!", "%21")
 	if u.MaxSize > 0 {
-		s += fmt.Sprintf("%d", u.MaxSize)
+		s += fmt.Sprintf("!%d", u.MaxSize)
 	}
 	s += u.Unit
 	return s
@@ -109,13 +109,13 @@ func (r Record) String() string {
 		s := strings.Join(l, ",")
 		write(true, "ruf", s)
 	}
-	write(r.ADKIM != "", "adkim", string(r.ADKIM))
-	write(r.ASPF != "", "aspf", string(r.ASPF))
+	write(r.ADKIM != "" && r.ADKIM != "r", "adkim", string(r.ADKIM))
+	write(r.ASPF != "" && r.ASPF != "r", "aspf", string(r.ASPF))
 	write(r.AggregateReportingInterval != DefaultRecord.AggregateReportingInterval, "ri", fmt.Sprintf("%d", r.AggregateReportingInterval))
-	if len(r.FailureReportingOptions) > 1 || (len(r.FailureReportingOptions) == 1 && r.FailureReportingOptions[0] != "0") {
+	if len(r.FailureReportingOptions) > 1 || len(r.FailureReportingOptions) == 1 && r.FailureReportingOptions[0] != "0" {
 		write(true, "fo", strings.Join(r.FailureReportingOptions, ":"))
 	}
-	if len(r.ReportingFormat) > 1 || (len(r.ReportingFormat) == 1 && strings.EqualFold(r.ReportingFormat[0], "afrf")) {
+	if len(r.ReportingFormat) > 1 || len(r.ReportingFormat) == 1 && !strings.EqualFold(r.ReportingFormat[0], "afrf") {
 		write(true, "rf", strings.Join(r.FailureReportingOptions, ":"))
 	}
 	write(r.Percentage != 100, "pct", fmt.Sprintf("%d", r.Percentage))

@@ -20,6 +20,16 @@ func (e parseErr) Error() string {
 //
 // DefaultRecord provides default values for tags not present in s.
 func ParseRecord(s string) (record *Record, isdmarc bool, rerr error) {
+	return parseRecord(s, true)
+}
+
+// ParseRecordNoRequired is like ParseRecord, but don't check for required fields
+// for regular DMARC records. Useful for checking the _report._dmarc record.
+func ParseRecordNoRequired(s string) (record *Record, isdmarc bool, rerr error) {
+	return parseRecord(s, false)
+}
+
+func parseRecord(s string, checkRequired bool) (record *Record, isdmarc bool, rerr error) {
 	defer func() {
 		x := recover()
 		if x == nil {
@@ -134,7 +144,7 @@ func ParseRecord(s string) (record *Record, isdmarc bool, rerr error) {
 	// ../rfc/7489:1106 says "p" is required, but ../rfc/7489:1407 implies we must be
 	// able to parse a record without a "p" or with invalid "sp" tag.
 	sp := r.SubdomainPolicy
-	if !seen["p"] || sp != PolicyEmpty && sp != PolicyNone && sp != PolicyQuarantine && sp != PolicyReject {
+	if checkRequired && (!seen["p"] || sp != PolicyEmpty && sp != PolicyNone && sp != PolicyQuarantine && sp != PolicyReject) {
 		if len(r.AggregateReportAddresses) > 0 {
 			r.Policy = PolicyNone
 			r.SubdomainPolicy = PolicyEmpty

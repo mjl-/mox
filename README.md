@@ -109,16 +109,14 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 
 ## Roadmap
 
-- Rewrite account and admin javascript to typescript
-- Prepare data storage for JMAP
 - IMAP THREAD extension
+- Prepare data storage for JMAP
 - DANE and DNSSEC
 - Sending DMARC and TLS reports (currently only receiving)
-- Accepting/processing/monitoring DMARC reports for external domains
 - Calendaring
-- OAUTH2 support, for single sign on
 - Add special IMAP mailbox ("Queue?") that contains queued but
   not-yet-delivered messages
+- OAUTH2 support, for single sign on
 - Sieve for filtering (for now see Rulesets in the account config)
 - Privilege separation, isolating parts of the application to more restricted
   sandbox (e.g. new unauthenticated connections)

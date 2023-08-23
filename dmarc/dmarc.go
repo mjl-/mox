@@ -146,6 +146,63 @@ func lookupRecord(ctx context.Context, resolver dns.Resolver, domain dns.Domain)
 	return StatusNone, record, text, rerr
 }
 
+func lookupReportsRecord(ctx context.Context, resolver dns.Resolver, dmarcDomain, extDestDomain dns.Domain) (Status, *Record, string, error) {
+	name := dmarcDomain.ASCII + "._report._dmarc." + extDestDomain.ASCII + "."
+	txts, err := dns.WithPackage(resolver, "dmarc").LookupTXT(ctx, name)
+	if err != nil && !dns.IsNotFound(err) {
+		return StatusTemperror, nil, "", fmt.Errorf("%w: %s", ErrDNS, err)
+	}
+	var record *Record
+	var text string
+	var rerr error = ErrNoRecord
+	for _, txt := range txts {
+		r, isdmarc, err := ParseRecordNoRequired(txt)
+		// Examples in the RFC use "v=DMARC1", even though it isn't a valid DMARC record.
+		// Accept the specific example.
+		// ../rfc/7489-eid5440
+		if !isdmarc && txt == "v=DMARC1" {
+			xr := DefaultRecord
+			r, isdmarc, err = &xr, true, nil
+		}
+		if !isdmarc {
+			// ../rfc/7489:1374
+			continue
+		} else if err != nil {
+			return StatusPermerror, nil, text, fmt.Errorf("%w: %s", ErrSyntax, err)
+		}
+		if record != nil {
+			// ../ ../rfc/7489:1388
+			return StatusNone, nil, "", ErrMultipleRecords
+		}
+		text = txt
+		record = r
+		rerr = nil
+	}
+	return StatusNone, record, text, rerr
+}
+
+// LookupExternalReportsAccepted returns whether the extDestDomain has opted in
+// to receiving dmarc reports for dmarcDomain (where the dmarc record was found),
+// through a "._report._dmarc." DNS TXT DMARC record.
+//
+// Callers should look at status for interpretation, not err, because err will
+// be set to ErrNoRecord when the DNS TXT record isn't present, which means the
+// extDestDomain does not opt in (not a failure condition).
+//
+// The normally invalid "v=DMARC1" record is accepted since it is used as
+// example in RFC 7489.
+func LookupExternalReportsAccepted(ctx context.Context, resolver dns.Resolver, dmarcDomain dns.Domain, extDestDomain dns.Domain) (accepts bool, status Status, record *Record, txt string, rerr error) {
+	log := xlog.WithContext(ctx)
+	start := time.Now()
+	defer func() {
+		log.Debugx("dmarc externalreports result", rerr, mlog.Field("accepts", accepts), mlog.Field("dmarcdomain", dmarcDomain), mlog.Field("extdestdomain", extDestDomain), mlog.Field("record", record), mlog.Field("duration", time.Since(start)))
+	}()
+
+	status, record, txt, rerr = lookupReportsRecord(ctx, resolver, dmarcDomain, extDestDomain)
+	accepts = rerr == nil
+	return accepts, status, record, txt, rerr
+}
+
 // Verify evaluates the DMARC policy for the domain in the From-header of a
 // message given the DKIM and SPF evaluation results.
 //

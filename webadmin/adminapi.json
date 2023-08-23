@@ -1446,7 +1446,7 @@
 				},
 				{
 					"Name": "Unit",
-					"Docs": "\"\" (b), \"k\", \"g\", \"t\" (case insensitive), unit size, where k is 2^10 etc.",
+					"Docs": "\"\" (b), \"k\", \"m\", \"g\", \"t\" (case insensitive), unit size, where k is 2^10 etc.",
 					"Typewords": [
 						"string"
 					]

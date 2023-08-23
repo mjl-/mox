@@ -15,6 +15,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"runtime/debug"
@@ -45,6 +46,7 @@ import (
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/mtastsdb"
+	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/spf"
@@ -932,23 +934,43 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		if record != nil && len(record.AggregateReportAddresses) == 0 {
 			addf(&r.DMARC.Warnings, "It is recommended you specify you would like aggregate reports about delivery success in the DMARC record, see instructions.")
 		}
-		localpart := smtp.Localpart("dmarc-reports")
+
+		dmarcr := dmarc.DefaultRecord
+		dmarcr.Policy = "reject"
+
+		var extInstr string
 		if domConf.DMARC != nil {
-			localpart = domConf.DMARC.ParsedLocalpart
+			// If the domain is in a different Organizational Domain, the receiving domain
+			// needs a special DNS record to opt-in to receiving reports. We check for that
+			// record.
+			// ../rfc/7489:1541
+			orgDom := publicsuffix.Lookup(ctx, domain)
+			destOrgDom := publicsuffix.Lookup(ctx, domConf.DMARC.DNSDomain)
+			if orgDom != destOrgDom {
+				accepts, status, _, _, err := dmarc.LookupExternalReportsAccepted(ctx, resolver, domain, domConf.DMARC.DNSDomain)
+				if status != dmarc.StatusNone {
+					addf(&r.DMARC.Errors, "Checking if external destination accepts reports: %s", err)
+				} else if !accepts {
+					addf(&r.DMARC.Errors, "External destination does not accept reports (%s)", err)
+				}
+				extInstr = fmt.Sprintf("Ensure a DNS TXT record exists in the domain of the destination address to opt-in to receiving reports from this domain:\n\n\t%s._report._dmarc.%s. IN TXT \"v=DMARC1;\"\n\n", domain.ASCII, domConf.DMARC.DNSDomain.ASCII)
+			}
+
+			uri := url.URL{
+				Scheme: "mailto",
+				Opaque: smtp.NewAddress(domConf.DMARC.ParsedLocalpart, domConf.DMARC.DNSDomain).Pack(false),
+			}
+			dmarcr.AggregateReportAddresses = []dmarc.URI{
+				{Address: uri.String(), MaxSize: 10, Unit: "m"},
+			}
 		} else {
-			addf(&r.DMARC.Instructions, `Configure a DMARC destination in domain in config file. Localpart could be %q.`, localpart)
-		}
-		dmarcr := dmarc.Record{
-			Version: "DMARC1",
-			Policy:  "reject",
-			AggregateReportAddresses: []dmarc.URI{
-				{Address: fmt.Sprintf("mailto:%s!10m", smtp.NewAddress(localpart, domain).Pack(false))},
-			},
-			AggregateReportingInterval: 86400,
-			Percentage:                 100,
+			addf(&r.DMARC.Instructions, `Configure a DMARC destination in domain in config file.`)
 		}
 		instr := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_dmarc IN TXT %s\n\nYou can start with testing mode by replacing p=reject with p=none. You can also request for the policy to be applied to a percentage of emails instead of all, by adding pct=X, with X between 0 and 100. Keep in mind that receiving mail servers will apply some anti-spam assessment regardless of the policy and whether it is applied to the message. The ruf= part requests daily aggregate reports to be sent to the specified address, which is automatically configured and reports automatically analyzed.", mox.TXTStrings(dmarcr.String()))
 		addf(&r.DMARC.Instructions, instr)
+		if extInstr != "" {
+			addf(&r.DMARC.Instructions, extInstr)
+		}
 	}()
 
 	// TLSRPT
@@ -966,23 +988,31 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 			r.TLSRPT.Record = &TLSRPTRecord{*record}
 		}
 
-		localpart := smtp.Localpart("tls-reports")
+		instr := fmt.Sprintf(`TLSRPT is an opt-in mechanism to request feedback about TLS connectivity from remote SMTP servers when they connect to us. It allows detecting delivery problems and unwanted downgrades to plaintext SMTP connections. With TLSRPT you configure an email address to which reports should be sent. Remote SMTP servers will send a report once a day with the number of successful connections, and the number of failed connections including details that should help debugging/resolving any issues.`)
 		if domConf.TLSRPT != nil {
-			localpart = domConf.TLSRPT.ParsedLocalpart
-		} else {
-			addf(&r.TLSRPT.Errors, `Configure a TLSRPT destination in domain in config file. Localpart could be %q.`, localpart)
-		}
-		tlsrptr := &tlsrpt.Record{
-			Version: "TLSRPTv1",
-			// todo: should URI-encode the URI, including ',', '!' and ';'.
-			RUAs: [][]string{{fmt.Sprintf("mailto:%s", smtp.NewAddress(localpart, domain).Pack(false))}},
-		}
-		instr := fmt.Sprintf(`TLSRPT is an opt-in mechanism to request feedback about TLS connectivity from remote SMTP servers when they connect to us. It allows detecting delivery problems and unwanted downgrades to plaintext SMTP connections. With TLSRPT you configure an email address to which reports should be sent. Remote SMTP servers will send a report once a day with the number of successful connections, and the number of failed connections including details that should help debugging/resolving any issues.
+			// TLSRPT does not require validation of reporting addresses outside the domain.
+			// ../rfc/8460:1463
+			uri := url.URL{
+				Scheme: "mailto",
+				Opaque: smtp.NewAddress(domConf.TLSRPT.ParsedLocalpart, domConf.TLSRPT.DNSDomain).Pack(false),
+			}
+			uristr := uri.String()
+			uristr = strings.ReplaceAll(uristr, ",", "%2C")
+			uristr = strings.ReplaceAll(uristr, "!", "%21")
+			uristr = strings.ReplaceAll(uristr, ";", "%3B")
+			tlsrptr := &tlsrpt.Record{
+				Version: "TLSRPTv1",
+				RUAs:    [][]string{{uristr}},
+			}
+			instr += fmt.Sprintf(`
 
 Ensure a DNS TXT record like the following exists:
 
 	_smtp._tls IN TXT %s
 `, mox.TXTStrings(tlsrptr.String()))
+		} else {
+			addf(&r.TLSRPT.Errors, `Configure a TLSRPT destination in domain in config file.`)
+		}
 		addf(&r.TLSRPT.Instructions, instr)
 	}()
 

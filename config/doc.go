@@ -45,8 +45,8 @@ describe-static" and "mox config describe-domains":
 
 	# If enabled, a single DNS TXT lookup of _updates.xmox.nl is done every 24h to
 	# check for a new release. Each time a new release is found, a changelog is
-	# fetched from https://updates.xmox.nl and delivered to the postmaster mailbox.
-	# (optional)
+	# fetched from https://updates.xmox.nl/changelog and delivered to the postmaster
+	# mailbox. (optional)
 	CheckUpdates: false
 
 	# In pedantic mode protocol violations (that happen in the wild) for SMTP/IMAP/etc
@@ -601,6 +601,10 @@ describe-static" and "mox config describe-domains":
 				# non-internationalized. Recommended value: dmarc-reports.
 				Localpart:
 
+				# Alternative domain for report recipient address. Can be used to receive reports
+				# for other domains. Unicode name. (optional)
+				Domain:
+
 				# Account to deliver to.
 				Account:
 
@@ -639,6 +643,10 @@ describe-static" and "mox config describe-domains":
 				# Address-part before the @ that accepts TLSRPT reports. Recommended value:
 				# tls-reports.
 				Localpart:
+
+				# Alternative domain for report recipient address. Can be used to receive reports
+				# for other domains. Unicode name. (optional)
+				Domain:
 
 				# Account to deliver to.
 				Account:

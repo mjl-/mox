@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,11 +19,13 @@ import (
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
+	"github.com/mjl-/mox/dmarc"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/junk"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/tlsrpt"
 )
 
 // TXTStrings returns a TXT record value as one or more quoted strings, taking the max
@@ -496,6 +499,17 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 		records = append(records, s)
 
 	}
+	dmarcr := dmarc.DefaultRecord
+	dmarcr.Policy = "reject"
+	if domConf.DMARC != nil {
+		uri := url.URL{
+			Scheme: "mailto",
+			Opaque: smtp.NewAddress(domConf.DMARC.ParsedLocalpart, domConf.DMARC.DNSDomain).Pack(false),
+		}
+		dmarcr.AggregateReportAddresses = []dmarc.URI{
+			{Address: uri.String(), MaxSize: 10, Unit: "m"},
+		}
+	}
 	records = append(records,
 		"",
 
@@ -505,10 +519,11 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 		fmt.Sprintf(`%s.                    IN TXT "v=spf1 mx ~all"`, d),
 		"",
 
-		"; Emails that fail the DMARC check (without DKIM and without SPF) should be rejected, and request reports.",
-		"; If you email through mailing lists that strip DKIM-Signature headers and don't",
-		"; rewrite the From header, you may want to set the policy to p=none.",
-		fmt.Sprintf(`_dmarc.%s.             IN TXT "v=DMARC1; p=reject; rua=mailto:dmarc-reports@%s!10m"`, d, d),
+		"; Emails that fail the DMARC check (without aligned DKIM and without aligned SPF)",
+		"; should be rejected, and request reports. If you email through mailing lists that",
+		"; strip DKIM-Signature headers and don't rewrite the From header, you may want to",
+		"; set the policy to p=none.",
+		fmt.Sprintf(`_dmarc.%s.             IN TXT "%s"`, d, dmarcr.String()),
 		"",
 	)
 
@@ -527,11 +542,20 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 		)
 	}
 
-	records = append(records,
-		"; Request reporting about TLS failures.",
-		fmt.Sprintf(`_smtp._tls.%s.         IN TXT "v=TLSRPTv1; rua=mailto:tls-reports@%s"`, d, d),
-		"",
+	if domConf.TLSRPT != nil {
+		uri := url.URL{
+			Scheme: "mailto",
+			Opaque: smtp.NewAddress(domConf.TLSRPT.ParsedLocalpart, domConf.TLSRPT.DNSDomain).Pack(false),
+		}
+		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]string{{uri.String()}}}
+		records = append(records,
+			"; Request reporting about TLS failures.",
+			fmt.Sprintf(`_smtp._tls.%s.         IN TXT "%s"`, d, tlsrptr.String()),
+			"",
+		)
+	}
 
+	records = append(records,
 		"; Autoconfig is used by Thunderbird. Autodiscover is (in theory) used by Microsoft.",
 		fmt.Sprintf(`autoconfig.%s.         IN CNAME %s.`, d, h),
 		fmt.Sprintf(`_autodiscover._tcp.%s. IN SRV 0 1 443 autoconfig.%s.`, d, d),

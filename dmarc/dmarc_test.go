@@ -50,6 +50,45 @@ func TestLookup(t *testing.T) {
 	test("sub.example.com", StatusNone, "example.com", &r, nil) // Policy published at organizational domain, public suffix.
 }
 
+func TestLookupExternalReportsAccepted(t *testing.T) {
+	resolver := dns.MockResolver{
+		TXT: map[string][]string{
+			"example.com._report._dmarc.simple.example.":    {"v=DMARC1"},
+			"example.com._report._dmarc.simple2.example.":   {"v=DMARC1;"},
+			"example.com._report._dmarc.one.example.":       {"v=DMARC1; p=none;", "other"},
+			"example.com._report._dmarc.temperror.example.": {"v=DMARC1; p=none;"},
+			"example.com._report._dmarc.multiple.example.":  {"v=DMARC1; p=none;", "v=DMARC1"},
+			"example.com._report._dmarc.malformed.example.": {"v=DMARC1; p=none; bogus;"},
+		},
+		Fail: map[dns.Mockreq]struct{}{
+			{Type: "txt", Name: "example.com._report._dmarc.temperror.example."}: {},
+		},
+	}
+
+	test := func(dom, extdom string, expStatus Status, expAccepts bool, expErr error) {
+		t.Helper()
+
+		accepts, status, _, _, err := LookupExternalReportsAccepted(context.Background(), resolver, dns.Domain{ASCII: dom}, dns.Domain{ASCII: extdom})
+		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
+			t.Fatalf("got err %#v, expected %#v", err, expErr)
+		}
+		if status != expStatus || accepts != expAccepts {
+			t.Fatalf("got status %s, accepts %v, expected %v, %v", status, accepts, expStatus, expAccepts)
+		}
+	}
+
+	r := DefaultRecord
+	r.Policy = PolicyNone
+	test("example.com", "simple.example", StatusNone, true, nil)
+	test("example.org", "simple.example", StatusNone, false, ErrNoRecord)
+	test("example.com", "simple2.example", StatusNone, true, nil)
+	test("example.com", "one.example", StatusNone, true, nil)
+	test("example.com", "absent.example", StatusNone, false, ErrNoRecord)
+	test("example.com", "multiple.example", StatusNone, false, ErrMultipleRecords)
+	test("example.com", "malformed.example", StatusPermerror, false, ErrSyntax)
+	test("example.com", "temperror.example", StatusTemperror, false, ErrDNS)
+}
+
 func TestVerify(t *testing.T) {
 	resolver := dns.MockResolver{
 		TXT: map[string][]string{

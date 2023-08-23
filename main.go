@@ -14,6 +14,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -38,6 +39,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtasts"
+	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/spf"
 	"github.com/mjl-/mox/store"
@@ -120,6 +122,7 @@ var commands = []struct {
 	{"dmarc lookup", cmdDMARCLookup},
 	{"dmarc parsereportmsg", cmdDMARCParsereportmsg},
 	{"dmarc verify", cmdDMARCVerify},
+	{"dmarc checkreportaddrs", cmdDMARCCheckreportaddrs},
 	{"dnsbl check", cmdDNSBLCheck},
 	{"dnsbl checkhealth", cmdDNSBLCheckhealth},
 	{"mtasts lookup", cmdMTASTSLookup},
@@ -1607,6 +1610,82 @@ can be found in message headers.
 	_, result := dmarc.Verify(context.Background(), dns.StrictResolver{}, dmarcFrom.Domain, dkimResults, spfStatus, spfIdentity, false)
 	xcheckf(result.Err, "dmarc verify")
 	fmt.Printf("dmarc from: %s\ndmarc status: %q\ndmarc reject: %v\ncmarc record: %s\n", dmarcFrom, result.Status, result.Reject, result.Record)
+}
+
+func cmdDMARCCheckreportaddrs(c *cmd) {
+	c.params = "domain"
+	c.help = `For each reporting address in the domain's DMARC record, check if it has opted into receiving reports (if needed).
+
+A DMARC record can request reports about DMARC evaluations to be sent to an
+email/http address. If the organizational domains of that of the DMARC record
+and that of the report destination address do not match, the destination
+address must opt-in to receiving DMARC reports by creating a DMARC record at
+<dmarcdomain>._report._dmarc.<reportdestdomain>.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	dom := xparseDomain(args[0], "domain")
+	_, domain, record, txt, err := dmarc.Lookup(context.Background(), dns.StrictResolver{}, dom)
+	xcheckf(err, "dmarc lookup domain %s", dom)
+	fmt.Printf("dmarc record at domain %s: %q\n", domain, txt)
+
+	check := func(kind, addr string) {
+		printResult := func(format string, args ...any) {
+			fmt.Printf("%s %s: %s\n", kind, addr, fmt.Sprintf(format, args...))
+		}
+
+		u, err := url.Parse(addr)
+		if err != nil {
+			printResult("parsing uri: %v (skipping)", addr, err)
+			return
+		}
+		var destdom dns.Domain
+		switch u.Scheme {
+		case "mailto":
+			a, err := smtp.ParseAddress(u.Opaque)
+			if err != nil {
+				printResult("parsing destination email address %s: %v (skipping)", u.Opaque, err)
+				return
+			}
+			destdom = a.Domain
+		default:
+			printResult("unrecognized scheme in reporting address %s (skipping)", u.Scheme)
+			return
+		}
+
+		if publicsuffix.Lookup(context.Background(), dom) == publicsuffix.Lookup(context.Background(), destdom) {
+			printResult("pass (same organizational domain)")
+			return
+		}
+
+		accepts, status, _, txt, err := dmarc.LookupExternalReportsAccepted(context.Background(), dns.StrictResolver{}, domain, destdom)
+		var txtstr string
+		txtaddr := fmt.Sprintf("%s._report._dmarc.%s", domain.ASCII, destdom.ASCII)
+		if txt == "" {
+			txtstr = fmt.Sprintf(" (no txt record %s)", txtaddr)
+		} else {
+			txtstr = fmt.Sprintf(" (txt record %s: %q)", txtaddr, txt)
+		}
+		if status != dmarc.StatusNone {
+			printResult("fail: %s%s", err, txtstr)
+		} else if accepts {
+			printResult("pass%s", txtstr)
+		} else if err != nil {
+			printResult("fail: %s%s", err, txtstr)
+		} else {
+			printResult("fail%s", txtstr)
+		}
+	}
+
+	for _, uri := range record.AggregateReportAddresses {
+		check("aggregate reporting", uri.Address)
+	}
+	for _, uri := range record.FailureReportAddresses {
+		check("failure reporting", uri.Address)
+	}
 }
 
 func cmdDMARCParsereportmsg(c *cmd) {

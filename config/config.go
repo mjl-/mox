@@ -41,7 +41,7 @@ type Static struct {
 	NoFixPermissions bool              `sconf:"optional" sconf-doc:"If true, do not automatically fix file permissions when starting up. By default, mox will ensure reasonable owner/permissions on the working, data and config directories (and files), and mox binary (if present)."`
 	Hostname         string            `sconf-doc:"Full hostname of system, e.g. mail.<domain>"`
 	HostnameDomain   dns.Domain        `sconf:"-" json:"-"` // Parsed form of hostname.
-	CheckUpdates     bool              `sconf:"optional" sconf-doc:"If enabled, a single DNS TXT lookup of _updates.xmox.nl is done every 24h to check for a new release. Each time a new release is found, a changelog is fetched from https://updates.xmox.nl and delivered to the postmaster mailbox."`
+	CheckUpdates     bool              `sconf:"optional" sconf-doc:"If enabled, a single DNS TXT lookup of _updates.xmox.nl is done every 24h to check for a new release. Each time a new release is found, a changelog is fetched from https://updates.xmox.nl/changelog and delivered to the postmaster mailbox."`
 	Pedantic         bool              `sconf:"optional" sconf-doc:"In pedantic mode protocol violations (that happen in the wild) for SMTP/IMAP/etc result in errors instead of accepting such behaviour."`
 	TLS              struct {
 		CA *struct {
@@ -267,10 +267,12 @@ type Domain struct {
 
 type DMARC struct {
 	Localpart string `sconf-doc:"Address-part before the @ that accepts DMARC reports. Must be non-internationalized. Recommended value: dmarc-reports."`
+	Domain    string `sconf:"optional" sconf-doc:"Alternative domain for report recipient address. Can be used to receive reports for other domains. Unicode name."`
 	Account   string `sconf-doc:"Account to deliver to."`
 	Mailbox   string `sconf-doc:"Mailbox to deliver to, e.g. DMARC."`
 
 	ParsedLocalpart smtp.Localpart `sconf:"-"`
+	DNSDomain       dns.Domain     `sconf:"-"` // Effective domain, always set based on Domain field or Domain where this is configured.
 }
 
 type MTASTS struct {
@@ -283,10 +285,12 @@ type MTASTS struct {
 
 type TLSRPT struct {
 	Localpart string `sconf-doc:"Address-part before the @ that accepts TLSRPT reports. Recommended value: tls-reports."`
+	Domain    string `sconf:"optional" sconf-doc:"Alternative domain for report recipient address. Can be used to receive reports for other domains. Unicode name."`
 	Account   string `sconf-doc:"Account to deliver to."`
 	Mailbox   string `sconf-doc:"Mailbox to deliver to, e.g. TLSRPT."`
 
 	ParsedLocalpart smtp.Localpart `sconf:"-"`
+	DNSDomain       dns.Domain     `sconf:"-"` // Effective domain, always set based on Domain field or Domain where this is configured.
 }
 
 type Selector struct {

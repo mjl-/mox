@@ -1214,9 +1214,20 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			// ../rfc/8616:234
 			addErrorf("DMARC localpart %q is an internationalized address, only conventional ascii-only address possible for interopability", lp)
 		}
+		addrdom := domain.Domain
+		if dmarc.Domain != "" {
+			addrdom, err = dns.ParseDomain(dmarc.Domain)
+			if err != nil {
+				addErrorf("DMARC domain %q: %s", dmarc.Domain, err)
+			} else if _, ok := c.Domains[addrdom.Name()]; !ok {
+				addErrorf("unknown domain %q for DMARC address in domain %q", dmarc.Domain, d)
+			}
+		}
+
 		domain.DMARC.ParsedLocalpart = lp
+		domain.DMARC.DNSDomain = addrdom
 		c.Domains[d] = domain
-		addrFull := smtp.NewAddress(lp, domain.Domain).String()
+		addrFull := smtp.NewAddress(lp, addrdom).String()
 		dest := config.Destination{
 			Mailbox:      dmarc.Mailbox,
 			DMARCReports: true,
@@ -1243,9 +1254,20 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			// to keep this ascii-only addresses.
 			addErrorf("TLSRPT localpart %q is an internationalized address, only conventional ascii-only address allowed for interopability", lp)
 		}
+		addrdom := domain.Domain
+		if tlsrpt.Domain != "" {
+			addrdom, err = dns.ParseDomain(tlsrpt.Domain)
+			if err != nil {
+				addErrorf("TLSRPT domain %q: %s", tlsrpt.Domain, err)
+			} else if _, ok := c.Domains[addrdom.Name()]; !ok {
+				addErrorf("unknown domain %q for TLSRPT address in domain %q", tlsrpt.Domain, d)
+			}
+		}
+
 		domain.TLSRPT.ParsedLocalpart = lp
+		domain.TLSRPT.DNSDomain = addrdom
 		c.Domains[d] = domain
-		addrFull := smtp.NewAddress(lp, domain.Domain).String()
+		addrFull := smtp.NewAddress(lp, addrdom).String()
 		dest := config.Destination{
 			Mailbox:    tlsrpt.Mailbox,
 			TLSReports: true,

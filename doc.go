@@ -57,6 +57,7 @@ low-maintenance self-hosted email.
 	mox dmarc lookup domain
 	mox dmarc parsereportmsg message ...
 	mox dmarc verify remoteip mailfromaddress helodomain < message
+	mox dmarc checkreportaddrs domain
 	mox dnsbl check zone ip
 	mox dnsbl checkhealth zone
 	mox mtasts lookup domain
@@ -664,6 +665,18 @@ the beginning of the SMTP transaction that delivered the message. These values
 can be found in message headers.
 
 	usage: mox dmarc verify remoteip mailfromaddress helodomain < message
+
+# mox dmarc checkreportaddrs
+
+For each reporting address in the domain's DMARC record, check if it has opted into receiving reports (if needed).
+
+A DMARC record can request reports about DMARC evaluations to be sent to an
+email/http address. If the organizational domains of that of the DMARC record
+and that of the report destination address do not match, the destination
+address must opt-in to receiving DMARC reports by creating a DMARC record at
+<dmarcdomain>._report._dmarc.<reportdestdomain>.
+
+	usage: mox dmarc checkreportaddrs domain
 
 # mox dnsbl check
 
