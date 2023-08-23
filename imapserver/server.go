@@ -2915,6 +2915,9 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 				removeIDs[i] = m.ID
 				anyIDs[i] = m.ID
 				mb.Sub(m.MailboxCounts())
+				// Update "remove", because RetrainMessage below will save the message.
+				remove[i].Expunged = true
+				remove[i].ModSeq = modseq
 			}
 			qmr := bstore.QueryTx[store.Recipient](tx)
 			qmr.FilterEqual("MessageID", anyIDs...)
@@ -2923,7 +2926,10 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 
 			qm = bstore.QueryTx[store.Message](tx)
 			qm.FilterIDs(removeIDs)
-			_, err = qm.UpdateNonzero(store.Message{Expunged: true, ModSeq: modseq})
+			n, err := qm.UpdateNonzero(store.Message{Expunged: true, ModSeq: modseq})
+			if err == nil && n != len(removeIDs) {
+				err = fmt.Errorf("only %d messages set to expunged, expected %d", n, len(removeIDs))
+			}
 			xcheckf(err, "marking messages marked for deleted as expunged")
 
 			err = tx.Update(&mb)
