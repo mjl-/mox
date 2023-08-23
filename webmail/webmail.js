@@ -3321,6 +3321,15 @@ const newMailboxlistView = (msglistView, requestNewView, updatePageTitle, setLoc
 			else if (ai >= 0 && bi >= 0 && ai !== bi) {
 				return ai < bi ? -1 : 1;
 			}
+			const la = mbva.mailbox.Name.split('/');
+			const lb = mbvb.mailbox.Name.split('/');
+			let n = Math.min(la.length, lb.length);
+			for (let i = 0; i < n; i++) {
+				if (la[i] === lb[i]) {
+					continue;
+				}
+				return la[i] < lb[i] ? -1 : 1;
+			}
 			return mbva.mailbox.Name < mbvb.mailbox.Name ? -1 : 1;
 		});
 		let prevmailboxname = '';
