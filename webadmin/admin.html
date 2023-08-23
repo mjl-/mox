@@ -13,7 +13,7 @@ h1 { font-size: 1.2rem; }
 h2 { font-size: 1.1rem; }
 h3, h4 { font-size: 1rem; }
 ul { padding-left: 1rem; }
-.literal { background-color: #fdfdfd; padding: .5em 1em; border: 1px solid #eee; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 15px; tab-size: 4; }
+.literal { background-color: #eee; padding: .5em 1em; margin: 1ex 0; border: 1px solid #eee; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 15px; tab-size: 4; }
 table td, table th { padding: .2em .5em; }
 table table td, table table th { padding: 0 0.1em; }
 table.long >tbody >tr >td { padding: 1em .5em; }
@@ -856,10 +856,11 @@ const domainDNSRecords = async (d) => {
 			'DNS Records',
 		),
 		dom.h1('Required DNS records'),
-		dom('pre.literal', records.join('\n')),
+		dom('pre.literal', style({maxWidth: '70em'}), records.join('\n')),
 		dom.br(),
 	)
 }
+
 const domainDNSCheck = async (d) => {
 	const [checks, dnsdomain] = await Promise.all([
 		api.CheckDomain(d),
@@ -881,7 +882,7 @@ const domainDNSCheck = async (d) => {
 			instructions = dom.div(style({margin: '.5ex 0'}))
 			const instrs = [
 				r.Instructions.map(s => [
-					dom('pre.literal', style({display: 'inline-block'}), s),
+					dom('pre.literal', style({display: 'inline-block', maxWidth: '60em'}), s),
 					dom.br(),
 				]),
 			]
@@ -951,7 +952,7 @@ const domainDNSCheck = async (d) => {
 	const detailsMTASTS = empty(checks.MTASTS.CNAMEs) && !checks.MTASTS.TXT && !checks.MTASTS.PolicyText ? [] : [
 		dom.div('CNAMEs followed: ' + (checks.MTASTS.CNAMEs.join(', ') || '(none)')),
 		!checks.MTASTS.TXT ? [] : dom.div('MTA-STS record: ' + checks.MTASTS.TXT),
-		!checks.MTASTS.PolicyText ? [] : dom.div('MTA-STS policy: ', dom('pre.literal', checks.MTASTS.PolicyText)),
+		!checks.MTASTS.PolicyText ? [] : dom.div('MTA-STS policy: ', dom('pre.literal', style({maxWidth: '60em'}), checks.MTASTS.PolicyText)),
 	]
 	const detailsSRVConf = !Object.entries(checks.SRVConf.SRVs) ? [] : [
 		dom.table(
