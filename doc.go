@@ -361,7 +361,7 @@ back to should an upgrade fail. Simply copying files in the data directory
 while mox is running can result in unusable database files.
 
 Message files never change (they are read-only, though can be removed) and are
-hardlinked so they don't consume additional space. If hardlinking fails, for
+hard-linked so they don't consume additional space. If hardlinking fails, for
 example when the backup destination directory is on a different file system, a
 regular copy is made. Using a destination directory like "data/tmp/backup"
 increases the odds hardlinking succeeds: the default systemd service file

@@ -317,7 +317,7 @@ func (w *staticgzcacheReplacer) Header() http.Header {
 	return w.w.Header()
 }
 
-// WriteHeader checks whether the response is eligable for compressing. If not,
+// WriteHeader checks whether the response is eligible for compressing. If not,
 // WriteHeader on the underlying ResponseWriter is called. If so, headers for gzip
 // content are set and the gzip content is written, either from disk or compressed
 // and stored in the cache.
