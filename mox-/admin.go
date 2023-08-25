@@ -453,18 +453,24 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 		"; Once your setup is working, you may want to increase the TTL.",
 		"$TTL 300",
 		"",
+	}
 
-		"; For the machine, only needs to be created for the first domain added.",
-		fmt.Sprintf(`%-*s IN TXT "v=spf1 a -all"`, 20+len(d), h+"."), // ../rfc/7208:2263 ../rfc/7208:2287
-		"",
+	if d != h {
+		records = append(records,
+			"; For the machine, only needs to be created once, for the first domain added.",
+			fmt.Sprintf(`%-*s IN TXT "v=spf1 a -all"`, 20+len(d), h+"."), // ../rfc/7208:2263 ../rfc/7208:2287
+			"",
+		)
+	}
 
+	records = append(records,
 		"; Deliver email for the domain to this host.",
 		fmt.Sprintf("%s.                    MX 10 %s.", d, h),
 		"",
 
 		"; Outgoing messages will be signed with the first two DKIM keys. The other two",
 		"; configured for backup, switching to them is just a config change.",
-	}
+	)
 	var selectors []string
 	for name := range domConf.DKIM.Selectors {
 		selectors = append(selectors, name)
