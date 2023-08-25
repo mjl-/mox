@@ -773,15 +773,19 @@ func (c *conn) cmdEhlo(p *parser) {
 
 // ../rfc/5321:1783
 func (c *conn) cmdHello(p *parser, ehlo bool) {
-	// ../rfc/5321:1827, though a few paragraphs earlier at ../rfc/5321:1802 is a claim
-	// additional data can occur.
-	p.xspace()
 	var remote dns.IPDomain
-	if ehlo {
-		remote = p.xipdomain(true)
+	if c.submission && !moxvar.Pedantic {
+		// Mail clients regularly put bogus information in the hostname/ip. For submission,
+		// the value is of no use, so there is not much point in annoying the user with
+		// errors they cannot fix themselves. Except when in pedantic mode.
+		remote = dns.IPDomain{IP: c.remoteIP}
 	} else {
-		remote = dns.IPDomain{Domain: p.xdomain()}
-		if !c.submission {
+		p.xspace()
+		if ehlo {
+			remote = p.xipdomain(true)
+		} else {
+			remote = dns.IPDomain{Domain: p.xdomain()}
+
 			// Verify a remote domain name has an A or AAAA record, CNAME not allowed. ../rfc/5321:722
 			cidctx := context.WithValue(mox.Context, mlog.CidKey, c.cid)
 			ctx, cancel := context.WithTimeout(cidctx, time.Minute)
@@ -792,9 +796,15 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 			}
 			// For success or temporary resolve errors, we'll just continue.
 		}
+		// ../rfc/5321:1827
+		// Though a few paragraphs earlier is a claim additional data can occur for address
+		// literals (IP addresses), although the ABNF in that document does not allow it.
+		// We allow additional text, but only if space-separated.
+		if len(remote.IP) > 0 && p.space() {
+			p.remainder() // ../rfc/5321:1802 ../rfc/2821:1632
+		}
+		p.xend()
 	}
-	p.remainder() // ../rfc/5321:1802
-	p.xend()
 
 	// Reset state as if RSET command has been issued. ../rfc/5321:2093 ../rfc/5321:2453
 	c.rset()
