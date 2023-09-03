@@ -207,13 +207,11 @@ func parsedMessage(log *mlog.Log, m store.Message, state *msgState, full, msgite
 					disp, params, err := mime.ParseMediaType(cp)
 					log.Check(err, "parsing content-disposition", mlog.Field("cp", cp))
 					if strings.EqualFold(disp, "attachment") {
-						if full {
-							name := p.ContentTypeParams["name"]
-							if name == "" {
-								name = params["filename"]
-							}
-							pm.attachments = append(pm.attachments, Attachment{path, name, p})
+						name := p.ContentTypeParams["name"]
+						if name == "" {
+							name = params["filename"]
 						}
+						pm.attachments = append(pm.attachments, Attachment{path, name, p})
 						return
 					}
 				}
