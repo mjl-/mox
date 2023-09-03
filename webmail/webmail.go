@@ -311,6 +311,7 @@ func serveContentFallback(log *mlog.Log, w http.ResponseWriter, r *http.Request,
 		st, err := f.Stat()
 		if err == nil {
 			http.ServeContent(w, r, "", st.ModTime(), f)
+			return
 		}
 	}
 	http.ServeContent(w, r, "", fallbackMtime(log), bytes.NewReader(fallback))
