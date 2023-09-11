@@ -2124,16 +2124,16 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	// Prepare for analyzing content, calculating reputation.
 	ipmasked1, ipmasked2, ipmasked3 := ipmasked(c.remoteIP)
 	var verifiedDKIMDomains []string
+	dkimSeen := map[string]bool{}
 	for _, r := range dkimResults {
 		// A message can have multiple signatures for the same identity. For example when
 		// signing the message multiple times with different algorithms (rsa and ed25519).
-		seen := map[string]bool{}
 		if r.Status != dkim.StatusPass {
 			continue
 		}
 		d := r.Sig.Domain.Name()
-		if !seen[d] {
-			seen[d] = true
+		if !dkimSeen[d] {
+			dkimSeen[d] = true
 			verifiedDKIMDomains = append(verifiedDKIMDomains, d)
 		}
 	}
