@@ -1903,6 +1903,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			if x != nil {
 				c.log.Error("dkim verify panic", mlog.Field("err", x))
 				debug.PrintStack()
+				metrics.PanicInc("dkimverify")
 			}
 		}()
 		defer wg.Done()
@@ -1936,8 +1937,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		defer func() {
 			x := recover() // Should not happen, but don't take program down if it does.
 			if x != nil {
-				c.log.Error("dkim verify panic", mlog.Field("err", x))
+				c.log.Error("spf verify panic", mlog.Field("err", x))
 				debug.PrintStack()
+				metrics.PanicInc("spfverify")
 			}
 		}()
 		defer wg.Done()

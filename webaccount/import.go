@@ -26,6 +26,7 @@ import (
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/message"
+	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/store"
@@ -68,6 +69,7 @@ func ImportManage() {
 		if x := recover(); x != nil {
 			log.Error("import manage panic", mlog.Field("err", x))
 			debug.PrintStack()
+			metrics.PanicInc("importmanage")
 		}
 	}()
 
@@ -343,6 +345,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		} else {
 			log.Error("import panic", mlog.Field("err", x))
 			debug.PrintStack()
+			metrics.PanicInc("importmessages")
 		}
 	}()
 

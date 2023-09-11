@@ -363,7 +363,7 @@ func logPanic(ctx context.Context) {
 	log := xlog.WithContext(ctx)
 	log.Error("recover from panic", mlog.Field("panic", x))
 	debug.PrintStack()
-	metrics.PanicInc("http")
+	metrics.PanicInc("webadmin")
 }
 
 // return IPs we may be listening on.
