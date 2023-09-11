@@ -1,4 +1,6 @@
-This file lists RFC's by number and title. "make" fetches the RFC's and adds references back to the source code where they are referenced.
+This file lists RFC's by number and title. "make" fetches the RFC's and adds
+references back to the source code where they are referenced. Not all RFC's in
+this list have been implemented yet.
 
 Also see IANA assignments, https://www.iana.org/protocols
 
@@ -12,6 +14,7 @@ Also see IANA assignments, https://www.iana.org/protocols
 2183	Communicating Presentation Information in Internet Messages: The Content-Disposition Header Field
 2231	MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
 3629	UTF-8, a transformation format of ISO 10646
+3676	The Text/Plain Format and DelSp Parameters
 3834	Recommendations for Automatic Responses to Electronic Mail
 5234	Augmented BNF for Syntax Specifications: ABNF
 5322	Internet Message Format
@@ -47,6 +50,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 3885	SMTP Service Extension for Message Tracking
 3974	SMTP Operational Experience in Mixed IPv4/v6 Environments
 4409	(obsoleted by RFC 6409) Message Submission for Mail
+4468	Message Submission BURL Extension
 4865	SMTP Submission Service Extension for Future Message Release
 4954	SMTP Service Extension for Authentication
 5068	Email Submission Operations: Access and Accountability Requirements
@@ -167,7 +171,6 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 4467	Internet Message Access Protocol (IMAP) - URLAUTH Extension
 4469	Internet Message Access Protocol (IMAP) CATENATE Extension
 4549	Synchronization Operations for Disconnected IMAP4 Clients
-4550	(obsoleted by RFC 5550) Internet Email to Support Diverse Service Environments (Lemonade) Profile
 4551	(obsoleted by RFC 7162) IMAP Extension for Conditional STORE Operation or Quick Flag Changes Resynchronization
 4731	IMAP4 Extension to SEARCH Command for Controlling What Kind of Information Is Returned
 4959	IMAP Extension for Simple Authentication and Security Layer (SASL) Initial Client Response
@@ -186,8 +189,8 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 5464	The IMAP METADATA Extension
 5465	The IMAP NOTIFY Extension
 5466	IMAP4 Extension for Named Searches (Filters)
+5524	Extended URLFETCH for Binary and Converted Parts
 5530	IMAP Response Codes
-5550	The Internet Email to Support Diverse Service Environments (Lemonade) Profile
 5738	(obsoleted by RFC 6855) IMAP Support for UTF-8
 5788	IMAP4 Keyword Registry
 5819	IMAP4 Extension for Returning STATUS Information in Extended LIST
@@ -215,6 +218,14 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 9394	IMAP PARTIAL Extension for Paged SEARCH and FETCH
 
 5198 	Unicode Format for Network Interchange
+
+# Lemonade profile
+4550	(obsoleted by RFC 5550) Internet Email to Support Diverse Service Environments (Lemonade) Profile
+5383	Deployment Considerations for Lemonade-Compliant Mobile Email
+5423	Internet Message Store Events
+5442	LEMONADE Architecture - Supporting Open Mobile Alliance (OMA) Mobile Email (MEM) Using Internet Mail
+5550	The Internet Email to Support Diverse Service Environments (Lemonade) Profile
+5551	Lemonade Notifications Architecture
 
 # Mailing list
 2369	The Use of URLs as Meta-Syntax for Core Mail List Commands and their Transport through Message Header Fields
@@ -256,6 +267,16 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 3685	(obsoleted by RFC 5235) Spamtest and VirusTest Extensions
 
 Also see http://sieve.info/documents
+
+# JMAP
+8620	The JSON Meta Application Protocol (JMAP)
+8621	The JSON Meta Application Protocol (JMAP) for Mail
+8887	A JSON Meta Application Protocol (JMAP) Subprotocol for WebSocket
+9007	Handling Message Disposition Notification with the JSON Meta Application Protocol (JMAP)
+9219	S/MIME Signature Verification Extension to the JSON Meta Application Protocol (JMAP)
+9425	JSON Meta Application Protocol (JMAP) for Quotas
+
+See implementation guide, https://jmap.io/server.html
 
 # Vouch by reference
 5518	Vouch By Reference
@@ -355,3 +376,47 @@ Also see http://sieve.info/documents
 5617	(Historic) DomainKeys Identified Mail (DKIM) Author Domain Signing Practices (ADSP)
 6186	(not used in practice) Use of SRV Records for Locating Email Submission/Access Services
 7817	Updated Transport Layer Security (TLS) Server Identity Check Procedure for Email-Related Protocols
+
+# WebDAV
+4918	HTTP Extensions for Web Distributed Authoring and Versioning (WebDAV)
+3253	Versioning Extensions to WebDAV (Web Distributed Authoring and Versioning)
+3648	Web Distributed Authoring and Versioning (WebDAV) Ordered Collections Protocol
+3744	Web Distributed Authoring and Versioning (WebDAV) Access Control Protocol
+4437	Web Distributed Authoring and Versioning (WebDAV) Redirect Reference Resources
+5323	Web Distributed Authoring and Versioning (WebDAV) SEARCH
+6578	Collection Synchronization for Web Distributed Authoring and Versioning (WebDAV)
+
+# CalDAV
+4791	Calendaring Extensions to WebDAV (CalDAV)
+5689	Extended MKCOL for Web Distributed Authoring and Versioning (WebDAV)
+6638	Scheduling Extensions to CalDAV
+6764	Locating Services for Calendaring Extensions to WebDAV (CalDAV) and vCard Extensions to WebDAV (CardDAV)
+7809	Calendaring Extensions to WebDAV (CalDAV): Time Zones by Reference
+7953	Calendar Availability
+
+# iCal
+5545	Internet Calendaring and Scheduling Core Object Specification (iCalendar)
+5546	iCalendar Transport-Independent Interoperability Protocol (iTIP)
+6047	iCalendar Message-Based Interoperability Protocol (iMIP)
+6868	Parameter Value Encoding in iCalendar and vCard
+7529	Non-Gregorian Recurrence Rules in the Internet Calendaring and Scheduling Core Object Specification (iCalendar)
+7986	New Properties for iCalendar
+9073	Event Publishing Extensions to iCalendar
+9074	"VALARM" Extensions for iCalendar
+9253	Support for iCalendar Relationships
+6321	xCal: The XML Format for iCalendar
+7265	jCal: The JSON Format for iCalendar
+
+# CardDAV
+6352	CardDAV: vCard Extensions to Web Distributed Authoring and Versioning (WebDAV)
+
+# vCard
+2425	A MIME Content-Type for Directory Information
+2426	vCard MIME Directory Profile
+6350	vCard Format Specification
+6351	xCard: vCard XML Representation
+6473	vCard KIND:application
+6474	vCard Format Extensions: Place of Birth, Place and Date of Death
+6715	vCard Format Extensions: Representing vCard Extensions Defined by the Open Mobile Alliance (OMA) Converged Address Book (CAB) Group
+6869	vCard KIND:device
+7095	jCard: The JSON Format for vCard
