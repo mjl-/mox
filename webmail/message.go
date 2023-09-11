@@ -316,12 +316,12 @@ func parseListPostAddress(s string) *MessageAddress {
 	if !strings.HasPrefix(s, "<mailto:") {
 		return nil
 	}
-	s = strings.TrimPrefix(s, "<mailto:")
-	t := strings.SplitN(s, ">", 2)
-	if len(t) != 2 {
+	s = s[1:]
+	s, _, found := strings.Cut(s, ">")
+	if !found {
 		return nil
 	}
-	u, err := url.Parse(t[0])
+	u, err := url.Parse(s)
 	if err != nil {
 		return nil
 	}
