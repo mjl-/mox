@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"runtime/trace"
 )
 
 func memprofile(mempath string) {
@@ -41,5 +42,16 @@ func profile(cpupath, mempath string) func() {
 			log.Printf("closing cpu profile: %v", err)
 		}
 		memprofile(mempath)
+	}
+}
+
+func traceExecution(path string) func() {
+	f, err := os.Create(path)
+	xcheckf(err, "create trace file")
+	trace.Start(f)
+	return func() {
+		trace.Stop()
+		err := f.Close()
+		xcheckf(err, "close trace file")
 	}
 }

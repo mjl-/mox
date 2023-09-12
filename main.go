@@ -407,9 +407,10 @@ func main() {
 	flag.BoolVar(&pedantic, "pedantic", false, "protocol violations result in errors instead of accepting/working around them")
 	flag.BoolVar(&store.CheckConsistencyOnClose, "checkconsistency", false, "dangerous option for testing only, enables data checks that abort/panic when inconsistencies are found")
 
-	var cpuprofile, memprofile string
+	var cpuprofile, memprofile, tracefile string
 	flag.StringVar(&cpuprofile, "cpuprof", "", "store cpu profile to file")
 	flag.StringVar(&memprofile, "memprof", "", "store mem profile to file")
+	flag.StringVar(&tracefile, "trace", "", "store execution trace to file")
 
 	flag.Usage = func() { usage(cmds, false) }
 	flag.Parse()
@@ -418,6 +419,9 @@ func main() {
 		usage(cmds, false)
 	}
 
+	if tracefile != "" {
+		defer traceExecution(tracefile)()
+	}
 	defer profile(cpuprofile, memprofile)()
 
 	if pedantic {
