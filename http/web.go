@@ -140,7 +140,7 @@ func (w *loggingWriter) Write(buf []byte) (int, error) {
 		// issues due to buffering.
 		// w.Gzip.Write updates w.Size with the compressed byte count.
 		n, err = w.Gzip.Write(buf)
-		if err != nil {
+		if err == nil {
 			err = w.Gzip.Flush()
 		}
 		if n > 0 {
