@@ -26,7 +26,7 @@ func messageItem(log *mlog.Log, m store.Message, state *msgState) (MessageItem, 
 	// Clear largish unused data.
 	m.MsgPrefix = nil
 	m.ParsedBuf = nil
-	return MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, pm.firstLine}, nil
+	return MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, pm.firstLine, true}, nil
 }
 
 // formatFirstLine returns a line the client can display next to the subject line

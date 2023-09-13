@@ -77,6 +77,7 @@ low-maintenance self-hosted email.
 	mox ensureparsed account
 	mox recalculatemailboxcounts account
 	mox message parse message.eml
+	mox reassignthreads [account]
 
 Many commands talk to a running mox instance, through the ctl file in the data
 directory. Specify the configuration file (that holds the path to the data
@@ -882,6 +883,40 @@ incorrect. This command will find, fix and print them.
 Parse message, print JSON representation.
 
 	usage: mox message parse message.eml
+
+# mox reassignthreads
+
+Reassign message threads.
+
+For all accounts, or optionally only the specified account.
+
+Threading for all messages in an account is first reset, and new base subject
+and normalized message-id saved with the message. Then all messages are
+evaluated and matched against their parents/ancestors.
+
+Messages are matched based on the References header, with a fall-back to an
+In-Reply-To header, and if neither is present/valid, based only on base
+subject.
+
+A References header typically points to multiple previous messages in a
+hierarchy. From oldest ancestor to most recent parent. An In-Reply-To header
+would have only a message-id of the parent message.
+
+A message is only linked to a parent/ancestor if their base subject is the
+same. This ensures unrelated replies, with a new subject, are placed in their
+own thread.
+
+The base subject is lower cased, has whitespace collapsed to a single
+space, and some components removed: leading "Re:", "Fwd:", "Fw:", or bracketed
+tag (that mailing lists often add, e.g. "[listname]"), trailing "(fwd)", or
+enclosing "[fwd: ...]".
+
+Messages are linked to all their ancestors. If an intermediate parent/ancestor
+message is deleted in the future, the message can still be linked to the earlier
+ancestors. If the direct parent already wasn't available while matching, this is
+stored as the message having a "missing link" to its stored ancestors.
+
+	usage: mox reassignthreads [account]
 */
 package main
 

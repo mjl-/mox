@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/exp/slices"
+
 	bolt "go.etcd.io/bbolt"
 
 	"github.com/mjl-/bstore"
@@ -241,6 +243,13 @@ possibly making them potentially no longer readable by the previous version.
 				checkf(err, dbpath, "missing nextuidvalidity")
 			}
 
+			up := store.Upgrade{ID: 1}
+			if err := db.Get(ctxbg, &up); err != nil {
+				log.Printf("warning: getting upgrade record (continuing, but not checking message threading): %v", err)
+			} else if up.Threads != 2 {
+				log.Printf("warning: no message threading in database, skipping checks for threading consistency")
+			}
+
 			mailboxes := map[int64]store.Mailbox{}
 			err := bstore.QueryDB[store.Mailbox](ctxbg, db).ForEach(func(mb store.Mailbox) error {
 				mailboxes[mb.ID] = mb
@@ -270,10 +279,37 @@ possibly making them potentially no longer readable by the previous version.
 				if m.Expunged {
 					return nil
 				}
+
 				mp := store.MessagePath(m.ID)
 				seen[mp] = struct{}{}
 				p := filepath.Join(accdir, "msg", mp)
 				checkFile(dbpath, p, len(m.MsgPrefix), m.Size)
+
+				if up.Threads != 2 {
+					return nil
+				}
+
+				if m.ThreadID <= 0 {
+					checkf(errors.New(`see "mox reassignthreads"`), dbpath, "message id %d, thread %d in mailbox %q (id %d) has bad threadid", m.ID, m.ThreadID, mb.Name, mb.ID)
+				}
+				if len(m.ThreadParentIDs) == 0 {
+					return nil
+				}
+				if slices.Contains(m.ThreadParentIDs, m.ID) {
+					checkf(errors.New(`see "mox reassignthreads"`), dbpath, "message id %d, thread %d in mailbox %q (id %d) has itself as thread parent", m.ID, m.ThreadID, mb.Name, mb.ID)
+				}
+				for i, pid := range m.ThreadParentIDs {
+					am := store.Message{ID: pid}
+					if err := db.Get(ctxbg, &am); err == bstore.ErrAbsent {
+						continue
+					} else if err != nil {
+						return fmt.Errorf("get ancestor message: %v", err)
+					} else if !slices.Equal(m.ThreadParentIDs[i+1:], am.ThreadParentIDs) {
+						checkf(errors.New(`see "mox reassignthreads"`), dbpath, "message %d, thread %d has ancestor ids %v, and ancestor at index %d with id %d should have the same tail but has %v", m.ID, m.ThreadID, m.ThreadParentIDs, i, am.ID, am.ThreadParentIDs)
+					} else {
+						break
+					}
+				}
 				return nil
 			})
 			checkf(err, dbpath, "reading messages in account database to check files")

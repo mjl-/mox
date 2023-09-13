@@ -50,8 +50,10 @@ func TestView(t *testing.T) {
 		listsGoNutsMinimal = &testmsg{"Lists/Go/Nuts", store.Flags{}, nil, msgMinimal, zerom, 0}
 		trashMinimal       = &testmsg{"Trash", store.Flags{}, nil, msgMinimal, zerom, 0}
 		junkMinimal        = &testmsg{"Trash", store.Flags{}, nil, msgMinimal, zerom, 0}
+		trashAlt           = &testmsg{"Trash", store.Flags{}, nil, msgAlt, zerom, 0}
+		inboxAltReply      = &testmsg{"Inbox", store.Flags{}, nil, msgAltReply, zerom, 0}
 	)
-	var testmsgs = []*testmsg{inboxMinimal, inboxFlags, listsMinimal, listsGoNutsMinimal, trashMinimal, junkMinimal}
+	var testmsgs = []*testmsg{inboxMinimal, inboxFlags, listsMinimal, listsGoNutsMinimal, trashMinimal, junkMinimal, trashAlt, inboxAltReply}
 	for _, tm := range testmsgs {
 		tdeliver(t, acc, tm)
 	}
@@ -116,10 +118,10 @@ func TestView(t *testing.T) {
 	evr.Get("start", &start)
 	var viewMsgs EventViewMsgs
 	evr.Get("viewMsgs", &viewMsgs)
-	tcompare(t, len(viewMsgs.MessageItems), 2)
+	tcompare(t, len(viewMsgs.MessageItems), 3)
 	tcompare(t, viewMsgs.ViewEnd, true)
 
-	var inbox, archive, lists store.Mailbox
+	var inbox, archive, lists, trash store.Mailbox
 	for _, mb := range start.Mailboxes {
 		if mb.Archive {
 			archive = mb
@@ -127,6 +129,8 @@ func TestView(t *testing.T) {
 			inbox = mb
 		} else if mb.Name == "Lists" {
 			lists = mb
+		} else if mb.Name == "Trash" {
+			trash = mb
 		}
 	}
 
@@ -161,7 +165,7 @@ func TestView(t *testing.T) {
 	testConn(api.Token(ctx), "&waitMinMsec=1&waitMaxMsec=2", waitReq, func(start EventStart, evr eventReader) {
 		var vm EventViewMsgs
 		evr.Get("viewMsgs", &vm)
-		tcompare(t, len(vm.MessageItems), 2)
+		tcompare(t, len(vm.MessageItems), 3)
 	})
 
 	// Connection with DestMessageID.
@@ -174,7 +178,7 @@ func TestView(t *testing.T) {
 	testConn(tokens[len(tokens)-3], "", destMsgReq, func(start EventStart, evr eventReader) {
 		var vm EventViewMsgs
 		evr.Get("viewMsgs", &vm)
-		tcompare(t, len(vm.MessageItems), 2)
+		tcompare(t, len(vm.MessageItems), 3)
 		tcompare(t, vm.ParsedMessage.ID, destMsgReq.Page.DestMessageID)
 	})
 	// todo: destmessageid past count, needs large mailbox
@@ -189,7 +193,7 @@ func TestView(t *testing.T) {
 	testConn(api.Token(ctx), "", badDestMsgReq, func(start EventStart, evr eventReader) {
 		var vm EventViewMsgs
 		evr.Get("viewMsgs", &vm)
-		tcompare(t, len(vm.MessageItems), 2)
+		tcompare(t, len(vm.MessageItems), 3)
 	})
 
 	// Connection with missing unknown AnchorMessageID, resets view.
@@ -205,7 +209,7 @@ func TestView(t *testing.T) {
 
 		var vm EventViewMsgs
 		evr.Get("viewMsgs", &vm)
-		tcompare(t, len(vm.MessageItems), 2)
+		tcompare(t, len(vm.MessageItems), 3)
 	})
 
 	// Connection that starts with a filter, without mailbox.
@@ -219,12 +223,12 @@ func TestView(t *testing.T) {
 		var vm EventViewMsgs
 		evr.Get("viewMsgs", &vm)
 		tcompare(t, len(vm.MessageItems), 1)
-		tcompare(t, vm.MessageItems[0].Message.ID, inboxFlags.ID)
+		tcompare(t, vm.MessageItems[0][0].Message.ID, inboxFlags.ID)
 	})
 
 	// Paginate from previous last element. There is nothing new.
 	var viewID int64 = 1
-	api.Request(ctx, Request{ID: 1, SSEID: start.SSEID, ViewID: viewID, Query: Query{Filter: Filter{MailboxID: inbox.ID}}, Page: Page{Count: 10, AnchorMessageID: viewMsgs.MessageItems[len(viewMsgs.MessageItems)-1].Message.ID}})
+	api.Request(ctx, Request{ID: 1, SSEID: start.SSEID, ViewID: viewID, Query: Query{Filter: Filter{MailboxID: inbox.ID}}, Page: Page{Count: 10, AnchorMessageID: viewMsgs.MessageItems[len(viewMsgs.MessageItems)-1][0].Message.ID}})
 	evr.Get("viewMsgs", &viewMsgs)
 	tcompare(t, len(viewMsgs.MessageItems), 0)
 
@@ -235,6 +239,36 @@ func TestView(t *testing.T) {
 	tcompare(t, len(viewMsgs.MessageItems), 0)
 	tcompare(t, viewMsgs.ViewEnd, true)
 
+	threadlen := func(mil [][]MessageItem) int {
+		n := 0
+		for _, l := range mil {
+			n += len(l)
+		}
+		return n
+	}
+
+	// Request with threading, should also include parent message from Trash mailbox (trashAlt).
+	viewID++
+	api.Request(ctx, Request{ID: 1, SSEID: start.SSEID, ViewID: viewID, Query: Query{Filter: Filter{MailboxID: inbox.ID}, Threading: "unread"}, Page: Page{Count: 10}})
+	evr.Get("viewMsgs", &viewMsgs)
+	tcompare(t, len(viewMsgs.MessageItems), 3)
+	tcompare(t, threadlen(viewMsgs.MessageItems), 3+1)
+	tcompare(t, viewMsgs.ViewEnd, true)
+	// And likewise when querying Trash, should also include child message in Inbox (inboxAltReply).
+	viewID++
+	api.Request(ctx, Request{ID: 1, SSEID: start.SSEID, ViewID: viewID, Query: Query{Filter: Filter{MailboxID: trash.ID}, Threading: "on"}, Page: Page{Count: 10}})
+	evr.Get("viewMsgs", &viewMsgs)
+	tcompare(t, len(viewMsgs.MessageItems), 3)
+	tcompare(t, threadlen(viewMsgs.MessageItems), 3+1)
+	tcompare(t, viewMsgs.ViewEnd, true)
+	// Without threading, the inbox has just 3 messages.
+	viewID++
+	api.Request(ctx, Request{ID: 1, SSEID: start.SSEID, ViewID: viewID, Query: Query{Filter: Filter{MailboxID: inbox.ID}, Threading: "off"}, Page: Page{Count: 10}})
+	evr.Get("viewMsgs", &viewMsgs)
+	tcompare(t, len(viewMsgs.MessageItems), 3)
+	tcompare(t, threadlen(viewMsgs.MessageItems), 3)
+	tcompare(t, viewMsgs.ViewEnd, true)
+
 	testFilter := func(orderAsc bool, f Filter, nf NotFilter, expIDs []int64) {
 		t.Helper()
 		viewID++
@@ -242,7 +276,7 @@ func TestView(t *testing.T) {
 		evr.Get("viewMsgs", &viewMsgs)
 		ids := make([]int64, len(viewMsgs.MessageItems))
 		for i, mi := range viewMsgs.MessageItems {
-			ids[i] = mi.Message.ID
+			ids[i] = mi[0].Message.ID
 		}
 		tcompare(t, ids, expIDs)
 		tcompare(t, viewMsgs.ViewEnd, true)
@@ -250,32 +284,32 @@ func TestView(t *testing.T) {
 
 	// Test filtering.
 	var znf NotFilter
-	testFilter(false, Filter{MailboxID: lists.ID, MailboxChildrenIncluded: true}, znf, []int64{listsGoNutsMinimal.ID, listsMinimal.ID}) // Mailbox and sub mailbox.
-	testFilter(true, Filter{MailboxID: lists.ID, MailboxChildrenIncluded: true}, znf, []int64{listsMinimal.ID, listsGoNutsMinimal.ID})  // Oldest first first.
-	testFilter(false, Filter{MailboxID: -1}, znf, []int64{listsGoNutsMinimal.ID, listsMinimal.ID, inboxFlags.ID, inboxMinimal.ID})      // All except trash/junk/rejects.
+	testFilter(false, Filter{MailboxID: lists.ID, MailboxChildrenIncluded: true}, znf, []int64{listsGoNutsMinimal.ID, listsMinimal.ID})              // Mailbox and sub mailbox.
+	testFilter(true, Filter{MailboxID: lists.ID, MailboxChildrenIncluded: true}, znf, []int64{listsMinimal.ID, listsGoNutsMinimal.ID})               // Oldest first first.
+	testFilter(false, Filter{MailboxID: -1}, znf, []int64{inboxAltReply.ID, listsGoNutsMinimal.ID, listsMinimal.ID, inboxFlags.ID, inboxMinimal.ID}) // All except trash/junk/rejects.
 	testFilter(false, Filter{Labels: []string{`\seen`}}, znf, []int64{inboxFlags.ID})
-	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{Labels: []string{`\seen`}}, []int64{inboxMinimal.ID})
+	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{Labels: []string{`\seen`}}, []int64{inboxAltReply.ID, inboxMinimal.ID})
 	testFilter(false, Filter{Labels: []string{`testlabel`}}, znf, []int64{inboxFlags.ID})
-	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{Labels: []string{`testlabel`}}, []int64{inboxMinimal.ID})
-	testFilter(false, Filter{MailboxID: inbox.ID, Oldest: &inboxFlags.m.Received}, znf, []int64{inboxFlags.ID})
+	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{Labels: []string{`testlabel`}}, []int64{inboxAltReply.ID, inboxMinimal.ID})
+	testFilter(false, Filter{MailboxID: inbox.ID, Oldest: &inboxFlags.m.Received}, znf, []int64{inboxAltReply.ID, inboxFlags.ID})
 	testFilter(false, Filter{MailboxID: inbox.ID, Newest: &inboxMinimal.m.Received}, znf, []int64{inboxMinimal.ID})
 	testFilter(false, Filter{MailboxID: inbox.ID, SizeMin: inboxFlags.m.Size}, znf, []int64{inboxFlags.ID})
 	testFilter(false, Filter{MailboxID: inbox.ID, SizeMax: inboxMinimal.m.Size}, znf, []int64{inboxMinimal.ID})
 	testFilter(false, Filter{From: []string{"mjl+altrel@mox.example"}}, znf, []int64{inboxFlags.ID})
-	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{From: []string{"mjl+altrel@mox.example"}}, []int64{inboxMinimal.ID})
+	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{From: []string{"mjl+altrel@mox.example"}}, []int64{inboxAltReply.ID, inboxMinimal.ID})
 	testFilter(false, Filter{To: []string{"mox+altrel@other.example"}}, znf, []int64{inboxFlags.ID})
-	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{To: []string{"mox+altrel@other.example"}}, []int64{inboxMinimal.ID})
+	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{To: []string{"mox+altrel@other.example"}}, []int64{inboxAltReply.ID, inboxMinimal.ID})
 	testFilter(false, Filter{From: []string{"mjl+altrel@mox.example", "bogus"}}, znf, []int64{})
 	testFilter(false, Filter{To: []string{"mox+altrel@other.example", "bogus"}}, znf, []int64{})
 	testFilter(false, Filter{Subject: []string{"test", "alt", "rel"}}, znf, []int64{inboxFlags.ID})
-	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{Subject: []string{"alt"}}, []int64{inboxMinimal.ID})
+	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{Subject: []string{"alt"}}, []int64{inboxAltReply.ID, inboxMinimal.ID})
 	testFilter(false, Filter{MailboxID: inbox.ID, Words: []string{"the text body", "body", "the "}}, znf, []int64{inboxFlags.ID})
-	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{Words: []string{"the text body"}}, []int64{inboxMinimal.ID})
+	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{Words: []string{"the text body"}}, []int64{inboxAltReply.ID, inboxMinimal.ID})
 	testFilter(false, Filter{Headers: [][2]string{{"X-Special", ""}}}, znf, []int64{inboxFlags.ID})
 	testFilter(false, Filter{Headers: [][2]string{{"X-Special", "testing"}}}, znf, []int64{inboxFlags.ID})
 	testFilter(false, Filter{Headers: [][2]string{{"X-Special", "other"}}}, znf, []int64{})
 	testFilter(false, Filter{Attachments: AttachmentImage}, znf, []int64{inboxFlags.ID})
-	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{Attachments: AttachmentImage}, []int64{inboxMinimal.ID})
+	testFilter(false, Filter{MailboxID: inbox.ID}, NotFilter{Attachments: AttachmentImage}, []int64{inboxAltReply.ID, inboxMinimal.ID})
 
 	// Test changes.
 	getChanges := func(changes ...any) {
@@ -341,13 +375,13 @@ func TestView(t *testing.T) {
 	var chmbcounts ChangeMailboxCounts
 	getChanges(&chmsgadd, &chmbcounts)
 	tcompare(t, chmsgadd.ChangeAddUID.MailboxID, inbox.ID)
-	tcompare(t, chmsgadd.MessageItem.Message.ID, inboxNew.ID)
+	tcompare(t, chmsgadd.MessageItems[0].Message.ID, inboxNew.ID)
 	chmbcounts.Size = 0
 	tcompare(t, chmbcounts, ChangeMailboxCounts{
 		ChangeMailboxCounts: store.ChangeMailboxCounts{
 			MailboxID:     inbox.ID,
 			MailboxName:   inbox.Name,
-			MailboxCounts: store.MailboxCounts{Total: 3, Unread: 2, Unseen: 2},
+			MailboxCounts: store.MailboxCounts{Total: 4, Unread: 3, Unseen: 3},
 		},
 	})
 
@@ -369,7 +403,7 @@ func TestView(t *testing.T) {
 		ChangeMailboxCounts: store.ChangeMailboxCounts{
 			MailboxID:     inbox.ID,
 			MailboxName:   inbox.Name,
-			MailboxCounts: store.MailboxCounts{Total: 3, Unread: 1, Unseen: 1},
+			MailboxCounts: store.MailboxCounts{Total: 4, Unread: 2, Unseen: 2},
 		},
 	})
 
@@ -384,9 +418,39 @@ func TestView(t *testing.T) {
 		ChangeMailboxCounts: store.ChangeMailboxCounts{
 			MailboxID:     inbox.ID,
 			MailboxName:   inbox.Name,
-			MailboxCounts: store.MailboxCounts{Total: 1},
+			MailboxCounts: store.MailboxCounts{Total: 2, Unread: 1, Unseen: 1},
 		},
 	})
+
+	// ChangeMsgThread
+	api.ThreadCollapse(ctx, []int64{inboxAltReply.ID}, true)
+	var chmsgthread ChangeMsgThread
+	getChanges(&chmsgthread)
+	tcompare(t, chmsgthread.ChangeThread, store.ChangeThread{MessageIDs: []int64{inboxAltReply.ID}, Muted: false, Collapsed: true})
+
+	// Now collapsing the thread root, the child is already collapsed so no change.
+	api.ThreadCollapse(ctx, []int64{trashAlt.ID}, true)
+	getChanges(&chmsgthread)
+	tcompare(t, chmsgthread.ChangeThread, store.ChangeThread{MessageIDs: []int64{trashAlt.ID}, Muted: false, Collapsed: true})
+
+	// Expand thread root, including change for child.
+	api.ThreadCollapse(ctx, []int64{trashAlt.ID}, false)
+	var chmsgthread2 ChangeMsgThread
+	getChanges(&chmsgthread, &chmsgthread2)
+	tcompare(t, chmsgthread.ChangeThread, store.ChangeThread{MessageIDs: []int64{trashAlt.ID}, Muted: false, Collapsed: false})
+	tcompare(t, chmsgthread2.ChangeThread, store.ChangeThread{MessageIDs: []int64{inboxAltReply.ID}, Muted: false, Collapsed: false})
+
+	// Mute thread, including child, also collapses.
+	api.ThreadMute(ctx, []int64{trashAlt.ID}, true)
+	getChanges(&chmsgthread, &chmsgthread2)
+	tcompare(t, chmsgthread.ChangeThread, store.ChangeThread{MessageIDs: []int64{trashAlt.ID}, Muted: true, Collapsed: true})
+	tcompare(t, chmsgthread2.ChangeThread, store.ChangeThread{MessageIDs: []int64{inboxAltReply.ID}, Muted: true, Collapsed: true})
+
+	// And unmute Mute thread, including child. Messages are not expanded.
+	api.ThreadMute(ctx, []int64{trashAlt.ID}, false)
+	getChanges(&chmsgthread, &chmsgthread2)
+	tcompare(t, chmsgthread.ChangeThread, store.ChangeThread{MessageIDs: []int64{trashAlt.ID}, Muted: false, Collapsed: true})
+	tcompare(t, chmsgthread2.ChangeThread, store.ChangeThread{MessageIDs: []int64{inboxAltReply.ID}, Muted: false, Collapsed: true})
 
 	// todo: check move operations and their changes, e.g. MailboxDelete, MailboxEmpty, MessageRemove.
 }

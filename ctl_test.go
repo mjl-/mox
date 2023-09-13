@@ -217,6 +217,14 @@ func TestCtl(t *testing.T) {
 		ctlcmdReparse(ctl, "")
 	})
 
+	// "reassignthreads"
+	testctl(func(ctl *ctl) {
+		ctlcmdReassignthreads(ctl, "mjl")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdReassignthreads(ctl, "")
+	})
+
 	// "backup", backup account.
 	err = dmarcdb.Init()
 	tcheck(t, err, "dmarcdb init")

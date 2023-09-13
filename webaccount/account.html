@@ -235,6 +235,11 @@ const index = async () => {
 				}
 				problems.appendChild(dom.div(box(yellow, data.Message)))
 			})
+			eventSource.addEventListener('step', (e) => {
+				const data = JSON.parse(e.data) // {Title: ...}
+				console.log('import step event', {e, data})
+				importProgress.appendChild(dom.div(dom.br(), box(blue, 'Step: '+data.Title)))
+			})
 			eventSource.addEventListener('done', (e) => {
 				console.log('import done event', {e})
 				importProgress.appendChild(dom.div(dom.br(), box(blue, 'Import finished')))
@@ -475,7 +480,7 @@ const index = async () => {
 				),
 				dom.div(
 					dom.button('Upload and import'),
-					dom.p(style({fontStyle: 'italic', marginTop: '.5ex'}), 'The file is uploaded first, then its messages are imported. Importing is done in a transaction, you can abort the entire import before it is finished.'),
+					dom.p(style({fontStyle: 'italic', marginTop: '.5ex'}), 'The file is uploaded first, then its messages are imported, finally messages are matched for threading. Importing is done in a transaction, you can abort the entire import before it is finished.'),
 				),
 			),
 		),

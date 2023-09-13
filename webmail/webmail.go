@@ -758,7 +758,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 
 		m.MsgPrefix = nil
 		m.ParsedBuf = nil
-		mi := MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, pm.firstLine}
+		mi := MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, pm.firstLine, false}
 		mijson, err := json.Marshal(mi)
 		xcheckf(ctx, err, "marshal messageitem")
 

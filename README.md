@@ -109,15 +109,16 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 
 ## Roadmap
 
-- IMAP THREAD extension
-- Prepare data storage for JMAP
 - DANE and DNSSEC
 - Sending DMARC and TLS reports (currently only receiving)
+- Require TLS SMTP extension (RFC 8689)
+- Prepare data storage for JMAP
 - Calendaring
 - Add special IMAP mailbox ("Queue?") that contains queued but
   not-yet-delivered messages
 - OAUTH2 support, for single sign on
 - Sieve for filtering (for now see Rulesets in the account config)
+- Expose threading through IMAP extension
 - Privilege separation, isolating parts of the application to more restricted
   sandbox (e.g. new unauthenticated connections)
 - Using mox as backup MX

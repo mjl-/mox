@@ -50,6 +50,13 @@ type ChangeFlags struct {
 	Keywords  []string // Non-system/well-known flags/keywords/labels.
 }
 
+// ChangeThread is sent when muted/collapsed changes.
+type ChangeThread struct {
+	MessageIDs []int64
+	Muted      bool
+	Collapsed  bool
+}
+
 // ChangeRemoveMailbox is sent for a removed mailbox.
 type ChangeRemoveMailbox struct {
 	MailboxID int64

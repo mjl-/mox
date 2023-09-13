@@ -932,6 +932,62 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		}
 		w.xclose()
 
+	case "reassignthreads":
+		/* protocol:
+		> "reassignthreads"
+		> account or empty
+		< "ok" or error
+		< stream
+		*/
+
+		accountOpt := ctl.xread()
+		ctl.xwriteok()
+		w := ctl.writer()
+
+		xreassignThreads := func(accName string) {
+			acc, err := store.OpenAccount(accName)
+			ctl.xcheck(err, "open account")
+			defer func() {
+				err := acc.Close()
+				log.Check(err, "closing account after reassigning threads")
+			}()
+
+			// We don't want to step on an existing upgrade process.
+			err = acc.ThreadingWait(ctl.log)
+			ctl.xcheck(err, "waiting for threading upgrade to finish")
+			// todo: should we try to continue if the threading upgrade failed? only if there is a chance it will succeed this time...
+
+			// todo: reassigning isn't atomic (in a single transaction), ideally it would be (bstore would need to be able to handle large updates).
+			const batchSize = 50000
+			total, err := acc.ResetThreading(ctx, ctl.log, batchSize, true)
+			ctl.xcheck(err, "resetting threading fields")
+			_, err = fmt.Fprintf(w, "New thread base subject assigned to %d message(s), starting to reassign threads...\n", total)
+			ctl.xcheck(err, "write")
+
+			// Assign threads again. Ideally we would do this in a single transaction, but
+			// bstore/boltdb cannot handle so many pending changes, so we set a high batchsize.
+			err = acc.AssignThreads(ctx, ctl.log, nil, 0, 50000, w)
+			ctl.xcheck(err, "reassign threads")
+
+			_, err = fmt.Fprintf(w, "Threads reassigned. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n")
+			ctl.xcheck(err, "write")
+		}
+
+		if accountOpt != "" {
+			xreassignThreads(accountOpt)
+		} else {
+			for i, accName := range mox.Conf.Accounts() {
+				var line string
+				if i > 0 {
+					line = "\n"
+				}
+				_, err := fmt.Fprintf(w, "%sReassigning threads for account %s...\n", line, accName)
+				ctl.xcheck(err, "write")
+				xreassignThreads(accName)
+			}
+		}
+		w.xclose()
+
 	case "backup":
 		backupctl(ctx, ctl)
 

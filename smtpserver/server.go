@@ -2327,7 +2327,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		if !a.accept {
 			conf, _ := acc.Conf()
 			if conf.RejectsMailbox != "" {
-				present, messageid, messagehash, err := rejectPresent(log, acc, conf.RejectsMailbox, m, dataFile)
+				present, _, messagehash, err := rejectPresent(log, acc, conf.RejectsMailbox, m, dataFile)
 				if err != nil {
 					log.Errorx("checking whether reject is already present", err)
 				} else if !present {
@@ -2336,7 +2336,6 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					// Regular automatic junk flags configuration applies to these messages. The
 					// default is to treat these as neutral, so they won't cause outright rejections
 					// due to reputation for later delivery attempts.
-					m.MessageID = messageid
 					m.MessageHash = messagehash
 					acc.WithWLock(func() {
 						hasSpace := true
@@ -2390,7 +2389,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 		}
 
-		// If a forwarded message and this is a first-time sender, wait before actually
+		// If this is a first-time sender and not a forwarded message, wait before actually
 		// delivering. If this turns out to be a spammer, we've kept one of their
 		// connections busy.
 		if delayFirstTime && !m.IsForward && a.reason == reasonNoBadSignals && c.firstTimeSenderDelay > 0 {
@@ -2432,8 +2431,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			log.Info("incoming message delivered", mlog.Field("reason", a.reason), mlog.Field("msgfrom", msgFrom))
 
 			conf, _ := acc.Conf()
-			if conf.RejectsMailbox != "" && messageID != "" {
-				if err := acc.RejectsRemove(log, conf.RejectsMailbox, messageID); err != nil {
+			if conf.RejectsMailbox != "" && m.MessageID != "" {
+				if err := acc.RejectsRemove(log, conf.RejectsMailbox, m.MessageID); err != nil {
 					log.Errorx("removing message from rejects mailbox", err, mlog.Field("messageid", messageID))
 				}
 			}

@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +38,7 @@ import (
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/publicsuffix"
@@ -143,6 +145,7 @@ var commands = []struct {
 	{"ensureparsed", cmdEnsureParsed},
 	{"recalculatemailboxcounts", cmdRecalculateMailboxCounts},
 	{"message parse", cmdMessageParse},
+	{"reassignthreads", cmdReassignthreads},
 
 	// Not listed.
 	{"helpall", cmdHelpall},
@@ -162,6 +165,7 @@ var commands = []struct {
 	{"ximport maildir", cmdXImportMaildir},
 	{"ximport mbox", cmdXImportMbox},
 	{"openaccounts", cmdOpenaccounts},
+	{"readmessages", cmdReadmessages},
 }
 
 var cmds []cmd
@@ -388,6 +392,10 @@ func main() {
 	// mox server should never use it. But integration tests enable it again with a
 	// flag.
 	store.CheckConsistencyOnClose = false
+
+	ctxbg := context.Background()
+	mox.Shutdown = ctxbg
+	mox.Context = ctxbg
 
 	log.SetFlags(0)
 
@@ -2086,6 +2094,7 @@ func cmdVersion(c *cmd) {
 	fmt.Println(moxvar.Version)
 }
 
+// todo: should make it possible to run this command against a running mox. it should disconnect existing clients for accounts with a bumped uidvalidity, so they will reconnect and refetch the data.
 func cmdBumpUIDValidity(c *cmd) {
 	c.params = "account [mailbox]"
 	c.help = `Change the IMAP UID validity of the mailbox, causing IMAP clients to refetch messages.
@@ -2476,13 +2485,193 @@ Opens database files directly, not going through a running mox instance.
 		c.Usage()
 	}
 
+	clog := mlog.New("openaccounts")
+
 	dataDir := filepath.Clean(args[0])
 	for _, accName := range args[1:] {
 		accDir := filepath.Join(dataDir, "accounts", accName)
-		log.Printf("opening account %s...", filepath.Join(accDir, accName))
+		log.Printf("opening account %s...", accDir)
 		a, err := store.OpenAccountDB(accDir, accName)
 		xcheckf(err, "open account %s", accName)
+		err = a.ThreadingWait(clog)
+		xcheckf(err, "wait for threading upgrade to complete for %s", accName)
 		err = a.Close()
 		xcheckf(err, "close account %s", accName)
+	}
+}
+
+func cmdReassignthreads(c *cmd) {
+	c.params = "[account]"
+	c.help = `Reassign message threads.
+
+For all accounts, or optionally only the specified account.
+
+Threading for all messages in an account is first reset, and new base subject
+and normalized message-id saved with the message. Then all messages are
+evaluated and matched against their parents/ancestors.
+
+Messages are matched based on the References header, with a fall-back to an
+In-Reply-To header, and if neither is present/valid, based only on base
+subject.
+
+A References header typically points to multiple previous messages in a
+hierarchy. From oldest ancestor to most recent parent. An In-Reply-To header
+would have only a message-id of the parent message.
+
+A message is only linked to a parent/ancestor if their base subject is the
+same. This ensures unrelated replies, with a new subject, are placed in their
+own thread.
+
+The base subject is lower cased, has whitespace collapsed to a single
+space, and some components removed: leading "Re:", "Fwd:", "Fw:", or bracketed
+tag (that mailing lists often add, e.g. "[listname]"), trailing "(fwd)", or
+enclosing "[fwd: ...]".
+
+Messages are linked to all their ancestors. If an intermediate parent/ancestor
+message is deleted in the future, the message can still be linked to the earlier
+ancestors. If the direct parent already wasn't available while matching, this is
+stored as the message having a "missing link" to its stored ancestors.
+`
+	args := c.Parse()
+	if len(args) > 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	var account string
+	if len(args) == 1 {
+		account = args[0]
+	}
+	ctlcmdReassignthreads(xctl(), account)
+}
+
+func ctlcmdReassignthreads(ctl *ctl, account string) {
+	ctl.xwrite("reassignthreads")
+	ctl.xwrite(account)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
+func cmdReadmessages(c *cmd) {
+	c.unlisted = true
+	c.params = "datadir account ..."
+	c.help = `Open account, parse several headers for all messages.
+
+For performance testing.
+
+Opens database files directly, not going through a running mox instance.
+`
+
+	gomaxprocs := runtime.GOMAXPROCS(0)
+	var procs, workqueuesize, limit int
+	c.flag.IntVar(&procs, "procs", gomaxprocs, "number of goroutines for reading messages")
+	c.flag.IntVar(&workqueuesize, "workqueuesize", 2*gomaxprocs, "number of messages to keep in work queue")
+	c.flag.IntVar(&limit, "limit", 0, "number of messages to process if greater than zero")
+	args := c.Parse()
+	if len(args) <= 1 {
+		c.Usage()
+	}
+
+	type threadPrep struct {
+		references []string
+		inReplyTo  []string
+	}
+
+	threadingFields := [][]byte{
+		[]byte("references"),
+		[]byte("in-reply-to"),
+	}
+
+	dataDir := filepath.Clean(args[0])
+	for _, accName := range args[1:] {
+		accDir := filepath.Join(dataDir, "accounts", accName)
+		log.Printf("opening account %s...", accDir)
+		a, err := store.OpenAccountDB(accDir, accName)
+		xcheckf(err, "open account %s", accName)
+
+		prepareMessages := func(in, out chan moxio.Work[store.Message, threadPrep]) {
+			headerbuf := make([]byte, 8*1024)
+			scratch := make([]byte, 4*1024)
+			for {
+				w, ok := <-in
+				if !ok {
+					return
+				}
+
+				m := w.In
+				var partialPart struct {
+					HeaderOffset int64
+					BodyOffset   int64
+				}
+				if err := json.Unmarshal(m.ParsedBuf, &partialPart); err != nil {
+					w.Err = fmt.Errorf("unmarshal part: %v", err)
+				} else {
+					size := partialPart.BodyOffset - partialPart.HeaderOffset
+					if int(size) > len(headerbuf) {
+						headerbuf = make([]byte, size)
+					}
+					if size > 0 {
+						buf := headerbuf[:int(size)]
+						err := func() error {
+							mr := a.MessageReader(m)
+							defer mr.Close()
+
+							// ReadAt returns whole buffer or error. Single read should be fast.
+							n, err := mr.ReadAt(buf, partialPart.HeaderOffset)
+							if err != nil || n != len(buf) {
+								return fmt.Errorf("read header: %v", err)
+							}
+							return nil
+						}()
+						if err != nil {
+							w.Err = err
+						} else if h, err := message.ParseHeaderFields(buf, scratch, threadingFields); err != nil {
+							w.Err = err
+						} else {
+							w.Out.references = h["References"]
+							w.Out.inReplyTo = h["In-Reply-To"]
+						}
+					}
+				}
+
+				out <- w
+			}
+		}
+
+		n := 0
+		t := time.Now()
+		t0 := t
+
+		processMessage := func(m store.Message, prep threadPrep) error {
+			if n%100000 == 0 {
+				log.Printf("%d messages (delta %s)", n, time.Since(t))
+				t = time.Now()
+			}
+			n++
+			return nil
+		}
+
+		wq := moxio.NewWorkQueue[store.Message, threadPrep](procs, workqueuesize, prepareMessages, processMessage)
+
+		err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
+			q := bstore.QueryTx[store.Message](tx)
+			q.FilterEqual("Expunged", false)
+			q.SortAsc("ID")
+			if limit > 0 {
+				q.Limit(limit)
+			}
+			err = q.ForEach(wq.Add)
+			if err == nil {
+				err = wq.Finish()
+			}
+			wq.Stop()
+
+			return err
+		})
+		xcheckf(err, "processing message")
+
+		err = a.Close()
+		xcheckf(err, "close account %s", accName)
+		log.Printf("account %s, total time %s", accName, time.Since(t0))
 	}
 }

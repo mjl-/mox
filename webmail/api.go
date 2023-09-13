@@ -748,7 +748,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			err = tx.Update(&sentmb)
 			xcheckf(ctx, err, "updating sent mailbox for counts")
 
-			err = acc.DeliverMessage(log, tx, &sentm, dataFile, true, true, false)
+			err = acc.DeliverMessage(log, tx, &sentm, dataFile, true, true, false, false)
 			if err != nil {
 				metricSubmission.WithLabelValues("storesenterror").Inc()
 				metricked = true
@@ -1488,7 +1488,140 @@ func (Webmail) MailboxSetSpecialUse(ctx context.Context, mb store.Mailbox) {
 	})
 }
 
+// ThreadCollapse saves the ThreadCollapse field for the messages and its
+// children. The messageIDs are typically thread roots. But not all roots
+// (without parent) of a thread need to have the same collapsed state.
+func (Webmail) ThreadCollapse(ctx context.Context, messageIDs []int64, collapse bool) {
+	log := xlog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc, err := store.OpenAccount(reqInfo.AccountName)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+
+	if len(messageIDs) == 0 {
+		xcheckuserf(ctx, errors.New("no messages"), "setting collapse")
+	}
+
+	acc.WithWLock(func() {
+		changes := make([]store.Change, 0, len(messageIDs))
+		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
+			// Gather ThreadIDs to list all potential messages, for a way to get all potential
+			// (child) messages. Further refined in FilterFn.
+			threadIDs := map[int64]struct{}{}
+			msgIDs := map[int64]struct{}{}
+			for _, id := range messageIDs {
+				m := store.Message{ID: id}
+				err := tx.Get(&m)
+				if err == bstore.ErrAbsent {
+					xcheckuserf(ctx, err, "get message")
+				}
+				xcheckf(ctx, err, "get message")
+				threadIDs[m.ThreadID] = struct{}{}
+				msgIDs[id] = struct{}{}
+			}
+
+			var updated []store.Message
+			q := bstore.QueryTx[store.Message](tx)
+			q.FilterEqual("ThreadID", slicesAny(maps.Keys(threadIDs))...)
+			q.FilterNotEqual("ThreadCollapsed", collapse)
+			q.FilterFn(func(tm store.Message) bool {
+				for _, id := range tm.ThreadParentIDs {
+					if _, ok := msgIDs[id]; ok {
+						return true
+					}
+				}
+				_, ok := msgIDs[tm.ID]
+				return ok
+			})
+			q.Gather(&updated)
+			q.SortAsc("ID") // Consistent order for testing.
+			_, err = q.UpdateFields(map[string]any{"ThreadCollapsed": collapse})
+			xcheckf(ctx, err, "updating collapse in database")
+
+			for _, m := range updated {
+				changes = append(changes, m.ChangeThread())
+			}
+		})
+		store.BroadcastChanges(acc, changes)
+	})
+}
+
+// ThreadMute saves the ThreadMute field for the messages and their children.
+// If messages are muted, they are also marked collapsed.
+func (Webmail) ThreadMute(ctx context.Context, messageIDs []int64, mute bool) {
+	log := xlog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc, err := store.OpenAccount(reqInfo.AccountName)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+
+	if len(messageIDs) == 0 {
+		xcheckuserf(ctx, errors.New("no messages"), "setting mute")
+	}
+
+	acc.WithWLock(func() {
+		changes := make([]store.Change, 0, len(messageIDs))
+		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
+			threadIDs := map[int64]struct{}{}
+			msgIDs := map[int64]struct{}{}
+			for _, id := range messageIDs {
+				m := store.Message{ID: id}
+				err := tx.Get(&m)
+				if err == bstore.ErrAbsent {
+					xcheckuserf(ctx, err, "get message")
+				}
+				xcheckf(ctx, err, "get message")
+				threadIDs[m.ThreadID] = struct{}{}
+				msgIDs[id] = struct{}{}
+			}
+
+			var updated []store.Message
+
+			q := bstore.QueryTx[store.Message](tx)
+			q.FilterEqual("ThreadID", slicesAny(maps.Keys(threadIDs))...)
+			q.FilterFn(func(tm store.Message) bool {
+				if tm.ThreadMuted == mute && (!mute || tm.ThreadCollapsed) {
+					return false
+				}
+				for _, id := range tm.ThreadParentIDs {
+					if _, ok := msgIDs[id]; ok {
+						return true
+					}
+				}
+				_, ok := msgIDs[tm.ID]
+				return ok
+			})
+			q.Gather(&updated)
+			fields := map[string]any{"ThreadMuted": mute}
+			if mute {
+				fields["ThreadCollapsed"] = true
+			}
+			_, err = q.UpdateFields(fields)
+			xcheckf(ctx, err, "updating mute in database")
+
+			for _, m := range updated {
+				changes = append(changes, m.ChangeThread())
+			}
+		})
+		store.BroadcastChanges(acc, changes)
+	})
+}
+
+func slicesAny[T any](l []T) []any {
+	r := make([]any, len(l))
+	for i, v := range l {
+		r[i] = v
+	}
+	return r
+}
+
 // SSETypes exists to ensure the generated API contains the types, for use in SSE events.
-func (Webmail) SSETypes() (start EventStart, viewErr EventViewErr, viewReset EventViewReset, viewMsgs EventViewMsgs, viewChanges EventViewChanges, msgAdd ChangeMsgAdd, msgRemove ChangeMsgRemove, msgFlags ChangeMsgFlags, mailboxRemove ChangeMailboxRemove, mailboxAdd ChangeMailboxAdd, mailboxRename ChangeMailboxRename, mailboxCounts ChangeMailboxCounts, mailboxSpecialUse ChangeMailboxSpecialUse, mailboxKeywords ChangeMailboxKeywords, flags store.Flags) {
+func (Webmail) SSETypes() (start EventStart, viewErr EventViewErr, viewReset EventViewReset, viewMsgs EventViewMsgs, viewChanges EventViewChanges, msgAdd ChangeMsgAdd, msgRemove ChangeMsgRemove, msgFlags ChangeMsgFlags, msgThread ChangeMsgThread, mailboxRemove ChangeMailboxRemove, mailboxAdd ChangeMailboxAdd, mailboxRename ChangeMailboxRename, mailboxCounts ChangeMailboxCounts, mailboxSpecialUse ChangeMailboxSpecialUse, mailboxKeywords ChangeMailboxKeywords, flags store.Flags) {
 	return
 }

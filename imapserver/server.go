@@ -31,7 +31,7 @@ not in IMAP4rev2). ../rfc/3501:964
 - todo: do not return binary data for a fetch body. at least not for imap4rev1. we should be encoding it as base64?
 - todo: on expunge we currently remove the message even if other sessions still have a reference to the uid. if they try to query the uid, they'll get an error. we could be nicer and only actually remove the message when the last reference has gone. we could add a new flag to store.Message marking the message as expunged, not give new session access to such messages, and make store remove them at startup, and clean them when the last session referencing the session goes. however, it will get much more complicated. renaming messages would need special handling. and should we do the same for removed mailboxes?
 - todo: try to recover from syntax errors when the last command line ends with a }, i.e. a literal. we currently abort the entire connection. we may want to read some amount of literal data and continue with a next command.
-- future: more extensions: STATUS=SIZE, OBJECTID, MULTISEARCH, REPLACE, NOTIFY, CATENATE, MULTIAPPEND, SORT, THREAD, CREATE-SPECIAL-USE.
+- todo future: more extensions: STATUS=SIZE, OBJECTID, MULTISEARCH, REPLACE, NOTIFY, CATENATE, MULTIAPPEND, SORT, THREAD, CREATE-SPECIAL-USE.
 */
 
 import (
@@ -1199,7 +1199,7 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 		case store.ChangeRemoveMailbox, store.ChangeAddMailbox, store.ChangeRenameMailbox, store.ChangeAddSubscription:
 			n = append(n, change)
 			continue
-		case store.ChangeMailboxCounts, store.ChangeMailboxSpecialUse, store.ChangeMailboxKeywords:
+		case store.ChangeMailboxCounts, store.ChangeMailboxSpecialUse, store.ChangeMailboxKeywords, store.ChangeThread:
 		default:
 			panic(fmt.Errorf("missing case for %#v", change))
 		}
@@ -2740,7 +2740,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			err = tx.Update(&mb)
 			xcheckf(err, "updating mailbox counts")
 
-			err := c.account.DeliverMessage(c.log, tx, &m, msgFile, true, true, false)
+			err := c.account.DeliverMessage(c.log, tx, &m, msgFile, true, true, false, false)
 			xcheckf(err, "delivering message")
 		})
 

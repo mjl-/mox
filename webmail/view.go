@@ -52,9 +52,18 @@ type Request struct {
 	Page  Page
 }
 
+type ThreadMode string
+
+const (
+	ThreadOff    ThreadMode = "off"
+	ThreadOn     ThreadMode = "on"
+	ThreadUnread ThreadMode = "unread"
+)
+
 // Query is a request for messages that match filters, in a given order.
 type Query struct {
 	OrderAsc  bool // Order by received ascending or desending.
+	Threading ThreadMode
 	Filter    Filter
 	NotFilter NotFilter
 }
@@ -163,6 +172,7 @@ type MessageItem struct {
 	IsSigned    bool
 	IsEncrypted bool
 	FirstLine   string // Of message body, for showing as preview.
+	MatchQuery  bool   // If message does not match query, it can still be included because of threading.
 }
 
 // ParsedMessage has more parsed/derived information about a message, intended
@@ -219,8 +229,18 @@ type EventViewMsgs struct {
 	ViewID    int64
 	RequestID int64
 
-	MessageItems  []MessageItem  // If empty, this was the last message for the request.
-	ParsedMessage *ParsedMessage // If set, will match the target page.DestMessageID from the request.
+	// If empty, this was the last message for the request. If non-empty, a list of
+	// thread messages. Each with the first message being the reason this thread is
+	// included and can be used as AnchorID in followup requests. If the threading mode
+	// is "off" in the query, there will always be only a single message. If a thread
+	// is sent, all messages in the thread are sent, including those that don't match
+	// the query (e.g. from another mailbox). Threads can be displayed based on the
+	// ThreadParentIDs field, with possibly slightly different display based on field
+	// ThreadMissingLink.
+	MessageItems [][]MessageItem
+
+	// If set, will match the target page.DestMessageID from the request.
+	ParsedMessage *ParsedMessage
 
 	// If set, there are no more messages in this view at this moment. Messages can be
 	// added, typically via Change messages, e.g. for new deliveries.
@@ -253,10 +273,10 @@ type EventViewChanges struct {
 	Changes [][2]any // The first field of [2]any is a string, the second of the Change types below.
 }
 
-// ChangeMsgAdd adds a new message to the view.
+// ChangeMsgAdd adds a new message and possibly its thread to the view.
 type ChangeMsgAdd struct {
 	store.ChangeAddUID
-	MessageItem MessageItem
+	MessageItems []MessageItem
 }
 
 // ChangeMsgRemove removes one or more messages from the view.
@@ -267,6 +287,11 @@ type ChangeMsgRemove struct {
 // ChangeMsgFlags updates flags for one message.
 type ChangeMsgFlags struct {
 	store.ChangeFlags
+}
+
+// ChangeMsgThread updates muted/collapsed fields for one message.
+type ChangeMsgThread struct {
+	store.ChangeThread
 }
 
 // ChangeMailboxRemove indicates a mailbox was removed, including all its messages.
@@ -308,9 +333,9 @@ type ChangeMailboxKeywords struct {
 type view struct {
 	Request Request
 
-	// Last message we sent to the client. We use it to decide if a newly delivered
-	// message is within the view and the client should get a notification.
-	LastMessage store.Message
+	// Received of last message we sent to the client. We use it to decide if a newly
+	// delivered message is within the view and the client should get a notification.
+	LastMessageReceived time.Time
 
 	// If set, the last message in the query view has been sent. There is no need to do
 	// another query, it will not return more data. Used to decide if an event for a
@@ -322,6 +347,12 @@ type view struct {
 	// Mailboxes to match, can be multiple, for matching children. If empty, there is
 	// no filter on mailboxes.
 	mailboxIDs map[int64]bool
+
+	// Threads sent to client. New messages for this thread are also sent, regardless
+	// of regular query matching, so also for other mailboxes. If the user (re)moved
+	// all messages of a thread, they may still receive events for the thread. Only
+	// filled when query with threading not off.
+	threadIDs map[int64]struct{}
 }
 
 // sses tracks all sse connections, and access to them.
@@ -513,6 +544,9 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 		http.Error(w, "400 - bad request - request cannot have Page.Count 0", http.StatusBadRequest)
 		return
 	}
+	if req.Query.Threading == "" {
+		req.Query.Threading = ThreadOff
+	}
 
 	var writer *eventWriter
 
@@ -699,7 +733,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 	// Start a view, it determines if we send a change to the client. And start an
 	// implicit query for messages, we'll send the messages to the client which can
 	// fill its ui with messages.
-	v := view{req, store.Message{}, false, matchMailboxes, mailboxIDs}
+	v := view{req, time.Time{}, false, matchMailboxes, mailboxIDs, map[int64]struct{}{}}
 	go viewRequestTx(reqctx, log, acc, qtx, v, viewMsgsc, viewErrc, viewResetc, donec)
 	qtx = nil // viewRequestTx closes qtx
 
@@ -764,7 +798,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 
 		// Return uids that are within range in view. Because the end has been reached, or
 		// because the UID is not after the last message.
-		xchangedUIDs := func(mailboxID int64, uids []store.UID) (changedUIDs []store.UID) {
+		xchangedUIDs := func(mailboxID int64, uids []store.UID, isRemove bool) (changedUIDs []store.UID) {
 			uidsAny := make([]any, len(uids))
 			for i, uid := range uids {
 				uidsAny[i] = uid
@@ -774,8 +808,10 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 			q := bstore.QueryTx[store.Message](xtx)
 			q.FilterNonzero(store.Message{MailboxID: mailboxID})
 			q.FilterEqual("UID", uidsAny...)
+			mbOK := v.matchesMailbox(mailboxID)
 			err = q.ForEach(func(m store.Message) error {
-				if v.inRange(m) {
+				_, thread := v.threadIDs[m.ThreadID]
+				if thread || mbOK && (v.inRange(m) || isRemove && m.Expunged) {
 					changedUIDs = append(changedUIDs, m.UID)
 				}
 				return nil
@@ -788,33 +824,40 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 		for _, change := range changes {
 			switch c := change.(type) {
 			case store.ChangeAddUID:
-				if ok, err := v.matches(log, acc, true, 0, c.MailboxID, c.UID, c.Flags, c.Keywords, getmsg); err != nil {
-					xcheckf(ctx, err, "matching new message against view")
-				} else if !ok {
-					continue
-				}
+				ok, err := v.matches(log, acc, true, 0, c.MailboxID, c.UID, c.Flags, c.Keywords, getmsg)
+				xcheckf(ctx, err, "matching new message against view")
 				m, err := getmsg(0, c.MailboxID, c.UID)
 				xcheckf(ctx, err, "get message")
+				_, thread := v.threadIDs[m.ThreadID]
+				if !ok && !thread {
+					continue
+				}
 				state := msgState{acc: acc}
 				mi, err := messageItem(log, m, &state)
 				state.clear()
 				xcheckf(ctx, err, "make messageitem")
-				taggedChanges = append(taggedChanges, [2]any{"ChangeMsgAdd", ChangeMsgAdd{c, mi}})
+				mi.MatchQuery = ok
+
+				mil := []MessageItem{mi}
+				if !thread && req.Query.Threading != ThreadOff {
+					err := ensureTx()
+					xcheckf(ctx, err, "transaction")
+					more, _, err := gatherThread(log, xtx, acc, v, m, 0)
+					xcheckf(ctx, err, "gathering thread messages for id %d, thread %d", m.ID, m.ThreadID)
+					mil = append(mil, more...)
+					v.threadIDs[m.ThreadID] = struct{}{}
+				}
+
+				taggedChanges = append(taggedChanges, [2]any{"ChangeMsgAdd", ChangeMsgAdd{c, mil}})
 
 				// If message extends the view, store it as such.
-				if !v.Request.Query.OrderAsc && m.Received.Before(v.LastMessage.Received) || v.Request.Query.OrderAsc && m.Received.After(v.LastMessage.Received) {
-					v.LastMessage = m
+				if !v.Request.Query.OrderAsc && m.Received.Before(v.LastMessageReceived) || v.Request.Query.OrderAsc && m.Received.After(v.LastMessageReceived) {
+					v.LastMessageReceived = m.Received
 				}
 
 			case store.ChangeRemoveUIDs:
-				// We do a quick filter over changes, not sending UID updates for unselected
-				// mailboxes or when the message is outside the range of the view. But we still may
-				// send messages that don't apply to the filter. If client doesn't recognize the
-				// messages, that's fine.
-				if !v.matchesMailbox(c.MailboxID) {
-					continue
-				}
-				changedUIDs := xchangedUIDs(c.MailboxID, c.UIDs)
+				// We may send changes for uids the client doesn't know, that's fine.
+				changedUIDs := xchangedUIDs(c.MailboxID, c.UIDs, true)
 				if len(changedUIDs) == 0 {
 					continue
 				}
@@ -823,17 +866,18 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 				taggedChanges = append(taggedChanges, [2]any{"ChangeMsgRemove", ch})
 
 			case store.ChangeFlags:
-				// As with ChangeRemoveUIDs above, we send more changes than strictly needed.
-				if !v.matchesMailbox(c.MailboxID) {
-					continue
-				}
-				changedUIDs := xchangedUIDs(c.MailboxID, []store.UID{c.UID})
+				// We may send changes for uids the client doesn't know, that's fine.
+				changedUIDs := xchangedUIDs(c.MailboxID, []store.UID{c.UID}, false)
 				if len(changedUIDs) == 0 {
 					continue
 				}
 				ch := ChangeMsgFlags{c}
 				ch.UID = changedUIDs[0]
 				taggedChanges = append(taggedChanges, [2]any{"ChangeMsgFlags", ch})
+
+			case store.ChangeThread:
+				// Change in muted/collaped state, just always ship it.
+				taggedChanges = append(taggedChanges, [2]any{"ChangeMsgThread", ChangeMsgThread{c}})
 
 			case store.ChangeRemoveMailbox:
 				taggedChanges = append(taggedChanges, [2]any{"ChangeMailboxRemove", ChangeMailboxRemove{c}})
@@ -910,7 +954,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 				v.End = true
 			}
 			if len(vm.MessageItems) > 0 {
-				v.LastMessage = vm.MessageItems[len(vm.MessageItems)-1].Message
+				v.LastMessageReceived = vm.MessageItems[len(vm.MessageItems)-1][0].Message.Received
 			}
 			writer.xsendEvent(ctx, log, "viewMsgs", vm)
 
@@ -948,7 +992,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 				cancelDrain()
 			}
 			if req.Cancel {
-				v = view{req, store.Message{}, false, false, nil}
+				v = view{req, time.Time{}, false, false, nil, nil}
 				continue
 			}
 
@@ -987,7 +1031,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 					if req.Query.Filter.MailboxChildrenIncluded {
 						xgatherMailboxIDs(ctx, rtx, mailboxIDs, mailboxPrefixes)
 					}
-					v = view{req, store.Message{}, false, matchMailboxes, mailboxIDs}
+					v = view{req, time.Time{}, false, matchMailboxes, mailboxIDs, map[int64]struct{}{}}
 				} else {
 					v.Request = req
 				}
@@ -1067,7 +1111,7 @@ func (v view) matchesMailbox(mailboxID int64) bool {
 // inRange returns whether m is within the range for the view, whether a change for
 // this message should be sent to the client so it can update its state.
 func (v view) inRange(m store.Message) bool {
-	return v.End || !v.Request.Query.OrderAsc && !m.Received.Before(v.LastMessage.Received) || v.Request.Query.OrderAsc && !m.Received.After(v.LastMessage.Received)
+	return v.End || !v.Request.Query.OrderAsc && !m.Received.Before(v.LastMessageReceived) || v.Request.Query.OrderAsc && !m.Received.After(v.LastMessageReceived)
 }
 
 // matches checks if the message, identified by either messageID or mailboxID+UID,
@@ -1152,7 +1196,7 @@ type msgResp struct {
 	err     error          // If set, an error happened and fields below are not set.
 	reset   bool           // If set, the anchor message does not exist (anymore?) and we are sending messages from the start, fields below not set.
 	viewEnd bool           // If set, the last message for the view was seen, no more should be requested, fields below not set.
-	mi      MessageItem    // If none of the cases above apply, the message that was found matching the query.
+	mil     []MessageItem  // If none of the cases above apply, the messages that was found matching the query. First message was reason the thread is returned, for use as AnchorID in followup request.
 	pm      *ParsedMessage // If m was the target page.DestMessageID, or this is the first match, this is the parsed message of mi.
 }
 
@@ -1176,7 +1220,7 @@ func viewRequestTx(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 		}
 	}()
 
-	var msgitems []MessageItem // Gathering for 300ms, then flushing.
+	var msgitems [][]MessageItem // Gathering for 300ms, then flushing.
 	var parsedMessage *ParsedMessage
 	var viewEnd bool
 
@@ -1225,7 +1269,7 @@ func viewRequestTx(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 				return
 			}
 
-			msgitems = append(msgitems, mr.mi)
+			msgitems = append(msgitems, mr.mil)
 			if mr.pm != nil {
 				parsedMessage = mr.pm
 			}
@@ -1406,6 +1450,12 @@ func queryMessages(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 			end = false
 			return bstore.StopForEach
 		}
+
+		if _, ok := v.threadIDs[m.ThreadID]; ok {
+			// Message was already returned as part of a thread.
+			return nil
+		}
+
 		var pm *ParsedMessage
 		if m.ID == page.DestMessageID || page.DestMessageID == 0 && have == 0 && page.AnchorMessageID == 0 {
 			found = true
@@ -1415,12 +1465,60 @@ func queryMessages(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 			}
 			pm = &xpm
 		}
+
 		mi, err := messageItem(log, m, &state)
 		if err != nil {
 			return fmt.Errorf("making messageitem for message %d: %v", m.ID, err)
 		}
-		mrc <- msgResp{mi: mi, pm: pm}
-		have++
+		mil := []MessageItem{mi}
+		if query.Threading != ThreadOff {
+			more, xpm, err := gatherThread(log, tx, acc, v, m, page.DestMessageID)
+			if err != nil {
+				return fmt.Errorf("gathering thread messages for id %d, thread %d: %v", m.ID, m.ThreadID, err)
+			}
+			if xpm != nil {
+				pm = xpm
+				found = true
+			}
+			mil = append(mil, more...)
+			v.threadIDs[m.ThreadID] = struct{}{}
+
+			// Calculate how many messages the frontend is going to show, and only count those as returned.
+			collapsed := map[int64]bool{}
+			for _, mi := range mil {
+				collapsed[mi.Message.ID] = mi.Message.ThreadCollapsed
+			}
+			unread := map[int64]bool{} // Propagated to thread root.
+			if query.Threading == ThreadUnread {
+				for _, mi := range mil {
+					m := mi.Message
+					if m.Seen {
+						continue
+					}
+					unread[m.ID] = true
+					for _, id := range m.ThreadParentIDs {
+						unread[id] = true
+					}
+				}
+			}
+			for _, mi := range mil {
+				m := mi.Message
+				threadRoot := true
+				rootID := m.ID
+				for _, id := range m.ThreadParentIDs {
+					if _, ok := collapsed[id]; ok {
+						threadRoot = false
+						rootID = id
+					}
+				}
+				if threadRoot || (query.Threading == ThreadOn && !collapsed[rootID] || query.Threading == ThreadUnread && unread[rootID]) {
+					have++
+				}
+			}
+		} else {
+			have++
+		}
+		mrc <- msgResp{mil: mil, pm: pm}
 		return nil
 	})
 	// Check for an error in one of the filters again. Check in ForEach would not
@@ -1435,6 +1533,57 @@ func queryMessages(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 	if end {
 		mrc <- msgResp{viewEnd: true}
 	}
+}
+
+func gatherThread(log *mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m store.Message, destMessageID int64) ([]MessageItem, *ParsedMessage, error) {
+	if m.ThreadID == 0 {
+		// If we would continue, FilterNonzero would fail because there are no non-zero fields.
+		return nil, nil, fmt.Errorf("message has threadid 0, account is probably still being upgraded, try turning threading off until the upgrade is done")
+	}
+
+	// Fetch other messages for this thread.
+	qt := bstore.QueryTx[store.Message](tx)
+	qt.FilterNonzero(store.Message{ThreadID: m.ThreadID})
+	qt.FilterEqual("Expunged", false)
+	qt.FilterNotEqual("ID", m.ID)
+	tml, err := qt.List()
+	if err != nil {
+		return nil, nil, fmt.Errorf("listing other messages in thread for message %d, thread %d: %v", m.ID, m.ThreadID, err)
+	}
+
+	var mil []MessageItem
+	var pm *ParsedMessage
+	for _, tm := range tml {
+		err := func() error {
+			xstate := msgState{acc: acc}
+			defer xstate.clear()
+
+			mi, err := messageItem(log, tm, &xstate)
+			if err != nil {
+				return fmt.Errorf("making messageitem for message %d, for thread %d: %v", tm.ID, m.ThreadID, err)
+			}
+			mi.MatchQuery, err = v.matches(log, acc, false, tm.ID, tm.MailboxID, tm.UID, tm.Flags, tm.Keywords, func(int64, int64, store.UID) (store.Message, error) {
+				return tm, nil
+			})
+			if err != nil {
+				return fmt.Errorf("matching thread message %d against view query: %v", tm.ID, err)
+			}
+			mil = append(mil, mi)
+
+			if tm.ID == destMessageID {
+				xpm, err := parsedMessage(log, tm, &xstate, true, false)
+				if err != nil {
+					return fmt.Errorf("parsing thread message %d: %v", tm.ID, err)
+				}
+				pm = &xpm
+			}
+			return nil
+		}()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return mil, pm, nil
 }
 
 // While checking the filters on a message, we may need to get more message

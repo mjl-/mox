@@ -88,7 +88,7 @@ type Part struct {
 // Envelope holds the basic/common message headers as used in IMAP4.
 type Envelope struct {
 	Date      time.Time
-	Subject   string
+	Subject   string // Q/B-word-decoded.
 	From      []Address
 	Sender    []Address
 	ReplyTo   []Address

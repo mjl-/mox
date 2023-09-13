@@ -131,6 +131,7 @@ func TestAccount(t *testing.T) {
 				count += x.Count
 			case importProblem:
 				t.Fatalf("unexpected problem: %q", x.Message)
+			case importStep:
 			case importDone:
 				break loop
 			case importAborted:

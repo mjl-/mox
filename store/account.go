@@ -34,7 +34,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +50,7 @@ import (
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
+	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
@@ -444,13 +447,40 @@ type Message struct {
 	OrigEHLODomain  string
 	OrigDKIMDomains []string
 
-	// Value of Message-Id header. Only set for messages that were
-	// delivered to the rejects mailbox. For ensuring such messages are
-	// delivered only once. Value includes <>.
+	// Canonicalized Message-Id, always lower-case and normalized quoting, without
+	// <>'s. Empty if missing. Used for matching message threads, and to prevent
+	// duplicate reject delivery.
 	MessageID string `bstore:"index"`
+	// lower-case: ../rfc/5256:495
 
-	// Hash of message. For rejects delivery, so optional like MessageID.
+	// For matching threads in case there is no References/In-Reply-To header. It is
+	// lower-cased, white-space collapsed, mailing list tags and re/fwd tags removed.
+	SubjectBase string `bstore:"index"`
+	// ../rfc/5256:90
+
+	// Hash of message. For rejects delivery in case there is no Message-ID, only set
+	// when delivered as reject.
 	MessageHash []byte
+
+	// ID of message starting this thread.
+	ThreadID int64 `bstore:"index"`
+	// IDs of parent messages, from closest parent to the root message. Parent messages
+	// may be in a different mailbox, or may no longer exist. ThreadParentIDs must
+	// never contain the message id itself (a cycle), and parent messages must
+	// reference the same ancestors.
+	ThreadParentIDs []int64
+	// ThreadMissingLink is true if there is no match with a direct parent. E.g. first
+	// ID in ThreadParentIDs is not the direct ancestor (an intermediate message may
+	// have been deleted), or subject-based matching was done.
+	ThreadMissingLink bool
+	// If set, newly delivered child messages are automatically marked as read. This
+	// field is copied to new child messages. Changes are propagated to the webmail
+	// client.
+	ThreadMuted bool
+	// If set, this (sub)thread is collapsed in the webmail client, for threading mode
+	// "on" (mode "unread" ignores it). This field is copied to new child message.
+	// Changes are propagated to the webmail client.
+	ThreadCollapsed bool
 
 	Flags
 	// For keywords other than system flags or the basic well-known $-flags. Only in
@@ -498,6 +528,10 @@ func (m Message) ChangeFlags(orig Flags) ChangeFlags {
 	return ChangeFlags{MailboxID: m.MailboxID, UID: m.UID, ModSeq: m.ModSeq, Mask: mask, Flags: m.Flags, Keywords: m.Keywords}
 }
 
+func (m Message) ChangeThread() ChangeThread {
+	return ChangeThread{[]int64{m.ID}, m.ThreadMuted, m.ThreadCollapsed}
+}
+
 // ModSeq represents a modseq as stored in the database. ModSeq 0 in the
 // database is sent to the client as 1, because modseq 0 is special in IMAP.
 // ModSeq coming from the client are of type int64.
@@ -531,6 +565,22 @@ func (m *Message) PrepareExpunge() {
 		ModSeq:    m.ModSeq,
 		Expunged:  true,
 	}
+}
+
+// PrepareThreading sets MessageID and SubjectBase (used in threading) based on the
+// envelope in part.
+func (m *Message) PrepareThreading(log *mlog.Log, part *message.Part) {
+	if part.Envelope == nil {
+		return
+	}
+	messageID, raw, err := message.MessageIDCanonical(part.Envelope.MessageID)
+	if err != nil {
+		log.Debugx("parsing message-id, ignoring", err, mlog.Field("messageid", part.Envelope.MessageID))
+	} else if raw {
+		log.Debug("could not parse message-id as address, continuing with raw value", mlog.Field("messageid", part.Envelope.MessageID))
+	}
+	m.MessageID = messageID
+	m.SubjectBase, _ = message.ThreadSubject(part.Envelope.Subject, false)
 }
 
 // LoadPart returns a message.Part by reading from m.ParsedBuf.
@@ -614,7 +664,7 @@ type Outgoing struct {
 }
 
 // Types stored in DB.
-var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}, SyncState{}}
+var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}, SyncState{}, Upgrade{}}
 
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.
 type Account struct {
@@ -623,6 +673,13 @@ type Account struct {
 	DBPath string     // Path to database with mailboxes, messages, etc.
 	DB     *bstore.DB // Open database connection.
 
+	// Channel that is closed if/when account has/gets "threads" accounting (see
+	// Upgrade.Threads).
+	threadsCompleted chan struct{}
+	// If threads upgrade completed with error, this is set. Used for warning during
+	// delivery, or aborting when importing.
+	threadsErr error
+
 	// Write lock must be held for account/mailbox modifications including message delivery.
 	// Read lock for reading mailboxes/messages.
 	// When making changes to mailboxes/messages, changes must be broadcasted before
@@ -630,6 +687,11 @@ type Account struct {
 	sync.RWMutex
 
 	nused int // Reference count, while >0, this account is alive and shared.
+}
+
+type Upgrade struct {
+	ID      byte
+	Threads byte // 0: None, 1: Adding MessageID's completed, 2: Adding ThreadID's completed.
 }
 
 // InitialUIDValidity returns a UIDValidity used for initializing an account.
@@ -650,6 +712,7 @@ func closeAccount(acc *Account) (rerr error) {
 	acc.nused--
 	defer openAccounts.Unlock()
 	if acc.nused == 0 {
+		// threadsCompleted must be closed now because it increased nused.
 		rerr = acc.DB.Close()
 		acc.DB = nil
 		delete(openAccounts.names, acc.Name)
@@ -714,45 +777,126 @@ func OpenAccountDB(accountDir, accountName string) (a *Account, rerr error) {
 		}
 	}()
 
+	acc := &Account{
+		Name:             accountName,
+		Dir:              accountDir,
+		DBPath:           dbpath,
+		DB:               db,
+		nused:            1,
+		threadsCompleted: make(chan struct{}),
+	}
+
 	if isNew {
 		if err := initAccount(db); err != nil {
 			return nil, fmt.Errorf("initializing account: %v", err)
 		}
-	} else {
-		// Ensure mailbox counts are set.
-		var mentioned bool
-		err := db.Write(context.TODO(), func(tx *bstore.Tx) error {
-			return bstore.QueryTx[Mailbox](tx).FilterEqual("HaveCounts", false).ForEach(func(mb Mailbox) error {
-				if !mentioned {
-					mentioned = true
-					xlog.Info("first calculation of mailbox counts for account", mlog.Field("account", accountName))
-				}
-				mc, err := mb.CalculateCounts(tx)
-				if err != nil {
-					return err
-				}
-				mb.HaveCounts = true
-				mb.MailboxCounts = mc
-				return tx.Update(&mb)
-			})
-		})
-		if err != nil {
-			return nil, fmt.Errorf("calculating counts for mailbox: %v", err)
-		}
+		close(acc.threadsCompleted)
+		return acc, nil
 	}
 
-	return &Account{
-		Name:   accountName,
-		Dir:    accountDir,
-		DBPath: dbpath,
-		DB:     db,
-		nused:  1,
-	}, nil
+	// Ensure mailbox counts are set.
+	var mentioned bool
+	err = db.Write(context.TODO(), func(tx *bstore.Tx) error {
+		return bstore.QueryTx[Mailbox](tx).FilterEqual("HaveCounts", false).ForEach(func(mb Mailbox) error {
+			if !mentioned {
+				mentioned = true
+				xlog.Info("first calculation of mailbox counts for account", mlog.Field("account", accountName))
+			}
+			mc, err := mb.CalculateCounts(tx)
+			if err != nil {
+				return err
+			}
+			mb.HaveCounts = true
+			mb.MailboxCounts = mc
+			return tx.Update(&mb)
+		})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("calculating counts for mailbox: %v", err)
+	}
+
+	// Start adding threading if needed.
+	up := Upgrade{ID: 1}
+	err = db.Write(context.TODO(), func(tx *bstore.Tx) error {
+		err := tx.Get(&up)
+		if err == bstore.ErrAbsent {
+			if err := tx.Insert(&up); err != nil {
+				return fmt.Errorf("inserting initial upgrade record: %v", err)
+			}
+			err = nil
+		}
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("checking message threading: %v", err)
+	}
+	if up.Threads == 2 {
+		close(acc.threadsCompleted)
+		return acc, nil
+	}
+
+	// Increase account use before holding on to account in background.
+	// Caller holds the lock. The goroutine below decreases nused by calling
+	// closeAccount.
+	acc.nused++
+
+	// Ensure all messages have a MessageID and SubjectBase, which are needed when
+	// matching threads.
+	// Then assign messages to threads, in the same way we do during imports.
+	xlog.Info("upgrading account for threading, in background", mlog.Field("account", acc.Name))
+	go func() {
+		defer func() {
+			err := closeAccount(acc)
+			xlog.Check(err, "closing use of account after upgrading account storage for threads", mlog.Field("account", a.Name))
+		}()
+
+		defer func() {
+			x := recover() // Should not happen, but don't take program down if it does.
+			if x != nil {
+				xlog.Error("upgradeThreads panic", mlog.Field("err", x))
+				debug.PrintStack()
+				metrics.PanicInc("upgradeThreads")
+				acc.threadsErr = fmt.Errorf("panic during upgradeThreads: %v", x)
+			}
+
+			// Mark that upgrade has finished, possibly error is indicated in threadsErr.
+			close(acc.threadsCompleted)
+		}()
+
+		err := upgradeThreads(mox.Shutdown, acc, &up)
+		if err != nil {
+			a.threadsErr = err
+			xlog.Errorx("upgrading account for threading, aborted", err, mlog.Field("account", a.Name))
+		} else {
+			xlog.Info("upgrading account for threading, completed", mlog.Field("account", a.Name))
+		}
+	}()
+	return acc, nil
+}
+
+// ThreadingWait blocks until the one-time account threading upgrade for the
+// account has completed, and returns an error if not successful.
+//
+// To be used before starting an import of messages.
+func (a *Account) ThreadingWait(log *mlog.Log) error {
+	select {
+	case <-a.threadsCompleted:
+		return a.threadsErr
+	default:
+	}
+	log.Debug("waiting for account upgrade to complete")
+
+	<-a.threadsCompleted
+	return a.threadsErr
 }
 
 func initAccount(db *bstore.DB) error {
 	return db.Write(context.TODO(), func(tx *bstore.Tx) error {
 		uidvalidity := InitialUIDValidity()
+
+		if err := tx.Insert(&Upgrade{ID: 1, Threads: 2}); err != nil {
+			return err
+		}
 
 		if len(mox.Conf.Static.DefaultMailboxes) > 0 {
 			// Deprecated in favor of InitialMailboxes.
@@ -862,10 +1006,14 @@ func (a *Account) Close() error {
 // - Message with UID >= mailbox uid next.
 // - Mailbox uidvalidity >= account uid validity.
 // - ModSeq > 0, CreateSeq > 0, CreateSeq <= ModSeq.
+// - All messages have a nonzero ThreadID, and no cycles in ThreadParentID, and parent messages the same ThreadParentIDs tail.
 func (a *Account) CheckConsistency() error {
-	var uiderrors []string    // With a limit, could be many.
-	var modseqerrors []string // With limit.
-	var fileerrors []string   // With limit.
+	var uidErrors []string            // With a limit, could be many.
+	var modseqErrors []string         // With limit.
+	var fileErrors []string           // With limit.
+	var threadidErrors []string       // With limit.
+	var threadParentErrors []string   // With limit.
+	var threadAncestorErrors []string // With limit.
 	var errors []string
 
 	err := a.DB.Read(context.Background(), func(tx *bstore.Tx) error {
@@ -897,13 +1045,13 @@ func (a *Account) CheckConsistency() error {
 
 			mb := mailboxes[m.MailboxID]
 
-			if (m.ModSeq == 0 || m.CreateSeq == 0 || m.CreateSeq > m.ModSeq) && len(modseqerrors) < 20 {
+			if (m.ModSeq == 0 || m.CreateSeq == 0 || m.CreateSeq > m.ModSeq) && len(modseqErrors) < 20 {
 				modseqerr := fmt.Sprintf("message %d in mailbox %q (id %d) has invalid modseq %d or createseq %d, both must be > 0 and createseq <= modseq", m.ID, mb.Name, mb.ID, m.ModSeq, m.CreateSeq)
-				modseqerrors = append(modseqerrors, modseqerr)
+				modseqErrors = append(modseqErrors, modseqerr)
 			}
-			if m.UID >= mb.UIDNext && len(uiderrors) < 20 {
+			if m.UID >= mb.UIDNext && len(uidErrors) < 20 {
 				uiderr := fmt.Sprintf("message %d in mailbox %q (id %d) has uid %d >= mailbox uidnext %d", m.ID, mb.Name, mb.ID, m.UID, mb.UIDNext)
-				uiderrors = append(uiderrors, uiderr)
+				uidErrors = append(uidErrors, uiderr)
 			}
 			if m.Expunged {
 				return nil
@@ -912,10 +1060,32 @@ func (a *Account) CheckConsistency() error {
 			st, err := os.Stat(p)
 			if err != nil {
 				existserr := fmt.Sprintf("message %d in mailbox %q (id %d) on-disk file %s: %v", m.ID, mb.Name, mb.ID, p, err)
-				fileerrors = append(fileerrors, existserr)
-			} else if len(fileerrors) < 20 && m.Size != int64(len(m.MsgPrefix))+st.Size() {
+				fileErrors = append(fileErrors, existserr)
+			} else if len(fileErrors) < 20 && m.Size != int64(len(m.MsgPrefix))+st.Size() {
 				sizeerr := fmt.Sprintf("message %d in mailbox %q (id %d) has size %d != len msgprefix %d + on-disk file size %d = %d", m.ID, mb.Name, mb.ID, m.Size, len(m.MsgPrefix), st.Size(), int64(len(m.MsgPrefix))+st.Size())
-				fileerrors = append(fileerrors, sizeerr)
+				fileErrors = append(fileErrors, sizeerr)
+			}
+
+			if m.ThreadID <= 0 && len(threadidErrors) < 20 {
+				err := fmt.Sprintf("message %d in mailbox %q (id %d) has threadid 0", m.ID, mb.Name, mb.ID)
+				threadidErrors = append(threadidErrors, err)
+			}
+			if slices.Contains(m.ThreadParentIDs, m.ID) && len(threadParentErrors) < 20 {
+				err := fmt.Sprintf("message %d in mailbox %q (id %d) references itself in threadparentids", m.ID, mb.Name, mb.ID)
+				threadParentErrors = append(threadParentErrors, err)
+			}
+			for i, pid := range m.ThreadParentIDs {
+				am := Message{ID: pid}
+				if err := tx.Get(&am); err == bstore.ErrAbsent {
+					continue
+				} else if err != nil {
+					return fmt.Errorf("get ancestor message: %v", err)
+				} else if !slices.Equal(m.ThreadParentIDs[i+1:], am.ThreadParentIDs) && len(threadAncestorErrors) < 20 {
+					err := fmt.Sprintf("message %d, thread %d has ancestor ids %v, and ancestor at index %d with id %d should have the same tail but has %v\n", m.ID, m.ThreadID, m.ThreadParentIDs, i, am.ID, am.ThreadParentIDs)
+					threadAncestorErrors = append(threadAncestorErrors, err)
+				} else {
+					break
+				}
 			}
 			return nil
 		})
@@ -938,9 +1108,12 @@ func (a *Account) CheckConsistency() error {
 	if err != nil {
 		return err
 	}
-	errors = append(errors, uiderrors...)
-	errors = append(errors, modseqerrors...)
-	errors = append(errors, fileerrors...)
+	errors = append(errors, uidErrors...)
+	errors = append(errors, modseqErrors...)
+	errors = append(errors, fileErrors...)
+	errors = append(errors, threadidErrors...)
+	errors = append(errors, threadParentErrors...)
+	errors = append(errors, threadAncestorErrors...)
 	if len(errors) > 0 {
 		return fmt.Errorf("%s", strings.Join(errors, "; "))
 	}
@@ -1031,7 +1204,7 @@ func (a *Account) WithRLock(fn func()) {
 // Caller must broadcast new message.
 //
 // Caller must update mailbox counts.
-func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, sync, notrain bool) error {
+func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, sync, notrain, nothreads bool) error {
 	if m.Expunged {
 		return fmt.Errorf("cannot deliver expunged message")
 	}
@@ -1049,9 +1222,9 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 	conf, _ := a.Conf()
 	m.JunkFlagsForMailbox(mb.Name, conf)
 
+	mr := FileMsgReader(m.MsgPrefix, msgFile) // We don't close, it would close the msgFile.
 	var part *message.Part
 	if m.ParsedBuf == nil {
-		mr := FileMsgReader(m.MsgPrefix, msgFile) // We don't close, it would close the msgFile.
 		p, err := message.EnsurePart(log, false, mr, m.Size)
 		if err != nil {
 			log.Infox("parsing delivered message", err, mlog.Field("parse", ""), mlog.Field("message", m.ID))
@@ -1063,6 +1236,13 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 			return fmt.Errorf("marshal parsed message: %w", err)
 		}
 		m.ParsedBuf = buf
+	} else {
+		var p message.Part
+		if err := json.Unmarshal(m.ParsedBuf, &p); err != nil {
+			log.Errorx("unmarshal parsed message, continuing", err, mlog.Field("parse", ""))
+		} else {
+			part = &p
+		}
 	}
 
 	// If we are delivering to the originally intended mailbox, no need to store the mailbox ID again.
@@ -1078,52 +1258,73 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 		m.ModSeq = modseq
 	}
 
+	if part != nil && m.MessageID == "" && m.SubjectBase == "" {
+		m.PrepareThreading(log, part)
+	}
+
+	// Assign to thread (if upgrade has completed).
+	noThreadID := nothreads
+	if m.ThreadID == 0 && !nothreads && part != nil {
+		select {
+		case <-a.threadsCompleted:
+			if a.threadsErr != nil {
+				log.Info("not assigning threads for new delivery, upgrading to threads failed")
+				noThreadID = true
+			} else {
+				if err := assignThread(log, tx, m, part); err != nil {
+					return fmt.Errorf("assigning thread: %w", err)
+				}
+			}
+		default:
+			// note: since we have a write transaction to get here, we can't wait for the
+			// thread upgrade to finish.
+			// If we don't assign a threadid the upgrade process will do it.
+			log.Info("not assigning threads for new delivery, upgrading to threads in progress which will assign this message")
+			noThreadID = true
+		}
+	}
+
 	if err := tx.Insert(m); err != nil {
 		return fmt.Errorf("inserting message: %w", err)
 	}
+	if !noThreadID && m.ThreadID == 0 {
+		m.ThreadID = m.ID
+		if err := tx.Update(m); err != nil {
+			return fmt.Errorf("updating message for its own thread id: %w", err)
+		}
+	}
 
 	// todo: perhaps we should match the recipients based on smtp submission and a matching message-id? we now miss the addresses in bcc's. for webmail, we could insert the recipients directly.
-	if mb.Sent {
-		// Attempt to parse the message for its To/Cc/Bcc headers, which we insert into Recipient.
-		if part == nil {
-			var p message.Part
-			if err := json.Unmarshal(m.ParsedBuf, &p); err != nil {
-				log.Errorx("unmarshal parsed message for its to,cc,bcc headers, continuing", err, mlog.Field("parse", ""))
-			} else {
-				part = &p
-			}
+	if mb.Sent && part != nil && part.Envelope != nil {
+		e := part.Envelope
+		sent := e.Date
+		if sent.IsZero() {
+			sent = m.Received
 		}
-		if part != nil && part.Envelope != nil {
-			e := part.Envelope
-			sent := e.Date
-			if sent.IsZero() {
-				sent = m.Received
+		if sent.IsZero() {
+			sent = time.Now()
+		}
+		addrs := append(append(e.To, e.CC...), e.BCC...)
+		for _, addr := range addrs {
+			if addr.User == "" {
+				// Would trigger error because Recipient.Localpart must be nonzero. todo: we could allow empty localpart in db, and filter by not using FilterNonzero.
+				log.Info("to/cc/bcc address with empty localpart, not inserting as recipient", mlog.Field("address", addr))
+				continue
 			}
-			if sent.IsZero() {
-				sent = time.Now()
+			d, err := dns.ParseDomain(addr.Host)
+			if err != nil {
+				log.Debugx("parsing domain in to/cc/bcc address", err, mlog.Field("address", addr))
+				continue
 			}
-			addrs := append(append(e.To, e.CC...), e.BCC...)
-			for _, addr := range addrs {
-				if addr.User == "" {
-					// Would trigger error because Recipient.Localpart must be nonzero. todo: we could allow empty localpart in db, and filter by not using FilterNonzero.
-					log.Info("to/cc/bcc address with empty localpart, not inserting as recipient", mlog.Field("address", addr))
-					continue
-				}
-				d, err := dns.ParseDomain(addr.Host)
-				if err != nil {
-					log.Debugx("parsing domain in to/cc/bcc address", err, mlog.Field("address", addr))
-					continue
-				}
-				mr := Recipient{
-					MessageID: m.ID,
-					Localpart: smtp.Localpart(addr.User),
-					Domain:    d.Name(),
-					OrgDomain: publicsuffix.Lookup(context.TODO(), d).Name(),
-					Sent:      sent,
-				}
-				if err := tx.Insert(&mr); err != nil {
-					return fmt.Errorf("inserting sent message recipients: %w", err)
-				}
+			mr := Recipient{
+				MessageID: m.ID,
+				Localpart: smtp.Localpart(addr.User),
+				Domain:    d.Name(),
+				OrgDomain: publicsuffix.Lookup(context.TODO(), d).Name(),
+				Sent:      sent,
+			}
+			if err := tx.Insert(&mr); err != nil {
+				return fmt.Errorf("inserting sent message recipients: %w", err)
 			}
 		}
 	}
@@ -1440,7 +1641,7 @@ ruleset:
 
 // MessagePath returns the file system path of a message.
 func (a *Account) MessagePath(messageID int64) string {
-	return filepath.Join(a.Dir, "msg", MessagePath(messageID))
+	return strings.Join(append([]string{a.Dir, "msg"}, messagePathElems(messageID)...), "/")
 }
 
 // MessageReader opens a message for reading, transparently combining the
@@ -1489,7 +1690,7 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 			return fmt.Errorf("updating mailbox for delivery: %w", err)
 		}
 
-		if err := a.DeliverMessage(log, tx, m, msgFile, consumeFile, true, false); err != nil {
+		if err := a.DeliverMessage(log, tx, m, msgFile, consumeFile, true, false, false); err != nil {
 			return err
 		}
 
@@ -1773,6 +1974,12 @@ const msgDirChars = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVW
 // MessagePath returns the filename of the on-disk filename, relative to the containing directory such as <account>/msg or queue.
 // Returns names like "AB/1".
 func MessagePath(messageID int64) string {
+	return strings.Join(messagePathElems(messageID), "/")
+}
+
+// messagePathElems returns the elems, for a single join without intermediate
+// string allocations.
+func messagePathElems(messageID int64) []string {
 	v := messageID >> 13 // 8k files per directory.
 	dir := ""
 	for {
@@ -1782,7 +1989,7 @@ func MessagePath(messageID int64) string {
 			break
 		}
 	}
-	return fmt.Sprintf("%s/%d", dir, messageID)
+	return []string{dir, strconv.FormatInt(messageID, 10)}
 }
 
 // Set returns a copy of f, with each flag that is true in mask set to the

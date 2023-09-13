@@ -23,7 +23,10 @@ func rejectPresent(log *mlog.Log, acc *store.Account, rejectsMailbox string, m *
 	} else if header, err := p.Header(); err != nil {
 		log.Infox("parsing reject message header for message-id", err)
 	} else {
-		msgID = header.Get("Message-Id")
+		msgID, _, err = message.MessageIDCanonical(header.Get("Message-Id"))
+		if err != nil {
+			log.Debugx("parsing message-id for reject", err, mlog.Field("messageid", header.Get("Message-Id")))
+		}
 	}
 
 	// We must not read MsgPrefix, it will likely change for subsequent deliveries.

@@ -185,6 +185,20 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	var mdnewf, mdcurf *os.File
 	var msgreader store.MsgSource
 
+	// Open account, creating a database file if it doesn't exist yet. It must be known
+	// in the configuration file.
+	a, err := store.OpenAccount(account)
+	ctl.xcheck(err, "opening account")
+	defer func() {
+		if a != nil {
+			err := a.Close()
+			ctl.log.Check(err, "closing account after import")
+		}
+	}()
+
+	err = a.ThreadingWait(ctl.log)
+	ctl.xcheck(err, "waiting for account thread upgrade")
+
 	defer func() {
 		if mboxf != nil {
 			err := mboxf.Close()
@@ -197,17 +211,6 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		if mdcurf != nil {
 			err := mdcurf.Close()
 			ctl.log.Check(err, "closing maildir cur after import")
-		}
-	}()
-
-	// Open account, creating a database file if it doesn't exist yet. It must be known
-	// in the configuration file.
-	a, err := store.OpenAccount(account)
-	ctl.xcheck(err, "opening account")
-	defer func() {
-		if a != nil {
-			err := a.Close()
-			ctl.log.Check(err, "closing account after import")
 		}
 	}()
 
@@ -277,7 +280,8 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		const consumeFile = true
 		const sync = false
 		const notrain = true
-		err := a.DeliverMessage(ctl.log, tx, m, mf, consumeFile, sync, notrain)
+		const nothreads = true
+		err := a.DeliverMessage(ctl.log, tx, m, mf, consumeFile, sync, notrain, nothreads)
 		ctl.xcheck(err, "delivering message")
 		deliveredIDs = append(deliveredIDs, m.ID)
 		ctl.log.Debug("delivered message", mlog.Field("id", m.ID))
@@ -332,6 +336,11 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			m.ParsedBuf, err = json.Marshal(p)
 			ctl.xcheck(err, "marshal parsed message structure")
 
+			// Set fields needed for future threading. By doing it now, DeliverMessage won't
+			// have to parse the Part again.
+			p.SetReaderAt(store.FileMsgReader(m.MsgPrefix, msgf))
+			m.PrepareThreading(ctl.log, &p)
+
 			if m.Received.IsZero() {
 				if p.Envelope != nil && !p.Envelope.Date.IsZero() {
 					m.Received = p.Envelope.Date
@@ -383,6 +392,12 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			ctl.xcheck(err, "reading next message")
 
 			process(m, msgf, origPath)
+		}
+
+		// Match threads.
+		if len(deliveredIDs) > 0 {
+			err = a.AssignThreads(ctx, ctl.log, tx, deliveredIDs[0], 0, io.Discard)
+			ctl.xcheck(err, "assigning messages to threads")
 		}
 
 		// Get mailbox again, uidnext is likely updated.

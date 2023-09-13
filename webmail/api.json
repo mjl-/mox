@@ -236,6 +236,46 @@
 			"Returns": []
 		},
 		{
+			"Name": "ThreadCollapse",
+			"Docs": "ThreadCollapse saves the ThreadCollapse field for the messages and its\nchildren. The messageIDs are typically thread roots. But not all roots\n(without parent) of a thread need to have the same collapsed state.",
+			"Params": [
+				{
+					"Name": "messageIDs",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "collapse",
+					"Typewords": [
+						"bool"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "ThreadMute",
+			"Docs": "ThreadMute saves the ThreadMute field for the messages and their children.\nIf messages are muted, they are also marked collapsed.",
+			"Params": [
+				{
+					"Name": "messageIDs",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "mute",
+					"Typewords": [
+						"bool"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "SSETypes",
 			"Docs": "SSETypes exists to ensure the generated API contains the types, for use in SSE events.",
 			"Params": [],
@@ -286,6 +326,12 @@
 					"Name": "msgFlags",
 					"Typewords": [
 						"ChangeMsgFlags"
+					]
+				},
+				{
+					"Name": "msgThread",
+					"Typewords": [
+						"ChangeMsgThread"
 					]
 				},
 				{
@@ -392,6 +438,13 @@
 					"Docs": "Order by received ascending or desending.",
 					"Typewords": [
 						"bool"
+					]
+				},
+				{
+					"Name": "Threading",
+					"Docs": "",
+					"Typewords": [
+						"ThreadMode"
 					]
 				},
 				{
@@ -783,7 +836,7 @@
 				},
 				{
 					"Name": "Subject",
-					"Docs": "",
+					"Docs": "Q/B-word-decoded.",
 					"Typewords": [
 						"string"
 					]
@@ -1319,8 +1372,9 @@
 				},
 				{
 					"Name": "MessageItems",
-					"Docs": "If empty, this was the last message for the request.",
+					"Docs": "If empty, this was the last message for the request. If non-empty, a list of thread messages. Each with the first message being the reason this thread is included and can be used as AnchorID in followup requests. If the threading mode is \"off\" in the query, there will always be only a single message. If a thread is sent, all messages in the thread are sent, including those that don't match the query (e.g. from another mailbox). Threads can be displayed based on the ThreadParentIDs field, with possibly slightly different display based on field ThreadMissingLink.",
 					"Typewords": [
+						"[]",
 						"[]",
 						"MessageItem"
 					]
@@ -1387,6 +1441,13 @@
 					"Docs": "Of message body, for showing as preview.",
 					"Typewords": [
 						"string"
+					]
+				},
+				{
+					"Name": "MatchQuery",
+					"Docs": "If message does not match query, it can still be included because of threading.",
+					"Typewords": [
+						"bool"
 					]
 				}
 			]
@@ -1630,17 +1691,60 @@
 				},
 				{
 					"Name": "MessageID",
-					"Docs": "Value of Message-Id header. Only set for messages that were delivered to the rejects mailbox. For ensuring such messages are delivered only once. Value includes \u003c\u003e.",
+					"Docs": "Canonicalized Message-Id, always lower-case and normalized quoting, without \u003c\u003e's. Empty if missing. Used for matching message threads, and to prevent duplicate reject delivery.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "SubjectBase",
+					"Docs": "For matching threads in case there is no References/In-Reply-To header. It is lower-cased, white-space collapsed, mailing list tags and re/fwd tags removed.",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
 					"Name": "MessageHash",
-					"Docs": "Hash of message. For rejects delivery, so optional like MessageID.",
+					"Docs": "Hash of message. For rejects delivery in case there is no Message-ID, only set when delivered as reject.",
 					"Typewords": [
 						"[]",
 						"uint8"
+					]
+				},
+				{
+					"Name": "ThreadID",
+					"Docs": "ID of message starting this thread.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "ThreadParentIDs",
+					"Docs": "IDs of parent messages, from closest parent to the root message. Parent messages may be in a different mailbox, or may no longer exist. ThreadParentIDs must never contain the message id itself (a cycle), and parent messages must reference the same ancestors.",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "ThreadMissingLink",
+					"Docs": "ThreadMissingLink is true if there is no match with a direct parent. E.g. first ID in ThreadParentIDs is not the direct ancestor (an intermediate message may have been deleted), or subject-based matching was done.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ThreadMuted",
+					"Docs": "If set, newly delivered child messages are automatically marked as read. This field is copied to new child messages. Changes are propagated to the webmail client.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ThreadCollapsed",
+					"Docs": "If set, this (sub)thread is collapsed in the webmail client, for threading mode \"on\" (mode \"unread\" ignores it). This field is copied to new child message. Changes are propagated to the webmail client.",
+					"Typewords": [
+						"bool"
 					]
 				},
 				{
@@ -1888,7 +1992,7 @@
 		},
 		{
 			"Name": "ChangeMsgAdd",
-			"Docs": "ChangeMsgAdd adds a new message to the view.",
+			"Docs": "ChangeMsgAdd adds a new message and possibly its thread to the view.",
 			"Fields": [
 				{
 					"Name": "MailboxID",
@@ -1927,9 +2031,10 @@
 					]
 				},
 				{
-					"Name": "MessageItem",
+					"Name": "MessageItems",
 					"Docs": "",
 					"Typewords": [
+						"[]",
 						"MessageItem"
 					]
 				}
@@ -2084,6 +2189,34 @@
 					"Typewords": [
 						"[]",
 						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ChangeMsgThread",
+			"Docs": "ChangeMsgThread updates muted/collapsed fields for one message.",
+			"Fields": [
+				{
+					"Name": "MessageIDs",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "Muted",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Collapsed",
+					"Docs": "",
+					"Typewords": [
+						"bool"
 					]
 				}
 			]
@@ -2382,6 +2515,27 @@
 		}
 	],
 	"Strings": [
+		{
+			"Name": "ThreadMode",
+			"Docs": "",
+			"Values": [
+				{
+					"Name": "ThreadOff",
+					"Value": "off",
+					"Docs": ""
+				},
+				{
+					"Name": "ThreadOn",
+					"Value": "on",
+					"Docs": ""
+				},
+				{
+					"Name": "ThreadUnread",
+					"Value": "unread",
+					"Docs": ""
+				}
+			]
+		},
 		{
 			"Name": "AttachmentType",
 			"Docs": "AttachmentType is for filtering by attachment type.",

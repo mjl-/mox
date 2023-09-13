@@ -45,6 +45,7 @@ type Message struct {
 	From, To, Cc, Bcc, Subject, MessageID string
 	Headers                               [][2]string
 	Date                                  time.Time
+	References                            string
 	Part                                  Part
 }
 
@@ -84,6 +85,7 @@ func (m Message) Marshal(t *testing.T) []byte {
 	header("Subject", m.Subject)
 	header("Message-Id", m.MessageID)
 	header("Date", m.Date.Format(message.RFC5322Z))
+	header("References", m.References)
 	for _, t := range m.Headers {
 		header(t[0], t[1])
 	}
@@ -181,10 +183,11 @@ var (
 		Part:    Part{Type: "text/html", Content: `<html>the body <img src="cid:img1@mox.example" /></html>`},
 	}
 	msgAlt = Message{
-		From:    "mjl <mjl@mox.example>",
-		To:      "mox <mox@other.example>",
-		Subject: "test",
-		Headers: [][2]string{{"In-Reply-To", "<previous@host.example>"}},
+		From:      "mjl <mjl@mox.example>",
+		To:        "mox <mox@other.example>",
+		Subject:   "test",
+		MessageID: "<alt@localhost>",
+		Headers:   [][2]string{{"In-Reply-To", "<previous@host.example>"}},
 		Part: Part{
 			Type: "multipart/alternative",
 			Parts: []Part{
@@ -192,6 +195,11 @@ var (
 				{Type: "text/html; charset=utf-8", Content: `<html>the body <img src="cid:img1@mox.example" /></html>`},
 			},
 		},
+	}
+	msgAltReply = Message{
+		Subject:    "Re: test",
+		References: "<alt@localhost>",
+		Part:       Part{Type: "text/plain", Content: "reply to alt"},
 	}
 	msgAltRel = Message{
 		From:    "mjl <mjl+altrel@mox.example>",

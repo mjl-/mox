@@ -56,8 +56,6 @@ func cmdGentestdata(c *cmd) {
 
 	log := mlog.New("gentestdata")
 	ctxbg := context.Background()
-	mox.Shutdown = ctxbg
-	mox.Context = ctxbg
 	mox.Conf.Log[""] = mlog.LevelInfo
 	mlog.SetConfig(mox.Conf.Log)
 
@@ -241,12 +239,16 @@ Accounts:
 	// First account without messages.
 	accTest0, err := store.OpenAccount("test0")
 	xcheckf(err, "open account test0")
+	err = accTest0.ThreadingWait(log)
+	xcheckf(err, "wait for threading to finish")
 	err = accTest0.Close()
 	xcheckf(err, "close account")
 
 	// Second account with one message.
 	accTest1, err := store.OpenAccount("test1")
 	xcheckf(err, "open account test1")
+	err = accTest1.ThreadingWait(log)
+	xcheckf(err, "wait for threading to finish")
 	err = accTest1.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 		inbox, err := bstore.QueryTx[store.Mailbox](tx).FilterNonzero(store.Mailbox{Name: "Inbox"}).Get()
 		xcheckf(err, "looking up inbox")
@@ -281,7 +283,7 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf, msg)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest1.DeliverMessage(log, tx, &m, mf, true, false, true)
+		err = accTest1.DeliverMessage(log, tx, &m, mf, true, false, true, false)
 		xcheckf(err, "add message to account test1")
 		err = mf.Close()
 		xcheckf(err, "closing file")
@@ -301,6 +303,8 @@ Accounts:
 	// Third account with two messages and junkfilter.
 	accTest2, err := store.OpenAccount("test2")
 	xcheckf(err, "open account test2")
+	err = accTest2.ThreadingWait(log)
+	xcheckf(err, "wait for threading to finish")
 	err = accTest2.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 		inbox, err := bstore.QueryTx[store.Mailbox](tx).FilterNonzero(store.Mailbox{Name: "Inbox"}).Get()
 		xcheckf(err, "looking up inbox")
@@ -335,7 +339,7 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf0, msg0)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(log, tx, &m0, mf0, true, false, false)
+		err = accTest2.DeliverMessage(log, tx, &m0, mf0, true, false, false, false)
 		xcheckf(err, "add message to account test2")
 		err = mf0.Close()
 		xcheckf(err, "closing file")
@@ -362,7 +366,7 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf1, msg1)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(log, tx, &m1, mf1, true, false, false)
+		err = accTest2.DeliverMessage(log, tx, &m1, mf1, true, false, false, false)
 		xcheckf(err, "add message to account test2")
 		err = mf1.Close()
 		xcheckf(err, "closing file")

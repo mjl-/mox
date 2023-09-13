@@ -81,8 +81,8 @@ for tag in $tags; do
 	fi
 done
 echo "Testing final upgrade to current."
-time ../../mox verifydata -skip-size-check stepdata
-time ../../mox openaccounts stepdata test0 test1 test2
+time ../../mox -cpuprof ../../upgrade-verifydata.cpu.pprof -memprof ../../upgrade-verifydata.mem.pprof verifydata -skip-size-check stepdata
+time ../../mox -loglevel info -cpuprof ../../upgrade-openaccounts.cpu.pprof -memprof ../../upgrade-openaccounts.mem.pprof openaccounts stepdata test0 test1 test2
 rm -r stepdata
 rm */mox
 cd ../..
