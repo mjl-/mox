@@ -1868,8 +1868,8 @@ const cmdHelp = async () => {
 		['R', 'reply all'],
 		['f', 'forward message'],
 		['v', 'view attachments'],
-		['T', 'view text version'],
-		['X', 'view HTML version'],
+		['t', 'view text version'],
+		['T', 'view HTML version'],
 		['o', 'open message in new tab'],
 		['O', 'show raw message'],
 		['ctrl p', 'print message'],
@@ -2681,8 +2681,8 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		r: cmdReply,
 		R: cmdReplyAll,
 		v: cmdViewAttachments,
-		T: cmdShowText,
-		X: cmdShowHTMLCycle,
+		t: cmdShowText,
+		T: cmdShowHTMLCycle,
 		'ctrl I': cmdToggleHeaders,
 		'alt j': cmdDown,
 		'alt k': cmdUp,
@@ -2923,7 +2923,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			const text = haveText && !settings.showHTML;
 			dom._kids(msgmodeElem, dom.div(dom._class('pad'), style({ borderTop: '1px solid #ccc' }), !haveText ? dom.span('HTML-only message', attr.title(htmlNote), style({ backgroundColor: '#ffca91', padding: '0 .15em', marginRight: '.25em' })) : [], dom.span(dom._class('btngroup'), haveText ? textbtn = dom.clickbutton(text ? dom._class('active') : [], 'Text', clickCmd(cmdShowText, shortcuts)) : [], htmlbtn = dom.clickbutton(text ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
 				// Shortcuts has a function that cycles through html and htmlexternal.
-				showShortcut('X');
+				showShortcut('T');
 				await cmdShowHTML();
 			}), htmlextbtn = dom.clickbutton('HTML with external resources', attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)))));
 			if (text) {

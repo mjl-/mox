@@ -1014,8 +1014,8 @@ const cmdHelp = async () => {
 						['R', 'reply all'],
 						['f', 'forward message'],
 						['v', 'view attachments'],
-						['T', 'view text version'],
-						['X', 'view HTML version'],
+						['t', 'view text version'],
+						['T', 'view HTML version'],
 						['o', 'open message in new tab'],
 						['O', 'show raw message'],
 						['ctrl p', 'print message'],
@@ -2168,8 +2168,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		r: cmdReply,
 		R: cmdReplyAll,
 		v: cmdViewAttachments,
-		T: cmdShowText,
-		X: cmdShowHTMLCycle,
+		t: cmdShowText,
+		T: cmdShowHTMLCycle,
 		'ctrl I': cmdToggleHeaders,
 
 		'alt j': cmdDown,
@@ -2573,7 +2573,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 						haveText ? textbtn=dom.clickbutton(text ? dom._class('active') : [], 'Text', clickCmd(cmdShowText, shortcuts)) : [],
 						htmlbtn=dom.clickbutton(text ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
 							// Shortcuts has a function that cycles through html and htmlexternal.
-							showShortcut('X')
+							showShortcut('T')
 							await cmdShowHTML()
 						}),
 						htmlextbtn=dom.clickbutton('HTML with external resources', attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)),
