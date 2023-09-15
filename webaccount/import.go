@@ -69,7 +69,7 @@ func ImportManage() {
 		if x := recover(); x != nil {
 			log.Error("import manage panic", mlog.Field("err", x))
 			debug.PrintStack()
-			metrics.PanicInc("importmanage")
+			metrics.PanicInc(metrics.Importmanage)
 		}
 	}()
 
@@ -342,7 +342,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		} else {
 			log.Error("import panic", mlog.Field("err", x))
 			debug.PrintStack()
-			metrics.PanicInc("importmessages")
+			metrics.PanicInc(metrics.Importmessages)
 		}
 	}()
 

@@ -682,7 +682,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		} else {
 			c.log.Error("unhandled panic", mlog.Field("err", x))
 			debug.PrintStack()
-			metrics.PanicInc("imapserver")
+			metrics.PanicInc(metrics.Imapserver)
 		}
 	}()
 

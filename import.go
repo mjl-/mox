@@ -256,7 +256,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		if x != ctl.x {
 			ctl.log.Error("import error", mlog.Field("panic", fmt.Errorf("%v", x)))
 			debug.PrintStack()
-			metrics.PanicInc("import")
+			metrics.PanicInc(metrics.Import)
 		} else {
 			ctl.log.Error("import error")
 		}

@@ -595,7 +595,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		} else {
 			c.log.Error("unhandled panic", mlog.Field("err", x))
 			debug.PrintStack()
-			metrics.PanicInc("smtpserver")
+			metrics.PanicInc(metrics.Smtpserver)
 		}
 	}()
 
@@ -1903,7 +1903,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			if x != nil {
 				c.log.Error("dkim verify panic", mlog.Field("err", x))
 				debug.PrintStack()
-				metrics.PanicInc("dkimverify")
+				metrics.PanicInc(metrics.Dkimverify)
 			}
 		}()
 		defer wg.Done()
@@ -1939,7 +1939,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			if x != nil {
 				c.log.Error("spf verify panic", mlog.Field("err", x))
 				debug.PrintStack()
-				metrics.PanicInc("spfverify")
+				metrics.PanicInc(metrics.Spfverify)
 			}
 		}()
 		defer wg.Done()

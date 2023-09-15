@@ -381,7 +381,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			log.WithContext(ctx).Error("handle panic", mlog.Field("err", x))
 			debug.PrintStack()
-			metrics.PanicInc("webmail-handle")
+			metrics.PanicInc(metrics.Webmailhandle)
 			panic(x)
 		}
 		if strings.HasPrefix(err.Code, "user:") {

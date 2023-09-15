@@ -568,7 +568,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 		} else {
 			log.WithContext(ctx).Error("serveEvents panic", mlog.Field("err", x))
 			debug.PrintStack()
-			metrics.PanicInc("webmail")
+			metrics.PanicInc(metrics.Webmail)
 			panic(x)
 		}
 	}()
@@ -1216,7 +1216,7 @@ func viewRequestTx(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 		if x != nil {
 			log.WithContext(ctx).Error("viewRequestTx panic", mlog.Field("err", x))
 			debug.PrintStack()
-			metrics.PanicInc("webmail-request")
+			metrics.PanicInc(metrics.Webmailrequest)
 		}
 	}()
 
@@ -1300,7 +1300,7 @@ func queryMessages(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 			log.WithContext(ctx).Error("queryMessages panic", mlog.Field("err", x))
 			debug.PrintStack()
 			mrc <- msgResp{err: fmt.Errorf("query failed")}
-			metrics.PanicInc("webmail-query")
+			metrics.PanicInc(metrics.Webmailquery)
 		}
 
 		close(mrc)

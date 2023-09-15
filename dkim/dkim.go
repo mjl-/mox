@@ -41,7 +41,7 @@ var (
 	metricDKIMSign = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "mox_dkim_sign_total",
-			Help: "DKIM messages signings.",
+			Help: "DKIM messages signings, label key is the type of key, rsa or ed25519.",
 		},
 		[]string{
 			"key",

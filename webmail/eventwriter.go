@@ -84,7 +84,7 @@ func (ew *eventWriter) xsendEvent(ctx context.Context, log *mlog.Log, name strin
 				if x != nil {
 					log.WithContext(ctx).Error("writeEvent panic", mlog.Field("err", x))
 					debug.PrintStack()
-					metrics.PanicInc("webmail-sendEvent")
+					metrics.PanicInc(metrics.Webmailsendevent)
 				}
 			}()
 

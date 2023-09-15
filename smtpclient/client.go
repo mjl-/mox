@@ -457,7 +457,7 @@ func (c *Client) recover(rerr *error) {
 	}
 	cerr, ok := x.(Error)
 	if !ok {
-		metrics.PanicInc("smtpclient")
+		metrics.PanicInc(metrics.Smtpclient)
 		panic(x)
 	}
 	*rerr = cerr

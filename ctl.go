@@ -282,7 +282,7 @@ func servectl(ctx context.Context, log *mlog.Log, conn net.Conn, shutdown func()
 		}
 		log.Error("servectl panic", mlog.Field("err", x), mlog.Field("cmd", ctl.cmd))
 		debug.PrintStack()
-		metrics.PanicInc("ctl")
+		metrics.PanicInc(metrics.Ctl)
 	}()
 
 	defer conn.Close()

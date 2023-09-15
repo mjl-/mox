@@ -855,7 +855,7 @@ func OpenAccountDB(accountDir, accountName string) (a *Account, rerr error) {
 			if x != nil {
 				xlog.Error("upgradeThreads panic", mlog.Field("err", x))
 				debug.PrintStack()
-				metrics.PanicInc("upgradeThreads")
+				metrics.PanicInc(metrics.Upgradethreads)
 				acc.threadsErr = fmt.Errorf("panic during upgradeThreads: %v", x)
 			}
 

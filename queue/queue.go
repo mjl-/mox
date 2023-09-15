@@ -497,7 +497,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 		if x != nil {
 			qlog.Error("deliver panic", mlog.Field("panic", x))
 			debug.PrintStack()
-			metrics.PanicInc("queue")
+			metrics.PanicInc(metrics.Queue)
 		}
 	}()
 

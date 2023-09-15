@@ -44,7 +44,7 @@ func monitorDNSBL(log *mlog.Log) {
 		if x != nil {
 			log.Error("monitordnsbl panic", mlog.Field("panic", x))
 			debug.PrintStack()
-			metrics.PanicInc("serve")
+			metrics.PanicInc(metrics.Serve)
 		}
 	}()
 

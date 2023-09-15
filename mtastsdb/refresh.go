@@ -112,7 +112,7 @@ func refreshDomain(ctx context.Context, db *bstore.DB, resolver dns.Resolver, pr
 			// Should not happen, but make sure errors don't take down the application.
 			log.Error("refresh1", mlog.Field("panic", x))
 			debug.PrintStack()
-			metrics.PanicInc("mtastsdb")
+			metrics.PanicInc(metrics.Mtastsdb)
 		}
 	}()
 
