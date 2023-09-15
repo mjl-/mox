@@ -1,3 +1,5 @@
+// Package webaccount provides a web app for users to view and change their account
+// settings, and to import/export email.
 package webaccount
 
 import (

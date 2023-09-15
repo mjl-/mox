@@ -1,3 +1,7 @@
+// Package webadmin is a web app for the mox administrator for viewing and changing
+// the configuration, like creating/removing accounts, viewing DMARC and TLS
+// reports, check DNS records for a domain, change the webserver configuration,
+// etc.
 package webadmin
 
 import (
