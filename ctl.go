@@ -340,7 +340,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		}
 
 		a.WithWLock(func() {
-			err := a.Deliver(log, addr, m, msgFile, true)
+			err := a.DeliverDestination(log, addr, m, msgFile, true)
 			ctl.xcheck(err, "delivering message")
 			log.Info("message delivered through ctl", mlog.Field("to", to))
 		})

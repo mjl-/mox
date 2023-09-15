@@ -1650,12 +1650,12 @@ func (a *Account) MessageReader(m Message) *MsgReader {
 	return &MsgReader{prefix: m.MsgPrefix, path: a.MessagePath(m.ID), size: m.Size}
 }
 
-// Deliver delivers an email to dest, based on the configured rulesets.
+// DeliverDestination delivers an email to dest, based on the configured rulesets.
 //
 // Caller must hold account wlock (mailbox may be created).
 // Message delivery, possible mailbox creation, and updated mailbox counts are
 // broadcasted.
-func (a *Account) Deliver(log *mlog.Log, dest config.Destination, m *Message, msgFile *os.File, consumeFile bool) error {
+func (a *Account) DeliverDestination(log *mlog.Log, dest config.Destination, m *Message, msgFile *os.File, consumeFile bool) error {
 	var mailbox string
 	rs := MessageRuleset(log, dest, m, m.MsgPrefix, msgFile)
 	if rs != nil {

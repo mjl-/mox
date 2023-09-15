@@ -70,7 +70,7 @@ func TestMailbox(t *testing.T) {
 	}
 	acc.WithWLock(func() {
 		conf, _ := acc.Conf()
-		err := acc.Deliver(xlog, conf.Destinations["mjl"], &m, msgFile, false)
+		err := acc.DeliverDestination(xlog, conf.Destinations["mjl"], &m, msgFile, false)
 		tcheck(t, err, "deliver without consume")
 
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
@@ -108,7 +108,7 @@ func TestMailbox(t *testing.T) {
 		})
 		tcheck(t, err, "deliver as sent and rejects")
 
-		err = acc.Deliver(xlog, conf.Destinations["mjl"], &mconsumed, msgFile, true)
+		err = acc.DeliverDestination(xlog, conf.Destinations["mjl"], &mconsumed, msgFile, true)
 		tcheck(t, err, "deliver with consume")
 
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
