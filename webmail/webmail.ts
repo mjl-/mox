@@ -989,6 +989,8 @@ const cmdHelp = async () => {
 						['S', 'select thread messages'],
 						['C', 'toggle thread collapse'],
 						['X', 'toggle thread mute, automatically marking new messages as read'],
+						['←', 'collapse thread'],
+						['→', 'expand thread'],
 					].map(t => dom.tr(dom.td(t[0]), dom.td(t[1]))),
 				),
 			),
@@ -2838,6 +2840,38 @@ const newMsglistView = (msgElem: HTMLElement, listMailboxes: listMailboxes, setL
 		updateState(oldstate)
 	}
 
+	const cmdCollapseExpand = async (collapse: boolean) => {
+		if (settings.threading === api.ThreadMode.ThreadOff) {
+			alert('Toggling thread collapse/expand is only available when threading is enabled.')
+			return
+		}
+		const oldstate = state()
+		const rootmivs = seletedRoots()
+		rootmivs.forEach(miv => {
+			if (miv.collapsed !== collapse) {
+				if (collapse) {
+					threadCollapse(miv, false)
+				} else {
+					threadExpand(miv, false)
+				}
+			}
+		})
+		if (collapse) {
+			selected = rootmivs
+			if (focus) {
+				focus = focus.threadRoot()
+			}
+		}
+		viewportEnsureMessages()
+		updateState(oldstate)
+		if (settings.threading === api.ThreadMode.ThreadOn) {
+			const action = collapse ? 'Collapsing' : 'Expanding'
+			await withStatus(action, client.ThreadCollapse(rootmivs.map(miv => miv.messageitem.Message.ID), collapse))
+		}
+	}
+	const cmdCollapse = async () => cmdCollapseExpand(true)
+	const cmdExpand = async () => cmdCollapseExpand(false)
+
 	const shortcuts: {[key: string]: command} = {
 		d: cmdTrash,
 		Delete: cmdTrash,
@@ -2850,6 +2884,8 @@ const newMsglistView = (msgElem: HTMLElement, listMailboxes: listMailboxes, setL
 		X: cmdToggleMute,
 		C: cmdToggleCollapse,
 		S: cmdSelectThread,
+		ArrowLeft: cmdCollapse,
+		ArrowRight: cmdExpand,
 	}
 
 	// After making changes, this function looks through the data structure for

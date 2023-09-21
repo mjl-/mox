@@ -1860,6 +1860,8 @@ const cmdHelp = async () => {
 		['S', 'select thread messages'],
 		['C', 'toggle thread collapse'],
 		['X', 'toggle thread mute, automatically marking new messages as read'],
+		['←', 'collapse thread'],
+		['→', 'expand thread'],
 	].map(t => dom.tr(dom.td(t[0]), dom.td(t[1]))))), dom.div(style({ width: '40em' }), dom.table(dom.tr(dom.td(attr.colspan('2'), dom.h2('Compose', style({ margin: '0' })))), [
 		['ctrl Enter', 'send message'],
 		['ctrl w', 'cancel message'],
@@ -3114,6 +3116,38 @@ const newMsglistView = (msgElem, listMailboxes, setLocationHash, otherMailbox, p
 		selected = msgitemViews.filter(miv => miv.messageitem.Message.ThreadID === focus.messageitem.Message.ThreadID);
 		updateState(oldstate);
 	};
+	const cmdCollapseExpand = async (collapse) => {
+		if (settings.threading === api.ThreadMode.ThreadOff) {
+			alert('Toggling thread collapse/expand is only available when threading is enabled.');
+			return;
+		}
+		const oldstate = state();
+		const rootmivs = seletedRoots();
+		rootmivs.forEach(miv => {
+			if (miv.collapsed !== collapse) {
+				if (collapse) {
+					threadCollapse(miv, false);
+				}
+				else {
+					threadExpand(miv, false);
+				}
+			}
+		});
+		if (collapse) {
+			selected = rootmivs;
+			if (focus) {
+				focus = focus.threadRoot();
+			}
+		}
+		viewportEnsureMessages();
+		updateState(oldstate);
+		if (settings.threading === api.ThreadMode.ThreadOn) {
+			const action = collapse ? 'Collapsing' : 'Expanding';
+			await withStatus(action, client.ThreadCollapse(rootmivs.map(miv => miv.messageitem.Message.ID), collapse));
+		}
+	};
+	const cmdCollapse = async () => cmdCollapseExpand(true);
+	const cmdExpand = async () => cmdCollapseExpand(false);
 	const shortcuts = {
 		d: cmdTrash,
 		Delete: cmdTrash,
@@ -3126,6 +3160,8 @@ const newMsglistView = (msgElem, listMailboxes, setLocationHash, otherMailbox, p
 		X: cmdToggleMute,
 		C: cmdToggleCollapse,
 		S: cmdSelectThread,
+		ArrowLeft: cmdCollapse,
+		ArrowRight: cmdExpand,
 	};
 	// After making changes, this function looks through the data structure for
 	// inconsistencies. Useful during development.
