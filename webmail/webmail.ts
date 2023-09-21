@@ -6220,6 +6220,15 @@ window.addEventListener('load', async () => {
 	}
 })
 
+// Keep original URL of page load, so we can remove it from stack trace if we need to.
+const origLocation = {
+	href: window.location.href,
+	protocol: window.location.protocol,
+	host: window.location.host,
+	pathname: window.location.pathname,
+	search: window.location.search,
+}
+
 // If a JS error happens, show a box in the lower left corner, with a button to
 // show details, in a popup. The popup shows the error message and a link to github
 // to create an issue. We want to lower the barrier to give feedback.
@@ -6230,10 +6239,11 @@ const showUnhandledError = (err: Error, lineno: number, colno: number) => {
 	}
 	let stack = err.stack || ''
 	if (stack) {
-		// Firefox has stacks with full location.href including hash at the time of
-		// writing, Chromium has location.href without hash.
-		const loc = window.location
-		stack = '\n'+stack.replaceAll(loc.href, 'webmail.html').replaceAll(loc.protocol+'//'+loc.host+loc.pathname+loc.search, 'webmail.html')
+		log({stack})
+		// At the time of writing, Firefox has stacks with full location.href of original
+		// page load including hash. Chromium has location.href without hash.
+		const loc = origLocation
+		stack = '\n'+stack.replaceAll(loc.href, 'webmail.html').replaceAll(loc.protocol + '//' + loc.host + loc.pathname + loc.search, 'webmail.html')
 	} else {
 		stack = ' (not available)'
 	}
