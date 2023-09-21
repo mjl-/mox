@@ -352,7 +352,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			// We set the flags that Deliver would set now and train ourselves. This prevents
 			// Deliver from training, which would open the junk filter, change it, and write it
 			// back to disk, for each message (slow).
-			m.JunkFlagsForMailbox(mb.Name, conf)
+			m.JunkFlagsForMailbox(mb, conf)
 			if jf != nil && m.NeedsTraining() {
 				if words, err := jf.ParseMessage(p); err != nil {
 					ctl.log.Infox("parsing message for updating junk filter", err, mlog.Field("parse", ""), mlog.Field("path", origPath))

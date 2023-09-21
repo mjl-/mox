@@ -3227,7 +3227,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 					m.IsReject = false
 				}
 				m.TrainedJunk = nil
-				m.JunkFlagsForMailbox(mbDst.Name, conf)
+				m.JunkFlagsForMailbox(mbDst, conf)
 				err := tx.Insert(&m)
 				xcheckf(err, "inserting message")
 				msgs[uid] = m
@@ -3397,7 +3397,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 				}
 				m.UID = uidnext
 				m.ModSeq = modseq
-				m.JunkFlagsForMailbox(mbDst.Name, conf)
+				m.JunkFlagsForMailbox(mbDst, conf)
 				uidnext++
 				err := tx.Update(m)
 				xcheckf(err, "updating moved message in database")

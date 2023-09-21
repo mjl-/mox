@@ -848,7 +848,7 @@ func (Webmail) MessageMove(ctx context.Context, messageIDs []int64, mailboxID in
 				m.UID = mbDst.UIDNext
 				m.ModSeq = modseq
 				mbDst.UIDNext++
-				m.JunkFlagsForMailbox(mbDst.Name, conf)
+				m.JunkFlagsForMailbox(mbDst, conf)
 				err = tx.Update(&m)
 				xcheckf(ctx, err, "updating moved message in database")
 

@@ -537,7 +537,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		// We set the flags that Deliver would set now and train ourselves. This prevents
 		// Deliver from training, which would open the junk filter, change it, and write it
 		// back to disk, for each message (slow).
-		m.JunkFlagsForMailbox(mb.Name, conf)
+		m.JunkFlagsForMailbox(mb, conf)
 		if jf != nil && m.NeedsTraining() {
 			trainMessage(m, p, pos)
 		}

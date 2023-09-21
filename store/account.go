@@ -611,12 +611,17 @@ func (m Message) NeedsTraining() bool {
 // used when delivering/moving/copying messages to a mailbox. Mail clients are not
 // very helpful with setting junk/notjunk flags. But clients can move/copy messages
 // to other mailboxes. So we set flags when clients move a message.
-func (m *Message) JunkFlagsForMailbox(mailbox string, conf config.Account) {
+func (m *Message) JunkFlagsForMailbox(mb Mailbox, conf config.Account) {
+	if mb.Junk {
+		m.Junk = true
+		m.Notjunk = false
+	}
+
 	if !conf.AutomaticJunkFlags.Enabled {
 		return
 	}
 
-	lmailbox := strings.ToLower(mailbox)
+	lmailbox := strings.ToLower(mb.Name)
 
 	if conf.JunkMailbox != nil && conf.JunkMailbox.MatchString(lmailbox) {
 		m.Junk = true
@@ -1220,7 +1225,7 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 	}
 
 	conf, _ := a.Conf()
-	m.JunkFlagsForMailbox(mb.Name, conf)
+	m.JunkFlagsForMailbox(mb, conf)
 
 	mr := FileMsgReader(m.MsgPrefix, msgFile) // We don't close, it would close the msgFile.
 	var part *message.Part
