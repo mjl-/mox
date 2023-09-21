@@ -842,7 +842,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 				if !thread && req.Query.Threading != ThreadOff {
 					err := ensureTx()
 					xcheckf(ctx, err, "transaction")
-					more, _, err := gatherThread(log, xtx, acc, v, m, 0)
+					more, _, err := gatherThread(log, xtx, acc, v, m, 0, false)
 					xcheckf(ctx, err, "gathering thread messages for id %d, thread %d", m.ID, m.ThreadID)
 					mil = append(mil, more...)
 					v.threadIDs[m.ThreadID] = struct{}{}
@@ -1458,6 +1458,10 @@ func queryMessages(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 
 		var pm *ParsedMessage
 		if m.ID == page.DestMessageID || page.DestMessageID == 0 && have == 0 && page.AnchorMessageID == 0 {
+			// For threads, if there was not DestMessageID, we may be getting the newest
+			// message. For an initial view, this isn't necessarily the first the user is
+			// expected to read first, that would be the first unread, which we'll get below
+			// when gathering the thread.
 			found = true
 			xpm, err := parsedMessage(log, m, &state, true, false)
 			if err != nil {
@@ -1472,7 +1476,7 @@ func queryMessages(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 		}
 		mil := []MessageItem{mi}
 		if query.Threading != ThreadOff {
-			more, xpm, err := gatherThread(log, tx, acc, v, m, page.DestMessageID)
+			more, xpm, err := gatherThread(log, tx, acc, v, m, page.DestMessageID, have == 0)
 			if err != nil {
 				return fmt.Errorf("gathering thread messages for id %d, thread %d: %v", m.ID, m.ThreadID, err)
 			}
@@ -1535,7 +1539,7 @@ func queryMessages(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 	}
 }
 
-func gatherThread(log *mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m store.Message, destMessageID int64) ([]MessageItem, *ParsedMessage, error) {
+func gatherThread(log *mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m store.Message, destMessageID int64, first bool) ([]MessageItem, *ParsedMessage, error) {
 	if m.ThreadID == 0 {
 		// If we would continue, FilterNonzero would fail because there are no non-zero fields.
 		return nil, nil, fmt.Errorf("message has threadid 0, account is probably still being upgraded, try turning threading off until the upgrade is done")
@@ -1546,6 +1550,7 @@ func gatherThread(log *mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m st
 	qt.FilterNonzero(store.Message{ThreadID: m.ThreadID})
 	qt.FilterEqual("Expunged", false)
 	qt.FilterNotEqual("ID", m.ID)
+	qt.SortAsc("ID")
 	tml, err := qt.List()
 	if err != nil {
 		return nil, nil, fmt.Errorf("listing other messages in thread for message %d, thread %d: %v", m.ID, m.ThreadID, err)
@@ -1553,6 +1558,7 @@ func gatherThread(log *mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m st
 
 	var mil []MessageItem
 	var pm *ParsedMessage
+	var firstUnread bool
 	for _, tm := range tml {
 		err := func() error {
 			xstate := msgState{acc: acc}
@@ -1570,7 +1576,8 @@ func gatherThread(log *mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m st
 			}
 			mil = append(mil, mi)
 
-			if tm.ID == destMessageID {
+			if tm.ID == destMessageID || destMessageID == 0 && first && (pm == nil || !firstUnread && !tm.Seen) {
+				firstUnread = !tm.Seen
 				xpm, err := parsedMessage(log, tm, &xstate, true, false)
 				if err != nil {
 					return fmt.Errorf("parsing thread message %d: %v", tm.ID, err)
@@ -1583,6 +1590,19 @@ func gatherThread(log *mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m st
 			return nil, nil, err
 		}
 	}
+
+	// Finally, the message that caused us to gather this thread (which is likely the
+	// most recent message in the thread) could be the only unread message.
+	if destMessageID == 0 && first && !m.Seen && !firstUnread {
+		xstate := msgState{acc: acc}
+		defer xstate.clear()
+		xpm, err := parsedMessage(log, m, &xstate, true, false)
+		if err != nil {
+			return nil, nil, fmt.Errorf("parsing thread message %d: %v", m.ID, err)
+		}
+		pm = &xpm
+	}
+
 	return mil, pm, nil
 }
 
