@@ -50,6 +50,21 @@ for tag in $tagsrev; do
 	rm -r $tag/data
 done
 
+# Do upgrade from v0.0.5 with big import straight to current. Will create
+# multiple new indices so may be heavier during upgrade.
+echo "Testing upgrade from v0.0.5 + big import straight to current."
+tag=v0.0.5
+./$tag/mox gentestdata stepdata
+ulimit -S -d unlimited
+echo 'Importing bulk data for upgrading.'
+gunzip < ../upgradetest.mbox.gz | time ./$tag/mox ximport mbox ./stepdata/accounts/test0 upgradetest /dev/stdin
+echo
+ulimit -S -d 768000
+time ../../mox -cpuprof ../../upgrade0-verifydata.cpu.pprof -memprof ../../upgrade0-verifydata.mem.pprof verifydata -skip-size-check stepdata
+time ../../mox -loglevel info -cpuprof ../../upgrade0-openaccounts.cpu.pprof -memprof ../../upgrade0-openaccounts.mem.pprof openaccounts stepdata test0 test1 test2
+rm -r stepdata
+
+
 # Also go step-wise through each released version. Having upgraded step by step
 # can have added more schema upgrades to the database files.
 tags=$(git tag --sort creatordate | grep -v '^v0\.0\.[123]$' | cat)
@@ -81,8 +96,8 @@ for tag in $tags; do
 	fi
 done
 echo "Testing final upgrade to current."
-time ../../mox -cpuprof ../../upgrade-verifydata.cpu.pprof -memprof ../../upgrade-verifydata.mem.pprof verifydata -skip-size-check stepdata
-time ../../mox -loglevel info -cpuprof ../../upgrade-openaccounts.cpu.pprof -memprof ../../upgrade-openaccounts.mem.pprof openaccounts stepdata test0 test1 test2
+time ../../mox -cpuprof ../../upgrade1-verifydata.cpu.pprof -memprof ../../upgrade1-verifydata.mem.pprof verifydata -skip-size-check stepdata
+time ../../mox -loglevel info -cpuprof ../../upgrade1-openaccounts.cpu.pprof -memprof ../../upgrade1-openaccounts.mem.pprof openaccounts stepdata test0 test1 test2
 rm -r stepdata
 rm */mox
 cd ../..
