@@ -4157,6 +4157,16 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 				cmdOpenActions()
 			}
 		},
+		async function dblclick() {
+			if (mailboxlistView.mailboxLeaf(mbv)) {
+				return
+			}
+			if (settings.mailboxCollapsed[mbv.mailbox.ID]) {
+				cmdExpand()
+			} else {
+				cmdCollapse()
+			}
+		},
 		async function click() {
 			mbv.root.focus()
 			await withStatus('Opening mailbox', mbv.open(true))
