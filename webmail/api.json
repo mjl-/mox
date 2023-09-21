@@ -1954,7 +1954,7 @@
 				},
 				{
 					"Name": "Filename",
-					"Docs": "File name based on \"name\" attribute of \"Content-Type\", or the \"filename\" attribute of \"Content-Disposition\".",
+					"Docs": "File name based on \"name\" attribute of \"Content-Type\", or the \"filename\" attribute of \"Content-Disposition\". todo: decode non-ascii character sets",
 					"Typewords": [
 						"string"
 					]

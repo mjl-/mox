@@ -212,6 +212,7 @@ func parsedMessage(log *mlog.Log, m store.Message, state *msgState, full, msgite
 					disp, params, err := mime.ParseMediaType(cp)
 					log.Check(err, "parsing content-disposition", mlog.Field("cp", cp))
 					if strings.EqualFold(disp, "attachment") {
+						// todo: should we be decoding these names? i've seen messages with regular q-word style mime-encoding, not the one specified in ../rfc/2231:210
 						name := p.ContentTypeParams["name"]
 						if name == "" {
 							name = params["filename"]

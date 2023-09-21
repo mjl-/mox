@@ -322,7 +322,7 @@ export interface MessageEnvelope {
 // viewable text or HTML part.
 export interface Attachment {
 	Path?: number[] | null  // Indices into top-level message.Part.Parts.
-	Filename: string  // File name based on "name" attribute of "Content-Type", or the "filename" attribute of "Content-Disposition".
+	Filename: string  // File name based on "name" attribute of "Content-Type", or the "filename" attribute of "Content-Disposition". todo: decode non-ascii character sets
 	Part: Part
 }
 
