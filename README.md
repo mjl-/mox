@@ -99,6 +99,10 @@ After starting, you can access the admin web interface on internal IPs.
 
 # Future/development
 
+Mox will receive funding for essentially full-time continued work from August
+2023 to August 2024 through NLnet/EU's NGI0 Entrust, see
+https://nlnet.nl/project/Mox/.
+
 Mox has automated tests, including for interoperability with Postfix for SMTP.
 Mox is manually tested with email clients: Mozilla Thunderbird, mutt, iOS Mail,
 macOS Mail, Android Mail, Microsoft Outlook. Mox is also manually tested to
@@ -201,7 +205,7 @@ violations, that would be interesting to hear about.
 
 Pull requests for bug fixes and new code are welcome too. If the changes are
 large, it helps to start a discussion (create a ticket) before doing all the
-work.
+work. It's best to get started with a small change, and go from there!
 
 By contributing (e.g. code), you agree your contributions are licensed under the
 MIT license (like mox), and have the rights to do so.
