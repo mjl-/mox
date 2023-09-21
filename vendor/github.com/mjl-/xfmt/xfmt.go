@@ -10,8 +10,12 @@ import (
 
 // Config tells format how to reformat text.
 type Config struct {
-	MaxWidth      int      // Max width of content (excluding indenting), after which lines are wrapped.
-	BreakPrefixes []string // String prefixes that cause a line to break, instead of being merged into the previous line.
+	// Max width of content (excluding indenting), after which lines are wrapped.
+	MaxWidth int
+
+	// String prefixes that cause a line to break, instead of being merged into the
+	// previous line.
+	BreakPrefixes []string
 }
 
 // Format reads text from r and writes reformatted text to w, according to
@@ -33,7 +37,7 @@ type formatter struct {
 	curLineend string
 }
 
-type parseError error
+type parseError struct{ error }
 
 func (f *formatter) format() (rerr error) {
 	defer func() {
@@ -65,7 +69,7 @@ func (f *formatter) format() (rerr error) {
 
 func (f *formatter) check(err error, action string) {
 	if err != nil {
-		panic(parseError(fmt.Errorf("%s: %s", action, err)))
+		panic(parseError{fmt.Errorf("%s: %s", action, err)})
 	}
 }
 
@@ -108,6 +112,7 @@ func (f *formatter) gatherLine() (string, string) {
 	var curLine, curLineend string
 	var curPrefix string
 
+	n := 0
 	for {
 		line, end := f.peekLine()
 		if line == "" && end == "" {
@@ -123,7 +128,7 @@ func (f *formatter) gatherLine() (string, string) {
 			}
 			break
 		}
-		if curLine != "" && (curPrefix != prefix || rem == "" || f.causeBreak(rem)) {
+		if n > 0 && (curPrefix != prefix || rem == "" || f.causeBreak(rem)) {
 			break
 		}
 		curPrefix = prefix
@@ -136,6 +141,7 @@ func (f *formatter) gatherLine() (string, string) {
 		if curLine != "" && curLine[len(curLine)-1] < 0x20 {
 			break
 		}
+		n++
 	}
 
 	return curPrefix + curLine, curLineend

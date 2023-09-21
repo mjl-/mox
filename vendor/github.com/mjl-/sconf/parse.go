@@ -245,8 +245,8 @@ func (p *parser) parseStruct0(v reflect.Value) {
 		if vv == zeroValue {
 			p.stop(fmt.Sprintf("unknown key %q", k))
 		}
-		if ft, _ := t.FieldByName(k); isIgnore(ft.Tag.Get("sconf")) {
-			p.stop(fmt.Sprintf("unknown key %q (has ignore tag)", k))
+		if ft, _ := t.FieldByName(k); !ft.IsExported() || isIgnore(ft.Tag.Get("sconf")) {
+			p.stop(fmt.Sprintf("unknown key %q (has ignore tag or not exported)", k))
 		}
 		vv.Set(p.parseValue(vv))
 	}
@@ -254,7 +254,7 @@ func (p *parser) parseStruct0(v reflect.Value) {
 	n := t.NumField()
 	for i := 0; i < n; i++ {
 		f := t.Field(i)
-		if isIgnore(f.Tag.Get("sconf")) || isOptional(f.Tag.Get("sconf")) {
+		if !f.IsExported() || isIgnore(f.Tag.Get("sconf")) || isOptional(f.Tag.Get("sconf")) {
 			continue
 		}
 		if _, ok := seen[f.Name]; !ok {

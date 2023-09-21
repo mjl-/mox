@@ -17,6 +17,7 @@ type writeError struct{ error }
 
 type writer struct {
 	out      *bufio.Writer
+	wrote    int
 	prefix   string
 	keepZero bool // If set, we also write zero values.
 	docs     bool // If set, we write comments.
@@ -33,8 +34,9 @@ func (w *writer) check(err error) {
 }
 
 func (w *writer) write(s string) {
-	_, err := w.out.WriteString(s)
+	n, err := w.out.WriteString(s)
 	w.check(err)
+	w.wrote += n
 }
 
 func (w *writer) flush() {
@@ -108,7 +110,7 @@ func isEmptyStruct(v reflect.Value) bool {
 	for i := 0; i < n; i++ {
 		ft := t.Field(i)
 		tag := ft.Tag.Get("sconf")
-		if isIgnore(tag) {
+		if !ft.IsExported() || isIgnore(tag) {
 			continue
 		}
 		if !isOptional(tag) {
@@ -134,7 +136,7 @@ func isZeroIgnored(v reflect.Value) bool {
 		for i := 0; i < n; i++ {
 			ft := t.Field(i)
 			tag := ft.Tag.Get("sconf")
-			if isIgnore(tag) {
+			if !ft.IsExported() || isIgnore(tag) {
 				continue
 			}
 			if !isZeroIgnored(v.Field(i)) {
@@ -153,7 +155,7 @@ func (w *writer) describeStruct(v reflect.Value) {
 	for i := 0; i < n; i++ {
 		f := t.Field(i)
 		fv := v.Field(i)
-		if isIgnore(f.Tag.Get("sconf")) {
+		if !f.IsExported() || isIgnore(f.Tag.Get("sconf")) {
 			continue
 		}
 		if !w.keepZero && isOptional(f.Tag.Get("sconf")) && isZeroIgnored(fv) {
@@ -163,11 +165,33 @@ func (w *writer) describeStruct(v reflect.Value) {
 			doc := f.Tag.Get("sconf-doc")
 			optional := isOptional(f.Tag.Get("sconf"))
 			if doc != "" || optional {
-				s := "\n" + w.prefix + "# " + doc
+				s := "\n"
+				if w.wrote == 0 {
+					// No empty line at start of file.
+					s = ""
+				}
+				// Treat two blank lines as section separator: the comments are not joined with
+				// lines with just "#", but instead with empty lines. To allow a hack where the
+				// first field of a config struct gives some context about the file.
+				sections := strings.Split(doc, "\n\n\n")
+				for si, section := range sections {
+					if si > 0 {
+						s += "\n\n\n"
+					}
+					for i, line := range strings.Split(section, "\n") {
+						if i > 0 {
+							s += "\n"
+						}
+						s += w.prefix + "#"
+						if line != "" {
+							s += " " + line
+						}
+					}
+				}
 				if optional {
 					opt := "(optional)"
-					if doc != "" {
-						opt = " " + opt
+					if !strings.HasSuffix(doc, " ") {
+						s += " "
 					}
 					s += opt
 				}

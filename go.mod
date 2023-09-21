@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/mjl-/bstore v0.0.2
-	github.com/mjl-/sconf v0.0.4
+	github.com/mjl-/sconf v0.0.5
 	github.com/mjl-/sherpa v0.6.6
 	github.com/mjl-/sherpadoc v0.0.12
 	github.com/mjl-/sherpaprom v0.0.2
@@ -22,7 +22,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
-	github.com/mjl-/xfmt v0.0.0-20190521151243-39d9c00752ce // indirect
+	github.com/mjl-/xfmt v0.0.2 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect

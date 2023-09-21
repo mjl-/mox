@@ -13,6 +13,11 @@ describe-static" and "mox config describe-domains":
 
 # mox.conf
 
+	# NOTE: This config file is in 'sconf' format. Indent with tabs. Comments must be
+	# on their own line, they don't end a line. Do not escape or quote strings.
+	# Details: https://pkg.go.dev/github.com/mjl-/sconf.
+
+
 	# Directory where all data is stored, e.g. queue, accounts and messages, ACME TLS
 	# certs/keys. If this is a relative path, it is relative to the directory of
 	# mox.conf.
@@ -525,6 +530,11 @@ describe-static" and "mox config describe-domains":
 				RemoteHostname:
 
 # domains.conf
+
+	# NOTE: This config file is in 'sconf' format. Indent with tabs. Comments must be
+	# on their own line, they don't end a line. Do not escape or quote strings.
+	# Details: https://pkg.go.dev/github.com/mjl-/sconf.
+
 
 	# Domains for which email is accepted. For internationalized domains, use their
 	# IDNA names in UTF-8.
