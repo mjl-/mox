@@ -2301,9 +2301,10 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		'image/apng',
 		'image/svg+xml',
 	]
+	const isText = (a: api.Attachment) => a.Part.MediaType.toLowerCase() === 'text'
 	const isImage = (a: api.Attachment) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase())
 	const isPDF = (a: api.Attachment) => (a.Part.MediaType+'/'+a.Part.MediaSubType).toLowerCase() === 'application/pdf'
-	const isViewable = (a: api.Attachment) => isImage(a) || isPDF(a)
+	const isViewable = (a: api.Attachment) => isText(a) || isImage(a) || isPDF(a)
 	const attachments: api.Attachment[] = (mi.Attachments || [])
 
 	let beforeViewFocus: Element | null
@@ -2393,28 +2394,35 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 						style({backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', margin: '0 30px'})
 					),
 				) : (
-					isPDF(a) ?
+					isText(a) ?
 						dom.iframe(
+							attr.title('Attachment shown as text.'),
 							style({flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em'}),
-							attr.title('Attachment as PDF.'),
-							attr.src('msg/'+m.ID+'/view/'+pathStr)
-						) :
-						content=dom.div(
-							function click(e: MouseEvent) {
-								e.stopPropagation()
-							},
-							style({minWidth: '30em', padding: '2ex', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em', textAlign: 'center'}),
-							dom.div(style({marginBottom: '2ex'}), 'Attachment could be a binary file.'),
-							dom.clickbutton('View as text', function click() {
-								content.replaceWith(
-									dom.iframe(
-										attr.title('Attachment shown as text, though it could be a binary file.'),
-										style({flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em'}),
-										attr.src('msg/'+m.ID+'/viewtext/'+pathStr)
-									)
-								)
-							}),
+							attr.src('msg/'+m.ID+'/viewtext/'+pathStr)
+						) : (
+							isPDF(a) ?
+								dom.iframe(
+									style({flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em'}),
+									attr.title('Attachment as PDF.'),
+									attr.src('msg/'+m.ID+'/view/'+pathStr)
+								) :
+								content=dom.div(
+									function click(e: MouseEvent) {
+										e.stopPropagation()
+									},
+									style({minWidth: '30em', padding: '2ex', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em', textAlign: 'center'}),
+									dom.div(style({marginBottom: '2ex'}), 'Attachment could be a binary file.'),
+									dom.clickbutton('View as text', function click() {
+										content.replaceWith(
+											dom.iframe(
+												attr.title('Attachment shown as text, though it could be a binary file.'),
+												style({flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em'}),
+												attr.src('msg/'+m.ID+'/viewtext/'+pathStr)
+											)
+										)
+									}),
 						)
+					)
 				),
 			!(index < attachments.length-1) ? [] : dom.div(
 				style({position: 'absolute', right: '1em', top: 0, bottom: 0, fontSize: '1.5em', width: '2em', display: 'flex', alignItems: 'center', cursor: 'pointer'}),

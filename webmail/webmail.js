@@ -2765,9 +2765,10 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		'image/apng',
 		'image/svg+xml',
 	];
+	const isText = (a) => a.Part.MediaType.toLowerCase() === 'text';
 	const isImage = (a) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase());
 	const isPDF = (a) => (a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase() === 'application/pdf';
-	const isViewable = (a) => isImage(a) || isPDF(a);
+	const isViewable = (a) => isText(a) || isImage(a) || isPDF(a);
 	const attachments = (mi.Attachments || []);
 	let beforeViewFocus;
 	const view = (a) => {
@@ -2820,13 +2821,14 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		}, attr.tabindex('0'), !(index > 0) ? [] : dom.div(style({ position: 'absolute', left: '1em', top: 0, bottom: 0, fontSize: '1.5em', width: '2em', display: 'flex', alignItems: 'center', cursor: 'pointer' }), dom.div(dom._class('silenttitle'), style({ backgroundColor: 'rgba(0, 0, 0, .8)', color: 'white', width: '2em', height: '2em', borderRadius: '1em', lineHeight: '2em', textAlign: 'center', fontWeight: 'bold' }), attr.title('To previous viewable attachment.'), '←'), attr.tabindex('0'), clickCmd(cmdViewPrev, attachShortcuts), enterCmd(cmdViewPrev, attachShortcuts)), dom.div(style({ textAlign: 'center', paddingBottom: '30px' }), dom.span(dom._class('pad'), function click(e) {
 			e.stopPropagation();
 		}, style({ backgroundColor: 'white', borderRadius: '.25em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd' }), a.Filename || '(unnamed)', ' - ', formatSize(a.Part.DecodedSize), ' - ', dom.a('Download', attr.download(''), attr.href('msg/' + m.ID + '/download/' + pathStr), function click(e) { e.stopPropagation(); }))), isImage(a) ?
-			dom.div(style({ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 5em' }), dom.img(attr.src('msg/' + m.ID + '/view/' + pathStr), style({ backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', margin: '0 30px' }))) : (isPDF(a) ?
+			dom.div(style({ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 5em' }), dom.img(attr.src('msg/' + m.ID + '/view/' + pathStr), style({ backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', margin: '0 30px' }))) : (isText(a) ?
+			dom.iframe(attr.title('Attachment shown as text.'), style({ flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em' }), attr.src('msg/' + m.ID + '/viewtext/' + pathStr)) : (isPDF(a) ?
 			dom.iframe(style({ flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em' }), attr.title('Attachment as PDF.'), attr.src('msg/' + m.ID + '/view/' + pathStr)) :
 			content = dom.div(function click(e) {
 				e.stopPropagation();
 			}, style({ minWidth: '30em', padding: '2ex', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em', textAlign: 'center' }), dom.div(style({ marginBottom: '2ex' }), 'Attachment could be a binary file.'), dom.clickbutton('View as text', function click() {
 				content.replaceWith(dom.iframe(attr.title('Attachment shown as text, though it could be a binary file.'), style({ flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em' }), attr.src('msg/' + m.ID + '/viewtext/' + pathStr)));
-			}))), !(index < attachments.length - 1) ? [] : dom.div(style({ position: 'absolute', right: '1em', top: 0, bottom: 0, fontSize: '1.5em', width: '2em', display: 'flex', alignItems: 'center', cursor: 'pointer' }), dom.div(dom._class('silenttitle'), style({ backgroundColor: 'rgba(0, 0, 0, .8)', color: 'white', width: '2em', height: '2em', borderRadius: '1em', lineHeight: '2em', textAlign: 'center', fontWeight: 'bold' }), attr.title('To next viewable attachment.'), '→'), attr.tabindex('0'), clickCmd(cmdViewNext, attachShortcuts), enterCmd(cmdViewNext, attachShortcuts)));
+			})))), !(index < attachments.length - 1) ? [] : dom.div(style({ position: 'absolute', right: '1em', top: 0, bottom: 0, fontSize: '1.5em', width: '2em', display: 'flex', alignItems: 'center', cursor: 'pointer' }), dom.div(dom._class('silenttitle'), style({ backgroundColor: 'rgba(0, 0, 0, .8)', color: 'white', width: '2em', height: '2em', borderRadius: '1em', lineHeight: '2em', textAlign: 'center', fontWeight: 'bold' }), attr.title('To next viewable attachment.'), '→'), attr.tabindex('0'), clickCmd(cmdViewNext, attachShortcuts), enterCmd(cmdViewNext, attachShortcuts)));
 		document.body.appendChild(popupRoot);
 		popupRoot.focus();
 		attachmentView = { key: keyHandler(attachShortcuts) };
