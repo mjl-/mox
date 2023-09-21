@@ -9,7 +9,8 @@ mkdir /tmp/mox
 cd /tmp/mox
 mox quickstart moxtest1@mox1.example "$MOX_UID" > output.txt
 
-sed -i -e '/- 172.28.1.10/d' -e 's/- 0.0.0.0/- 172.28.1.10/' -e '/- ::/d' -e 's/letsencrypt:/pebble:/g' -e 's/: letsencrypt/: pebble/g' -e 's,DirectoryURL: https://acme-v02.api.letsencrypt.org/directory,DirectoryURL: https://acmepebble.example:14000/dir,' -e 's/SMTP:$/SMTP:\n\t\t\tFirstTimeSenderDelay: 1s/' config/mox.conf
+cp config/mox.conf config/mox.conf.orig
+sed -i -e 's/letsencrypt:/pebble:/g' -e 's/: letsencrypt/: pebble/g' -e 's,DirectoryURL: https://acme-v02.api.letsencrypt.org/directory,DirectoryURL: https://acmepebble.example:14000/dir,' -e 's/SMTP:$/SMTP:\n\t\t\tFirstTimeSenderDelay: 1s/' config/mox.conf
 cat <<EOF >>config/mox.conf
 
 TLS:

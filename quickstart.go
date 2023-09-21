@@ -149,78 +149,76 @@ logging in with IMAP.
 	// We are going to find the (public) IPs to listen on and possibly the host name.
 
 	// Start with reasonable defaults. We'll replace them specific IPs, if we can find them.
-	publicListenerIPs := []string{"0.0.0.0", "::"}
 	privateListenerIPs := []string{"127.0.0.1", "::1"}
+	publicListenerIPs := []string{"0.0.0.0", "::"}
+	var publicNATIPs []string // Actual public IP, but when it is NATed and machine doesn't have direct access.
+	defaultPublicListenerIPs := true
 
 	// If we find IPs based on network interfaces, {public,private}ListenerIPs are set
 	// based on these values.
-	var privateIPs, publicIPs []string
+	var loopbackIPs, privateIPs, publicIPs []string
+
+	// Gather IP addresses for public and private listeners.
+	// We look at each network interface. If an interface has a private address, we
+	// conservatively assume all addresses on that interface are private.
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		fatalf("listing network interfaces: %s", err)
+	}
+	parseAddrIP := func(s string) net.IP {
+		if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
+			s = s[1 : len(s)-1]
+		}
+		ip, _, _ := net.ParseCIDR(s)
+		return ip
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			fatalf("listing address for network interface: %s", err)
+		}
+		if len(addrs) == 0 {
+			continue
+		}
+
+		// todo: should we detect temporary/ephemeral ipv6 addresses and not add them?
+		var nonpublic bool
+		for _, addr := range addrs {
+			ip := parseAddrIP(addr.String())
+			if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
+				continue
+			}
+			if ip.IsLoopback() || ip.IsPrivate() {
+				nonpublic = true
+				break
+			}
+		}
+
+		for _, addr := range addrs {
+			ip := parseAddrIP(addr.String())
+			if ip == nil {
+				continue
+			}
+			if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
+				continue
+			}
+			if nonpublic {
+				if ip.IsLoopback() {
+					loopbackIPs = append(loopbackIPs, ip.String())
+				} else {
+					privateIPs = append(privateIPs, ip.String())
+				}
+			} else {
+				publicIPs = append(publicIPs, ip.String())
+			}
+		}
+	}
 
 	var dnshostname dns.Domain
 	if hostname == "" {
-		// Gather IP addresses for public and private listeners.
-		// If we cannot find addresses for a category we fallback to all ips or localhost ips.
-		// We look at each network interface. If an interface has a private address, we
-		// conservatively assume all addresses on that interface are private.
-		ifaces, err := net.Interfaces()
-		if err != nil {
-			fatalf("listing network interfaces: %s", err)
-		}
-		parseAddrIP := func(s string) net.IP {
-			if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
-				s = s[1 : len(s)-1]
-			}
-			ip, _, _ := net.ParseCIDR(s)
-			return ip
-		}
-		for _, iface := range ifaces {
-			if iface.Flags&net.FlagUp == 0 {
-				continue
-			}
-			addrs, err := iface.Addrs()
-			if err != nil {
-				fatalf("listing address for network interface: %s", err)
-			}
-			if len(addrs) == 0 {
-				continue
-			}
-
-			// todo: should we detect temporary/ephemeral ipv6 addresses and not add them?
-			var nonpublic bool
-			for _, addr := range addrs {
-				ip := parseAddrIP(addr.String())
-				if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
-					continue
-				}
-				if ip.IsLoopback() || ip.IsPrivate() {
-					nonpublic = true
-					break
-				}
-			}
-
-			for _, addr := range addrs {
-				ip := parseAddrIP(addr.String())
-				if ip == nil {
-					continue
-				}
-				if ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
-					continue
-				}
-				if nonpublic {
-					privateIPs = append(privateIPs, ip.String())
-				} else {
-					publicIPs = append(publicIPs, ip.String())
-				}
-			}
-		}
-
-		if len(publicIPs) > 0 {
-			publicListenerIPs = publicIPs
-		}
-		if len(privateIPs) > 0 {
-			privateListenerIPs = privateIPs
-		}
-
 		hostnameStr, err := os.Hostname()
 		if err != nil {
 			fatalf("hostname: %s", err)
@@ -311,9 +309,13 @@ again with the -hostname flag.
 	ips, err := resolver.LookupIPAddr(ipctx, dnshostname.ASCII+".")
 	ipcancel()
 	var xips []net.IPAddr
-	var xipstrs []string
+	var hostIPs []string
 	var dnswarned bool
+	hostPrivate := len(ips) > 0
 	for _, ip := range ips {
+		if !ip.IP.IsPrivate() {
+			hostPrivate = false
+		}
 		// During linux install, you may get an alias for you full hostname in /etc/hosts
 		// resolving to 127.0.1.1, which would result in a false positive about the
 		// hostname having a record. Filter it out. It is a bit surprising that hosts don't
@@ -324,17 +326,60 @@ again with the -hostname flag.
 			continue
 		}
 		xips = append(xips, ip)
-		xipstrs = append(xipstrs, ip.String())
+		hostIPs = append(hostIPs, ip.String())
 	}
 	if err == nil && len(xips) == 0 {
 		// todo: possibly check this by trying to resolve without using /etc/hosts?
 		err = errors.New("hostname not in dns, probably only in /etc/hosts")
 	}
 	ips = xips
-	if hostname != "" {
-		// Host name was specified, assume we will run on a machine with those IPs.
-		publicListenerIPs = xipstrs
-		publicIPs = xipstrs
+
+	// We may have found private and public IPs on the machine, and IPs for the host
+	// name we think we should use. They may not match with each other. E.g. the public
+	// IPs on interfaces could be different from the IPs for the host. We don't try to
+	// detect all possible configs, but just generate what makes sense given whether we
+	// found public/private/hostname IPs. If the user is doing sensible things, it
+	// should be correct. But they should be checking the generated config file anyway.
+	// And we do log which host name we are using, and whether we detected a NAT setup.
+	// In the future, we may do an interactive setup that can guide the user better.
+
+	if !hostPrivate && len(publicIPs) == 0 && len(privateIPs) > 0 {
+		// We only have private IPs, assume we are behind a NAT and put the IPs of the host in NATIPs.
+		publicListenerIPs = privateIPs
+		publicNATIPs = hostIPs
+		defaultPublicListenerIPs = false
+		if len(loopbackIPs) > 0 {
+			privateListenerIPs = loopbackIPs
+		}
+	} else {
+		if len(hostIPs) > 0 {
+			publicListenerIPs = hostIPs
+			defaultPublicListenerIPs = false
+
+			// Only keep private IPs that are not in host-based publicListenerIPs. For
+			// internal-only setups, including integration tests.
+			m := map[string]bool{}
+			for _, ip := range hostIPs {
+				m[ip] = true
+			}
+			var npriv []string
+			for _, ip := range privateIPs {
+				if !m[ip] {
+					npriv = append(npriv, ip)
+				}
+			}
+			sort.Strings(npriv)
+			privateIPs = npriv
+		} else if len(publicIPs) > 0 {
+			publicListenerIPs = publicIPs
+			defaultPublicListenerIPs = false
+			hostIPs = publicIPs // For DNSBL check below.
+		}
+		if len(privateIPs) > 0 {
+			privateListenerIPs = append(privateIPs, loopbackIPs...)
+		} else if len(loopbackIPs) > 0 {
+			privateListenerIPs = loopbackIPs
+		}
 	}
 	if err != nil {
 		if !dnswarned {
@@ -422,11 +467,11 @@ This likely means one of two things:
 		{ASCII: "sbl.spamhaus.org"},
 		{ASCII: "bl.spamcop.net"},
 	}
-	if len(publicIPs) > 0 {
-		fmt.Printf("Checking whether your public IPs are listed in popular DNS block lists...")
+	if len(hostIPs) > 0 {
+		fmt.Printf("Checking whether host name IPs are listed in popular DNS block lists...")
 		var listed bool
 		for _, zone := range zones {
-			for _, ip := range publicIPs {
+			for _, ip := range hostIPs {
 				dnsblctx, dnsblcancel := context.WithTimeout(resolveCtx, 5*time.Second)
 				status, expl, err := dnsbl.Lookup(dnsblctx, resolver, zone, net.ParseIP(ip))
 				dnsblcancel()
@@ -449,7 +494,7 @@ email. Your IP may be in block lists only temporarily. To see if your IPs are
 listed in more DNS block lists, visit:
 
 `)
-			for _, ip := range publicIPs {
+			for _, ip := range hostIPs {
 				fmt.Printf("- https://multirbl.valli.org/lookup/%s.html\n", url.PathEscape(ip))
 			}
 			fmt.Printf("\n")
@@ -458,20 +503,28 @@ listed in more DNS block lists, visit:
 		}
 	}
 
-	if len(publicIPs) == 0 {
-		log.Printf(`WARNING: Could not find your public IP address(es). The "public" listener is
+	if defaultPublicListenerIPs {
+		log.Printf(`
+WARNING: Could not find your public IP address(es). The "public" listener is
 configured to listen on 0.0.0.0 (IPv4) and :: (IPv6). If you don't change these
 to your actual public IP addresses, you will likely get "address in use" errors
 when starting mox because the "internal" listener binds to a specific IP
 address on the same port(s). If you are behind a NAT, instead configure the
 actual public IPs in the listener's "NATIPs" option.
 
-If you are behind a NAT that does not preserve the remote IPs of connections,
-you will likely experience problems accepting email due to IP-based policies.
-For example, SPF is a mechanism that checks if an IP address is allowed to send
+`)
+	}
+	if len(publicNATIPs) > 0 {
+		log.Printf(`
+NOTE: Quickstart used the IPs of the host name of the mail server, but only
+found private IPs on the machine. This indicates this machine is behind a NAT,
+so the host IPs were configured in the NATIPs field of the public listeners. If
+you are behind a NAT that does not preserve the remote IPs of connections, you
+will likely experience problems accepting email due to IP-based policies. For
+example, SPF is a mechanism that checks if an IP address is allowed to send
 email for a domain, and mox uses IP-based (non)junk classification, and IP-based
-rate-limiting both for accepting email and blocking bad actors (such as with
-too many authentication failures).
+rate-limiting both for accepting email and blocking bad actors (such as with too
+many authentication failures).
 
 `)
 	}
@@ -510,7 +563,8 @@ too many authentication failures).
 	fmt.Printf("Admin password: %s\n", adminpw)
 
 	public := config.Listener{
-		IPs: publicListenerIPs,
+		IPs:    publicListenerIPs,
+		NATIPs: publicNATIPs,
 	}
 	public.SMTP.Enabled = true
 	public.Submissions.Enabled = true
