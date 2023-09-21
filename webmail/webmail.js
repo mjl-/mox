@@ -5520,6 +5520,7 @@ const init = async () => {
 			}
 		}));
 	};
+	const capitalizeFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 	const connect = async (isreconnect) => {
 		connectionElem.classList.toggle('loading', true);
 		dom._kids(connectionElem);
@@ -5534,7 +5535,7 @@ const init = async () => {
 		catch (err) {
 			connecting = false;
 			noreconnect = true;
-			dom._kids(statusElem, (err.message || 'error fetching connection token') + ', not automatically retrying');
+			dom._kids(statusElem, (capitalizeFirst(err.message || 'Error fetching connection token')) + ', not automatically retrying. ');
 			showNotConnected();
 			return;
 		}
@@ -5582,7 +5583,7 @@ const init = async () => {
 		}
 		catch (err) { }
 		eventSource = new window.EventSource('events?token=' + encodeURIComponent(token) + '&request=' + encodeURIComponent(JSON.stringify(request)) + slow);
-		let eventID = window.setTimeout(() => dom._kids(statusElem, 'Connecting...'), 1000);
+		let eventID = window.setTimeout(() => dom._kids(statusElem, 'Connecting... '), 1000);
 		eventSource.addEventListener('open', (e) => {
 			log('eventsource open', { e });
 			if (eventID) {
@@ -5611,7 +5612,7 @@ const init = async () => {
 			document.title = ['(not connected)', loginAddress ? (loginAddress.User + '@' + (loginAddress.Domain.Unicode || loginAddress.Domain.ASCII)) : '', 'Mox Webmail'].filter(s => s).join(' - ');
 			dom._kids(connectionElem);
 			if (noreconnect) {
-				dom._kids(statusElem, errmsg + ', not automatically retrying');
+				dom._kids(statusElem, capitalizeFirst(errmsg) + ', not automatically retrying. ');
 				showNotConnected();
 				listloadingElem.remove();
 				listendElem.remove();
