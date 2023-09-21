@@ -1835,6 +1835,11 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 			focus ? dom._class('focus') : [],
 			attr.draggable('true'),
 			function dragstart(e: DragEvent) {
+				if (!msglistView.selected().includes(msgitemView)) {
+					e.preventDefault()
+					window.alert('Can only drag items in selection.')
+					return
+				}
 				// We send the Message.ID and MailboxID, so we can decide based on the destination
 				// mailbox whether to move. We don't move messages already in the destination
 				// mailbox, and also skip messages in the Sent mailbox when there are also messages
