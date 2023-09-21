@@ -31,7 +31,5 @@
 /cover.html
 /.go/
 /node_modules/
-/upgrade-verifydata.cpu.pprof
-/upgrade-verifydata.mem.pprof
-/upgrade-openaccounts.cpu.pprof
-/upgrade-openaccounts.mem.pprof
+/upgrade*-verifydata.*.pprof
+/upgrade*-openaccounts.*.pprof
