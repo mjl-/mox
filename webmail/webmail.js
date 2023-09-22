@@ -3606,10 +3606,10 @@ const newMsglistView = (msgElem, listMailboxes, setLocationHash, otherMailbox, p
 					else if (i > 0) {
 						focus = mivs[i - 1];
 					}
-					const si = selected.indexOf(miv);
-					if (si >= 0) {
-						selected.splice(si, 1);
-					}
+				}
+				const si = selected.indexOf(miv);
+				if (si >= 0) {
+					selected.splice(si, 1);
 				}
 				// Strict cleanup.
 				miv.parent = null;
