@@ -114,6 +114,8 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 ## Roadmap
 
 - DANE and DNSSEC
+- Non-HTTP-based authentication for webmail/webadmin/webaccount.
+- Per-domain webmail and imap/smtp host name (and TLS cert) and client settings.
 - Sending DMARC and TLS reports (currently only receiving)
 - Require TLS SMTP extension (RFC 8689)
 - Prepare data storage for JMAP
