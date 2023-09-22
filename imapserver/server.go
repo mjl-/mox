@@ -3378,9 +3378,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 					xserverErrorf("internal error: got uid %d, expected %d, for index %d", m.UID, uids[i], i)
 				}
 
-				mc := m.MailboxCounts()
-				mbSrc.Sub(mc)
-				mbDst.Add(mc)
+				mbSrc.Sub(m.MailboxCounts())
 
 				// Copy of message record that we'll insert when UID is freed up.
 				om := *m
@@ -3394,7 +3392,9 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 					// is used for reputation calculation during future deliveries.
 					m.MailboxOrigID = m.MailboxDestinedID
 					m.IsReject = false
+					m.Seen = false
 				}
+				mbDst.Add(m.MailboxCounts())
 				m.UID = uidnext
 				m.ModSeq = modseq
 				m.JunkFlagsForMailbox(mbDst, conf)

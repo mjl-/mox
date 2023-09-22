@@ -844,6 +844,7 @@ func (Webmail) MessageMove(ctx context.Context, messageIDs []int64, mailboxID in
 					// is used for reputation calculation during future deliveries.
 					m.MailboxOrigID = m.MailboxDestinedID
 					m.IsReject = false
+					m.Seen = false
 				}
 				m.UID = mbDst.UIDNext
 				m.ModSeq = modseq
