@@ -615,6 +615,7 @@ func (m *Message) JunkFlagsForMailbox(mb Mailbox, conf config.Account) {
 	if mb.Junk {
 		m.Junk = true
 		m.Notjunk = false
+		return
 	}
 
 	if !conf.AutomaticJunkFlags.Enabled {
