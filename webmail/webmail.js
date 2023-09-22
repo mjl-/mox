@@ -1088,7 +1088,7 @@ const defaultSettings = {
 	mailboxCollapsed: {},
 	showAllHeaders: false,
 	showHeaders: [],
-	threading: api.ThreadMode.ThreadUnread,
+	threading: api.ThreadMode.ThreadOn,
 	checkConsistency: location.hostname === 'localhost', // Enable UI update consistency checks, default only for local development.
 };
 const parseSettings = () => {

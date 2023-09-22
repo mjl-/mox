@@ -137,7 +137,7 @@ const defaultSettings = {
 	mailboxCollapsed: {} as {[mailboxID: number]: boolean}, // Mailboxes that are collapsed.
 	showAllHeaders: false, // Whether to show all message headers.
 	showHeaders: [] as string[], // Additional message headers to show.
-	threading: api.ThreadMode.ThreadUnread,
+	threading: api.ThreadMode.ThreadOn,
 	checkConsistency: location.hostname === 'localhost', // Enable UI update consistency checks, default only for local development.
 }
 const parseSettings = (): typeof defaultSettings => {
