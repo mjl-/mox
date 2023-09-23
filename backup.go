@@ -231,7 +231,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			// No point in trying with regular copy, we would warn twice.
 			return false, err
 		} else if !warnedHardlink {
-			xwarnx("creating hardlink to message", err, mlog.Field("srcpath", srcpath), mlog.Field("dstpath", dstpath))
+			xwarnx("creating hardlink to message failed, will be doing regular file copies and not warn again", err, mlog.Field("srcpath", srcpath), mlog.Field("dstpath", dstpath))
 			warnedHardlink = true
 		}
 
