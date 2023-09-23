@@ -807,7 +807,7 @@ Change the IMAP UID validity of the mailbox, causing IMAP clients to refetch mes
 This can be useful after manually repairing metadata about the account/mailbox.
 
 Opens account database file directly. Ensure mox does not have the account
-+open, or is not running.
+open, or is not running.
 
 	usage: mox bumpuidvalidity account [mailbox]
 

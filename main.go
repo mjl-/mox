@@ -2102,7 +2102,7 @@ func cmdBumpUIDValidity(c *cmd) {
 This can be useful after manually repairing metadata about the account/mailbox.
 
 Opens account database file directly. Ensure mox does not have the account
-+open, or is not running.
+open, or is not running.
 `
 	args := c.Parse()
 	if len(args) != 1 && len(args) != 2 {
@@ -2118,8 +2118,12 @@ Opens account database file directly. Ensure mox does not have the account
 		}
 	}()
 
-	var uidvalidity uint32
 	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
+		uidvalidity, err := a.NextUIDValidity(tx)
+		if err != nil {
+			return fmt.Errorf("assigning next uid validity: %v", err)
+		}
+
 		q := bstore.QueryTx[store.Mailbox](tx)
 		if len(args) == 2 {
 			q.FilterEqual("Name", args[1])
@@ -2132,8 +2136,7 @@ Opens account database file directly. Ensure mox does not have the account
 			return fmt.Errorf("looking up mailbox %q, found %d mailboxes", args[1], len(mbl))
 		}
 		for _, mb := range mbl {
-			mb.UIDValidity++
-			uidvalidity = mb.UIDValidity
+			mb.UIDValidity = uidvalidity
 			err = tx.Update(&mb)
 			if err != nil {
 				return fmt.Errorf("updating uid validity for mailbox: %v", err)
