@@ -27,13 +27,13 @@ func TestListBasic(t *testing.T) {
 	tc.xuntagged(ulist("Inbox"))
 
 	tc.last(tc.client.List("%"))
-	tc.xuntagged(ulist("Archive"), ulist("Drafts"), ulist("Inbox"), ulist("Junk"), ulist("Sent"), ulist("Trash"))
+	tc.xuntagged(ulist("Archive", `\Archive`), ulist("Drafts", `\Drafts`), ulist("Inbox"), ulist("Junk", `\Junk`), ulist("Sent", `\Sent`), ulist("Trash", `\Trash`))
 
 	tc.last(tc.client.List("*"))
-	tc.xuntagged(ulist("Archive"), ulist("Drafts"), ulist("Inbox"), ulist("Junk"), ulist("Sent"), ulist("Trash"))
+	tc.xuntagged(ulist("Archive", `\Archive`), ulist("Drafts", `\Drafts`), ulist("Inbox"), ulist("Junk", `\Junk`), ulist("Sent", `\Sent`), ulist("Trash", `\Trash`))
 
 	tc.last(tc.client.List("A*"))
-	tc.xuntagged(ulist("Archive"))
+	tc.xuntagged(ulist("Archive", `\Archive`))
 
 	tc.client.Create("Inbox/todo")
 

@@ -58,7 +58,7 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 	p.xspace()
 	patterns, isList := p.xmboxOrPat()
 	isExtended = isExtended || isList
-	var retSubscribed, retChildren, retSpecialUse bool
+	var retSubscribed, retChildren bool
 	var retStatusAttrs []string
 	if p.take(" RETURN (") {
 		isExtended = true
@@ -79,7 +79,8 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 				retChildren = true
 			case "SPECIAL-USE":
 				// ../rfc/6154:478
-				retSpecialUse = true
+				// We always include special-use mailbox flags. Mac OS X Mail 16.0 (sept 2023) does
+				// not ask for the flags, but does use them when given. ../rfc/6154:146
 			case "STATUS":
 				// ../rfc/9051:7072 ../rfc/5819:181
 				p.xspace()
@@ -189,7 +190,7 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 				if !listSubscribed && retSubscribed && info.subscribed {
 					flags = append(flags, bare(`\Subscribed`))
 				}
-				if retSpecialUse && info.mailbox != nil {
+				if info.mailbox != nil {
 					if info.mailbox.Archive {
 						flags = append(flags, bare(`\Archive`))
 					}
