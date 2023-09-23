@@ -109,9 +109,15 @@ func (m dict) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
 // password because sending opaque files containing passwords around to users seems
 // like bad security practice.
 //
+// Multiple addresses can be passed, the first is used for IMAP/submission login,
+// and likely seen as primary account by Apple software.
+//
 // The config is not signed, so users must ignore warnings about unsigned profiles.
-func MobileConfig(address, fullName string) ([]byte, error) {
-	addr, err := smtp.ParseAddress(address)
+func MobileConfig(addresses []string, fullName string) ([]byte, error) {
+	if len(addresses) == 0 {
+		return nil, fmt.Errorf("need at least 1 address")
+	}
+	addr, err := smtp.ParseAddress(addresses[0])
 	if err != nil {
 		return nil, fmt.Errorf("parsing address: %v", err)
 	}
@@ -131,7 +137,7 @@ func MobileConfig(address, fullName string) ([]byte, error) {
 	const key = "mox0"
 	uuid := func(prefix string) string {
 		mac := hmac.New(sha256.New, []byte(key))
-		mac.Write([]byte(prefix + "\n" + "\n" + address))
+		mac.Write([]byte(prefix + "\n" + "\n" + strings.Join(addresses, ",")))
 		sum := mac.Sum(nil)
 		uuid := fmt.Sprintf("%x-%x-%x-%x-%x", sum[0:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16])
 		return uuid
@@ -152,26 +158,28 @@ func MobileConfig(address, fullName string) ([]byte, error) {
 	p := deviceManagementProfile{
 		Version: "1.0",
 		Dict: dict(map[string]any{
-			"PayloadDisplayName": fmt.Sprintf("%s email account", address),
+			"PayloadDisplayName": fmt.Sprintf("%s email account", addresses[0]),
 			"PayloadIdentifier":  reverseAddr + ".email",
 			"PayloadType":        "Configuration",
 			"PayloadUUID":        uuidConfig,
 			"PayloadVersion":     1,
 			"PayloadContent": array{
 				dict(map[string]any{
-					"EmailAccountDescription":                address,
-					"EmailAccountName":                       fullName,
-					"EmailAccountType":                       "EmailTypeIMAP",
-					"EmailAddress":                           address,
+					"EmailAccountDescription": addresses[0],
+					"EmailAccountName":        fullName,
+					"EmailAccountType":        "EmailTypeIMAP",
+					// Comma-separated multiple addresses are not documented at Apple, but seem to
+					// work.
+					"EmailAddress":                           strings.Join(addresses, ","),
 					"IncomingMailServerAuthentication":       "EmailAuthCRAMMD5", // SCRAM not an option at time of writing..
-					"IncomingMailServerUsername":             address,
+					"IncomingMailServerUsername":             addresses[0],
 					"IncomingMailServerHostName":             config.IMAP.Host.ASCII,
 					"IncomingMailServerPortNumber":           config.IMAP.Port,
 					"IncomingMailServerUseSSL":               config.IMAP.TLSMode == mox.TLSModeImmediate,
 					"OutgoingMailServerAuthentication":       "EmailAuthCRAMMD5", // SCRAM not an option at time of writing...
 					"OutgoingMailServerHostName":             config.Submission.Host.ASCII,
 					"OutgoingMailServerPortNumber":           config.Submission.Port,
-					"OutgoingMailServerUsername":             address,
+					"OutgoingMailServerUsername":             addresses[0],
 					"OutgoingMailServerUseSSL":               config.Submission.TLSMode == mox.TLSModeImmediate,
 					"OutgoingPasswordSameAsIncomingPassword": true,
 					"PayloadIdentifier":                      reverseAddr + ".email.account",

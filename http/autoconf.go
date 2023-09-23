@@ -328,15 +328,23 @@ func mobileconfigHandle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "405 - method not allowed - get required", http.StatusMethodNotAllowed)
 		return
 	}
-	address := r.FormValue("address")
+	addresses := r.FormValue("addresses")
 	fullName := r.FormValue("name")
-	buf, err := MobileConfig(address, fullName)
+	var buf []byte
+	var err error
+	if addresses == "" {
+		err = fmt.Errorf("missing/empty field addresses")
+	}
+	l := strings.Split(addresses, ",")
+	if err == nil {
+		buf, err = MobileConfig(l, fullName)
+	}
 	if err != nil {
 		http.Error(w, "400 - bad request - "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	h := w.Header()
-	filename := address
+	filename := l[0]
 	filename = strings.ReplaceAll(filename, ".", "-")
 	filename = strings.ReplaceAll(filename, "@", "-at-")
 	filename = "email-account-" + filename + ".mobileconfig"
