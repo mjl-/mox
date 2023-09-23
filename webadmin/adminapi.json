@@ -437,7 +437,7 @@
 		},
 		{
 			"Name": "AccountAdd",
-			"Docs": "AccountAdd adds existing a new account, with an initial email address, and reloads the configuration.",
+			"Docs": "AccountAdd adds existing a new account, with an initial email address, and\nreloads the configuration.",
 			"Params": [
 				{
 					"Name": "accountName",
@@ -544,8 +544,8 @@
 			"Returns": []
 		},
 		{
-			"Name": "ClientConfigDomain",
-			"Docs": "ClientConfigDomain returns configurations for email clients, IMAP and\nSubmission (SMTP) for the domain.",
+			"Name": "ClientConfigsDomain",
+			"Docs": "ClientConfigsDomain returns configurations for email clients, IMAP and\nSubmission (SMTP) for the domain.",
 			"Params": [
 				{
 					"Name": "domain",
@@ -558,7 +558,7 @@
 				{
 					"Name": "r0",
 					"Typewords": [
-						"ClientConfig"
+						"ClientConfigs"
 					]
 				}
 			]
@@ -2772,21 +2772,21 @@
 			]
 		},
 		{
-			"Name": "ClientConfig",
-			"Docs": "ClientConfig holds the client configuration for IMAP/Submission for a\ndomain.",
+			"Name": "ClientConfigs",
+			"Docs": "ClientConfigs holds the client configuration for IMAP/Submission for a\ndomain.",
 			"Fields": [
 				{
 					"Name": "Entries",
 					"Docs": "",
 					"Typewords": [
 						"[]",
-						"ClientConfigEntry"
+						"ClientConfigsEntry"
 					]
 				}
 			]
 		},
 		{
-			"Name": "ClientConfigEntry",
+			"Name": "ClientConfigsEntry",
 			"Docs": "",
 			"Fields": [
 				{

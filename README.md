@@ -29,8 +29,9 @@ See Quickstart below to get started.
   (instructions to create DNS records, configure
   SPF/DKIM/DMARC/TLSRPT/MTA-STS), for status information, managing
   accounts/domains, and modifying the configuration file.
-- Autodiscovery (with SRV records, Microsoft-style and Thunderbird-style) for
-  easy account setup (though not many clients support it).
+- Autodiscovery (with SRV records, Microsoft-style, Thunderbird-style, and Apple
+  device management profiles) for easy account setup (though client support is
+  limited).
 - Webmail for reading/sending email from the browser.
 - Webserver with serving static files and forwarding requests (reverse
   proxy), so port 443 can also be used to serve websites.
@@ -39,8 +40,8 @@ See Quickstart below to get started.
   testing/developing, including pedantic mode.
 
 Mox is available under the MIT-license and was created by Mechiel Lukkien,
-mechiel@ueber.net. Mox includes the Public Suffix List by Mozilla, under Mozilla
-Public License, v2.0.
+mechiel@ueber.net. Mox includes BSD-3-claused code from the Go Authors, and the
+Public Suffix List by Mozilla under Mozilla Public License, v2.0.
 
 
 # Download

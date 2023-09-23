@@ -617,11 +617,19 @@ func Listen() {
 			port := config.Port(l.AutoconfigHTTPS.Port, 443)
 			srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, port, "autoconfig-https")
 			autoconfigMatch := func(dom dns.Domain) bool {
-				// todo: may want to check this against the configured domains, could in theory be just a webserver.
-				return strings.HasPrefix(dom.ASCII, "autoconfig.")
+				// Thunderbird requests an autodiscovery URL at the email address domain name, so
+				// autoconfig prefix is optional.
+				if strings.HasPrefix(dom.ASCII, "autoconfig.") {
+					dom.ASCII = strings.TrimPrefix(dom.ASCII, "autoconfig.")
+					dom.Unicode = strings.TrimPrefix(dom.Unicode, "autoconfig.")
+				}
+				_, ok := mox.Conf.Domain(dom)
+				return ok
 			}
 			srv.Handle("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", safeHeaders(http.HandlerFunc(autoconfHandle)))
 			srv.Handle("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", safeHeaders(http.HandlerFunc(autodiscoverHandle)))
+			srv.Handle("mobileconfig", autoconfigMatch, "/profile.mobileconfig", safeHeaders(http.HandlerFunc(mobileconfigHandle)))
+			srv.Handle("mobileconfigqrcodepng", autoconfigMatch, "/profile.mobileconfig.qrcode.png", safeHeaders(http.HandlerFunc(mobileconfigQRCodeHandle)))
 		}
 		if l.MTASTSHTTPS.Enabled {
 			port := config.Port(l.MTASTSHTTPS.Port, 443)

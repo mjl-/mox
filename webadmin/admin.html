@@ -695,12 +695,12 @@ const account = async (name) => {
 const domain = async (d) => {
 	const end = new Date().toISOString()
 	const start = new Date(new Date().getTime() - 30*24*3600*1000).toISOString()
-	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfig] = await Promise.all([
+	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfigs] = await Promise.all([
 		api.DMARCSummaries(start, end, d),
 		api.TLSRPTSummaries(start, end, d),
 		api.DomainLocalparts(d),
 		api.Domain(d),
-		api.ClientConfigDomain(d),
+		api.ClientConfigsDomain(d),
 	])
 
 	let form, fieldset, localpart, account
@@ -725,7 +725,7 @@ const domain = async (d) => {
 				),
 			),
 			dom.tbody(
-				clientConfig.Entries.map(e =>
+				clientConfigs.Entries.map(e =>
 					dom.tr(
 						dom.td(e.Protocol),
 						dom.td(domainString(e.Host)),
@@ -756,7 +756,7 @@ const domain = async (d) => {
 						dom.td(t[0] || '(catchall)'),
 						dom.td(dom.a(t[1], attr({href: '#accounts/'+t[1]}))),
 						dom.td(
-							dom.button('Remove address', async function click(e) {
+							dom.button('Remove', async function click(e) {
 								e.preventDefault()
 								if (!window.confirm('Are you sure you want to remove this address?')) {
 									return

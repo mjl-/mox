@@ -509,7 +509,7 @@ configured over otherwise secured connections, like a VPN.
 }
 
 func printClientConfig(d dns.Domain) {
-	cc, err := mox.ClientConfigDomain(d)
+	cc, err := mox.ClientConfigsDomain(d)
 	xcheckf(err, "getting client config")
 	fmt.Printf("%-20s %-30s %5s %-15s %s\n", "Protocol", "Host", "Port", "Listener", "Note")
 	for _, e := range cc.Entries {

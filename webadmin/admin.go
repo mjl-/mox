@@ -1578,7 +1578,8 @@ func (Admin) DomainRemove(ctx context.Context, domain string) {
 	xcheckf(ctx, err, "removing domain")
 }
 
-// AccountAdd adds existing a new account, with an initial email address, and reloads the configuration.
+// AccountAdd adds existing a new account, with an initial email address, and
+// reloads the configuration.
 func (Admin) AccountAdd(ctx context.Context, accountName, address string) {
 	err := mox.AccountAdd(ctx, accountName, address)
 	xcheckf(ctx, err, "adding account")
@@ -1625,13 +1626,13 @@ func (Admin) SetAccountLimits(ctx context.Context, accountName string, maxOutgoi
 	xcheckf(ctx, err, "saving account limits")
 }
 
-// ClientConfigDomain returns configurations for email clients, IMAP and
+// ClientConfigsDomain returns configurations for email clients, IMAP and
 // Submission (SMTP) for the domain.
-func (Admin) ClientConfigDomain(ctx context.Context, domain string) mox.ClientConfig {
+func (Admin) ClientConfigsDomain(ctx context.Context, domain string) mox.ClientConfigs {
 	d, err := dns.ParseDomain(domain)
 	xcheckuserf(ctx, err, "parsing domain")
 
-	cc, err := mox.ClientConfigDomain(d)
+	cc, err := mox.ClientConfigsDomain(d)
 	xcheckf(ctx, err, "client config for domain")
 	return cc
 }

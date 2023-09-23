@@ -15,6 +15,7 @@ require (
 	golang.org/x/exp v0.0.0-20230811145659-89c5cff77bcb
 	golang.org/x/net v0.15.0
 	golang.org/x/text v0.13.0
+	rsc.io/qr v0.2.0
 )
 
 require (

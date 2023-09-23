@@ -220,7 +220,7 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/":
 		if r.Method != "GET" {
-			http.Error(w, "405 - method not allowed - post required", http.StatusMethodNotAllowed)
+			http.Error(w, "405 - method not allowed - get required", http.StatusMethodNotAllowed)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
