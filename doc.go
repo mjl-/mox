@@ -16,7 +16,7 @@ low-maintenance self-hosted email.
 	mox serve
 	mox quickstart [-existing-webserver] [-hostname host] user@domain [user | uid]
 	mox stop
-	mox setaccountpassword address
+	mox setaccountpassword account
 	mox setadminpassword
 	mox loglevels [level [pkg]]
 	mox queue list
@@ -156,9 +156,11 @@ password itself, are stored in the account database. The stored secrets are for
 authentication with: scram-sha-256, scram-sha-1, cram-md5, plain text (bcrypt
 hash).
 
-Any email address configured for the account can be used.
+The parameter is an account name, as configured under Accounts in domains.conf
+and as present in the data/accounts/ directory, not a configured email address
+for an account.
 
-	usage: mox setaccountpassword address
+	usage: mox setaccountpassword account
 
 # mox setadminpassword
 

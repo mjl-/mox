@@ -681,7 +681,7 @@ func ctlcmdConfigAccountAdd(ctl *ctl, account, address string) {
 	ctl.xwrite(account)
 	ctl.xwrite(address)
 	ctl.xreadok()
-	fmt.Printf("account added, set a password with \"mox setaccountpassword %s\"\n", address)
+	fmt.Printf("account added, set a password with \"mox setaccountpassword %s\"\n", account)
 }
 
 func cmdConfigAccountRemove(c *cmd) {
@@ -1136,7 +1136,7 @@ pick a random, unguessable password, preferably at least 12 characters.
 }
 
 func cmdSetaccountpassword(c *cmd) {
-	c.params = "address"
+	c.params = "account"
 	c.help = `Set new password an account.
 
 The password is read from stdin. Secrets derived from the password, but not the
@@ -1144,7 +1144,9 @@ password itself, are stored in the account database. The stored secrets are for
 authentication with: scram-sha-256, scram-sha-1, cram-md5, plain text (bcrypt
 hash).
 
-Any email address configured for the account can be used.
+The parameter is an account name, as configured under Accounts in domains.conf
+and as present in the data/accounts/ directory, not a configured email address
+for an account.
 `
 	args := c.Parse()
 	if len(args) != 1 {
@@ -1157,9 +1159,9 @@ Any email address configured for the account can be used.
 	ctlcmdSetaccountpassword(xctl(), args[0], pw)
 }
 
-func ctlcmdSetaccountpassword(ctl *ctl, address, password string) {
+func ctlcmdSetaccountpassword(ctl *ctl, account, password string) {
 	ctl.xwrite("setaccountpassword")
-	ctl.xwrite(address)
+	ctl.xwrite(account)
 	ctl.xwrite(password)
 	ctl.xreadok()
 }

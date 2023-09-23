@@ -33,7 +33,7 @@ CURL_CA_BUNDLE=/integration/tls/ca.pem curl -o /integration/tmp-pebble-ca.pem ht
 mox -checkconsistency serve &
 while true; do
 	if test -e data/ctl; then
-		echo -n accountpass1234 | mox setaccountpassword moxtest1@mox1.example
+		echo -n accountpass1234 | mox setaccountpassword moxtest1
 		break
 	fi
 	sleep 0.1

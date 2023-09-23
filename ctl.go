@@ -355,15 +355,15 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 	case "setaccountpassword":
 		/* protocol:
 		> "setaccountpassword"
-		> address
+		> account
 		> password
 		< "ok" or error
 		*/
 
-		addr := ctl.xread()
+		account := ctl.xread()
 		pw := ctl.xread()
 
-		acc, _, err := store.OpenEmail(addr)
+		acc, err := store.OpenAccount(account)
 		ctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {

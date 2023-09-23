@@ -10,7 +10,7 @@ services:
       - ./testdata/imaptest/imaptest.mbox:/mox/imaptest.mbox
     working_dir: /mox
     tty: true # For job control with set -m.
-    command: sh -c 'set -m; mox serve & sleep 1; echo testtest | mox setaccountpassword mjl@mox.example; fg'
+    command: sh -c 'set -m; mox serve & sleep 1; echo testtest | mox setaccountpassword mjl; fg'
     healthcheck:
       test: netstat -nlt | grep ':1143 '
       interval: 1s

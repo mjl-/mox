@@ -61,7 +61,7 @@ func TestCtl(t *testing.T) {
 
 	// "setaccountpassword"
 	testctl(func(ctl *ctl) {
-		ctlcmdSetaccountpassword(ctl, "mjl@mox.example", "test4321")
+		ctlcmdSetaccountpassword(ctl, "mjl", "test4321")
 	})
 
 	err := queue.Init()
