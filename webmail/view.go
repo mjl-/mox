@@ -1476,7 +1476,7 @@ func queryMessages(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 		}
 		mil := []MessageItem{mi}
 		if query.Threading != ThreadOff {
-			more, xpm, err := gatherThread(log, tx, acc, v, m, page.DestMessageID, have == 0)
+			more, xpm, err := gatherThread(log, tx, acc, v, m, page.DestMessageID, page.AnchorMessageID == 0 && have == 0)
 			if err != nil {
 				return fmt.Errorf("gathering thread messages for id %d, thread %d: %v", m.ID, m.ThreadID, err)
 			}
