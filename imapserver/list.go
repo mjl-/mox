@@ -194,7 +194,7 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 						flags = append(flags, bare(`\Archive`))
 					}
 					if info.mailbox.Draft {
-						flags = append(flags, bare(`\Draft`))
+						flags = append(flags, bare(`\Drafts`))
 					}
 					if info.mailbox.Junk {
 						flags = append(flags, bare(`\Junk`))

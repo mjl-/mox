@@ -109,7 +109,7 @@ func TestListExtended(t *testing.T) {
 		Fhasnochildren = `\HasNoChildren`
 		Fnonexistent   = `\NonExistent`
 		Farchive       = `\Archive`
-		Fdraft         = `\Draft`
+		Fdraft         = `\Drafts`
 		Fjunk          = `\Junk`
 		Fsent          = `\Sent`
 		Ftrash         = `\Trash`
