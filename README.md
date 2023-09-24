@@ -39,33 +39,13 @@ Mox is available under the MIT-license and was created by Mechiel Lukkien,
 mechiel@ueber.net. Mox includes BSD-3-claused code from the Go Authors, and the
 Public Suffix List by Mozilla under Mozilla Public License, v2.0.
 
+Mox has automated tests, including for interoperability with Postfix for SMTP.
+Mox is manually tested with email clients: Mozilla Thunderbird, mutt, iOS Mail,
+macOS Mail, Android Mail, Microsoft Outlook. Mox is also manually tested to
+interoperate with popular cloud providers: gmail.com, outlook.com, yahoo.com,
+proton.me.
 
-# Download
-
-You can easily (cross) compile mox if you have a recent Go toolchain installed
-(see "go version", it must be >= 1.19; otherwise, see https://go.dev/dl/ or
-https://go.dev/doc/manage-install and $HOME/go/bin):
-
-	GOBIN=$PWD CGO_ENABLED=0 go install github.com/mjl-/mox@latest
-
-Or you can download a binary built with the latest Go toolchain from
-https://beta.gobuilds.org/github.com/mjl-/mox@latest/linux-amd64-latest/, and
-symlink or rename it to "mox".
-
-Verify you have a working mox binary:
-
-	./mox version
-
-Note: Mox only compiles for/works on unix systems, not on Plan 9 or Windows.
-
-You can also run mox with docker image `r.xmox.nl/mox`, with tags like `v0.0.1`
-and `v0.0.1-go1.20.1-alpine3.17.2`, see https://r.xmox.nl/r/mox/. Though new
-docker images aren't (automatically) generated for new Go runtime/compile
-releases. See docker-compose.yml in this repository for instructions on
-starting. It is important to run with docker host networking, so mox can use
-the public IPs and has correct remote IP information for incoming connections
-(important for junk filtering and rate-limiting). Given these caveats, it's
-recommended to run mox without docker.
+The code is heavily cross-referenced with the RFCs for readability/maintainability.
 
 
 # Quickstart
@@ -78,7 +58,7 @@ mail.example.com), login as root, and run:
 	useradd -m -d /home/mox mox
 
 	cd /home/mox
-	... compile or download mox to this directory, see above ...
+	... compile or download mox to this directory, see below ...
 
 	# Generate config files for your address/domain:
 	./mox quickstart you@example.com
@@ -92,25 +72,42 @@ modern email requires HTTPS, and mox currently needs it for automatic TLS.  You
 could combine mox with an existing webserver, but it requires a lot more
 configuration. If you want to serve websites on the same machine, consider using
 the webserver built into mox. It's pretty good! If you want to run an existing
-webserver on port 443/80, see "mox help quickstart", it'll tell you to run
-"./mox quickstart -existing-webserver you@example.com".
+webserver on port 443/80, see "mox help quickstart".
 
 After starting, you can access the admin web interface on internal IPs.
 
+# Download
+
+You can easily (cross) compile mox if you have a recent Go toolchain installed
+(see "go version", it must be >= 1.20; otherwise, see https://go.dev/dl/ or
+https://go.dev/doc/manage-install and $HOME/go/bin):
+
+	GOBIN=$PWD CGO_ENABLED=0 go install github.com/mjl-/mox@latest
+
+Or you can download a binary built with the latest Go toolchain from
+https://beta.gobuilds.org/github.com/mjl-/mox@latest/linux-amd64-latest/, and
+symlink or rename it to "mox".
+
+Verify you have a working mox binary:
+
+	./mox version
+
+Mox only compiles for/works on unix systems, not on Plan 9 or Windows.
+
+You can also run mox with docker image `r.xmox.nl/mox`, with tags like `v0.0.1`
+and `v0.0.1-go1.20.1-alpine3.17.2`, see https://r.xmox.nl/r/mox/. Though new
+docker images aren't (automatically) generated for new Go runtime/compile
+releases. See docker-compose.yml in this repository for instructions on
+starting. It is important to run with docker host networking, so mox can use
+the public IPs and has correct remote IP information for incoming connections
+(important for junk filtering and rate-limiting). Given these caveats, it's
+recommended to run mox without docker.
 
 # Future/development
 
 Mox will receive funding for essentially full-time continued work from August
 2023 to August 2024 through NLnet/EU's NGI0 Entrust, see
 https://nlnet.nl/project/Mox/.
-
-Mox has automated tests, including for interoperability with Postfix for SMTP.
-Mox is manually tested with email clients: Mozilla Thunderbird, mutt, iOS Mail,
-macOS Mail, Android Mail, Microsoft Outlook. Mox is also manually tested to
-interoperate with popular cloud providers: gmail.com, outlook.com, yahoo.com,
-proton.me.
-
-The code is heavily cross-referenced with the RFCs for readability/maintainability.
 
 ## Roadmap
 
