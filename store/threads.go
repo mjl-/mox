@@ -735,7 +735,7 @@ func upgradeThreads(ctx context.Context, acc *Account, up *Upgrade) error {
 		t0 := time.Now()
 
 		const batchSize = 10000
-		total, err := acc.ResetThreading(ctx, xlog, batchSize, true)
+		total, err := acc.ResetThreading(ctx, log, batchSize, true)
 		if err != nil {
 			return fmt.Errorf("resetting message threading fields: %v", err)
 		}
@@ -757,7 +757,7 @@ func upgradeThreads(ctx context.Context, acc *Account, up *Upgrade) error {
 		t0 := time.Now()
 
 		const batchSize = 10000
-		if err := acc.AssignThreads(ctx, xlog, nil, 1, batchSize, io.Discard); err != nil {
+		if err := acc.AssignThreads(ctx, log, nil, 1, batchSize, io.Discard); err != nil {
 			return fmt.Errorf("upgrading to threads storage, step 2/2: %w", err)
 		}
 		up.Threads = 2

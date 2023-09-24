@@ -245,9 +245,9 @@ possibly making them potentially no longer readable by the previous version.
 
 			up := store.Upgrade{ID: 1}
 			if err := db.Get(ctxbg, &up); err != nil {
-				log.Printf("warning: getting upgrade record (continuing, but not checking message threading): %v", err)
+				log.Printf("warning: %s: getting upgrade record (continuing, but not checking message threading): %v", dbpath, err)
 			} else if up.Threads != 2 {
-				log.Printf("warning: no message threading in database, skipping checks for threading consistency")
+				log.Printf("warning: %s: no message threading in database, skipping checks for threading consistency", dbpath)
 			}
 
 			mailboxes := map[int64]store.Mailbox{}
