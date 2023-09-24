@@ -7,21 +7,18 @@ See Quickstart below to get started.
 - Quick and easy to start/maintain mail server, for your own domain(s).
 - SMTP (with extensions) for receiving, submitting and delivering email.
 - IMAP4 (with extensions) for giving email clients access to email.
-- Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
-- SPF, verifying that a remote host is allowed to send email for a domain.
-- DKIM, verifying that a message is signed by the claimed sender domain,
-  and for signing emails sent by mox for others to verify.
-- DMARC, for enforcing SPF/DKIM policies set by domains. Incoming DMARC
-  aggregate reports are analyzed.
-- Reputation tracking, learning (per user) host- and domain-based reputation from
-  (Non-)Junk email.
+- Webmail for reading/sending email from the browser.
+- SPF/DKIM/DMARC for authenticating messages/delivery, also DMARC reports.
+- Reputation tracking, learning (per user) host-, domain- and
+  sender address-based reputation from (Non-)Junk email classification.
 - Bayesian spam filtering that learns (per user) from (Non-)Junk email.
 - Slowing down senders with no/low reputation or questionable email content
   (similar to greylisting). Rejected emails are stored in a mailbox called Rejects
   for a short period, helping with misclassified legitimate synchronous
   signup/login/transactional emails.
-- Internationalized email, with unicode names in domains and usernames
-  ("localparts").
+- Internationalized email, with unicode in email address usernames
+  ("localparts"), and in domain names (IDNA).
+- Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
 - TLSRPT, parsing reports about TLS usage and issues.
 - MTA-STS, for ensuring TLS is used whenever it is required. Both serving of
   policies, and tracking and applying policies of remote servers.
@@ -32,11 +29,10 @@ See Quickstart below to get started.
 - Autodiscovery (with SRV records, Microsoft-style, Thunderbird-style, and Apple
   device management profiles) for easy account setup (though client support is
   limited).
-- Webmail for reading/sending email from the browser.
 - Webserver with serving static files and forwarding requests (reverse
   proxy), so port 443 can also be used to serve websites.
 - Prometheus metrics and structured logging for operational insight.
-- "localserve" subcommand for running mox locally for email-related
+- "mox localserve" subcommand for running mox locally for email-related
   testing/developing, including pedantic mode.
 
 Mox is available under the MIT-license and was created by Mechiel Lukkien,
@@ -63,16 +59,19 @@ Verify you have a working mox binary:
 Note: Mox only compiles for/works on unix systems, not on Plan 9 or Windows.
 
 You can also run mox with docker image `r.xmox.nl/mox`, with tags like `v0.0.1`
-and `v0.0.1-go1.20.1-alpine3.17.2`, see https://r.xmox.nl/r/mox/.  See
-docker-compose.yml in this repository for instructions on starting. You must run
-docker with host networking, because mox needs to find your actual public IP's
-and get the remote IPs for incoming connections, not a local/internal NAT IP.
+and `v0.0.1-go1.20.1-alpine3.17.2`, see https://r.xmox.nl/r/mox/. Though new
+docker images aren't (automatically) generated for new Go runtime/compile
+releases. See docker-compose.yml in this repository for instructions on
+starting. It is important to run with docker host networking, so mox can use
+the public IPs and has correct remote IP information for incoming connections
+(important for junk filtering and rate-limiting). Given these caveats, it's
+recommended to run mox without docker.
 
 
 # Quickstart
 
 The easiest way to get started with serving email for your domain is to get a
-vm/machine dedicated to serving email, name it [host].[domain] (e.g.
+(virtual) machine dedicated to serving email, name it [host].[domain] (e.g.
 mail.example.com), login as root, and run:
 
 	# Create mox user and homedir (or pick another name or homedir):
@@ -84,16 +83,17 @@ mail.example.com), login as root, and run:
 	# Generate config files for your address/domain:
 	./mox quickstart you@example.com
 
-The quickstart creates an account, generates a password and configuration
-files, prints the DNS records you need to manually create and prints commands
-to start mox and optionally install mox as a service.
+The quickstart creates configuration files for the domain and account,
+generates an admin and account password, prints the DNS records you need to add
+and prints commands to start mox and optionally install mox as a service.
 
-A dedicated machine is highly recommended because modern email requires HTTPS,
-and mox currently needs it for automatic TLS.  You could combine mox with an
-existing webserver, but it requires more configuration. If you want to serve
-websites on the same machine, consider using the webserver built into mox. If
-you want to run an existing webserver on port 443/80, see "mox help quickstart",
-it'll tell you to run "./mox quickstart -existing-webserver you@example.com".
+A machine that doesn't already run a webserver is highly recommended because
+modern email requires HTTPS, and mox currently needs it for automatic TLS.  You
+could combine mox with an existing webserver, but it requires a lot more
+configuration. If you want to serve websites on the same machine, consider using
+the webserver built into mox. It's pretty good! If you want to run an existing
+webserver on port 443/80, see "mox help quickstart", it'll tell you to run
+"./mox quickstart -existing-webserver you@example.com".
 
 After starting, you can access the admin web interface on internal IPs.
 
@@ -115,37 +115,48 @@ The code is heavily cross-referenced with the RFCs for readability/maintainabili
 ## Roadmap
 
 - DANE and DNSSEC
-- Non-HTTP-based authentication for webmail/webadmin/webaccount.
-- Per-domain webmail and imap/smtp host name (and TLS cert) and client settings.
-- Sending DMARC and TLS reports (currently only receiving)
+- Authentication other than HTTP-basic for webmail/webadmin/webaccount
+- Per-domain webmail and IMAP/SMTP host name (and TLS cert) and client settings
 - Require TLS SMTP extension (RFC 8689)
-- Prepare data storage for JMAP
-- Calendaring
+- Sending DMARC and TLS reports (currently only receiving)
+- Make mox Go packages more easily reusable, each pulling in fewer (internal)
+  dependencies
+- HTTP-based API for sending messages and receiving delivery feedback
+- Calendaring with CalDAV/iCal
+- More IMAP extensions (PREVIEW, WITHIN, IMPORTANT, COMPRESS=DEFLATE,
+  CREATE-SPECIAL-USE, SAVEDATE, UNAUTHENTICATE, REPLACE, QUOTA, NOTIFY,
+  MULTIAPPEND, OBJECTID, MULTISEARCH)
+- ARC, with forwarded email from trusted source
+- Forwarding (to an external address)
 - Add special IMAP mailbox ("Queue?") that contains queued but
-  not-yet-delivered messages
-- OAUTH2 support, for single sign on
+  not-yet-delivered messages, updated with IMAP flags/keywords/tags.
 - Sieve for filtering (for now see Rulesets in the account config)
 - Expose threading through IMAP extension
+- Autoresponder (out of office/vacation)
+- OAUTH2 support, for single sign on
 - Privilege separation, isolating parts of the application to more restricted
   sandbox (e.g. new unauthenticated connections)
 - Using mox as backup MX
-- ARC, with forwarded email from trusted source
 - JMAP
-- Autoresponder (out of office/vacation)
-- HTTP-based API for sending messages and receiving delivery feedback
 - Milter support, for integration with external tools
+- IMAP extensions for "online"/non-syncing/webmail clients (SORT (including
+  DISPLAYFROM, DISPLAYTO), THREAD, PARTIAL, CONTEXT=SEARCH CONTEXT=SORT ESORT,
+  FILTERS)
+- IMAP Sieve extension, to run Sieve scripts after message changes (not only
+  new deliveries)
+- Improve support for mobile clients with extensions: IMAP URLAUTH, SMTP
+  CHUNKING and BINARYMIME, IMAP CATENATE
 
 There are many smaller improvements to make as well, search for "todo" in the code.
 
-## Not supported
+## Not supported/planned
 
 But perhaps in the future...
 
+- Mailing list manager
 - Functioning as SMTP relay
-- Forwarding (to an external address)
 - POP3
 - Delivery to (unix) OS system users
-- Mailing list manager
 - Support for pluggable delivery mechanisms
 - iOS Mail push notifications (with XAPPLEPUSHSERVICE undocumented imap
   extension and hard to get APNS certificate)
@@ -156,18 +167,22 @@ But perhaps in the future...
 ## Why a new mail server implementation?
 
 Mox aims to make "running a mail server" easy and nearly effortless. Excellent
-quality mail server software exists, but getting a working setup typically
-requires you configure half a dozen services (SMTP, IMAP, SPF/DKIM/DMARC, spam
-filtering). That seems to lead to people no longer running their own mail
-servers, instead switching to one of the few centralized email providers. Email
-with SMTP is a long-time decentralized messaging protocol. To keep it
-decentralized, people need to run their own mail server. Mox aims to make that
-easy.
+quality (open source) mail server software exists, but getting a working setup
+typically requires you configure half a dozen services (SMTP, IMAP,
+SPF/DKIM/DMARC, spam filtering), which are often written in C (where small bugs
+often have large consequences). That seems to lead to people no longer running
+their own mail servers, instead switching to one of the few centralized email
+providers. Email with SMTP is a long-time decentralized messaging protocol. To
+keep it decentralized, people need to run their own mail server. Mox aims to
+make that easy.
 
 ## Where is the documentation?
 
-See all commands and help text at https://pkg.go.dev/github.com/mjl-/mox/, and
-example config files at https://pkg.go.dev/github.com/mjl-/mox/config/.
+See all commands and help output at https://pkg.go.dev/github.com/mjl-/mox/.
+
+See the commented example config files at
+https://pkg.go.dev/github.com/mjl-/mox/config/. They often contain enough
+documentation about a feature and how to configure it.
 
 You can get the same information by running "mox" without arguments to list its
 subcommands and usage, and "mox help [subcommand]" for more details.
@@ -190,7 +205,8 @@ Similarly, see the export functionality on the accounts web page and the "mox
 export maildir" and "mox export mbox" subcommands to export email.
 
 Importing large mailboxes may require a lot of memory (a limitation of the
-current database). Splitting up mailboxes in smaller parts would help.
+current database). Splitting up mailboxes in smaller parts (e.g. 100k messages)
+would help.
 
 ## How can I help?
 
@@ -207,8 +223,9 @@ compatibility issues, limitations, anti-spam measures, specification
 violations, that would be interesting to hear about.
 
 Pull requests for bug fixes and new code are welcome too. If the changes are
-large, it helps to start a discussion (create a ticket) before doing all the
-work. It's best to get started with a small change, and go from there!
+large, it helps to start a discussion (create an "issue") before doing all the
+work. In practice, starting with a small contribution and growing from there has
+the highest chance of success.
 
 By contributing (e.g. code), you agree your contributions are licensed under the
 MIT license (like mox), and have the rights to do so.
@@ -228,8 +245,8 @@ setaccountpassword".
 The admin can change the password of any account through the admin page, at
 http://localhost/admin/ by default (leave username empty when logging in).
 
-The account and admin pages are served on localhost on your mail server.
-To access these from your browser, run
+The account and admin pages are served on localhost for configs created with
+the quickstart.  To access these from your browser, run
 `ssh -L 8080:localhost:80 you@yourmachine` locally and open
 http://localhost:8080/[...].
 
@@ -240,8 +257,13 @@ The admin password can be changed with "mox setadminpassword".
 Unfortunately, mox does not yet provide an option for that. Mox does spam
 filtering based on reputation of received messages. It will take a good amount
 of work to share that information with a backup MX. Without that information,
-spammers could use a backup MX to get their spam accepted. Until mox has a
-proper solution, you can simply run a single SMTP server.
+spammers could use a backup MX to get their spam accepted.
+
+Until mox has a proper solution, you can simply run a single SMTP server. The
+author has run a single mail server for over a decade without issues. Machines
+and network connectivity are stable nowadays, and email delivery will be
+retried for many hours during temporary errors (e.g. when rebooting a machine
+after updates).
 
 ## How do I stay up to date?
 
@@ -270,18 +292,19 @@ and the release you're upgrading to.
 
 Before upgrading, make a backup of the data directory with `mox backup
 <destdir>`. This writes consistent snapshots of the database files, and
-duplicates message files from the queue and accounts.  Using the new mox
-binary, run `mox verifydata <backupdir>` (do NOT use the "live" data
+duplicates message files from the outgoing queue and accounts.  Using the new
+mox binary, run `mox verifydata <backupdir>` (do NOT use the "live" data
 directory!) for a dry run. If this fails, an upgrade will probably fail too.
-Important: verifydata with the new mox binary can modify the database files
-(due to automatic schema upgrades). So make a fresh backup again before the
-actual upgrade. See the help output of the "backup" and "verifydata" commands
-for more details.
+Important: verifydata with the new mox binary can modify the database files (due
+to automatic schema upgrades). So make a fresh backup again before the actual
+upgrade. See the help output of the "backup" and "verifydata" commands for more
+details.
 
-During backup, message files are hardlinked if possible. Using a destination
-directory like `data/tmp/backup` increases the odds hardlinking succeeds: the
-default systemd service file specifically mounts the data directory, causing
-attempts to outside it to fail with an error about cross-device linking.
+During backup, message files are hardlinked if possible, and copied otherwise.
+Using a destination directory like `data/tmp/backup` increases the odds
+hardlinking succeeds: the default mox systemd service file mounts
+the data directory separately, so hardlinks to outside the data directory are
+cross-device and will fail.
 
 If an upgrade fails and you have to restore (parts) of the data directory, you
 should run `mox verifydata <datadir>` (with the original binary) on the
@@ -359,9 +382,10 @@ helps you set up a system that doesn't trigger most of the technical signals
 a mail server or address for the first time. Sending from a newly registered
 domain. Sending messages with content that resembles known spam messages.
 
-Should your email be rejected, you will typically get an error message that
-explains why. In the case of big email providers the error message often has
-instructions on how to prove to them you are a legimate sender.
+Should your email be rejected, you will typically get an error message during
+the SMTP transaction that explains why. In the case of big email providers the
+error message often has instructions on how to prove to them you are a legimate
+sender.
 
 ## Can I use existing TLS certificates/keys?
 
