@@ -277,7 +277,7 @@ You can also monitor newly added releases on this repository with the github
 (https://github.com/mjl-/mox/tags.atom) or releases
 (https://github.com/mjl-/mox/releases.atom), or monitor the docker images.
 
-Keep in mind you have a responsibility to keep the internect-connected software
+Keep in mind you have a responsibility to keep the internet-connected software
 you run up to date and secure.
 
 ## How do I upgrade my mox installation?
