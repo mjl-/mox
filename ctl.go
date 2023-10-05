@@ -758,6 +758,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 						q.SortAsc("ID")
 						return q.ForEach(func(m store.Message) error {
 							lastID = m.ID
+							n++
 
 							p := acc.MessagePath(m.ID)
 							st, err := os.Stat(p)
@@ -810,7 +811,6 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 								return fmt.Errorf("marshal parsed message: %v", err)
 							}
 							total++
-							n++
 							if err := tx.Update(&m); err != nil {
 								return fmt.Errorf("update message: %v", err)
 							}
