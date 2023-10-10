@@ -3,9 +3,11 @@ package mox
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/ed25519"
 	cryptorand "crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -18,6 +20,8 @@ import (
 	"time"
 
 	"golang.org/x/exp/maps"
+
+	"github.com/mjl-/adns"
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
@@ -446,7 +450,7 @@ func WebserverConfigSet(ctx context.Context, domainRedirects map[string]string, 
 
 // DomainRecords returns text lines describing DNS records required for configuring
 // a domain.
-func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
+func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]string, error) {
 	d := domain.ASCII
 	h := Conf.Static.HostnameDomain.ASCII
 
@@ -455,6 +459,60 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 		"; Once your setup is working, you may want to increase the TTL.",
 		"$TTL 300",
 		"",
+	}
+
+	if public, ok := Conf.Static.Listeners["public"]; ok && public.TLS != nil && (len(public.TLS.HostPrivateRSA2048Keys) > 0 || len(public.TLS.HostPrivateECDSAP256Keys) > 0) {
+		records = append(records,
+			"; DANE: These records indicate that a remote mail server trying to deliver email",
+			"; with SMTP (TCP port 25) must verify the TLS certificate with DANE-EE (3), based",
+			"; on the certificate public key (\"SPKI\", 1) that is SHA2-256-hashed (1) to the",
+			"; hexadecimal hash. DANE-EE verification means only the certificate or public",
+			"; key is verified, not whether the certificate is signed by a (centralized)",
+			"; certificate authority (CA), is expired, or matches the host name.",
+			";",
+			"; NOTE: Create the records below only once: They are for the machine, and apply",
+			"; to all hosted domains.",
+		)
+		if !hasDNSSEC {
+			records = append(records,
+				";",
+				"; WARNING: Domain does not appear to be DNSSEC-signed. To enable DANE, first",
+				"; enable DNSSEC on your domain, then add the TLSA records. Records below have been",
+				"; commented out.",
+			)
+		}
+		addTLSA := func(privKey crypto.Signer) error {
+			spkiBuf, err := x509.MarshalPKIXPublicKey(privKey.Public())
+			if err != nil {
+				return fmt.Errorf("marshal SubjectPublicKeyInfo for DANE record: %v", err)
+			}
+			sum := sha256.Sum256(spkiBuf)
+			tlsaRecord := adns.TLSA{
+				Usage:     adns.TLSAUsageDANEEE,
+				Selector:  adns.TLSASelectorSPKI,
+				MatchType: adns.TLSAMatchTypeSHA256,
+				CertAssoc: sum[:],
+			}
+			var s string
+			if hasDNSSEC {
+				s = fmt.Sprintf("_25._tcp.%-*s IN TLSA %s", 20+len(d)-len("_25._tcp."), h+".", tlsaRecord.Record())
+			} else {
+				s = fmt.Sprintf(";; _25._tcp.%-*s IN TLSA %s", 20+len(d)-len(";; _25._tcp."), h+".", tlsaRecord.Record())
+			}
+			records = append(records, s)
+			return nil
+		}
+		for _, privKey := range public.TLS.HostPrivateECDSAP256Keys {
+			if err := addTLSA(privKey); err != nil {
+				return nil, err
+			}
+		}
+		for _, privKey := range public.TLS.HostPrivateRSA2048Keys {
+			if err := addTLSA(privKey); err != nil {
+				return nil, err
+			}
+		}
+		records = append(records, "")
 	}
 
 	if d != h {
@@ -537,7 +595,9 @@ func DomainRecords(domConf config.Domain, domain dns.Domain) ([]string, error) {
 
 	if sts := domConf.MTASTS; sts != nil {
 		records = append(records,
-			"; TLS must be used when delivering to us.",
+			"; Remote servers can use MTA-STS to verify our TLS certificate with the",
+			"; WebPKI pool of CA's (certificate authorities) when delivering over SMTP with",
+			"; STARTTLSTLS.",
 			fmt.Sprintf(`mta-sts.%s.            IN CNAME %s.`, d, h),
 			fmt.Sprintf(`_mta-sts.%s.           IN TXT "v=STSv1; id=%s"`, d, sts.PolicyID),
 			"",

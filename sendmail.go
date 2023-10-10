@@ -279,7 +279,8 @@ binary should be setgid that group:
 		xsavecheckf(err, "parsing remote hostname")
 	}
 
-	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, ourHostname, remoteHostname, auth)
+	// todo: implement SRV and DANE, allowing for a simpler config file (just the email address & password)
+	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, ourHostname, remoteHostname, auth, nil, nil, nil)
 	xsavecheckf(err, "open smtp session")
 
 	err = client.Deliver(ctx, submitconf.From, recipient, int64(len(msg)), strings.NewReader(msg), true, false)

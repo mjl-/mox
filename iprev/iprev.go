@@ -56,7 +56,7 @@ const (
 // "names".
 //
 // If a temporary error occurred, rerr is set.
-func Lookup(ctx context.Context, resolver dns.Resolver, ip net.IP) (rstatus Status, name string, names []string, rerr error) {
+func Lookup(ctx context.Context, resolver dns.Resolver, ip net.IP) (rstatus Status, name string, names []string, authentic bool, rerr error) {
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	defer func() {
@@ -64,19 +64,21 @@ func Lookup(ctx context.Context, resolver dns.Resolver, ip net.IP) (rstatus Stat
 		log.Debugx("iprev lookup result", rerr, mlog.Field("ip", ip), mlog.Field("status", rstatus), mlog.Field("duration", time.Since(start)))
 	}()
 
-	revNames, revErr := dns.WithPackage(resolver, "iprev").LookupAddr(ctx, ip.String())
+	revNames, result, revErr := dns.WithPackage(resolver, "iprev").LookupAddr(ctx, ip.String())
 	if dns.IsNotFound(revErr) {
-		return StatusPermerror, "", nil, ErrNoRecord
+		return StatusPermerror, "", nil, result.Authentic, ErrNoRecord
 	} else if revErr != nil {
-		return StatusTemperror, "", nil, fmt.Errorf("%w: %s", ErrDNS, revErr)
+		return StatusTemperror, "", nil, result.Authentic, fmt.Errorf("%w: %s", ErrDNS, revErr)
 	}
 
 	var lastErr error
+	authentic = result.Authentic
 	for _, rname := range revNames {
-		ips, err := dns.WithPackage(resolver, "iprev").LookupIP(ctx, "ip", rname)
+		ips, result, err := dns.WithPackage(resolver, "iprev").LookupIP(ctx, "ip", rname)
+		authentic = authentic && result.Authentic
 		for _, fwdIP := range ips {
 			if ip.Equal(fwdIP) {
-				return StatusPass, rname, revNames, nil
+				return StatusPass, rname, revNames, authentic, nil
 			}
 		}
 		if err != nil && !dns.IsNotFound(err) {
@@ -84,7 +86,7 @@ func Lookup(ctx context.Context, resolver dns.Resolver, ip net.IP) (rstatus Stat
 		}
 	}
 	if lastErr != nil {
-		return StatusTemperror, "", revNames, fmt.Errorf("%w: %s", ErrDNS, lastErr)
+		return StatusTemperror, "", revNames, authentic, fmt.Errorf("%w: %s", ErrDNS, lastErr)
 	}
-	return StatusFail, "", revNames, nil
+	return StatusFail, "", revNames, authentic, nil
 }

@@ -3,16 +3,8 @@
 (
 cat <<EOF
 /*
-Command mox is a modern full-featured open source secure mail server for
+Command mox is a modern, secure, full-featured, open source mail server for
 low-maintenance self-hosted email.
-
-  - Quick and easy to set up with quickstart and automatic TLS with ACME and
-    Let's Encrypt.
-  - IMAP4 with extensions for accessing email.
-  - SMTP with SPF, DKIM, DMARC, DNSBL, MTA-STS, TLSRPT for exchanging email.
-  - Reputation-based and content-based spam filtering.
-  - Internationalized email.
-  - Admin web interface.
 
 # Commands
 

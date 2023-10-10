@@ -127,7 +127,9 @@ type Args struct {
 var timeNow = time.Now
 
 // Lookup looks up and parses an SPF TXT record for domain.
-func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rstatus Status, rtxt string, rrecord *Record, rerr error) {
+//
+// authentic indicates if the DNS results were DNSSEC-verified.
+func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rstatus Status, rtxt string, rrecord *Record, authentic bool, rerr error) {
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	defer func() {
@@ -137,15 +139,15 @@ func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rsta
 	// ../rfc/7208:586
 	host := domain.ASCII + "."
 	if err := validateDNS(host); err != nil {
-		return StatusNone, "", nil, fmt.Errorf("%w: %s: %s", ErrName, domain, err)
+		return StatusNone, "", nil, false, fmt.Errorf("%w: %s: %s", ErrName, domain, err)
 	}
 
 	// Lookup spf record.
-	txts, err := dns.WithPackage(resolver, "spf").LookupTXT(ctx, host)
+	txts, result, err := dns.WithPackage(resolver, "spf").LookupTXT(ctx, host)
 	if dns.IsNotFound(err) {
-		return StatusNone, "", nil, fmt.Errorf("%w for %s", ErrNoRecord, host)
+		return StatusNone, "", nil, result.Authentic, fmt.Errorf("%w for %s", ErrNoRecord, host)
 	} else if err != nil {
-		return StatusTemperror, "", nil, fmt.Errorf("%w: %s: %s", ErrDNS, host, err)
+		return StatusTemperror, "", nil, result.Authentic, fmt.Errorf("%w: %s: %s", ErrDNS, host, err)
 	}
 
 	// Parse the records. We only handle those that look like spf records.
@@ -159,20 +161,20 @@ func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rsta
 			continue
 		} else if err != nil {
 			// ../rfc/7208:852
-			return StatusPermerror, txt, nil, fmt.Errorf("%w: %s", ErrRecordSyntax, err)
+			return StatusPermerror, txt, nil, result.Authentic, fmt.Errorf("%w: %s", ErrRecordSyntax, err)
 		}
 		if record != nil {
 			// ../rfc/7208:576
-			return StatusPermerror, "", nil, ErrMultipleRecords
+			return StatusPermerror, "", nil, result.Authentic, ErrMultipleRecords
 		}
 		text = txt
 		record = r
 	}
 	if record == nil {
 		// ../rfc/7208:837
-		return StatusNone, "", nil, ErrNoRecord
+		return StatusNone, "", nil, result.Authentic, ErrNoRecord
 	}
-	return StatusNone, text, record, nil
+	return StatusNone, text, record, result.Authentic, nil
 }
 
 // Verify checks if a remote IP is allowed to send email for a domain.
@@ -190,7 +192,9 @@ func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rsta
 //
 // Verify takes the maximum number of 10 DNS requests into account, and the maximum
 // of 2 lookups resulting in no records ("void lookups").
-func Verify(ctx context.Context, resolver dns.Resolver, args Args) (received Received, domain dns.Domain, explanation string, rerr error) {
+//
+// authentic indicates if the DNS results were DNSSEC-verified.
+func Verify(ctx context.Context, resolver dns.Resolver, args Args) (received Received, domain dns.Domain, explanation string, authentic bool, rerr error) {
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	defer func() {
@@ -208,10 +212,10 @@ func Verify(ctx context.Context, resolver dns.Resolver, args Args) (received Rec
 			Helo:         args.HelloDomain,
 			Receiver:     args.LocalHostname.ASCII,
 		}
-		return received, dns.Domain{}, "", nil
+		return received, dns.Domain{}, "", false, nil
 	}
 
-	status, mechanism, expl, err := checkHost(ctx, resolver, args)
+	status, mechanism, expl, authentic, err := checkHost(ctx, resolver, args)
 	comment := fmt.Sprintf("domain %s", args.domain.ASCII)
 	if isHello {
 		comment += ", from ehlo because mailfrom is empty"
@@ -233,7 +237,7 @@ func Verify(ctx context.Context, resolver dns.Resolver, args Args) (received Rec
 	} else {
 		received.Identity = "mailfrom"
 	}
-	return received, args.domain, expl, err
+	return received, args.domain, expl, authentic, err
 }
 
 // prepare args, setting fields sender* and domain as required for checkHost.
@@ -268,26 +272,29 @@ func prepare(args *Args) (isHello bool, ok bool) {
 }
 
 // lookup spf record, then evaluate args against it.
-func checkHost(ctx context.Context, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rerr error) {
-	status, _, record, err := Lookup(ctx, resolver, args.domain)
+func checkHost(ctx context.Context, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rauthentic bool, rerr error) {
+	status, _, record, rauthentic, err := Lookup(ctx, resolver, args.domain)
 	if err != nil {
-		return status, "", "", err
+		return status, "", "", rauthentic, err
 	}
 
-	return evaluate(ctx, record, resolver, args)
+	var evalAuthentic bool
+	rstatus, mechanism, rexplanation, evalAuthentic, rerr = evaluate(ctx, record, resolver, args)
+	rauthentic = rauthentic && evalAuthentic
+	return
 }
 
 // Evaluate evaluates the IP and names from args against the SPF DNS record for the domain.
-func Evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rerr error) {
+func Evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rauthentic bool, rerr error) {
 	_, ok := prepare(&args)
 	if !ok {
-		return StatusNone, "default", "", fmt.Errorf("no domain name to validate")
+		return StatusNone, "default", "", false, fmt.Errorf("no domain name to validate")
 	}
 	return evaluate(ctx, record, resolver, args)
 }
 
 // evaluate RemoteIP against domain from args, given record.
-func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rerr error) {
+func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rauthentic bool, rerr error) {
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	defer func() {
@@ -300,6 +307,9 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 		args.dnsRequests = new(int)
 		args.voidLookups = new(int)
 	}
+
+	// Response is authentic until we find a non-authentic DNS response.
+	rauthentic = true
 
 	// To4 returns nil for an IPv6 address. To16 will return an IPv4-to-IPv6-mapped address.
 	var remote6 net.IP
@@ -338,7 +348,8 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 
 	// Used for "a" and "mx".
 	checkHostIP := func(domain dns.Domain, d Directive, args *Args) (bool, Status, error) {
-		ips, err := resolver.LookupIP(ctx, "ip", domain.ASCII+".")
+		ips, result, err := resolver.LookupIP(ctx, "ip", domain.ASCII+".")
+		rauthentic = rauthentic && result.Authentic
 		trackVoidLookup(err, args)
 		// If "not found", we must ignore the error and treat as zero records in answer. ../rfc/7208:1116
 		if err != nil && !dns.IsNotFound(err) {
@@ -358,7 +369,7 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 		switch d.Mechanism {
 		case "include", "a", "mx", "ptr", "exists":
 			if err := trackLookupLimits(&args); err != nil {
-				return StatusPermerror, d.MechanismString(), "", err
+				return StatusPermerror, d.MechanismString(), "", rauthentic, err
 			}
 		}
 
@@ -369,22 +380,24 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 
 		case "include":
 			// ../rfc/7208:1143
-			name, err := expandDomainSpecDNS(ctx, resolver, d.DomainSpec, args)
+			name, authentic, err := expandDomainSpecDNS(ctx, resolver, d.DomainSpec, args)
+			rauthentic = rauthentic && authentic
 			if err != nil {
-				return StatusPermerror, d.MechanismString(), "", fmt.Errorf("expanding domain-spec for include: %w", err)
+				return StatusPermerror, d.MechanismString(), "", rauthentic, fmt.Errorf("expanding domain-spec for include: %w", err)
 			}
 			nargs := args
 			nargs.domain = dns.Domain{ASCII: strings.TrimSuffix(name, ".")}
 			nargs.explanation = &record.Explanation // ../rfc/7208:1548
-			status, _, _, err := checkHost(ctx, resolver, nargs)
+			status, _, _, authentic, err := checkHost(ctx, resolver, nargs)
+			rauthentic = rauthentic && authentic
 			// ../rfc/7208:1202
 			switch status {
 			case StatusPass:
 				match = true
 			case StatusTemperror:
-				return StatusTemperror, d.MechanismString(), "", fmt.Errorf("include %q: %w", name, err)
+				return StatusTemperror, d.MechanismString(), "", rauthentic, fmt.Errorf("include %q: %w", name, err)
 			case StatusPermerror, StatusNone:
-				return StatusPermerror, d.MechanismString(), "", fmt.Errorf("include %q resulted in status %q: %w", name, status, err)
+				return StatusPermerror, d.MechanismString(), "", rauthentic, fmt.Errorf("include %q resulted in status %q: %w", name, status, err)
 			}
 
 		case "a":
@@ -396,11 +409,11 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 			// mechanism for which it isn't specified.
 			host, err := evaluateDomainSpec(d.DomainSpec, args.domain)
 			if err != nil {
-				return StatusPermerror, d.MechanismString(), "", err
+				return StatusPermerror, d.MechanismString(), "", rauthentic, err
 			}
 			hmatch, status, err := checkHostIP(host, d, &args)
 			if err != nil {
-				return status, d.MechanismString(), "", err
+				return status, d.MechanismString(), "", rauthentic, err
 			}
 			match = hmatch
 
@@ -408,14 +421,15 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 			// ../rfc/7208:1262
 			host, err := evaluateDomainSpec(d.DomainSpec, args.domain)
 			if err != nil {
-				return StatusPermerror, d.MechanismString(), "", err
+				return StatusPermerror, d.MechanismString(), "", rauthentic, err
 			}
 			// Note: LookupMX can return an error and still return MX records.
-			mxs, err := resolver.LookupMX(ctx, host.ASCII+".")
+			mxs, result, err := resolver.LookupMX(ctx, host.ASCII+".")
+			rauthentic = rauthentic && result.Authentic
 			trackVoidLookup(err, &args)
 			// note: we handle "not found" simply as a result of zero mx records.
 			if err != nil && !dns.IsNotFound(err) {
-				return StatusTemperror, d.MechanismString(), "", err
+				return StatusTemperror, d.MechanismString(), "", rauthentic, err
 			}
 			if err == nil && len(mxs) == 1 && mxs[0].Host == "." {
 				// Explicitly no MX.
@@ -428,15 +442,15 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 				// found no match before the 11th name.
 				// ../rfc/7208:945
 				if i >= 10 {
-					return StatusPermerror, d.MechanismString(), "", ErrTooManyDNSRequests
+					return StatusPermerror, d.MechanismString(), "", rauthentic, ErrTooManyDNSRequests
 				}
 				mxd, err := dns.ParseDomain(strings.TrimSuffix(mx.Host, "."))
 				if err != nil {
-					return StatusPermerror, d.MechanismString(), "", err
+					return StatusPermerror, d.MechanismString(), "", rauthentic, err
 				}
 				hmatch, status, err := checkHostIP(mxd, d, &args)
 				if err != nil {
-					return status, d.MechanismString(), "", err
+					return status, d.MechanismString(), "", rauthentic, err
 				}
 				if hmatch {
 					match = hmatch
@@ -448,13 +462,14 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 			// ../rfc/7208:1281
 			host, err := evaluateDomainSpec(d.DomainSpec, args.domain)
 			if err != nil {
-				return StatusPermerror, d.MechanismString(), "", err
+				return StatusPermerror, d.MechanismString(), "", rauthentic, err
 			}
 
-			rnames, err := resolver.LookupAddr(ctx, args.RemoteIP.String())
+			rnames, result, err := resolver.LookupAddr(ctx, args.RemoteIP.String())
+			rauthentic = rauthentic && result.Authentic
 			trackVoidLookup(err, &args)
 			if err != nil && !dns.IsNotFound(err) {
-				return StatusTemperror, d.MechanismString(), "", err
+				return StatusTemperror, d.MechanismString(), "", rauthentic, err
 			}
 			lookups := 0
 		ptrnames:
@@ -474,7 +489,8 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 					break
 				}
 				lookups++
-				ips, err := resolver.LookupIP(ctx, "ip", rd.ASCII+".")
+				ips, result, err := resolver.LookupIP(ctx, "ip", rd.ASCII+".")
+				rauthentic = rauthentic && result.Authentic
 				trackVoidLookup(err, &args)
 				for _, ip := range ips {
 					if checkIP(ip, d) {
@@ -496,22 +512,24 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 
 		case "exists":
 			// ../rfc/7208:1382
-			name, err := expandDomainSpecDNS(ctx, resolver, d.DomainSpec, args)
+			name, authentic, err := expandDomainSpecDNS(ctx, resolver, d.DomainSpec, args)
+			rauthentic = rauthentic && authentic
 			if err != nil {
-				return StatusPermerror, d.MechanismString(), "", fmt.Errorf("expanding domain-spec for exists: %w", err)
+				return StatusPermerror, d.MechanismString(), "", rauthentic, fmt.Errorf("expanding domain-spec for exists: %w", err)
 			}
 
-			ips, err := resolver.LookupIP(ctx, "ip4", ensureAbsDNS(name))
+			ips, result, err := resolver.LookupIP(ctx, "ip4", ensureAbsDNS(name))
+			rauthentic = rauthentic && result.Authentic
 			// Note: we do count this for void lookups, as that is an anti-abuse mechanism.
 			// ../rfc/7208:1382 does not say anything special, so ../rfc/7208:984 applies.
 			trackVoidLookup(err, &args)
 			if err != nil && !dns.IsNotFound(err) {
-				return StatusTemperror, d.MechanismString(), "", err
+				return StatusTemperror, d.MechanismString(), "", rauthentic, err
 			}
 			match = len(ips) > 0
 
 		default:
-			return StatusNone, d.MechanismString(), "", fmt.Errorf("internal error, unexpected mechanism %q", d.Mechanism)
+			return StatusNone, d.MechanismString(), "", rauthentic, fmt.Errorf("internal error, unexpected mechanism %q", d.Mechanism)
 		}
 
 		if !match {
@@ -519,40 +537,43 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 		}
 		switch d.Qualifier {
 		case "", "+":
-			return StatusPass, d.MechanismString(), "", nil
+			return StatusPass, d.MechanismString(), "", rauthentic, nil
 		case "?":
-			return StatusNeutral, d.MechanismString(), "", nil
+			return StatusNeutral, d.MechanismString(), "", rauthentic, nil
 		case "-":
 			nargs := args
 			// ../rfc/7208:1489
-			expl := explanation(ctx, resolver, record, nargs)
-			return StatusFail, d.MechanismString(), expl, nil
+			authentic, expl := explanation(ctx, resolver, record, nargs)
+			rauthentic = rauthentic && authentic
+			return StatusFail, d.MechanismString(), expl, rauthentic, nil
 		case "~":
-			return StatusSoftfail, d.MechanismString(), "", nil
+			return StatusSoftfail, d.MechanismString(), "", rauthentic, nil
 		}
-		return StatusNone, d.MechanismString(), "", fmt.Errorf("internal error, unexpected qualifier %q", d.Qualifier)
+		return StatusNone, d.MechanismString(), "", rauthentic, fmt.Errorf("internal error, unexpected qualifier %q", d.Qualifier)
 	}
 
 	if record.Redirect != "" {
 		// We only know "redirect" for evaluating purposes, ignoring any others. ../rfc/7208:1423
 
 		// ../rfc/7208:1440
-		name, err := expandDomainSpecDNS(ctx, resolver, record.Redirect, args)
+		name, authentic, err := expandDomainSpecDNS(ctx, resolver, record.Redirect, args)
+		rauthentic = rauthentic && authentic
 		if err != nil {
-			return StatusPermerror, "", "", fmt.Errorf("expanding domain-spec: %w", err)
+			return StatusPermerror, "", "", rauthentic, fmt.Errorf("expanding domain-spec: %w", err)
 		}
 		nargs := args
 		nargs.domain = dns.Domain{ASCII: strings.TrimSuffix(name, ".")}
 		nargs.explanation = nil // ../rfc/7208:1548
-		status, mechanism, expl, err := checkHost(ctx, resolver, nargs)
+		status, mechanism, expl, authentic, err := checkHost(ctx, resolver, nargs)
+		rauthentic = rauthentic && authentic
 		if status == StatusNone {
-			return StatusPermerror, mechanism, "", err
+			return StatusPermerror, mechanism, "", rauthentic, err
 		}
-		return status, mechanism, expl, err
+		return status, mechanism, expl, rauthentic, err
 	}
 
 	// ../rfc/7208:996 ../rfc/7208:2095
-	return StatusNeutral, "default", "", nil
+	return StatusNeutral, "default", "", rauthentic, nil
 }
 
 // evaluateDomainSpec returns the parsed dns domain for spec if non-empty, and
@@ -569,11 +590,11 @@ func evaluateDomainSpec(spec string, d dns.Domain) (dns.Domain, error) {
 	return d, nil
 }
 
-func expandDomainSpecDNS(ctx context.Context, resolver dns.Resolver, domainSpec string, args Args) (string, error) {
+func expandDomainSpecDNS(ctx context.Context, resolver dns.Resolver, domainSpec string, args Args) (string, bool, error) {
 	return expandDomainSpec(ctx, resolver, domainSpec, args, true)
 }
 
-func expandDomainSpecExp(ctx context.Context, resolver dns.Resolver, domainSpec string, args Args) (string, error) {
+func expandDomainSpecExp(ctx context.Context, resolver dns.Resolver, domainSpec string, args Args) (string, bool, error) {
 	return expandDomainSpec(ctx, resolver, domainSpec, args, false)
 }
 
@@ -582,8 +603,10 @@ func expandDomainSpecExp(ctx context.Context, resolver dns.Resolver, domainSpec 
 // Caller should typically treat failures as StatusPermerror. ../rfc/7208:1641
 // ../rfc/7208:1639
 // ../rfc/7208:1047
-func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec string, args Args, dns bool) (string, error) {
+func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec string, args Args, dns bool) (string, bool, error) {
 	exp := !dns
+
+	rauthentic := true // Until non-authentic record is found.
 
 	s := domainSpec
 
@@ -599,7 +622,7 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 		}
 
 		if i >= n {
-			return "", fmt.Errorf("%w: trailing bare %%", ErrMacroSyntax)
+			return "", rauthentic, fmt.Errorf("%w: trailing bare %%", ErrMacroSyntax)
 		}
 		c = s[i]
 		i++
@@ -613,11 +636,11 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 			b.WriteString("%20")
 			continue
 		} else if c != '{' {
-			return "", fmt.Errorf("%w: invalid macro opening %%%c", ErrMacroSyntax, c)
+			return "", rauthentic, fmt.Errorf("%w: invalid macro opening %%%c", ErrMacroSyntax, c)
 		}
 
 		if i >= n {
-			return "", fmt.Errorf("%w: missing macro ending }", ErrMacroSyntax)
+			return "", rauthentic, fmt.Errorf("%w: missing macro ending }", ErrMacroSyntax)
 		}
 		c = s[i]
 		i++
@@ -645,9 +668,10 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 		case 'p':
 			// ../rfc/7208:937
 			if err := trackLookupLimits(&args); err != nil {
-				return "", err
+				return "", rauthentic, err
 			}
-			names, err := resolver.LookupAddr(ctx, args.RemoteIP.String())
+			names, result, err := resolver.LookupAddr(ctx, args.RemoteIP.String())
+			rauthentic = rauthentic && result.Authentic
 			trackVoidLookup(err, &args)
 			if len(names) == 0 || err != nil {
 				// ../rfc/7208:1709
@@ -661,7 +685,8 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 					if !matchfn(name) {
 						continue
 					}
-					ips, err := resolver.LookupIP(ctx, "ip", name)
+					ips, result, err := resolver.LookupIP(ctx, "ip", name)
+					rauthentic = rauthentic && result.Authentic
 					trackVoidLookup(err, &args)
 					// ../rfc/7208:1714, we don't have to check other errors.
 					for _, ip := range ips {
@@ -678,18 +703,18 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 			dotdomain := "." + domain
 			v, err = verify(func(name string) bool { return name == domain })
 			if err != nil {
-				return "", err
+				return "", rauthentic, err
 			}
 			if v == "" {
 				v, err = verify(func(name string) bool { return strings.HasSuffix(name, dotdomain) })
 				if err != nil {
-					return "", err
+					return "", rauthentic, err
 				}
 			}
 			if v == "" {
 				v, err = verify(func(name string) bool { return name != domain && !strings.HasSuffix(name, dotdomain) })
 				if err != nil {
-					return "", err
+					return "", rauthentic, err
 				}
 			}
 			if v == "" {
@@ -712,7 +737,7 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 			}
 		case 'c', 'r', 't':
 			if !exp {
-				return "", fmt.Errorf("%w: macro letter %c only allowed in exp", ErrMacroSyntax, c)
+				return "", rauthentic, fmt.Errorf("%w: macro letter %c only allowed in exp", ErrMacroSyntax, c)
 			}
 			switch c {
 			case 'c':
@@ -723,7 +748,7 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 				v = fmt.Sprintf("%d", timeNow().Unix())
 			}
 		default:
-			return "", fmt.Errorf("%w: unknown macro letter %c", ErrMacroSyntax, c)
+			return "", rauthentic, fmt.Errorf("%w: unknown macro letter %c", ErrMacroSyntax, c)
 		}
 
 		digits := ""
@@ -735,11 +760,11 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 		if digits != "" {
 			v, err := strconv.Atoi(digits)
 			if err != nil {
-				return "", fmt.Errorf("%w: bad macro transformer digits %q: %s", ErrMacroSyntax, digits, err)
+				return "", rauthentic, fmt.Errorf("%w: bad macro transformer digits %q: %s", ErrMacroSyntax, digits, err)
 			}
 			nlabels = v
 			if nlabels == 0 {
-				return "", fmt.Errorf("%w: zero labels for digits transformer", ErrMacroSyntax)
+				return "", rauthentic, fmt.Errorf("%w: zero labels for digits transformer", ErrMacroSyntax)
 			}
 		}
 
@@ -764,7 +789,7 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 		}
 
 		if i >= n || s[i] != '}' {
-			return "", fmt.Errorf("%w: missing closing } for macro", ErrMacroSyntax)
+			return "", rauthentic, fmt.Errorf("%w: missing closing } for macro", ErrMacroSyntax)
 		}
 		i++
 
@@ -801,14 +826,14 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 		isAbs := strings.HasSuffix(r, ".")
 		r = ensureAbsDNS(r)
 		if err := validateDNS(r); err != nil {
-			return "", fmt.Errorf("invalid dns name: %s", err)
+			return "", rauthentic, fmt.Errorf("invalid dns name: %s", err)
 		}
 		// If resulting name is too large, cut off labels on the left until it fits. ../rfc/7208:1749
 		if len(r) > 253+1 {
 			labels := strings.Split(r, ".")
 			for i := range labels {
 				if i == len(labels)-1 {
-					return "", fmt.Errorf("expanded dns name too long")
+					return "", rauthentic, fmt.Errorf("expanded dns name too long")
 				}
 				s := strings.Join(labels[i+1:], ".")
 				if len(s) <= 254 {
@@ -821,7 +846,7 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 			r = r[:len(r)-1]
 		}
 	}
-	return r, nil
+	return r, rauthentic, nil
 }
 
 func expandIP(ip net.IP) string {
@@ -883,7 +908,7 @@ func split(v, delim string) (r []string) {
 
 // explanation does a best-effort attempt to fetch an explanation for a StatusFail response.
 // If no explanation could be composed, an empty string is returned.
-func explanation(ctx context.Context, resolver dns.Resolver, r *Record, args Args) string {
+func explanation(ctx context.Context, resolver dns.Resolver, r *Record, args Args) (bool, string) {
 	// ../rfc/7208:1485
 
 	// If this record is the result of an "include", we have to use the explanation
@@ -896,27 +921,29 @@ func explanation(ctx context.Context, resolver dns.Resolver, r *Record, args Arg
 
 	// ../rfc/7208:1491
 	if expl == "" {
-		return ""
+		return true, ""
 	}
 
 	// Limits for dns requests and void lookups should not be taken into account.
 	// Starting with zero ensures they aren't triggered.
 	args.dnsRequests = new(int)
 	args.voidLookups = new(int)
-	name, err := expandDomainSpecDNS(ctx, resolver, r.Explanation, args)
+	name, authentic, err := expandDomainSpecDNS(ctx, resolver, r.Explanation, args)
 	if err != nil || name == "" {
-		return ""
+		return authentic, ""
 	}
-	txts, err := resolver.LookupTXT(ctx, ensureAbsDNS(name))
+	txts, result, err := resolver.LookupTXT(ctx, ensureAbsDNS(name))
+	authentic = authentic && result.Authentic
 	if err != nil || len(txts) == 0 {
-		return ""
+		return authentic, ""
 	}
 	txt := strings.Join(txts, "")
-	s, err := expandDomainSpecExp(ctx, resolver, txt, args)
+	s, exauthentic, err := expandDomainSpecExp(ctx, resolver, txt, args)
+	authentic = authentic && exauthentic
 	if err != nil {
-		return ""
+		return authentic, ""
 	}
-	return s
+	return authentic, s
 }
 
 func ensureAbsDNS(s string) string {

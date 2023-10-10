@@ -38,7 +38,7 @@ import (
 var xlog = mlog.New("dkim")
 
 var (
-	metricDKIMSign = promauto.NewCounterVec(
+	metricSign = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "mox_dkim_sign_total",
 			Help: "DKIM messages signings, label key is the type of key, rsa or ed25519.",
@@ -47,7 +47,7 @@ var (
 			"key",
 		},
 	)
-	metricDKIMVerify = promauto.NewHistogramVec(
+	metricVerify = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "mox_dkim_verify_duration_seconds",
 			Help:    "DKIM verify, including lookup, duration and result.",
@@ -113,10 +113,11 @@ var (
 // To decide what to do with a message, both the signature parameters and the DNS
 // TXT record have to be consulted.
 type Result struct {
-	Status Status
-	Sig    *Sig    // Parsed form of DKIM-Signature header. Can be nil for invalid DKIM-Signature header.
-	Record *Record // Parsed form of DKIM DNS record for selector and domain in Sig. Optional.
-	Err    error   // If Status is not StatusPass, this error holds the details and can be checked using errors.Is.
+	Status          Status
+	Sig             *Sig    // Parsed form of DKIM-Signature header. Can be nil for invalid DKIM-Signature header.
+	Record          *Record // Parsed form of DKIM DNS record for selector and domain in Sig. Optional.
+	RecordAuthentic bool    // Whether DKIM DNS record was DNSSEC-protected. Only valid if Sig is non-nil.
+	Err             error   // If Status is not StatusPass, this error holds the details and can be checked using errors.Is.
 }
 
 // todo: use some io.Writer to hash the body and the header.
@@ -157,10 +158,10 @@ func Sign(ctx context.Context, localpart smtp.Localpart, domain dns.Domain, c co
 		switch sel.Key.(type) {
 		case *rsa.PrivateKey:
 			sig.AlgorithmSign = "rsa"
-			metricDKIMSign.WithLabelValues("rsa").Inc()
+			metricSign.WithLabelValues("rsa").Inc()
 		case ed25519.PrivateKey:
 			sig.AlgorithmSign = "ed25519"
-			metricDKIMSign.WithLabelValues("ed25519").Inc()
+			metricSign.WithLabelValues("ed25519").Inc()
 		default:
 			return "", fmt.Errorf("internal error, unknown pivate key %T", sel.Key)
 		}
@@ -267,7 +268,9 @@ func Sign(ctx context.Context, localpart smtp.Localpart, domain dns.Domain, c co
 //
 // A requested record is <selector>._domainkey.<domain>. Exactly one valid DKIM
 // record should be present.
-func Lookup(ctx context.Context, resolver dns.Resolver, selector, domain dns.Domain) (rstatus Status, rrecord *Record, rtxt string, rerr error) {
+//
+// authentic indicates if DNS results were DNSSEC-verified.
+func Lookup(ctx context.Context, resolver dns.Resolver, selector, domain dns.Domain) (rstatus Status, rrecord *Record, rtxt string, authentic bool, rerr error) {
 	log := xlog.WithContext(ctx)
 	start := timeNow()
 	defer func() {
@@ -275,14 +278,14 @@ func Lookup(ctx context.Context, resolver dns.Resolver, selector, domain dns.Dom
 	}()
 
 	name := selector.ASCII + "._domainkey." + domain.ASCII + "."
-	records, err := dns.WithPackage(resolver, "dkim").LookupTXT(ctx, name)
+	records, lookupResult, err := dns.WithPackage(resolver, "dkim").LookupTXT(ctx, name)
 	if dns.IsNotFound(err) {
 		// ../rfc/6376:2608
 		// We must return StatusPermerror. We may want to return StatusTemperror because in
 		// practice someone will start using a new key before DNS changes have propagated.
-		return StatusPermerror, nil, "", fmt.Errorf("%w: dns name %q", ErrNoRecord, name)
+		return StatusPermerror, nil, "", lookupResult.Authentic, fmt.Errorf("%w: dns name %q", ErrNoRecord, name)
 	} else if err != nil {
-		return StatusTemperror, nil, "", fmt.Errorf("%w: dns name %q: %s", ErrDNS, name, err)
+		return StatusTemperror, nil, "", lookupResult.Authentic, fmt.Errorf("%w: dns name %q: %s", ErrDNS, name, err)
 	}
 
 	// ../rfc/6376:2612
@@ -298,7 +301,7 @@ func Lookup(ctx context.Context, resolver dns.Resolver, selector, domain dns.Dom
 		var isdkim bool
 		r, isdkim, err = ParseRecord(s)
 		if err != nil && isdkim {
-			return StatusPermerror, nil, txt, fmt.Errorf("%w: %s", ErrSyntax, err)
+			return StatusPermerror, nil, txt, lookupResult.Authentic, fmt.Errorf("%w: %s", ErrSyntax, err)
 		} else if err != nil {
 			// Hopefully the remote MTA admin discovers the configuration error and fix it for
 			// an upcoming delivery attempt, in case we rejected with temporary status.
@@ -310,7 +313,7 @@ func Lookup(ctx context.Context, resolver dns.Resolver, selector, domain dns.Dom
 		// ../rfc/6376:1609
 		// ../rfc/6376:2584
 		if record != nil {
-			return StatusTemperror, nil, "", fmt.Errorf("%w: dns name %q", ErrMultipleRecords, name)
+			return StatusTemperror, nil, "", lookupResult.Authentic, fmt.Errorf("%w: dns name %q", ErrMultipleRecords, name)
 		}
 		record = r
 		txt = s
@@ -318,9 +321,9 @@ func Lookup(ctx context.Context, resolver dns.Resolver, selector, domain dns.Dom
 	}
 
 	if record == nil {
-		return status, nil, "", err
+		return status, nil, "", lookupResult.Authentic, err
 	}
-	return StatusNeutral, record, txt, nil
+	return StatusNeutral, record, txt, lookupResult.Authentic, nil
 }
 
 // Verify parses the DKIM-Signature headers in a message and verifies each of them.
@@ -346,7 +349,7 @@ func Verify(ctx context.Context, resolver dns.Resolver, smtputf8 bool, policy fu
 				alg = r.Sig.Algorithm()
 			}
 			status := string(r.Status)
-			metricDKIMVerify.WithLabelValues(alg, status).Observe(duration)
+			metricVerify.WithLabelValues(alg, status).Observe(duration)
 		}
 
 		if len(results) == 0 {
@@ -373,26 +376,26 @@ func Verify(ctx context.Context, resolver dns.Resolver, smtputf8 bool, policy fu
 		if err != nil {
 			// ../rfc/6376:2503
 			err := fmt.Errorf("parsing DKIM-Signature header: %w", err)
-			results = append(results, Result{StatusPermerror, nil, nil, err})
+			results = append(results, Result{StatusPermerror, nil, nil, false, err})
 			continue
 		}
 
 		h, canonHeaderSimple, canonDataSimple, err := checkSignatureParams(ctx, sig)
 		if err != nil {
-			results = append(results, Result{StatusPermerror, nil, nil, err})
+			results = append(results, Result{StatusPermerror, nil, nil, false, err})
 			continue
 		}
 
 		// ../rfc/6376:2560
 		if err := policy(sig); err != nil {
 			err := fmt.Errorf("%w: %s", ErrPolicy, err)
-			results = append(results, Result{StatusPolicy, nil, nil, err})
+			results = append(results, Result{StatusPolicy, nil, nil, false, err})
 			continue
 		}
 
 		br := bufio.NewReader(&moxio.AtReader{R: r, Offset: int64(bodyOffset)})
-		status, txt, err := verifySignature(ctx, resolver, sig, h, canonHeaderSimple, canonDataSimple, hdrs, verifySig, br, ignoreTestMode)
-		results = append(results, Result{status, sig, txt, err})
+		status, txt, authentic, err := verifySignature(ctx, resolver, sig, h, canonHeaderSimple, canonDataSimple, hdrs, verifySig, br, ignoreTestMode)
+		results = append(results, Result{status, sig, txt, authentic, err})
 	}
 	return results, nil
 }
@@ -477,15 +480,15 @@ func checkSignatureParams(ctx context.Context, sig *Sig) (hash crypto.Hash, cano
 }
 
 // lookup the public key in the DNS and verify the signature.
-func verifySignature(ctx context.Context, resolver dns.Resolver, sig *Sig, hash crypto.Hash, canonHeaderSimple, canonDataSimple bool, hdrs []header, verifySig []byte, body *bufio.Reader, ignoreTestMode bool) (Status, *Record, error) {
+func verifySignature(ctx context.Context, resolver dns.Resolver, sig *Sig, hash crypto.Hash, canonHeaderSimple, canonDataSimple bool, hdrs []header, verifySig []byte, body *bufio.Reader, ignoreTestMode bool) (Status, *Record, bool, error) {
 	// ../rfc/6376:2604
-	status, record, _, err := Lookup(ctx, resolver, sig.Selector, sig.Domain)
+	status, record, _, authentic, err := Lookup(ctx, resolver, sig.Selector, sig.Domain)
 	if err != nil {
 		// todo: for temporary errors, we could pass on information so caller returns a 4.7.5 ecode, ../rfc/6376:2777
-		return status, nil, err
+		return status, nil, authentic, err
 	}
 	status, err = verifySignatureRecord(record, sig, hash, canonHeaderSimple, canonDataSimple, hdrs, verifySig, body, ignoreTestMode)
-	return status, record, err
+	return status, record, authentic, err
 }
 
 // verify a DKIM signature given the record from dns and signature from the email message.

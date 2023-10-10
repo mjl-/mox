@@ -3,7 +3,11 @@ package mox
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
@@ -25,6 +29,8 @@ import (
 	"time"
 
 	"golang.org/x/text/unicode/norm"
+
+	"github.com/mjl-/autocert"
 
 	"github.com/mjl-/sconf"
 
@@ -434,6 +440,8 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
 
+	log := xlog.WithContext(ctx)
+
 	c := &conf.Static
 
 	// check that mailbox is in unicode NFC normalized form.
@@ -496,13 +504,77 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 	}
 	c.HostnameDomain = hostname
 
+	// Return private key for host name for use with an ACME. Used to return the same
+	// private key as pre-generated for use with DANE, with its public key in DNS.
+	// We only use this key for Listener's that have this ACME configured, and for
+	// which the effective listener host name (either specific to the listener, or the
+	// global name) is requested. Other host names can get a fresh private key, they
+	// don't appear in DANE records.
+	//
+	// - run 0: only use listener with explicitly matching host name in listener
+	//   (default quickstart config does not set it).
+	// - run 1: only look at public listener (and host matching mox host name)
+	// - run 2: all listeners (and host matching mox host name)
+	findACMEHostPrivateKey := func(acmeName, host string, keyType autocert.KeyType, run int) crypto.Signer {
+		for listenerName, l := range Conf.Static.Listeners {
+			if l.TLS == nil || l.TLS.ACME != acmeName {
+				continue
+			}
+			if run == 0 && host != l.HostnameDomain.ASCII {
+				continue
+			}
+			if run == 1 && listenerName != "public" || host != Conf.Static.HostnameDomain.ASCII {
+				continue
+			}
+			switch keyType {
+			case autocert.KeyRSA2048:
+				if len(l.TLS.HostPrivateRSA2048Keys) == 0 {
+					continue
+				}
+				return l.TLS.HostPrivateRSA2048Keys[0]
+			case autocert.KeyECDSAP256:
+				if len(l.TLS.HostPrivateECDSAP256Keys) == 0 {
+					continue
+				}
+				return l.TLS.HostPrivateECDSAP256Keys[0]
+			default:
+				return nil
+			}
+		}
+		return nil
+	}
+	// Make a function for an autocert.Manager.GetPrivateKey, using findACMEHostPrivateKey.
+	makeGetPrivateKey := func(acmeName string) func(host string, keyType autocert.KeyType) (crypto.Signer, error) {
+		return func(host string, keyType autocert.KeyType) (crypto.Signer, error) {
+			key := findACMEHostPrivateKey(acmeName, host, keyType, 0)
+			if key == nil {
+				key = findACMEHostPrivateKey(acmeName, host, keyType, 1)
+			}
+			if key == nil {
+				key = findACMEHostPrivateKey(acmeName, host, keyType, 2)
+			}
+			if key != nil {
+				log.Debug("found existing private key for certificate for host", mlog.Field("acmename", acmeName), mlog.Field("host", host), mlog.Field("keytype", keyType))
+				return key, nil
+			}
+			log.Debug("generating new private key for certificate for host", mlog.Field("acmename", acmeName), mlog.Field("host", host), mlog.Field("keytype", keyType))
+			switch keyType {
+			case autocert.KeyRSA2048:
+				return rsa.GenerateKey(cryptorand.Reader, 2048)
+			case autocert.KeyECDSAP256:
+				return ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+			default:
+				return nil, fmt.Errorf("unrecognized requested key type %v", keyType)
+			}
+		}
+	}
 	for name, acme := range c.ACME {
 		if checkOnly {
 			continue
 		}
 		acmeDir := dataDirPath(configFile, c.DataDir, "acme")
 		os.MkdirAll(acmeDir, 0770)
-		manager, err := autotls.Load(name, acmeDir, acme.ContactEmail, acme.DirectoryURL, Shutdown.Done())
+		manager, err := autotls.Load(name, acmeDir, acme.ContactEmail, acme.DirectoryURL, makeGetPrivateKey(name), Shutdown.Done())
 		if err != nil {
 			addErrorf("loading ACME identity for %q: %s", name, err)
 		}
@@ -538,7 +610,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 					l.TLS.ACMEConfig = acme.Manager.ACMETLSConfig
 
 					// SMTP STARTTLS connections are commonly made without SNI, because certificates
-					// often aren't validated.
+					// often aren't verified.
 					hostname := c.HostnameDomain
 					if l.Hostname != "" {
 						hostname = l.HostnameDomain
@@ -560,6 +632,34 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 				}
 			} else {
 				addErrorf("listener %q: cannot have TLS config without ACME and without static keys/certificates", name)
+			}
+			for _, privKeyFile := range l.TLS.HostPrivateKeyFiles {
+				keyPath := configDirPath(configFile, privKeyFile)
+				privKey, err := loadPrivateKeyFile(keyPath)
+				if err != nil {
+					addErrorf("listener %q: parsing host private key for DANE and ACME certificates: %v", name, err)
+					continue
+				}
+				switch k := privKey.(type) {
+				case *rsa.PrivateKey:
+					if k.N.BitLen() != 2048 {
+						log.Error("need rsa key with 2048 bits, for host private key for DANE/ACME certificates, ignoring", mlog.Field("listener", name), mlog.Field("file", keyPath), mlog.Field("bits", k.N.BitLen()))
+						continue
+					}
+					l.TLS.HostPrivateRSA2048Keys = append(l.TLS.HostPrivateRSA2048Keys, k)
+				case *ecdsa.PrivateKey:
+					if k.Curve != elliptic.P256() {
+						log.Error("unrecognized ecdsa curve for host private key for DANE/ACME certificates, ignoring", mlog.Field("listener", name), mlog.Field("file", keyPath))
+						continue
+					}
+					l.TLS.HostPrivateECDSAP256Keys = append(l.TLS.HostPrivateECDSAP256Keys, k)
+				default:
+					log.Error("unrecognized key type for host private key for DANE/ACME certificates, ignoring", mlog.Field("listener", name), mlog.Field("file", keyPath), mlog.Field("keytype", fmt.Sprintf("%T", privKey)))
+					continue
+				}
+			}
+			if l.TLS.ACME != "" && (len(l.TLS.HostPrivateRSA2048Keys) == 0) != (len(l.TLS.HostPrivateECDSAP256Keys) == 0) {
+				log.Error("warning: uncommon configuration with either only an RSA 2048 or ECDSA P256 host private key for DANE/ACME certificates; this ACME implementation can retrieve certificates for both type of keys, it is recommended to set either both or none; continuing")
 			}
 
 			// TLS 1.2 was introduced in 2008. TLS <1.2 was deprecated by ../rfc/8996:31 and ../rfc/8997:66 in 2021.
@@ -1393,6 +1493,35 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 	}
 
 	return
+}
+
+func loadPrivateKeyFile(keyPath string) (crypto.Signer, error) {
+	keyBuf, err := os.ReadFile(keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading host private key: %v", err)
+	}
+	b, _ := pem.Decode(keyBuf)
+	if b == nil {
+		return nil, fmt.Errorf("parsing pem block for private key: %v", err)
+	}
+	var privKey any
+	switch b.Type {
+	case "PRIVATE KEY":
+		privKey, err = x509.ParsePKCS8PrivateKey(b.Bytes)
+	case "RSA PRIVATE KEY":
+		privKey, err = x509.ParsePKCS1PrivateKey(b.Bytes)
+	case "EC PRIVATE KEY":
+		privKey, err = x509.ParseECPrivateKey(b.Bytes)
+	default:
+		err = fmt.Errorf("unknown pem type %q", b.Type)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("parsing private key: %v", err)
+	}
+	if k, ok := privKey.(crypto.Signer); ok {
+		return k, nil
+	}
+	return nil, fmt.Errorf("parsed private key not a crypto.Signer, but %T", privKey)
 }
 
 func loadTLSKeyCerts(configFile, kind string, ctls *config.TLS) error {

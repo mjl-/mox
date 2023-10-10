@@ -122,10 +122,14 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 8904	DNS Whitelist (DNSWL) Email Authentication Method Extension
 
 # DANE
+6394	Use Cases and Requirements for DNS-Based Authentication of Named Entities (DANE)
 6698	The DNS-Based Authentication of Named Entities (DANE) Transport Layer Security (TLS) Protocol: TLSA
 7218	Adding Acronyms to Simplify Conversations about DNS-Based Authentication of Named Entities (DANE)
 7671	The DNS-Based Authentication of Named Entities (DANE) Protocol: Updates and Operational Guidance
 7672	SMTP Security via Opportunistic DNS-Based Authentication of Named Entities (DANE) Transport Layer Security (TLS)
+7673	Using DNS-Based Authentication of Named Entities (DANE) TLSA Records with SRV Records
+7929	DNS-Based Authentication of Named Entities (DANE) Bindings for OpenPGP
+8162	Using Secure DNS to Associate Certificates with Domain Names for S/MIME
 
 # TLS-RPT
 8460	SMTP TLS Reporting
@@ -283,6 +287,7 @@ See implementation guide, https://jmap.io/server.html
 
 # TLS
 6125	Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)
+7250	Using Raw Public Keys in Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
 7525	Recommendations for Secure Use of Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
 8314	Cleartext Considered Obsolete: Use of Transport Layer Security (TLS) for Email Submission and Access
 8996	Deprecating TLS 1.0 and TLS 1.1
@@ -321,21 +326,31 @@ See implementation guide, https://jmap.io/server.html
 1536	Common DNS Implementation Errors and Suggested Fixes
 2181	Clarifications to the DNS Specification
 2308	Negative Caching of DNS Queries (DNS NCACHE)
+2672	(obsoleted by RFC 6672) Non-Terminal DNS Name Redirection
+3226	DNSSEC and IPv6 A6 aware server/resolver message size requirements
 3363	Representing Internet Protocol version 6 (IPv6) Addresses in the Domain Name System (DNS)
 3596	DNS Extensions to Support IP Version 6
 3597	Handling of Unknown DNS Resource Record (RR) Types
+3833	Threat Analysis of the Domain Name System (DNS)
 4343	Domain Name System (DNS) Case Insensitivity Clarification
 4592	The Role of Wildcards in the Domain Name System
+5001	DNS Name Server Identifier (NSID) Option
 5452	Measures for Making DNS More Resilient against Forged Answers
 6604	xNAME RCODE and Status Bits Clarification
 6672	DNAME Redirection in the DNS
 6891	Extension Mechanisms for DNS (EDNS(0))
 6895	Domain Name System (DNS) IANA Considerations
+7686	The ".onion" Special-Use Domain Name
 7766	DNS Transport over TCP - Implementation Requirements
+7828	The edns-tcp-keepalive EDNS0 Option
+7873	Domain Name System (DNS) Cookies
 8020	NXDOMAIN: There Really Is Nothing Underneath
 8482	Providing Minimal-Sized Responses to DNS Queries That Have QTYPE=ANY
 8490	DNS Stateful Operations
+8499	DNS Terminology
 8767	Serving Stale Data to Improve DNS Resiliency
+8914	Extended DNS Errors
+9018	Interoperable Domain Name System (DNS) Server Cookies
 9210	DNS Transport over TCP - Operational Requirements
 
 # DNSSEC
@@ -352,6 +367,7 @@ See implementation guide, https://jmap.io/server.html
 6014	Cryptographic Algorithm Identifier Allocation for DNSSEC
 6781	DNSSEC Operational Practices, Version 2
 6840	Clarifications and Implementation Notes for DNS Security (DNSSEC)
+7901	CHAIN Query Requests in DNS
 8198	Aggressive Use of DNSSEC-Validated Cache
 8624	Algorithm Implementation Requirements and Usage Guidance for DNSSEC
 8749	Moving DNSSEC Lookaside Validation (DLV) to Historic Status

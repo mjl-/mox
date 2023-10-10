@@ -13,6 +13,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
+	"github.com/mjl-/adns"
+
 	"github.com/mjl-/mox/mlog"
 )
 
@@ -21,6 +23,10 @@ import (
 // todo future: add option to not use anything in the cache, for the admin pages where you check the latest DNS settings, ignoring old cached info.
 
 var xlog = mlog.New("dns")
+
+func init() {
+	net.DefaultResolver.StrictErrors = true
+}
 
 var (
 	metricLookup = promauto.NewHistogramVec(
@@ -39,16 +45,17 @@ var (
 
 // Resolver is the interface strict resolver implements.
 type Resolver interface {
-	LookupAddr(ctx context.Context, addr string) ([]string, error) // Always returns absolute names, with trailing dot.
-	LookupCNAME(ctx context.Context, host string) (string, error)  // NOTE: returns an error if no CNAME record is present.
-	LookupHost(ctx context.Context, host string) (addrs []string, err error)
-	LookupIP(ctx context.Context, network, host string) ([]net.IP, error)
-	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
-	LookupMX(ctx context.Context, name string) ([]*net.MX, error)
-	LookupNS(ctx context.Context, name string) ([]*net.NS, error)
 	LookupPort(ctx context.Context, network, service string) (port int, err error)
-	LookupSRV(ctx context.Context, service, proto, name string) (string, []*net.SRV, error)
-	LookupTXT(ctx context.Context, name string) ([]string, error)
+	LookupAddr(ctx context.Context, addr string) ([]string, adns.Result, error) // Always returns absolute names, with trailing dot.
+	LookupCNAME(ctx context.Context, host string) (string, adns.Result, error)  // NOTE: returns an error if no CNAME record is present.
+	LookupHost(ctx context.Context, host string) ([]string, adns.Result, error)
+	LookupIP(ctx context.Context, network, host string) ([]net.IP, adns.Result, error)
+	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, adns.Result, error)
+	LookupMX(ctx context.Context, name string) ([]*net.MX, adns.Result, error)
+	LookupNS(ctx context.Context, name string) ([]*net.NS, adns.Result, error)
+	LookupSRV(ctx context.Context, service, proto, name string) (string, []*net.SRV, adns.Result, error)
+	LookupTXT(ctx context.Context, name string) ([]string, adns.Result, error)
+	LookupTLSA(ctx context.Context, port int, protocol, host string) ([]adns.TLSA, adns.Result, error)
 }
 
 // WithPackage sets Pkg on resolver if it is a StrictResolve and does not have a package set yet.
@@ -65,8 +72,8 @@ func WithPackage(resolver Resolver, name string) Resolver {
 // StrictResolver is a net.Resolver that enforces that DNS names end with a dot,
 // preventing "search"-relative lookups.
 type StrictResolver struct {
-	Pkg      string        // Name of subsystem that is making DNS requests, for metrics.
-	Resolver *net.Resolver // Where the actual lookups are done. If nil, net.DefaultResolver is used for lookups.
+	Pkg      string         // Name of subsystem that is making DNS requests, for metrics.
+	Resolver *adns.Resolver // Where the actual lookups are done. If nil, adns.DefaultResolver is used for lookups.
 }
 
 var _ Resolver = StrictResolver{}
@@ -75,7 +82,7 @@ var ErrRelativeDNSName = errors.New("dns: host to lookup must be absolute, endin
 
 func metricLookupObserve(pkg, typ string, err error, start time.Time) {
 	var result string
-	var dnsErr *net.DNSError
+	var dnsErr *adns.DNSError
 	switch {
 	case err == nil:
 		result = "ok"
@@ -101,7 +108,7 @@ func (r StrictResolver) WithPackage(name string) Resolver {
 
 func (r StrictResolver) resolver() Resolver {
 	if r.Resolver == nil {
-		return net.DefaultResolver
+		return adns.DefaultResolver
 	}
 	return r.Resolver
 }
@@ -111,26 +118,52 @@ func resolveErrorHint(err *error) {
 	if e == nil {
 		return
 	}
-	dnserr, ok := e.(*net.DNSError)
+	dnserr, ok := e.(*adns.DNSError)
 	if !ok {
 		return
 	}
 	// If the dns server is not running, and it is one of the default/fallback IPs,
 	// hint at where to look.
 	if dnserr.IsTemporary && runtime.GOOS == "linux" && (dnserr.Server == "127.0.0.1:53" || dnserr.Server == "[::1]:53") && strings.HasSuffix(dnserr.Err, "connection refused") {
-		*err = fmt.Errorf("%w (hint: does /etc/resolv.conf point to a running nameserver? in case of systemd-resolved, see systemd-resolved.service(8))", *err)
+		*err = fmt.Errorf("%w (hint: does /etc/resolv.conf point to a running nameserver? in case of systemd-resolved, see systemd-resolved.service(8); better yet, install a proper dnssec-verifying recursive resolver like unbound)", *err)
 	}
 }
 
-func (r StrictResolver) LookupAddr(ctx context.Context, addr string) (resp []string, err error) {
+func (r StrictResolver) LookupPort(ctx context.Context, network, service string) (resp int, err error) {
 	start := time.Now()
 	defer func() {
-		metricLookupObserve(r.Pkg, "addr", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err, mlog.Field("pkg", r.Pkg), mlog.Field("type", "addr"), mlog.Field("addr", addr), mlog.Field("resp", resp), mlog.Field("duration", time.Since(start)))
+		metricLookupObserve(r.Pkg, "port", err, start)
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "port"),
+			mlog.Field("network", network),
+			mlog.Field("service", service),
+			mlog.Field("resp", resp),
+			mlog.Field("duration", time.Since(start)),
+		)
 	}()
 	defer resolveErrorHint(&err)
 
-	resp, err = r.resolver().LookupAddr(ctx, addr)
+	resp, err = r.resolver().LookupPort(ctx, network, service)
+	return
+}
+
+func (r StrictResolver) LookupAddr(ctx context.Context, addr string) (resp []string, result adns.Result, err error) {
+	start := time.Now()
+	defer func() {
+		metricLookupObserve(r.Pkg, "addr", err, start)
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "addr"),
+			mlog.Field("addr", addr),
+			mlog.Field("resp", resp),
+			mlog.Field("authentic", result.Authentic),
+			mlog.Field("duration", time.Since(start)),
+		)
+	}()
+	defer resolveErrorHint(&err)
+
+	resp, result, err = r.resolver().LookupAddr(ctx, addr)
 	// For addresses from /etc/hosts without dot, we add the missing trailing dot.
 	for i, s := range resp {
 		if !strings.HasSuffix(s, ".") {
@@ -142,20 +175,27 @@ func (r StrictResolver) LookupAddr(ctx context.Context, addr string) (resp []str
 
 // LookupCNAME looks up a CNAME. Unlike "net" LookupCNAME, it returns a "not found"
 // error if there is no CNAME record.
-func (r StrictResolver) LookupCNAME(ctx context.Context, host string) (resp string, err error) {
+func (r StrictResolver) LookupCNAME(ctx context.Context, host string) (resp string, result adns.Result, err error) {
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "cname", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err, mlog.Field("pkg", r.Pkg), mlog.Field("type", "cname"), mlog.Field("host", host), mlog.Field("resp", resp), mlog.Field("duration", time.Since(start)))
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "cname"),
+			mlog.Field("host", host),
+			mlog.Field("resp", resp),
+			mlog.Field("authentic", result.Authentic),
+			mlog.Field("duration", time.Since(start)),
+		)
 	}()
 	defer resolveErrorHint(&err)
 
 	if !strings.HasSuffix(host, ".") {
-		return "", ErrRelativeDNSName
+		return "", result, ErrRelativeDNSName
 	}
-	resp, err = r.resolver().LookupCNAME(ctx, host)
+	resp, result, err = r.resolver().LookupCNAME(ctx, host)
 	if err == nil && resp == host {
-		return "", &net.DNSError{
+		return "", result, &adns.DNSError{
 			Err:        "no cname record",
 			Name:       host,
 			Server:     "",
@@ -164,119 +204,185 @@ func (r StrictResolver) LookupCNAME(ctx context.Context, host string) (resp stri
 	}
 	return
 }
-func (r StrictResolver) LookupHost(ctx context.Context, host string) (resp []string, err error) {
+
+func (r StrictResolver) LookupHost(ctx context.Context, host string) (resp []string, result adns.Result, err error) {
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "host", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err, mlog.Field("pkg", r.Pkg), mlog.Field("type", "host"), mlog.Field("host", host), mlog.Field("resp", resp), mlog.Field("duration", time.Since(start)))
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "host"),
+			mlog.Field("host", host),
+			mlog.Field("resp", resp),
+			mlog.Field("authentic", result.Authentic),
+			mlog.Field("duration", time.Since(start)),
+		)
 	}()
 	defer resolveErrorHint(&err)
 
 	if !strings.HasSuffix(host, ".") {
-		return nil, ErrRelativeDNSName
+		return nil, result, ErrRelativeDNSName
 	}
-	resp, err = r.resolver().LookupHost(ctx, host)
+	resp, result, err = r.resolver().LookupHost(ctx, host)
 	return
 }
 
-func (r StrictResolver) LookupIP(ctx context.Context, network, host string) (resp []net.IP, err error) {
+func (r StrictResolver) LookupIP(ctx context.Context, network, host string) (resp []net.IP, result adns.Result, err error) {
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "ip", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err, mlog.Field("pkg", r.Pkg), mlog.Field("type", "ip"), mlog.Field("network", network), mlog.Field("host", host), mlog.Field("resp", resp), mlog.Field("duration", time.Since(start)))
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "ip"),
+			mlog.Field("network", network),
+			mlog.Field("host", host),
+			mlog.Field("resp", resp),
+			mlog.Field("authentic", result.Authentic),
+			mlog.Field("duration", time.Since(start)),
+		)
 	}()
 	defer resolveErrorHint(&err)
 
 	if !strings.HasSuffix(host, ".") {
-		return nil, ErrRelativeDNSName
+		return nil, result, ErrRelativeDNSName
 	}
-	resp, err = r.resolver().LookupIP(ctx, network, host)
+	resp, result, err = r.resolver().LookupIP(ctx, network, host)
 	return
 }
 
-func (r StrictResolver) LookupIPAddr(ctx context.Context, host string) (resp []net.IPAddr, err error) {
+func (r StrictResolver) LookupIPAddr(ctx context.Context, host string) (resp []net.IPAddr, result adns.Result, err error) {
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "ipaddr", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err, mlog.Field("pkg", r.Pkg), mlog.Field("type", "ipaddr"), mlog.Field("host", host), mlog.Field("resp", resp), mlog.Field("duration", time.Since(start)))
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "ipaddr"),
+			mlog.Field("host", host),
+			mlog.Field("resp", resp),
+			mlog.Field("authentic", result.Authentic),
+			mlog.Field("duration", time.Since(start)),
+		)
 	}()
 	defer resolveErrorHint(&err)
 
 	if !strings.HasSuffix(host, ".") {
-		return nil, ErrRelativeDNSName
+		return nil, result, ErrRelativeDNSName
 	}
-	resp, err = r.resolver().LookupIPAddr(ctx, host)
+	resp, result, err = r.resolver().LookupIPAddr(ctx, host)
 	return
 }
 
-func (r StrictResolver) LookupMX(ctx context.Context, name string) (resp []*net.MX, err error) {
+func (r StrictResolver) LookupMX(ctx context.Context, name string) (resp []*net.MX, result adns.Result, err error) {
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "mx", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err, mlog.Field("pkg", r.Pkg), mlog.Field("type", "mx"), mlog.Field("name", name), mlog.Field("resp", resp), mlog.Field("duration", time.Since(start)))
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "mx"),
+			mlog.Field("name", name),
+			mlog.Field("resp", resp),
+			mlog.Field("authentic", result.Authentic),
+			mlog.Field("duration", time.Since(start)),
+		)
 	}()
 	defer resolveErrorHint(&err)
 
 	if !strings.HasSuffix(name, ".") {
-		return nil, ErrRelativeDNSName
+		return nil, result, ErrRelativeDNSName
 	}
-	resp, err = r.resolver().LookupMX(ctx, name)
+	resp, result, err = r.resolver().LookupMX(ctx, name)
 	return
 }
 
-func (r StrictResolver) LookupNS(ctx context.Context, name string) (resp []*net.NS, err error) {
+func (r StrictResolver) LookupNS(ctx context.Context, name string) (resp []*net.NS, result adns.Result, err error) {
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "ns", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err, mlog.Field("pkg", r.Pkg), mlog.Field("type", "ns"), mlog.Field("name", name), mlog.Field("resp", resp), mlog.Field("duration", time.Since(start)))
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "ns"),
+			mlog.Field("name", name),
+			mlog.Field("resp", resp),
+			mlog.Field("authentic", result.Authentic),
+			mlog.Field("duration", time.Since(start)),
+		)
 	}()
 	defer resolveErrorHint(&err)
 
 	if !strings.HasSuffix(name, ".") {
-		return nil, ErrRelativeDNSName
+		return nil, result, ErrRelativeDNSName
 	}
-	resp, err = r.resolver().LookupNS(ctx, name)
+	resp, result, err = r.resolver().LookupNS(ctx, name)
 	return
 }
 
-func (r StrictResolver) LookupPort(ctx context.Context, network, service string) (resp int, err error) {
-	start := time.Now()
-	defer func() {
-		metricLookupObserve(r.Pkg, "port", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err, mlog.Field("pkg", r.Pkg), mlog.Field("type", "port"), mlog.Field("network", network), mlog.Field("service", service), mlog.Field("resp", resp), mlog.Field("duration", time.Since(start)))
-	}()
-	defer resolveErrorHint(&err)
-
-	resp, err = r.resolver().LookupPort(ctx, network, service)
-	return
-}
-
-func (r StrictResolver) LookupSRV(ctx context.Context, service, proto, name string) (resp0 string, resp1 []*net.SRV, err error) {
+func (r StrictResolver) LookupSRV(ctx context.Context, service, proto, name string) (resp0 string, resp1 []*net.SRV, result adns.Result, err error) {
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "srv", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err, mlog.Field("pkg", r.Pkg), mlog.Field("type", "srv"), mlog.Field("service", service), mlog.Field("proto", proto), mlog.Field("name", name), mlog.Field("resp0", resp0), mlog.Field("resp1", resp1), mlog.Field("duration", time.Since(start)))
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "srv"),
+			mlog.Field("service", service),
+			mlog.Field("proto", proto),
+			mlog.Field("name", name),
+			mlog.Field("resp0", resp0),
+			mlog.Field("resp1", resp1),
+			mlog.Field("authentic", result.Authentic),
+			mlog.Field("duration", time.Since(start)),
+		)
 	}()
 	defer resolveErrorHint(&err)
 
 	if !strings.HasSuffix(name, ".") {
-		return "", nil, ErrRelativeDNSName
+		return "", nil, result, ErrRelativeDNSName
 	}
-	resp0, resp1, err = r.resolver().LookupSRV(ctx, service, proto, name)
+	resp0, resp1, result, err = r.resolver().LookupSRV(ctx, service, proto, name)
 	return
 }
 
-func (r StrictResolver) LookupTXT(ctx context.Context, name string) (resp []string, err error) {
+func (r StrictResolver) LookupTXT(ctx context.Context, name string) (resp []string, result adns.Result, err error) {
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "txt", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err, mlog.Field("pkg", r.Pkg), mlog.Field("type", "txt"), mlog.Field("name", name), mlog.Field("resp", resp), mlog.Field("duration", time.Since(start)))
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "txt"),
+			mlog.Field("name", name),
+			mlog.Field("resp", resp),
+			mlog.Field("authentic", result.Authentic),
+			mlog.Field("duration", time.Since(start)),
+		)
 	}()
 	defer resolveErrorHint(&err)
 
 	if !strings.HasSuffix(name, ".") {
-		return nil, ErrRelativeDNSName
+		return nil, result, ErrRelativeDNSName
 	}
-	resp, err = r.resolver().LookupTXT(ctx, name)
+	resp, result, err = r.resolver().LookupTXT(ctx, name)
+	return
+}
+
+func (r StrictResolver) LookupTLSA(ctx context.Context, port int, protocol, host string) (resp []adns.TLSA, result adns.Result, err error) {
+	start := time.Now()
+	defer func() {
+		metricLookupObserve(r.Pkg, "tlsa", err, start)
+		xlog.WithContext(ctx).Debugx("dns lookup result", err,
+			mlog.Field("pkg", r.Pkg),
+			mlog.Field("type", "tlsa"),
+			mlog.Field("port", port),
+			mlog.Field("protocol", protocol),
+			mlog.Field("host", host),
+			mlog.Field("resp", resp),
+			mlog.Field("authentic", result.Authentic),
+			mlog.Field("duration", time.Since(start)),
+		)
+	}()
+	defer resolveErrorHint(&err)
+
+	if !strings.HasSuffix(host, ".") {
+		return nil, result, ErrRelativeDNSName
+	}
+	resp, result, err = r.resolver().LookupTLSA(ctx, port, protocol, host)
 	return
 }

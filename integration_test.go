@@ -1,5 +1,7 @@
 //go:build integration
 
+// todo: set up a test for dane, mta-sts, etc.
+
 package main
 
 import (
@@ -127,7 +129,7 @@ This is the message.
 `, mailfrom, rcptto)
 		msg = strings.ReplaceAll(msg, "\n", "\r\n")
 		auth := []sasl.Client{sasl.NewClientPlain(mailfrom, password)}
-		c, err := smtpclient.New(mox.Context, xlog, conn, smtpclient.TLSSkip, ourHostname, dns.Domain{ASCII: desthost}, auth)
+		c, err := smtpclient.New(mox.Context, xlog, conn, smtpclient.TLSSkip, ourHostname, dns.Domain{ASCII: desthost}, auth, nil, nil, nil)
 		tcheck(t, err, "smtp hello")
 		err = c.Deliver(mox.Context, mailfrom, rcptto, int64(len(msg)), strings.NewReader(msg), false, false)
 		tcheck(t, err, "deliver with smtp")

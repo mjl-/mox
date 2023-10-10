@@ -31,7 +31,7 @@ func TestLookup(t *testing.T) {
 		t.Helper()
 
 		d := dns.Domain{ASCII: domain}
-		status, txt, record, err := Lookup(context.Background(), resolver, d)
+		status, txt, record, _, err := Lookup(context.Background(), resolver, d)
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("got err %v, expected err %v", err, expErr)
 		}
@@ -99,7 +99,7 @@ func TestExpand(t *testing.T) {
 			args.RemoteIP = mustParseIP(ip)
 		}
 
-		r, err := expandDomainSpec(ctx, resolver, macro, args, dns)
+		r, _, err := expandDomainSpec(ctx, resolver, macro, args, dns)
 		if (err == nil) != (exp != "") {
 			t.Fatalf("got err %v, expected expansion %q, for macro %q", err, exp, macro)
 		}
@@ -260,7 +260,7 @@ func TestVerify(t *testing.T) {
 			LocalIP:           xip("127.0.0.1"),
 			LocalHostname:     dns.Domain{ASCII: "localhost"},
 		}
-		received, _, _, err := Verify(ctx, r, args)
+		received, _, _, _, err := Verify(ctx, r, args)
 		if received.Result != status {
 			t.Fatalf("got status %q, expected %q, for ip %q (err %v)", received.Result, status, ip, err)
 		}
@@ -346,7 +346,7 @@ func TestVerifyMultipleDomain(t *testing.T) {
 			LocalIP:        net.ParseIP("127.0.0.1"),
 			LocalHostname:  dns.Domain{ASCII: "localhost"},
 		}
-		received, _, _, err := Verify(context.Background(), resolver, args)
+		received, _, _, _, err := Verify(context.Background(), resolver, args)
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
@@ -371,7 +371,7 @@ func TestVerifyScenarios(t *testing.T) {
 	test := func(resolver dns.Resolver, args Args, expStatus Status, expDomain string, expExpl string, expErr error) {
 		t.Helper()
 
-		recv, d, expl, err := Verify(context.Background(), resolver, args)
+		recv, d, expl, _, err := Verify(context.Background(), resolver, args)
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("got err %v, expected %v", err, expErr)
 		}
@@ -506,7 +506,7 @@ func TestEvaluate(t *testing.T) {
 	record := &Record{}
 	resolver := dns.MockResolver{}
 	args := Args{}
-	status, _, _, _ := Evaluate(context.Background(), record, resolver, args)
+	status, _, _, _, _ := Evaluate(context.Background(), record, resolver, args)
 	if status != StatusNone {
 		t.Fatalf("got status %q, expected none", status)
 	}
@@ -514,7 +514,7 @@ func TestEvaluate(t *testing.T) {
 	args = Args{
 		HelloDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "test.example"}},
 	}
-	status, mechanism, _, err := Evaluate(context.Background(), record, resolver, args)
+	status, mechanism, _, _, err := Evaluate(context.Background(), record, resolver, args)
 	if status != StatusNeutral || mechanism != "default" || err != nil {
 		t.Fatalf("got status %q, mechanism %q, err %v, expected neutral, default, no error", status, mechanism, err)
 	}

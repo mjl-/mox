@@ -271,7 +271,7 @@ func TestClient(t *testing.T) {
 				result <- fmt.Errorf("client: %w", fmt.Errorf(format, args...))
 				panic("stop")
 			}
-			c, err := New(ctx, log, clientConn, opts.tlsMode, localhost, opts.tlsHostname, auths)
+			c, err := New(ctx, log, clientConn, opts.tlsMode, localhost, opts.tlsHostname, auths, nil, nil, nil)
 			if (err == nil) != (expClientErr == nil) || err != nil && !errors.As(err, reflect.New(reflect.ValueOf(expClientErr).Type()).Interface()) && !errors.Is(err, expClientErr) {
 				fail("new client: got err %v, expected %#v", err, expClientErr)
 			}
@@ -373,7 +373,7 @@ func TestErrors(t *testing.T) {
 	run(t, func(s xserver) {
 		s.writeline("bogus") // Invalid, should be "220 <hostname>".
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrProtocol) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrProtocol without Permanent", err))
@@ -384,7 +384,7 @@ func TestErrors(t *testing.T) {
 	run(t, func(s xserver) {
 		s.conn.Close()
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		var xerr Error
 		if err == nil || !errors.Is(err, io.ErrUnexpectedEOF) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v (%v), expected ErrUnexpectedEOF without Permanent", err, err))
@@ -395,7 +395,7 @@ func TestErrors(t *testing.T) {
 	run(t, func(s xserver) {
 		s.writeline("521 not accepting connections")
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || !xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with Permanent", err))
@@ -406,7 +406,7 @@ func TestErrors(t *testing.T) {
 	run(t, func(s xserver) {
 		s.writeline("2200 mox.example") // Invalid, too many digits.
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrProtocol) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrProtocol without Permanent", err))
@@ -420,7 +420,7 @@ func TestErrors(t *testing.T) {
 		s.writeline("250-mox.example")
 		s.writeline("500 different code") // Invalid.
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrProtocol) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrProtocol without Permanent", err))
@@ -436,7 +436,7 @@ func TestErrors(t *testing.T) {
 		s.readline("MAIL FROM:")
 		s.writeline("550 5.7.0 not allowed")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -456,7 +456,7 @@ func TestErrors(t *testing.T) {
 		s.readline("MAIL FROM:")
 		s.writeline("451 bad sender")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -478,7 +478,7 @@ func TestErrors(t *testing.T) {
 		s.readline("RCPT TO:")
 		s.writeline("451")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -502,7 +502,7 @@ func TestErrors(t *testing.T) {
 		s.readline("DATA")
 		s.writeline("550 no!")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -522,7 +522,7 @@ func TestErrors(t *testing.T) {
 		s.readline("STARTTLS")
 		s.writeline("502 command not implemented")
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSStrictStartTLS, localhost, dns.Domain{ASCII: "mox.example"}, nil)
+		_, err := New(ctx, log, conn, TLSStrictStartTLS, localhost, dns.Domain{ASCII: "mox.example"}, nil, nil, nil, nil)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrTLS) || !errors.As(err, &xerr) || !xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrTLS with Permanent", err))
@@ -538,7 +538,7 @@ func TestErrors(t *testing.T) {
 		s.readline("MAIL FROM:")
 		s.writeline("451 enough")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSSkip, localhost, dns.Domain{ASCII: "mox.example"}, nil)
+		c, err := New(ctx, log, conn, TLSSkip, localhost, dns.Domain{ASCII: "mox.example"}, nil, nil, nil, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -568,7 +568,7 @@ func TestErrors(t *testing.T) {
 		s.readline("DATA")
 		s.writeline("550 not now")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -598,7 +598,7 @@ func TestErrors(t *testing.T) {
 		s.readline("MAIL FROM:")
 		s.writeline("550 ok")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
 		if err != nil {
 			panic(err)
 		}

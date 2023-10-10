@@ -419,12 +419,15 @@ type KeyCert struct {
 }
 
 type TLS struct {
-	ACME       string    `sconf:"optional" sconf-doc:"Name of provider from top-level configuration to use for ACME, e.g. letsencrypt."`
-	KeyCerts   []KeyCert `sconf:"optional" sconf-doc:"Key and certificate files are opened by the privileged root process and passed to the unprivileged mox process, so no special permissions are required."`
-	MinVersion string    `sconf:"optional" sconf-doc:"Minimum TLS version. Default: TLSv1.2."`
+	ACME                string    `sconf:"optional" sconf-doc:"Name of provider from top-level configuration to use for ACME, e.g. letsencrypt."`
+	KeyCerts            []KeyCert `sconf:"optional" sconf-doc:"Keys and certificates to use for this listener. The files are opened by the privileged root process and passed to the unprivileged mox process, so no special permissions are required on the files. If the private key will not be replaced when refreshing certificates, also consider adding the private key to HostPrivateKeyFiles and configuring DANE TLSA DNS records."`
+	MinVersion          string    `sconf:"optional" sconf-doc:"Minimum TLS version. Default: TLSv1.2."`
+	HostPrivateKeyFiles []string  `sconf:"optional" sconf-doc:"Private keys used for ACME certificates. Specified explicitly so DANE TLSA DNS records can be generated, even before the certificates are requested. DANE is a mechanism to authenticate remote TLS certificates based on a public key or certificate specified in DNS, protected with DNSSEC. DANE is opportunistic and attempted when delivering SMTP with STARTTLS. The private key files must be in PEM format. PKCS8 is recommended, but PKCS1 and EC private keys are recognized as well. Only RSA 2048 bit and ECDSA P-256 keys are currently used. The first of each is used when requesting new certificates through ACME."`
 
-	Config     *tls.Config `sconf:"-" json:"-"` // TLS config for non-ACME-verification connections, i.e. SMTP and IMAP, and not port 443.
-	ACMEConfig *tls.Config `sconf:"-" json:"-"` // TLS config that handles ACME verification, for serving on port 443.
+	Config                   *tls.Config     `sconf:"-" json:"-"` // TLS config for non-ACME-verification connections, i.e. SMTP and IMAP, and not port 443.
+	ACMEConfig               *tls.Config     `sconf:"-" json:"-"` // TLS config that handles ACME verification, for serving on port 443.
+	HostPrivateRSA2048Keys   []crypto.Signer `sconf:"-" json:"-"` // Private keys for new TLS certificates for listener host name, for new certificates with ACME, and for DANE records.
+	HostPrivateECDSAP256Keys []crypto.Signer `sconf:"-" json:"-"`
 }
 
 type WebHandler struct {

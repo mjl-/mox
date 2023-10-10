@@ -11,7 +11,7 @@ import (
 // i.e. if it has no null mx record, regular mx records or resolve to an address.
 func checkMXRecords(ctx context.Context, resolver dns.Resolver, d dns.Domain) (bool, error) {
 	// Note: LookupMX can return an error and still return records.
-	mx, err := resolver.LookupMX(ctx, d.ASCII+".")
+	mx, _, err := resolver.LookupMX(ctx, d.ASCII+".")
 	if err == nil && len(mx) == 1 && mx[0].Host == "." {
 		// Null MX record, explicit signal that remote does not accept email.
 		return false, nil
@@ -25,7 +25,7 @@ func checkMXRecords(ctx context.Context, resolver dns.Resolver, d dns.Domain) (b
 	}
 	var lastErr error
 	for _, x := range mx {
-		ips, err := resolver.LookupIPAddr(ctx, x.Host)
+		ips, _, err := resolver.LookupIPAddr(ctx, x.Host)
 		if len(ips) > 0 {
 			return true, nil
 		}

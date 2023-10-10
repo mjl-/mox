@@ -96,7 +96,7 @@ func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rver
 	nctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	name := "_updates." + domain.ASCII + "."
-	txts, err := dns.WithPackage(resolver, "updates").LookupTXT(nctx, name)
+	txts, _, err := dns.WithPackage(resolver, "updates").LookupTXT(nctx, name)
 	if dns.IsNotFound(err) {
 		return Version{}, nil, ErrNoRecord
 	} else if err != nil {

@@ -30,6 +30,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
 )
 
@@ -59,24 +60,6 @@ var (
 		},
 	)
 )
-
-type contextDialer interface {
-	DialContext(ctx context.Context, network, addr string) (c net.Conn, err error)
-}
-
-// Used to dial remote SMTP servers.
-// Overridden for tests.
-var dial = func(ctx context.Context, dialer contextDialer, timeout time.Duration, addr string, laddr net.Addr) (net.Conn, error) {
-	// If this is a net.Dialer, use its settings and add the timeout and localaddr.
-	// This is the typical case, but SOCKS5 support can use a different dialer.
-	if d, ok := dialer.(*net.Dialer); ok {
-		nd := *d
-		nd.Timeout = timeout
-		nd.LocalAddr = laddr
-		return nd.DialContext(ctx, "tcp", addr)
-	}
-	return dialer.DialContext(ctx, "tcp", addr)
-}
 
 var jitter = mox.NewRand()
 
@@ -547,7 +530,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 		qlog.Debug("delivering with transport", mlog.Field("transport", transportName))
 	}
 
-	var dialer contextDialer = &net.Dialer{}
+	var dialer smtpclient.Dialer = &net.Dialer{}
 	if transport.Submissions != nil {
 		deliverSubmit(cid, qlog, resolver, dialer, m, backoff, transportName, transport.Submissions, true, 465)
 	} else if transport.Submission != nil {
@@ -561,7 +544,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 			if err != nil {
 				fail(qlog, m, backoff, false, dsn.NameIP{}, "", fmt.Sprintf("socks dialer: %v", err))
 				return
-			} else if d, ok := socksdialer.(contextDialer); !ok {
+			} else if d, ok := socksdialer.(smtpclient.Dialer); !ok {
 				fail(qlog, m, backoff, false, dsn.NameIP{}, "", "socks dialer is not a contextdialer")
 				return
 			} else {
@@ -610,99 +593,4 @@ func routeMatchDomain(l []string, d dns.Domain) bool {
 		}
 	}
 	return false
-}
-
-// dialHost dials host for delivering Msg, taking previous attempts into accounts.
-// If the previous attempt used IPv4, this attempt will use IPv6 (in case one of the IPs is in a DNSBL).
-// The second attempt for an address family we prefer the same IP as earlier, to increase our chances if remote is doing greylisting.
-// dialHost updates m with the dialed IP and m should be saved in case of failure.
-// If we have fully specified local smtp listen IPs, we set those for the outgoing
-// connection. The admin probably configured these same IPs in SPF, but others
-// possibly not.
-func dialHost(ctx context.Context, log *mlog.Log, resolver dns.Resolver, dialer contextDialer, host dns.IPDomain, port int, m *Msg) (conn net.Conn, ip net.IP, dualstack bool, rerr error) {
-	var ips []net.IP
-	if len(host.IP) > 0 {
-		ips = []net.IP{host.IP}
-	} else {
-		// todo: The Go resolver automatically follows CNAMEs, which is not allowed for
-		// host names in MX records. ../rfc/5321:3861 ../rfc/2181:661
-		name := host.Domain.ASCII + "."
-		ipaddrs, err := resolver.LookupIPAddr(ctx, name)
-		if err != nil || len(ipaddrs) == 0 {
-			return nil, nil, false, fmt.Errorf("looking up %q: %v", name, err)
-		}
-		var have4, have6 bool
-		for _, ipaddr := range ipaddrs {
-			ips = append(ips, ipaddr.IP)
-			if ipaddr.IP.To4() == nil {
-				have6 = true
-			} else {
-				have4 = true
-			}
-		}
-		dualstack = have4 && have6
-		prevIPs := m.DialedIPs[host.String()]
-		if len(prevIPs) > 0 {
-			prevIP := prevIPs[len(prevIPs)-1]
-			prevIs4 := prevIP.To4() != nil
-			sameFamily := 0
-			for _, ip := range prevIPs {
-				is4 := ip.To4() != nil
-				if prevIs4 == is4 {
-					sameFamily++
-				}
-			}
-			preferPrev := sameFamily == 1
-			// We use stable sort so any preferred/randomized listing from DNS is kept intact.
-			sort.SliceStable(ips, func(i, j int) bool {
-				aIs4 := ips[i].To4() != nil
-				bIs4 := ips[j].To4() != nil
-				if aIs4 != bIs4 {
-					// Prefer "i" if it is not same address family.
-					return aIs4 != prevIs4
-				}
-				// Prefer "i" if it is the same as last and we should be preferring it.
-				return preferPrev && ips[i].Equal(prevIP)
-			})
-			log.Debug("ordered ips for dialing", mlog.Field("ips", ips))
-		}
-	}
-
-	var timeout time.Duration
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		timeout = 30 * time.Second
-	} else {
-		timeout = time.Until(deadline) / time.Duration(len(ips))
-	}
-
-	var lastErr error
-	var lastIP net.IP
-	for _, ip := range ips {
-		addr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
-		log.Debug("dialing remote host for delivery", mlog.Field("addr", addr))
-		var laddr net.Addr
-		for _, lip := range mox.Conf.Static.SpecifiedSMTPListenIPs {
-			ipIs4 := ip.To4() != nil
-			lipIs4 := lip.To4() != nil
-			if ipIs4 == lipIs4 {
-				laddr = &net.TCPAddr{IP: lip}
-				break
-			}
-		}
-		conn, err := dial(ctx, dialer, timeout, addr, laddr)
-		if err == nil {
-			log.Debug("connected for smtp delivery", mlog.Field("host", host), mlog.Field("addr", addr), mlog.Field("laddr", laddr))
-			if m.DialedIPs == nil {
-				m.DialedIPs = map[string][]net.IP{}
-			}
-			name := host.String()
-			m.DialedIPs[name] = append(m.DialedIPs[name], ip)
-			return conn, ip, dualstack, nil
-		}
-		log.Debugx("connection attempt for smtp delivery", err, mlog.Field("host", host), mlog.Field("addr", addr), mlog.Field("laddr", laddr))
-		lastErr = err
-		lastIP = ip
-	}
-	return nil, lastIP, dualstack, lastErr
 }

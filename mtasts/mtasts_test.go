@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mjl-/adns"
+
 	"github.com/mjl-/mox/dns"
 )
 
@@ -223,7 +225,7 @@ func TestFetch(t *testing.T) {
 		HTTPClient.Transport = &http.Transport{
 			Dial: func(network, addr string) (net.Conn, error) {
 				if strings.HasPrefix(addr, "mta-sts.doesnotexist.example") {
-					return nil, &net.DNSError{IsNotFound: true}
+					return nil, &adns.DNSError{IsNotFound: true}
 				}
 				return l.Dial()
 			},

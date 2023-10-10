@@ -19,16 +19,15 @@ See Quickstart below to get started.
 - Internationalized email, with unicode in email address usernames
   ("localparts"), and in domain names (IDNA).
 - Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
-- TLSRPT, parsing reports about TLS usage and issues.
-- MTA-STS, for ensuring TLS is used whenever it is required. Both serving of
-  policies, and tracking and applying policies of remote servers.
+- DANE and MTA-STS for inbound and outbound delivery over SMTP with STARTTLS,
+  with incoming TLSRPT reporting.
 - Web admin interface that helps you set up your domains and accounts
   (instructions to create DNS records, configure
   SPF/DKIM/DMARC/TLSRPT/MTA-STS), for status information, managing
   accounts/domains, and modifying the configuration file.
-- Autodiscovery (with SRV records, Microsoft-style, Thunderbird-style, and Apple
-  device management profiles) for easy account setup (though client support is
-  limited).
+- Account autodiscovery (with SRV records, Microsoft-style, Thunderbird-style,
+  and Apple device management profiles) for easy account setup (though client
+  support is limited).
 - Webserver with serving static files and forwarding requests (reverse
   proxy), so port 443 can also be used to serve websites.
 - Prometheus metrics and structured logging for operational insight.
@@ -111,7 +110,6 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- DANE and DNSSEC
 - Authentication other than HTTP-basic for webmail/webadmin/webaccount
 - Per-domain webmail and IMAP/SMTP host name (and TLS cert) and client settings
 - Require TLS SMTP extension (RFC 8689)

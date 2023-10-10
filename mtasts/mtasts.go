@@ -179,14 +179,14 @@ func LookupRecord(ctx context.Context, resolver dns.Resolver, domain dns.Domain)
 	var txts []string
 	for {
 		var err error
-		txts, err = dns.WithPackage(resolver, "mtasts").LookupTXT(ctx, name)
+		txts, _, err = dns.WithPackage(resolver, "mtasts").LookupTXT(ctx, name)
 		if dns.IsNotFound(err) {
 			// DNS has no specified limit on how many CNAMEs to follow. Chains of 10 CNAMEs
 			// have been seen on the internet.
 			if len(cnames) > 16 {
 				return nil, "", cnames, fmt.Errorf("too many cnames")
 			}
-			cname, err := dns.WithPackage(resolver, "mtasts").LookupCNAME(ctx, name)
+			cname, _, err := dns.WithPackage(resolver, "mtasts").LookupCNAME(ctx, name)
 			if dns.IsNotFound(err) {
 				return nil, "", cnames, ErrNoRecord
 			}
@@ -266,7 +266,7 @@ func FetchPolicy(ctx context.Context, domain dns.Domain) (policy *Policy, policy
 	defer cancel()
 
 	// TLS requirements are what the Go standard library checks: trusted, non-expired,
-	// hostname validated against DNS-ID supporting wildcard. ../rfc/8461:524
+	// hostname verified against DNS-ID supporting wildcard. ../rfc/8461:524
 	url := "https://mta-sts." + domain.Name() + "/.well-known/mta-sts.txt"
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

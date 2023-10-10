@@ -2,12 +2,14 @@ package autotls
 
 import (
 	"context"
+	"crypto"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
 
-	"golang.org/x/crypto/acme/autocert"
+	"github.com/mjl-/autocert"
 
 	"github.com/mjl-/mox/dns"
 )
@@ -17,7 +19,11 @@ func TestAutotls(t *testing.T) {
 	os.MkdirAll("../testdata/autotls", 0770)
 
 	shutdown := make(chan struct{})
-	m, err := Load("test", "../testdata/autotls", "mox@localhost", "https://localhost/", shutdown)
+
+	getPrivateKey := func(host string, keyType autocert.KeyType) (crypto.Signer, error) {
+		return nil, fmt.Errorf("not used")
+	}
+	m, err := Load("test", "../testdata/autotls", "mox@localhost", "https://localhost/", getPrivateKey, shutdown)
 	if err != nil {
 		t.Fatalf("load manager: %v", err)
 	}
@@ -74,7 +80,7 @@ func TestAutotls(t *testing.T) {
 
 	key0 := m.Manager.Client.Key
 
-	m, err = Load("test", "../testdata/autotls", "mox@localhost", "https://localhost/", shutdown)
+	m, err = Load("test", "../testdata/autotls", "mox@localhost", "https://localhost/", getPrivateKey, shutdown)
 	if err != nil {
 		t.Fatalf("load manager again: %v", err)
 	}
@@ -87,7 +93,7 @@ func TestAutotls(t *testing.T) {
 		t.Fatalf("hostpolicy, got err %v, expected no error", err)
 	}
 
-	m2, err := Load("test2", "../testdata/autotls", "mox@localhost", "https://localhost/", shutdown)
+	m2, err := Load("test2", "../testdata/autotls", "mox@localhost", "https://localhost/", nil, shutdown)
 	if err != nil {
 		t.Fatalf("load another manager: %v", err)
 	}

@@ -82,14 +82,14 @@ func Lookup(ctx context.Context, resolver dns.Resolver, zone dns.Domain, ip net.
 	addr := b.String()
 
 	// ../rfc/5782:175
-	_, err := dns.WithPackage(resolver, "dnsbl").LookupIP(ctx, "ip4", addr)
+	_, _, err := dns.WithPackage(resolver, "dnsbl").LookupIP(ctx, "ip4", addr)
 	if dns.IsNotFound(err) {
 		return StatusPass, "", nil
 	} else if err != nil {
 		return StatusTemperr, "", fmt.Errorf("%w: %s", ErrDNS, err)
 	}
 
-	txts, err := dns.WithPackage(resolver, "dnsbl").LookupTXT(ctx, addr)
+	txts, _, err := dns.WithPackage(resolver, "dnsbl").LookupTXT(ctx, addr)
 	if dns.IsNotFound(err) {
 		return StatusFail, "", nil
 	} else if err != nil {

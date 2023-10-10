@@ -789,7 +789,7 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 			// Verify a remote domain name has an A or AAAA record, CNAME not allowed. ../rfc/5321:722
 			cidctx := context.WithValue(mox.Context, mlog.CidKey, c.cid)
 			ctx, cancel := context.WithTimeout(cidctx, time.Minute)
-			_, err := c.resolver.LookupIPAddr(ctx, remote.Domain.ASCII+".")
+			_, _, err := c.resolver.LookupIPAddr(ctx, remote.Domain.ASCII+".")
 			cancel()
 			if dns.IsNotFound(err) {
 				xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeProto5Other0, "your ehlo domain does not resolve to an IP address")
@@ -1413,7 +1413,7 @@ func (c *conn) cmdRcpt(p *parser) {
 			cidctx := context.WithValue(mox.Context, mlog.CidKey, c.cid)
 			spfctx, spfcancel := context.WithTimeout(cidctx, time.Minute)
 			defer spfcancel()
-			receivedSPF, _, _, err := spf.Verify(spfctx, c.resolver, spfArgs)
+			receivedSPF, _, _, _, err := spf.Verify(spfctx, c.resolver, spfArgs)
 			spfcancel()
 			if err != nil {
 				c.log.Errorx("spf verify for multiple recipients", err)
@@ -1573,6 +1573,7 @@ func (c *conn) cmdData(p *parser) {
 	// ../rfc/5321:3311 ../rfc/6531:578
 	var recvFrom string
 	var iprevStatus iprev.Status // Only for delivery, not submission.
+	var iprevAuthentic bool
 	if c.submission {
 		// Hide internal hosts.
 		// todo future: make this a config option, where admins specify ip ranges that they don't want exposed. also see ../rfc/5321:4321
@@ -1588,7 +1589,7 @@ func (c *conn) cmdData(p *parser) {
 		iprevctx, iprevcancel := context.WithTimeout(cmdctx, time.Minute)
 		var revName string
 		var revNames []string
-		iprevStatus, revName, revNames, err = iprev.Lookup(iprevctx, c.resolver, c.remoteIP)
+		iprevStatus, revName, revNames, iprevAuthentic, err = iprev.Lookup(iprevctx, c.resolver, c.remoteIP)
 		iprevcancel()
 		if err != nil {
 			c.log.Infox("reverse-forward lookup", err, mlog.Field("remoteip", c.remoteIP))
@@ -1655,7 +1656,7 @@ func (c *conn) cmdData(p *parser) {
 	if c.submission {
 		c.submit(cmdctx, recvHdrFor, msgWriter, &dataFile)
 	} else {
-		c.deliver(cmdctx, recvHdrFor, msgWriter, iprevStatus, &dataFile)
+		c.deliver(cmdctx, recvHdrFor, msgWriter, iprevStatus, iprevAuthentic, &dataFile)
 	}
 }
 
@@ -1859,7 +1860,7 @@ func (c *conn) xlocalserveError(lp smtp.Localpart) {
 
 // deliver is called for incoming messages from external, typically untrusted
 // sources. i.e. not submitted by authenticated users.
-func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, iprevStatus iprev.Status, pdataFile **os.File) {
+func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, iprevStatus iprev.Status, iprevAuthentic bool, pdataFile **os.File) {
 	dataFile := *pdataFile
 
 	// todo: in decision making process, if we run into (some) temporary errors, attempt to continue. if we decide to accept, all good. if we decide to reject, we'll make it a temporary reject.
@@ -1879,12 +1880,20 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		Hostname: mox.Conf.Static.HostnameDomain.XName(c.smtputf8),
 	}
 
+	commentAuthentic := func(v bool) string {
+		if v {
+			return "with dnssec"
+		}
+		return "without dnssec"
+	}
+
 	// Reverse IP lookup results.
 	// todo future: how useful is this?
 	// ../rfc/5321:2481
 	authResults.Methods = append(authResults.Methods, message.AuthMethod{
-		Method: "iprev",
-		Result: string(iprevStatus),
+		Method:  "iprev",
+		Result:  string(iprevStatus),
+		Comment: commentAuthentic(iprevAuthentic),
 		Props: []message.AuthProp{
 			message.MakeAuthProp("policy", "iprev", c.remoteIP.String(), false, ""),
 		},
@@ -1923,6 +1932,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	var receivedSPF spf.Received
 	var spfDomain dns.Domain
 	var spfExpl string
+	var spfAuthentic bool
 	var spfErr error
 	spfArgs := spf.Args{
 		RemoteIP:          c.remoteIP,
@@ -1945,7 +1955,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		defer wg.Done()
 		spfctx, spfcancel := context.WithTimeout(ctx, time.Minute)
 		defer spfcancel()
-		receivedSPF, spfDomain, spfExpl, spfErr = spf.Verify(spfctx, c.resolver, spfArgs)
+		receivedSPF, spfDomain, spfExpl, spfAuthentic, spfErr = spf.Verify(spfctx, c.resolver, spfArgs)
 		spfcancel()
 		if spfErr != nil {
 			c.log.Infox("spf verify", spfErr)
@@ -2003,7 +2013,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			// todo future: also specify whether dns record was dnssec-signed.
 			if r.Record != nil && r.Record.PublicKey != nil {
 				if pubkey, ok := r.Record.PublicKey.(*rsa.PublicKey); ok {
-					comment = fmt.Sprintf("%d bit rsa", pubkey.N.BitLen())
+					comment = fmt.Sprintf("%d bit rsa, ", pubkey.N.BitLen())
 				}
 			}
 
@@ -2020,6 +2030,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			if r.Sig.Identity != nil {
 				props = append(props, message.MakeAuthProp("header", "i", r.Sig.Identity.String(), true, ""))
 				identity = r.Sig.Identity
+			}
+			if r.RecordAuthentic {
+				comment += "with dnssec"
+			} else {
+				comment += "without dnssec"
 			}
 		}
 		var errmsg string
@@ -2048,10 +2063,17 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	if spfIdentity != nil {
 		props = []message.AuthProp{message.MakeAuthProp("smtp", string(receivedSPF.Identity), spfIdentity.XName(c.smtputf8), true, spfIdentity.ASCIIExtra(c.smtputf8))}
 	}
+	var spfComment string
+	if spfAuthentic {
+		spfComment = "with dnssec"
+	} else {
+		spfComment = "without dnssec"
+	}
 	authResults.Methods = append(authResults.Methods, message.AuthMethod{
-		Method: "spf",
-		Result: string(receivedSPF.Result),
-		Props:  props,
+		Method:  "spf",
+		Result:  string(receivedSPF.Result),
+		Comment: spfComment,
+		Props:   props,
 	})
 	switch receivedSPF.Result {
 	case spf.StatusPass:
@@ -2105,9 +2127,16 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		defer dmarccancel()
 		dmarcUse, dmarcResult = dmarc.Verify(dmarcctx, c.resolver, msgFrom.Domain, dkimResults, receivedSPF.Result, spfIdentity, applyRandomPercentage)
 		dmarccancel()
+		var comment string
+		if dmarcResult.RecordAuthentic {
+			comment = "with dnssec"
+		} else {
+			comment = "without dnssec"
+		}
 		dmarcMethod = message.AuthMethod{
-			Method: "dmarc",
-			Result: string(dmarcResult.Status),
+			Method:  "dmarc",
+			Result:  string(dmarcResult.Status),
+			Comment: comment,
 			Props: []message.AuthProp{
 				// ../rfc/7489:1489
 				message.MakeAuthProp("header", "from", msgFrom.Domain.ASCII, true, msgFrom.Domain.ASCIIExtra(c.smtputf8)),

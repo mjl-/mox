@@ -31,7 +31,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/crypto/acme"
-	"golang.org/x/crypto/acme/autocert"
+
+	"github.com/mjl-/autocert"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
@@ -64,10 +65,16 @@ type Manager struct {
 
 // Load returns an initialized autotls manager for "name" (used for the ACME key
 // file and requested certs and their keys). All files are stored within acmeDir.
+//
 // contactEmail must be a valid email address to which notifications about ACME can
-// be sent. directoryURL is the ACME starting point. When shutdown is closed, no
-// new TLS connections can be created.
-func Load(name, acmeDir, contactEmail, directoryURL string, shutdown <-chan struct{}) (*Manager, error) {
+// be sent. directoryURL is the ACME starting point.
+//
+// getPrivateKey is called to get the private key for the host and key type. It
+// can be used to deliver a specific (e.g. always the same) private key for a
+// host, or a newly generated key.
+//
+// When shutdown is closed, no new TLS connections can be created.
+func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(host string, keyType autocert.KeyType) (crypto.Signer, error), shutdown <-chan struct{}) (*Manager, error) {
 	if directoryURL == "" {
 		return nil, fmt.Errorf("empty ACME directory URL")
 	}
@@ -136,6 +143,7 @@ func Load(name, acmeDir, contactEmail, directoryURL string, shutdown <-chan stru
 			Key:          key,
 			UserAgent:    "mox/" + moxvar.Version,
 		},
+		GetPrivateKey: getPrivateKey,
 		// HostPolicy set below.
 	}
 
@@ -146,7 +154,7 @@ func Load(name, acmeDir, contactEmail, directoryURL string, shutdown <-chan stru
 		// At startup, during config initialization, we already adjust the tls config to
 		// inject the listener hostname if there isn't one in the TLS client hello. This is
 		// common for SMTP STARTTLS connections, which often do not care about the
-		// validation of the certificate.
+		// verification of the certificate.
 		if hello.ServerName == "" {
 			log.Debug("tls request without sni servername, rejecting", mlog.Field("localaddr", hello.Conn.LocalAddr()), mlog.Field("supportedprotos", hello.SupportedProtos))
 			return nil, fmt.Errorf("sni server name required")
@@ -225,7 +233,7 @@ func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.D
 
 			xlog.Debug("checking ips of hosts configured for acme tls cert validation")
 			for _, h := range added {
-				ips, err := resolver.LookupIP(ctx, "ip", h.ASCII+".")
+				ips, _, err := resolver.LookupIP(ctx, "ip", h.ASCII+".")
 				if err != nil {
 					xlog.Errorx("warning: acme tls cert validation for host may fail due to dns lookup error", err, mlog.Field("host", h))
 					continue

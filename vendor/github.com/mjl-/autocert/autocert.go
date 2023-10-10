@@ -92,6 +92,15 @@ func defaultHostPolicy(context.Context, string) error {
 	return nil
 }
 
+// KeyType represents a private key type that can be used to request a certificate
+// with Manager.GetPrivateKey. More may be added in the future.
+type KeyType uint8
+
+const (
+	KeyRSA2048   KeyType = 0
+	KeyECDSAP256 KeyType = 1
+)
+
 // Manager is a stateful certificate manager built on top of acme.Client.
 // It obtains and refreshes certificates automatically using "tls-alpn-01"
 // or "http-01" challenge types, as well as providing them to a TLS server
@@ -147,6 +156,11 @@ type Manager struct {
 	//
 	// Mutating the field after the first call of GetCertificate method will have no effect.
 	Client *acme.Client
+
+	// GetPrivateKey is called to get a private key for a host (A-labels only, no
+	// trailing dot) when there is no valid certificate in the cache. If GetPrivateKey
+	// is nil, a new key is automatically generated.
+	GetPrivateKey func(host string, keyType KeyType) (crypto.Signer, error)
 
 	// Email optionally specifies a contact email address.
 	// This is used by CAs, such as Let's Encrypt, to notify about problems
@@ -632,7 +646,23 @@ func (m *Manager) certState(ck certKey) (*certState, error) {
 		err error
 		key crypto.Signer
 	)
-	if ck.isRSA {
+	if m.GetPrivateKey != nil {
+		if ck.isRSA {
+			key, err = m.GetPrivateKey(ck.domain, KeyRSA2048)
+			if err == nil {
+				if _, ok := key.(*rsa.PrivateKey); !ok {
+					err = fmt.Errorf("got %T, expected *rsa.PrivateKey", key)
+				}
+			}
+		} else {
+			key, err = m.GetPrivateKey(ck.domain, KeyECDSAP256)
+			if err == nil {
+				if _, ok := key.(*ecdsa.PrivateKey); !ok {
+					err = fmt.Errorf("got %T, expected *ecdsa.PrivateKey", key)
+				}
+			}
+		}
+	} else if ck.isRSA {
 		key, err = rsa.GenerateKey(rand.Reader, 2048)
 	} else {
 		key, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

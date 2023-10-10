@@ -3,15 +3,23 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	cryptorand "crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"net/url"
@@ -24,11 +32,15 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/mjl-/adns"
+
+	"github.com/mjl-/autocert"
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sconf"
 	"github.com/mjl-/sherpa"
 
 	"github.com/mjl-/mox/config"
+	"github.com/mjl-/mox/dane"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"
 	"github.com/mjl-/mox/dmarcdb"
@@ -43,6 +55,7 @@ import (
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/spf"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/tlsrpt"
@@ -109,12 +122,17 @@ var commands = []struct {
 	{"config domain rm", cmdConfigDomainRemove},
 	{"config describe-sendmail", cmdConfigDescribeSendmail},
 	{"config printservice", cmdConfigPrintservice},
+	{"config ensureacmehostprivatekeys", cmdConfigEnsureACMEHostprivatekeys},
 	{"example", cmdExample},
 
 	{"checkupdate", cmdCheckupdate},
 	{"cid", cmdCid},
 	{"clientconfig", cmdClientConfig},
 	{"deliver", cmdDeliver},
+	{"dane dial", cmdDANEDial},
+	{"dane dialmx", cmdDANEDialmx},
+	{"dane makerecord", cmdDANEMakeRecord},
+	{"dns lookup", cmdDNSLookup},
 	{"dkim gened25519", cmdDKIMGened25519},
 	{"dkim genrsa", cmdDKIMGenrsa},
 	{"dkim lookup", cmdDKIMLookup},
@@ -772,7 +790,14 @@ configured.
 	if !ok {
 		log.Fatalf("unknown domain")
 	}
-	records, err := mox.DomainRecords(domConf, d)
+
+	resolver := dns.StrictResolver{Pkg: "main"}
+	_, result, err := resolver.LookupTXT(context.Background(), d.ASCII+".")
+	if !dns.IsNotFound(err) {
+		xcheckf(err, "looking up record for dnssec-status")
+	}
+
+	records, err := mox.DomainRecords(domConf, d, result.Authentic)
 	xcheckf(err, "records")
 	fmt.Print(strings.Join(records, "\n") + "\n")
 }
@@ -819,17 +844,236 @@ func cmdConfigDNSCheck(c *cmd) {
 	}
 
 	result := webadmin.Admin{}.CheckDomain(context.Background(), args[0])
+	printResult("DNSSEC", result.DNSSEC.Result)
 	printResult("IPRev", result.IPRev.Result)
 	printResult("MX", result.MX.Result)
 	printResult("TLS", result.TLS.Result)
+	printResult("DANE", result.DANE.Result)
 	printResult("SPF", result.SPF.Result)
 	printResult("DKIM", result.DKIM.Result)
 	printResult("DMARC", result.DMARC.Result)
 	printResult("TLSRPT", result.TLSRPT.Result)
 	printResult("MTASTS", result.MTASTS.Result)
-	printResult("SRVConf", result.SRVConf.Result)
+	printResult("SRV", result.SRVConf.Result)
 	printResult("Autoconf", result.Autoconf.Result)
 	printResult("Autodiscover", result.Autodiscover.Result)
+}
+
+func cmdConfigEnsureACMEHostprivatekeys(c *cmd) {
+	c.params = ""
+	c.help = `Ensure host private keys exist for TLS listeners with ACME.
+
+In mox.conf, each listener can have TLS configured. Long-lived private key files
+can be specified, which will be used when requesting ACME certificates.
+Configuring these private keys makes it feasible to publish DANE TLSA records
+for the corresponding public keys in DNS, protected with DNSSEC, allowing TLS
+certificate verification without depending on a list of Certificate Authorities
+(CAs). Previous versions of mox did not pre-generate private keys for use with
+ACME certificates, but would generate private keys on-demand. By explicitly
+configuring private keys, they will not change automatedly with new
+certificates, and the DNS TLSA records stay valid.
+
+This command looks for listeners in mox.conf with TLS with ACME configured. For
+each missing host private key (of type rsa-2048 and ecdsa-p256) a key is written
+to config/hostkeys/. If a certificate exists in the ACME "cache", its private
+key is copied. Otherwise a new private key is generated. Snippets for manually
+updating/editing mox.conf are printed.
+
+After running this command, and updating mox.conf, run "mox config dnsrecords"
+for a domain and create the TLSA DNS records it suggests to enable DANE.
+`
+	args := c.Parse()
+	if len(args) != 0 {
+		c.Usage()
+	}
+
+	// Load a private key from p, in various forms. We only look at the first PEM
+	// block. Files with only a private key, or with multiple blocks but private key
+	// first like autocert does, can be loaded.
+	loadPrivateKey := func(f *os.File) (any, error) {
+		buf, err := io.ReadAll(f)
+		if err != nil {
+			return nil, fmt.Errorf("reading private key file: %v", err)
+		}
+		block, _ := pem.Decode(buf)
+		if block == nil {
+			return nil, fmt.Errorf("no pem block found in pem file")
+		}
+		var privKey any
+		switch block.Type {
+		case "EC PRIVATE KEY":
+			privKey, err = x509.ParseECPrivateKey(block.Bytes)
+		case "RSA PRIVATE KEY":
+			privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+		case "PRIVATE KEY":
+			privKey, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+		default:
+			return nil, fmt.Errorf("unrecognized pem block type %q", block.Type)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("parsing private key of type %q: %v", block.Type, err)
+		}
+		return privKey, nil
+	}
+
+	// Either load a private key from file, or if it doesn't exist generate a new
+	// private key.
+	xtryLoadPrivateKey := func(kt autocert.KeyType, p string) any {
+		f, err := os.Open(p)
+		if err != nil && errors.Is(err, fs.ErrNotExist) {
+			switch kt {
+			case autocert.KeyRSA2048:
+				privKey, err := rsa.GenerateKey(cryptorand.Reader, 2048)
+				xcheckf(err, "generating new 2048-bit rsa private key")
+				return privKey
+			case autocert.KeyECDSAP256:
+				privKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+				xcheckf(err, "generating new ecdsa p-256 private key")
+				return privKey
+			}
+			log.Fatalf("unexpected keytype %v", kt)
+			return nil
+		}
+		xcheckf(err, "%s: open acme key and certificate file", p)
+
+		// Load private key from file. autocert stores a PEM file that starts with a
+		// private key, followed by certificate(s). So we can just read it and should find
+		// the private key we are looking for.
+		privKey, err := loadPrivateKey(f)
+		if xerr := f.Close(); xerr != nil {
+			log.Printf("closing private key file: %v", xerr)
+		}
+		xcheckf(err, "parsing private key from acme key and certificate file")
+
+		switch k := privKey.(type) {
+		case *rsa.PrivateKey:
+			if k.N.BitLen() == 2048 {
+				return privKey
+			}
+			log.Printf("warning: rsa private key in %s has %d bits, skipping and generating new 2048-bit rsa private key", p, k.N.BitLen())
+			privKey, err := rsa.GenerateKey(cryptorand.Reader, 2048)
+			xcheckf(err, "generating new 2048-bit rsa private key")
+			return privKey
+		case *ecdsa.PrivateKey:
+			if k.Curve == elliptic.P256() {
+				return privKey
+			}
+			log.Printf("warning: ecdsa private key in %s has curve %v, skipping and generating new p-256 ecdsa key", p, k.Curve.Params().Name)
+			privKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+			xcheckf(err, "generating new ecdsa p-256 private key")
+			return privKey
+		default:
+			log.Fatalf("%s: unexpected private key file of type %T", p, privKey)
+			return nil
+		}
+	}
+
+	// Write privKey as PKCS#8 private key to p. Only if file does not yet exist.
+	writeHostPrivateKey := func(privKey any, p string) error {
+		os.MkdirAll(filepath.Dir(p), 0700)
+		f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if err != nil {
+			return fmt.Errorf("create: %v", err)
+		}
+		defer func() {
+			if f != nil {
+				if err := f.Close(); err != nil {
+					log.Printf("closing new hostkey file %s after error: %v", p, err)
+				}
+				if err := os.Remove(p); err != nil {
+					log.Printf("removing new hostkey file %s after error: %v", p, err)
+				}
+			}
+		}()
+		buf, err := x509.MarshalPKCS8PrivateKey(privKey)
+		if err != nil {
+			return fmt.Errorf("marshal private host key: %v", err)
+		}
+		block := pem.Block{
+			Type:  "PRIVATE KEY",
+			Bytes: buf,
+		}
+		if err := pem.Encode(f, &block); err != nil {
+			return fmt.Errorf("write as pem: %v", err)
+		}
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("close: %v", err)
+		}
+		f = nil
+		return nil
+	}
+
+	mustLoadConfig()
+	timestamp := time.Now().Format("20060102T150405")
+	didCreate := false
+	for listenerName, l := range mox.Conf.Static.Listeners {
+		if l.TLS == nil || l.TLS.ACME == "" {
+			continue
+		}
+		haveKeyTypes := map[autocert.KeyType]bool{}
+		for _, privKeyFile := range l.TLS.HostPrivateKeyFiles {
+			p := mox.ConfigDirPath(privKeyFile)
+			f, err := os.Open(p)
+			xcheckf(err, "open host private key")
+			privKey, err := loadPrivateKey(f)
+			if err := f.Close(); err != nil {
+				log.Printf("closing host private key file: %v", err)
+			}
+			xcheckf(err, "loading host private key")
+			switch k := privKey.(type) {
+			case *rsa.PrivateKey:
+				if k.N.BitLen() == 2048 {
+					haveKeyTypes[autocert.KeyRSA2048] = true
+				}
+			case *ecdsa.PrivateKey:
+				if k.Curve == elliptic.P256() {
+					haveKeyTypes[autocert.KeyECDSAP256] = true
+				}
+			}
+		}
+		created := []string{}
+		for _, kt := range []autocert.KeyType{autocert.KeyRSA2048, autocert.KeyECDSAP256} {
+			if haveKeyTypes[kt] {
+				continue
+			}
+			// Lookup key in ACME cache.
+			host := l.HostnameDomain
+			if host.ASCII == "" {
+				host = mox.Conf.Static.HostnameDomain
+			}
+			filename := host.ASCII
+			kind := "ecdsap256"
+			if kt == autocert.KeyRSA2048 {
+				filename += "+rsa"
+				kind = "rsa2048"
+			}
+			p := mox.DataDirPath(filepath.Join("acme", "keycerts", l.TLS.ACME, filename))
+			privKey := xtryLoadPrivateKey(kt, p)
+
+			relPath := fmt.Sprintf("hostkeys/%s.%s.%s.privatekey.pkcs8.pem", host.Name(), timestamp, kind)
+			destPath := mox.ConfigDirPath(relPath)
+			err := writeHostPrivateKey(privKey, destPath)
+			xcheckf(err, "writing host private key file to %s: %v", destPath, err)
+			created = append(created, relPath)
+			fmt.Printf("Wrote host private key: %s\n", destPath)
+		}
+		didCreate = didCreate || len(created) > 0
+		if len(created) > 0 {
+			tls := config.TLS{
+				HostPrivateKeyFiles: append(l.TLS.HostPrivateKeyFiles, created...),
+			}
+			fmt.Printf("\nEnsure Listener %q in %s has the following in its TLS section, below \"ACME: %s\" (don't forget to indent with tabs):\n\n", listenerName, mox.ConfigStaticPath, l.TLS.ACME)
+			err := sconf.Write(os.Stdout, tls)
+			xcheckf(err, "writing new TLS.HostPrivateKeyFiles section")
+			fmt.Println()
+		}
+	}
+	if didCreate {
+		fmt.Printf(`
+After updating mox.conf and restarting, run "mox config dnsrecords" for a
+domain and create the TLSA DNS records it suggests to enable DANE.
+`)
+	}
 }
 
 var examples = []struct {
@@ -1326,6 +1570,517 @@ with DKIM, by mox.
 	xcheckf(err, "writing rsa private key")
 }
 
+func cmdDANEDial(c *cmd) {
+	c.params = "host:port"
+	var usages string
+	c.flag.StringVar(&usages, "usages", "pkix-ta,pkix-ee,dane-ta,dane-ee", "allowed usages for dane, comma-separated list")
+	c.help = `Dial the address using TLS with certificate verification using DANE.
+
+Data is copied between connection and stdin/stdout until either side closes the
+connection.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	allowedUsages := []adns.TLSAUsage{}
+	if usages != "" {
+		for _, s := range strings.Split(usages, ",") {
+			var usage adns.TLSAUsage
+			switch strings.ToLower(s) {
+			case "pkix-ta", strconv.Itoa(int(adns.TLSAUsagePKIXTA)):
+				usage = adns.TLSAUsagePKIXTA
+			case "pkix-ee", strconv.Itoa(int(adns.TLSAUsagePKIXEE)):
+				usage = adns.TLSAUsagePKIXEE
+			case "dane-ta", strconv.Itoa(int(adns.TLSAUsageDANETA)):
+				usage = adns.TLSAUsageDANETA
+			case "dane-ee", strconv.Itoa(int(adns.TLSAUsageDANEEE)):
+				usage = adns.TLSAUsageDANEEE
+			default:
+				log.Fatalf("unknown dane usage %q", s)
+			}
+			allowedUsages = append(allowedUsages, usage)
+		}
+	}
+
+	resolver := dns.StrictResolver{Pkg: "danedial"}
+	conn, record, err := dane.Dial(context.Background(), resolver, "tcp", args[0], allowedUsages)
+	xcheckf(err, "dial")
+	log.Printf("(connected, verified with %s)", record)
+
+	go func() {
+		_, err := io.Copy(os.Stdout, conn)
+		xcheckf(err, "copy from connection to stdout")
+		conn.Close()
+	}()
+	_, err = io.Copy(conn, os.Stdin)
+	xcheckf(err, "copy from stdin to connection")
+}
+
+func cmdDANEDialmx(c *cmd) {
+	c.params = "domain [destination-host]"
+	var ehloHostname string
+	c.flag.StringVar(&ehloHostname, "ehlohostname", "localhost", "hostname to send in smtp ehlo command")
+	c.help = `Connect to MX server for domain using STARTTLS verified with DANE.
+
+If no destination host is specified, regular delivery logic is used to find the
+hosts to attempt delivery too. This involves following CNAMEs for the domain,
+looking up MX records, and possibly falling back to the domain name itself as
+host.
+
+If a destination host is specified, that is the only candidate host considered
+for dialing.
+
+With a list of destinations gathered, each is dialed until a successful SMTP
+session verified with DANE has been initialized, including EHLO and STARTTLS
+commands.
+
+Once connected, data is copied between connection and stdin/stdout, until
+either side closes the connection.
+
+This command follows the same logic as delivery attempts made from the queue,
+sharing most of its code.
+`
+	args := c.Parse()
+	if len(args) != 1 && len(args) != 2 {
+		c.Usage()
+	}
+
+	ehloDomain, err := dns.ParseDomain(ehloHostname)
+	xcheckf(err, "parsing ehlo hostname")
+
+	origNextHop, err := dns.ParseDomain(args[0])
+	xcheckf(err, "parse domain")
+
+	clog := mlog.New("danedialmx")
+
+	ctxbg := context.Background()
+
+	resolver := dns.StrictResolver{}
+	var haveMX bool
+	var origNextHopAuthentic, expandedNextHopAuthentic bool
+	var expandedNextHop dns.Domain
+	var hosts []dns.IPDomain
+	if len(args) == 1 {
+		var permanent bool
+		haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, permanent, err = smtpclient.GatherDestinations(ctxbg, clog, resolver, dns.IPDomain{Domain: origNextHop})
+		status := "temporary"
+		if permanent {
+			status = "permanent"
+		}
+		if err != nil {
+			log.Fatalf("gathering destinations: %v (%s)", err, status)
+		}
+		if expandedNextHop != origNextHop {
+			log.Printf("followed cnames to %s", expandedNextHop)
+		}
+		if haveMX {
+			log.Printf("found mx record, trying mx hosts")
+		} else {
+			log.Printf("no mx record found, will try to connect to domain directly")
+		}
+		if !origNextHopAuthentic {
+			log.Fatalf("error: initial domain not dnssec-secure")
+		}
+		if !expandedNextHopAuthentic {
+			log.Fatalf("error: expanded domain not dnssec-secure")
+		}
+
+		l := []string{}
+		for _, h := range hosts {
+			l = append(l, h.String())
+		}
+		log.Printf("destinations: %s", strings.Join(l, ", "))
+	} else {
+		d, err := dns.ParseDomain(args[1])
+		if err != nil {
+			log.Fatalf("parsing destination host: %v", err)
+		}
+		log.Printf("skipping domain mx/cname lookups, assuming domain is dnssec-protected")
+
+		origNextHopAuthentic = true
+		expandedNextHopAuthentic = true
+		expandedNextHop = d
+		hosts = []dns.IPDomain{{Domain: d}}
+	}
+
+	dialedIPs := map[string][]net.IP{}
+	for _, host := range hosts {
+		// It should not be possible for hosts to have IP addresses: They are not
+		// allowed by dns.ParseDomain, and MX records cannot contain them.
+		if host.IsIP() {
+			log.Fatalf("unexpected IP address for destination host")
+		}
+
+		log.Printf("attempting to connect to %s", host)
+
+		authentic, expandedAuthentic, expandedHost, ips, _, err := smtpclient.GatherIPs(ctxbg, clog, resolver, host, dialedIPs)
+		if err != nil {
+			log.Printf("resolving ips for %s: %v, skipping", host, err)
+			continue
+		}
+		if !authentic {
+			log.Printf("no dnssec for ips of %s, skipping", host)
+			continue
+		}
+		if !expandedAuthentic {
+			log.Printf("no dnssec for cname-followed ips of %s, skipping", host)
+			continue
+		}
+		if expandedHost != host.Domain {
+			log.Printf("host %s cname-expanded to %s", host, expandedHost)
+		}
+		log.Printf("host %s resolved to ips %s, looking up tlsa records", host, ips)
+
+		daneRequired, daneRecords, tlsaBaseDomain, err := smtpclient.GatherTLSA(ctxbg, clog, resolver, host.Domain, expandedAuthentic, expandedHost)
+		if err != nil {
+			log.Printf("looking up tlsa records: %s, skipping", err)
+			continue
+		}
+		tlsMode := smtpclient.TLSStrictStartTLS
+		if len(daneRecords) == 0 {
+			if !daneRequired {
+				log.Printf("host %s has no tlsa records, skipping", expandedHost)
+				continue
+			}
+			log.Printf("warning: only unusable tlsa records found, continuing with required tls without certificate verification")
+			tlsMode = smtpclient.TLSUnverifiedStartTLS
+		} else {
+			var l []string
+			for _, r := range daneRecords {
+				l = append(l, r.String())
+			}
+			log.Printf("tlsa records: %s", strings.Join(l, "; "))
+		}
+
+		tlsRemoteHostnames := smtpclient.GatherTLSANames(haveMX, expandedNextHopAuthentic, expandedAuthentic, origNextHop, expandedNextHop, host.Domain, tlsaBaseDomain)
+		var l []string
+		for _, name := range tlsRemoteHostnames {
+			l = append(l, name.String())
+		}
+		log.Printf("gathered valid tls certificate names for potential verification with dane-ta: %s", strings.Join(l, ", "))
+
+		dialer := &net.Dialer{Timeout: 5 * time.Second}
+		conn, _, err := smtpclient.Dial(ctxbg, clog, dialer, dns.IPDomain{Domain: expandedHost}, ips, 25, dialedIPs)
+		if err != nil {
+			log.Printf("dial %s: %v, skipping", expandedHost, err)
+			continue
+		}
+		log.Printf("connected to %s, %s, starting smtp session with ehlo and starttls with dane verification", expandedHost, conn.RemoteAddr())
+
+		var verifiedRecord adns.TLSA
+		sc, err := smtpclient.New(ctxbg, clog, conn, tlsMode, ehloDomain, tlsRemoteHostnames[0], nil, daneRecords, tlsRemoteHostnames[1:], &verifiedRecord)
+		if err != nil {
+			log.Printf("setting up smtp session: %v, skipping", err)
+			conn.Close()
+			continue
+		}
+
+		smtpConn, err := sc.Conn()
+		if err != nil {
+			log.Fatalf("error: taking over smtp connection: %s", err)
+		}
+		log.Printf("tls verified with tlsa record: %s", verifiedRecord)
+		log.Printf("smtp session initialized and connected to stdin/stdout")
+
+		go func() {
+			_, err := io.Copy(os.Stdout, smtpConn)
+			xcheckf(err, "copy from connection to stdout")
+			smtpConn.Close()
+		}()
+		_, err = io.Copy(smtpConn, os.Stdin)
+		xcheckf(err, "copy from stdin to connection")
+	}
+
+	log.Fatalf("no remaining destinations")
+}
+
+func cmdDANEMakeRecord(c *cmd) {
+	c.params = "usage selector matchtype [certificate.pem | publickey.pem | privatekey.pem]"
+	c.help = `Print TLSA record for given certificate/key and parameters.
+
+Valid values:
+- usage: pkix-ta (0), pkix-ee (1), dane-ta (2), dane-ee (3)
+- selector: cert (0), spki (1)
+- matchtype: full (0), sha2-256 (1), sha2-512 (2)
+
+Common DANE TLSA record parameters are: dane-ee spki sha2-256, or 3 1 1,
+followed by a sha2-256 hash of the DER-encoded "SPKI" (subject public key info)
+from the certificate. An example DNS zone file entry:
+
+	_25._tcp.example.com. IN TLSA 3 1 1 133b919c9d65d8b1488157315327334ead8d83372db57465ecabf53ee5748aee
+
+The first usable information from the pem file is used to compose the TLSA
+record. In case of selector "cert", a certificate is required. Otherwise the
+"subject public key info" (spki) of the first certificate or public or private
+key (pkcs#8, pkcs#1 or ec private key) is used.
+`
+
+	args := c.Parse()
+	if len(args) != 4 {
+		c.Usage()
+	}
+
+	var usage adns.TLSAUsage
+	switch strings.ToLower(args[0]) {
+	case "pkix-ta", strconv.Itoa(int(adns.TLSAUsagePKIXTA)):
+		usage = adns.TLSAUsagePKIXTA
+	case "pkix-ee", strconv.Itoa(int(adns.TLSAUsagePKIXEE)):
+		usage = adns.TLSAUsagePKIXEE
+	case "dane-ta", strconv.Itoa(int(adns.TLSAUsageDANETA)):
+		usage = adns.TLSAUsageDANETA
+	case "dane-ee", strconv.Itoa(int(adns.TLSAUsageDANEEE)):
+		usage = adns.TLSAUsageDANEEE
+	default:
+		if v, err := strconv.ParseUint(args[0], 10, 16); err != nil {
+			log.Fatalf("bad usage %q", args[0])
+		} else {
+			// Does not influence certificate association data, so we can accept other numbers.
+			log.Printf("warning: continuing with unrecognized tlsa usage %d", v)
+			usage = adns.TLSAUsage(v)
+		}
+	}
+
+	var selector adns.TLSASelector
+	switch strings.ToLower(args[1]) {
+	case "cert", strconv.Itoa(int(adns.TLSASelectorCert)):
+		selector = adns.TLSASelectorCert
+	case "spki", strconv.Itoa(int(adns.TLSASelectorSPKI)):
+		selector = adns.TLSASelectorSPKI
+	default:
+		log.Fatalf("bad selector %q", args[1])
+	}
+
+	var matchType adns.TLSAMatchType
+	switch strings.ToLower(args[2]) {
+	case "full", strconv.Itoa(int(adns.TLSAMatchTypeFull)):
+		matchType = adns.TLSAMatchTypeFull
+	case "sha2-256", strconv.Itoa(int(adns.TLSAMatchTypeSHA256)):
+		matchType = adns.TLSAMatchTypeSHA256
+	case "sha2-512", strconv.Itoa(int(adns.TLSAMatchTypeSHA512)):
+		matchType = adns.TLSAMatchTypeSHA512
+	default:
+		log.Fatalf("bad matchtype %q", args[2])
+	}
+
+	buf, err := os.ReadFile(args[3])
+	xcheckf(err, "reading certificate")
+	for {
+		var block *pem.Block
+		block, buf = pem.Decode(buf)
+		if block == nil {
+			extra := ""
+			if len(buf) > 0 {
+				extra = " (with leftover data from pem file)"
+			}
+			if selector == adns.TLSASelectorCert {
+				log.Fatalf("no certificate found in pem file%s", extra)
+			} else {
+				log.Fatalf("no certificate or public or private key found in pem file%s", extra)
+			}
+		}
+		var cert *x509.Certificate
+		var data []byte
+		if block.Type == "CERTIFICATE" {
+			cert, err = x509.ParseCertificate(block.Bytes)
+			xcheckf(err, "parse certificate")
+			switch selector {
+			case adns.TLSASelectorCert:
+				data = cert.Raw
+			case adns.TLSASelectorSPKI:
+				data = cert.RawSubjectPublicKeyInfo
+			}
+		} else if selector == adns.TLSASelectorCert {
+			// We need a certificate, just a public/private key won't do.
+			log.Printf("skipping pem type %q, certificate is required", block.Type)
+			continue
+		} else {
+			var privKey, pubKey any
+			var err error
+			switch block.Type {
+			case "PUBLIC KEY":
+				_, err := x509.ParsePKIXPublicKey(block.Bytes)
+				xcheckf(err, "parse pkix subject public key info (spki)")
+				data = block.Bytes
+			case "EC PRIVATE KEY":
+				privKey, err = x509.ParseECPrivateKey(block.Bytes)
+				xcheckf(err, "parse ec private key")
+			case "RSA PRIVATE KEY":
+				privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+				xcheckf(err, "parse pkcs#1 rsa private key")
+			case "RSA PUBLIC KEY":
+				pubKey, err = x509.ParsePKCS1PublicKey(block.Bytes)
+				xcheckf(err, "parse pkcs#1 rsa public key")
+			case "PRIVATE KEY":
+				// PKCS#8 private key
+				privKey, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+				xcheckf(err, "parse pkcs#8 private key")
+			default:
+				log.Printf("skipping unrecognized pem type %q", block.Type)
+				continue
+			}
+			if data == nil {
+				if pubKey == nil && privKey != nil {
+					if signer, ok := privKey.(crypto.Signer); !ok {
+						log.Fatalf("private key of type %T is not a signer, cannot get public key", privKey)
+					} else {
+						pubKey = signer.Public()
+					}
+				}
+				if pubKey == nil {
+					// Should not happen.
+					log.Fatalf("internal error: did not find private or public key")
+				}
+				data, err = x509.MarshalPKIXPublicKey(pubKey)
+				xcheckf(err, "marshal pkix subject public key info (spki)")
+			}
+		}
+
+		switch matchType {
+		case adns.TLSAMatchTypeFull:
+		case adns.TLSAMatchTypeSHA256:
+			p := sha256.Sum256(data)
+			data = p[:]
+		case adns.TLSAMatchTypeSHA512:
+			p := sha512.Sum512(data)
+			data = p[:]
+		}
+		fmt.Printf("%d %d %d %x\n", usage, selector, matchType, data)
+		break
+	}
+}
+
+func cmdDNSLookup(c *cmd) {
+	c.params = "[ptr | mx | cname | ips | a | aaaa | ns | txt | srv | tlsa] name"
+	c.help = `Lookup DNS name of given type.
+
+Lookup always prints whether the response was DNSSEC-protected.
+
+Examples:
+
+mox dns lookup ptr 1.1.1.1
+mox dns lookup mx xmox.nl
+mox dns lookup txt _dmarc.xmox.nl.
+mox dns lookup tlsa _25._tcp.xmox.nl
+`
+	args := c.Parse()
+
+	if len(args) != 2 {
+		c.Usage()
+	}
+
+	resolver := dns.StrictResolver{Pkg: "dns"}
+
+	// like xparseDomain, but treat unparseable domain as an ASCII name so names with
+	// underscores are still looked up, e,g <selector>._domainkey.<host>.
+	xdomain := func(s string) dns.Domain {
+		d, err := dns.ParseDomain(s)
+		if err != nil {
+			return dns.Domain{ASCII: strings.TrimSuffix(s, ".")}
+		}
+		return d
+	}
+
+	cmd, name := args[0], args[1]
+
+	switch cmd {
+	case "ptr":
+		ip := xparseIP(name, "ip")
+		ptrs, result, err := resolver.LookupAddr(context.Background(), ip.String())
+		if err != nil {
+			log.Fatalf("dns lookup: %v (%s)", err, dnssecStatus(result.Authentic))
+		}
+		fmt.Printf("names (%d, %s):\n", len(ptrs), dnssecStatus(result.Authentic))
+		for _, ptr := range ptrs {
+			fmt.Printf("- %s\n", ptr)
+		}
+
+	case "mx":
+		name := xdomain(name)
+		mxl, result, err := resolver.LookupMX(context.Background(), name.ASCII+".")
+		if err != nil {
+			log.Printf("dns lookup: %v (%s)", err, dnssecStatus(result.Authentic))
+			// We can still have valid records...
+		}
+		fmt.Printf("mx records (%d, %s):\n", len(mxl), dnssecStatus(result.Authentic))
+		for _, mx := range mxl {
+			fmt.Printf("- %s, preference %d\n", mx.Host, mx.Pref)
+		}
+
+	case "cname":
+		name := xdomain(name)
+		target, result, err := resolver.LookupCNAME(context.Background(), name.ASCII+".")
+		if err != nil {
+			log.Fatalf("dns lookup: %v (%s)", err, dnssecStatus(result.Authentic))
+		}
+		fmt.Printf("%s (%s)\n", target, dnssecStatus(result.Authentic))
+
+	case "ips", "a", "aaaa":
+		network := "ip"
+		if cmd == "a" {
+			network = "ip4"
+		} else if cmd == "aaaa" {
+			network = "ip6"
+		}
+		name := xdomain(name)
+		ips, result, err := resolver.LookupIP(context.Background(), network, name.ASCII+".")
+		if err != nil {
+			log.Fatalf("dns lookup: %v (%s)", err, dnssecStatus(result.Authentic))
+		}
+		fmt.Printf("records (%d, %s):\n", len(ips), dnssecStatus(result.Authentic))
+		for _, ip := range ips {
+			fmt.Printf("- %s\n", ip)
+		}
+
+	case "ns":
+		name := xdomain(name)
+		nsl, result, err := resolver.LookupNS(context.Background(), name.ASCII+".")
+		if err != nil {
+			log.Fatalf("dns lookup: %v (%s)", err, dnssecStatus(result.Authentic))
+		}
+		fmt.Printf("ns records (%d, %s):\n", len(nsl), dnssecStatus(result.Authentic))
+		for _, ns := range nsl {
+			fmt.Printf("- %s\n", ns)
+		}
+
+	case "txt":
+		host := xdomain(name)
+		l, result, err := resolver.LookupTXT(context.Background(), host.ASCII+".")
+		if err != nil {
+			log.Fatalf("dns lookup: %v (%s)", err, dnssecStatus(result.Authentic))
+		}
+		fmt.Printf("txt records (%d, %s):\n", len(l), dnssecStatus(result.Authentic))
+		for _, txt := range l {
+			fmt.Printf("- %s\n", txt)
+		}
+
+	case "srv":
+		host := xdomain(name)
+		_, l, result, err := resolver.LookupSRV(context.Background(), "", "", host.ASCII+".")
+		if err != nil {
+			log.Fatalf("dns lookup: %v (%s)", err, dnssecStatus(result.Authentic))
+		}
+		fmt.Printf("srv records (%d, %s):\n", len(l), dnssecStatus(result.Authentic))
+		for _, srv := range l {
+			fmt.Printf("- host %s, port %d, priority %d, weight %d\n", srv.Target, srv.Port, srv.Priority, srv.Weight)
+		}
+
+	case "tlsa":
+		host := xdomain(name)
+		l, result, err := resolver.LookupTLSA(context.Background(), 0, "", host.ASCII+".")
+		if err != nil {
+			log.Fatalf("dns lookup: %v (%s)", err, dnssecStatus(result.Authentic))
+		}
+		fmt.Printf("tlsa records (%d, %s):\n", len(l), dnssecStatus(result.Authentic))
+		for _, tlsa := range l {
+			fmt.Printf("- usage %q (%d), selector %q (%d), matchtype %q (%d), certificate association data %x\n", tlsa.Usage, tlsa.Usage, tlsa.Selector, tlsa.Selector, tlsa.MatchType, tlsa.MatchType, tlsa.CertAssoc)
+		}
+	default:
+		log.Fatalf("unknown record type %q", args[0])
+	}
+}
+
 func cmdDKIMGened25519(c *cmd) {
 	c.params = ">$selector._domainkey.$domain.ed25519key.pkcs8.pem"
 	c.help = `Generate a new ed25519 key for use with DKIM.
@@ -1506,7 +2261,7 @@ func cmdDKIMLookup(c *cmd) {
 	selector := xparseDomain(args[0], "selector")
 	domain := xparseDomain(args[1], "domain")
 
-	status, record, txt, err := dkim.Lookup(context.Background(), dns.StrictResolver{}, selector, domain)
+	status, record, txt, authentic, err := dkim.Lookup(context.Background(), dns.StrictResolver{}, selector, domain)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
@@ -1515,6 +2270,11 @@ func cmdDKIMLookup(c *cmd) {
 	}
 	if txt != "" {
 		fmt.Printf("TXT record: %s\n", txt)
+	}
+	if authentic {
+		fmt.Println("dnssec-signed: yes")
+	} else {
+		fmt.Println("dnssec-signed: no")
 	}
 	if record != nil {
 		fmt.Printf("Record:\n")
@@ -1541,9 +2301,17 @@ func cmdDMARCLookup(c *cmd) {
 	}
 
 	fromdomain := xparseDomain(args[0], "domain")
-	_, domain, _, txt, err := dmarc.Lookup(context.Background(), dns.StrictResolver{}, fromdomain)
+	_, domain, _, txt, authentic, err := dmarc.Lookup(context.Background(), dns.StrictResolver{}, fromdomain)
 	xcheckf(err, "dmarc lookup domain %s", fromdomain)
 	fmt.Printf("dmarc record at domain %s: %s\n", domain, txt)
+	fmt.Printf("(%s)\n", dnssecStatus(authentic))
+}
+
+func dnssecStatus(v bool) string {
+	if v {
+		return "with dnssec"
+	}
+	return "without dnssec"
 }
 
 func cmdDMARCVerify(c *cmd) {
@@ -1593,9 +2361,9 @@ can be found in message headers.
 		if heloDomain != nil {
 			spfArgs.HelloDomain = dns.IPDomain{Domain: *heloDomain}
 		}
-		rspf, spfDomain, expl, err := spf.Verify(context.Background(), dns.StrictResolver{}, spfArgs)
+		rspf, spfDomain, expl, authentic, err := spf.Verify(context.Background(), dns.StrictResolver{}, spfArgs)
 		if err != nil {
-			log.Printf("spf verify: %v (explanation: %q)", err, expl)
+			log.Printf("spf verify: %v (explanation: %q, authentic %v)", err, expl, authentic)
 		} else {
 			received = &rspf
 			spfStatus = received.Result
@@ -1605,7 +2373,7 @@ can be found in message headers.
 			} else {
 				spfIdentity = heloDomain
 			}
-			fmt.Printf("spf result: %s: %s\n", spfDomain, spfStatus)
+			fmt.Printf("spf result: %s: %s (%s)\n", spfDomain, spfStatus, dnssecStatus(authentic))
 		}
 	}
 
@@ -1642,13 +2410,16 @@ address must opt-in to receiving DMARC reports by creating a DMARC record at
 	}
 
 	dom := xparseDomain(args[0], "domain")
-	_, domain, record, txt, err := dmarc.Lookup(context.Background(), dns.StrictResolver{}, dom)
+	_, domain, record, txt, authentic, err := dmarc.Lookup(context.Background(), dns.StrictResolver{}, dom)
 	xcheckf(err, "dmarc lookup domain %s", dom)
 	fmt.Printf("dmarc record at domain %s: %q\n", domain, txt)
+	fmt.Printf("(%s)\n", dnssecStatus(authentic))
 
 	check := func(kind, addr string) {
+		var authentic bool
+
 		printResult := func(format string, args ...any) {
-			fmt.Printf("%s %s: %s\n", kind, addr, fmt.Sprintf(format, args...))
+			fmt.Printf("%s %s: %s (%s)\n", kind, addr, fmt.Sprintf(format, args...), dnssecStatus(authentic))
 		}
 
 		u, err := url.Parse(addr)
@@ -1675,7 +2446,7 @@ address must opt-in to receiving DMARC reports by creating a DMARC record at
 			return
 		}
 
-		accepts, status, _, txt, err := dmarc.LookupExternalReportsAccepted(context.Background(), dns.StrictResolver{}, domain, destdom)
+		accepts, status, _, txt, authentic, err := dmarc.LookupExternalReportsAccepted(context.Background(), dns.StrictResolver{}, domain, destdom)
 		var txtstr string
 		txtaddr := fmt.Sprintf("%s._report._dmarc.%s", domain.ASCII, destdom.ASCII)
 		if txt == "" {
@@ -1853,14 +2624,14 @@ printed.
 		LocalIP:           net.ParseIP("127.0.0.1"),
 		LocalHostname:     dns.Domain{ASCII: "localhost"},
 	}
-	r, _, explanation, err := spf.Verify(context.Background(), dns.StrictResolver{}, spfargs)
+	r, _, explanation, authentic, err := spf.Verify(context.Background(), dns.StrictResolver{}, spfargs)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
 	if explanation != "" {
 		fmt.Printf("explanation: %s\n", explanation)
 	}
-	fmt.Printf("status: %s\n", r.Result)
+	fmt.Printf("status: %s (%s)\n", r.Result, dnssecStatus(authentic))
 	if r.Mechanism != "" {
 		fmt.Printf("mechanism: %s\n", r.Mechanism)
 	}
@@ -1887,9 +2658,10 @@ func cmdSPFLookup(c *cmd) {
 	}
 
 	domain := xparseDomain(args[0], "domain")
-	_, txt, _, err := spf.Lookup(context.Background(), dns.StrictResolver{}, domain)
+	_, txt, _, authentic, err := spf.Lookup(context.Background(), dns.StrictResolver{}, domain)
 	xcheckf(err, "spf lookup for %s", domain)
 	fmt.Println(txt)
+	fmt.Printf("(%s)\n", dnssecStatus(authentic))
 }
 
 func cmdMTASTSLookup(c *cmd) {
@@ -2027,7 +2799,7 @@ func cmdCheckupdate(c *cmd) {
 
 A single DNS TXT lookup to _updates.xmox.nl tells if a new version is
 available. If so, a changelog is fetched from https://updates.xmox.nl, and the
-individual entries validated with a builtin public key. The changelog is
+individual entries verified with a builtin public key. The changelog is
 printed.
 `
 	if len(c.Parse()) != 0 {

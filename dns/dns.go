@@ -5,10 +5,11 @@ package dns
 import (
 	"errors"
 	"fmt"
-	"net"
 	"strings"
 
 	"golang.org/x/net/idna"
+
+	"github.com/mjl-/adns"
 )
 
 var errTrailingDot = errors.New("dns name has trailing dot")
@@ -100,16 +101,16 @@ func ParseDomain(s string) (Domain, error) {
 	return Domain{ascii, unicode}, nil
 }
 
-// IsNotFound returns whether an error is a net.DNSError with IsNotFound set.
+// IsNotFound returns whether an error is an adns.DNSError with IsNotFound set.
 // IsNotFound means the requested type does not exist for the given domain (a
-// nodata or nxdomain response). It doesn't not necessarily mean no other types
-// for that name exist.
+// nodata or nxdomain response). It doesn't not necessarily mean no other types for
+// that name exist.
 //
 // A DNS server can respond to a lookup with an error "nxdomain" to indicate a
 // name does not exist (at all), or with a success status with an empty list.
 // The Go resolver returns an IsNotFound error for both cases, there is no need
 // to explicitly check for zero entries.
 func IsNotFound(err error) bool {
-	var dnsErr *net.DNSError
+	var dnsErr *adns.DNSError
 	return err != nil && errors.As(err, &dnsErr) && dnsErr.IsNotFound
 }

@@ -136,9 +136,11 @@ describe-static" and "mox config describe-domains":
 				# (optional)
 				ACME:
 
-				# Key and certificate files are opened by the privileged root process and passed
-				# to the unprivileged mox process, so no special permissions are required.
-				# (optional)
+				# Keys and certificates to use for this listener. The files are opened by the
+				# privileged root process and passed to the unprivileged mox process, so no
+				# special permissions are required on the files. If the private key will not be
+				# replaced when refreshing certificates, also consider adding the private key to
+				# HostPrivateKeyFiles and configuring DANE TLSA DNS records. (optional)
 				KeyCerts:
 					-
 
@@ -151,6 +153,17 @@ describe-static" and "mox config describe-domains":
 
 				# Minimum TLS version. Default: TLSv1.2. (optional)
 				MinVersion:
+
+				# Private keys used for ACME certificates. Specified explicitly so DANE TLSA DNS
+				# records can be generated, even before the certificates are requested. DANE is a
+				# mechanism to authenticate remote TLS certificates based on a public key or
+				# certificate specified in DNS, protected with DNSSEC. DANE is opportunistic and
+				# attempted when delivering SMTP with STARTTLS. The private key files must be in
+				# PEM format. PKCS8 is recommended, but PKCS1 and EC private keys are recognized
+				# as well. Only RSA 2048 bit and ECDSA P-256 keys are currently used. The first of
+				# each is used when requesting new certificates through ACME. (optional)
+				HostPrivateKeyFiles:
+					-
 
 			# Maximum size in bytes for incoming and outgoing messages. Default is 100MB.
 			# (optional)

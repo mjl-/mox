@@ -8,8 +8,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/ed25519"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -31,6 +33,9 @@ import (
 	_ "embed"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/exp/maps"
+
+	"github.com/mjl-/adns"
 
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
@@ -243,7 +248,7 @@ type Result struct {
 	Instructions []string
 }
 
-type TLSCheckResult struct {
+type DNSSECResult struct {
 	Result
 }
 
@@ -261,6 +266,14 @@ type MX struct {
 
 type MXCheckResult struct {
 	Records []MX
+	Result
+}
+
+type TLSCheckResult struct {
+	Result
+}
+
+type DANECheckResult struct {
 	Result
 }
 
@@ -345,9 +358,11 @@ type AutodiscoverCheckResult struct {
 // (e.g. DNS records), and warnings and errors encountered.
 type CheckResult struct {
 	Domain       string
+	DNSSEC       DNSSECResult
 	IPRev        IPRevCheckResult
 	MX           MXCheckResult
 	TLS          TLSCheckResult
+	DANE         DANECheckResult
 	SPF          SPFCheckResult
 	DKIM         DKIMCheckResult
 	DMARC        DMARCCheckResult
@@ -421,7 +436,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 	// host must be an absolute dns name, ending with a dot.
 	lookupIPs := func(errors *[]string, host string) (ips []string, ourIPs, notOurIPs []net.IP, rerr error) {
-		addrs, err := resolver.LookupHost(ctx, host)
+		addrs, _, err := resolver.LookupHost(ctx, host)
 		if err != nil {
 			addf(errors, "Looking up %q: %s", host, err)
 			return nil, nil, nil, err
@@ -479,6 +494,36 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 	var wg sync.WaitGroup
 
+	// DNSSEC
+	wg.Add(1)
+	go func() {
+		defer logPanic(ctx)
+		defer wg.Done()
+
+		_, result, err := resolver.LookupNS(ctx, ".")
+		if err != nil {
+			addf(&r.DNSSEC.Errors, "Looking up NS for DNS root (.) to check support in resolver for DNSSEC-verification: %s", err)
+		} else if !result.Authentic {
+			addf(&r.DNSSEC.Warnings, `It looks like the DNS resolvers configured on your system do not verify DNSSEC, or aren't trusted (by having loopback IPs or through "options trust-ad" in /etc/resolv.conf).  Without DNSSEC, outbound delivery with SMTP used unprotected MX records, and SMTP STARTTLS connections cannot verify the TLS certificate with DANE (based on a public key in DNS), and will fallback to either MTA-STS for verification, or use "opportunistic TLS" with no certificate verification.`)
+		} else {
+			_, result, _ := resolver.LookupMX(ctx, domain.ASCII+".")
+			if !result.Authentic {
+				addf(&r.DNSSEC.Warnings, `DNS records for this domain (zone) are not DNSSEC-signed. Mail servers sending email to your domain, or receiving email from your domain, cannot verify that the MX/SPF/DKIM/DMARC/MTA-STS records they see are authentic.`)
+			}
+		}
+
+		addf(&r.DNSSEC.Instructions, `Enable DNSSEC-signing of the DNS records of your domain (zone) at your DNS hosting provider.`)
+
+		addf(&r.DNSSEC.Instructions, `If your DNS records are already DNSSEC-signed, you may not have a DNSSEC-verifying recursive resolver in use. Install unbound, and enable support for "extended DNS errors" (EDE), for example:
+
+cat <<EOF >/etc/unbound/unbound.conf.d/ede.conf
+server:
+    ede: yes
+    val-log-level: 2
+EOF
+`)
+	}()
+
 	// IPRev
 	wg.Add(1)
 	go func() {
@@ -488,7 +533,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		// For each mox.Conf.SpecifiedSMTPListenIPs and all NATIPs, and each IP for
 		// mox.Conf.HostnameDomain, check if they resolve back to the host name.
 		hostIPs := map[dns.Domain][]net.IP{}
-		ips, err := resolver.LookupIP(ctx, "ip", mox.Conf.Static.HostnameDomain.ASCII+".")
+		ips, _, err := resolver.LookupIP(ctx, "ip", mox.Conf.Static.HostnameDomain.ASCII+".")
 		if err != nil {
 			addf(&r.IPRev.Errors, "Looking up IPs for hostname: %s", err)
 		}
@@ -555,7 +600,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 				s := ip.String()
 				host := host
 				go func() {
-					addrs, err := resolver.LookupAddr(ctx, s)
+					addrs, _, err := resolver.LookupAddr(ctx, s)
 					results <- result{host, s, addrs, err}
 				}()
 			}
@@ -606,7 +651,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		mxs, err := resolver.LookupMX(ctx, domain.ASCII+".")
+		mxs, _, err := resolver.LookupMX(ctx, domain.ASCII+".")
 		if err != nil {
 			addf(&r.MX.Errors, "Looking up MX records for %s: %s", domain, err)
 		}
@@ -713,7 +758,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 		checkSMTPSTARTTLS := func() {
 			// Initial errors are ignored, will already have been warned about by MX checks.
-			mxs, err := resolver.LookupMX(ctx, domain.ASCII+".")
+			mxs, _, err := resolver.LookupMX(ctx, domain.ASCII+".")
 			if err != nil {
 				return
 			}
@@ -738,6 +783,115 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 	}()
 
+	// DANE
+	wg.Add(1)
+	go func() {
+		defer logPanic(ctx)
+		defer wg.Done()
+
+		daneRecords := func(l config.Listener) map[string]struct{} {
+			if l.TLS == nil {
+				return nil
+			}
+			records := map[string]struct{}{}
+			addRecord := func(privKey crypto.Signer) {
+				spkiBuf, err := x509.MarshalPKIXPublicKey(privKey.Public())
+				if err != nil {
+					addf(&r.DANE.Errors, "marshal SubjectPublicKeyInfo for DANE record: %v", err)
+					return
+				}
+				sum := sha256.Sum256(spkiBuf)
+				r := adns.TLSA{
+					Usage:     adns.TLSAUsageDANEEE,
+					Selector:  adns.TLSASelectorSPKI,
+					MatchType: adns.TLSAMatchTypeSHA256,
+					CertAssoc: sum[:],
+				}
+				records[r.Record()] = struct{}{}
+			}
+			for _, privKey := range l.TLS.HostPrivateRSA2048Keys {
+				addRecord(privKey)
+			}
+			for _, privKey := range l.TLS.HostPrivateECDSAP256Keys {
+				addRecord(privKey)
+			}
+			return records
+		}
+
+		expectedDANERecords := func(host string) map[string]struct{} {
+			for _, l := range mox.Conf.Static.Listeners {
+				if l.HostnameDomain.ASCII == host {
+					return daneRecords(l)
+				}
+			}
+			public := mox.Conf.Static.Listeners["public"]
+			if mox.Conf.Static.HostnameDomain.ASCII == host && public.HostnameDomain.ASCII == "" {
+				return daneRecords(public)
+			}
+			return nil
+		}
+
+		mxl, result, err := resolver.LookupMX(ctx, domain.ASCII+".")
+		if err != nil {
+			addf(&r.DANE.Errors, "Looking up MX hosts to check for DANE records: %s", err)
+		} else {
+			if !result.Authentic {
+				addf(&r.DANE.Warnings, "DANE is inactive because MX records are not DNSSEC-signed.")
+			}
+			for _, mx := range mxl {
+				expect := expectedDANERecords(mx.Host)
+
+				tlsal, tlsaResult, err := resolver.LookupTLSA(ctx, 25, "tcp", mx.Host+".")
+				if dns.IsNotFound(err) {
+					if len(expect) > 0 {
+						addf(&r.DANE.Errors, "No DANE records for MX host %s, expected: %s.", mx.Host, strings.Join(maps.Keys(expect), "; "))
+					}
+					continue
+				} else if err != nil {
+					addf(&r.DANE.Errors, "Looking up DANE records for MX host %s: %v", mx.Host, err)
+					continue
+				} else if !tlsaResult.Authentic && len(tlsal) > 0 {
+					addf(&r.DANE.Errors, "DANE records exist for MX host %s, but are not DNSSEC-signed.", mx.Host)
+				}
+
+				extra := map[string]struct{}{}
+				for _, e := range tlsal {
+					s := e.Record()
+					if _, ok := expect[s]; ok {
+						delete(expect, s)
+					} else {
+						extra[s] = struct{}{}
+					}
+				}
+				if len(expect) > 0 {
+					l := maps.Keys(expect)
+					sort.Strings(l)
+					addf(&r.DANE.Errors, "Missing DANE records of type TLSA for MX host _25._tcp.%s: %s", mx.Host, strings.Join(l, "; "))
+				}
+				if len(extra) > 0 {
+					l := maps.Keys(extra)
+					sort.Strings(l)
+					addf(&r.DANE.Errors, "Unexpected DANE records of type TLSA for MX host _25._tcp.%s: %s", mx.Host, strings.Join(l, "; "))
+				}
+			}
+		}
+
+		public := mox.Conf.Static.Listeners["public"]
+		pubDom := public.HostnameDomain
+		if pubDom.ASCII == "" {
+			pubDom = mox.Conf.Static.HostnameDomain
+		}
+		records := maps.Keys(daneRecords(public))
+		sort.Strings(records)
+		if len(records) > 0 {
+			instr := "Ensure the DNS records below exist. These records are for the whole machine, not per domain, so create them only once. Make sure DNSSEC is enabled, otherwise the records have no effect. The records indicate that a remote mail server trying to deliver email with SMTP (TCP port 25) must verify the TLS certificate with DANE-EE (3), based on the certificate public key (\"SPKI\", 1) that is SHA2-256-hashed (1) to the hexadecimal hash. DANE-EE verification means only the certificate or public key is verified, not whether the certificate is signed by a (centralized) certificate authority (CA), is expired, or matches the host name.\n\n"
+			for _, r := range records {
+				instr += fmt.Sprintf("\t_25._tcp.%s. TLSA %s\n", pubDom.ASCII, r)
+			}
+			addf(&r.DANE.Instructions, instr)
+		}
+	}()
+
 	// SPF
 	// todo: add warnings if we have Transports with submission? admin should ensure their IPs are in the SPF record. it may be an IP(net), or an include. that means we cannot easily check for it. and should we first check the transport can be used from this domain (or an account that has this domain?). also see DKIM.
 	wg.Add(1)
@@ -747,7 +901,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 		// Verify a domain with the configured IPs that do SMTP.
 		verifySPF := func(kind string, domain dns.Domain) (string, *SPFRecord, spf.Record) {
-			_, txt, record, err := spf.Lookup(ctx, resolver, domain)
+			_, txt, record, _, err := spf.Lookup(ctx, resolver, domain)
 			if err != nil {
 				addf(&r.SPF.Errors, "Looking up %s SPF record: %s", kind, err)
 			}
@@ -779,7 +933,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 					LocalIP:           net.ParseIP("127.0.0.1"),
 					LocalHostname:     dns.Domain{ASCII: "localhost"},
 				}
-				status, mechanism, expl, err := spf.Evaluate(ctx, record, resolver, args)
+				status, mechanism, expl, _, err := spf.Evaluate(ctx, record, resolver, args)
 				if err != nil {
 					addf(&r.SPF.Errors, "Evaluating IP %q against %s SPF record: %s", ip, kind, err)
 				} else if status != spf.StatusPass {
@@ -844,7 +998,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 				haveEd25519 = true
 			}
 
-			_, record, txt, err := dkim.Lookup(ctx, resolver, selc.Domain, domain)
+			_, record, txt, _, err := dkim.Lookup(ctx, resolver, selc.Domain, domain)
 			if err != nil {
 				missing = append(missing, sel)
 				if errors.Is(err, dkim.ErrNoRecord) {
@@ -918,7 +1072,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		_, dmarcDomain, record, txt, err := dmarc.Lookup(ctx, resolver, domain)
+		_, dmarcDomain, record, txt, _, err := dmarc.Lookup(ctx, resolver, domain)
 		if err != nil {
 			addf(&r.DMARC.Errors, "Looking up DMARC record: %s", err)
 		} else if record == nil {
@@ -951,7 +1105,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 			orgDom := publicsuffix.Lookup(ctx, domain)
 			destOrgDom := publicsuffix.Lookup(ctx, domConf.DMARC.DNSDomain)
 			if orgDom != destOrgDom {
-				accepts, status, _, _, err := dmarc.LookupExternalReportsAccepted(ctx, resolver, domain, domConf.DMARC.DNSDomain)
+				accepts, status, _, _, _, err := dmarc.LookupExternalReportsAccepted(ctx, resolver, domain, domConf.DMARC.DNSDomain)
 				if status != dmarc.StatusNone {
 					addf(&r.DMARC.Errors, "Checking if external destination accepts reports: %s", err)
 				} else if !accepts {
@@ -1058,7 +1212,7 @@ Ensure a DNS TXT record like the following exists:
 				addf(&r.MTASTS.Warnings, "Policy has a MaxAge of less than 1 day. For stable configurations, the recommended period is in weeks.")
 			}
 
-			mxl, _ := resolver.LookupMX(ctx, domain.ASCII+".")
+			mxl, _, _ := resolver.LookupMX(ctx, domain.ASCII+".")
 			// We do not check for errors, the MX check will complain about mx errors, we assume we will get the same error here.
 			mxs := map[dns.Domain]struct{}{}
 			for _, mx := range mxl {
@@ -1155,7 +1309,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		for i := range reqs {
 			go func(i int) {
 				defer srvwg.Done()
-				_, reqs[i].srvs, reqs[i].err = resolver.LookupSRV(ctx, reqs[i].name[1:], "tcp", domain.ASCII+".")
+				_, reqs[i].srvs, _, reqs[i].err = resolver.LookupSRV(ctx, reqs[i].name[1:], "tcp", domain.ASCII+".")
 			}(i)
 		}
 		srvwg.Wait()
@@ -1212,7 +1366,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 
 		addf(&r.Autodiscover.Instructions, "Ensure DNS records like the following exist:\n\n\t_autodiscover._tcp.%s IN SRV 0 1 443 autoconfig.%s\n\tautoconfig.%s IN CNAME %s\n\nNote: the trailing dots are relevant, it makes the host names absolute instead of relative to the domain name.", domain.ASCII+".", domain.ASCII+".", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 
-		_, srvs, err := resolver.LookupSRV(ctx, "autodiscover", "tcp", domain.ASCII+".")
+		_, srvs, _, err := resolver.LookupSRV(ctx, "autodiscover", "tcp", domain.ASCII+".")
 		if err != nil {
 			addf(&r.Autodiscover.Errors, "Looking up SRV record %q: %s", "autodiscover", err)
 			return
@@ -1496,7 +1650,7 @@ type Reverse struct {
 // LookupIP does a reverse lookup of ip.
 func (Admin) LookupIP(ctx context.Context, ip string) Reverse {
 	resolver := dns.StrictResolver{Pkg: "webadmin"}
-	names, err := resolver.LookupAddr(ctx, ip)
+	names, _, err := resolver.LookupAddr(ctx, ip)
 	xcheckuserf(ctx, err, "looking up ip")
 	return Reverse{names}
 }
@@ -1555,7 +1709,12 @@ func (Admin) DomainRecords(ctx context.Context, domain string) []string {
 	if !ok {
 		xcheckuserf(ctx, errors.New("unknown domain"), "lookup domain")
 	}
-	records, err := mox.DomainRecords(dc, d)
+	resolver := dns.StrictResolver{Pkg: "admin"}
+	_, result, err := resolver.LookupTXT(ctx, domain+".")
+	if !dns.IsNotFound(err) {
+		xcheckf(ctx, err, "looking up record to determine if dnssec is implemented")
+	}
+	records, err := mox.DomainRecords(dc, d, result.Authentic)
 	xcheckf(ctx, err, "dns records")
 	return records
 }

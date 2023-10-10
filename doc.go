@@ -1,14 +1,6 @@
 /*
-Command mox is a modern full-featured open source secure mail server for
+Command mox is a modern, secure, full-featured, open source mail server for
 low-maintenance self-hosted email.
-
-  - Quick and easy to set up with quickstart and automatic TLS with ACME and
-    Let's Encrypt.
-  - IMAP4 with extensions for accessing email.
-  - SMTP with SPF, DKIM, DMARC, DNSBL, MTA-STS, TLSRPT for exchanging email.
-  - Reputation-based and content-based spam filtering.
-  - Internationalized email.
-  - Admin web interface.
 
 # Commands
 
@@ -44,10 +36,15 @@ low-maintenance self-hosted email.
 	mox config domain rm domain
 	mox config describe-sendmail >/etc/moxsubmit.conf
 	mox config printservice >mox.service
+	mox config ensureacmehostprivatekeys
 	mox example [name]
 	mox checkupdate
 	mox cid cid
 	mox clientconfig domain
+	mox dane dial host:port
+	mox dane dialmx domain [destination-host]
+	mox dane makerecord usage selector matchtype [certificate.pem | publickey.pem | privatekey.pem]
+	mox dns lookup [ptr | mx | cname | ips | a | aaaa | ns | txt | srv | tlsa] name
 	mox dkim gened25519 >$selector._domainkey.$domain.ed25519key.pkcs8.pem
 	mox dkim genrsa >$selector._domainkey.$domain.rsakey.pkcs8.pem
 	mox dkim lookup selector domain
@@ -541,6 +538,31 @@ date version.
 
 	usage: mox config printservice >mox.service
 
+# mox config ensureacmehostprivatekeys
+
+Ensure host private keys exist for TLS listeners with ACME.
+
+In mox.conf, each listener can have TLS configured. Long-lived private key files
+can be specified, which will be used when requesting ACME certificates.
+Configuring these private keys makes it feasible to publish DANE TLSA records
+for the corresponding public keys in DNS, protected with DNSSEC, allowing TLS
+certificate verification without depending on a list of Certificate Authorities
+(CAs). Previous versions of mox did not pre-generate private keys for use with
+ACME certificates, but would generate private keys on-demand. By explicitly
+configuring private keys, they will not change automatedly with new
+certificates, and the DNS TLSA records stay valid.
+
+This command looks for listeners in mox.conf with TLS with ACME configured. For
+each missing host private key (of type rsa-2048 and ecdsa-p256) a key is written
+to config/hostkeys/. If a certificate exists in the ACME "cache", its private
+key is copied. Otherwise a new private key is generated. Snippets for manually
+updating/editing mox.conf are printed.
+
+After running this command, and updating mox.conf, run "mox config dnsrecords"
+for a domain and create the TLSA DNS records it suggests to enable DANE.
+
+	usage: mox config ensureacmehostprivatekeys
+
 # mox example
 
 List available examples, or print a specific example.
@@ -553,7 +575,7 @@ Check if a newer version of mox is available.
 
 A single DNS TXT lookup to _updates.xmox.nl tells if a new version is
 available. If so, a changelog is fetched from https://updates.xmox.nl, and the
-individual entries validated with a builtin public key. The changelog is
+individual entries verified with a builtin public key. The changelog is
 printed.
 
 	usage: mox checkupdate
@@ -581,6 +603,80 @@ Without TLS/STARTTLS, passwords are sent in clear text, which should only be
 configured over otherwise secured connections, like a VPN.
 
 	usage: mox clientconfig domain
+
+# mox dane dial
+
+Dial the address using TLS with certificate verification using DANE.
+
+Data is copied between connection and stdin/stdout until either side closes the
+connection.
+
+	usage: mox dane dial host:port
+	  -usages string
+	    	allowed usages for dane, comma-separated list (default "pkix-ta,pkix-ee,dane-ta,dane-ee")
+
+# mox dane dialmx
+
+Connect to MX server for domain using STARTTLS verified with DANE.
+
+If no destination host is specified, regular delivery logic is used to find the
+hosts to attempt delivery too. This involves following CNAMEs for the domain,
+looking up MX records, and possibly falling back to the domain name itself as
+host.
+
+If a destination host is specified, that is the only candidate host considered
+for dialing.
+
+With a list of destinations gathered, each is dialed until a successful SMTP
+session verified with DANE has been initialized, including EHLO and STARTTLS
+commands.
+
+Once connected, data is copied between connection and stdin/stdout, until
+either side closes the connection.
+
+This command follows the same logic as delivery attempts made from the queue,
+sharing most of its code.
+
+	usage: mox dane dialmx domain [destination-host]
+	  -ehlohostname string
+	    	hostname to send in smtp ehlo command (default "localhost")
+
+# mox dane makerecord
+
+Print TLSA record for given certificate/key and parameters.
+
+Valid values:
+- usage: pkix-ta (0), pkix-ee (1), dane-ta (2), dane-ee (3)
+- selector: cert (0), spki (1)
+- matchtype: full (0), sha2-256 (1), sha2-512 (2)
+
+Common DANE TLSA record parameters are: dane-ee spki sha2-256, or 3 1 1,
+followed by a sha2-256 hash of the DER-encoded "SPKI" (subject public key info)
+from the certificate. An example DNS zone file entry:
+
+	_25._tcp.example.com. IN TLSA 3 1 1 133b919c9d65d8b1488157315327334ead8d83372db57465ecabf53ee5748aee
+
+The first usable information from the pem file is used to compose the TLSA
+record. In case of selector "cert", a certificate is required. Otherwise the
+"subject public key info" (spki) of the first certificate or public or private
+key (pkcs#8, pkcs#1 or ec private key) is used.
+
+	usage: mox dane makerecord usage selector matchtype [certificate.pem | publickey.pem | privatekey.pem]
+
+# mox dns lookup
+
+Lookup DNS name of given type.
+
+Lookup always prints whether the response was DNSSEC-protected.
+
+Examples:
+
+mox dns lookup ptr 1.1.1.1
+mox dns lookup mx xmox.nl
+mox dns lookup txt _dmarc.xmox.nl.
+mox dns lookup tlsa _25._tcp.xmox.nl
+
+	usage: mox dns lookup [ptr | mx | cname | ips | a | aaaa | ns | txt | srv | tlsa] name
 
 # mox dkim gened25519
 

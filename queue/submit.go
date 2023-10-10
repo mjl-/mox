@@ -24,7 +24,7 @@ import (
 
 // deliver via another SMTP server, e.g. relaying to a smart host, possibly
 // with authentication (submission).
-func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer contextDialer, m Msg, backoff time.Duration, transportName string, transport *config.TransportSMTP, dialTLS bool, defaultPort int) {
+func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, m Msg, backoff time.Duration, transportName string, transport *config.TransportSMTP, dialTLS bool, defaultPort int) {
 	// todo: configurable timeouts
 
 	port := transport.Port
@@ -51,10 +51,25 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer cont
 		qlog.Debug("queue deliversubmit result", mlog.Field("host", transport.DNSHost), mlog.Field("port", port), mlog.Field("attempt", m.Attempts), mlog.Field("permanent", permanent), mlog.Field("secodeopt", secodeOpt), mlog.Field("errmsg", errmsg), mlog.Field("ok", success), mlog.Field("duration", time.Since(start)))
 	}()
 
+	// We don't have to attempt SMTP-DANE for submission, since it only applies to SMTP
+	// relaying on port 25. ../rfc/7672:1261
+
+	// todo: for submission, understand SRV records, and even DANE.
+
 	dialctx, dialcancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer dialcancel()
+	if m.DialedIPs == nil {
+		m.DialedIPs = map[string][]net.IP{}
+	}
+	_, _, _, ips, _, err := smtpclient.GatherIPs(dialctx, qlog, resolver, dns.IPDomain{Domain: transport.DNSHost}, m.DialedIPs)
+	var conn net.Conn
+	if err == nil {
+		if m.DialedIPs == nil {
+			m.DialedIPs = map[string][]net.IP{}
+		}
+		conn, _, err = smtpclient.Dial(dialctx, qlog, dialer, dns.IPDomain{Domain: transport.DNSHost}, ips, port, m.DialedIPs)
+	}
 	addr := net.JoinHostPort(transport.Host, fmt.Sprintf("%d", port))
-	conn, _, _, err := dialHost(dialctx, qlog, resolver, dialer, dns.IPDomain{Domain: transport.DNSHost}, port, &m)
 	var result string
 	switch {
 	case err == nil:
@@ -103,7 +118,7 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer cont
 	}
 	clientctx, clientcancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer clientcancel()
-	client, err := smtpclient.New(clientctx, qlog, conn, tlsMode, mox.Conf.Static.HostnameDomain, transport.DNSHost, auth)
+	client, err := smtpclient.New(clientctx, qlog, conn, tlsMode, mox.Conf.Static.HostnameDomain, transport.DNSHost, auth, nil, nil, nil)
 	if err != nil {
 		smtperr, ok := err.(smtpclient.Error)
 		var remoteMTA dsn.NameIP

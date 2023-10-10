@@ -749,6 +749,13 @@
 					]
 				},
 				{
+					"Name": "DNSSEC",
+					"Docs": "",
+					"Typewords": [
+						"DNSSECResult"
+					]
+				},
+				{
 					"Name": "IPRev",
 					"Docs": "",
 					"Typewords": [
@@ -767,6 +774,13 @@
 					"Docs": "",
 					"Typewords": [
 						"TLSCheckResult"
+					]
+				},
+				{
+					"Name": "DANE",
+					"Docs": "",
+					"Typewords": [
+						"DANECheckResult"
 					]
 				},
 				{
@@ -823,6 +837,36 @@
 					"Docs": "",
 					"Typewords": [
 						"AutodiscoverCheckResult"
+					]
+				}
+			]
+		},
+		{
+			"Name": "DNSSECResult",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Errors",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Warnings",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Instructions",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
 					]
 				}
 			]
@@ -961,6 +1005,36 @@
 		},
 		{
 			"Name": "TLSCheckResult",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Errors",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Warnings",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Instructions",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "DANECheckResult",
 			"Docs": "",
 			"Fields": [
 				{

@@ -912,6 +912,7 @@ const domainDNSCheck = async (d) => {
 		]
 	}
 
+	const detailsDNSSEC = ''
 	const detailsIPRev = !checks.IPRev.IPNames || !Object.entries(checks.IPRev.IPNames).length ? [] : [
 		dom.div('Hostname: ' + domainString(checks.IPRev.Hostname)),
 		dom.table(
@@ -930,6 +931,7 @@ const domainDNSCheck = async (d) => {
 		),
 	]
 	const detailsTLS = ''
+	const detailsDANE = ''
 	const detailsSPF = [
 		checks.SPF.DomainTXT ? [dom.div('Domain TXT record: ' + checks.SPF.DomainTXT)] : [],
 		checks.SPF.HostTXT ? [dom.div('Host TXT record: ' + checks.SPF.HostTXT)] : [],
@@ -986,9 +988,11 @@ const domainDNSCheck = async (d) => {
 			'Check DNS',
 		),
 		dom.h1('DNS records and domain configuration check'),
+		resultSection('DNSSEC', checks.DNSSEC, detailsDNSSEC),
 		resultSection('IPRev', checks.IPRev, detailsIPRev),
 		resultSection('MX', checks.MX, detailsMX),
 		resultSection('TLS', checks.TLS, detailsTLS),
+		resultSection('DANE', checks.DANE, detailsDANE),
 		resultSection('SPF', checks.SPF, detailsSPF),
 		resultSection('DKIM', checks.DKIM, detailsDKIM),
 		resultSection('DMARC', checks.DMARC, detailsDMARC),

@@ -17,6 +17,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
+	"github.com/mjl-/adns"
+
+	"github.com/mjl-/mox/dane"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
@@ -49,7 +52,7 @@ var (
 	ErrSMTPUTF8Unsupported = errors.New("remote smtp server does not implement smtputf8 extension, required by message")
 	ErrStatus              = errors.New("remote smtp server sent unexpected response status code") // Relatively common, e.g. when a 250 OK was expected and server sent 451 temporary error.
 	ErrProtocol            = errors.New("smtp protocol error")                                     // After a malformed SMTP response or inconsistent multi-line response.
-	ErrTLS                 = errors.New("tls error")                                               // E.g. handshake failure, or hostname validation was required and failed.
+	ErrTLS                 = errors.New("tls error")                                               // E.g. handshake failure, or hostname verification was required and failed.
 	ErrBotched             = errors.New("smtp connection is botched")                              // Set on a client, and returned for new operations, after an i/o error or malformed SMTP response.
 	ErrClosed              = errors.New("client is closed")
 )
@@ -58,13 +61,20 @@ var (
 type TLSMode string
 
 const (
-	// TLS with STARTTLS for MX SMTP servers, with validated certificate is required: matching name, not expired, trusted by CA.
+	// Required TLS with STARTTLS for SMTP servers, with either verified DANE TLSA
+	// record, or a WebPKI-verified certificate (with matching name, not expired, etc).
 	TLSStrictStartTLS TLSMode = "strictstarttls"
 
-	// TLS immediately ("implicit TLS"), with validated certificate is required: matching name, not expired, trusted by CA.
+	// Required TLS with STARTTLS for SMTP servers, without verifiying the certificate.
+	// This mode is needed to fallback after only unusable DANE records were found
+	// (e.g. with unknown parameters in the TLSA records).
+	TLSUnverifiedStartTLS TLSMode = "unverifiedstarttls"
+
+	// TLS immediately ("implicit TLS"), with either verified DANE TLSA records or a
+	// verified certificate: matching name, not expired, trusted by CA.
 	TLSStrictImmediate TLSMode = "strictimmediate"
 
-	// Use TLS if remote claims to support it, but do not validate the certificate
+	// Use TLS if remote claims to support it, but do not verify the certificate
 	// (not trusted by CA, different host name or expired certificate is accepted).
 	TLSOpportunistic TLSMode = "opportunistic"
 
@@ -80,8 +90,12 @@ type Client struct {
 	// can be wrapped in a tls.Client. We close origConn instead of conn because
 	// closing the TLS connection would send a TLS close notification, which may block
 	// for 5s if the server isn't reading it (because it is also sending it).
-	origConn net.Conn
-	conn     net.Conn
+	origConn            net.Conn
+	conn                net.Conn
+	remoteHostname      dns.Domain   // TLS with SNI and name verification.
+	daneRecords         []adns.TLSA  // For authenticating (START)TLS connection.
+	moreRemoteHostnames []dns.Domain // Additional allowed names in TLS certificate.
+	verifiedRecord      *adns.TLSA   // If non-nil, then will be set to verified DANE record if any.
 
 	r        *bufio.Reader
 	w        *bufio.Writer
@@ -164,21 +178,27 @@ func (e Error) Error() string {
 // records with preferences, other DNS records, MTA-STS, retries and special
 // cases into account.
 //
-// tlsMode indicates if TLS is required, optional or should not be used. A
-// certificate is only validated (trusted, match remoteHostname and not expired)
-// for the strict tls modes. By default, SMTP does not verify TLS for
-// interopability reasons, but MTA-STS or DANE can require it. If opportunistic TLS
-// is used, and a TLS error is encountered, the caller may want to try again (on a
-// new connection) without TLS.
+// tlsMode indicates if TLS is required, optional or should not be used. Only for
+// strict TLS modes is the certificate verified: Either with DANE, or through
+// the trusted CA pool with matching remoteHostname and not expired. For DANE,
+// additional host names in moreRemoteHostnames are allowed during TLS certificate
+// verification. By default, SMTP does not verify TLS for interopability reasons,
+// but MTA-STS or DANE can require it. If opportunistic TLS is used, and a TLS
+// error is encountered, the caller may want to try again (on a new connection)
+// without TLS.
 //
 // If auth is non-empty, authentication will be done with the first algorithm
 // supported by the server. If none of the algorithms are supported, an error is
 // returned.
-func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, ourHostname, remoteHostname dns.Domain, auth []sasl.Client) (*Client, error) {
+func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, ehloHostname, remoteHostname dns.Domain, auth []sasl.Client, daneRecords []adns.TLSA, moreRemoteHostnames []dns.Domain, verifiedRecord *adns.TLSA) (*Client, error) {
 	c := &Client{
-		origConn: conn,
-		lastlog:  time.Now(),
-		cmds:     []string{"(none)"},
+		origConn:            conn,
+		remoteHostname:      remoteHostname,
+		daneRecords:         daneRecords,
+		moreRemoteHostnames: moreRemoteHostnames,
+		verifiedRecord:      verifiedRecord,
+		lastlog:             time.Now(),
+		cmds:                []string{"(none)"},
 	}
 	c.log = log.Fields(mlog.Field("smtpclient", "")).MoreFields(func() []mlog.Pair {
 		now := time.Now()
@@ -190,12 +210,9 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, our
 	})
 
 	if tlsMode == TLSStrictImmediate {
-		tlsconfig := tls.Config{
-			ServerName: remoteHostname.ASCII,
-			RootCAs:    mox.Conf.Static.TLS.CertPool,
-			MinVersion: tls.VersionTLS12, // ../rfc/8996:31 ../rfc/8997:66
-		}
-		tlsconn := tls.Client(conn, &tlsconfig)
+		// todo: we could also verify DANE here. not applicable to SMTP delivery.
+		config := c.tlsConfig(tlsMode)
+		tlsconn := tls.Client(conn, &config)
 		if err := tlsconn.HandshakeContext(ctx); err != nil {
 			return nil, err
 		}
@@ -216,10 +233,23 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, our
 	c.tw = moxio.NewTraceWriter(c.log, "LC: ", timeoutWriter{c.conn, 30 * time.Second, c.log})
 	c.w = bufio.NewWriter(c.tw)
 
-	if err := c.hello(ctx, tlsMode, ourHostname, remoteHostname, auth); err != nil {
+	if err := c.hello(ctx, tlsMode, ehloHostname, auth); err != nil {
 		return nil, err
 	}
 	return c, nil
+}
+
+func (c *Client) tlsConfig(tlsMode TLSMode) tls.Config {
+	if c.daneRecords != nil {
+		return dane.TLSClientConfig(c.log, c.daneRecords, c.remoteHostname, c.moreRemoteHostnames, c.verifiedRecord)
+	}
+	// todo: possibly accept older TLS versions for TLSOpportunistic?
+	return tls.Config{
+		ServerName:         c.remoteHostname.ASCII,
+		RootCAs:            mox.Conf.Static.TLS.CertPool,
+		InsecureSkipVerify: tlsMode == TLSOpportunistic || tlsMode == TLSUnverifiedStartTLS,
+		MinVersion:         tls.VersionTLS12, // ../rfc/8996:31 ../rfc/8997:66
+	}
 }
 
 // xbotchf generates a temporary error and marks the client as botched. e.g. for
@@ -463,7 +493,7 @@ func (c *Client) recover(rerr *error) {
 	*rerr = cerr
 }
 
-func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ourHostname, remoteHostname dns.Domain, auth []sasl.Client) (rerr error) {
+func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Domain, auth []sasl.Client) (rerr error) {
 	defer c.recover(&rerr)
 
 	// perform EHLO handshake, falling back to HELO if server does not appear to
@@ -474,7 +504,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ourHostname, remote
 		c.cmds[0] = "ehlo"
 		c.cmdStart = time.Now()
 		// Syntax: ../rfc/5321:1827
-		c.xwritelinef("EHLO %s", ourHostname.ASCII)
+		c.xwritelinef("EHLO %s", ehloHostname.ASCII)
 		code, _, lastLine, remains := c.xreadecode(false)
 		switch code {
 		// ../rfc/5321:997
@@ -486,7 +516,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ourHostname, remote
 			// ../rfc/5321:996
 			c.cmds[0] = "helo"
 			c.cmdStart = time.Now()
-			c.xwritelinef("HELO %s", ourHostname.ASCII)
+			c.xwritelinef("HELO %s", ehloHostname.ASCII)
 			code, _, lastLine, _ = c.xreadecode(false)
 			if code != smtp.C250Completed {
 				c.xerrorf(code/100 == 5, code, "", lastLine, "%w: expected 250 to HELO, got %d", ErrStatus, code)
@@ -536,8 +566,8 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ourHostname, remote
 	hello(true)
 
 	// Attempt TLS if remote understands STARTTLS and we aren't doing immediate TLS or if caller requires it.
-	if c.extStartTLS && (tlsMode != TLSSkip && tlsMode != TLSStrictImmediate) || tlsMode == TLSStrictStartTLS {
-		c.log.Debug("starting tls client", mlog.Field("tlsmode", tlsMode), mlog.Field("servername", remoteHostname))
+	if c.extStartTLS && (tlsMode != TLSSkip && tlsMode != TLSStrictImmediate) || tlsMode == TLSStrictStartTLS || tlsMode == TLSUnverifiedStartTLS {
+		c.log.Debug("starting tls client", mlog.Field("tlsmode", tlsMode), mlog.Field("servername", c.remoteHostname))
 		c.cmds[0] = "starttls"
 		c.cmdStart = time.Now()
 		c.xwritelinef("STARTTLS")
@@ -561,14 +591,8 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ourHostname, remote
 
 		// For TLSStrictStartTLS, the Go TLS library performs the checks needed for MTA-STS.
 		// ../rfc/8461:646
-		// todo: possibly accept older TLS versions for TLSOpportunistic?
-		tlsConfig := &tls.Config{
-			ServerName:         remoteHostname.ASCII,
-			RootCAs:            mox.Conf.Static.TLS.CertPool,
-			InsecureSkipVerify: tlsMode != TLSStrictStartTLS,
-			MinVersion:         tls.VersionTLS12, // ../rfc/8996:31 ../rfc/8997:66
-		}
-		nconn := tls.Client(conn, tlsConfig)
+		tlsConfig := c.tlsConfig(tlsMode)
+		nconn := tls.Client(conn, &tlsConfig)
 		c.conn = nconn
 
 		nctx, cancel := context.WithTimeout(ctx, time.Minute)
@@ -584,7 +608,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ourHostname, remote
 		c.w = bufio.NewWriter(c.tw)
 
 		tlsversion, ciphersuite := mox.TLSInfo(nconn)
-		c.log.Debug("starttls client handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite), mlog.Field("servername", remoteHostname), mlog.Field("insecureskipverify", tlsConfig.InsecureSkipVerify))
+		c.log.Debug("starttls client handshake done", mlog.Field("tlsmode", tlsMode), mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite), mlog.Field("servername", c.remoteHostname), mlog.Field("danerecord", c.verifiedRecord))
 
 		hello(false)
 	}
@@ -915,4 +939,14 @@ func (c *Client) Close() (rerr error) {
 		rerr = err
 	}
 	return
+}
+
+// Conn returns the connection with initialized SMTP session. Once the caller uses
+// this connection it is in control, and responsible for closing the connection,
+// and other functions on the client must not be called anymore.
+func (c *Client) Conn() (net.Conn, error) {
+	if err := c.conn.SetDeadline(time.Time{}); err != nil {
+		return nil, fmt.Errorf("clearing io deadlines: %w", err)
+	}
+	return c.conn, nil
 }

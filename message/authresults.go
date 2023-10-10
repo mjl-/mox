@@ -41,7 +41,7 @@ type AuthProp struct {
 	// Whether value is address-like (localpart@domain, or domain). Or another value,
 	// which is subject to escaping.
 	IsAddrLike bool
-	Comment    string // If not empty, header comment withtout "()", added after Value.
+	Comment    string // If not empty, header comment without "()", added after Value.
 }
 
 // MakeAuthProp is a convenient way to make an AuthProp.

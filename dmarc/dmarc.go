@@ -81,6 +81,8 @@ type Result struct {
 	Domain dns.Domain
 	// Parsed DMARC record.
 	Record *Record
+	// Whether DMARC DNS response was DNSSEC-signed, regardless of whether SPF/DKIM records were DNSSEC-signed.
+	RecordAuthentic bool
 	// Details about possible error condition, e.g. when parsing the DMARC record failed.
 	Err error
 }
@@ -93,7 +95,9 @@ type Result struct {
 // domain is determined using the public suffix list. E.g. for
 // "sub.example.com", the organizational domain is "example.com". The returned
 // domain is the domain with the DMARC record.
-func Lookup(ctx context.Context, resolver dns.Resolver, from dns.Domain) (status Status, domain dns.Domain, record *Record, txt string, rerr error) {
+//
+// rauthentic indicates if the DNS results were DNSSEC-verified.
+func Lookup(ctx context.Context, resolver dns.Resolver, from dns.Domain) (status Status, domain dns.Domain, record *Record, txt string, rauthentic bool, rerr error) {
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	defer func() {
@@ -102,27 +106,29 @@ func Lookup(ctx context.Context, resolver dns.Resolver, from dns.Domain) (status
 
 	// ../rfc/7489:859 ../rfc/7489:1370
 	domain = from
-	status, record, txt, err := lookupRecord(ctx, resolver, domain)
+	status, record, txt, authentic, err := lookupRecord(ctx, resolver, domain)
 	if status != StatusNone {
-		return status, domain, record, txt, err
+		return status, domain, record, txt, authentic, err
 	}
 	if record == nil {
 		// ../rfc/7489:761 ../rfc/7489:1377
 		domain = publicsuffix.Lookup(ctx, from)
 		if domain == from {
-			return StatusNone, domain, nil, txt, err
+			return StatusNone, domain, nil, txt, authentic, err
 		}
 
-		status, record, txt, err = lookupRecord(ctx, resolver, domain)
+		var xauth bool
+		status, record, txt, xauth, err = lookupRecord(ctx, resolver, domain)
+		authentic = authentic && xauth
 	}
-	return status, domain, record, txt, err
+	return status, domain, record, txt, authentic, err
 }
 
-func lookupRecord(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (Status, *Record, string, error) {
+func lookupRecord(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (Status, *Record, string, bool, error) {
 	name := "_dmarc." + domain.ASCII + "."
-	txts, err := dns.WithPackage(resolver, "dmarc").LookupTXT(ctx, name)
+	txts, result, err := dns.WithPackage(resolver, "dmarc").LookupTXT(ctx, name)
 	if err != nil && !dns.IsNotFound(err) {
-		return StatusTemperror, nil, "", fmt.Errorf("%w: %s", ErrDNS, err)
+		return StatusTemperror, nil, "", result.Authentic, fmt.Errorf("%w: %s", ErrDNS, err)
 	}
 	var record *Record
 	var text string
@@ -133,24 +139,24 @@ func lookupRecord(ctx context.Context, resolver dns.Resolver, domain dns.Domain)
 			// ../rfc/7489:1374
 			continue
 		} else if err != nil {
-			return StatusPermerror, nil, text, fmt.Errorf("%w: %s", ErrSyntax, err)
+			return StatusPermerror, nil, text, result.Authentic, fmt.Errorf("%w: %s", ErrSyntax, err)
 		}
 		if record != nil {
 			// ../ ../rfc/7489:1388
-			return StatusNone, nil, "", ErrMultipleRecords
+			return StatusNone, nil, "", result.Authentic, ErrMultipleRecords
 		}
 		text = txt
 		record = r
 		rerr = nil
 	}
-	return StatusNone, record, text, rerr
+	return StatusNone, record, text, result.Authentic, rerr
 }
 
-func lookupReportsRecord(ctx context.Context, resolver dns.Resolver, dmarcDomain, extDestDomain dns.Domain) (Status, *Record, string, error) {
+func lookupReportsRecord(ctx context.Context, resolver dns.Resolver, dmarcDomain, extDestDomain dns.Domain) (Status, *Record, string, bool, error) {
 	name := dmarcDomain.ASCII + "._report._dmarc." + extDestDomain.ASCII + "."
-	txts, err := dns.WithPackage(resolver, "dmarc").LookupTXT(ctx, name)
+	txts, result, err := dns.WithPackage(resolver, "dmarc").LookupTXT(ctx, name)
 	if err != nil && !dns.IsNotFound(err) {
-		return StatusTemperror, nil, "", fmt.Errorf("%w: %s", ErrDNS, err)
+		return StatusTemperror, nil, "", result.Authentic, fmt.Errorf("%w: %s", ErrDNS, err)
 	}
 	var record *Record
 	var text string
@@ -168,17 +174,17 @@ func lookupReportsRecord(ctx context.Context, resolver dns.Resolver, dmarcDomain
 			// ../rfc/7489:1374
 			continue
 		} else if err != nil {
-			return StatusPermerror, nil, text, fmt.Errorf("%w: %s", ErrSyntax, err)
+			return StatusPermerror, nil, text, result.Authentic, fmt.Errorf("%w: %s", ErrSyntax, err)
 		}
 		if record != nil {
 			// ../ ../rfc/7489:1388
-			return StatusNone, nil, "", ErrMultipleRecords
+			return StatusNone, nil, "", result.Authentic, ErrMultipleRecords
 		}
 		text = txt
 		record = r
 		rerr = nil
 	}
-	return StatusNone, record, text, rerr
+	return StatusNone, record, text, result.Authentic, rerr
 }
 
 // LookupExternalReportsAccepted returns whether the extDestDomain has opted in
@@ -191,16 +197,18 @@ func lookupReportsRecord(ctx context.Context, resolver dns.Resolver, dmarcDomain
 //
 // The normally invalid "v=DMARC1" record is accepted since it is used as
 // example in RFC 7489.
-func LookupExternalReportsAccepted(ctx context.Context, resolver dns.Resolver, dmarcDomain dns.Domain, extDestDomain dns.Domain) (accepts bool, status Status, record *Record, txt string, rerr error) {
+//
+// authentic indicates if the DNS results were DNSSEC-verified.
+func LookupExternalReportsAccepted(ctx context.Context, resolver dns.Resolver, dmarcDomain dns.Domain, extDestDomain dns.Domain) (accepts bool, status Status, record *Record, txt string, authentic bool, rerr error) {
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	defer func() {
 		log.Debugx("dmarc externalreports result", rerr, mlog.Field("accepts", accepts), mlog.Field("dmarcdomain", dmarcDomain), mlog.Field("extdestdomain", extDestDomain), mlog.Field("record", record), mlog.Field("duration", time.Since(start)))
 	}()
 
-	status, record, txt, rerr = lookupReportsRecord(ctx, resolver, dmarcDomain, extDestDomain)
+	status, record, txt, authentic, rerr = lookupReportsRecord(ctx, resolver, dmarcDomain, extDestDomain)
 	accepts = rerr == nil
-	return accepts, status, record, txt, rerr
+	return accepts, status, record, txt, authentic, rerr
 }
 
 // Verify evaluates the DMARC policy for the domain in the From-header of a
@@ -231,12 +239,13 @@ func Verify(ctx context.Context, resolver dns.Resolver, from dns.Domain, dkimRes
 		log.Debugx("dmarc verify result", result.Err, mlog.Field("fromdomain", from), mlog.Field("dkimresults", dkimResults), mlog.Field("spfresult", spfResult), mlog.Field("status", result.Status), mlog.Field("reject", result.Reject), mlog.Field("use", useResult), mlog.Field("duration", time.Since(start)))
 	}()
 
-	status, recordDomain, record, _, err := Lookup(ctx, resolver, from)
+	status, recordDomain, record, _, authentic, err := Lookup(ctx, resolver, from)
 	if record == nil {
-		return false, Result{false, status, recordDomain, record, err}
+		return false, Result{false, status, recordDomain, record, authentic, err}
 	}
 	result.Domain = recordDomain
 	result.Record = record
+	result.RecordAuthentic = authentic
 
 	// Record can request sampling of messages to apply policy.
 	// See ../rfc/7489:1432

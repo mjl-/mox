@@ -158,7 +158,7 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 
 	ourHostname := mox.Conf.Static.HostnameDomain
 	remoteHostname := dns.Domain{ASCII: "mox.example"}
-	client, err := smtpclient.New(ctxbg, xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, ourHostname, remoteHostname, auth)
+	client, err := smtpclient.New(ctxbg, xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, ourHostname, remoteHostname, auth, nil, nil, nil)
 	if err != nil {
 		clientConn.Close()
 	} else {

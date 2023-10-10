@@ -3,6 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	cryptorand "crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"log"
@@ -146,6 +153,36 @@ logging in with IMAP.
 	resolveCtx, resolveCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer resolveCancel()
 
+	fmt.Printf("Checking if DNS resolvers are DNSSEC-verifying...")
+	_, resolverDNSSECResult, err := resolver.LookupNS(resolveCtx, ".")
+	if err != nil {
+		fmt.Println("")
+		fatalf("checking dnssec support in resolver: %v", err)
+	} else if !resolverDNSSECResult.Authentic {
+		fmt.Printf(`
+
+WARNING: It looks like the DNS resolvers configured on your system do not
+verify DNSSEC, or aren't trusted (by having loopback IPs or through "options
+trust-ad" in /etc/resolv.conf).  Without DNSSEC, outbound delivery with SMTP
+used unprotected MX records, and SMTP STARTTLS connections cannot verify the TLS
+certificate with DANE (based on a public key in DNS), and will fallback to
+either MTA-STS for verification, or use "opportunistic TLS" with no certificate
+verification.
+
+Recommended action: Install unbound, a DNSSEC-verifying recursive DNS resolver,
+and enable support for "extended dns errors" (EDE):
+
+cat <<EOF >/etc/unbound/unbound.conf.d/ede.conf
+server:
+    ede: yes
+    val-log-level: 2
+EOF
+
+`)
+	} else {
+		fmt.Println(" OK")
+	}
+
 	// We are going to find the (public) IPs to listen on and possibly the host name.
 
 	// Start with reasonable defaults. We'll replace them specific IPs, if we can find them.
@@ -244,7 +281,7 @@ logging in with IMAP.
 			for _, ip := range publicIPs {
 				revctx, revcancel := context.WithTimeout(resolveCtx, 5*time.Second)
 				defer revcancel()
-				l, err := resolver.LookupAddr(revctx, ip)
+				l, _, err := resolver.LookupAddr(revctx, ip)
 				if err != nil {
 					warnf("WARNING: looking up reverse name(s) for %s: %v", ip, err)
 				}
@@ -306,7 +343,7 @@ again with the -hostname flag.
 	fmt.Printf("Looking up IPs for hostname %s...", dnshostname)
 	ipctx, ipcancel := context.WithTimeout(resolveCtx, 5*time.Second)
 	defer ipcancel()
-	ips, err := resolver.LookupIPAddr(ipctx, dnshostname.ASCII+".")
+	ips, domainDNSSECResult, err := resolver.LookupIPAddr(ipctx, dnshostname.ASCII+".")
 	ipcancel()
 	var xips []net.IPAddr
 	var hostIPs []string
@@ -403,6 +440,23 @@ This likely means one of two things:
 
 
 `, dnshostname, err)
+	} else if !domainDNSSECResult.Authentic {
+		if !dnswarned {
+			fmt.Printf("\n")
+		}
+		dnswarned = true
+		fmt.Printf(`
+NOTE: It looks like the DNS records of your domain (zone) are not DNSSEC-signed.
+Mail servers that send email to your domain, or receive email from your domain,
+cannot verify that the MX/SPF/DKIM/DMARC/MTA-STS records they receive are
+authentic. DANE, for authenticated delivery without relying on a pool of
+certificate authorities, requires DNSSEC, so will not be configured at this
+time.
+Recommended action: Continue now, but consider enabling DNSSEC for your domain
+later at your DNS operator, and adding DANE records for protecting incoming
+messages over SMTP.
+
+`)
 	}
 
 	if !dnswarned {
@@ -421,7 +475,7 @@ This likely means one of two things:
 			go func() {
 				revctx, revcancel := context.WithTimeout(resolveCtx, 5*time.Second)
 				defer revcancel()
-				addrs, err := resolver.LookupAddr(revctx, s)
+				addrs, _, err := resolver.LookupAddr(revctx, s)
 				results <- result{s, addrs, err}
 			}()
 		}
@@ -581,9 +635,57 @@ many authentication failures).
 				{CertFile: autoconfigbase + "-chain.crt.pem", KeyFile: autoconfigbase + ".key.pem"},
 			},
 		}
+
+		fmt.Println(
+			`Placeholder paths to TLS certificates to be provided by the existing webserver
+have been placed in config/mox.conf and need to be edited.
+
+No private keys for the public listener have been generated for use with DANE.
+To configure DANE (which requires DNSSEC), set config field HostPrivateKeyFiles
+in the "public" Listener to both RSA 2048-bit and ECDSA P-256 private key files
+and check the admin page for the needed DNS records.`)
+
 	} else {
+		// todo: we may want to generate a second set of keys, make the user already add it to the DNS, but keep the private key offline. would require config option to specify a public key only, so the dane records can be generated.
+		hostRSAPrivateKey, err := rsa.GenerateKey(cryptorand.Reader, 2048)
+		if err != nil {
+			fatalf("generating rsa private key for host: %s", err)
+		}
+		hostECDSAPrivateKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+		if err != nil {
+			fatalf("generating ecsa private key for host: %s", err)
+		}
+		now := time.Now()
+		timestamp := now.Format("20060102T150405")
+		hostRSAPrivateKeyFile := fmt.Sprintf("hostkeys/%s.%s.%s.privatekey.pkcs8.pem", dnshostname.Name(), timestamp, "rsa2048")
+		hostECDSAPrivateKeyFile := fmt.Sprintf("hostkeys/%s.%s.%s.privatekey.pkcs8.pem", dnshostname.Name(), timestamp, "ecdsap256")
+		xwritehostkeyfile := func(path string, key crypto.Signer) {
+			buf, err := x509.MarshalPKCS8PrivateKey(key)
+			if err != nil {
+				fatalf("marshaling host private key to pkcs8 for %s: %s", path, err)
+			}
+			var b bytes.Buffer
+			block := pem.Block{
+				Type:  "PRIVATE KEY",
+				Bytes: buf,
+			}
+			err = pem.Encode(&b, &block)
+			if err != nil {
+				fatalf("pem-encoding host private key file for %s: %s", path, err)
+			}
+			xwritefile(path, b.Bytes(), 0600)
+		}
+		xwritehostkeyfile(filepath.Join("config", hostRSAPrivateKeyFile), hostRSAPrivateKey)
+		xwritehostkeyfile(filepath.Join("config", hostECDSAPrivateKeyFile), hostECDSAPrivateKey)
+
 		public.TLS = &config.TLS{
 			ACME: "letsencrypt",
+			HostPrivateKeyFiles: []string{
+				hostRSAPrivateKeyFile,
+				hostECDSAPrivateKeyFile,
+			},
+			HostPrivateRSA2048Keys:   []crypto.Signer{hostRSAPrivateKey},
+			HostPrivateECDSAP256Keys: []crypto.Signer{hostECDSAPrivateKey},
 		}
 		public.AutoconfigHTTPS.Enabled = true
 		public.MTASTSHTTPS.Enabled = true
@@ -780,7 +882,7 @@ configured correctly.
 	// priming dns caches with negative/absent records, causing our "quick setup" to
 	// appear to fail or take longer than "quick".
 
-	records, err := mox.DomainRecords(confDomain, domain)
+	records, err := mox.DomainRecords(confDomain, domain, domainDNSSECResult.Authentic)
 	if err != nil {
 		fatalf("making required DNS records")
 	}
@@ -836,9 +938,6 @@ http://localhost/admin/   - admin (empty username)
 To access these from your browser, run
 "ssh -L 8080:localhost:80 you@yourmachine" locally and open
 http://localhost:8080/[...].
-
-For secure email exchange you should have a strictly validating DNSSEC
-resolver. An easy and the recommended way is to install unbound.
 
 If you run into problem, have questions/feedback or found a bug, please let us
 know. Mox needs your help!

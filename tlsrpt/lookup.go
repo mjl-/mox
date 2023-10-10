@@ -58,7 +58,7 @@ func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rrec
 	}()
 
 	name := "_smtp._tls." + domain.ASCII + "."
-	txts, err := dns.WithPackage(resolver, "tlsrpt").LookupTXT(ctx, name)
+	txts, _, err := dns.WithPackage(resolver, "tlsrpt").LookupTXT(ctx, name)
 	if dns.IsNotFound(err) {
 		return nil, "", ErrNoRecord
 	} else if err != nil {
