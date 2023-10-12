@@ -2388,7 +2388,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			),
 			isImage(a) ?
 				dom.div(
-					style({flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 5em'}),
+					style({flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100% - 50px)', margin: '0 5em'}),
 					dom.img(
 						attr.src('msg/'+m.ID+'/view/'+pathStr),
 						style({backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', margin: '0 30px'})
