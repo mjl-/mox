@@ -33,11 +33,11 @@ func TestIPRev(t *testing.T) {
 		AAAA: map[string][]string{
 			"basic6.example.": {"2001:db8::1"},
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "ptr", Name: "10.0.0.3"}:           {},
-			{Type: "ptr", Name: "2001:db8::3"}:        {},
-			{Type: "ip", Name: "temperror.example."}:  {},
-			{Type: "ip", Name: "temperror2.example."}: {},
+		Fail: []string{
+			"ptr 10.0.0.3",
+			"ptr 2001:db8::3",
+			"ip temperror.example.",
+			"ip temperror2.example.",
 		},
 		Authentic: []string{
 			"ptr 10.0.0.1",

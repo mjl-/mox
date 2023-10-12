@@ -39,9 +39,9 @@ func TestLookup(t *testing.T) {
 			"_mta-sts.b.cnames.example.":        "_mta-sts.c.cnames.example.",
 			"_mta-sts.followtemperror.example.": "_mta-sts.cnametemperror.example.",
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "txt", Name: "_mta-sts.temperror.example."}:        {},
-			{Type: "cname", Name: "_mta-sts.cnametemperror.example."}: {},
+		Fail: []string{
+			"txt _mta-sts.temperror.example.",
+			"cname _mta-sts.cnametemperror.example.",
 		},
 	}
 

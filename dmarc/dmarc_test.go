@@ -21,8 +21,8 @@ func TestLookup(t *testing.T) {
 			"_dmarc.malformed.example.": {"v=DMARC1; p=none; bogus;"},
 			"_dmarc.example.com.":       {"v=DMARC1; p=none;"},
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "txt", Name: "_dmarc.temperror.example."}: {},
+		Fail: []string{
+			"txt _dmarc.temperror.example.",
 		},
 	}
 
@@ -60,8 +60,8 @@ func TestLookupExternalReportsAccepted(t *testing.T) {
 			"example.com._report._dmarc.multiple.example.":  {"v=DMARC1; p=none;", "v=DMARC1"},
 			"example.com._report._dmarc.malformed.example.": {"v=DMARC1; p=none; bogus;"},
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "txt", Name: "example.com._report._dmarc.temperror.example."}: {},
+		Fail: []string{
+			"txt example.com._report._dmarc.temperror.example.",
 		},
 	}
 
@@ -100,8 +100,8 @@ func TestVerify(t *testing.T) {
 			"_dmarc.malformed.example.": {"v=DMARC1; p=none; bogus"},
 			"_dmarc.example.com.":       {"v=DMARC1; p=reject"},
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "txt", Name: "_dmarc.temperror.example."}: {},
+		Fail: []string{
+			"txt _dmarc.temperror.example.",
 		},
 	}
 

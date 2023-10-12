@@ -22,8 +22,8 @@ func TestLookup(t *testing.T) {
 			"nonspf.example.":    {"something else"},
 			"ok.example.":        {"v=spf1"},
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "txt", Name: "temperror.example."}: {},
+		Fail: []string{
+			"txt temperror.example.",
 		},
 	}
 
@@ -245,7 +245,6 @@ func TestVerify(t *testing.T) {
 				{Host: "mail-c.example.org.", Pref: 10},
 			},
 		},
-		Fail: map[dns.Mockreq]struct{}{},
 	}
 
 	ctx := context.Background()
@@ -441,8 +440,8 @@ func TestVerifyScenarios(t *testing.T) {
 			"2001:db8::1": {"mail.mox.example."},
 			"10.0.1.1":    {"mx1.many-mx.example.", "mx2.many-mx.example.", "mx3.many-mx.example.", "mx4.many-mx.example.", "mx5.many-mx.example.", "mx6.many-mx.example.", "mx7.many-mx.example.", "mx8.many-mx.example.", "mx9.many-mx.example.", "mx10.many-mx.example.", "mx11.many-mx.example."},
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "txt", Name: "temperror.example."}: {},
+		Fail: []string{
+			"txt temperror.example.",
 		},
 	}
 

@@ -460,8 +460,8 @@ test
 	})
 	// DNS request is failing temporarily.
 	test(nil, StatusTemperror, ErrDNS, func() {
-		resolver.Fail = map[dns.Mockreq]struct{}{
-			{Type: "txt", Name: "test._domainkey.mox.example."}: {},
+		resolver.Fail = []string{
+			"txt test._domainkey.mox.example.",
 		}
 	})
 	// Claims to be DKIM through v=, but cannot be parsed. ../rfc/6376:2621

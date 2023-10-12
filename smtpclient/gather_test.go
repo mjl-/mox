@@ -73,10 +73,10 @@ func TestGatherDestinations(t *testing.T) {
 			"danglingcname.example.":        "absent.example.", // Points to missing name.
 			"temperror-cname.example.":      "absent.example.",
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "mx", Name: "temperror-mx.example."}:       {},
-			{Type: "host", Name: "temperror-a.example."}:      {},
-			{Type: "cname", Name: "temperror-cname.example."}: {},
+		Fail: []string{
+			"mx temperror-mx.example.",
+			"host temperror-a.example.",
+			"cname temperror-cname.example.",
 		},
 		Inauthentic: []string{"cname cnameinauthentic.example."},
 	}
@@ -154,9 +154,9 @@ func TestGatherIPs(t *testing.T) {
 			"danglingcname.example.":        "absent.example.", // Points to missing name.
 			"temperror-cname.example.":      "absent.example.",
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "host", Name: "temperror-a.example."}:      {},
-			{Type: "cname", Name: "temperror-cname.example."}: {},
+		Fail: []string{
+			"host temperror-a.example.",
+			"cname temperror-cname.example.",
 		},
 		Inauthentic: []string{"cname cnameinauthentic.example."},
 	}
@@ -241,8 +241,8 @@ func TestGatherTLSA(t *testing.T) {
 			"_25._tcp.cnameinauthentic.example.":     "_25._tcp.host1.example.",
 			"_25._tcp.danglingcname.example.":        "_25._tcp.absent.example.", // Points to missing name.
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "cname", Name: "_25._tcp.temperror-cname.example."}: {},
+		Fail: []string{
+			"cname _25._tcp.temperror-cname.example.",
 		},
 		Inauthentic: []string{
 			"cname _25._tcp.cnameinauthentic.example.",

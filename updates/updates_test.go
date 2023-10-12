@@ -28,8 +28,8 @@ func TestUpdates(t *testing.T) {
 			"_updates.temperror.example.":  {"v=UPDATES0; l=v0.0.1"},
 			"_updates.unknown.example.":    {"v=UPDATES0; l=v0.0.1; unknown=ok"},
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "txt", Name: "_updates.temperror.example."}: {},
+		Fail: []string{
+			"txt _updates.temperror.example.",
 		},
 	}
 

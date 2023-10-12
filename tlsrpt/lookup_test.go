@@ -18,8 +18,8 @@ func TestLookup(t *testing.T) {
 			"_smtp._tls.malformed.example.": {"v=TLSRPTv1; bad"},
 			"_smtp._tls.other.example.":     {"other"},
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "txt", Name: "_smtp._tls.temperror.example."}: {},
+		Fail: []string{
+			"txt _smtp._tls.temperror.example.",
 		},
 	}
 

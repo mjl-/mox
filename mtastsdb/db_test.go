@@ -117,8 +117,8 @@ func TestDB(t *testing.T) {
 			"_mta-sts.other.example.com.":     {"v=STSv1; id=1"},
 			"_mta-sts.temperror.example.com.": {""},
 		},
-		Fail: map[dns.Mockreq]struct{}{
-			{Type: "txt", Name: "_mta-sts.temperror.example.com."}: {},
+		Fail: []string{
+			"txt _mta-sts.temperror.example.com.",
 		},
 	}
 
