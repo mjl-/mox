@@ -242,6 +242,12 @@ The message is printed to stdout and is in standard internet mail format.
 
 Import a maildir into an account.
 
+The mbox/maildir archive is accessed and imported by the running mox process, so
+it must have access to the archive files. The default suggested systemd service
+file isolates mox from most of the file system, with only the "data/" directory
+accessible, so you may want to put the mbox/maildir archive files in a
+directory like "data/import/" to make it available to mox.
+
 By default, messages will train the junk filter based on their flags and, if
 "automatic junk flags" configuration is set, based on mailbox naming.
 
@@ -255,9 +261,6 @@ uploading a zip or tgz file with mbox and/or maildirs.
 Mailbox flags, like "seen", "answered", will be imported. An optional
 dovecot-keywords file can specify additional flags, like Forwarded/Junk/NotJunk.
 
-The maildir files/directories are read by the mox process, so make sure it has
-access to the maildir directories/files.
-
 	usage: mox import maildir accountname mailboxname maildir
 
 # mox import mbox
@@ -265,6 +268,12 @@ access to the maildir directories/files.
 Import an mbox into an account.
 
 Using mbox is not recommended, maildir is a better defined format.
+
+The mbox/maildir archive is accessed and imported by the running mox process, so
+it must have access to the archive files. The default suggested systemd service
+file isolates mox from most of the file system, with only the "data/" directory
+accessible, so you may want to put the mbox/maildir archive files in a
+directory like "data/import/" to make it available to mox.
 
 By default, messages will train the junk filter based on their flags and, if
 "automatic junk flags" configuration is set, based on mailbox naming.
@@ -275,9 +284,6 @@ recipients to be accepted, unless other reputation signals prevent that.
 
 Users can also import mailboxes/messages through the account web page by
 uploading a zip or tgz file with mbox and/or maildirs.
-
-The mailbox is read by the mox process, so make sure it has access to the
-maildir directories/files.
 
 	usage: mox import mbox accountname mailboxname mbox
 
