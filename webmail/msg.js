@@ -964,7 +964,7 @@ const init = () => {
 	if (mi.Attachments && mi.Attachments.length > 0) {
 		dom._kids(msgattachmentview, dom.div(style({ borderTop: '1px solid #ccc' }), dom.div(dom._class('pad'), 'Attachments: ', join(mi.Attachments.map(a => a.Filename || '(unnamed)'), () => ', '))));
 	}
-	const msgheaderview = dom.table(style({ marginBottom: '1ex', width: '100%' }));
+	const msgheaderview = dom.table(dom._class('msgheaders'), style({ marginBottom: '1ex', width: '100%' }));
 	loadMsgheaderView(msgheaderview, mi, [], null);
 	const l = window.location.pathname.split('/');
 	const w = l[l.length - 1];

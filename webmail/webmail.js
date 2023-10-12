@@ -2715,7 +2715,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 	let urlType; // text, html, htmlexternal; for opening in new tab/print
 	let msgbuttonElem, msgheaderElem, msgattachmentElem, msgmodeElem;
 	let msgheaderdetailsElem = null; // When full headers are visible, or some headers are requested through settings.
-	const msgmetaElem = dom.div(style({ backgroundColor: '#f8f8f8', borderBottom: '1px solid #ccc', maxHeight: '90%', overflowY: 'auto' }), attr.role('region'), attr.arialabel('Buttons and headers for message'), msgbuttonElem = dom.div(), dom.div(attr.arialive('assertive'), msgheaderElem = dom.table(style({ marginBottom: '1ex', width: '100%' })), msgattachmentElem = dom.div(), msgmodeElem = dom.div()));
+	const msgmetaElem = dom.div(style({ backgroundColor: '#f8f8f8', borderBottom: '1px solid #ccc', maxHeight: '90%', overflowY: 'auto' }), attr.role('region'), attr.arialabel('Buttons and headers for message'), msgbuttonElem = dom.div(), dom.div(attr.arialive('assertive'), msgheaderElem = dom.table(dom._class('msgheaders'), style({ marginBottom: '1ex', width: '100%' })), msgattachmentElem = dom.div(), msgmodeElem = dom.div()));
 	const msgscrollElem = dom.div(dom._class('pad', 'yscrollauto'), attr.role('region'), attr.arialabel('Message body'), style({ backgroundColor: 'white' }));
 	const msgcontentElem = dom.div(dom._class('scrollparent'), style({ flexGrow: '1' }));
 	const trashMailboxID = listMailboxes().find(mb => mb.Trash)?.ID;

@@ -2207,7 +2207,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		msgbuttonElem=dom.div(),
 		dom.div(
 			attr.arialive('assertive'),
-			msgheaderElem=dom.table(style({marginBottom: '1ex', width: '100%'})),
+			msgheaderElem=dom.table(dom._class('msgheaders'), style({marginBottom: '1ex', width: '100%'})),
 			msgattachmentElem=dom.div(),
 			msgmodeElem=dom.div(),
 		),
