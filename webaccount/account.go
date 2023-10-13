@@ -52,7 +52,7 @@ var accountSherpaHandler http.Handler
 func mustParseAPI(api string, buf []byte) (doc sherpadoc.Section) {
 	err := json.Unmarshal(buf, &doc)
 	if err != nil {
-		xlog.Fatalx("parsing api docs", err, mlog.Field("api", api))
+		xlog.Fatalx("parsing webaccount api docs", err, mlog.Field("api", api))
 	}
 	return doc
 }
