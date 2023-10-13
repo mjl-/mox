@@ -2145,7 +2145,7 @@ const compose = (opts) => {
 		maxWidth: '70em',
 		width: '40%',
 		borderRadius: '.25em',
-	}), dom.form(fieldset = dom.fieldset(dom.table(style({ width: '100%' }), dom.tr(dom.td(style({ textAlign: 'right', color: '#555' }), dom.span('From:')), dom.td(dom.clickbutton('Cancel', style({ float: 'right' }), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)), from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)))), toRow = dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555' })), toCell = dom.td(style({ width: '100%' }))), replyToRow = dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555' })), replyToCell = dom.td(style({ width: '100%' }))), ccRow = dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555' })), ccCell = dom.td(style({ width: '100%' }))), bccRow = dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555' })), bccCell = dom.td(style({ width: '100%' }))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555' })), dom.td(style({ width: '100%' }), subject = dom.input(focusPlaceholder('subject...'), attr.value(opts.subject || ''), attr.required(''), style({ width: '100%' }))))), body = dom.textarea(dom._class('mono'), attr.rows('15'), style({ width: '100%' }), opts.body || '', opts.body && !opts.isForward ? prop({ selectionStart: opts.body.length, selectionEnd: opts.body.length }) : [], function keyup(e) {
+	}), dom.form(fieldset = dom.fieldset(dom.table(style({ width: '100%' }), dom.tr(dom.td(style({ textAlign: 'right', color: '#555' }), dom.span('From:')), dom.td(dom.clickbutton('Cancel', style({ float: 'right' }), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)), from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)))), toRow = dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555' })), toCell = dom.td(style({ width: '100%' }))), replyToRow = dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555' })), replyToCell = dom.td(style({ width: '100%' }))), ccRow = dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555' })), ccCell = dom.td(style({ width: '100%' }))), bccRow = dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555' })), bccCell = dom.td(style({ width: '100%' }))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555' })), dom.td(style({ width: '100%' }), subject = dom.input(focusPlaceholder('subject...'), attr.value(opts.subject || ''), attr.required(''), style({ width: '100%' }))))), body = dom.textarea(dom._class('mono'), attr.rows('15'), style({ width: '100%' }), opts.body || '', opts.body && !opts.isForward && !opts.body.startsWith('\n\n') ? prop({ selectionStart: opts.body.length, selectionEnd: opts.body.length }) : [], function keyup(e) {
 		if (e.key === 'Enter') {
 			checkAttachments();
 		}
@@ -2571,8 +2571,10 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		const pm = await parsedMessagePromise;
 		let body = '';
 		const sel = window.getSelection();
+		let haveSel = false;
 		if (sel && sel.toString()) {
 			body = sel.toString();
+			haveSel = true;
 		}
 		else if (pm.Texts && pm.Texts.length > 0) {
 			body = pm.Texts[0];
@@ -2582,7 +2584,20 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			body = '\n\n---- Forwarded Message ----\n\n' + body;
 		}
 		else {
-			body = body.split('\n').map(line => '> ' + line).join('\n') + '\n\n';
+			body = body.split('\n').map(line => '> ' + line).join('\n');
+			if (haveSel) {
+				body += '\n\n';
+			}
+			else {
+				let onWroteLine = '';
+				if (mi.Envelope.Date && mi.Envelope.From && mi.Envelope.From.length === 1) {
+					const from = mi.Envelope.From[0];
+					const name = from.Name || formatEmailAddress(from);
+					const datetime = mi.Envelope.Date.toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" }) + ' at ' + mi.Envelope.Date.toLocaleTimeString();
+					onWroteLine = 'On ' + datetime + ', ' + name + ' wrote:\n';
+				}
+				body = '\n\n' + onWroteLine + body;
+			}
 		}
 		const subjectPrefix = forward ? 'Fwd:' : 'Re:';
 		let subject = mi.Envelope.Subject || '';

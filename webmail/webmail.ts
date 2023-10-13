@@ -1428,7 +1428,7 @@ const compose = (opts: ComposeOptions) => {
 				),
 				body=dom.textarea(dom._class('mono'), attr.rows('15'), style({width: '100%'}),
 					opts.body || '',
-					opts.body && !opts.isForward ? prop({selectionStart: opts.body.length, selectionEnd: opts.body.length}) : [],
+					opts.body && !opts.isForward && !opts.body.startsWith('\n\n') ? prop({selectionStart: opts.body.length, selectionEnd: opts.body.length}) : [],
 					function keyup(e: KeyboardEvent) {
 						if (e.key === 'Enter') {
 							checkAttachments()
@@ -2037,8 +2037,10 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		const pm = await parsedMessagePromise
 		let body = ''
 		const sel = window.getSelection()
+		let haveSel = false
 		if (sel && sel.toString()) {
 			body = sel.toString()
+			haveSel = true
 		} else if (pm.Texts && pm.Texts.length > 0) {
 			body = pm.Texts[0]
 		}
@@ -2046,7 +2048,19 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		if (forward) {
 			body = '\n\n---- Forwarded Message ----\n\n'+body
 		} else {
-			body = body.split('\n').map(line => '> ' + line).join('\n') + '\n\n'
+			body = body.split('\n').map(line => '> ' + line).join('\n')
+			if (haveSel) {
+				body += '\n\n'
+			} else {
+				let onWroteLine = ''
+				if (mi.Envelope.Date && mi.Envelope.From && mi.Envelope.From.length === 1) {
+					const from = mi.Envelope.From[0]
+					const name = from.Name || formatEmailAddress(from)
+					const datetime = mi.Envelope.Date.toLocaleDateString(undefined, {weekday: "short", year: "numeric", month: "short", day: "numeric"}) + ' at ' + mi.Envelope.Date.toLocaleTimeString()
+					onWroteLine = 'On ' + datetime + ', ' + name + ' wrote:\n'
+				}
+				body = '\n\n' + onWroteLine + body
+			}
 		}
 		const subjectPrefix = forward ? 'Fwd:' : 'Re:'
 		let subject = mi.Envelope.Subject || ''
