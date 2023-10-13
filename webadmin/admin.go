@@ -1364,7 +1364,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		addf(&r.Autodiscover.Instructions, "Ensure DNS records like the following exist:\n\n\t_autodiscover._tcp.%s SRV 0 1 443 autoconfig.%s\n\tautoconfig.%s CNAME %s\n\nNote: the trailing dots are relevant, it makes the host names absolute instead of relative to the domain name.", domain.ASCII+".", domain.ASCII+".", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
+		addf(&r.Autodiscover.Instructions, "Ensure DNS records like the following exist:\n\n\t_autodiscover._tcp.%s SRV 0 1 443 %s\n\tautoconfig.%s CNAME %s\n\nNote: the trailing dots are relevant, it makes the host names absolute instead of relative to the domain name.", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 
 		_, srvs, _, err := resolver.LookupSRV(ctx, "autodiscover", "tcp", domain.ASCII+".")
 		if err != nil {

@@ -623,6 +623,11 @@ func Listen() {
 					dom.ASCII = strings.TrimPrefix(dom.ASCII, "autoconfig.")
 					dom.Unicode = strings.TrimPrefix(dom.Unicode, "autoconfig.")
 				}
+				// Autodiscovery uses a SRV record. It shouldn't point to a CNAME. So we directly
+				// use the mail server's host name.
+				if dom == mox.Conf.Static.HostnameDomain || dom == mox.Conf.Static.Listeners["public"].HostnameDomain {
+					return true
+				}
 				_, ok := mox.Conf.Domain(dom)
 				return ok
 			}

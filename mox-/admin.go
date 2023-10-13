@@ -626,7 +626,7 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 	records = append(records,
 		"; Autoconfig is used by Thunderbird. Autodiscover is (in theory) used by Microsoft.",
 		fmt.Sprintf(`autoconfig.%s.         CNAME %s.`, d, h),
-		fmt.Sprintf(`_autodiscover._tcp.%s. SRV 0 1 443 autoconfig.%s.`, d, d),
+		fmt.Sprintf(`_autodiscover._tcp.%s. SRV 0 1 443 %s.`, d, h),
 		"",
 
 		// ../rfc/6186:133 ../rfc/8314:692
