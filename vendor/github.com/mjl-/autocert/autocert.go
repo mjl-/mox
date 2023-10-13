@@ -724,7 +724,8 @@ func (m *Manager) verifyRFC(ctx context.Context, client *acme.Client, domain str
 	// all order authorizations: if we've tried a challenge type once and it didn't work,
 	// it will most likely not work on another order's authorization either.
 	challengeTypes := m.supportedChallengeTypes()
-	nextTyp := 0 // challengeTypes index
+	nextTyp := 0         // challengeTypes index
+	var authErrs []error // Validation errors, possibly hinting at a solution.
 AuthorizeOrderLoop:
 	for {
 		o, err := client.AuthorizeOrder(ctx, acme.DomainIDs(domain))
@@ -765,18 +766,29 @@ AuthorizeOrderLoop:
 				nextTyp++
 			}
 			if chal == nil {
-				return nil, fmt.Errorf("acme/autocert: unable to satisfy %q for domain %q: no viable challenge type found", z.URI, domain)
+				details := ""
+				if len(authErrs) > 0 {
+					details = " (failures: " + authErrs[0].Error()
+					for _, err := range authErrs[1:] {
+						details += "; " + err.Error()
+					}
+					details += ")"
+				}
+				return nil, fmt.Errorf("acme/autocert: unable to satisfy %q for domain %q: no viable challenge type found%s", z.URI, domain, details)
 			}
 			// Respond to the challenge and wait for validation result.
 			cleanup, err := m.fulfill(ctx, client, chal, domain)
 			if err != nil {
+				authErrs = append(authErrs, fmt.Errorf("challenge %s: preparing response for validation: %v", chal.Type, err))
 				continue AuthorizeOrderLoop
 			}
 			defer cleanup()
 			if _, err := client.Accept(ctx, chal); err != nil {
+				authErrs = append(authErrs, fmt.Errorf("challenge %s: requesting validation: %v", chal.Type, err))
 				continue AuthorizeOrderLoop
 			}
 			if _, err := client.WaitAuthorization(ctx, z.URI); err != nil {
+				authErrs = append(authErrs, fmt.Errorf("challenge %s: %v", chal.Type, err))
 				continue AuthorizeOrderLoop
 			}
 		}
@@ -785,6 +797,7 @@ AuthorizeOrderLoop:
 		// Wait for the CA to update the order status.
 		o, err = client.WaitOrder(ctx, o.URI)
 		if err != nil {
+			authErrs = append(authErrs, fmt.Errorf("waiting for order: %v", err))
 			continue AuthorizeOrderLoop
 		}
 		return o, nil

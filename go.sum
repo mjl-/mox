@@ -149,6 +149,8 @@ github.com/mjl-/adns v0.0.0-20231009145311-e3834995f16c h1:ZOr9KnCxfAwJWSeZn8Qs6
 github.com/mjl-/adns v0.0.0-20231009145311-e3834995f16c/go.mod h1:JWhGACVviyVUEra9Zv1M8JMkDVXArVt+AIXjTXtuwb4=
 github.com/mjl-/autocert v0.0.0-20231009155929-d0d48f2f0290 h1:0hCRSu8+XCZ2cSRW+ZtP/7L5wMYjOKFSQthoyj+4cN8=
 github.com/mjl-/autocert v0.0.0-20231009155929-d0d48f2f0290/go.mod h1:taMFU86abMxKLPV4Bynhv8enbYmS67b8LG80qZv2Qus=
+github.com/mjl-/autocert v0.0.0-20231013072455-c361ae2e20a6 h1:TEXyTghAN9pmV2ffzdnhmzkML08e1Z/oGywJ9eunbRI=
+github.com/mjl-/autocert v0.0.0-20231013072455-c361ae2e20a6/go.mod h1:taMFU86abMxKLPV4Bynhv8enbYmS67b8LG80qZv2Qus=
 github.com/mjl-/bstore v0.0.2 h1:4fdpIOY/+Dv1dBHyzdqa4PD90p8Mz86FeyRpI4qcehw=
 github.com/mjl-/bstore v0.0.2/go.mod h1:/cD25FNBaDfvL/plFRxI3Ba3E+wcB0XVOS8nJDqndg0=
 github.com/mjl-/sconf v0.0.5 h1:4CMUTENpSnaeP2g6RKtrs8udTxnJgjX2MCCovxGId6s=

@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/mjl-/adns v0.0.0-20231009145311-e3834995f16c
-	github.com/mjl-/autocert v0.0.0-20231009155929-d0d48f2f0290
+	github.com/mjl-/autocert v0.0.0-20231013072455-c361ae2e20a6
 	github.com/mjl-/bstore v0.0.2
 	github.com/mjl-/sconf v0.0.5
 	github.com/mjl-/sherpa v0.6.6

@@ -17,7 +17,7 @@ github.com/mjl-/adns
 github.com/mjl-/adns/internal/bytealg
 github.com/mjl-/adns/internal/itoa
 github.com/mjl-/adns/internal/singleflight
-# github.com/mjl-/autocert v0.0.0-20231009155929-d0d48f2f0290
+# github.com/mjl-/autocert v0.0.0-20231013072455-c361ae2e20a6
 ## explicit; go 1.20
 github.com/mjl-/autocert
 # github.com/mjl-/bstore v0.0.2
