@@ -949,6 +949,12 @@ func (c *conn) cmdAuth(p *parser) {
 			}
 		} else {
 			p.xspace()
+			if !moxvar.Pedantic {
+				// Windows Mail 16005.14326.21606.0 sends two spaces between "AUTH PLAIN" and the
+				// base64 data.
+				for p.space() {
+				}
+			}
 			auth = p.remainder()
 			if auth == "" {
 				// ../rfc/4954:235
