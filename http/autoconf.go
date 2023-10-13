@@ -133,7 +133,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 }
 
 // Autodiscover from Microsoft, also used by Thunderbird.
-// User should create a DNS record: _autodiscover._tcp.<domain> IN SRV 0 0 443 <hostname or autodiscover.<domain>>
+// User should create a DNS record: _autodiscover._tcp.<domain> SRV 0 0 443 <hostname>
 //
 // In practice, autodiscover does not seem to work wit microsoft clients. A
 // connectivity test tool for outlook is available on

@@ -495,9 +495,9 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 			}
 			var s string
 			if hasDNSSEC {
-				s = fmt.Sprintf("_25._tcp.%-*s IN TLSA %s", 20+len(d)-len("_25._tcp."), h+".", tlsaRecord.Record())
+				s = fmt.Sprintf("_25._tcp.%-*s TLSA %s", 20+len(d)-len("_25._tcp."), h+".", tlsaRecord.Record())
 			} else {
-				s = fmt.Sprintf(";; _25._tcp.%-*s IN TLSA %s", 20+len(d)-len(";; _25._tcp."), h+".", tlsaRecord.Record())
+				s = fmt.Sprintf(";; _25._tcp.%-*s TLSA %s", 20+len(d)-len(";; _25._tcp."), h+".", tlsaRecord.Record())
 			}
 			records = append(records, s)
 			return nil
@@ -518,7 +518,7 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 	if d != h {
 		records = append(records,
 			"; For the machine, only needs to be created once, for the first domain added.",
-			fmt.Sprintf(`%-*s IN TXT "v=spf1 a -all"`, 20+len(d), h+"."), // ../rfc/7208:2263 ../rfc/7208:2287
+			fmt.Sprintf(`%-*s TXT "v=spf1 a -all"`, 20+len(d), h+"."), // ../rfc/7208:2263 ../rfc/7208:2287
 			"",
 		)
 	}
@@ -561,7 +561,7 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 				"; of multiple strings (max size of each is 255 bytes).",
 			)
 		}
-		s := fmt.Sprintf("%s._domainkey.%s.   IN TXT %s", name, d, TXTStrings(txt))
+		s := fmt.Sprintf("%s._domainkey.%s.   TXT %s", name, d, TXTStrings(txt))
 		records = append(records, s)
 
 	}
@@ -582,14 +582,14 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 		"; Specify the MX host is allowed to send for our domain and for itself (for DSNs).",
 		"; ~all means softfail for anything else, which is done instead of -all to prevent older",
 		"; mail servers from rejecting the message because they never get to looking for a dkim/dmarc pass.",
-		fmt.Sprintf(`%s.                    IN TXT "v=spf1 mx ~all"`, d),
+		fmt.Sprintf(`%s.                    TXT "v=spf1 mx ~all"`, d),
 		"",
 
 		"; Emails that fail the DMARC check (without aligned DKIM and without aligned SPF)",
 		"; should be rejected, and request reports. If you email through mailing lists that",
 		"; strip DKIM-Signature headers and don't rewrite the From header, you may want to",
 		"; set the policy to p=none.",
-		fmt.Sprintf(`_dmarc.%s.             IN TXT "%s"`, d, dmarcr.String()),
+		fmt.Sprintf(`_dmarc.%s.             TXT "%s"`, d, dmarcr.String()),
 		"",
 	)
 
@@ -598,8 +598,8 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 			"; Remote servers can use MTA-STS to verify our TLS certificate with the",
 			"; WebPKI pool of CA's (certificate authorities) when delivering over SMTP with",
 			"; STARTTLSTLS.",
-			fmt.Sprintf(`mta-sts.%s.            IN CNAME %s.`, d, h),
-			fmt.Sprintf(`_mta-sts.%s.           IN TXT "v=STSv1; id=%s"`, d, sts.PolicyID),
+			fmt.Sprintf(`mta-sts.%s.            CNAME %s.`, d, h),
+			fmt.Sprintf(`_mta-sts.%s.           TXT "v=STSv1; id=%s"`, d, sts.PolicyID),
 			"",
 		)
 	} else {
@@ -618,36 +618,36 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]string{{uri.String()}}}
 		records = append(records,
 			"; Request reporting about TLS failures.",
-			fmt.Sprintf(`_smtp._tls.%s.         IN TXT "%s"`, d, tlsrptr.String()),
+			fmt.Sprintf(`_smtp._tls.%s.         TXT "%s"`, d, tlsrptr.String()),
 			"",
 		)
 	}
 
 	records = append(records,
 		"; Autoconfig is used by Thunderbird. Autodiscover is (in theory) used by Microsoft.",
-		fmt.Sprintf(`autoconfig.%s.         IN CNAME %s.`, d, h),
-		fmt.Sprintf(`_autodiscover._tcp.%s. IN SRV 0 1 443 autoconfig.%s.`, d, d),
+		fmt.Sprintf(`autoconfig.%s.         CNAME %s.`, d, h),
+		fmt.Sprintf(`_autodiscover._tcp.%s. SRV 0 1 443 autoconfig.%s.`, d, d),
 		"",
 
 		// ../rfc/6186:133 ../rfc/8314:692
 		"; For secure IMAP and submission autoconfig, point to mail host.",
-		fmt.Sprintf(`_imaps._tcp.%s.        IN SRV 0 1 993 %s.`, d, h),
-		fmt.Sprintf(`_submissions._tcp.%s.  IN SRV 0 1 465 %s.`, d, h),
+		fmt.Sprintf(`_imaps._tcp.%s.        SRV 0 1 993 %s.`, d, h),
+		fmt.Sprintf(`_submissions._tcp.%s.  SRV 0 1 465 %s.`, d, h),
 		"",
 		// ../rfc/6186:242
 		"; Next records specify POP3 and non-TLS ports are not to be used.",
 		"; These are optional and safe to leave out (e.g. if you have to click a lot in a",
 		"; DNS admin web interface).",
-		fmt.Sprintf(`_imap._tcp.%s.         IN SRV 0 1 143 .`, d),
-		fmt.Sprintf(`_submission._tcp.%s.   IN SRV 0 1 587 .`, d),
-		fmt.Sprintf(`_pop3._tcp.%s.         IN SRV 0 1 110 .`, d),
-		fmt.Sprintf(`_pop3s._tcp.%s.        IN SRV 0 1 995 .`, d),
+		fmt.Sprintf(`_imap._tcp.%s.         SRV 0 1 143 .`, d),
+		fmt.Sprintf(`_submission._tcp.%s.   SRV 0 1 587 .`, d),
+		fmt.Sprintf(`_pop3._tcp.%s.         SRV 0 1 110 .`, d),
+		fmt.Sprintf(`_pop3s._tcp.%s.        SRV 0 1 995 .`, d),
 		"",
 
 		"; Optional:",
 		"; You could mark Let's Encrypt as the only Certificate Authority allowed to",
 		"; sign TLS certificates for your domain.",
-		fmt.Sprintf("%s.                    IN CAA 0 issue \"letsencrypt.org\"", d),
+		fmt.Sprintf("%s.                    CAA 0 issue \"letsencrypt.org\"", d),
 	)
 	return records, nil
 }

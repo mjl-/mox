@@ -23,7 +23,7 @@ TLS:
 EOF
 
 # A fresh file was set up by moxacmepebble.
-sed -n '/^;/,/IN CAA/p' output.txt >>/integration/example-integration.zone
+sed -n '/^;/,/CAA /p' output.txt >>/integration/example-integration.zone
 unbound-control -s 172.28.1.30 reload # reload unbound with zone file changes
 
 mox -checkconsistency serve &

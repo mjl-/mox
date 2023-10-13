@@ -660,7 +660,7 @@ Common DANE TLSA record parameters are: dane-ee spki sha2-256, or 3 1 1,
 followed by a sha2-256 hash of the DER-encoded "SPKI" (subject public key info)
 from the certificate. An example DNS zone file entry:
 
-	_25._tcp.example.com. IN TLSA 3 1 1 133b919c9d65d8b1488157315327334ead8d83372db57465ecabf53ee5748aee
+	_25._tcp.example.com. TLSA 3 1 1 133b919c9d65d8b1488157315327334ead8d83372db57465ecabf53ee5748aee
 
 The first usable information from the pem file is used to compose the TLSA
 record. In case of selector "cert", a certificate is required. Otherwise the

@@ -976,10 +976,10 @@ EOF
 		if err != nil {
 			addf(&r.SPF.Errors, "Making SPF record for instructions: %s", err)
 		}
-		domainspf := fmt.Sprintf("%s IN TXT %s", domain.ASCII+".", mox.TXTStrings(dtxt))
+		domainspf := fmt.Sprintf("%s TXT %s", domain.ASCII+".", mox.TXTStrings(dtxt))
 
 		// Check SPF record for sending host. ../rfc/7208:2263 ../rfc/7208:2287
-		hostspf := fmt.Sprintf(`%s IN TXT "v=spf1 a -all"`, mox.Conf.Static.HostnameDomain.ASCII+".")
+		hostspf := fmt.Sprintf(`%s TXT "v=spf1 a -all"`, mox.Conf.Static.HostnameDomain.ASCII+".")
 
 		addf(&r.SPF.Instructions, "Ensure DNS TXT records like the following exists:\n\n\t%s\n\t%s\n\nIf you have an existing mail setup, with other hosts also sending mail for you domain, you should add those IPs as well. You could replace \"-all\" with \"~all\" to treat mail sent from unlisted IPs as \"softfail\", or with \"?all\" for \"neutral\".", domainspf, hostspf)
 	}()
@@ -1058,7 +1058,7 @@ EOF
 				addf(&r.DKIM.Errors, "Making DKIM record for instructions: %s", err)
 				continue
 			}
-			instr += fmt.Sprintf("\n\t%s._domainkey IN TXT %s\n", sel, mox.TXTStrings(txt))
+			instr += fmt.Sprintf("\n\t%s._domainkey TXT %s\n", sel, mox.TXTStrings(txt))
 		}
 		if instr != "" {
 			instr = "Ensure the following DNS record(s) exists, so mail servers receiving emails from this domain can verify the signatures in the mail headers:\n" + instr
@@ -1111,7 +1111,7 @@ EOF
 				} else if !accepts {
 					addf(&r.DMARC.Errors, "External destination does not accept reports (%s)", err)
 				}
-				extInstr = fmt.Sprintf("Ensure a DNS TXT record exists in the domain of the destination address to opt-in to receiving reports from this domain:\n\n\t%s._report._dmarc.%s. IN TXT \"v=DMARC1;\"\n\n", domain.ASCII, domConf.DMARC.DNSDomain.ASCII)
+				extInstr = fmt.Sprintf("Ensure a DNS TXT record exists in the domain of the destination address to opt-in to receiving reports from this domain:\n\n\t%s._report._dmarc.%s. TXT \"v=DMARC1;\"\n\n", domain.ASCII, domConf.DMARC.DNSDomain.ASCII)
 			}
 
 			uri := url.URL{
@@ -1124,7 +1124,7 @@ EOF
 		} else {
 			addf(&r.DMARC.Instructions, `Configure a DMARC destination in domain in config file.`)
 		}
-		instr := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_dmarc IN TXT %s\n\nYou can start with testing mode by replacing p=reject with p=none. You can also request for the policy to be applied to a percentage of emails instead of all, by adding pct=X, with X between 0 and 100. Keep in mind that receiving mail servers will apply some anti-spam assessment regardless of the policy and whether it is applied to the message. The ruf= part requests daily aggregate reports to be sent to the specified address, which is automatically configured and reports automatically analyzed.", mox.TXTStrings(dmarcr.String()))
+		instr := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_dmarc TXT %s\n\nYou can start with testing mode by replacing p=reject with p=none. You can also request for the policy to be applied to a percentage of emails instead of all, by adding pct=X, with X between 0 and 100. Keep in mind that receiving mail servers will apply some anti-spam assessment regardless of the policy and whether it is applied to the message. The ruf= part requests daily aggregate reports to be sent to the specified address, which is automatically configured and reports automatically analyzed.", mox.TXTStrings(dmarcr.String()))
 		addf(&r.DMARC.Instructions, instr)
 		if extInstr != "" {
 			addf(&r.DMARC.Instructions, extInstr)
@@ -1166,7 +1166,7 @@ EOF
 
 Ensure a DNS TXT record like the following exists:
 
-	_smtp._tls IN TXT %s
+	_smtp._tls TXT %s
 `, mox.TXTStrings(tlsrptr.String()))
 		} else {
 			addf(&r.TLSRPT.Errors, `Configure a TLSRPT destination in domain in config file.`)
@@ -1254,14 +1254,14 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 
 		addf(&r.MTASTS.Instructions, `Enable a policy through the configuration file. For new deployments, it is best to start with mode "testing" while enabling TLSRPT. Start with a short "max_age", so updates to your policy are picked up quickly. When confidence in the deployment is high enough, switch to "enforce" mode and a longer "max age". A max age in the order of weeks is recommended. If you foresee a change to your setup in the future, requiring different policies or MX records, you may want to dial back the "max age" ahead of time, similar to how you would handle TTL's in DNS record updates.`)
 
-		host := fmt.Sprintf("Ensure DNS CNAME/A/AAAA records exist that resolve mta-sts.%s to this mail server. For example:\n\n\t%s IN CNAME %s\n\n", domain.ASCII, "mta-sts."+domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
+		host := fmt.Sprintf("Ensure DNS CNAME/A/AAAA records exist that resolve mta-sts.%s to this mail server. For example:\n\n\t%s CNAME %s\n\n", domain.ASCII, "mta-sts."+domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 		addf(&r.MTASTS.Instructions, host)
 
 		mtastsr := mtasts.Record{
 			Version: "STSv1",
 			ID:      time.Now().Format("20060102T150405"),
 		}
-		dns := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_mta-sts IN TXT %s\n\nConfigure the ID in the configuration file, it must be of the form [a-zA-Z0-9]{1,31}. It represents the version of the policy. For each policy change, you must change the ID to a new unique value. You could use a timestamp like 20220621T123000. When this field exists, an SMTP server will fetch a policy at https://mta-sts.%s/.well-known/mta-sts.txt. This policy is served by mox.", mox.TXTStrings(mtastsr.String()), domain.Name())
+		dns := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_mta-sts TXT %s\n\nConfigure the ID in the configuration file, it must be of the form [a-zA-Z0-9]{1,31}. It represents the version of the policy. For each policy change, you must change the ID to a new unique value. You could use a timestamp like 20220621T123000. When this field exists, an SMTP server will fetch a policy at https://mta-sts.%s/.well-known/mta-sts.txt. This policy is served by mox.", mox.TXTStrings(mtastsr.String()), domain.Name())
 		addf(&r.MTASTS.Instructions, dns)
 	}()
 
@@ -1318,7 +1318,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		r.SRVConf.SRVs = map[string][]*net.SRV{}
 		for _, req := range reqs {
 			name := req.name + "_.tcp." + domain.ASCII
-			instr += fmt.Sprintf("\t%s._tcp.%-*s IN SRV 0 1 %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", req.port, req.host)
+			instr += fmt.Sprintf("\t%s._tcp.%-*s SRV 0 1 %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", req.port, req.host)
 			r.SRVConf.SRVs[req.name] = req.srvs
 			if err != nil {
 				addf(&r.SRVConf.Errors, "Looking up SRV record %q: %s", name, err)
@@ -1337,7 +1337,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		addf(&r.Autoconf.Instructions, "Ensure a DNS CNAME record like the following exists:\n\n\tautoconfig.%s IN CNAME %s\n\nNote: the trailing dot is relevant, it makes the host name absolute instead of relative to the domain name.", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
+		addf(&r.Autoconf.Instructions, "Ensure a DNS CNAME record like the following exists:\n\n\tautoconfig.%s CNAME %s\n\nNote: the trailing dot is relevant, it makes the host name absolute instead of relative to the domain name.", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 
 		host := "autoconfig." + domain.ASCII + "."
 		ips, ourIPs, notOurIPs, err := lookupIPs(&r.Autoconf.Errors, host)
@@ -1364,7 +1364,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		addf(&r.Autodiscover.Instructions, "Ensure DNS records like the following exist:\n\n\t_autodiscover._tcp.%s IN SRV 0 1 443 autoconfig.%s\n\tautoconfig.%s IN CNAME %s\n\nNote: the trailing dots are relevant, it makes the host names absolute instead of relative to the domain name.", domain.ASCII+".", domain.ASCII+".", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
+		addf(&r.Autodiscover.Instructions, "Ensure DNS records like the following exist:\n\n\t_autodiscover._tcp.%s SRV 0 1 443 autoconfig.%s\n\tautoconfig.%s CNAME %s\n\nNote: the trailing dots are relevant, it makes the host names absolute instead of relative to the domain name.", domain.ASCII+".", domain.ASCII+".", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 
 		_, srvs, _, err := resolver.LookupSRV(ctx, "autodiscover", "tcp", domain.ASCII+".")
 		if err != nil {

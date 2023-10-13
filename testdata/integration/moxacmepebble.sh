@@ -22,9 +22,9 @@ EOF
 
 (
 	cat /integration/example.zone;
-	sed -n '/^;/,/IN CAA/p' output.txt |
+	sed -n '/^;/,/CAA /p' output.txt |
 		# allow sending from postfix for mox1.example.
-		sed 's/mox1.example.  *IN TXT "v=spf1 mx ~all"/mox1.example. IN TXT "v=spf1 mx ip4:172.28.1.70 ~all"/'
+		sed 's/mox1.example.  *TXT "v=spf1 mx ~all"/mox1.example. TXT "v=spf1 mx ip4:172.28.1.70 ~all"/'
 ) >/integration/example-integration.zone
 unbound-control -s 172.28.1.30 reload # reload unbound with zone file changes
 

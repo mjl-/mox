@@ -5,14 +5,14 @@ $TTL 5m
 
 @ NS dns.example.
 
-moxacmepebble.mox1  IN A 172.28.1.10
-moxmail2.mox2       IN A 172.28.1.20
-dns                 IN A 172.28.1.30
-acmepebble          IN A 172.28.1.40
-test                IN A 172.28.1.50
-localserve.mox1     IN A 172.28.1.60
-postfixmail.postfix IN A 172.28.1.70
+moxacmepebble.mox1  A 172.28.1.10
+moxmail2.mox2       A 172.28.1.20
+dns                 A 172.28.1.30
+acmepebble          A 172.28.1.40
+test                A 172.28.1.50
+localserve.mox1     A 172.28.1.60
+postfixmail.postfix A 172.28.1.70
 
 postfix MX 10 postfixmail.postfix.example.
-postfixdkim0._domainkey.postfix IN TXT "v=DKIM1;h=sha256;t=s;k=ed25519;p=a4IsBTuMsSQjU+xVyx8KEd8eObis4FrCiV72OaEkvDY="
-postfix IN TXT "v=spf1 ip4:172.28.1.20 -all"
+postfixdkim0._domainkey.postfix TXT "v=DKIM1;h=sha256;t=s;k=ed25519;p=a4IsBTuMsSQjU+xVyx8KEd8eObis4FrCiV72OaEkvDY="
+postfix TXT "v=spf1 ip4:172.28.1.20 -all"
