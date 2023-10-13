@@ -1554,7 +1554,7 @@ func ctlcmdQueueDump(ctl *ctl, id string) {
 }
 
 func cmdDKIMGenrsa(c *cmd) {
-	c.params = ">$selector._domainkey.$domain.rsakey.pkcs8.pem"
+	c.params = ">$selector._domainkey.$domain.rsa2048.privatekey.pkcs8.pem"
 	c.help = `Generate a new 2048 bit RSA private key for use with DKIM.
 
 The generated file is in PEM format, and has a comment it is generated for use
@@ -2082,7 +2082,7 @@ mox dns lookup tlsa _25._tcp.xmox.nl
 }
 
 func cmdDKIMGened25519(c *cmd) {
-	c.params = ">$selector._domainkey.$domain.ed25519key.pkcs8.pem"
+	c.params = ">$selector._domainkey.$domain.ed25519.privatekey.pkcs8.pem"
 	c.help = `Generate a new ed25519 key for use with DKIM.
 
 Ed25519 keys are much smaller than RSA keys of comparable cryptographic

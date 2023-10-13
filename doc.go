@@ -45,8 +45,8 @@ low-maintenance self-hosted email.
 	mox dane dialmx domain [destination-host]
 	mox dane makerecord usage selector matchtype [certificate.pem | publickey.pem | privatekey.pem]
 	mox dns lookup [ptr | mx | cname | ips | a | aaaa | ns | txt | srv | tlsa] name
-	mox dkim gened25519 >$selector._domainkey.$domain.ed25519key.pkcs8.pem
-	mox dkim genrsa >$selector._domainkey.$domain.rsakey.pkcs8.pem
+	mox dkim gened25519 >$selector._domainkey.$domain.ed25519.privatekey.pkcs8.pem
+	mox dkim genrsa >$selector._domainkey.$domain.rsa2048.privatekey.pkcs8.pem
 	mox dkim lookup selector domain
 	mox dkim txt <$selector._domainkey.$domain.key.pkcs8.pem
 	mox dkim verify message
@@ -693,7 +693,7 @@ strength. This is convenient because of maximum DNS message sizes. At the time
 of writing, not many mail servers appear to support ed25519 DKIM keys though,
 so it is recommended to sign messages with both RSA and ed25519 keys.
 
-	usage: mox dkim gened25519 >$selector._domainkey.$domain.ed25519key.pkcs8.pem
+	usage: mox dkim gened25519 >$selector._domainkey.$domain.ed25519.privatekey.pkcs8.pem
 
 # mox dkim genrsa
 
@@ -702,7 +702,7 @@ Generate a new 2048 bit RSA private key for use with DKIM.
 The generated file is in PEM format, and has a comment it is generated for use
 with DKIM, by mox.
 
-	usage: mox dkim genrsa >$selector._domainkey.$domain.rsakey.pkcs8.pem
+	usage: mox dkim genrsa >$selector._domainkey.$domain.rsa2048.privatekey.pkcs8.pem
 
 # mox dkim lookup
 

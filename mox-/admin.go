@@ -109,7 +109,7 @@ func MakeDKIMRSAKey(selector, domain dns.Domain) ([]byte, error) {
 	block := &pem.Block{
 		Type: "PRIVATE KEY",
 		Headers: map[string]string{
-			"Note": dkimKeyNote("rsa", selector, domain),
+			"Note": dkimKeyNote("rsa-2048", selector, domain),
 		},
 		Bytes: pkcs8,
 	}
@@ -194,7 +194,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 
 	addSelector := func(kind, name string, privKey []byte) error {
 		record := fmt.Sprintf("%s._domainkey.%s", name, domain.ASCII)
-		keyPath := filepath.Join("dkim", fmt.Sprintf("%s.%s.%skey.pkcs8.pem", record, timestamp, kind))
+		keyPath := filepath.Join("dkim", fmt.Sprintf("%s.%s.%s.privatekey.pkcs8.pem", record, timestamp, kind))
 		p := configDirPath(ConfigDynamicPath, keyPath)
 		if err := writeFile(p, privKey); err != nil {
 			return err
@@ -223,7 +223,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 		if err != nil {
 			return fmt.Errorf("making dkim rsa private key: %s", err)
 		}
-		return addSelector("rsa", name, key)
+		return addSelector("rsa2048", name, key)
 	}
 
 	if err := addEd25519(year + "a"); err != nil {
