@@ -35,9 +35,14 @@ import (
 )
 
 // TXTStrings returns a TXT record value as one or more quoted strings, taking the max
-// length of 255 characters for a string into account.
+// length of 255 characters for a string into account. In case of multiple
+// strings, a multi-line record is returned.
 func TXTStrings(s string) string {
-	r := ""
+	if len(s) <= 255 {
+		return `"` + s + `"`
+	}
+
+	r := "(\n"
 	for len(s) > 0 {
 		n := len(s)
 		if n > 255 {
@@ -46,9 +51,10 @@ func TXTStrings(s string) string {
 		if r != "" {
 			r += " "
 		}
-		r += `"` + s[:n] + `"`
+		r += "\t\t\"" + s[:n] + "\"\n"
 		s = s[n:]
 	}
+	r += "\t)"
 	return r
 }
 
