@@ -711,6 +711,11 @@ const [dom, style, attr, prop] = (function () {
 			if (typeof c === 'string') {
 				formatText(e, c);
 			}
+			else if (c instanceof String) {
+				// String is an escape-hatch for text that should not be formatted with
+				// unicode-block-change-highlighting, e.g. for textarea values.
+				e.appendChild(document.createTextNode('' + c));
+			}
 			else if (c instanceof Element) {
 				e.appendChild(c);
 			}
@@ -2145,7 +2150,10 @@ const compose = (opts) => {
 		maxWidth: '70em',
 		width: '40%',
 		borderRadius: '.25em',
-	}), dom.form(fieldset = dom.fieldset(dom.table(style({ width: '100%' }), dom.tr(dom.td(style({ textAlign: 'right', color: '#555' }), dom.span('From:')), dom.td(dom.clickbutton('Cancel', style({ float: 'right' }), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)), from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)))), toRow = dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555' })), toCell = dom.td(style({ width: '100%' }))), replyToRow = dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555' })), replyToCell = dom.td(style({ width: '100%' }))), ccRow = dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555' })), ccCell = dom.td(style({ width: '100%' }))), bccRow = dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555' })), bccCell = dom.td(style({ width: '100%' }))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555' })), dom.td(style({ width: '100%' }), subject = dom.input(focusPlaceholder('subject...'), attr.value(opts.subject || ''), attr.required(''), style({ width: '100%' }))))), body = dom.textarea(dom._class('mono'), attr.rows('15'), style({ width: '100%' }), opts.body || '', opts.body && !opts.isForward && !opts.body.startsWith('\n\n') ? prop({ selectionStart: opts.body.length, selectionEnd: opts.body.length }) : [], function keyup(e) {
+	}), dom.form(fieldset = dom.fieldset(dom.table(style({ width: '100%' }), dom.tr(dom.td(style({ textAlign: 'right', color: '#555' }), dom.span('From:')), dom.td(dom.clickbutton('Cancel', style({ float: 'right' }), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)), from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)))), toRow = dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555' })), toCell = dom.td(style({ width: '100%' }))), replyToRow = dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555' })), replyToCell = dom.td(style({ width: '100%' }))), ccRow = dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555' })), ccCell = dom.td(style({ width: '100%' }))), bccRow = dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555' })), bccCell = dom.td(style({ width: '100%' }))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555' })), dom.td(style({ width: '100%' }), subject = dom.input(focusPlaceholder('subject...'), attr.value(opts.subject || ''), attr.required(''), style({ width: '100%' }))))), body = dom.textarea(dom._class('mono'), attr.rows('15'), style({ width: '100%' }), 
+	// Explicit string object so it doesn't get the highlight-unicode-block-changes
+	// treatment, which would cause characters to disappear.
+	new String(opts.body || ''), opts.body && !opts.isForward && !opts.body.startsWith('\n\n') ? prop({ selectionStart: opts.body.length, selectionEnd: opts.body.length }) : [], function keyup(e) {
 		if (e.key === 'Enter') {
 			checkAttachments();
 		}

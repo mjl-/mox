@@ -711,6 +711,11 @@ const [dom, style, attr, prop] = (function () {
 			if (typeof c === 'string') {
 				formatText(e, c);
 			}
+			else if (c instanceof String) {
+				// String is an escape-hatch for text that should not be formatted with
+				// unicode-block-change-highlighting, e.g. for textarea values.
+				e.appendChild(document.createTextNode('' + c));
+			}
 			else if (c instanceof Element) {
 				e.appendChild(c);
 			}

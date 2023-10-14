@@ -1,6 +1,6 @@
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 
-type ElemArg = string | Element | Function | {_class: string[]} | {_attrs: {[k: string]: string}} | {_styles: {[k: string]: string | number}} | {_props: {[k: string]: any}} | {root: HTMLElement} | ElemArg[]
+type ElemArg = string | String | Element | Function | {_class: string[]} | {_attrs: {[k: string]: string}} | {_styles: {[k: string]: string | number}} | {_props: {[k: string]: any}} | {root: HTMLElement} | ElemArg[]
 
 const [dom, style, attr, prop] = (function() {
 
@@ -95,6 +95,10 @@ const _domKids = <T extends HTMLElement>(e: T, l: ElemArg[]): T => {
 		const xc = c as {[k: string]: any}
 		if (typeof c === 'string') {
 			formatText(e, c)
+		} else if (c instanceof String) {
+			// String is an escape-hatch for text that should not be formatted with
+			// unicode-block-change-highlighting, e.g. for textarea values.
+			e.appendChild(document.createTextNode(''+c))
 		} else if (c instanceof Element) {
 			e.appendChild(c)
 		} else if (c instanceof Function) {

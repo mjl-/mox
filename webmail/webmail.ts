@@ -1427,7 +1427,9 @@ const compose = (opts: ComposeOptions) => {
 					),
 				),
 				body=dom.textarea(dom._class('mono'), attr.rows('15'), style({width: '100%'}),
-					opts.body || '',
+					// Explicit string object so it doesn't get the highlight-unicode-block-changes
+					// treatment, which would cause characters to disappear.
+					new String(opts.body || ''),
 					opts.body && !opts.isForward && !opts.body.startsWith('\n\n') ? prop({selectionStart: opts.body.length, selectionEnd: opts.body.length}) : [],
 					function keyup(e: KeyboardEvent) {
 						if (e.key === 'Enter') {
