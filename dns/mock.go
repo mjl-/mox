@@ -184,20 +184,20 @@ func (r MockResolver) LookupHost(ctx context.Context, host string) ([]string, ad
 
 func (r MockResolver) LookupIP(ctx context.Context, network, host string) ([]net.IP, adns.Result, error) {
 	mr := mockReq{"ip", host}
-	_, result, err := r.result(ctx, mr)
+	name, result, err := r.result(ctx, mr)
 	if err != nil {
 		return nil, result, err
 	}
 	var ips []net.IP
 	switch network {
 	case "ip", "ip4":
-		for _, ip := range r.A[host] {
+		for _, ip := range r.A[name] {
 			ips = append(ips, net.ParseIP(ip))
 		}
 	}
 	switch network {
 	case "ip", "ip6":
-		for _, ip := range r.AAAA[host] {
+		for _, ip := range r.AAAA[name] {
 			ips = append(ips, net.ParseIP(ip))
 		}
 	}
@@ -209,7 +209,7 @@ func (r MockResolver) LookupIP(ctx context.Context, network, host string) ([]net
 
 func (r MockResolver) LookupMX(ctx context.Context, name string) ([]*net.MX, adns.Result, error) {
 	mr := mockReq{"mx", name}
-	_, result, err := r.result(ctx, mr)
+	name, result, err := r.result(ctx, mr)
 	if err != nil {
 		return nil, result, err
 	}
@@ -222,7 +222,7 @@ func (r MockResolver) LookupMX(ctx context.Context, name string) ([]*net.MX, adn
 
 func (r MockResolver) LookupTXT(ctx context.Context, name string) ([]string, adns.Result, error) {
 	mr := mockReq{"txt", name}
-	_, result, err := r.result(ctx, mr)
+	name, result, err := r.result(ctx, mr)
 	if err != nil {
 		return nil, result, err
 	}
@@ -241,7 +241,7 @@ func (r MockResolver) LookupTLSA(ctx context.Context, port int, protocol string,
 		name = fmt.Sprintf("_%d._%s.%s", port, protocol, host)
 	}
 	mr := mockReq{"tlsa", name}
-	_, result, err := r.result(ctx, mr)
+	name, result, err := r.result(ctx, mr)
 	if err != nil {
 		return nil, result, err
 	}

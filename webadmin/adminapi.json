@@ -1627,14 +1627,6 @@
 			"Docs": "",
 			"Fields": [
 				{
-					"Name": "CNAMEs",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"string"
-					]
-				},
-				{
 					"Name": "TXT",
 					"Docs": "",
 					"Typewords": [

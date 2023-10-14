@@ -263,7 +263,7 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 	policy = &cachedPolicy.Policy
 	nctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	record, _, _, err := mtasts.LookupRecord(nctx, resolver, domain)
+	record, _, err := mtasts.LookupRecord(nctx, resolver, domain)
 	if err != nil {
 		if !errors.Is(err, mtasts.ErrNoRecord) {
 			// Could be a temporary DNS or configuration error.

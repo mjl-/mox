@@ -125,7 +125,7 @@ func refreshDomain(ctx context.Context, db *bstore.DB, resolver dns.Resolver, pr
 		return
 	}
 	log.Debug("refreshing mta-sts policy for domain", mlog.Field("domain", d))
-	record, _, _, err := mtasts.LookupRecord(ctx, resolver, d)
+	record, _, err := mtasts.LookupRecord(ctx, resolver, d)
 	if err == nil && record.ID == pr.RecordID {
 		qup := bstore.QueryDB[PolicyRecord](ctx, db)
 		qup.FilterNonzero(PolicyRecord{Domain: pr.Domain, LastUpdate: pr.LastUpdate})

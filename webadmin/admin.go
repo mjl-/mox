@@ -325,7 +325,6 @@ type MTASTSRecord struct {
 	mtasts.Record
 }
 type MTASTSCheckResult struct {
-	CNAMEs     []string
 	TXT        string
 	Record     *MTASTSRecord
 	PolicyText string
@@ -1180,14 +1179,9 @@ Ensure a DNS TXT record like the following exists:
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		record, txt, cnames, err := mtasts.LookupRecord(ctx, resolver, domain)
+		record, txt, err := mtasts.LookupRecord(ctx, resolver, domain)
 		if err != nil {
 			addf(&r.MTASTS.Errors, "Looking up MTA-STS record: %s", err)
-		}
-		if cnames != nil {
-			r.MTASTS.CNAMEs = cnames
-		} else {
-			r.MTASTS.CNAMEs = []string{}
 		}
 		r.MTASTS.TXT = txt
 		if record != nil {

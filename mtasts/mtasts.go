@@ -162,45 +162,26 @@ var (
 )
 
 // LookupRecord looks up the MTA-STS TXT DNS record at "_mta-sts.<domain>",
-// following CNAME records, and returns the parsed MTA-STS record, the DNS TXT
-// record and any CNAMEs that were followed.
-func LookupRecord(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rrecord *Record, rtxt string, rcnames []string, rerr error) {
+// following CNAME records, and returns the parsed MTA-STS record and the DNS TXT
+// record.
+func LookupRecord(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rrecord *Record, rtxt string, rerr error) {
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	defer func() {
-		log.Debugx("mtasts lookup result", rerr, mlog.Field("domain", domain), mlog.Field("record", rrecord), mlog.Field("cnames", rcnames), mlog.Field("duration", time.Since(start)))
+		log.Debugx("mtasts lookup result", rerr, mlog.Field("domain", domain), mlog.Field("record", rrecord), mlog.Field("duration", time.Since(start)))
 	}()
 
 	// ../rfc/8461:289
 	// ../rfc/8461:351
-	// We lookup the txt record, but must follow CNAME records when the TXT does not exist.
-	var cnames []string
+	// We lookup the txt record, but must follow CNAME records when the TXT does not
+	// exist. LookupTXT follows CNAMEs.
 	name := "_mta-sts." + domain.ASCII + "."
 	var txts []string
-	for {
-		var err error
-		txts, _, err = dns.WithPackage(resolver, "mtasts").LookupTXT(ctx, name)
-		if dns.IsNotFound(err) {
-			// DNS has no specified limit on how many CNAMEs to follow. Chains of 10 CNAMEs
-			// have been seen on the internet.
-			if len(cnames) > 16 {
-				return nil, "", cnames, fmt.Errorf("too many cnames")
-			}
-			cname, _, err := dns.WithPackage(resolver, "mtasts").LookupCNAME(ctx, name)
-			if dns.IsNotFound(err) {
-				return nil, "", cnames, ErrNoRecord
-			}
-			if err != nil {
-				return nil, "", cnames, fmt.Errorf("%w: %s", ErrDNS, err)
-			}
-			cnames = append(cnames, cname)
-			name = cname
-			continue
-		} else if err != nil {
-			return nil, "", cnames, fmt.Errorf("%w: %s", ErrDNS, err)
-		} else {
-			break
-		}
+	txts, _, err := dns.WithPackage(resolver, "mtasts").LookupTXT(ctx, name)
+	if dns.IsNotFound(err) {
+		return nil, "", ErrNoRecord
+	} else if err != nil {
+		return nil, "", fmt.Errorf("%w: %s", ErrDNS, err)
 	}
 
 	var text string
@@ -215,18 +196,18 @@ func LookupRecord(ctx context.Context, resolver dns.Resolver, domain dns.Domain)
 			continue
 		}
 		if err != nil {
-			return nil, "", cnames, err
+			return nil, "", err
 		}
 		if record != nil {
-			return nil, "", cnames, ErrMultipleRecords
+			return nil, "", ErrMultipleRecords
 		}
 		record = r
 		text = txt
 	}
 	if record == nil {
-		return nil, "", cnames, ErrNoRecord
+		return nil, "", ErrNoRecord
 	}
-	return record, text, cnames, nil
+	return record, text, nil
 }
 
 // Policy fetch errors.
@@ -330,7 +311,7 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (record 
 		log.Debugx("mtasts get result", err, mlog.Field("domain", domain), mlog.Field("record", record), mlog.Field("policy", policy), mlog.Field("duration", time.Since(start)))
 	}()
 
-	record, _, _, err = LookupRecord(ctx, resolver, domain)
+	record, _, err = LookupRecord(ctx, resolver, domain)
 	if err != nil {
 		return nil, nil, err
 	}

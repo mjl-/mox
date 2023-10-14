@@ -951,8 +951,7 @@ const domainDNSCheck = async (d) => {
 	const detailsTLSRPT = !checks.TLSRPT.TXT ? [] : [
 		dom.div('TXT record: ' + checks.TLSRPT.TXT),
 	]
-	const detailsMTASTS = empty(checks.MTASTS.CNAMEs) && !checks.MTASTS.TXT && !checks.MTASTS.PolicyText ? [] : [
-		dom.div('CNAMEs followed: ' + (checks.MTASTS.CNAMEs.join(', ') || '(none)')),
+	const detailsMTASTS = !checks.MTASTS.TXT && !checks.MTASTS.PolicyText ? [] : [
 		!checks.MTASTS.TXT ? [] : dom.div('MTA-STS record: ' + checks.MTASTS.TXT),
 		!checks.MTASTS.PolicyText ? [] : dom.div('MTA-STS policy: ', dom('pre.literal', style({maxWidth: '60em'}), checks.MTASTS.PolicyText)),
 	]
