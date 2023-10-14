@@ -116,19 +116,18 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 		return
 	}
 
-	// Check for MTA-STS policy and enforce it if needed. We have to check the
-	// effective domain (found after following CNAME record(s)): there will certainly
-	// not be an MTA-STS record for the original recipient domain, because that is not
-	// allowed when a CNAME record is present.
+	// Check for MTA-STS policy and enforce it if needed.
+	// We must check at the original next-hop, i.e. recipient domain, not following any
+	// CNAMEs. If we were to follow CNAMEs and ask for MTA-STS at that domain, it
+	// would only take a single CNAME DNS response to direct us to an unrelated domain.
 	var policy *mtasts.Policy
-	tlsModeDefault := smtpclient.TLSOpportunistic
-	if !expandedNextHop.IsZero() {
+	if !origNextHop.IsZero() {
 		cidctx := context.WithValue(mox.Shutdown, mlog.CidKey, cid)
-		policy, _, err = mtastsdb.Get(cidctx, resolver, expandedNextHop)
+		policy, _, err = mtastsdb.Get(cidctx, resolver, origNextHop)
 		if err != nil {
-			// No need to refuse to deliver if we have some mtasts error.
-			qlog.Infox("mtasts failed, continuing with strict tls requirement", err, mlog.Field("domain", expandedNextHop))
-			tlsModeDefault = smtpclient.TLSStrictStartTLS
+			qlog.Infox("mtasts lookup temporary error, aborting delivery attempt", err, mlog.Field("domain", origNextHop))
+			fail(qlog, m, backoff, false, dsn.NameIP{}, "", err.Error())
+			return
 		}
 		// note: policy can be nil, if a domain does not implement MTA-STS or it's the
 		// first time we fetch the policy and if we encountered an error.
@@ -168,7 +167,7 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 		nqlog := qlog.WithCid(cid)
 		var remoteIP net.IP
 
-		tlsMode := tlsModeDefault
+		tlsMode := smtpclient.TLSOpportunistic
 		if policy != nil && policy.Mode == mtasts.ModeEnforce {
 			tlsMode = smtpclient.TLSStrictStartTLS
 		}
