@@ -2,6 +2,7 @@ package junk
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -14,12 +15,12 @@ func FuzzParseMessage(f *testing.F) {
 		}
 		f.Add(string(buf))
 	}
-	add("../testdata/junk/parse.eml")
-	add("../testdata/junk/parse2.eml")
-	add("../testdata/junk/parse3.eml")
+	add(filepath.FromSlash("../testdata/junk/parse.eml"))
+	add(filepath.FromSlash("../testdata/junk/parse2.eml"))
+	add(filepath.FromSlash("../testdata/junk/parse3.eml"))
 
-	dbPath := "../testdata/junk/parse.db"
-	bloomPath := "../testdata/junk/parse.bloom"
+	dbPath := filepath.FromSlash("../testdata/junk/parse.db")
+	bloomPath := filepath.FromSlash("../testdata/junk/parse.bloom")
 	os.Remove(dbPath)
 	os.Remove(bloomPath)
 	params := Params{Twograms: true}

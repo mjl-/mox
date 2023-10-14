@@ -321,11 +321,15 @@ func writeLocalConfig(log *mlog.Log, dir, ip string) (rerr error) {
 	local.WebserverHTTPS.Enabled = true
 	local.WebserverHTTPS.Port = 1443
 
+	uid := os.Getuid()
+	if uid < 0 {
+		uid = 1 // For windows.
+	}
 	static := config.Static{
 		DataDir:           ".",
 		LogLevel:          "traceauth",
 		Hostname:          "localhost",
-		User:              fmt.Sprintf("%d", os.Getuid()),
+		User:              fmt.Sprintf("%d", uid),
 		AdminPasswordFile: "adminpasswd",
 		Pedantic:          true,
 		Listeners: map[string]config.Listener{

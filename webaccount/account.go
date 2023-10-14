@@ -299,15 +299,13 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		}
 		defer func() {
 			if tmpf != nil {
+				name := tmpf.Name()
 				err := tmpf.Close()
 				log.Check(err, "closing uploaded file")
+				err = os.Remove(name)
+				log.Check(err, "removing temporary file", mlog.Field("path", name))
 			}
 		}()
-		if err := os.Remove(tmpf.Name()); err != nil {
-			log.Errorx("removing temporary file", err)
-			http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
-			return
-		}
 		if _, err := io.Copy(tmpf, f); err != nil {
 			log.Errorx("copying import to temporary file", err)
 			http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
@@ -319,7 +317,7 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		tmpf = nil // importStart is now responsible for closing.
+		tmpf = nil // importStart is now responsible for cleanup.
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"ImportToken": token})

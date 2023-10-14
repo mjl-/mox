@@ -1,5 +1,15 @@
 This file has notes useful for mox developers.
 
+# Code style & guidelines
+
+- Keep the same style as existing code.
+- For Windows: use package "path/filepath" when dealing with files/directories.
+  Test code can pass forward-slashed paths directly to standard library functions,
+  but use proper filepath functions when parameters are passed and in non-test
+  code.  Mailbox names always use forward slash, so use package "path" for mailbox
+  name/path manipulation. Do not remove/rename files that are still open.
+
+
 # TLS certificates
 
 https://github.com/cloudflare/cfssl is useful for testing with TLS

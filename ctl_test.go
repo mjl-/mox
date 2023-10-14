@@ -7,6 +7,7 @@ import (
 	"flag"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/mjl-/mox/dmarcdb"
@@ -33,8 +34,8 @@ func tcheck(t *testing.T, err error, errmsg string) {
 // unhandled errors would cause a panic.
 func TestCtl(t *testing.T) {
 	os.RemoveAll("testdata/ctl/data")
-	mox.ConfigStaticPath = "testdata/ctl/mox.conf"
-	mox.ConfigDynamicPath = "testdata/ctl/domains.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("testdata/ctl/mox.conf")
+	mox.ConfigDynamicPath = filepath.FromSlash("testdata/ctl/domains.conf")
 	if errs := mox.LoadConfig(ctxbg, true, false); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}
@@ -147,13 +148,13 @@ func TestCtl(t *testing.T) {
 	})
 
 	// Export data, import it again
-	xcmdExport(true, []string{"testdata/ctl/data/tmp/export/mbox/", "testdata/ctl/data/accounts/mjl"}, nil)
-	xcmdExport(false, []string{"testdata/ctl/data/tmp/export/maildir/", "testdata/ctl/data/accounts/mjl"}, nil)
+	xcmdExport(true, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, nil)
+	xcmdExport(false, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/maildir/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, nil)
 	testctl(func(ctl *ctl) {
-		ctlcmdImport(ctl, true, "mjl", "inbox", "testdata/ctl/data/tmp/export/mbox/Inbox.mbox")
+		ctlcmdImport(ctl, true, "mjl", "inbox", filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/Inbox.mbox"))
 	})
 	testctl(func(ctl *ctl) {
-		ctlcmdImport(ctl, false, "mjl", "inbox", "testdata/ctl/data/tmp/export/maildir/Inbox")
+		ctlcmdImport(ctl, false, "mjl", "inbox", filepath.FromSlash("testdata/ctl/data/tmp/export/maildir/Inbox"))
 	})
 
 	// "recalculatemailboxcounts"
@@ -177,12 +178,12 @@ func TestCtl(t *testing.T) {
 			m.Size = int64(len(content))
 			msgf, err := store.CreateMessageTemp("ctltest")
 			tcheck(t, err, "create temp file")
+			defer os.Remove(msgf.Name())
+			defer msgf.Close()
 			_, err = msgf.Write(content)
 			tcheck(t, err, "write message file")
-			err = acc.DeliverMailbox(xlog, "Inbox", m, msgf, true)
+			err = acc.DeliverMailbox(xlog, "Inbox", m, msgf)
 			tcheck(t, err, "deliver message")
-			err = msgf.Close()
-			tcheck(t, err, "close message file")
 		}
 
 		var msgBadSize store.Message
@@ -236,13 +237,13 @@ func TestCtl(t *testing.T) {
 		os.RemoveAll("testdata/ctl/data/tmp/backup-data")
 		err := os.WriteFile("testdata/ctl/data/receivedid.key", make([]byte, 16), 0600)
 		tcheck(t, err, "writing receivedid.key")
-		ctlcmdBackup(ctl, "testdata/ctl/data/tmp/backup-data", false)
+		ctlcmdBackup(ctl, filepath.FromSlash("testdata/ctl/data/tmp/backup-data"), false)
 	})
 
 	// Verify the backup.
 	xcmd := cmd{
 		flag:     flag.NewFlagSet("", flag.ExitOnError),
-		flagArgs: []string{"testdata/ctl/data/tmp/backup-data"},
+		flagArgs: []string{filepath.FromSlash("testdata/ctl/data/tmp/backup-data")},
 	}
 	cmdVerifydata(&xcmd)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestAPI(t *testing.T) {
 	mox.LimitersInit()
 	os.RemoveAll("../testdata/webmail/data")
 	mox.Context = ctxbg
-	mox.ConfigStaticPath = "../testdata/webmail/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webmail/mox.conf")
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
 

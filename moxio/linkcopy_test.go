@@ -26,6 +26,7 @@ func TestLinkOrCopy(t *testing.T) {
 	f, err := os.Create(src)
 	tcheckf(t, err, "creating test file")
 	defer os.Remove(src)
+	defer f.Close()
 	err = LinkOrCopy(log, "linkorcopytest-dst.txt", src, nil, false)
 	tcheckf(t, err, "linking file")
 	err = os.Remove("linkorcopytest-dst.txt")

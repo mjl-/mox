@@ -372,7 +372,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 
 		xvlog("queue backed finished", mlog.Field("duration", time.Since(tmQueue)))
 	}
-	backupQueue("queue/index.db")
+	backupQueue(filepath.FromSlash("queue/index.db"))
 
 	backupAccount := func(acc *store.Account) {
 		defer acc.Close()
@@ -469,7 +469,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 				return nil
 			}
 			ap := filepath.Join("accounts", acc.Name, p)
-			if strings.HasPrefix(p, "msg/") {
+			if strings.HasPrefix(p, "msg"+string(filepath.Separator)) {
 				xwarnx("backing up unrecognized file in account message directory (should be moved away)", nil, mlog.Field("path", ap))
 			} else {
 				xwarnx("backing up unrecognized file in account directory", nil, mlog.Field("path", ap))

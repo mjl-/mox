@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/mjl-/mox/mlog"
@@ -109,11 +108,7 @@ func loadStaticGzipCache(dir string, maxSize int64) {
 		}
 		var atime int64
 		if err == nil {
-			if sys, sysok := fi.Sys().(*syscall.Stat_t); !sysok {
-				err = fmt.Errorf("FileInfo.Sys not a *syscall.Stat_t but %T", fi.Sys())
-			} else {
-				atime = statAtime(sys)
-			}
+			atime, err = statAtime(fi.Sys())
 		}
 		if err != nil {
 			xlog.Infox("removing unusable/unrecognized file in static gzip cache dir", err)

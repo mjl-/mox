@@ -160,8 +160,8 @@ type merged struct {
 var webmail = &merged{
 	fallbackHTML: webmailHTML,
 	fallbackJS:   webmailJS,
-	htmlPath:     "webmail/webmail.html",
-	jsPath:       "webmail/webmail.js",
+	htmlPath:     filepath.FromSlash("webmail/webmail.html"),
+	jsPath:       filepath.FromSlash("webmail/webmail.js"),
 }
 
 // fallbackMtime returns a time to use for the Last-Modified header in case we
@@ -733,7 +733,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		h.Set("Content-Type", "text/html; charset=utf-8")
 		h.Set("Cache-Control", "no-cache, max-age=0")
 
-		path := "webmail/msg.html"
+		path := filepath.FromSlash("webmail/msg.html")
 		fallback := webmailmsgHTML
 		serveContentFallback(log, w, r, path, fallback)
 
@@ -800,7 +800,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 
 		// We typically return the embedded file, but during development it's handy to load
 		// from disk.
-		path := "webmail/text.html"
+		path := filepath.FromSlash("webmail/text.html")
 		fallback := webmailtextHTML
 		serveContentFallback(log, w, r, path, fallback)
 

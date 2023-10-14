@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -58,7 +59,7 @@ func FuzzServer(f *testing.F) {
 	}
 
 	mox.Context = ctxbg
-	mox.ConfigStaticPath = "../testdata/imapserverfuzz/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imapserverfuzz/mox.conf")
 	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)

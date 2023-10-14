@@ -27,7 +27,8 @@ buildall:
 	GOOS=illumos GOARCH=amd64 go build
 	GOOS=solaris GOARCH=amd64 go build
 	GOOS=aix GOARCH=ppc64 go build
-	# no windows or plan9 for now
+	GOOS=windows GOARCH=amd64 go build
+	# no plan9 for now
 
 fmt:
 	gofmt -w -s *.go */*/*.go

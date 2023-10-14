@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -40,7 +41,7 @@ func setup(t *testing.T) (*store.Account, func()) {
 	// Prepare config so email can be delivered to mjl@mox.example.
 	os.RemoveAll("../testdata/queue/data")
 	mox.Context = ctxbg
-	mox.ConfigStaticPath = "../testdata/queue/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/queue/mox.conf")
 	mox.MustLoadConfig(true, false)
 	acc, err := store.OpenAccount("mjl")
 	tcheck(t, err, "open account")
@@ -86,13 +87,15 @@ func TestQueue(t *testing.T) {
 	}
 
 	path := smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "mox.example"}}}
-	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, prepareFile(t), nil, true)
+	mf := prepareFile(t)
+	defer os.Remove(mf.Name())
+	defer mf.Close()
+
+	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 
-	mf2 := prepareFile(t)
-	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf2, nil, false)
+	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
-	os.Remove(mf2.Name())
 
 	msgs, err = List(ctxbg)
 	tcheck(t, err, "listing queue")
@@ -385,7 +388,7 @@ func TestQueue(t *testing.T) {
 
 	// Add a message to be delivered with submit because of its route.
 	topath := smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "submit.example"}}}
-	_, err = Add(ctxbg, xlog, "mjl", path, topath, false, false, int64(len(testmsg)), "<test@localhost>", nil, prepareFile(t), nil, true)
+	_, err = Add(ctxbg, xlog, "mjl", path, topath, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 	wasNetDialer = testDeliver(fakeSubmitServer)
 	if !wasNetDialer {
@@ -393,7 +396,7 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Add a message to be delivered with submit because of explicitly configured transport, that uses TLS.
-	msgID, err := Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, prepareFile(t), nil, true)
+	msgID, err := Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 	transportSubmitTLS := "submittls"
 	n, err = Kick(ctxbg, msgID, "", "", &transportSubmitTLS)
@@ -417,7 +420,7 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Add a message to be delivered with socks.
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<socks@localhost>", nil, prepareFile(t), nil, true)
+	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<socks@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 	transportSocks := "socks"
 	n, err = Kick(ctxbg, msgID, "", "", &transportSocks)
@@ -431,7 +434,7 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Add message to be delivered with opportunistic TLS verification.
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, prepareFile(t), nil, true)
+	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, msgID, "", "", nil)
 	tcheck(t, err, "kick queue")
@@ -441,7 +444,7 @@ func TestQueue(t *testing.T) {
 	testDeliver(fakeSMTPSTARTTLSServer)
 
 	// Test fallback to plain text with TLS handshake fails.
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<badtls@localhost>", nil, prepareFile(t), nil, true)
+	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<badtls@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, msgID, "", "", nil)
 	tcheck(t, err, "kick queue")
@@ -457,7 +460,7 @@ func TestQueue(t *testing.T) {
 			{Usage: adns.TLSAUsageDANEEE, Selector: adns.TLSASelectorSPKI, MatchType: adns.TLSAMatchTypeFull, CertAssoc: moxCert.Leaf.RawSubjectPublicKeyInfo},
 		},
 	}
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<dane@localhost>", nil, prepareFile(t), nil, true)
+	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<dane@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, msgID, "", "", nil)
 	tcheck(t, err, "kick queue")
@@ -472,7 +475,7 @@ func TestQueue(t *testing.T) {
 			{},
 		},
 	}
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<daneunusable@localhost>", nil, prepareFile(t), nil, true)
+	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<daneunusable@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, msgID, "", "", nil)
 	tcheck(t, err, "kick queue")
@@ -489,7 +492,7 @@ func TestQueue(t *testing.T) {
 			{Usage: adns.TLSAUsageDANEEE, Selector: adns.TLSASelectorSPKI, MatchType: adns.TLSAMatchTypeFull, CertAssoc: make([]byte, sha256.Size)},
 		},
 	}
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<daneinsecure@localhost>", nil, prepareFile(t), nil, true)
+	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<daneinsecure@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, msgID, "", "", nil)
 	tcheck(t, err, "kick queue")
@@ -504,7 +507,7 @@ func TestQueue(t *testing.T) {
 	resolver.TLSA = nil
 
 	// Add another message that we'll fail to deliver entirely.
-	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, prepareFile(t), nil, true)
+	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 
 	msgs, err = List(ctxbg)
@@ -660,7 +663,10 @@ func TestQueueStart(t *testing.T) {
 	}
 
 	path := smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "mox.example"}}}
-	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, prepareFile(t), nil, true)
+	mf := prepareFile(t)
+	defer os.Remove(mf.Name())
+	defer mf.Close()
+	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil)
 	tcheck(t, err, "add message to queue for delivery")
 	checkDialed(true)
 

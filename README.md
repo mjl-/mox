@@ -91,7 +91,10 @@ Verify you have a working mox binary:
 
 	./mox version
 
-Mox only compiles for/works on unix systems, not on Plan 9 or Windows.
+Mox only compiles for and fully works on unix systems. Mox also compiles for
+Windows, but "mox serve" does not yet work, though "mox localserve" (for a
+local test instance) and most other subcommands do. Mox does not compile for
+Plan 9.
 
 You can also run mox with docker image `r.xmox.nl/mox`, with tags like `v0.0.1`
 and `v0.0.1-go1.20.1-alpine3.17.2`, see https://r.xmox.nl/r/mox/. Though new

@@ -178,10 +178,10 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 		}
 		defer func() {
 			if f != nil {
-				err := os.Remove(path)
-				log.Check(err, "removing file after error")
-				err = f.Close()
+				err := f.Close()
 				log.Check(err, "closing file after error")
+				err = os.Remove(path)
+				log.Check(err, "removing file after error", mlog.Field("path", path))
 			}
 		}()
 		if _, err := f.Write(data); err != nil {

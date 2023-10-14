@@ -83,7 +83,7 @@ func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(h
 	}
 
 	// Load identity key if it exists. Otherwise, create a new key.
-	p := filepath.Join(acmeDir + "/" + name + ".key")
+	p := filepath.Join(acmeDir, name+".key")
 	var key crypto.Signer
 	f, err := os.Open(p)
 	if f != nil {
@@ -135,7 +135,7 @@ func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(h
 	}
 
 	m := &autocert.Manager{
-		Cache:  dirCache(acmeDir + "/keycerts/" + name),
+		Cache:  dirCache(filepath.Join(acmeDir, "keycerts", name)),
 		Prompt: autocert.AcceptTOS,
 		Email:  contactEmail,
 		Client: &acme.Client{

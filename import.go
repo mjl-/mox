@@ -276,11 +276,10 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	xdeliver := func(m *store.Message, mf *os.File) {
 		// todo: possibly set dmarcdomain to the domain of the from address? at least for non-spams that have been seen. otherwise user would start without any reputations. the assumption would be that the user has accepted email and deemed it legit, coming from the indicated sender.
 
-		const consumeFile = true
 		const sync = false
 		const notrain = true
 		const nothreads = true
-		err := a.DeliverMessage(ctl.log, tx, m, mf, consumeFile, sync, notrain, nothreads)
+		err := a.DeliverMessage(ctl.log, tx, m, mf, sync, notrain, nothreads)
 		ctl.xcheck(err, "delivering message")
 		deliveredIDs = append(deliveredIDs, m.ID)
 		ctl.log.Debug("delivered message", mlog.Field("id", m.ID))
@@ -313,13 +312,11 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 
 		process := func(m *store.Message, msgf *os.File, origPath string) {
 			defer func() {
-				if msgf == nil {
-					return
-				}
-				err := os.Remove(msgf.Name())
-				ctl.log.Check(err, "removing temporary message after failing to import")
-				err = msgf.Close()
+				name := msgf.Name()
+				err := msgf.Close()
 				ctl.log.Check(err, "closing temporary message after failing to import")
+				err = os.Remove(name)
+				ctl.log.Check(err, "removing temporary message after failing to import", mlog.Field("path", name))
 			}()
 
 			for _, kw := range m.Keywords {
@@ -373,9 +370,6 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			m.CreateSeq = modseq
 			m.ModSeq = modseq
 			xdeliver(m, msgf)
-			err = msgf.Close()
-			ctl.log.Check(err, "closing message after delivery")
-			msgf = nil
 
 			n++
 			if n%1000 == 0 {

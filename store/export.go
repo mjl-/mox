@@ -82,10 +82,11 @@ type DirArchiver struct {
 }
 
 // Create create name in the file system, in dir.
+// name must always use forwarded slashes.
 func (a DirArchiver) Create(name string, size int64, mtime time.Time) (io.WriteCloser, error) {
 	isdir := strings.HasSuffix(name, "/")
 	name = strings.TrimSuffix(name, "/")
-	p := filepath.Join(a.Dir, name)
+	p := filepath.Join(a.Dir, filepath.FromSlash(name))
 	os.MkdirAll(filepath.Dir(p), 0770)
 	if isdir {
 		return nil, os.Mkdir(p, 0770)
@@ -213,8 +214,11 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 	var mboxwriter *bufio.Writer
 	defer func() {
 		if mboxtmp != nil {
+			name := mboxtmp.Name()
 			err := mboxtmp.Close()
 			log.Check(err, "closing mbox temp file")
+			err = os.Remove(name)
+			log.Check(err, "removing mbox temp file", mlog.Field("name", name))
 		}
 	}()
 
@@ -287,8 +291,11 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 		if err := w.Close(); err != nil {
 			return fmt.Errorf("closing message file: %v", err)
 		}
+		name := mboxtmp.Name()
 		err = mboxtmp.Close()
 		log.Check(err, "closing temporary mbox file")
+		err = os.Remove(name)
+		log.Check(err, "removing temporary mbox file", mlog.Field("path", name))
 		mboxwriter = nil
 		mboxtmp = nil
 		return nil
@@ -523,10 +530,6 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 				mboxtmp, err = os.CreateTemp("", "mox-mail-export-mbox")
 				if err != nil {
 					return fmt.Errorf("creating temp mbox file: %v", err)
-				}
-				// Remove file immediately, so we are sure we don't leave it around.
-				if err := os.Remove(mboxtmp.Name()); err != nil {
-					return fmt.Errorf("removing temp file just created: %v", err)
 				}
 				mboxwriter = bufio.NewWriter(mboxtmp)
 			}

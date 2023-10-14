@@ -89,6 +89,8 @@ IMAP. HTTP listeners are started for the admin/account web interfaces, and for
 automated TLS configuration. Missing essential TLS certificates are immediately
 requested, other TLS certificates are requested on demand.
 
+Only implemented on unix systems, not Windows.
+
 	usage: mox serve
 
 # mox quickstart

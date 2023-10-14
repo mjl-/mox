@@ -220,13 +220,7 @@ binary should be setgid that group:
 		os.Mkdir(maildir, 0700)
 		f, err := os.CreateTemp(maildir, "newmsg.")
 		xcheckf(err, "creating temp file for storing message after failed delivery")
-		defer func() {
-			if f != nil {
-				if err := os.Remove(f.Name()); err != nil {
-					log.Printf("removing temp file after failure storing failed delivery: %v", err)
-				}
-			}
-		}()
+		// note: not removing the partial file if writing/closing below fails.
 		_, err = f.Write([]byte(msg))
 		xcheckf(err, "writing message to temp file after failed delivery")
 		name := f.Name()

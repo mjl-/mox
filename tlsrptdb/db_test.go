@@ -63,7 +63,7 @@ const reportJSON = `{
 func TestReport(t *testing.T) {
 	mox.Context = ctxbg
 	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
-	mox.ConfigStaticPath = "../testdata/tlsrpt/fake.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/tlsrpt/fake.conf")
 	mox.Conf.Static.DataDir = "."
 	// Recognize as configured domain.
 	mox.Conf.Dynamic.Domains = map[string]config.Domain{

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -28,7 +29,7 @@ func tcheck(t *testing.T, err error, msg string) {
 
 func TestMailbox(t *testing.T) {
 	os.RemoveAll("../testdata/store/data")
-	mox.ConfigStaticPath = "../testdata/store/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
 	acc, err := OpenAccount("mjl")
 	tcheck(t, err, "open account")
@@ -44,6 +45,7 @@ func TestMailbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating temp msg file: %s", err)
 	}
+	defer os.Remove(msgFile.Name())
 	defer msgFile.Close()
 	msgWriter := message.NewWriter(msgFile)
 	if _, err := msgWriter.Write([]byte(" message")); err != nil {
@@ -70,7 +72,7 @@ func TestMailbox(t *testing.T) {
 	}
 	acc.WithWLock(func() {
 		conf, _ := acc.Conf()
-		err := acc.DeliverDestination(xlog, conf.Destinations["mjl"], &m, msgFile, false)
+		err := acc.DeliverDestination(xlog, conf.Destinations["mjl"], &m, msgFile)
 		tcheck(t, err, "deliver without consume")
 
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
@@ -79,7 +81,7 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "sent mailbox")
 			msent.MailboxID = mbsent.ID
 			msent.MailboxOrigID = mbsent.ID
-			err = acc.DeliverMessage(xlog, tx, &msent, msgFile, false, true, false, false)
+			err = acc.DeliverMessage(xlog, tx, &msent, msgFile, true, false, false)
 			tcheck(t, err, "deliver message")
 			if !msent.ThreadMuted || !msent.ThreadCollapsed {
 				t.Fatalf("thread muted & collapsed should have been copied from parent (duplicate message-id) m")
@@ -95,7 +97,7 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "insert rejects mailbox")
 			mreject.MailboxID = mbrejects.ID
 			mreject.MailboxOrigID = mbrejects.ID
-			err = acc.DeliverMessage(xlog, tx, &mreject, msgFile, false, true, false, false)
+			err = acc.DeliverMessage(xlog, tx, &mreject, msgFile, true, false, false)
 			tcheck(t, err, "deliver message")
 
 			err = tx.Get(&mbrejects)
@@ -108,7 +110,7 @@ func TestMailbox(t *testing.T) {
 		})
 		tcheck(t, err, "deliver as sent and rejects")
 
-		err = acc.DeliverDestination(xlog, conf.Destinations["mjl"], &mconsumed, msgFile, true)
+		err = acc.DeliverDestination(xlog, conf.Destinations["mjl"], &mconsumed, msgFile)
 		tcheck(t, err, "deliver with consume")
 
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
@@ -251,9 +253,11 @@ func TestMailbox(t *testing.T) {
 }
 
 func TestMessageRuleset(t *testing.T) {
-	f, err := os.Open("/dev/null")
-	tcheck(t, err, "open")
+	f, err := CreateMessageTemp("msgruleset")
+	tcheck(t, err, "creating temp msg file")
+	defer os.Remove(f.Name())
 	defer f.Close()
+
 	msgBuf := []byte(strings.ReplaceAll(`List-ID:  <test.mox.example>
 
 test

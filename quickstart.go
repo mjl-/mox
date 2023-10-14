@@ -592,7 +592,7 @@ many authentication failures).
 
 	dc := config.Dynamic{}
 	sc := config.Static{
-		DataDir:           "../data",
+		DataDir:           filepath.FromSlash("../data"),
 		User:              user,
 		LogLevel:          "debug", // Help new users, they'll bring it back to info when it all works.
 		Hostname:          dnshostname.Name(),
@@ -625,9 +625,9 @@ many authentication failures).
 	public.IMAPS.Enabled = true
 
 	if existingWebserver {
-		hostbase := fmt.Sprintf("path/to/%s", dnshostname.Name())
-		mtastsbase := fmt.Sprintf("path/to/mta-sts.%s", domain.Name())
-		autoconfigbase := fmt.Sprintf("path/to/autoconfig.%s", domain.Name())
+		hostbase := filepath.FromSlash("path/to/" + dnshostname.Name())
+		mtastsbase := filepath.FromSlash("path/to/mta-sts." + domain.Name())
+		autoconfigbase := filepath.FromSlash("path/to/autoconfig." + domain.Name())
 		public.TLS = &config.TLS{
 			KeyCerts: []config.KeyCert{
 				{CertFile: hostbase + "-chain.crt.pem", KeyFile: hostbase + ".key.pem"},
@@ -657,8 +657,8 @@ and check the admin page for the needed DNS records.`)
 		}
 		now := time.Now()
 		timestamp := now.Format("20060102T150405")
-		hostRSAPrivateKeyFile := fmt.Sprintf("hostkeys/%s.%s.%s.privatekey.pkcs8.pem", dnshostname.Name(), timestamp, "rsa2048")
-		hostECDSAPrivateKeyFile := fmt.Sprintf("hostkeys/%s.%s.%s.privatekey.pkcs8.pem", dnshostname.Name(), timestamp, "ecdsap256")
+		hostRSAPrivateKeyFile := filepath.Join("hostkeys", fmt.Sprintf("%s.%s.%s.privatekey.pkcs8.pem", dnshostname.Name(), timestamp, "rsa2048"))
+		hostECDSAPrivateKeyFile := filepath.Join("hostkeys", fmt.Sprintf("%s.%s.%s.privatekey.pkcs8.pem", dnshostname.Name(), timestamp, "ecdsap256"))
 		xwritehostkeyfile := func(path string, key crypto.Signer) {
 			buf, err := x509.MarshalPKCS8PrivateKey(key)
 			if err != nil {
@@ -727,8 +727,8 @@ and check the admin page for the needed DNS records.`)
 	sc.Postmaster.Account = accountName
 	sc.Postmaster.Mailbox = "Postmaster"
 
-	mox.ConfigStaticPath = "config/mox.conf"
-	mox.ConfigDynamicPath = "config/domains.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("config/mox.conf")
+	mox.ConfigDynamicPath = filepath.FromSlash("config/domains.conf")
 
 	mox.Conf.DynamicLastCheck = time.Now() // Prevent error logging by Make calls below.
 
@@ -759,7 +759,7 @@ and check the admin page for the needed DNS records.`)
 	for _, bl := range public.SMTP.DNSBLs {
 		confstr = strings.ReplaceAll(confstr, "- "+bl+"\n", "#- "+bl+"\n")
 	}
-	xwritefile("config/mox.conf", []byte(confstr), 0660)
+	xwritefile(filepath.FromSlash("config/mox.conf"), []byte(confstr), 0660)
 
 	// Generate domains config, and add a commented out example for delivery to a mailing list.
 	var db bytes.Buffer
@@ -798,11 +798,11 @@ and check the admin page for the needed DNS records.`)
 		ndests += "#\t\t" + line + "\n"
 	}
 	dconfstr := strings.ReplaceAll(db.String(), odests, ndests)
-	xwritefile("config/domains.conf", []byte(dconfstr), 0660)
+	xwritefile(filepath.FromSlash("config/domains.conf"), []byte(dconfstr), 0660)
 
 	// Verify config.
 	loadTLSKeyCerts := !existingWebserver
-	mc, errs := mox.ParseConfig(context.Background(), "config/mox.conf", true, loadTLSKeyCerts, false)
+	mc, errs := mox.ParseConfig(context.Background(), filepath.FromSlash("config/mox.conf"), true, loadTLSKeyCerts, false)
 	if len(errs) > 0 {
 		if len(errs) > 1 {
 			log.Printf("checking generated config, multiple errors:")

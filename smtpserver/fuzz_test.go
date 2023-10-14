@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -30,7 +31,7 @@ func FuzzServer(f *testing.F) {
 	f.Add("QUIT")
 
 	mox.Context = ctxbg
-	mox.ConfigStaticPath = "../testdata/smtpserverfuzz/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/smtpserverfuzz/mox.conf")
 	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)

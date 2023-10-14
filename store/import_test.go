@@ -24,15 +24,15 @@ func TestMboxReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("next mbox message: %v", err)
 	}
-	defer mf0.Close()
 	defer os.Remove(mf0.Name())
+	defer mf0.Close()
 
 	_, mf1, _, err := mr.Next()
 	if err != nil {
 		t.Fatalf("next mbox message: %v", err)
 	}
-	defer mf1.Close()
 	defer os.Remove(mf1.Name())
+	defer mf1.Close()
 
 	_, _, _, err = mr.Next()
 	if err != io.EOF {
@@ -62,15 +62,15 @@ func TestMaildirReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("next maildir message: %v", err)
 	}
-	defer mf0.Close()
 	defer os.Remove(mf0.Name())
+	defer mf0.Close()
 
 	_, mf1, _, err := mr.Next()
 	if err != nil {
 		t.Fatalf("next maildir message: %v", err)
 	}
-	defer mf1.Close()
 	defer os.Remove(mf1.Name())
+	defer mf1.Close()
 
 	_, _, _, err = mr.Next()
 	if err != io.EOF {

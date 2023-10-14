@@ -24,7 +24,7 @@ func tcheckf(t *testing.T, err error, format string, args ...any) {
 
 func TestDB(t *testing.T) {
 	mox.Shutdown = ctxbg
-	mox.ConfigStaticPath = "../testdata/mtasts/fake.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/mtasts/fake.conf")
 	mox.Conf.Static.DataDir = "."
 
 	dbpath := mox.DataDirPath("mtasts.db")

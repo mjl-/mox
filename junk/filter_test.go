@@ -42,8 +42,8 @@ func TestFilter(t *testing.T) {
 		IgnoreWords: 0.1,
 		RareWords:   1,
 	}
-	dbPath := "../testdata/junk/filter.db"
-	bloomPath := "../testdata/junk/filter.bloom"
+	dbPath := filepath.FromSlash("../testdata/junk/filter.db")
+	bloomPath := filepath.FromSlash("../testdata/junk/filter.bloom")
 	os.Remove(dbPath)
 	os.Remove(bloomPath)
 	f, err := NewFilter(ctxbg, log, params, dbPath, bloomPath)
@@ -59,8 +59,8 @@ func TestFilter(t *testing.T) {
 	os.MkdirAll("../testdata/train/ham", 0770)
 	os.MkdirAll("../testdata/train/spam", 0770)
 
-	hamdir := "../testdata/train/ham"
-	spamdir := "../testdata/train/spam"
+	hamdir := filepath.FromSlash("../testdata/train/ham")
+	spamdir := filepath.FromSlash("../testdata/train/spam")
 	hamfiles := tlistdir(t, hamdir)
 	if len(hamfiles) > 100 {
 		hamfiles = hamfiles[:100]

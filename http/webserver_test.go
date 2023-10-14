@@ -27,7 +27,7 @@ func tcheck(t *testing.T, err error, msg string) {
 
 func TestWebserver(t *testing.T) {
 	os.RemoveAll("../testdata/webserver/data")
-	mox.ConfigStaticPath = "../testdata/webserver/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webserver/mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
 
@@ -158,7 +158,7 @@ func TestWebserver(t *testing.T) {
 
 func TestWebsocket(t *testing.T) {
 	os.RemoveAll("../testdata/websocket/data")
-	mox.ConfigStaticPath = "../testdata/websocket/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/websocket/mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
 

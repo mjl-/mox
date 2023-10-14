@@ -20,7 +20,7 @@ func TestExport(t *testing.T) {
 	// and maildir/mbox. check there are 2 files in the repo, no errors.txt.
 
 	os.RemoveAll("../testdata/store/data")
-	mox.ConfigStaticPath = "../testdata/store/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
 	acc, err := OpenAccount("mjl")
 	tcheck(t, err, "open account")
@@ -32,16 +32,17 @@ func TestExport(t *testing.T) {
 	msgFile, err := CreateMessageTemp("mox-test-export")
 	tcheck(t, err, "create temp")
 	defer os.Remove(msgFile.Name()) // To be sure.
+	defer msgFile.Close()
 	const msg = "test: test\r\n\r\ntest\r\n"
 	_, err = msgFile.Write([]byte(msg))
 	tcheck(t, err, "write message")
 
 	m := Message{Received: time.Now(), Size: int64(len(msg))}
-	err = acc.DeliverMailbox(xlog, "Inbox", &m, msgFile, false)
+	err = acc.DeliverMailbox(xlog, "Inbox", &m, msgFile)
 	tcheck(t, err, "deliver")
 
 	m = Message{Received: time.Now(), Size: int64(len(msg))}
-	err = acc.DeliverMailbox(xlog, "Trash", &m, msgFile, true)
+	err = acc.DeliverMailbox(xlog, "Trash", &m, msgFile)
 	tcheck(t, err, "deliver")
 
 	var maildirZip, maildirTar, mboxZip, mboxTar bytes.Buffer
@@ -61,8 +62,8 @@ func TestExport(t *testing.T) {
 	archive(ZipArchiver{zip.NewWriter(&mboxZip)}, false)
 	archive(TarArchiver{tar.NewWriter(&maildirTar)}, true)
 	archive(TarArchiver{tar.NewWriter(&mboxTar)}, false)
-	archive(DirArchiver{"../testdata/exportmaildir"}, true)
-	archive(DirArchiver{"../testdata/exportmbox"}, false)
+	archive(DirArchiver{filepath.FromSlash("../testdata/exportmaildir")}, true)
+	archive(DirArchiver{filepath.FromSlash("../testdata/exportmbox")}, false)
 
 	if r, err := zip.NewReader(bytes.NewReader(maildirZip.Bytes()), int64(maildirZip.Len())); err != nil {
 		t.Fatalf("reading maildir zip: %v", err)
@@ -115,6 +116,6 @@ func TestExport(t *testing.T) {
 		}
 	}
 
-	checkDirFiles("../testdata/exportmaildir", 2)
-	checkDirFiles("../testdata/exportmbox", 2)
+	checkDirFiles(filepath.FromSlash("../testdata/exportmaildir"), 2)
+	checkDirFiles(filepath.FromSlash("../testdata/exportmbox"), 2)
 }

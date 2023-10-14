@@ -193,7 +193,7 @@ func fakeCert(t *testing.T) tls.Certificate {
 
 // Test submission from authenticated user.
 func TestSubmission(t *testing.T) {
-	ts := newTestServer(t, "../testdata/smtp/mox.conf", dns.MockResolver{})
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
 	defer ts.close()
 
 	// Set DKIM signing config.
@@ -254,7 +254,7 @@ func TestDelivery(t *testing.T) {
 		},
 		PTR: map[string][]string{},
 	}
-	ts := newTestServer(t, "../testdata/smtp/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
 	defer ts.close()
 
 	ts.run(func(err error, client *smtpclient.Client) {
@@ -333,9 +333,11 @@ func TestDelivery(t *testing.T) {
 func tinsertmsg(t *testing.T, acc *store.Account, mailbox string, m *store.Message, msg string) {
 	mf, err := store.CreateMessageTemp("queue-dsn")
 	tcheck(t, err, "temp message")
+	defer os.Remove(mf.Name())
+	defer mf.Close()
 	_, err = mf.Write([]byte(msg))
 	tcheck(t, err, "write message")
-	err = acc.DeliverMailbox(xlog, mailbox, m, mf, true)
+	err = acc.DeliverMailbox(xlog, mailbox, m, mf)
 	tcheck(t, err, "deliver message")
 	err = mf.Close()
 	tcheck(t, err, "close message")
@@ -392,7 +394,7 @@ func TestSpam(t *testing.T) {
 			"_dmarc.example.org.": {"v=DMARC1;p=reject"},
 		},
 	}
-	ts := newTestServer(t, "../testdata/smtp/junk/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
 	defer ts.close()
 
 	// Insert spammy messages. No junkfilter training yet.
@@ -538,7 +540,7 @@ func TestForward(t *testing.T) {
 			rcptTo = "mjl@mox.example" // Without IsForward rule.
 		}
 
-		ts := newTestServer(t, "../testdata/smtp/junk/mox.conf", resolver)
+		ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
 		defer ts.close()
 
 		var msgBad = strings.ReplaceAll(`From: <remote@bad.example>
@@ -645,7 +647,7 @@ func TestDMARCSent(t *testing.T) {
 			"_dmarc.example.org.": {"v=DMARC1;p=reject"},
 		},
 	}
-	ts := newTestServer(t, "../testdata/smtp/junk/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
 	defer ts.close()
 
 	// Insert spammy messages not related to the test message.
@@ -710,7 +712,7 @@ func TestBlocklistedSubjectpass(t *testing.T) {
 			"127.0.0.10": {"example.org."}, // For iprev check.
 		},
 	}
-	ts := newTestServer(t, "../testdata/smtp/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
 	ts.dnsbls = []dns.Domain{{ASCII: "dnsbl.example"}}
 	defer ts.close()
 
@@ -776,7 +778,7 @@ func TestDMARCReport(t *testing.T) {
 			"127.0.0.10": {"example.org."}, // For iprev check.
 		},
 	}
-	ts := newTestServer(t, "../testdata/smtp/dmarcreport/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/dmarcreport/mox.conf"), resolver)
 	defer ts.close()
 
 	run := func(report string, n int) {
@@ -899,7 +901,7 @@ func TestTLSReport(t *testing.T) {
 			"127.0.0.10": {"example.org."}, // For iprev check.
 		},
 	}
-	ts := newTestServer(t, "../testdata/smtp/tlsrpt/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/tlsrpt/mox.conf"), resolver)
 	defer ts.close()
 
 	run := func(tlsrpt string, n int) {
@@ -939,7 +941,7 @@ func TestTLSReport(t *testing.T) {
 }
 
 func TestRatelimitConnectionrate(t *testing.T) {
-	ts := newTestServer(t, "../testdata/smtp/mox.conf", dns.MockResolver{})
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
 	defer ts.close()
 
 	// We'll be creating 300 connections, no TLS and reduce noise.
@@ -965,7 +967,7 @@ func TestRatelimitConnectionrate(t *testing.T) {
 }
 
 func TestRatelimitAuth(t *testing.T) {
-	ts := newTestServer(t, "../testdata/smtp/mox.conf", dns.MockResolver{})
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
 	defer ts.close()
 
 	ts.submission = true
@@ -1006,7 +1008,7 @@ func TestRatelimitDelivery(t *testing.T) {
 			"127.0.0.10": {"example.org."},
 		},
 	}
-	ts := newTestServer(t, "../testdata/smtp/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
 	defer ts.close()
 
 	orig := limitIPMasked1MessagesPerMinute
@@ -1061,7 +1063,7 @@ func TestRatelimitDelivery(t *testing.T) {
 }
 
 func TestNonSMTP(t *testing.T) {
-	ts := newTestServer(t, "../testdata/smtp/mox.conf", dns.MockResolver{})
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
 	defer ts.close()
 	ts.cid += 2
 
@@ -1105,7 +1107,7 @@ func TestNonSMTP(t *testing.T) {
 
 // Test limits on outgoing messages.
 func TestLimitOutgoing(t *testing.T) {
-	ts := newTestServer(t, "../testdata/smtp/sendlimit/mox.conf", dns.MockResolver{})
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/sendlimit/mox.conf"), dns.MockResolver{})
 	defer ts.close()
 
 	ts.user = "mjl@mox.example"
@@ -1149,7 +1151,7 @@ func TestCatchall(t *testing.T) {
 			"127.0.0.10": {"other.example."},
 		},
 	}
-	ts := newTestServer(t, "../testdata/smtp/catchall/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/catchall/mox.conf"), resolver)
 	defer ts.close()
 
 	testDeliver := func(rcptTo string, expErr *smtpclient.Error) {
@@ -1195,7 +1197,7 @@ func TestDKIMSign(t *testing.T) {
 		},
 	}
 
-	ts := newTestServer(t, "../testdata/smtp/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
 	defer ts.close()
 
 	// Set DKIM signing config.
@@ -1287,7 +1289,7 @@ func TestPostmaster(t *testing.T) {
 			"127.0.0.10": {"other.example."},
 		},
 	}
-	ts := newTestServer(t, "../testdata/smtp/postmaster/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/postmaster/mox.conf"), resolver)
 	defer ts.close()
 
 	testDeliver := func(rcptTo string, expErr *smtpclient.Error) {
@@ -1321,7 +1323,7 @@ func TestEmptylocalpart(t *testing.T) {
 			"127.0.0.10": {"other.example."},
 		},
 	}
-	ts := newTestServer(t, "../testdata/smtp/mox.conf", resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
 	defer ts.close()
 
 	testDeliver := func(rcptTo string, expErr *smtpclient.Error) {

@@ -2,7 +2,7 @@ package imapserver
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"sort"
 	"strings"
 
@@ -133,7 +133,7 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 			err := q.ForEach(func(mb store.Mailbox) error {
 				names[mb.Name] = info{mailbox: &mb}
 				nameList = append(nameList, mb.Name)
-				for p := filepath.Dir(mb.Name); p != "."; p = filepath.Dir(p) {
+				for p := path.Dir(mb.Name); p != "."; p = path.Dir(p) {
 					hasChild[p] = true
 				}
 				return nil
@@ -148,7 +148,7 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 				if !ok {
 					nameList = append(nameList, sub.Name)
 				}
-				for p := filepath.Dir(sub.Name); p != "."; p = filepath.Dir(p) {
+				for p := path.Dir(sub.Name); p != "."; p = path.Dir(p) {
 					hasSubscribedChild[p] = true
 				}
 				return nil

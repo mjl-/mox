@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -338,7 +339,7 @@ func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn 
 		os.RemoveAll("../testdata/imap/data")
 	}
 	mox.Context = ctxbg
-	mox.ConfigStaticPath = "../testdata/imap/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
 	mox.MustLoadConfig(true, false)
 	acc, err := store.OpenAccount("mjl")
 	tcheck(t, err, "open account")

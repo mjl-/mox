@@ -17,6 +17,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -644,7 +645,7 @@ func (f *Filter) TrainDir(dir string, files []string, ham bool) (n, malformed ui
 	}
 
 	for _, name := range files {
-		p := fmt.Sprintf("%s/%s", dir, name)
+		p := filepath.Join(dir, name)
 		valid, words, err := f.tokenizeMail(p)
 		if err != nil {
 			// f.log.Infox("tokenizing mail", err, mlog.Field("path", p))

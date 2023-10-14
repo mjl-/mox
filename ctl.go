@@ -320,12 +320,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		msgFile, err := store.CreateMessageTemp("ctl-deliver")
 		ctl.xcheck(err, "creating temporary message file")
 		defer func() {
-			if msgFile != nil {
-				err := os.Remove(msgFile.Name())
-				log.Check(err, "removing temporary message file", mlog.Field("path", msgFile.Name()))
-				err = msgFile.Close()
-				log.Check(err, "closing temporary message file")
-			}
+			name := msgFile.Name()
+			err := msgFile.Close()
+			log.Check(err, "closing temporary message file")
+			err = os.Remove(name)
+			log.Check(err, "removing temporary message file", mlog.Field("path", name))
 		}()
 		mw := message.NewWriter(msgFile)
 		ctl.xwriteok()
@@ -340,14 +339,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		}
 
 		a.WithWLock(func() {
-			err := a.DeliverDestination(log, addr, m, msgFile, true)
+			err := a.DeliverDestination(log, addr, m, msgFile)
 			ctl.xcheck(err, "delivering message")
 			log.Info("message delivered through ctl", mlog.Field("to", to))
 		})
 
-		err = msgFile.Close()
-		log.Check(err, "closing delivered message file")
-		msgFile = nil
 		err = a.Close()
 		ctl.xcheck(err, "closing account")
 		ctl.xwriteok()

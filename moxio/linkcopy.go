@@ -45,10 +45,10 @@ func LinkOrCopy(log *mlog.Log, dst, src string, srcReaderOpt io.Reader, sync boo
 	}
 	defer func() {
 		if df != nil {
-			err = os.Remove(dst)
-			log.Check(err, "removing partial destination file")
-			err = df.Close()
+			err := df.Close()
 			log.Check(err, "closing partial destination file")
+			err = os.Remove(dst)
+			log.Check(err, "removing partial destination file", mlog.Field("path", dst))
 		}
 	}()
 
@@ -64,7 +64,7 @@ func LinkOrCopy(log *mlog.Log, dst, src string, srcReaderOpt io.Reader, sync boo
 	df = nil
 	if err != nil {
 		err := os.Remove(dst)
-		log.Check(err, "removing partial destination file")
+		log.Check(err, "removing partial destination file", mlog.Field("path", dst))
 		return err
 	}
 	return nil

@@ -107,3 +107,19 @@ docker:
 
 docker-release:
 	./docker-release.sh
+
+buildall:
+	GOOS=linux GOARCH=arm go build
+	GOOS=linux GOARCH=arm64 go build
+	GOOS=linux GOARCH=amd64 go build
+	GOOS=linux GOARCH=386 go build
+	GOOS=openbsd GOARCH=amd64 go build
+	GOOS=freebsd GOARCH=amd64 go build
+	GOOS=netbsd GOARCH=amd64 go build
+	GOOS=darwin GOARCH=amd64 go build
+	GOOS=dragonfly GOARCH=amd64 go build
+	GOOS=illumos GOARCH=amd64 go build
+	GOOS=solaris GOARCH=amd64 go build
+	GOOS=aix GOARCH=ppc64 go build
+	GOOS=windows GOARCH=amd64 go build
+	# no plan9 for now

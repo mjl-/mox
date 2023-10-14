@@ -2,6 +2,7 @@ package dmarcrpt
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -122,14 +123,14 @@ func TestParseReport(t *testing.T) {
 }
 
 func TestParseMessageReport(t *testing.T) {
-	const dir = "../testdata/dmarc-reports"
+	dir := filepath.FromSlash("../testdata/dmarc-reports")
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("listing dmarc report emails: %s", err)
 	}
 
 	for _, file := range files {
-		p := dir + "/" + file.Name()
+		p := filepath.Join(dir, file.Name())
 		f, err := os.Open(p)
 		if err != nil {
 			t.Fatalf("open %q: %s", p, err)

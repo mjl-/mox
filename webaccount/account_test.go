@@ -38,7 +38,7 @@ func tcheck(t *testing.T, err error, msg string) {
 
 func TestAccount(t *testing.T) {
 	os.RemoveAll("../testdata/httpaccount/data")
-	mox.ConfigStaticPath = "../testdata/httpaccount/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/httpaccount/mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
 	acc, err := store.OpenAccount("mjl")
@@ -144,8 +144,8 @@ func TestAccount(t *testing.T) {
 			t.Fatalf("imported %d messages, expected %d", count, expect)
 		}
 	}
-	testImport("../testdata/importtest.mbox.zip", 2)
-	testImport("../testdata/importtest.maildir.tgz", 2)
+	testImport(filepath.FromSlash("../testdata/importtest.mbox.zip"), 2)
+	testImport(filepath.FromSlash("../testdata/importtest.maildir.tgz"), 2)
 
 	// Check there are messages, with the right flags.
 	acc.DB.Read(ctxbg, func(tx *bstore.Tx) error {

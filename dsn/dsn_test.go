@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -131,7 +132,7 @@ func TestDSN(t *testing.T) {
 
 	// Test for valid DKIM signature.
 	mox.Context = context.Background()
-	mox.ConfigStaticPath = "../testdata/dsn/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/dsn/mox.conf")
 	mox.MustLoadConfig(true, false)
 	msgbuf, err = m.Compose(log, false)
 	if err != nil {

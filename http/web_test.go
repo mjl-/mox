@@ -15,7 +15,7 @@ import (
 
 func TestServeHTTP(t *testing.T) {
 	os.RemoveAll("../testdata/web/data")
-	mox.ConfigStaticPath = "../testdata/web/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/web/mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
 

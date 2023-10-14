@@ -17,16 +17,17 @@ var ctxbg = context.Background()
 
 func TestDMARCDB(t *testing.T) {
 	mox.Shutdown = ctxbg
-	mox.ConfigStaticPath = "../testdata/dmarcdb/fake.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/dmarcdb/fake.conf")
 	mox.Conf.Static.DataDir = "."
 
 	dbpath := mox.DataDirPath("dmarcrpt.db")
 	os.MkdirAll(filepath.Dir(dbpath), 0770)
-	defer os.Remove(dbpath)
 
 	if err := Init(); err != nil {
 		t.Fatalf("init database: %s", err)
 	}
+	defer os.Remove(dbpath)
+	defer DB.Close()
 
 	feedback := &dmarcrpt.Feedback{
 		ReportMetadata: dmarcrpt.ReportMetadata{

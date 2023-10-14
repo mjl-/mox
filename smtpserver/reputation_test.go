@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -99,7 +100,7 @@ func TestReputation(t *testing.T) {
 	check := func(m store.Message, history []store.Message, expJunk *bool, expConclusive bool, expMethod reputationMethod) {
 		t.Helper()
 
-		p := "../testdata/smtpserver-reputation.db"
+		p := filepath.FromSlash("../testdata/smtpserver-reputation.db")
 		defer os.Remove(p)
 
 		db, err := bstore.Open(ctxbg, p, &bstore.Options{Timeout: 5 * time.Second}, store.DBTypes...)

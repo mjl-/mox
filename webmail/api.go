@@ -352,12 +352,11 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	dataFile, err := store.CreateMessageTemp("webmail-submit")
 	xcheckf(ctx, err, "creating temporary file for message")
 	defer func() {
-		if dataFile != nil {
-			err := dataFile.Close()
-			log.Check(err, "closing submit message file")
-			err = os.Remove(dataFile.Name())
-			log.Check(err, "removing temporary submit message file")
-		}
+		name := dataFile.Name()
+		err := dataFile.Close()
+		log.Check(err, "closing submit message file")
+		err = os.Remove(name)
+		log.Check(err, "removing temporary submit message file", mlog.Field("name", name))
 	}()
 
 	// If writing to the message file fails, we abort immediately.
@@ -669,7 +668,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			Localpart: rcpt.Localpart,
 			IPDomain:  dns.IPDomain{Domain: rcpt.Domain},
 		}
-		_, err := queue.Add(ctx, log, reqInfo.AccountName, fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), dataFile, nil, false)
+		_, err := queue.Add(ctx, log, reqInfo.AccountName, fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), dataFile, nil)
 		if err != nil {
 			metricSubmission.WithLabelValues("queueerror").Inc()
 		}
@@ -720,11 +719,6 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			sentmb, err := bstore.QueryDB[store.Mailbox](ctx, acc.DB).FilterEqual("Sent", true).Get()
 			if err == bstore.ErrAbsent {
 				// There is no mailbox designated as Sent mailbox, so we're done.
-				err := os.Remove(dataFile.Name())
-				log.Check(err, "removing submitmessage file")
-				err = dataFile.Close()
-				log.Check(err, "closing submitmessage file")
-				dataFile = nil
 				return
 			}
 			xcheckf(ctx, err, "message submitted to queue, adding to Sent mailbox")
@@ -749,7 +743,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			err = tx.Update(&sentmb)
 			xcheckf(ctx, err, "updating sent mailbox for counts")
 
-			err = acc.DeliverMessage(log, tx, &sentm, dataFile, true, true, false, false)
+			err = acc.DeliverMessage(log, tx, &sentm, dataFile, true, false, false)
 			if err != nil {
 				metricSubmission.WithLabelValues("storesenterror").Inc()
 				metricked = true
@@ -757,10 +751,6 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			xcheckf(ctx, err, "message submitted to queue, appending message to Sent mailbox")
 
 			changes = append(changes, sentm.ChangeAddUID(), sentmb.ChangeCounts())
-
-			err = dataFile.Close()
-			log.Check(err, "closing submit message file")
-			dataFile = nil
 		})
 
 		store.BroadcastChanges(acc, changes)

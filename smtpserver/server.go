@@ -1514,12 +1514,11 @@ func (c *conn) cmdData(p *parser) {
 		xsmtpServerErrorf(errCodes(smtp.C451LocalErr, smtp.SeSys3Other0, err), "creating temporary file for message: %s", err)
 	}
 	defer func() {
-		if dataFile != nil {
-			err := os.Remove(dataFile.Name())
-			c.log.Check(err, "removing temporary message file", mlog.Field("path", dataFile.Name()))
-			err = dataFile.Close()
-			c.log.Check(err, "removing temporary message file")
-		}
+		name := dataFile.Name()
+		err := dataFile.Close()
+		c.log.Check(err, "removing temporary message file")
+		err = os.Remove(name)
+		c.log.Check(err, "removing temporary message file", mlog.Field("path", name))
 	}()
 	msgWriter := message.NewWriter(dataFile)
 	dr := smtp.NewDataReader(c.r)
@@ -1660,17 +1659,15 @@ func (c *conn) cmdData(p *parser) {
 	// handle it first, and leave the rest of the function for handling wild west
 	// internet traffic.
 	if c.submission {
-		c.submit(cmdctx, recvHdrFor, msgWriter, &dataFile)
+		c.submit(cmdctx, recvHdrFor, msgWriter, dataFile)
 	} else {
-		c.deliver(cmdctx, recvHdrFor, msgWriter, iprevStatus, iprevAuthentic, &dataFile)
+		c.deliver(cmdctx, recvHdrFor, msgWriter, iprevStatus, iprevAuthentic, dataFile)
 	}
 }
 
 // submit is used for mail from authenticated users that we will try to deliver.
-func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, pdataFile **os.File) {
+func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, dataFile *os.File) {
 	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/webmail.go:/MessageSubmit\(
-
-	dataFile := *pdataFile
 
 	var msgPrefix []byte
 
@@ -1774,7 +1771,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// We always deliver through the queue. It would be more efficient to deliver
 	// directly, but we don't want to circumvent all the anti-spam measures. Accounts
 	// on a single mox instance should be allowed to block each other.
-	for i, rcptAcc := range c.recipients {
+	for _, rcptAcc := range c.recipients {
 		if Localserve {
 			code, timeout := localserveNeedsError(rcptAcc.rcptTo.Localpart)
 			if timeout {
@@ -1790,7 +1787,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		xmsgPrefix := append([]byte(recvHdrFor(rcptAcc.rcptTo.String())), msgPrefix...)
 
 		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-		if _, err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, dataFile, nil, i == len(c.recipients)-1); err != nil {
+		if _, err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, dataFile, nil); err != nil {
 			// Aborting the transaction is not great. But continuing and generating DSNs will
 			// probably result in errors as well...
 			metricSubmission.WithLabelValues("queueerror").Inc()
@@ -1803,10 +1800,6 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		err := c.account.DB.Insert(ctx, &store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)})
 		xcheckf(err, "adding outgoing message")
 	}
-
-	err = dataFile.Close()
-	c.log.Check(err, "closing file after submission")
-	*pdataFile = nil
 
 	c.transactionGood++
 	c.transactionBad-- // Compensate for early earlier pessimistic increase.
@@ -1866,9 +1859,7 @@ func (c *conn) xlocalserveError(lp smtp.Localpart) {
 
 // deliver is called for incoming messages from external, typically untrusted
 // sources. i.e. not submitted by authenticated users.
-func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, iprevStatus iprev.Status, iprevAuthentic bool, pdataFile **os.File) {
-	dataFile := *pdataFile
-
+func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, iprevStatus iprev.Status, iprevAuthentic bool, dataFile *os.File) {
 	// todo: in decision making process, if we run into (some) temporary errors, attempt to continue. if we decide to accept, all good. if we decide to reject, we'll make it a temporary reject.
 
 	msgFrom, headers, err := message.From(c.log, false, dataFile)
@@ -2381,7 +2372,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 						if err != nil {
 							log.Errorx("tidying rejects mailbox", err)
 						} else if hasSpace {
-							if err := acc.DeliverMailbox(log, conf.RejectsMailbox, m, dataFile, false); err != nil {
+							if err := acc.DeliverMailbox(log, conf.RejectsMailbox, m, dataFile); err != nil {
 								log.Errorx("delivering spammy mail to rejects mailbox", err)
 							} else {
 								log.Info("delivered spammy mail to rejects mailbox")
@@ -2456,7 +2447,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 		}
 		acc.WithWLock(func() {
-			if err := acc.DeliverMailbox(log, a.mailbox, m, dataFile, false); err != nil {
+			if err := acc.DeliverMailbox(log, a.mailbox, m, dataFile); err != nil {
 				log.Errorx("delivering", err)
 				metricDelivery.WithLabelValues("delivererror", a.reason).Inc()
 				addError(rcptAcc, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
@@ -2561,12 +2552,6 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			c.log.Errorx("queuing DSN for incoming delivery, no DSN sent", err)
 		}
 	}
-
-	err = os.Remove(dataFile.Name())
-	c.log.Check(err, "removing file after delivery")
-	err = dataFile.Close()
-	c.log.Check(err, "closing data file after delivery")
-	*pdataFile = nil
 
 	c.transactionGood++
 	c.transactionBad-- // Compensate for early earlier pessimistic increase.

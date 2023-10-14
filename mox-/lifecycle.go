@@ -5,18 +5,14 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/signal"
 	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-
-	"github.com/mjl-/mox/mlog"
 )
 
 // We start up as root, bind to sockets, open private key/cert files and fork and
@@ -54,68 +50,6 @@ func RestorePassedFiles() {
 		passedFiles[path] = append(passedFiles[path], os.NewFile(o, path))
 		o++
 	}
-}
-
-// Fork and exec as unprivileged user.
-//
-// We don't use just setuid because it is hard to guarantee that no other
-// privileged go worker processes have been started before we get here. E.g. init
-// functions in packages can start goroutines.
-func ForkExecUnprivileged() {
-	prog, err := os.Executable()
-	if err != nil {
-		xlog.Fatalx("finding executable for exec", err)
-	}
-
-	files := []*os.File{os.Stdin, os.Stdout, os.Stderr}
-	var addrs []string
-	for addr, f := range passedListeners {
-		files = append(files, f)
-		addrs = append(addrs, addr)
-	}
-	var paths []string
-	for path, fl := range passedFiles {
-		for _, f := range fl {
-			files = append(files, f)
-			paths = append(paths, path)
-		}
-	}
-	env := os.Environ()
-	env = append(env, "MOX_SOCKETS="+strings.Join(addrs, ","), "MOX_FILES="+strings.Join(paths, ","))
-
-	p, err := os.StartProcess(prog, os.Args, &os.ProcAttr{
-		Env:   env,
-		Files: files,
-		Sys: &syscall.SysProcAttr{
-			Credential: &syscall.Credential{
-				Uid: Conf.Static.UID,
-				Gid: Conf.Static.GID,
-			},
-		},
-	})
-	if err != nil {
-		xlog.Fatalx("fork and exec", err)
-	}
-	CleanupPassedFiles()
-
-	// If we get a interrupt/terminate signal, pass it on to the child. For interrupt,
-	// the child probably already got it.
-	// todo: see if we tie up child and root process so a kill -9 of the root process
-	// kills the child process too.
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		sig := <-sigc
-		p.Signal(sig)
-	}()
-
-	st, err := p.Wait()
-	if err != nil {
-		xlog.Fatalx("wait", err)
-	}
-	code := st.ExitCode()
-	xlog.Print("stopping after child exit", mlog.Field("exitcode", code))
-	os.Exit(code)
 }
 
 // CleanupPassedFiles closes the listening socket file descriptors and files passed
@@ -164,15 +98,19 @@ func Listen(network, addr string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	tcpln, ok := ln.(*net.TCPListener)
-	if !ok {
-		return nil, fmt.Errorf("listener not a tcp listener, but %T, for network %s, address %s", ln, network, addr)
+	// On windows, we cannot duplicate a socket. We don't need to for mox localserve
+	// with FilesImmediate.
+	if !FilesImmediate {
+		tcpln, ok := ln.(*net.TCPListener)
+		if !ok {
+			return nil, fmt.Errorf("listener not a tcp listener, but %T, for network %s, address %s", ln, network, addr)
+		}
+		f, err := tcpln.File()
+		if err != nil {
+			return nil, fmt.Errorf("dup listener: %v", err)
+		}
+		passedListeners[addr] = f
 	}
-	f, err := tcpln.File()
-	if err != nil {
-		return nil, fmt.Errorf("dup listener: %v", err)
-	}
-	passedListeners[addr] = f
 	return ln, err
 }
 

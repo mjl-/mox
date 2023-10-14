@@ -428,7 +428,7 @@ func main() {
 		return
 	}
 
-	flag.StringVar(&mox.ConfigStaticPath, "config", envString("MOXCONF", "config/mox.conf"), "configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf")
+	flag.StringVar(&mox.ConfigStaticPath, "config", envString("MOXCONF", filepath.FromSlash("config/mox.conf")), "configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf")
 	flag.StringVar(&loglevel, "loglevel", "", "if non-empty, this log level is set early in startup")
 	flag.BoolVar(&pedantic, "pedantic", false, "protocol violations result in errors instead of accepting/working around them")
 	flag.BoolVar(&store.CheckConsistencyOnClose, "checkconsistency", false, "dangerous option for testing only, enables data checks that abort/panic when inconsistencies are found")
@@ -1050,7 +1050,7 @@ for a domain and create the TLSA DNS records it suggests to enable DANE.
 			p := mox.DataDirPath(filepath.Join("acme", "keycerts", l.TLS.ACME, filename))
 			privKey := xtryLoadPrivateKey(kt, p)
 
-			relPath := fmt.Sprintf("hostkeys/%s.%s.%s.privatekey.pkcs8.pem", host.Name(), timestamp, kind)
+			relPath := filepath.Join("hostkeys", fmt.Sprintf("%s.%s.%s.privatekey.pkcs8.pem", host.Name(), timestamp, kind))
 			destPath := mox.ConfigDirPath(relPath)
 			err := writeHostPrivateKey(privKey, destPath)
 			xcheckf(err, "writing host private key file to %s: %v", destPath, err)

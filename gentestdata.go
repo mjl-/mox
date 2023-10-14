@@ -85,8 +85,8 @@ Accounts:
 				IgnoreWords: 0.1
 `
 
-	mox.ConfigStaticPath = "/tmp/mox-bogus/mox.conf"
-	mox.ConfigDynamicPath = "/tmp/mox-bogus/domains.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("/tmp/mox-bogus/mox.conf")
+	mox.ConfigDynamicPath = filepath.FromSlash("/tmp/mox-bogus/domains.conf")
 	mox.Conf.DynamicLastCheck = time.Now() // Should prevent warning.
 	mox.Conf.Static = config.Static{
 		DataDir: destDataDir,
@@ -228,11 +228,12 @@ Accounts:
 	prefix := []byte{}
 	mf := tempfile()
 	xcheckf(err, "temp file for queue message")
+	defer os.Remove(mf.Name())
 	defer mf.Close()
 	const qmsg = "From: <test0@mox.example>\r\nTo: <other@remote.example>\r\nSubject: test\r\n\r\nthe message...\r\n"
 	_, err = fmt.Fprint(mf, qmsg)
 	xcheckf(err, "writing message")
-	_, err = queue.Add(ctxbg, log, "test0", mailfrom, rcptto, false, false, int64(len(qmsg)), "<test@localhost>", prefix, mf, nil, true)
+	_, err = queue.Add(ctxbg, log, "test0", mailfrom, rcptto, false, false, int64(len(qmsg)), "<test@localhost>", prefix, mf, nil)
 	xcheckf(err, "enqueue message")
 
 	// Create three accounts.
@@ -283,10 +284,14 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf, msg)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest1.DeliverMessage(log, tx, &m, mf, true, false, true, false)
+		err = accTest1.DeliverMessage(log, tx, &m, mf, false, true, false)
+
+		mfname := mf.Name()
 		xcheckf(err, "add message to account test1")
 		err = mf.Close()
 		xcheckf(err, "closing file")
+		err = os.Remove(mfname)
+		xcheckf(err, "removing temp message file")
 
 		err = tx.Get(&inbox)
 		xcheckf(err, "get inbox")
@@ -339,10 +344,14 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf0, msg0)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(log, tx, &m0, mf0, true, false, false, false)
+		err = accTest2.DeliverMessage(log, tx, &m0, mf0, false, false, false)
 		xcheckf(err, "add message to account test2")
+
+		mf0name := mf0.Name()
 		err = mf0.Close()
 		xcheckf(err, "closing file")
+		err = os.Remove(mf0name)
+		xcheckf(err, "removing temp message file")
 
 		err = tx.Get(&inbox)
 		xcheckf(err, "get inbox")
@@ -366,10 +375,14 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf1, msg1)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(log, tx, &m1, mf1, true, false, false, false)
+		err = accTest2.DeliverMessage(log, tx, &m1, mf1, false, false, false)
 		xcheckf(err, "add message to account test2")
+
+		mf1name := mf1.Name()
 		err = mf1.Close()
 		xcheckf(err, "closing file")
+		err = os.Remove(mf1name)
+		xcheckf(err, "removing temp message file")
 
 		err = tx.Get(&sent)
 		xcheckf(err, "get sent")

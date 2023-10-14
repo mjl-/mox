@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ import (
 func TestView(t *testing.T) {
 	os.RemoveAll("../testdata/webmail/data")
 	mox.Context = ctxbg
-	mox.ConfigStaticPath = "../testdata/webmail/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webmail/mox.conf")
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
 

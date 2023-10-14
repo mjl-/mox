@@ -471,8 +471,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 		c.User = "mox"
 	}
 	u, err := user.Lookup(c.User)
-	var userErr user.UnknownUserError
-	if err != nil && errors.As(err, &userErr) {
+	if err != nil {
 		uid, err := strconv.ParseUint(c.User, 10, 32)
 		if err != nil {
 			addErrorf("parsing unknown user %s as uid: %v (hint: add user mox with \"useradd -d $PWD mox\" or specify a different username on the quickstart command-line)", c.User, err)
@@ -481,8 +480,6 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 			c.UID = uint32(uid)
 			c.GID = uint32(uid)
 		}
-	} else if err != nil {
-		addErrorf("looking up user: %v", err)
 	} else {
 		if uid, err := strconv.ParseUint(u.Uid, 10, 32); err != nil {
 			addErrorf("parsing uid %s: %v", u.Uid, err)

@@ -1189,9 +1189,6 @@ func (a *Account) WithRLock(fn func()) {
 
 // DeliverMessage delivers a mail message to the account.
 //
-// If consumeFile is set, the original msgFile is moved/renamed or copied and
-// removed as part of delivery.
-//
 // The message, with msg.MsgPrefix and msgFile combined, must have a header
 // section. The caller is responsible for adding a header separator to
 // msg.MsgPrefix if missing from an incoming message.
@@ -1210,7 +1207,7 @@ func (a *Account) WithRLock(fn func()) {
 // Caller must broadcast new message.
 //
 // Caller must update mailbox counts.
-func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, consumeFile, sync, notrain, nothreads bool) error {
+func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, sync, notrain, nothreads bool) error {
 	if m.Expunged {
 		return fmt.Errorf("cannot deliver expunged message")
 	}
@@ -1346,12 +1343,7 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 		}
 	}
 
-	if consumeFile {
-		if err := os.Rename(msgFile.Name(), msgPath); err != nil {
-			// Could be due to cross-filesystem rename. Users shouldn't configure their systems that way.
-			return fmt.Errorf("moving msg file to destination directory: %w", err)
-		}
-	} else if err := moxio.LinkOrCopy(log, msgPath, msgFile.Name(), &moxio.AtReader{R: msgFile}, true); err != nil {
+	if err := moxio.LinkOrCopy(log, msgPath, msgFile.Name(), &moxio.AtReader{R: msgFile}, true); err != nil {
 		return fmt.Errorf("linking/copying message to new file: %w", err)
 	}
 
@@ -1647,7 +1639,7 @@ ruleset:
 
 // MessagePath returns the file system path of a message.
 func (a *Account) MessagePath(messageID int64) string {
-	return strings.Join(append([]string{a.Dir, "msg"}, messagePathElems(messageID)...), "/")
+	return strings.Join(append([]string{a.Dir, "msg"}, messagePathElems(messageID)...), string(filepath.Separator))
 }
 
 // MessageReader opens a message for reading, transparently combining the
@@ -1661,7 +1653,7 @@ func (a *Account) MessageReader(m Message) *MsgReader {
 // Caller must hold account wlock (mailbox may be created).
 // Message delivery, possible mailbox creation, and updated mailbox counts are
 // broadcasted.
-func (a *Account) DeliverDestination(log *mlog.Log, dest config.Destination, m *Message, msgFile *os.File, consumeFile bool) error {
+func (a *Account) DeliverDestination(log *mlog.Log, dest config.Destination, m *Message, msgFile *os.File) error {
 	var mailbox string
 	rs := MessageRuleset(log, dest, m, m.MsgPrefix, msgFile)
 	if rs != nil {
@@ -1671,7 +1663,7 @@ func (a *Account) DeliverDestination(log *mlog.Log, dest config.Destination, m *
 	} else {
 		mailbox = dest.Mailbox
 	}
-	return a.DeliverMailbox(log, mailbox, m, msgFile, consumeFile)
+	return a.DeliverMailbox(log, mailbox, m, msgFile)
 }
 
 // DeliverMailbox delivers an email to the specified mailbox.
@@ -1679,7 +1671,7 @@ func (a *Account) DeliverDestination(log *mlog.Log, dest config.Destination, m *
 // Caller must hold account wlock (mailbox may be created).
 // Message delivery, possible mailbox creation, and updated mailbox counts are
 // broadcasted.
-func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgFile *os.File, consumeFile bool) error {
+func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgFile *os.File) error {
 	var changes []Change
 	err := a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
 		mb, chl, err := a.MailboxEnsure(tx, mailbox, true)
@@ -1696,7 +1688,7 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 			return fmt.Errorf("updating mailbox for delivery: %w", err)
 		}
 
-		if err := a.DeliverMessage(log, tx, m, msgFile, consumeFile, true, false, false); err != nil {
+		if err := a.DeliverMessage(log, tx, m, msgFile, true, false, false); err != nil {
 			return err
 		}
 
@@ -1977,10 +1969,11 @@ func OpenEmail(email string) (*Account, config.Destination, error) {
 // 64 characters, must be power of 2 for MessagePath
 const msgDirChars = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-_"
 
-// MessagePath returns the filename of the on-disk filename, relative to the containing directory such as <account>/msg or queue.
+// MessagePath returns the filename of the on-disk filename, relative to the
+// containing directory such as <account>/msg or queue.
 // Returns names like "AB/1".
 func MessagePath(messageID int64) string {
-	return strings.Join(messagePathElems(messageID), "/")
+	return strings.Join(messagePathElems(messageID), string(filepath.Separator))
 }
 
 // messagePathElems returns the elems, for a single join without intermediate

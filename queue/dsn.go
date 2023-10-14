@@ -154,12 +154,11 @@ func queueDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg stri
 		return
 	}
 	defer func() {
-		if msgFile != nil {
-			err := os.Remove(msgFile.Name())
-			log.Check(err, "removing message file", mlog.Field("path", msgFile.Name()))
-			err = msgFile.Close()
-			log.Check(err, "closing message file")
-		}
+		name := msgFile.Name()
+		err := msgFile.Close()
+		log.Check(err, "closing message file")
+		err = os.Remove(name)
+		log.Check(err, "removing message file", mlog.Field("path", name))
 	}()
 
 	msgWriter := message.NewWriter(msgFile)
@@ -174,12 +173,9 @@ func queueDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg stri
 		MsgPrefix: []byte{},
 	}
 	acc.WithWLock(func() {
-		if err := acc.DeliverMailbox(log, mailbox, msg, msgFile, true); err != nil {
+		if err := acc.DeliverMailbox(log, mailbox, msg, msgFile); err != nil {
 			qlog("delivering dsn to mailbox", err)
 			return
 		}
 	})
-	err = msgFile.Close()
-	log.Check(err, "closing dsn file")
-	msgFile = nil
 }

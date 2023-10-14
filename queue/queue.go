@@ -118,7 +118,7 @@ func (m Msg) MessagePath() string {
 
 // Init opens the queue database without starting delivery.
 func Init() error {
-	qpath := mox.DataDirPath("queue/index.db")
+	qpath := mox.DataDirPath(filepath.FromSlash("queue/index.db"))
 	os.MkdirAll(filepath.Dir(qpath), 0770)
 	isNew := false
 	if _, err := os.Stat(qpath); err != nil && os.IsNotExist(err) {
@@ -176,14 +176,11 @@ func Count(ctx context.Context) (int, error) {
 // Add a new message to the queue. The queue is kicked immediately to start a
 // first delivery attempt.
 //
-// If consumeFile is true, it is removed as part of delivery (by rename or copy
-// and remove). msgFile is never closed by Add.
-//
 // dnsutf8Opt is a utf8-version of the message, to be used only for DNSs. If set,
 // this data is used as the message when delivering the DSN and the remote SMTP
 // server supports SMTPUTF8. If the remote SMTP server does not support SMTPUTF8,
 // the regular non-utf8 message is delivered.
-func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcptTo smtp.Path, has8bit, smtputf8 bool, size int64, messageID string, msgPrefix []byte, msgFile *os.File, dsnutf8Opt []byte, consumeFile bool) (int64, error) {
+func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcptTo smtp.Path, has8bit, smtputf8 bool, size int64, messageID string, msgPrefix []byte, msgFile *os.File, dsnutf8Opt []byte) (int64, error) {
 	// todo: Add should accept multiple rcptTo if they are for the same domain. so we can queue them for delivery in one (or just a few) session(s), transferring the data only once. ../rfc/5321:3759
 
 	if Localserve {
@@ -202,7 +199,7 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 		conf, _ := acc.Conf()
 		dest := conf.Destinations[mailFrom.String()]
 		acc.WithWLock(func() {
-			err = acc.DeliverDestination(log, dest, &m, msgFile, consumeFile)
+			err = acc.DeliverDestination(log, dest, &m, msgFile)
 		})
 		if err != nil {
 			return 0, fmt.Errorf("delivering message: %v", err)
@@ -239,12 +236,7 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 	}()
 	dstDir := filepath.Dir(dst)
 	os.MkdirAll(dstDir, 0770)
-	if consumeFile {
-		if err := os.Rename(msgFile.Name(), dst); err != nil {
-			// Could be due to cross-filesystem rename. Users shouldn't configure their systems that way.
-			return 0, fmt.Errorf("move message into queue dir: %w", err)
-		}
-	} else if err := moxio.LinkOrCopy(log, dst, msgFile.Name(), nil, true); err != nil {
+	if err := moxio.LinkOrCopy(log, dst, msgFile.Name(), nil, true); err != nil {
 		return 0, fmt.Errorf("linking/copying message to new file: %s", err)
 	} else if err := moxio.SyncDir(dstDir); err != nil {
 		return 0, fmt.Errorf("sync directory: %v", err)

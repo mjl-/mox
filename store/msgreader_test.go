@@ -12,7 +12,13 @@ func TestMsgreader(t *testing.T) {
 		t.Fatalf("expected error for non-existing file, got %s", err)
 	}
 
-	if buf, err := io.ReadAll(&MsgReader{prefix: []byte("hello"), path: "/dev/null", size: int64(len("hello"))}); err != nil {
+	if err := os.WriteFile("emptyfile_test.txt", []byte{}, 0660); err != nil {
+		t.Fatalf("writing emptyfile_test.txt: %s", err)
+	}
+	defer os.Remove("emptyfile_test.txt")
+	mr := &MsgReader{prefix: []byte("hello"), path: "emptyfile_test.txt", size: int64(len("hello"))}
+	defer mr.Close()
+	if buf, err := io.ReadAll(mr); err != nil {
 		t.Fatalf("readall: %s", err)
 	} else if string(buf) != "hello" {
 		t.Fatalf("got %q, expected %q", buf, "hello")
@@ -22,7 +28,8 @@ func TestMsgreader(t *testing.T) {
 		t.Fatalf("writing msgreader_test.txt: %s", err)
 	}
 	defer os.Remove("msgreader_test.txt")
-	mr := &MsgReader{prefix: []byte("hello"), path: "msgreader_test.txt", size: int64(len("hello world"))}
+	mr = &MsgReader{prefix: []byte("hello"), path: "msgreader_test.txt", size: int64(len("hello world"))}
+	defer mr.Close()
 	if buf, err := io.ReadAll(mr); err != nil {
 		t.Fatalf("readall: %s", err)
 	} else if string(buf) != "hello world" {

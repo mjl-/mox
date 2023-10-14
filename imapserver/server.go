@@ -50,6 +50,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -895,7 +896,7 @@ func xmailboxPatternMatcher(ref string, patterns []string) matchStringer {
 
 		s := pat
 		if ref != "" {
-			s = filepath.Join(ref, pat)
+			s = path.Join(ref, pat)
 		}
 
 		// Fix casing for all Inbox paths.
@@ -2481,7 +2482,7 @@ func (c *conn) cmdLsub(tag, cmd string, p *parser) {
 		for _, sub := range subscriptions {
 			name := sub.Name
 			if ispercent {
-				for p := filepath.Dir(name); p != "."; p = filepath.Dir(p) {
+				for p := path.Dir(name); p != "."; p = path.Dir(p) {
 					subscribedKids[p] = true
 				}
 			}
@@ -2675,12 +2676,11 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 	msgFile, err := store.CreateMessageTemp("imap-append")
 	xcheckf(err, "creating temp file for message")
 	defer func() {
-		if msgFile != nil {
-			err := os.Remove(msgFile.Name())
-			c.xsanity(err, "removing APPEND temporary file")
-			err = msgFile.Close()
-			c.xsanity(err, "closing APPEND temporary file")
-		}
+		p := msgFile.Name()
+		err := msgFile.Close()
+		c.xsanity(err, "closing APPEND temporary file")
+		err = os.Remove(p)
+		c.xsanity(err, "removing APPEND temporary file")
 	}()
 	defer c.xtrace(mlog.LevelTracedata)()
 	mw := message.NewWriter(msgFile)
@@ -2740,7 +2740,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			err = tx.Update(&mb)
 			xcheckf(err, "updating mailbox counts")
 
-			err := c.account.DeliverMessage(c.log, tx, &m, msgFile, true, true, false, false)
+			err := c.account.DeliverMessage(c.log, tx, &m, msgFile, true, false, false)
 			xcheckf(err, "delivering message")
 		})
 
@@ -2753,10 +2753,6 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		changes = append(changes, m.ChangeAddUID(), mb.ChangeCounts())
 		c.broadcast(changes)
 	})
-
-	err = msgFile.Close()
-	c.log.Check(err, "closing appended file")
-	msgFile = nil
 
 	if c.mailboxID == mb.ID {
 		c.applyChanges(pendingChanges, false)

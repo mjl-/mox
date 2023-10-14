@@ -2,6 +2,7 @@ package store
 
 import (
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ import (
 
 func TestThreadingUpgrade(t *testing.T) {
 	os.RemoveAll("../testdata/store/data")
-	mox.ConfigStaticPath = "../testdata/store/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
 	acc, err := OpenAccount("mjl")
 	tcheck(t, err, "open account")
@@ -32,6 +33,7 @@ func TestThreadingUpgrade(t *testing.T) {
 		t.Helper()
 		f, err := CreateMessageTemp("account-test")
 		tcheck(t, err, "temp file")
+		defer os.Remove(f.Name())
 		defer f.Close()
 
 		s = strings.ReplaceAll(s, "\n", "\r\n")
@@ -40,7 +42,7 @@ func TestThreadingUpgrade(t *testing.T) {
 			MsgPrefix: []byte(s),
 			Received:  recv,
 		}
-		err = acc.DeliverMailbox(log, "Inbox", &m, f, true)
+		err = acc.DeliverMailbox(log, "Inbox", &m, f)
 		tcheck(t, err, "deliver")
 		if expThreadID == 0 {
 			expThreadID = m.ID

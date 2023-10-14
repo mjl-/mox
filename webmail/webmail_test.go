@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/textproto"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -253,10 +254,12 @@ type testmsg struct {
 func tdeliver(t *testing.T, acc *store.Account, tm *testmsg) {
 	msgFile, err := store.CreateMessageTemp("webmail-test")
 	tcheck(t, err, "create message temp")
+	defer os.Remove(msgFile.Name())
+	defer msgFile.Close()
 	size, err := msgFile.Write(tm.msg.Marshal(t))
 	tcheck(t, err, "write message temp")
 	m := store.Message{Flags: tm.Flags, Keywords: tm.Keywords, Size: int64(size)}
-	err = acc.DeliverMailbox(xlog, tm.Mailbox, &m, msgFile, true)
+	err = acc.DeliverMailbox(xlog, tm.Mailbox, &m, msgFile)
 	tcheck(t, err, "deliver test message")
 	err = msgFile.Close()
 	tcheck(t, err, "closing test message")
@@ -272,7 +275,7 @@ func TestWebmail(t *testing.T) {
 	mox.LimitersInit()
 	os.RemoveAll("../testdata/webmail/data")
 	mox.Context = ctxbg
-	mox.ConfigStaticPath = "../testdata/webmail/mox.conf"
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webmail/mox.conf")
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
 
