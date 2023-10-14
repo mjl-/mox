@@ -1786,7 +1786,7 @@ func attachmentTypes(log *mlog.Log, m store.Message, state *msgState) (map[Attac
 		mt := strings.ToLower(a.Part.MediaType + "/" + a.Part.MediaSubType)
 		if t, ok := attachmentMimetypes[mt]; ok {
 			types[t] = true
-		} else if ext := filepath.Ext(a.Part.ContentTypeParams["name"]); ext != "" {
+		} else if ext := filepath.Ext(tryDecodeParam(log, a.Part.ContentTypeParams["name"])); ext != "" {
 			if t, ok := attachmentExtensions[strings.ToLower(ext)]; ok {
 				types[t] = true
 			} else {

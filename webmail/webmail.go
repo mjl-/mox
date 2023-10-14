@@ -317,25 +317,6 @@ func serveContentFallback(log *mlog.Log, w http.ResponseWriter, r *http.Request,
 	http.ServeContent(w, r, "", fallbackMtime(log), bytes.NewReader(fallback))
 }
 
-// Escape mime content header parameter, such as content-type charset or
-// content-disposition filename.
-func escapeParam(s string) string {
-	// todo: follow ../rfc/2183?
-
-	basic := len(s) > 0
-	for _, c := range s {
-		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '.' {
-			continue
-		}
-		basic = false
-		break
-	}
-	if basic {
-		return s
-	}
-	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
-}
-
 // Handler returns a handler for the webmail endpoints, customized for the max
 // message size coming from the listener.
 func Handler(maxMessageSize int64) func(w http.ResponseWriter, r *http.Request) {
@@ -593,19 +574,20 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 			subjectSlug = s
 		}
 		filename := fmt.Sprintf("email-%d-attachments-%s%s.zip", m.ID, m.Received.Format("20060102-150405"), subjectSlug)
-		h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%s`, escapeParam(filename)))
+		cd := mime.FormatMediaType("attachment", map[string]string{"filename": filename})
+		h.Set("Content-Disposition", cd)
 
 		zw := zip.NewWriter(w)
 		names := map[string]bool{}
 		for _, a := range mi.Attachments {
 			ap := a.Part
-			name := ap.ContentTypeParams["name"]
+			name := tryDecodeParam(log, ap.ContentTypeParams["name"])
 			if name == "" {
 				// We don't check errors, this is all best-effort.
 				h, _ := ap.Header()
 				disposition := h.Get("Content-Disposition")
 				_, params, _ := mime.ParseMediaType(disposition)
-				name = params["filename"]
+				name = tryDecodeParam(log, params["filename"])
 			}
 			if name != "" {
 				name = filepath.Base(name)
@@ -697,10 +679,11 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		// not, there is not much we could do better...
 		headers(false, false, false)
 		ct := "text/plain"
+		params := map[string]string{}
 		if charset := p.ContentTypeParams["charset"]; charset != "" {
-			ct += fmt.Sprintf("; charset=%s", escapeParam(charset))
+			params["charset"] = charset
 		}
-		h.Set("Content-Type", ct)
+		h.Set("Content-Type", mime.FormatMediaType(ct, params))
 		h.Set("Cache-Control", "no-cache, max-age=0")
 
 		_, err := io.Copy(w, &moxio.AtReader{R: msgr})
@@ -892,18 +875,19 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		h.Set("Content-Type", ct)
 		h.Set("Cache-Control", "no-cache, max-age=0")
 		if t[1] == "download" {
-			name := ap.ContentTypeParams["name"]
+			name := tryDecodeParam(log, ap.ContentTypeParams["name"])
 			if name == "" {
 				// We don't check errors, this is all best-effort.
 				h, _ := ap.Header()
 				disposition := h.Get("Content-Disposition")
 				_, params, _ := mime.ParseMediaType(disposition)
-				name = params["filename"]
+				name = tryDecodeParam(log, params["filename"])
 			}
 			if name == "" {
 				name = "attachment.bin"
 			}
-			h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%s`, escapeParam(name)))
+			cd := mime.FormatMediaType("attachment", map[string]string{"filename": name})
+			h.Set("Content-Disposition", cd)
 		}
 
 		_, err := io.Copy(w, ap.Reader())

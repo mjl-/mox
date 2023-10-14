@@ -524,9 +524,11 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		header("Content-Type", fmt.Sprintf(`multipart/mixed; boundary="%s"`, mp.Boundary()))
 		line(xmsgw)
 
+		ct := mime.FormatMediaType("text/plain", map[string]string{"charset": charset})
 		textHdr := textproto.MIMEHeader{}
-		textHdr.Set("Content-Type", "text/plain; charset="+escapeParam(charset))
+		textHdr.Set("Content-Type", ct)
 		textHdr.Set("Content-Transfer-Encoding", cte)
+
 		textp, err := mp.CreatePart(textHdr)
 		xcheckf(ctx, err, "adding text part to message")
 		_, err = textp.Write([]byte(text))
@@ -534,13 +536,11 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 		xaddPart := func(ct, filename string) io.Writer {
 			ahdr := textproto.MIMEHeader{}
-			if ct == "" {
-				ct = "application/octet-stream"
-			}
-			ct += fmt.Sprintf(`; name="%s"`, filename)
+			cd := mime.FormatMediaType("attachment", map[string]string{"filename": filename})
+
 			ahdr.Set("Content-Type", ct)
 			ahdr.Set("Content-Transfer-Encoding", "base64")
-			ahdr.Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%s`, escapeParam(filename)))
+			ahdr.Set("Content-Disposition", cd)
 			ap, err := mp.CreatePart(ahdr)
 			xcheckf(ctx, err, "adding attachment part to message")
 			return ap
@@ -587,12 +587,21 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			}
 			ct := strings.TrimSuffix(t[0], "base64")
 			ct = strings.TrimSuffix(ct, ";")
+			if ct == "" {
+				ct = "application/octet-stream"
+			}
+			filename := a.Filename
+			if filename == "" {
+				filename = "unnamed.bin"
+			}
+			params := map[string]string{"name": filename}
+			ct = mime.FormatMediaType(ct, params)
 
 			// Ensure base64 is valid, then we'll write the original string.
 			_, err := io.Copy(io.Discard, base64.NewDecoder(base64.StdEncoding, strings.NewReader(t[1])))
 			xcheckuserf(ctx, err, "parsing attachment as base64")
 
-			xaddAttachmentBase64(ct, a.Filename, []byte(t[1]))
+			xaddAttachmentBase64(ct, filename, []byte(t[1]))
 		}
 
 		if len(m.ForwardAttachments.Paths) > 0 {
@@ -617,14 +626,16 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 							ap = ap.Parts[xp]
 						}
 
-						filename := ap.ContentTypeParams["name"]
+						filename := tryDecodeParam(log, ap.ContentTypeParams["name"])
 						if filename == "" {
 							filename = "unnamed.bin"
 						}
-						ct := strings.ToLower(ap.MediaType + "/" + ap.MediaSubType)
+						params := map[string]string{"name": filename}
 						if pcharset := ap.ContentTypeParams["charset"]; pcharset != "" {
-							ct += "; charset=" + escapeParam(pcharset)
+							params["charset"] = pcharset
 						}
+						ct := strings.ToLower(ap.MediaType + "/" + ap.MediaSubType)
+						ct = mime.FormatMediaType(ct, params)
 						xaddAttachment(ct, filename, ap.Reader())
 					}
 				})
@@ -634,7 +645,8 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		err = mp.Close()
 		xcheckf(ctx, err, "writing mime multipart")
 	} else {
-		header("Content-Type", "text/plain; charset="+escapeParam(charset))
+		ct := mime.FormatMediaType("text/plain", map[string]string{"charset": charset})
+		header("Content-Type", ct)
 		header("Content-Transfer-Encoding", cte)
 		line(xmsgw)
 		xmsgw.Write([]byte(text))

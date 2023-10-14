@@ -12,11 +12,45 @@ import (
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
 )
 
 // todo: we should have all needed information for messageItem in store.Message (perhaps some data in message.Part) for fast access, not having to parse the on-disk message file.
+
+// Attempt q/b-word-decode name, coming from Content-Type "name" field or
+// Content-Disposition "filename" field.
+//
+// RFC 2231 specify an encoding for non-ascii values in mime header parameters. But
+// it appears common practice to instead just q/b-word encode the values.
+// Thunderbird and gmail.com do this for the Content-Type "name" parameter.
+// gmail.com also does that for the Content-Disposition "filename" parameter, where
+// Thunderbird uses the RFC 2231-defined encoding. Go's mime.ParseMediaType parses
+// the mechanism specified in RFC 2231 only. The value for "name" we get here would
+// already be decoded properly for standards-compliant headers, like
+// "filename*0*=UTF-8”%...; filename*1*=%.... We'll look for Q/B-word encoding
+// markers ("=?"-prefix or "?="-suffix) and try to decode if present. This would
+// only cause trouble for filenames having this prefix/suffix.
+func tryDecodeParam(log *mlog.Log, name string) string {
+	if name == "" || !strings.HasPrefix(name, "=?") && !strings.HasSuffix(name, "?=") {
+		return name
+	}
+	// todo: find where this is allowed. it seems quite common. perhaps we should remove the pedantic check?
+	if moxvar.Pedantic {
+		log.Debug("attachment contains rfc2047 q/b-word-encoded mime parameter instead of rfc2231-encoded", mlog.Field("name", name))
+		return name
+	}
+	dec := mime.WordDecoder{}
+	s, err := dec.DecodeHeader(name)
+	if err != nil {
+		log.Debugx("q/b-word decoding mime parameter", err, mlog.Field("name", name))
+		return name
+	}
+	return s
+}
+
+// todo: mime.FormatMediaType does not wrap long lines. should do it ourselves, and split header into several parts (if commonly supported).
 
 func messageItem(log *mlog.Log, m store.Message, state *msgState) (MessageItem, error) {
 	pm, err := parsedMessage(log, m, state, false, true)
@@ -212,10 +246,9 @@ func parsedMessage(log *mlog.Log, m store.Message, state *msgState, full, msgite
 					disp, params, err := mime.ParseMediaType(cp)
 					log.Check(err, "parsing content-disposition", mlog.Field("cp", cp))
 					if strings.EqualFold(disp, "attachment") {
-						// todo: should we be decoding these names? i've seen messages with regular q-word style mime-encoding, not the one specified in ../rfc/2231:210
-						name := p.ContentTypeParams["name"]
+						name := tryDecodeParam(log, p.ContentTypeParams["name"])
 						if name == "" {
-							name = params["filename"]
+							name = tryDecodeParam(log, params["filename"])
 						}
 						pm.attachments = append(pm.attachments, Attachment{path, name, p})
 						return
@@ -285,8 +318,8 @@ func parsedMessage(log *mlog.Log, m store.Message, state *msgState, full, msgite
 					return
 				}
 
-				name, ok := p.ContentTypeParams["name"]
-				if !ok && (full || msgitem) {
+				name := tryDecodeParam(log, p.ContentTypeParams["name"])
+				if name == "" && (full || msgitem) {
 					// todo: should have this, and perhaps all content-* headers, preparsed in message.Part?
 					h, err := p.Header()
 					log.Check(err, "parsing attachment headers", mlog.Field("msgid", m.ID))
@@ -294,7 +327,7 @@ func parsedMessage(log *mlog.Log, m store.Message, state *msgState, full, msgite
 					if cp != "" {
 						_, params, err := mime.ParseMediaType(cp)
 						log.Check(err, "parsing content-disposition", mlog.Field("cp", cp))
-						name = params["filename"]
+						name = tryDecodeParam(log, params["filename"])
 					}
 				}
 				pm.attachments = append(pm.attachments, Attachment{path, name, p})
