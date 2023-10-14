@@ -1349,6 +1349,8 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 
 	if sync {
 		if err := moxio.SyncDir(msgDir); err != nil {
+			xerr := os.Remove(msgPath)
+			log.Check(xerr, "removing message after syncdir error", mlog.Field("path", msgPath))
 			return fmt.Errorf("sync directory: %w", err)
 		}
 	}
@@ -1356,6 +1358,8 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 	if !notrain && m.NeedsTraining() {
 		l := []Message{*m}
 		if err := a.RetrainMessages(context.TODO(), log, tx, l, false); err != nil {
+			xerr := os.Remove(msgPath)
+			log.Check(xerr, "removing message after syncdir error", mlog.Field("path", msgPath))
 			return fmt.Errorf("training junkfilter: %w", err)
 		}
 		*m = l[0]
