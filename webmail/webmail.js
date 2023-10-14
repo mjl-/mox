@@ -1680,7 +1680,7 @@ let statusElem;
 const withStatus = async (action, promise, disablable, noAlert) => {
 	let elem;
 	let id = window.setTimeout(() => {
-		elem = dom.span(action + '...');
+		elem = dom.span(action + '... ');
 		statusElem.appendChild(elem);
 		id = 0;
 	}, 1000);

@@ -761,7 +761,7 @@ let statusElem: HTMLElement
 const withStatus = async <T>(action: string, promise: Promise<T>, disablable?: Disablable, noAlert?: boolean): Promise<T> => {
 	let elem: HTMLElement | undefined
 	let id = window.setTimeout(() => {
-		elem = dom.span(action+'...')
+		elem = dom.span(action+'... ')
 		statusElem.appendChild(elem)
 		id = 0
 	}, 1000)
