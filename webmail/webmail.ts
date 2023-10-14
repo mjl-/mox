@@ -1375,8 +1375,6 @@ const compose = (opts: ComposeOptions) => {
 			border: '1px solid #ccc',
 			padding: '1em',
 			minWidth: '40em',
-			maxWidth: '70em',
-			width: '40%',
 			borderRadius: '.25em',
 		}),
 		dom.form(
