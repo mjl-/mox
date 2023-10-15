@@ -1254,7 +1254,58 @@ const compose = (opts: ComposeOptions) => {
 			return
 		}
 
-		let autosizeElem: HTMLElement, inputElem: HTMLInputElement
+		let rcptSecPromise: Promise<api.RecipientSecurity> | null = null
+		let rcptSecAddr: string = ''
+		let rcptSecAborter: {abort?: () => void} = {}
+
+		let autosizeElem: HTMLElement, inputElem: HTMLInputElement, securityBar: HTMLElement
+
+		const fetchRecipientSecurity = () => {
+			if (inputElem.value === rcptSecAddr) {
+				return
+			}
+			securityBar.style.borderImage = ''
+			rcptSecAddr = inputElem.value
+			if (!inputElem.value) {
+				return
+			}
+
+			if (rcptSecAborter.abort) {
+				rcptSecAborter.abort()
+				rcptSecAborter.abort = undefined
+			}
+
+			const color = (v: api.SecurityResult) => {
+				if (v === api.SecurityResult.SecurityResultYes) {
+					return '#50c40f'
+				} else if (v === api.SecurityResult.SecurityResultNo) {
+					return '#e15d1c'
+				} else if (v === api.SecurityResult.SecurityResultUnknown) {
+					return 'white'
+				}
+				return '#aaa'
+			}
+			const setBar = (c0: string, c1: string, c2: string) => {
+				const stops = [
+					c0 + ' 0%', c0 + ' 32%', 'white 32%', 'white 33%',
+					c1 + ' 33%', c1 + ' 66%', 'white 66%', 'white 67%',
+					c2 + ' 67%', c2 + ' 100%',
+				].join(', ')
+				securityBar.style.borderImage = 'linear-gradient(to right, ' + stops + ') 1'
+			}
+
+			const aborter: {abort?: () => void} = {}
+			rcptSecAborter = aborter
+			rcptSecPromise = client.withOptions({aborter: aborter}).RecipientSecurity(inputElem.value)
+			rcptSecPromise.then((rs) => {
+				setBar(color(rs.MTASTS), color(rs.DNSSEC), color(rs.DANE))
+				aborter.abort = undefined
+			}, () => {
+				setBar('#888', '#888', '#888')
+				aborter.abort = undefined
+			})
+		}
+
 		const root = dom.span(
 			autosizeElem=dom.span(
 				dom._class('autosize'),
@@ -1263,6 +1314,7 @@ const compose = (opts: ComposeOptions) => {
 					style({width: 'auto'}),
 					attr.value(addr),
 					newAddressComplete(),
+					attr.title('The bars below the input field indicate security features of the recipient (domain):\n1. Delivery with STARTTLS and MTA-STS (PKIX/WebPKI) enforced.\n2. MX lookup resulted in DNSSEC-signed response.\n3. First delivery destination host has DANE, so STARTTLS is required.\n\nColors:\n- Red, not implemented/unsupported\n- Green, implemented/supported\n- Gray, error while determining\n- Absent/white, unknown or skipped (e.g. dane check skipped due to dnssec-lookup error)'),
 					function keydown(e: KeyboardEvent) {
 						if (e.key === '-' && e.ctrlKey) {
 							remove()
@@ -1278,6 +1330,17 @@ const compose = (opts: ComposeOptions) => {
 						// data-value is used for size of ::after css pseudo-element to stretch input field.
 						autosizeElem.dataset.value = inputElem.value
 					},
+					function change() {
+						fetchRecipientSecurity()
+					},
+				),
+				securityBar=dom.span(
+					dom._class('securitybar'),
+					style({
+						margin: '0 1px',
+						borderBottom: '1.5px solid',
+						borderBottomColor: 'transparent',
+					}),
 				),
 			),
 			' ',
@@ -1290,6 +1353,7 @@ const compose = (opts: ComposeOptions) => {
 			' ',
 		)
 		autosizeElem.dataset.value = inputElem.value
+		fetchRecipientSecurity()
 
 		const remove = () => {
 			const i = views.indexOf(v)
@@ -1397,7 +1461,7 @@ const compose = (opts: ComposeOptions) => {
 							dom.span('From:'),
 						),
 						dom.td(
-							dom.clickbutton('Cancel', style({float: 'right'}), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)),
+							dom.clickbutton('Cancel', style({float: 'right', marginLeft: '1em', marginTop: '.15em'}), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)),
 							from=dom.select(
 								attr.required(''),
 								style({width: 'auto'}),

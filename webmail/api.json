@@ -276,6 +276,26 @@
 			"Returns": []
 		},
 		{
+			"Name": "RecipientSecurity",
+			"Docs": "RecipientSecurity looks up security properties of the address in the\nsingle-address message addressee (as it appears in a To/Cc/Bcc/etc header).",
+			"Params": [
+				{
+					"Name": "messageAddressee",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"RecipientSecurity"
+					]
+				}
+			]
+		},
+		{
 			"Name": "SSETypes",
 			"Docs": "SSETypes exists to ensure the generated API contains the types, for use in SSE events.",
 			"Params": [],
@@ -1230,6 +1250,33 @@
 					"Docs": "Number of bytes for all messages.",
 					"Typewords": [
 						"int64"
+					]
+				}
+			]
+		},
+		{
+			"Name": "RecipientSecurity",
+			"Docs": "RecipientSecurity is a quick analysis of the security properties of delivery to the recipient (domain).\nFields are nil when an error occurred during analysis.",
+			"Fields": [
+				{
+					"Name": "MTASTS",
+					"Docs": "Whether we have a stored enforced MTA-STS policy, or domain has MTA-STS DNS record.",
+					"Typewords": [
+						"SecurityResult"
+					]
+				},
+				{
+					"Name": "DNSSEC",
+					"Docs": "Whether MX lookup response was DNSSEC-signed.",
+					"Typewords": [
+						"SecurityResult"
+					]
+				},
+				{
+					"Name": "DANE",
+					"Docs": "Whether first delivery destination has DANE records.",
+					"Typewords": [
+						"SecurityResult"
 					]
 				}
 			]
@@ -2584,6 +2631,32 @@
 					"Name": "AttachmentPresentation",
 					"Value": "presentation",
 					"Docs": "odp, pptx, ..."
+				}
+			]
+		},
+		{
+			"Name": "SecurityResult",
+			"Docs": "SecurityResult indicates whether a security feature is supported.",
+			"Values": [
+				{
+					"Name": "SecurityResultError",
+					"Value": "error",
+					"Docs": ""
+				},
+				{
+					"Name": "SecurityResultNo",
+					"Value": "no",
+					"Docs": ""
+				},
+				{
+					"Name": "SecurityResultYes",
+					"Value": "yes",
+					"Docs": ""
+				},
+				{
+					"Name": "SecurityResultUnknown",
+					"Value": "unknown",
+					"Docs": "Unknown whether supported. Finding out may only be (reasonably) possible when\ntrying (e.g. SMTP STARTTLS). Once tried, the result may be cached for future\nlookups."
 				}
 			]
 		},

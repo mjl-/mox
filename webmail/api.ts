@@ -177,6 +177,14 @@ export interface Mailbox {
 	Size: number  // Number of bytes for all messages.
 }
 
+// RecipientSecurity is a quick analysis of the security properties of delivery to the recipient (domain).
+// Fields are nil when an error occurred during analysis.
+export interface RecipientSecurity {
+	MTASTS: SecurityResult  // Whether we have a stored enforced MTA-STS policy, or domain has MTA-STS DNS record.
+	DNSSEC: SecurityResult  // Whether MX lookup response was DNSSEC-signed.
+	DANE: SecurityResult  // Whether first delivery destination has DANE records.
+}
+
 // EventStart is the first message sent on an SSE connection, giving the client
 // basic data to populate its UI. After this event, messages will follow quickly in
 // an EventViewMsgs event.
@@ -480,13 +488,24 @@ export enum AttachmentType {
 	AttachmentPresentation = "presentation",  // odp, pptx, ...
 }
 
+// SecurityResult indicates whether a security feature is supported.
+export enum SecurityResult {
+	SecurityResultError = "error",
+	SecurityResultNo = "no",
+	SecurityResultYes = "yes",
+	// Unknown whether supported. Finding out may only be (reasonably) possible when
+	// trying (e.g. SMTP STARTTLS). Once tried, the result may be cached for future
+	// lookups.
+	SecurityResultUnknown = "unknown",
+}
+
 // Localpart is a decoded local part of an email address, before the "@".
 // For quoted strings, values do not hold the double quote or escaping backslashes.
 // An empty string can be a valid localpart.
 export type Localpart = string
 
-export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"Request":true,"SpecialUse":true,"SubmitMessage":true}
-export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"Localpart":true,"ThreadMode":true}
+export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"SpecialUse":true,"SubmitMessage":true}
+export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"Localpart":true,"SecurityResult":true,"ThreadMode":true}
 export const intsTypes: {[typename: string]: boolean} = {"ModSeq":true,"UID":true,"Validation":true}
 export const types: TypenameMap = {
 	"Request": {"Name":"Request","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"Cancel","Docs":"","Typewords":["bool"]},{"Name":"Query","Docs":"","Typewords":["Query"]},{"Name":"Page","Docs":"","Typewords":["Page"]}]},
@@ -504,6 +523,7 @@ export const types: TypenameMap = {
 	"File": {"Name":"File","Docs":"","Fields":[{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"DataURI","Docs":"","Typewords":["string"]}]},
 	"ForwardAttachments": {"Name":"ForwardAttachments","Docs":"","Fields":[{"Name":"MessageID","Docs":"","Typewords":["int64"]},{"Name":"Paths","Docs":"","Typewords":["[]","[]","int32"]}]},
 	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
+	"RecipientSecurity": {"Name":"RecipientSecurity","Docs":"","Fields":[{"Name":"MTASTS","Docs":"","Typewords":["SecurityResult"]},{"Name":"DNSSEC","Docs":"","Typewords":["SecurityResult"]},{"Name":"DANE","Docs":"","Typewords":["SecurityResult"]}]},
 	"EventStart": {"Name":"EventStart","Docs":"","Fields":[{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"LoginAddress","Docs":"","Typewords":["MessageAddress"]},{"Name":"Addresses","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"DomainAddressConfigs","Docs":"","Typewords":["{}","DomainAddressConfig"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Mailboxes","Docs":"","Typewords":["[]","Mailbox"]}]},
 	"DomainAddressConfig": {"Name":"DomainAddressConfig","Docs":"","Fields":[{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]}]},
 	"EventViewErr": {"Name":"EventViewErr","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]},{"Name":"Err","Docs":"","Typewords":["string"]}]},
@@ -531,6 +551,7 @@ export const types: TypenameMap = {
 	"Validation": {"Name":"Validation","Docs":"","Values":[{"Name":"ValidationUnknown","Value":0,"Docs":""},{"Name":"ValidationStrict","Value":1,"Docs":""},{"Name":"ValidationDMARC","Value":2,"Docs":""},{"Name":"ValidationRelaxed","Value":3,"Docs":""},{"Name":"ValidationPass","Value":4,"Docs":""},{"Name":"ValidationNeutral","Value":5,"Docs":""},{"Name":"ValidationTemperror","Value":6,"Docs":""},{"Name":"ValidationPermerror","Value":7,"Docs":""},{"Name":"ValidationFail","Value":8,"Docs":""},{"Name":"ValidationSoftfail","Value":9,"Docs":""},{"Name":"ValidationNone","Value":10,"Docs":""}]},
 	"ThreadMode": {"Name":"ThreadMode","Docs":"","Values":[{"Name":"ThreadOff","Value":"off","Docs":""},{"Name":"ThreadOn","Value":"on","Docs":""},{"Name":"ThreadUnread","Value":"unread","Docs":""}]},
 	"AttachmentType": {"Name":"AttachmentType","Docs":"","Values":[{"Name":"AttachmentIndifferent","Value":"","Docs":""},{"Name":"AttachmentNone","Value":"none","Docs":""},{"Name":"AttachmentAny","Value":"any","Docs":""},{"Name":"AttachmentImage","Value":"image","Docs":""},{"Name":"AttachmentPDF","Value":"pdf","Docs":""},{"Name":"AttachmentArchive","Value":"archive","Docs":""},{"Name":"AttachmentSpreadsheet","Value":"spreadsheet","Docs":""},{"Name":"AttachmentDocument","Value":"document","Docs":""},{"Name":"AttachmentPresentation","Value":"presentation","Docs":""}]},
+	"SecurityResult": {"Name":"SecurityResult","Docs":"","Values":[{"Name":"SecurityResultError","Value":"error","Docs":""},{"Name":"SecurityResultNo","Value":"no","Docs":""},{"Name":"SecurityResultYes","Value":"yes","Docs":""},{"Name":"SecurityResultUnknown","Value":"unknown","Docs":""}]},
 	"Localpart": {"Name":"Localpart","Docs":"","Values":null},
 }
 
@@ -550,6 +571,7 @@ export const parser = {
 	File: (v: any) => parse("File", v) as File,
 	ForwardAttachments: (v: any) => parse("ForwardAttachments", v) as ForwardAttachments,
 	Mailbox: (v: any) => parse("Mailbox", v) as Mailbox,
+	RecipientSecurity: (v: any) => parse("RecipientSecurity", v) as RecipientSecurity,
 	EventStart: (v: any) => parse("EventStart", v) as EventStart,
 	DomainAddressConfig: (v: any) => parse("DomainAddressConfig", v) as DomainAddressConfig,
 	EventViewErr: (v: any) => parse("EventViewErr", v) as EventViewErr,
@@ -577,6 +599,7 @@ export const parser = {
 	Validation: (v: any) => parse("Validation", v) as Validation,
 	ThreadMode: (v: any) => parse("ThreadMode", v) as ThreadMode,
 	AttachmentType: (v: any) => parse("AttachmentType", v) as AttachmentType,
+	SecurityResult: (v: any) => parse("SecurityResult", v) as SecurityResult,
 	Localpart: (v: any) => parse("Localpart", v) as Localpart,
 }
 
@@ -756,6 +779,16 @@ export class Client {
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, mute]
 		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// RecipientSecurity looks up security properties of the address in the
+	// single-address message addressee (as it appears in a To/Cc/Bcc/etc header).
+	async RecipientSecurity(messageAddressee: string): Promise<RecipientSecurity> {
+		const fn: string = "RecipientSecurity"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = [["RecipientSecurity"]]
+		const params: any[] = [messageAddressee]
+		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as RecipientSecurity
 	}
 
 	// SSETypes exists to ensure the generated API contains the types, for use in SSE events.

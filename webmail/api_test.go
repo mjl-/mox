@@ -12,6 +12,7 @@ import (
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
 
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/store"
@@ -362,4 +363,10 @@ func TestAPI(t *testing.T) {
 	l, full = api.CompleteRecipient(ctx, "cc2")
 	tcompare(t, l, []string{"mjl cc2 <mjl+cc2@mox.example>"})
 	tcompare(t, full, true)
+
+	// RecipientSecurity
+	resolver := dns.MockResolver{}
+	rs, err := recipientSecurity(ctxbg, resolver, "mjl@a.mox.example")
+	tcompare(t, err, nil)
+	tcompare(t, rs, RecipientSecurity{SecurityResultNo, SecurityResultNo, SecurityResultNo})
 }

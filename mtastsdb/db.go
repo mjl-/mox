@@ -106,9 +106,12 @@ func Close() {
 	}
 }
 
-// Lookup looks up a policy for the domain in the database.
+// lookup looks up a policy for the domain in the database.
 //
 // Only non-expired records are returned.
+//
+// Returns ErrNotFound if record is not present.
+// Returns ErrBackoff if a recent attempt to fetch a record failed.
 func lookup(ctx context.Context, domain dns.Domain) (*PolicyRecord, error) {
 	log := xlog.WithContext(ctx)
 	db, err := database(ctx)

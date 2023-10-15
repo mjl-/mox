@@ -11,12 +11,14 @@ import (
 	"mime"
 	"mime/multipart"
 	"mime/quotedprintable"
+	"net"
 	"net/http"
 	"net/mail"
 	"net/textproto"
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	_ "embed"
@@ -35,8 +37,11 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
+	"github.com/mjl-/mox/mtasts"
+	"github.com/mjl-/mox/mtastsdb"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
 )
 
@@ -1615,6 +1620,125 @@ func (Webmail) ThreadMute(ctx context.Context, messageIDs []int64, mute bool) {
 		})
 		store.BroadcastChanges(acc, changes)
 	})
+}
+
+// SecurityResult indicates whether a security feature is supported.
+type SecurityResult string
+
+const (
+	SecurityResultError SecurityResult = "error"
+	SecurityResultNo    SecurityResult = "no"
+	SecurityResultYes   SecurityResult = "yes"
+	// Unknown whether supported. Finding out may only be (reasonably) possible when
+	// trying (e.g. SMTP STARTTLS). Once tried, the result may be cached for future
+	// lookups.
+	SecurityResultUnknown SecurityResult = "unknown"
+)
+
+// RecipientSecurity is a quick analysis of the security properties of delivery to the recipient (domain).
+// Fields are nil when an error occurred during analysis.
+type RecipientSecurity struct {
+	MTASTS SecurityResult // Whether we have a stored enforced MTA-STS policy, or domain has MTA-STS DNS record.
+	DNSSEC SecurityResult // Whether MX lookup response was DNSSEC-signed.
+	DANE   SecurityResult // Whether first delivery destination has DANE records.
+}
+
+// RecipientSecurity looks up security properties of the address in the
+// single-address message addressee (as it appears in a To/Cc/Bcc/etc header).
+func (Webmail) RecipientSecurity(ctx context.Context, messageAddressee string) (RecipientSecurity, error) {
+	resolver := dns.StrictResolver{Pkg: "webmail"}
+	return recipientSecurity(ctx, resolver, messageAddressee)
+}
+
+// separate function for testing with mocked resolver.
+func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddressee string) (RecipientSecurity, error) {
+	log := xlog.WithContext(ctx)
+
+	rs := RecipientSecurity{
+		SecurityResultUnknown,
+		SecurityResultUnknown,
+		SecurityResultUnknown,
+	}
+
+	msgAddr, err := mail.ParseAddress(messageAddressee)
+	if err != nil {
+		return rs, fmt.Errorf("parsing message addressee: %v", err)
+	}
+
+	addr, err := smtp.ParseAddress(msgAddr.Address)
+	if err != nil {
+		return rs, fmt.Errorf("parsing address: %v", err)
+	}
+
+	var wg sync.WaitGroup
+
+	// MTA-STS.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		policy, _, err := mtastsdb.Get(ctx, resolver, addr.Domain)
+		if policy != nil && policy.Mode == mtasts.ModeEnforce {
+			rs.MTASTS = SecurityResultYes
+		} else if err == nil {
+			rs.MTASTS = SecurityResultNo
+		} else {
+			rs.MTASTS = SecurityResultError
+		}
+	}()
+
+	// DNSSEC and DANE.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		_, origNextHopAuthentic, expandedNextHopAuthentic, _, hosts, _, err := smtpclient.GatherDestinations(ctx, log, resolver, dns.IPDomain{Domain: addr.Domain})
+		if err != nil {
+			rs.DNSSEC = SecurityResultError
+			return
+		}
+		if origNextHopAuthentic && expandedNextHopAuthentic {
+			rs.DNSSEC = SecurityResultYes
+		} else {
+			rs.DNSSEC = SecurityResultNo
+		}
+
+		if !origNextHopAuthentic {
+			rs.DANE = SecurityResultNo
+			return
+		}
+
+		// We're only looking at the first host to deliver to (typically first mx destination).
+		if len(hosts) == 0 || hosts[0].Domain.IsZero() {
+			return // Should not happen.
+		}
+		host := hosts[0]
+
+		// Resolve the IPs. Required for DANE to prevent bad DNS servers from causing an
+		// error result instead of no-DANE result.
+		authentic, expandedAuthentic, expandedHost, _, _, err := smtpclient.GatherIPs(ctx, log, resolver, host, map[string][]net.IP{})
+		if err != nil {
+			rs.DANE = SecurityResultError
+			return
+		}
+		if !authentic {
+			rs.DANE = SecurityResultNo
+			return
+		}
+
+		daneRequired, _, _, err := smtpclient.GatherTLSA(ctx, log, resolver, host.Domain, expandedAuthentic, expandedHost)
+		if err != nil {
+			rs.DANE = SecurityResultError
+			return
+		} else if daneRequired {
+			rs.DANE = SecurityResultYes
+		} else {
+			rs.DANE = SecurityResultNo
+		}
+	}()
+
+	wg.Wait()
+	return rs, nil
 }
 
 func slicesAny[T any](l []T) []any {
