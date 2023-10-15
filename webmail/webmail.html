@@ -68,6 +68,9 @@ table.search td { padding: .25em; }
 .quoted1 { color: #03828f; }
 .quoted2 { color: #c7445c; }
 .quoted3 { color: #417c10; }
+.autosize { display: inline-grid; max-width: 90vw; }
+.autosize.input { grid-area: 1 / 2; }
+.autosize::after { content: attr(data-value); margin-right: 1em; line-height: 0; visibility: hidden; white-space: pre-wrap; overflow-x: hidden; }
 
 .scrollparent { position: relative; }
 .yscroll { overflow-y: scroll; position: absolute; top: 0; bottom: 0; left: 0; right: 0; }

@@ -1159,6 +1159,7 @@ const compose = (opts: ComposeOptions) => {
 	let fieldset: HTMLFieldSetElement
 	let from: HTMLSelectElement
 	let customFrom: HTMLInputElement | null = null
+	let subjectAutosize: HTMLElement
 	let subject: HTMLInputElement
 	let body: HTMLTextAreaElement
 	let attachments: HTMLInputElement
@@ -1253,24 +1254,31 @@ const compose = (opts: ComposeOptions) => {
 			return
 		}
 
-		let input: HTMLInputElement
+		let autosizeElem: HTMLElement, inputElem: HTMLInputElement
 		const root = dom.span(
-			input=dom.input(
-				focusPlaceholder('Jane <jane@example.org>'),
-				style({width: 'auto'}),
-				attr.value(addr),
-				newAddressComplete(),
-				function keydown(e: KeyboardEvent) {
-					if (e.key === '-' && e.ctrlKey) {
-						remove()
-					} else if (e.key === '=' && e.ctrlKey) {
-						newAddrView('', views, btn, cell, row, single)
-					} else {
-						return
-					}
-					e.preventDefault()
-					e.stopPropagation()
-				},
+			autosizeElem=dom.span(
+				dom._class('autosize'),
+				inputElem=dom.input(
+					focusPlaceholder('Jane <jane@example.org>'),
+					style({width: 'auto'}),
+					attr.value(addr),
+					newAddressComplete(),
+					function keydown(e: KeyboardEvent) {
+						if (e.key === '-' && e.ctrlKey) {
+							remove()
+						} else if (e.key === '=' && e.ctrlKey) {
+							newAddrView('', views, btn, cell, row, single)
+						} else {
+							return
+						}
+						e.preventDefault()
+						e.stopPropagation()
+					},
+					function input() {
+						// data-value is used for size of ::after css pseudo-element to stretch input field.
+						autosizeElem.dataset.value = inputElem.value
+					},
+				),
 			),
 			' ',
 			dom.clickbutton('-', style({padding: '0 .25em'}), attr.arialabel('Remove address.'), attr.title('Remove address.'), function click() {
@@ -1281,6 +1289,7 @@ const compose = (opts: ComposeOptions) => {
 			}),
 			' ',
 		)
+		autosizeElem.dataset.value = inputElem.value
 
 		const remove = () => {
 			const i = views.indexOf(v)
@@ -1310,14 +1319,14 @@ const compose = (opts: ComposeOptions) => {
 			}
 		}
 
-		const v: AddrView = {root: root, input: input}
+		const v: AddrView = {root: root, input: inputElem}
 		views.push(v)
 		cell.appendChild(v.root)
 		row.style.display = ''
 		if (single) {
 			btn.style.display = 'none'
 		}
-		input.focus()
+		inputElem.focus()
 		return v
 	}
 
@@ -1375,6 +1384,7 @@ const compose = (opts: ComposeOptions) => {
 			border: '1px solid #ccc',
 			padding: '1em',
 			minWidth: '40em',
+			maxWidth: '95vw',
 			borderRadius: '.25em',
 		}),
 		dom.form(
@@ -1403,24 +1413,36 @@ const compose = (opts: ComposeOptions) => {
 					),
 					toRow=dom.tr(
 						dom.td('To:', style({textAlign: 'right', color: '#555'})),
-						toCell=dom.td(style({width: '100%'})),
+						toCell=dom.td(style({lineHeight: '1.5'})),
 					),
 					replyToRow=dom.tr(
 						dom.td('Reply-To:', style({textAlign: 'right', color: '#555'})),
-						replyToCell=dom.td(style({width: '100%'})),
+						replyToCell=dom.td(style({lineHeight: '1.5'})),
 					),
 					ccRow=dom.tr(
 						dom.td('Cc:', style({textAlign: 'right', color: '#555'})),
-						ccCell=dom.td(style({width: '100%'})),
+						ccCell=dom.td(style({lineHeight: '1.5'})),
 					),
 					bccRow=dom.tr(
 						dom.td('Bcc:', style({textAlign: 'right', color: '#555'})),
-						bccCell=dom.td(style({width: '100%'})),
+						bccCell=dom.td(style({lineHeight: '1.5'})),
 					),
 					dom.tr(
 						dom.td('Subject:', style({textAlign: 'right', color: '#555'})),
-						dom.td(style({width: '100%'}),
-							subject=dom.input(focusPlaceholder('subject...'), attr.value(opts.subject || ''), attr.required(''), style({width: '100%'})),
+						dom.td(
+							subjectAutosize=dom.span(
+								dom._class('autosize'),
+								style({width: '100%'}), // Without 100% width, the span takes minimal width for input, we want the full table cell.
+								subject=dom.input(
+									style({width: '100%'}),
+									attr.value(opts.subject || ''),
+									attr.required(''),
+									focusPlaceholder('subject...'),
+									function input() {
+										subjectAutosize.dataset.value = subject.value
+									},
+								),
+							),
 						),
 					),
 				),
@@ -1464,6 +1486,8 @@ const compose = (opts: ComposeOptions) => {
 			},
 		),
 	)
+
+	subjectAutosize.dataset.value = subject.value
 
 	;(opts.to && opts.to.length > 0 ? opts.to : ['']).forEach(s => newAddrView(s, toViews, toBtn, toCell, toRow))
 	;(opts.cc || []).forEach(s => newAddrView(s, ccViews, ccBtn, ccCell, ccRow))

@@ -1959,6 +1959,7 @@ const compose = (opts) => {
 	let fieldset;
 	let from;
 	let customFrom = null;
+	let subjectAutosize;
 	let subject;
 	let body;
 	let attachments;
@@ -2042,8 +2043,8 @@ const compose = (opts) => {
 		if (single && views.length !== 0) {
 			return;
 		}
-		let input;
-		const root = dom.span(input = dom.input(focusPlaceholder('Jane <jane@example.org>'), style({ width: 'auto' }), attr.value(addr), newAddressComplete(), function keydown(e) {
+		let autosizeElem, inputElem;
+		const root = dom.span(autosizeElem = dom.span(dom._class('autosize'), inputElem = dom.input(focusPlaceholder('Jane <jane@example.org>'), style({ width: 'auto' }), attr.value(addr), newAddressComplete(), function keydown(e) {
 			if (e.key === '-' && e.ctrlKey) {
 				remove();
 			}
@@ -2055,12 +2056,16 @@ const compose = (opts) => {
 			}
 			e.preventDefault();
 			e.stopPropagation();
-		}), ' ', dom.clickbutton('-', style({ padding: '0 .25em' }), attr.arialabel('Remove address.'), attr.title('Remove address.'), function click() {
+		}, function input() {
+			// data-value is used for size of ::after css pseudo-element to stretch input field.
+			autosizeElem.dataset.value = inputElem.value;
+		})), ' ', dom.clickbutton('-', style({ padding: '0 .25em' }), attr.arialabel('Remove address.'), attr.title('Remove address.'), function click() {
 			remove();
 			if (single && views.length === 0) {
 				btn.style.display = '';
 			}
 		}), ' ');
+		autosizeElem.dataset.value = inputElem.value;
 		const remove = () => {
 			const i = views.indexOf(v);
 			views.splice(i, 1);
@@ -2087,14 +2092,14 @@ const compose = (opts) => {
 				next.focus();
 			}
 		};
-		const v = { root: root, input: input };
+		const v = { root: root, input: inputElem };
 		views.push(v);
 		cell.appendChild(v.root);
 		row.style.display = '';
 		if (single) {
 			btn.style.display = 'none';
 		}
-		input.focus();
+		inputElem.focus();
 		return v;
 	};
 	let noAttachmentsWarning;
@@ -2147,8 +2152,12 @@ const compose = (opts) => {
 		border: '1px solid #ccc',
 		padding: '1em',
 		minWidth: '40em',
+		maxWidth: '95vw',
 		borderRadius: '.25em',
-	}), dom.form(fieldset = dom.fieldset(dom.table(style({ width: '100%' }), dom.tr(dom.td(style({ textAlign: 'right', color: '#555' }), dom.span('From:')), dom.td(dom.clickbutton('Cancel', style({ float: 'right' }), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)), from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)))), toRow = dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555' })), toCell = dom.td(style({ width: '100%' }))), replyToRow = dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555' })), replyToCell = dom.td(style({ width: '100%' }))), ccRow = dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555' })), ccCell = dom.td(style({ width: '100%' }))), bccRow = dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555' })), bccCell = dom.td(style({ width: '100%' }))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555' })), dom.td(style({ width: '100%' }), subject = dom.input(focusPlaceholder('subject...'), attr.value(opts.subject || ''), attr.required(''), style({ width: '100%' }))))), body = dom.textarea(dom._class('mono'), attr.rows('15'), style({ width: '100%' }), 
+	}), dom.form(fieldset = dom.fieldset(dom.table(style({ width: '100%' }), dom.tr(dom.td(style({ textAlign: 'right', color: '#555' }), dom.span('From:')), dom.td(dom.clickbutton('Cancel', style({ float: 'right' }), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)), from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)))), toRow = dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555' })), toCell = dom.td(style({ lineHeight: '1.5' }))), replyToRow = dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555' })), replyToCell = dom.td(style({ lineHeight: '1.5' }))), ccRow = dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555' })), ccCell = dom.td(style({ lineHeight: '1.5' }))), bccRow = dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555' })), bccCell = dom.td(style({ lineHeight: '1.5' }))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555' })), dom.td(subjectAutosize = dom.span(dom._class('autosize'), style({ width: '100%' }), // Without 100% width, the span takes minimal width for input, we want the full table cell.
+	subject = dom.input(style({ width: '100%' }), attr.value(opts.subject || ''), attr.required(''), focusPlaceholder('subject...'), function input() {
+		subjectAutosize.dataset.value = subject.value;
+	}))))), body = dom.textarea(dom._class('mono'), attr.rows('15'), style({ width: '100%' }), 
 	// Explicit string object so it doesn't get the highlight-unicode-block-changes
 	// treatment, which would cause characters to disappear.
 	new String(opts.body || ''), opts.body && !opts.isForward && !opts.body.startsWith('\n\n') ? prop({ selectionStart: opts.body.length, selectionEnd: opts.body.length }) : [], function keyup(e) {
@@ -2172,6 +2181,7 @@ const compose = (opts) => {
 		e.preventDefault();
 		shortcutCmd(cmdSend, shortcuts);
 	}));
+	subjectAutosize.dataset.value = subject.value;
 	(opts.to && opts.to.length > 0 ? opts.to : ['']).forEach(s => newAddrView(s, toViews, toBtn, toCell, toRow));
 	(opts.cc || []).forEach(s => newAddrView(s, ccViews, ccBtn, ccCell, ccRow));
 	(opts.bcc || []).forEach(s => newAddrView(s, bccViews, bccBtn, bccCell, bccRow));
