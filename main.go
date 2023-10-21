@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/exp/slices"
 
 	"github.com/mjl-/adns"
 
@@ -280,28 +281,16 @@ If a single command matches, its usage and full help text is printed.
 		c.Usage()
 	}
 
-	equal := func(a, b []string) bool {
-		if len(a) != len(b) {
-			return false
-		}
-		for i := range a {
-			if a[i] != b[i] {
-				return false
-			}
-		}
-		return true
-	}
-
 	prefix := func(l, pre []string) bool {
 		if len(pre) > len(l) {
 			return false
 		}
-		return equal(pre, l[:len(pre)])
+		return slices.Equal(pre, l[:len(pre)])
 	}
 
 	var partial []cmd
 	for _, c := range cmds {
-		if equal(c.words, args) {
+		if slices.Equal(c.words, args) {
 			c.gather()
 			fmt.Print(c.makeUsage())
 			if c.help != "" {
