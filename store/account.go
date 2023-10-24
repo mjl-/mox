@@ -564,6 +564,7 @@ func (m *Message) PrepareExpunge() {
 		CreateSeq: m.CreateSeq,
 		ModSeq:    m.ModSeq,
 		Expunged:  true,
+		ThreadID:  m.ThreadID,
 	}
 }
 
