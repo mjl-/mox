@@ -23,6 +23,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/mtastsdb"
+	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
 )
@@ -58,13 +59,36 @@ var (
 			Help: "Total number of connections where looking up TLSA records resulted in an error.",
 		},
 	)
+	// todo: recognize when "tls-required-no" message header caused a non-verifying certificate to be overridden. requires doing our own certificate validation after having set tls.Config.InsecureSkipVerify due to tls-required-no.
+	metricTLSRequiredNoIgnored = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "mox_queue_tlsrequiredno_ignored_total",
+			Help: "Delivery attempts with TLS policy findings ignored due to message with TLS-Required: No header. Does not cover case where TLS certificate cannot be PKIX-verified.",
+		},
+		[]string{
+			"ignored", // mtastspolicy (error getting policy), mtastsmx (mx host not allowed in policy), badtls (error negotiating tls), badtlsa (error fetching dane tlsa records)
+		},
+	)
+	metricRequireTLSUnsupported = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "mox_queue_requiretls_unsupported_total",
+			Help: "Delivery attempts that failed due to message with REQUIRETLS.",
+		},
+		[]string{
+			"reason", // nopolicy (no mta-sts and no dane), norequiretls (smtp server does not support requiretls)
+		},
+	)
 )
 
 // todo: rename function, perhaps put some of the params in a delivery struct so we don't pass all the params all the time?
 func fail(qlog *mlog.Log, m Msg, backoff time.Duration, permanent bool, remoteMTA dsn.NameIP, secodeOpt, errmsg string) {
+	// todo future: when we implement relaying, we should be able to send DSNs to non-local users. and possibly specify a null mailfrom. ../rfc/5321:1503
+	// todo future: when we implement relaying, and a dsn cannot be delivered, and requiretls was active, we cannot drop the message. instead deliver to local postmaster? though ../rfc/8689:383 may intend to say the dsn should be delivered without requiretls?
+	// todo future: when we implement smtp dsn extension, parameter RET=FULL must be disregarded for messages with REQUIRETLS. ../rfc/8689:379
+
 	if permanent || m.Attempts >= 8 {
 		qlog.Errorx("permanent failure delivering from queue", errors.New(errmsg))
-		queueDSNFailure(qlog, m, remoteMTA, secodeOpt, errmsg)
+		deliverDSNFailure(qlog, m, remoteMTA, secodeOpt, errmsg)
 
 		if err := queueDelete(context.Background(), m.ID); err != nil {
 			qlog.Errorx("deleting message from queue after permanent failure", err)
@@ -84,7 +108,7 @@ func fail(qlog *mlog.Log, m Msg, backoff time.Duration, permanent bool, remoteMT
 		qlog.Errorx("temporary failure delivering from queue, sending delayed dsn", errors.New(errmsg), mlog.Field("backoff", backoff))
 
 		retryUntil := m.LastAttempt.Add((4 + 8 + 16) * time.Hour)
-		queueDSNDelay(qlog, m, remoteMTA, secodeOpt, errmsg, retryUntil)
+		deliverDSNDelay(qlog, m, remoteMTA, secodeOpt, errmsg, retryUntil)
 	} else {
 		qlog.Errorx("temporary failure delivering from queue", errors.New(errmsg), mlog.Field("backoff", backoff), mlog.Field("nextattempt", m.NextAttempt))
 	}
@@ -102,6 +126,10 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 	//   successful delivery. But hopefully the delivery just succeeds. For each host:
 	//   - If there is an MTA-STS policy, we only connect to allow-listed hosts.
 	//   - We try to lookup DANE records (optional) and verify them if present.
+	//   - If RequireTLS is true, we only deliver if the remote SMTP server implements it.
+	//   - If RequireTLS is false, we'll fall back to regular delivery attempts without
+	//     TLS verification and possibly without TLS at all, ignoring recipient domain/host
+	//     MTA-STS and DANE policies.
 
 	// Resolve domain and hosts to attempt delivery to.
 	// These next-hop names are often the name under which we find MX records. The
@@ -125,9 +153,14 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 		cidctx := context.WithValue(mox.Shutdown, mlog.CidKey, cid)
 		policy, _, err = mtastsdb.Get(cidctx, resolver, origNextHop)
 		if err != nil {
-			qlog.Infox("mtasts lookup temporary error, aborting delivery attempt", err, mlog.Field("domain", origNextHop))
-			fail(qlog, m, backoff, false, dsn.NameIP{}, "", err.Error())
-			return
+			if m.RequireTLS != nil && !*m.RequireTLS {
+				qlog.Infox("mtasts lookup temporary error, continuing due to tls-required-no message header", err, mlog.Field("domain", origNextHop))
+				metricTLSRequiredNoIgnored.WithLabelValues("mtastspolicy").Inc()
+			} else {
+				qlog.Infox("mtasts lookup temporary error, aborting delivery attempt", err, mlog.Field("domain", origNextHop))
+				fail(qlog, m, backoff, false, dsn.NameIP{}, "", err.Error())
+				return
+			}
 		}
 		// note: policy can be nil, if a domain does not implement MTA-STS or it's the
 		// first time we fetch the policy and if we encountered an error.
@@ -144,6 +177,7 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 	var remoteMTA dsn.NameIP
 	var secodeOpt, errmsg string
 	permanent = false
+	nmissingRequireTLS := 0
 	// todo: should make distinction between host permanently not accepting the message, and the message not being deliverable permanently. e.g. a mx host may have a size limit, or not accept 8bitmime, while another host in the list does accept the message. same for smtputf8, ../rfc/6531:555
 	for _, h := range hosts {
 		var badTLS, ok bool
@@ -155,11 +189,17 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 				policyHosts = append(policyHosts, mx.LogString())
 			}
 			if policy.Mode == mtasts.ModeEnforce {
-				errmsg = fmt.Sprintf("mx host %s does not match enforced mta-sts policy with hosts %s", h.Domain, strings.Join(policyHosts, ","))
-				qlog.Error("mx host does not match mta-sts policy in mode enforce, skipping", mlog.Field("host", h.Domain), mlog.Field("policyhosts", policyHosts))
-				continue
+				if m.RequireTLS != nil && !*m.RequireTLS {
+					qlog.Info("mx host does not match mta-sts policy in mode enforce, ignoring due to tls-required-no message header", mlog.Field("host", h.Domain), mlog.Field("policyhosts", policyHosts))
+					metricTLSRequiredNoIgnored.WithLabelValues("mtastsmx").Inc()
+				} else {
+					errmsg = fmt.Sprintf("mx host %s does not match enforced mta-sts policy with hosts %s", h.Domain, strings.Join(policyHosts, ","))
+					qlog.Error("mx host does not match mta-sts policy in mode enforce, skipping", mlog.Field("host", h.Domain), mlog.Field("policyhosts", policyHosts))
+					continue
+				}
+			} else {
+				qlog.Error("mx host does not match mta-sts policy, but it is not enforced, continuing", mlog.Field("host", h.Domain), mlog.Field("policyhosts", policyHosts))
 			}
-			qlog.Error("mx host does not match mta-sts policy, but it is not enforced, continuing", mlog.Field("host", h.Domain), mlog.Field("policyhosts", policyHosts))
 		}
 
 		qlog.Info("delivering to remote", mlog.Field("remote", h), mlog.Field("queuecid", cid))
@@ -190,10 +230,14 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 		// old server that only does ancient TLS versions, or has a misconfiguration. Note
 		// that opportunistic TLS does not do regular certificate verification, so that can't
 		// be the problem.
-		if !ok && badTLS && !enforceMTASTS && tlsMode == smtpclient.TLSOpportunistic && !daneRequired {
+		if !ok && badTLS && (!enforceMTASTS && tlsMode == smtpclient.TLSOpportunistic && !daneRequired || m.RequireTLS != nil && !*m.RequireTLS) {
+			if m.RequireTLS != nil && !*m.RequireTLS {
+				metricTLSRequiredNoIgnored.WithLabelValues("badtls").Inc()
+			}
+
 			// In case of failure with opportunistic TLS, try again without TLS. ../rfc/7435:459
 			// todo future: add a configuration option to not fall back?
-			nqlog.Info("connecting again for delivery attempt without tls")
+			nqlog.Info("connecting again for delivery attempt without tls", mlog.Field("enforcemtasts", enforceMTASTS), mlog.Field("danerequired", daneRequired), mlog.Field("requiretls", m.RequireTLS))
 			tlsMode = smtpclient.TLSSkip
 			permanent, _, _, secodeOpt, remoteIP, errmsg, ok = deliverHost(nqlog, resolver, dialer, cid, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, &m, tlsMode)
 		}
@@ -209,6 +253,9 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 		if permanent {
 			break
 		}
+		if secodeOpt == smtp.SePol7MissingReqTLS {
+			nmissingRequireTLS++
+		}
 	}
 
 	// In theory, we could make a failure permanent if we didn't find any mx host
@@ -220,13 +267,27 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 	// failures.
 	// todo: possibly detect that future deliveries will fail due to long ttl's of cached records that are preventing delivery.
 
+	// If we failed due to requiretls not being satisfied, make the delivery permanent.
+	// It is unlikely the recipient domain will implement requiretls during our retry
+	// period. Best to let the sender know immediately.
+	if !permanent && nmissingRequireTLS > 0 && nmissingRequireTLS == len(hosts) {
+		qlog.Info("marking delivery as permanently failed because recipient domain does not implement requiretls")
+		permanent = true
+	}
+
 	fail(qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg)
 }
 
 // deliverHost attempts to deliver m to host. Depending on tlsMode, we'll do
 // required TLS with WebPKI verification (with MTA-STS), opportunistic DANE TLS
-// (opportunistic TLS) or non-verifying TLS (opportunistic TLS) deliverHost updates
-// m.DialedIPs, which must be saved in case of failure to deliver.
+// (opportunistic TLS), non-verifying TLS (opportunistic TLS) or skip TLS
+// altogether due to previous TLS errors.
+//
+// deliverHost updates m.DialedIPs, which must be saved in case of failure to
+// deliver.
+//
+// With TLS-Required no header, we ignore verification failures and continue
+// delivering.
 //
 // The haveMX and next-hop-authentic fields are used to determine if DANE is
 // applicable. The next-hop fields themselves are used to determine valid names
@@ -282,14 +343,13 @@ func deliverHost(log *mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer,
 	if err == nil && authentic && origNextHopAuthentic && (!haveMX || expandedNextHopAuthentic) && host.IsDomain() {
 		metricDestinationsAuthentic.Inc()
 
-		// Modes to skip and not verify aren't normally set when we get here. But in the
-		// future may perhaps be set on a message manually after delivery failures. We can
-		// handle them here.
 		switch tlsMode {
 		case smtpclient.TLSSkip:
-			// No TLS, so clearly no DANE.
+			// No TLS, so clearly no DANE. This can happen if we've dialed TLS before but a TLS
+			// connection couldn't be established.
 		case smtpclient.TLSUnverifiedStartTLS:
 			// Fallback mode for DANE without usable records, so skip DANE.
+			// We shouldn't be able to get here, but no harm handling it.
 		default:
 			// Look for TLSA records in either the expandedHost, or otherwise the original
 			// host. ../rfc/7672:912
@@ -324,11 +384,26 @@ func deliverHost(log *mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer,
 			} else if !daneRequired {
 				log.Debugx("not doing opportunistic dane after gathering tlsa records", err)
 				err = nil
+			} else if err != nil && m.RequireTLS != nil && !*m.RequireTLS {
+				log.Debugx("error gathering dane tlsa records with dane required, but continuing without validation due to tls-required-no message header", err)
+				daneRecords = nil
+				err = nil
+				metricTLSRequiredNoIgnored.WithLabelValues("badtlsa").Inc()
 			}
 			// else, err is propagated below.
 		}
 	} else {
 		log.Debugx("not attempting verification with dane", err, mlog.Field("authentic", authentic), mlog.Field("expandedauthentic", expandedAuthentic))
+	}
+
+	// todo: for requiretls, should an MTA-STS policy in mode testing be treated as good enough for requiretls? let's be strict and assume not.
+	// todo: ../rfc/8689:276 seems to specify stricter requirements on name in certificate than DANE (which allows original recipient domain name and cname-expanded name, and hints at following CNAME for MX targets as well, allowing both their original and expanded names too). perhaps the intent was just to say the name must be validated according to the relevant specifications?
+	// todo: for requiretls, should we allow no usable dane records with requiretls? dane allows it, but doesn't seem in spirit of requiretls, so not allowing it.
+	if err == nil && m.RequireTLS != nil && *m.RequireTLS && !(daneRequired && len(daneRecords) > 0) && !enforceMTASTS {
+		log.Info("verified tls is required, but destination has no usable dane records and no mta-sts policy, canceling delivery attempt to host")
+		metricRequireTLSUnsupported.WithLabelValues("nopolicy").Inc()
+		// Resond with proper enhanced status code. ../rfc/8689:301
+		return false, daneRequired, false, smtp.SePol7MissingReqTLS, remoteIP, "missing required tls verification mechanism", false
 	}
 
 	// Dial the remote host given the IPs if no error yet.
@@ -380,6 +455,9 @@ func deliverHost(log *mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer,
 		moreHosts = tlsRemoteHostnames[1:]
 	}
 	var verifiedRecord adns.TLSA
+	if m.RequireTLS != nil && !*m.RequireTLS && tlsMode != smtpclient.TLSSkip {
+		tlsMode = smtpclient.TLSUnverifiedStartTLS
+	}
 	sc, err := smtpclient.New(ctx, log, conn, tlsMode, ourHostname, firstHost, nil, daneRecords, moreHosts, &verifiedRecord)
 	defer func() {
 		if sc == nil {
@@ -389,6 +467,21 @@ func deliverHost(log *mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer,
 		}
 		mox.Connections.Unregister(conn)
 	}()
+	if err == nil && m.SenderAccount != "" {
+		// Remember the STARTTLS and REQUIRETLS support for this recipient domain.
+		// It is used in the webmail client, to show the recipient domain security mechanisms.
+		// We always save only the last connection we actually encountered. There may be
+		// multiple MX hosts, perhaps only some support STARTTLS and REQUIRETLS. We may not
+		// be accurate for the whole domain, but we're only storing a hint.
+		rdt := store.RecipientDomainTLS{
+			Domain:     m.RecipientDomain.Domain.Name(),
+			STARTTLS:   sc.TLSEnabled(),
+			RequireTLS: sc.SupportsRequireTLS(),
+		}
+		if err = updateRecipientDomainTLS(ctx, m.SenderAccount, rdt); err != nil {
+			err = fmt.Errorf("storing recipient domain tls status: %w", err)
+		}
+	}
 	if err == nil {
 		// SMTP session is ready. Finally try to actually deliver.
 		has8bit := m.Has8bit
@@ -401,7 +494,7 @@ func deliverHost(log *mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer,
 			size = int64(len(m.DSNUTF8))
 			msg = bytes.NewReader(m.DSNUTF8)
 		}
-		err = sc.Deliver(ctx, mailFrom, rcptTo, size, msg, has8bit, smtputf8)
+		err = sc.Deliver(ctx, mailFrom, rcptTo, size, msg, has8bit, smtputf8, m.RequireTLS != nil && *m.RequireTLS)
 	}
 	if err != nil {
 		log.Infox("delivery failed", err)
@@ -433,8 +526,34 @@ func deliverHost(log *mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer,
 		if permanent && m.Attempts == 1 && dualstack && strings.HasPrefix(cerr.Secode, "7.") {
 			permanent = false
 		}
-		return permanent, daneRequired, errors.Is(cerr, smtpclient.ErrTLS), cerr.Secode, remoteIP, cerr.Error(), false
+		// If server does not implement requiretls, respond with that code. ../rfc/8689:301
+		secode := cerr.Secode
+		if errors.Is(cerr.Err, smtpclient.ErrRequireTLSUnsupported) {
+			secode = smtp.SePol7MissingReqTLS
+			metricRequireTLSUnsupported.WithLabelValues("norequiretls").Inc()
+		}
+		return permanent, daneRequired, errors.Is(cerr, smtpclient.ErrTLS), secode, remoteIP, cerr.Error(), false
 	} else {
 		return false, daneRequired, errors.Is(cerr, smtpclient.ErrTLS), "", remoteIP, err.Error(), false
 	}
+}
+
+// Update (overwite) last known starttls/requiretls support for recipient domain.
+func updateRecipientDomainTLS(ctx context.Context, senderAccount string, rdt store.RecipientDomainTLS) error {
+	acc, err := store.OpenAccount(senderAccount)
+	if err != nil {
+		return fmt.Errorf("open account: %w", err)
+	}
+	err = acc.DB.Write(ctx, func(tx *bstore.Tx) error {
+		// First delete any existing record.
+		if err := tx.Delete(&store.RecipientDomainTLS{Domain: rdt.Domain}); err != nil && err != bstore.ErrAbsent {
+			return fmt.Errorf("removing previous recipient domain tls status: %w", err)
+		}
+		// Insert new record.
+		return tx.Insert(&rdt)
+	})
+	if err != nil {
+		return fmt.Errorf("adding recipient domain tls status to account database: %w", err)
+	}
+	return nil
 }

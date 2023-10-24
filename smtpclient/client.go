@@ -44,17 +44,27 @@ var (
 			"secode",
 		},
 	)
+	metricTLSRequiredNoIgnored = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "mox_smtpclient_tlsrequiredno_ignored_total",
+			Help: "Connection attempts with TLS policy findings ignored due to message with TLS-Required: No header. Does not cover case where TLS certificate cannot be PKIX-verified.",
+		},
+		[]string{
+			"ignored", // daneverification (no matching tlsa record)
+		},
+	)
 )
 
 var (
-	ErrSize                = errors.New("message too large for remote smtp server") // SMTP server announced a maximum message size and the message to be delivered exceeds it.
-	Err8bitmimeUnsupported = errors.New("remote smtp server does not implement 8bitmime extension, required by message")
-	ErrSMTPUTF8Unsupported = errors.New("remote smtp server does not implement smtputf8 extension, required by message")
-	ErrStatus              = errors.New("remote smtp server sent unexpected response status code") // Relatively common, e.g. when a 250 OK was expected and server sent 451 temporary error.
-	ErrProtocol            = errors.New("smtp protocol error")                                     // After a malformed SMTP response or inconsistent multi-line response.
-	ErrTLS                 = errors.New("tls error")                                               // E.g. handshake failure, or hostname verification was required and failed.
-	ErrBotched             = errors.New("smtp connection is botched")                              // Set on a client, and returned for new operations, after an i/o error or malformed SMTP response.
-	ErrClosed              = errors.New("client is closed")
+	ErrSize                  = errors.New("message too large for remote smtp server") // SMTP server announced a maximum message size and the message to be delivered exceeds it.
+	Err8bitmimeUnsupported   = errors.New("remote smtp server does not implement 8bitmime extension, required by message")
+	ErrSMTPUTF8Unsupported   = errors.New("remote smtp server does not implement smtputf8 extension, required by message")
+	ErrRequireTLSUnsupported = errors.New("remote smtp server does not implement requiretls extension, required for delivery")
+	ErrStatus                = errors.New("remote smtp server sent unexpected response status code") // Relatively common, e.g. when a 250 OK was expected and server sent 451 temporary error.
+	ErrProtocol              = errors.New("smtp protocol error")                                     // After a malformed SMTP response or inconsistent multi-line response.
+	ErrTLS                   = errors.New("tls error")                                               // E.g. handshake failure, or hostname verification was required and failed.
+	ErrBotched               = errors.New("smtp connection is botched")                              // Set on a client, and returned for new operations, after an i/o error or malformed SMTP response.
+	ErrClosed                = errors.New("client is closed")
 )
 
 // TLSMode indicates if TLS must, should or must not be used.
@@ -67,7 +77,8 @@ const (
 
 	// Required TLS with STARTTLS for SMTP servers, without verifiying the certificate.
 	// This mode is needed to fallback after only unusable DANE records were found
-	// (e.g. with unknown parameters in the TLSA records).
+	// (e.g. with unknown parameters in the TLSA records). Also for allowing
+	// verification errors with DANE with message header TLS-Required no.
 	TLSUnverifiedStartTLS TLSMode = "unverifiedstarttls"
 
 	// TLS immediately ("implicit TLS"), with either verified DANE TLSA records or a
@@ -105,6 +116,7 @@ type Client struct {
 	lastlog  time.Time // For adding delta timestamps between log lines.
 	cmds     []string  // Last or active command, for generating errors and metrics.
 	cmdStart time.Time // Start of command.
+	tls      bool      // Whether connection is TLS protected.
 
 	botched  bool // If set, protocol is out of sync and no further commands can be sent.
 	needRset bool // If set, a new delivery requires an RSET command.
@@ -117,6 +129,7 @@ type Client struct {
 	extPipelining     bool     // Remote server supports command pipelining.
 	extSMTPUTF8       bool     // Remote server supports SMTPUTF8 extension.
 	extAuthMechanisms []string // Supported authentication mechanisms.
+	extRequireTLS     bool     // Remote supports REQUIRETLS extension.
 }
 
 // Error represents a failure to deliver a message.
@@ -185,7 +198,9 @@ func (e Error) Error() string {
 // verification. By default, SMTP does not verify TLS for interopability reasons,
 // but MTA-STS or DANE can require it. If opportunistic TLS is used, and a TLS
 // error is encountered, the caller may want to try again (on a new connection)
-// without TLS.
+// without TLS. For messages with header TLS-Required no, DANE records may be
+// passed along with tlsMode TLSUnverifiedStartTLS. In that case, failing DANE
+// verification causes an error to be logged, but the connection won't be aborted.
 //
 // If auth is non-empty, authentication will be done with the first algorithm
 // supported by the server. If none of the algorithms are supported, an error is
@@ -212,13 +227,14 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, ehl
 	if tlsMode == TLSStrictImmediate {
 		// todo: we could also verify DANE here. not applicable to SMTP delivery.
 		config := c.tlsConfig(tlsMode)
-		tlsconn := tls.Client(conn, &config)
+		tlsconn := tls.Client(conn, config)
 		if err := tlsconn.HandshakeContext(ctx); err != nil {
 			return nil, err
 		}
 		c.conn = tlsconn
 		tlsversion, ciphersuite := mox.TLSInfo(tlsconn)
 		c.log.Debug("tls client handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite), mlog.Field("servername", remoteHostname))
+		c.tls = true
 	} else {
 		c.conn = conn
 	}
@@ -239,12 +255,26 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, ehl
 	return c, nil
 }
 
-func (c *Client) tlsConfig(tlsMode TLSMode) tls.Config {
+func (c *Client) tlsConfig(tlsMode TLSMode) *tls.Config {
 	if c.daneRecords != nil {
-		return dane.TLSClientConfig(c.log, c.daneRecords, c.remoteHostname, c.moreRemoteHostnames, c.verifiedRecord)
+		config := dane.TLSClientConfig(c.log, c.daneRecords, c.remoteHostname, c.moreRemoteHostnames, c.verifiedRecord)
+		if tlsMode == TLSUnverifiedStartTLS {
+			// In case of delivery with header "TLS-Required: No", the connection should not be
+			// aborted.
+			origVerify := config.VerifyConnection
+			config.VerifyConnection = func(cs tls.ConnectionState) error {
+				err := origVerify(cs)
+				if err != nil {
+					c.log.Infox("verifying dane failed, continuing due to tls mode unverified starttls, due to tls-required-no message header", err)
+					metricTLSRequiredNoIgnored.WithLabelValues("daneverification").Inc()
+				}
+				return nil
+			}
+		}
+		return &config
 	}
 	// todo: possibly accept older TLS versions for TLSOpportunistic?
-	return tls.Config{
+	return &tls.Config{
 		ServerName:         c.remoteHostname.ASCII,
 		RootCAs:            mox.Conf.Static.TLS.CertPool,
 		InsecureSkipVerify: tlsMode == TLSOpportunistic || tlsMode == TLSUnverifiedStartTLS,
@@ -538,6 +568,8 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 				c.ext8bitmime = true
 			case "PIPELINING":
 				c.extPipelining = true
+			case "REQUIRETLS":
+				c.extRequireTLS = true
 			default:
 				// For SMTPUTF8 we must ignore any parameter. ../rfc/6531:207
 				if s == "SMTPUTF8" || strings.HasPrefix(s, "SMTPUTF8 ") {
@@ -592,7 +624,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 		// For TLSStrictStartTLS, the Go TLS library performs the checks needed for MTA-STS.
 		// ../rfc/8461:646
 		tlsConfig := c.tlsConfig(tlsMode)
-		nconn := tls.Client(conn, &tlsConfig)
+		nconn := tls.Client(conn, tlsConfig)
 		c.conn = nconn
 
 		nctx, cancel := context.WithTimeout(ctx, time.Minute)
@@ -609,6 +641,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 
 		tlsversion, ciphersuite := mox.TLSInfo(nconn)
 		c.log.Debug("starttls client handshake done", mlog.Field("tlsmode", tlsMode), mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite), mlog.Field("servername", c.remoteHostname), mlog.Field("danerecord", c.verifiedRecord))
+		c.tls = true
 
 		hello(false)
 	}
@@ -720,6 +753,24 @@ func (c *Client) SupportsSMTPUTF8() bool {
 	return c.extSMTPUTF8
 }
 
+// SupportsStartTLS returns whether the SMTP server supports the STARTTLS
+// extension.
+func (c *Client) SupportsStartTLS() bool {
+	return c.extStartTLS
+}
+
+// SupportsRequireTLS returns whether the SMTP server supports the REQUIRETLS
+// extension. The REQUIRETLS extension is only announced after enabling
+// STARTTLS.
+func (c *Client) SupportsRequireTLS() bool {
+	return c.extRequireTLS
+}
+
+// TLSEnabled returns whether TLS is enabled for this connection.
+func (c *Client) TLSEnabled() bool {
+	return c.tls
+}
+
 // Deliver attempts to deliver a message to a mail server.
 //
 // mailFrom must be an email address, or empty in case of a DSN. rcptTo must be
@@ -733,12 +784,15 @@ func (c *Client) SupportsSMTPUTF8() bool {
 // character, or when UTF-8 is used in a localpart, reqSMTPUTF8 must be true. If set,
 // the remote server must support the SMTPUTF8 extension or delivery will fail.
 //
+// If requireTLS is true, the remote server must support the REQUIRETLS
+// extension, or delivery will fail.
+//
 // Deliver uses the following SMTP extensions if the remote server supports them:
 // 8BITMIME, SMTPUTF8, SIZE, PIPELINING, ENHANCEDSTATUSCODES, STARTTLS.
 //
 // Returned errors can be of type Error, one of the Err-variables in this package
 // or other underlying errors, e.g. for i/o. Use errors.Is to check.
-func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, msgSize int64, msg io.Reader, req8bitmime, reqSMTPUTF8 bool) (rerr error) {
+func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, msgSize int64, msg io.Reader, req8bitmime, reqSMTPUTF8, requireTLS bool) (rerr error) {
 	defer c.recover(&rerr)
 
 	if c.origConn == nil {
@@ -761,6 +815,9 @@ func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, ms
 		// ../rfc/6531:313
 		c.xerrorf(false, 0, "", "", "%w", ErrSMTPUTF8Unsupported)
 	}
+	if !c.extRequireTLS && requireTLS {
+		c.xerrorf(false, 0, "", "", "%w", ErrRequireTLSUnsupported)
+	}
 
 	if c.extSize && msgSize > c.maxSize {
 		c.xerrorf(true, 0, "", "", "%w: message is %d bytes, remote has a %d bytes maximum size", ErrSize, msgSize, c.maxSize)
@@ -782,12 +839,17 @@ func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, ms
 		// ../rfc/6531:213
 		smtputf8Arg = " SMTPUTF8"
 	}
+	var requiretlsArg string
+	if requireTLS {
+		// ../rfc/8689:155
+		requiretlsArg = " REQUIRETLS"
+	}
 
 	// Transaction overview: ../rfc/5321:1015
 	// MAIL FROM: ../rfc/5321:1879
 	// RCPT TO: ../rfc/5321:1916
 	// DATA: ../rfc/5321:1992
-	lineMailFrom := fmt.Sprintf("MAIL FROM:<%s>%s%s%s", mailFrom, mailSize, bodyType, smtputf8Arg)
+	lineMailFrom := fmt.Sprintf("MAIL FROM:<%s>%s%s%s%s", mailFrom, mailSize, bodyType, smtputf8Arg, requiretlsArg)
 	lineRcptTo := fmt.Sprintf("RCPT TO:<%s>", rcptTo)
 
 	// We are going into a transaction. We'll clear this when done.

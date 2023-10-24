@@ -20,7 +20,7 @@ See Quickstart below to get started.
   ("localparts"), and in domain names (IDNA).
 - Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
 - DANE and MTA-STS for inbound and outbound delivery over SMTP with STARTTLS,
-  with incoming TLSRPT reporting.
+  including REQUIRETLS and with incoming TLSRPT reporting.
 - Web admin interface that helps you set up your domains and accounts
   (instructions to create DNS records, configure
   SPF/DKIM/DMARC/TLSRPT/MTA-STS), for status information, managing

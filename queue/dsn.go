@@ -15,7 +15,7 @@ import (
 	"github.com/mjl-/mox/store"
 )
 
-func queueDSNFailure(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string) {
+func deliverDSNFailure(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string) {
 	const subject = "mail delivery failed"
 	message := fmt.Sprintf(`
 Delivery has failed permanently for your email to:
@@ -29,10 +29,10 @@ Error during the last delivery attempt:
 	%s
 `, m.Recipient().XString(m.SMTPUTF8), errmsg)
 
-	queueDSN(log, m, remoteMTA, secodeOpt, errmsg, true, nil, subject, message)
+	deliverDSN(log, m, remoteMTA, secodeOpt, errmsg, true, nil, subject, message)
 }
 
-func queueDSNDelay(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, retryUntil time.Time) {
+func deliverDSNDelay(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, retryUntil time.Time) {
 	const subject = "mail delivery delayed"
 	message := fmt.Sprintf(`
 Delivery has been delayed of your email to:
@@ -47,15 +47,14 @@ Error during the last delivery attempt:
 	%s
 `, m.Recipient().XString(false), errmsg)
 
-	queueDSN(log, m, remoteMTA, secodeOpt, errmsg, false, &retryUntil, subject, message)
+	deliverDSN(log, m, remoteMTA, secodeOpt, errmsg, false, &retryUntil, subject, message)
 }
 
 // We only queue DSNs for delivery failures for emails submitted by authenticated
 // users. So we are delivering to local users. ../rfc/5321:1466
 // ../rfc/5321:1494
 // ../rfc/7208:490
-// todo future: when we implement relaying, we should be able to send DSNs to non-local users. and possibly specify a null mailfrom. ../rfc/5321:1503
-func queueDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, permanent bool, retryUntil *time.Time, subject, textBody string) {
+func deliverDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, permanent bool, retryUntil *time.Time, subject, textBody string) {
 	kind := "delayed delivery"
 	if permanent {
 		kind = "failure"

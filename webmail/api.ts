@@ -142,6 +142,7 @@ export interface SubmitMessage {
 	ResponseMessageID: number  // If set, this was a reply or forward, based on IsForward.
 	ReplyTo: string  // If non-empty, Reply-To header to add to message.
 	UserAgent: string  // User-Agent header added if not empty.
+	RequireTLS?: boolean | null  // For "Require TLS" extension during delivery.
 }
 
 // File is a new attachment (not from an existing message that is being
@@ -177,12 +178,14 @@ export interface Mailbox {
 	Size: number  // Number of bytes for all messages.
 }
 
-// RecipientSecurity is a quick analysis of the security properties of delivery to the recipient (domain).
-// Fields are nil when an error occurred during analysis.
+// RecipientSecurity is a quick analysis of the security properties of delivery to
+// the recipient (domain).
 export interface RecipientSecurity {
+	STARTTLS: SecurityResult  // Whether recipient domain supports (opportunistic) STARTTLS, as seen during most recent delivery attempt. Will be "unknown" if no delivery to the domain has been attempted yet.
 	MTASTS: SecurityResult  // Whether we have a stored enforced MTA-STS policy, or domain has MTA-STS DNS record.
 	DNSSEC: SecurityResult  // Whether MX lookup response was DNSSEC-signed.
 	DANE: SecurityResult  // Whether first delivery destination has DANE records.
+	RequireTLS: SecurityResult  // Whether recipient domain is known to implement the REQUIRETLS SMTP extension. Will be "unknown" if no delivery to the domain has been attempted yet.
 }
 
 // EventStart is the first message sent on an SSE connection, giving the client
@@ -519,11 +522,11 @@ export const types: TypenameMap = {
 	"Address": {"Name":"Address","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Host","Docs":"","Typewords":["string"]}]},
 	"MessageAddress": {"Name":"MessageAddress","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
 	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
-	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]}]},
+	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]}]},
 	"File": {"Name":"File","Docs":"","Fields":[{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"DataURI","Docs":"","Typewords":["string"]}]},
 	"ForwardAttachments": {"Name":"ForwardAttachments","Docs":"","Fields":[{"Name":"MessageID","Docs":"","Typewords":["int64"]},{"Name":"Paths","Docs":"","Typewords":["[]","[]","int32"]}]},
 	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
-	"RecipientSecurity": {"Name":"RecipientSecurity","Docs":"","Fields":[{"Name":"MTASTS","Docs":"","Typewords":["SecurityResult"]},{"Name":"DNSSEC","Docs":"","Typewords":["SecurityResult"]},{"Name":"DANE","Docs":"","Typewords":["SecurityResult"]}]},
+	"RecipientSecurity": {"Name":"RecipientSecurity","Docs":"","Fields":[{"Name":"STARTTLS","Docs":"","Typewords":["SecurityResult"]},{"Name":"MTASTS","Docs":"","Typewords":["SecurityResult"]},{"Name":"DNSSEC","Docs":"","Typewords":["SecurityResult"]},{"Name":"DANE","Docs":"","Typewords":["SecurityResult"]},{"Name":"RequireTLS","Docs":"","Typewords":["SecurityResult"]}]},
 	"EventStart": {"Name":"EventStart","Docs":"","Fields":[{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"LoginAddress","Docs":"","Typewords":["MessageAddress"]},{"Name":"Addresses","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"DomainAddressConfigs","Docs":"","Typewords":["{}","DomainAddressConfig"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Mailboxes","Docs":"","Typewords":["[]","Mailbox"]}]},
 	"DomainAddressConfig": {"Name":"DomainAddressConfig","Docs":"","Fields":[{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]}]},
 	"EventViewErr": {"Name":"EventViewErr","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]},{"Name":"Err","Docs":"","Typewords":["string"]}]},

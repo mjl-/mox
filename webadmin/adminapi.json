@@ -623,6 +623,26 @@
 			"Returns": []
 		},
 		{
+			"Name": "QueueSaveRequireTLS",
+			"Docs": "QueueSaveRequireTLS updates the requiretls field for a message in the queue,\nto be used for the next delivery.",
+			"Params": [
+				{
+					"Name": "id",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "requireTLS",
+					"Typewords": [
+						"nullable",
+						"bool"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "LogLevels",
 			"Docs": "LogLevels returns the current log levels.",
 			"Params": [],
@@ -3039,6 +3059,14 @@
 					"Docs": "If non-empty, the transport to use for this message. Can be set through cli or admin interface. If empty (the default for a submitted message), regular routing rules apply.",
 					"Typewords": [
 						"string"
+					]
+				},
+				{
+					"Name": "RequireTLS",
+					"Docs": "RequireTLS influences TLS verification during delivery.  If nil, the recipient domain policy is followed (MTA-STS and/or DANE), falling back to optional opportunistic non-verified STARTTLS.  If RequireTLS is true (through SMTP REQUIRETLS extension or webmail submit), MTA-STS or DANE is required, as well as REQUIRETLS support by the next hop server.  If RequireTLS is false (through messag header \"TLS-Required: No\"), the recipient domain's policy is ignored if it does not lead to a successful TLS connection, i.e. falling back to SMTP delivery with unverified STARTTLS or plain text.",
+					"Typewords": [
+						"nullable",
+						"bool"
 					]
 				}
 			]

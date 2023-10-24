@@ -16,6 +16,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/sasl"
+	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
 )
@@ -51,10 +52,19 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 		qlog.Debug("queue deliversubmit result", mlog.Field("host", transport.DNSHost), mlog.Field("port", port), mlog.Field("attempt", m.Attempts), mlog.Field("permanent", permanent), mlog.Field("secodeopt", secodeOpt), mlog.Field("errmsg", errmsg), mlog.Field("ok", success), mlog.Field("duration", time.Since(start)))
 	}()
 
-	// We don't have to attempt SMTP-DANE for submission, since it only applies to SMTP
-	// relaying on port 25. ../rfc/7672:1261
+	// todo: SMTP-DANE should be used when relaying on port 25.
+	// ../rfc/7672:1261
 
 	// todo: for submission, understand SRV records, and even DANE.
+
+	// If submit was done with REQUIRETLS extension for SMTP, we must verify TLS
+	// certificates. If our submission connection is not configured that way, abort.
+	requireTLS := m.RequireTLS != nil && *m.RequireTLS
+	if requireTLS && tlsMode != smtpclient.TLSStrictStartTLS && tlsMode != smtpclient.TLSStrictImmediate {
+		errmsg = fmt.Sprintf("transport %s: message requires verified tls but transport does not verify tls", transportName)
+		fail(qlog, m, backoff, true, dsn.NameIP{}, smtp.SePol7MissingReqTLS, errmsg)
+		return
+	}
 
 	dialctx, dialcancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer dialcancel()
@@ -165,7 +175,7 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 
 	deliverctx, delivercancel := context.WithTimeout(context.Background(), time.Duration(60+size/(1024*1024))*time.Second)
 	defer delivercancel()
-	err = client.Deliver(deliverctx, m.Sender().String(), m.Recipient().String(), size, msgr, req8bit, reqsmtputf8)
+	err = client.Deliver(deliverctx, m.Sender().String(), m.Recipient().String(), size, msgr, req8bit, reqsmtputf8, requireTLS)
 	if err != nil {
 		qlog.Infox("delivery failed", err)
 	}

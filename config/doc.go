@@ -184,6 +184,13 @@ describe-static" and "mox config describe-domains":
 				# TLS and may not be able to deliver messages. (optional)
 				RequireSTARTTLS: false
 
+				# Do not announce the REQUIRETLS SMTP extension. Messages delivered using the
+				# REQUIRETLS extension should only be distributed onwards to servers also
+				# implementing the REQUIRETLS extension. In some situations, such as hosting
+				# mailing lists, this may not be feasible due to lack of support for the extension
+				# by mailing list subscribers. (optional)
+				NoRequireTLS: false
+
 				# Addresses of DNS block lists for incoming messages. Block lists are only
 				# consulted for connections/messages without enough reputation to make an
 				# accept/reject decision. This prevents sending IPs of all communications to the

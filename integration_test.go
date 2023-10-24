@@ -131,7 +131,7 @@ This is the message.
 		auth := []sasl.Client{sasl.NewClientPlain(mailfrom, password)}
 		c, err := smtpclient.New(mox.Context, xlog, conn, smtpclient.TLSSkip, ourHostname, dns.Domain{ASCII: desthost}, auth, nil, nil, nil)
 		tcheck(t, err, "smtp hello")
-		err = c.Deliver(mox.Context, mailfrom, rcptto, int64(len(msg)), strings.NewReader(msg), false, false)
+		err = c.Deliver(mox.Context, mailfrom, rcptto, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		tcheck(t, err, "deliver with smtp")
 		err = c.Close()
 		tcheck(t, err, "close smtpclient")

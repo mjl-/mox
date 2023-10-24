@@ -13,7 +13,7 @@ import (
 )
 
 // compose dsn message and add it to the queue for delivery to rcptTo.
-func queueDSN(ctx context.Context, c *conn, rcptTo smtp.Path, m dsn.Message) error {
+func queueDSN(ctx context.Context, c *conn, rcptTo smtp.Path, m dsn.Message, requireTLS bool) error {
 	buf, err := m.Compose(c.log, false)
 	if err != nil {
 		return err
@@ -46,7 +46,11 @@ func queueDSN(ctx context.Context, c *conn, rcptTo smtp.Path, m dsn.Message) err
 	// ../rfc/3464:433
 	const has8bit = false
 	const smtputf8 = false
-	if _, err := queue.Add(ctx, c.log, "", smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), m.MessageID, nil, f, bufUTF8); err != nil {
+	var reqTLS *bool
+	if requireTLS {
+		reqTLS = &requireTLS
+	}
+	if _, err := queue.Add(ctx, c.log, "", smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), m.MessageID, nil, f, bufUTF8, reqTLS); err != nil {
 		return err
 	}
 	return nil

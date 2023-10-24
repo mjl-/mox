@@ -1823,6 +1823,13 @@ func (Admin) QueueDrop(ctx context.Context, id int64) {
 	xcheckf(ctx, err, "drop message from queue")
 }
 
+// QueueSaveRequireTLS updates the requiretls field for a message in the queue,
+// to be used for the next delivery.
+func (Admin) QueueSaveRequireTLS(ctx context.Context, id int64, requireTLS *bool) {
+	err := queue.SaveRequireTLS(ctx, id, requireTLS)
+	xcheckf(ctx, err, "update requiretls for message in queue")
+}
+
 // LogLevels returns the current log levels.
 func (Admin) LogLevels(ctx context.Context) map[string]string {
 	m := map[string]string{}

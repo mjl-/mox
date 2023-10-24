@@ -123,10 +123,14 @@ type Listener struct {
 	SMTPMaxMessageSize int64 `sconf:"optional" sconf-doc:"Maximum size in bytes for incoming and outgoing messages. Default is 100MB."`
 	SMTP               struct {
 		Enabled         bool
-		Port            int      `sconf:"optional" sconf-doc:"Default 25."`
-		NoSTARTTLS      bool     `sconf:"optional" sconf-doc:"Do not offer STARTTLS to secure the connection. Not recommended."`
-		RequireSTARTTLS bool     `sconf:"optional" sconf-doc:"Do not accept incoming messages if STARTTLS is not active. Can be used in combination with a strict MTA-STS policy. A remote SMTP server may not support TLS and may not be able to deliver messages."`
-		DNSBLs          []string `sconf:"optional" sconf-doc:"Addresses of DNS block lists for incoming messages. Block lists are only consulted for connections/messages without enough reputation to make an accept/reject decision. This prevents sending IPs of all communications to the block list provider. If any of the listed DNSBLs contains a requested IP address, the message is rejected as spam. The DNSBLs are checked for healthiness before use, at most once per 4 hours. Example DNSBLs: sbl.spamhaus.org, bl.spamcop.net. See https://www.spamhaus.org/sbl/ and https://www.spamcop.net/ for more information and terms of use."`
+		Port            int  `sconf:"optional" sconf-doc:"Default 25."`
+		NoSTARTTLS      bool `sconf:"optional" sconf-doc:"Do not offer STARTTLS to secure the connection. Not recommended."`
+		RequireSTARTTLS bool `sconf:"optional" sconf-doc:"Do not accept incoming messages if STARTTLS is not active. Can be used in combination with a strict MTA-STS policy. A remote SMTP server may not support TLS and may not be able to deliver messages."`
+		NoRequireTLS    bool `sconf:"optional" sconf-doc:"Do not announce the REQUIRETLS SMTP extension. Messages delivered using the REQUIRETLS extension should only be distributed onwards to servers also implementing the REQUIRETLS extension. In some situations, such as hosting mailing lists, this may not be feasible due to lack of support for the extension by mailing list subscribers."`
+		// Reoriginated messages (such as messages sent to mailing list subscribers) should
+		// keep REQUIRETLS. ../rfc/8689:412
+
+		DNSBLs []string `sconf:"optional" sconf-doc:"Addresses of DNS block lists for incoming messages. Block lists are only consulted for connections/messages without enough reputation to make an accept/reject decision. This prevents sending IPs of all communications to the block list provider. If any of the listed DNSBLs contains a requested IP address, the message is rejected as spam. The DNSBLs are checked for healthiness before use, at most once per 4 hours. Example DNSBLs: sbl.spamhaus.org, bl.spamcop.net. See https://www.spamhaus.org/sbl/ and https://www.spamcop.net/ for more information and terms of use."`
 
 		FirstTimeSenderDelay *time.Duration `sconf:"optional" sconf-doc:"Delay before accepting a message from a first-time sender for the destination account. Default: 15s."`
 

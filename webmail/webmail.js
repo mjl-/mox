@@ -62,11 +62,11 @@ var api;
 		"Address": { "Name": "Address", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Host", "Docs": "", "Typewords": ["string"] }] },
 		"MessageAddress": { "Name": "MessageAddress", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
 		"Domain": { "Name": "Domain", "Docs": "", "Fields": [{ "Name": "ASCII", "Docs": "", "Typewords": ["string"] }, { "Name": "Unicode", "Docs": "", "Typewords": ["string"] }] },
-		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }] },
+		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }] },
 		"File": { "Name": "File", "Docs": "", "Fields": [{ "Name": "Filename", "Docs": "", "Typewords": ["string"] }, { "Name": "DataURI", "Docs": "", "Typewords": ["string"] }] },
 		"ForwardAttachments": { "Name": "ForwardAttachments", "Docs": "", "Fields": [{ "Name": "MessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Paths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }] },
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
-		"RecipientSecurity": { "Name": "RecipientSecurity", "Docs": "", "Fields": [{ "Name": "MTASTS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["SecurityResult"] }] },
+		"RecipientSecurity": { "Name": "RecipientSecurity", "Docs": "", "Fields": [{ "Name": "STARTTLS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["SecurityResult"] }] },
 		"EventStart": { "Name": "EventStart", "Docs": "", "Fields": [{ "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["MessageAddress"] }, { "Name": "Addresses", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "DomainAddressConfigs", "Docs": "", "Typewords": ["{}", "DomainAddressConfig"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailboxes", "Docs": "", "Typewords": ["[]", "Mailbox"] }] },
 		"DomainAddressConfig": { "Name": "DomainAddressConfig", "Docs": "", "Fields": [{ "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }] },
 		"EventViewErr": { "Name": "EventViewErr", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "RequestID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Err", "Docs": "", "Typewords": ["string"] }] },
@@ -1039,7 +1039,7 @@ To simulate slow API calls and SSE events:
 
 Show additional headers of messages:
 
-	settingsPut({...settings, showHeaders: ['User-Agent', 'X-Mailer', 'Message-Id', 'List-Id', 'List-Post', 'X-Mox-Reason']})
+	settingsPut({...settings, showHeaders: ['User-Agent', 'X-Mailer', 'Message-Id', 'List-Id', 'List-Post', 'X-Mox-Reason', 'TLS-Required']})
 
 Enable logging and reload afterwards:
 
@@ -1987,6 +1987,7 @@ const compose = (opts) => {
 	let subject;
 	let body;
 	let attachments;
+	let requiretls;
 	let toBtn, ccBtn, bccBtn, replyToBtn, customFromBtn;
 	let replyToCell, toCell, ccCell, bccCell; // Where we append new address views.
 	let toRow, replyToRow, ccRow, bccRow; // We show/hide rows as needed.
@@ -2035,6 +2036,7 @@ const compose = (opts) => {
 			ForwardAttachments: forwardAttachmentPaths.length === 0 ? { MessageID: 0, Paths: [] } : { MessageID: opts.attachmentsMessageItem.Message.ID, Paths: forwardAttachmentPaths },
 			IsForward: opts.isForward || false,
 			ResponseMessageID: opts.responseMessageID || 0,
+			RequireTLS: requiretls.value === '' ? null : requiretls.value === 'yes',
 		};
 		await client.MessageSubmit(message);
 		cmdCancel();
@@ -2042,10 +2044,10 @@ const compose = (opts) => {
 	const cmdSend = async () => {
 		await withStatus('Sending email', submit(), fieldset);
 	};
-	const cmdAddTo = async () => { newAddrView('', toViews, toBtn, toCell, toRow); };
-	const cmdAddCc = async () => { newAddrView('', ccViews, ccBtn, ccCell, ccRow); };
-	const cmdAddBcc = async () => { newAddrView('', bccViews, bccBtn, bccCell, bccRow); };
-	const cmdReplyTo = async () => { newAddrView('', replytoViews, replyToBtn, replyToCell, replyToRow, true); };
+	const cmdAddTo = async () => { newAddrView('', true, toViews, toBtn, toCell, toRow); };
+	const cmdAddCc = async () => { newAddrView('', true, ccViews, ccBtn, ccCell, ccRow); };
+	const cmdAddBcc = async () => { newAddrView('', true, bccViews, bccBtn, bccCell, bccRow); };
+	const cmdReplyTo = async () => { newAddrView('', false, replytoViews, replyToBtn, replyToCell, replyToRow, true); };
 	const cmdCustomFrom = async () => {
 		if (customFrom) {
 			return;
@@ -2063,7 +2065,7 @@ const compose = (opts) => {
 		'ctrl Y': cmdReplyTo,
 		// ctrl - and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
 	};
-	const newAddrView = (addr, views, btn, cell, row, single) => {
+	const newAddrView = (addr, isRecipient, views, btn, cell, row, single) => {
 		if (single && views.length !== 0) {
 			return;
 		}
@@ -2096,11 +2098,13 @@ const compose = (opts) => {
 				}
 				return '#aaa';
 			};
-			const setBar = (c0, c1, c2) => {
+			const setBar = (c0, c1, c2, c3, c4) => {
 				const stops = [
-					c0 + ' 0%', c0 + ' 32%', 'white 32%', 'white 33%',
-					c1 + ' 33%', c1 + ' 66%', 'white 66%', 'white 67%',
-					c2 + ' 67%', c2 + ' 100%',
+					c0 + ' 0%', c0 + ' 19%', 'white 19%', 'white 20%',
+					c1 + ' 20%', c1 + ' 39%', 'white 39%', 'white 40%',
+					c2 + ' 40%', c2 + ' 59%', 'white 59%', 'white 60%',
+					c3 + ' 60%', c3 + ' 79%', 'white 79%', 'white 80%',
+					c4 + ' 80%', c4 + ' 100%',
 				].join(', ');
 				securityBar.style.borderImage = 'linear-gradient(to right, ' + stops + ') 1';
 			};
@@ -2108,19 +2112,56 @@ const compose = (opts) => {
 			rcptSecAborter = aborter;
 			rcptSecPromise = client.withOptions({ aborter: aborter }).RecipientSecurity(inputElem.value);
 			rcptSecPromise.then((rs) => {
-				setBar(color(rs.MTASTS), color(rs.DNSSEC), color(rs.DANE));
+				setBar(color(rs.STARTTLS), color(rs.MTASTS), color(rs.DNSSEC), color(rs.DANE), color(rs.RequireTLS));
+				const implemented = [];
+				const check = (v, s) => {
+					if (v) {
+						implemented.push(s);
+					}
+				};
+				check(rs.STARTTLS === api.SecurityResult.SecurityResultYes, 'STARTTLS');
+				check(rs.MTASTS === api.SecurityResult.SecurityResultYes, 'MTASTS');
+				check(rs.DNSSEC === api.SecurityResult.SecurityResultYes, 'DNSSEC');
+				check(rs.DANE === api.SecurityResult.SecurityResultYes, 'DANE');
+				check(rs.RequireTLS === api.SecurityResult.SecurityResultYes, 'RequireTLS');
+				const status = 'Security mechanisms known to be implemented by the recipient domain: ' + (implemented.length === 0 ? '(none)' : implemented.join(', ')) + '.';
+				inputElem.setAttribute('title', status + '\n\n' + recipientSecurityTitle);
 				aborter.abort = undefined;
+				v.recipientSecurity = rs;
+				if (isRecipient) {
+					// If all recipients implement REQUIRETLS, we can enable it.
+					let reqtls = true;
+					const walk = (l) => {
+						for (const v of l) {
+							if (v.recipientSecurity?.RequireTLS !== api.SecurityResult.SecurityResultYes) {
+								reqtls = false;
+								break;
+							}
+						}
+					};
+					walk(toViews);
+					walk(ccViews);
+					walk(bccViews);
+					if (requiretls.value === '' || requiretls.value === 'yes') {
+						requiretls.value = reqtls ? 'yes' : '';
+					}
+				}
 			}, () => {
-				setBar('#888', '#888', '#888');
+				setBar('#888', '#888', '#888', '#888', '#888');
+				inputElem.setAttribute('title', 'Error fetching security mechanisms known to be implemented by the recipient domain...\n\n' + recipientSecurityTitle);
 				aborter.abort = undefined;
+				if (requiretls.value === 'yes') {
+					requiretls.value = '';
+				}
 			});
 		};
-		const root = dom.span(autosizeElem = dom.span(dom._class('autosize'), inputElem = dom.input(focusPlaceholder('Jane <jane@example.org>'), style({ width: 'auto' }), attr.value(addr), newAddressComplete(), attr.title('The bars below the input field indicate security features of the recipient (domain):\n1. Delivery with STARTTLS and MTA-STS (PKIX/WebPKI) enforced.\n2. MX lookup resulted in DNSSEC-signed response.\n3. First delivery destination host has DANE, so STARTTLS is required.\n\nColors:\n- Red, not implemented/unsupported\n- Green, implemented/supported\n- Gray, error while determining\n- Absent/white, unknown or skipped (e.g. dane check skipped due to dnssec-lookup error)'), function keydown(e) {
+		const recipientSecurityTitle = 'Description of security mechanisms recipient domains may implement:\n1. STARTTLS: Opportunistic (unverified) TLS with STARTTLS, successfully negotiated during the most recent delivery attempt.\n2. MTA-STS: For PKIX/WebPKI-verified TLS.\n3. DNSSEC: MX DNS records are DNSSEC-signed.\n4. DANE: First delivery destination host implements DANE for verified TLS.\n5. RequireTLS: SMTP extension for verified TLS delivery into recipient mailbox, support detected during the most recent delivery attempt.\n\nChecks STARTTLS, DANE and RequireTLS cover the most recently used delivery path, not necessarily all possible delivery paths.\n\nThe bars below the input field indicate implementation status by the recipient domain:\n- Red, not implemented/unsupported\n- Green, implemented/supported\n- Gray, error while determining\n- Absent/white, unknown or skipped (e.g. no previous delivery attempt, or DANE check skipped due to DNSSEC-lookup error)';
+		const root = dom.span(autosizeElem = dom.span(dom._class('autosize'), inputElem = dom.input(focusPlaceholder('Jane <jane@example.org>'), style({ width: 'auto' }), attr.value(addr), newAddressComplete(), attr.title(recipientSecurityTitle), function keydown(e) {
 			if (e.key === '-' && e.ctrlKey) {
 				remove();
 			}
 			else if (e.key === '=' && e.ctrlKey) {
-				newAddrView('', views, btn, cell, row, single);
+				newAddrView('', isRecipient, views, btn, cell, row, single);
 			}
 			else {
 				return;
@@ -2143,7 +2184,6 @@ const compose = (opts) => {
 			}
 		}), ' ');
 		autosizeElem.dataset.value = inputElem.value;
-		fetchRecipientSecurity();
 		const remove = () => {
 			const i = views.indexOf(v);
 			views.splice(i, 1);
@@ -2170,7 +2210,8 @@ const compose = (opts) => {
 				next.focus();
 			}
 		};
-		const v = { root: root, input: inputElem };
+		const v = { root: root, input: inputElem, isRecipient: isRecipient, recipientSecurity: null };
+		fetchRecipientSecurity();
 		views.push(v);
 		cell.appendChild(v.root);
 		row.style.display = '';
@@ -2255,16 +2296,16 @@ const compose = (opts) => {
 		return v;
 	}), dom.label(style({ color: '#666' }), dom.input(attr.type('checkbox'), function change(e) {
 		forwardAttachmentViews.forEach(v => v.checkbox.checked = e.target.checked);
-	}), ' (Toggle all)')), noAttachmentsWarning = dom.div(style({ display: 'none', backgroundColor: '#fcd284', padding: '0.15em .25em', margin: '.5em 0' }), 'Message mentions attachments, but no files are attached.'), dom.div(style({ margin: '1ex 0' }), 'Attachments ', attachments = dom.input(attr.type('file'), attr.multiple(''), function change() { checkAttachments(); })), dom.submitbutton('Send')), async function submit(e) {
+	}), ' (Toggle all)')), noAttachmentsWarning = dom.div(style({ display: 'none', backgroundColor: '#fcd284', padding: '0.15em .25em', margin: '.5em 0' }), 'Message mentions attachments, but no files are attached.'), dom.label(style({ margin: '1ex 0', display: 'block' }), 'Attachments ', attachments = dom.input(attr.type('file'), attr.multiple(''), function change() { checkAttachments(); })), dom.label(style({ margin: '1ex 0', display: 'block' }), attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'), 'TLS ', requiretls = dom.select(dom.option(attr.value(''), 'Default'), dom.option(attr.value('yes'), 'With RequireTLS'), dom.option(attr.value('no'), 'Fallback to insecure'))), dom.div(style({ margin: '3ex 0 1ex 0', display: 'block' }), dom.submitbutton('Send'))), async function submit(e) {
 		e.preventDefault();
 		shortcutCmd(cmdSend, shortcuts);
 	}));
 	subjectAutosize.dataset.value = subject.value;
-	(opts.to && opts.to.length > 0 ? opts.to : ['']).forEach(s => newAddrView(s, toViews, toBtn, toCell, toRow));
-	(opts.cc || []).forEach(s => newAddrView(s, ccViews, ccBtn, ccCell, ccRow));
-	(opts.bcc || []).forEach(s => newAddrView(s, bccViews, bccBtn, bccCell, bccRow));
+	(opts.to && opts.to.length > 0 ? opts.to : ['']).forEach(s => newAddrView(s, true, toViews, toBtn, toCell, toRow));
+	(opts.cc || []).forEach(s => newAddrView(s, true, ccViews, ccBtn, ccCell, ccRow));
+	(opts.bcc || []).forEach(s => newAddrView(s, true, bccViews, bccBtn, bccCell, bccRow));
 	if (opts.replyto) {
-		newAddrView(opts.replyto, replytoViews, replyToBtn, replyToCell, replyToRow, true);
+		newAddrView(opts.replyto, false, replytoViews, replyToBtn, replyToCell, replyToRow, true);
 	}
 	if (!opts.cc || !opts.cc.length) {
 		ccRow.style.display = 'none';

@@ -297,7 +297,7 @@ func Dial(ctx context.Context, resolver dns.Resolver, network, address string, a
 // verified, if any.
 func TLSClientConfig(log *mlog.Log, records []adns.TLSA, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, verifiedRecord *adns.TLSA) tls.Config {
 	return tls.Config{
-		ServerName:         allowedHost.ASCII,
+		ServerName:         allowedHost.ASCII, // For SNI.
 		InsecureSkipVerify: true,
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			verified, record, err := Verify(log, records, cs, allowedHost, moreAllowedHosts)

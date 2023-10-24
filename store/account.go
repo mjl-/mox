@@ -669,8 +669,17 @@ type Outgoing struct {
 	Submitted time.Time `bstore:"nonzero,default now"`
 }
 
+// RecipientDomainTLS stores TLS capabilities of a recipient domain as encountered
+// during most recent connection (delivery attempt).
+type RecipientDomainTLS struct {
+	Domain     string    // Unicode.
+	Updated    time.Time `bstore:"default now"`
+	STARTTLS   bool      // Supports STARTTLS.
+	RequireTLS bool      // Supports RequireTLS SMTP extension.
+}
+
 // Types stored in DB.
-var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}, SyncState{}, Upgrade{}}
+var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}, SyncState{}, Upgrade{}, RecipientDomainTLS{}}
 
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.
 type Account struct {

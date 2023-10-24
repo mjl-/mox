@@ -130,6 +130,7 @@ var commands = []struct {
 	{"cid", cmdCid},
 	{"clientconfig", cmdClientConfig},
 	{"deliver", cmdDeliver},
+	// todo: turn cmdDANEDialmx into a regular "dialmx" command that follows mta-sts policy, with options to require dane, mta-sts or requiretls. the code will be similar to queue/direct.go
 	{"dane dial", cmdDANEDial},
 	{"dane dialmx", cmdDANEDialmx},
 	{"dane makerecord", cmdDANEMakeRecord},

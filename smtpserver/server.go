@@ -17,6 +17,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"net/textproto"
 	"os"
 	"runtime/debug"
 	"sort"
@@ -201,7 +202,7 @@ func Listen() {
 			port := config.Port(listener.SMTP.Port, 25)
 			for _, ip := range listener.IPs {
 				firstTimeSenderDelay := durationDefault(listener.SMTP.FirstTimeSenderDelay, firstTimeSenderDelayDefault)
-				listen1("smtp", name, ip, port, hostname, tlsConfig, false, false, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay)
+				listen1("smtp", name, ip, port, hostname, tlsConfig, false, false, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, !listener.SMTP.NoRequireTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay)
 			}
 		}
 		if listener.Submission.Enabled {
@@ -211,7 +212,7 @@ func Listen() {
 			}
 			port := config.Port(listener.Submission.Port, 587)
 			for _, ip := range listener.IPs {
-				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, nil, 0)
+				listen1("submission", name, ip, port, hostname, tlsConfig, true, false, maxMsgSize, !listener.Submission.NoRequireSTARTTLS, !listener.Submission.NoRequireSTARTTLS, true, nil, 0)
 			}
 		}
 
@@ -222,7 +223,7 @@ func Listen() {
 			}
 			port := config.Port(listener.Submissions.Port, 465)
 			for _, ip := range listener.IPs {
-				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, maxMsgSize, true, true, nil, 0)
+				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, maxMsgSize, true, true, true, nil, 0)
 			}
 		}
 	}
@@ -230,7 +231,7 @@ func Listen() {
 
 var servers []func()
 
-func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
+func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
 		xlog.Print("listening for smtp", mlog.Field("listener", name), mlog.Field("address", addr), mlog.Field("protocol", protocol))
@@ -252,7 +253,7 @@ func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig
 				continue
 			}
 			resolver := dns.StrictResolver{} // By leaving Pkg empty, it'll be set by each package that uses the resolver, e.g. spf/dkim/dmarc.
-			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, dnsBLs, firstTimeSenderDelay)
+			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, requireTLS, dnsBLs, firstTimeSenderDelay)
 		}
 	}
 
@@ -277,6 +278,7 @@ type conn struct {
 	conn     net.Conn
 
 	tls                   bool
+	extRequireTLS         bool // Whether to announce and allow the REQUIRETLS extension.
 	resolver              dns.Resolver
 	r                     *bufio.Reader
 	w                     *bufio.Writer
@@ -316,8 +318,9 @@ type conn struct {
 
 	// Message transaction.
 	mailFrom    *smtp.Path
-	has8bitmime bool // If MAIL FROM parameter BODY=8BITMIME was sent. Required for SMTPUTF8.
-	smtputf8    bool // todo future: we should keep track of this per recipient. perhaps only a specific recipient requires smtputf8, e.g. due to a utf8 localpart. we should decide ourselves if the message needs smtputf8, e.g. due to utf8 header values.
+	requireTLS  *bool // MAIL FROM with REQUIRETLS set.
+	has8bitmime bool  // If MAIL FROM parameter BODY=8BITMIME was sent. Required for SMTPUTF8.
+	smtputf8    bool  // todo future: we should keep track of this per recipient. perhaps only a specific recipient requires smtputf8, e.g. due to a utf8 localpart. we should decide ourselves if the message needs smtputf8, e.g. due to utf8 header values.
 	recipients  []rcptAccount
 }
 
@@ -353,6 +356,7 @@ func (c *conn) reset() {
 // ../rfc/5321:2502
 func (c *conn) rset() {
 	c.mailFrom = nil
+	c.requireTLS = nil
 	c.has8bitmime = false
 	c.smtputf8 = false
 	c.recipients = nil
@@ -524,7 +528,7 @@ func (c *conn) writelinef(format string, args ...any) {
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
-func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, tls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
+func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, tls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
 	var localIP, remoteIP net.IP
 	if a, ok := nc.LocalAddr().(*net.TCPAddr); ok {
 		localIP = a.IP
@@ -545,6 +549,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		conn:                  nc,
 		submission:            submission,
 		tls:                   tls,
+		extRequireTLS:         requireTLS,
 		resolver:              resolver,
 		lastlog:               time.Now(),
 		tlsConfig:             tlsConfig,
@@ -821,6 +826,10 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 	if !c.tls && c.tlsConfig != nil {
 		// ../rfc/3207:90
 		c.bwritelinef("250-STARTTLS")
+	} else if c.extRequireTLS {
+		// ../rfc/8689:202
+		// ../rfc/8689:143
+		c.bwritelinef("250-REQUIRETLS")
 	}
 	if c.submission {
 		// ../rfc/4954:123
@@ -1285,6 +1294,15 @@ func (c *conn) cmdMail(p *parser) {
 		case "SMTPUTF8":
 			// ../rfc/6531:213
 			c.smtputf8 = true
+		case "REQUIRETLS":
+			// ../rfc/8689:155
+			if !c.tls {
+				xsmtpUserErrorf(smtp.C530SecurityRequired, smtp.SePol7EncNeeded10, "requiretls only allowed on tls-encrypted connections")
+			} else if !c.extRequireTLS {
+				xsmtpUserErrorf(smtp.C555UnrecognizedAddrParams, smtp.SeSys3NotSupported3, "REQUIRETLS not allowed for this connection")
+			}
+			v := true
+			c.requireTLS = &v
 		default:
 			// ../rfc/5321:2230
 			xsmtpUserErrorf(smtp.C555UnrecognizedAddrParams, smtp.SeSys3NotSupported3, "unrecognized parameter %q", key)
@@ -1645,7 +1663,12 @@ func (c *conn) cmdData(p *parser) {
 		recvHdr := &message.HeaderWriter{}
 		// For additional Received-header clauses, see:
 		// https://www.iana.org/assignments/mail-parameters/mail-parameters.xhtml#table-mail-parameters-8
-		recvHdr.Add(" ", "Received:", "from", recvFrom, "by", recvBy, "via", "tcp", "with", with, "id", mox.ReceivedID(c.cid)) // ../rfc/5321:3158
+		withComment := ""
+		if c.requireTLS != nil && *c.requireTLS {
+			// Comment is actually part of ID ABNF rule. ../rfc/5321:3336
+			withComment = " (requiretls)"
+		}
+		recvHdr.Add(" ", "Received:", "from", recvFrom, "by", recvBy, "via", "tcp", "with", with+withComment, "id", mox.ReceivedID(c.cid)) // ../rfc/5321:3158
 		if c.tls {
 			tlsConn := c.conn.(*tls.Conn)
 			tlsComment := message.TLSReceivedComment(c.log, tlsConn.ConnectionState())
@@ -1663,6 +1686,23 @@ func (c *conn) cmdData(p *parser) {
 	} else {
 		c.deliver(cmdctx, recvHdrFor, msgWriter, iprevStatus, iprevAuthentic, dataFile)
 	}
+}
+
+// Check if a message has unambiguous "TLS-Required: No" header. Messages must not
+// contain multiple TLS-Required headers. The only valid value is "no". But we'll
+// accept multiple headers as long as all they are all "no".
+// ../rfc/8689:223
+func hasTLSRequiredNo(h textproto.MIMEHeader) bool {
+	l := h.Values("Tls-Required")
+	if len(l) == 0 {
+		return false
+	}
+	for _, v := range l {
+		if !strings.EqualFold(v, "no") {
+			return false
+		}
+	}
+	return true
 }
 
 // submit is used for mail from authenticated users that we will try to deliver.
@@ -1690,6 +1730,14 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		metricSubmission.WithLabelValues("badfrom").Inc()
 		c.log.Infox("verifying message From address", err, mlog.Field("user", c.username), mlog.Field("msgfrom", msgFrom))
 		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SePol7DeliveryUnauth1, "must match authenticated user")
+	}
+
+	// TLS-Required: No header makes us not enforce recipient domain's TLS policy.
+	// ../rfc/8689:206
+	// Only when requiretls smtp extension wasn't used. ../rfc/8689:246
+	if c.requireTLS == nil && hasTLSRequiredNo(header) {
+		v := false
+		c.requireTLS = &v
 	}
 
 	// Outgoing messages should not have a Return-Path header. The final receiving mail
@@ -1787,7 +1835,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		xmsgPrefix := append([]byte(recvHdrFor(rcptAcc.rcptTo.String())), msgPrefix...)
 
 		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-		if _, err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, dataFile, nil); err != nil {
+		if _, err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, dataFile, nil, c.requireTLS); err != nil {
 			// Aborting the transaction is not great. But continuing and generating DSNs will
 			// probably result in errors as well...
 			metricSubmission.WithLabelValues("queueerror").Inc()
@@ -1870,6 +1918,16 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	// Basic loop detection. ../rfc/5321:4065 ../rfc/5321:1526
 	if len(headers.Values("Received")) > 100 {
 		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeNet4Loop6, "loop detected, more than 100 Received headers")
+	}
+
+	// TLS-Required: No header makes us not enforce recipient domain's TLS policy.
+	// Since we only deliver locally at the moment, this won't influence our behaviour.
+	// Once we forward, it would our delivery attempts.
+	// ../rfc/8689:206
+	// Only when requiretls smtp extension wasn't used. ../rfc/8689:246
+	if c.requireTLS == nil && hasTLSRequiredNo(headers) {
+		v := false
+		c.requireTLS = &v
 	}
 
 	// We'll be building up an Authentication-Results header.
@@ -2547,7 +2605,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 		if Localserve {
 			c.log.Error("not queueing dsn for incoming delivery due to localserve")
-		} else if err := queueDSN(context.TODO(), c, *c.mailFrom, dsnMsg); err != nil {
+		} else if err := queueDSN(context.TODO(), c, *c.mailFrom, dsnMsg, c.requireTLS != nil && *c.requireTLS); err != nil {
 			metricServerErrors.WithLabelValues("queuedsn").Inc()
 			c.log.Errorx("queuing DSN for incoming delivery, no DSN sent", err)
 		}

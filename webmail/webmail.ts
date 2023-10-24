@@ -52,7 +52,7 @@ To simulate slow API calls and SSE events:
 
 Show additional headers of messages:
 
-	settingsPut({...settings, showHeaders: ['User-Agent', 'X-Mailer', 'Message-Id', 'List-Id', 'List-Post', 'X-Mox-Reason']})
+	settingsPut({...settings, showHeaders: ['User-Agent', 'X-Mailer', 'Message-Id', 'List-Id', 'List-Post', 'X-Mox-Reason', 'TLS-Required']})
 
 Enable logging and reload afterwards:
 
@@ -1154,6 +1154,8 @@ const compose = (opts: ComposeOptions) => {
 	type AddrView = {
 		root: HTMLElement
 		input: HTMLInputElement
+		isRecipient: boolean
+		recipientSecurity: null | api.RecipientSecurity
 	}
 
 	let fieldset: HTMLFieldSetElement
@@ -1163,6 +1165,7 @@ const compose = (opts: ComposeOptions) => {
 	let subject: HTMLInputElement
 	let body: HTMLTextAreaElement
 	let attachments: HTMLInputElement
+	let requiretls: HTMLSelectElement
 
 	let toBtn: HTMLButtonElement, ccBtn: HTMLButtonElement, bccBtn: HTMLButtonElement, replyToBtn: HTMLButtonElement, customFromBtn: HTMLButtonElement
 	let replyToCell: HTMLElement, toCell: HTMLElement, ccCell: HTMLElement, bccCell: HTMLElement // Where we append new address views.
@@ -1217,6 +1220,7 @@ const compose = (opts: ComposeOptions) => {
 			ForwardAttachments: forwardAttachmentPaths.length === 0 ? {MessageID: 0, Paths: []} : {MessageID: opts.attachmentsMessageItem!.Message.ID, Paths: forwardAttachmentPaths},
 			IsForward: opts.isForward || false,
 			ResponseMessageID: opts.responseMessageID || 0,
+			RequireTLS: requiretls.value === '' ? null : requiretls.value === 'yes',
 		}
 		await client.MessageSubmit(message)
 		cmdCancel()
@@ -1226,10 +1230,10 @@ const compose = (opts: ComposeOptions) => {
 		await withStatus('Sending email', submit(), fieldset)
 	}
 
-	const cmdAddTo = async () => { newAddrView('', toViews, toBtn, toCell, toRow) }
-	const cmdAddCc = async () => { newAddrView('', ccViews, ccBtn, ccCell, ccRow) }
-	const cmdAddBcc = async () => { newAddrView('', bccViews, bccBtn, bccCell, bccRow) }
-	const cmdReplyTo = async () => { newAddrView('', replytoViews, replyToBtn, replyToCell, replyToRow, true) }
+	const cmdAddTo = async () => { newAddrView('', true, toViews, toBtn, toCell, toRow) }
+	const cmdAddCc = async () => { newAddrView('', true, ccViews, ccBtn, ccCell, ccRow) }
+	const cmdAddBcc = async () => { newAddrView('', true, bccViews, bccBtn, bccCell, bccRow) }
+	const cmdReplyTo = async () => { newAddrView('', false, replytoViews, replyToBtn, replyToCell, replyToRow, true) }
 	const cmdCustomFrom = async () => {
 		if (customFrom) {
 			return
@@ -1249,7 +1253,7 @@ const compose = (opts: ComposeOptions) => {
 		// ctrl - and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
 	}
 
-	const newAddrView = (addr: string, views: AddrView[], btn: HTMLButtonElement, cell: HTMLElement, row: HTMLElement, single?: boolean) => {
+	const newAddrView = (addr: string, isRecipient: boolean, views: AddrView[], btn: HTMLButtonElement, cell: HTMLElement, row: HTMLElement, single?: boolean) => {
 		if (single && views.length !== 0) {
 			return
 		}
@@ -1285,11 +1289,13 @@ const compose = (opts: ComposeOptions) => {
 				}
 				return '#aaa'
 			}
-			const setBar = (c0: string, c1: string, c2: string) => {
+			const setBar = (c0: string, c1: string, c2: string, c3: string, c4: string) => {
 				const stops = [
-					c0 + ' 0%', c0 + ' 32%', 'white 32%', 'white 33%',
-					c1 + ' 33%', c1 + ' 66%', 'white 66%', 'white 67%',
-					c2 + ' 67%', c2 + ' 100%',
+					c0 + ' 0%', c0 + ' 19%', 'white 19%', 'white 20%',
+					c1 + ' 20%', c1 + ' 39%', 'white 39%', 'white 40%',
+					c2 + ' 40%', c2 + ' 59%', 'white 59%', 'white 60%',
+					c3 + ' 60%', c3 + ' 79%', 'white 79%', 'white 80%',
+					c4 + ' 80%', c4 + ' 100%',
 				].join(', ')
 				securityBar.style.borderImage = 'linear-gradient(to right, ' + stops + ') 1'
 			}
@@ -1298,14 +1304,53 @@ const compose = (opts: ComposeOptions) => {
 			rcptSecAborter = aborter
 			rcptSecPromise = client.withOptions({aborter: aborter}).RecipientSecurity(inputElem.value)
 			rcptSecPromise.then((rs) => {
-				setBar(color(rs.MTASTS), color(rs.DNSSEC), color(rs.DANE))
+				setBar(color(rs.STARTTLS), color(rs.MTASTS), color(rs.DNSSEC), color(rs.DANE), color(rs.RequireTLS))
+
+				const implemented: string[] = []
+				const check = (v: boolean, s: string) => {
+					if (v) {
+						implemented.push(s)
+					}
+				}
+				check(rs.STARTTLS === api.SecurityResult.SecurityResultYes, 'STARTTLS')
+				check(rs.MTASTS === api.SecurityResult.SecurityResultYes, 'MTASTS')
+				check(rs.DNSSEC === api.SecurityResult.SecurityResultYes, 'DNSSEC')
+				check(rs.DANE === api.SecurityResult.SecurityResultYes, 'DANE')
+				check(rs.RequireTLS === api.SecurityResult.SecurityResultYes, 'RequireTLS')
+				const status = 'Security mechanisms known to be implemented by the recipient domain: '+ (implemented.length === 0 ? '(none)' : implemented.join(', ')) + '.'
+				inputElem.setAttribute('title', status+'\n\n'+recipientSecurityTitle)
+
 				aborter.abort = undefined
+				v.recipientSecurity = rs
+				if (isRecipient) {
+					// If all recipients implement REQUIRETLS, we can enable it.
+					let reqtls = true
+					const walk = (l: AddrView[]) => {
+						for (const v of l) {
+							if (v.recipientSecurity?.RequireTLS !== api.SecurityResult.SecurityResultYes) {
+								reqtls = false
+								break
+							}
+						}
+					}
+					walk(toViews)
+					walk(ccViews)
+					walk(bccViews)
+					if (requiretls.value === '' || requiretls.value === 'yes') {
+						requiretls.value = reqtls ? 'yes' : ''
+					}
+				}
 			}, () => {
-				setBar('#888', '#888', '#888')
+				setBar('#888', '#888', '#888', '#888', '#888')
+				inputElem.setAttribute('title', 'Error fetching security mechanisms known to be implemented by the recipient domain...\n\n'+recipientSecurityTitle)
 				aborter.abort = undefined
+				if (requiretls.value === 'yes') {
+					requiretls.value = ''
+				}
 			})
 		}
 
+		const recipientSecurityTitle = 'Description of security mechanisms recipient domains may implement:\n1. STARTTLS: Opportunistic (unverified) TLS with STARTTLS, successfully negotiated during the most recent delivery attempt.\n2. MTA-STS: For PKIX/WebPKI-verified TLS.\n3. DNSSEC: MX DNS records are DNSSEC-signed.\n4. DANE: First delivery destination host implements DANE for verified TLS.\n5. RequireTLS: SMTP extension for verified TLS delivery into recipient mailbox, support detected during the most recent delivery attempt.\n\nChecks STARTTLS, DANE and RequireTLS cover the most recently used delivery path, not necessarily all possible delivery paths.\n\nThe bars below the input field indicate implementation status by the recipient domain:\n- Red, not implemented/unsupported\n- Green, implemented/supported\n- Gray, error while determining\n- Absent/white, unknown or skipped (e.g. no previous delivery attempt, or DANE check skipped due to DNSSEC-lookup error)'
 		const root = dom.span(
 			autosizeElem=dom.span(
 				dom._class('autosize'),
@@ -1314,12 +1359,12 @@ const compose = (opts: ComposeOptions) => {
 					style({width: 'auto'}),
 					attr.value(addr),
 					newAddressComplete(),
-					attr.title('The bars below the input field indicate security features of the recipient (domain):\n1. Delivery with STARTTLS and MTA-STS (PKIX/WebPKI) enforced.\n2. MX lookup resulted in DNSSEC-signed response.\n3. First delivery destination host has DANE, so STARTTLS is required.\n\nColors:\n- Red, not implemented/unsupported\n- Green, implemented/supported\n- Gray, error while determining\n- Absent/white, unknown or skipped (e.g. dane check skipped due to dnssec-lookup error)'),
+					attr.title(recipientSecurityTitle),
 					function keydown(e: KeyboardEvent) {
 						if (e.key === '-' && e.ctrlKey) {
 							remove()
 						} else if (e.key === '=' && e.ctrlKey) {
-							newAddrView('', views, btn, cell, row, single)
+							newAddrView('', isRecipient, views, btn, cell, row, single)
 						} else {
 							return
 						}
@@ -1353,7 +1398,6 @@ const compose = (opts: ComposeOptions) => {
 			' ',
 		)
 		autosizeElem.dataset.value = inputElem.value
-		fetchRecipientSecurity()
 
 		const remove = () => {
 			const i = views.indexOf(v)
@@ -1383,7 +1427,10 @@ const compose = (opts: ComposeOptions) => {
 			}
 		}
 
-		const v: AddrView = {root: root, input: inputElem}
+		const v: AddrView = {root: root, input: inputElem, isRecipient: isRecipient, recipientSecurity: null}
+
+		fetchRecipientSecurity()
+
 		views.push(v)
 		cell.appendChild(v.root)
 		row.style.display = ''
@@ -1541,8 +1588,21 @@ const compose = (opts: ComposeOptions) => {
 					}), ' (Toggle all)')
 				),
 				noAttachmentsWarning=dom.div(style({display: 'none', backgroundColor: '#fcd284', padding: '0.15em .25em', margin: '.5em 0'}), 'Message mentions attachments, but no files are attached.'),
-				dom.div(style({margin: '1ex 0'}), 'Attachments ', attachments=dom.input(attr.type('file'), attr.multiple(''), function change() { checkAttachments() })),
-				dom.submitbutton('Send'),
+				dom.label(style({margin: '1ex 0', display: 'block'}), 'Attachments ', attachments=dom.input(attr.type('file'), attr.multiple(''), function change() { checkAttachments() })),
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'),
+					'TLS ',
+					requiretls=dom.select(
+						dom.option(attr.value(''), 'Default'),
+						dom.option(attr.value('yes'), 'With RequireTLS'),
+						dom.option(attr.value('no'), 'Fallback to insecure'),
+					),
+				),
+				dom.div(
+					style({margin: '3ex 0 1ex 0', display: 'block'}),
+					dom.submitbutton('Send'),
+				),
 			),
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
@@ -1553,11 +1613,11 @@ const compose = (opts: ComposeOptions) => {
 
 	subjectAutosize.dataset.value = subject.value
 
-	;(opts.to && opts.to.length > 0 ? opts.to : ['']).forEach(s => newAddrView(s, toViews, toBtn, toCell, toRow))
-	;(opts.cc || []).forEach(s => newAddrView(s, ccViews, ccBtn, ccCell, ccRow))
-	;(opts.bcc || []).forEach(s => newAddrView(s, bccViews, bccBtn, bccCell, bccRow))
+	;(opts.to && opts.to.length > 0 ? opts.to : ['']).forEach(s => newAddrView(s, true, toViews, toBtn, toCell, toRow))
+	;(opts.cc || []).forEach(s => newAddrView(s,true,  ccViews, ccBtn, ccCell, ccRow))
+	;(opts.bcc || []).forEach(s => newAddrView(s, true, bccViews, bccBtn, bccCell, bccRow))
 	if (opts.replyto) {
-		newAddrView(opts.replyto, replytoViews, replyToBtn, replyToCell, replyToRow, true)
+		newAddrView(opts.replyto, false, replytoViews, replyToBtn, replyToCell, replyToRow, true)
 	}
 	if (!opts.cc || !opts.cc.length) {
 		ccRow.style.display = 'none'

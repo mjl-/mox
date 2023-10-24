@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -23,17 +24,26 @@ import (
 )
 
 var submitconf struct {
-	LocalHostname      string `sconf-doc:"Hosts don't always have an FQDN, set it explicitly, for EHLO."`
-	Host               string `sconf-doc:"Host to dial for delivery, e.g. mail.<domain>."`
-	Port               int    `sconf-doc:"Port to dial for delivery, e.g. 465 for submissions, 587 for submission, or perhaps 25 for smtp."`
-	TLS                bool   `sconf-doc:"Connect with TLS. Usually for connections to port 465."`
-	STARTTLS           bool   `sconf-doc:"After starting in plain text, use STARTTLS to enable TLS. For port 587 and 25."`
-	Username           string `sconf-doc:"For SMTP authentication."`
-	Password           string `sconf-doc:"For password-based SMTP authentication, e.g. SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5, PLAIN."`
-	AuthMethod         string `sconf-doc:"If set, only attempt this authentication mechanism. E.g. SCRAM-SHA-256. If not set, any mutually supported algorithm can be used, in order of most to least secure."`
-	From               string `sconf-doc:"Address for MAIL FROM in SMTP and From-header in message."`
-	DefaultDestination string `sconf:"optional" sconf-doc:"Used when specified address does not contain an @ and may be a local user (eg root)."`
+	LocalHostname      string           `sconf-doc:"Hosts don't always have an FQDN, set it explicitly, for EHLO."`
+	Host               string           `sconf-doc:"Host to dial for delivery, e.g. mail.<domain>."`
+	Port               int              `sconf-doc:"Port to dial for delivery, e.g. 465 for submissions, 587 for submission, or perhaps 25 for smtp."`
+	TLS                bool             `sconf-doc:"Connect with TLS. Usually for connections to port 465."`
+	STARTTLS           bool             `sconf-doc:"After starting in plain text, use STARTTLS to enable TLS. For port 587 and 25."`
+	Username           string           `sconf-doc:"For SMTP authentication."`
+	Password           string           `sconf-doc:"For password-based SMTP authentication, e.g. SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5, PLAIN."`
+	AuthMethod         string           `sconf-doc:"If set, only attempt this authentication mechanism. E.g. SCRAM-SHA-256. If not set, any mutually supported algorithm can be used, in order of most to least secure."`
+	From               string           `sconf-doc:"Address for MAIL FROM in SMTP and From-header in message."`
+	DefaultDestination string           `sconf:"optional" sconf-doc:"Used when specified address does not contain an @ and may be a local user (eg root)."`
+	RequireTLS         RequireTLSOption `sconf:"optional" sconf-doc:"If yes, submission server must implement SMTP REQUIRETLS extension, and connection to submission server must use verified TLS. If no, a TLS-Required header with value no is added to the message, allowing fallback to unverified TLS or plain text delivery despite recpient domain policies. By default, the submission server will follow the policies of the recipient domain (MTA-STS and/or DANE), and apply unverified opportunistic TLS with STARTTLS."`
 }
+
+type RequireTLSOption string
+
+const (
+	RequireTLSDefault RequireTLSOption = ""
+	RequireTLSYes     RequireTLSOption = "yes"
+	RequireTLSNo      RequireTLSOption = "no"
+)
 
 func cmdConfigDescribeSendmail(c *cmd) {
 	c.params = ">/etc/moxsubmit.conf"
@@ -157,6 +167,9 @@ binary should be setgid that group:
 				if !haveTo {
 					line = fmt.Sprintf("To: <%s>\r\n", recipient) + line
 				}
+				if submitconf.RequireTLS == RequireTLSNo {
+					line = "TLS-Required: No\r\n" + line
+				}
 				header = false
 			} else if header {
 				t := strings.SplitN(line, ":", 2)
@@ -198,6 +211,9 @@ binary should be setgid that group:
 		if err == io.EOF {
 			break
 		}
+	}
+	if header && submitconf.RequireTLS == RequireTLSNo {
+		sb.WriteString("TLS-Required: No\r\n")
 	}
 	msg := sb.String()
 
@@ -262,6 +278,8 @@ binary should be setgid that group:
 		tlsMode = smtpclient.TLSStrictImmediate
 	} else if submitconf.STARTTLS {
 		tlsMode = smtpclient.TLSStrictStartTLS
+	} else if submitconf.RequireTLS == RequireTLSYes {
+		xsavecheckf(errors.New("cannot submit with requiretls enabled without tls to submission server"), "checking tls configuration")
 	}
 
 	ourHostname, err := dns.ParseDomain(submitconf.LocalHostname)
@@ -277,7 +295,7 @@ binary should be setgid that group:
 	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, ourHostname, remoteHostname, auth, nil, nil, nil)
 	xsavecheckf(err, "open smtp session")
 
-	err = client.Deliver(ctx, submitconf.From, recipient, int64(len(msg)), strings.NewReader(msg), true, false)
+	err = client.Deliver(ctx, submitconf.From, recipient, int64(len(msg)), strings.NewReader(msg), true, false, submitconf.RequireTLS == RequireTLSYes)
 	xsavecheckf(err, "submit message")
 
 	if err := client.Close(); err != nil {

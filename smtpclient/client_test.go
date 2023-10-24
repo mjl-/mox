@@ -36,6 +36,8 @@ func TestClient(t *testing.T) {
 	ctx := context.Background()
 	log := mlog.New("smtpclient")
 
+	mlog.SetConfig(map[string]mlog.Level{"": mlog.LevelTrace})
+
 	type options struct {
 		pipelining   bool
 		ecodes       bool
@@ -43,13 +45,15 @@ func TestClient(t *testing.T) {
 		starttls     bool
 		eightbitmime bool
 		smtputf8     bool
+		requiretls   bool
 		ehlo         bool
 
-		tlsMode      TLSMode
-		tlsHostname  dns.Domain
-		need8bitmime bool
-		needsmtputf8 bool
-		auths        []string // Allowed mechanisms.
+		tlsMode         TLSMode
+		tlsHostname     dns.Domain
+		need8bitmime    bool
+		needsmtputf8    bool
+		needsrequiretls bool
+		auths           []string // Allowed mechanisms.
 
 		nodeliver bool // For server, whether client will attempt a delivery.
 	}
@@ -145,6 +149,9 @@ func TestClient(t *testing.T) {
 				}
 				if opts.smtputf8 {
 					writeline("250-SMTPUTF8")
+				}
+				if opts.requiretls && haveTLS {
+					writeline("250-REQUIRETLS")
 				}
 				if opts.auths != nil {
 					writeline("250-AUTH " + strings.Join(opts.auths, " "))
@@ -260,6 +267,7 @@ func TestClient(t *testing.T) {
 			result <- nil
 		}()
 
+		// todo: should abort tests more properly. on client failures, we may be left with hanging test.
 		go func() {
 			defer func() {
 				x := recover()
@@ -268,7 +276,8 @@ func TestClient(t *testing.T) {
 				}
 			}()
 			fail := func(format string, args ...any) {
-				result <- fmt.Errorf("client: %w", fmt.Errorf(format, args...))
+				err := fmt.Errorf("client: %w", fmt.Errorf(format, args...))
+				result <- err
 				panic("stop")
 			}
 			c, err := New(ctx, log, clientConn, opts.tlsMode, localhost, opts.tlsHostname, auths, nil, nil, nil)
@@ -279,7 +288,7 @@ func TestClient(t *testing.T) {
 				result <- nil
 				return
 			}
-			err = c.Deliver(ctx, "postmaster@mox.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), opts.need8bitmime, opts.needsmtputf8)
+			err = c.Deliver(ctx, "postmaster@mox.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), opts.need8bitmime, opts.needsmtputf8, opts.needsrequiretls)
 			if (err == nil) != (expDeliverErr == nil) || err != nil && !errors.Is(err, expDeliverErr) {
 				fail("first deliver: got err %v, expected %v", err, expDeliverErr)
 			}
@@ -288,7 +297,7 @@ func TestClient(t *testing.T) {
 				if err != nil {
 					fail("reset: %v", err)
 				}
-				err = c.Deliver(ctx, "postmaster@mox.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), opts.need8bitmime, opts.needsmtputf8)
+				err = c.Deliver(ctx, "postmaster@mox.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), opts.need8bitmime, opts.needsmtputf8, opts.needsrequiretls)
 				if (err == nil) != (expDeliverErr == nil) || err != nil && !errors.Is(err, expDeliverErr) {
 					fail("second deliver: got err %v, expected %v", err, expDeliverErr)
 				}
@@ -327,11 +336,13 @@ test
 		smtputf8:     true,
 		starttls:     true,
 		ehlo:         true,
+		requiretls:   true,
 
-		tlsMode:      TLSStrictStartTLS,
-		tlsHostname:  dns.Domain{ASCII: "mox.example"},
-		need8bitmime: true,
-		needsmtputf8: true,
+		tlsMode:         TLSStrictStartTLS,
+		tlsHostname:     dns.Domain{ASCII: "mox.example"},
+		need8bitmime:    true,
+		needsmtputf8:    true,
+		needsrequiretls: true,
 	}
 
 	test(msg, options{}, nil, nil, nil, nil)
@@ -346,6 +357,7 @@ test
 	test(msg, options{ehlo: true, auths: []string{"SCRAM-SHA-1"}}, []sasl.Client{sasl.NewClientSCRAMSHA1("test", "test")}, nil, nil, nil)
 	test(msg, options{ehlo: true, auths: []string{"SCRAM-SHA-256"}}, []sasl.Client{sasl.NewClientSCRAMSHA256("test", "test")}, nil, nil, nil)
 	// todo: add tests for failing authentication, also at various stages in SCRAM
+	test(msg, options{ehlo: true, requiretls: false, needsrequiretls: true, nodeliver: true}, nil, nil, ErrRequireTLSUnsupported, nil)
 
 	// Set an expired certificate. For non-strict TLS, we should still accept it.
 	// ../rfc/7435:424
@@ -441,7 +453,7 @@ func TestErrors(t *testing.T) {
 			panic(err)
 		}
 		msg := ""
-		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false)
+		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || !xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with Permanent", err))
@@ -461,7 +473,7 @@ func TestErrors(t *testing.T) {
 			panic(err)
 		}
 		msg := ""
-		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false)
+		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with not-Permanent", err))
@@ -483,7 +495,7 @@ func TestErrors(t *testing.T) {
 			panic(err)
 		}
 		msg := ""
-		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false)
+		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with not-Permanent", err))
@@ -507,7 +519,7 @@ func TestErrors(t *testing.T) {
 			panic(err)
 		}
 		msg := ""
-		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false)
+		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || !xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with Permanent", err))
@@ -543,7 +555,7 @@ func TestErrors(t *testing.T) {
 			panic(err)
 		}
 		msg := ""
-		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false)
+		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with non-Permanent", err))
@@ -574,14 +586,14 @@ func TestErrors(t *testing.T) {
 		}
 
 		msg := ""
-		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false)
+		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with non-Permanent", err))
 		}
 
 		// Another delivery.
-		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false)
+		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
 		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || !xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with Permanent", err))
 		}
@@ -604,7 +616,7 @@ func TestErrors(t *testing.T) {
 		}
 
 		msg := ""
-		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false)
+		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || !xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with Permanent", err))

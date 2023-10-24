@@ -16,6 +16,7 @@ import (
 	"net/mail"
 	"net/textproto"
 	"os"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -33,6 +34,7 @@ import (
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
+	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
@@ -162,6 +164,7 @@ type SubmitMessage struct {
 	ResponseMessageID  int64  // If set, this was a reply or forward, based on IsForward.
 	ReplyTo            string // If non-empty, Reply-To header to add to message.
 	UserAgent          string // User-Agent header added if not empty.
+	RequireTLS         *bool  // For "Require TLS" extension during delivery.
 }
 
 // ForwardAttachments references attachments by a list of message.Part paths.
@@ -522,6 +525,9 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	if m.UserAgent != "" {
 		header("User-Agent", m.UserAgent)
 	}
+	if m.RequireTLS != nil && !*m.RequireTLS {
+		header("TLS-Required", "No")
+	}
 	header("MIME-Version", "1.0")
 
 	if len(m.Attachments) > 0 || len(m.ForwardAttachments.Paths) > 0 {
@@ -685,7 +691,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			Localpart: rcpt.Localpart,
 			IPDomain:  dns.IPDomain{Domain: rcpt.Domain},
 		}
-		_, err := queue.Add(ctx, log, reqInfo.AccountName, fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), dataFile, nil)
+		_, err := queue.Add(ctx, log, reqInfo.AccountName, fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), dataFile, nil, m.RequireTLS)
 		if err != nil {
 			metricSubmission.WithLabelValues("queueerror").Inc()
 		}
@@ -1635,12 +1641,27 @@ const (
 	SecurityResultUnknown SecurityResult = "unknown"
 )
 
-// RecipientSecurity is a quick analysis of the security properties of delivery to the recipient (domain).
-// Fields are nil when an error occurred during analysis.
+// RecipientSecurity is a quick analysis of the security properties of delivery to
+// the recipient (domain).
 type RecipientSecurity struct {
-	MTASTS SecurityResult // Whether we have a stored enforced MTA-STS policy, or domain has MTA-STS DNS record.
-	DNSSEC SecurityResult // Whether MX lookup response was DNSSEC-signed.
-	DANE   SecurityResult // Whether first delivery destination has DANE records.
+	// Whether recipient domain supports (opportunistic) STARTTLS, as seen during most
+	// recent delivery attempt. Will be "unknown" if no delivery to the domain has been
+	// attempted yet.
+	STARTTLS SecurityResult
+
+	// Whether we have a stored enforced MTA-STS policy, or domain has MTA-STS DNS
+	// record.
+	MTASTS SecurityResult
+
+	// Whether MX lookup response was DNSSEC-signed.
+	DNSSEC SecurityResult
+
+	// Whether first delivery destination has DANE records.
+	DANE SecurityResult
+
+	// Whether recipient domain is known to implement the REQUIRETLS SMTP extension.
+	// Will be "unknown" if no delivery to the domain has been attempted yet.
+	RequireTLS SecurityResult
 }
 
 // RecipientSecurity looks up security properties of the address in the
@@ -1650,11 +1671,25 @@ func (Webmail) RecipientSecurity(ctx context.Context, messageAddressee string) (
 	return recipientSecurity(ctx, resolver, messageAddressee)
 }
 
+// logPanic can be called with a defer from a goroutine to prevent the entire program from being shutdown in case of a panic.
+func logPanic(ctx context.Context) {
+	x := recover()
+	if x == nil {
+		return
+	}
+	log := xlog.WithContext(ctx)
+	log.Error("recover from panic", mlog.Field("panic", x))
+	debug.PrintStack()
+	metrics.PanicInc(metrics.Webmail)
+}
+
 // separate function for testing with mocked resolver.
 func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddressee string) (RecipientSecurity, error) {
 	log := xlog.WithContext(ctx)
 
 	rs := RecipientSecurity{
+		SecurityResultUnknown,
+		SecurityResultUnknown,
 		SecurityResultUnknown,
 		SecurityResultUnknown,
 		SecurityResultUnknown,
@@ -1675,6 +1710,7 @@ func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddres
 	// MTA-STS.
 	wg.Add(1)
 	go func() {
+		defer logPanic(ctx)
 		defer wg.Done()
 
 		policy, _, err := mtastsdb.Get(ctx, resolver, addr.Domain)
@@ -1690,6 +1726,7 @@ func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddres
 	// DNSSEC and DANE.
 	wg.Add(1)
 	go func() {
+		defer logPanic(ctx)
 		defer wg.Done()
 
 		_, origNextHopAuthentic, expandedNextHopAuthentic, _, hosts, _, err := smtpclient.GatherDestinations(ctx, log, resolver, dns.IPDomain{Domain: addr.Domain})
@@ -1737,7 +1774,51 @@ func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddres
 		}
 	}()
 
+	// STARTTLS and RequireTLS
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc, err := store.OpenAccount(reqInfo.AccountName)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		if acc != nil {
+			err := acc.Close()
+			log.Check(err, "closing account")
+		}
+	}()
+
+	err = acc.DB.Read(ctx, func(tx *bstore.Tx) error {
+		q := bstore.QueryTx[store.RecipientDomainTLS](tx)
+		q.FilterNonzero(store.RecipientDomainTLS{Domain: addr.Domain.Name()})
+		rd, err := q.Get()
+		if err == bstore.ErrAbsent {
+			return nil
+		} else if err != nil {
+			rs.STARTTLS = SecurityResultError
+			rs.RequireTLS = SecurityResultError
+			log.Errorx("looking up recipient domain", err, mlog.Field("domain", addr.Domain))
+			return nil
+		}
+		if rd.STARTTLS {
+			rs.STARTTLS = SecurityResultYes
+		} else {
+			rs.STARTTLS = SecurityResultNo
+		}
+		if rd.RequireTLS {
+			rs.RequireTLS = SecurityResultYes
+		} else {
+			rs.RequireTLS = SecurityResultNo
+		}
+		return nil
+	})
+	xcheckf(ctx, err, "lookup recipient domain")
+
+	// Close account as soon as possible, not after waiting for MTA-STS/DNSSEC/DANE
+	// checks to complete, which can take a while.
+	err = acc.Close()
+	log.Check(err, "closing account")
+	acc = nil
+
 	wg.Wait()
+
 	return rs, nil
 }
 

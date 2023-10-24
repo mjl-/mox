@@ -1537,7 +1537,6 @@ const queueList = async () => {
 	])
 
 	const nowSecs = new Date().getTime()/1000
-	let transport
 
 	const page = document.getElementById('page')
 	dom._kids(page,
@@ -1560,63 +1559,97 @@ const queueList = async () => {
 						dom.th('Next attempt'),
 						dom.th('Last attempt'),
 						dom.th('Last error'),
+						dom.th('Require TLS'),
 						dom.th('Transport/Retry'),
 						dom.th('Remove'),
 					),
 				),
 				dom.tbody(
-					msgs.map(m => dom.tr(
-						dom.td(''+m.ID),
-						dom.td(age(new Date(m.Queued), false, nowSecs)),
-						dom.td(m.SenderLocalpart+"@"+ipdomainString(m.SenderDomain)), // todo: escaping of localpart
-						dom.td(m.RecipientLocalpart+"@"+ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
-						dom.td(formatSize(m.Size)),
-						dom.td(''+m.Attempts),
-						dom.td(age(new Date(m.NextAttempt), true, nowSecs)),
-						dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'),
-						dom.td(m.LastError || '-'),
-						dom.td(
-							transport=dom.select(
-								attr({title: 'Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'}),
-								dom.option('(default)', attr({value: ''})),
-								Object.keys(transports).sort().map(t => dom.option(t, m.Transport === t ? attr({checked: ''}) : [])),
+					msgs.map(m => {
+						let requiretls, requiretlsFieldset, transport
+						return dom.tr(
+							dom.td(''+m.ID),
+							dom.td(age(new Date(m.Queued), false, nowSecs)),
+							dom.td(m.SenderLocalpart+"@"+ipdomainString(m.SenderDomain)), // todo: escaping of localpart
+							dom.td(m.RecipientLocalpart+"@"+ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
+							dom.td(formatSize(m.Size)),
+							dom.td(''+m.Attempts),
+							dom.td(age(new Date(m.NextAttempt), true, nowSecs)),
+							dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'),
+							dom.td(m.LastError || '-'),
+							dom.td(
+								dom.form(
+									requiretlsFieldset=dom.fieldset(
+										requiretls=dom.select(
+											attr({title: 'How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'}),
+											dom.option('Default', attr({value: ''})),
+											dom.option('With RequireTLS', attr({value: 'yes'}), m.RequireTLS === true ? attr({selected: ''}) : []),
+											dom.option('Fallback to insecure', attr({value: 'no'}), m.RequireTLS === false ? attr({selected: ''}) : []),
+										),
+										' ',
+										dom.button('Save'),
+									),
+									async function submit(e) {
+										e.preventDefault()
+										try {
+											requiretlsFieldset.disabled = true
+											await api.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes')
+										} catch (err) {
+											console.log({err})
+											window.alert('Error: ' + err.message)
+											return
+										} finally {
+											requiretlsFieldset.disabled = false
+										}
+									}
+								),
 							),
-							' ',
-							dom.button('Retry now', async function click(e) {
-								e.preventDefault()
-								try {
-									e.target.disabled = true
-									await api.QueueKick(m.ID, transport.value)
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + err.message)
-									return
-								} finally {
-									e.target.disabled = false
-								}
-								window.location.reload() // todo: only refresh the list
-							}),
-						),
-						dom.td(
-							dom.button('Remove', async function click(e) {
-								e.preventDefault()
-								if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
-									return
-								}
-								try {
-									e.target.disabled = true
-									await api.QueueDrop(m.ID)
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + err.message)
-									return
-								} finally {
-									e.target.disabled = false
-								}
-								window.location.reload() // todo: only refresh the list
-							}),
-						),
-					)),
+							dom.td(
+								dom.form(
+									transport=dom.select(
+										attr({title: 'Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'}),
+										dom.option('(default)', attr({value: ''})),
+										Object.keys(transports).sort().map(t => dom.option(t, m.Transport === t ? attr({checked: ''}) : [])),
+									),
+									' ',
+									dom.button('Retry now'),
+									async function submit(e) {
+										e.preventDefault()
+										try {
+											e.target.disabled = true
+											await api.QueueKick(m.ID, transport.value)
+										} catch (err) {
+											console.log({err})
+											window.alert('Error: ' + err.message)
+											return
+										} finally {
+											e.target.disabled = false
+										}
+										window.location.reload() // todo: only refresh the list
+									}
+								),
+							),
+							dom.td(
+								dom.button('Remove', async function click(e) {
+									e.preventDefault()
+									if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
+										return
+									}
+									try {
+										e.target.disabled = true
+										await api.QueueDrop(m.ID)
+									} catch (err) {
+										console.log({err})
+										window.alert('Error: ' + err.message)
+										return
+									} finally {
+										e.target.disabled = false
+									}
+									window.location.reload() // todo: only refresh the list
+								}),
+							),
+						)
+					})
 				),
 			),
 		],

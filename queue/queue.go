@@ -99,6 +99,21 @@ type Msg struct {
 	// admin interface. If empty (the default for a submitted message), regular routing
 	// rules apply.
 	Transport string
+
+	// RequireTLS influences TLS verification during delivery.
+	//
+	// If nil, the recipient domain policy is followed (MTA-STS and/or DANE), falling
+	// back to optional opportunistic non-verified STARTTLS.
+	//
+	// If RequireTLS is true (through SMTP REQUIRETLS extension or webmail submit),
+	// MTA-STS or DANE is required, as well as REQUIRETLS support by the next hop
+	// server.
+	//
+	// If RequireTLS is false (through messag header "TLS-Required: No"), the recipient
+	// domain's policy is ignored if it does not lead to a successful TLS connection,
+	// i.e. falling back to SMTP delivery with unverified STARTTLS or plain text.
+	RequireTLS *bool
+	// ../rfc/8689:250
 }
 
 // Sender of message as used in MAIL FROM.
@@ -180,7 +195,7 @@ func Count(ctx context.Context) (int, error) {
 // this data is used as the message when delivering the DSN and the remote SMTP
 // server supports SMTPUTF8. If the remote SMTP server does not support SMTPUTF8,
 // the regular non-utf8 message is delivered.
-func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcptTo smtp.Path, has8bit, smtputf8 bool, size int64, messageID string, msgPrefix []byte, msgFile *os.File, dsnutf8Opt []byte) (int64, error) {
+func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcptTo smtp.Path, has8bit, smtputf8 bool, size int64, messageID string, msgPrefix []byte, msgFile *os.File, dsnutf8Opt []byte, requireTLS *bool) (int64, error) {
 	// todo: Add should accept multiple rcptTo if they are for the same domain. so we can queue them for delivery in one (or just a few) session(s), transferring the data only once. ../rfc/5321:3759
 
 	if Localserve {
@@ -221,7 +236,7 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 	}()
 
 	now := time.Now()
-	qm := Msg{0, now, senderAccount, mailFrom.Localpart, mailFrom.IPDomain, rcptTo.Localpart, rcptTo.IPDomain, formatIPDomain(rcptTo.IPDomain), 0, nil, now, nil, "", has8bit, smtputf8, size, messageID, msgPrefix, dsnutf8Opt, ""}
+	qm := Msg{0, now, senderAccount, mailFrom.Localpart, mailFrom.IPDomain, rcptTo.Localpart, rcptTo.IPDomain, formatIPDomain(rcptTo.IPDomain), 0, nil, now, nil, "", has8bit, smtputf8, size, messageID, msgPrefix, dsnutf8Opt, "", requireTLS}
 
 	if err := tx.Insert(&qm); err != nil {
 		return 0, err
@@ -337,6 +352,18 @@ func Drop(ctx context.Context, ID int64, toDomain string, recipient string) (int
 		}
 	}
 	return n, nil
+}
+
+// SaveRequireTLS updates the RequireTLS field of the message with id.
+func SaveRequireTLS(ctx context.Context, id int64, requireTLS *bool) error {
+	return DB.Write(ctx, func(tx *bstore.Tx) error {
+		m := Msg{ID: id}
+		if err := tx.Get(&m); err != nil {
+			return fmt.Errorf("get message: %w", err)
+		}
+		m.RequireTLS = requireTLS
+		return tx.Update(&m)
+	})
 }
 
 type ReadReaderAtCloser interface {

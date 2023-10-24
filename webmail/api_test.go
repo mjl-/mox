@@ -366,7 +366,12 @@ func TestAPI(t *testing.T) {
 
 	// RecipientSecurity
 	resolver := dns.MockResolver{}
-	rs, err := recipientSecurity(ctxbg, resolver, "mjl@a.mox.example")
+	rs, err := recipientSecurity(ctx, resolver, "mjl@a.mox.example")
 	tcompare(t, err, nil)
-	tcompare(t, rs, RecipientSecurity{SecurityResultNo, SecurityResultNo, SecurityResultNo})
+	tcompare(t, rs, RecipientSecurity{SecurityResultUnknown, SecurityResultNo, SecurityResultNo, SecurityResultNo, SecurityResultUnknown})
+	err = acc.DB.Insert(ctx, &store.RecipientDomainTLS{Domain: "a.mox.example", STARTTLS: true, RequireTLS: false})
+	tcheck(t, err, "insert recipient domain tls info")
+	rs, err = recipientSecurity(ctx, resolver, "mjl@a.mox.example")
+	tcompare(t, err, nil)
+	tcompare(t, rs, RecipientSecurity{SecurityResultYes, SecurityResultNo, SecurityResultNo, SecurityResultNo, SecurityResultNo})
 }
