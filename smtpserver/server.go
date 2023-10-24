@@ -1579,7 +1579,7 @@ func (c *conn) cmdData(p *parser) {
 		}
 	}
 
-	if Localserve {
+	if Localserve && moxvar.Pedantic {
 		// Require that message can be parsed fully.
 		p, err := message.Parse(c.log, false, dataFile)
 		if err == nil {
