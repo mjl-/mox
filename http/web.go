@@ -610,7 +610,7 @@ func Listen() {
 					return
 				}
 				w.Header().Set("Content-Type", "text/html")
-				fmt.Fprint(w, `<html><body>see <a href="/metrics">/metrics</a></body></html>`)
+				fmt.Fprint(w, `<html><body>see <a href="metrics">metrics</a></body></html>`)
 			})))
 		}
 		if l.AutoconfigHTTPS.Enabled {
