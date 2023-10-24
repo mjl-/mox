@@ -78,6 +78,12 @@ var (
 			"reason", // nopolicy (no mta-sts and no dane), norequiretls (smtp server does not support requiretls)
 		},
 	)
+	metricPlaintextFallback = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "mox_queue_plaintext_fallback_total",
+			Help: "Delivery attempts with fallback to plain text delivery.",
+		},
+	)
 )
 
 // todo: rename function, perhaps put some of the params in a delivery struct so we don't pass all the params all the time?
@@ -180,8 +186,6 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 	nmissingRequireTLS := 0
 	// todo: should make distinction between host permanently not accepting the message, and the message not being deliverable permanently. e.g. a mx host may have a size limit, or not accept 8bitmime, while another host in the list does accept the message. same for smtputf8, ../rfc/6531:555
 	for _, h := range hosts {
-		var badTLS, ok bool
-
 		// ../rfc/8461:913
 		if policy != nil && !policy.Matches(h.Domain) {
 			var policyHosts []string
@@ -222,15 +226,17 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 		// usually with verification of the certificate.
 		var daneRequired bool
 
+		var badTLS, ok bool
 		enforceMTASTS := policy != nil && policy.Mode == mtasts.ModeEnforce
 		permanent, daneRequired, badTLS, secodeOpt, remoteIP, errmsg, ok = deliverHost(nqlog, resolver, dialer, cid, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, &m, tlsMode)
 
-		// If we had a TLS-related failure when doing opportunistic (optional) TLS, and no
-		// DANE records were not found, we should try again without TLS. This could be an
-		// old server that only does ancient TLS versions, or has a misconfiguration. Note
-		// that opportunistic TLS does not do regular certificate verification, so that can't
-		// be the problem.
+		// If we had a TLS-related failure when doing TLS, and we don't have a requirement for MTA-STS/DANE,
+		// we try again without TLS. This could be an old
+		// server that only does ancient TLS versions, or has a misconfiguration. Note that
+		// opportunistic TLS does not do regular certificate verification, so that can't be
+		// the problem.
 		if !ok && badTLS && (!enforceMTASTS && tlsMode == smtpclient.TLSOpportunistic && !daneRequired || m.RequireTLS != nil && !*m.RequireTLS) {
+			metricPlaintextFallback.Inc()
 			if m.RequireTLS != nil && !*m.RequireTLS {
 				metricTLSRequiredNoIgnored.WithLabelValues("badtls").Inc()
 			}
