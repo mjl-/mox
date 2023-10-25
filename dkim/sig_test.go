@@ -91,7 +91,7 @@ func TestSig(t *testing.T) {
 		BodyHash:         xbase64("LjkN2rUhrS3zKXfH2vNgUzz5ERRJkgP9CURXBX0JP0Q="),
 		Domain:           xdomain("xn--mx-lka.example"), // møx.example
 		SignedHeaders:    []string{"from"},
-		Selector:         xdomain("xn--tst-bma"),                                     // tést
+		Selector:         dns.Domain{ASCII: "xn--tst-bma"},
 		Identity:         &Identity{&ulp, xdomain("xn--tst-bma.xn--mx-lka.example")}, // tést.møx.example
 		Canonicalization: "simple/simple",
 		Length:           -1,

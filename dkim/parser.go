@@ -206,12 +206,12 @@ func (p *parser) xdomainselector(isselector bool) dns.Domain {
 	for p.hasPrefix(".") {
 		s += p.xtake(".") + p.xtakefn1(false, subdomain)
 	}
+	if isselector {
+		// Not to be interpreted as IDNA.
+		return dns.Domain{ASCII: strings.ToLower(s)}
+	}
 	d, err := dns.ParseDomain(s)
 	if err != nil {
-		// ParseDomain does not allow underscore, work around it.
-		if strings.Contains(s, "_") && isselector && !moxvar.Pedantic {
-			return dns.Domain{ASCII: strings.ToLower(s)}
-		}
 		p.xerrorf("parsing domain %q: %s", s, err)
 	}
 	return d
