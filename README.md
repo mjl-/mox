@@ -113,10 +113,9 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
+- Sending DMARC and TLS reports (currently only receiving)
 - Authentication other than HTTP-basic for webmail/webadmin/webaccount
 - Per-domain webmail and IMAP/SMTP host name (and TLS cert) and client settings
-- Require TLS SMTP extension (RFC 8689)
-- Sending DMARC and TLS reports (currently only receiving)
 - Make mox Go packages more easily reusable, each pulling in fewer (internal)
   dependencies
 - HTTP-based API for sending messages and receiving delivery feedback
