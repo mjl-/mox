@@ -6,9 +6,15 @@ import (
 )
 
 func TestParseDomain(t *testing.T) {
-	test := func(s string, exp Domain, expErr error) {
+	test := func(lax bool, s string, exp Domain, expErr error) {
 		t.Helper()
-		dom, err := ParseDomain(s)
+		var dom Domain
+		var err error
+		if lax {
+			dom, err = ParseDomainLax(s)
+		} else {
+			dom, err = ParseDomain(s)
+		}
 		if (err == nil) != (expErr == nil) || expErr != nil && !errors.Is(err, expErr) {
 			t.Fatalf("parse domain %q: err %v, expected %v", s, err, expErr)
 		}
@@ -18,10 +24,15 @@ func TestParseDomain(t *testing.T) {
 	}
 
 	// We rely on normalization of names throughout the code base.
-	test("xmox.nl", Domain{"xmox.nl", ""}, nil)
-	test("XMOX.NL", Domain{"xmox.nl", ""}, nil)
-	test("TEST☺.XMOX.NL", Domain{"xn--test-3o3b.xmox.nl", "test☺.xmox.nl"}, nil)
-	test("TEST☺.XMOX.NL", Domain{"xn--test-3o3b.xmox.nl", "test☺.xmox.nl"}, nil)
-	test("ℂᵤⓇℒ。𝐒🄴", Domain{"curl.se", ""}, nil) // https://daniel.haxx.se/blog/2022/12/14/idn-is-crazy/
-	test("xmox.nl.", Domain{}, errTrailingDot)
+	test(false, "xmox.nl", Domain{"xmox.nl", ""}, nil)
+	test(false, "XMOX.NL", Domain{"xmox.nl", ""}, nil)
+	test(false, "TEST☺.XMOX.NL", Domain{"xn--test-3o3b.xmox.nl", "test☺.xmox.nl"}, nil)
+	test(false, "TEST☺.XMOX.NL", Domain{"xn--test-3o3b.xmox.nl", "test☺.xmox.nl"}, nil)
+	test(false, "ℂᵤⓇℒ。𝐒🄴", Domain{"curl.se", ""}, nil) // https://daniel.haxx.se/blog/2022/12/14/idn-is-crazy/
+	test(false, "xmox.nl.", Domain{}, errTrailingDot)
+
+	test(false, "_underscore.xmox.nl", Domain{}, errIDNA)
+	test(true, "_underscore.xmox.NL", Domain{ASCII: "_underscore.xmox.nl"}, nil)
+	test(true, "_underscore.☺.xmox.nl", Domain{}, errUnderscore)
+	test(true, "_underscore.xn--test-3o3b.xmox.nl", Domain{}, errUnderscore)
 }

@@ -444,7 +444,8 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 				if i >= 10 {
 					return StatusPermerror, d.MechanismString(), "", rauthentic, ErrTooManyDNSRequests
 				}
-				mxd, err := dns.ParseDomain(strings.TrimSuffix(mx.Host, "."))
+				// Parsing lax (unless in pedantic mode) for MX targets with underscores as seen in the wild.
+				mxd, err := dns.ParseDomainLax(strings.TrimSuffix(mx.Host, "."))
 				if err != nil {
 					return StatusPermerror, d.MechanismString(), "", rauthentic, err
 				}

@@ -148,7 +148,8 @@ func GatherDestinations(ctx context.Context, log *mlog.Log, resolver dns.Resolve
 		// The Go resolver already sorts by preference, randomizing records of same
 		// preference. ../rfc/5321:3885
 		for _, mx := range mxl {
-			host, err := dns.ParseDomain(strings.TrimSuffix(mx.Host, "."))
+			// Parsing lax (unless pedantic mode) for MX targets with underscores as seen in the wild.
+			host, err := dns.ParseDomainLax(strings.TrimSuffix(mx.Host, "."))
 			if err != nil {
 				// note: should not happen because Go resolver already filters these out.
 				err = fmt.Errorf("%w: invalid host name in mx record %q: %v", errDNS, mx.Host, err)

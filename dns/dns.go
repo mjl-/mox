@@ -10,9 +10,15 @@ import (
 	"golang.org/x/net/idna"
 
 	"github.com/mjl-/adns"
+
+	"github.com/mjl-/mox/moxvar"
 )
 
-var errTrailingDot = errors.New("dns name has trailing dot")
+var (
+	errTrailingDot = errors.New("dns name has trailing dot")
+	errUnderscore  = errors.New("domain name with underscore")
+	errIDNA        = errors.New("idna")
+)
 
 // Domain is a domain name, with one or more labels, with at least an ASCII
 // representation, and for IDNA non-ASCII domains a unicode representation.
@@ -83,13 +89,14 @@ func ParseDomain(s string) (Domain, error) {
 	if strings.HasSuffix(s, ".") {
 		return Domain{}, errTrailingDot
 	}
+
 	ascii, err := idna.Lookup.ToASCII(s)
 	if err != nil {
-		return Domain{}, fmt.Errorf("to ascii: %w", err)
+		return Domain{}, fmt.Errorf("%w: to ascii: %v", errIDNA, err)
 	}
 	unicode, err := idna.Lookup.ToUnicode(s)
 	if err != nil {
-		return Domain{}, fmt.Errorf("to unicode: %w", err)
+		return Domain{}, fmt.Errorf("%w: to unicode: %w", errIDNA, err)
 	}
 	// todo: should we cause errors for unicode domains that were not in
 	// canonical form? we are now accepting all kinds of obscure spellings
@@ -99,6 +106,41 @@ func ParseDomain(s string) (Domain, error) {
 		return Domain{ascii, ""}, nil
 	}
 	return Domain{ascii, unicode}, nil
+}
+
+// ParseDomainLax parses a domain like ParseDomain, but allows labels with
+// underscores if the entire domain name is ASCII-only non-IDNA and Pedantic mode
+// is not enabled. Used for interoperability, e.g. domains may specify MX
+// targets with underscores.
+func ParseDomainLax(s string) (Domain, error) {
+	if moxvar.Pedantic || !strings.Contains(s, "_") {
+		return ParseDomain(s)
+	}
+
+	// If there is any non-ASCII, this is certainly not an A-label-only domain.
+	s = strings.ToLower(s)
+	for _, c := range s {
+		if c >= 0x80 {
+			return Domain{}, fmt.Errorf("%w: underscore and non-ascii not allowed", errUnderscore)
+		}
+	}
+
+	// Try parsing with underscores replaced with allowed ASCII character.
+	// If that's not valid, the version with underscore isn't either.
+	repl := strings.ReplaceAll(s, "_", "a")
+	d, err := ParseDomain(repl)
+	if err != nil {
+		return Domain{}, fmt.Errorf("%w: %v", errUnderscore, err)
+	}
+	// If we found an IDNA domain, we're not going to allow it.
+	if d.Unicode != "" {
+		return Domain{}, fmt.Errorf("%w: idna domain with underscores not allowed", errUnderscore)
+	}
+	// Just to be safe, ensure no unexpected conversions happened.
+	if d.ASCII != repl {
+		return Domain{}, fmt.Errorf("%w: underscores and non-canonical names not allowed", errUnderscore)
+	}
+	return Domain{ASCII: s}, nil
 }
 
 // IsNotFound returns whether an error is an adns.DNSError with IsNotFound set.
