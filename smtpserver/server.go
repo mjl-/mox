@@ -2371,7 +2371,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			continue
 		}
 
-		m := &store.Message{
+		m := store.Message{
 			Received:           time.Now(),
 			RemoteIP:           c.remoteIP.String(),
 			RemoteIPMasked1:    ipmasked1,
@@ -2395,7 +2395,18 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			DKIMDomains:        verifiedDKIMDomains,
 			Size:               msgWriter.Size,
 		}
-		d := delivery{m, dataFile, rcptAcc, acc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, iprevStatus}
+		if c.tls {
+			tlsState := c.conn.(*tls.Conn).ConnectionState()
+			m.ReceivedTLSVersion = tlsState.Version
+			m.ReceivedTLSCipherSuite = tlsState.CipherSuite
+			if c.requireTLS != nil {
+				m.ReceivedRequireTLS = *c.requireTLS
+			}
+		} else {
+			m.ReceivedTLSVersion = 1 // Signals plain text delivery.
+		}
+
+		d := delivery{&m, dataFile, rcptAcc, acc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, iprevStatus}
 		a := analyze(ctx, log, c.resolver, d)
 
 		// Any DMARC result override is stored in the evaluation for outgoing DMARC
@@ -2577,7 +2588,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		if !a.accept {
 			conf, _ := acc.Conf()
 			if conf.RejectsMailbox != "" {
-				present, _, messagehash, err := rejectPresent(log, acc, conf.RejectsMailbox, m, dataFile)
+				present, _, messagehash, err := rejectPresent(log, acc, conf.RejectsMailbox, &m, dataFile)
 				if err != nil {
 					log.Errorx("checking whether reject is already present", err)
 				} else if !present {
@@ -2596,7 +2607,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 						if err != nil {
 							log.Errorx("tidying rejects mailbox", err)
 						} else if hasSpace {
-							if err := acc.DeliverMailbox(log, conf.RejectsMailbox, m, dataFile); err != nil {
+							if err := acc.DeliverMailbox(log, conf.RejectsMailbox, &m, dataFile); err != nil {
 								log.Errorx("delivering spammy mail to rejects mailbox", err)
 							} else {
 								log.Info("delivered spammy mail to rejects mailbox")
@@ -2671,7 +2682,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 		}
 		acc.WithWLock(func() {
-			if err := acc.DeliverMailbox(log, a.mailbox, m, dataFile); err != nil {
+			if err := acc.DeliverMailbox(log, a.mailbox, &m, dataFile); err != nil {
 				log.Errorx("delivering", err)
 				metricDelivery.WithLabelValues("delivererror", a.reason).Inc()
 				addError(rcptAcc, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")

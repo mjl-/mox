@@ -378,6 +378,9 @@ const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, more
 				dom.div(style({display: 'flex', justifyContent: 'space-between'}),
 					dom.div(msgenv.Subject || ''),
 					dom.div(
+						mi.Message.ReceivedTLSVersion === 1 ? dom.span(style({padding: '0px 0.15em', fontSize: '.9em', borderBottom: '1.5px solid #e15d1c'}), 'Without TLS', attr.title('Message received (last hop) without TLS')) : [],
+						mi.Message.ReceivedTLSVersion > 1 && !mi.Message.ReceivedRequireTLS ? dom.span(style({padding: '0px 0.15em', fontSize: '.9em', borderBottom: '1.5px solid #50c40f'}), 'With TLS', attr.title('Message received (last hop) with TLS')) : [],
+						mi.Message.ReceivedRequireTLS ? dom.span(style({padding: '.1em .3em', fontSize: '.9em', backgroundColor: '#d2f791', border: '1px solid #ccc', borderRadius: '3px'}), 'With RequireTLS', attr.title('Transported with RequireTLS, ensuring TLS along the entire delivery path from sender to recipient, with TLS certificate verification through MTA-STS and/or DANE.')) : [],
 						mi.IsSigned ? dom.span(style({backgroundColor: '#666', padding: '0px 0.15em', fontSize: '.9em', color: 'white', borderRadius: '.15em'}), 'Message has a signature') : [],
 						mi.IsEncrypted ? dom.span(style({backgroundColor: '#666', padding: '0px 0.15em', fontSize: '.9em', color: 'white', borderRadius: '.15em'}), 'Message is encrypted') : [],
 						refineKeyword ? (mi.Message.Keywords || []).map(kw =>

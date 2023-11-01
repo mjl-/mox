@@ -482,6 +482,10 @@ type Message struct {
 	// Changes are propagated to the webmail client.
 	ThreadCollapsed bool
 
+	ReceivedTLSVersion     uint16 // 0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.
+	ReceivedTLSCipherSuite uint16
+	ReceivedRequireTLS     bool // Whether RequireTLS was known to be used for incoming delivery.
+
 	Flags
 	// For keywords other than system flags or the basic well-known $-flags. Only in
 	// "atom" syntax (IMAP), they are case-insensitive, always stored in lower-case

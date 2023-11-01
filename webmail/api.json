@@ -1817,6 +1817,27 @@
 					]
 				},
 				{
+					"Name": "ReceivedTLSVersion",
+					"Docs": "0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.",
+					"Typewords": [
+						"uint16"
+					]
+				},
+				{
+					"Name": "ReceivedTLSCipherSuite",
+					"Docs": "",
+					"Typewords": [
+						"uint16"
+					]
+				},
+				{
+					"Name": "ReceivedRequireTLS",
+					"Docs": "Whether RequireTLS was known to be used for incoming delivery.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
 					"Name": "Seen",
 					"Docs": "",
 					"Typewords": [
