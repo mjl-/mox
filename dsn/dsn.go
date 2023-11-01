@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/mjl-/mox/dkim"
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -365,14 +366,28 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 
 	data := msgw.w.Bytes()
 
+	// Add DKIM signature for domain, even if higher up than the full mail hostname.
+	// This helps with an assumed (because default) relaxed DKIM policy. If the DMARC
+	// policy happens to be strict, the signature won't help, but won't hurt either.
 	fd := m.From.IPDomain.Domain
-	confDom, _ := mox.Conf.Domain(fd)
-	if len(confDom.DKIM.Sign) > 0 {
-		if dkimHeaders, err := dkim.Sign(context.Background(), m.From.Localpart, fd, confDom.DKIM, smtputf8, bytes.NewReader(data)); err != nil {
+	var zerodom dns.Domain
+	for fd != zerodom {
+		confDom, ok := mox.Conf.Domain(fd)
+		if !ok {
+			var nfd dns.Domain
+			_, nfd.ASCII, _ = strings.Cut(fd.ASCII, ".")
+			_, nfd.Unicode, _ = strings.Cut(fd.Unicode, ".")
+			fd = nfd
+			continue
+		}
+
+		dkimHeaders, err := dkim.Sign(context.Background(), m.From.Localpart, fd, confDom.DKIM, smtputf8, bytes.NewReader(data))
+		if err != nil {
 			log.Errorx("dsn: dkim sign for domain, returning unsigned dsn", err, mlog.Field("domain", fd))
 		} else {
 			data = append([]byte(dkimHeaders), data...)
 		}
+		break
 	}
 
 	return data, nil
