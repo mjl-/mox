@@ -2915,7 +2915,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		'image/apng',
 		'image/svg+xml',
 	];
-	const isText = (a) => a.Part.MediaType.toLowerCase() === 'text';
+	const isText = (a) => ['text', 'message'].includes(a.Part.MediaType.toLowerCase());
 	const isImage = (a) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase());
 	const isPDF = (a) => (a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase() === 'application/pdf';
 	const isViewable = (a) => isText(a) || isImage(a) || isPDF(a);

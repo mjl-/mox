@@ -2463,7 +2463,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		'image/apng',
 		'image/svg+xml',
 	]
-	const isText = (a: api.Attachment) => a.Part.MediaType.toLowerCase() === 'text'
+	const isText = (a: api.Attachment) => ['text', 'message'].includes(a.Part.MediaType.toLowerCase())
 	const isImage = (a: api.Attachment) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase())
 	const isPDF = (a: api.Attachment) => (a.Part.MediaType+'/'+a.Part.MediaSubType).toLowerCase() === 'application/pdf'
 	const isViewable = (a: api.Attachment) => isText(a) || isImage(a) || isPDF(a)
