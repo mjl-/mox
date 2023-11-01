@@ -1,6 +1,6 @@
 This file has notes useful for mox developers.
 
-# Code style & guidelines
+# Code style, guidelines, notes
 
 - Keep the same style as existing code.
 - For Windows: use package "path/filepath" when dealing with files/directories.
@@ -8,6 +8,8 @@ This file has notes useful for mox developers.
   but use proper filepath functions when parameters are passed and in non-test
   code.  Mailbox names always use forward slash, so use package "path" for mailbox
   name/path manipulation. Do not remove/rename files that are still open.
+- Not all code uses adns, the DNSSEC-aware resolver. Such as code that makes
+  http requests, like mtasts and autotls/autocert.
 
 
 # TLS certificates
