@@ -202,11 +202,7 @@ type importStep struct {
 func importStart(log *mlog.Log, accName string, f *os.File, skipMailboxPrefix string) (string, error) {
 	defer func() {
 		if f != nil {
-			name := f.Name()
-			err := f.Close()
-			log.Check(err, "closing uploaded file")
-			err = os.Remove(name)
-			log.Check(err, "removing uploaded file", mlog.Field("name", name))
+			store.CloseRemoveTempFile(log, f, "upload for import")
 		}
 	}()
 
@@ -316,11 +312,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 	}
 
 	defer func() {
-		name := f.Name()
-		err := f.Close()
-		log.Check(err, "closing uploaded messages file")
-		err = os.Remove(name)
-		log.Check(err, "removing uploaded messages file", mlog.Field("path", name))
+		store.CloseRemoveTempFile(log, f, "uploaded messages")
 
 		for _, id := range deliveredIDs {
 			p := acc.MessagePath(id)
@@ -594,11 +586,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		ximportcheckf(err, "creating temp message")
 		defer func() {
 			if f != nil {
-				name := f.Name()
-				err = f.Close()
-				log.Check(err, "closing temporary file for delivery")
-				err := os.Remove(name)
-				log.Check(err, "removing temporary file for delivery", mlog.Field("path", name))
+				store.CloseRemoveTempFile(log, f, "message to import")
 			}
 		}()
 

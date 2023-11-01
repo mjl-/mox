@@ -290,13 +290,8 @@ Only implemented on unix systems, not Windows.
 				log.Infox("making temporary message file for changelog delivery", err)
 				return next
 			}
-			defer func() {
-				name := f.Name()
-				err = f.Close()
-				log.Check(err, "closing temp changelog file")
-				err := os.Remove(name)
-				log.Check(err, "removing temp changelog file", mlog.Field("path", name))
-			}()
+			defer store.CloseRemoveTempFile(log, f, "message for changelog delivery")
+
 			m := &store.Message{
 				Received: time.Now(),
 				Flags:    store.Flags{Flagged: true},

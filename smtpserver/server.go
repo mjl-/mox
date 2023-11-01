@@ -1532,13 +1532,7 @@ func (c *conn) cmdData(p *parser) {
 	if err != nil {
 		xsmtpServerErrorf(errCodes(smtp.C451LocalErr, smtp.SeSys3Other0, err), "creating temporary file for message: %s", err)
 	}
-	defer func() {
-		name := dataFile.Name()
-		err := dataFile.Close()
-		c.log.Check(err, "removing temporary message file")
-		err = os.Remove(name)
-		c.log.Check(err, "removing temporary message file", mlog.Field("path", name))
-	}()
+	defer store.CloseRemoveTempFile(c.log, dataFile, "smtpserver delivered message")
 	msgWriter := message.NewWriter(dataFile)
 	dr := smtp.NewDataReader(c.r)
 	n, err := io.Copy(&limitWriter{maxSize: c.maxMessageSize, w: msgWriter}, dr)

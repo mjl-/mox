@@ -359,13 +359,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	// Create file to compose message into.
 	dataFile, err := store.CreateMessageTemp("webmail-submit")
 	xcheckf(ctx, err, "creating temporary file for message")
-	defer func() {
-		name := dataFile.Name()
-		err := dataFile.Close()
-		log.Check(err, "closing submit message file")
-		err = os.Remove(name)
-		log.Check(err, "removing temporary submit message file", mlog.Field("name", name))
-	}()
+	defer store.CloseRemoveTempFile(log, dataFile, "message to submit")
 
 	// If writing to the message file fails, we abort immediately.
 	xmsgw := &xerrWriter{ctx, bufio.NewWriter(dataFile), 0, w.maxMessageSize}

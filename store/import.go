@@ -84,11 +84,7 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 	}
 	defer func() {
 		if f != nil {
-			name := f.Name()
-			err := f.Close()
-			mr.log.Check(err, "closing temporary message file after mbox read error")
-			err = os.Remove(name)
-			mr.log.Check(err, "removing temporary message file after mbox read error", mlog.Field("path", name))
+			CloseRemoveTempFile(mr.log, f, "message after mbox read error")
 		}
 	}()
 

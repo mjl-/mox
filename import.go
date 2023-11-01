@@ -311,13 +311,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		conf, _ := a.Conf()
 
 		process := func(m *store.Message, msgf *os.File, origPath string) {
-			defer func() {
-				name := msgf.Name()
-				err := msgf.Close()
-				ctl.log.Check(err, "closing temporary message after failing to import")
-				err = os.Remove(name)
-				ctl.log.Check(err, "removing temporary message after failing to import", mlog.Field("path", name))
-			}()
+			defer store.CloseRemoveTempFile(ctl.log, msgf, "message to import")
 
 			for _, kw := range m.Keywords {
 				mailboxKeywords[kw] = true

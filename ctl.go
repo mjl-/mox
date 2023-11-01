@@ -319,13 +319,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 
 		msgFile, err := store.CreateMessageTemp("ctl-deliver")
 		ctl.xcheck(err, "creating temporary message file")
-		defer func() {
-			name := msgFile.Name()
-			err := msgFile.Close()
-			log.Check(err, "closing temporary message file")
-			err = os.Remove(name)
-			log.Check(err, "removing temporary message file", mlog.Field("path", name))
-		}()
+		defer store.CloseRemoveTempFile(log, msgFile, "deliver message")
 		mw := message.NewWriter(msgFile)
 		ctl.xwriteok()
 

@@ -175,13 +175,7 @@ func deliverDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg st
 		qlog("creating temporary message file", err)
 		return
 	}
-	defer func() {
-		name := msgFile.Name()
-		err := msgFile.Close()
-		log.Check(err, "closing message file")
-		err = os.Remove(name)
-		log.Check(err, "removing message file", mlog.Field("path", name))
-	}()
+	defer store.CloseRemoveTempFile(log, msgFile, "dsn message")
 
 	msgWriter := message.NewWriter(msgFile)
 	if _, err := msgWriter.Write(msgData); err != nil {

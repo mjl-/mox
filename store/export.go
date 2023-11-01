@@ -214,11 +214,7 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 	var mboxwriter *bufio.Writer
 	defer func() {
 		if mboxtmp != nil {
-			name := mboxtmp.Name()
-			err := mboxtmp.Close()
-			log.Check(err, "closing mbox temp file")
-			err = os.Remove(name)
-			log.Check(err, "removing mbox temp file", mlog.Field("name", name))
+			CloseRemoveTempFile(log, mboxtmp, "mbox")
 		}
 	}()
 

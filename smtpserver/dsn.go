@@ -3,10 +3,8 @@ package smtpserver
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/mjl-/mox/dsn"
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
@@ -30,13 +28,8 @@ func queueDSN(ctx context.Context, c *conn, rcptTo smtp.Path, m dsn.Message, req
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
-	defer func() {
-		name := f.Name()
-		err = f.Close()
-		c.log.Check(err, "closing temporary dsn message file")
-		err := os.Remove(name)
-		c.log.Check(err, "removing temporary dsn message file", mlog.Field("path", name))
-	}()
+	defer store.CloseRemoveTempFile(c.log, f, "smtpserver dsn message")
+
 	if _, err := f.Write([]byte(buf)); err != nil {
 		return fmt.Errorf("writing dsn file: %w", err)
 	}

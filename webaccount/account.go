@@ -299,11 +299,7 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		}
 		defer func() {
 			if tmpf != nil {
-				name := tmpf.Name()
-				err := tmpf.Close()
-				log.Check(err, "closing uploaded file")
-				err = os.Remove(name)
-				log.Check(err, "removing temporary file", mlog.Field("path", name))
+				store.CloseRemoveTempFile(log, tmpf, "upload")
 			}
 		}()
 		if _, err := io.Copy(tmpf, f); err != nil {
