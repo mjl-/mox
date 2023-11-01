@@ -100,6 +100,11 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 
 	ts := testserver{t: t, cid: 1, resolver: resolver, tlsmode: smtpclient.TLSOpportunistic}
 
+	if dmarcdb.EvalDB != nil {
+		dmarcdb.EvalDB.Close()
+		dmarcdb.EvalDB = nil
+	}
+
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = configPath
 	mox.MustLoadConfig(true, false)
@@ -192,6 +197,15 @@ func fakeCert(t *testing.T) tls.Certificate {
 	return c
 }
 
+// check expected dmarc evaluations for outgoing aggregate reports.
+func checkEvaluationCount(t *testing.T, n int) []dmarcdb.Evaluation {
+	t.Helper()
+	l, err := dmarcdb.Evaluations(ctxbg)
+	tcheck(t, err, "get dmarc evaluations")
+	tcompare(t, len(l), n)
+	return l
+}
+
 // Test submission from authenticated user.
 func TestSubmission(t *testing.T) {
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
@@ -229,6 +243,7 @@ func TestSubmission(t *testing.T) {
 			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
 				t.Fatalf("got err %#v (%q), expected %#v", err, err, expErr)
 			}
+			checkEvaluationCount(t, 0)
 		})
 	}
 
@@ -329,6 +344,8 @@ func TestDelivery(t *testing.T) {
 			t.Fatalf("no delivery in 1s")
 		}
 	})
+
+	checkEvaluationCount(t, 0)
 }
 
 func tinsertmsg(t *testing.T, acc *store.Account, mailbox string, m *store.Message, msg string) {
@@ -392,7 +409,7 @@ func TestSpam(t *testing.T) {
 		},
 		TXT: map[string][]string{
 			"example.org.":        {"v=spf1 ip4:127.0.0.10 -all"},
-			"_dmarc.example.org.": {"v=DMARC1;p=reject"},
+			"_dmarc.example.org.": {"v=DMARC1;p=reject; rua=mailto:dmarcrpt@example.org"},
 		},
 	}
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
@@ -451,6 +468,7 @@ func TestSpam(t *testing.T) {
 		}
 
 		checkCount("Rejects", 1)
+		checkEvaluationCount(t, 0) // No positive interactions yet.
 	})
 
 	// Delivery from sender with bad reputation matching AcceptRejectsToMailbox should
@@ -463,8 +481,9 @@ func TestSpam(t *testing.T) {
 		}
 		tcheck(t, err, "deliver")
 
-		checkCount("mjl2junk", 1) // In ruleset rejects mailbox.
-		checkCount("Rejects", 1)  // Same as before.
+		checkCount("mjl2junk", 1)  // In ruleset rejects mailbox.
+		checkCount("Rejects", 1)   // Same as before.
+		checkEvaluationCount(t, 0) // This is not an actual accept.
 	})
 
 	// Mark the messages as having good reputation.
@@ -485,6 +504,7 @@ func TestSpam(t *testing.T) {
 		// Message should now be removed from Rejects mailboxes.
 		checkCount("Rejects", 0)
 		checkCount("mjl2junk", 1)
+		checkEvaluationCount(t, 1)
 	})
 
 	// Undo dmarc pass, mark messages as junk, and train the filter.
@@ -506,6 +526,7 @@ func TestSpam(t *testing.T) {
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
 			t.Fatalf("attempt to deliver spamy message, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 		}
+		checkEvaluationCount(t, 1) // No new evaluation, this isn't a DMARC reject.
 	})
 }
 
@@ -525,9 +546,9 @@ func TestForward(t *testing.T) {
 				"bad.example.":            {"v=spf1 ip4:127.0.0.1 -all"},
 				"good.example.":           {"v=spf1 ip4:127.0.0.1 -all"},
 				"forward.example.":        {"v=spf1 ip4:127.0.0.10 -all"},
-				"_dmarc.bad.example.":     {"v=DMARC1;p=reject"},
-				"_dmarc.good.example.":    {"v=DMARC1;p=reject"},
-				"_dmarc.forward.example.": {"v=DMARC1;p=reject"},
+				"_dmarc.bad.example.":     {"v=DMARC1;p=reject; rua=mailto:dmarc@bad.example"},
+				"_dmarc.good.example.":    {"v=DMARC1;p=reject; rua=mailto:dmarc@good.example"},
+				"_dmarc.forward.example.": {"v=DMARC1;p=reject; rua=mailto:dmarc@forward.example"},
 			},
 			PTR: map[string][]string{
 				"127.0.0.10": {"forward.example."}, // For iprev check.
@@ -543,6 +564,8 @@ func TestForward(t *testing.T) {
 
 		ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
 		defer ts.close()
+
+		totalEvaluations := 0
 
 		var msgBad = strings.ReplaceAll(`From: <remote@bad.example>
 To: <mjl3@mox.example>
@@ -580,6 +603,7 @@ happens to come from forwarding mail server.
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgBad)), strings.NewReader(msgBad), false, false, false)
 				tcheck(t, err, "deliver message")
 			}
+			totalEvaluations += 10
 
 			n, err := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).UpdateFields(map[string]any{"Junk": true, "MsgFromValidated": true})
 			tcheck(t, err, "marking messages as junk")
@@ -591,6 +615,8 @@ happens to come from forwarding mail server.
 			if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
 				t.Fatalf("delivery by bad sender, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 			}
+
+			checkEvaluationCount(t, totalEvaluations)
 		})
 
 		// Delivery from different "message From" without reputation, but from same
@@ -607,12 +633,14 @@ happens to come from forwarding mail server.
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgOK)), strings.NewReader(msgOK), false, false, false)
 			if forward {
 				tcheck(t, err, "deliver")
+				totalEvaluations += 1
 			} else {
 				var cerr smtpclient.Error
 				if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
 					t.Fatalf("delivery by bad ip, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 				}
 			}
+			checkEvaluationCount(t, totalEvaluations)
 		})
 
 		// Delivery from forwarding server that isn't a forward should get same treatment.
@@ -624,12 +652,14 @@ happens to come from forwarding mail server.
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgOK2)), strings.NewReader(msgOK2), false, false, false)
 			if forward {
 				tcheck(t, err, "deliver")
+				totalEvaluations += 1
 			} else {
 				var cerr smtpclient.Error
 				if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
 					t.Fatalf("delivery by bad ip, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 				}
 			}
+			checkEvaluationCount(t, totalEvaluations)
 		})
 	}
 
@@ -644,12 +674,30 @@ func TestDMARCSent(t *testing.T) {
 			"example.org.": {"127.0.0.1"}, // For mx check.
 		},
 		TXT: map[string][]string{
-			"example.org.":        {"v=spf1 ip4:127.0.0.10 -all"},
-			"_dmarc.example.org.": {"v=DMARC1;p=reject"},
+			"example.org.":        {"v=spf1 ip4:127.0.0.1 -all"},
+			"_dmarc.example.org.": {"v=DMARC1;p=reject;rua=mailto:dmarcrpt@example.org"},
 		},
 	}
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
 	defer ts.close()
+
+	// First check that DMARC policy rejects message and results in optional evaluation.
+	ts.run(func(err error, client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@mox.example"
+		if err == nil {
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+		}
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
+			t.Fatalf("attempt to deliver spamy message, got err %v, expected smtpclient.Error with code %d", err, smtp.C550MailboxUnavail)
+		}
+		l := checkEvaluationCount(t, 1)
+		tcompare(t, l[0].Optional, true)
+	})
+
+	// Update DNS for an SPF pass, and DMARC pass.
+	resolver.TXT["example.org."] = []string{"v=spf1 ip4:127.0.0.10 -all"}
 
 	// Insert spammy messages not related to the test message.
 	m := store.Message{
@@ -676,6 +724,7 @@ func TestDMARCSent(t *testing.T) {
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
 			t.Fatalf("attempt to deliver spamy message, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 		}
+		checkEvaluationCount(t, 1) // No new evaluation.
 	})
 
 	// Insert a message that we sent to the address that is about to send to us.
@@ -684,7 +733,26 @@ func TestDMARCSent(t *testing.T) {
 	err := ts.acc.DB.Insert(ctxbg, &store.Recipient{MessageID: sentMsg.ID, Localpart: "remote", Domain: "example.org", OrgDomain: "example.org", Sent: time.Now()})
 	tcheck(t, err, "inserting message recipient")
 
+	// Reject a message due to DMARC again. Since we sent a message to the domain, it
+	// is no longer unknown and we should see a non-optional evaluation that will
+	// result in a DMARC report.
+	resolver.TXT["example.org."] = []string{"v=spf1 ip4:127.0.0.1 -all"}
+	ts.run(func(err error, client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@mox.example"
+		if err == nil {
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+		}
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
+			t.Fatalf("attempt to deliver spamy message, got err %v, expected smtpclient.Error with code %d", err, smtp.C550MailboxUnavail)
+		}
+		l := checkEvaluationCount(t, 2) // New evaluation.
+		tcompare(t, l[1].Optional, false)
+	})
+
 	// We should now be accepting the message because we recently sent a message.
+	resolver.TXT["example.org."] = []string{"v=spf1 ip4:127.0.0.10 -all"}
 	ts.run(func(err error, client *smtpclient.Client) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
@@ -692,6 +760,8 @@ func TestDMARCSent(t *testing.T) {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
 		}
 		tcheck(t, err, "deliver")
+		l := checkEvaluationCount(t, 3) // New evaluation.
+		tcompare(t, l[2].Optional, false)
 	})
 }
 
@@ -773,7 +843,7 @@ func TestDMARCReport(t *testing.T) {
 		},
 		TXT: map[string][]string{
 			"example.org.":        {"v=spf1 ip4:127.0.0.10 -all"},
-			"_dmarc.example.org.": {"v=DMARC1;p=reject"},
+			"_dmarc.example.org.": {"v=DMARC1;p=reject; rua=mailto:dmarcrpt@example.org"},
 		},
 		PTR: map[string][]string{
 			"127.0.0.10": {"example.org."}, // For iprev check.
@@ -815,6 +885,11 @@ func TestDMARCReport(t *testing.T) {
 
 	run(dmarcReport, 0)
 	run(strings.ReplaceAll(dmarcReport, "xmox.nl", "mox.example"), 1)
+
+	// We always store as an evaluation, but as optional for reports.
+	evals := checkEvaluationCount(t, 2)
+	tcompare(t, evals[0].Optional, true)
+	tcompare(t, evals[1].Optional, true)
 }
 
 const dmarcReport = `<?xml version="1.0" encoding="UTF-8" ?>
@@ -896,7 +971,7 @@ func TestTLSReport(t *testing.T) {
 		TXT: map[string][]string{
 			"testsel._domainkey.example.org.": {dkimTxt},
 			"example.org.":                    {"v=spf1 ip4:127.0.0.10 -all"},
-			"_dmarc.example.org.":             {"v=DMARC1;p=reject"},
+			"_dmarc.example.org.":             {"v=DMARC1;p=reject;rua=mailto:dmarcrpt@example.org"},
 		},
 		PTR: map[string][]string{
 			"127.0.0.10": {"example.org."}, // For iprev check.
@@ -939,6 +1014,11 @@ func TestTLSReport(t *testing.T) {
 
 	run(tlsrpt, 0)
 	run(strings.ReplaceAll(tlsrpt, "xmox.nl", "mox.example"), 1)
+
+	// We always store as an evaluation, but as optional for reports.
+	evals := checkEvaluationCount(t, 2)
+	tcompare(t, evals[0].Optional, true)
+	tcompare(t, evals[1].Optional, true)
 }
 
 func TestRatelimitConnectionrate(t *testing.T) {

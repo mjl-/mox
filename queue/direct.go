@@ -92,7 +92,7 @@ func fail(qlog *mlog.Log, m Msg, backoff time.Duration, permanent bool, remoteMT
 	// todo future: when we implement relaying, and a dsn cannot be delivered, and requiretls was active, we cannot drop the message. instead deliver to local postmaster? though ../rfc/8689:383 may intend to say the dsn should be delivered without requiretls?
 	// todo future: when we implement smtp dsn extension, parameter RET=FULL must be disregarded for messages with REQUIRETLS. ../rfc/8689:379
 
-	if permanent || m.Attempts >= 8 {
+	if permanent || m.MaxAttempts == 0 && m.Attempts >= 8 || m.MaxAttempts > 0 && m.Attempts >= m.MaxAttempts {
 		qlog.Errorx("permanent failure delivering from queue", errors.New(errmsg))
 		deliverDSNFailure(qlog, m, remoteMTA, secodeOpt, errmsg)
 
@@ -230,12 +230,13 @@ func deliverDirect(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 		enforceMTASTS := policy != nil && policy.Mode == mtasts.ModeEnforce
 		permanent, daneRequired, badTLS, secodeOpt, remoteIP, errmsg, ok = deliverHost(nqlog, resolver, dialer, cid, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, &m, tlsMode)
 
-		// If we had a TLS-related failure when doing TLS, and we don't have a requirement for MTA-STS/DANE,
-		// we try again without TLS. This could be an old
-		// server that only does ancient TLS versions, or has a misconfiguration. Note that
+		// If we had a TLS-related failure when doing TLS, and we don't have a requirement
+		// for MTA-STS/DANE, we try again without TLS. This could be an old server that
+		// only does ancient TLS versions, or has a misconfiguration. Note that
 		// opportunistic TLS does not do regular certificate verification, so that can't be
 		// the problem.
-		if !ok && badTLS && (!enforceMTASTS && tlsMode == smtpclient.TLSOpportunistic && !daneRequired || m.RequireTLS != nil && !*m.RequireTLS) {
+		// We don't fall back to plain text for DMARC reports. ../rfc/7489:1768 ../rfc/7489:2683
+		if !ok && badTLS && (!enforceMTASTS && tlsMode == smtpclient.TLSOpportunistic && !daneRequired && !m.IsDMARCReport || m.RequireTLS != nil && !*m.RequireTLS) {
 			metricPlaintextFallback.Inc()
 			if m.RequireTLS != nil && !*m.RequireTLS {
 				metricTLSRequiredNoIgnored.WithLabelValues("badtls").Inc()

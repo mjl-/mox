@@ -1,9 +1,3 @@
-// Package dmarcdb stores incoming DMARC reports.
-//
-// With DMARC, a domain can request emails with DMARC verification results by
-// remote mail servers to be sent to a specified address. Mox parses such
-// reports, stores them in its database and makes them available through its
-// admin web interface.
 package dmarcdb
 
 import (
@@ -25,9 +19,9 @@ import (
 )
 
 var (
-	DBTypes = []any{DomainFeedback{}} // Types stored in DB.
-	DB      *bstore.DB                // Exported for backups.
-	mutex   sync.Mutex
+	ReportsDBTypes = []any{DomainFeedback{}} // Types stored in DB.
+	ReportsDB      *bstore.DB                // Exported for backups.
+	reportsMutex   sync.Mutex
 )
 
 var (
@@ -65,25 +59,19 @@ type DomainFeedback struct {
 	dmarcrpt.Feedback
 }
 
-func database(ctx context.Context) (rdb *bstore.DB, rerr error) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	if DB == nil {
+func reportsDB(ctx context.Context) (rdb *bstore.DB, rerr error) {
+	reportsMutex.Lock()
+	defer reportsMutex.Unlock()
+	if ReportsDB == nil {
 		p := mox.DataDirPath("dmarcrpt.db")
 		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
+		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, ReportsDBTypes...)
 		if err != nil {
 			return nil, err
 		}
-		DB = db
+		ReportsDB = db
 	}
-	return DB, nil
-}
-
-// Init opens the database.
-func Init() error {
-	_, err := database(mox.Shutdown)
-	return err
+	return ReportsDB, nil
 }
 
 // AddReport adds a DMARC aggregate feedback report from an email to the database,
@@ -91,7 +79,7 @@ func Init() error {
 //
 // fromDomain is the domain in the report message From header.
 func AddReport(ctx context.Context, f *dmarcrpt.Feedback, fromDomain dns.Domain) error {
-	db, err := database(ctx)
+	db, err := reportsDB(ctx)
 	if err != nil {
 		return err
 	}
@@ -141,7 +129,7 @@ func AddReport(ctx context.Context, f *dmarcrpt.Feedback, fromDomain dns.Domain)
 
 // Records returns all reports in the database.
 func Records(ctx context.Context) ([]DomainFeedback, error) {
-	db, err := database(ctx)
+	db, err := reportsDB(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +139,7 @@ func Records(ctx context.Context) ([]DomainFeedback, error) {
 
 // RecordID returns the report for the ID.
 func RecordID(ctx context.Context, id int64) (DomainFeedback, error) {
-	db, err := database(ctx)
+	db, err := reportsDB(ctx)
 	if err != nil {
 		return DomainFeedback{}, err
 	}
@@ -164,7 +152,7 @@ func RecordID(ctx context.Context, id int64) (DomainFeedback, error) {
 // RecordsPeriodDomain returns the reports overlapping start and end, for the given
 // domain. If domain is empty, all records match for domain.
 func RecordsPeriodDomain(ctx context.Context, start, end time.Time, domain string) ([]DomainFeedback, error) {
-	db, err := database(ctx)
+	db, err := reportsDB(ctx)
 	if err != nil {
 		return nil, err
 	}

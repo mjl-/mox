@@ -84,7 +84,7 @@ func TestLookupExternalReportsAccepted(t *testing.T) {
 	test("example.com", "simple2.example", StatusNone, true, nil)
 	test("example.com", "one.example", StatusNone, true, nil)
 	test("example.com", "absent.example", StatusNone, false, ErrNoRecord)
-	test("example.com", "multiple.example", StatusNone, false, ErrMultipleRecords)
+	test("example.com", "multiple.example", StatusNone, true, nil)
 	test("example.com", "malformed.example", StatusPermerror, false, ErrSyntax)
 	test("example.com", "temperror.example", StatusTemperror, false, ErrDNS)
 }
@@ -137,7 +137,7 @@ func TestVerify(t *testing.T) {
 		[]dkim.Result{},
 		spf.StatusNone,
 		nil,
-		true, Result{true, StatusFail, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
+		true, Result{true, StatusFail, false, false, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
 	)
 
 	// Accept with spf pass.
@@ -145,7 +145,7 @@ func TestVerify(t *testing.T) {
 		[]dkim.Result{},
 		spf.StatusPass,
 		&dns.Domain{ASCII: "sub.reject.example"},
-		true, Result{false, StatusPass, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
+		true, Result{false, StatusPass, true, false, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
 	)
 
 	// Accept with dkim pass.
@@ -161,7 +161,7 @@ func TestVerify(t *testing.T) {
 		},
 		spf.StatusFail,
 		&dns.Domain{ASCII: "reject.example"},
-		true, Result{false, StatusPass, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
+		true, Result{false, StatusPass, false, true, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
 	)
 
 	// Reject due to spf and dkim "strict".
@@ -181,7 +181,7 @@ func TestVerify(t *testing.T) {
 		},
 		spf.StatusPass,
 		&dns.Domain{ASCII: "sub.strict.example"},
-		true, Result{true, StatusFail, dns.Domain{ASCII: "strict.example"}, &strict, false, nil},
+		true, Result{true, StatusFail, false, false, dns.Domain{ASCII: "strict.example"}, &strict, false, nil},
 	)
 
 	// No dmarc policy, nothing to say.
@@ -189,7 +189,7 @@ func TestVerify(t *testing.T) {
 		[]dkim.Result{},
 		spf.StatusNone,
 		nil,
-		false, Result{false, StatusNone, dns.Domain{ASCII: "absent.example"}, nil, false, ErrNoRecord},
+		false, Result{false, StatusNone, false, false, dns.Domain{ASCII: "absent.example"}, nil, false, ErrNoRecord},
 	)
 
 	// No dmarc policy, spf pass does nothing.
@@ -197,7 +197,7 @@ func TestVerify(t *testing.T) {
 		[]dkim.Result{},
 		spf.StatusPass,
 		&dns.Domain{ASCII: "absent.example"},
-		false, Result{false, StatusNone, dns.Domain{ASCII: "absent.example"}, nil, false, ErrNoRecord},
+		false, Result{false, StatusNone, false, false, dns.Domain{ASCII: "absent.example"}, nil, false, ErrNoRecord},
 	)
 
 	none := DefaultRecord
@@ -207,7 +207,7 @@ func TestVerify(t *testing.T) {
 		[]dkim.Result{},
 		spf.StatusPass,
 		&dns.Domain{ASCII: "none.example"},
-		true, Result{false, StatusPass, dns.Domain{ASCII: "none.example"}, &none, false, nil},
+		true, Result{false, StatusPass, true, false, dns.Domain{ASCII: "none.example"}, &none, false, nil},
 	)
 
 	// No actual reject due to pct=0.
@@ -218,7 +218,7 @@ func TestVerify(t *testing.T) {
 		[]dkim.Result{},
 		spf.StatusNone,
 		nil,
-		false, Result{true, StatusFail, dns.Domain{ASCII: "test.example"}, &testr, false, nil},
+		false, Result{true, StatusFail, false, false, dns.Domain{ASCII: "test.example"}, &testr, false, nil},
 	)
 
 	// No reject if subdomain has "none" policy.
@@ -229,7 +229,7 @@ func TestVerify(t *testing.T) {
 		[]dkim.Result{},
 		spf.StatusFail,
 		&dns.Domain{ASCII: "sub.subnone.example"},
-		true, Result{false, StatusFail, dns.Domain{ASCII: "subnone.example"}, &sub, false, nil},
+		true, Result{false, StatusFail, false, false, dns.Domain{ASCII: "subnone.example"}, &sub, false, nil},
 	)
 
 	// No reject if spf temperror and no other pass.
@@ -237,7 +237,7 @@ func TestVerify(t *testing.T) {
 		[]dkim.Result{},
 		spf.StatusTemperror,
 		&dns.Domain{ASCII: "mail.reject.example"},
-		true, Result{false, StatusTemperror, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
+		true, Result{false, StatusTemperror, false, false, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
 	)
 
 	// No reject if dkim temperror and no other pass.
@@ -253,7 +253,7 @@ func TestVerify(t *testing.T) {
 		},
 		spf.StatusNone,
 		nil,
-		true, Result{false, StatusTemperror, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
+		true, Result{false, StatusTemperror, false, false, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
 	)
 
 	// No reject if spf temperror but still dkim pass.
@@ -269,7 +269,7 @@ func TestVerify(t *testing.T) {
 		},
 		spf.StatusTemperror,
 		&dns.Domain{ASCII: "mail.reject.example"},
-		true, Result{false, StatusPass, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
+		true, Result{false, StatusPass, false, true, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
 	)
 
 	// No reject if dkim temperror but still spf pass.
@@ -285,7 +285,7 @@ func TestVerify(t *testing.T) {
 		},
 		spf.StatusPass,
 		&dns.Domain{ASCII: "mail.reject.example"},
-		true, Result{false, StatusPass, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
+		true, Result{false, StatusPass, true, false, dns.Domain{ASCII: "reject.example"}, &reject, false, nil},
 	)
 
 	// Bad DMARC record results in permerror without reject.
@@ -293,7 +293,7 @@ func TestVerify(t *testing.T) {
 		[]dkim.Result{},
 		spf.StatusNone,
 		nil,
-		false, Result{false, StatusPermerror, dns.Domain{ASCII: "malformed.example"}, nil, false, ErrSyntax},
+		false, Result{false, StatusPermerror, false, false, dns.Domain{ASCII: "malformed.example"}, nil, false, ErrSyntax},
 	)
 
 	// DKIM domain that is higher-level than organizational can not result in a pass. ../rfc/7489:525
@@ -309,6 +309,6 @@ func TestVerify(t *testing.T) {
 		},
 		spf.StatusNone,
 		nil,
-		true, Result{true, StatusFail, dns.Domain{ASCII: "example.com"}, &reject, false, nil},
+		true, Result{true, StatusFail, false, false, dns.Domain{ASCII: "example.com"}, &reject, false, nil},
 	)
 }

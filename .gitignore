@@ -5,6 +5,7 @@
 /testdata/check/
 /testdata/ctl/data/
 /testdata/ctl/dkim/
+/testdata/dmarcdb/data/
 /testdata/empty/
 /testdata/exportmaildir/
 /testdata/exportmbox/

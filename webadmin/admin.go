@@ -1546,7 +1546,7 @@ func (Admin) TLSRPTSummaries(ctx context.Context, start, end time.Time, domain s
 // end (most recent first), then by domain.
 func (Admin) DMARCReports(ctx context.Context, start, end time.Time, domain string) (reports []dmarcdb.DomainFeedback) {
 	reports, err := dmarcdb.RecordsPeriodDomain(ctx, start, end, domain)
-	xcheckf(ctx, err, "fetching dmarc reports from database")
+	xcheckf(ctx, err, "fetching dmarc aggregate reports from database")
 	sort.Slice(reports, func(i, j int) bool {
 		iend := reports[i].ReportMetadata.DateRange.End
 		jend := reports[j].ReportMetadata.DateRange.End
@@ -1565,9 +1565,9 @@ func (Admin) DMARCReportID(ctx context.Context, domain string, reportID int64) (
 		err = bstore.ErrAbsent
 	}
 	if err == bstore.ErrAbsent {
-		xcheckuserf(ctx, err, "fetching dmarc report from database")
+		xcheckuserf(ctx, err, "fetching dmarc aggregate report from database")
 	}
-	xcheckf(ctx, err, "fetching dmarc report from database")
+	xcheckf(ctx, err, "fetching dmarc aggregate report from database")
 	return report
 }
 
@@ -1589,7 +1589,7 @@ type DMARCSummary struct {
 // The returned summaries are ordered by domain name.
 func (Admin) DMARCSummaries(ctx context.Context, start, end time.Time, domain string) (domainSummaries []DMARCSummary) {
 	reports, err := dmarcdb.RecordsPeriodDomain(ctx, start, end, domain)
-	xcheckf(ctx, err, "fetching dmarc reports from database")
+	xcheckf(ctx, err, "fetching dmarc aggregate reports from database")
 	summaries := map[string]DMARCSummary{}
 	for _, r := range reports {
 		sum := summaries[r.Domain]
@@ -1931,4 +1931,32 @@ func (Admin) WebserverConfigSave(ctx context.Context, oldConf, newConf Webserver
 // Transports returns the configured transports, for sending email.
 func (Admin) Transports(ctx context.Context) map[string]config.Transport {
 	return mox.Conf.Static.Transports
+}
+
+// DMARCEvaluationStats returns a map of all domains with evaluations to a count of
+// the evaluations and whether those evaluations will cause a report to be sent.
+func (Admin) DMARCEvaluationStats(ctx context.Context) map[string]dmarcdb.EvaluationStat {
+	stats, err := dmarcdb.EvaluationStats(ctx)
+	xcheckf(ctx, err, "get evaluation stats")
+	return stats
+}
+
+// DMARCEvaluationsDomain returns all evaluations for aggregate reports for the
+// domain, sorted from oldest to most recent.
+func (Admin) DMARCEvaluationsDomain(ctx context.Context, domain string) (dns.Domain, []dmarcdb.Evaluation) {
+	dom, err := dns.ParseDomain(domain)
+	xcheckf(ctx, err, "parsing domain")
+
+	evals, err := dmarcdb.EvaluationsDomain(ctx, dom)
+	xcheckf(ctx, err, "get evaluations for domain")
+	return dom, evals
+}
+
+// DMARCRemoveEvaluations removes evaluations for a domain.
+func (Admin) DMARCRemoveEvaluations(ctx context.Context, domain string) {
+	dom, err := dns.ParseDomain(domain)
+	xcheckf(ctx, err, "parsing domain")
+
+	err = dmarcdb.RemoveEvaluationsDomain(ctx, dom)
+	xcheckf(ctx, err, "removing evaluations for domain")
 }

@@ -691,7 +691,8 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			Localpart: rcpt.Localpart,
 			IPDomain:  dns.IPDomain{Domain: rcpt.Domain},
 		}
-		_, err := queue.Add(ctx, log, reqInfo.AccountName, fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), dataFile, nil, m.RequireTLS)
+		qm := queue.MakeMsg(reqInfo.AccountName, fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS)
+		err := queue.Add(ctx, log, &qm, dataFile)
 		if err != nil {
 			metricSubmission.WithLabelValues("queueerror").Inc()
 		}

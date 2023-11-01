@@ -1,6 +1,7 @@
 package dmarcrpt
 
 import (
+	"encoding/xml"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -62,6 +63,7 @@ const reportExample = `<?xml version="1.0" encoding="UTF-8" ?>
 
 func TestParseReport(t *testing.T) {
 	var expect = &Feedback{
+		XMLName: xml.Name{Local: "feedback"},
 		ReportMetadata: ReportMetadata{
 			OrgName:          "google.com",
 			Email:            "noreply-dmarc-support@google.com",
@@ -126,7 +128,7 @@ func TestParseMessageReport(t *testing.T) {
 	dir := filepath.FromSlash("../testdata/dmarc-reports")
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatalf("listing dmarc report emails: %s", err)
+		t.Fatalf("listing dmarc aggregate report emails: %s", err)
 	}
 
 	for _, file := range files {

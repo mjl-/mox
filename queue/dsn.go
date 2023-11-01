@@ -6,6 +6,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dsn"
 	"github.com/mjl-/mox/message"
@@ -13,6 +16,15 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
+)
+
+var (
+	metricDMARCReportFailure = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "mox_queue_dmarcreport_failure_total",
+			Help: "Permanent failures to deliver a DMARC report.",
+		},
+	)
 )
 
 func deliverDSNFailure(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string) {
@@ -33,6 +45,12 @@ Error during the last delivery attempt:
 }
 
 func deliverDSNDelay(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, retryUntil time.Time) {
+	// Should not happen, but doesn't hurt to prevent sending delayed delivery
+	// notifications for DMARC reports. We don't want to waste postmaster attention.
+	if m.IsDMARCReport {
+		return
+	}
+
 	const subject = "mail delivery delayed"
 	message := fmt.Sprintf(`
 Delivery has been delayed of your email to:
@@ -133,7 +151,12 @@ func deliverDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg st
 	msgData = append(msgData, []byte("Return-Path: <"+dsnMsg.From.XString(m.SMTPUTF8)+">\r\n")...)
 
 	mailbox := "Inbox"
-	acc, err := store.OpenAccount(m.SenderAccount)
+	senderAccount := m.SenderAccount
+	if m.IsDMARCReport {
+		// senderAccount should already by postmaster, but doesn't hurt to ensure it.
+		senderAccount = mox.Conf.Static.Postmaster.Account
+	}
+	acc, err := store.OpenAccount(senderAccount)
 	if err != nil {
 		acc, err = store.OpenAccount(mox.Conf.Static.Postmaster.Account)
 		if err != nil {
@@ -171,6 +194,17 @@ func deliverDSN(log *mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg st
 		Size:      msgWriter.Size,
 		MsgPrefix: []byte{},
 	}
+
+	// If this is a DMARC report, deliver it as seen message to a submailbox of the
+	// postmaster mailbox. We mark it as seen so it doesn't waste postmaster attention,
+	// but we deliver them so they can be checked in case of problems.
+	if m.IsDMARCReport {
+		mailbox = fmt.Sprintf("%s/dmarc", mox.Conf.Static.Postmaster.Mailbox)
+		msg.Seen = true
+		metricDMARCReportFailure.Inc()
+		log.Info("delivering dsn for failure to deliver outgoing dmarc report")
+	}
+
 	acc.WithWLock(func() {
 		if err := acc.DeliverMailbox(log, mailbox, msg, msgFile); err != nil {
 			qlog("delivering dsn to mailbox", err)

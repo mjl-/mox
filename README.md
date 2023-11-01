@@ -8,7 +8,8 @@ See Quickstart below to get started.
 - SMTP (with extensions) for receiving, submitting and delivering email.
 - IMAP4 (with extensions) for giving email clients access to email.
 - Webmail for reading/sending email from the browser.
-- SPF/DKIM/DMARC for authenticating messages/delivery, also DMARC reports.
+- SPF/DKIM/DMARC for authenticating messages/delivery, also DMARC aggregate
+  reports.
 - Reputation tracking, learning (per user) host-, domain- and
   sender address-based reputation from (Non-)Junk email classification.
 - Bayesian spam filtering that learns (per user) from (Non-)Junk email.
@@ -113,7 +114,7 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- Sending DMARC and TLS reports (currently only receiving)
+- Sending TLS reports (currently only receiving)
 - Authentication other than HTTP-basic for webmail/webadmin/webaccount
 - Per-domain webmail and IMAP/SMTP host name (and TLS cert) and client settings
 - Make mox Go packages more easily reusable, each pulling in fewer (internal)

@@ -382,14 +382,14 @@ func Verify(ctx context.Context, resolver dns.Resolver, smtputf8 bool, policy fu
 
 		h, canonHeaderSimple, canonDataSimple, err := checkSignatureParams(ctx, sig)
 		if err != nil {
-			results = append(results, Result{StatusPermerror, nil, nil, false, err})
+			results = append(results, Result{StatusPermerror, sig, nil, false, err})
 			continue
 		}
 
 		// ../rfc/6376:2560
 		if err := policy(sig); err != nil {
 			err := fmt.Errorf("%w: %s", ErrPolicy, err)
-			results = append(results, Result{StatusPolicy, nil, nil, false, err})
+			results = append(results, Result{StatusPolicy, sig, nil, false, err})
 			continue
 		}
 

@@ -260,11 +260,13 @@ const index = async () => {
 			),
 		),
 		dom.br(),
-		dom.h2('Reporting'),
-		dom.div(dom.a('DMARC', attr({href: '#dmarc'}))),
+		dom.h2('Reports'),
+		dom.div(dom.a('DMARC', attr({href: '#dmarc/reports'}))),
 		dom.div(dom.a('TLS', attr({href: '#tlsrpt'}))),
+		dom.br(),
+		dom.h2('Operations'),
 		dom.div(dom.a('MTA-STS policies', attr({href: '#mtasts'}))),
-		// todo: outgoing DMARC findings
+		dom.div(dom.a('DMARC evaluations', attr({href: '#dmarc/evaluations'}))),
 		// todo: outgoing TLSRPT findings
 		// todo: routing, globally, per domain and per account
 		dom.br(),
@@ -418,6 +420,16 @@ const box = (color, ...l) => [
 	),
 	dom.br(),
 ]
+const inlineBox = (color, ...l) =>
+	dom.span(
+		style({
+			display: 'inline-block',
+			padding: color ? '0.05em 0.2em' : '',
+			backgroundColor: color,
+			borderRadius: '3px',
+		}),
+		l,
+	)
 
 const accounts = async () => {
 	const accounts = await api.Accounts()
@@ -1004,7 +1016,25 @@ const domainDNSCheck = async (d) => {
 	)
 }
 
-const dmarc = async () => {
+const dmarcIndex = async () => {
+	const page = document.getElementById('page')
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			'DMARC reports and evaluations',
+		),
+		dom.ul(
+			dom.li(
+				dom.a(attr({href: '#dmarc/reports'}), 'Reports'), ', incoming DMARC aggregate reports.',
+			),
+			dom.li(
+				dom.a(attr({href: '#dmarc/evaluations'}), 'Evaluations'), ', for outgoing DMARC aggregate reports.',
+			),
+		),
+	)
+}
+
+const dmarcReports = async () => {
 	const end = new Date().toISOString()
 	const start = new Date(new Date().getTime() - 30*24*3600*1000).toISOString()
 	const summaries = await api.DMARCSummaries(start, end, "")
@@ -1013,7 +1043,8 @@ const dmarc = async () => {
 	dom._kids(page,
 		crumbs(
 			crumblink('Mox Admin', '#'),
-			'DMARC aggregate reporting summary',
+			crumblink('DMARC', '#dmarc'),
+			'Aggregate reporting summary',
 		),
 		dom.p('DMARC reports are periodically sent by other mail servers that received an email message with a "From" header with our domain. Domains can have a DMARC DNS record that asks other mail servers to send these aggregate reports for analysis.'),
 		renderDMARCSummaries(summaries),
@@ -1049,6 +1080,167 @@ const renderDMARCSummaries = (summaries) => {
 			),
 		)
 	]
+}
+
+const dmarcEvaluations = async () => {
+	const evalStats = await api.DMARCEvaluationStats()
+
+	const isEmpty = (o) => {
+		for (const e in o) {
+			return false
+		}
+		return true
+	}
+
+	const page = document.getElementById('page')
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			crumblink('DMARC', '#dmarc'),
+			'Evaluations',
+		),
+		dom.p('Incoming messages are checked against the DMARC policy of the domain in the message From header. If the policy requests reporting on the resulting evaluations, they are stored in the database. Each interval of 1 to 24 hours, the evaluations may be sent to a reporting address specified in the domain\'s DMARC policy. Not all evaluations are a reason to send a report, but if a report is sent all evaluations are included.'),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('Domain', attr({title: 'Domain in the message From header. Keep in mind these can be forged, so this does not necessarily mean someone from this domain authentically tried delivering email.'})),
+					dom.th('Evaluations', attr({title: 'Total number of message delivery attempts, including retries.'})),
+					dom.th('Send report', attr({title: 'Whether the current evaluations will cause a report to be sent.'})),
+				),
+			),
+			dom.tbody(
+				Object.entries(evalStats).sort((a, b) => a[0] < b[0] ? -1 : 1).map(t =>
+					dom.tr(
+						dom.td(dom.a(attr({href: '#dmarc/evaluations/'+domainName(t[1].Domain)}), domainString(t[1].Domain))),
+						dom.td(style({textAlign: 'right'}), ''+t[1].Count),
+						dom.td(style({textAlign: 'right'}), t[1].SendReport ? '✓' : ''),
+					),
+				),
+				isEmpty(evalStats) ? dom.tr(dom.td(attr({colspan: '3'}), 'No evaluations.')) : [],
+			),
+		),
+	)
+}
+
+const dmarcEvaluationsDomain = async (domain) => {
+	const [d, evaluations] = await api.DMARCEvaluationsDomain(domain)
+
+	let lastInterval = ''
+	let lastAddresses = ''
+
+	const formatPolicy = (e) => {
+		const p = e.PolicyPublished
+		let s = ''
+		const add = (k, v) => {
+			if (v) {
+				s += k+'='+v+'; '
+			}
+		}
+		add('p', p.Policy)
+		add('sp', p.SubdomainPolicy)
+		add('adkim', p.ADKIM)
+		add('aspf', p.ASPF)
+		add('pct', ''+p.Percentage)
+		add('fo', ''+p.ReportingOptions)
+		return s
+	}
+	let lastPolicy = ''
+
+	const authStatus = (v) => inlineBox(v ? '' : yellow, v ? 'pass' : 'fail')
+	const formatDKIMResults = (results) => results.map(r => dom.div('selector '+r.Selector+(r.Domain !== domain ? ', domain '+r.Domain : '') + ': ', inlineBox(r.Result === "pass" ? '' : yellow, r.Result)))
+	const formatSPFResults = (results) => results.map(r => dom.div(''+r.Scope+(r.Domain !== domain ? ', domain '+r.Domain : '') + ': ', inlineBox(r.Result === "pass" ? '' : yellow, r.Result)))
+
+	const sourceIP = (ip) => {
+		const r = dom.span(ip, attr({title: 'Click to do a reverse lookup of the IP.'}), style({cursor: 'pointer'}), async function click(e) {
+			e.preventDefault()
+			try {
+				const rev = await api.LookupIP(ip)
+				r.innerText = ip + '\n' + rev.Hostnames.join('\n')
+			} catch (err) {
+				r.innerText = ip + '\nerror: ' +err.message
+			}
+		})
+		return r
+	}
+
+	const page = document.getElementById('page')
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			crumblink('DMARC', '#dmarc'),
+			crumblink('Evaluations', '#dmarc/evaluations'),
+			'Domain '+domainString(d),
+		),
+		dom.div(
+			dom.button('Remove evaluations', async function click(e) {
+				e.target.disabled = true
+				try {
+					await api.DMARCRemoveEvaluations(domain)
+					window.location.reload() // todo: only clear the table?
+				} catch (err) {
+					console.log({err})
+					window.alert('Error: ' + err.message)
+				} finally {
+					e.target.disabled = false
+				}
+			}),
+		),
+		dom.br(),
+		dom.p('The evaluations below will be sent in a DMARC aggregate report to the addresses found in the published DMARC DNS record, which is fetched again before sending the report. The fields Interval hours, Addresses and Policy are only filled for the first row and whenever a new value in the published DMARC record is encountered.'),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('ID'),
+					dom.th('Evaluated'),
+					dom.th('Optional', attr({title: 'Some evaluations will not cause a DMARC aggregate report to be sent. But if a report is sent, optional records are included.'})),
+					dom.th('Interval hours', attr({title: 'DMARC policies published by a domain can specify how often they would like to receive reports. The default is 24 hours, but can be as often as each hour. To keep reports comparable between different mail servers that send reports, reports are sent at rounded up intervals of whole hours that can divide a 24 hour day, and are aligned with the start of a day at UTC.'})),
+					dom.th('Addresses', attr({title: 'Addresses that will receive the report. An address can have a maximum report size configured. If there is no address, no report will be sent.'})),
+					dom.th('Policy', attr({title: 'Summary of the policy as encountered in the DMARC DNS record of the domain, and used for evaluation.'})),
+					dom.th('IP', attr({title: 'IP address of delivery attempt that was evaluated, relevant for SPF.'})),
+					dom.th('Disposition', attr({title: 'Our decision to accept/reject this message. It may be different than requested by the published policy. For example, when overriding due to delivery from a mailing list or forwarded address.'})),
+					dom.th('DKIM/SPF', attr({title: 'Whether DKIM and SPF had an aligned pass, where strict/relaxed alignment means whether the domain of an SPF pass and DKIM pass matches the exact domain (strict) or optionally a subdomain (relaxed). A DMARC pass requires at least one pass.'})),
+					dom.th('Envelope to', attr({title: 'Domain used in SMTP RCPT TO during delivery.'})),
+					dom.th('Envelope from', attr({title: 'Domain used in SMTP MAIL FROM during delivery.'})),
+					dom.th('Message from', attr({title: 'Domain in "From" message header.'})),
+					dom.th('DKIM details', attr({title: 'Results of verifying DKIM-Signature headers in message. Only signatures with matching organizational domain are included, regardless of strict/relaxed DKIM alignment in DMARC policy.'})),
+					dom.th('SPF details', attr({title: 'Results of SPF check used in DMARC evaluation. "mfrom" indicates the "SMTP MAIL FROM" domain was used, "helo" indicates the SMTP EHLO domain was used.'})),
+				),
+			),
+			dom.tbody(
+				evaluations.map(e => {
+					const ival = e.IntervalHours + 'h'
+					const interval = ival === lastInterval ? '' : ival
+					lastInterval = ival
+
+					const a = (e.Addresses || []).join('\n')
+					const addresses = a === lastAddresses ? '' : a
+					lastAddresses = a
+
+					const p = formatPolicy(e)
+					const policy = p === lastPolicy ? '' : p
+					lastPolicy = p
+
+					return dom.tr(
+						dom.td(''+e.ID),
+						dom.td(new Date(e.Evaluated).toUTCString()),
+						dom.td(e.Optional ? 'Yes' : ''),
+						dom.td(interval),
+						dom.td(addresses),
+						dom.td(policy),
+						dom.td(sourceIP(e.SourceIP)),
+						dom.td(inlineBox(e.Disposition === 'none' ? '' : 'red', e.Disposition), (e.OverrideReasons || []).length > 0 ? ' ('+e.OverrideReasons.map(r => r.Type).join(', ')+')' : ''),
+						dom.td(authStatus(e.AlignedDKIMPass), '/', authStatus(e.AlignedSPFPass)),
+						dom.td(e.EnvelopeTo),
+						dom.td(e.EnvelopeFrom),
+						dom.td(e.HeaderFrom),
+						dom.td(formatDKIMResults(e.DKIMResults || [])),
+						dom.td(formatSPFResults(e.SPFResults || [])),
+					)
+				}),
+				evaluations.length === 0 ? dom.tr(dom.td(attr({colspan: '14'}), 'No evaluations.')) : [],
+			),
+		),
+	)
 }
 
 const utcDate = (dt) => new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate(), dt.getUTCHours(), dt.getUTCMinutes(), dt.getUTCSeconds()))
@@ -2241,7 +2433,13 @@ const init = async () => {
 			} else if (h === 'tlsrpt') {
 				await tlsrpt()
 			} else if (h === 'dmarc') {
-				await dmarc()
+				await dmarcIndex()
+			} else if (h === 'dmarc/reports') {
+				await dmarcReports()
+			} else if (h === 'dmarc/evaluations') {
+				await dmarcEvaluations()
+			} else if (t[0] == 'dmarc' && t[1] == 'evaluations' && t.length === 3) {
+				await dmarcEvaluationsDomain(t[2])
 			} else if (h === 'mtasts') {
 				await mtasts()
 			} else if (h === 'dnsbl') {

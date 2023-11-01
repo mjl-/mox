@@ -192,9 +192,9 @@ Accounts:
 	err = dmarcdb.Init()
 	xcheckf(err, "dmarcdb init")
 	report, err := dmarcrpt.ParseReport(strings.NewReader(dmarcReport))
-	xcheckf(err, "parsing dmarc report")
+	xcheckf(err, "parsing dmarc aggregate report")
 	err = dmarcdb.AddReport(ctxbg, report, dns.Domain{ASCII: "mox.example"})
-	xcheckf(err, "adding dmarc report")
+	xcheckf(err, "adding dmarc aggregate report")
 
 	// Populate mtasts.db.
 	err = mtastsdb.Init(false)
@@ -233,7 +233,8 @@ Accounts:
 	const qmsg = "From: <test0@mox.example>\r\nTo: <other@remote.example>\r\nSubject: test\r\n\r\nthe message...\r\n"
 	_, err = fmt.Fprint(mf, qmsg)
 	xcheckf(err, "writing message")
-	_, err = queue.Add(ctxbg, log, "test0", mailfrom, rcptto, false, false, int64(len(qmsg)), "<test@localhost>", prefix, mf, nil, nil)
+	qm := queue.MakeMsg("test0", mailfrom, rcptto, false, false, int64(len(qmsg)), "<test@localhost>", prefix, nil)
+	err = queue.Add(ctxbg, log, &qm, mf)
 	xcheckf(err, "enqueue message")
 
 	// Create three accounts.

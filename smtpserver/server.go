@@ -37,6 +37,7 @@ import (
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"
 	"github.com/mjl-/mox/dmarcdb"
+	"github.com/mjl-/mox/dmarcrpt"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dsn"
 	"github.com/mjl-/mox/iprev"
@@ -1835,7 +1836,8 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		xmsgPrefix := append([]byte(recvHdrFor(rcptAcc.rcptTo.String())), msgPrefix...)
 
 		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-		if _, err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, dataFile, nil, c.requireTLS); err != nil {
+		qm := queue.MakeMsg(c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS)
+		if err := queue.Add(ctx, c.log, &qm, dataFile); err != nil {
 			// Aborting the transaction is not great. But continuing and generating DSNs will
 			// probably result in errors as well...
 			metricSubmission.WithLabelValues("queueerror").Inc()
@@ -2065,7 +2067,6 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		var comment string
 		var props []message.AuthProp
 		if r.Sig != nil {
-			// todo future: also specify whether dns record was dnssec-signed.
 			if r.Record != nil && r.Record.PublicKey != nil {
 				if pubkey, ok := r.Record.PublicKey.(*rsa.PublicKey); ok {
 					comment = fmt.Sprintf("%d bit rsa, ", pubkey.N.BitLen())
@@ -2167,6 +2168,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	var dmarcUse bool
 	var dmarcResult dmarc.Result
 	const applyRandomPercentage = true
+	// dmarcMethod is added to authResults when delivering to recipients: accounts can
+	// have different policy override rules.
 	var dmarcMethod message.AuthMethod
 	var msgFromValidation = store.ValidationNone
 	if msgFrom.IsZero() {
@@ -2177,6 +2180,15 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		}
 	} else {
 		msgFromValidation = alignment(ctx, msgFrom.Domain, dkimResults, receivedSPF.Result, spfIdentity)
+
+		// We are doing the DMARC evaluation now. But we only store it for inclusion in an
+		// aggregate report when we actually use it. We use an evaluation for each
+		// recipient, with each a potentially different result due to mailing
+		// list/forwarding configuration. If we reject a message due to being spam, we
+		// don't want to spend any resources for the sender domain, and we don't want to
+		// give the sender any more information about us, so we won't record the
+		// evaluation.
+		// todo future: also not send for first-time senders? they could be spammers getting through our filter, don't want to give them insights either. though we currently would have no reasonable way to decide if they are still reputationless at the time we are composing/sending aggregate reports.
 
 		dmarcctx, dmarccancel := context.WithTimeout(ctx, time.Minute)
 		defer dmarccancel()
@@ -2202,9 +2214,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			msgFromValidation = store.ValidationDMARC
 		}
 
-		// todo future: consider enforcing an spf fail if there is no dmarc policy or the dmarc policy is none. ../rfc/7489:1507
+		// todo future: consider enforcing an spf (soft)fail if there is no dmarc policy or the dmarc policy is none. ../rfc/7489:1507
 	}
-	authResults.Methods = append(authResults.Methods, dmarcMethod)
 	c.log.Debug("dmarc verification", mlog.Field("result", dmarcResult.Status), mlog.Field("domain", msgFrom.Domain))
 
 	// Prepare for analyzing content, calculating reputation.
@@ -2366,16 +2377,6 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			continue
 		}
 
-		// ../rfc/5321:3204
-		// Received-SPF header goes before Received. ../rfc/7208:2038
-		msgPrefix := []byte(
-			"Delivered-To: " + rcptAcc.rcptTo.XString(c.smtputf8) + "\r\n" + // ../rfc/9228:274
-				"Return-Path: <" + c.mailFrom.String() + ">\r\n" + // ../rfc/5321:3300
-				authResults.Header() +
-				receivedSPF.Header() +
-				recvHdrFor(rcptAcc.rcptTo.String()),
-		)
-
 		m := &store.Message{
 			Received:           time.Now(),
 			RemoteIP:           c.remoteIP.String(),
@@ -2398,16 +2399,187 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			MailFromValidation: mailFromValidation,
 			MsgFromValidation:  msgFromValidation,
 			DKIMDomains:        verifiedDKIMDomains,
-			Size:               int64(len(msgPrefix)) + msgWriter.Size,
-			MsgPrefix:          msgPrefix,
+			Size:               msgWriter.Size,
 		}
 		d := delivery{m, dataFile, rcptAcc, acc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, iprevStatus}
 		a := analyze(ctx, log, c.resolver, d)
-		if a.reason != "" {
-			xmoxreason := "X-Mox-Reason: " + a.reason + "\r\n"
-			m.MsgPrefix = append([]byte(xmoxreason), m.MsgPrefix...)
-			m.Size += int64(len(xmoxreason))
+
+		// Any DMARC result override is stored in the evaluation for outgoing DMARC
+		// aggregate reports, and added to the Authentication-Results message header.
+		var dmarcOverride string
+		if dmarcResult.Record != nil {
+			if !dmarcUse {
+				dmarcOverride = string(dmarcrpt.PolicyOverrideSampledOut)
+			} else if a.dmarcOverrideReason != "" && (a.accept && !m.IsReject) == dmarcResult.Reject {
+				dmarcOverride = a.dmarcOverrideReason
+			}
 		}
+
+		// Add per-recipient DMARC method to Authentication-Results. Each account can have
+		// their own override rules, e.g. based on configured mailing lists/forwards.
+		// ../rfc/7489:1486
+		rcptDMARCMethod := dmarcMethod
+		if dmarcOverride != "" {
+			if rcptDMARCMethod.Comment != "" {
+				rcptDMARCMethod.Comment += ", "
+			}
+			rcptDMARCMethod.Comment += "override " + dmarcOverride
+		}
+		rcptAuthResults := authResults
+		rcptAuthResults.Methods = append([]message.AuthMethod{}, authResults.Methods...)
+		rcptAuthResults.Methods = append(rcptAuthResults.Methods, rcptDMARCMethod)
+
+		// Prepend reason as message header, for easy display in mail clients.
+		var xmoxreason string
+		if a.reason != "" {
+			xmoxreason = "X-Mox-Reason: " + a.reason + "\r\n"
+		}
+
+		// ../rfc/5321:3204
+		// Received-SPF header goes before Received. ../rfc/7208:2038
+		m.MsgPrefix = []byte(
+			xmoxreason +
+				"Delivered-To: " + rcptAcc.rcptTo.XString(c.smtputf8) + "\r\n" + // ../rfc/9228:274
+				"Return-Path: <" + c.mailFrom.String() + ">\r\n" + // ../rfc/5321:3300
+				rcptAuthResults.Header() +
+				receivedSPF.Header() +
+				recvHdrFor(rcptAcc.rcptTo.String()),
+		)
+		m.Size += int64(len(m.MsgPrefix))
+
+		// Store DMARC evaluation for inclusion in an aggregate report. Only if there is at
+		// least one reporting address: We don't want to needlessly store a row in a
+		// database for each delivery attempt. If we reject a message for being junk, we
+		// are also not going to send it a DMARC report. The DMARC check is done early in
+		// the analysis, we will report on rejects because of DMARC, because it could be
+		// valuable feedback about forwarded or mailing list messages.
+		// ../rfc/7489:1492
+		if !mox.Conf.Static.NoOutgoingDMARCReports && dmarcResult.Record != nil && len(dmarcResult.Record.AggregateReportAddresses) > 0 && (a.accept && !m.IsReject || a.reason == reasonDMARCPolicy) {
+			// Disposition holds our decision on whether to accept the message. Not what the
+			// DMARC evaluation resulted in. We can override, e.g. because of mailing lists,
+			// forwarding, or local policy.
+			// We treat quarantine as reject, so never claim to quarantine.
+			// ../rfc/7489:1691
+			disposition := dmarcrpt.DispositionNone
+			if !a.accept {
+				disposition = dmarcrpt.DispositionReject
+			}
+
+			// unknownDomain returns whether the sender is domain with which this account has
+			// not had positive interaction.
+			unknownDomain := func() (unknown bool) {
+				err := acc.DB.Read(ctx, func(tx *bstore.Tx) (err error) {
+					// See if we received a non-junk message from this organizational domain.
+					q := bstore.QueryTx[store.Message](tx)
+					q.FilterNonzero(store.Message{MsgFromOrgDomain: m.MsgFromOrgDomain})
+					q.FilterEqual("Notjunk", false)
+					exists, err := q.Exists()
+					if err != nil {
+						return fmt.Errorf("querying for non-junk message from organizational domain: %v", err)
+					}
+					if exists {
+						return nil
+					}
+
+					// See if we sent a message to this organizational domain.
+					qr := bstore.QueryTx[store.Recipient](tx)
+					qr.FilterNonzero(store.Recipient{OrgDomain: m.MsgFromOrgDomain})
+					exists, err = qr.Exists()
+					if err != nil {
+						return fmt.Errorf("querying for message sent to organizational domain: %v", err)
+					}
+					if !exists {
+						unknown = true
+					}
+					return nil
+				})
+				if err != nil {
+					log.Errorx("checking if sender is unknown domain, for dmarc aggregate report evaluation", err)
+				}
+				return
+			}
+
+			r := dmarcResult.Record
+			addresses := make([]string, len(r.AggregateReportAddresses))
+			for i, a := range r.AggregateReportAddresses {
+				addresses[i] = a.String()
+			}
+			sp := dmarcrpt.Disposition(r.SubdomainPolicy)
+			if r.SubdomainPolicy == dmarc.PolicyEmpty {
+				sp = dmarcrpt.Disposition(r.Policy)
+			}
+			eval := dmarcdb.Evaluation{
+				// Evaluated and IntervalHours set by AddEvaluation.
+				PolicyDomain: dmarcResult.Domain.Name(),
+
+				// Optional evaluations don't cause a report to be sent, but will be included.
+				// Useful for automated inter-mailer messages, we don't want to get in a reporting
+				// loop. We also don't want to be used for sending reports to unsuspecting domains
+				// we have no relation with.
+				// todo: would it make sense to also mark some percentage of mailing-list-policy-overrides optional? to lower the load on mail servers of folks sending to large mailing lists.
+				Optional: rcptAcc.destination.DMARCReports || rcptAcc.destination.TLSReports || a.reason == reasonDMARCPolicy && unknownDomain(),
+
+				Addresses: addresses,
+
+				PolicyPublished: dmarcrpt.PolicyPublished{
+					Domain:          dmarcResult.Domain.Name(),
+					ADKIM:           dmarcrpt.Alignment(r.ADKIM),
+					ASPF:            dmarcrpt.Alignment(r.ASPF),
+					Policy:          dmarcrpt.Disposition(r.Policy),
+					SubdomainPolicy: sp,
+					Percentage:      r.Percentage,
+					// We don't save ReportingOptions, we don't do per-message failure reporting.
+				},
+				SourceIP:        c.remoteIP.String(),
+				Disposition:     disposition,
+				AlignedDKIMPass: dmarcResult.AlignedDKIMPass,
+				AlignedSPFPass:  dmarcResult.AlignedSPFPass,
+				EnvelopeTo:      rcptAcc.rcptTo.IPDomain.String(),
+				EnvelopeFrom:    c.mailFrom.IPDomain.String(),
+				HeaderFrom:      msgFrom.Domain.Name(),
+			}
+
+			if dmarcOverride != "" {
+				eval.OverrideReasons = []dmarcrpt.PolicyOverrideReason{
+					{Type: dmarcrpt.PolicyOverride(dmarcOverride)},
+				}
+			}
+
+			// We'll include all signatures for the organizational domain, even if they weren't
+			// relevant due to strict alignment requirement.
+			for _, dkimResult := range dkimResults {
+				if dkimResult.Sig == nil || publicsuffix.Lookup(ctx, msgFrom.Domain) != publicsuffix.Lookup(ctx, dkimResult.Sig.Domain) {
+					continue
+				}
+				r := dmarcrpt.DKIMAuthResult{
+					Domain:   dkimResult.Sig.Domain.Name(),
+					Selector: dkimResult.Sig.Selector.ASCII,
+					Result:   dmarcrpt.DKIMResult(dkimResult.Status),
+				}
+				eval.DKIMResults = append(eval.DKIMResults, r)
+			}
+
+			switch receivedSPF.Identity {
+			case spf.ReceivedHELO:
+				spfAuthResult := dmarcrpt.SPFAuthResult{
+					Domain: spfArgs.HelloDomain.String(), // Can be unicode and also IP.
+					Scope:  dmarcrpt.SPFDomainScopeHelo,
+					Result: dmarcrpt.SPFResult(receivedSPF.Result),
+				}
+				eval.SPFResults = []dmarcrpt.SPFAuthResult{spfAuthResult}
+			case spf.ReceivedMailFrom:
+				spfAuthResult := dmarcrpt.SPFAuthResult{
+					Domain: spfArgs.MailFromDomain.Name(), // Can be unicode.
+					Scope:  dmarcrpt.SPFDomainScopeMailFrom,
+					Result: dmarcrpt.SPFResult(receivedSPF.Result),
+				}
+				eval.SPFResults = []dmarcrpt.SPFAuthResult{spfAuthResult}
+			}
+
+			err := dmarcdb.AddEvaluation(ctx, dmarcResult.Record.AggregateReportingInterval, &eval)
+			log.Check(err, "adding dmarc evaluation to database for aggregate report")
+		}
+
 		if !a.accept {
 			conf, _ := acc.Conf()
 			if conf.RejectsMailbox != "" {
@@ -2455,9 +2627,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		if a.dmarcReport != nil {
 			// todo future: add rate limiting to prevent DoS attacks. ../rfc/7489:2570
 			if err := dmarcdb.AddReport(ctx, a.dmarcReport, msgFrom.Domain); err != nil {
-				log.Errorx("saving dmarc report in database", err)
+				log.Errorx("saving dmarc aggregate report in database", err)
 			} else {
-				log.Info("dmarc report processed")
+				log.Info("dmarc aggregate report processed")
 				m.Flags.Seen = true
 				delayFirstTime = false
 			}

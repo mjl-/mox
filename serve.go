@@ -52,7 +52,7 @@ func shutdown(log *mlog.Log) {
 
 // start initializes all packages, starts all listeners and the switchboard
 // goroutine, then returns.
-func start(mtastsdbRefresher, skipForkExec bool) error {
+func start(mtastsdbRefresher, sendDMARCReports, skipForkExec bool) error {
 	smtpserver.Listen()
 	imapserver.Listen()
 	http.Listen()
@@ -69,10 +69,6 @@ func start(mtastsdbRefresher, skipForkExec bool) error {
 		}
 	}
 
-	if err := dmarcdb.Init(); err != nil {
-		return fmt.Errorf("dmarc init: %s", err)
-	}
-
 	if err := mtastsdb.Init(mtastsdbRefresher); err != nil {
 		return fmt.Errorf("mtasts init: %s", err)
 	}
@@ -84,6 +80,14 @@ func start(mtastsdbRefresher, skipForkExec bool) error {
 	done := make(chan struct{}, 1)
 	if err := queue.Start(dns.StrictResolver{Pkg: "queue"}, done); err != nil {
 		return fmt.Errorf("queue start: %s", err)
+	}
+
+	// dmarcdb starts after queue because it may start sending reports through the queue.
+	if err := dmarcdb.Init(); err != nil {
+		return fmt.Errorf("dmarc init: %s", err)
+	}
+	if sendDMARCReports {
+		dmarcdb.Start(dns.StrictResolver{Pkg: "dmarcdb"})
 	}
 
 	store.StartAuthCache()

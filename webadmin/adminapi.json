@@ -753,6 +753,60 @@
 					]
 				}
 			]
+		},
+		{
+			"Name": "DMARCEvaluationStats",
+			"Docs": "DMARCEvaluationStats returns a map of all domains with evaluations to a count of\nthe evaluations and whether those evaluations will cause a report to be sent.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"{}",
+						"EvaluationStat"
+					]
+				}
+			]
+		},
+		{
+			"Name": "DMARCEvaluationsDomain",
+			"Docs": "DMARCEvaluationsDomain returns all evaluations for aggregate reports for the\ndomain, sorted from oldest to most recent.",
+			"Params": [
+				{
+					"Name": "domain",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "r1",
+					"Typewords": [
+						"[]",
+						"Evaluation"
+					]
+				}
+			]
+		},
+		{
+			"Name": "DMARCRemoveEvaluations",
+			"Docs": "DMARCRemoveEvaluations removes evaluations for a domain.",
+			"Params": [
+				{
+					"Name": "domain",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
 		}
 	],
 	"Sections": [],
@@ -2512,7 +2566,7 @@
 			"Fields": [
 				{
 					"Name": "Domain",
-					"Docs": "",
+					"Docs": "Domain is where DMARC record was found, not necessarily message From. Reports we generate use unicode names, incoming reports may have either ASCII-only or Unicode domains.",
 					"Typewords": [
 						"string"
 					]
@@ -2914,7 +2968,7 @@
 		},
 		{
 			"Name": "Msg",
-			"Docs": "Msg is a message in the queue.",
+			"Docs": "Msg is a message in the queue.\n\nUse MakeMsg to make a message with fields that Add needs. Add will further set\nqueueing related fields.",
 			"Fields": [
 				{
 					"Name": "ID",
@@ -2980,6 +3034,13 @@
 					]
 				},
 				{
+					"Name": "MaxAttempts",
+					"Docs": "Max number of attempts before giving up. If 0, then the default of 8 attempts is used instead.",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
 					"Name": "DialedIPs",
 					"Docs": "For each host, the IPs that were dialed. Used for IP selection for later attempts.",
 					"Typewords": [
@@ -3020,6 +3081,20 @@
 				{
 					"Name": "SMTPUTF8",
 					"Docs": "Whether message requires use of SMTPUTF8.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IsDMARCReport",
+					"Docs": "Delivery failures for DMARC reports are handled differently.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IsTLSReport",
+					"Docs": "Delivery failures for TLS reports are handled differently.",
 					"Typewords": [
 						"bool"
 					]
@@ -3438,6 +3513,162 @@
 					"Docs": "",
 					"Typewords": [
 						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "EvaluationStat",
+			"Docs": "EvaluationStat summarizes stored evaluations, for inclusion in an upcoming\naggregate report, for a domain.",
+			"Fields": [
+				{
+					"Name": "Count",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "SendReport",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Evaluation",
+			"Docs": "Evaluation is the result of an evaluation of a DMARC policy, to be included\nin a DMARC report.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "PolicyDomain",
+					"Docs": "Domain where DMARC policy was found, could be the organizational domain while evaluation was for a subdomain. Unicode. Same as domain found in PolicyPublished. A separate field for its index.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Evaluated",
+					"Docs": "Time of evaluation, determines which report (covering whole hours) this evaluation will be included in.",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Optional",
+					"Docs": "If optional, this evaluation is not a reason to send a DMARC report, but it will be included when a report is sent due to other non-optional evaluations. Set for evaluations of incoming DMARC reports. We don't want such deliveries causing us to send a report, or we would keep exchanging reporting messages forever. Also set for when evaluation is a DMARC reject for domains we haven't positively interacted with, to prevent being used to flood an unsuspecting domain with reports.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IntervalHours",
+					"Docs": "Effective aggregate reporting interval in hours. Between 1 and 24, rounded up from seconds from policy to first number that can divide 24.",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "Addresses",
+					"Docs": "\"rua\" in DMARC record, we only store evaluations for records with aggregate reporting addresses, so always non-empty.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "PolicyPublished",
+					"Docs": "Policy used for evaluation. We don't store the \"fo\" field for failure reporting options, since we don't send failure reports for individual messages.",
+					"Typewords": [
+						"PolicyPublished"
+					]
+				},
+				{
+					"Name": "SourceIP",
+					"Docs": "For \"row\" in a report record.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Disposition",
+					"Docs": "",
+					"Typewords": [
+						"Disposition"
+					]
+				},
+				{
+					"Name": "AlignedDKIMPass",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "AlignedSPFPass",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "OverrideReasons",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"PolicyOverrideReason"
+					]
+				},
+				{
+					"Name": "EnvelopeTo",
+					"Docs": "For \"identifiers\" in a report record.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "EnvelopeFrom",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "HeaderFrom",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "DKIMResults",
+					"Docs": "For \"auth_results\" in a report record.",
+					"Typewords": [
+						"[]",
+						"DKIMAuthResult"
+					]
+				},
+				{
+					"Name": "SPFResults",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"SPFAuthResult"
 					]
 				}
 			]

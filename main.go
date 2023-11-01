@@ -2436,13 +2436,13 @@ address must opt-in to receiving DMARC reports by creating a DMARC record at
 			return
 		}
 
-		accepts, status, _, txt, authentic, err := dmarc.LookupExternalReportsAccepted(context.Background(), dns.StrictResolver{}, domain, destdom)
+		accepts, status, _, txts, authentic, err := dmarc.LookupExternalReportsAccepted(context.Background(), dns.StrictResolver{}, domain, destdom)
 		var txtstr string
 		txtaddr := fmt.Sprintf("%s._report._dmarc.%s", domain.ASCII, destdom.ASCII)
-		if txt == "" {
-			txtstr = fmt.Sprintf(" (no txt record %s)", txtaddr)
+		if len(txts) == 0 {
+			txtstr = fmt.Sprintf(" (no txt records %s)", txtaddr)
 		} else {
-			txtstr = fmt.Sprintf(" (txt record %s: %q)", txtaddr, txt)
+			txtstr = fmt.Sprintf(" (txt record %s: %q)", txtaddr, txts)
 		}
 		if status != dmarc.StatusNone {
 			printResult("fail: %s%s", err, txtstr)

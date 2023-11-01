@@ -37,16 +37,17 @@ type delivery struct {
 }
 
 type analysis struct {
-	accept      bool
-	mailbox     string
-	code        int
-	secode      string
-	userError   bool
-	errmsg      string
-	err         error              // For our own logging, not sent to remote.
-	dmarcReport *dmarcrpt.Feedback // Validated dmarc aggregate report, not yet stored.
-	tlsReport   *tlsrpt.Report     // Validated TLS report, not yet stored.
-	reason      string             // If non-empty, reason for this decision. Can be one of reputationMethod and a few other tokens.
+	accept              bool
+	mailbox             string
+	code                int
+	secode              string
+	userError           bool
+	errmsg              string
+	err                 error              // For our own logging, not sent to remote.
+	dmarcReport         *dmarcrpt.Feedback // Validated DMARC aggregate report, not yet stored.
+	tlsReport           *tlsrpt.Report     // Validated TLS report, not yet stored.
+	reason              string             // If non-empty, reason for this decision. Can be one of reputationMethod and a few other tokens.
+	dmarcOverrideReason string             // If set, one of dmarcrpt.PolicyOverride
 }
 
 const (
@@ -64,7 +65,7 @@ const (
 	reasonDNSBlocklisted    = "dns-blocklisted"
 	reasonSubjectpass       = "subjectpass"
 	reasonSubjectpassError  = "subjectpass-error"
-	reasonIPrev             = "iprev" // No or mil junk reputation signals, and bad iprev.
+	reasonIPrev             = "iprev" // No or mild junk reputation signals, and bad iprev.
 )
 
 func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delivery) analysis {
@@ -83,14 +84,16 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		ld := rs.ListAllowDNSDomain
 		// todo: on temporary failures, reject temporarily?
 		if d.m.MailFromValidated && ld.Name() == d.m.MailFromDomain {
-			return analysis{accept: true, mailbox: mailbox, reason: reasonListAllow}
+			return analysis{accept: true, mailbox: mailbox, reason: reasonListAllow, dmarcOverrideReason: string(dmarcrpt.PolicyOverrideMailingList)}
 		}
 		for _, r := range d.dkimResults {
 			if r.Status == dkim.StatusPass && r.Sig.Domain == ld {
-				return analysis{accept: true, mailbox: mailbox, reason: reasonListAllow}
+				return analysis{accept: true, mailbox: mailbox, reason: reasonListAllow, dmarcOverrideReason: string(dmarcrpt.PolicyOverrideMailingList)}
 			}
 		}
 	}
+
+	var dmarcOverrideReason string
 
 	// For forwarded messages, we have different junk analysis. We don't reject for
 	// failing DMARC, and we clear fields that could implicate the forwarding mail
@@ -113,6 +116,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 			}
 		}
 		d.m.DKIMDomains = dkimdoms
+		dmarcOverrideReason = string(dmarcrpt.PolicyOverrideForwarded)
 		log.Info("forwarded message, clearing identifying signals of forwarding mail server")
 	}
 
@@ -154,7 +158,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 				})
 			})
 			if mberr != nil {
-				return analysis{false, mailbox, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError}
+				return analysis{false, mailbox, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, dmarcOverrideReason}
 			}
 			d.m.MailboxID = 0 // We plan to reject, no need to set intended MailboxID.
 		}
@@ -168,7 +172,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 			d.m.Seen = true
 			log.Info("accepting reject to configured mailbox due to ruleset")
 		}
-		return analysis{accept, mailbox, code, secode, err == nil, errmsg, err, nil, nil, reason}
+		return analysis{accept, mailbox, code, secode, err == nil, errmsg, err, nil, nil, reason, dmarcOverrideReason}
 	}
 
 	if d.dmarcUse && d.dmarcResult.Reject {
@@ -180,17 +184,17 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	// track of the report. We'll check reputation, defaulting to accept.
 	var dmarcReport *dmarcrpt.Feedback
 	if d.rcptAcc.destination.DMARCReports {
-		// Messages with DMARC aggregate reports must have a dmarc pass. ../rfc/7489:1866
+		// Messages with DMARC aggregate reports must have a DMARC pass. ../rfc/7489:1866
 		if d.dmarcResult.Status != dmarc.StatusPass {
-			log.Info("received dmarc report without dmarc pass, not processing as dmarc report")
+			log.Info("received dmarc aggregate report without dmarc pass, not processing as dmarc report")
 		} else if report, err := dmarcrpt.ParseMessageReport(log, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
-			log.Infox("parsing dmarc report", err)
+			log.Infox("parsing dmarc aggregate report", err)
 		} else if d, err := dns.ParseDomain(report.PolicyPublished.Domain); err != nil {
-			log.Infox("parsing domain in dmarc report", err)
+			log.Infox("parsing domain in dmarc aggregate report", err)
 		} else if _, ok := mox.Conf.Domain(d); !ok {
-			log.Info("dmarc report for domain not configured, ignoring", mlog.Field("domain", d))
+			log.Info("dmarc aggregate report for domain not configured, ignoring", mlog.Field("domain", d))
 		} else if report.ReportMetadata.DateRange.End > time.Now().Unix()+60 {
-			log.Info("dmarc report with end date in the future, ignoring", mlog.Field("domain", d), mlog.Field("end", time.Unix(report.ReportMetadata.DateRange.End, 0)))
+			log.Info("dmarc aggregate report with end date in the future, ignoring", mlog.Field("domain", d), mlog.Field("end", time.Unix(report.ReportMetadata.DateRange.End, 0)))
 		} else {
 			dmarcReport = report
 		}
@@ -261,12 +265,12 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	log.Info("reputation analyzed", mlog.Field("conclusive", conclusive), mlog.Field("isjunk", isjunk), mlog.Field("method", string(method)))
 	if conclusive {
 		if !*isjunk {
-			return analysis{accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reason}
+			return analysis{accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reason, dmarcOverrideReason: dmarcOverrideReason}
 		}
 		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, string(method))
 	} else if dmarcReport != nil || tlsReport != nil {
-		log.Info("accepting dmarc reporting or tlsrpt message without reputation")
-		return analysis{accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reasonReporting}
+		log.Info("accepting message with dmarc aggregate report or tls report without reputation")
+		return analysis{accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reasonReporting, dmarcOverrideReason: dmarcOverrideReason}
 	}
 	// If there was no previous message from sender or its domain, and we have an SPF
 	// (soft)fail, reject the message.
@@ -302,7 +306,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		pass := err == nil
 		log.Infox("pass by subject token", err, mlog.Field("pass", pass))
 		if pass {
-			return analysis{accept: true, mailbox: mailbox, reason: reasonSubjectpass}
+			return analysis{accept: true, mailbox: mailbox, reason: reasonSubjectpass, dmarcOverrideReason: dmarcOverrideReason}
 		}
 	}
 
@@ -382,7 +386,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	}
 
 	if accept {
-		return analysis{accept: true, mailbox: mailbox, reason: reasonNoBadSignals}
+		return analysis{accept: true, mailbox: mailbox, reason: reasonNoBadSignals, dmarcOverrideReason: dmarcOverrideReason}
 	}
 
 	if subjectpassKey != "" && d.dmarcResult.Status == dmarc.StatusPass && method == methodNone && (dnsblocklisted || junkSubjectpass) {

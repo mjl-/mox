@@ -70,6 +70,9 @@ var DB *bstore.DB          // Exported for making backups.
 var Localserve bool
 
 // Msg is a message in the queue.
+//
+// Use MakeMsg to make a message with fields that Add needs. Add will further set
+// queueing related fields.
 type Msg struct {
 	ID                 int64
 	Queued             time.Time      `bstore:"default now"`
@@ -80,15 +83,19 @@ type Msg struct {
 	RecipientDomain    dns.IPDomain
 	RecipientDomainStr string              // For filtering.
 	Attempts           int                 // Next attempt is based on last attempt and exponential back off based on attempts.
+	MaxAttempts        int                 // Max number of attempts before giving up. If 0, then the default of 8 attempts is used instead.
 	DialedIPs          map[string][]net.IP // For each host, the IPs that were dialed. Used for IP selection for later attempts.
 	NextAttempt        time.Time           // For scheduling.
 	LastAttempt        *time.Time
 	LastError          string
-	Has8bit            bool   // Whether message contains bytes with high bit set, determines whether 8BITMIME SMTP extension is needed.
-	SMTPUTF8           bool   // Whether message requires use of SMTPUTF8.
-	Size               int64  // Full size of message, combined MsgPrefix with contents of message file.
-	MessageID          string // Used when composing a DSN, in its References header.
-	MsgPrefix          []byte
+
+	Has8bit       bool   // Whether message contains bytes with high bit set, determines whether 8BITMIME SMTP extension is needed.
+	SMTPUTF8      bool   // Whether message requires use of SMTPUTF8.
+	IsDMARCReport bool   // Delivery failures for DMARC reports are handled differently.
+	IsTLSReport   bool   // Delivery failures for TLS reports are handled differently.
+	Size          int64  // Full size of message, combined MsgPrefix with contents of message file.
+	MessageID     string // Used when composing a DSN, in its References header.
+	MsgPrefix     []byte
 
 	// If set, this message is a DSN and this is a version using utf-8, for the case
 	// the remote MTA supports smtputf8. In this case, Size and MsgPrefix are not
@@ -188,44 +195,71 @@ func Count(ctx context.Context) (int, error) {
 	return bstore.QueryDB[Msg](ctx, DB).Count()
 }
 
+// MakeMsg is a convenience function that sets the commonly used fields for a Msg.
+func MakeMsg(senderAccount string, sender, recipient smtp.Path, has8bit, smtputf8 bool, size int64, messageID string, prefix []byte, requireTLS *bool) Msg {
+	return Msg{
+		SenderAccount:      mox.Conf.Static.Postmaster.Account,
+		SenderLocalpart:    sender.Localpart,
+		SenderDomain:       sender.IPDomain,
+		RecipientLocalpart: recipient.Localpart,
+		RecipientDomain:    recipient.IPDomain,
+		Has8bit:            has8bit,
+		SMTPUTF8:           smtputf8,
+		Size:               size,
+		MessageID:          messageID,
+		MsgPrefix:          prefix,
+		RequireTLS:         requireTLS,
+	}
+}
+
 // Add a new message to the queue. The queue is kicked immediately to start a
 // first delivery attempt.
 //
-// dnsutf8Opt is a utf8-version of the message, to be used only for DNSs. If set,
-// this data is used as the message when delivering the DSN and the remote SMTP
-// server supports SMTPUTF8. If the remote SMTP server does not support SMTPUTF8,
-// the regular non-utf8 message is delivered.
-func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcptTo smtp.Path, has8bit, smtputf8 bool, size int64, messageID string, msgPrefix []byte, msgFile *os.File, dsnutf8Opt []byte, requireTLS *bool) (int64, error) {
+// ID must be 0 and will be set after inserting in the queue.
+//
+// Add sets derived fields like RecipientDomainStr, and fields related to queueing,
+// such as Queued, NextAttempt, LastAttempt, LastError.
+func Add(ctx context.Context, log *mlog.Log, qm *Msg, msgFile *os.File) error {
 	// todo: Add should accept multiple rcptTo if they are for the same domain. so we can queue them for delivery in one (or just a few) session(s), transferring the data only once. ../rfc/5321:3759
 
+	if qm.ID != 0 {
+		return fmt.Errorf("id of queued message must be 0")
+	}
+	qm.Queued = time.Now()
+	qm.DialedIPs = nil
+	qm.NextAttempt = qm.Queued
+	qm.LastAttempt = nil
+	qm.LastError = ""
+	qm.RecipientDomainStr = formatIPDomain(qm.RecipientDomain)
+
 	if Localserve {
-		if senderAccount == "" {
-			return 0, fmt.Errorf("cannot queue with localserve without local account")
+		if qm.SenderAccount == "" {
+			return fmt.Errorf("cannot queue with localserve without local account")
 		}
-		acc, err := store.OpenAccount(senderAccount)
+		acc, err := store.OpenAccount(qm.SenderAccount)
 		if err != nil {
-			return 0, fmt.Errorf("opening sender account for immediate delivery with localserve: %v", err)
+			return fmt.Errorf("opening sender account for immediate delivery with localserve: %v", err)
 		}
 		defer func() {
 			err := acc.Close()
 			log.Check(err, "closing account")
 		}()
-		m := store.Message{Size: size, MsgPrefix: msgPrefix}
+		m := store.Message{Size: qm.Size, MsgPrefix: qm.MsgPrefix}
 		conf, _ := acc.Conf()
-		dest := conf.Destinations[mailFrom.String()]
+		dest := conf.Destinations[qm.Sender().String()]
 		acc.WithWLock(func() {
 			err = acc.DeliverDestination(log, dest, &m, msgFile)
 		})
 		if err != nil {
-			return 0, fmt.Errorf("delivering message: %v", err)
+			return fmt.Errorf("delivering message: %v", err)
 		}
 		log.Debug("immediately delivered from queue to sender")
-		return 0, nil
+		return nil
 	}
 
 	tx, err := DB.Begin(ctx, true)
 	if err != nil {
-		return 0, fmt.Errorf("begin transaction: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		if tx != nil {
@@ -235,11 +269,8 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 		}
 	}()
 
-	now := time.Now()
-	qm := Msg{0, now, senderAccount, mailFrom.Localpart, mailFrom.IPDomain, rcptTo.Localpart, rcptTo.IPDomain, formatIPDomain(rcptTo.IPDomain), 0, nil, now, nil, "", has8bit, smtputf8, size, messageID, msgPrefix, dsnutf8Opt, "", requireTLS}
-
-	if err := tx.Insert(&qm); err != nil {
-		return 0, err
+	if err := tx.Insert(qm); err != nil {
+		return err
 	}
 
 	dst := qm.MessagePath()
@@ -252,19 +283,19 @@ func Add(ctx context.Context, log *mlog.Log, senderAccount string, mailFrom, rcp
 	dstDir := filepath.Dir(dst)
 	os.MkdirAll(dstDir, 0770)
 	if err := moxio.LinkOrCopy(log, dst, msgFile.Name(), nil, true); err != nil {
-		return 0, fmt.Errorf("linking/copying message to new file: %s", err)
+		return fmt.Errorf("linking/copying message to new file: %s", err)
 	} else if err := moxio.SyncDir(dstDir); err != nil {
-		return 0, fmt.Errorf("sync directory: %v", err)
+		return fmt.Errorf("sync directory: %v", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit transaction: %s", err)
+		return fmt.Errorf("commit transaction: %s", err)
 	}
 	tx = nil
 	dst = ""
 
 	queuekick()
-	return qm.ID, nil
+	return nil
 }
 
 func formatIPDomain(d dns.IPDomain) string {

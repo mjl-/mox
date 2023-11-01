@@ -124,8 +124,9 @@ during those commands instead of during "data".
 	queue.Localserve = true
 
 	const mtastsdbRefresher = false
+	const sendDMARCReports = false
 	const skipForkExec = true
-	if err := start(mtastsdbRefresher, skipForkExec); err != nil {
+	if err := start(mtastsdbRefresher, sendDMARCReports, skipForkExec); err != nil {
 		log.Fatalx("starting mox", err)
 	}
 	golog.Printf("mox, version %s", moxvar.Version)

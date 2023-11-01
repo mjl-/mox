@@ -549,6 +549,13 @@ describe-static" and "mox config describe-domains":
 				# typically the hostname of the host in the Address field.
 				RemoteHostname:
 
+	# Do not send DMARC reports (aggregate only). By default, aggregate reports on
+	# DMARC evaluations are sent to domains if their DMARC policy requests them.
+	# Reports are sent at whole hours, with a minimum of 1 hour and maximum of 24
+	# hours, rounded up so a whole number of intervals cover 24 hours, aligned at
+	# whole days in UTC. (optional)
+	NoOutgoingDMARCReports: false
+
 # domains.conf
 
 	# NOTE: This config file is in 'sconf' format. Indent with tabs. Comments must be

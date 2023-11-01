@@ -107,6 +107,10 @@ func NewAddress(localpart Localpart, domain dns.Domain) Address {
 	return Address{localpart, domain}
 }
 
+func (a Address) Path() Path {
+	return Path{Localpart: a.Localpart, IPDomain: dns.IPDomain{Domain: a.Domain}}
+}
+
 func (a Address) IsZero() bool {
 	return a == Address{}
 }

@@ -17,7 +17,7 @@ import (
 	"github.com/mjl-/mox/moxio"
 )
 
-var ErrNoReport = errors.New("no dmarc report found in message")
+var ErrNoReport = errors.New("no dmarc aggregate report found in message")
 
 // ParseReport parses an XML aggregate feedback report.
 // The maximum report size is 20MB.

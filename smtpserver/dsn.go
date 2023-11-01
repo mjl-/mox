@@ -50,7 +50,9 @@ func queueDSN(ctx context.Context, c *conn, rcptTo smtp.Path, m dsn.Message, req
 	if requireTLS {
 		reqTLS = &requireTLS
 	}
-	if _, err := queue.Add(ctx, c.log, "", smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), m.MessageID, nil, f, bufUTF8, reqTLS); err != nil {
+	qm := queue.MakeMsg("", smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), m.MessageID, nil, reqTLS)
+	qm.DSNUTF8 = bufUTF8
+	if err := queue.Add(ctx, c.log, &qm, f); err != nil {
 		return err
 	}
 	return nil

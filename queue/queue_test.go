@@ -110,10 +110,14 @@ func TestQueue(t *testing.T) {
 	defer os.Remove(mf.Name())
 	defer mf.Close()
 
-	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil, nil)
+	var qm Msg
+
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
 
-	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil, nil)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
 
 	msgs, err = List(ctxbg)
@@ -440,7 +444,8 @@ func TestQueue(t *testing.T) {
 
 	// Add a message to be delivered with submit because of its route.
 	topath := smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "submit.example"}}}
-	_, err = Add(ctxbg, xlog, "mjl", path, topath, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil, nil)
+	qm = MakeMsg("mjl", path, topath, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
 	wasNetDialer = testDeliver(fakeSubmitServer)
 	if !wasNetDialer {
@@ -448,10 +453,11 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Add a message to be delivered with submit because of explicitly configured transport, that uses TLS.
-	msgID, err := Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil, nil)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
 	transportSubmitTLS := "submittls"
-	n, err = Kick(ctxbg, msgID, "", "", &transportSubmitTLS)
+	n, err = Kick(ctxbg, qm.ID, "", "", &transportSubmitTLS)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -472,10 +478,11 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Add a message to be delivered with socks.
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<socks@localhost>", nil, mf, nil, nil)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<socks@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
 	transportSocks := "socks"
-	n, err = Kick(ctxbg, msgID, "", "", &transportSocks)
+	n, err = Kick(ctxbg, qm.ID, "", "", &transportSocks)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -486,9 +493,10 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Add message to be delivered with opportunistic TLS verification.
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, mf, nil, nil)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, msgID, "", "", nil)
+	n, err = Kick(ctxbg, qm.ID, "", "", nil)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -496,9 +504,10 @@ func TestQueue(t *testing.T) {
 	testDeliver(fakeSMTPSTARTTLSServer)
 
 	// Test fallback to plain text with TLS handshake fails.
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<badtls@localhost>", nil, mf, nil, nil)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<badtls@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, msgID, "", "", nil)
+	n, err = Kick(ctxbg, qm.ID, "", "", nil)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -512,9 +521,10 @@ func TestQueue(t *testing.T) {
 			{Usage: adns.TLSAUsageDANEEE, Selector: adns.TLSASelectorSPKI, MatchType: adns.TLSAMatchTypeFull, CertAssoc: moxCert.Leaf.RawSubjectPublicKeyInfo},
 		},
 	}
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<dane@localhost>", nil, mf, nil, nil)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<dane@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, msgID, "", "", nil)
+	n, err = Kick(ctxbg, qm.ID, "", "", nil)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -530,9 +540,10 @@ func TestQueue(t *testing.T) {
 
 	// Add message to be delivered with verified TLS and REQUIRETLS.
 	yes := true
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, mf, nil, &yes)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, &yes)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, msgID, "", "", nil)
+	n, err = Kick(ctxbg, qm.ID, "", "", nil)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -545,9 +556,10 @@ func TestQueue(t *testing.T) {
 			{},
 		},
 	}
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<daneunusable@localhost>", nil, mf, nil, nil)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<daneunusable@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, msgID, "", "", nil)
+	n, err = Kick(ctxbg, qm.ID, "", "", nil)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -562,9 +574,10 @@ func TestQueue(t *testing.T) {
 			{Usage: adns.TLSAUsageDANEEE, Selector: adns.TLSASelectorSPKI, MatchType: adns.TLSAMatchTypeFull, CertAssoc: make([]byte, sha256.Size)},
 		},
 	}
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<daneinsecure@localhost>", nil, mf, nil, nil)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<daneinsecure@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, msgID, "", "", nil)
+	n, err = Kick(ctxbg, qm.ID, "", "", nil)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -581,9 +594,10 @@ func TestQueue(t *testing.T) {
 
 	// Check that message is delivered with TLS-Required: No and non-matching DANE record.
 	no := false
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<tlsrequirednostarttls@localhost>", nil, mf, nil, &no)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<tlsrequirednostarttls@localhost>", nil, &no)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, msgID, "", "", nil)
+	n, err = Kick(ctxbg, qm.ID, "", "", nil)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -591,9 +605,10 @@ func TestQueue(t *testing.T) {
 	testDeliver(fakeSMTPSTARTTLSServer)
 
 	// Check that message is delivered with TLS-Required: No and bad TLS, falling back to plain text.
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<tlsrequirednoplaintext@localhost>", nil, mf, nil, &no)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<tlsrequirednoplaintext@localhost>", nil, &no)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, msgID, "", "", nil)
+	n, err = Kick(ctxbg, qm.ID, "", "", nil)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -601,9 +616,10 @@ func TestQueue(t *testing.T) {
 	testDeliver(makeBadFakeSMTPSTARTTLSServer(true))
 
 	// Add message with requiretls that fails immediately due to no REQUIRETLS support in all servers.
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<tlsrequiredunsupported@localhost>", nil, mf, nil, &yes)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<tlsrequiredunsupported@localhost>", nil, &yes)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, msgID, "", "", nil)
+	n, err = Kick(ctxbg, qm.ID, "", "", nil)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -615,9 +631,10 @@ func TestQueue(t *testing.T) {
 	resolver.TLSA = nil
 
 	// Add message with requiretls that fails immediately due to no verification policy for recipient domain.
-	msgID, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<tlsrequirednopolicy@localhost>", nil, mf, nil, &yes)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<tlsrequirednopolicy@localhost>", nil, &yes)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, msgID, "", "", nil)
+	n, err = Kick(ctxbg, qm.ID, "", "", nil)
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
@@ -629,7 +646,8 @@ func TestQueue(t *testing.T) {
 	})
 
 	// Add another message that we'll fail to deliver entirely.
-	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil, nil)
+	qm = MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
 
 	msgs, err = List(ctxbg)
@@ -788,7 +806,8 @@ func TestQueueStart(t *testing.T) {
 	mf := prepareFile(t)
 	defer os.Remove(mf.Name())
 	defer mf.Close()
-	_, err = Add(ctxbg, xlog, "mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, mf, nil, nil)
+	qm := MakeMsg("mjl", path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	err = Add(ctxbg, xlog, &qm, mf)
 	tcheck(t, err, "add message to queue for delivery")
 	checkDialed(true)
 
