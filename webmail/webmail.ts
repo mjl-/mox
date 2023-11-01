@@ -2364,7 +2364,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	let msgheaderdetailsElem: HTMLElement | null = null // When full headers are visible, or some headers are requested through settings.
 
 	const msgmetaElem = dom.div(
-		style({backgroundColor: '#f8f8f8', borderBottom: '1px solid #ccc', maxHeight: '90%', overflowY: 'auto'}),
+		style({backgroundColor: '#f8f8f8', borderBottom: '5px solid white', maxHeight: '90%', overflowY: 'auto'}),
 		attr.role('region'), attr.arialabel('Buttons and headers for message'),
 		msgbuttonElem=dom.div(),
 		dom.div(
@@ -2373,6 +2373,9 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			msgattachmentElem=dom.div(),
 			msgmodeElem=dom.div(),
 		),
+		// Explicit gray line with white border below that separates headers from body, to
+		// prevent HTML messages from faking UI elements.
+		dom.div(style({height: '2px', backgroundColor: '#ccc'})),
 	)
 
 	const msgscrollElem = dom.div(dom._class('pad', 'yscrollauto'),
