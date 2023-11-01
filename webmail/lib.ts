@@ -316,10 +316,11 @@ const formatAddressFull = (a: api.MessageAddress): string => {
 	return s
 }
 
-// format just the name, or otherwies just the email address.
+// format just the name if present and it doesn't look like an address, or otherwise just the email address.
 const formatAddressShort = (a: api.MessageAddress): string => {
-	if (a.Name) {
-		return a.Name
+	const n = a.Name
+	if (n && !n.includes('<') && !n.includes('@') && !n.includes('>')) {
+		return n
 	}
 	return '<' + a.User + '@' + a.Domain.ASCII + '>'
 }

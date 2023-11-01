@@ -1744,7 +1744,7 @@ interface MsgitemView {
 	// Sub messages in thread. Can be further descendants, when an intermediate message
 	// is missing.
 	kids: MsgitemView[]
-	// Whether this thread root is collapsed. If so, the root is visible, all descedants
+	// Whether this thread root is collapsed. If so, the root is visible, all descendants
 	// are not. Value is only valid if this is a thread root.
 	collapsed: boolean
 
