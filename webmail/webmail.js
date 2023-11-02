@@ -1040,7 +1040,7 @@ To simulate slow API calls and SSE events:
 
 Show additional headers of messages:
 
-	settingsPut({...settings, showHeaders: ['User-Agent', 'X-Mailer', 'Message-Id', 'List-Id', 'List-Post', 'X-Mox-Reason', 'TLS-Required']})
+	settingsPut({...settings, showHeaders: ['Delivered-To', 'User-Agent', 'X-Mailer', 'Message-Id', 'List-Id', 'List-Post', 'X-Mox-Reason', 'TLS-Required']})
 
 Enable logging and reload afterwards:
 
