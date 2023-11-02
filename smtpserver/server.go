@@ -2411,24 +2411,26 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 		// Any DMARC result override is stored in the evaluation for outgoing DMARC
 		// aggregate reports, and added to the Authentication-Results message header.
-		var dmarcOverride string
-		if dmarcResult.Record != nil {
-			if !dmarcUse {
-				dmarcOverride = string(dmarcrpt.PolicyOverrideSampledOut)
-			} else if a.dmarcOverrideReason != "" && (a.accept && !m.IsReject) == dmarcResult.Reject {
-				dmarcOverride = a.dmarcOverrideReason
-			}
+		// We want to tell the sender that we have an override, e.g. for mailing lists, so
+		// they don't overestimate the potential damage of switching from p=none to
+		// p=reject.
+		var dmarcOverrides []string
+		if a.dmarcOverrideReason != "" {
+			dmarcOverrides = []string{a.dmarcOverrideReason}
+		}
+		if dmarcResult.Record != nil && !dmarcUse {
+			dmarcOverrides = append(dmarcOverrides, string(dmarcrpt.PolicyOverrideSampledOut))
 		}
 
 		// Add per-recipient DMARC method to Authentication-Results. Each account can have
 		// their own override rules, e.g. based on configured mailing lists/forwards.
 		// ../rfc/7489:1486
 		rcptDMARCMethod := dmarcMethod
-		if dmarcOverride != "" {
+		if len(dmarcOverrides) > 0 {
 			if rcptDMARCMethod.Comment != "" {
 				rcptDMARCMethod.Comment += ", "
 			}
-			rcptDMARCMethod.Comment += "override " + dmarcOverride
+			rcptDMARCMethod.Comment += "override " + strings.Join(dmarcOverrides, ",")
 		}
 		rcptAuthResults := authResults
 		rcptAuthResults.Methods = append([]message.AuthMethod{}, authResults.Methods...)
@@ -2477,7 +2479,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					// See if we received a non-junk message from this organizational domain.
 					q := bstore.QueryTx[store.Message](tx)
 					q.FilterNonzero(store.Message{MsgFromOrgDomain: m.MsgFromOrgDomain})
-					q.FilterEqual("Notjunk", false)
+					q.FilterEqual("Notjunk", true)
 					exists, err := q.Exists()
 					if err != nil {
 						return fmt.Errorf("querying for non-junk message from organizational domain: %v", err)
@@ -2544,10 +2546,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				HeaderFrom:      msgFrom.Domain.Name(),
 			}
 
-			if dmarcOverride != "" {
-				eval.OverrideReasons = []dmarcrpt.PolicyOverrideReason{
-					{Type: dmarcrpt.PolicyOverride(dmarcOverride)},
-				}
+			for _, s := range dmarcOverrides {
+				reason := dmarcrpt.PolicyOverrideReason{Type: dmarcrpt.PolicyOverride(s)}
+				eval.OverrideReasons = append(eval.OverrideReasons, reason)
 			}
 
 			// We'll include all signatures for the organizational domain, even if they weren't
