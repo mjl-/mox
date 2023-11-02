@@ -1817,6 +1817,13 @@
 					]
 				},
 				{
+					"Name": "IsMailingList",
+					"Docs": "If received message was known to match a mailing list rule (with modified junk filtering).",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
 					"Name": "ReceivedTLSVersion",
 					"Docs": "0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.",
 					"Typewords": [

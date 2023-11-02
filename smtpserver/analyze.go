@@ -68,6 +68,18 @@ const (
 	reasonIPrev             = "iprev" // No or mild junk reputation signals, and bad iprev.
 )
 
+func isListDomain(d delivery, ld dns.Domain) bool {
+	if d.m.MailFromValidated && ld.Name() == d.m.MailFromDomain {
+		return true
+	}
+	for _, r := range d.dkimResults {
+		if r.Status == dkim.StatusPass && r.Sig.Domain == ld {
+			return true
+		}
+	}
+	return false
+}
+
 func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delivery) analysis {
 	mailbox := d.rcptAcc.destination.Mailbox
 	if mailbox == "" {
@@ -81,15 +93,10 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		mailbox = rs.Mailbox
 	}
 	if rs != nil && !rs.ListAllowDNSDomain.IsZero() {
-		ld := rs.ListAllowDNSDomain
 		// todo: on temporary failures, reject temporarily?
-		if d.m.MailFromValidated && ld.Name() == d.m.MailFromDomain {
+		if isListDomain(d, rs.ListAllowDNSDomain) {
+			d.m.IsMailingList = true
 			return analysis{accept: true, mailbox: mailbox, reason: reasonListAllow, dmarcOverrideReason: string(dmarcrpt.PolicyOverrideMailingList)}
-		}
-		for _, r := range d.dkimResults {
-			if r.Status == dkim.StatusPass && r.Sig.Domain == ld {
-				return analysis{accept: true, mailbox: mailbox, reason: reasonListAllow, dmarcOverrideReason: string(dmarcrpt.PolicyOverrideMailingList)}
-			}
 		}
 	}
 

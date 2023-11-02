@@ -1127,6 +1127,8 @@ type ComposeOptions = {
 	// Message is marked as replied/answered or forwarded after submitting, and
 	// In-Reply-To and References headers are added pointing to this message.
 	responseMessageID?: number
+	// Whether message is to a list, due to List-Id header.
+	isList?: boolean
 }
 
 interface ComposeView {
@@ -1323,8 +1325,9 @@ const compose = (opts: ComposeOptions) => {
 				aborter.abort = undefined
 				v.recipientSecurity = rs
 				if (isRecipient) {
-					// If all recipients implement REQUIRETLS, we can enable it.
-					let reqtls = true
+					// If we are not replying to a message from a mailing list, and all recipients
+					// implement REQUIRETLS, we enable it.
+					let reqtls = opts.isList !== true
 					const walk = (l: AddrView[]) => {
 						for (const v of l) {
 							if (v.recipientSecurity?.RequireTLS !== api.SecurityResult.SecurityResultYes) {
@@ -2223,6 +2226,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			isForward: forward,
 			attachmentsMessageItem: forward ? mi : undefined,
 			responseMessageID: m.ID,
+			isList: m.IsMailingList,
 		}
 		if (all) {
 			opts.to = (to || []).concat((mi.Envelope.To || []).filter(a => !envelopeIdentity([a]))).map(a => formatAddress(a))

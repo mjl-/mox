@@ -482,6 +482,10 @@ type Message struct {
 	// Changes are propagated to the webmail client.
 	ThreadCollapsed bool
 
+	// If received message was known to match a mailing list rule (with modified junk
+	// filtering).
+	IsMailingList bool
+
 	ReceivedTLSVersion     uint16 // 0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.
 	ReceivedTLSCipherSuite uint16
 	ReceivedRequireTLS     bool // Whether RequireTLS was known to be used for incoming delivery.
