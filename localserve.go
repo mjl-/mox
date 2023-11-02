@@ -66,8 +66,10 @@ during those commands instead of during "data".
 	}
 
 	var dir, ip string
+	var initOnly bool
 	c.flag.StringVar(&dir, "dir", filepath.Join(userConfDir, "mox-localserve"), "configuration storage directory")
 	c.flag.StringVar(&ip, "ip", "", "serve on this ip instead of default 127.0.0.1 and ::1. only used when writing configuration, at first launch.")
+	c.flag.BoolVar(&initOnly, "initonly", false, "write configuration files and exit")
 	args := c.Parse()
 	if len(args) != 0 {
 		c.Usage()
@@ -76,6 +78,18 @@ during those commands instead of during "data".
 	log := mlog.New("localserve")
 
 	mox.FilesImmediate = true
+
+	if initOnly {
+		if _, err := os.Stat(dir); err == nil {
+			log.Print("warning: directory for configuration files already exists, continuing")
+		}
+		log.Print("creating mox localserve config", mlog.Field("dir", dir))
+		err := writeLocalConfig(log, dir, ip)
+		if err != nil {
+			log.Fatalx("creating mox localserve config", err, mlog.Field("dir", dir))
+		}
+		return
+	}
 
 	// Load config, creating a new one if needed.
 	var existingConfig bool
