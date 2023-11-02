@@ -288,8 +288,8 @@ var commands = map[string]func(c *conn, tag, cmd string, p *parser){
 	"uid move":    (*conn).cmdUIDMove,
 }
 
-var errIO = errors.New("fatal io error")             // For read/write errors and errors that should close the connection.
-var errProtocol = errors.New("fatal protocol error") // For protocol errors for which a stack trace should be printed.
+var errIO = errors.New("io error")             // For read/write errors and errors that should close the connection.
+var errProtocol = errors.New("protocol error") // For protocol errors for which a stack trace should be printed.
 
 var sanityChecks bool
 

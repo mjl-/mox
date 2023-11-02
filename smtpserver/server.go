@@ -63,7 +63,7 @@ var xlog = mlog.New("smtpserver")
 
 // We use panic and recover for error handling while executing commands.
 // These errors signal the connection must be closed.
-var errIO = errors.New("fatal io error")
+var errIO = errors.New("io error")
 
 // If set, regular delivery/submit is sidestepped, email is accepted and
 // delivered to the account named mox.
