@@ -62,7 +62,7 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# go.etcd.io/bbolt v1.3.7
+# go.etcd.io/bbolt v1.3.8
 ## explicit; go 1.17
 go.etcd.io/bbolt
 # golang.org/x/crypto v0.14.0
