@@ -75,7 +75,7 @@ func parseReport(p message.Part) (*Feedback, error) {
 	r := p.Reader()
 
 	// If no (useful) content-type is set, try to detect it.
-	if ct == "" || ct == "application/octect-stream" {
+	if ct == "" || ct == "application/octet-stream" {
 		data := make([]byte, 512)
 		n, err := io.ReadFull(r, data)
 		if err == io.EOF {
@@ -92,7 +92,7 @@ func parseReport(p message.Part) (*Feedback, error) {
 	case "application/zip":
 		// Google sends messages with direct application/zip content-type.
 		return parseZip(r)
-	case "application/gzip":
+	case "application/gzip", "application/x-gzip":
 		gzr, err := gzip.NewReader(r)
 		if err != nil {
 			return nil, fmt.Errorf("decoding gzip xml report: %s", err)
