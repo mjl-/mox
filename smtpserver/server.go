@@ -2480,6 +2480,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					q := bstore.QueryTx[store.Message](tx)
 					q.FilterNonzero(store.Message{MsgFromOrgDomain: m.MsgFromOrgDomain})
 					q.FilterEqual("Notjunk", true)
+					q.FilterEqual("IsReject", false)
 					exists, err := q.Exists()
 					if err != nil {
 						return fmt.Errorf("querying for non-junk message from organizational domain: %v", err)

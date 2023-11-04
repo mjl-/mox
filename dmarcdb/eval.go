@@ -728,8 +728,8 @@ specified in the "rua" field of the DMARC record for your domain.
 Report domain: %s
 Submitter: %s
 Report-ID: %s
-Period: %s - %s in UTC
-`, dom, mox.Conf.Static.HostnameDomain, report.ReportMetadata.ReportID, beginTime.Format(time.DateTime), endTime.Format(time.DateTime))
+Period: %s - %s UTC
+`, dom, mox.Conf.Static.HostnameDomain, report.ReportMetadata.ReportID, beginTime.UTC().Format(time.DateTime), endTime.UTC().Format(time.DateTime))
 
 	// The attached file follows the naming convention from the RFC. ../rfc/7489:1812
 	reportFilename := fmt.Sprintf("%s!%s!%d!%d!%s.xml.gz", mox.Conf.Static.HostnameDomain.ASCII, dom.ASCII, beginTime.Unix(), endTime.Add(-time.Second).Unix(), report.ReportMetadata.ReportID)
