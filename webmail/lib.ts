@@ -340,7 +340,7 @@ const equalAddress = (a: api.MessageAddress, b: api.MessageAddress) => {
 const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, moreHeaders: string[], refineKeyword: null | ((kw: string) => Promise<void>)) => {
 	const msgenv = mi.Envelope
 	const received = mi.Message.Received
-	const receivedlocal = new Date(received.getTime() - received.getTimezoneOffset()*60*1000)
+	const receivedlocal = new Date(received.getTime())
 	dom._kids(msgheaderelem,
 		// todo: make addresses clickable, start search (keep current mailbox if any)
 		dom.tr(
