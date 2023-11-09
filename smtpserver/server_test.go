@@ -1193,7 +1193,7 @@ func TestNonSMTP(t *testing.T) {
 
 // Test limits on outgoing messages.
 func TestLimitOutgoing(t *testing.T) {
-	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/sendlimit/mox.conf"), dns.MockResolver{})
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtpserversendlimit/mox.conf"), dns.MockResolver{})
 	defer ts.close()
 
 	ts.user = "mjl@mox.example"
@@ -1237,7 +1237,7 @@ func TestCatchall(t *testing.T) {
 			"127.0.0.10": {"other.example."},
 		},
 	}
-	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/catchall/mox.conf"), resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtpservercatchall/mox.conf"), resolver)
 	defer ts.close()
 
 	testDeliver := func(rcptTo string, expErr *smtpclient.Error) {
