@@ -61,7 +61,7 @@ var (
 	)
 )
 
-var jitter = mox.NewRand()
+var jitter = mox.NewPseudoRand()
 
 var DBTypes = []any{Msg{}} // Types stored in DB.
 var DB *bstore.DB          // Exported for making backups.

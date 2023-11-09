@@ -5,11 +5,24 @@ import (
 	"encoding/binary"
 	"fmt"
 	mathrand "math/rand"
+	"sync"
 )
 
-// NewRand returns a new PRNG seeded with random bytes from crypto/rand.
-func NewRand() *mathrand.Rand {
-	return mathrand.New(mathrand.NewSource(CryptoRandInt()))
+type rand struct {
+	*mathrand.Rand
+	sync.Mutex
+}
+
+// NewPseudoRand returns a new PRNG seeded with random bytes from crypto/rand.
+func NewPseudoRand() *rand {
+	return &rand{Rand: mathrand.New(mathrand.NewSource(CryptoRandInt()))}
+}
+
+// Read can be called concurrently.
+func (r *rand) Read(buf []byte) (int, error) {
+	r.Lock()
+	defer r.Unlock()
+	return r.Rand.Read(buf)
 }
 
 // CryptoRandInt returns a cryptographically random number.

@@ -40,11 +40,19 @@ import (
 var moxService string
 
 func pwgen() string {
-	rand := mox.NewRand()
 	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_;:,<.>/"
 	s := ""
+	buf := make([]byte, 1)
 	for i := 0; i < 12; i++ {
-		s += string(chars[rand.Intn(len(chars))])
+		for {
+			cryptorand.Read(buf)
+			i := int(buf[0])
+			if i+len(chars) > 255 {
+				continue // Prevent bias.
+			}
+			s += string(chars[i%len(chars)])
+			break
+		}
 	}
 	return s
 }

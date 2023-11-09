@@ -24,6 +24,7 @@ package store
 import (
 	"context"
 	"crypto/md5"
+	cryptorand "crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding"
@@ -73,8 +74,6 @@ var (
 	ErrUnknownCredentials = errors.New("credentials not found")
 	ErrAccountUnknown     = errors.New("no such account")
 )
-
-var subjectpassRand = mox.NewRand()
 
 var DefaultInitialMailboxes = config.InitialMailboxes{
 	SpecialUse: config.SpecialUseMailboxes{
@@ -1460,8 +1459,12 @@ func (a *Account) Subjectpass(email string) (key string, err error) {
 		}
 		key = ""
 		const chars = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-		for i := 0; i < 16; i++ {
-			key += string(chars[subjectpassRand.Intn(len(chars))])
+		buf := make([]byte, 16)
+		if _, err := cryptorand.Read(buf); err != nil {
+			return err
+		}
+		for _, b := range buf {
+			key += string(chars[int(b)%len(chars)])
 		}
 		v.Key = key
 		return tx.Insert(&v)

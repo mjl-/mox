@@ -272,7 +272,7 @@ func RemoveEvaluationsDomain(ctx context.Context, domain dns.Domain) error {
 	return err
 }
 
-var jitterRand = mox.NewRand()
+var jitterRand = mox.NewPseudoRand()
 
 // time to sleep until next whole hour t, replaced by tests.
 // Jitter so we don't cause load at exactly whole hours, other processes may

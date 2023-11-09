@@ -168,7 +168,7 @@ var (
 	)
 )
 
-var jitterRand = mox.NewRand()
+var jitterRand = mox.NewPseudoRand()
 
 func durationDefault(delay *time.Duration, def time.Duration) time.Duration {
 	if delay == nil {
