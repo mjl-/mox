@@ -1,7 +1,6 @@
 package webmail
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -10,7 +9,6 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
-	"mime/quotedprintable"
 	"net"
 	"net/http"
 	"net/mail"
@@ -180,48 +178,20 @@ type File struct {
 	DataURI  string // Full data of the attachment, with base64 encoding and including content-type.
 }
 
-// xerrWriter is an io.Writer that panics with a *sherpa.Error when Write
-// returns an error.
-type xerrWriter struct {
-	ctx  context.Context
-	w    *bufio.Writer
-	size int64
-	max  int64
-}
-
-// Write implements io.Writer, but calls panic (that is handled higher up) on
-// i/o errors.
-func (w *xerrWriter) Write(buf []byte) (int, error) {
-	n, err := w.w.Write(buf)
-	xcheckf(w.ctx, err, "writing message file")
-	if n > 0 {
-		w.size += int64(n)
-		if w.size > w.max {
-			xcheckuserf(w.ctx, errors.New("max message size reached"), "writing message file")
-		}
-	}
-	return n, err
-}
-
-type nameAddress struct {
-	Name    string
-	Address smtp.Address
-}
-
 // parseAddress expects either a plain email address like "user@domain", or a
 // single address as used in a message header, like "name <user@domain>".
-func parseAddress(msghdr string) (nameAddress, error) {
+func parseAddress(msghdr string) (message.NameAddress, error) {
 	a, err := mail.ParseAddress(msghdr)
 	if err != nil {
-		return nameAddress{}, nil
+		return message.NameAddress{}, nil
 	}
 
 	// todo: parse more fully according to ../rfc/5322:959
 	path, err := smtp.ParseAddress(a.Address)
 	if err != nil {
-		return nameAddress{}, err
+		return message.NameAddress{}, err
 	}
-	return nameAddress{a.Name, path}, nil
+	return message.NameAddress{DisplayName: a.Name, Address: path}, nil
 }
 
 func xmailboxID(ctx context.Context, tx *bstore.Tx, mailboxID int64) store.Mailbox {
@@ -278,7 +248,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	fromAddr, err := parseAddress(m.From)
 	xcheckuserf(ctx, err, "parsing From address")
 
-	var replyTo *nameAddress
+	var replyTo *message.NameAddress
 	if m.ReplyTo != "" {
 		a, err := parseAddress(m.ReplyTo)
 		xcheckuserf(ctx, err, "parsing Reply-To address")
@@ -287,7 +257,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 	var recipients []smtp.Address
 
-	var toAddrs []nameAddress
+	var toAddrs []message.NameAddress
 	for _, s := range m.To {
 		addr, err := parseAddress(s)
 		xcheckuserf(ctx, err, "parsing To address")
@@ -295,7 +265,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		recipients = append(recipients, addr.Address)
 	}
 
-	var ccAddrs []nameAddress
+	var ccAddrs []message.NameAddress
 	for _, s := range m.Cc {
 		addr, err := parseAddress(s)
 		xcheckuserf(ctx, err, "parsing Cc address")
@@ -362,74 +332,19 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	defer store.CloseRemoveTempFile(log, dataFile, "message to submit")
 
 	// If writing to the message file fails, we abort immediately.
-	xmsgw := &xerrWriter{ctx, bufio.NewWriter(dataFile), 0, w.maxMessageSize}
-
-	isASCII := func(s string) bool {
-		for _, c := range s {
-			if c >= 0x80 {
-				return false
-			}
-		}
-		return true
-	}
-
-	header := func(k, v string) {
-		fmt.Fprintf(xmsgw, "%s: %s\r\n", k, v)
-	}
-
-	headerAddrs := func(k string, l []nameAddress) {
-		if len(l) == 0 {
+	xc := message.NewComposer(dataFile, w.maxMessageSize)
+	defer func() {
+		x := recover()
+		if x == nil {
 			return
 		}
-		v := ""
-		linelen := len(k) + len(": ")
-		for _, a := range l {
-			if v != "" {
-				v += ","
-				linelen++
-			}
-			addr := mail.Address{Name: a.Name, Address: a.Address.Pack(smtputf8)}
-			s := addr.String()
-			if v != "" && linelen+1+len(s) > 77 {
-				v += "\r\n\t"
-				linelen = 1
-			} else if v != "" {
-				v += " "
-				linelen++
-			}
-			v += s
-			linelen += len(s)
+		if err, ok := x.(error); ok && errors.Is(err, message.ErrMessageSize) {
+			xcheckuserf(ctx, err, "making message")
+		} else if ok && errors.Is(err, message.ErrCompose) {
+			xcheckf(ctx, err, "making message")
 		}
-		fmt.Fprintf(xmsgw, "%s: %s\r\n", k, v)
-	}
-
-	line := func(w io.Writer) {
-		_, _ = w.Write([]byte("\r\n"))
-	}
-
-	text := m.TextBody
-	if !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	text = strings.ReplaceAll(text, "\n", "\r\n")
-
-	charset := "us-ascii"
-	if !isASCII(text) {
-		charset = "utf-8"
-	}
-
-	var cte string
-	if message.NeedsQuotedPrintable(text) {
-		var sb strings.Builder
-		_, err := io.Copy(quotedprintable.NewWriter(&sb), strings.NewReader(text))
-		xcheckf(ctx, err, "converting text to quoted printable")
-		text = sb.String()
-		cte = "quoted-printable"
-	} else if has8bit || charset == "utf-8" {
-		cte = "8bit"
-	} else {
-		cte = "7bit"
-	}
+		panic(x)
+	}()
 
 	// todo spec: can we add an Authentication-Results header that indicates this is an authenticated message? the "auth" method is for SMTP AUTH, which this isn't. ../rfc/8601 https://www.iana.org/assignments/email-auth/email-auth.xhtml
 
@@ -454,39 +369,19 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	}
 
 	// Outer message headers.
-	headerAddrs("From", []nameAddress{fromAddr})
+	xc.HeaderAddrs("From", []message.NameAddress{fromAddr})
 	if replyTo != nil {
-		headerAddrs("Reply-To", []nameAddress{*replyTo})
+		xc.HeaderAddrs("Reply-To", []message.NameAddress{*replyTo})
 	}
-	headerAddrs("To", toAddrs)
-	headerAddrs("Cc", ccAddrs)
-
-	var subjectValue string
-	subjectLineLen := len("Subject: ")
-	subjectWord := false
-	for i, word := range strings.Split(m.Subject, " ") {
-		if !smtputf8 && !isASCII(word) {
-			word = mime.QEncoding.Encode("utf-8", word)
-		}
-		if i > 0 {
-			subjectValue += " "
-			subjectLineLen++
-		}
-		if subjectWord && subjectLineLen+len(word) > 77 {
-			subjectValue += "\r\n\t"
-			subjectLineLen = 1
-		}
-		subjectValue += word
-		subjectLineLen += len(word)
-		subjectWord = true
-	}
-	if subjectValue != "" {
-		header("Subject", subjectValue)
+	xc.HeaderAddrs("To", toAddrs)
+	xc.HeaderAddrs("Cc", ccAddrs)
+	if m.Subject != "" {
+		xc.Subject(m.Subject)
 	}
 
 	messageID := fmt.Sprintf("<%s>", mox.MessageIDGen(smtputf8))
-	header("Message-Id", messageID)
-	header("Date", time.Now().Format(message.RFC5322Z))
+	xc.Header("Message-Id", messageID)
+	xc.Header("Date", time.Now().Format(message.RFC5322Z))
 	// Add In-Reply-To and References headers.
 	if m.ResponseMessageID > 0 {
 		xdbread(ctx, acc, func(tx *bstore.Tx) {
@@ -504,39 +399,39 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			if rp.Envelope == nil {
 				return
 			}
-			header("In-Reply-To", rp.Envelope.MessageID)
+			xc.Header("In-Reply-To", rp.Envelope.MessageID)
 			ref := h.Get("References")
 			if ref == "" {
 				ref = h.Get("In-Reply-To")
 			}
 			if ref != "" {
-				header("References", ref+"\r\n\t"+rp.Envelope.MessageID)
+				xc.Header("References", ref+"\r\n\t"+rp.Envelope.MessageID)
 			} else {
-				header("References", rp.Envelope.MessageID)
+				xc.Header("References", rp.Envelope.MessageID)
 			}
 		})
 	}
 	if m.UserAgent != "" {
-		header("User-Agent", m.UserAgent)
+		xc.Header("User-Agent", m.UserAgent)
 	}
 	if m.RequireTLS != nil && !*m.RequireTLS {
-		header("TLS-Required", "No")
+		xc.Header("TLS-Required", "No")
 	}
-	header("MIME-Version", "1.0")
+	xc.Header("MIME-Version", "1.0")
 
 	if len(m.Attachments) > 0 || len(m.ForwardAttachments.Paths) > 0 {
-		mp := multipart.NewWriter(xmsgw)
-		header("Content-Type", fmt.Sprintf(`multipart/mixed; boundary="%s"`, mp.Boundary()))
-		line(xmsgw)
+		mp := multipart.NewWriter(xc)
+		xc.Header("Content-Type", fmt.Sprintf(`multipart/mixed; boundary="%s"`, mp.Boundary()))
+		xc.Line()
 
-		ct := mime.FormatMediaType("text/plain", map[string]string{"charset": charset})
+		textBody, ct, cte := xc.TextPart(m.TextBody)
 		textHdr := textproto.MIMEHeader{}
 		textHdr.Set("Content-Type", ct)
 		textHdr.Set("Content-Transfer-Encoding", cte)
 
 		textp, err := mp.CreatePart(textHdr)
 		xcheckf(ctx, err, "adding text part to message")
-		_, err = textp.Write([]byte(text))
+		_, err = textp.Write(textBody)
 		xcheckf(ctx, err, "writing text part")
 
 		xaddPart := func(ct, filename string) io.Writer {
@@ -650,15 +545,14 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		err = mp.Close()
 		xcheckf(ctx, err, "writing mime multipart")
 	} else {
-		ct := mime.FormatMediaType("text/plain", map[string]string{"charset": charset})
-		header("Content-Type", ct)
-		header("Content-Transfer-Encoding", cte)
-		line(xmsgw)
-		xmsgw.Write([]byte(text))
+		textBody, ct, cte := xc.TextPart(m.TextBody)
+		xc.Header("Content-Type", ct)
+		xc.Header("Content-Transfer-Encoding", cte)
+		xc.Line()
+		xc.Write([]byte(textBody))
 	}
 
-	err = xmsgw.w.Flush()
-	xcheckf(ctx, err, "writing message")
+	xc.Flush()
 
 	// Add DKIM-Signature headers.
 	var msgPrefix string
@@ -680,7 +574,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	}
 	for _, rcpt := range recipients {
 		rcptMsgPrefix := recvHdrFor(rcpt.Pack(smtputf8)) + msgPrefix
-		msgSize := int64(len(rcptMsgPrefix)) + xmsgw.size
+		msgSize := int64(len(rcptMsgPrefix)) + xc.Size
 		toPath := smtp.Path{
 			Localpart: rcpt.Localpart,
 			IPDomain:  dns.IPDomain{Domain: rcpt.Domain},
@@ -752,7 +646,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 				MailboxID:     sentmb.ID,
 				MailboxOrigID: sentmb.ID,
 				Flags:         store.Flags{Notjunk: true, Seen: true},
-				Size:          int64(len(msgPrefix)) + xmsgw.size,
+				Size:          int64(len(msgPrefix)) + xc.Size,
 				MsgPrefix:     []byte(msgPrefix),
 			}
 

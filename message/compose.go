@@ -13,46 +13,50 @@ import (
 	"github.com/mjl-/mox/smtp"
 )
 
-var errCompose = errors.New("compose")
+var (
+	ErrMessageSize = errors.New("message too large")
+	ErrCompose     = errors.New("compose")
+)
 
-// Composer helps compose a message. Operations that fail call panic, which can be
-// caught with Composer.Recover. Writes are buffered.
+// Composer helps compose a message. Operations that fail call panic, which should
+// be caught with recover(), checking for ErrCompose and optionally ErrMessageSize.
+// Writes are buffered.
 type Composer struct {
-	Has8bit  bool // Whether message contains 8bit data.
-	SMTPUTF8 bool // Whether message needs to be sent with SMTPUTF8 extension.
+	Has8bit  bool  // Whether message contains 8bit data.
+	SMTPUTF8 bool  // Whether message needs to be sent with SMTPUTF8 extension.
+	Size     int64 // Total bytes written.
 
-	bw *bufio.Writer
+	bw      *bufio.Writer
+	maxSize int64 // If greater than zero, writes beyond maximum size raise ErrMessageSize.
 }
 
-func NewComposer(w io.Writer) *Composer {
-	return &Composer{bw: bufio.NewWriter(w)}
+// NewComposer initializes a new composer with a buffered writer around w, and
+// with a maximum message size if maxSize is greater than zero.
+// Operations on a Composer do not return an error. Caller must use recover() to
+// catch ErrCompose and optionally ErrMessageSize errors.
+func NewComposer(w io.Writer, maxSize int64) *Composer {
+	return &Composer{bw: bufio.NewWriter(w), maxSize: maxSize}
 }
 
 // Write implements io.Writer, but calls panic (that is handled higher up) on
 // i/o errors.
 func (c *Composer) Write(buf []byte) (int, error) {
+	if c.maxSize > 0 && c.Size+int64(len(buf)) > c.maxSize {
+		c.Checkf(ErrMessageSize, "writing message")
+	}
 	n, err := c.bw.Write(buf)
+	if n > 0 {
+		c.Size += int64(n)
+	}
 	c.Checkf(err, "write")
 	return n, nil
-}
-
-// Recover recovers the sentinel panic error value, storing it into rerr.
-func (c *Composer) Recover(rerr *error) {
-	x := recover()
-	if x == nil {
-		return
-	}
-	if err, ok := x.(error); ok && errors.Is(err, errCompose) {
-		*rerr = err
-	} else {
-		panic(x)
-	}
 }
 
 // Checkf checks err, panicing with sentinel error value.
 func (c *Composer) Checkf(err error, format string, args ...any) {
 	if err != nil {
-		panic(fmt.Errorf("%w: %s: %v", errCompose, err, fmt.Sprintf(format, args...)))
+		// We expose the original error too, needed at least for ErrMessageSize.
+		panic(fmt.Errorf("%w: %w: %v", ErrCompose, err, fmt.Sprintf(format, args...)))
 	}
 }
 
@@ -67,8 +71,14 @@ func (c *Composer) Header(k, v string) {
 	fmt.Fprintf(c, "%s: %s\r\n", k, v)
 }
 
+// NameAddress holds both an address display name, and an SMTP path address.
+type NameAddress struct {
+	DisplayName string
+	Address     smtp.Address
+}
+
 // HeaderAddrs writes a message header with addresses.
-func (c *Composer) HeaderAddrs(k string, l []smtp.Address) {
+func (c *Composer) HeaderAddrs(k string, l []NameAddress) {
 	if len(l) == 0 {
 		return
 	}
@@ -79,7 +89,7 @@ func (c *Composer) HeaderAddrs(k string, l []smtp.Address) {
 			v += ","
 			linelen++
 		}
-		addr := mail.Address{Address: a.Pack(c.SMTPUTF8)}
+		addr := mail.Address{Name: a.DisplayName, Address: a.Address.Pack(c.SMTPUTF8)}
 		s := addr.String()
 		if v != "" && linelen+1+len(s) > 77 {
 			v += "\r\n\t"

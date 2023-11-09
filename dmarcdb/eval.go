@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -779,9 +780,9 @@ Period: %s - %s UTC
 	// The attached file follows the naming convention from the RFC. ../rfc/7489:1812
 	reportFilename := fmt.Sprintf("%s!%s!%d!%d.xml.gz", mox.Conf.Static.HostnameDomain.ASCII, dom.ASCII, beginTime.Unix(), endTime.Add(-time.Second).Unix())
 
-	var addrs []smtp.Address
+	var addrs []message.NameAddress
 	for _, rcpt := range recipients {
-		addrs = append(addrs, rcpt.address)
+		addrs = append(addrs, message.NameAddress{Address: rcpt.address})
 	}
 
 	// Compose the message.
@@ -841,19 +842,29 @@ Period: %s - %s UTC
 	return true, nil
 }
 
-func composeAggregateReport(ctx context.Context, log *mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []smtp.Address, subject, text, filename string, reportXMLGzipFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
-	xc := message.NewComposer(mf)
-	defer xc.Recover(&rerr)
+func composeAggregateReport(ctx context.Context, log *mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportXMLGzipFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
+	xc := message.NewComposer(mf, 100*1024*1024)
+	defer func() {
+		x := recover()
+		if x == nil {
+			return
+		}
+		if err, ok := x.(error); ok && errors.Is(err, message.ErrCompose) {
+			rerr = err
+			return
+		}
+		panic(x)
+	}()
 
 	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
 	for _, a := range recipients {
-		if a.Localpart.IsInternational() {
+		if a.Address.Localpart.IsInternational() {
 			xc.SMTPUTF8 = true
 			break
 		}
 	}
 
-	xc.HeaderAddrs("From", []smtp.Address{fromAddr})
+	xc.HeaderAddrs("From", []message.NameAddress{{Address: fromAddr}})
 	xc.HeaderAddrs("To", recipients)
 	xc.Subject(subject)
 	messageID = fmt.Sprintf("<%s>", mox.MessageIDGen(xc.SMTPUTF8))
@@ -904,7 +915,7 @@ func composeAggregateReport(ctx context.Context, log *mlog.Log, mf *os.File, fro
 // Though this functionality is quite underspecified, we'll do our best to send our
 // an error report in case our report is too large for all recipients.
 // ../rfc/7489:1918
-func sendErrorReport(ctx context.Context, log *mlog.Log, fromAddr smtp.Address, recipients []smtp.Address, reportDomain dns.Domain, reportID string, reportMsgSize int64) error {
+func sendErrorReport(ctx context.Context, log *mlog.Log, fromAddr smtp.Address, recipients []message.NameAddress, reportDomain dns.Domain, reportID string, reportMsgSize int64) error {
 	log.Debug("no reporting addresses willing to accept report given size, queuing short error message")
 
 	msgf, err := store.CreateMessageTemp("dmarcreportmsg-out")
@@ -915,7 +926,7 @@ func sendErrorReport(ctx context.Context, log *mlog.Log, fromAddr smtp.Address, 
 
 	var recipientStrs []string
 	for _, rcpt := range recipients {
-		recipientStrs = append(recipientStrs, rcpt.String())
+		recipientStrs = append(recipientStrs, rcpt.Address.String())
 	}
 
 	subject := fmt.Sprintf("DMARC aggregate reporting error report for %s", reportDomain.ASCII)
@@ -941,7 +952,7 @@ Submitting-URI: %s
 	msgSize := int64(len(msgPrefix)) + msgInfo.Size()
 
 	for _, rcpt := range recipients {
-		qm := queue.MakeMsg(mox.Conf.Static.Postmaster.Account, fromAddr.Path(), rcpt.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
+		qm := queue.MakeMsg(mox.Conf.Static.Postmaster.Account, fromAddr.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsDMARCReport.
 		qm.MaxAttempts = 5
@@ -958,19 +969,29 @@ Submitting-URI: %s
 	return nil
 }
 
-func composeErrorReport(ctx context.Context, log *mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []smtp.Address, subject, text string) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
-	xc := message.NewComposer(mf)
-	defer xc.Recover(&rerr)
+func composeErrorReport(ctx context.Context, log *mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text string) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
+	xc := message.NewComposer(mf, 100*1024*1024)
+	defer func() {
+		x := recover()
+		if x == nil {
+			return
+		}
+		if err, ok := x.(error); ok && errors.Is(err, message.ErrCompose) {
+			rerr = err
+			return
+		}
+		panic(x)
+	}()
 
 	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
 	for _, a := range recipients {
-		if a.Localpart.IsInternational() {
+		if a.Address.Localpart.IsInternational() {
 			xc.SMTPUTF8 = true
 			break
 		}
 	}
 
-	xc.HeaderAddrs("From", []smtp.Address{fromAddr})
+	xc.HeaderAddrs("From", []message.NameAddress{{Address: fromAddr}})
 	xc.HeaderAddrs("To", recipients)
 	xc.Header("Subject", subject)
 	messageID = fmt.Sprintf("<%s>", mox.MessageIDGen(xc.SMTPUTF8))

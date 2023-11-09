@@ -276,7 +276,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 		return cleanup, fmt.Errorf("looking up current tlsrpt record for reporting addresses: %v", err)
 	}
 
-	var recipients []smtp.Address
+	var recipients []message.NameAddress
 
 	for _, l := range record.RUAs {
 		for _, s := range l {
@@ -292,7 +292,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 					log.Debugx("parsing mailto uri in tlsrpt record rua value, ignoring", err, mlog.Field("rua", s))
 					continue
 				}
-				recipients = append(recipients, addr)
+				recipients = append(recipients, message.NameAddress{Address: addr})
 			} else if u.Scheme == "https" {
 				// Although "report" is ambiguous and could mean both only the JSON data or an
 				// entire message (including DKIM-Signature) with the JSON data, it appears the
@@ -414,7 +414,7 @@ Period: %s - %s UTC
 	msgSize := int64(len(msgPrefix)) + msgInfo.Size()
 
 	for _, rcpt := range recipients {
-		qm := queue.MakeMsg(mox.Conf.Static.Postmaster.Account, from.Path(), rcpt.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
+		qm := queue.MakeMsg(mox.Conf.Static.Postmaster.Account, from.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsTLSReport.
 		// ../rfc/8460:1077
@@ -442,19 +442,29 @@ Period: %s - %s UTC
 	return true, nil
 }
 
-func composeMessage(ctx context.Context, log *mlog.Log, mf *os.File, policyDomain dns.Domain, fromAddr smtp.Address, recipients []smtp.Address, subject, text, filename string, reportFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
-	xc := message.NewComposer(mf)
-	defer xc.Recover(&rerr)
+func composeMessage(ctx context.Context, log *mlog.Log, mf *os.File, policyDomain dns.Domain, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
+	xc := message.NewComposer(mf, 100*1024*1024)
+	defer func() {
+		x := recover()
+		if x == nil {
+			return
+		}
+		if err, ok := x.(error); ok && errors.Is(err, message.ErrCompose) {
+			rerr = err
+			return
+		}
+		panic(x)
+	}()
 
 	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
 	for _, a := range recipients {
-		if a.Localpart.IsInternational() {
+		if a.Address.Localpart.IsInternational() {
 			xc.SMTPUTF8 = true
 			break
 		}
 	}
 
-	xc.HeaderAddrs("From", []smtp.Address{fromAddr})
+	xc.HeaderAddrs("From", []message.NameAddress{{Address: fromAddr}})
 	xc.HeaderAddrs("To", recipients)
 	xc.Subject(subject)
 	// ../rfc/8460:926
