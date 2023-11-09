@@ -1,5 +1,7 @@
 package dmarcdb
 
+// Sending TLS reports and DMARC reports is very similar. See ../dmarcdb/eval.go:/similar and ../tlsrptsend/send.go:/similar.
+
 import (
 	"compress/gzip"
 	"context"

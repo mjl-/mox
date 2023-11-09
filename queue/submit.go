@@ -33,13 +33,16 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 		port = defaultPort
 	}
 
-	tlsMode := smtpclient.TLSStrictStartTLS
+	tlsMode := smtpclient.TLSRequiredStartTLS
+	tlsPKIX := true
 	if dialTLS {
-		tlsMode = smtpclient.TLSStrictImmediate
+		tlsMode = smtpclient.TLSImmediate
 	} else if transport.STARTTLSInsecureSkipVerify {
 		tlsMode = smtpclient.TLSOpportunistic
+		tlsPKIX = false
 	} else if transport.NoSTARTTLS {
 		tlsMode = smtpclient.TLSSkip
+		tlsPKIX = false
 	}
 	start := time.Now()
 	var deliveryResult string
@@ -60,7 +63,7 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 	// If submit was done with REQUIRETLS extension for SMTP, we must verify TLS
 	// certificates. If our submission connection is not configured that way, abort.
 	requireTLS := m.RequireTLS != nil && *m.RequireTLS
-	if requireTLS && tlsMode != smtpclient.TLSStrictStartTLS && tlsMode != smtpclient.TLSStrictImmediate {
+	if requireTLS && (tlsMode != smtpclient.TLSRequiredStartTLS && tlsMode != smtpclient.TLSImmediate || !tlsPKIX) {
 		errmsg = fmt.Sprintf("transport %s: message requires verified tls but transport does not verify tls", transportName)
 		fail(qlog, m, backoff, true, dsn.NameIP{}, smtp.SePol7MissingReqTLS, errmsg)
 		return
@@ -128,7 +131,11 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 	}
 	clientctx, clientcancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer clientcancel()
-	client, err := smtpclient.New(clientctx, qlog, conn, tlsMode, mox.Conf.Static.HostnameDomain, transport.DNSHost, auth, nil, nil, nil)
+	opts := smtpclient.Opts{
+		Auth:    auth,
+		RootCAs: mox.Conf.Static.TLS.CertPool,
+	}
+	client, err := smtpclient.New(clientctx, qlog, conn, tlsMode, tlsPKIX, mox.Conf.Static.HostnameDomain, transport.DNSHost, opts)
 	if err != nil {
 		smtperr, ok := err.(smtpclient.Error)
 		var remoteMTA dsn.NameIP

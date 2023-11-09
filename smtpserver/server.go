@@ -295,7 +295,7 @@ type conn struct {
 	log                   *mlog.Log
 	maxMessageSize        int64
 	requireTLSForAuth     bool
-	requireTLSForDelivery bool
+	requireTLSForDelivery bool      // If set, delivery is only allowed with TLS (STARTTLS), except if delivery is to a TLS reporting address.
 	cmd                   string    // Current command.
 	cmdStart              time.Time // Start of current command.
 	ncmds                 int       // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
@@ -761,12 +761,20 @@ func (c *conn) xneedHello() {
 	}
 }
 
-// If smtp server is configured to require TLS for all mail delivery, abort command.
-func (c *conn) xneedTLSForDelivery() {
-	if c.requireTLSForDelivery && !c.tls {
+// If smtp server is configured to require TLS for all mail delivery (except to TLS
+// reporting address), abort command.
+func (c *conn) xneedTLSForDelivery(rcpt smtp.Path) {
+	// For TLS reports, we allow the message in even without TLS, because there may be
+	// TLS interopability problems. ../rfc/8460:316
+	if c.requireTLSForDelivery && !c.tls && !isTLSReportRecipient(rcpt) {
 		// ../rfc/3207:148
 		xsmtpUserErrorf(smtp.C530SecurityRequired, smtp.SePol7Other0, "STARTTLS required for mail delivery")
 	}
+}
+
+func isTLSReportRecipient(rcpt smtp.Path) bool {
+	_, _, dest, err := mox.FindAccount(rcpt.Localpart, rcpt.IPDomain.Domain, false)
+	return err == nil && (dest.HostTLSReports || dest.DomainTLSReports)
 }
 
 func (c *conn) cmdHelo(p *parser) {
@@ -1219,7 +1227,6 @@ func (c *conn) cmdMail(p *parser) {
 
 	c.xneedHello()
 	c.xcheckAuth()
-	c.xneedTLSForDelivery()
 	if c.mailFrom != nil {
 		// ../rfc/5321:2507, though ../rfc/5321:1029 contradicts, implying a MAIL would also reset, but ../rfc/5321:1160 decides.
 		xsmtpUserErrorf(smtp.C503BadCmdSeq, smtp.SeProto5BadCmdOrSeq1, "already have MAIL")
@@ -1368,7 +1375,6 @@ func (c *conn) cmdMail(p *parser) {
 func (c *conn) cmdRcpt(p *parser) {
 	c.xneedHello()
 	c.xcheckAuth()
-	c.xneedTLSForDelivery()
 	if c.mailFrom == nil {
 		// ../rfc/5321:1088
 		xsmtpUserErrorf(smtp.C503BadCmdSeq, smtp.SeProto5BadCmdOrSeq1, "missing MAIL FROM")
@@ -1397,6 +1403,12 @@ func (c *conn) cmdRcpt(p *parser) {
 		xsmtpUserErrorf(smtp.C555UnrecognizedAddrParams, smtp.SeSys3NotSupported3, "unrecognized parameter %q", key)
 	}
 	p.xend()
+
+	// Check if TLS is enabled if required. It's not great that sender/recipient
+	// addresses may have been exposed in plaintext before we can reject delivery. The
+	// recipient could be the tls reporting addresses, which must always be able to
+	// receive in plain text.
+	c.xneedTLSForDelivery(fpath)
 
 	// todo future: for submission, should we do explicit verification that domains are fully qualified? also for mail from. ../rfc/6409:420
 
@@ -1496,7 +1508,6 @@ func (c *conn) cmdRcpt(p *parser) {
 func (c *conn) cmdData(p *parser) {
 	c.xneedHello()
 	c.xcheckAuth()
-	c.xneedTLSForDelivery()
 	if c.mailFrom == nil {
 		// ../rfc/5321:1130
 		xsmtpUserErrorf(smtp.C503BadCmdSeq, smtp.SeProto5BadCmdOrSeq1, "missing MAIL FROM")
@@ -2525,7 +2536,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				// loop. We also don't want to be used for sending reports to unsuspecting domains
 				// we have no relation with.
 				// todo: would it make sense to also mark some percentage of mailing-list-policy-overrides optional? to lower the load on mail servers of folks sending to large mailing lists.
-				Optional: rcptAcc.destination.DMARCReports || rcptAcc.destination.TLSReports || a.reason == reasonDMARCPolicy && unknownDomain(),
+				Optional: rcptAcc.destination.DMARCReports || rcptAcc.destination.HostTLSReports || rcptAcc.destination.DomainTLSReports || a.reason == reasonDMARCPolicy && unknownDomain(),
 
 				Addresses: addresses,
 
@@ -2643,7 +2654,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		}
 		if a.tlsReport != nil {
 			// todo future: add rate limiting to prevent DoS attacks.
-			if err := tlsrptdb.AddReport(ctx, msgFrom.Domain, c.mailFrom.String(), a.tlsReport); err != nil {
+			if err := tlsrptdb.AddReport(ctx, msgFrom.Domain, c.mailFrom.String(), rcptAcc.destination.HostTLSReports, a.tlsReport); err != nil {
 				log.Errorx("saving TLSRPT report in database", err)
 			} else {
 				log.Info("tlsrpt report processed")

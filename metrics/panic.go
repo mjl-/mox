@@ -27,6 +27,7 @@ const (
 	Queue            Panic = "queue"
 	Smtpclient       Panic = "smtpclient"
 	Smtpserver       Panic = "smtpserver"
+	Tlsrptdb         Panic = "tlsrptdb"
 	Dkimverify       Panic = "dkimverify"
 	Spfverify        Panic = "spfverify"
 	Upgradethreads   Panic = "upgradethreads"

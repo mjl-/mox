@@ -73,6 +73,7 @@ func TestReport(t *testing.T) {
 	dbpath := mox.DataDirPath("tlsrpt.db")
 	os.MkdirAll(filepath.Dir(dbpath), 0770)
 	defer os.Remove(dbpath)
+	defer os.Remove(mox.DataDirPath("tlsrptresult.db"))
 
 	if err := Init(); err != nil {
 		t.Fatalf("init database: %s", err)
@@ -93,7 +94,7 @@ func TestReport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parsing TLSRPT from message %q: %s", file.Name(), err)
 		}
-		if err := AddReport(ctxbg, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", report); err != nil {
+		if err := AddReport(ctxbg, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", false, report); err != nil {
 			t.Fatalf("adding report to database: %s", err)
 		}
 	}
@@ -101,7 +102,7 @@ func TestReport(t *testing.T) {
 	report, err := tlsrpt.Parse(strings.NewReader(reportJSON))
 	if err != nil {
 		t.Fatalf("parsing report: %v", err)
-	} else if err := AddReport(ctxbg, dns.Domain{ASCII: "company-y.example"}, "tlsrpt@company-y.example", report); err != nil {
+	} else if err := AddReport(ctxbg, dns.Domain{ASCII: "company-y.example"}, "tlsrpt@company-y.example", false, report); err != nil {
 		t.Fatalf("adding report to database: %s", err)
 	}
 

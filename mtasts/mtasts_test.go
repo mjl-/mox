@@ -247,7 +247,7 @@ func TestFetch(t *testing.T) {
 			expErr = ErrNoRecord
 		}
 
-		_, p, err = Get(context.Background(), resolver, dns.Domain{ASCII: domain})
+		_, p, _, err = Get(context.Background(), resolver, dns.Domain{ASCII: domain})
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("get: got err %#v, expected %#v", err, expErr)
 		}

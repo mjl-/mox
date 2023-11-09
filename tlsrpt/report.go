@@ -2,13 +2,25 @@ package tlsrpt
 
 import (
 	"compress/gzip"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"os"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slices"
+
+	"github.com/mjl-/adns"
+
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
@@ -25,6 +37,79 @@ type Report struct {
 	ContactInfo      string          `json:"contact-info"` // Email address.
 	ReportID         string          `json:"report-id"`
 	Policies         []Result        `json:"policies"`
+}
+
+// Merge combines the counts and failure details of results into the report.
+// Policies are merged if identical and added otherwise. Same for failure details
+// within a result.
+func (r *Report) Merge(results ...Result) {
+Merge:
+	for _, nr := range results {
+		for i, p := range r.Policies {
+			if !p.Policy.equal(nr.Policy) {
+				continue
+			}
+
+			r.Policies[i].Add(nr.Summary.TotalSuccessfulSessionCount, nr.Summary.TotalFailureSessionCount, nr.FailureDetails...)
+			continue Merge
+		}
+
+		r.Policies = append(r.Policies, nr)
+	}
+}
+
+// Add increases the success/failure counts of a result, and adds any failure
+// details.
+func (r *Result) Add(success, failure int64, fds ...FailureDetails) {
+	r.Summary.TotalSuccessfulSessionCount += success
+	r.Summary.TotalFailureSessionCount += failure
+
+Merge:
+	for _, nfd := range fds {
+		for i, fd := range r.FailureDetails {
+			if !fd.equalKey(nfd) {
+				continue
+			}
+
+			fd.FailedSessionCount += nfd.FailedSessionCount
+			r.FailureDetails[i] = fd
+			continue Merge
+		}
+		r.FailureDetails = append(r.FailureDetails, nfd)
+	}
+}
+
+// Add is a convenience function for merging making a Result and merging it into
+// the report.
+func (r *Report) Add(policy ResultPolicy, success, failure int64, fds ...FailureDetails) {
+	r.Merge(Result{policy, Summary{success, failure}, fds})
+}
+
+// TLSAPolicy returns a policy for DANE.
+func TLSAPolicy(records []adns.TLSA, tlsaBaseDomain dns.Domain) ResultPolicy {
+	// The policy domain is the TLSA base domain. ../rfc/8460:251
+
+	l := make([]string, len(records))
+	for i, r := range records {
+		l[i] = r.Record()
+	}
+	sort.Strings(l) // For consistent equals.
+	return ResultPolicy{
+		Type:   TLSA,
+		String: l,
+		Domain: tlsaBaseDomain.ASCII,
+		MXHost: []string{},
+	}
+}
+
+func MakeResult(policyType PolicyType, domain dns.Domain, fds ...FailureDetails) Result {
+	if fds == nil {
+		fds = []FailureDetails{}
+	}
+	return Result{
+		Policy:         ResultPolicy{Type: policyType, Domain: domain.ASCII, String: []string{}, MXHost: []string{}},
+		FailureDetails: fds,
+	}
 }
 
 // note: with TLSRPT prefix to prevent clash in sherpadoc types.
@@ -80,11 +165,32 @@ type Result struct {
 	FailureDetails []FailureDetails `json:"failure-details"`
 }
 
+// todo spec: ../rfc/8460:437 says policy is a string, with rules for turning dane records into a single string. perhaps a remnant of an earlier version (for mtasts a single string would have made more sense). i doubt the intention is to always have a single element in policy-string (though the field name is singular).
+
 type ResultPolicy struct {
-	Type   string   `json:"policy-type"`
-	String []string `json:"policy-string"`
-	Domain string   `json:"policy-domain"`
-	MXHost []string `json:"mx-host"` // Example in RFC has errata, it originally was a single string. ../rfc/8460-eid6241 ../rfc/8460:1779
+	Type   PolicyType `json:"policy-type"`
+	String []string   `json:"policy-string"`
+	Domain string     `json:"policy-domain"`
+	MXHost []string   `json:"mx-host"` // Example in RFC has errata, it originally was a single string. ../rfc/8460-eid6241 ../rfc/8460:1779
+}
+
+// PolicyType indicates the policy success/failure results are for.
+type PolicyType string
+
+const (
+	// For DANE, against a mail host (not recipient domain).
+	TLSA PolicyType = "tlsa"
+
+	// For MTA-STS, against a recipient domain (not a mail host).
+	STS PolicyType = "sts"
+
+	// Recipient domain did not have MTA-STS policy, or mail host (TSLA base domain)
+	// did not have DANE TLSA records.
+	NoPolicyFound PolicyType = "no-policy-found"
+)
+
+func (rp ResultPolicy) equal(orp ResultPolicy) bool {
+	return rp.Type == orp.Type && slices.Equal(rp.String, orp.String) && rp.Domain == orp.Domain && slices.Equal(rp.MXHost, orp.MXHost)
 }
 
 type Summary struct {
@@ -112,15 +218,129 @@ const (
 	ResultSTSPolicyFetch          ResultType = "sts-policy-fetch-error"
 )
 
+// todo spec: ../rfc/8460:719 more of these fields should be optional. some sts failure details, like failed policy fetches, won't have an ip or mx, the failure happens earlier in the delivery process.
+
 type FailureDetails struct {
 	ResultType            ResultType `json:"result-type"`
 	SendingMTAIP          string     `json:"sending-mta-ip"`
 	ReceivingMXHostname   string     `json:"receiving-mx-hostname"`
-	ReceivingMXHelo       string     `json:"receiving-mx-helo"`
+	ReceivingMXHelo       string     `json:"receiving-mx-helo,omitempty"`
 	ReceivingIP           string     `json:"receiving-ip"`
 	FailedSessionCount    int64      `json:"failed-session-count"`
 	AdditionalInformation string     `json:"additional-information"`
 	FailureReasonCode     string     `json:"failure-reason-code"`
+}
+
+// equalKey returns whether FailureDetails have the same values, expect for
+// FailedSessionCount. Useful for aggregating FailureDetails.
+func (fd FailureDetails) equalKey(ofd FailureDetails) bool {
+	fd.FailedSessionCount = 0
+	ofd.FailedSessionCount = 0
+	return fd == ofd
+}
+
+// Details is a convenience function to compose a FailureDetails.
+func Details(t ResultType, r string) FailureDetails {
+	return FailureDetails{ResultType: t, FailedSessionCount: 1, FailureReasonCode: r}
+}
+
+var invalidReasons = map[x509.InvalidReason]string{
+	x509.NotAuthorizedToSign:           "not-authorized-to-sign",
+	x509.Expired:                       "certificate-expired",
+	x509.CANotAuthorizedForThisName:    "ca-not-authorized-for-this-name",
+	x509.TooManyIntermediates:          "too-many-intermediates",
+	x509.IncompatibleUsage:             "incompatible-key-usage",
+	x509.NameMismatch:                  "parent-subject-child-issuer-mismatch",
+	x509.NameConstraintsWithoutSANs:    "name-constraint-without-sans",
+	x509.UnconstrainedName:             "unconstrained-name",
+	x509.TooManyConstraints:            "too-many-constraints",
+	x509.CANotAuthorizedForExtKeyUsage: "ca-not-authorized-for-ext-key-usage",
+}
+
+// TLSFailureDetails turns errors encountered during TLS handshakes into a result
+// type and failure reason code for use with FailureDetails.
+//
+// Errors from crypto/tls, including local and remote alerts, from crypto/x509,
+// and generic i/o and timeout errors are recognized.
+func TLSFailureDetails(err error) (ResultType, string) {
+	var invalidErr x509.CertificateInvalidError
+	var hostErr x509.HostnameError
+	var unknownAuthErr x509.UnknownAuthorityError
+	var rootsErr x509.SystemRootsError
+	var verifyErr *tls.CertificateVerificationError
+	var netErr *net.OpError
+	var recordHdrErr tls.RecordHeaderError
+	if errors.As(err, &invalidErr) {
+		if invalidErr.Reason == x509.Expired {
+			// Result: ../rfc/8460:546
+			return ResultCertificateExpired, ""
+		}
+		s, ok := invalidReasons[invalidErr.Reason]
+		if !ok {
+			s = fmt.Sprintf("go-x509-invalid-reason-%d", invalidErr.Reason)
+		}
+		// Result: ../rfc/8460:549
+		return ResultCertificateNotTrusted, s
+	} else if errors.As(err, &hostErr) {
+		// Result: ../rfc/8460:541
+		return ResultCertificateHostMismatch, ""
+	} else if errors.As(err, &unknownAuthErr) {
+		// Result: ../rfc/8460:549
+		return ResultCertificateNotTrusted, ""
+	} else if errors.As(err, &rootsErr) {
+		// Result: ../rfc/8460:549
+		return ResultCertificateNotTrusted, "no-system-roots"
+	} else if errors.As(err, &verifyErr) {
+		// We don't know a more specific error. ../rfc/8460:610
+		// Result: ../rfc/8460:567
+		return ResultValidationFailure, "unknown-go-certificate-verification-error"
+	} else if errors.As(err, &netErr) && netErr.Op == "remote error" {
+		// This is how TLS errors from the server (through an alert) are represented by
+		// crypto/tls. Err will usually be tls.alert error that is a type around uint8.
+		reasonCode := "tls-remote-error"
+		if netErr.Err != nil {
+			// todo: ideally, crypto/tls would let us check if this is an alert. it could be another uint8-typed error.
+			v := reflect.ValueOf(netErr.Err)
+			if v.Kind() == reflect.Uint8 && v.Type().Name() == "alert" {
+				reasonCode = "tls-remote-" + formatAlert(uint8(v.Uint()))
+			}
+		}
+		return ResultValidationFailure, reasonCode
+	} else if errors.As(err, &recordHdrErr) {
+		// Like for AlertError, not a lot of details, but better than nothing.
+		// Result: ../rfc/8460:567
+		return ResultValidationFailure, "tls-record-header-error"
+	}
+
+	// Consider not adding failure details at all for transient errors? It probably
+	// isn't very common to have an accidental connection failure during STARTTL setup
+	// after having completed SMTP TCP setup and having exchanged commands. Seems best
+	// to report on them. ../rfc/8460:625
+	// Could be any other kind of error, we try to report on i/o errors, but best not to claim any
+	// other reason we don't know about. ../rfc/8460:610
+	// Result: ../rfc/8460:567
+	var reasonCode string
+	if errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+		reasonCode = "io-timeout-during-handshake"
+	} else if moxio.IsClosed(err) || errors.Is(err, io.ErrClosedPipe) {
+		reasonCode = "connection-closed-during-handshake"
+	} else {
+		// Attempt to get a local, outgoing TLS alert.
+		// We unwrap the error to the end (not multiple errors), and check for uint8 of a
+		// type named "alert".
+		for {
+			uerr := errors.Unwrap(err)
+			if uerr == nil {
+				break
+			}
+			err = uerr
+		}
+		v := reflect.ValueOf(err)
+		if v.Kind() == reflect.Uint8 && v.Type().Name() == "alert" {
+			reasonCode = "tls-local-" + formatAlert(uint8(v.Uint()))
+		}
+	}
+	return ResultValidationFailure, reasonCode
 }
 
 // Parse parses a Report.

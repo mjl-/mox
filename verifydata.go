@@ -402,7 +402,7 @@ possibly making them potentially no longer readable by the previous version.
 				p = p[len(dataDir)+1:]
 			}
 			switch p {
-			case "dmarcrpt.db", "dmarceval.db", "mtasts.db", "tlsrpt.db", "receivedid.key", "lastknownversion":
+			case "dmarcrpt.db", "dmarceval.db", "mtasts.db", "tlsrpt.db", "tlsrptresult.db", "receivedid.key", "lastknownversion":
 				return nil
 			case "acme", "queue", "accounts", "tmp", "moved":
 				return fs.SkipDir
@@ -423,7 +423,8 @@ possibly making them potentially no longer readable by the previous version.
 	checkDB(true, filepath.Join(dataDir, "dmarcrpt.db"), dmarcdb.ReportsDBTypes)
 	checkDB(false, filepath.Join(dataDir, "dmarceval.db"), dmarcdb.EvalDBTypes) // After v0.0.7.
 	checkDB(true, filepath.Join(dataDir, "mtasts.db"), mtastsdb.DBTypes)
-	checkDB(true, filepath.Join(dataDir, "tlsrpt.db"), tlsrptdb.DBTypes)
+	checkDB(true, filepath.Join(dataDir, "tlsrpt.db"), tlsrptdb.ReportDBTypes)
+	checkDB(false, filepath.Join(dataDir, "tlsrptresult.db"), tlsrptdb.ResultDBTypes) // After v0.0.7.
 	checkQueue()
 	checkAccounts()
 	checkOther()

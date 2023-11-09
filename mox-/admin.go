@@ -523,8 +523,25 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 
 	if d != h {
 		records = append(records,
-			"; For the machine, only needs to be created once, for the first domain added.",
+			"; For the machine, only needs to be created once, for the first domain added:",
+			"; ",
+			"; SPF-allow host for itself, resulting in relaxed DMARC pass for (postmaster)",
+			"; messages (DSNs) sent from host:",
 			fmt.Sprintf(`%-*s TXT "v=spf1 a -all"`, 20+len(d), h+"."), // ../rfc/7208:2263 ../rfc/7208:2287
+			"",
+		)
+	}
+	if d != h && Conf.Static.HostTLSRPT.ParsedLocalpart != "" {
+		uri := url.URL{
+			Scheme: "mailto",
+			Opaque: smtp.NewAddress(Conf.Static.HostTLSRPT.ParsedLocalpart, Conf.Static.HostnameDomain).Pack(false),
+		}
+		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]string{{uri.String()}}}
+		records = append(records,
+			"; For the machine, only needs to be created once, for the first domain added:",
+			"; ",
+			"; Request reporting about success/failures of TLS connections to (MX) host, for DANE.",
+			fmt.Sprintf(`_smtp._tls.%-*s         TXT "%s"`, 20+len(d)-len("_smtp._tls."), h+".", tlsrptr.String()),
 			"",
 		)
 	}

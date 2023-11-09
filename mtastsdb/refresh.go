@@ -141,8 +141,15 @@ func refreshDomain(ctx context.Context, db *bstore.DB, resolver dns.Resolver, pr
 		}
 		return
 	}
-	// ../rfc/8461:587
 	if err != nil && pr.Mode == mtasts.ModeNone {
+		if errors.Is(err, mtasts.ErrNoRecord) {
+			// Policy was in mode "none". Now it doesn't have a policy anymore. Remove from our
+			// database so we don't keep refreshing it.
+			err := db.Delete(ctx, &pr)
+			log.Check(err, "removing mta-sts policy with mode none, dns record is gone")
+		}
+		// Else, don't bother operator with temporary error about policy none.
+		// ../rfc/8461:587
 		return
 	} else if err != nil {
 		log.Errorx("looking up mta-sts record for domain", err, mlog.Field("domain", d))

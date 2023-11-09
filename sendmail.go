@@ -18,6 +18,7 @@ import (
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
@@ -274,10 +275,13 @@ binary should be setgid that group:
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	tlsMode := smtpclient.TLSSkip
+	tlsPKIX := false
 	if submitconf.TLS {
-		tlsMode = smtpclient.TLSStrictImmediate
+		tlsMode = smtpclient.TLSImmediate
+		tlsPKIX = true
 	} else if submitconf.STARTTLS {
-		tlsMode = smtpclient.TLSStrictStartTLS
+		tlsMode = smtpclient.TLSRequiredStartTLS
+		tlsPKIX = true
 	} else if submitconf.RequireTLS == RequireTLSYes {
 		xsavecheckf(errors.New("cannot submit with requiretls enabled without tls to submission server"), "checking tls configuration")
 	}
@@ -292,7 +296,11 @@ binary should be setgid that group:
 	}
 
 	// todo: implement SRV and DANE, allowing for a simpler config file (just the email address & password)
-	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, ourHostname, remoteHostname, auth, nil, nil, nil)
+	opts := smtpclient.Opts{
+		Auth:    auth,
+		RootCAs: mox.Conf.Static.TLS.CertPool,
+	}
+	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, tlsPKIX, ourHostname, remoteHostname, opts)
 	xsavecheckf(err, "open smtp session")
 
 	err = client.Deliver(ctx, submitconf.From, recipient, int64(len(msg)), strings.NewReader(msg), true, false, submitconf.RequireTLS == RequireTLSYes)

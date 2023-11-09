@@ -224,7 +224,7 @@ Only implemented on unix systems, not Windows.
 	// taken.
 	const mtastsdbRefresher = true
 	const skipForkExec = false
-	if err := start(mtastsdbRefresher, !mox.Conf.Static.NoOutgoingDMARCReports, skipForkExec); err != nil {
+	if err := start(mtastsdbRefresher, !mox.Conf.Static.NoOutgoingDMARCReports, !mox.Conf.Static.NoOutgoingTLSReports, skipForkExec); err != nil {
 		log.Fatalx("start", err)
 	}
 	log.Print("ready to serve")

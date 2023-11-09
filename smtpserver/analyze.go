@@ -210,7 +210,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 	// Similar to DMARC reporting, we check for the required DKIM. We'll check
 	// reputation, defaulting to accept.
 	var tlsReport *tlsrpt.Report
-	if d.rcptAcc.destination.TLSReports {
+	if d.rcptAcc.destination.HostTLSReports || d.rcptAcc.destination.DomainTLSReports {
 		// Valid DKIM signature for domain must be present. We take "valid" to assume
 		// "passing", not "syntactically valid". We also check for "tlsrpt" as service.
 		// This check is optional, but if anyone goes through the trouble to explicitly
@@ -218,6 +218,13 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		// ../rfc/8460:320
 		ok := false
 		for _, r := range d.dkimResults {
+			// The record should have an allowed service "tlsrpt". The RFC mentions it as if
+			// the service must be specified explicitly, but the default allowed services for a
+			// DKIM record are "*", which includes "tlsrpt". Unless a the DKIM record
+			// explicitly specifies services (e.g. s=email), a record will work for TLS
+			// reports. The DKIM records seen used for TLS reporting in the wild don't
+			// explicitly set "s" for services.
+			// ../rfc/8460:326
 			if r.Status == dkim.StatusPass && r.Sig.Domain == d.msgFrom.Domain && r.Sig.Length < 0 && r.Record.ServiceAllowed("tlsrpt") {
 				ok = true
 				break

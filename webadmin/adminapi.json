@@ -807,6 +807,99 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "TLSRPTResults",
+			"Docs": "TLSRPTResults returns all TLSRPT results in the database.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"TLSResult"
+					]
+				}
+			]
+		},
+		{
+			"Name": "TLSRPTResultsPolicyDomain",
+			"Docs": "TLSRPTResultsPolicyDomain returns the TLS results for a domain.",
+			"Params": [
+				{
+					"Name": "policyDomain",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "r1",
+					"Typewords": [
+						"[]",
+						"TLSResult"
+					]
+				}
+			]
+		},
+		{
+			"Name": "LookupTLSRPTRecord",
+			"Docs": "LookupTLSRPTRecord looks up a TLSRPT record and returns the parsed form, original txt\nform from DNS, and error with the TLSRPT record as a string.",
+			"Params": [
+				{
+					"Name": "domain",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "record",
+					"Typewords": [
+						"nullable",
+						"TLSRPTRecord"
+					]
+				},
+				{
+					"Name": "txt",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "errstr",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "TLSRPTRemoveResults",
+			"Docs": "TLSRPTRemoveResults removes the TLS results for a domain for the given day. If\nday is empty, all results are removed.",
+			"Params": [
+				{
+					"Name": "domain",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "day",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
 		}
 	],
 	"Sections": [],
@@ -879,7 +972,14 @@
 					]
 				},
 				{
-					"Name": "TLSRPT",
+					"Name": "HostTLSRPT",
+					"Docs": "",
+					"Typewords": [
+						"TLSRPTCheckResult"
+					]
+				},
+				{
+					"Name": "DomainTLSRPT",
 					"Docs": "",
 					"Typewords": [
 						"TLSRPTCheckResult"
@@ -2148,6 +2248,13 @@
 						"[]",
 						"Pair"
 					]
+				},
+				{
+					"Name": "PolicyText",
+					"Docs": "Text that make up the policy, as retrieved. We didn't store this in the past. If empty, policy can be reconstructed from Policy field. Needed by TLSRPT.",
+					"Typewords": [
+						"string"
+					]
 				}
 			]
 		},
@@ -2181,6 +2288,13 @@
 					"Docs": "",
 					"Typewords": [
 						"string"
+					]
+				},
+				{
+					"Name": "HostReport",
+					"Docs": "Report for host TLSRPT record, as opposed to domain TLSRPT record.",
+					"Typewords": [
+						"bool"
 					]
 				},
 				{
@@ -2290,7 +2404,7 @@
 					"Name": "policy-type",
 					"Docs": "",
 					"Typewords": [
-						"string"
+						"PolicyType"
 					]
 				},
 				{
@@ -2367,6 +2481,7 @@
 					"Name": "receiving-mx-helo",
 					"Docs": "",
 					"Typewords": [
+						"nullable",
 						"string"
 					]
 				},
@@ -3672,6 +3787,76 @@
 					]
 				}
 			]
+		},
+		{
+			"Name": "TLSResult",
+			"Docs": "TLSResult is stored in the database to track TLS results per policy domain, day\nand recipient domain. These records will be included in TLS reports.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "PolicyDomain",
+					"Docs": "Domain with TLSRPT DNS record, with addresses that will receive reports. Either a recipient domain (for MTA-STS policies) or an (MX) host (for DANE policies). Unicode.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "DayUTC",
+					"Docs": "DayUTC is of the form yyyymmdd.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RecipientDomain",
+					"Docs": "Reports are sent per policy domain. When delivering a message to a recipient domain, we can get multiple TLSResults, typically one for MTA-STS, and one or more for DANE (one for each MX target, or actually TLSA base domain). We track recipient domain so we can display successes/failures for delivery of messages to a recipient domain in the admin pages. Unicode.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Created",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Updated",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "IsHost",
+					"Docs": "Result is for host (e.g. DANE), not recipient domain (e.g. MTA-STS).",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "SendReport",
+					"Docs": "Whether to send a report. TLS results for delivering messages with TLS reports will be recorded, but will not cause a report to be sent.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Results",
+					"Docs": "Results is updated for each TLS attempt.",
+					"Typewords": [
+						"[]",
+						"Result"
+					]
+				}
+			]
 		}
 	],
 	"Ints": [],
@@ -3736,6 +3921,27 @@
 					"Name": "ModeNone",
 					"Value": "none",
 					"Docs": "In case MTA-STS is not or no longer implemented."
+				}
+			]
+		},
+		{
+			"Name": "PolicyType",
+			"Docs": "PolicyType indicates the policy success/failure results are for.",
+			"Values": [
+				{
+					"Name": "TLSA",
+					"Value": "tlsa",
+					"Docs": "For DANE, against a mail host (not recipient domain)."
+				},
+				{
+					"Name": "STS",
+					"Value": "sts",
+					"Docs": "For MTA-STS, against a recipient domain (not a mail host)."
+				},
+				{
+					"Name": "NoPolicyFound",
+					"Value": "no-policy-found",
+					"Docs": "Recipient domain did not have MTA-STS policy, or mail host (TSLA base domain)\ndid not have DANE TLSA records."
 				}
 			]
 		},

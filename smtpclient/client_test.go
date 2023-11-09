@@ -23,7 +23,6 @@ import (
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/scram"
 	"github.com/mjl-/mox/smtp"
@@ -49,6 +48,8 @@ func TestClient(t *testing.T) {
 		ehlo         bool
 
 		tlsMode         TLSMode
+		tlsPKIX         bool
+		roots           *x509.CertPool
 		tlsHostname     dns.Domain
 		need8bitmime    bool
 		needsmtputf8    bool
@@ -60,8 +61,8 @@ func TestClient(t *testing.T) {
 
 	// Make fake cert, and make it trusted.
 	cert := fakeCert(t, false)
-	mox.Conf.Static.TLS.CertPool = x509.NewCertPool()
-	mox.Conf.Static.TLS.CertPool.AddCert(cert.Leaf)
+	roots := x509.NewCertPool()
+	roots.AddCert(cert.Leaf)
 	tlsConfig := tls.Config{
 		Certificates: []tls.Certificate{cert},
 	}
@@ -280,7 +281,7 @@ func TestClient(t *testing.T) {
 				result <- err
 				panic("stop")
 			}
-			c, err := New(ctx, log, clientConn, opts.tlsMode, localhost, opts.tlsHostname, auths, nil, nil, nil)
+			c, err := New(ctx, log, clientConn, opts.tlsMode, opts.tlsPKIX, localhost, opts.tlsHostname, Opts{Auth: auths, RootCAs: opts.roots})
 			if (err == nil) != (expClientErr == nil) || err != nil && !errors.As(err, reflect.New(reflect.ValueOf(expClientErr).Type()).Interface()) && !errors.Is(err, expClientErr) {
 				fail("new client: got err %v, expected %#v", err, expClientErr)
 			}
@@ -338,7 +339,9 @@ test
 		ehlo:         true,
 		requiretls:   true,
 
-		tlsMode:         TLSStrictStartTLS,
+		tlsMode:         TLSRequiredStartTLS,
+		tlsPKIX:         true,
+		roots:           roots,
 		tlsHostname:     dns.Domain{ASCII: "mox.example"},
 		need8bitmime:    true,
 		needsmtputf8:    true,
@@ -350,7 +353,7 @@ test
 	test(msg, options{ehlo: true, eightbitmime: true}, nil, nil, nil, nil)
 	test(msg, options{ehlo: true, eightbitmime: false, need8bitmime: true, nodeliver: true}, nil, nil, Err8bitmimeUnsupported, nil)
 	test(msg, options{ehlo: true, smtputf8: false, needsmtputf8: true, nodeliver: true}, nil, nil, ErrSMTPUTF8Unsupported, nil)
-	test(msg, options{ehlo: true, starttls: true, tlsMode: TLSStrictStartTLS, tlsHostname: dns.Domain{ASCII: "mismatch.example"}, nodeliver: true}, nil, ErrTLS, nil, &net.OpError{}) // Server TLS handshake is a net.OpError with "remote error" as text.
+	test(msg, options{ehlo: true, starttls: true, tlsMode: TLSRequiredStartTLS, tlsPKIX: true, tlsHostname: dns.Domain{ASCII: "mismatch.example"}, nodeliver: true}, nil, ErrTLS, nil, &net.OpError{}) // Server TLS handshake is a net.OpError with "remote error" as text.
 	test(msg, options{ehlo: true, maxSize: len(msg) - 1, nodeliver: true}, nil, nil, ErrSize, nil)
 	test(msg, options{ehlo: true, auths: []string{"PLAIN"}}, []sasl.Client{sasl.NewClientPlain("test", "test")}, nil, nil, nil)
 	test(msg, options{ehlo: true, auths: []string{"CRAM-MD5"}}, []sasl.Client{sasl.NewClientCRAMMD5("test", "test")}, nil, nil, nil)
@@ -362,19 +365,19 @@ test
 	// Set an expired certificate. For non-strict TLS, we should still accept it.
 	// ../rfc/7435:424
 	cert = fakeCert(t, true)
-	mox.Conf.Static.TLS.CertPool = x509.NewCertPool()
-	mox.Conf.Static.TLS.CertPool.AddCert(cert.Leaf)
+	roots = x509.NewCertPool()
+	roots.AddCert(cert.Leaf)
 	tlsConfig = tls.Config{
 		Certificates: []tls.Certificate{cert},
 	}
-	test(msg, options{ehlo: true, starttls: true}, nil, nil, nil, nil)
+	test(msg, options{ehlo: true, starttls: true, roots: roots}, nil, nil, nil, nil)
 
 	// Again with empty cert pool so it isn't trusted in any way.
-	mox.Conf.Static.TLS.CertPool = x509.NewCertPool()
+	roots = x509.NewCertPool()
 	tlsConfig = tls.Config{
 		Certificates: []tls.Certificate{cert},
 	}
-	test(msg, options{ehlo: true, starttls: true}, nil, nil, nil, nil)
+	test(msg, options{ehlo: true, starttls: true, roots: roots}, nil, nil, nil, nil)
 }
 
 func TestErrors(t *testing.T) {
@@ -385,7 +388,7 @@ func TestErrors(t *testing.T) {
 	run(t, func(s xserver) {
 		s.writeline("bogus") // Invalid, should be "220 <hostname>".
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		_, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrProtocol) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrProtocol without Permanent", err))
@@ -396,7 +399,7 @@ func TestErrors(t *testing.T) {
 	run(t, func(s xserver) {
 		s.conn.Close()
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		_, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		var xerr Error
 		if err == nil || !errors.Is(err, io.ErrUnexpectedEOF) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v (%v), expected ErrUnexpectedEOF without Permanent", err, err))
@@ -407,7 +410,7 @@ func TestErrors(t *testing.T) {
 	run(t, func(s xserver) {
 		s.writeline("521 not accepting connections")
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		_, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || !xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with Permanent", err))
@@ -418,7 +421,7 @@ func TestErrors(t *testing.T) {
 	run(t, func(s xserver) {
 		s.writeline("2200 mox.example") // Invalid, too many digits.
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		_, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrProtocol) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrProtocol without Permanent", err))
@@ -432,7 +435,7 @@ func TestErrors(t *testing.T) {
 		s.writeline("250-mox.example")
 		s.writeline("500 different code") // Invalid.
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		_, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrProtocol) || !errors.As(err, &xerr) || xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrProtocol without Permanent", err))
@@ -448,7 +451,7 @@ func TestErrors(t *testing.T) {
 		s.readline("MAIL FROM:")
 		s.writeline("550 5.7.0 not allowed")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		if err != nil {
 			panic(err)
 		}
@@ -468,7 +471,7 @@ func TestErrors(t *testing.T) {
 		s.readline("MAIL FROM:")
 		s.writeline("451 bad sender")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		if err != nil {
 			panic(err)
 		}
@@ -490,7 +493,7 @@ func TestErrors(t *testing.T) {
 		s.readline("RCPT TO:")
 		s.writeline("451")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		if err != nil {
 			panic(err)
 		}
@@ -514,7 +517,7 @@ func TestErrors(t *testing.T) {
 		s.readline("DATA")
 		s.writeline("550 no!")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		if err != nil {
 			panic(err)
 		}
@@ -534,7 +537,7 @@ func TestErrors(t *testing.T) {
 		s.readline("STARTTLS")
 		s.writeline("502 command not implemented")
 	}, func(conn net.Conn) {
-		_, err := New(ctx, log, conn, TLSStrictStartTLS, localhost, dns.Domain{ASCII: "mox.example"}, nil, nil, nil, nil)
+		_, err := New(ctx, log, conn, TLSRequiredStartTLS, true, localhost, dns.Domain{ASCII: "mox.example"}, Opts{})
 		var xerr Error
 		if err == nil || !errors.Is(err, ErrTLS) || !errors.As(err, &xerr) || !xerr.Permanent {
 			panic(fmt.Errorf("got %#v, expected ErrTLS with Permanent", err))
@@ -550,7 +553,7 @@ func TestErrors(t *testing.T) {
 		s.readline("MAIL FROM:")
 		s.writeline("451 enough")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSSkip, localhost, dns.Domain{ASCII: "mox.example"}, nil, nil, nil, nil)
+		c, err := New(ctx, log, conn, TLSSkip, false, localhost, dns.Domain{ASCII: "mox.example"}, Opts{})
 		if err != nil {
 			panic(err)
 		}
@@ -580,7 +583,7 @@ func TestErrors(t *testing.T) {
 		s.readline("DATA")
 		s.writeline("550 not now")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		if err != nil {
 			panic(err)
 		}
@@ -610,7 +613,7 @@ func TestErrors(t *testing.T) {
 		s.readline("MAIL FROM:")
 		s.writeline("550 ok")
 	}, func(conn net.Conn) {
-		c, err := New(ctx, log, conn, TLSOpportunistic, localhost, zerohost, nil, nil, nil, nil)
+		c, err := New(ctx, log, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
 		if err != nil {
 			panic(err)
 		}

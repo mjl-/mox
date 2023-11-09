@@ -109,6 +109,14 @@ func (e ErrorCode) Error() string {
 	return fmt.Sprintf("error from name server: %s", errorCodeStrings[e])
 }
 
+// String returns a short text string for known error codes, or "unknown".
+func (e ErrorCode) String() string {
+	if int(e) >= 0 && int(e) < len(errorCodeStrings) {
+		return errorCodeStrings[e]
+	}
+	return "unknown"
+}
+
 // short strings, always included in error messages.
 var errorCodeStrings = []string{
 	"other",

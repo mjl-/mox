@@ -68,7 +68,7 @@ func TestRefresh(t *testing.T) {
 			Extensions:    nil,
 		}
 
-		pr := PolicyRecord{domain, time.Time{}, validEnd, lastUpdate, lastUse, backoff, recordID, policy}
+		pr := PolicyRecord{domain, time.Time{}, validEnd, lastUpdate, lastUse, backoff, recordID, policy, policy.String()}
 		if err := db.Insert(ctxbg, &pr); err != nil {
 			t.Fatalf("insert policy: %s", err)
 		}

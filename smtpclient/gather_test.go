@@ -283,12 +283,12 @@ func TestGatherTLSA(t *testing.T) {
 	test(domain("cnameloop.example"), false, domain("cnameloop.example"), true, nil, zerohost, errCNAMELimit)
 
 	test(domain("host0.example"), false, domain("inauthentic.example"), true, list0, domain("host0.example"), nil)
-	test(domain("inauthentic.example"), false, domain("inauthentic.example"), false, nil, zerohost, nil)
-	test(domain("temperror-cname.example"), false, domain("temperror-cname.example"), true, nil, zerohost, &adns.DNSError{})
+	test(domain("inauthentic.example"), false, domain("inauthentic.example"), false, nil, domain("inauthentic.example"), nil)
+	test(domain("temperror-cname.example"), false, domain("temperror-cname.example"), true, nil, domain("temperror-cname.example"), &adns.DNSError{})
 
 	test(domain("host1.example"), true, domain("cname-to-inauthentic.example"), true, list1, domain("host1.example"), nil)
 	test(domain("host1.example"), true, domain("danglingcname.example"), true, list1, domain("host1.example"), nil)
-	test(domain("danglingcname.example"), true, domain("danglingcname.example"), false, nil, zerohost, nil)
+	test(domain("danglingcname.example"), true, domain("danglingcname.example"), false, nil, domain("danglingcname.example"), nil)
 }
 
 func TestGatherTLSANames(t *testing.T) {

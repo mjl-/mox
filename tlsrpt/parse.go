@@ -18,8 +18,13 @@ type Extension struct {
 //
 //	v=TLSRPTv1; rua=mailto:tlsrpt@mox.example;
 type Record struct {
-	Version    string     // "TLSRPTv1", for "v=".
-	RUAs       [][]string // Aggregate reporting URI, for "rua=". "rua=" can occur multiple times, each can be a list. Must be URL-encoded strings, with ",", "!" and ";" encoded.
+	Version string // "TLSRPTv1", for "v=".
+
+	// Aggregate reporting URI, for "rua=". "rua=" can occur multiple times, each can
+	// be a list. Must be URL-encoded strings, with ",", "!" and ";" encoded.
+	RUAs [][]string
+	// ../rfc/8460:383
+
 	Extensions []Extension
 }
 

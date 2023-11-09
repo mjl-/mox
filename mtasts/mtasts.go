@@ -23,6 +23,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
+	"github.com/mjl-/adns"
+
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
@@ -153,6 +155,30 @@ func (p *Policy) Matches(host dns.Domain) bool {
 	return false
 }
 
+// TLSReportFailureReason returns a concise error for known error types, or an
+// empty string. For use in TLSRPT.
+func TLSReportFailureReason(err error) string {
+	// If this is a DNSSEC authentication error, we'll collect it for TLS reporting.
+	// We can also use this reason for STS, not only DANE. ../rfc/8460:580
+	var errCode adns.ErrorCode
+	if errors.As(err, &errCode) && errCode.IsAuthentication() {
+		return fmt.Sprintf("dns-extended-error-%d-%s", errCode, strings.ReplaceAll(errCode.String(), " ", "-"))
+	}
+
+	for _, e := range mtastsErrors {
+		if errors.Is(err, e) {
+			s := strings.TrimPrefix(e.Error(), "mtasts: ")
+			return strings.ReplaceAll(s, " ", "-")
+		}
+	}
+	return ""
+}
+
+var mtastsErrors = []error{
+	ErrNoRecord, ErrMultipleRecords, ErrDNS, ErrRecordSyntax, // Lookup
+	ErrNoPolicy, ErrPolicyFetch, ErrPolicySyntax, // Fetch
+}
+
 // Lookup errors.
 var (
 	ErrNoRecord        = errors.New("mtasts: no mta-sts dns txt record") // Domain does not implement MTA-STS. If a cached non-expired policy is available, it should still be used.
@@ -262,7 +288,8 @@ func FetchPolicy(ctx context.Context, domain dns.Domain) (policy *Policy, policy
 		return nil, "", ErrNoPolicy
 	}
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: http get: %s", ErrPolicyFetch, err)
+		// We pass along underlying TLS certificate errors.
+		return nil, "", fmt.Errorf("%w: http get: %w", ErrPolicyFetch, err)
 	}
 	metrics.HTTPClientObserve(ctx, "mtasts", req.Method, resp.StatusCode, err, start)
 	defer resp.Body.Close()
@@ -302,7 +329,7 @@ func FetchPolicy(ctx context.Context, domain dns.Domain) (policy *Policy, policy
 // record is still returned.
 //
 // Also see Get in package mtastsdb.
-func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (record *Record, policy *Policy, err error) {
+func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (record *Record, policy *Policy, policyText string, err error) {
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	result := "lookuperror"
@@ -313,15 +340,15 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (record 
 
 	record, _, err = LookupRecord(ctx, resolver, domain)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	result = "fetcherror"
-	policy, _, err = FetchPolicy(ctx, domain)
+	policy, policyText, err = FetchPolicy(ctx, domain)
 	if err != nil {
-		return record, nil, err
+		return record, nil, "", err
 	}
 
 	result = "ok"
-	return record, policy, nil
+	return record, policy, policyText, nil
 }

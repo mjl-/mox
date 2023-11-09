@@ -365,7 +365,8 @@ type CheckResult struct {
 	SPF          SPFCheckResult
 	DKIM         DKIMCheckResult
 	DMARC        DMARCCheckResult
-	TLSRPT       TLSRPTCheckResult
+	HostTLSRPT   TLSRPTCheckResult
+	DomainTLSRPT TLSRPTCheckResult
 	MTASTS       MTASTSCheckResult
 	SRVConf      SRVConfCheckResult
 	Autoconf     AutoconfCheckResult
@@ -1130,28 +1131,27 @@ EOF
 		}
 	}()
 
-	// TLSRPT
-	wg.Add(1)
-	go func() {
+	checkTLSRPT := func(result *TLSRPTCheckResult, dom dns.Domain, address smtp.Address, isHost bool) {
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		record, txt, err := tlsrpt.Lookup(ctx, resolver, domain)
+		record, txt, err := tlsrpt.Lookup(ctx, resolver, dom)
 		if err != nil {
-			addf(&r.TLSRPT.Errors, "Looking up TLSRPT record: %s", err)
+			addf(&result.Errors, "Looking up TLSRPT record: %s", err)
 		}
-		r.TLSRPT.TXT = txt
+		result.TXT = txt
 		if record != nil {
-			r.TLSRPT.Record = &TLSRPTRecord{*record}
+			result.Record = &TLSRPTRecord{*record}
 		}
 
-		instr := `TLSRPT is an opt-in mechanism to request feedback about TLS connectivity from remote SMTP servers when they connect to us. It allows detecting delivery problems and unwanted downgrades to plaintext SMTP connections. With TLSRPT you configure an email address to which reports should be sent. Remote SMTP servers will send a report once a day with the number of successful connections, and the number of failed connections including details that should help debugging/resolving any issues.`
-		if domConf.TLSRPT != nil {
+		instr := `TLSRPT is an opt-in mechanism to request feedback about TLS connectivity from remote SMTP servers when they connect to us. It allows detecting delivery problems and unwanted downgrades to plaintext SMTP connections. With TLSRPT you configure an email address to which reports should be sent. Remote SMTP servers will send a report once a day with the number of successful connections, and the number of failed connections including details that should help debugging/resolving any issues. Both the mail host (e.g. mail.domain.example) and a recipient domain (e.g. domain.example, with an MX record pointing to mail.domain.example) can have a TLSRPT record. The TLSRPT record for the hosts is for reporting about DANE, the TLSRPT record for the domain is for MTA-STS.`
+		var zeroaddr smtp.Address
+		if address != zeroaddr {
 			// TLSRPT does not require validation of reporting addresses outside the domain.
 			// ../rfc/8460:1463
 			uri := url.URL{
 				Scheme: "mailto",
-				Opaque: smtp.NewAddress(domConf.TLSRPT.ParsedLocalpart, domConf.TLSRPT.DNSDomain).Pack(false),
+				Opaque: address.Pack(false),
 			}
 			uristr := uri.String()
 			uristr = strings.ReplaceAll(uristr, ",", "%2C")
@@ -1167,11 +1167,29 @@ Ensure a DNS TXT record like the following exists:
 
 	_smtp._tls TXT %s
 `, mox.TXTStrings(tlsrptr.String()))
+		} else if isHost {
+			addf(&result.Errors, `Configure a host TLSRPT localpart in static mox.conf config file.`)
 		} else {
-			addf(&r.TLSRPT.Errors, `Configure a TLSRPT destination in domain in config file.`)
+			addf(&result.Errors, `Configure a domain TLSRPT destination in domains.conf config file.`)
 		}
-		addf(&r.TLSRPT.Instructions, instr)
-	}()
+		addf(&result.Instructions, instr)
+	}
+
+	// Hots TLSRPT
+	wg.Add(1)
+	var hostTLSRPTAddr smtp.Address
+	if mox.Conf.Static.HostTLSRPT.Localpart != "" {
+		hostTLSRPTAddr = smtp.NewAddress(mox.Conf.Static.HostTLSRPT.ParsedLocalpart, mox.Conf.Static.HostnameDomain)
+	}
+	go checkTLSRPT(&r.HostTLSRPT, mox.Conf.Static.HostnameDomain, hostTLSRPTAddr, true)
+
+	// Domain TLSRPT
+	wg.Add(1)
+	var domainTLSRPTAddr smtp.Address
+	if domConf.TLSRPT != nil {
+		domainTLSRPTAddr = smtp.NewAddress(domConf.TLSRPT.ParsedLocalpart, domain)
+	}
+	go checkTLSRPT(&r.DomainTLSRPT, domain, domainTLSRPTAddr, false)
 
 	// MTA-STS
 	wg.Add(1)
@@ -1959,4 +1977,52 @@ func (Admin) DMARCRemoveEvaluations(ctx context.Context, domain string) {
 
 	err = dmarcdb.RemoveEvaluationsDomain(ctx, dom)
 	xcheckf(ctx, err, "removing evaluations for domain")
+}
+
+// TLSRPTResults returns all TLSRPT results in the database.
+func (Admin) TLSRPTResults(ctx context.Context) []tlsrptdb.TLSResult {
+	results, err := tlsrptdb.Results(ctx)
+	xcheckf(ctx, err, "get results")
+	return results
+}
+
+// TLSRPTResultsPolicyDomain returns the TLS results for a domain.
+func (Admin) TLSRPTResultsPolicyDomain(ctx context.Context, policyDomain string) (dns.Domain, []tlsrptdb.TLSResult) {
+	dom, err := dns.ParseDomain(policyDomain)
+	xcheckf(ctx, err, "parsing domain")
+
+	results, err := tlsrptdb.ResultsPolicyDomain(ctx, dom)
+	xcheckf(ctx, err, "get result for policy domain")
+	return dom, results
+}
+
+// LookupTLSRPTRecord looks up a TLSRPT record and returns the parsed form, original txt
+// form from DNS, and error with the TLSRPT record as a string.
+func (Admin) LookupTLSRPTRecord(ctx context.Context, domain string) (record *TLSRPTRecord, txt string, errstr string) {
+	dom, err := dns.ParseDomain(domain)
+	xcheckf(ctx, err, "parsing domain")
+
+	resolver := dns.StrictResolver{Pkg: "webadmin"}
+	r, txt, err := tlsrpt.Lookup(ctx, resolver, dom)
+	if err != nil && (errors.Is(err, tlsrpt.ErrNoRecord) || errors.Is(err, tlsrpt.ErrMultipleRecords) || errors.Is(err, tlsrpt.ErrRecordSyntax)) {
+		errstr = err.Error()
+		err = nil
+	}
+	xcheckf(ctx, err, "fetching tlsrpt record")
+
+	if r != nil {
+		record = &TLSRPTRecord{Record: *r}
+	}
+
+	return record, txt, errstr
+}
+
+// TLSRPTRemoveResults removes the TLS results for a domain for the given day. If
+// day is empty, all results are removed.
+func (Admin) TLSRPTRemoveResults(ctx context.Context, domain string, day string) {
+	dom, err := dns.ParseDomain(domain)
+	xcheckf(ctx, err, "parsing domain")
+
+	err = tlsrptdb.RemoveResultsPolicyDomain(ctx, dom, day)
+	xcheckf(ctx, err, "removing tls results")
 }

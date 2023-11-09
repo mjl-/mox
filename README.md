@@ -21,7 +21,7 @@ See Quickstart below to get started.
   ("localparts"), and in domain names (IDNA).
 - Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
 - DANE and MTA-STS for inbound and outbound delivery over SMTP with STARTTLS,
-  including REQUIRETLS and with incoming TLSRPT reporting.
+  including REQUIRETLS and with incoming/outgoing TLSRPT reporting.
 - Web admin interface that helps you set up your domains and accounts
   (instructions to create DNS records, configure
   SPF/DKIM/DMARC/TLSRPT/MTA-STS), for status information, managing
@@ -114,7 +114,6 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- Sending TLS reports (currently only receiving)
 - Authentication other than HTTP-basic for webmail/webadmin/webaccount
 - Per-domain webmail and IMAP/SMTP host name (and TLS cert) and client settings
 - Make mox Go packages more easily reusable, each pulling in fewer (internal)

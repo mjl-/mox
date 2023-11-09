@@ -7,10 +7,12 @@ package mtastsdb
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/mtasts"
+	"github.com/mjl-/mox/tlsrpt"
 )
 
 var xlog = mlog.New("mtastsdb")
@@ -49,6 +52,10 @@ type PolicyRecord struct {
 	Backoff       bool
 	RecordID      string // As retrieved from DNS.
 	mtasts.Policy        // As retrieved from the well-known HTTPS url.
+
+	// Text that make up the policy, as retrieved. We didn't store this in the past. If
+	// empty, policy can be reconstructed from Policy field. Needed by TLSRPT.
+	PolicyText string
 }
 
 var (
@@ -145,7 +152,7 @@ func lookup(ctx context.Context, domain dns.Domain) (*PolicyRecord, error) {
 
 // Upsert adds the policy to the database, overwriting an existing policy for the domain.
 // Policy can be nil, indicating a failure to fetch the policy.
-func Upsert(ctx context.Context, domain dns.Domain, recordID string, policy *mtasts.Policy) error {
+func Upsert(ctx context.Context, domain dns.Domain, recordID string, policy *mtasts.Policy, policyText string) error {
 	db, err := database(ctx)
 	if err != nil {
 		return err
@@ -172,7 +179,7 @@ func Upsert(ctx context.Context, domain dns.Domain, recordID string, policy *mta
 		validEnd := now.Add(time.Duration(p.MaxAgeSeconds) * time.Second)
 
 		if err == bstore.ErrAbsent {
-			pr = PolicyRecord{domain.Name(), now, validEnd, now, now, backoff, recordID, p}
+			pr = PolicyRecord{domain.Name(), now, validEnd, now, now, backoff, recordID, p, policyText}
 			return tx.Insert(&pr)
 		}
 
@@ -182,6 +189,7 @@ func Upsert(ctx context.Context, domain dns.Domain, recordID string, policy *mta
 		pr.Backoff = backoff
 		pr.RecordID = recordID
 		pr.Policy = p
+		pr.PolicyText = policyText
 		return tx.Update(&pr)
 	})
 }
@@ -210,7 +218,11 @@ func PolicyRecords(ctx context.Context) ([]PolicyRecord, error) {
 //
 // Some errors are logged but not otherwise returned, e.g. if a new policy is
 // supposedly published but could not be retrieved.
-func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy *mtasts.Policy, fresh bool, err error) {
+//
+// Get returns an "sts" or "no-policy-found" in reportResult in most cases (when
+// not a local/internal error). It may add an "sts" result without policy contents
+// ("policy-string") in case of errors while fetching the policy.
+func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy *mtasts.Policy, reportResult tlsrpt.Result, fresh bool, err error) {
 	log := xlog.WithContext(ctx)
 	defer func() {
 		result := "ok"
@@ -231,17 +243,37 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 		// and should backoff. So attempt to fetch policy.
 		nctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		record, p, err := mtasts.Get(nctx, resolver, domain)
+		record, p, ptext, err := mtasts.Get(nctx, resolver, domain)
 		if err != nil {
 			switch {
 			case errors.Is(err, mtasts.ErrNoRecord) || errors.Is(err, mtasts.ErrMultipleRecords) || errors.Is(err, mtasts.ErrRecordSyntax) || errors.Is(err, mtasts.ErrNoPolicy) || errors.Is(err, mtasts.ErrPolicyFetch) || errors.Is(err, mtasts.ErrPolicySyntax):
 				// Remote is not doing MTA-STS, continue below. ../rfc/8461:333 ../rfc/8461:574
 				log.Debugx("interpreting mtasts error to mean remote is not doing mta-sts", err)
+
+				if errors.Is(err, mtasts.ErrNoRecord) {
+					reportResult = tlsrpt.MakeResult(tlsrpt.NoPolicyFound, domain)
+				} else {
+					fd := policyFetchFailureDetails(err)
+					reportResult = tlsrpt.MakeResult(tlsrpt.STS, domain, fd)
+				}
+
 			default:
 				// Interpret as temporary error, e.g. mtasts.ErrDNS, try again later.
-				return nil, false, fmt.Errorf("lookup up mta-sts policy: %w", err)
+
+				// Temporary DNS error could be an operational issue on our side, but we can still
+				// report it.
+				// Result: ../rfc/8460:594
+				fd := tlsrpt.Details(tlsrpt.ResultSTSPolicyFetch, mtasts.TLSReportFailureReason(err))
+				reportResult = tlsrpt.MakeResult(tlsrpt.STS, domain, fd)
+
+				return nil, reportResult, false, fmt.Errorf("lookup up mta-sts policy: %w", err)
 			}
+		} else if p.Mode == mtasts.ModeNone {
+			reportResult = tlsrpt.MakeResult(tlsrpt.NoPolicyFound, domain)
+		} else {
+			reportResult = tlsrpt.Result{Policy: tlsrptPolicy(p, ptext, domain)}
 		}
+
 		// Insert policy into database. If we could not fetch the policy itself, we back
 		// off for 5 minutes. ../rfc/8461:555
 		if err == nil || errors.Is(err, mtasts.ErrNoPolicy) || errors.Is(err, mtasts.ErrPolicyFetch) || errors.Is(err, mtasts.ErrPolicySyntax) {
@@ -249,17 +281,22 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 			if record != nil {
 				recordID = record.ID
 			}
-			if err := Upsert(ctx, domain, recordID, p); err != nil {
+			if err := Upsert(ctx, domain, recordID, p, ptext); err != nil {
 				log.Errorx("inserting policy into cache, continuing", err)
 			}
 		}
-		return p, true, nil
+
+		return p, reportResult, true, nil
 	} else if err != nil && errors.Is(err, ErrBackoff) {
 		// ../rfc/8461:552
 		// We recently failed to fetch a policy, act as if MTA-STS is not implemented.
-		return nil, false, nil
+		// Result: ../rfc/8460:594
+		fd := tlsrpt.Details(tlsrpt.ResultSTSPolicyFetch, "back-off-after-recent-fetch-error")
+		reportResult = tlsrpt.MakeResult(tlsrpt.STS, domain, fd)
+		return nil, reportResult, false, nil
 	} else if err != nil {
-		return nil, false, fmt.Errorf("looking up mta-sts policy in cache: %w", err)
+		// We don't add the result to the report, this is an internal error.
+		return nil, reportResult, false, fmt.Errorf("looking up mta-sts policy in cache: %w", err)
 	}
 
 	// Policy was found in database. Check in DNS it is still fresh.
@@ -268,25 +305,96 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 	defer cancel()
 	record, _, err := mtasts.LookupRecord(nctx, resolver, domain)
 	if err != nil {
-		if !errors.Is(err, mtasts.ErrNoRecord) {
+		if errors.Is(err, mtasts.ErrNoRecord) {
+			if policy.Mode != mtasts.ModeNone {
+				log.Errorx("no mtasts dns record while checking non-none policy for freshness, either domain owner removed mta-sts without phasing out policy with a none-policy for period of previous max-age, or this could be an attempt to downgrade to connection without mtasts, continuing with previous policy", err)
+			}
+			// else, policy will be removed by periodic refresher in the near future.
+		} else {
 			// Could be a temporary DNS or configuration error.
 			log.Errorx("checking for freshness of cached mta-sts dns txt record for domain, continuing with previously cached policy", err)
 		}
-		return policy, false, nil
-	} else if record.ID == cachedPolicy.RecordID {
-		return policy, true, nil
+
+		// Result: ../rfc/8460:594
+		fd := tlsrpt.Details(tlsrpt.ResultSTSPolicyFetch, mtasts.TLSReportFailureReason(err))
+		if policy.Mode != mtasts.ModeNone {
+			fd.FailureReasonCode += "+fallback-to-cached-policy"
+		}
+		reportResult = tlsrpt.Result{
+			Policy:         tlsrptPolicy(policy, cachedPolicy.PolicyText, domain),
+			FailureDetails: []tlsrpt.FailureDetails{fd},
+		}
+		return policy, reportResult, false, nil
+	} else if record.ID == cachedPolicy.RecordID && cachedPolicy.PolicyText != "" {
+		// In the past, we didn't store the raw policy lines in cachedPolicy.Lines. We only
+		// stop now if we do have policy lines in the cache.
+		reportResult = tlsrpt.Result{Policy: tlsrptPolicy(policy, cachedPolicy.PolicyText, domain)}
+		return policy, reportResult, true, nil
 	}
 
-	// New policy should be available.
+	// New policy should be available, or we are fetching the policy again because we
+	// didn't store the raw policy lines in the past.
 	nctx, cancel = context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	p, _, err := mtasts.FetchPolicy(nctx, domain)
+	p, ptext, err := mtasts.FetchPolicy(nctx, domain)
 	if err != nil {
 		log.Errorx("fetching updated policy for domain, continuing with previously cached policy", err)
-		return policy, false, nil
+
+		fd := policyFetchFailureDetails(err)
+		fd.FailureReasonCode += "+fallback-to-cached-policy"
+		reportResult = tlsrpt.Result{
+			Policy:         tlsrptPolicy(policy, cachedPolicy.PolicyText, domain),
+			FailureDetails: []tlsrpt.FailureDetails{fd},
+		}
+		return policy, reportResult, false, nil
 	}
-	if err := Upsert(ctx, domain, record.ID, p); err != nil {
+	if err := Upsert(ctx, domain, record.ID, p, ptext); err != nil {
 		log.Errorx("inserting refreshed policy into cache, continuing with fresh policy", err)
 	}
-	return p, true, nil
+	reportResult = tlsrpt.Result{Policy: tlsrptPolicy(p, ptext, domain)}
+	return p, reportResult, true, nil
+}
+
+func policyFetchFailureDetails(err error) tlsrpt.FailureDetails {
+	var verificationErr *tls.CertificateVerificationError
+	if errors.As(err, &verificationErr) {
+		resultType, reasonCode := tlsrpt.TLSFailureDetails(verificationErr)
+		// Result: ../rfc/8460:601
+		reason := string(resultType)
+		if reasonCode != "" {
+			reason += "+" + reasonCode
+		}
+		return tlsrpt.Details(tlsrpt.ResultSTSWebPKIInvalid, reason)
+	} else if errors.Is(err, mtasts.ErrPolicySyntax) {
+		// Result: ../rfc/8460:598
+		return tlsrpt.Details(tlsrpt.ResultSTSPolicyInvalid, mtasts.TLSReportFailureReason(err))
+	}
+	// Result: ../rfc/8460:594
+	return tlsrpt.Details(tlsrpt.ResultSTSPolicyFetch, mtasts.TLSReportFailureReason(err))
+}
+
+func tlsrptPolicy(p *mtasts.Policy, policyText string, domain dns.Domain) tlsrpt.ResultPolicy {
+	if policyText == "" {
+		// We didn't always store original policy lines. Reconstruct.
+		policyText = p.String()
+	}
+	lines := strings.Split(strings.TrimSuffix(policyText, "\n"), "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimSuffix(line, "\r")
+	}
+
+	rp := tlsrpt.ResultPolicy{
+		Type:   tlsrpt.STS,
+		Domain: domain.ASCII,
+		String: lines,
+	}
+	rp.MXHost = make([]string, len(p.MX))
+	for i, mx := range p.MX {
+		s := mx.Domain.ASCII
+		if mx.Wildcard {
+			s = "*." + s
+		}
+		rp.MXHost[i] = s
+	}
+	return rp
 }

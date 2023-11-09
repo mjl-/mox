@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/tlsrpt"
 )
 
 // todo future: add function to deliver message to multiple recipients. requires more elaborate return value, indicating success per message: some recipients may succeed, others may fail, and we should still deliver. to prevent backscatter, we also sometimes don't allow multiple recipients. ../rfc/5321:1144
@@ -71,22 +73,17 @@ var (
 type TLSMode string
 
 const (
-	// Required TLS with STARTTLS for SMTP servers, with either verified DANE TLSA
-	// record, or a WebPKI-verified certificate (with matching name, not expired, etc).
-	TLSStrictStartTLS TLSMode = "strictstarttls"
+	// TLS immediately ("implicit TLS"), directly starting TLS on the TCP connection,
+	// so not using STARTTLS. Whether PKIX and/or DANE is verified is specified
+	// separately.
+	TLSImmediate TLSMode = "immediate"
 
-	// Required TLS with STARTTLS for SMTP servers, without verifiying the certificate.
-	// This mode is needed to fallback after only unusable DANE records were found
-	// (e.g. with unknown parameters in the TLSA records). Also for allowing
-	// verification errors with DANE with message header TLS-Required no.
-	TLSUnverifiedStartTLS TLSMode = "unverifiedstarttls"
+	// Required TLS with STARTTLS for SMTP servers. The STARTTLS command is always
+	// executed, even if the server does not announce support.
+	// Whether PKIX and/or DANE is verified is specified separately.
+	TLSRequiredStartTLS TLSMode = "requiredstarttls"
 
-	// TLS immediately ("implicit TLS"), with either verified DANE TLSA records or a
-	// verified certificate: matching name, not expired, trusted by CA.
-	TLSStrictImmediate TLSMode = "strictimmediate"
-
-	// Use TLS if remote claims to support it, but do not verify the certificate
-	// (not trusted by CA, different host name or expired certificate is accepted).
+	// Use TLS with STARTTLS if remote claims to support it.
 	TLSOpportunistic TLSMode = "opportunistic"
 
 	// TLS must not be attempted, e.g. due to earlier TLS handshake error.
@@ -101,12 +98,20 @@ type Client struct {
 	// can be wrapped in a tls.Client. We close origConn instead of conn because
 	// closing the TLS connection would send a TLS close notification, which may block
 	// for 5s if the server isn't reading it (because it is also sending it).
-	origConn            net.Conn
-	conn                net.Conn
-	remoteHostname      dns.Domain   // TLS with SNI and name verification.
-	daneRecords         []adns.TLSA  // For authenticating (START)TLS connection.
-	moreRemoteHostnames []dns.Domain // Additional allowed names in TLS certificate.
-	verifiedRecord      *adns.TLSA   // If non-nil, then will be set to verified DANE record if any.
+	origConn              net.Conn
+	conn                  net.Conn
+	tlsVerifyPKIX         bool
+	ignoreTLSVerifyErrors bool
+	rootCAs               *x509.CertPool
+	remoteHostname        dns.Domain   // TLS with SNI and name verification.
+	daneRecords           []adns.TLSA  // For authenticating (START)TLS connection.
+	daneMoreHostnames     []dns.Domain // Additional allowed names in TLS certificate for DANE-TA.
+	daneVerifiedRecord    *adns.TLSA   // If non-nil, then will be set to verified DANE record if any.
+
+	// TLS connection success/failure are added. These are always non-nil, regardless
+	// of what was passed in opts. It lets us unconditionally dereference them.
+	recipientDomainResult *tlsrpt.Result // Either "sts" or "no-policy-found".
+	hostResult            *tlsrpt.Result // Either "dane" or "no-policy-found".
 
 	r        *bufio.Reader
 	w        *bufio.Writer
@@ -121,8 +126,9 @@ type Client struct {
 	botched  bool // If set, protocol is out of sync and no further commands can be sent.
 	needRset bool // If set, a new delivery requires an RSET command.
 
-	extEcodes         bool // Remote server supports sending extended error codes.
-	extStartTLS       bool // Remote server supports STARTTLS.
+	remoteHelo        string // From 220 greeting line.
+	extEcodes         bool   // Remote server supports sending extended error codes.
+	extStartTLS       bool   // Remote server supports STARTTLS.
 	ext8bitmime       bool
 	extSize           bool     // Remote server supports SIZE parameter.
 	maxSize           int64    // Max size of email message.
@@ -177,6 +183,33 @@ func (e Error) Error() string {
 	return s
 }
 
+// Opts influence behaviour of Client.
+type Opts struct {
+	// If auth is non-empty, authentication will be done with the first algorithm
+	// supported by the server. If none of the algorithms are supported, an error is
+	// returned.
+	Auth []sasl.Client
+
+	DANERecords        []adns.TLSA  // If not nil, DANE records to verify.
+	DANEMoreHostnames  []dns.Domain // For use with DANE, where additional certificate host names are allowed.
+	DANEVerifiedRecord *adns.TLSA   // If non-empty, set to the DANE record that verified the TLS connection.
+
+	// If set, TLS verification errors (for DANE or PKIX) are ignored. Useful for
+	// delivering messages with message header "TLS-Required: No".
+	// Certificates are still verified, and results are still tracked for TLS
+	// reporting, but the connections will continue.
+	IgnoreTLSVerifyErrors bool
+
+	// If not nil, used instead of the system default roots for TLS PKIX verification.
+	RootCAs *x509.CertPool
+
+	// TLS verification successes/failures is added to these TLS reporting results.
+	// Once the STARTTLS handshake is attempted, a successful/failed connection is
+	// tracked.
+	RecipientDomainResult *tlsrpt.Result // MTA-STS or no policy.
+	HostResult            *tlsrpt.Result // DANE or no policy.
+}
+
 // New initializes an SMTP session on the given connection, returning a client that
 // can be used to deliver messages.
 //
@@ -191,29 +224,38 @@ func (e Error) Error() string {
 // records with preferences, other DNS records, MTA-STS, retries and special
 // cases into account.
 //
-// tlsMode indicates if TLS is required, optional or should not be used. Only for
-// strict TLS modes is the certificate verified: Either with DANE, or through
-// the trusted CA pool with matching remoteHostname and not expired. For DANE,
-// additional host names in moreRemoteHostnames are allowed during TLS certificate
-// verification. By default, SMTP does not verify TLS for interopability reasons,
-// but MTA-STS or DANE can require it. If opportunistic TLS is used, and a TLS
-// error is encountered, the caller may want to try again (on a new connection)
-// without TLS. For messages with header TLS-Required no, DANE records may be
-// passed along with tlsMode TLSUnverifiedStartTLS. In that case, failing DANE
-// verification causes an error to be logged, but the connection won't be aborted.
-//
-// If auth is non-empty, authentication will be done with the first algorithm
-// supported by the server. If none of the algorithms are supported, an error is
-// returned.
-func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, ehloHostname, remoteHostname dns.Domain, auth []sasl.Client, daneRecords []adns.TLSA, moreRemoteHostnames []dns.Domain, verifiedRecord *adns.TLSA) (*Client, error) {
+// tlsMode indicates if and how TLS may/must (not) be used. tlsVerifyPKIX
+// indicates if TLS certificates must be validated against the PKIX/WebPKI
+// certificate authorities (if TLS is done). DANE-verification is done when
+// opts.DANERecords is not nil. TLS verification errors will be ignored if
+// opts.IgnoreTLSVerification is set. If TLS is done, PKIX verification is
+// always performed for tracking the results for TLS reporting, but if
+// tlsVerifyPKIX is false, the verification result does not affect the
+// connection. At the time of writing, delivery of email on the internet is done
+// with opportunistic TLS without PKIX verification by default. Recipient domains
+// can opt-in to PKIX verification by publishing an MTA-STS policy, or opt-in to
+// DANE verification by publishing DNSSEC-protected TLSA records in DNS.
+func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, tlsVerifyPKIX bool, ehloHostname, remoteHostname dns.Domain, opts Opts) (*Client, error) {
+	ensureResult := func(r *tlsrpt.Result) *tlsrpt.Result {
+		if r == nil {
+			return &tlsrpt.Result{}
+		}
+		return r
+	}
+
 	c := &Client{
-		origConn:            conn,
-		remoteHostname:      remoteHostname,
-		daneRecords:         daneRecords,
-		moreRemoteHostnames: moreRemoteHostnames,
-		verifiedRecord:      verifiedRecord,
-		lastlog:             time.Now(),
-		cmds:                []string{"(none)"},
+		origConn:              conn,
+		tlsVerifyPKIX:         tlsVerifyPKIX,
+		ignoreTLSVerifyErrors: opts.IgnoreTLSVerifyErrors,
+		rootCAs:               opts.RootCAs,
+		remoteHostname:        remoteHostname,
+		daneRecords:           opts.DANERecords,
+		daneMoreHostnames:     opts.DANEMoreHostnames,
+		daneVerifiedRecord:    opts.DANEVerifiedRecord,
+		lastlog:               time.Now(),
+		cmds:                  []string{"(none)"},
+		recipientDomainResult: ensureResult(opts.RecipientDomainResult),
+		hostResult:            ensureResult(opts.HostResult),
 	}
 	c.log = log.Fields(mlog.Field("smtpclient", "")).MoreFields(func() []mlog.Pair {
 		now := time.Now()
@@ -224,13 +266,15 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, ehl
 		return l
 	})
 
-	if tlsMode == TLSStrictImmediate {
-		// todo: we could also verify DANE here. not applicable to SMTP delivery.
-		config := c.tlsConfig(tlsMode)
+	if tlsMode == TLSImmediate {
+		config := c.tlsConfig()
 		tlsconn := tls.Client(conn, config)
+		// The tlsrpt tracking isn't used by caller, but won't hurt.
 		if err := tlsconn.HandshakeContext(ctx); err != nil {
+			c.tlsResultAdd(0, 1, err)
 			return nil, err
 		}
+		c.tlsResultAdd(1, 0, nil)
 		c.conn = tlsconn
 		tlsversion, ciphersuite := mox.TLSInfo(tlsconn)
 		c.log.Debug("tls client handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite), mlog.Field("servername", remoteHostname))
@@ -249,36 +293,103 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, ehl
 	c.tw = moxio.NewTraceWriter(c.log, "LC: ", timeoutWriter{c.conn, 30 * time.Second, c.log})
 	c.w = bufio.NewWriter(c.tw)
 
-	if err := c.hello(ctx, tlsMode, ehloHostname, auth); err != nil {
+	if err := c.hello(ctx, tlsMode, ehloHostname, opts.Auth); err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
-func (c *Client) tlsConfig(tlsMode TLSMode) *tls.Config {
-	if c.daneRecords != nil {
-		config := dane.TLSClientConfig(c.log, c.daneRecords, c.remoteHostname, c.moreRemoteHostnames, c.verifiedRecord)
-		if tlsMode == TLSUnverifiedStartTLS {
-			// In case of delivery with header "TLS-Required: No", the connection should not be
-			// aborted.
-			origVerify := config.VerifyConnection
-			config.VerifyConnection = func(cs tls.ConnectionState) error {
-				err := origVerify(cs)
-				if err != nil {
-					c.log.Infox("verifying dane failed, continuing due to tls mode unverified starttls, due to tls-required-no message header", err)
-					metricTLSRequiredNoIgnored.WithLabelValues("daneverification").Inc()
+// reportedError wraps an error while indicating it was already tracked for TLS
+// reporting.
+type reportedError struct{ err error }
+
+func (e reportedError) Error() string {
+	return e.err.Error()
+}
+
+func (e reportedError) Unwrap() error {
+	return e.err
+}
+
+func (c *Client) tlsConfig() *tls.Config {
+	// We always manage verification ourselves: We need to report in detail about
+	// failures. And we may have to verify both PKIX and DANE, record errors for
+	// each, and possibly ignore the errors.
+
+	verifyConnection := func(cs tls.ConnectionState) error {
+		// Collect verification errors. If there are none at the end, TLS validation
+		// succeeded. We may find validation problems below, record them for a TLS report
+		// but continue due to policies. We track the TLS reporting result in this
+		// function, wrapping errors in a reportedError.
+		var daneErr, pkixErr error
+
+		// DANE verification.
+		// daneRecords can be non-nil and empty, that's intended.
+		if c.daneRecords != nil {
+			verified, record, err := dane.Verify(c.log, c.daneRecords, cs, c.remoteHostname, c.daneMoreHostnames)
+			c.log.Debugx("dane verification", err, mlog.Field("verified", verified), mlog.Field("record", record))
+			if verified {
+				if c.daneVerifiedRecord != nil {
+					*c.daneVerifiedRecord = record
 				}
-				return nil
+			} else {
+				// Track error for reports.
+				// todo spec: may want to propose adding a result for no-dane-match. dane allows multiple records, some mismatching/failing isn't fatal and reporting on each record is probably not productive. ../rfc/8460:541
+				fd := c.tlsrptFailureDetails(tlsrpt.ResultValidationFailure, "dane-no-match")
+				if err != nil {
+					// todo future: potentially add more details. e.g. dane-ta verification errors. tlsrpt does not have "result types" to indicate those kinds of errors. we would probably have to pass c.daneResult to dane.Verify.
+
+					// We may have encountered errors while evaluation some of the TLSA records.
+					fd.FailureReasonCode += "+errors"
+				}
+				c.hostResult.Add(0, 0, fd)
+
+				if c.ignoreTLSVerifyErrors {
+					// We ignore the failure and continue the connection.
+					c.log.Infox("verifying dane failed, continuing with connection", err)
+					metricTLSRequiredNoIgnored.WithLabelValues("daneverification").Inc()
+				} else {
+					// This connection will fail.
+					daneErr = dane.ErrNoMatch
+				}
 			}
 		}
-		return &config
+
+		// PKIX verification.
+		opts := x509.VerifyOptions{
+			DNSName:       cs.ServerName,
+			Intermediates: x509.NewCertPool(),
+			Roots:         c.rootCAs,
+		}
+		for _, cert := range cs.PeerCertificates[1:] {
+			opts.Intermediates.AddCert(cert)
+		}
+		if _, err := cs.PeerCertificates[0].Verify(opts); err != nil {
+			resultType, reasonCode := tlsrpt.TLSFailureDetails(err)
+			fd := c.tlsrptFailureDetails(resultType, reasonCode)
+			c.recipientDomainResult.Add(0, 0, fd)
+
+			if c.tlsVerifyPKIX && !c.ignoreTLSVerifyErrors {
+				pkixErr = err
+			}
+		}
+
+		if daneErr != nil && pkixErr != nil {
+			return reportedError{errors.Join(daneErr, pkixErr)}
+		} else if daneErr != nil {
+			return reportedError{daneErr}
+		} else if pkixErr != nil {
+			return reportedError{pkixErr}
+		}
+		return nil
 	}
-	// todo: possibly accept older TLS versions for TLSOpportunistic?
+
 	return &tls.Config{
-		ServerName:         c.remoteHostname.ASCII,
-		RootCAs:            mox.Conf.Static.TLS.CertPool,
-		InsecureSkipVerify: tlsMode == TLSOpportunistic || tlsMode == TLSUnverifiedStartTLS,
+		ServerName: c.remoteHostname.ASCII, // For SNI.
+		// todo: possibly accept older TLS versions for TLSOpportunistic? or would our private key be at risk?
 		MinVersion:         tls.VersionTLS12, // ../rfc/8996:31 ../rfc/8997:66
+		InsecureSkipVerify: true,             // VerifyConnection below is called and will do all verification.
+		VerifyConnection:   verifyConnection,
 	}
 }
 
@@ -589,16 +700,18 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 	// Read greeting.
 	c.cmds = []string{"(greeting)"}
 	c.cmdStart = time.Now()
-	code, _, lastLine, _ := c.xreadecode(false)
+	code, _, lastLine, lines := c.xreadecode(false)
 	if code != smtp.C220ServiceReady {
 		c.xerrorf(code/100 == 5, code, "", lastLine, "%w: expected 220, got %d", ErrStatus, code)
 	}
+	// ../rfc/5321:2588
+	c.remoteHelo, _, _ = strings.Cut(lines[0], " ")
 
 	// Write EHLO, falling back to HELO if server doesn't appear to support it.
 	hello(true)
 
 	// Attempt TLS if remote understands STARTTLS and we aren't doing immediate TLS or if caller requires it.
-	if c.extStartTLS && (tlsMode != TLSSkip && tlsMode != TLSStrictImmediate) || tlsMode == TLSStrictStartTLS || tlsMode == TLSUnverifiedStartTLS {
+	if c.extStartTLS && tlsMode == TLSOpportunistic || tlsMode == TLSRequiredStartTLS {
 		c.log.Debug("starting tls client", mlog.Field("tlsmode", tlsMode), mlog.Field("servername", c.remoteHostname))
 		c.cmds[0] = "starttls"
 		c.cmdStart = time.Now()
@@ -606,6 +719,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 		code, secode, lastLine, _ := c.xread()
 		// ../rfc/3207:107
 		if code != smtp.C220ServiceReady {
+			c.tlsResultAddFailureDetails(0, 1, c.tlsrptFailureDetails(tlsrpt.ResultSTARTTLSNotSupported, fmt.Sprintf("smtp-starttls-reply-code-%d", code)))
 			c.xerrorf(code/100 == 5, code, secode, lastLine, "%w: STARTTLS: got %d, expected 220", ErrTLS, code)
 		}
 
@@ -621,9 +735,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 			}
 		}
 
-		// For TLSStrictStartTLS, the Go TLS library performs the checks needed for MTA-STS.
-		// ../rfc/8461:646
-		tlsConfig := c.tlsConfig(tlsMode)
+		tlsConfig := c.tlsConfig()
 		nconn := tls.Client(conn, tlsConfig)
 		c.conn = nconn
 
@@ -631,6 +743,10 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 		defer cancel()
 		err := nconn.HandshakeContext(nctx)
 		if err != nil {
+			// For each STARTTLS failure, we track a failed TLS session. For deliveries with
+			// multiple MX targets, we may add multiple failures, and delivery may succeed with
+			// a later MX target with which we can do STARTTLS. ../rfc/8460:524
+			c.tlsResultAdd(0, 1, err)
 			c.xerrorf(false, 0, "", "", "%w: STARTTLS TLS handshake: %s", ErrTLS, err)
 		}
 		cancel()
@@ -640,16 +756,73 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 		c.w = bufio.NewWriter(c.tw)
 
 		tlsversion, ciphersuite := mox.TLSInfo(nconn)
-		c.log.Debug("starttls client handshake done", mlog.Field("tlsmode", tlsMode), mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite), mlog.Field("servername", c.remoteHostname), mlog.Field("danerecord", c.verifiedRecord))
+		c.log.Debug("starttls client handshake done",
+			mlog.Field("tlsmode", tlsMode),
+			mlog.Field("verifypkix", c.tlsVerifyPKIX),
+			mlog.Field("verifydane", c.daneRecords != nil),
+			mlog.Field("ignoretlsverifyerrors", c.ignoreTLSVerifyErrors),
+			mlog.Field("tls", tlsversion),
+			mlog.Field("ciphersuite", ciphersuite),
+			mlog.Field("servername", c.remoteHostname),
+			mlog.Field("danerecord", c.daneVerifiedRecord))
 		c.tls = true
+		// Track successful TLS connection. ../rfc/8460:515
+		c.tlsResultAdd(1, 0, nil)
 
 		hello(false)
+	} else if tlsMode == TLSOpportunistic {
+		// Result: ../rfc/8460:538
+		c.tlsResultAddFailureDetails(0, 0, c.tlsrptFailureDetails(tlsrpt.ResultSTARTTLSNotSupported, ""))
 	}
 
 	if len(auth) > 0 {
 		return c.auth(auth)
 	}
 	return
+}
+
+func addrIP(addr net.Addr) string {
+	if t, ok := addr.(*net.TCPAddr); ok {
+		return t.IP.String()
+	}
+	host, _, _ := net.SplitHostPort(addr.String())
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return "" // For pipe during tests.
+	}
+	return ip.String()
+}
+
+// tlsrptFailureDetails returns FailureDetails with connection details (such as
+// IP addresses) for inclusion in a TLS report.
+func (c *Client) tlsrptFailureDetails(resultType tlsrpt.ResultType, reasonCode string) tlsrpt.FailureDetails {
+	return tlsrpt.FailureDetails{
+		ResultType:          resultType,
+		SendingMTAIP:        addrIP(c.origConn.LocalAddr()),
+		ReceivingMXHostname: c.remoteHostname.ASCII,
+		ReceivingMXHelo:     c.remoteHelo,
+		ReceivingIP:         addrIP(c.origConn.RemoteAddr()),
+		FailedSessionCount:  1,
+		FailureReasonCode:   reasonCode,
+	}
+}
+
+// tlsResultAdd adds TLS success/failure to all results.
+func (c *Client) tlsResultAdd(success, failure int64, err error) {
+	// Only track failure if not already done so in tls.Config.VerifyConnection.
+	var fds []tlsrpt.FailureDetails
+	var repErr reportedError
+	if err != nil && !errors.As(err, &repErr) {
+		resultType, reasonCode := tlsrpt.TLSFailureDetails(err)
+		fd := c.tlsrptFailureDetails(resultType, reasonCode)
+		fds = []tlsrpt.FailureDetails{fd}
+	}
+	c.tlsResultAddFailureDetails(success, failure, fds...)
+}
+
+func (c *Client) tlsResultAddFailureDetails(success, failure int64, fds ...tlsrpt.FailureDetails) {
+	c.recipientDomainResult.Add(success, failure, fds...)
+	c.hostResult.Add(success, failure, fds...)
 }
 
 // ../rfc/4954:139

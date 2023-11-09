@@ -501,6 +501,18 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 	}
 	c.HostnameDomain = hostname
 
+	if c.HostTLSRPT.Account != "" {
+		tlsrptLocalpart, err := smtp.ParseLocalpart(c.HostTLSRPT.Localpart)
+		if err != nil {
+			addErrorf("invalid localpart %q for host tlsrpt: %v", c.HostTLSRPT.Localpart, err)
+		} else if tlsrptLocalpart.IsInternational() {
+			// Does not appear documented in ../rfc/8460, but similar to DMARC it makes sense
+			// to keep this ascii-only addresses.
+			addErrorf("host TLSRPT localpart %q is an internationalized address, only conventional ascii-only address allowed for interopability", tlsrptLocalpart)
+		}
+		c.HostTLSRPT.ParsedLocalpart = tlsrptLocalpart
+	}
+
 	// Return private key for host name for use with an ACME. Used to return the same
 	// private key as pre-generated for use with DANE, with its public key in DNS.
 	// We only use this key for Listener's that have this ACME configured, and for
@@ -942,6 +954,25 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 	}
 	checkMailboxNormf(static.Postmaster.Mailbox, "postmaster mailbox")
 
+	accDests = map[string]AccountDestination{}
+
+	// Validate host TLSRPT account/address.
+	if static.HostTLSRPT.Account != "" {
+		if _, ok := c.Accounts[static.HostTLSRPT.Account]; !ok {
+			addErrorf("host tlsrpt account %q does not exist", static.HostTLSRPT.Account)
+		}
+		checkMailboxNormf(static.HostTLSRPT.Mailbox, "host tlsrpt mailbox")
+
+		// Localpart has been parsed already.
+
+		addrFull := smtp.NewAddress(static.HostTLSRPT.ParsedLocalpart, static.HostnameDomain).String()
+		dest := config.Destination{
+			Mailbox:        static.HostTLSRPT.Mailbox,
+			HostTLSReports: true,
+		}
+		accDests[addrFull] = AccountDestination{false, static.HostTLSRPT.ParsedLocalpart, static.HostTLSRPT.Account, dest}
+	}
+
 	var haveSTSListener, haveWebserverListener bool
 	for _, l := range static.Listeners {
 		if l.MTASTSHTTPS.Enabled {
@@ -1111,7 +1142,6 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 	}
 
 	// Validate email addresses.
-	accDests = map[string]AccountDestination{}
 	for accName, acc := range c.Accounts {
 		var err error
 		acc.DNSDomain, err = dns.ParseDomain(acc.Domain)
@@ -1366,8 +1396,8 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		c.Domains[d] = domain
 		addrFull := smtp.NewAddress(lp, addrdom).String()
 		dest := config.Destination{
-			Mailbox:    tlsrpt.Mailbox,
-			TLSReports: true,
+			Mailbox:          tlsrpt.Mailbox,
+			DomainTLSReports: true,
 		}
 		checkMailboxNormf(tlsrpt.Mailbox, "TLSRPT mailbox for account %q", tlsrpt.Account)
 		accDests[addrFull] = AccountDestination{false, lp, tlsrpt.Account, dest}

@@ -209,7 +209,7 @@ Accounts:
 		},
 		MaxAgeSeconds: 1296000,
 	}
-	err = mtastsdb.Upsert(ctxbg, dns.Domain{ASCII: "mox.example"}, "123", &mtastsPolicy)
+	err = mtastsdb.Upsert(ctxbg, dns.Domain{ASCII: "mox.example"}, "123", &mtastsPolicy, mtastsPolicy.String())
 	xcheckf(err, "adding mtastsdb report")
 
 	// Populate tlsrpt.db.
@@ -217,7 +217,7 @@ Accounts:
 	xcheckf(err, "tlsrptdb init")
 	tlsr, err := tlsrpt.Parse(strings.NewReader(tlsReport))
 	xcheckf(err, "parsing tls report")
-	err = tlsrptdb.AddReport(ctxbg, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", tlsr)
+	err = tlsrptdb.AddReport(ctxbg, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", false, tlsr)
 	xcheckf(err, "adding tls report")
 
 	// Populate queue, with a message.

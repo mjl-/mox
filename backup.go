@@ -282,7 +282,8 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	backupDB(dmarcdb.ReportsDB, "dmarcrpt.db")
 	backupDB(dmarcdb.EvalDB, "dmarceval.db")
 	backupDB(mtastsdb.DB, "mtasts.db")
-	backupDB(tlsrptdb.DB, "tlsrpt.db")
+	backupDB(tlsrptdb.ReportDB, "tlsrpt.db")
+	backupDB(tlsrptdb.ResultDB, "tlsrptresult.db")
 	backupFile("receivedid.key")
 
 	// Acme directory is optional.
@@ -530,7 +531,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 
 		switch p {
-		case "dmarcrpt.db", "dmarceval.db", "mtasts.db", "tlsrpt.db", "receivedid.key", "ctl":
+		case "dmarcrpt.db", "dmarceval.db", "mtasts.db", "tlsrpt.db", "tlsrptresult.db", "receivedid.key", "ctl":
 			// Already handled.
 			return nil
 		case "lastknownversion": // Optional file, not yet handled.

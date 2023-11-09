@@ -842,9 +842,10 @@ func cmdConfigDNSCheck(c *cmd) {
 	printResult("SPF", result.SPF.Result)
 	printResult("DKIM", result.DKIM.Result)
 	printResult("DMARC", result.DMARC.Result)
-	printResult("TLSRPT", result.TLSRPT.Result)
+	printResult("Host TLSRPT", result.HostTLSRPT.Result)
+	printResult("Domain TLSRPT", result.DomainTLSRPT.Result)
 	printResult("MTASTS", result.MTASTS.Result)
-	printResult("SRV", result.SRVConf.Result)
+	printResult("SRV conf", result.SRVConf.Result)
 	printResult("Autoconf", result.Autoconf.Result)
 	printResult("Autodiscover", result.Autodiscover.Result)
 }
@@ -1728,14 +1729,14 @@ sharing most of its code.
 			log.Printf("looking up tlsa records: %s, skipping", err)
 			continue
 		}
-		tlsMode := smtpclient.TLSStrictStartTLS
+		tlsMode := smtpclient.TLSRequiredStartTLS
 		if len(daneRecords) == 0 {
 			if !daneRequired {
 				log.Printf("host %s has no tlsa records, skipping", expandedHost)
 				continue
 			}
 			log.Printf("warning: only unusable tlsa records found, continuing with required tls without certificate verification")
-			tlsMode = smtpclient.TLSUnverifiedStartTLS
+			daneRecords = nil
 		} else {
 			var l []string
 			for _, r := range daneRecords {
@@ -1744,9 +1745,9 @@ sharing most of its code.
 			log.Printf("tlsa records: %s", strings.Join(l, "; "))
 		}
 
-		tlsRemoteHostnames := smtpclient.GatherTLSANames(haveMX, expandedNextHopAuthentic, expandedAuthentic, origNextHop, expandedNextHop, host.Domain, tlsaBaseDomain)
+		tlsHostnames := smtpclient.GatherTLSANames(haveMX, expandedNextHopAuthentic, expandedAuthentic, origNextHop, expandedNextHop, host.Domain, tlsaBaseDomain)
 		var l []string
-		for _, name := range tlsRemoteHostnames {
+		for _, name := range tlsHostnames {
 			l = append(l, name.String())
 		}
 		log.Printf("gathered valid tls certificate names for potential verification with dane-ta: %s", strings.Join(l, ", "))
@@ -1760,7 +1761,14 @@ sharing most of its code.
 		log.Printf("connected to %s, %s, starting smtp session with ehlo and starttls with dane verification", expandedHost, conn.RemoteAddr())
 
 		var verifiedRecord adns.TLSA
-		sc, err := smtpclient.New(ctxbg, clog, conn, tlsMode, ehloDomain, tlsRemoteHostnames[0], nil, daneRecords, tlsRemoteHostnames[1:], &verifiedRecord)
+		opts := smtpclient.Opts{
+			DANERecords:        daneRecords,
+			DANEMoreHostnames:  tlsHostnames[1:],
+			DANEVerifiedRecord: &verifiedRecord,
+			RootCAs:            mox.Conf.Static.TLS.CertPool,
+		}
+		tlsPKIX := false
+		sc, err := smtpclient.New(ctxbg, clog, conn, tlsMode, tlsPKIX, ehloDomain, tlsHostnames[0], opts)
 		if err != nil {
 			log.Printf("setting up smtp session: %v, skipping", err)
 			conn.Close()
@@ -2672,7 +2680,7 @@ should be used, and how long the policy can be cached.
 
 	domain := xparseDomain(args[0], "domain")
 
-	record, policy, err := mtasts.Get(context.Background(), dns.StrictResolver{}, domain)
+	record, policy, _, err := mtasts.Get(context.Background(), dns.StrictResolver{}, domain)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
@@ -2712,6 +2720,8 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 	c.unlisted = true
 	c.params = "< message"
 	c.help = "Parse a TLS report from the message and add it to the database."
+	var hostReport bool
+	c.flag.BoolVar(&hostReport, "hostreport", false, "report for a host instead of domain")
 	args := c.Parse()
 	if len(args) != 0 {
 		c.Usage()
@@ -2737,7 +2747,7 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 	xcheckf(err, "parsing tls report in message")
 
 	mailfrom := from.User + "@" + from.Host // todo future: should escape and such
-	err = tlsrptdb.AddReport(context.Background(), domain, mailfrom, report)
+	err = tlsrptdb.AddReport(context.Background(), domain, mailfrom, hostReport, report)
 	xcheckf(err, "add tls report to database")
 }
 

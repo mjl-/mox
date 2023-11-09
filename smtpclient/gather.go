@@ -266,14 +266,16 @@ func GatherIPs(ctx context.Context, log *mlog.Log, resolver dns.Resolver, host d
 // Only usable records are returned. If any record was found, DANE is required and
 // this is indicated with daneRequired. If no usable records remain, the caller
 // must do TLS, but not verify the remote TLS certificate.
+//
+// Returned values are always meaningful, also when an error was returned.
 func GatherTLSA(ctx context.Context, log *mlog.Log, resolver dns.Resolver, host dns.Domain, expandedAuthentic bool, expandedHost dns.Domain) (daneRequired bool, daneRecords []adns.TLSA, tlsaBaseDomain dns.Domain, err error) {
 	// ../rfc/7672:912
 	// This function is only called when the lookup of host was authentic.
 
 	var l []adns.TLSA
 
+	tlsaBaseDomain = host
 	if host == expandedHost || !expandedAuthentic {
-		tlsaBaseDomain = host
 		l, err = lookupTLSACNAME(ctx, log, resolver, 25, "tcp", host)
 	} else if expandedAuthentic {
 		// ../rfc/7672:934
@@ -286,8 +288,8 @@ func GatherTLSA(ctx context.Context, log *mlog.Log, resolver dns.Resolver, host 
 	}
 	if len(l) == 0 || err != nil {
 		daneRequired = err != nil
-		log.Debugx("gathering tlsa records failed", err, mlog.Field("danerequired", daneRequired))
-		return daneRequired, nil, dns.Domain{}, err
+		log.Debugx("gathering tlsa records failed", err, mlog.Field("danerequired", daneRequired), mlog.Field("basedomain", tlsaBaseDomain))
+		return daneRequired, nil, tlsaBaseDomain, err
 	}
 	daneRequired = len(l) > 0
 	l = filterUsableTLSARecords(log, l)
@@ -329,7 +331,7 @@ func lookupTLSACNAME(ctx context.Context, log *mlog.Log, resolver dns.Resolver, 
 		return nil, fmt.Errorf("looking up tlsa records for tlsa candidate base domain: %w", err)
 	} else if !result.Authentic {
 		log.Debugx("tlsa lookup not authentic, not doing dane for host", err, mlog.Field("host", host), mlog.Field("name", name))
-		return nil, err
+		return nil, nil
 	}
 	return l, nil
 }

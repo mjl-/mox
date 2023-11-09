@@ -19,6 +19,7 @@ table table td, table table th { padding: 0 0.1em; }
 table.long >tbody >tr >td { padding: 1em .5em; }
 table.long td { vertical-align: top; }
 table > tbody > tr:nth-child(odd) { background-color: #f8f8f8; }
+table.hover > tbody > tr:hover { background-color: #f0f0f0; }
 .text { max-width: 50em; }
 p { margin-bottom: 1em; max-width: 50em; }
 [title] { text-decoration: underline; text-decoration-style: dotted; }
@@ -262,12 +263,12 @@ const index = async () => {
 		dom.br(),
 		dom.h2('Reports'),
 		dom.div(dom.a('DMARC', attr({href: '#dmarc/reports'}))),
-		dom.div(dom.a('TLS', attr({href: '#tlsrpt'}))),
+		dom.div(dom.a('TLS', attr({href: '#tlsrpt/reports'}))),
 		dom.br(),
 		dom.h2('Operations'),
 		dom.div(dom.a('MTA-STS policies', attr({href: '#mtasts'}))),
 		dom.div(dom.a('DMARC evaluations', attr({href: '#dmarc/evaluations'}))),
-		// todo: outgoing TLSRPT findings
+		dom.div(dom.a('TLS connection results', attr({href: '#tlsrpt/results'}))),
 		// todo: routing, globally, per domain and per account
 		dom.br(),
 		dom.h2('DNS blocklist status'),
@@ -960,8 +961,8 @@ const domainDNSCheck = async (d) => {
 		dom.div('Domain: ' + checks.DMARC.Domain),
 		!checks.DMARC.TXT ? [] : dom.div('TXT record: ' + checks.DMARC.TXT),
 	]
-	const detailsTLSRPT = !checks.TLSRPT.TXT ? [] : [
-		dom.div('TXT record: ' + checks.TLSRPT.TXT),
+	const detailsTLSRPT = (checksTLSRPT) => !checksTLSRPT.TXT ? [] : [
+		dom.div('TXT record: ' + checksTLSRPT.TXT),
 	]
 	const detailsMTASTS = !checks.MTASTS.TXT && !checks.MTASTS.PolicyText ? [] : [
 		!checks.MTASTS.TXT ? [] : dom.div('MTA-STS record: ' + checks.MTASTS.TXT),
@@ -1007,7 +1008,8 @@ const domainDNSCheck = async (d) => {
 		resultSection('SPF', checks.SPF, detailsSPF),
 		resultSection('DKIM', checks.DKIM, detailsDKIM),
 		resultSection('DMARC', checks.DMARC, detailsDMARC),
-		resultSection('TLSRPT', checks.TLSRPT, detailsTLSRPT),
+		resultSection('Host TLSRPT', checks.HostTLSRPT, detailsTLSRPT(checks.HostTLSRPT)),
+		resultSection('Domain TLSRPT', checks.DomainTLSRPT, detailsTLSRPT(checks.DomainTLSRPT)),
 		resultSection('MTA-STS', checks.MTASTS, detailsMTASTS),
 		resultSection('SRV conf', checks.SRVConf, detailsSRVConf),
 		resultSection('Autoconf', checks.Autoconf, detailsAutoconf),
@@ -1458,7 +1460,149 @@ const domainDMARCReport = async (d, reportID) => {
 	)
 }
 
-const tlsrpt = async () => {
+const tlsrptIndex = async () => {
+	const page = document.getElementById('page')
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			'TLSRPT reports and connectivity results',
+		),
+		dom.ul(
+			dom.li(
+				dom.a(attr({href: '#tlsrpt/reports'}), 'Reports'), ', incoming TLS reports.',
+			),
+			dom.li(
+				dom.a(attr({href: '#tlsrpt/results'}), 'Results'), ', for outgoing TLS reports.',
+			),
+		),
+	)
+}
+
+const tlsrptResults = async () => {
+	const results = await api.TLSRPTResults()
+
+	// todo: add a view where results are grouped by policy domain+dayutc. now each recipient domain gets a row.
+
+	const page = document.getElementById('page')
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			crumblink('TLSRPT', '#tlsrpt'),
+			'Results',
+		),
+		dom.p('Messages are delivered with SMTP with TLS using STARTTLS if supported and/or required by the recipient domain\'s mail server. TLS connections may fail for various reasons, such as mismatching certificate host name, expired certificates or TLS protocol version/cipher suite incompatibilities. Statistics about successful connections and failed connections are tracked. Results can be tracked for recipient domains (for MTA-STS policies), and per MX host (for DANE). A domain/host can publish a TLSRPT DNS record with addresses that should receive TLS reports. Reports are sent every 24 hours. Not all results are enough reason to send a report, but if a report is sent all results are included.'),
+		dom('table.hover',
+			dom.thead(
+				dom.tr(
+					dom.th('Day (UTC)', attr({title: 'Day covering these results, a whole day from 00:00 UTC to 24:00 UTC.'})),
+					dom.th('Recipient domain', attr({title: 'Domain of addressee. For delivery to a recipient, the recipient and policy domains will match for reporting on MTA-STS policies, but can also result in reports for hosts from the MX record of the recipient to report on DANE policies.'})),
+					dom.th('Policy domain', attr({title: 'Domain for TLSRPT policy, specifying URIs to which reports should be sent.'})),
+					dom.th('Host', attr({title: 'Whether policy domain is an (MX) host (for DANE), or a recipient domain (for MTA-STS).'})),
+					dom.th('Success', attr({title: 'Total number of successful connections.'})),
+					dom.th('Failure', attr({title: 'Total number of failed connection attempts.'})),
+					dom.th('Failure details', attr({title: 'Total number of details about failures.'})),
+					dom.th('Send report', attr({title: 'Whether the current results will cause a report to be sent. A report is only sent if the domain has a TLSRPT with reporting addresses configured.'})),
+				),
+			),
+			dom.tbody(
+				results.sort((a, b) => {
+					if (a.DayUTC !== b.DayUTC) {
+						return a.DayUTC < b.DayUTC ? -1 : 1
+					}
+					if (a.RecipientDomain !== b.RecipientDomain) {
+						return a.RecipientDomain < b.RecipientDomain ? -1 : 1
+					}
+					return a.PolicyDomain < b.PolicyDomain ? -1 : 1
+				}).map(r => {
+					let success = 0
+					let failed = 0
+					let failureDetails = 0
+					r.Results.forEach(result => {
+						success += result.summary['total-successful-session-count']
+						failed += result.summary['total-failure-session-count']
+						failureDetails += (result['failure-details'] || []).length
+					})
+					return dom.tr(
+						dom.td(r.DayUTC),
+						dom.td(r.RecipientDomain),
+						dom.td(dom.a(attr({href: '#tlsrpt/results/'+r.PolicyDomain}), r.PolicyDomain)),
+						dom.td(r.IsHost ? '✓' : ''),
+						dom.td(style({textAlign: 'right'}), ''+success),
+						dom.td(style({textAlign: 'right'}), ''+failed),
+						dom.td(style({textAlign: 'right'}), ''+failureDetails),
+						dom.td(style({textAlign: 'right'}), r.SendReport ? '✓' : ''),
+					)
+				}),
+				results.length === 0 ? dom.tr(dom.td(attr({colspan: '8'}), 'No results.')) : [],
+			),
+		),
+	)
+}
+
+const tlsrptResultsPolicyDomain = async (domain) => {
+	const [d, tlsresults] = await api.TLSRPTResultsPolicyDomain(domain)
+	const recordPromise = api.LookupTLSRPTRecord(domain)
+
+	let recordBox
+	const page = document.getElementById('page')
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			crumblink('TLSRPT', '#tlsrpt'),
+			crumblink('Results', '#tlsrpt/results'),
+			'Policy domain '+domainString(d),
+		),
+		dom.div(
+			dom.button('Remove results', async function click(e) {
+				e.preventDefault()
+				e.target.disabled = true
+				try {
+					await api.TLSRPTRemoveResults(domain, '')
+					window.location.reload() // todo: only clear the table?
+				} catch (err) {
+					console.log({err})
+					window.alert('Error: ' + err.message)
+				} finally {
+					e.target.disabled = false
+				}
+			}),
+		),
+		dom.br(),
+		dom.div('Fetching TLSRPT DNS record for policy domain...'),
+		recordBox=dom.div(),
+		dom.br(),
+		dom.p('Below are the results per day and recipient domain that may be sent in a report.'),
+		tlsresults.map(tlsresult => [
+			dom.h2(tlsresult.DayUTC, ' - ', dom.span(attr({title: 'Recipient domain, as used in SMTP MAIL TO, usually based on message To/Cc/Bcc.'}), tlsresult.RecipientDomain)),
+			dom.p(
+				'Send report (if TLSRPT exists and has address): '+(tlsresult.SendReport ? 'Yes' : 'No'),
+				dom.br(),
+				'Report about (MX) host (instead of recipient domain): '+(tlsresult.IsHost ? 'Yes' : 'No'),
+			),
+			dom('div.literal', JSON.stringify(tlsresult.Results, null, '\t')),
+		])
+	)
+
+	// In background so page load fade doesn't look weird.
+	;(async () => {
+		let record, txt, errmsg
+		try {
+			[record, txt, errmsg] = await recordPromise
+		} catch (err) {
+			errmsg = 'error: '+err.message
+		}
+		const l = []
+		if (txt) {
+			l.push(dom('div.literal', txt))
+		}
+		if (errmsg) {
+			l.push(box(red, errmsg))
+		}
+		dom._kids(recordBox, l)
+	})()
+}
+
+const tlsrptReports = async () => {
 	const end = new Date().toISOString()
 	const start = new Date(new Date().getTime() - 30*24*3600*1000).toISOString()
 	const summaries = await api.TLSRPTSummaries(start, end, '')
@@ -2431,7 +2575,13 @@ const init = async () => {
 			} else if (h === 'queue') {
 				await queueList()
 			} else if (h === 'tlsrpt') {
-				await tlsrpt()
+				await tlsrptIndex()
+			} else if (h === 'tlsrpt/reports') {
+				await tlsrptReports()
+			} else if (h === 'tlsrpt/results') {
+				await tlsrptResults()
+			} else if (t[0] == 'tlsrpt' && t[1] == 'results' && t.length === 3) {
+				await tlsrptResultsPolicyDomain(t[2])
 			} else if (h === 'dmarc') {
 				await dmarcIndex()
 			} else if (h === 'dmarc/reports') {

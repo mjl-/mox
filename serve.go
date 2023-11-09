@@ -16,6 +16,7 @@ import (
 	"github.com/mjl-/mox/smtpserver"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/tlsrptdb"
+	"github.com/mjl-/mox/tlsrptsend"
 )
 
 func shutdown(log *mlog.Log) {
@@ -52,7 +53,7 @@ func shutdown(log *mlog.Log) {
 
 // start initializes all packages, starts all listeners and the switchboard
 // goroutine, then returns.
-func start(mtastsdbRefresher, sendDMARCReports, skipForkExec bool) error {
+func start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec bool) error {
 	smtpserver.Listen()
 	imapserver.Listen()
 	http.Listen()
@@ -88,6 +89,10 @@ func start(mtastsdbRefresher, sendDMARCReports, skipForkExec bool) error {
 	}
 	if sendDMARCReports {
 		dmarcdb.Start(dns.StrictResolver{Pkg: "dmarcdb"})
+	}
+
+	if sendTLSReports {
+		tlsrptsend.Start(dns.StrictResolver{Pkg: "tlsrptsend"})
 	}
 
 	store.StartAuthCache()

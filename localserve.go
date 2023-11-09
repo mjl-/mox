@@ -139,8 +139,9 @@ during those commands instead of during "data".
 
 	const mtastsdbRefresher = false
 	const sendDMARCReports = false
+	const sendTLSReports = false
 	const skipForkExec = true
-	if err := start(mtastsdbRefresher, sendDMARCReports, skipForkExec); err != nil {
+	if err := start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec); err != nil {
 		log.Fatalx("starting mox", err)
 	}
 	golog.Printf("mox, version %s", moxvar.Version)

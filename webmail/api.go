@@ -1708,7 +1708,7 @@ func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddres
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		policy, _, err := mtastsdb.Get(ctx, resolver, addr.Domain)
+		policy, _, _, err := mtastsdb.Get(ctx, resolver, addr.Domain)
 		if policy != nil && policy.Mode == mtasts.ModeEnforce {
 			rs.MTASTS = SecurityResultYes
 		} else if err == nil {

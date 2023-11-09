@@ -32,6 +32,8 @@ import (
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
+	"github.com/mjl-/mox/tlsrpt"
+	"github.com/mjl-/mox/tlsrptdb"
 )
 
 var xlog = mlog.New("queue")
@@ -55,7 +57,7 @@ var (
 		[]string{
 			"attempt",   // Number of attempts.
 			"transport", // empty for default direct delivery.
-			"tlsmode",   // strict, opportunistic, skip
+			"tlsmode",   // immediate, requiredstarttls, opportunistic, skip (from smtpclient.TLSMode), with optional +mtasts and/or +dane.
 			"result",    // ok, timeout, canceled, temperror, permerror, error
 		},
 	)
@@ -580,12 +582,71 @@ func deliver(resolver dns.Resolver, m Msg) {
 		qlog.Debug("delivering with transport", mlog.Field("transport", transportName))
 	}
 
+	// We gather TLS connection successes and failures during delivery, and we store
+	// them in tlsrptb. Every 24 hours we send an email with a report to the recipient
+	// domains that opt in via a TLSRPT DNS record.  For us, the tricky part is
+	// collecting all reporting information. We've got several TLS modes
+	// (opportunistic, DANE and/or MTA-STS (PKIX), overrides due to Require TLS).
+	// Failures can happen at various levels: MTA-STS policies (apply to whole delivery
+	// attempt/domain), MX targets (possibly multiple per delivery attempt, both for
+	// MTA-STS and DANE).
+	//
+	// Once the SMTP client has tried a TLS handshake, we register success/failure,
+	// regardless of what happens next on the connection. We also register failures
+	// when they happen before we get to the SMTP client, but only if they are related
+	// to TLS (and some DNSSEC).
+	var recipientDomainResult tlsrpt.Result
+	var hostResults []tlsrpt.Result
+	defer func() {
+		if mox.Conf.Static.NoOutgoingTLSReports || !m.RecipientDomain.IsDomain() {
+			return
+		}
+
+		now := time.Now()
+		dayUTC := now.UTC().Format("20060102")
+
+		results := make([]tlsrptdb.TLSResult, 0, 1+len(hostResults))
+		addResult := func(r tlsrpt.Result, isHost bool) {
+			var zerotype tlsrpt.PolicyType
+			if r.Policy.Type == zerotype {
+				return
+			}
+
+			// Ensure we store policy domain in unicode in database.
+			policyDomain, err := dns.ParseDomain(r.Policy.Domain)
+			if err != nil {
+				qlog.Errorx("parsing policy domain for tls result", err, mlog.Field("policydomain", r.Policy.Domain))
+				return
+			}
+
+			tlsResult := tlsrptdb.TLSResult{
+				PolicyDomain:    policyDomain.Name(),
+				DayUTC:          dayUTC,
+				RecipientDomain: m.RecipientDomain.Domain.Name(),
+				IsHost:          isHost,
+				SendReport:      !m.IsTLSReport,
+				Results:         []tlsrpt.Result{r},
+			}
+			results = append(results, tlsResult)
+		}
+		addResult(recipientDomainResult, false)
+		for _, result := range hostResults {
+			addResult(result, true)
+		}
+
+		if len(results) > 0 {
+			err := tlsrptdb.AddTLSResults(context.Background(), results)
+			qlog.Check(err, "adding tls results to database for upcoming tlsrpt report")
+		}
+	}()
+
 	var dialer smtpclient.Dialer = &net.Dialer{}
 	if transport.Submissions != nil {
 		deliverSubmit(cid, qlog, resolver, dialer, m, backoff, transportName, transport.Submissions, true, 465)
 	} else if transport.Submission != nil {
 		deliverSubmit(cid, qlog, resolver, dialer, m, backoff, transportName, transport.Submission, false, 587)
 	} else if transport.SMTP != nil {
+		// todo future: perhaps also gather tlsrpt results for submissions.
 		deliverSubmit(cid, qlog, resolver, dialer, m, backoff, transportName, transport.SMTP, false, 25)
 	} else {
 		ourHostname := mox.Conf.Static.HostnameDomain
@@ -602,7 +663,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 			}
 			ourHostname = transport.Socks.Hostname
 		}
-		deliverDirect(cid, qlog, resolver, dialer, ourHostname, transportName, m, backoff)
+		recipientDomainResult, hostResults = deliverDirect(cid, qlog, resolver, dialer, ourHostname, transportName, m, backoff)
 	}
 }
 

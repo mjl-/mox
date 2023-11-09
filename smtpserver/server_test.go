@@ -93,6 +93,7 @@ type testserver struct {
 	requiretls bool
 	dnsbls     []dns.Domain
 	tlsmode    smtpclient.TLSMode
+	tlspkix    bool
 }
 
 func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *testserver {
@@ -164,7 +165,11 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 
 	ourHostname := mox.Conf.Static.HostnameDomain
 	remoteHostname := dns.Domain{ASCII: "mox.example"}
-	client, err := smtpclient.New(ctxbg, xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, ourHostname, remoteHostname, auth, nil, nil, nil)
+	opts := smtpclient.Opts{
+		Auth:    auth,
+		RootCAs: mox.Conf.Static.TLS.CertPool,
+	}
+	client, err := smtpclient.New(ctxbg, xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, ts.tlspkix, ourHostname, remoteHostname, opts)
 	if err != nil {
 		clientConn.Close()
 	} else {

@@ -393,7 +393,8 @@ func (Account) DestinationSave(ctx context.Context, destName string, oldDest, ne
 
 	// Keep fields we manage.
 	newDest.DMARCReports = curDest.DMARCReports
-	newDest.TLSReports = curDest.TLSReports
+	newDest.HostTLSReports = curDest.HostTLSReports
+	newDest.DomainTLSReports = curDest.DomainTLSReports
 
 	err := mox.DestinationSave(ctx, accountName, destName, newDest)
 	xcheckf(ctx, err, "saving destination")

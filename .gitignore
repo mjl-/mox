@@ -24,6 +24,7 @@
 /testdata/smtp/postmaster/
 /testdata/smtpserverfuzz/data/
 /testdata/store/data/
+/testdata/tlsrptsend/data/
 /testdata/train/
 /testdata/webmail/data/
 /testdata/upgradetest.mbox.gz

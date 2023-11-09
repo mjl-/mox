@@ -179,9 +179,10 @@ describe-static" and "mox config describe-domains":
 				# Do not offer STARTTLS to secure the connection. Not recommended. (optional)
 				NoSTARTTLS: false
 
-				# Do not accept incoming messages if STARTTLS is not active. Can be used in
-				# combination with a strict MTA-STS policy. A remote SMTP server may not support
-				# TLS and may not be able to deliver messages. (optional)
+				# Do not accept incoming messages if STARTTLS is not active. Consider using in
+				# combination with an MTA-STS policy and/or DANE. A remote SMTP server may not
+				# support TLS and may not be able to deliver messages. Incoming messages for TLS
+				# reporting addresses ignore this setting and do not require TLS. (optional)
 				RequireSTARTTLS: false
 
 				# Do not announce the REQUIRETLS SMTP extension. Messages delivered using the
@@ -391,6 +392,22 @@ describe-static" and "mox config describe-domains":
 		# E.g. Postmaster or Inbox.
 		Mailbox:
 
+	# Destination for per-host TLS reports (TLSRPT). TLS reports can be per recipient
+	# domain (for MTA-STS), or per MX host (for DANE). The per-domain TLS reporting
+	# configuration is in domains.conf. This is the TLS reporting configuration for
+	# this host. If absent, no host-based TLSRPT address is configured, and no host
+	# TLSRPT DNS record is suggested. (optional)
+	HostTLSRPT:
+
+		# Account to deliver TLS reports to. Typically same account as for postmaster.
+		Account:
+
+		# Mailbox to deliver TLS reports to. Recommended value: TLSRPT.
+		Mailbox:
+
+		# Localpart at hostname to accept TLS reports at. Recommended value: tls-reports.
+		Localpart:
+
 	# Mailboxes to create for new accounts. Inbox is always created. Mailboxes can be
 	# given a 'special-use' role, which are understood by most mail clients. If
 	# absent/empty, the following mailboxes are created: Sent, Archive, Trash, Drafts
@@ -555,6 +572,11 @@ describe-static" and "mox config describe-domains":
 	# hours, rounded up so a whole number of intervals cover 24 hours, aligned at
 	# whole days in UTC. (optional)
 	NoOutgoingDMARCReports: false
+
+	# Do not send TLS reports. By default, reports about successful and failed SMTP
+	# STARTTLS connections are sent to domains if their TLSRPT DNS record requests
+	# them. Reports covering a 24 hour UTC interval are sent daily. (optional)
+	NoOutgoingTLSReports: false
 
 # domains.conf
 
