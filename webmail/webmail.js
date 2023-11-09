@@ -822,6 +822,7 @@ const [dom, style, attr, prop] = (function () {
 		ul: (...l) => _domKids(document.createElement('ul'), l),
 		li: (...l) => _domKids(document.createElement('li'), l),
 		iframe: (...l) => _domKids(document.createElement('iframe'), l),
+		embed: (...l) => _domKids(document.createElement('embed'), l),
 		b: (...l) => _domKids(document.createElement('b'), l),
 		img: (...l) => _domKids(document.createElement('img'), l),
 		style: (...l) => _domKids(document.createElement('style'), l),
@@ -2973,7 +2974,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		}, style({ backgroundColor: 'white', borderRadius: '.25em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd' }), a.Filename || '(unnamed)', ' - ', formatSize(a.Part.DecodedSize), ' - ', dom.a('Download', attr.download(''), attr.href('msg/' + m.ID + '/download/' + pathStr), function click(e) { e.stopPropagation(); }))), isImage(a) ?
 			dom.div(style({ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100% - 50px)', margin: '0 5em' }), dom.img(attr.src('msg/' + m.ID + '/view/' + pathStr), style({ backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', margin: '0 30px' }))) : (isText(a) ?
 			dom.iframe(attr.title('Attachment shown as text.'), style({ flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em' }), attr.src('msg/' + m.ID + '/viewtext/' + pathStr)) : (isPDF(a) ?
-			dom.iframe(style({ flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em' }), attr.title('Attachment as PDF.'), attr.src('msg/' + m.ID + '/view/' + pathStr)) :
+			dom.embed(style({ flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em' }), attr.title('Attachment as PDF.'), attr.src('msg/' + m.ID + '/view/' + pathStr)) :
 			content = dom.div(function click(e) {
 				e.stopPropagation();
 			}, style({ minWidth: '30em', padding: '2ex', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em', textAlign: 'center' }), dom.div(style({ marginBottom: '2ex' }), 'Attachment could be a binary file.'), dom.clickbutton('View as text', function click() {
