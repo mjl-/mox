@@ -13,10 +13,10 @@ require (
 	github.com/mjl-/sherpats v0.0.4
 	github.com/prometheus/client_golang v1.14.0
 	go.etcd.io/bbolt v1.3.8
-	golang.org/x/crypto v0.14.0
-	golang.org/x/exp v0.0.0-20230811145659-89c5cff77bcb
-	golang.org/x/net v0.16.0
-	golang.org/x/text v0.13.0
+	golang.org/x/crypto v0.15.0
+	golang.org/x/exp v0.0.0-20231108232855-2478ac86f678
+	golang.org/x/net v0.18.0
+	golang.org/x/text v0.14.0
 	rsc.io/qr v0.2.0
 )
 
@@ -29,8 +29,8 @@ require (
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
-	golang.org/x/mod v0.12.0 // indirect
-	golang.org/x/sys v0.13.0 // indirect
-	golang.org/x/tools v0.13.0 // indirect
+	golang.org/x/mod v0.14.0 // indirect
+	golang.org/x/sys v0.14.0 // indirect
+	golang.org/x/tools v0.15.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
