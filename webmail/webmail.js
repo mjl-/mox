@@ -2135,7 +2135,7 @@ const compose = (opts) => {
 					let reqtls = opts.isList !== true;
 					const walk = (l) => {
 						for (const v of l) {
-							if (v.recipientSecurity?.RequireTLS !== api.SecurityResult.SecurityResultYes) {
+							if (v.recipientSecurity?.RequireTLS !== api.SecurityResult.SecurityResultYes || v.recipientSecurity?.MTASTS !== api.SecurityResult.SecurityResultYes && v.recipientSecurity?.DANE !== api.SecurityResult.SecurityResultYes) {
 								reqtls = false;
 								break;
 							}
