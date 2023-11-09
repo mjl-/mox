@@ -276,7 +276,7 @@ func TestSendReports(t *testing.T) {
 		return <-step
 	}
 
-	sleepBetween = func() {}
+	sleepBetween = func(ctx context.Context, between time.Duration) (ok bool) { return true }
 
 	test := func(evals []Evaluation, expAggrAddrs map[string]struct{}, expErrorAddrs map[string]struct{}, optExpReport *dmarcrpt.Feedback) {
 		t.Helper()
