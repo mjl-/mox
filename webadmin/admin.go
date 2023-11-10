@@ -1118,8 +1118,22 @@ EOF
 				Scheme: "mailto",
 				Opaque: smtp.NewAddress(domConf.DMARC.ParsedLocalpart, domConf.DMARC.DNSDomain).Pack(false),
 			}
+			uristr := uri.String()
 			dmarcr.AggregateReportAddresses = []dmarc.URI{
-				{Address: uri.String(), MaxSize: 10, Unit: "m"},
+				{Address: uristr, MaxSize: 10, Unit: "m"},
+			}
+
+			if record != nil {
+				found := false
+				for _, addr := range record.AggregateReportAddresses {
+					if addr.Address == uristr {
+						found = true
+						break
+					}
+				}
+				if !found {
+					addf(&r.DMARC.Errors, "Configured DMARC reporting address is not present in record.")
+				}
 			}
 		} else {
 			addf(&r.DMARC.Instructions, `Configure a DMARC destination in domain in config file.`)
@@ -1153,13 +1167,10 @@ EOF
 				Scheme: "mailto",
 				Opaque: address.Pack(false),
 			}
-			uristr := uri.String()
-			uristr = strings.ReplaceAll(uristr, ",", "%2C")
-			uristr = strings.ReplaceAll(uristr, "!", "%21")
-			uristr = strings.ReplaceAll(uristr, ";", "%3B")
+			rua := tlsrpt.RUA(uri.String())
 			tlsrptr := &tlsrpt.Record{
 				Version: "TLSRPTv1",
-				RUAs:    [][]string{{uristr}},
+				RUAs:    [][]tlsrpt.RUA{{rua}},
 			}
 			instr += fmt.Sprintf(`
 
@@ -1167,6 +1178,23 @@ Ensure a DNS TXT record like the following exists:
 
 	_smtp._tls TXT %s
 `, mox.TXTStrings(tlsrptr.String()))
+
+			if err == nil {
+				found := false
+			RUA:
+				for _, l := range record.RUAs {
+					for _, e := range l {
+						if e == rua {
+							found = true
+							break RUA
+						}
+					}
+				}
+				if !found {
+					addf(&result.Errors, `Configured reporting address is not present in TLSRPT record.`)
+				}
+			}
+
 		} else if isHost {
 			addf(&result.Errors, `Configure a host TLSRPT localpart in static mox.conf config file.`)
 		} else {

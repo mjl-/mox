@@ -1759,11 +1759,11 @@
 				},
 				{
 					"Name": "RUAs",
-					"Docs": "Aggregate reporting URI, for \"rua=\". \"rua=\" can occur multiple times, each can be a list. Must be URL-encoded strings, with \",\", \"!\" and \";\" encoded.",
+					"Docs": "Aggregate reporting URI, for \"rua=\". \"rua=\" can occur multiple times, each can be a list.",
 					"Typewords": [
 						"[]",
 						"[]",
-						"string"
+						"RUA"
 					]
 				},
 				{
@@ -3902,6 +3902,11 @@
 					"Docs": "Relaxed requires either an exact or subdomain name match."
 				}
 			]
+		},
+		{
+			"Name": "RUA",
+			"Docs": "RUA is a reporting address with scheme and special characters \",\", \"!\" and\n\";\" not encoded.",
+			"Values": null
 		},
 		{
 			"Name": "Mode",

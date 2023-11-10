@@ -308,7 +308,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 
 	for _, l := range record.RUAs {
 		for _, s := range l {
-			u, err := url.Parse(s)
+			u, err := url.Parse(string(s))
 			if err != nil {
 				log.Debugx("parsing rua uri in tlsrpt dns record, ignoring", err, mlog.Field("rua", s))
 				continue

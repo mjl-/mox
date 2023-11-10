@@ -36,8 +36,8 @@ func TestLookup(t *testing.T) {
 		}
 	}
 
-	test("basic.example", &Record{Version: "TLSRPTv1", RUAs: [][]string{{"mailto:tlsrpt@basic.example"}}}, nil)
-	test("one.example", &Record{Version: "TLSRPTv1", RUAs: [][]string{{"mailto:tlsrpt@basic.example"}}}, nil)
+	test("basic.example", &Record{Version: "TLSRPTv1", RUAs: [][]RUA{{"mailto:tlsrpt@basic.example"}}}, nil)
+	test("one.example", &Record{Version: "TLSRPTv1", RUAs: [][]RUA{{"mailto:tlsrpt@basic.example"}}}, nil)
 	test("multiple.example", nil, ErrMultipleRecords)
 	test("absent.example", nil, ErrNoRecord)
 	test("other.example", nil, ErrNoRecord)

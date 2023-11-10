@@ -536,7 +536,7 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 			Scheme: "mailto",
 			Opaque: smtp.NewAddress(Conf.Static.HostTLSRPT.ParsedLocalpart, Conf.Static.HostnameDomain).Pack(false),
 		}
-		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]string{{uri.String()}}}
+		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]tlsrpt.RUA{{tlsrpt.RUA(uri.String())}}}
 		records = append(records,
 			"; For the machine, only needs to be created once, for the first domain added:",
 			"; ",
@@ -638,7 +638,7 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 			Scheme: "mailto",
 			Opaque: smtp.NewAddress(domConf.TLSRPT.ParsedLocalpart, domConf.TLSRPT.DNSDomain).Pack(false),
 		}
-		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]string{{uri.String()}}}
+		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]tlsrpt.RUA{{tlsrpt.RUA(uri.String())}}}
 		records = append(records,
 			"; Request reporting about TLS failures.",
 			fmt.Sprintf(`_smtp._tls.%s.         TXT "%s"`, d, tlsrptr.String()),

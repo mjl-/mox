@@ -25,10 +25,10 @@ func TestRecord(t *testing.T) {
 		}
 	}
 
-	good("v=TLSRPTv1; rua=mailto:tlsrpt@mox.example;", Record{Version: "TLSRPTv1", RUAs: [][]string{{"mailto:tlsrpt@mox.example"}}})
-	good("v=TLSRPTv1; rua=mailto:tlsrpt@mox.example , \t\t https://mox.example/tlsrpt  ", Record{Version: "TLSRPTv1", RUAs: [][]string{{"mailto:tlsrpt@mox.example", "https://mox.example/tlsrpt"}}})
-	good("v=TLSRPTv1; rua=mailto:tlsrpt@mox.example; ext=yes", Record{Version: "TLSRPTv1", RUAs: [][]string{{"mailto:tlsrpt@mox.example"}}, Extensions: []Extension{{"ext", "yes"}}})
-	good("v=TLSRPTv1 ; rua=mailto:x@x.example; rua=mailto:y@x.example", Record{Version: "TLSRPTv1", RUAs: [][]string{{"mailto:x@x.example"}, {"mailto:y@x.example"}}})
+	good("v=TLSRPTv1; rua=mailto:tlsrpt@mox.example;", Record{Version: "TLSRPTv1", RUAs: [][]RUA{{"mailto:tlsrpt@mox.example"}}})
+	good("v=TLSRPTv1; rua=mailto:tlsrpt@mox.example , \t\t https://mox.example/tlsrpt  ", Record{Version: "TLSRPTv1", RUAs: [][]RUA{{"mailto:tlsrpt@mox.example", "https://mox.example/tlsrpt"}}})
+	good("v=TLSRPTv1; rua=mailto:tlsrpt@mox.example; ext=yes", Record{Version: "TLSRPTv1", RUAs: [][]RUA{{"mailto:tlsrpt@mox.example"}}, Extensions: []Extension{{"ext", "yes"}}})
+	good("v=TLSRPTv1 ; rua=mailto:x@x.example; rua=mailto:y@x.example", Record{Version: "TLSRPTv1", RUAs: [][]RUA{{"mailto:x@x.example"}, {"mailto:y@x.example"}}})
 
 	bad("v=TLSRPTv0")
 	bad("v=TLSRPTv10")
@@ -48,7 +48,7 @@ func TestRecord(t *testing.T) {
 	bad("v=TLSRPTv1; rua=http://bad/%")                                            // bad URI
 
 	const want = `v=TLSRPTv1; rua=mailto:x@mox.example; more=a; ext=2`
-	record := Record{Version: "TLSRPTv1", RUAs: [][]string{{"mailto:x@mox.example"}}, Extensions: []Extension{{"more", "a"}, {"ext", "2"}}}
+	record := Record{Version: "TLSRPTv1", RUAs: [][]RUA{{"mailto:x@mox.example"}}, Extensions: []Extension{{"more", "a"}, {"ext", "2"}}}
 	got := record.String()
 	if got != want {
 		t.Fatalf("record string, got %q, want %q", got, want)
