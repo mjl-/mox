@@ -2448,15 +2448,16 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		rcptAuthResults.Methods = append(rcptAuthResults.Methods, rcptDMARCMethod)
 
 		// Prepend reason as message header, for easy display in mail clients.
-		var xmoxreason string
+		var xmox string
 		if a.reason != "" {
-			xmoxreason = "X-Mox-Reason: " + a.reason + "\r\n"
+			xmox = "X-Mox-Reason: " + a.reason + "\r\n"
 		}
+		xmox += a.headers
 
 		// ../rfc/5321:3204
 		// Received-SPF header goes before Received. ../rfc/7208:2038
 		m.MsgPrefix = []byte(
-			xmoxreason +
+			xmox +
 				"Delivered-To: " + rcptAcc.rcptTo.XString(c.smtputf8) + "\r\n" + // ../rfc/9228:274
 				"Return-Path: <" + c.mailFrom.String() + ">\r\n" + // ../rfc/5321:3300
 				rcptAuthResults.Header() +

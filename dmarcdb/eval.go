@@ -341,12 +341,13 @@ func Start(resolver dns.Resolver) {
 			_, err := bstore.QueryDB[Evaluation](ctx, db).FilterLess("Evaluated", nextEnd.Add(-48*time.Hour)).Delete()
 			log.Check(err, "removing stale dmarc evaluations from database")
 
-			log.Info("sending dmarc aggregate reports", mlog.Field("end", nextEnd.UTC()), mlog.Field("intervals", intervals))
-			if err := sendReports(ctx, log.WithCid(mox.Cid()), resolver, db, nextEnd, intervals); err != nil {
-				log.Errorx("sending dmarc aggregate reports", err)
+			clog := log.WithCid(mox.Cid())
+			clog.Info("sending dmarc aggregate reports", mlog.Field("end", nextEnd.UTC()), mlog.Field("intervals", intervals))
+			if err := sendReports(ctx, clog, resolver, db, nextEnd, intervals); err != nil {
+				clog.Errorx("sending dmarc aggregate reports", err)
 				metricReportError.Inc()
 			} else {
-				log.Info("finding sending dmarc aggregate reports")
+				clog.Info("finished sending dmarc aggregate reports")
 			}
 		}
 	}()
@@ -443,6 +444,7 @@ func sendReports(ctx context.Context, log *mlog.Log, resolver dns.Resolver, db *
 			defer wg.Done()
 
 			rlog := log.WithCid(mox.Cid()).Fields(mlog.Field("domain", domain))
+			rlog.Info("sending dmarc report")
 			if _, err := sendReportDomain(ctx, rlog, resolver, db, endTime, domain); err != nil {
 				rlog.Errorx("sending dmarc aggregate report to domain", err)
 				metricReportError.Inc()

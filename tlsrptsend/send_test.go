@@ -232,13 +232,13 @@ func TestSendReports(t *testing.T) {
 	}
 
 	report1 := tlsrpt.Report{
-		OrganizationName: "mail.mox.example",
+		OrganizationName: "mox.example",
 		DateRange: tlsrpt.TLSRPTDateRange{
 			Start: endUTC.Add(-24 * time.Hour),
 			End:   endUTC.Add(-time.Second),
 		},
-		ContactInfo: "postmaster@mail.mox.example",
-		ReportID:    endUTC.Format("20060102") + ".sender.example@mail.mox.example",
+		ContactInfo: "postmaster@mox.example",
+		ReportID:    endUTC.Format("20060102") + ".sender.example@mox.example",
 		Policies: []tlsrpt.Result{
 			{
 				Policy: tlsrpt.ResultPolicy{
@@ -265,13 +265,13 @@ func TestSendReports(t *testing.T) {
 		},
 	}
 	report2 := tlsrpt.Report{
-		OrganizationName: "mail.mox.example",
+		OrganizationName: "mox.example",
 		DateRange: tlsrpt.TLSRPTDateRange{
 			Start: endUTC.Add(-24 * time.Hour),
 			End:   endUTC.Add(-time.Second),
 		},
-		ContactInfo: "postmaster@mail.mox.example",
-		ReportID:    endUTC.Format("20060102") + ".mailhost.sender.example@mail.mox.example",
+		ContactInfo: "postmaster@mox.example",
+		ReportID:    endUTC.Format("20060102") + ".mailhost.sender.example@mox.example",
 		Policies: []tlsrpt.Result{
 			{
 				Policy: tlsrpt.ResultPolicy{

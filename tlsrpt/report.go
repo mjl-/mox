@@ -64,6 +64,15 @@ func (r *Result) Add(success, failure int64, fds ...FailureDetails) {
 	r.Summary.TotalSuccessfulSessionCount += success
 	r.Summary.TotalFailureSessionCount += failure
 
+	// In smtpclient we can compensate with a negative success, after failed read after
+	// successful handshake. Sanity check that we never get negative counts.
+	if r.Summary.TotalSuccessfulSessionCount < 0 {
+		r.Summary.TotalSuccessfulSessionCount = 0
+	}
+	if r.Summary.TotalFailureSessionCount < 0 {
+		r.Summary.TotalFailureSessionCount = 0
+	}
+
 Merge:
 	for _, nfd := range fds {
 		for i, fd := range r.FailureDetails {

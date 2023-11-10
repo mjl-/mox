@@ -114,12 +114,13 @@ func Start(resolver dns.Resolver) {
 			_, err := bstore.QueryDB[tlsrptdb.TLSResult](ctx, db).FilterLess("DayUTC", endUTC.Add((-48-12)*time.Hour).Format("20060102")).Delete()
 			log.Check(err, "removing stale tls results from database")
 
-			log.Info("sending tls reports", mlog.Field("day", dayUTC))
-			if err := sendReports(ctx, log.WithCid(mox.Cid()), resolver, db, dayUTC, endUTC); err != nil {
-				log.Errorx("sending tls reports", err)
+			clog := log.WithCid(mox.Cid())
+			clog.Info("sending tls reports", mlog.Field("day", dayUTC))
+			if err := sendReports(ctx, clog, resolver, db, dayUTC, endUTC); err != nil {
+				clog.Errorx("sending tls reports", err)
 				metricReportError.Inc()
 			} else {
-				log.Info("finished sending tls reports")
+				clog.Info("finished sending tls reports")
 			}
 
 			endUTC = endUTC.Add(24 * time.Hour)
@@ -224,6 +225,7 @@ func sendReports(ctx context.Context, log *mlog.Log, resolver dns.Resolver, db *
 			defer wg.Done()
 
 			rlog := log.WithCid(mox.Cid()).Fields(mlog.Field("policydomain", policyDomain), mlog.Field("daytutc", dayUTC))
+			rlog.Info("sending tls report")
 			if _, err := sendReportDomain(ctx, rlog, resolver, db, endTimeUTC, policyDomain, dayUTC); err != nil {
 				rlog.Errorx("sending tls report to domain", err)
 				metricReportError.Inc()
@@ -247,9 +249,35 @@ func removeResults(ctx context.Context, log *mlog.Log, db *bstore.DB, policyDoma
 var queueAdd = queue.Add
 
 func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver, db *bstore.DB, endUTC time.Time, policyDomain, dayUTC string) (cleanup bool, rerr error) {
-	dom, err := dns.ParseDomain(policyDomain)
+	polDom, err := dns.ParseDomain(policyDomain)
 	if err != nil {
 		return false, fmt.Errorf("parsing policy domain for sending tls reports: %v", err)
+	}
+
+	// Reports need to be DKIM-signed by the submitter domain. Lookup the DKIM
+	// configuration now. If we don't have any, there is no point sending reports.
+	// todo spec: ../rfc/8460:322 "reporting domain" is a bit ambiguous. submitter domain is used in other places. it may be helpful in practice to allow dmarc-relaxed-like matching of the signing domain, so an address postmaster at mail host can send the reports using dkim keys at a higher-up domain (e.g. the publicsuffix domain).
+	fromDom := mox.Conf.Static.HostnameDomain
+	var confDKIM config.DKIM
+	for {
+		confDom, ok := mox.Conf.Domain(fromDom)
+		if len(confDom.DKIM.Sign) > 0 {
+			confDKIM = confDom.DKIM
+			break
+		} else if ok {
+			return true, fmt.Errorf("domain for mail host does not have dkim signing configured, report message cannot be dkim-signed")
+		}
+
+		// Remove least significant label.
+		var nfd dns.Domain
+		_, nfd.ASCII, _ = strings.Cut(fromDom.ASCII, ".")
+		_, nfd.Unicode, _ = strings.Cut(fromDom.Unicode, ".")
+		fromDom = nfd
+
+		var zerodom dns.Domain
+		if fromDom == zerodom {
+			return true, fmt.Errorf("no configured domain for mail host found, report message cannot be dkim-signed")
+		}
 	}
 
 	// We'll cleanup records by default.
@@ -266,7 +294,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 	}()
 
 	// Get TLSRPT record. If there are no reporting addresses, we're not going to send at all.
-	record, _, err := tlsrpt.Lookup(ctx, resolver, dom)
+	record, _, err := tlsrpt.Lookup(ctx, resolver, polDom)
 	if err != nil {
 		// If there is no TLSRPT record, that's fine, we'll remove what we tracked.
 		if errors.Is(err, tlsrpt.ErrNoRecord) {
@@ -335,14 +363,14 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 	beginUTC := endUTC.Add(-24 * time.Hour)
 
 	report := tlsrpt.Report{
-		OrganizationName: mox.Conf.Static.HostnameDomain.ASCII,
+		OrganizationName: fromDom.ASCII,
 		DateRange: tlsrpt.TLSRPTDateRange{
 			Start: beginUTC,
 			End:   endUTC.Add(-time.Second), // Per example, ../rfc/8460:1769
 		},
-		ContactInfo: "postmaster@" + mox.Conf.Static.HostnameDomain.ASCII,
+		ContactInfo: "postmaster@" + fromDom.ASCII,
 		// todo spec: ../rfc/8460:968 ../rfc/8460:1772 ../rfc/8460:691 subject header assumes a report-id in the form of a msg-id, but example and report-id json field explanation allows free-form report-id's (assuming we're talking about the same report-id here).
-		ReportID: endUTC.Format("20060102") + "." + dom.ASCII + "@" + mox.Conf.Static.HostnameDomain.ASCII,
+		ReportID: endUTC.Format("20060102") + "." + polDom.ASCII + "@" + fromDom.ASCII,
 	}
 
 	// Merge all results into this report.
@@ -380,10 +408,10 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 	// typical setup the host is a subdomain of a configured domain with
 	// DKIM keys, so we can DKIM-sign our reports. SPF should pass anyway.
 	// todo future: when sending, use an SMTP MAIL FROM that we can relate back to recipient reporting address so we can stop trying to send reports in case of repeated delivery failure DSNs.
-	from := smtp.Address{Localpart: "postmaster", Domain: mox.Conf.Static.HostnameDomain}
+	from := smtp.Address{Localpart: "postmaster", Domain: fromDom}
 
 	// Subject follows the form from RFC. ../rfc/8460:959
-	subject := fmt.Sprintf("Report Domain: %s Submitter: %s Report-ID: <%s>", dom.ASCII, mox.Conf.Static.HostnameDomain.ASCII, report.ReportID)
+	subject := fmt.Sprintf("Report Domain: %s Submitter: %s Report-ID: <%s>", polDom.ASCII, fromDom, report.ReportID)
 
 	// Human-readable part for convenience. ../rfc/8460:917
 	text := fmt.Sprintf(`
@@ -397,13 +425,13 @@ Policy Domain: %s
 Submitter: %s
 Report-ID: %s
 Period: %s - %s UTC
-`, dom, mox.Conf.Static.HostnameDomain, report.ReportID, beginUTC.Format(time.DateTime), endUTC.Format(time.DateTime))
+`, polDom, fromDom, report.ReportID, beginUTC.Format(time.DateTime), endUTC.Format(time.DateTime))
 
 	// The attached file follows the naming convention from the RFC. ../rfc/8460:849
-	reportFilename := fmt.Sprintf("%s!%s!%d!%d.json.gz", mox.Conf.Static.HostnameDomain.ASCII, dom.ASCII, beginUTC.Unix(), endUTC.Add(-time.Second).Unix())
+	reportFilename := fmt.Sprintf("%s!%s!%d!%d.json.gz", fromDom.ASCII, polDom.ASCII, beginUTC.Unix(), endUTC.Add(-time.Second).Unix())
 
 	// Compose the message.
-	msgPrefix, has8bit, smtputf8, messageID, err := composeMessage(ctx, log, msgf, dom, from, recipients, subject, text, reportFilename, reportFile)
+	msgPrefix, has8bit, smtputf8, messageID, err := composeMessage(ctx, log, msgf, polDom, confDKIM, from, recipients, subject, text, reportFilename, reportFile)
 	if err != nil {
 		return false, fmt.Errorf("composing message with outgoing tls report: %v", err)
 	}
@@ -442,7 +470,7 @@ Period: %s - %s UTC
 	return true, nil
 }
 
-func composeMessage(ctx context.Context, log *mlog.Log, mf *os.File, policyDomain dns.Domain, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
+func composeMessage(ctx context.Context, log *mlog.Log, mf *os.File, policyDomain dns.Domain, confDKIM config.DKIM, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
 	xc := message.NewComposer(mf, 100*1024*1024)
 	defer func() {
 		x := recover()
@@ -469,7 +497,7 @@ func composeMessage(ctx context.Context, log *mlog.Log, mf *os.File, policyDomai
 	xc.Subject(subject)
 	// ../rfc/8460:926
 	xc.Header("TLS-Report-Domain", policyDomain.ASCII)
-	xc.Header("TLS-Report-Submitter", mox.Conf.Static.HostnameDomain.ASCII)
+	xc.Header("TLS-Report-Submitter", fromAddr.Domain.ASCII)
 	// TLS failures should be ignored. ../rfc/8460:317 ../rfc/8460:1050
 	xc.Header("TLS-Required", "No")
 	messageID = fmt.Sprintf("<%s>", mox.MessageIDGen(xc.SMTPUTF8))
@@ -514,46 +542,16 @@ func composeMessage(ctx context.Context, log *mlog.Log, mf *os.File, policyDomai
 
 	xc.Flush()
 
-	// Also sign the TLS-Report headers. ../rfc/8460:940
-	extraHeaders := []string{"TLS-Report-Domain", "TLS-Report-Submitter"}
-	msgPrefix = dkimSign(ctx, log, fromAddr, smtputf8, mf, extraHeaders)
-
-	return msgPrefix, xc.Has8bit, xc.SMTPUTF8, messageID, nil
-}
-
-func dkimSign(ctx context.Context, log *mlog.Log, fromAddr smtp.Address, smtputf8 bool, mf *os.File, extraHeaders []string) string {
-	// Add DKIM-Signature headers if we have a key for (a higher) domain than the from
-	// address, which is a host name. A signature will only be useful with higher-level
-	// domains if they have a relaxed dkim check (which is the default). If the dkim
-	// check is strict, there is no harm, there will simply not be a dkim pass.
-	fd := fromAddr.Domain
-	var zerodom dns.Domain
-	for fd != zerodom {
-		confDom, ok := mox.Conf.Domain(fd)
-		if ok && len(confDom.DKIM.Sign) == 0 {
-			return ""
-		}
-		if len(confDom.DKIM.Sign) > 0 {
-			selectors := map[string]config.Selector{}
-			for name, sel := range confDom.DKIM.Selectors {
-				sel.HeadersEffective = append(append([]string{}, sel.HeadersEffective...), extraHeaders...)
-				selectors[name] = sel
-			}
-			confDom.DKIM.Selectors = selectors
-
-			dkimHeaders, err := dkim.Sign(ctx, fromAddr.Localpart, fd, confDom.DKIM, smtputf8, mf)
-			if err != nil {
-				log.Errorx("dkim-signing dmarc report, continuing without signature", err)
-				metricReportError.Inc()
-				return ""
-			}
-			return dkimHeaders
-		}
-
-		var nfd dns.Domain
-		_, nfd.ASCII, _ = strings.Cut(fd.ASCII, ".")
-		_, nfd.Unicode, _ = strings.Cut(fd.Unicode, ".")
-		fd = nfd
+	selectors := map[string]config.Selector{}
+	for name, sel := range confDKIM.Selectors {
+		// Also sign the TLS-Report headers. ../rfc/8460:940
+		sel.HeadersEffective = append(append([]string{}, sel.HeadersEffective...), "TLS-Report-Domain", "TLS-Report-Submitter")
+		selectors[name] = sel
 	}
-	return ""
+	confDKIM.Selectors = selectors
+
+	dkimHeader, err := dkim.Sign(ctx, fromAddr.Localpart, fromAddr.Domain, confDKIM, smtputf8, mf)
+	xc.Checkf(err, "dkim-signing report message")
+
+	return dkimHeader, xc.Has8bit, xc.SMTPUTF8, messageID, nil
 }

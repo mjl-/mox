@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -113,15 +114,16 @@ type Client struct {
 	recipientDomainResult *tlsrpt.Result // Either "sts" or "no-policy-found".
 	hostResult            *tlsrpt.Result // Either "dane" or "no-policy-found".
 
-	r        *bufio.Reader
-	w        *bufio.Writer
-	tr       *moxio.TraceReader // Kept for changing trace levels between cmd/auth/data.
-	tw       *moxio.TraceWriter
-	log      *mlog.Log
-	lastlog  time.Time // For adding delta timestamps between log lines.
-	cmds     []string  // Last or active command, for generating errors and metrics.
-	cmdStart time.Time // Start of command.
-	tls      bool      // Whether connection is TLS protected.
+	r                       *bufio.Reader
+	w                       *bufio.Writer
+	tr                      *moxio.TraceReader // Kept for changing trace levels between cmd/auth/data.
+	tw                      *moxio.TraceWriter
+	log                     *mlog.Log
+	lastlog                 time.Time // For adding delta timestamps between log lines.
+	cmds                    []string  // Last or active command, for generating errors and metrics.
+	cmdStart                time.Time // Start of command.
+	tls                     bool      // Whether connection is TLS protected.
+	firstReadAfterHandshake bool      // To detect TLS alert error from remote just after handshake.
 
 	botched  bool // If set, protocol is out of sync and no further commands can be sent.
 	needRset bool // If set, a new delivery requires an RSET command.
@@ -274,6 +276,7 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, tls
 			c.tlsResultAdd(0, 1, err)
 			return nil, err
 		}
+		c.firstReadAfterHandshake = true
 		c.tlsResultAdd(1, 0, nil)
 		c.conn = tlsconn
 		tlsversion, ciphersuite := mox.TLSInfo(tlsconn)
@@ -444,8 +447,19 @@ func (c *Client) readline() (string, error) {
 
 	line, err := bufs.Readline(c.r)
 	if err != nil {
+		// See if this is a TLS alert from remote, and one other than 0 (which notifies
+		// that the connection is being closed. If so, we register a TLS connection
+		// failure. This handles TLS alerts that happen just after a successful handshake.
+		var netErr *net.OpError
+		if c.firstReadAfterHandshake && errors.As(err, &netErr) && netErr.Op == "remote error" && netErr.Err != nil && reflect.ValueOf(netErr.Err).Kind() == reflect.Uint8 && reflect.ValueOf(netErr.Err).Uint() != 0 {
+			resultType, reasonCode := tlsrpt.TLSFailureDetails(err)
+			// We count -1 success to compensate for the assumed success right after the handshake.
+			c.tlsResultAddFailureDetails(-1, 1, c.tlsrptFailureDetails(resultType, reasonCode))
+		}
+
 		return line, c.botchf(0, "", "", "%s: %w", strings.Join(c.cmds, ","), err)
 	}
+	c.firstReadAfterHandshake = false
 	return line, nil
 }
 
@@ -749,6 +763,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 			c.tlsResultAdd(0, 1, err)
 			c.xerrorf(false, 0, "", "", "%w: STARTTLS TLS handshake: %s", ErrTLS, err)
 		}
+		c.firstReadAfterHandshake = true
 		cancel()
 		c.tr = moxio.NewTraceReader(c.log, "RS: ", c.conn)
 		c.tw = moxio.NewTraceWriter(c.log, "LC: ", c.conn) // No need to wrap in timeoutWriter, it would just set the timeout on the underlying connection, which is still active.
