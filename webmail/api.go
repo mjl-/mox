@@ -140,7 +140,6 @@ type Attachment struct {
 
 	// File name based on "name" attribute of "Content-Type", or the "filename"
 	// attribute of "Content-Disposition".
-	// todo: decode non-ascii character sets
 	Filename string
 
 	Part message.Part

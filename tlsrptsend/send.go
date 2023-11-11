@@ -414,8 +414,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 	subject := fmt.Sprintf("Report Domain: %s Submitter: %s Report-ID: <%s>", polDom.ASCII, fromDom, report.ReportID)
 
 	// Human-readable part for convenience. ../rfc/8460:917
-	text := fmt.Sprintf(`
-Attached is a TLS report with a summary of connection successes and failures
+	text := fmt.Sprintf(`Attached is a TLS report with a summary of connection successes and failures
 during attempts to securely deliver messages to your mail server, including
 details about errors encountered. You are receiving this message because your
 address is specified in the "rua" field of the TLSRPT record for your
