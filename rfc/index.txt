@@ -221,7 +221,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 9208	IMAP QUOTA Extension
 9394	IMAP PARTIAL Extension for Paged SEARCH and FETCH
 
-5198 	Unicode Format for Network Interchange
+5198	Unicode Format for Network Interchange
 
 # Lemonade profile
 4550	(obsoleted by RFC 5550) Internet Email to Support Diverse Service Environments (Lemonade) Profile

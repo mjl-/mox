@@ -4,6 +4,8 @@ package main
 
 // Read source files and RFC and errata files, and cross-link them.
 
+// todo: also cross-reference typescript and possibly other files. switch from go parser to just reading the source as text.
+
 import (
 	"bytes"
 	"flag"
@@ -40,6 +42,7 @@ func main() {
 		dstlineno int
 		dstisrfc  bool
 		dstrfc    string // e.g. "5322" or "6376-eid4810"
+		comment   string // e.g. "todo" or "todo spec"
 	}
 
 	// RFC-file to RFC-line to references to list of file+line (possibly RFCs).
@@ -75,6 +78,16 @@ func main() {
 						continue
 					}
 
+					var comment string
+					if strings.HasPrefix(line, "// todo") {
+						s, _, have := strings.Cut(strings.TrimPrefix(line, "// "), ":")
+						if have {
+							comment = s
+						} else {
+							comment = "todo"
+						}
+					}
+
 					srcpath := arg
 					srclineno := fset.Position(c.Pos()).Line + i
 					dir := filepath.Dir(srcpath)
@@ -104,9 +117,9 @@ func main() {
 						if _, err := os.Stat(dstpath); err != nil {
 							log.Fatalf("%s:%d: references %s: %v", srcpath, srclineno, dstpath, err)
 						}
-						r := ref{srcpath, srclineno, dstpath, dstlineno, true, rfc}
+						r := ref{srcpath, srclineno, dstpath, dstlineno, true, rfc, comment}
 						addRef(sourceLineRFCs, r.srcpath, r.srclineno, r)
-						addRef(rfcLineSources, r.dstrfc, r.dstlineno, ref{r.dstrfc, r.dstlineno, r.srcpath, r.srclineno, false, ""})
+						addRef(rfcLineSources, r.dstrfc, r.dstlineno, ref{r.dstrfc, r.dstlineno, r.srcpath, r.srclineno, false, "", comment})
 					}
 				}
 			}
@@ -162,7 +175,11 @@ func main() {
 
 				// Add link from rfc to source code.
 				for _, r := range refs {
-					line += fmt.Sprintf(" %s:%d", r.dstpath, r.dstlineno)
+					comment := r.comment
+					if comment != "" {
+						comment += ": "
+					}
+					line += fmt.Sprintf(" %s%s:%d", comment, r.dstpath, r.dstlineno)
 				}
 				if iserrata {
 					line = line[1:]

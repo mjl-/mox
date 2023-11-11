@@ -222,4 +222,5 @@ done
 - Create git tag, push code.
 - Publish new docker image.
 - Publish signed release notes for updates.xmox.nl and update DNS record.
+- Publish new cross-referenced code/rfc to www.xmox.nl/xr/.
 - Create new release on the github page, so watchers get a notification.
