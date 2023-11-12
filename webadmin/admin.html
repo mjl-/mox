@@ -1498,6 +1498,7 @@ const tlsrptResults = async () => {
 					dom.th('Recipient domain', attr({title: 'Domain of addressee. For delivery to a recipient, the recipient and policy domains will match for reporting on MTA-STS policies, but can also result in reports for hosts from the MX record of the recipient to report on DANE policies.'})),
 					dom.th('Policy domain', attr({title: 'Domain for TLSRPT policy, specifying URIs to which reports should be sent.'})),
 					dom.th('Host', attr({title: 'Whether policy domain is an (MX) host (for DANE), or a recipient domain (for MTA-STS).'})),
+					dom.th('Policies', attr({title: 'Policies found.'})),
 					dom.th('Success', attr({title: 'Total number of successful connections.'})),
 					dom.th('Failure', attr({title: 'Total number of failed connection attempts.'})),
 					dom.th('Failure details', attr({title: 'Total number of details about failures.'})),
@@ -1522,18 +1523,26 @@ const tlsrptResults = async () => {
 						failed += result.summary['total-failure-session-count']
 						failureDetails += (result['failure-details'] || []).length
 					})
+					const policyTypes = []
+					for (const result of r.Results) {
+						const pt = result.policy['policy-type']
+						if (!policyTypes.includes(pt)) {
+							policyTypes.push(pt)
+						}
+					}
 					return dom.tr(
 						dom.td(r.DayUTC),
 						dom.td(r.RecipientDomain),
 						dom.td(dom.a(attr({href: '#tlsrpt/results/'+r.PolicyDomain}), r.PolicyDomain)),
 						dom.td(r.IsHost ? '✓' : ''),
+						dom.td(policyTypes.join(', ')),
 						dom.td(style({textAlign: 'right'}), ''+success),
 						dom.td(style({textAlign: 'right'}), ''+failed),
 						dom.td(style({textAlign: 'right'}), ''+failureDetails),
 						dom.td(style({textAlign: 'right'}), r.SendReport ? '✓' : ''),
 					)
 				}),
-				results.length === 0 ? dom.tr(dom.td(attr({colspan: '8'}), 'No results.')) : [],
+				results.length === 0 ? dom.tr(dom.td(attr({colspan: '9'}), 'No results.')) : [],
 			),
 		),
 	)
