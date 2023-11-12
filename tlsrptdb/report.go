@@ -49,7 +49,7 @@ var (
 // todo: should be named just Record, but it would cause a sherpa type name conflict.
 type TLSReportRecord struct {
 	ID         int64  `bstore:"typename Record"`
-	Domain     string `bstore:"index"` // Domain to which the TLS report applies.
+	Domain     string `bstore:"index"` // Policy domain to which the TLS report applies. Unicode.
 	FromDomain string
 	MailFrom   string
 	HostReport bool // Report for host TLSRPT record, as opposed to domain TLSRPT record.
@@ -99,16 +99,19 @@ func AddReport(ctx context.Context, verifiedFromDomain dns.Domain, mailFrom stri
 	for _, p := range r.Policies {
 		pp := p.Policy
 
-		// Check domain, they must all be the same for now (in future, with DANE, this may
-		// no longer apply).
+		// Check domain, they must all be the same for now. We are not expecting senders to
+		// coalesce TLS results for different policy domains in a single report.
 		d, err := dns.ParseDomain(pp.Domain)
 		if err != nil {
 			log.Errorx("invalid domain in tls report", err, mlog.Field("domain", pp.Domain), mlog.Field("mailfrom", mailFrom))
 			continue
 		}
-		if _, ok := mox.Conf.Domain(d); !ok {
-			log.Info("unknown domain in tls report, not storing", mlog.Field("domain", d), mlog.Field("mailfrom", mailFrom))
-			return fmt.Errorf("unknown domain")
+		if hostReport && d != mox.Conf.Static.HostnameDomain {
+			log.Info("unknown mail host policy domain in tls report, not storing", mlog.Field("domain", d), mlog.Field("mailfrom", mailFrom))
+			return fmt.Errorf("unknown mail host policy domain")
+		} else if _, ok := mox.Conf.Domain(d); !hostReport && !ok {
+			log.Info("unknown recipient policy domain in tls report, not storing", mlog.Field("domain", d), mlog.Field("mailfrom", mailFrom))
+			return fmt.Errorf("unknown recipient policy domain")
 		}
 		if reportdom != zerodom && d != reportdom {
 			return fmt.Errorf("multiple domains in report %s and %s", reportdom, d)
@@ -151,17 +154,19 @@ func RecordID(ctx context.Context, id int64) (TLSReportRecord, error) {
 	return e, err
 }
 
-// RecordsPeriodDomain returns the reports overlapping start and end, for the given
-// domain. If domain is empty, all records match for domain.
-func RecordsPeriodDomain(ctx context.Context, start, end time.Time, domain string) ([]TLSReportRecord, error) {
+// RecordsPeriodPolicyDomain returns the reports overlapping start and end, for the
+// given policy domain. If policy domain is empty, records for all domains are
+// returned.
+func RecordsPeriodDomain(ctx context.Context, start, end time.Time, policyDomain dns.Domain) ([]TLSReportRecord, error) {
 	db, err := reportDB(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	q := bstore.QueryDB[TLSReportRecord](ctx, db)
-	if domain != "" {
-		q.FilterNonzero(TLSReportRecord{Domain: domain})
+	var zerodom dns.Domain
+	if policyDomain != zerodom {
+		q.FilterNonzero(TLSReportRecord{Domain: policyDomain.Name()})
 	}
 	q.FilterFn(func(r TLSReportRecord) bool {
 		dr := r.Report.DateRange

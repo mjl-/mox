@@ -1102,7 +1102,7 @@ const dmarcEvaluations = async () => {
 			'Evaluations',
 		),
 		dom.p('Incoming messages are checked against the DMARC policy of the domain in the message From header. If the policy requests reporting on the resulting evaluations, they are stored in the database. Each interval of 1 to 24 hours, the evaluations may be sent to a reporting address specified in the domain\'s DMARC policy. Not all evaluations are a reason to send a report, but if a report is sent all evaluations are included.'),
-		dom.table(
+		dom('table.hover',
 			dom.thead(
 				dom.tr(
 					dom.th('Domain', attr({title: 'Domain in the message From header. Keep in mind these can be forged, so this does not necessarily mean someone from this domain authentically tried delivering email.'})),
@@ -1189,7 +1189,7 @@ const dmarcEvaluationsDomain = async (domain) => {
 		),
 		dom.br(),
 		dom.p('The evaluations below will be sent in a DMARC aggregate report to the addresses found in the published DMARC DNS record, which is fetched again before sending the report. The fields Interval hours, Addresses and Policy are only filled for the first row and whenever a new value in the published DMARC record is encountered.'),
-		dom.table(
+		dom('table.hover',
 			dom.thead(
 				dom.tr(
 					dom.th('ID'),
@@ -1290,7 +1290,7 @@ const domainDMARC = async (d) => {
 		dom.p('DMARC reports are periodically sent by other mail servers that received an email message with a "From" header with our domain. Domains can have a DMARC DNS record that asks other mail servers to send these aggregate reports for analysis.'),
 		dom.p('Below the DMARC aggregate reports for the past 30 days.'),
 		reports.length === 0 ? dom.div('No DMARC reports for domain.') :
-		dom.table(
+		dom('table.hover',
 			dom.thead(
 				dom.tr(
 					dom.th('ID'),
@@ -1631,19 +1631,19 @@ const renderTLSRPTSummaries = (summaries) => {
 	return [
 		dom.p('Below a summary of TLS reports for the past 30 days.'),
 		summaries.length === 0 ? dom.div(box(yellow, 'No domains with TLS reports.')) :
-		dom.table(
+		dom('table.hover',
 			dom.thead(
 				dom.tr(
-					dom.th('Domain', attr({title: ''})),
-					dom.th('Successes', attr({title: ''})),
-					dom.th('Failures', attr({title: ''})),
-					dom.th('Failure details', attr({title: ''})),
+					dom.th('Policy domain', attr({title: 'Policy domain the report is about. The recipient domain for MTA-STS, the TLSA base domain for DANE.'})),
+					dom.th('Successes', attr({title: 'Number of successful SMTP STARTTLS sessions.'})),
+					dom.th('Failures', attr({title: 'Number of failed SMTP STARTTLS sessions.'})),
+					dom.th('Failure details', attr({title: 'Details about connection failures.'})),
 				)
 			),
 			dom.tbody(
 				summaries.map(r =>
 					dom.tr(
-						dom.td(dom.a(attr({href: '#domains/' + r.Domain + '/tlsrpt', title: 'See report details.'}), r.Domain)),
+						dom.td(dom.a(attr({href: '#domains/' + domainName(r.PolicyDomain) + '/tlsrpt', title: 'See report details.'}), domainName(r.PolicyDomain))),
 						dom.td(style({textAlign: 'right'}), '' + r.Success),
 						dom.td(style({textAlign: 'right'}), '' + r.Failure),
 						dom.td(!r.ResultTypeCounts ? [] : Object.entries(r.ResultTypeCounts).map(kv => kv[0] + ': ' + kv[1]).join('; ')),
@@ -1683,7 +1683,7 @@ const domainTLSRPT = async (d) => {
 		dom.p('TLSRPT (TLS reporting) is a mechanism to request feedback from other mail servers about TLS connections to your mail server. If is typically used along with MTA-STS and/or DANE to enforce that SMTP connections are protected with TLS. Mail servers implementing TLSRPT will typically send a daily report with both successful and failed connection counts, including details about failures.'),
 		dom.p('Below the TLS reports for the past 30 days.'),
 		records.length === 0 ? dom.div('No TLS reports for domain.') :
-		dom.table(
+		dom('table.hover',
 			dom.thead(
 				dom.tr(
 					dom.th('Report', attr({colspan: '3'})),
@@ -1712,21 +1712,23 @@ const domainTLSRPT = async (d) => {
 			dom.tbody(
 				records.map(record => {
 					const r = record.Report
-					const reportRowSpan = attr({rowspan: ''+r.policies.length})
+					let nrows = 0
+					r.policies.forEach(pr => nrows += (pr['failure-details'] || []).length || 1)
+					const reportRowSpan = attr({rowspan: ''+nrows})
 					const valignTop = style({verticalAlign: 'top'})
 					const alignRight = style({textAlign: 'right'})
 					return r.policies.map((result, index) => {
 						const rows = []
 						const details = result['failure-details'] || []
 						const resultRowSpan = attr({rowspan: ''+(details.length || 1)})
-						const addRow = (d) => {
+						const addRow = (d, di) => {
 							const row = dom.tr(
 								index > 0 || rows.length > 0 ? [] : [
 									dom.td(reportRowSpan, valignTop, dom.a(''+record.ID, attr({href: '#domains/' + record.Domain + '/tlsrpt/'+record.ID}))),
 									dom.td(reportRowSpan, valignTop, r['organization-name'] || r['contact-info'] || record.MailFrom || '', attr({title: 'Organization: ' +r['organization-name'] + '; \nContact info: ' + r['contact-info'] + '; \nReport ID: ' + r['report-id'] + '; \nMail from: ' + record.MailFrom, })),
 									dom.td(reportRowSpan, valignTop, period(new Date(r['date-range']['start-datetime']), new Date(r['date-range']['end-datetime']))),
 								],
-								index > 0 ? [] : [
+								di > 0 ? [] : [
 									dom.td(resultRowSpan, valignTop, policyType(result.policy), attr({title: (result.policy['policy-string'] || []).join('\n')})),
 									dom.td(resultRowSpan, valignTop, alignRight, '' + result.summary['total-successful-session-count']),
 									dom.td(resultRowSpan, valignTop, alignRight, '' + result.summary['total-failure-session-count']),
@@ -1735,7 +1737,7 @@ const domainTLSRPT = async (d) => {
 									dom.td(d['result-type']),
 									dom.td(d['sending-mta-ip']),
 									dom.td(d['receiving-mx-hostname']),
-									dom.td(d['receiving-mx-helo']),
+									dom.td(d['receiving-mx-helo'] || ''),
 									dom.td(d['receiving-ip']),
 									dom.td(alignRight, '' + d['failed-session-count']),
 									dom.td(d['additional-information']),
@@ -1745,11 +1747,13 @@ const domainTLSRPT = async (d) => {
 							)
 							rows.push(row)
 						}
+						let di = 0
 						for (const d of details) {
-							addRow(d)
+							addRow(d, di)
+							di++
 						}
-						if (!details.length) {
-							addRow()
+						if (details.length === 0) {
+							addRow(undefined, 0)
 						}
 						return rows
 					})
@@ -1819,7 +1823,7 @@ const makeMTASTSTable = items => {
 		["Inserted", "", "Time when the policy was first inserted."],
 	]
 	const nowSecs = new Date().getTime()/1000
-	return dom.table(
+	return dom('table.hover',
 		dom.thead(
 			dom.tr(keys.map(kt => dom.th(dom.span(attr({title: kt[2]}), kt[1] || kt[0])))),
 		),
@@ -1903,7 +1907,7 @@ const queueList = async () => {
 		msgs.length === 0 ? 'Currently no messages in the queue.' : [
 			dom.p('The messages below are currently in the queue.'),
 			// todo: sorting by address/timestamps/attempts. perhaps filtering.
-			dom.table(
+			dom('table.hover',
 				dom.thead(
 					dom.tr(
 						dom.th('ID'),

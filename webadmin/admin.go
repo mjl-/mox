@@ -1517,10 +1517,17 @@ func (Admin) MTASTSPolicies(ctx context.Context) (records []mtastsdb.PolicyRecor
 }
 
 // TLSReports returns TLS reports overlapping with period start/end, for the given
-// domain (or all domains if empty). The reports are sorted first by period end
-// (most recent first), then by domain.
-func (Admin) TLSReports(ctx context.Context, start, end time.Time, domain string) (reports []tlsrptdb.TLSReportRecord) {
-	records, err := tlsrptdb.RecordsPeriodDomain(ctx, start, end, domain)
+// policy domain (or all domains if empty). The reports are sorted first by period
+// end (most recent first), then by policy domain.
+func (Admin) TLSReports(ctx context.Context, start, end time.Time, policyDomain string) (reports []tlsrptdb.TLSReportRecord) {
+	var polDom dns.Domain
+	if policyDomain != "" {
+		var err error
+		polDom, err = dns.ParseDomain(policyDomain)
+		xcheckuserf(ctx, err, "parsing domain %q", policyDomain)
+	}
+
+	records, err := tlsrptdb.RecordsPeriodDomain(ctx, start, end, polDom)
 	xcheckf(ctx, err, "fetching tlsrpt report records from database")
 	sort.Slice(records, func(i, j int) bool {
 		iend := records[i].Report.DateRange.End
@@ -1549,7 +1556,7 @@ func (Admin) TLSReportID(ctx context.Context, domain string, reportID int64) tls
 // TLSRPTSummary presents TLS reporting statistics for a single domain
 // over a period.
 type TLSRPTSummary struct {
-	Domain           string
+	PolicyDomain     dns.Domain
 	Success          int64
 	Failure          int64
 	ResultTypeCounts map[tlsrpt.ResultType]int
@@ -1558,13 +1565,23 @@ type TLSRPTSummary struct {
 // TLSRPTSummaries returns a summary of received TLS reports overlapping with
 // period start/end for one or all domains (when domain is empty).
 // The returned summaries are ordered by domain name.
-func (Admin) TLSRPTSummaries(ctx context.Context, start, end time.Time, domain string) (domainSummaries []TLSRPTSummary) {
-	reports, err := tlsrptdb.RecordsPeriodDomain(ctx, start, end, domain)
+func (Admin) TLSRPTSummaries(ctx context.Context, start, end time.Time, policyDomain string) (domainSummaries []TLSRPTSummary) {
+	var polDom dns.Domain
+	if policyDomain != "" {
+		var err error
+		polDom, err = dns.ParseDomain(policyDomain)
+		xcheckuserf(ctx, err, "parsing policy domain")
+	}
+	reports, err := tlsrptdb.RecordsPeriodDomain(ctx, start, end, polDom)
 	xcheckf(ctx, err, "fetching tlsrpt reports from database")
-	summaries := map[string]TLSRPTSummary{}
+
+	summaries := map[dns.Domain]TLSRPTSummary{}
 	for _, r := range reports {
-		sum := summaries[r.Domain]
-		sum.Domain = r.Domain
+		dom, err := dns.ParseDomain(r.Domain)
+		xcheckf(ctx, err, "parsing domain %q", r.Domain)
+
+		sum := summaries[dom]
+		sum.PolicyDomain = dom
 		for _, result := range r.Report.Policies {
 			sum.Success += result.Summary.TotalSuccessfulSessionCount
 			sum.Failure += result.Summary.TotalFailureSessionCount
@@ -1575,14 +1592,14 @@ func (Admin) TLSRPTSummaries(ctx context.Context, start, end time.Time, domain s
 				sum.ResultTypeCounts[details.ResultType]++
 			}
 		}
-		summaries[r.Domain] = sum
+		summaries[dom] = sum
 	}
 	sums := make([]TLSRPTSummary, 0, len(summaries))
 	for _, sum := range summaries {
 		sums = append(sums, sum)
 	}
 	sort.Slice(sums, func(i, j int) bool {
-		return sums[i].Domain < sums[j].Domain
+		return sums[i].PolicyDomain.Name() < sums[j].PolicyDomain.Name()
 	})
 	return sums
 }

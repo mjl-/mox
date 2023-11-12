@@ -124,7 +124,7 @@ func TestReport(t *testing.T) {
 
 	start, _ := time.Parse(time.RFC3339, "2016-04-01T00:00:00Z")
 	end, _ := time.Parse(time.RFC3339, "2016-04-01T23:59:59Z")
-	records, err = RecordsPeriodDomain(ctxbg, start, end, "test.xmox.nl")
+	records, err = RecordsPeriodDomain(ctxbg, start, end, dns.Domain{ASCII: "test.xmox.nl"})
 	if err != nil || len(records) != 1 {
 		t.Fatalf("got err %v, records %#v, expected no error with 1 record", err, records)
 	}

@@ -159,7 +159,7 @@
 		},
 		{
 			"Name": "TLSReports",
-			"Docs": "TLSReports returns TLS reports overlapping with period start/end, for the given\ndomain (or all domains if empty). The reports are sorted first by period end\n(most recent first), then by domain.",
+			"Docs": "TLSReports returns TLS reports overlapping with period start/end, for the given\npolicy domain (or all domains if empty). The reports are sorted first by period\nend (most recent first), then by policy domain.",
 			"Params": [
 				{
 					"Name": "start",
@@ -174,7 +174,7 @@
 					]
 				},
 				{
-					"Name": "domain",
+					"Name": "policyDomain",
 					"Typewords": [
 						"string"
 					]
@@ -233,7 +233,7 @@
 					]
 				},
 				{
-					"Name": "domain",
+					"Name": "policyDomain",
 					"Typewords": [
 						"string"
 					]
@@ -2271,7 +2271,7 @@
 				},
 				{
 					"Name": "Domain",
-					"Docs": "Domain to which the TLS report applies.",
+					"Docs": "Policy domain to which the TLS report applies. Unicode.",
 					"Typewords": [
 						"string"
 					]
@@ -2520,10 +2520,10 @@
 			"Docs": "TLSRPTSummary presents TLS reporting statistics for a single domain\nover a period.",
 			"Fields": [
 				{
-					"Name": "Domain",
+					"Name": "PolicyDomain",
 					"Docs": "",
 					"Typewords": [
-						"string"
+						"Domain"
 					]
 				},
 				{
