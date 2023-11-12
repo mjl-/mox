@@ -1972,7 +1972,7 @@ const queueList = async () => {
 									transport=dom.select(
 										attr({title: 'Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'}),
 										dom.option('(default)', attr({value: ''})),
-										Object.keys(transports).sort().map(t => dom.option(t, m.Transport === t ? attr({checked: ''}) : [])),
+										Object.keys(transports || []).sort().map(t => dom.option(t, m.Transport === t ? attr({checked: ''}) : [])),
 									),
 									' ',
 									dom.button('Retry now'),
