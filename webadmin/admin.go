@@ -1463,6 +1463,13 @@ func (Admin) Domain(ctx context.Context, domain string) dns.Domain {
 	return d
 }
 
+// ParseDomain parses a domain, possibly an IDNA domain.
+func (Admin) ParseDomain(ctx context.Context, domain string) dns.Domain {
+	d, err := dns.ParseDomain(domain)
+	xcheckuserf(ctx, err, "parse domain")
+	return d
+}
+
 // DomainLocalparts returns the encoded localparts and accounts configured in domain.
 func (Admin) DomainLocalparts(ctx context.Context, domain string) (localpartAccounts map[string]string) {
 	d, err := dns.ParseDomain(domain)
@@ -1559,7 +1566,7 @@ type TLSRPTSummary struct {
 	PolicyDomain     dns.Domain
 	Success          int64
 	Failure          int64
-	ResultTypeCounts map[tlsrpt.ResultType]int
+	ResultTypeCounts map[tlsrpt.ResultType]int64
 }
 
 // TLSRPTSummaries returns a summary of received TLS reports overlapping with
@@ -1587,9 +1594,9 @@ func (Admin) TLSRPTSummaries(ctx context.Context, start, end time.Time, policyDo
 			sum.Failure += result.Summary.TotalFailureSessionCount
 			for _, details := range result.FailureDetails {
 				if sum.ResultTypeCounts == nil {
-					sum.ResultTypeCounts = map[tlsrpt.ResultType]int{}
+					sum.ResultTypeCounts = map[tlsrpt.ResultType]int64{}
 				}
-				sum.ResultTypeCounts[details.ResultType]++
+				sum.ResultTypeCounts[details.ResultType] += details.FailedSessionCount
 			}
 		}
 		summaries[dom] = sum

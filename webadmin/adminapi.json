@@ -57,6 +57,26 @@
 			]
 		},
 		{
+			"Name": "ParseDomain",
+			"Docs": "ParseDomain parses a domain, possibly an IDNA domain.",
+			"Params": [
+				{
+					"Name": "domain",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
 			"Name": "DomainLocalparts",
 			"Docs": "DomainLocalparts returns the encoded localparts and accounts configured in domain.",
 			"Params": [
@@ -2545,7 +2565,7 @@
 					"Docs": "",
 					"Typewords": [
 						"{}",
-						"int32"
+						"int64"
 					]
 				}
 			]
