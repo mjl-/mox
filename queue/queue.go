@@ -598,7 +598,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 	var recipientDomainResult tlsrpt.Result
 	var hostResults []tlsrpt.Result
 	defer func() {
-		if mox.Conf.Static.NoOutgoingTLSReports || !m.RecipientDomain.IsDomain() {
+		if mox.Conf.Static.NoOutgoingTLSReports || m.RecipientDomain.IsIP() {
 			return
 		}
 
@@ -606,6 +606,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 		dayUTC := now.UTC().Format("20060102")
 
 		results := make([]tlsrptdb.TLSResult, 0, 1+len(hostResults))
+		tlsaPolicyDomains := map[string]bool{}
 		addResult := func(r tlsrpt.Result, isHost bool) {
 			var zerotype tlsrpt.PolicyType
 			if r.Policy.Type == zerotype {
@@ -619,6 +620,10 @@ func deliver(resolver dns.Resolver, m Msg) {
 				return
 			}
 
+			if r.Policy.Type == tlsrpt.TLSA {
+				tlsaPolicyDomains[policyDomain.ASCII] = true
+			}
+
 			tlsResult := tlsrptdb.TLSResult{
 				PolicyDomain:    policyDomain.Name(),
 				DayUTC:          dayUTC,
@@ -629,9 +634,15 @@ func deliver(resolver dns.Resolver, m Msg) {
 			}
 			results = append(results, tlsResult)
 		}
-		addResult(recipientDomainResult, false)
 		for _, result := range hostResults {
 			addResult(result, true)
+		}
+		// If we were delivering to a mail host directly (not a domain with MX records), we
+		// are more likely to get a TLSA policy than an STS policy. Don't potentially
+		// confuse operators with both a tlsa and no-policy-found result.
+		// todo spec: ../rfc/8460:440 an explicit no-sts-policy result would be useful.
+		if recipientDomainResult.Policy.Type != tlsrpt.NoPolicyFound || !tlsaPolicyDomains[recipientDomainResult.Policy.Domain] {
+			addResult(recipientDomainResult, false)
 		}
 
 		if len(results) > 0 {
