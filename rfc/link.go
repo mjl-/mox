@@ -149,16 +149,12 @@ func main() {
 			lines = lines[:len(lines)-1]
 		}
 		for i, line := range lines {
-			if !iserrata && len(line) > 80 {
+			if !(iserrata && i > 0) && len(line) > 80 {
 				line = strings.TrimRight(line[:80], " ")
 			}
 			refs := lineRefs[i+1]
 			if len(refs) > 0 {
-				if iserrata {
-					line = ""
-				} else {
-					line = fmt.Sprintf("%-80s", line)
-				}
+				line = fmt.Sprintf("%-80s", line)
 
 				// Lookup source files for rfc:line, so we can cross-link the rfcs.
 				done := map[string]bool{}
@@ -180,9 +176,6 @@ func main() {
 						comment += ": "
 					}
 					line += fmt.Sprintf(" %s%s:%d", comment, r.dstpath, r.dstlineno)
-				}
-				if iserrata {
-					line = line[1:]
 				}
 			}
 			line += "\n"

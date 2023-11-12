@@ -217,7 +217,7 @@ body { font-family: 'ubuntu mono', monospace; }
 			for i, line := range strings.Split(string(buf), "\n") {
 				if line == "" {
 					line = "\n"
-				} else if len(line) < 80 || strings.Contains(rfc.File, "-") {
+				} else if len(line) < 80 || strings.Contains(rfc.File, "-") && i > 0 {
 					line = htmltemplate.HTMLEscapeString(line)
 				} else {
 					t := strings.Split(line[80:], " ")
