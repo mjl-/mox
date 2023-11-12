@@ -196,6 +196,7 @@ const (
 	// Recipient domain did not have MTA-STS policy, or mail host (TSLA base domain)
 	// did not have DANE TLSA records.
 	NoPolicyFound PolicyType = "no-policy-found"
+	// todo spec: ../rfc/8460:440 ../rfc/8460:697 suggest to replace with values like "no-sts-found" and "no-tlsa-found" to make it explicit which policy isn't found. also easier to implement, because you don't have to handle leaving out an sts no-policy-found result for a mail host when a tlsa policy is present.
 )
 
 func (rp ResultPolicy) equal(orp ResultPolicy) bool {
