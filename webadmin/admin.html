@@ -1653,6 +1653,17 @@ const domainTLSRPT = async (d) => {
 		api.Domain(d),
 	])
 
+	const policyType = (policy) => {
+		let s = policy['policy-type']
+		if (s === 'sts') {
+			const mode = (policy['policy-string'] || []).find(s => s.startsWith('mode:'))
+			if (mode) {
+				s += ': '+mode.replace('mode:', '').trim()
+			}
+		}
+		return s
+	}
+
 	const page = document.getElementById('page')
 	dom._kids(page,
 		crumbs(
@@ -1707,7 +1718,7 @@ const domainTLSRPT = async (d) => {
 									dom.td(reportRowSpan, valignTop, period(new Date(r['date-range']['start-datetime']), new Date(r['date-range']['end-datetime']))),
 								],
 								index > 0 ? [] : [
-									dom.td(resultRowSpan, valignTop, '' + result.policy['policy-type']+': '+((result.policy['policy-string'] || []).filter(s => s.startsWith('mode:'))[0] || '(no policy)').replace('mode:', '').trim(), attr({title: (result.policy['policy-string'] || []).join('\n')})),
+									dom.td(resultRowSpan, valignTop, policyType(result.policy), attr({title: (result.policy['policy-string'] || []).join('\n')})),
 									dom.td(resultRowSpan, valignTop, alignRight, '' + result.summary['total-successful-session-count']),
 									dom.td(resultRowSpan, valignTop, alignRight, '' + result.summary['total-failure-session-count']),
 								],
