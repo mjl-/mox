@@ -2032,7 +2032,7 @@ func (Admin) LookupTLSRPTRecord(ctx context.Context, domain string) (record *TLS
 
 	resolver := dns.StrictResolver{Pkg: "webadmin"}
 	r, txt, err := tlsrpt.Lookup(ctx, resolver, dom)
-	if err != nil && (errors.Is(err, tlsrpt.ErrNoRecord) || errors.Is(err, tlsrpt.ErrMultipleRecords) || errors.Is(err, tlsrpt.ErrRecordSyntax)) {
+	if err != nil && (errors.Is(err, tlsrpt.ErrNoRecord) || errors.Is(err, tlsrpt.ErrMultipleRecords) || errors.Is(err, tlsrpt.ErrRecordSyntax) || errors.Is(err, tlsrpt.ErrDNS)) {
 		errstr = err.Error()
 		err = nil
 	}
