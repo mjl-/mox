@@ -36,11 +36,21 @@ func FindAccount(localpart smtp.Localpart, domain dns.Domain, allowPostmaster bo
 		return false
 	}
 
+	// Check for special mail host addresses.
 	if localpart == "postmaster" && postmasterDomain() {
 		if !allowPostmaster {
 			return "", "", config.Destination{}, ErrAccountNotFound
 		}
 		return Conf.Static.Postmaster.Account, "postmaster", config.Destination{Mailbox: Conf.Static.Postmaster.Mailbox}, nil
+	}
+	if localpart == Conf.Static.HostTLSRPT.ParsedLocalpart && domain == Conf.Static.HostnameDomain {
+		// Get destination, should always be present.
+		canonical := smtp.NewAddress(localpart, domain).String()
+		accAddr, ok := Conf.AccountDestination(canonical)
+		if !ok {
+			return "", "", config.Destination{}, ErrAccountNotFound
+		}
+		return accAddr.Account, canonical, accAddr.Destination, nil
 	}
 
 	d, ok := Conf.Domain(domain)
