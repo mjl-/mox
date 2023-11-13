@@ -381,4 +381,14 @@ func TestSendReports(t *testing.T) {
 		"tls-reports3@mailhost.sender.example": report2,
 	}
 	test(tlsResults, expReports)
+
+	db.Insert(ctxbg,
+		&tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: "tls-reports@sender.example", Until: time.Now().Add(-time.Minute)},                  // Expired, so ignored.
+		&tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: "tls-reports1@mailhost.sender.example", Until: time.Now().Add(time.Minute)},         // Still valid.
+		&tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: "tls-reports3@mailhost.sender.example", Until: time.Now().Add(31 * 24 * time.Hour)}, // Still valid.
+	)
+	test(tlsResults, map[string]tlsrpt.Report{
+		"tls-reports@sender.example":           report1,
+		"tls-reports2@mailhost.sender.example": report2,
+	})
 }

@@ -605,6 +605,20 @@ func deliver(resolver dns.Resolver, m Msg) {
 		now := time.Now()
 		dayUTC := now.UTC().Format("20060102")
 
+		// See if this contains a failure. If not, we'll mark TLS results for delivering
+		// DMARC reports SendReport false, so we won't as easily get into a report sending
+		// loop.
+		var failure bool
+		for _, result := range hostResults {
+			if result.Summary.TotalFailureSessionCount > 0 {
+				failure = true
+				break
+			}
+		}
+		if recipientDomainResult.Summary.TotalFailureSessionCount > 0 {
+			failure = true
+		}
+
 		results := make([]tlsrptdb.TLSResult, 0, 1+len(hostResults))
 		tlsaPolicyDomains := map[string]bool{}
 		addResult := func(r tlsrpt.Result, isHost bool) {
@@ -629,7 +643,7 @@ func deliver(resolver dns.Resolver, m Msg) {
 				DayUTC:          dayUTC,
 				RecipientDomain: m.RecipientDomain.Domain.Name(),
 				IsHost:          isHost,
-				SendReport:      !m.IsTLSReport,
+				SendReport:      !m.IsTLSReport && (!m.IsDMARCReport || failure),
 				Results:         []tlsrpt.Result{r},
 			}
 			results = append(results, tlsResult)

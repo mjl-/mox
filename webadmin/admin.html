@@ -1023,7 +1023,7 @@ const dmarcIndex = async () => {
 	dom._kids(page,
 		crumbs(
 			crumblink('Mox Admin', '#'),
-			'DMARC reports and evaluations',
+			'DMARC',
 		),
 		dom.ul(
 			dom.li(
@@ -1085,7 +1085,10 @@ const renderDMARCSummaries = (summaries) => {
 }
 
 const dmarcEvaluations = async () => {
-	const evalStats = await api.DMARCEvaluationStats()
+	const [evalStats, suppressAddresses] = await Promise.all([
+		api.DMARCEvaluationStats(),
+		api.DMARCSuppressList(),
+	])
 
 	const isEmpty = (o) => {
 		for (const e in o) {
@@ -1093,6 +1096,9 @@ const dmarcEvaluations = async () => {
 		}
 		return true
 	}
+
+	let fieldset, reportingAddress, until, comment
+	const nextmonth = new Date(new Date().getTime()+31*24*3600*1000)
 
 	const page = document.getElementById('page')
 	dom._kids(page,
@@ -1119,6 +1125,101 @@ const dmarcEvaluations = async () => {
 					),
 				),
 				isEmpty(evalStats) ? dom.tr(dom.td(attr({colspan: '3'}), 'No evaluations.')) : [],
+			),
+		),
+		dom.br(),
+		dom.br(),
+		dom.h2('Suppressed reporting addresses'),
+		dom.p('In practice, sending a DMARC report to a reporting address can cause DSN to be sent back. Such addresses can be added to a supression list for a period, to reduce noise in the postmaster mailbox.'),
+		dom.form(
+			async function submit(e) {
+				e.stopPropagation()
+				e.preventDefault()
+				try {
+					fieldset.disabled = true
+					await api.DMARCSuppressAdd(reportingAddress.value, new Date(until.value), comment.value)
+				} catch (err) {
+					console.log({err})
+					window.alert('Error: ' + err.message)
+					return
+				} finally {
+					fieldset.disabled = false
+				}
+				window.location.reload() // todo: add the address to the list, or only reload the list
+			},
+			fieldset=dom.fieldset(
+				dom.label(
+					style({display: 'inline-block'}),
+					'Reporting address',
+					dom.br(),
+					reportingAddress=dom.input(attr({required: ''})),
+				),
+				' ',
+				dom.label(
+					style({display: 'inline-block'}),
+					'Until',
+					dom.br(),
+					until=dom.input(attr({type: 'date', required: '', value: nextmonth.getFullYear()+'-'+(1+nextmonth.getMonth())+'-'+nextmonth.getDate()})),
+				),
+				' ',
+				dom.label(
+					style({display: 'inline-block'}),
+					dom.span('Comment (optional)'),
+					dom.br(),
+					comment=dom.input(),
+				),
+				' ',
+				dom.button('Add', attr({title: 'Outgoing reports to this reporting address will be suppressed until the end time.'})),
+			),
+		),
+		dom.br(),
+		dom('table.hover',
+			dom.thead(
+				dom.tr(
+					dom.th('Reporting address'),
+					dom.th('Until'),
+					dom.th('Comment'),
+					dom.th('Action'),
+				),
+			),
+			dom.tbody(
+				(suppressAddresses || []).length === 0 ? dom.tr(dom.td(attr({colspan: '4'}), 'No suppressed reporting addresses.')) : [],
+				(suppressAddresses || []).map(ba =>
+					dom.tr(
+						dom.td(ba.ReportingAddress),
+						dom.td(ba.Until),
+						dom.td(ba.Comment),
+						dom.td(
+							dom.button('Remove', attr({type: 'button'}), async function click(e) {
+								try {
+									e.target.disabled = true
+									await api.DMARCSuppressRemove(ba.ID)
+								} catch (err) {
+									console.log({err})
+									window.alert('Error: ' + err.message)
+									return
+								} finally {
+									e.target.disabled = false
+								}
+								window.location.reload() // todo: only reload the list
+							}),
+							' ',
+							dom.button('Extend for 1 month', attr({type: 'button'}), async function click(e) {
+								try {
+									e.target.disabled = true
+									await api.DMARCSuppressExtend(ba.ID, new Date(new Date().getTime() + 31*24*3600*1000))
+								} catch (err) {
+									console.log({err})
+									window.alert('Error: ' + err.message)
+									return
+								} finally {
+									e.target.disabled = false
+								}
+								window.location.reload() // todo: only reload the list
+							}),
+						),
+					)
+				),
 			),
 		),
 	)
@@ -1479,9 +1580,15 @@ const tlsrptIndex = async () => {
 }
 
 const tlsrptResults = async () => {
-	const results = await api.TLSRPTResults()
+	const [results, suppressAddresses] = await Promise.all([
+		api.TLSRPTResults(),
+		api.TLSRPTSuppressList(),
+	])
 
 	// todo: add a view where results are grouped by policy domain+dayutc. now each recipient domain gets a row.
+
+	let fieldset, reportingAddress, until, comment
+	const nextmonth = new Date(new Date().getTime()+31*24*3600*1000)
 
 	const page = document.getElementById('page')
 	dom._kids(page,
@@ -1543,6 +1650,101 @@ const tlsrptResults = async () => {
 					)
 				}),
 				results.length === 0 ? dom.tr(dom.td(attr({colspan: '9'}), 'No results.')) : [],
+			),
+		),
+		dom.br(),
+		dom.br(),
+		dom.h2('Suppressed reporting addresses'),
+		dom.p('In practice, sending a TLS report to a reporting address can cause DSN to be sent back. Such addresses can be added to a suppress list for a period, to reduce noise in the postmaster mailbox.'),
+		dom.form(
+			async function submit(e) {
+				e.stopPropagation()
+				e.preventDefault()
+				try {
+					fieldset.disabled = true
+					await api.TLSRPTSuppressAdd(reportingAddress.value, new Date(until.value), comment.value)
+				} catch (err) {
+					console.log({err})
+					window.alert('Error: ' + err.message)
+					return
+				} finally {
+					fieldset.disabled = false
+				}
+				window.location.reload() // todo: add the address to the list, or only reload the list
+			},
+			fieldset=dom.fieldset(
+				dom.label(
+					style({display: 'inline-block'}),
+					'Reporting address',
+					dom.br(),
+					reportingAddress=dom.input(attr({required: ''})),
+				),
+				' ',
+				dom.label(
+					style({display: 'inline-block'}),
+					'Until',
+					dom.br(),
+					until=dom.input(attr({type: 'date', required: '', value: nextmonth.getFullYear()+'-'+(1+nextmonth.getMonth())+'-'+nextmonth.getDate()})),
+				),
+				' ',
+				dom.label(
+					style({display: 'inline-block'}),
+					dom.span('Comment (optional)'),
+					dom.br(),
+					comment=dom.input(),
+				),
+				' ',
+				dom.button('Add', attr({title: 'Outgoing reports to this reporting address will be suppressed until the end time.'})),
+			),
+		),
+		dom.br(),
+		dom('table.hover',
+			dom.thead(
+				dom.tr(
+					dom.th('Reporting address'),
+					dom.th('Until'),
+					dom.th('Comment'),
+					dom.th('Action'),
+				),
+			),
+			dom.tbody(
+				(suppressAddresses || []).length === 0 ? dom.tr(dom.td(attr({colspan: '4'}), 'No suppressed reporting addresses.')) : [],
+				(suppressAddresses || []).map(ba =>
+					dom.tr(
+						dom.td(ba.ReportingAddress),
+						dom.td(ba.Until),
+						dom.td(ba.Comment),
+						dom.td(
+							dom.button('Remove', attr({type: 'button'}), async function click(e) {
+								try {
+									e.target.disabled = true
+									await api.TLSRPTSuppressRemove(ba.ID)
+								} catch (err) {
+									console.log({err})
+									window.alert('Error: ' + err.message)
+									return
+								} finally {
+									e.target.disabled = false
+								}
+								window.location.reload() // todo: only reload the list
+							}),
+							' ',
+							dom.button('Extend for 1 month', attr({type: 'button'}), async function click(e) {
+								try {
+									e.target.disabled = true
+									await api.TLSRPTSuppressExtend(ba.ID, new Date(new Date().getTime() + 31*24*3600*1000))
+								} catch (err) {
+									console.log({err})
+									window.alert('Error: ' + err.message)
+									return
+								} finally {
+									e.target.disabled = false
+								}
+								window.location.reload() // todo: only reload the list
+							}),
+						),
+					)
+				),
 			),
 		),
 	)

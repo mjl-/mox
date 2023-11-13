@@ -312,7 +312,7 @@ func TestSendReports(t *testing.T) {
 
 			if optExpReport != nil {
 				// Parse report in message and compare with expected.
-				expFeedback.ReportMetadata.ReportID = feedback.ReportMetadata.ReportID
+				optExpReport.ReportMetadata.ReportID = feedback.ReportMetadata.ReportID
 				tcompare(t, feedback, expFeedback)
 			}
 
@@ -347,6 +347,18 @@ func TestSendReports(t *testing.T) {
 	evalOpt := eval
 	evalOpt.Optional = true
 	test([]Evaluation{evalOpt}, map[string]struct{}{}, map[string]struct{}{}, nil)
+
+	// Address is suppressed.
+	sa := SuppressAddress{ReportingAddress: "dmarcrpt@sender.example", Until: time.Now().Add(time.Minute)}
+	err = db.Insert(ctxbg, &sa)
+	tcheckf(t, err, "insert suppress address")
+	test([]Evaluation{eval}, map[string]struct{}{}, map[string]struct{}{}, nil)
+
+	// Suppression has expired.
+	sa.Until = time.Now().Add(-time.Minute)
+	err = db.Update(ctxbg, &sa)
+	tcheckf(t, err, "update suppress address")
+	test([]Evaluation{eval}, map[string]struct{}{"dmarcrpt@sender.example": {}}, map[string]struct{}{}, expFeedback)
 
 	// Two RUA's, one with a size limit that doesn't pass, and one that does pass.
 	resolver.TXT["_dmarc.sender.example."] = []string{"v=DMARC1; rua=mailto:dmarcrpt1@sender.example!1,mailto:dmarcrpt2@sender.example!10t; ri=3600"}

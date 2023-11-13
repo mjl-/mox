@@ -2031,6 +2031,36 @@ func (Admin) DMARCRemoveEvaluations(ctx context.Context, domain string) {
 	xcheckf(ctx, err, "removing evaluations for domain")
 }
 
+// DMARCSuppressAdd adds a reporting address to the suppress list. Outgoing
+// reports will be suppressed for a period.
+func (Admin) DMARCSuppressAdd(ctx context.Context, reportingAddress string, until time.Time, comment string) {
+	addr, err := smtp.ParseAddress(reportingAddress)
+	xcheckuserf(ctx, err, "parsing reporting address")
+
+	ba := dmarcdb.SuppressAddress{ReportingAddress: addr.String(), Until: until, Comment: comment}
+	err = dmarcdb.SuppressAdd(ctx, &ba)
+	xcheckf(ctx, err, "adding address to suppresslist")
+}
+
+// DMARCSuppressList returns all reporting addresses on the suppress list.
+func (Admin) DMARCSuppressList(ctx context.Context) []dmarcdb.SuppressAddress {
+	l, err := dmarcdb.SuppressList(ctx)
+	xcheckf(ctx, err, "listing reporting addresses in suppresslist")
+	return l
+}
+
+// DMARCSuppressRemove removes a reporting address record from the suppress list.
+func (Admin) DMARCSuppressRemove(ctx context.Context, id int64) {
+	err := dmarcdb.SuppressRemove(ctx, id)
+	xcheckf(ctx, err, "removing reporting address from suppresslist")
+}
+
+// DMARCSuppressExtend updates the until field of a suppressed reporting address record.
+func (Admin) DMARCSuppressExtend(ctx context.Context, id int64, until time.Time) {
+	err := dmarcdb.SuppressUpdate(ctx, id, until)
+	xcheckf(ctx, err, "updating reporting address in suppresslist")
+}
+
 // TLSRPTResults returns all TLSRPT results in the database.
 func (Admin) TLSRPTResults(ctx context.Context) []tlsrptdb.TLSResult {
 	results, err := tlsrptdb.Results(ctx)
@@ -2077,4 +2107,34 @@ func (Admin) TLSRPTRemoveResults(ctx context.Context, domain string, day string)
 
 	err = tlsrptdb.RemoveResultsPolicyDomain(ctx, dom, day)
 	xcheckf(ctx, err, "removing tls results")
+}
+
+// TLSRPTSuppressAdd adds a reporting address to the suppress list. Outgoing
+// reports will be suppressed for a period.
+func (Admin) TLSRPTSuppressAdd(ctx context.Context, reportingAddress string, until time.Time, comment string) {
+	addr, err := smtp.ParseAddress(reportingAddress)
+	xcheckuserf(ctx, err, "parsing reporting address")
+
+	ba := tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: addr.String(), Until: until, Comment: comment}
+	err = tlsrptdb.SuppressAdd(ctx, &ba)
+	xcheckf(ctx, err, "adding address to suppresslist")
+}
+
+// TLSRPTSuppressList returns all reporting addresses on the suppress list.
+func (Admin) TLSRPTSuppressList(ctx context.Context) []tlsrptdb.TLSRPTSuppressAddress {
+	l, err := tlsrptdb.SuppressList(ctx)
+	xcheckf(ctx, err, "listing reporting addresses in suppresslist")
+	return l
+}
+
+// TLSRPTSuppressRemove removes a reporting address record from the suppress list.
+func (Admin) TLSRPTSuppressRemove(ctx context.Context, id int64) {
+	err := tlsrptdb.SuppressRemove(ctx, id)
+	xcheckf(ctx, err, "removing reporting address from suppresslist")
+}
+
+// TLSRPTSuppressExtend updates the until field of a suppressed reporting address record.
+func (Admin) TLSRPTSuppressExtend(ctx context.Context, id int64, until time.Time) {
+	err := tlsrptdb.SuppressUpdate(ctx, id, until)
+	xcheckf(ctx, err, "updating reporting address in suppresslist")
 }

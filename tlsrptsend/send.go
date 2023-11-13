@@ -441,6 +441,19 @@ Period: %s - %s UTC
 	msgSize := int64(len(msgPrefix)) + msgInfo.Size()
 
 	for _, rcpt := range recipients {
+		// If recipient is on suppression list, we won't queue the reporting message.
+		q := bstore.QueryDB[tlsrptdb.TLSRPTSuppressAddress](ctx, db)
+		q.FilterNonzero(tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: rcpt.Address.Path().String()})
+		q.FilterGreater("Until", time.Now())
+		exists, err := q.Exists()
+		if err != nil {
+			return false, fmt.Errorf("querying suppress list: %v", err)
+		}
+		if exists {
+			log.Info("suppressing outgoing tls report", mlog.Field("reportingaddress", rcpt.Address))
+			continue
+		}
+
 		qm := queue.MakeMsg(mox.Conf.Static.Postmaster.Account, from.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsTLSReport.
@@ -451,7 +464,7 @@ Period: %s - %s UTC
 		no := false
 		qm.RequireTLS = &no
 
-		err := queueAdd(ctx, log, &qm, msgf)
+		err = queueAdd(ctx, log, &qm, msgf)
 		if err != nil {
 			tempError = true
 			log.Errorx("queueing message with tls report", err)

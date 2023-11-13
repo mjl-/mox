@@ -829,6 +829,77 @@
 			"Returns": []
 		},
 		{
+			"Name": "DMARCSuppressAdd",
+			"Docs": "DMARCSuppressAdd adds a reporting address to the suppress list. Outgoing\nreports will be suppressed for a period.",
+			"Params": [
+				{
+					"Name": "reportingAddress",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "until",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "comment",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DMARCSuppressList",
+			"Docs": "DMARCSuppressList returns all reporting addresses on the suppress list.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"SuppressAddress"
+					]
+				}
+			]
+		},
+		{
+			"Name": "DMARCSuppressRemove",
+			"Docs": "DMARCSuppressRemove removes a reporting address record from the suppress list.",
+			"Params": [
+				{
+					"Name": "id",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DMARCSuppressExtend",
+			"Docs": "DMARCSuppressExtend updates the until field of a suppressed reporting address record.",
+			"Params": [
+				{
+					"Name": "id",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "until",
+					"Typewords": [
+						"timestamp"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "TLSRPTResults",
 			"Docs": "TLSRPTResults returns all TLSRPT results in the database.",
 			"Params": [],
@@ -916,6 +987,77 @@
 					"Name": "day",
 					"Typewords": [
 						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "TLSRPTSuppressAdd",
+			"Docs": "TLSRPTSuppressAdd adds a reporting address to the suppress list. Outgoing\nreports will be suppressed for a period.",
+			"Params": [
+				{
+					"Name": "reportingAddress",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "until",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "comment",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "TLSRPTSuppressList",
+			"Docs": "TLSRPTSuppressList returns all reporting addresses on the suppress list.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"TLSRPTSuppressAddress"
+					]
+				}
+			]
+		},
+		{
+			"Name": "TLSRPTSuppressRemove",
+			"Docs": "TLSRPTSuppressRemove removes a reporting address record from the suppress list.",
+			"Params": [
+				{
+					"Name": "id",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "TLSRPTSuppressExtend",
+			"Docs": "TLSRPTSuppressExtend updates the until field of a suppressed reporting address record.",
+			"Params": [
+				{
+					"Name": "id",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "until",
+					"Typewords": [
+						"timestamp"
 					]
 				}
 			],
@@ -3809,6 +3951,47 @@
 			]
 		},
 		{
+			"Name": "SuppressAddress",
+			"Docs": "SuppressAddress is a reporting address for which outgoing DMARC reports\nwill be suppressed for a period.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Inserted",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "ReportingAddress",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Until",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Comment",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
 			"Name": "TLSResult",
 			"Docs": "TLSResult is stored in the database to track TLS results per policy domain, day\nand recipient domain. These records will be included in TLS reports.",
 			"Fields": [
@@ -3874,6 +4057,47 @@
 					"Typewords": [
 						"[]",
 						"Result"
+					]
+				}
+			]
+		},
+		{
+			"Name": "TLSRPTSuppressAddress",
+			"Docs": "TLSRPTSuppressAddress is a reporting address for which outgoing TLS reports\nwill be suppressed for a period.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Inserted",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "ReportingAddress",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Until",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Comment",
+					"Docs": "",
+					"Typewords": [
+						"string"
 					]
 				}
 			]

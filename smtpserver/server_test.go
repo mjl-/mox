@@ -985,13 +985,12 @@ func TestTLSReport(t *testing.T) {
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/tlsrpt/mox.conf"), resolver)
 	defer ts.close()
 
-	run := func(tlsrpt string, n int) {
+	run := func(rcptTo, tlsrpt string, n int) {
 		t.Helper()
 		ts.run(func(err error, client *smtpclient.Client) {
 			t.Helper()
 
 			mailFrom := "remote@example.org"
-			rcptTo := "mjl@mox.example"
 
 			msgb := &bytes.Buffer{}
 			_, xerr := fmt.Fprintf(msgb, "From: %s\r\nTo: %s\r\nSubject: tlsrpt report\r\nMIME-Version: 1.0\r\nContent-Type: application/tlsrpt+json\r\n\r\n%s\r\n", mailFrom, rcptTo, tlsrpt)
@@ -1017,13 +1016,15 @@ func TestTLSReport(t *testing.T) {
 
 	const tlsrpt = `{"organization-name":"Example.org","date-range":{"start-datetime":"2022-01-07T00:00:00Z","end-datetime":"2022-01-07T23:59:59Z"},"contact-info":"tlsrpt@example.org","report-id":"1","policies":[{"policy":{"policy-type":"no-policy-found","policy-domain":"xmox.nl"},"summary":{"total-successful-session-count":1,"total-failure-session-count":0}}]}`
 
-	run(tlsrpt, 0)
-	run(strings.ReplaceAll(tlsrpt, "xmox.nl", "mox.example"), 1)
+	run("mjl@mox.example", tlsrpt, 0)
+	run("mjl@mox.example", strings.ReplaceAll(tlsrpt, "xmox.nl", "mox.example"), 1)
+	run("mjl@mailhost.mox.example", strings.ReplaceAll(tlsrpt, "xmox.nl", "mailhost.mox.example"), 2)
 
 	// We always store as an evaluation, but as optional for reports.
-	evals := checkEvaluationCount(t, 2)
+	evals := checkEvaluationCount(t, 3)
 	tcompare(t, evals[0].Optional, true)
 	tcompare(t, evals[1].Optional, true)
+	tcompare(t, evals[2].Optional, true)
 }
 
 func TestRatelimitConnectionrate(t *testing.T) {

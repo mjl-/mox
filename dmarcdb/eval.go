@@ -60,7 +60,7 @@ var (
 )
 
 var (
-	EvalDBTypes = []any{Evaluation{}} // Types stored in DB.
+	EvalDBTypes = []any{Evaluation{}, SuppressAddress{}} // Types stored in DB.
 	// Exported for backups. For incoming deliveries the SMTP server adds evaluations
 	// to the database. Every hour, a goroutine wakes up that gathers evaluations from
 	// the last hour(s), sends a report, and removes the evaluations from the database.
@@ -117,6 +117,16 @@ type Evaluation struct {
 	// For "auth_results" in a report record.
 	DKIMResults []dmarcrpt.DKIMAuthResult
 	SPFResults  []dmarcrpt.SPFAuthResult
+}
+
+// SuppressAddress is a reporting address for which outgoing DMARC reports
+// will be suppressed for a period.
+type SuppressAddress struct {
+	ID               int64
+	Inserted         time.Time `bstore:"default now"`
+	ReportingAddress string    `bstore:"unique"`
+	Until            time.Time `bstore:"nonzero"`
+	Comment          string
 }
 
 var dmarcResults = map[bool]dmarcrpt.DMARCResult{
@@ -803,6 +813,19 @@ Period: %s - %s UTC
 	msgSize := int64(len(msgPrefix)) + msgInfo.Size()
 	var queued bool
 	for _, rcpt := range recipients {
+		// If recipient is on suppression list, we won't queue the reporting message.
+		q := bstore.QueryDB[SuppressAddress](ctx, db)
+		q.FilterNonzero(SuppressAddress{ReportingAddress: rcpt.address.Path().String()})
+		q.FilterGreater("Until", time.Now())
+		exists, err := q.Exists()
+		if err != nil {
+			return false, fmt.Errorf("querying suppress list: %v", err)
+		}
+		if exists {
+			log.Info("suppressing outgoing dmarc aggregate report", mlog.Field("reportingaddress", rcpt.address))
+			continue
+		}
+
 		// Only send to addresses where we don't exceed their size limit. The RFC mentions
 		// the size of the report, but then continues about the size after compression and
 		// transport encodings (i.e. gzip and the mime base64 attachment, so the intention
@@ -818,7 +841,7 @@ Period: %s - %s UTC
 		qm.MaxAttempts = 5
 		qm.IsDMARCReport = true
 
-		err := queueAdd(ctx, log, &qm, msgf)
+		err = queueAdd(ctx, log, &qm, msgf)
 		if err != nil {
 			tempError = true
 			log.Errorx("queueing message with dmarc aggregate report", err)
@@ -831,7 +854,7 @@ Period: %s - %s UTC
 	}
 
 	if !queued {
-		if err := sendErrorReport(ctx, log, from, addrs, dom, report.ReportMetadata.ReportID, msgSize); err != nil {
+		if err := sendErrorReport(ctx, log, db, from, addrs, dom, report.ReportMetadata.ReportID, msgSize); err != nil {
 			log.Errorx("sending dmarc error reports", err)
 			metricReportError.Inc()
 		}
@@ -917,7 +940,7 @@ func composeAggregateReport(ctx context.Context, log *mlog.Log, mf *os.File, fro
 // Though this functionality is quite underspecified, we'll do our best to send our
 // an error report in case our report is too large for all recipients.
 // ../rfc/7489:1918
-func sendErrorReport(ctx context.Context, log *mlog.Log, fromAddr smtp.Address, recipients []message.NameAddress, reportDomain dns.Domain, reportID string, reportMsgSize int64) error {
+func sendErrorReport(ctx context.Context, log *mlog.Log, db *bstore.DB, fromAddr smtp.Address, recipients []message.NameAddress, reportDomain dns.Domain, reportID string, reportMsgSize int64) error {
 	log.Debug("no reporting addresses willing to accept report given size, queuing short error message")
 
 	msgf, err := store.CreateMessageTemp("dmarcreportmsg-out")
@@ -954,6 +977,19 @@ Submitting-URI: %s
 	msgSize := int64(len(msgPrefix)) + msgInfo.Size()
 
 	for _, rcpt := range recipients {
+		// If recipient is on suppression list, we won't queue the reporting message.
+		q := bstore.QueryDB[SuppressAddress](ctx, db)
+		q.FilterNonzero(SuppressAddress{ReportingAddress: rcpt.Address.Path().String()})
+		q.FilterGreater("Until", time.Now())
+		exists, err := q.Exists()
+		if err != nil {
+			return fmt.Errorf("querying suppress list: %v", err)
+		}
+		if exists {
+			log.Info("suppressing outgoing dmarc error report", mlog.Field("reportingaddress", rcpt.Address))
+			continue
+		}
+
 		qm := queue.MakeMsg(mox.Conf.Static.Postmaster.Account, fromAddr.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsDMARCReport.
@@ -1043,4 +1079,50 @@ func dkimSign(ctx context.Context, log *mlog.Log, fromAddr smtp.Address, smtputf
 		fd = nfd
 	}
 	return ""
+}
+
+// SuppressAdd adds an address to the suppress list.
+func SuppressAdd(ctx context.Context, ba *SuppressAddress) error {
+	db, err := evalDB(ctx)
+	if err != nil {
+		return err
+	}
+
+	return db.Insert(ctx, ba)
+}
+
+// SuppressList returns all reporting addresses on the suppress list.
+func SuppressList(ctx context.Context) ([]SuppressAddress, error) {
+	db, err := evalDB(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return bstore.QueryDB[SuppressAddress](ctx, db).SortDesc("ID").List()
+}
+
+// SuppressRemove removes a reporting address record from the suppress list.
+func SuppressRemove(ctx context.Context, id int64) error {
+	db, err := evalDB(ctx)
+	if err != nil {
+		return err
+	}
+
+	return db.Delete(ctx, &SuppressAddress{ID: id})
+}
+
+// SuppressUpdate updates the until field of a reporting address record.
+func SuppressUpdate(ctx context.Context, id int64, until time.Time) error {
+	db, err := evalDB(ctx)
+	if err != nil {
+		return err
+	}
+
+	ba := SuppressAddress{ID: id}
+	err = db.Get(ctx, &ba)
+	if err != nil {
+		return err
+	}
+	ba.Until = until
+	return db.Update(ctx, &ba)
 }

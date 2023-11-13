@@ -17,7 +17,7 @@ var (
 	mutex         sync.Mutex
 
 	// Accessed directly by tlsrptsend.
-	ResultDBTypes = []any{TLSResult{}}
+	ResultDBTypes = []any{TLSResult{}, TLSRPTSuppressAddress{}}
 	ResultDB      *bstore.DB
 )
 
