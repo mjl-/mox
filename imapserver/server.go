@@ -1435,7 +1435,8 @@ func (c *conn) cmdStarttls(tag, cmd string, p *parser) {
 		xcheckf(err, "reading buffered data for tls handshake")
 		conn = &prefixConn{buf, conn}
 	}
-	c.ok(tag, cmd)
+	// We add the cid to facilitate debugging in case of TLS connection failure.
+	c.ok(tag, cmd+" ("+mox.ReceivedID(c.cid)+")")
 
 	cidctx := context.WithValue(mox.Context, mlog.CidKey, c.cid)
 	ctx, cancel := context.WithTimeout(cidctx, time.Minute)

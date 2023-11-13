@@ -880,7 +880,8 @@ func (c *conn) cmdStarttls(p *parser) {
 		}
 	}
 
-	c.writecodeline(smtp.C220ServiceReady, smtp.SeOther00, "go!", nil)
+	// We add the cid to the output, to help debugging in case of a failing TLS connection.
+	c.writecodeline(smtp.C220ServiceReady, smtp.SeOther00, "go! ("+mox.ReceivedID(c.cid)+")", nil)
 	tlsConn := tls.Server(conn, c.tlsConfig)
 	cidctx := context.WithValue(mox.Context, mlog.CidKey, c.cid)
 	ctx, cancel := context.WithTimeout(cidctx, time.Minute)
