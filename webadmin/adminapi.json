@@ -3799,6 +3799,21 @@
 			"Docs": "EvaluationStat summarizes stored evaluations, for inclusion in an upcoming\naggregate report, for a domain.",
 			"Fields": [
 				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "Dispositions",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
 					"Name": "Count",
 					"Docs": "",
 					"Typewords": [
@@ -3810,13 +3825,6 @@
 					"Docs": "",
 					"Typewords": [
 						"bool"
-					]
-				},
-				{
-					"Name": "Domain",
-					"Docs": "",
-					"Typewords": [
-						"Domain"
 					]
 				}
 			]

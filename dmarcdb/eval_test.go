@@ -109,14 +109,16 @@ func TestEvaluations(t *testing.T) {
 
 	expStats := map[string]EvaluationStat{
 		"sender1.example": {
-			Count:      3,
-			SendReport: true,
-			Domain:     dns.Domain{ASCII: "sender1.example"},
+			Domain:       dns.Domain{ASCII: "sender1.example"},
+			Dispositions: []string{"none"},
+			Count:        3,
+			SendReport:   true,
 		},
 		"sender2.example": {
-			Count:      1,
-			SendReport: true,
-			Domain:     dns.Domain{ASCII: "sender2.example"},
+			Domain:       dns.Domain{ASCII: "sender2.example"},
+			Dispositions: []string{"none"},
+			Count:        1,
+			SendReport:   true,
 		},
 	}
 	stats, err := EvaluationStats(ctxbg)
@@ -142,9 +144,10 @@ func TestEvaluations(t *testing.T) {
 
 	expStats = map[string]EvaluationStat{
 		"sender2.example": {
-			Count:      1,
-			SendReport: true,
-			Domain:     dns.Domain{ASCII: "sender2.example"},
+			Domain:       dns.Domain{ASCII: "sender2.example"},
+			Dispositions: []string{"none"},
+			Count:        1,
+			SendReport:   true,
 		},
 	}
 	stats, err = EvaluationStats(ctxbg)

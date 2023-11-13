@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -219,9 +220,10 @@ func Evaluations(ctx context.Context) ([]Evaluation, error) {
 // EvaluationStat summarizes stored evaluations, for inclusion in an upcoming
 // aggregate report, for a domain.
 type EvaluationStat struct {
-	Count      int
-	SendReport bool
-	Domain     dns.Domain
+	Domain       dns.Domain
+	Dispositions []string
+	Count        int
+	SendReport   bool
 }
 
 // EvaluationStats returns evaluation counts and report-sending status per domain.
@@ -235,6 +237,9 @@ func EvaluationStats(ctx context.Context) (map[string]EvaluationStat, error) {
 
 	err = bstore.QueryDB[Evaluation](ctx, db).ForEach(func(e Evaluation) error {
 		if stat, ok := r[e.PolicyDomain]; ok {
+			if !slices.Contains(stat.Dispositions, string(e.Disposition)) {
+				stat.Dispositions = append(stat.Dispositions, string(e.Disposition))
+			}
 			stat.Count++
 			stat.SendReport = stat.SendReport || !e.Optional
 			r[e.PolicyDomain] = stat
@@ -244,9 +249,10 @@ func EvaluationStats(ctx context.Context) (map[string]EvaluationStat, error) {
 				return fmt.Errorf("parsing domain %q: %v", e.PolicyDomain, err)
 			}
 			r[e.PolicyDomain] = EvaluationStat{
-				Count:      1,
-				SendReport: !e.Optional,
-				Domain:     dom,
+				Domain:       dom,
+				Dispositions: []string{string(e.Disposition)},
+				Count:        1,
+				SendReport:   !e.Optional,
 			}
 		}
 		return nil

@@ -1112,6 +1112,7 @@ const dmarcEvaluations = async () => {
 			dom.thead(
 				dom.tr(
 					dom.th('Domain', attr({title: 'Domain in the message From header. Keep in mind these can be forged, so this does not necessarily mean someone from this domain authentically tried delivering email.'})),
+					dom.th('Dispositions', attr({title: 'Unique dispositions occurring in report.'})),
 					dom.th('Evaluations', attr({title: 'Total number of message delivery attempts, including retries.'})),
 					dom.th('Send report', attr({title: 'Whether the current evaluations will cause a report to be sent.'})),
 				),
@@ -1120,6 +1121,7 @@ const dmarcEvaluations = async () => {
 				Object.entries(evalStats).sort((a, b) => a[0] < b[0] ? -1 : 1).map(t =>
 					dom.tr(
 						dom.td(dom.a(attr({href: '#dmarc/evaluations/'+domainName(t[1].Domain)}), domainString(t[1].Domain))),
+						dom.td((t[1].Dispositions || []).join(' ')),
 						dom.td(style({textAlign: 'right'}), ''+t[1].Count),
 						dom.td(style({textAlign: 'right'}), t[1].SendReport ? '✓' : ''),
 					),
