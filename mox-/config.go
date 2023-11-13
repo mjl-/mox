@@ -251,6 +251,12 @@ func (c *Config) allowACMEHosts(checkACMEHosts bool) {
 		}
 
 		for _, dom := range c.Dynamic.Domains {
+			if dom.DMARC != nil && dom.DMARC.Domain != "" && dom.DMARC.DNSDomain != dom.Domain {
+				// Do not allow TLS certificates for domains for which we only accept DMARC reports
+				// as external party.
+				continue
+			}
+
 			if l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS {
 				if d, err := dns.ParseDomain("autoconfig." + dom.Domain.ASCII); err != nil {
 					xlog.Errorx("parsing autoconfig domain", err, mlog.Field("domain", dom.Domain))
