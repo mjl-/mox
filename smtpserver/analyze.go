@@ -260,7 +260,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 				log.Info("tlsrpt policy domain", mlog.Field("domain", p.Policy.Domain))
 				if d, err := dns.ParseDomain(p.Policy.Domain); err != nil {
 					log.Infox("parsing domain in tls report", err)
-				} else if _, ok := mox.Conf.Domain(d); ok {
+				} else if _, ok := mox.Conf.Domain(d); ok || d == mox.Conf.Static.HostnameDomain {
 					known = true
 					break
 				}
