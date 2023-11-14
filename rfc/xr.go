@@ -384,6 +384,8 @@ function updateIframes() {
 	rfciframe.src = rfcsrc
 	if (codesrc) {
 		codefile.innerText = t[0]
+	}
+	if (rfcsrc) {
 		rfcfile.innerText = t[1]
 	}
 }
