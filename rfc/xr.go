@@ -364,18 +364,28 @@ window.addEventListener('hashchange', function() {
 })
 function hashlink2src(s) {
 	const t = s.split(':')
+	if (t.length > 2 || t[0].startsWith('/') || t[0].includes('..')) {
+		return ''
+	}
 	let h = t[0]+'.html'
 	if (t.length === 2) {
 		h += '#L'+t[1]
 	}
+	h = './'+h
 	console.log('hashlink', s, h)
 	return h
 }
 function updateIframes() {
 	const h = location.hash.length > 1 ? location.hash.substring(1) : 'code,rfc'
 	const t = h.split(',')
-	codeiframe.src = hashlink2src(t[0])
-	rfciframe.src = hashlink2src(t[1])
+	const codesrc = hashlink2src(t[0])
+	const rfcsrc = hashlink2src(t[1])
+	codeiframe.src = codesrc
+	rfciframe.src = rfcsrc
+	if (codesrc) {
+		codefile.innerText = t[0]
+		rfcfile.innerText = t[1]
+	}
 }
 window.addEventListener('load', function() {
 	console.log('document load')
