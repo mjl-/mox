@@ -2069,10 +2069,15 @@ func (Admin) TLSRPTResults(ctx context.Context) []tlsrptdb.TLSResult {
 }
 
 // TLSRPTResultsPolicyDomain returns the TLS results for a domain.
-func (Admin) TLSRPTResultsPolicyDomain(ctx context.Context, policyDomain string) (dns.Domain, []tlsrptdb.TLSResult) {
+func (Admin) TLSRPTResultsDomain(ctx context.Context, isRcptDom bool, policyDomain string) (dns.Domain, []tlsrptdb.TLSResult) {
 	dom, err := dns.ParseDomain(policyDomain)
 	xcheckf(ctx, err, "parsing domain")
 
+	if isRcptDom {
+		results, err := tlsrptdb.ResultsRecipientDomain(ctx, dom)
+		xcheckf(ctx, err, "get result for recipient domain")
+		return dom, results
+	}
 	results, err := tlsrptdb.ResultsPolicyDomain(ctx, dom)
 	xcheckf(ctx, err, "get result for policy domain")
 	return dom, results
@@ -2101,12 +2106,17 @@ func (Admin) LookupTLSRPTRecord(ctx context.Context, domain string) (record *TLS
 
 // TLSRPTRemoveResults removes the TLS results for a domain for the given day. If
 // day is empty, all results are removed.
-func (Admin) TLSRPTRemoveResults(ctx context.Context, domain string, day string) {
+func (Admin) TLSRPTRemoveResults(ctx context.Context, isRcptDom bool, domain string, day string) {
 	dom, err := dns.ParseDomain(domain)
 	xcheckf(ctx, err, "parsing domain")
 
-	err = tlsrptdb.RemoveResultsPolicyDomain(ctx, dom, day)
-	xcheckf(ctx, err, "removing tls results")
+	if isRcptDom {
+		err = tlsrptdb.RemoveResultsRecipientDomain(ctx, dom, day)
+		xcheckf(ctx, err, "removing tls results")
+	} else {
+		err = tlsrptdb.RemoveResultsPolicyDomain(ctx, dom, day)
+		xcheckf(ctx, err, "removing tls results")
+	}
 }
 
 // TLSRPTSuppressAdd adds a reporting address to the suppress list. Outgoing

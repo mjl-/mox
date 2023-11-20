@@ -914,9 +914,15 @@
 			]
 		},
 		{
-			"Name": "TLSRPTResultsPolicyDomain",
+			"Name": "TLSRPTResultsDomain",
 			"Docs": "TLSRPTResultsPolicyDomain returns the TLS results for a domain.",
 			"Params": [
+				{
+					"Name": "isRcptDom",
+					"Typewords": [
+						"bool"
+					]
+				},
 				{
 					"Name": "policyDomain",
 					"Typewords": [
@@ -977,6 +983,12 @@
 			"Name": "TLSRPTRemoveResults",
 			"Docs": "TLSRPTRemoveResults removes the TLS results for a domain for the given day. If\nday is empty, all results are removed.",
 			"Params": [
+				{
+					"Name": "isRcptDom",
+					"Typewords": [
+						"bool"
+					]
+				},
 				{
 					"Name": "domain",
 					"Typewords": [
@@ -4012,7 +4024,7 @@
 				},
 				{
 					"Name": "PolicyDomain",
-					"Docs": "Domain with TLSRPT DNS record, with addresses that will receive reports. Either a recipient domain (for MTA-STS policies) or an (MX) host (for DANE policies). Unicode.",
+					"Docs": "Domain potentially with TLSRPT DNS record, with addresses that will receive reports. Either a recipient domain (for MTA-STS policies) or an (MX) host (for DANE policies). Unicode.",
 					"Typewords": [
 						"string"
 					]
@@ -4026,7 +4038,7 @@
 				},
 				{
 					"Name": "RecipientDomain",
-					"Docs": "Reports are sent per policy domain. When delivering a message to a recipient domain, we can get multiple TLSResults, typically one for MTA-STS, and one or more for DANE (one for each MX target, or actually TLSA base domain). We track recipient domain so we can display successes/failures for delivery of messages to a recipient domain in the admin pages. Unicode.",
+					"Docs": "Reports are sent per recipient domain and per MX host. For reports to a recipient domain, we type send a result for MTA-STS and one or more MX host (DANE) results. Unicode.",
 					"Typewords": [
 						"string"
 					]
@@ -4047,7 +4059,7 @@
 				},
 				{
 					"Name": "IsHost",
-					"Docs": "Result is for host (e.g. DANE), not recipient domain (e.g. MTA-STS).",
+					"Docs": "Result is for MX host (DANE), not recipient domain (MTA-STS).",
 					"Typewords": [
 						"bool"
 					]
@@ -4055,6 +4067,28 @@
 				{
 					"Name": "SendReport",
 					"Docs": "Whether to send a report. TLS results for delivering messages with TLS reports will be recorded, but will not cause a report to be sent.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "SentToRecipientDomain",
+					"Docs": "Set after sending to recipient domain, before sending results to policy domain (after which the record is removed).",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "RecipientDomainReportingAddresses",
+					"Docs": "Reporting addresses from the recipient domain TLSRPT record, not necessarily those we sent to (e.g. due to failure). Used to leave results to MX target (DANE) policy domains out that were already sent in the report to the recipient domain, so we don't report twice.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "SentToPolicyDomain",
+					"Docs": "Set after sending report to policy domain.",
 					"Typewords": [
 						"bool"
 					]

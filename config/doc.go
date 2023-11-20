@@ -570,13 +570,23 @@ describe-static" and "mox config describe-domains":
 	# DMARC evaluations are sent to domains if their DMARC policy requests them.
 	# Reports are sent at whole hours, with a minimum of 1 hour and maximum of 24
 	# hours, rounded up so a whole number of intervals cover 24 hours, aligned at
-	# whole days in UTC. (optional)
+	# whole days in UTC. Reports are sent from the postmaster@<mailhostname> address.
+	# (optional)
 	NoOutgoingDMARCReports: false
 
-	# Do not send TLS reports. By default, reports about successful and failed SMTP
-	# STARTTLS connections are sent to domains if their TLSRPT DNS record requests
-	# them. Reports covering a 24 hour UTC interval are sent daily. (optional)
+	# Do not send TLS reports. By default, reports about failed SMTP STARTTLS
+	# connections and related MTA-STS/DANE policies are sent to domains if their
+	# TLSRPT DNS record requests them. Reports covering a 24 hour UTC interval are
+	# sent daily. Reports are sent from the postmaster address of the configured
+	# domain the mailhostname is in. If there is no such domain, or it does not have
+	# DKIM configured, no reports are sent. (optional)
 	NoOutgoingTLSReports: false
+
+	# Also send TLS reports if there were no SMTP STARTTLS connection failures. By
+	# default, reports are only sent when at least one failure occurred. If a report
+	# is sent, it does always include the successful connection counts as well.
+	# (optional)
+	OutgoingTLSReportsForAllSuccess: false
 
 # domains.conf
 

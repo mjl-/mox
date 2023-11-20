@@ -19,26 +19,24 @@ import (
 type TLSResult struct {
 	ID int64
 
-	// Domain with TLSRPT DNS record, with addresses that will receive reports. Either
-	// a recipient domain (for MTA-STS policies) or an (MX) host (for DANE policies).
-	// Unicode.
+	// Domain potentially with TLSRPT DNS record, with addresses that will receive
+	// reports. Either a recipient domain (for MTA-STS policies) or an (MX) host (for
+	// DANE policies). Unicode.
 	PolicyDomain string `bstore:"unique PolicyDomain+DayUTC+RecipientDomain,nonzero"`
 
 	// DayUTC is of the form yyyymmdd.
 	DayUTC string `bstore:"nonzero"`
 	// We send per 24h UTC-aligned days. ../rfc/8460:474
 
-	// Reports are sent per policy domain. When delivering a message to a recipient
-	// domain, we can get multiple TLSResults, typically one for MTA-STS, and one or
-	// more for DANE (one for each MX target, or actually TLSA base domain). We track
-	// recipient domain so we can display successes/failures for delivery of messages
-	// to a recipient domain in the admin pages. Unicode.
+	// Reports are sent per recipient domain and per MX host. For reports to a
+	// recipient domain, we type send a result for MTA-STS and one or more MX host
+	// (DANE) results. Unicode.
 	RecipientDomain string `bstore:"index,nonzero"`
 
 	Created time.Time `bstore:"default now"`
 	Updated time.Time `bstore:"default now"`
 
-	IsHost bool // Result is for host (e.g. DANE), not recipient domain (e.g. MTA-STS).
+	IsHost bool // Result is for MX host (DANE), not recipient domain (MTA-STS).
 
 	// Whether to send a report. TLS results for delivering messages with TLS reports
 	// will be recorded, but will not cause a report to be sent.
@@ -46,6 +44,17 @@ type TLSResult struct {
 	// ../rfc/8460:318 says we should not include TLS results for sending a TLS report,
 	// but presumably that's to prevent mail servers sending a report every day once
 	// they start.
+
+	// Set after sending to recipient domain, before sending results to policy domain
+	// (after which the record is removed).
+	SentToRecipientDomain bool
+	// Reporting addresses from the recipient domain TLSRPT record, not necessarily
+	// those we sent to (e.g. due to failure). Used to leave results to MX target
+	// (DANE) policy domains out that were already sent in the report to the recipient
+	// domain, so we don't report twice.
+	RecipientDomainReportingAddresses []string
+	// Set after sending report to policy domain.
+	SentToPolicyDomain bool
 
 	// Results is updated for each TLS attempt.
 	Results []tlsrpt.Result
@@ -149,7 +158,7 @@ func Results(ctx context.Context) ([]TLSResult, error) {
 	return bstore.QueryDB[TLSResult](ctx, db).SortAsc("PolicyDomain", "DayUTC", "RecipientDomain").List()
 }
 
-// ResultsPolicyDomain returns all TLSResults for a policy domain, potentially for
+// ResultsDomain returns all TLSResults for a policy domain, potentially for
 // multiple days.
 func ResultsPolicyDomain(ctx context.Context, policyDomain dns.Domain) ([]TLSResult, error) {
 	db, err := resultDB(ctx)
@@ -158,6 +167,17 @@ func ResultsPolicyDomain(ctx context.Context, policyDomain dns.Domain) ([]TLSRes
 	}
 
 	return bstore.QueryDB[TLSResult](ctx, db).FilterNonzero(TLSResult{PolicyDomain: policyDomain.Name()}).SortAsc("DayUTC", "RecipientDomain").List()
+}
+
+// ResultsRecipientDomain returns all TLSResults for a recipient domain,
+// potentially for multiple days.
+func ResultsRecipientDomain(ctx context.Context, recipientDomain dns.Domain) ([]TLSResult, error) {
+	db, err := resultDB(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return bstore.QueryDB[TLSResult](ctx, db).FilterNonzero(TLSResult{RecipientDomain: recipientDomain.Name()}).SortAsc("DayUTC", "PolicyDomain").List()
 }
 
 // RemoveResultsPolicyDomain removes all TLSResults for the policy domain on the
@@ -169,6 +189,18 @@ func RemoveResultsPolicyDomain(ctx context.Context, policyDomain dns.Domain, day
 	}
 
 	_, err = bstore.QueryDB[TLSResult](ctx, db).FilterNonzero(TLSResult{PolicyDomain: policyDomain.Name(), DayUTC: dayUTC}).Delete()
+	return err
+}
+
+// RemoveResultsRecipientDomain removes all TLSResults for the recipient domain on
+// the day from the database.
+func RemoveResultsRecipientDomain(ctx context.Context, recipientDomain dns.Domain, dayUTC string) error {
+	db, err := resultDB(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = bstore.QueryDB[TLSResult](ctx, db).FilterNonzero(TLSResult{RecipientDomain: recipientDomain.Name(), DayUTC: dayUTC}).Delete()
 	return err
 }
 

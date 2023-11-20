@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mjl-/bstore"
+
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -238,7 +240,7 @@ func TestSendReports(t *testing.T) {
 			End:   endUTC.Add(-time.Second),
 		},
 		ContactInfo: "postmaster@mox.example",
-		ReportID:    endUTC.Format("20060102") + ".sender.example@mox.example",
+		ReportID:    endUTC.Add(-12*time.Hour).Format("20060102") + ".sender.example@mox.example",
 		Policies: []tlsrpt.Result{
 			{
 				Policy: tlsrpt.ResultPolicy{
@@ -262,6 +264,29 @@ func TestSendReports(t *testing.T) {
 					},
 				},
 			},
+			// Includes reports about MX target, for DANE policies.
+			{
+				Policy: tlsrpt.ResultPolicy{
+					Type:   tlsrpt.TLSA,
+					Domain: "mailhost.sender.example",
+					String: []string{"... tlsa record ..."},
+				},
+				Summary: tlsrpt.Summary{
+					TotalSuccessfulSessionCount: 10,
+					TotalFailureSessionCount:    1,
+				},
+				FailureDetails: []tlsrpt.FailureDetails{
+					{
+						ResultType:          tlsrpt.ResultValidationFailure,
+						SendingMTAIP:        "1.2.3.4",
+						ReceivingMXHostname: "mailhost.sender.example",
+						ReceivingMXHelo:     "mailhost.sender.example",
+						ReceivingIP:         "4.3.2.1",
+						FailedSessionCount:  1,
+						FailureReasonCode:   "dns-extended-error-7-signature-expired",
+					},
+				},
+			},
 		},
 	}
 	report2 := tlsrpt.Report{
@@ -271,17 +296,20 @@ func TestSendReports(t *testing.T) {
 			End:   endUTC.Add(-time.Second),
 		},
 		ContactInfo: "postmaster@mox.example",
-		ReportID:    endUTC.Format("20060102") + ".mailhost.sender.example@mox.example",
+		ReportID:    endUTC.Add(-12*time.Hour).Format("20060102") + ".mailhost.sender.example@mox.example",
 		Policies: []tlsrpt.Result{
+			// The MX target policies are per-recipient domain, so the MX operator can see the
+			// affected recipient domains.
 			{
 				Policy: tlsrpt.ResultPolicy{
 					Type:   tlsrpt.TLSA,
-					Domain: "mailhost.sender.example",
+					Domain: "sender.example", // Recipient domain.
 					String: []string{"... tlsa record ..."},
+					MXHost: []string{"mailhost.sender.example"}, // Original policy domain.
 				},
 				Summary: tlsrpt.Summary{
-					TotalSuccessfulSessionCount: 20,
-					TotalFailureSessionCount:    2,
+					TotalSuccessfulSessionCount: 10,
+					TotalFailureSessionCount:    1,
 				},
 				FailureDetails: []tlsrpt.FailureDetails{
 					{
@@ -290,7 +318,66 @@ func TestSendReports(t *testing.T) {
 						ReceivingMXHostname: "mailhost.sender.example",
 						ReceivingMXHelo:     "mailhost.sender.example",
 						ReceivingIP:         "4.3.2.1",
-						FailedSessionCount:  2,
+						FailedSessionCount:  1,
+						FailureReasonCode:   "dns-extended-error-7-signature-expired",
+					},
+				},
+			},
+			{
+				Policy: tlsrpt.ResultPolicy{
+					Type:   tlsrpt.TLSA,
+					Domain: "sharedsender.example", // Recipient domain.
+					String: []string{"... tlsa record ..."},
+					MXHost: []string{"mailhost.sender.example"}, // Original policy domain.
+				},
+				Summary: tlsrpt.Summary{
+					TotalSuccessfulSessionCount: 10,
+					TotalFailureSessionCount:    1,
+				},
+				FailureDetails: []tlsrpt.FailureDetails{
+					{
+						ResultType:          tlsrpt.ResultValidationFailure,
+						SendingMTAIP:        "1.2.3.4",
+						ReceivingMXHostname: "mailhost.sender.example",
+						ReceivingMXHelo:     "mailhost.sender.example",
+						ReceivingIP:         "4.3.2.1",
+						FailedSessionCount:  1,
+						FailureReasonCode:   "dns-extended-error-7-signature-expired",
+					},
+				},
+			},
+		},
+	}
+	report3 := tlsrpt.Report{
+		OrganizationName: "mox.example",
+		DateRange: tlsrpt.TLSRPTDateRange{
+			Start: endUTC.Add(-24 * time.Hour),
+			End:   endUTC.Add(-time.Second),
+		},
+		ContactInfo: "postmaster@mox.example",
+		ReportID:    endUTC.Add(-12*time.Hour).Format("20060102") + ".mailhost.sender.example@mox.example",
+		Policies: []tlsrpt.Result{
+			// The MX target policies are per-recipient domain, so the MX operator can see the
+			// affected recipient domains.
+			{
+				Policy: tlsrpt.ResultPolicy{
+					Type:   tlsrpt.TLSA,
+					Domain: "sharedsender.example", // Recipient domain.
+					String: []string{"... tlsa record ..."},
+					MXHost: []string{"mailhost.sender.example"}, // Original policy domain.
+				},
+				Summary: tlsrpt.Summary{
+					TotalSuccessfulSessionCount: 10,
+					TotalFailureSessionCount:    1,
+				},
+				FailureDetails: []tlsrpt.FailureDetails{
+					{
+						ResultType:          tlsrpt.ResultValidationFailure,
+						SendingMTAIP:        "1.2.3.4",
+						ReceivingMXHostname: "mailhost.sender.example",
+						ReceivingMXHelo:     "mailhost.sender.example",
+						ReceivingIP:         "4.3.2.1",
+						FailedSessionCount:  1,
 						FailureReasonCode:   "dns-extended-error-7-signature-expired",
 					},
 				},
@@ -309,8 +396,8 @@ func TestSendReports(t *testing.T) {
 
 	sleepBetween = func(ctx context.Context, d time.Duration) (ok bool) { return true }
 
-	test := func(results []tlsrptdb.TLSResult, expReports map[string]tlsrpt.Report) {
-		// t.Helper()
+	test := func(results []tlsrptdb.TLSResult, expReports map[string][]tlsrpt.Report) {
+		t.Helper()
 
 		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 
@@ -319,7 +406,7 @@ func TestSendReports(t *testing.T) {
 			tcheckf(t, err, "inserting tlsresult")
 		}
 
-		haveReports := map[string]tlsrpt.Report{}
+		haveReports := map[string][]tlsrpt.Report{}
 
 		var mutex sync.Mutex
 
@@ -340,15 +427,7 @@ func TestSendReports(t *testing.T) {
 			tcheckf(t, err, "parsing generated report message")
 
 			addr := qm.Recipient().String()
-
-			if _, ok := haveReports[addr]; ok {
-				t.Fatalf("report for address %s already seen", addr)
-			} else if expReport, ok := expReports[addr]; !ok {
-				t.Fatalf("unexpected report for address %s", addr)
-			} else {
-				tcompare(t, *report, expReport)
-			}
-			haveReports[addr] = *report
+			haveReports[addr] = append(haveReports[addr], *report)
 
 			return nil
 		}
@@ -362,33 +441,76 @@ func TestSendReports(t *testing.T) {
 		tcompare(t, haveReports, expReports)
 
 		// Second loop. Evaluations cleaned, should not result in report messages.
-		haveReports = map[string]tlsrpt.Report{}
+		haveReports = map[string][]tlsrpt.Report{}
 		step <- 0
 		<-wait
-		tcompare(t, haveReports, map[string]tlsrpt.Report{})
+		tcompare(t, haveReports, map[string][]tlsrpt.Report{})
 
 		// Caus Start to stop.
 		mox.ShutdownCancel()
 		step <- time.Minute
+
+		leftover, err := bstore.QueryDB[tlsrptdb.TLSResult](ctxbg, db).List()
+		tcheckf(t, err, "querying database")
+		if len(leftover) != 0 {
+			t.Fatalf("leftover results in database after sending reports: %v", leftover)
+		}
+		_, err = bstore.QueryDB[tlsrptdb.TLSResult](ctxbg, db).Delete()
+		tcheckf(t, err, "cleaning from database")
 	}
 
 	// Multiple results, some are combined into a single report, another result
 	// generates a separate report to multiple rua's, and the last don't send a report.
-	expReports := map[string]tlsrpt.Report{
-		"tls-reports@sender.example":           report1,
-		"tls-reports1@mailhost.sender.example": report2,
-		"tls-reports2@mailhost.sender.example": report2,
-		"tls-reports3@mailhost.sender.example": report2,
-	}
-	test(tlsResults, expReports)
+	test(tlsResults, map[string][]tlsrpt.Report{
+		"tls-reports@sender.example":           {report1},
+		"tls-reports1@mailhost.sender.example": {report2},
+		"tls-reports2@mailhost.sender.example": {report2},
+		"tls-reports3@mailhost.sender.example": {report2},
+	})
 
+	// If MX target has same reporting addresses as recipient domain, only recipient
+	// domain should get a report.
+	resolver.TXT["_smtp._tls.mailhost.sender.example."] = []string{"v=TLSRPTv1; rua=mailto:tls-reports@sender.example"}
+	test(tlsResults[:2], map[string][]tlsrpt.Report{
+		"tls-reports@sender.example": {report1},
+	})
+
+	resolver.TXT["_smtp._tls.sharedsender.example."] = []string{"v=TLSRPTv1; rua=mailto:tls-reports@sender.example"}
+	test(tlsResults, map[string][]tlsrpt.Report{
+		"tls-reports@sender.example": {report1, report3},
+	})
+
+	// Suppressed addresses don't get a report.
+	resolver.TXT["_smtp._tls.mailhost.sender.example."] = []string{"v=TLSRPTv1; rua=mailto:tls-reports1@mailhost.sender.example,mailto:tls-reports2@mailhost.sender.example; rua=mailto:tls-reports3@mailhost.sender.example"}
 	db.Insert(ctxbg,
 		&tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: "tls-reports@sender.example", Until: time.Now().Add(-time.Minute)},                  // Expired, so ignored.
 		&tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: "tls-reports1@mailhost.sender.example", Until: time.Now().Add(time.Minute)},         // Still valid.
 		&tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: "tls-reports3@mailhost.sender.example", Until: time.Now().Add(31 * 24 * time.Hour)}, // Still valid.
 	)
-	test(tlsResults, map[string]tlsrpt.Report{
-		"tls-reports@sender.example":           report1,
-		"tls-reports2@mailhost.sender.example": report2,
+	test(tlsResults, map[string][]tlsrpt.Report{
+		"tls-reports@sender.example":           {report1},
+		"tls-reports2@mailhost.sender.example": {report2},
+	})
+
+	// Make reports success-only, ensuring we don't get a report anymore.
+	for i := range tlsResults {
+		for j := range tlsResults[i].Results {
+			tlsResults[i].Results[j].Summary.TotalFailureSessionCount = 0
+			tlsResults[i].Results[j].FailureDetails = nil
+		}
+	}
+	test(tlsResults, map[string][]tlsrpt.Report{})
+
+	// But when we want to send report for all-successful connections, we get reports again.
+	mox.Conf.Static.OutgoingTLSReportsForAllSuccess = true
+	for _, report := range []*tlsrpt.Report{&report1, &report2} {
+		for i := range report.Policies {
+			report.Policies[i].Summary.TotalFailureSessionCount = 0
+			report.Policies[i].FailureDetails = nil
+		}
+	}
+	test(tlsResults, map[string][]tlsrpt.Report{
+		"tls-reports@sender.example":           {report1},
+		"tls-reports2@mailhost.sender.example": {report2},
 	})
 }

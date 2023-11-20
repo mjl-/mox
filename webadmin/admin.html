@@ -1599,7 +1599,7 @@ const tlsrptResults = async () => {
 			crumblink('TLSRPT', '#tlsrpt'),
 			'Results',
 		),
-		dom.p('Messages are delivered with SMTP with TLS using STARTTLS if supported and/or required by the recipient domain\'s mail server. TLS connections may fail for various reasons, such as mismatching certificate host name, expired certificates or TLS protocol version/cipher suite incompatibilities. Statistics about successful connections and failed connections are tracked. Results can be tracked for recipient domains (for MTA-STS policies), and per MX host (for DANE). A domain/host can publish a TLSRPT DNS record with addresses that should receive TLS reports. Reports are sent every 24 hours. Not all results are enough reason to send a report, but if a report is sent all results are included.'),
+		dom.p('Messages are delivered with SMTP with TLS using STARTTLS if supported and/or required by the recipient domain\'s mail server. TLS connections may fail for various reasons, such as mismatching certificate host name, expired certificates or TLS protocol version/cipher suite incompatibilities. Statistics about successful connections and failed connections are tracked. Results can be tracked for recipient domains (for MTA-STS policies), and per MX host (for DANE). A domain/host can publish a TLSRPT DNS record with addresses that should receive TLS reports. Reports are sent every 24 hours. Not all results are enough reason to send a report, but if a report is sent all results are included. By default, reports are only sent if a report contains a connection failure. Sending reports about all-successful connections can be configured. Reports sent to recipient domains include the results for its MX hosts, and reports for an MX host reference the recipient domains.'),
 		dom('table.hover',
 			dom.thead(
 				dom.tr(
@@ -1611,7 +1611,7 @@ const tlsrptResults = async () => {
 					dom.th('Success', attr({title: 'Total number of successful connections.'})),
 					dom.th('Failure', attr({title: 'Total number of failed connection attempts.'})),
 					dom.th('Failure details', attr({title: 'Total number of details about failures.'})),
-					dom.th('Send report', attr({title: 'Whether the current results will cause a report to be sent. A report is only sent if the domain has a TLSRPT with reporting addresses configured.'})),
+					dom.th('Send report', attr({title: 'Whether the current results may cause a report to be sent. To prevent report loops, reports are not sent for TLS connections used to deliver TLS or DMARC reports. Whether a report is eventually sent depends on more factors, such as whether the policy domain has a TLSRPT policy with reporting addresses, and whether TLS connection failures were registered (depending on configuration).'})),
 				),
 			),
 			dom.tbody(
@@ -1642,7 +1642,7 @@ const tlsrptResults = async () => {
 					return dom.tr(
 						dom.td(r.DayUTC),
 						dom.td(r.RecipientDomain),
-						dom.td(dom.a(attr({href: '#tlsrpt/results/'+r.PolicyDomain}), r.PolicyDomain)),
+						dom.td(dom.a(attr({href: '#tlsrpt/results/'+ (r.RecipientDomain === r.PolicyDomain ? 'rcptdom/' : 'host/') + r.PolicyDomain}), r.PolicyDomain)),
 						dom.td(r.IsHost ? '✓' : ''),
 						dom.td(policyTypes.join(', ')),
 						dom.td(style({textAlign: 'right'}), ''+success),
@@ -1752,8 +1752,8 @@ const tlsrptResults = async () => {
 	)
 }
 
-const tlsrptResultsPolicyDomain = async (domain) => {
-	const [d, tlsresults] = await api.TLSRPTResultsPolicyDomain(domain)
+const tlsrptResultsPolicyDomain = async (isrcptdom, domain) => {
+	const [d, tlsresults] = await api.TLSRPTResultsDomain(isrcptdom, domain)
 	const recordPromise = api.LookupTLSRPTRecord(domain)
 
 	let recordBox
@@ -1763,14 +1763,14 @@ const tlsrptResultsPolicyDomain = async (domain) => {
 			crumblink('Mox Admin', '#'),
 			crumblink('TLSRPT', '#tlsrpt'),
 			crumblink('Results', '#tlsrpt/results'),
-			'Policy domain '+domainString(d),
+			(isrcptdom ? 'Recipient domain ' : 'Host ') + domainString(d),
 		),
 		dom.div(
 			dom.button('Remove results', async function click(e) {
 				e.preventDefault()
 				e.target.disabled = true
 				try {
-					await api.TLSRPTRemoveResults(domain, '')
+					await api.TLSRPTRemoveResults(isrcptdom, domain, '')
 					window.location.reload() // todo: only clear the table?
 				} catch (err) {
 					console.log({err})
@@ -1781,14 +1781,14 @@ const tlsrptResultsPolicyDomain = async (domain) => {
 			}),
 		),
 		dom.br(),
-		dom.div('Fetching TLSRPT DNS record for policy domain...'),
+		dom.div('Fetching TLSRPT DNS record...'),
 		recordBox=dom.div(),
 		dom.br(),
-		dom.p('Below are the results per day and recipient domain that may be sent in a report.'),
+		dom.p('Below are the results per day and ' + (isrcptdom ? 'policy' : 'recipient') + ' domain that may be sent in a report.'),
 		tlsresults.map(tlsresult => [
-			dom.h2(tlsresult.DayUTC, ' - ', dom.span(attr({title: 'Recipient domain, as used in SMTP MAIL TO, usually based on message To/Cc/Bcc.'}), tlsresult.RecipientDomain)),
+			dom.h2(tlsresult.DayUTC, ' - ', dom.span(attr({title: 'Recipient domain, as used in SMTP MAIL TO, usually based on message To/Cc/Bcc.'}), isrcptdom ? tlsresult.PolicyDomain : tlsresult.RecipientDomain)),
 			dom.p(
-				'Send report (if TLSRPT exists and has address): '+(tlsresult.SendReport ? 'Yes' : 'No'),
+				'Send report (if TLSRPT policy exists and has address): '+(tlsresult.SendReport ? 'Yes' : 'No'),
 				dom.br(),
 				'Report about (MX) host (instead of recipient domain): '+(tlsresult.IsHost ? 'Yes' : 'No'),
 			),
@@ -2811,8 +2811,8 @@ const init = async () => {
 				await domainTLSRPTID(t[2], parseInt(t[3]))
 			} else if (h === 'tlsrpt/results') {
 				await tlsrptResults()
-			} else if (t[0] == 'tlsrpt' && t[1] == 'results' && t.length === 3) {
-				await tlsrptResultsPolicyDomain(t[2])
+			} else if (t[0] == 'tlsrpt' && t[1] == 'results' && (t[2] === 'rcptdom' || t[2] == 'host') && t.length === 4) {
+				await tlsrptResultsPolicyDomain(t[2] === 'rcptdom', t[3])
 			} else if (h === 'dmarc') {
 				await dmarcIndex()
 			} else if (h === 'dmarc/reports') {
