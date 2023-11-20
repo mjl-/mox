@@ -2436,7 +2436,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	}
 	loadButtons(parsedMessageOpt || null)
 
-	loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword)
+	loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword, false)
 
 	const loadHeaderDetails = (pm: api.ParsedMessage) => {
 		if (msgheaderdetailsElem) {
@@ -2705,7 +2705,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		updateKeywords: async (modseq: number, keywords: string[]) => {
 			mi.Message.ModSeq = modseq
 			mi.Message.Keywords = keywords
-			loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword)
+			loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword, false)
 			loadMoreHeaders(await parsedMessagePromise)
 		},
 	}

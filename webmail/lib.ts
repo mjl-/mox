@@ -334,10 +334,35 @@ const equalAddress = (a: api.MessageAddress, b: api.MessageAddress) => {
 	return (!a.User || !b.User || a.User === b.User) && a.Domain.ASCII === b.Domain.ASCII
 }
 
+const addressList = (allAddrs: boolean, l: api.MessageAddress[]) => {
+	if (l.length <= 5 || allAddrs) {
+		return dom.span(join(l.map(a => formatAddressFull(a)), () => ', '))
+	}
+	let elem = dom.span(
+		join(
+			l.slice(0, 4).map(a => formatAddressFull(a)),
+			() => ', '
+		),
+		' ',
+		dom.clickbutton('More...', attr.title('More addresses:\n'+l.slice(4).map(a => formatAddressFull(a)).join(',\n')), function click() {
+			const nelem = dom.span(
+				join(l.map(a => formatAddressFull(a)), () => ', '),
+				' ',
+				dom.clickbutton('Less...', function click() {
+					elem.replaceWith(addressList(allAddrs, l))
+				}),
+			)
+			elem.replaceWith(nelem)
+			elem = nelem
+		})
+	)
+	return elem
+}
+
 // loadMsgheaderView loads the common message headers into msgheaderelem.
 // if refineKeyword is set, labels are shown and a click causes a call to
 // refineKeyword.
-const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, moreHeaders: string[], refineKeyword: null | ((kw: string) => Promise<void>)) => {
+const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, moreHeaders: string[], refineKeyword: null | ((kw: string) => Promise<void>), allAddrs: boolean) => {
 	const msgenv = mi.Envelope
 	const received = mi.Message.Received
 	const receivedlocal = new Date(received.getTime())
@@ -362,15 +387,15 @@ const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, more
 		),
 		dom.tr(
 			dom.td('To:', style({textAlign: 'right', color: '#555', whiteSpace: 'nowrap'})),
-			dom.td(join((msgenv.To || []).map(a => formatAddressFull(a)), () => ', ')),
+			dom.td(addressList(allAddrs, msgenv.To || [])),
 		),
 		(msgenv.CC || []).length === 0 ? [] : dom.tr(
 			dom.td('Cc:', style({textAlign: 'right', color: '#555', whiteSpace: 'nowrap'})),
-			dom.td(join((msgenv.CC || []).map(a => formatAddressFull(a)), () => ', ')),
+			dom.td(addressList(allAddrs, msgenv.CC || [])),
 		),
 		(msgenv.BCC || []).length === 0 ? [] : dom.tr(
 			dom.td('Bcc:', style({textAlign: 'right', color: '#555', whiteSpace: 'nowrap'})),
-			dom.td(join((msgenv.BCC || []).map(a => formatAddressFull(a)), () => ', ')),
+			dom.td(addressList(allAddrs, msgenv.BCC || [])),
 		),
 		dom.tr(
 			dom.td('Subject:', style({textAlign: 'right', color: '#555', whiteSpace: 'nowrap'})),
