@@ -29,8 +29,8 @@ github.com/mjl-/adns v0.0.0-20231109160910-82839fe3e6ae h1:P/kTaQbDFSbmDK+RVjwu7
 github.com/mjl-/adns v0.0.0-20231109160910-82839fe3e6ae/go.mod h1:v47qUMJnipnmDTRGaHwpCwzE6oypa5K33mUvBfzZBn8=
 github.com/mjl-/autocert v0.0.0-20231013072455-c361ae2e20a6 h1:TEXyTghAN9pmV2ffzdnhmzkML08e1Z/oGywJ9eunbRI=
 github.com/mjl-/autocert v0.0.0-20231013072455-c361ae2e20a6/go.mod h1:taMFU86abMxKLPV4Bynhv8enbYmS67b8LG80qZv2Qus=
-github.com/mjl-/bstore v0.0.2 h1:4fdpIOY/+Dv1dBHyzdqa4PD90p8Mz86FeyRpI4qcehw=
-github.com/mjl-/bstore v0.0.2/go.mod h1:/cD25FNBaDfvL/plFRxI3Ba3E+wcB0XVOS8nJDqndg0=
+github.com/mjl-/bstore v0.0.3 h1:7lpZfzADXYbodan3s8Tb5aXXK90oKB9vdDvz0MC5jrw=
+github.com/mjl-/bstore v0.0.3/go.mod h1:/cD25FNBaDfvL/plFRxI3Ba3E+wcB0XVOS8nJDqndg0=
 github.com/mjl-/sconf v0.0.5 h1:4CMUTENpSnaeP2g6RKtrs8udTxnJgjX2MCCovxGId6s=
 github.com/mjl-/sconf v0.0.5/go.mod h1:uF8OdWtLT8La3i4ln176i1pB0ps9pXGCaABEU55ZkE0=
 github.com/mjl-/sherpa v0.6.6 h1:4Xc4/s12W2I/C1genIL8l4ZCLMsTo8498cPSjQcIHGc=

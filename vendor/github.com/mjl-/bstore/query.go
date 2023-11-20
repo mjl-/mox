@@ -924,15 +924,28 @@ func (q *Query[T]) Delete() (deleted int, rerr error) {
 		return 0, q.err
 	}
 
-	n := 0
+	// We collect the records to delete first, then delete them.
+	type work struct {
+		bk  []byte
+		rov reflect.Value
+	}
+	var deletes []work
 	err := q.foreachKey(true, true, func(bk []byte, ov T) error {
-		n++
 		rov := reflect.ValueOf(ov)
 		q.gather(ov, rov)
-		q.stats.Delete++
-		return q.xtx.delete(q.exec.rb, q.st, bk, rov)
+		deletes = append(deletes, work{bk, rov})
+		return nil
 	})
-	return n, err
+	if err != nil {
+		return 0, err
+	}
+	for _, w := range deletes {
+		q.stats.Delete++
+		if err := q.xtx.delete(q.exec.rb, q.st, w.bk, w.rov); err != nil {
+			return 0, err
+		}
+	}
+	return len(deletes), nil
 }
 
 // Get returns the single selected record.
@@ -1081,21 +1094,37 @@ next:
 }
 
 func (q *Query[T]) update(fields []reflect.StructField, values []reflect.Value) (int, error) {
-	n := 0
-	ov := reflect.New(q.st.Type).Elem()
+	// todo: we could check if the updated fields are not relevant for the cursor (not in filter/sort query) and update inside foreach.
+	// We first gather all records to be updated (using the query), then update the
+	// records.
+	type work struct {
+		bk []byte
+		rv reflect.Value
+		ov reflect.Value
+	}
+	var updates []work
 	err := q.foreachKey(true, true, func(bk []byte, v T) error {
-		n++
 		rv := reflect.ValueOf(&v).Elem()
+		ov := reflect.New(q.st.Type).Elem()
 		ov.Set(rv)
 		for i, sf := range fields {
 			frv := rv.FieldByIndex(sf.Index)
 			frv.Set(values[i])
 		}
 		q.gather(v, rv)
-		q.stats.Update++
-		return q.xtx.update(q.exec.rb, q.st, rv, ov, bk)
+		updates = append(updates, work{bk, rv, ov})
+		return nil
 	})
-	return n, err
+	if err != nil {
+		return 0, err
+	}
+	for _, w := range updates {
+		q.stats.Update++
+		if err := q.xtx.update(q.exec.rb, q.st, w.rv, w.ov, w.bk); err != nil {
+			return 0, err
+		}
+	}
+	return len(updates), nil
 }
 
 // IDs sets idsptr to the primary keys of selected records. Idptrs must be a
@@ -1201,6 +1230,9 @@ var StopForEach error = errors.New("stop foreach")
 // ForEach calls fn on each selected record.
 // If fn returns StopForEach, ForEach stops iterating, so no longer calls fn,
 // and returns nil.
+// Fn must not update values, the internal cursor is not repositioned between
+// invocations of fn, which would cause undefined behaviour (in practice,
+// matching values could be skipped).
 func (q *Query[T]) ForEach(fn func(value T) error) (rerr error) {
 	defer q.finish(&rerr)
 	q.checkNotNext()
