@@ -34,9 +34,22 @@ func TestMsgWriter(t *testing.T) {
 	check("no header\r\n", false)
 	check("key: value\r\n\r\n", true)
 	check("key: value\r\n\r\nbody", true)
-	check("key: value\n\nbody", false)
+	check("key: value\n\nbody", true)
+	check("key: value\n\r\nbody", true)
 	check("key: value\r\rbody", false)
 	check("\r\n\r\n", true)
 	check("\r\n\r\nbody", true)
 	check("\r\nbody", true)
+
+	// Check \n is replaced with \r\n.
+	var b strings.Builder
+	mw := NewWriter(&b)
+	msg := "key: value\n\nline1\r\nline2\n"
+	_, err := mw.Write([]byte(msg))
+	tcheck(t, err, "write")
+	got := b.String()
+	exp := "key: value\r\n\r\nline1\r\nline2\r\n"
+	if got != exp {
+		t.Fatalf("got %q, expected %q", got, exp)
+	}
 }

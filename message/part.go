@@ -490,7 +490,6 @@ func parseAddressList(log *mlog.Log, h mail.Header, k string) []Address {
 		var user, host string
 		addr, err := smtp.ParseAddress(a.Address)
 		if err != nil {
-			// todo: pass a ctx to this function so we can log with cid.
 			log.Infox("parsing address (continuing)", err, mlog.Field("address", a.Address))
 		} else {
 			user = addr.Localpart.String()

@@ -5,7 +5,7 @@ import (
 )
 
 // Writer is a write-through helper, collecting properties about the written
-// message.
+// message and replacing bare \n line endings with \r\n.
 type Writer struct {
 	writer io.Writer
 
@@ -24,6 +24,8 @@ func NewWriter(w io.Writer) *Writer {
 
 // Write implements io.Writer.
 func (w *Writer) Write(buf []byte) (int, error) {
+	origtail := w.tail
+
 	if !w.HaveBody && len(buf) > 0 {
 		get := func(i int) byte {
 			if i < 0 {
@@ -33,7 +35,7 @@ func (w *Writer) Write(buf []byte) (int, error) {
 		}
 
 		for i, b := range buf {
-			if b == '\n' && get(i-3) == '\r' && get(i-2) == '\n' && get(i-1) == '\r' {
+			if b == '\n' && (get(i-1) == '\n' || get(i-1) == '\r' && get(i-2) == '\n') {
 				w.HaveBody = true
 				break
 			}
@@ -54,9 +56,45 @@ func (w *Writer) Write(buf []byte) (int, error) {
 			}
 		}
 	}
-	n, err := w.writer.Write(buf)
-	if n > 0 {
-		w.Size += int64(n)
+
+	wrote := 0
+	o := 0
+Top:
+	for o < len(buf) {
+		for i := o; i < len(buf); i++ {
+			if buf[i] == '\n' && (i > 0 && buf[i-1] != '\r' || i == 0 && origtail[2] != '\r') {
+				// Write buffer leading up to missing \r.
+				if i > o+1 {
+					n, err := w.writer.Write(buf[o:i])
+					if n > 0 {
+						wrote += n
+						w.Size += int64(n)
+					}
+					if err != nil {
+						return wrote, err
+					}
+				}
+				n, err := w.writer.Write([]byte{'\r', '\n'})
+				if n == 2 {
+					wrote += 1 // For only the newline.
+					w.Size += int64(2)
+				}
+				if err != nil {
+					return wrote, err
+				}
+				o = i + 1
+				continue Top
+			}
+		}
+		n, err := w.writer.Write(buf[o:])
+		if n > 0 {
+			wrote += n
+			w.Size += int64(n)
+		}
+		if err != nil {
+			return wrote, err
+		}
+		break
 	}
-	return n, err
+	return wrote, nil
 }
