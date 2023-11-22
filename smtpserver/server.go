@@ -843,7 +843,7 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 	if c.submission {
 		// ../rfc/4954:123
 		if c.tls || !c.requireTLSForAuth {
-			c.bwritelinef("250-AUTH SCRAM-SHA-256 SCRAM-SHA-1 CRAM-MD5 PLAIN")
+			c.bwritelinef("250-AUTH SCRAM-SHA-256 SCRAM-SHA-1 CRAM-MD5 PLAIN LOGIN")
 		} else {
 			c.bwritelinef("250-AUTH ")
 		}
@@ -949,8 +949,6 @@ func (c *conn) cmdAuth(p *parser) {
 		}
 	}()
 
-	// todo: implement "AUTH LOGIN"? it looks like PLAIN, but without the continuation. it is an obsolete sasl mechanism. an account in desktop outlook appears to go through the cloud, attempting to submit email only with unadvertised and AUTH LOGIN. it appears they don't know "plain".
-
 	// ../rfc/4954:699
 	p.xspace()
 	mech := p.xsaslMech()
@@ -1048,6 +1046,51 @@ func (c *conn) cmdAuth(p *parser) {
 		c.username = authc
 		// ../rfc/4954:276
 		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
+
+	case "LOGIN":
+		// LOGIN is obsoleted in favor of PLAIN, only implemented to support legacy
+		// clients, see Internet-Draft (I-D):
+		// https://datatracker.ietf.org/doc/html/draft-murchison-sasl-login-00
+
+		authVariant = "login"
+
+		// ../rfc/4954:343
+		// ../rfc/4954:326
+		if !c.tls && c.requireTLSForAuth {
+			xsmtpUserErrorf(smtp.C538EncReqForAuth, smtp.SePol7EncReqForAuth11, "authentication requires tls")
+		}
+
+		// Read user name. The I-D says the client should ignore the server challenge, we
+		// send an empty one.
+		// I-D says maximum length must be 64 bytes. We allow more, for long user names
+		// (domains).
+		username := string(xreadInitial())
+
+		// Again, client should ignore the challenge, we send the same as the example in
+		// the I-D.
+		c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte("Password")))
+
+		// Password is in line in plain text, so hide it.
+		defer c.xtrace(mlog.LevelTraceauth)()
+		password := string(xreadContinuation())
+		c.xtrace(mlog.LevelTrace) // Restore.
+
+		acc, err := store.OpenEmailAuth(username, password)
+		if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
+			// ../rfc/4954:274
+			authResult = "badcreds"
+			c.log.Info("failed authentication attempt", mlog.Field("username", username), mlog.Field("remote", c.remoteIP))
+			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
+		}
+		xcheckf(err, "verifying credentials")
+
+		authResult = "ok"
+		c.authFailed = 0
+		c.setSlow(false)
+		c.account = acc
+		c.username = username
+		// ../rfc/4954:276
+		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "hello ancient smtp implementation", nil)
 
 	case "CRAM-MD5":
 		authVariant = strings.ToLower(mech)

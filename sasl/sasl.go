@@ -53,6 +53,35 @@ func (a *clientPlain) Next(fromServer []byte) (toServer []byte, last bool, rerr 
 	}
 }
 
+type clientLogin struct {
+	Username, Password string
+	step               int
+}
+
+var _ Client = (*clientLogin)(nil)
+
+// NewClientLogin returns a client for the obsolete SASL LOGIN authentication.
+// See https://datatracker.ietf.org/doc/html/draft-murchison-sasl-login-00
+func NewClientLogin(username, password string) Client {
+	return &clientLogin{username, password, 0}
+}
+
+func (a *clientLogin) Info() (name string, hasCleartextCredentials bool) {
+	return "LOGIN", true
+}
+
+func (a *clientLogin) Next(fromServer []byte) (toServer []byte, last bool, rerr error) {
+	defer func() { a.step++ }()
+	switch a.step {
+	case 0:
+		return []byte(a.Username), false, nil
+	case 1:
+		return []byte(a.Password), true, nil
+	default:
+		return nil, false, fmt.Errorf("invalid step %d", a.step)
+	}
+}
+
 type clientCRAMMD5 struct {
 	Username, Password string
 	step               int

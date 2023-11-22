@@ -256,6 +256,7 @@ func TestSubmission(t *testing.T) {
 	testAuth(nil, "", "", &smtpclient.Error{Permanent: true, Code: smtp.C530SecurityRequired, Secode: smtp.SePol7Other0})
 	authfns := []func(user, pass string) sasl.Client{
 		sasl.NewClientPlain,
+		sasl.NewClientLogin,
 		sasl.NewClientCRAMMD5,
 		sasl.NewClientSCRAMSHA1,
 		sasl.NewClientSCRAMSHA256,
