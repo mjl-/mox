@@ -221,8 +221,8 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 
 		// No untagged ESEARCH response if nothing was requested. ../rfc/9051:4160
 		if len(eargs) > 0 {
-			// Microsoft Outlook "new" (Microsoft Office 365/15.20.7025.17) seems to fail when
-			// the tag value doesn't have double quotes. These quotes are optional.
+			// The tag was originally a string, became an astring in IMAP4rev2, better stick to
+			// string. ../rfc/4466:707 ../rfc/5259:1163 ../rfc/9051:7087
 			resp := fmt.Sprintf(`* ESEARCH (TAG "%s")`, tag)
 			if isUID {
 				resp += " UID"
