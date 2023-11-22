@@ -34,19 +34,18 @@ import (
 	"github.com/mjl-/mox/tlsrpt"
 )
 
-// TXTStrings returns a TXT record value as one or more quoted strings, taking the max
-// length of 255 characters for a string into account. In case of multiple
-// strings, a multi-line record is returned.
+// TXTStrings returns a TXT record value as one or more quoted strings, each max
+// 100 characters. In case of multiple strings, a multi-line record is returned.
 func TXTStrings(s string) string {
-	if len(s) <= 255 {
+	if len(s) <= 100 {
 		return `"` + s + `"`
 	}
 
 	r := "(\n"
 	for len(s) > 0 {
 		n := len(s)
-		if n > 255 {
-			n = 255
+		if n > 100 {
+			n = 100
 		}
 		if r != "" {
 			r += " "
@@ -578,10 +577,9 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 			return nil, fmt.Errorf("making DKIM DNS TXT record: %v", err)
 		}
 
-		if len(txt) > 255 {
+		if len(txt) > 100 {
 			records = append(records,
-				"; NOTE: Ensure the next record is added in DNS as a single record, it consists",
-				"; of multiple strings (max size of each is 255 bytes).",
+				"; NOTE: The following strings must be added to DNS as single record.",
 			)
 		}
 		s := fmt.Sprintf("%s._domainkey.%s.   TXT %s", name, d, TXTStrings(txt))

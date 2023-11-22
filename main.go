@@ -2132,8 +2132,8 @@ The DNS should be configured as a TXT record at $selector._domainkey.$domain.
 	fmt.Print("<selector>._domainkey.<your.domain.> TXT ")
 	for record != "" {
 		s := record
-		if len(s) > 255 {
-			s, record = record[:255], record[255:]
+		if len(s) > 100 {
+			s, record = record[:100], record[100:]
 		} else {
 			record = ""
 		}
