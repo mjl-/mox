@@ -224,6 +224,9 @@ let loginAddress: api.MessageAddress | null = null
 // the account has an address for.
 let domainAddressConfigs: {[domainASCII: string]: api.DomainAddressConfig} = {}
 
+// Mailbox containing rejects.
+let rejectsMailbox: string = ''
+
 const client = new api.Client()
 
 // Link returns a clickable link with rel="noopener noreferrer".
@@ -2782,7 +2785,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 		if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk) {
 			window.setTimeout(async () => {
-				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.ID === msglistView.activeMessageID()) {
+				const mailboxIsReject = () => !!listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID && mb.Name === rejectsMailbox)
+				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxIsReject()) {
 					await withStatus('Marking current message as not junk', client.FlagsAdd([miv.messageitem.Message.ID], ['$notjunk']))
 				}
 			}, 5*1000)
@@ -6285,6 +6289,7 @@ const init = async () => {
 				return a.User < b.User ? -1 : 1
 			})
 			domainAddressConfigs = start.DomainAddressConfigs || {}
+			rejectsMailbox = start.RejectsMailbox
 
 			clearList()
 

@@ -213,6 +213,7 @@ type EventStart struct {
 	DomainAddressConfigs map[string]DomainAddressConfig // ASCII domain to address config.
 	MailboxName          string
 	Mailboxes            []store.Mailbox
+	RejectsMailbox       string
 }
 
 // DomainAddressConfig has the address (localpart) configuration for a domain, so
@@ -720,7 +721,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 	}
 
 	// Write first event, allowing client to fill its UI with mailboxes.
-	start := EventStart{sse.ID, loginAddress, addresses, domainAddressConfigs, mailbox.Name, mbl}
+	start := EventStart{sse.ID, loginAddress, addresses, domainAddressConfigs, mailbox.Name, mbl, accConf.RejectsMailbox}
 	writer.xsendEvent(ctx, log, "start", start)
 
 	// The goroutine doing the querying will send messages on these channels, which

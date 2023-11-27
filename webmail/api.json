@@ -1351,6 +1351,13 @@
 						"[]",
 						"Mailbox"
 					]
+				},
+				{
+					"Name": "RejectsMailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
 				}
 			]
 		},

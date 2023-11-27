@@ -344,6 +344,8 @@ type Route struct {
 	ResolvedTransport Transport `sconf:"-" json:"-"`
 }
 
+// todo: move RejectsMailbox to store.Mailbox.SpecialUse, possibly with "X" prefix?
+
 type Account struct {
 	Domain       string                 `sconf-doc:"Default domain for account. Deprecated behaviour: If a destination is not a full address but only a localpart, this domain is added to form a full address."`
 	Description  string                 `sconf:"optional" sconf-doc:"Free form description, e.g. full name or alternative contact info."`

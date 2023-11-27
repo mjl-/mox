@@ -198,6 +198,7 @@ export interface EventStart {
 	DomainAddressConfigs?: { [key: string]: DomainAddressConfig }  // ASCII domain to address config.
 	MailboxName: string
 	Mailboxes?: Mailbox[] | null
+	RejectsMailbox: string
 }
 
 // DomainAddressConfig has the address (localpart) configuration for a domain, so
@@ -531,7 +532,7 @@ export const types: TypenameMap = {
 	"ForwardAttachments": {"Name":"ForwardAttachments","Docs":"","Fields":[{"Name":"MessageID","Docs":"","Typewords":["int64"]},{"Name":"Paths","Docs":"","Typewords":["[]","[]","int32"]}]},
 	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
 	"RecipientSecurity": {"Name":"RecipientSecurity","Docs":"","Fields":[{"Name":"STARTTLS","Docs":"","Typewords":["SecurityResult"]},{"Name":"MTASTS","Docs":"","Typewords":["SecurityResult"]},{"Name":"DNSSEC","Docs":"","Typewords":["SecurityResult"]},{"Name":"DANE","Docs":"","Typewords":["SecurityResult"]},{"Name":"RequireTLS","Docs":"","Typewords":["SecurityResult"]}]},
-	"EventStart": {"Name":"EventStart","Docs":"","Fields":[{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"LoginAddress","Docs":"","Typewords":["MessageAddress"]},{"Name":"Addresses","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"DomainAddressConfigs","Docs":"","Typewords":["{}","DomainAddressConfig"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Mailboxes","Docs":"","Typewords":["[]","Mailbox"]}]},
+	"EventStart": {"Name":"EventStart","Docs":"","Fields":[{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"LoginAddress","Docs":"","Typewords":["MessageAddress"]},{"Name":"Addresses","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"DomainAddressConfigs","Docs":"","Typewords":["{}","DomainAddressConfig"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Mailboxes","Docs":"","Typewords":["[]","Mailbox"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]}]},
 	"DomainAddressConfig": {"Name":"DomainAddressConfig","Docs":"","Fields":[{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]}]},
 	"EventViewErr": {"Name":"EventViewErr","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]},{"Name":"Err","Docs":"","Typewords":["string"]}]},
 	"EventViewReset": {"Name":"EventViewReset","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]}]},
