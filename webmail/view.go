@@ -30,6 +30,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
 )
@@ -214,6 +215,7 @@ type EventStart struct {
 	MailboxName          string
 	Mailboxes            []store.Mailbox
 	RejectsMailbox       string
+	Version              string
 }
 
 // DomainAddressConfig has the address (localpart) configuration for a domain, so
@@ -721,7 +723,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 	}
 
 	// Write first event, allowing client to fill its UI with mailboxes.
-	start := EventStart{sse.ID, loginAddress, addresses, domainAddressConfigs, mailbox.Name, mbl, accConf.RejectsMailbox}
+	start := EventStart{sse.ID, loginAddress, addresses, domainAddressConfigs, mailbox.Name, mbl, accConf.RejectsMailbox, moxvar.Version}
 	writer.xsendEvent(ctx, log, "start", start)
 
 	// The goroutine doing the querying will send messages on these channels, which

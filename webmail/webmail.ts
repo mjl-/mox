@@ -227,6 +227,9 @@ let domainAddressConfigs: {[domainASCII: string]: api.DomainAddressConfig} = {}
 // Mailbox containing rejects.
 let rejectsMailbox: string = ''
 
+// Last known server version. For asking to reload.
+let moxVersion: string = ''
+
 const client = new api.Client()
 
 // Link returns a clickable link with rel="noopener noreferrer".
@@ -2911,7 +2914,7 @@ const newMsglistView = (msgElem: HTMLElement, listMailboxes: listMailboxes, setL
 		}
 	}
 	const cmdDelete = async () => {
-		if (!confirm('Are you sure you want to permanently delete?')) {
+		if (!window.confirm('Are you sure you want to permanently delete?')) {
 			return
 		}
 		await withStatus('Permanently deleting messages', client.MessageDelete(mlv.selected().map(miv => miv.messageitem.Message.ID)))
@@ -6268,7 +6271,16 @@ const init = async () => {
 		}
 
 		eventSource.addEventListener('start', (e: MessageEvent) => {
-			const start = checkParse(() => api.parser.EventStart(JSON.parse(e.data)))
+			const data = JSON.parse(e.data)
+			if (moxVersion && data.Version !== moxVersion) {
+				if (window.confirm('Server has been updated to a new version. Reload?')) {
+					window.location.reload()
+					return
+				}
+			}
+			moxVersion = data.Version
+
+			const start = checkParse(() => api.parser.EventStart(data))
 			log('event start', start)
 
 			connecting = false

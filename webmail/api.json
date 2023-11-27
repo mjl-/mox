@@ -1358,6 +1358,13 @@
 					"Typewords": [
 						"string"
 					]
+				},
+				{
+					"Name": "Version",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
 				}
 			]
 		},
