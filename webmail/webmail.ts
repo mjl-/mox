@@ -2190,7 +2190,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		parsedMessageReject = reject
 	})
 
-	const react = async (to: api.MessageAddress[] | null, forward: boolean, all: boolean) => {
+	const react = async (to: api.MessageAddress[], cc: api.MessageAddress[], bcc: api.MessageAddress[], forward: boolean, all: boolean) => {
 		const pm = await parsedMessagePromise
 		let body = ''
 		const sel = window.getSelection()
@@ -2224,9 +2224,9 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		subject = (RegExp('^'+subjectPrefix, 'i').test(subject) ? '' : subjectPrefix+' ') + subject
 		const opts: ComposeOptions = {
 			from: mi.Envelope.To || undefined,
-			to: (to || []).map(a => formatAddress(a)),
-			cc: [],
-			bcc: [],
+			to: to.map(a => formatAddress(a)),
+			cc: cc.map(a => formatAddress(a)),
+			bcc: bcc.map(a => formatAddress(a)),
 			subject: subject,
 			body: body,
 			isForward: forward,
@@ -2243,9 +2243,13 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	}
 
 	const reply = async (all: boolean, toOpt?: api.MessageAddress[]) => {
-		await react(toOpt || ((mi.Envelope.ReplyTo || []).length > 0 ? mi.Envelope.ReplyTo : mi.Envelope.From) || null, false, all)
+		if (!all && !toOpt && (mi.Envelope.From || []).length === 1 && envelopeIdentity(mi.Envelope.From || [])) {
+			await react(mi.Envelope.To || [], mi.Envelope.CC || [], mi.Envelope.BCC || [], false, all)
+		} else {
+			await react(toOpt || ((mi.Envelope.ReplyTo || []).length > 0 ? mi.Envelope.ReplyTo : mi.Envelope.From) || [], [], [], false, all)
+		}
 	}
-	const cmdForward = async () => { react([], true, false) }
+	const cmdForward = async () => { react([], [], [], true, false) }
 	const cmdReplyList = async () => {
 		const pm = await parsedMessagePromise
 		if (pm.ListReplyAddress) {
