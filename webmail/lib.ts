@@ -212,6 +212,13 @@ const prop = (x: {[k: string]: any}) => { return {_props: x}}
 return [dom, style, attr, prop]
 })()
 
+// For authentication/security results.
+const underlineGreen = '#50c40f'
+const underlineRed = '#e15d1c'
+const underlineBlue = '#09f'
+const underlineGrey = '#aaa'
+const underlineYellow = 'yellow'
+
 // join elements in l with the results of calls to efn. efn can return
 // HTMLElements, which cannot be inserted into the dom multiple times, hence the
 // function.
@@ -316,6 +323,64 @@ const formatAddressFull = (a: api.MessageAddress): string => {
 	return s
 }
 
+// like formatAddressFull, but underline domain with dmarc-like validation if appropriate.
+const formatAddressFullValidated = (a: api.MessageAddress, m: api.Message, use: boolean): (string | HTMLElement)[] => {
+	const domainText = (s: string): HTMLElement | string => {
+		if (!use) {
+			return s
+		}
+		// We want to show how "approved" this message is given the message From's domain.
+		// We have MsgFromValidation available. It's not the greatest, being a mix of
+		// potential strict validations, actual DMARC policy validation, potential relaxed
+		// validation, but no explicit fail or (temporary) errors. We also don't know if
+		// historic messages were from a mailing list. We could add a heuristic based on
+		// List-Id headers, but it would be unreliable...
+		// todo: add field to Message with the exact results.
+		let color = ''
+		let title = ''
+		switch (m.MsgFromValidation) {
+		case api.Validation.ValidationStrict:
+			color = underlineGreen
+			title = 'Message would have matched a strict DMARC policy.'
+			break
+		case api.Validation.ValidationDMARC:
+			color = underlineGreen
+			title = 'Message matched DMARC policy of domain.'
+			break
+		case api.Validation.ValidationRelaxed:
+			color = underlineGreen
+			title = 'Domain did not have a DMARC policy, but message would match a relaxed policy if it had existed.'
+			break;
+		case api.Validation.ValidationNone:
+			if (m.IsForward || m.IsMailingList) {
+				color = underlineBlue
+				title = 'Message would not pass DMARC policy, but came in through a configured mailing list or forwarding address.'
+			} else {
+				color = underlineRed
+				title = 'Either domain did not have a DMARC policy, or message did not adhere to it.'
+			}
+			break;
+		default:
+			// Also for zero value, when unknown. E.g. for sent messages added with IMAP.
+			return dom.span(attr.title('Unknown DMARC verification result.'), s)
+		}
+		return dom.span(attr.title(title), style({borderBottom: '1.5px solid '+color, textDecoration: 'none'}), s)
+	}
+
+	let l: (string | HTMLElement)[] = []
+	if (a.Name) {
+		l.push(a.Name + ' ')
+	}
+	l.push('<' + a.User + '@')
+	l.push(domainText(a.Domain.ASCII))
+	l.push('>')
+	if (a.Domain.Unicode) {
+		// Not underlining because unicode domain may already cause underlining.
+		l.push(' (' + a.User + '@' + a.Domain.Unicode+')')
+	}
+	return l
+}
+
 // format just the name if present and it doesn't look like an address, or otherwise just the email address.
 const formatAddressShort = (a: api.MessageAddress): string => {
 	const n = a.Name
@@ -373,7 +438,7 @@ const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, more
 			dom.td(
 				style({width: '100%'}),
 				dom.div(style({display: 'flex', justifyContent: 'space-between'}),
-					dom.div(join((msgenv.From || []).map(a => formatAddressFull(a)), () => ', ')),
+					dom.div(join((msgenv.From || []).map(a => formatAddressFullValidated(a, mi.Message, !!msgenv.From && msgenv.From.length === 1)), () => ', ')),
 					dom.div(
 						attr.title('Received: ' + received.toString() + ';\nDate header in message: ' + (msgenv.Date ? msgenv.Date.toString() : '(missing/invalid)')),
 						receivedlocal.toDateString() + ' ' + receivedlocal.toTimeString().split(' ')[0],

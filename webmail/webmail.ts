@@ -1289,13 +1289,13 @@ const compose = (opts: ComposeOptions) => {
 
 			const color = (v: api.SecurityResult) => {
 				if (v === api.SecurityResult.SecurityResultYes) {
-					return '#50c40f'
+					return underlineGreen
 				} else if (v === api.SecurityResult.SecurityResultNo) {
-					return '#e15d1c'
+					return underlineRed
 				} else if (v === api.SecurityResult.SecurityResultUnknown) {
 					return 'white'
 				}
-				return '#aaa'
+				return underlineGrey
 			}
 			const setBar = (c0: string, c1: string, c2: string, c3: string, c4: string) => {
 				const stops = [
