@@ -574,21 +574,21 @@ func TestForward(t *testing.T) {
 		totalEvaluations := 0
 
 		var msgBad = strings.ReplaceAll(`From: <remote@bad.example>
-To: <mjl3@mox.example>
+To: <mjl@mox.example>
 Subject: test
 Message-Id: <bad@example.org>
 
 test email
 `, "\n", "\r\n")
 		var msgOK = strings.ReplaceAll(`From: <remote@good.example>
-To: <mjl3@mox.example>
+To: <mjl@mox.example>
 Subject: other
 Message-Id: <good@example.org>
 
 unrelated message.
 `, "\n", "\r\n")
 		var msgOK2 = strings.ReplaceAll(`From: <other@forward.example>
-To: <mjl3@mox.example>
+To: <mjl@mox.example>
 Subject: non-forward
 Message-Id: <regular@example.org>
 
@@ -655,7 +655,13 @@ happens to come from forwarding mail server.
 
 			mailFrom := "other@forward.example"
 
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgOK2)), strings.NewReader(msgOK2), false, false, false)
+			// Ensure To header matches.
+			msg := msgOK2
+			if forward {
+				msg = strings.ReplaceAll(msg, "<mjl@mox.example>", "<mjl3@mox.example>")
+			}
+
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 			if forward {
 				tcheck(t, err, "deliver")
 				totalEvaluations += 1
@@ -1418,9 +1424,11 @@ func TestEmptylocalpart(t *testing.T) {
 		t.Helper()
 		ts.run(func(err error, client *smtpclient.Client) {
 			t.Helper()
+
 			mailFrom := `""@other.example`
+			msg := strings.ReplaceAll(deliverMessage, "To: <mjl@mox.example>", `To: <""@mox.example>`)
 			if err == nil {
-				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 			}
 			var cerr smtpclient.Error
 			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {

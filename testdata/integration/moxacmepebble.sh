@@ -19,6 +19,9 @@ TLS:
                         # So certificates from moxmail2 are trusted, and pebble's certificate is trusted.
 			- /integration/tls/ca.pem
 EOF
+# Recognize postfix@mox1.example as destination, and that it is a forwarding destination.
+# Postfix seems to keep the mailfrom when forwarding, so we match on that verifieddomain (but using DKIM).
+sed -i -e 's/moxtest1@mox1.example: nil/moxtest1@mox1.example: nil\n\t\t\tpostfix@mox1.example:\n\t\t\t\tRulesets:\n\t\t\t\t\t-\n\t\t\t\t\t\tSMTPMailFromRegexp: .*\n\t\t\t\t\t\tVerifiedDomain: mox1.example\n\t\t\t\t\t\tIsForward: true\n\t\t\t\t\t\tMailbox: Inbox/' config/domains.conf
 
 (
 	cat /integration/example.zone;

@@ -1765,7 +1765,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// for other users.
 	// We don't check the Sender field, there is no expectation of verification, ../rfc/7489:2948
 	// and with Resent headers it seems valid to have someone else as Sender. ../rfc/5322:1578
-	msgFrom, header, err := message.From(c.log, true, dataFile)
+	msgFrom, _, header, err := message.From(c.log, true, dataFile)
 	if err != nil {
 		metricSubmission.WithLabelValues("badmessage").Inc()
 		c.log.Infox("parsing message From address", err, mlog.Field("user", c.username))
@@ -1961,7 +1961,7 @@ func (c *conn) xlocalserveError(lp smtp.Localpart) {
 func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, iprevStatus iprev.Status, iprevAuthentic bool, dataFile *os.File) {
 	// todo: in decision making process, if we run into (some) temporary errors, attempt to continue. if we decide to accept, all good. if we decide to reject, we'll make it a temporary reject.
 
-	msgFrom, headers, err := message.From(c.log, false, dataFile)
+	msgFrom, envelope, headers, err := message.From(c.log, false, dataFile)
 	if err != nil {
 		c.log.Infox("parsing message for From address", err)
 	}
@@ -2461,7 +2461,12 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			m.ReceivedTLSVersion = 1 // Signals plain text delivery.
 		}
 
-		d := delivery{&m, dataFile, rcptAcc, acc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, iprevStatus}
+		var msgTo, msgCc []message.Address
+		if envelope != nil {
+			msgTo = envelope.To
+			msgCc = envelope.CC
+		}
+		d := delivery{c.tls, &m, dataFile, rcptAcc, acc, msgTo, msgCc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, iprevStatus}
 		a := analyze(ctx, log, c.resolver, d)
 
 		// Any DMARC result override is stored in the evaluation for outgoing DMARC

@@ -16,6 +16,7 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dnsbl"
 	"github.com/mjl-/mox/iprev"
+	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/publicsuffix"
@@ -26,10 +27,13 @@ import (
 )
 
 type delivery struct {
+	tls         bool
 	m           *store.Message
 	dataFile    *os.File
 	rcptAcc     rcptAccount
 	acc         *store.Account
+	msgTo       []message.Address
+	msgCc       []message.Address
 	msgFrom     smtp.Address
 	dnsBLs      []dns.Domain
 	dmarcUse    bool
@@ -369,11 +373,41 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		jitter := (jitterRand.Float64() - 0.5) / 10
 		threshold := jf.Threshold + jitter
 
-		// With an iprev fail, we set a higher bar for content.
+		rcptToMatch := func(l []message.Address) bool {
+			// todo: we use Go's net/mail to parse message header addresses. it does not allow empty quoted strings (contrary to spec), leaving To empty. so we don't verify To address for that unusual case for now. ../rfc/5322:961 ../rfc/5322:743
+			if d.rcptAcc.rcptTo.Localpart == "" {
+				return true
+			}
+			for _, a := range l {
+				dom, err := dns.ParseDomain(a.Host)
+				if err != nil {
+					continue
+				}
+				if dom == d.rcptAcc.rcptTo.IPDomain.Domain && smtp.Localpart(a.User) == d.rcptAcc.rcptTo.Localpart {
+					return true
+				}
+			}
+			return false
+		}
+
+		// todo: some of these checks should also apply for reputation-based analysis with a weak signal, e.g. verified dkim/spf signal from new domain.
+		// With an iprev fail, non-TLS connection or our address not in To/Cc header, we set a higher bar for content.
 		reason = reasonJunkContent
 		if suspiciousIPrevFail && threshold > 0.25 {
 			threshold = 0.25
-			log.Info("setting junk threshold due to iprev fail", mlog.Field("threshold", 0.25))
+			log.Info("setting junk threshold due to iprev fail", mlog.Field("threshold", threshold))
+			reason = reasonJunkContentStrict
+		} else if !d.tls && threshold > 0.25 {
+			threshold = 0.25
+			log.Info("setting junk threshold due to plaintext smtp", mlog.Field("threshold", threshold))
+			reason = reasonJunkContentStrict
+		} else if (rs == nil || !rs.IsForward) && threshold > 0.25 && !rcptToMatch(d.msgTo) && !rcptToMatch(d.msgCc) {
+			// A common theme in junk messages is your recipient address not being in the To/Cc
+			// headers. We may be in Bcc, but that's unusual for first-time senders. Some
+			// providers (e.g. gmail) does not DKIM-sign Bcc headers, so junk messages can be
+			// sent with matching Bcc headers. We don't get here for known senders.
+			threshold = 0.25
+			log.Info("setting junk threshold due to smtp rcpt to and message to/cc address mismatch", mlog.Field("threshold", threshold))
 			reason = reasonJunkContentStrict
 		}
 		accept = contentProb <= threshold

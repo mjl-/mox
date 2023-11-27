@@ -115,7 +115,7 @@ services:
     volumes:
       # todo: figure out how to mount files with a uid that the process in the container can read...
       - ./testdata/integration/resolv.conf:/etc/resolv.conf
-    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; (echo 'maillog_file = /dev/stdout'; echo 'mydestination = $$myhostname, localhost.$$mydomain, localhost, $$mydomain') >>/etc/postfix/main.cf; echo 'root: moxtest1@mox1.example' >>/etc/postfix/aliases; newaliases; postfix start-fg"]
+    command: ["sh", "-c", "set -e; chmod o+r /etc/resolv.conf; (echo 'maillog_file = /dev/stdout'; echo 'mydestination = $$myhostname, localhost.$$mydomain, localhost, $$mydomain'; echo 'smtp_tls_security_level = may') >>/etc/postfix/main.cf; echo 'root: postfix@mox1.example' >>/etc/postfix/aliases; newaliases; postfix start-fg"]
     healthcheck:
       test: netstat -nlt | grep ':25 '
       interval: 1s

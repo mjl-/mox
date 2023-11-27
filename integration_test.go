@@ -158,7 +158,7 @@ This is the message.
 
 	xlog.Print("submitting email to postfix, waiting for imap notification at moxacmepebble")
 	t0 = time.Now()
-	deliver(true, true, "moxacmepebble.mox1.example:993", "moxtest1@mox1.example", "accountpass1234", func() {
+	deliver(false, true, "moxacmepebble.mox1.example:993", "moxtest1@mox1.example", "accountpass1234", func() {
 		submit(true, "moxtest1@mox1.example", "accountpass1234", "moxacmepebble.mox1.example:465", "root@postfix.example")
 	})
 	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
