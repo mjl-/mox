@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mjl-/mox/imapclient"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/store"
 )
@@ -58,17 +59,18 @@ func FuzzServer(f *testing.F) {
 		f.Add(tag + cmd)
 	}
 
+	log := mlog.New("imapserver", nil)
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imapserverfuzz/mox.conf")
 	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)
-	acc, err := store.OpenAccount("mjl")
+	acc, err := store.OpenAccount(log, "mjl")
 	if err != nil {
 		f.Fatalf("open account: %v", err)
 	}
 	defer acc.Close()
-	err = acc.SetPassword("testtest")
+	err = acc.SetPassword(log, "testtest")
 	if err != nil {
 		f.Fatalf("set password: %v", err)
 	}

@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/exp/slog"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/mjl-/autocert"
@@ -44,14 +45,14 @@ import (
 	"github.com/mjl-/mox/smtp"
 )
 
-var xlog = mlog.New("mox")
+var pkglog = mlog.New("mox", nil)
 
 // Config paths are set early in program startup. They will point to files in
 // the same directory.
 var (
 	ConfigStaticPath  string
 	ConfigDynamicPath string
-	Conf              = Config{Log: map[string]mlog.Level{"": mlog.LevelError}}
+	Conf              = Config{Log: map[string]slog.Level{"": slog.LevelError}}
 )
 
 // Config as used in the code, a processed version of what is in the config file.
@@ -61,7 +62,7 @@ type Config struct {
 	Static config.Static // Does not change during the lifetime of a running instance.
 
 	logMutex sync.Mutex // For accessing the log levels.
-	Log      map[string]mlog.Level
+	Log      map[string]slog.Level
 
 	dynamicMutex     sync.Mutex
 	Dynamic          config.Dynamic // Can only be accessed directly by tests. Use methods on Config for locked access.
@@ -83,31 +84,31 @@ type AccountDestination struct {
 // LogLevelSet sets a new log level for pkg. An empty pkg sets the default log
 // value that is used if no explicit log level is configured for a package.
 // This change is ephemeral, no config file is changed.
-func (c *Config) LogLevelSet(pkg string, level mlog.Level) {
+func (c *Config) LogLevelSet(log mlog.Log, pkg string, level slog.Level) {
 	c.logMutex.Lock()
 	defer c.logMutex.Unlock()
 	l := c.copyLogLevels()
 	l[pkg] = level
 	c.Log = l
-	xlog.Print("log level changed", mlog.Field("pkg", pkg), mlog.Field("level", mlog.LevelStrings[level]))
+	log.Print("log level changed", slog.String("pkg", pkg), slog.Any("level", mlog.LevelStrings[level]))
 	mlog.SetConfig(c.Log)
 }
 
 // LogLevelRemove removes a configured log level for a package.
-func (c *Config) LogLevelRemove(pkg string) {
+func (c *Config) LogLevelRemove(log mlog.Log, pkg string) {
 	c.logMutex.Lock()
 	defer c.logMutex.Unlock()
 	l := c.copyLogLevels()
 	delete(l, pkg)
 	c.Log = l
-	xlog.Print("log level cleared", mlog.Field("pkg", pkg))
+	log.Print("log level cleared", slog.String("pkg", pkg))
 	mlog.SetConfig(c.Log)
 }
 
 // copyLogLevels returns a copy of c.Log, for modifications.
 // must be called with log lock held.
-func (c *Config) copyLogLevels() map[string]mlog.Level {
-	m := map[string]mlog.Level{}
+func (c *Config) copyLogLevels() map[string]slog.Level {
+	m := map[string]slog.Level{}
 	for pkg, level := range c.Log {
 		m[pkg] = level
 	}
@@ -115,7 +116,7 @@ func (c *Config) copyLogLevels() map[string]mlog.Level {
 }
 
 // LogLevels returns a copy of the current log levels.
-func (c *Config) LogLevels() map[string]mlog.Level {
+func (c *Config) LogLevels() map[string]slog.Level {
 	c.logMutex.Lock()
 	defer c.logMutex.Unlock()
 	return c.copyLogLevels()
@@ -128,12 +129,12 @@ func (c *Config) withDynamicLock(fn func()) {
 	if now.Sub(c.DynamicLastCheck) > time.Second {
 		c.DynamicLastCheck = now
 		if fi, err := os.Stat(ConfigDynamicPath); err != nil {
-			xlog.Errorx("stat domains config", err)
+			pkglog.Errorx("stat domains config", err)
 		} else if !fi.ModTime().Equal(c.dynamicMtime) {
 			if errs := c.loadDynamic(); len(errs) > 0 {
-				xlog.Errorx("loading domains config", errs[0], mlog.Field("errors", errs))
+				pkglog.Errorx("loading domains config", errs[0], slog.Any("errors", errs))
 			} else {
-				xlog.Info("domains config reloaded")
+				pkglog.Info("domains config reloaded")
 				c.dynamicMtime = fi.ModTime()
 			}
 		}
@@ -143,14 +144,14 @@ func (c *Config) withDynamicLock(fn func()) {
 
 // must be called with dynamic lock held.
 func (c *Config) loadDynamic() []error {
-	d, mtime, accDests, err := ParseDynamicConfig(context.Background(), ConfigDynamicPath, c.Static)
+	d, mtime, accDests, err := ParseDynamicConfig(context.Background(), pkglog, ConfigDynamicPath, c.Static)
 	if err != nil {
 		return err
 	}
 	c.Dynamic = d
 	c.dynamicMtime = mtime
 	c.accountDestinations = accDests
-	c.allowACMEHosts(true)
+	c.allowACMEHosts(pkglog, true)
 	return nil
 }
 
@@ -236,7 +237,7 @@ func (c *Config) Routes(accountName string, domain dns.Domain) (accountRoutes, d
 	return
 }
 
-func (c *Config) allowACMEHosts(checkACMEHosts bool) {
+func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 	for _, l := range c.Static.Listeners {
 		if l.TLS == nil || l.TLS.ACME == "" {
 			continue
@@ -259,7 +260,7 @@ func (c *Config) allowACMEHosts(checkACMEHosts bool) {
 
 			if l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS {
 				if d, err := dns.ParseDomain("autoconfig." + dom.Domain.ASCII); err != nil {
-					xlog.Errorx("parsing autoconfig domain", err, mlog.Field("domain", dom.Domain))
+					log.Errorx("parsing autoconfig domain", err, slog.Any("domain", dom.Domain))
 				} else {
 					hostnames[d] = struct{}{}
 				}
@@ -268,7 +269,7 @@ func (c *Config) allowACMEHosts(checkACMEHosts bool) {
 			if l.MTASTSHTTPS.Enabled && dom.MTASTS != nil && !l.MTASTSHTTPS.NonTLS {
 				d, err := dns.ParseDomain("mta-sts." + dom.Domain.ASCII)
 				if err != nil {
-					xlog.Errorx("parsing mta-sts domain", err, mlog.Field("domain", dom.Domain))
+					log.Errorx("parsing mta-sts domain", err, slog.Any("domain", dom.Domain))
 				} else {
 					hostnames[d] = struct{}{}
 				}
@@ -292,15 +293,15 @@ func (c *Config) allowACMEHosts(checkACMEHosts bool) {
 		if public.IPsNATed {
 			ips = nil
 		}
-		m.SetAllowedHostnames(dns.StrictResolver{Pkg: "autotls"}, hostnames, ips, checkACMEHosts)
+		m.SetAllowedHostnames(log, dns.StrictResolver{Pkg: "autotls", Log: log.Logger}, hostnames, ips, checkACMEHosts)
 	}
 }
 
 // todo future: write config parsing & writing code that can read a config and remembers the exact tokens including newlines and comments, and can write back a modified file. the goal is to be able to write a config file automatically (after changing fields through the ui), but not loose comments and whitespace, to still get useful diffs for storing the config in a version control system.
 
 // must be called with lock held.
-func writeDynamic(ctx context.Context, log *mlog.Log, c config.Dynamic) error {
-	accDests, errs := prepareDynamicConfig(ctx, ConfigDynamicPath, Conf.Static, &c)
+func writeDynamic(ctx context.Context, log mlog.Log, c config.Dynamic) error {
+	accDests, errs := prepareDynamicConfig(ctx, log, ConfigDynamicPath, Conf.Static, &c)
 	if len(errs) > 0 {
 		return errs[0]
 	}
@@ -330,7 +331,7 @@ func writeDynamic(ctx context.Context, log *mlog.Log, c config.Dynamic) error {
 	if err := f.Sync(); err != nil {
 		return fmt.Errorf("sync domains.conf after write: %v", err)
 	}
-	if err := moxio.SyncDir(filepath.Dir(ConfigDynamicPath)); err != nil {
+	if err := moxio.SyncDir(log, filepath.Dir(ConfigDynamicPath)); err != nil {
 		return fmt.Errorf("sync dir of domains.conf after write: %v", err)
 	}
 
@@ -349,32 +350,32 @@ func writeDynamic(ctx context.Context, log *mlog.Log, c config.Dynamic) error {
 	Conf.Dynamic = c
 	Conf.accountDestinations = accDests
 
-	Conf.allowACMEHosts(true)
+	Conf.allowACMEHosts(log, true)
 
 	return nil
 }
 
 // MustLoadConfig loads the config, quitting on errors.
 func MustLoadConfig(doLoadTLSKeyCerts, checkACMEHosts bool) {
-	errs := LoadConfig(context.Background(), doLoadTLSKeyCerts, checkACMEHosts)
+	errs := LoadConfig(context.Background(), pkglog, doLoadTLSKeyCerts, checkACMEHosts)
 	if len(errs) > 1 {
-		xlog.Error("loading config file: multiple errors")
+		pkglog.Error("loading config file: multiple errors")
 		for _, err := range errs {
-			xlog.Errorx("config error", err)
+			pkglog.Errorx("config error", err)
 		}
-		xlog.Fatal("stopping after multiple config errors")
+		pkglog.Fatal("stopping after multiple config errors")
 	} else if len(errs) == 1 {
-		xlog.Fatalx("loading config file", errs[0])
+		pkglog.Fatalx("loading config file", errs[0])
 	}
 }
 
 // LoadConfig attempts to parse and load a config, returning any errors
 // encountered.
-func LoadConfig(ctx context.Context, doLoadTLSKeyCerts, checkACMEHosts bool) []error {
+func LoadConfig(ctx context.Context, log mlog.Log, doLoadTLSKeyCerts, checkACMEHosts bool) []error {
 	Shutdown, ShutdownCancel = context.WithCancel(context.Background())
 	Context, ContextCancel = context.WithCancel(context.Background())
 
-	c, errs := ParseConfig(ctx, ConfigStaticPath, false, doLoadTLSKeyCerts, checkACMEHosts)
+	c, errs := ParseConfig(ctx, log, ConfigStaticPath, false, doLoadTLSKeyCerts, checkACMEHosts)
 	if len(errs) > 0 {
 		return errs
 	}
@@ -405,7 +406,7 @@ func SetConfig(c *Config) {
 // quickstart in the case the user is going to provide their own certificates.
 // If checkACMEHosts is true, the hosts allowed for acme are compared with the
 // explicitly configured ips we are listening on.
-func ParseConfig(ctx context.Context, p string, checkOnly, doLoadTLSKeyCerts, checkACMEHosts bool) (c *Config, errs []error) {
+func ParseConfig(ctx context.Context, log mlog.Log, p string, checkOnly, doLoadTLSKeyCerts, checkACMEHosts bool) (c *Config, errs []error) {
 	c = &Config{
 		Static: config.Static{
 			DataDir: ".",
@@ -424,15 +425,15 @@ func ParseConfig(ctx context.Context, p string, checkOnly, doLoadTLSKeyCerts, ch
 		return nil, []error{fmt.Errorf("parsing %s%v", p, err)}
 	}
 
-	if xerrs := PrepareStaticConfig(ctx, p, c, checkOnly, doLoadTLSKeyCerts); len(xerrs) > 0 {
+	if xerrs := PrepareStaticConfig(ctx, log, p, c, checkOnly, doLoadTLSKeyCerts); len(xerrs) > 0 {
 		return nil, xerrs
 	}
 
 	pp := filepath.Join(filepath.Dir(p), "domains.conf")
-	c.Dynamic, c.dynamicMtime, c.accountDestinations, errs = ParseDynamicConfig(ctx, pp, c.Static)
+	c.Dynamic, c.dynamicMtime, c.accountDestinations, errs = ParseDynamicConfig(ctx, log, pp, c.Static)
 
 	if !checkOnly {
-		c.allowACMEHosts(checkACMEHosts)
+		c.allowACMEHosts(log, checkACMEHosts)
 	}
 
 	return c, errs
@@ -441,12 +442,10 @@ func ParseConfig(ctx context.Context, p string, checkOnly, doLoadTLSKeyCerts, ch
 // PrepareStaticConfig parses the static config file and prepares data structures
 // for starting mox. If checkOnly is set no substantial changes are made, like
 // creating an ACME registration.
-func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, checkOnly, doLoadTLSKeyCerts bool) (errs []error) {
+func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, conf *Config, checkOnly, doLoadTLSKeyCerts bool) (errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
-
-	log := xlog.WithContext(ctx)
 
 	c := &conf.Static
 
@@ -461,7 +460,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 
 	// Post-process logging config.
 	if logLevel, ok := mlog.Levels[c.LogLevel]; ok {
-		conf.Log = map[string]mlog.Level{"": logLevel}
+		conf.Log = map[string]slog.Level{"": logLevel}
 	} else {
 		addErrorf("invalid log level %q", c.LogLevel)
 	}
@@ -569,10 +568,10 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 				key = findACMEHostPrivateKey(acmeName, host, keyType, 2)
 			}
 			if key != nil {
-				log.Debug("found existing private key for certificate for host", mlog.Field("acmename", acmeName), mlog.Field("host", host), mlog.Field("keytype", keyType))
+				log.Debug("found existing private key for certificate for host", slog.String("acmename", acmeName), slog.String("host", host), slog.Any("keytype", keyType))
 				return key, nil
 			}
-			log.Debug("generating new private key for certificate for host", mlog.Field("acmename", acmeName), mlog.Field("host", host), mlog.Field("keytype", keyType))
+			log.Debug("generating new private key for certificate for host", slog.String("acmename", acmeName), slog.String("host", host), slog.Any("keytype", keyType))
 			switch keyType {
 			case autocert.KeyRSA2048:
 				return rsa.GenerateKey(cryptorand.Reader, 2048)
@@ -658,18 +657,18 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 				switch k := privKey.(type) {
 				case *rsa.PrivateKey:
 					if k.N.BitLen() != 2048 {
-						log.Error("need rsa key with 2048 bits, for host private key for DANE/ACME certificates, ignoring", mlog.Field("listener", name), mlog.Field("file", keyPath), mlog.Field("bits", k.N.BitLen()))
+						log.Error("need rsa key with 2048 bits, for host private key for DANE/ACME certificates, ignoring", slog.String("listener", name), slog.String("file", keyPath), slog.Int("bits", k.N.BitLen()))
 						continue
 					}
 					l.TLS.HostPrivateRSA2048Keys = append(l.TLS.HostPrivateRSA2048Keys, k)
 				case *ecdsa.PrivateKey:
 					if k.Curve != elliptic.P256() {
-						log.Error("unrecognized ecdsa curve for host private key for DANE/ACME certificates, ignoring", mlog.Field("listener", name), mlog.Field("file", keyPath))
+						log.Error("unrecognized ecdsa curve for host private key for DANE/ACME certificates, ignoring", slog.String("listener", name), slog.String("file", keyPath))
 						continue
 					}
 					l.TLS.HostPrivateECDSAP256Keys = append(l.TLS.HostPrivateECDSAP256Keys, k)
 				default:
-					log.Error("unrecognized key type for host private key for DANE/ACME certificates, ignoring", mlog.Field("listener", name), mlog.Field("file", keyPath), mlog.Field("keytype", fmt.Sprintf("%T", privKey)))
+					log.Error("unrecognized key type for host private key for DANE/ACME certificates, ignoring", slog.String("listener", name), slog.String("file", keyPath), slog.String("keytype", fmt.Sprintf("%T", privKey)))
 					continue
 				}
 			}
@@ -914,7 +913,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 }
 
 // PrepareDynamicConfig parses the dynamic config file given a static file.
-func ParseDynamicConfig(ctx context.Context, dynamicPath string, static config.Static) (c config.Dynamic, mtime time.Time, accDests map[string]AccountDestination, errs []error) {
+func ParseDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string, static config.Static) (c config.Dynamic, mtime time.Time, accDests map[string]AccountDestination, errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
@@ -934,13 +933,11 @@ func ParseDynamicConfig(ctx context.Context, dynamicPath string, static config.S
 		return
 	}
 
-	accDests, errs = prepareDynamicConfig(ctx, dynamicPath, static, &c)
+	accDests, errs = prepareDynamicConfig(ctx, log, dynamicPath, static, &c)
 	return c, fi.ModTime(), accDests, errs
 }
 
-func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config.Static, c *config.Dynamic) (accDests map[string]AccountDestination, errs []error) {
-	log := xlog.WithContext(ctx)
-
+func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string, static config.Static, c *config.Dynamic) (accDests map[string]AccountDestination, errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
@@ -1321,7 +1318,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			if !ok {
 				addErrorf("could not find localpart %q to replace with address in destinations", lp)
 			} else {
-				log.Error(`deprecation warning: support for account destination addresses specified as just localpart ("username") instead of full email address will be removed in the future; update domains.conf, for each Account, for each Destination, ensure each key is an email address by appending "@" and the default domain for the account`, mlog.Field("localpart", lp), mlog.Field("address", addr), mlog.Field("account", accName))
+				log.Error(`deprecation warning: support for account destination addresses specified as just localpart ("username") instead of full email address will be removed in the future; update domains.conf, for each Account, for each Destination, ensure each key is an email address by appending "@" and the default domain for the account`, slog.Any("localpart", lp), slog.Any("address", addr), slog.String("account", accName))
 				acc.Destinations[addr] = dest
 				delete(acc.Destinations, lp)
 			}

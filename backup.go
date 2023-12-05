@@ -12,10 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/dmarcdb"
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtastsdb"
@@ -48,51 +49,51 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	writer := ctl.writer()
 
 	// Format easily readable output for the user.
-	formatLog := func(prefix, text string, err error, fields ...mlog.Pair) []byte {
+	formatLog := func(prefix, text string, err error, attrs ...slog.Attr) []byte {
 		var b bytes.Buffer
 		fmt.Fprint(&b, prefix)
 		fmt.Fprint(&b, text)
 		if err != nil {
 			fmt.Fprint(&b, ": "+err.Error())
 		}
-		for _, f := range fields {
-			fmt.Fprintf(&b, "; %s=%v", f.Key, f.Value)
+		for _, a := range attrs {
+			fmt.Fprintf(&b, "; %s=%v", a.Key, a.Value)
 		}
 		fmt.Fprint(&b, "\n")
 		return b.Bytes()
 	}
 
 	// Log an error to both the mox service as the user running "mox backup".
-	xlogx := func(prefix, text string, err error, fields ...mlog.Pair) {
-		ctl.log.Errorx(text, err, fields...)
+	pkglogx := func(prefix, text string, err error, attrs ...slog.Attr) {
+		ctl.log.Errorx(text, err, attrs...)
 
-		_, werr := writer.Write(formatLog(prefix, text, err, fields...))
+		_, werr := writer.Write(formatLog(prefix, text, err, attrs...))
 		ctl.xcheck(werr, "write to ctl")
 	}
 
 	// Log an error but don't mark backup as failed.
-	xwarnx := func(text string, err error, fields ...mlog.Pair) {
-		xlogx("warning: ", text, err, fields...)
+	xwarnx := func(text string, err error, attrs ...slog.Attr) {
+		pkglogx("warning: ", text, err, attrs...)
 	}
 
 	// Log an error that causes the backup to be marked as failed. We typically
 	// continue processing though.
-	xerrx := func(text string, err error, fields ...mlog.Pair) {
+	xerrx := func(text string, err error, attrs ...slog.Attr) {
 		incomplete = true
-		xlogx("error: ", text, err, fields...)
+		pkglogx("error: ", text, err, attrs...)
 	}
 
 	// If verbose is enabled, log to the cli command. Always log as info level.
-	xvlog := func(text string, fields ...mlog.Pair) {
-		ctl.log.Info(text, fields...)
+	xvlog := func(text string, attrs ...slog.Attr) {
+		ctl.log.Info(text, attrs...)
 		if verbose {
-			_, werr := writer.Write(formatLog("", text, nil, fields...))
+			_, werr := writer.Write(formatLog("", text, nil, attrs...))
 			ctl.xcheck(werr, "write to ctl")
 		}
 	}
 
 	if _, err := os.Stat(dstDataDir); err == nil {
-		xwarnx("destination data directory already exists", nil, mlog.Field("dir", dstDataDir))
+		xwarnx("destination data directory already exists", nil, slog.String("dir", dstDataDir))
 	}
 
 	srcDataDir := filepath.Clean(mox.DataDirPath("."))
@@ -119,7 +120,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 
 		sf, err := os.Open(srcpath)
 		if err != nil {
-			xerrx("open source file (not backed up)", err, mlog.Field("srcpath", srcpath), mlog.Field("dstpath", dstpath))
+			xerrx("open source file (not backed up)", err, slog.String("srcpath", srcpath), slog.String("dstpath", dstpath))
 			return
 		}
 		defer sf.Close()
@@ -127,7 +128,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		ensureDestDir(dstpath)
 		df, err := os.OpenFile(dstpath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0660)
 		if err != nil {
-			xerrx("creating destination file (not backed up)", err, mlog.Field("srcpath", srcpath), mlog.Field("dstpath", dstpath))
+			xerrx("creating destination file (not backed up)", err, slog.String("srcpath", srcpath), slog.String("dstpath", dstpath))
 			return
 		}
 		defer func() {
@@ -136,16 +137,16 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			}
 		}()
 		if _, err := io.Copy(df, sf); err != nil {
-			xerrx("copying file (not backed up properly)", err, mlog.Field("srcpath", srcpath), mlog.Field("dstpath", dstpath))
+			xerrx("copying file (not backed up properly)", err, slog.String("srcpath", srcpath), slog.String("dstpath", dstpath))
 			return
 		}
 		err = df.Close()
 		df = nil
 		if err != nil {
-			xerrx("closing destination file (not backed up properly)", err, mlog.Field("srcpath", srcpath), mlog.Field("dstpath", dstpath))
+			xerrx("closing destination file (not backed up properly)", err, slog.String("srcpath", srcpath), slog.String("dstpath", dstpath))
 			return
 		}
-		xvlog("backed up file", mlog.Field("path", path), mlog.Field("duration", time.Since(tmFile)))
+		xvlog("backed up file", slog.String("path", path), slog.Duration("duration", time.Since(tmFile)))
 	}
 
 	// Back up the files in a directory (by copying).
@@ -155,7 +156,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		dstdir := filepath.Join(dstDataDir, dir)
 		err := filepath.WalkDir(srcdir, func(srcpath string, d fs.DirEntry, err error) error {
 			if err != nil {
-				xerrx("walking file (not backed up)", err, mlog.Field("srcpath", srcpath))
+				xerrx("walking file (not backed up)", err, slog.String("srcpath", srcpath))
 				return nil
 			}
 			if d.IsDir() {
@@ -165,10 +166,10 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			return nil
 		})
 		if err != nil {
-			xerrx("copying directory (not backed up properly)", err, mlog.Field("srcdir", srcdir), mlog.Field("dstdir", dstdir), mlog.Field("duration", time.Since(tmDir)))
+			xerrx("copying directory (not backed up properly)", err, slog.String("srcdir", srcdir), slog.String("dstdir", dstdir), slog.Duration("duration", time.Since(tmDir)))
 			return
 		}
-		xvlog("backed up directory", mlog.Field("dir", dir), mlog.Field("duration", time.Since(tmDir)))
+		xvlog("backed up directory", slog.String("dir", dir), slog.Duration("duration", time.Since(tmDir)))
 	}
 
 	// Backup a database by copying it in a readonly transaction.
@@ -177,7 +178,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	backupDB := func(db *bstore.DB, path string) (rerr error) {
 		defer func() {
 			if rerr != nil {
-				xerrx("backing up database", rerr, mlog.Field("path", path))
+				xerrx("backing up database", rerr, slog.String("path", path))
 			}
 		}()
 
@@ -216,7 +217,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		if err != nil {
 			return fmt.Errorf("closing destination database after copy: %v", err)
 		}
-		xvlog("backed up database file", mlog.Field("path", path), mlog.Field("duration", time.Since(tmDB)))
+		xvlog("backed up database file", slog.String("path", path), slog.Duration("duration", time.Since(tmDB)))
 		return nil
 	}
 
@@ -231,7 +232,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			// No point in trying with regular copy, we would warn twice.
 			return false, err
 		} else if !warnedHardlink {
-			xwarnx("creating hardlink to message failed, will be doing regular file copies and not warn again", err, mlog.Field("srcpath", srcpath), mlog.Field("dstpath", dstpath))
+			xwarnx("creating hardlink to message failed, will be doing regular file copies and not warn again", err, slog.String("srcpath", srcpath), slog.String("dstpath", dstpath))
 			warnedHardlink = true
 		}
 
@@ -269,7 +270,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	// Start making the backup.
 	tmStart := time.Now()
 
-	ctl.log.Print("making backup", mlog.Field("destdir", dstDataDir))
+	ctl.log.Print("making backup", slog.String("destdir", dstDataDir))
 
 	err := os.MkdirAll(dstDataDir, 0770)
 	if err != nil {
@@ -299,14 +300,14 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		tmQueue := time.Now()
 
 		if err := backupDB(queue.DB, path); err != nil {
-			xerrx("queue not backed up", err, mlog.Field("path", path), mlog.Field("duration", time.Since(tmQueue)))
+			xerrx("queue not backed up", err, slog.String("path", path), slog.Duration("duration", time.Since(tmQueue)))
 			return
 		}
 
 		dstdbpath := filepath.Join(dstDataDir, path)
 		db, err := bstore.Open(ctx, dstdbpath, &bstore.Options{MustExist: true}, queue.DBTypes...)
 		if err != nil {
-			xerrx("open copied queue database", err, mlog.Field("dstpath", dstdbpath), mlog.Field("duration", time.Since(tmQueue)))
+			xerrx("open copied queue database", err, slog.String("dstpath", dstdbpath), slog.Duration("duration", time.Since(tmQueue)))
 			return
 		}
 
@@ -329,7 +330,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			srcpath := filepath.Join(srcDataDir, "queue", mp)
 			dstpath := filepath.Join(dstDataDir, "queue", mp)
 			if linked, err := linkOrCopy(srcpath, dstpath); err != nil {
-				xerrx("linking/copying queue message", err, mlog.Field("srcpath", srcpath), mlog.Field("dstpath", dstpath))
+				xerrx("linking/copying queue message", err, slog.String("srcpath", srcpath), slog.String("dstpath", dstpath))
 			} else if linked {
 				nlinked++
 			} else {
@@ -338,9 +339,9 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			return nil
 		})
 		if err != nil {
-			xerrx("processing queue messages (not backed up properly)", err, mlog.Field("duration", time.Since(tmMsgs)))
+			xerrx("processing queue messages (not backed up properly)", err, slog.Duration("duration", time.Since(tmMsgs)))
 		} else {
-			xvlog("queue message files linked/copied", mlog.Field("linked", nlinked), mlog.Field("copied", ncopied), mlog.Field("duration", time.Since(tmMsgs)))
+			xvlog("queue message files linked/copied", slog.Int("linked", nlinked), slog.Int("copied", ncopied), slog.Duration("duration", time.Since(tmMsgs)))
 		}
 
 		// Read through all files in queue directory and warn about anything we haven't handled yet.
@@ -348,7 +349,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		srcqdir := filepath.Join(srcDataDir, "queue")
 		err = filepath.WalkDir(srcqdir, func(srcqpath string, d fs.DirEntry, err error) error {
 			if err != nil {
-				xerrx("walking files in queue", err, mlog.Field("srcpath", srcqpath))
+				xerrx("walking files in queue", err, slog.String("srcpath", srcqpath))
 				return nil
 			}
 			if d.IsDir() {
@@ -362,17 +363,17 @@ func backupctl(ctx context.Context, ctl *ctl) {
 				return nil
 			}
 			qp := filepath.Join("queue", p)
-			xwarnx("backing up unrecognized file in queue directory", nil, mlog.Field("path", qp))
+			xwarnx("backing up unrecognized file in queue directory", nil, slog.String("path", qp))
 			backupFile(qp)
 			return nil
 		})
 		if err != nil {
-			xerrx("walking queue directory (not backed up properly)", err, mlog.Field("dir", "queue"), mlog.Field("duration", time.Since(tmWalk)))
+			xerrx("walking queue directory (not backed up properly)", err, slog.String("dir", "queue"), slog.Duration("duration", time.Since(tmWalk)))
 		} else {
-			xvlog("walked queue directory", mlog.Field("duration", time.Since(tmWalk)))
+			xvlog("walked queue directory", slog.Duration("duration", time.Since(tmWalk)))
 		}
 
-		xvlog("queue backed finished", mlog.Field("duration", time.Since(tmQueue)))
+		xvlog("queue backed finished", slog.Duration("duration", time.Since(tmQueue)))
 	}
 	backupQueue(filepath.FromSlash("queue/index.db"))
 
@@ -385,7 +386,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		dbpath := filepath.Join("accounts", acc.Name, "index.db")
 		err := backupDB(acc.DB, dbpath)
 		if err != nil {
-			xerrx("copying account database", err, mlog.Field("path", dbpath), mlog.Field("duration", time.Since(tmAccount)))
+			xerrx("copying account database", err, slog.String("path", dbpath), slog.Duration("duration", time.Since(tmAccount)))
 		}
 
 		// todo: should document/check not taking a rlock on account.
@@ -409,7 +410,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		dstdbpath := filepath.Join(dstDataDir, dbpath)
 		db, err := bstore.Open(ctx, dstdbpath, &bstore.Options{MustExist: true}, store.DBTypes...)
 		if err != nil {
-			xerrx("open copied account database", err, mlog.Field("dstpath", dstdbpath), mlog.Field("duration", time.Since(tmAccount)))
+			xerrx("open copied account database", err, slog.String("dstpath", dstdbpath), slog.Duration("duration", time.Since(tmAccount)))
 			return
 		}
 
@@ -433,7 +434,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			srcpath := filepath.Join(srcDataDir, amp)
 			dstpath := filepath.Join(dstDataDir, amp)
 			if linked, err := linkOrCopy(srcpath, dstpath); err != nil {
-				xerrx("linking/copying account message", err, mlog.Field("srcpath", srcpath), mlog.Field("dstpath", dstpath))
+				xerrx("linking/copying account message", err, slog.String("srcpath", srcpath), slog.String("dstpath", dstpath))
 			} else if linked {
 				nlinked++
 			} else {
@@ -442,9 +443,9 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			return nil
 		})
 		if err != nil {
-			xerrx("processing account messages (not backed up properly)", err, mlog.Field("duration", time.Since(tmMsgs)))
+			xerrx("processing account messages (not backed up properly)", err, slog.Duration("duration", time.Since(tmMsgs)))
 		} else {
-			xvlog("account message files linked/copied", mlog.Field("linked", nlinked), mlog.Field("copied", ncopied), mlog.Field("duration", time.Since(tmMsgs)))
+			xvlog("account message files linked/copied", slog.Int("linked", nlinked), slog.Int("copied", ncopied), slog.Duration("duration", time.Since(tmMsgs)))
 		}
 
 		// Read through all files in account directory and warn about anything we haven't handled yet.
@@ -452,7 +453,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		srcadir := filepath.Join(srcDataDir, "accounts", acc.Name)
 		err = filepath.WalkDir(srcadir, func(srcapath string, d fs.DirEntry, err error) error {
 			if err != nil {
-				xerrx("walking files in account", err, mlog.Field("srcpath", srcapath))
+				xerrx("walking files in account", err, slog.String("srcpath", srcapath))
 				return nil
 			}
 			if d.IsDir() {
@@ -472,20 +473,20 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			}
 			ap := filepath.Join("accounts", acc.Name, p)
 			if strings.HasPrefix(p, "msg"+string(filepath.Separator)) {
-				xwarnx("backing up unrecognized file in account message directory (should be moved away)", nil, mlog.Field("path", ap))
+				xwarnx("backing up unrecognized file in account message directory (should be moved away)", nil, slog.String("path", ap))
 			} else {
-				xwarnx("backing up unrecognized file in account directory", nil, mlog.Field("path", ap))
+				xwarnx("backing up unrecognized file in account directory", nil, slog.String("path", ap))
 			}
 			backupFile(ap)
 			return nil
 		})
 		if err != nil {
-			xerrx("walking account directory (not backed up properly)", err, mlog.Field("srcdir", srcadir), mlog.Field("duration", time.Since(tmWalk)))
+			xerrx("walking account directory (not backed up properly)", err, slog.String("srcdir", srcadir), slog.Duration("duration", time.Since(tmWalk)))
 		} else {
-			xvlog("walked account directory", mlog.Field("duration", time.Since(tmWalk)))
+			xvlog("walked account directory", slog.Duration("duration", time.Since(tmWalk)))
 		}
 
-		xvlog("account backup finished", mlog.Field("dir", filepath.Join("accounts", acc.Name)), mlog.Field("duration", time.Since(tmAccount)))
+		xvlog("account backup finished", slog.String("dir", filepath.Join("accounts", acc.Name)), slog.Duration("duration", time.Since(tmAccount)))
 	}
 
 	// For each configured account, open it, make a copy of the database and
@@ -493,9 +494,9 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	// account directories when handling "all other files" below.
 	accounts := map[string]struct{}{}
 	for _, accName := range mox.Conf.Accounts() {
-		acc, err := store.OpenAccount(accName)
+		acc, err := store.OpenAccount(ctl.log, accName)
 		if err != nil {
-			xerrx("opening account for copying (will try to copy as regular files later)", err, mlog.Field("account", accName))
+			xerrx("opening account for copying (will try to copy as regular files later)", err, slog.String("account", accName))
 			continue
 		}
 		accounts[accName] = struct{}{}
@@ -506,7 +507,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	tmWalk := time.Now()
 	err = filepath.WalkDir(srcDataDir, func(srcpath string, d fs.DirEntry, err error) error {
 		if err != nil {
-			xerrx("walking path", err, mlog.Field("path", srcpath))
+			xerrx("walking path", err, slog.String("path", srcpath))
 			return nil
 		}
 
@@ -536,18 +537,18 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			return nil
 		case "lastknownversion": // Optional file, not yet handled.
 		default:
-			xwarnx("backing up unrecognized file", nil, mlog.Field("path", p))
+			xwarnx("backing up unrecognized file", nil, slog.String("path", p))
 		}
 		backupFile(p)
 		return nil
 	})
 	if err != nil {
-		xerrx("walking other files (not backed up properly)", err, mlog.Field("duration", time.Since(tmWalk)))
+		xerrx("walking other files (not backed up properly)", err, slog.Duration("duration", time.Since(tmWalk)))
 	} else {
-		xvlog("walking other files finished", mlog.Field("duration", time.Since(tmWalk)))
+		xvlog("walking other files finished", slog.Duration("duration", time.Since(tmWalk)))
 	}
 
-	xvlog("backup finished", mlog.Field("duration", time.Since(tmStart)))
+	xvlog("backup finished", slog.Duration("duration", time.Since(tmStart)))
 
 	writer.xclose()
 

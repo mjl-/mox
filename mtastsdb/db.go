@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -27,8 +29,6 @@ import (
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/tlsrpt"
 )
-
-var xlog = mlog.New("mtastsdb")
 
 var (
 	metricGet = promauto.NewCounterVec(
@@ -108,7 +108,7 @@ func Close() {
 	defer mutex.Unlock()
 	if DB != nil {
 		err := DB.Close()
-		xlog.Check(err, "closing database")
+		mlog.New("mtastsdb", nil).Check(err, "closing database")
 		DB = nil
 	}
 }
@@ -119,8 +119,7 @@ func Close() {
 //
 // Returns ErrNotFound if record is not present.
 // Returns ErrBackoff if a recent attempt to fetch a record failed.
-func lookup(ctx context.Context, domain dns.Domain) (*PolicyRecord, error) {
-	log := xlog.WithContext(ctx)
+func lookup(ctx context.Context, log mlog.Log, domain dns.Domain) (*PolicyRecord, error) {
 	db, err := database(ctx)
 	if err != nil {
 		return nil, err
@@ -222,8 +221,8 @@ func PolicyRecords(ctx context.Context) ([]PolicyRecord, error) {
 // Get returns an "sts" or "no-policy-found" in reportResult in most cases (when
 // not a local/internal error). It may add an "sts" result without policy contents
 // ("policy-string") in case of errors while fetching the policy.
-func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy *mtasts.Policy, reportResult tlsrpt.Result, fresh bool, err error) {
-	log := xlog.WithContext(ctx)
+func Get(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain dns.Domain) (policy *mtasts.Policy, reportResult tlsrpt.Result, fresh bool, err error) {
+	log := mlog.New("mtastsdb", elog)
 	defer func() {
 		result := "ok"
 		if err != nil && errors.Is(err, ErrBackoff) {
@@ -234,16 +233,16 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 			result = "error"
 		}
 		metricGet.WithLabelValues(result).Inc()
-		log.Debugx("mtastsdb get result", err, mlog.Field("domain", domain), mlog.Field("fresh", fresh))
+		log.Debugx("mtastsdb get result", err, slog.Any("domain", domain), slog.Bool("fresh", fresh))
 	}()
 
-	cachedPolicy, err := lookup(ctx, domain)
+	cachedPolicy, err := lookup(ctx, log, domain)
 	if err != nil && errors.Is(err, ErrNotFound) {
 		// We don't have a policy for this domain, not even a record that we tried recently
 		// and should backoff. So attempt to fetch policy.
 		nctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		record, p, ptext, err := mtasts.Get(nctx, resolver, domain)
+		record, p, ptext, err := mtasts.Get(nctx, log.Logger, resolver, domain)
 		if err != nil {
 			switch {
 			case errors.Is(err, mtasts.ErrNoRecord) || errors.Is(err, mtasts.ErrMultipleRecords) || errors.Is(err, mtasts.ErrRecordSyntax) || errors.Is(err, mtasts.ErrNoPolicy) || errors.Is(err, mtasts.ErrPolicyFetch) || errors.Is(err, mtasts.ErrPolicySyntax):
@@ -303,7 +302,7 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 	policy = &cachedPolicy.Policy
 	nctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	record, _, err := mtasts.LookupRecord(nctx, resolver, domain)
+	record, _, err := mtasts.LookupRecord(nctx, log.Logger, resolver, domain)
 	if err != nil {
 		if errors.Is(err, mtasts.ErrNoRecord) {
 			if policy.Mode != mtasts.ModeNone {
@@ -336,7 +335,7 @@ func Get(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (policy 
 	// didn't store the raw policy lines in the past.
 	nctx, cancel = context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	p, ptext, err := mtasts.FetchPolicy(nctx, domain)
+	p, ptext, err := mtasts.FetchPolicy(nctx, log.Logger, domain)
 	if err != nil {
 		log.Errorx("fetching updated policy for domain, continuing with previously cached policy", err)
 

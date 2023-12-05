@@ -57,7 +57,7 @@ func PrepareWordSearch(words, notWords []string) WordSearch {
 // The search terms are matched against content-transfer-decoded and
 // charset-decoded bodies and optionally headers.
 // HTML parts are currently treated as regular text, without parsing HTML.
-func (ws WordSearch) MatchPart(log *mlog.Log, p *message.Part, headerToo bool) (bool, error) {
+func (ws WordSearch) MatchPart(log mlog.Log, p *message.Part, headerToo bool) (bool, error) {
 	seen := map[int]bool{}
 	miss, err := ws.matchPart(log, p, headerToo, seen)
 	match := err == nil && !miss && len(seen) == len(ws.words)
@@ -73,7 +73,7 @@ func (ws WordSearch) isQuickHit(seen map[int]bool) bool {
 // search a part as text and/or its subparts, recursively. Once we know we have
 // a miss, we stop (either due to not-word match or error). In case of
 // non-miss, the caller checks if there was a hit.
-func (ws WordSearch) matchPart(log *mlog.Log, p *message.Part, headerToo bool, seen map[int]bool) (miss bool, rerr error) {
+func (ws WordSearch) matchPart(log mlog.Log, p *message.Part, headerToo bool, seen map[int]bool) (miss bool, rerr error) {
 	if headerToo {
 		miss, err := ws.searchReader(log, p.HeaderReader(), seen)
 		if miss || err != nil || ws.isQuickHit(seen) {
@@ -108,7 +108,7 @@ func (ws WordSearch) matchPart(log *mlog.Log, p *message.Part, headerToo bool, s
 	return false, nil
 }
 
-func (ws WordSearch) searchReader(log *mlog.Log, r io.Reader, seen map[int]bool) (miss bool, rerr error) {
+func (ws WordSearch) searchReader(log mlog.Log, r io.Reader, seen map[int]bool) (miss bool, rerr error) {
 	// We will be reading through the content, stopping as soon as we known an answer:
 	// when all words have been seen and there are no "not words" (true), or one "not
 	// word" has been seen (false). We use bytes.Contains to look for the words. We

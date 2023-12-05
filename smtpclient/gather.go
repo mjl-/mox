@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/adns"
 
 	"github.com/mjl-/mox/dns"
@@ -45,8 +47,10 @@ var (
 // were found, both the original and expanded next-hops must be authentic for DANE
 // to apply. For a non-IP with no MX records found, the authentic result can be
 // used to decide which of the names to use as TLSA base domain.
-func GatherDestinations(ctx context.Context, log *mlog.Log, resolver dns.Resolver, origNextHop dns.IPDomain) (haveMX, origNextHopAuthentic, expandedNextHopAuthentic bool, expandedNextHop dns.Domain, hosts []dns.IPDomain, permanent bool, err error) {
+func GatherDestinations(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, origNextHop dns.IPDomain) (haveMX, origNextHopAuthentic, expandedNextHopAuthentic bool, expandedNextHop dns.Domain, hosts []dns.IPDomain, permanent bool, err error) {
 	// ../rfc/5321:3824
+
+	log := mlog.New("smtpclient", elog)
 
 	// IP addresses are dialed directly, and don't have TLSA records.
 	if len(origNextHop.IP) > 0 {
@@ -167,7 +171,9 @@ func GatherDestinations(ctx context.Context, log *mlog.Log, resolver dns.Resolve
 // GatherIPs looks up the IPs to try for connecting to host, with the IPs ordered
 // to take previous attempts into account. For use with DANE, the CNAME-expanded
 // name is returned, and whether the DNS responses were authentic.
-func GatherIPs(ctx context.Context, log *mlog.Log, resolver dns.Resolver, host dns.IPDomain, dialedIPs map[string][]net.IP) (authentic bool, expandedAuthentic bool, expandedHost dns.Domain, ips []net.IP, dualstack bool, rerr error) {
+func GatherIPs(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, host dns.IPDomain, dialedIPs map[string][]net.IP) (authentic bool, expandedAuthentic bool, expandedHost dns.Domain, ips []net.IP, dualstack bool, rerr error) {
+	log := mlog.New("smtpclient", elog)
+
 	if len(host.IP) > 0 {
 		return false, false, dns.Domain{}, []net.IP{host.IP}, false, nil
 	}
@@ -250,7 +256,7 @@ func GatherIPs(ctx context.Context, log *mlog.Log, resolver dns.Resolver, host d
 			// Prefer "i" if it is the same as last and we should be preferring it.
 			return preferPrev && ips[i].Equal(prevIP)
 		})
-		log.Debug("ordered ips for dialing", mlog.Field("ips", ips))
+		log.Debug("ordered ips for dialing", slog.Any("ips", ips))
 	}
 	return
 }
@@ -268,7 +274,9 @@ func GatherIPs(ctx context.Context, log *mlog.Log, resolver dns.Resolver, host d
 // must do TLS, but not verify the remote TLS certificate.
 //
 // Returned values are always meaningful, also when an error was returned.
-func GatherTLSA(ctx context.Context, log *mlog.Log, resolver dns.Resolver, host dns.Domain, expandedAuthentic bool, expandedHost dns.Domain) (daneRequired bool, daneRecords []adns.TLSA, tlsaBaseDomain dns.Domain, err error) {
+func GatherTLSA(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, host dns.Domain, expandedAuthentic bool, expandedHost dns.Domain) (daneRequired bool, daneRecords []adns.TLSA, tlsaBaseDomain dns.Domain, err error) {
+	log := mlog.New("smtpclient", elog)
+
 	// ../rfc/7672:912
 	// This function is only called when the lookup of host was authentic.
 
@@ -288,32 +296,32 @@ func GatherTLSA(ctx context.Context, log *mlog.Log, resolver dns.Resolver, host 
 	}
 	if len(l) == 0 || err != nil {
 		daneRequired = err != nil
-		log.Debugx("gathering tlsa records failed", err, mlog.Field("danerequired", daneRequired), mlog.Field("basedomain", tlsaBaseDomain))
+		log.Debugx("gathering tlsa records failed", err, slog.Bool("danerequired", daneRequired), slog.Any("basedomain", tlsaBaseDomain))
 		return daneRequired, nil, tlsaBaseDomain, err
 	}
 	daneRequired = len(l) > 0
 	l = filterUsableTLSARecords(log, l)
-	log.Debug("tlsa records exist", mlog.Field("danerequired", daneRequired), mlog.Field("records", l), mlog.Field("basedomain", tlsaBaseDomain))
+	log.Debug("tlsa records exist", slog.Bool("danerequired", daneRequired), slog.Any("records", l), slog.Any("basedomain", tlsaBaseDomain))
 	return daneRequired, l, tlsaBaseDomain, err
 }
 
 // lookupTLSACNAME composes a TLSA domain name to lookup, follows CNAMEs and looks
 // up TLSA records. no TLSA records exist, a nil error is returned as it means
 // the host does not opt-in to DANE.
-func lookupTLSACNAME(ctx context.Context, log *mlog.Log, resolver dns.Resolver, port int, protocol string, host dns.Domain) (l []adns.TLSA, rerr error) {
+func lookupTLSACNAME(ctx context.Context, log mlog.Log, resolver dns.Resolver, port int, protocol string, host dns.Domain) (l []adns.TLSA, rerr error) {
 	name := fmt.Sprintf("_%d._%s.%s", port, protocol, host.ASCII+".")
 	for i := 0; ; i++ {
 		cname, result, err := resolver.LookupCNAME(ctx, name)
 		if dns.IsNotFound(err) {
 			if !result.Authentic {
-				log.Debugx("cname nxdomain result during tlsa lookup not authentic, not doing dane for host", err, mlog.Field("host", host), mlog.Field("name", name))
+				log.Debugx("cname nxdomain result during tlsa lookup not authentic, not doing dane for host", err, slog.Any("host", host), slog.String("name", name))
 				return nil, nil
 			}
 			break
 		} else if err != nil {
 			return nil, fmt.Errorf("looking up cname for tlsa candidate base domain: %w", err)
 		} else if !result.Authentic {
-			log.Debugx("cname result during tlsa lookup not authentic, not doing dane for host", err, mlog.Field("host", host), mlog.Field("name", name))
+			log.Debugx("cname result during tlsa lookup not authentic, not doing dane for host", err, slog.Any("host", host), slog.String("name", name))
 			return nil, nil
 		}
 		if i == 10 {
@@ -325,18 +333,18 @@ func lookupTLSACNAME(ctx context.Context, log *mlog.Log, resolver dns.Resolver, 
 	var err error
 	l, result, err = resolver.LookupTLSA(ctx, 0, "", name)
 	if dns.IsNotFound(err) || err == nil && len(l) == 0 {
-		log.Debugx("no tlsa records for host, not doing dane", err, mlog.Field("host", host), mlog.Field("name", name), mlog.Field("authentic", result.Authentic))
+		log.Debugx("no tlsa records for host, not doing dane", err, slog.Any("host", host), slog.String("name", name), slog.Bool("authentic", result.Authentic))
 		return nil, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("looking up tlsa records for tlsa candidate base domain: %w", err)
 	} else if !result.Authentic {
-		log.Debugx("tlsa lookup not authentic, not doing dane for host", err, mlog.Field("host", host), mlog.Field("name", name))
+		log.Debugx("tlsa lookup not authentic, not doing dane for host", err, slog.Any("host", host), slog.String("name", name))
 		return nil, nil
 	}
 	return l, nil
 }
 
-func filterUsableTLSARecords(log *mlog.Log, l []adns.TLSA) []adns.TLSA {
+func filterUsableTLSARecords(log mlog.Log, l []adns.TLSA) []adns.TLSA {
 	// Gather "usable" records. ../rfc/7672:708
 	o := 0
 	for _, r := range l {
@@ -368,12 +376,12 @@ func filterUsableTLSARecords(log *mlog.Log, l []adns.TLSA) []adns.TLSA {
 			}
 		case adns.TLSAMatchTypeSHA256:
 			if len(r.CertAssoc) != sha256.Size {
-				log.Debug("dane tlsa record with wrong data size for sha2-256", mlog.Field("got", len(r.CertAssoc)), mlog.Field("expect", sha256.Size))
+				log.Debug("dane tlsa record with wrong data size for sha2-256", slog.Int("got", len(r.CertAssoc)), slog.Int("expect", sha256.Size))
 				continue
 			}
 		case adns.TLSAMatchTypeSHA512:
 			if len(r.CertAssoc) != sha512.Size {
-				log.Debug("dane tlsa record with wrong data size for sha2-512", mlog.Field("got", len(r.CertAssoc)), mlog.Field("expect", sha512.Size))
+				log.Debug("dane tlsa record with wrong data size for sha2-512", slog.Int("got", len(r.CertAssoc)), slog.Int("expect", sha512.Size))
 				continue
 			}
 		default:

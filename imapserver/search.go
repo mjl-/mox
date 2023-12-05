@@ -5,10 +5,11 @@ import (
 	"net/textproto"
 	"strings"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/message"
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/store"
 )
 
@@ -393,7 +394,7 @@ func (s *search) match0(sk searchKey) bool {
 		lower := strings.ToLower(value)
 		h, err := s.p.Header()
 		if err != nil {
-			c.log.Debugx("parsing message header", err, mlog.Field("uid", s.uid))
+			c.log.Debugx("parsing message header", err, slog.Any("uid", s.uid))
 			return false
 		}
 		for _, v := range h.Values(field) {
@@ -517,7 +518,7 @@ func (s *search) match0(sk searchKey) bool {
 	}
 
 	if s.p == nil {
-		c.log.Info("missing parsed message, not matching", mlog.Field("uid", s.uid))
+		c.log.Info("missing parsed message, not matching", slog.Any("uid", s.uid))
 		return false
 	}
 
@@ -546,7 +547,7 @@ func (s *search) match0(sk searchKey) bool {
 		lower := strings.ToLower(sk.astring)
 		h, err := s.p.Header()
 		if err != nil {
-			c.log.Errorx("parsing header for search", err, mlog.Field("uid", s.uid))
+			c.log.Errorx("parsing header for search", err, slog.Any("uid", s.uid))
 			return false
 		}
 		k := textproto.CanonicalMIMEHeaderKey(sk.headerField)

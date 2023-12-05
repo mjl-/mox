@@ -13,6 +13,7 @@ import (
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 )
 
@@ -66,6 +67,8 @@ func TestAdminAuth(t *testing.T) {
 
 func TestCheckDomain(t *testing.T) {
 	// NOTE: we aren't currently looking at the results, having the code paths executed is better than nothing.
+
+	log := mlog.New("webadmin", nil)
 
 	resolver := dns.MockResolver{
 		MX: map[string][]*net.MX{
@@ -130,6 +133,6 @@ func TestCheckDomain(t *testing.T) {
 	checkDomain(ctxbg, resolver, dialer, "mox.example")
 	// todo: check returned data
 
-	Admin{}.Domains(ctxbg)        // todo: check results
-	dnsblsStatus(ctxbg, resolver) // todo: check results
+	Admin{}.Domains(ctxbg)             // todo: check results
+	dnsblsStatus(ctxbg, log, resolver) // todo: check results
 }

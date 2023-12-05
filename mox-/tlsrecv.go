@@ -1,14 +1,16 @@
-package message
+package mox
 
 import (
 	"crypto/tls"
 	"fmt"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/mox/mlog"
 )
 
 // TLSReceivedComment returns a comment about TLS of the connection for use in a Receive header.
-func TLSReceivedComment(log *mlog.Log, cs tls.ConnectionState) []string {
+func TLSReceivedComment(log mlog.Log, cs tls.ConnectionState) []string {
 	// todo future: we could use the "tls" clause for the Received header as specified in ../rfc/8314:496. however, the text implies it is only for submission, not regular smtp. and it cannot specify the tls version. for now, not worth the trouble.
 
 	// Comments from other mail servers:
@@ -32,7 +34,7 @@ func TLSReceivedComment(log *mlog.Log, cs tls.ConnectionState) []string {
 	if version, ok := versions[cs.Version]; ok {
 		add(version)
 	} else {
-		log.Info("unknown tls version identifier", mlog.Field("version", cs.Version))
+		log.Info("unknown tls version identifier", slog.Any("version", cs.Version))
 		add(fmt.Sprintf("TLS identifier %x", cs.Version))
 	}
 

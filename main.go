@@ -32,6 +32,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/exp/slices"
+	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/adns"
 
@@ -211,6 +212,8 @@ type cmd struct {
 	params   string // Arguments to command. Multiple lines possible.
 	help     string // Additional explanation. First line is synopsis, the rest is only printed for an explicit help/usage for that command.
 	args     []string
+
+	log mlog.Log
 }
 
 func (c *cmd) Parse() []string {
@@ -388,7 +391,7 @@ func mustLoadConfig() {
 		mox.Conf.Log[""] = level
 		mlog.SetConfig(mox.Conf.Log)
 	} else if loglevel != "" && !ok {
-		log.Fatal("unknown loglevel", mlog.Field("loglevel", loglevel))
+		log.Fatal("unknown loglevel", slog.String("loglevel", loglevel))
 	}
 	if pedantic {
 		moxvar.Pedantic = true
@@ -413,6 +416,7 @@ func main() {
 		c := &cmd{
 			flag:     flag.NewFlagSet("sendmail", flag.ExitOnError),
 			flagArgs: os.Args[1:],
+			log:      mlog.New("sendmail", nil),
 		}
 		cmdSendmail(c)
 		return
@@ -464,6 +468,7 @@ next:
 		}
 		c.flag = flag.NewFlagSet("mox "+strings.Join(c.words, " "), flag.ExitOnError)
 		c.flagArgs = args[len(c.words):]
+		c.log = mlog.New(strings.Join(c.words, ""), nil)
 		c.fn(&c)
 		return
 	}
@@ -538,7 +543,7 @@ are printed.
 
 	mox.FilesImmediate = true
 
-	_, errs := mox.ParseConfig(context.Background(), mox.ConfigStaticPath, true, true, false)
+	_, errs := mox.ParseConfig(context.Background(), c.log, mox.ConfigStaticPath, true, true, false)
 	if len(errs) > 1 {
 		log.Printf("multiple errors:")
 		for _, err := range errs {
@@ -1596,7 +1601,7 @@ connection.
 	}
 
 	resolver := dns.StrictResolver{Pkg: "danedial"}
-	conn, record, err := dane.Dial(context.Background(), resolver, "tcp", args[0], allowedUsages)
+	conn, record, err := dane.Dial(context.Background(), c.log.Logger, resolver, "tcp", args[0], allowedUsages)
 	xcheckf(err, "dial")
 	log.Printf("(connected, verified with %s)", record)
 
@@ -1644,8 +1649,6 @@ sharing most of its code.
 	origNextHop, err := dns.ParseDomain(args[0])
 	xcheckf(err, "parse domain")
 
-	clog := mlog.New("danedialmx")
-
 	ctxbg := context.Background()
 
 	resolver := dns.StrictResolver{}
@@ -1655,7 +1658,7 @@ sharing most of its code.
 	var hosts []dns.IPDomain
 	if len(args) == 1 {
 		var permanent bool
-		haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, permanent, err = smtpclient.GatherDestinations(ctxbg, clog, resolver, dns.IPDomain{Domain: origNextHop})
+		haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, permanent, err = smtpclient.GatherDestinations(ctxbg, c.log.Logger, resolver, dns.IPDomain{Domain: origNextHop})
 		status := "temporary"
 		if permanent {
 			status = "permanent"
@@ -1706,7 +1709,7 @@ sharing most of its code.
 
 		log.Printf("attempting to connect to %s", host)
 
-		authentic, expandedAuthentic, expandedHost, ips, _, err := smtpclient.GatherIPs(ctxbg, clog, resolver, host, dialedIPs)
+		authentic, expandedAuthentic, expandedHost, ips, _, err := smtpclient.GatherIPs(ctxbg, c.log.Logger, resolver, host, dialedIPs)
 		if err != nil {
 			log.Printf("resolving ips for %s: %v, skipping", host, err)
 			continue
@@ -1724,7 +1727,7 @@ sharing most of its code.
 		}
 		log.Printf("host %s resolved to ips %s, looking up tlsa records", host, ips)
 
-		daneRequired, daneRecords, tlsaBaseDomain, err := smtpclient.GatherTLSA(ctxbg, clog, resolver, host.Domain, expandedAuthentic, expandedHost)
+		daneRequired, daneRecords, tlsaBaseDomain, err := smtpclient.GatherTLSA(ctxbg, c.log.Logger, resolver, host.Domain, expandedAuthentic, expandedHost)
 		if err != nil {
 			log.Printf("looking up tlsa records: %s, skipping", err)
 			continue
@@ -1753,7 +1756,7 @@ sharing most of its code.
 		log.Printf("gathered valid tls certificate names for potential verification with dane-ta: %s", strings.Join(l, ", "))
 
 		dialer := &net.Dialer{Timeout: 5 * time.Second}
-		conn, _, err := smtpclient.Dial(ctxbg, clog, dialer, dns.IPDomain{Domain: expandedHost}, ips, 25, dialedIPs)
+		conn, _, err := smtpclient.Dial(ctxbg, c.log.Logger, dialer, dns.IPDomain{Domain: expandedHost}, ips, 25, dialedIPs)
 		if err != nil {
 			log.Printf("dial %s: %v, skipping", expandedHost, err)
 			continue
@@ -1768,7 +1771,7 @@ sharing most of its code.
 			RootCAs:            mox.Conf.Static.TLS.CertPool,
 		}
 		tlsPKIX := false
-		sc, err := smtpclient.New(ctxbg, clog, conn, tlsMode, tlsPKIX, ehloDomain, tlsHostnames[0], opts)
+		sc, err := smtpclient.New(ctxbg, c.log.Logger, conn, tlsMode, tlsPKIX, ehloDomain, tlsHostnames[0], opts)
 		if err != nil {
 			log.Printf("setting up smtp session: %v, skipping", err)
 			conn.Close()
@@ -2175,7 +2178,7 @@ that was passed.
 	msgf, err := os.Open(args[0])
 	xcheckf(err, "open message")
 
-	results, err := dkim.Verify(context.Background(), dns.StrictResolver{}, false, dkim.DefaultPolicy, msgf, true)
+	results, err := dkim.Verify(context.Background(), c.log.Logger, dns.StrictResolver{}, false, dkim.DefaultPolicy, msgf, true)
 	xcheckf(err, "dkim verify")
 
 	for _, result := range results {
@@ -2214,13 +2217,11 @@ headers prepended.
 		c.Usage()
 	}
 
-	clog := mlog.New("dkimsign")
-
 	msgf, err := os.Open(args[0])
 	xcheckf(err, "open message")
 	defer msgf.Close()
 
-	p, err := message.Parse(clog, true, msgf)
+	p, err := message.Parse(c.log.Logger, true, msgf)
 	xcheckf(err, "parsing message")
 
 	if len(p.Envelope.From) != 1 {
@@ -2237,7 +2238,7 @@ headers prepended.
 		log.Fatalf("domain %s not configured", dom)
 	}
 
-	headers, err := dkim.Sign(context.Background(), localpart, dom, domConf.DKIM, false, msgf)
+	headers, err := dkim.Sign(context.Background(), c.log.Logger, localpart, dom, domConf.DKIM, false, msgf)
 	xcheckf(err, "signing message with dkim")
 	if headers == "" {
 		log.Fatalf("no DKIM configured for domain %s", dom)
@@ -2259,7 +2260,7 @@ func cmdDKIMLookup(c *cmd) {
 	selector := xparseDomain(args[0], "selector")
 	domain := xparseDomain(args[1], "domain")
 
-	status, record, txt, authentic, err := dkim.Lookup(context.Background(), dns.StrictResolver{}, selector, domain)
+	status, record, txt, authentic, err := dkim.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, selector, domain)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
@@ -2299,7 +2300,7 @@ func cmdDMARCLookup(c *cmd) {
 	}
 
 	fromdomain := xparseDomain(args[0], "domain")
-	_, domain, _, txt, authentic, err := dmarc.Lookup(context.Background(), dns.StrictResolver{}, fromdomain)
+	_, domain, _, txt, authentic, err := dmarc.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, fromdomain)
 	xcheckf(err, "dmarc lookup domain %s", fromdomain)
 	fmt.Printf("dmarc record at domain %s: %s\n", domain, txt)
 	fmt.Printf("(%s)\n", dnssecStatus(authentic))
@@ -2359,7 +2360,7 @@ can be found in message headers.
 		if heloDomain != nil {
 			spfArgs.HelloDomain = dns.IPDomain{Domain: *heloDomain}
 		}
-		rspf, spfDomain, expl, authentic, err := spf.Verify(context.Background(), dns.StrictResolver{}, spfArgs)
+		rspf, spfDomain, expl, authentic, err := spf.Verify(context.Background(), c.log.Logger, dns.StrictResolver{}, spfArgs)
 		if err != nil {
 			log.Printf("spf verify: %v (explanation: %q, authentic %v)", err, expl, authentic)
 		} else {
@@ -2377,17 +2378,17 @@ can be found in message headers.
 
 	data, err := io.ReadAll(os.Stdin)
 	xcheckf(err, "read message")
-	dmarcFrom, _, _, err := message.From(mlog.New("dmarcverify"), false, bytes.NewReader(data))
+	dmarcFrom, _, _, err := message.From(c.log.Logger, false, bytes.NewReader(data))
 	xcheckf(err, "extract dmarc from message")
 
 	const ignoreTestMode = false
-	dkimResults, err := dkim.Verify(context.Background(), dns.StrictResolver{}, true, func(*dkim.Sig) error { return nil }, bytes.NewReader(data), ignoreTestMode)
+	dkimResults, err := dkim.Verify(context.Background(), c.log.Logger, dns.StrictResolver{}, true, func(*dkim.Sig) error { return nil }, bytes.NewReader(data), ignoreTestMode)
 	xcheckf(err, "dkim verify")
 	for _, r := range dkimResults {
 		fmt.Printf("dkim result: %q (err %v)\n", r.Status, r.Err)
 	}
 
-	_, result := dmarc.Verify(context.Background(), dns.StrictResolver{}, dmarcFrom.Domain, dkimResults, spfStatus, spfIdentity, false)
+	_, result := dmarc.Verify(context.Background(), c.log.Logger, dns.StrictResolver{}, dmarcFrom.Domain, dkimResults, spfStatus, spfIdentity, false)
 	xcheckf(result.Err, "dmarc verify")
 	fmt.Printf("dmarc from: %s\ndmarc status: %q\ndmarc reject: %v\ncmarc record: %s\n", dmarcFrom, result.Status, result.Reject, result.Record)
 }
@@ -2408,7 +2409,7 @@ address must opt-in to receiving DMARC reports by creating a DMARC record at
 	}
 
 	dom := xparseDomain(args[0], "domain")
-	_, domain, record, txt, authentic, err := dmarc.Lookup(context.Background(), dns.StrictResolver{}, dom)
+	_, domain, record, txt, authentic, err := dmarc.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, dom)
 	xcheckf(err, "dmarc lookup domain %s", dom)
 	fmt.Printf("dmarc record at domain %s: %q\n", domain, txt)
 	fmt.Printf("(%s)\n", dnssecStatus(authentic))
@@ -2439,12 +2440,12 @@ address must opt-in to receiving DMARC reports by creating a DMARC record at
 			return
 		}
 
-		if publicsuffix.Lookup(context.Background(), dom) == publicsuffix.Lookup(context.Background(), destdom) {
+		if publicsuffix.Lookup(context.Background(), c.log.Logger, dom) == publicsuffix.Lookup(context.Background(), c.log.Logger, destdom) {
 			printResult("pass (same organizational domain)")
 			return
 		}
 
-		accepts, status, _, txts, authentic, err := dmarc.LookupExternalReportsAccepted(context.Background(), dns.StrictResolver{}, domain, destdom)
+		accepts, status, _, txts, authentic, err := dmarc.LookupExternalReportsAccepted(context.Background(), c.log.Logger, dns.StrictResolver{}, domain, destdom)
 		var txtstr string
 		txtaddr := fmt.Sprintf("%s._report._dmarc.%s", domain.ASCII, destdom.ASCII)
 		if len(txts) == 0 {
@@ -2486,12 +2487,10 @@ understand email deliverability problems.
 		c.Usage()
 	}
 
-	clog := mlog.New("dmarcparsereportmsg")
-
 	for _, arg := range args {
 		f, err := os.Open(arg)
 		xcheckf(err, "open %q", arg)
-		feedback, err := dmarcrpt.ParseMessageReport(clog, f)
+		feedback, err := dmarcrpt.ParseMessageReport(c.log.Logger, f)
 		xcheckf(err, "parse report in %q", arg)
 		meta := feedback.ReportMetadata
 		fmt.Printf("Report: period %s-%s, organisation %q, reportID %q, %s\n", time.Unix(meta.DateRange.Begin, 0).UTC().String(), time.Unix(meta.DateRange.End, 0).UTC().String(), meta.OrgName, meta.ReportID, meta.Email)
@@ -2540,11 +2539,9 @@ func cmdDMARCDBAddReport(c *cmd) {
 
 	mustLoadConfig()
 
-	clog := mlog.New("dmarcdbaddreport")
-
 	fromdomain := xparseDomain(args[0], "domain")
 	fmt.Fprintln(os.Stderr, "reading report message from stdin")
-	report, err := dmarcrpt.ParseMessageReport(clog, os.Stdin)
+	report, err := dmarcrpt.ParseMessageReport(c.log.Logger, os.Stdin)
 	xcheckf(err, "parse message")
 	err = dmarcdb.AddReport(context.Background(), report, fromdomain)
 	xcheckf(err, "add dmarc report")
@@ -2565,7 +2562,7 @@ successfully used TLS, and how what kind of errors occurred otherwise.
 	}
 
 	d := xparseDomain(args[0], "domain")
-	_, txt, err := tlsrpt.Lookup(context.Background(), dns.StrictResolver{}, d)
+	_, txt, err := tlsrpt.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, d)
 	xcheckf(err, "tlsrpt lookup for %s", d)
 	fmt.Println(txt)
 }
@@ -2581,12 +2578,10 @@ The report is printed in formatted JSON.
 		c.Usage()
 	}
 
-	clog := mlog.New("tlsrptparsereportmsg")
-
 	for _, arg := range args {
 		f, err := os.Open(arg)
 		xcheckf(err, "open %q", arg)
-		report, err := tlsrpt.ParseMessage(clog, f)
+		report, err := tlsrpt.ParseMessage(c.log.Logger, f)
 		xcheckf(err, "parse report in %q", arg)
 		// todo future: only print the highlights?
 		enc := json.NewEncoder(os.Stdout)
@@ -2622,7 +2617,7 @@ printed.
 		LocalIP:           net.ParseIP("127.0.0.1"),
 		LocalHostname:     dns.Domain{ASCII: "localhost"},
 	}
-	r, _, explanation, authentic, err := spf.Verify(context.Background(), dns.StrictResolver{}, spfargs)
+	r, _, explanation, authentic, err := spf.Verify(context.Background(), c.log.Logger, dns.StrictResolver{}, spfargs)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
@@ -2656,7 +2651,7 @@ func cmdSPFLookup(c *cmd) {
 	}
 
 	domain := xparseDomain(args[0], "domain")
-	_, txt, _, authentic, err := spf.Lookup(context.Background(), dns.StrictResolver{}, domain)
+	_, txt, _, authentic, err := spf.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, domain)
 	xcheckf(err, "spf lookup for %s", domain)
 	fmt.Println(txt)
 	fmt.Printf("(%s)\n", dnssecStatus(authentic))
@@ -2680,7 +2675,7 @@ should be used, and how long the policy can be cached.
 
 	domain := xparseDomain(args[0], "domain")
 
-	record, policy, _, err := mtasts.Get(context.Background(), dns.StrictResolver{}, domain)
+	record, policy, _, err := mtasts.Get(context.Background(), c.log.Logger, dns.StrictResolver{}, domain)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
@@ -2729,13 +2724,11 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 
 	mustLoadConfig()
 
-	clog := mlog.New("tlsrptdbaddreport")
-
 	// First read message, to get the From-header. Then parse it as TLSRPT.
 	fmt.Fprintln(os.Stderr, "reading report message from stdin")
 	buf, err := io.ReadAll(os.Stdin)
 	xcheckf(err, "reading message")
-	part, err := message.Parse(clog, true, bytes.NewReader(buf))
+	part, err := message.Parse(c.log.Logger, true, bytes.NewReader(buf))
 	xcheckf(err, "parsing message")
 	if part.Envelope == nil || len(part.Envelope.From) != 1 {
 		log.Fatalf("message must have one From-header")
@@ -2743,11 +2736,11 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 	from := part.Envelope.From[0]
 	domain := xparseDomain(from.Host, "domain")
 
-	report, err := tlsrpt.ParseMessage(clog, bytes.NewReader(buf))
+	report, err := tlsrpt.ParseMessage(c.log.Logger, bytes.NewReader(buf))
 	xcheckf(err, "parsing tls report in message")
 
 	mailfrom := from.User + "@" + from.Host // todo future: should escape and such
-	err = tlsrptdb.AddReport(context.Background(), domain, mailfrom, hostReport, report)
+	err = tlsrptdb.AddReport(context.Background(), c.log, domain, mailfrom, hostReport, report)
 	xcheckf(err, "add tls report to database")
 }
 
@@ -2766,7 +2759,7 @@ URL with more information.
 	zone := xparseDomain(args[0], "zone")
 	ip := xparseIP(args[1], "ip")
 
-	status, explanation, err := dnsbl.Lookup(context.Background(), dns.StrictResolver{}, zone, ip)
+	status, explanation, err := dnsbl.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, zone, ip)
 	fmt.Printf("status: %s\n", status)
 	if status == dnsbl.StatusFail {
 		fmt.Printf("explanation: %q\n", explanation)
@@ -2789,7 +2782,7 @@ The health of a DNS blocklist can be checked by querying for 127.0.0.1 and
 	}
 
 	zone := xparseDomain(args[0], "zone")
-	err := dnsbl.CheckHealth(context.Background(), dns.StrictResolver{}, zone)
+	err := dnsbl.CheckHealth(context.Background(), c.log.Logger, dns.StrictResolver{}, zone)
 	xcheckf(err, "unhealthy")
 	fmt.Println("healthy")
 }
@@ -2814,12 +2807,12 @@ printed.
 		fmt.Printf("last known version: %s\n", lastknown)
 		fmt.Printf("current version: %s\n", current)
 	}
-	latest, _, err := updates.Lookup(context.Background(), dns.StrictResolver{}, dns.Domain{ASCII: changelogDomain})
+	latest, _, err := updates.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, dns.Domain{ASCII: changelogDomain})
 	xcheckf(err, "lookup of latest version")
 	fmt.Printf("latest version: %s\n", latest)
 
 	if latest.After(current) {
-		changelog, err := updates.FetchChangelog(context.Background(), changelogURL, current, changelogPubKey)
+		changelog, err := updates.FetchChangelog(context.Background(), c.log.Logger, changelogURL, current, changelogPubKey)
 		xcheckf(err, "fetching changelog")
 		if len(changelog.Changes) == 0 {
 			log.Printf("no changes in changelog")
@@ -2884,7 +2877,7 @@ open, or is not running.
 	}
 
 	mustLoadConfig()
-	a, err := store.OpenAccount(args[0])
+	a, err := store.OpenAccount(c.log, args[0])
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -2942,7 +2935,7 @@ open, or is not running.
 	}
 
 	mustLoadConfig()
-	a, err := store.OpenAccount(args[0])
+	a, err := store.OpenAccount(c.log, args[0])
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -3036,7 +3029,7 @@ open, or is not running.
 	}
 
 	mustLoadConfig()
-	a, err := store.OpenAccount(args[0])
+	a, err := store.OpenAccount(c.log, args[0])
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -3156,10 +3149,8 @@ func cmdEnsureParsed(c *cmd) {
 		c.Usage()
 	}
 
-	clog := mlog.New("ensureparsed")
-
 	mustLoadConfig()
-	a, err := store.OpenAccount(args[0])
+	a, err := store.OpenAccount(c.log, args[0])
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -3180,7 +3171,7 @@ func cmdEnsureParsed(c *cmd) {
 		}
 		for _, m := range l {
 			mr := a.MessageReader(m)
-			p, err := message.EnsurePart(clog, false, mr, m.Size)
+			p, err := message.EnsurePart(c.log.Logger, false, mr, m.Size)
 			if err != nil {
 				log.Printf("parsing message %d: %v (continuing)", m.ID, err)
 			}
@@ -3233,15 +3224,13 @@ func cmdMessageParse(c *cmd) {
 		c.Usage()
 	}
 
-	clog := mlog.New("messageparse")
-
 	f, err := os.Open(args[0])
 	xcheckf(err, "open")
 	defer f.Close()
 
-	part, err := message.Parse(clog, false, f)
+	part, err := message.Parse(c.log.Logger, false, f)
 	xcheckf(err, "parsing message")
-	err = part.Walk(clog, nil)
+	err = part.Walk(c.log.Logger, nil)
 	xcheckf(err, "parsing nested parts")
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "\t")
@@ -3262,15 +3251,13 @@ Opens database files directly, not going through a running mox instance.
 		c.Usage()
 	}
 
-	clog := mlog.New("openaccounts")
-
 	dataDir := filepath.Clean(args[0])
 	for _, accName := range args[1:] {
 		accDir := filepath.Join(dataDir, "accounts", accName)
 		log.Printf("opening account %s...", accDir)
-		a, err := store.OpenAccountDB(accDir, accName)
+		a, err := store.OpenAccountDB(c.log, accDir, accName)
 		xcheckf(err, "open account %s", accName)
-		err = a.ThreadingWait(clog)
+		err = a.ThreadingWait(c.log)
 		xcheckf(err, "wait for threading upgrade to complete for %s", accName)
 		err = a.Close()
 		xcheckf(err, "close account %s", accName)
@@ -3363,7 +3350,7 @@ Opens database files directly, not going through a running mox instance.
 	for _, accName := range args[1:] {
 		accDir := filepath.Join(dataDir, "accounts", accName)
 		log.Printf("opening account %s...", accDir)
-		a, err := store.OpenAccountDB(accDir, accName)
+		a, err := store.OpenAccountDB(c.log, accDir, accName)
 		xcheckf(err, "open account %s", accName)
 
 		prepareMessages := func(in, out chan moxio.Work[store.Message, threadPrep]) {

@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/mox/mlog"
 )
 
@@ -14,7 +16,7 @@ import (
 // ensure the file is written on disk. Callers should also sync the directory of
 // the destination file, but may want to do that after linking/copying multiple
 // files. If dst was created and an error occurred, it is removed.
-func LinkOrCopy(log *mlog.Log, dst, src string, srcReaderOpt io.Reader, sync bool) (rerr error) {
+func LinkOrCopy(log mlog.Log, dst, src string, srcReaderOpt io.Reader, sync bool) (rerr error) {
 	// Try hardlink first.
 	err := os.Link(src, dst)
 	if err == nil {
@@ -48,7 +50,7 @@ func LinkOrCopy(log *mlog.Log, dst, src string, srcReaderOpt io.Reader, sync boo
 			err := df.Close()
 			log.Check(err, "closing partial destination file")
 			err = os.Remove(dst)
-			log.Check(err, "removing partial destination file", mlog.Field("path", dst))
+			log.Check(err, "removing partial destination file", slog.String("path", dst))
 		}
 	}()
 
@@ -64,7 +66,7 @@ func LinkOrCopy(log *mlog.Log, dst, src string, srcReaderOpt io.Reader, sync boo
 	df = nil
 	if err != nil {
 		err := os.Remove(dst)
-		log.Check(err, "removing partial destination file", mlog.Field("path", dst))
+		log.Check(err, "removing partial destination file", slog.String("path", dst))
 		return err
 	}
 	return nil

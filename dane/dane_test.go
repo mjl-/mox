@@ -17,9 +17,10 @@ import (
 	"reflect"
 	"strconv"
 	"sync/atomic"
+	"testing"
 	"time"
 
-	"testing"
+	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/adns"
 
@@ -37,7 +38,8 @@ func tcheckf(t *testing.T, err error, format string, args ...any) {
 
 // Test dialing and DANE TLS verification.
 func TestDial(t *testing.T) {
-	mlog.SetConfig(map[string]mlog.Level{"": mlog.LevelDebug})
+	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelDebug})
+	log := mlog.New("dane", nil)
 
 	// Create fake CA/trusted-anchor certificate.
 	taTempl := x509.Certificate{
@@ -139,7 +141,7 @@ func TestDial(t *testing.T) {
 	test := func(resolver dns.Resolver, expRecord adns.TLSA, expErr any) {
 		t.Helper()
 
-		conn, record, err := Dial(context.Background(), resolver, "tcp", net.JoinHostPort(dialHost, portstr), allowedUsages)
+		conn, record, err := Dial(context.Background(), log.Logger, resolver, "tcp", net.JoinHostPort(dialHost, portstr), allowedUsages)
 		if err == nil {
 			conn.Close()
 		}

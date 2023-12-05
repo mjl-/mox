@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -29,8 +31,6 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
 )
-
-var xlog = mlog.New("updates")
 
 var (
 	metricLookup = promauto.NewHistogramVec(
@@ -81,8 +81,8 @@ type Changelog struct {
 
 // Lookup looks up the updates DNS TXT record at "_updates.<domain>" and returns
 // the parsed form.
-func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rversion Version, rrecord *Record, rerr error) {
-	log := xlog.WithContext(ctx)
+func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain dns.Domain) (rversion Version, rrecord *Record, rerr error) {
+	log := mlog.New("updates", elog)
 	start := time.Now()
 	defer func() {
 		var result = "ok"
@@ -90,7 +90,7 @@ func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rver
 			result = "error"
 		}
 		metricLookup.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("updates lookup result", rerr, mlog.Field("domain", domain), mlog.Field("version", rversion), mlog.Field("record", rrecord), mlog.Field("duration", time.Since(start)))
+		log.Debugx("updates lookup result", rerr, slog.Any("domain", domain), slog.Any("version", rversion), slog.Any("record", rrecord), slog.Duration("duration", time.Since(start)))
 	}()
 
 	nctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -132,8 +132,8 @@ func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rver
 // error is returned.
 //
 // A changelog can be maximum 1 MB.
-func FetchChangelog(ctx context.Context, baseURL string, base Version, pubKey []byte) (changelog *Changelog, rerr error) {
-	log := xlog.WithContext(ctx)
+func FetchChangelog(ctx context.Context, elog *slog.Logger, baseURL string, base Version, pubKey []byte) (changelog *Changelog, rerr error) {
+	log := mlog.New("updates", elog)
 	start := time.Now()
 	defer func() {
 		var result = "ok"
@@ -141,7 +141,7 @@ func FetchChangelog(ctx context.Context, baseURL string, base Version, pubKey []
 			result = "error"
 		}
 		metricFetchChangelog.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("updates fetch changelog result", rerr, mlog.Field("baseurl", baseURL), mlog.Field("base", base), mlog.Field("duration", time.Since(start)))
+		log.Debugx("updates fetch changelog result", rerr, slog.String("baseurl", baseURL), slog.Any("base", base), slog.Duration("duration", time.Since(start)))
 	}()
 
 	url := baseURL + "?from=" + base.String()
@@ -156,7 +156,7 @@ func FetchChangelog(ctx context.Context, baseURL string, base Version, pubKey []
 	if resp == nil {
 		resp = &http.Response{StatusCode: 0}
 	}
-	metrics.HTTPClientObserve(ctx, "updates", req.Method, resp.StatusCode, err, start)
+	metrics.HTTPClientObserve(ctx, log, "updates", req.Method, resp.StatusCode, err, start)
 	if err != nil {
 		return nil, fmt.Errorf("%w: making http request: %s", ErrChangelogFetch, err)
 	}
@@ -182,20 +182,20 @@ func FetchChangelog(ctx context.Context, baseURL string, base Version, pubKey []
 
 // Check checks for an updated version through DNS and fetches a
 // changelog if so.
-func Check(ctx context.Context, resolver dns.Resolver, domain dns.Domain, lastKnown Version, changelogBaseURL string, pubKey []byte) (rversion Version, rrecord *Record, changelog *Changelog, rerr error) {
-	log := xlog.WithContext(ctx)
+func Check(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain dns.Domain, lastKnown Version, changelogBaseURL string, pubKey []byte) (rversion Version, rrecord *Record, changelog *Changelog, rerr error) {
+	log := mlog.New("updates", elog)
 	start := time.Now()
 	defer func() {
-		log.Debugx("updates check result", rerr, mlog.Field("domain", domain), mlog.Field("lastknown", lastKnown), mlog.Field("changelogbaseurl", changelogBaseURL), mlog.Field("version", rversion), mlog.Field("record", rrecord), mlog.Field("duration", time.Since(start)))
+		log.Debugx("updates check result", rerr, slog.Any("domain", domain), slog.Any("lastknown", lastKnown), slog.String("changelogbaseurl", changelogBaseURL), slog.Any("version", rversion), slog.Any("record", rrecord), slog.Duration("duration", time.Since(start)))
 	}()
 
-	latest, record, err := Lookup(ctx, resolver, domain)
+	latest, record, err := Lookup(ctx, log.Logger, resolver, domain)
 	if err != nil {
 		return latest, record, nil, err
 	}
 
 	if latest.After(lastKnown) {
-		changelog, err = FetchChangelog(ctx, changelogBaseURL, lastKnown, pubKey)
+		changelog, err = FetchChangelog(ctx, log.Logger, changelogBaseURL, lastKnown, pubKey)
 	}
 	return latest, record, changelog, err
 }

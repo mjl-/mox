@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -51,7 +53,8 @@ type Dialer interface {
 // If we have fully specified local SMTP listener IPs, we set those for the
 // outgoing connection. The admin probably configured these same IPs in SPF, but
 // others possibly not.
-func Dial(ctx context.Context, log *mlog.Log, dialer Dialer, host dns.IPDomain, ips []net.IP, port int, dialedIPs map[string][]net.IP) (conn net.Conn, ip net.IP, rerr error) {
+func Dial(ctx context.Context, elog *slog.Logger, dialer Dialer, host dns.IPDomain, ips []net.IP, port int, dialedIPs map[string][]net.IP) (conn net.Conn, ip net.IP, rerr error) {
+	log := mlog.New("smtpclient", elog)
 	timeout := 30 * time.Second
 	if deadline, ok := ctx.Deadline(); ok && len(ips) > 0 {
 		timeout = time.Until(deadline) / time.Duration(len(ips))
@@ -61,7 +64,7 @@ func Dial(ctx context.Context, log *mlog.Log, dialer Dialer, host dns.IPDomain, 
 	var lastIP net.IP
 	for _, ip := range ips {
 		addr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
-		log.Debug("dialing host", mlog.Field("addr", addr))
+		log.Debug("dialing host", slog.String("addr", addr))
 		var laddr net.Addr
 		for _, lip := range mox.Conf.Static.SpecifiedSMTPListenIPs {
 			ipIs4 := ip.To4() != nil
@@ -73,12 +76,12 @@ func Dial(ctx context.Context, log *mlog.Log, dialer Dialer, host dns.IPDomain, 
 		}
 		conn, err := dial(ctx, dialer, timeout, addr, laddr)
 		if err == nil {
-			log.Debug("connected to host", mlog.Field("host", host), mlog.Field("addr", addr), mlog.Field("laddr", laddr))
+			log.Debug("connected to host", slog.Any("host", host), slog.String("addr", addr), slog.Any("laddr", laddr))
 			name := host.String()
 			dialedIPs[name] = append(dialedIPs[name], ip)
 			return conn, ip, nil
 		}
-		log.Debugx("connection attempt", err, mlog.Field("host", host), mlog.Field("addr", addr), mlog.Field("laddr", laddr))
+		log.Debugx("connection attempt", err, slog.Any("host", host), slog.String("addr", addr), slog.Any("laddr", laddr))
 		lastErr = err
 		lastIP = ip
 	}

@@ -28,9 +28,11 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/acme"
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"golang.org/x/crypto/acme"
 
 	"github.com/mjl-/autocert"
 
@@ -38,8 +40,6 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxvar"
 )
-
-var xlog = mlog.New("autotls")
 
 var (
 	metricCertput = promauto.NewCounter(
@@ -148,7 +148,7 @@ func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(h
 	}
 
 	loggingGetCertificate := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		log := xlog.WithContext(hello.Context())
+		log := mlog.New("autotls", nil).WithContext(hello.Context())
 
 		// Handle missing SNI to prevent logging an error below.
 		// At startup, during config initialization, we already adjust the tls config to
@@ -156,16 +156,16 @@ func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(h
 		// common for SMTP STARTTLS connections, which often do not care about the
 		// verification of the certificate.
 		if hello.ServerName == "" {
-			log.Debug("tls request without sni servername, rejecting", mlog.Field("localaddr", hello.Conn.LocalAddr()), mlog.Field("supportedprotos", hello.SupportedProtos))
+			log.Debug("tls request without sni servername, rejecting", slog.Any("localaddr", hello.Conn.LocalAddr()), slog.Any("supportedprotos", hello.SupportedProtos))
 			return nil, fmt.Errorf("sni server name required")
 		}
 
 		cert, err := m.GetCertificate(hello)
 		if err != nil {
 			if errors.Is(err, errHostNotAllowed) {
-				log.Debugx("requesting certificate", err, mlog.Field("host", hello.ServerName))
+				log.Debugx("requesting certificate", err, slog.String("host", hello.ServerName))
 			} else {
-				log.Errorx("requesting certificate", err, mlog.Field("host", hello.ServerName))
+				log.Errorx("requesting certificate", err, slog.String("host", hello.ServerName))
 			}
 		}
 		return cert, err
@@ -194,7 +194,7 @@ func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(h
 // are fully served by publicIPs (only if non-empty and there is no unspecified
 // address in the list). If no, log an error with a warning that ACME validation
 // may fail.
-func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.Domain]struct{}, publicIPs []string, checkHosts bool) {
+func (m *Manager) SetAllowedHostnames(log mlog.Log, resolver dns.Resolver, hostnames map[dns.Domain]struct{}, publicIPs []string, checkHosts bool) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -207,7 +207,7 @@ func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.D
 		return l[i].Name() < l[j].Name()
 	})
 
-	xlog.Debug("autotls setting allowed hostnames", mlog.Field("hostnames", l), mlog.Field("publicips", publicIPs))
+	log.Debug("autotls setting allowed hostnames", slog.Any("hostnames", l), slog.Any("publicips", publicIPs))
 	var added []dns.Domain
 	for h := range hostnames {
 		if _, ok := m.hosts[h]; !ok {
@@ -231,16 +231,16 @@ func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.D
 				publicIPstrs[ip] = struct{}{}
 			}
 
-			xlog.Debug("checking ips of hosts configured for acme tls cert validation")
+			log.Debug("checking ips of hosts configured for acme tls cert validation")
 			for _, h := range added {
 				ips, _, err := resolver.LookupIP(ctx, "ip", h.ASCII+".")
 				if err != nil {
-					xlog.Errorx("warning: acme tls cert validation for host may fail due to dns lookup error", err, mlog.Field("host", h))
+					log.Errorx("warning: acme tls cert validation for host may fail due to dns lookup error", err, slog.Any("host", h))
 					continue
 				}
 				for _, ip := range ips {
 					if _, ok := publicIPstrs[ip.String()]; !ok {
-						xlog.Error("warning: acme tls cert validation for host is likely to fail because not all its ips are being listened on", mlog.Field("hostname", h), mlog.Field("listenedips", publicIPs), mlog.Field("hostips", ips), mlog.Field("missingip", ip))
+						log.Error("warning: acme tls cert validation for host is likely to fail because not all its ips are being listened on", slog.Any("hostname", h), slog.Any("listenedips", publicIPs), slog.Any("hostips", ips), slog.Any("missingip", ip))
 					}
 				}
 			}
@@ -266,9 +266,9 @@ var errHostNotAllowed = errors.New("autotls: host not in allowlist")
 // present. Only hosts added with SetAllowedHostnames are allowed. During shutdown,
 // no new connections are allowed.
 func (m *Manager) HostPolicy(ctx context.Context, host string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := mlog.New("autotls", nil).WithContext(ctx)
 	defer func() {
-		log.WithContext(ctx).Debugx("autotls hostpolicy result", rerr, mlog.Field("host", host))
+		log.Debugx("autotls hostpolicy result", rerr, slog.String("host", host))
 	}()
 
 	// Don't request new TLS certs when we are shutting down.
@@ -300,46 +300,46 @@ func (m *Manager) HostPolicy(ctx context.Context, host string) (rerr error) {
 type dirCache autocert.DirCache
 
 func (d dirCache) Delete(ctx context.Context, name string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := mlog.New("autotls", nil).WithContext(ctx)
 	defer func() {
-		log.Debugx("dircache delete result", rerr, mlog.Field("name", name))
+		log.Debugx("dircache delete result", rerr, slog.String("name", name))
 	}()
 	err := autocert.DirCache(d).Delete(ctx, name)
 	if err != nil {
-		log.Errorx("deleting cert from dir cache", err, mlog.Field("name", name))
+		log.Errorx("deleting cert from dir cache", err, slog.String("name", name))
 	} else if !strings.HasSuffix(name, "+token") {
-		log.Info("autotls cert delete", mlog.Field("name", name))
+		log.Info("autotls cert delete", slog.String("name", name))
 	}
 	return err
 }
 
 func (d dirCache) Get(ctx context.Context, name string) (rbuf []byte, rerr error) {
-	log := xlog.WithContext(ctx)
+	log := mlog.New("autotls", nil).WithContext(ctx)
 	defer func() {
-		log.Debugx("dircache get result", rerr, mlog.Field("name", name))
+		log.Debugx("dircache get result", rerr, slog.String("name", name))
 	}()
 	buf, err := autocert.DirCache(d).Get(ctx, name)
 	if err != nil && errors.Is(err, autocert.ErrCacheMiss) {
-		log.Infox("getting cert from dir cache", err, mlog.Field("name", name))
+		log.Infox("getting cert from dir cache", err, slog.String("name", name))
 	} else if err != nil {
-		log.Errorx("getting cert from dir cache", err, mlog.Field("name", name))
+		log.Errorx("getting cert from dir cache", err, slog.String("name", name))
 	} else if !strings.HasSuffix(name, "+token") {
-		log.Debug("autotls cert get", mlog.Field("name", name))
+		log.Debug("autotls cert get", slog.String("name", name))
 	}
 	return buf, err
 }
 
 func (d dirCache) Put(ctx context.Context, name string, data []byte) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := mlog.New("autotls", nil).WithContext(ctx)
 	defer func() {
-		log.Debugx("dircache put result", rerr, mlog.Field("name", name))
+		log.Debugx("dircache put result", rerr, slog.String("name", name))
 	}()
 	metricCertput.Inc()
 	err := autocert.DirCache(d).Put(ctx, name, data)
 	if err != nil {
-		log.Errorx("storing cert in dir cache", err, mlog.Field("name", name))
+		log.Errorx("storing cert in dir cache", err, slog.String("name", name))
 	} else if !strings.HasSuffix(name, "+token") {
-		log.Info("autotls cert store", mlog.Field("name", name))
+		log.Info("autotls cert store", slog.String("name", name))
 	}
 	return err
 }

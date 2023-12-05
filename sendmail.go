@@ -17,7 +17,6 @@ import (
 	"github.com/mjl-/sconf"
 
 	"github.com/mjl-/mox/dns"
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtp"
@@ -300,7 +299,7 @@ binary should be setgid that group:
 		Auth:    auth,
 		RootCAs: mox.Conf.Static.TLS.CertPool,
 	}
-	client, err := smtpclient.New(ctx, mlog.New("sendmail"), conn, tlsMode, tlsPKIX, ourHostname, remoteHostname, opts)
+	client, err := smtpclient.New(ctx, c.log.Logger, conn, tlsMode, tlsPKIX, ourHostname, remoteHostname, opts)
 	xsavecheckf(err, "open smtp session")
 
 	err = client.Deliver(ctx, submitconf.From, recipient, int64(len(msg)), strings.NewReader(msg), true, false, submitconf.RequireTLS == RequireTLSYes)

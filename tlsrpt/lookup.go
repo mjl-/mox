@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 )
-
-var xlog = mlog.New("tlsrpt")
 
 var (
 	metricLookup = promauto.NewHistogramVec(
@@ -35,8 +35,8 @@ var (
 
 // Lookup looks up a TLSRPT DNS TXT record for domain at "_smtp._tls.<domain>" and
 // parses it.
-func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rrecord *Record, rtxt string, rerr error) {
-	log := xlog.WithContext(ctx)
+func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain dns.Domain) (rrecord *Record, rtxt string, rerr error) {
+	log := mlog.New("tlsrpt", elog)
 	start := time.Now()
 	defer func() {
 		result := "ok"
@@ -54,7 +54,7 @@ func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rrec
 			}
 		}
 		metricLookup.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("tlsrpt lookup result", rerr, mlog.Field("domain", domain), mlog.Field("record", rrecord), mlog.Field("duration", time.Since(start)))
+		log.Debugx("tlsrpt lookup result", rerr, slog.Any("domain", domain), slog.Any("record", rrecord), slog.Duration("duration", time.Since(start)))
 	}()
 
 	name := "_smtp._tls." + domain.ASCII + "."

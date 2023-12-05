@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
+	"golang.org/x/exp/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -300,13 +301,13 @@ var jitteredTimeUntil = func(t time.Time) time.Duration {
 // sends DMARC reports to domains that requested them.
 func Start(resolver dns.Resolver) {
 	go func() {
-		log := mlog.New("dmarcdb")
+		log := mlog.New("dmarcdb", nil)
 
 		defer func() {
 			// In case of panic don't take the whole program down.
 			x := recover()
 			if x != nil {
-				log.Error("recover from panic", mlog.Field("panic", x))
+				log.Error("recover from panic", slog.Any("panic", x))
 				debug.PrintStack()
 				metrics.PanicInc(metrics.Dmarcdb)
 			}
@@ -358,7 +359,7 @@ func Start(resolver dns.Resolver) {
 			log.Check(err, "removing stale dmarc evaluations from database")
 
 			clog := log.WithCid(mox.Cid())
-			clog.Info("sending dmarc aggregate reports", mlog.Field("end", nextEnd.UTC()), mlog.Field("intervals", intervals))
+			clog.Info("sending dmarc aggregate reports", slog.Time("end", nextEnd.UTC()), slog.Any("intervals", intervals))
 			if err := sendReports(ctx, clog, resolver, db, nextEnd, intervals); err != nil {
 				clog.Errorx("sending dmarc aggregate reports", err)
 				metricReportError.Inc()
@@ -393,7 +394,7 @@ var sleepBetween = func(ctx context.Context, between time.Duration) (ok bool) {
 
 // sendReports gathers all policy domains that have evaluations that should
 // receive a DMARC report and sends a report to each.
-func sendReports(ctx context.Context, log *mlog.Log, resolver dns.Resolver, db *bstore.DB, endTime time.Time, intervals []int) error {
+func sendReports(ctx context.Context, log mlog.Log, resolver dns.Resolver, db *bstore.DB, endTime time.Time, intervals []int) error {
 	ivals := make([]any, len(intervals))
 	for i, v := range intervals {
 		ivals[i] = v
@@ -452,14 +453,14 @@ func sendReports(ctx context.Context, log *mlog.Log, resolver dns.Resolver, db *
 				// In case of panic don't take the whole program down.
 				x := recover()
 				if x != nil {
-					log.Error("unhandled panic in dmarcdb sendReports", mlog.Field("panic", x))
+					log.Error("unhandled panic in dmarcdb sendReports", slog.Any("panic", x))
 					debug.PrintStack()
 					metrics.PanicInc(metrics.Dmarcdb)
 				}
 			}()
 			defer wg.Done()
 
-			rlog := log.WithCid(mox.Cid()).Fields(mlog.Field("domain", domain))
+			rlog := log.WithCid(mox.Cid()).With(slog.Any("domain", domain))
 			rlog.Info("sending dmarc report")
 			if _, err := sendReportDomain(ctx, rlog, resolver, db, endTime, domain); err != nil {
 				rlog.Errorx("sending dmarc aggregate report to domain", err)
@@ -478,8 +479,8 @@ type recipient struct {
 	maxSize uint64
 }
 
-func parseRecipient(log *mlog.Log, uri dmarc.URI) (r recipient, ok bool) {
-	log = log.Fields(mlog.Field("uri", uri.Address))
+func parseRecipient(log mlog.Log, uri dmarc.URI) (r recipient, ok bool) {
+	log = log.With(slog.Any("uri", uri.Address))
 
 	u, err := url.Parse(uri.Address)
 	if err != nil {
@@ -510,14 +511,14 @@ func parseRecipient(log *mlog.Log, uri dmarc.URI) (r recipient, ok bool) {
 		r.maxSize *= 1024 * 1024 * 1024 * 1024
 	case "":
 	default:
-		log.Debug("unrecognized max size unit in dmarc record rua value", mlog.Field("unit", uri.Unit))
+		log.Debug("unrecognized max size unit in dmarc record rua value", slog.String("unit", uri.Unit))
 		return r, false
 	}
 
 	return r, true
 }
 
-func removeEvaluations(ctx context.Context, log *mlog.Log, db *bstore.DB, endTime time.Time, domain string) {
+func removeEvaluations(ctx context.Context, log mlog.Log, db *bstore.DB, endTime time.Time, domain string) {
 	q := bstore.QueryDB[Evaluation](ctx, db)
 	q.FilterLess("Evaluated", endTime)
 	q.FilterNonzero(Evaluation{PolicyDomain: domain})
@@ -528,7 +529,7 @@ func removeEvaluations(ctx context.Context, log *mlog.Log, db *bstore.DB, endTim
 // replaceable for testing.
 var queueAdd = queue.Add
 
-func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver, db *bstore.DB, endTime time.Time, domain string) (cleanup bool, rerr error) {
+func sendReportDomain(ctx context.Context, log mlog.Log, resolver dns.Resolver, db *bstore.DB, endTime time.Time, domain string) (cleanup bool, rerr error) {
 	dom, err := dns.ParseDomain(domain)
 	if err != nil {
 		return false, fmt.Errorf("parsing domain for sending reports: %v", err)
@@ -567,7 +568,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 	// evaluations regardless. We always use the latest DMARC record when sending, but
 	// we'll lump all policies of the last interval into one report.
 	// ../rfc/7489:1714
-	status, _, record, _, _, err := dmarc.Lookup(ctx, resolver, dom)
+	status, _, record, _, _, err := dmarc.Lookup(ctx, log.Logger, resolver, dom)
 	if err != nil {
 		// todo future: we could perhaps still send this report, assuming the values we know. in case of temporary error, we could also schedule again regardless of next interval hour (we would now only retry a 24h-interval report after 24h passed).
 		// Remove records unless it was a temporary error. We'll try again next round.
@@ -588,8 +589,8 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 
 		// Check if domain of rua recipient has the same organizational domain as for the
 		// evaluations. If not, we need to verify we are allowed to send.
-		ruaOrgDom := publicsuffix.Lookup(ctx, r.address.Domain)
-		evalOrgDom := publicsuffix.Lookup(ctx, dom)
+		ruaOrgDom := publicsuffix.Lookup(ctx, log.Logger, r.address.Domain)
+		evalOrgDom := publicsuffix.Lookup(ctx, log.Logger, dom)
 
 		if ruaOrgDom == evalOrgDom {
 			recipients = append(recipients, r)
@@ -599,12 +600,12 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 		// Verify and follow addresses in other organizational domain through
 		// <policydomain>._report._dmarc.<host> lookup.
 		// ../rfc/7489:1556
-		accepts, status, records, _, _, err := dmarc.LookupExternalReportsAccepted(ctx, resolver, evalOrgDom, r.address.Domain)
+		accepts, status, records, _, _, err := dmarc.LookupExternalReportsAccepted(ctx, log.Logger, resolver, evalOrgDom, r.address.Domain)
 		log.Debugx("checking if rua address with different organization domain has opted into receiving dmarc reports", err,
-			mlog.Field("policydomain", evalOrgDom),
-			mlog.Field("destinationdomain", r.address.Domain),
-			mlog.Field("accepts", accepts),
-			mlog.Field("status", status))
+			slog.Any("policydomain", evalOrgDom),
+			slog.Any("destinationdomain", r.address.Domain),
+			slog.Bool("accepts", accepts),
+			slog.Any("status", status))
 		if status == dmarc.StatusTemperror {
 			// With a temporary error, we'll try to get the report the delivered anyway,
 			// perhaps there are multiple recipients.
@@ -626,7 +627,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 		// alternative addresses and no new address specified).
 		// ../rfc/7489:1600
 		foundReplacement := false
-		rlog := log.Fields(mlog.Field("followedaddress", uri.Address))
+		rlog := log.With(slog.Any("followedaddress", uri.Address))
 		for _, record := range records {
 			for _, exturi := range record.AggregateReportAddresses {
 				extr, ok := parseRecipient(rlog, exturi)
@@ -634,10 +635,10 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 					continue
 				}
 				if extr.address.Domain != r.address.Domain {
-					rlog.Debug("rua address in external _report dmarc record has different host than initial dmarc record, ignoring new name", mlog.Field("externaladdress", extr.address))
+					rlog.Debug("rua address in external _report dmarc record has different host than initial dmarc record, ignoring new name", slog.Any("externaladdress", extr.address))
 					errors = append(errors, fmt.Sprintf("rua %s is external domain with a replacement address %s with different host", r.address, extr.address))
 				} else {
-					rlog.Debug("using replacement rua address from external _report dmarc record", mlog.Field("externaladdress", extr.address))
+					rlog.Debug("using replacement rua address from external _report dmarc record", slog.Any("externaladdress", extr.address))
 					foundReplacement = true
 					recipients = append(recipients, extr)
 				}
@@ -744,7 +745,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 		report.Records = append(report.Records, rc.ReportRecord)
 	}
 
-	reportFile, err := store.CreateMessageTemp("dmarcreportout")
+	reportFile, err := store.CreateMessageTemp(log, "dmarcreportout")
 	if err != nil {
 		return false, fmt.Errorf("creating temporary file for outgoing dmarc aggregate report: %v", err)
 	}
@@ -767,7 +768,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 		return true, fmt.Errorf("writing dmarc aggregate report as xml with gzip: %v", err)
 	}
 
-	msgf, err := store.CreateMessageTemp("dmarcreportmsgout")
+	msgf, err := store.CreateMessageTemp(log, "dmarcreportmsgout")
 	if err != nil {
 		return false, fmt.Errorf("creating temporary message file with outgoing dmarc aggregate report: %v", err)
 	}
@@ -828,7 +829,7 @@ Period: %s - %s UTC
 			return false, fmt.Errorf("querying suppress list: %v", err)
 		}
 		if exists {
-			log.Info("suppressing outgoing dmarc aggregate report", mlog.Field("reportingaddress", rcpt.address))
+			log.Info("suppressing outgoing dmarc aggregate report", slog.Any("reportingaddress", rcpt.address))
 			continue
 		}
 
@@ -853,7 +854,7 @@ Period: %s - %s UTC
 			log.Errorx("queueing message with dmarc aggregate report", err)
 			metricReportError.Inc()
 		} else {
-			log.Debug("dmarc aggregate report queued", mlog.Field("recipient", rcpt.address))
+			log.Debug("dmarc aggregate report queued", slog.Any("recipient", rcpt.address))
 			queued = true
 			metricReport.Inc()
 		}
@@ -873,7 +874,7 @@ Period: %s - %s UTC
 	return true, nil
 }
 
-func composeAggregateReport(ctx context.Context, log *mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportXMLGzipFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
+func composeAggregateReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportXMLGzipFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
 	xc := message.NewComposer(mf, 100*1024*1024)
 	defer func() {
 		x := recover()
@@ -946,10 +947,10 @@ func composeAggregateReport(ctx context.Context, log *mlog.Log, mf *os.File, fro
 // Though this functionality is quite underspecified, we'll do our best to send our
 // an error report in case our report is too large for all recipients.
 // ../rfc/7489:1918
-func sendErrorReport(ctx context.Context, log *mlog.Log, db *bstore.DB, fromAddr smtp.Address, recipients []message.NameAddress, reportDomain dns.Domain, reportID string, reportMsgSize int64) error {
+func sendErrorReport(ctx context.Context, log mlog.Log, db *bstore.DB, fromAddr smtp.Address, recipients []message.NameAddress, reportDomain dns.Domain, reportID string, reportMsgSize int64) error {
 	log.Debug("no reporting addresses willing to accept report given size, queuing short error message")
 
-	msgf, err := store.CreateMessageTemp("dmarcreportmsg-out")
+	msgf, err := store.CreateMessageTemp(log, "dmarcreportmsg-out")
 	if err != nil {
 		return fmt.Errorf("creating temporary message file for outgoing dmarc error report: %v", err)
 	}
@@ -992,7 +993,7 @@ Submitting-URI: %s
 			return fmt.Errorf("querying suppress list: %v", err)
 		}
 		if exists {
-			log.Info("suppressing outgoing dmarc error report", mlog.Field("reportingaddress", rcpt.Address))
+			log.Info("suppressing outgoing dmarc error report", slog.Any("reportingaddress", rcpt.Address))
 			continue
 		}
 
@@ -1006,14 +1007,14 @@ Submitting-URI: %s
 			log.Errorx("queueing message with dmarc error report", err)
 			metricReportError.Inc()
 		} else {
-			log.Debug("dmarc error report queued", mlog.Field("recipient", rcpt))
+			log.Debug("dmarc error report queued", slog.Any("recipient", rcpt))
 			metricReport.Inc()
 		}
 	}
 	return nil
 }
 
-func composeErrorReport(ctx context.Context, log *mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text string) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
+func composeErrorReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text string) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
 	xc := message.NewComposer(mf, 100*1024*1024)
 	defer func() {
 		x := recover()
@@ -1058,7 +1059,7 @@ func composeErrorReport(ctx context.Context, log *mlog.Log, mf *os.File, fromAdd
 	return msgPrefix, xc.Has8bit, xc.SMTPUTF8, messageID, nil
 }
 
-func dkimSign(ctx context.Context, log *mlog.Log, fromAddr smtp.Address, smtputf8 bool, mf *os.File) string {
+func dkimSign(ctx context.Context, log mlog.Log, fromAddr smtp.Address, smtputf8 bool, mf *os.File) string {
 	// Add DKIM-Signature headers if we have a key for (a higher) domain than the from
 	// address, which is a host name. A signature will only be useful with higher-level
 	// domains if they have a relaxed dkim check (which is the default). If the dkim
@@ -1068,7 +1069,7 @@ func dkimSign(ctx context.Context, log *mlog.Log, fromAddr smtp.Address, smtputf
 	for fd != zerodom {
 		confDom, ok := mox.Conf.Domain(fd)
 		if len(confDom.DKIM.Sign) > 0 {
-			dkimHeaders, err := dkim.Sign(ctx, fromAddr.Localpart, fd, confDom.DKIM, smtputf8, mf)
+			dkimHeaders, err := dkim.Sign(ctx, log.Logger, fromAddr.Localpart, fd, confDom.DKIM, smtputf8, mf)
 			if err != nil {
 				log.Errorx("dkim-signing dmarc report, continuing without signature", err)
 				metricReportError.Inc()

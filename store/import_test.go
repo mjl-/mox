@@ -10,7 +10,7 @@ import (
 )
 
 func TestMboxReader(t *testing.T) {
-	createTemp := func(pattern string) (*os.File, error) {
+	createTemp := func(log mlog.Log, pattern string) (*os.File, error) {
 		return os.CreateTemp("", pattern)
 	}
 	mboxf, err := os.Open("../testdata/importtest.mbox")
@@ -19,7 +19,8 @@ func TestMboxReader(t *testing.T) {
 	}
 	defer mboxf.Close()
 
-	mr := NewMboxReader(createTemp, mboxf.Name(), mboxf, mlog.New("mboxreader"))
+	log := mlog.New("mboxreader", nil)
+	mr := NewMboxReader(log, createTemp, mboxf.Name(), mboxf)
 	_, mf0, _, err := mr.Next()
 	if err != nil {
 		t.Fatalf("next mbox message: %v", err)
@@ -41,7 +42,7 @@ func TestMboxReader(t *testing.T) {
 }
 
 func TestMaildirReader(t *testing.T) {
-	createTemp := func(pattern string) (*os.File, error) {
+	createTemp := func(log mlog.Log, pattern string) (*os.File, error) {
 		return os.CreateTemp("", pattern)
 	}
 	// todo: rename 1642966915.1.mox to "1642966915.1.mox:2,"? cannot have that name in the git repo because go module (or the proxy) doesn't like it. could also add some flags and test they survive the import.
@@ -57,7 +58,8 @@ func TestMaildirReader(t *testing.T) {
 	}
 	defer curf.Close()
 
-	mr := NewMaildirReader(createTemp, newf, curf, mlog.New("maildirreader"))
+	log := mlog.New("maildirreader", nil)
+	mr := NewMaildirReader(log, createTemp, newf, curf)
 	_, mf0, _, err := mr.Next()
 	if err != nil {
 		t.Fatalf("next maildir message: %v", err)
@@ -85,7 +87,7 @@ func TestParseDovecotKeywords(t *testing.T) {
 3 $Forwarded
 4 $Junk
 `
-	flags, err := ParseDovecotKeywordsFlags(strings.NewReader(data), mlog.New("dovecotkeywords"))
+	flags, err := ParseDovecotKeywordsFlags(strings.NewReader(data), mlog.New("dovecotkeywords", nil))
 	if err != nil {
 		t.Fatalf("parsing dovecot-keywords: %v", err)
 	}

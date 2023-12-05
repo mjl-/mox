@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/slices"
+	"golang.org/x/exp/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -80,13 +81,13 @@ var jitteredTimeUntil = func(t time.Time) time.Duration {
 // reports. Reports are sent spread out over a 4 hour period.
 func Start(resolver dns.Resolver) {
 	go func() {
-		log := mlog.New("tlsrptsend")
+		log := mlog.New("tlsrptsend", nil)
 
 		defer func() {
 			// In case of panic don't take the whole program down.
 			x := recover()
 			if x != nil {
-				log.Error("recover from panic", mlog.Field("panic", x))
+				log.Error("recover from panic", slog.Any("panic", x))
 				debug.PrintStack()
 				metrics.PanicInc(metrics.Tlsrptdb)
 			}
@@ -117,7 +118,7 @@ func Start(resolver dns.Resolver) {
 			log.Check(err, "removing stale tls results from database")
 
 			clog := log.WithCid(mox.Cid())
-			clog.Info("sending tls reports", mlog.Field("day", dayUTC))
+			clog.Info("sending tls reports", slog.String("day", dayUTC))
 			if err := sendReports(ctx, clog, resolver, db, dayUTC, endUTC); err != nil {
 				clog.Errorx("sending tls reports", err)
 				metricReportError.Inc()
@@ -159,7 +160,7 @@ var sleepBetween = func(ctx context.Context, between time.Duration) (ok bool) {
 // sendReports gathers all policy domains that have results that should receive a
 // TLS report and sends a report to each if their TLSRPT DNS record has reporting
 // addresses.
-func sendReports(ctx context.Context, log *mlog.Log, resolver dns.Resolver, db *bstore.DB, dayUTC string, endTimeUTC time.Time) error {
+func sendReports(ctx context.Context, log mlog.Log, resolver dns.Resolver, db *bstore.DB, dayUTC string, endTimeUTC time.Time) error {
 	type key struct {
 		policyDomain string
 		dayUTC       string
@@ -228,14 +229,14 @@ func sendReports(ctx context.Context, log *mlog.Log, resolver dns.Resolver, db *
 					// In case of panic don't take the whole program down.
 					x := recover()
 					if x != nil {
-						log.Error("unhandled panic in tlsrptsend sendReports", mlog.Field("panic", x))
+						log.Error("unhandled panic in tlsrptsend sendReports", slog.Any("panic", x))
 						debug.PrintStack()
 						metrics.PanicInc(metrics.Tlsrptdb)
 					}
 				}()
 				defer wg.Done()
 
-				rlog := log.WithCid(mox.Cid()).Fields(mlog.Field("policydomain", k.policyDomain), mlog.Field("daytutc", k.dayUTC), mlog.Field("isrcptdom", isRcptDom))
+				rlog := log.WithCid(mox.Cid()).With(slog.String("policydomain", k.policyDomain), slog.String("daytutc", k.dayUTC), slog.Bool("isrcptdom", isRcptDom))
 				rlog.Info("looking to send tls report for domain")
 				cleanup, err := sendReportDomain(ctx, rlog, resolver, db, endTimeUTC, isRcptDom, k.policyDomain, k.dayUTC)
 				if err != nil {
@@ -279,7 +280,7 @@ func sendReports(ctx context.Context, log *mlog.Log, resolver dns.Resolver, db *
 // replaceable for testing.
 var queueAdd = queue.Add
 
-func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver, db *bstore.DB, endUTC time.Time, isRcptDom bool, policyDomain, dayUTC string) (cleanup bool, rerr error) {
+func sendReportDomain(ctx context.Context, log mlog.Log, resolver dns.Resolver, db *bstore.DB, endUTC time.Time, isRcptDom bool, policyDomain, dayUTC string) (cleanup bool, rerr error) {
 	polDom, err := dns.ParseDomain(policyDomain)
 	if err != nil {
 		return false, fmt.Errorf("parsing policy domain for sending tls reports: %v", err)
@@ -324,7 +325,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 	}()
 
 	// Get TLSRPT record. If there are no reporting addresses, we're not going to send at all.
-	record, _, err := tlsrpt.Lookup(ctx, resolver, polDom)
+	record, _, err := tlsrpt.Lookup(ctx, log.Logger, resolver, polDom)
 	if err != nil {
 		// If there is no TLSRPT record, that's fine, we'll remove what we tracked.
 		if errors.Is(err, tlsrpt.ErrNoRecord) {
@@ -341,14 +342,14 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 		for _, s := range l {
 			u, err := url.Parse(string(s))
 			if err != nil {
-				log.Debugx("parsing rua uri in tlsrpt dns record, ignoring", err, mlog.Field("rua", s))
+				log.Debugx("parsing rua uri in tlsrpt dns record, ignoring", err, slog.Any("rua", s))
 				continue
 			}
 
 			if u.Scheme == "mailto" {
 				addr, err := smtp.ParseAddress(u.Opaque)
 				if err != nil {
-					log.Debugx("parsing mailto uri in tlsrpt record rua value, ignoring", err, mlog.Field("rua", s))
+					log.Debugx("parsing mailto uri in tlsrpt record rua value, ignoring", err, slog.Any("rua", s))
 					continue
 				}
 				recipients = append(recipients, message.NameAddress{Address: addr})
@@ -365,9 +366,9 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 				// them.
 				// ../rfc/8460:320 ../rfc/8460:1055
 				// todo spec: would be good to have clearer distinction between "report" (JSON) and "report message" (message with report attachment, that can be DKIM signed). propose sending report message over https that includes DKIM signature so authenticity can be verified and the report used. ../rfc/8460:310
-				log.Debug("https scheme in rua uri in tlsrpt record, ignoring since they will likey not be used to due lack of authentication", mlog.Field("rua", s))
+				log.Debug("https scheme in rua uri in tlsrpt record, ignoring since they will likey not be used to due lack of authentication", slog.Any("rua", s))
 			} else {
-				log.Debug("unknown scheme in rua uri in tlsrpt record, ignoring", mlog.Field("rua", s))
+				log.Debug("unknown scheme in rua uri in tlsrpt record, ignoring", slog.Any("rua", s))
 			}
 		}
 	}
@@ -472,7 +473,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 
 	log.Info("sending tls report")
 
-	reportFile, err := store.CreateMessageTemp("tlsreportout")
+	reportFile, err := store.CreateMessageTemp(log, "tlsreportout")
 	if err != nil {
 		return false, fmt.Errorf("creating temporary file for outgoing tls report: %v", err)
 	}
@@ -492,7 +493,7 @@ func sendReportDomain(ctx context.Context, log *mlog.Log, resolver dns.Resolver,
 		return false, fmt.Errorf("writing tls report as json with gzip: %v", err)
 	}
 
-	msgf, err := store.CreateMessageTemp("tlsreportmsgout")
+	msgf, err := store.CreateMessageTemp(log, "tlsreportmsgout")
 	if err != nil {
 		return false, fmt.Errorf("creating temporary message file with outgoing tls report: %v", err)
 	}
@@ -579,7 +580,7 @@ Period: %s - %s UTC
 			return false, fmt.Errorf("querying suppress list: %v", err)
 		}
 		if exists {
-			log.Info("suppressing outgoing tls report", mlog.Field("reportingaddress", rcpt.Address))
+			log.Info("suppressing outgoing tls report", slog.Any("reportingaddress", rcpt.Address))
 			continue
 		}
 
@@ -601,7 +602,7 @@ Period: %s - %s UTC
 		} else {
 			queued = true
 			tempError = false
-			log.Debug("tls report queued", mlog.Field("recipient", rcpt))
+			log.Debug("tls report queued", slog.Any("recipient", rcpt))
 			metricReport.Inc()
 		}
 	}
@@ -613,7 +614,7 @@ Period: %s - %s UTC
 	return true, nil
 }
 
-func composeMessage(ctx context.Context, log *mlog.Log, mf *os.File, policyDomain dns.Domain, confDKIM config.DKIM, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
+func composeMessage(ctx context.Context, log mlog.Log, mf *os.File, policyDomain dns.Domain, confDKIM config.DKIM, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
 	xc := message.NewComposer(mf, 100*1024*1024)
 	defer func() {
 		x := recover()
@@ -693,7 +694,7 @@ func composeMessage(ctx context.Context, log *mlog.Log, mf *os.File, policyDomai
 	}
 	confDKIM.Selectors = selectors
 
-	dkimHeader, err := dkim.Sign(ctx, fromAddr.Localpart, fromAddr.Domain, confDKIM, smtputf8, mf)
+	dkimHeader, err := dkim.Sign(ctx, log.Logger, fromAddr.Localpart, fromAddr.Domain, confDKIM, smtputf8, mf)
 	xc.Checkf(err, "dkim-signing report message")
 
 	return dkimHeader, xc.Has8bit, xc.SMTPUTF8, messageID, nil

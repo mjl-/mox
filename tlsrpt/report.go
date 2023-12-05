@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/slices"
+	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/adns"
 
@@ -368,9 +369,11 @@ func Parse(r io.Reader) (*Report, error) {
 // ParseMessage parses a Report from a mail message.
 // The maximum size of the message is 15MB, the maximum size of the
 // decompressed report is 20MB.
-func ParseMessage(log *mlog.Log, r io.ReaderAt) (*Report, error) {
+func ParseMessage(elog *slog.Logger, r io.ReaderAt) (*Report, error) {
+	log := mlog.New("tlsrpt", elog)
+
 	// ../rfc/8460:905
-	p, err := message.Parse(log, true, &moxio.LimitAtReader{R: r, Limit: 15 * 1024 * 1024})
+	p, err := message.Parse(log.Logger, true, &moxio.LimitAtReader{R: r, Limit: 15 * 1024 * 1024})
 	if err != nil {
 		return nil, fmt.Errorf("parsing mail message: %s", err)
 	}
@@ -381,7 +384,7 @@ func ParseMessage(log *mlog.Log, r io.ReaderAt) (*Report, error) {
 	return parseMessageReport(log, p, allow)
 }
 
-func parseMessageReport(log *mlog.Log, p message.Part, allow bool) (*Report, error) {
+func parseMessageReport(log mlog.Log, p message.Part, allow bool) (*Report, error) {
 	if p.MediaType != "MULTIPART" {
 		if !allow {
 			return nil, ErrNoReport
@@ -390,7 +393,7 @@ func parseMessageReport(log *mlog.Log, p message.Part, allow bool) (*Report, err
 	}
 
 	for {
-		sp, err := p.ParseNextPart(log)
+		sp, err := p.ParseNextPart(log.Logger)
 		if err == io.EOF {
 			return nil, ErrNoReport
 		}

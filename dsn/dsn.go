@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
@@ -135,7 +137,7 @@ type Recipient struct {
 // DSN.
 //
 // DKIM signatures are added if DKIM signing is configured for the "from" domain.
-func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
+func (m *Message) Compose(log mlog.Log, smtputf8 bool) ([]byte, error) {
 	// ../rfc/3462:119
 	// ../rfc/3464:377
 	// We'll make a multipart/report with 2 or 3 parts:
@@ -381,9 +383,9 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 			continue
 		}
 
-		dkimHeaders, err := dkim.Sign(context.Background(), m.From.Localpart, fd, confDom.DKIM, smtputf8, bytes.NewReader(data))
+		dkimHeaders, err := dkim.Sign(context.Background(), log.Logger, m.From.Localpart, fd, confDom.DKIM, smtputf8, bytes.NewReader(data))
 		if err != nil {
-			log.Errorx("dsn: dkim sign for domain, returning unsigned dsn", err, mlog.Field("domain", fd))
+			log.Errorx("dsn: dkim sign for domain, returning unsigned dsn", err, slog.Any("domain", fd))
 		} else {
 			data = append([]byte(dkimHeaders), data...)
 		}

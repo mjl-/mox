@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 )
 
@@ -12,7 +13,7 @@ import (
 // responsible for closing and possibly removing the file. The caller should ensure
 // the contents of the file are synced to disk before attempting to deliver the
 // message.
-func CreateMessageTemp(pattern string) (*os.File, error) {
+func CreateMessageTemp(log mlog.Log, pattern string) (*os.File, error) {
 	dir := mox.DataDirPath("tmp")
 	os.MkdirAll(dir, 0770)
 	f, err := os.CreateTemp(dir, pattern)
@@ -22,7 +23,7 @@ func CreateMessageTemp(pattern string) (*os.File, error) {
 	err = f.Chmod(0660)
 	if err != nil {
 		xerr := f.Close()
-		xlog.Check(xerr, "closing temp message file after chmod error")
+		log.Check(xerr, "closing temp message file after chmod error")
 		return nil, err
 	}
 	return f, err

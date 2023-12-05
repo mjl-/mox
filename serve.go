@@ -19,7 +19,7 @@ import (
 	"github.com/mjl-/mox/tlsrptsend"
 )
 
-func shutdown(log *mlog.Log) {
+func shutdown(log mlog.Log) {
 	// We indicate we are shutting down. Causes new connections and new SMTP commands
 	// to be rejected. Should stop active connections pretty quickly.
 	mox.ShutdownCancel()

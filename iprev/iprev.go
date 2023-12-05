@@ -9,6 +9,8 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -16,7 +18,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 )
 
-var xlog = mlog.New("iprev")
+var xlog = mlog.New("iprev", nil)
 
 var (
 	metricIPRev = promauto.NewHistogramVec(
@@ -61,7 +63,7 @@ func Lookup(ctx context.Context, resolver dns.Resolver, ip net.IP) (rstatus Stat
 	start := time.Now()
 	defer func() {
 		metricIPRev.WithLabelValues(string(rstatus)).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("iprev lookup result", rerr, mlog.Field("ip", ip), mlog.Field("status", rstatus), mlog.Field("duration", time.Since(start)))
+		log.Debugx("iprev lookup result", rerr, slog.Any("ip", ip), slog.Any("status", rstatus), slog.Duration("duration", time.Since(start)))
 	}()
 
 	revNames, result, revErr := dns.WithPackage(resolver, "iprev").LookupAddr(ctx, ip.String())

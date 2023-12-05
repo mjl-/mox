@@ -10,8 +10,6 @@ import (
 )
 
 var (
-	xlog = mlog.New("tlsrptdb")
-
 	ReportDBTypes = []any{TLSReportRecord{}}
 	ReportDB      *bstore.DB
 	mutex         sync.Mutex
@@ -34,9 +32,10 @@ func Init() error {
 
 // Close closes the database connections.
 func Close() {
+	log := mlog.New("tlsrptdb", nil)
 	if ResultDB != nil {
 		err := ResultDB.Close()
-		xlog.Check(err, "closing result database")
+		log.Check(err, "closing result database")
 		ResultDB = nil
 	}
 
@@ -44,7 +43,7 @@ func Close() {
 	defer mutex.Unlock()
 	if ReportDB != nil {
 		err := ReportDB.Close()
-		xlog.Check(err, "closing report database")
+		log.Check(err, "closing report database")
 		ReportDB = nil
 	}
 }

@@ -10,6 +10,14 @@ This file has notes useful for mox developers.
   name/path manipulation. Do not remove/rename files that are still open.
 - Not all code uses adns, the DNSSEC-aware resolver. Such as code that makes
   http requests, like mtasts and autotls/autocert.
+- We don't have an internal/ directory, really just to prevent long paths in
+  the repo, and to keep all Go code matching *.go */*.go (without matching
+  vendor/). Part of the packages are reusable by other software. Those reusable
+  packages must not cause mox implementation details (such as bstore) to get out,
+  which would cause unexpected dependencies. Those packages also only expose the
+  standard slog package for logging, not our mlog package. Packages not intended
+  for reuse do use mlog as it is more convenient. Internally, we always use
+  mlog.Log to do the logging, wrapping an slog.Logger.
 
 
 # TLS certificates

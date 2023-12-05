@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/mlog"
@@ -106,7 +108,7 @@ func (a DirArchiver) Close() error {
 // Some errors are not fatal and result in skipped messages. In that happens, a
 // file "errors.txt" is added to the archive describing the errors. The goal is to
 // let users export (hopefully) most messages even in the face of errors.
-func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDir string, archiver Archiver, maildir bool, mailboxOpt string) error {
+func ExportMessages(ctx context.Context, log mlog.Log, db *bstore.DB, accountDir string, archiver Archiver, maildir bool, mailboxOpt string) error {
 	// todo optimize: should prepare next file to add to archive (can be an mbox with many messages) while writing a file to the archive (which typically compresses, which takes time).
 
 	// Start transaction without closure, we are going to close it early, but don't
@@ -291,7 +293,7 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 		err = mboxtmp.Close()
 		log.Check(err, "closing temporary mbox file")
 		err = os.Remove(name)
-		log.Check(err, "removing temporary mbox file", mlog.Field("path", name))
+		log.Check(err, "removing temporary mbox file", slog.String("path", name))
 		mboxwriter = nil
 		mboxtmp = nil
 		return nil

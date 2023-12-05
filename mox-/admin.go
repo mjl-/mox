@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/adns"
 
@@ -28,7 +29,6 @@ import (
 	"github.com/mjl-/mox/dmarc"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/junk"
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/tlsrpt"
@@ -154,7 +154,7 @@ func MakeAccountConfig(addr smtp.Address) config.Account {
 // MakeDomainConfig makes a new config for a domain, creating DKIM keys, using
 // accountName for DMARC and TLS reports.
 func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountName string, withMTASTS bool) (config.Domain, []string, error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 
 	now := time.Now()
 	year := now.Format("2006")
@@ -164,7 +164,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 	defer func() {
 		for _, p := range paths {
 			err := os.Remove(p)
-			log.Check(err, "removing path for domain config", mlog.Field("path", p))
+			log.Check(err, "removing path for domain config", slog.String("path", p))
 		}
 	}()
 
@@ -180,7 +180,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 				err := f.Close()
 				log.Check(err, "closing file after error")
 				err = os.Remove(path)
-				log.Check(err, "removing file after error", mlog.Field("path", path))
+				log.Check(err, "removing file after error", slog.String("path", path))
 			}
 		}()
 		if _, err := f.Write(data); err != nil {
@@ -288,10 +288,10 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 // If the account does not exist, it is created with localpart. Localpart must be
 // set only if the account does not yet exist.
 func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, localpart smtp.Localpart) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("adding domain", rerr, mlog.Field("domain", domain), mlog.Field("account", accountName), mlog.Field("localpart", localpart))
+			log.Errorx("adding domain", rerr, slog.Any("domain", domain), slog.String("account", accountName), slog.Any("localpart", localpart))
 		}
 	}()
 
@@ -327,7 +327,7 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 	defer func() {
 		for _, f := range cleanupFiles {
 			err := os.Remove(f)
-			log.Check(err, "cleaning up file after error", mlog.Field("path", f))
+			log.Check(err, "cleaning up file after error", slog.String("path", f))
 		}
 	}()
 
@@ -356,7 +356,7 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("domain added", mlog.Field("domain", domain))
+	log.Info("domain added", slog.Any("domain", domain))
 	cleanupFiles = nil // All good, don't cleanup.
 	return nil
 }
@@ -365,10 +365,10 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 //
 // No accounts are removed, also not when they still reference this domain.
 func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("removing domain", rerr, mlog.Field("domain", domain))
+			log.Errorx("removing domain", rerr, slog.Any("domain", domain))
 		}
 	}()
 
@@ -418,16 +418,16 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 			err = os.Rename(src, dst)
 		}
 		if err != nil {
-			log.Errorx("renaming dkim private key file for removed domain", err, mlog.Field("src", src), mlog.Field("dst", dst))
+			log.Errorx("renaming dkim private key file for removed domain", err, slog.String("src", src), slog.String("dst", dst))
 		}
 	}
 
-	log.Info("domain removed", mlog.Field("domain", domain))
+	log.Info("domain removed", slog.Any("domain", domain))
 	return nil
 }
 
 func WebserverConfigSet(ctx context.Context, domainRedirects map[string]string, webhandlers []config.WebHandler) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
 			log.Errorx("saving webserver config", rerr)
@@ -680,10 +680,10 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 //
 // Catchall addresses are not supported for AccountAdd. Add separately with AddressAdd.
 func AccountAdd(ctx context.Context, account, address string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("adding account", rerr, mlog.Field("account", account), mlog.Field("address", address))
+			log.Errorx("adding account", rerr, slog.String("account", account), slog.String("address", address))
 		}
 	}()
 
@@ -716,16 +716,16 @@ func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("account added", mlog.Field("account", account), mlog.Field("address", addr))
+	log.Info("account added", slog.String("account", account), slog.Any("address", addr))
 	return nil
 }
 
 // AccountRemove removes an account and reloads the configuration.
 func AccountRemove(ctx context.Context, account string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("adding account", rerr, mlog.Field("account", account))
+			log.Errorx("adding account", rerr, slog.String("account", account))
 		}
 	}()
 
@@ -750,7 +750,7 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("account removed", mlog.Field("account", account))
+	log.Info("account removed", slog.String("account", account))
 	return nil
 }
 
@@ -775,10 +775,10 @@ func checkAddressAvailable(addr smtp.Address) error {
 // AddressAdd adds an email address to an account and reloads the configuration. If
 // address starts with an @ it is treated as a catchall address for the domain.
 func AddressAdd(ctx context.Context, address, account string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("adding address", rerr, mlog.Field("address", address), mlog.Field("account", account))
+			log.Errorx("adding address", rerr, slog.String("address", address), slog.String("account", account))
 		}
 	}()
 
@@ -834,16 +834,16 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("address added", mlog.Field("address", address), mlog.Field("account", account))
+	log.Info("address added", slog.String("address", address), slog.String("account", account))
 	return nil
 }
 
 // AddressRemove removes an email address and reloads the configuration.
 func AddressRemove(ctx context.Context, address string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("removing address", rerr, mlog.Field("address", address))
+			log.Errorx("removing address", rerr, slog.String("address", address))
 		}
 	}()
 
@@ -884,16 +884,16 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("address removed", mlog.Field("address", address), mlog.Field("account", ad.Account))
+	log.Info("address removed", slog.String("address", address), slog.String("account", ad.Account))
 	return nil
 }
 
 // AccountFullNameSave updates the full name for an account and reloads the configuration.
 func AccountFullNameSave(ctx context.Context, account, fullName string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("saving account full name", rerr, mlog.Field("account", account))
+			log.Errorx("saving account full name", rerr, slog.String("account", account))
 		}
 	}()
 
@@ -920,16 +920,16 @@ func AccountFullNameSave(ctx context.Context, account, fullName string) (rerr er
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("account full name saved", mlog.Field("account", account))
+	log.Info("account full name saved", slog.String("account", account))
 	return nil
 }
 
 // DestinationSave updates a destination for an account and reloads the configuration.
 func DestinationSave(ctx context.Context, account, destName string, newDest config.Destination) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("saving destination", rerr, mlog.Field("account", account), mlog.Field("destname", destName), mlog.Field("destination", newDest))
+			log.Errorx("saving destination", rerr, slog.String("account", account), slog.String("destname", destName), slog.Any("destination", newDest))
 		}
 	}()
 
@@ -965,16 +965,16 @@ func DestinationSave(ctx context.Context, account, destName string, newDest conf
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("destination saved", mlog.Field("account", account), mlog.Field("destname", destName))
+	log.Info("destination saved", slog.String("account", account), slog.String("destname", destName))
 	return nil
 }
 
 // AccountLimitsSave saves new message sending limits for an account.
 func AccountLimitsSave(ctx context.Context, account string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("saving account limits", rerr, mlog.Field("account", account))
+			log.Errorx("saving account limits", rerr, slog.String("account", account))
 		}
 	}()
 
@@ -1001,7 +1001,7 @@ func AccountLimitsSave(ctx context.Context, account string, maxOutgoingMessagesP
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("account limits saved", mlog.Field("account", account))
+	log.Info("account limits saved", slog.String("account", account))
 	return nil
 }
 
@@ -1157,7 +1157,7 @@ func ClientConfigsDomain(d dns.Domain) (ClientConfigs, error) {
 // IPs returns ip addresses we may be listening/receiving mail on or
 // connecting/sending from to the outside.
 func IPs(ctx context.Context, receiveOnly bool) ([]net.IP, error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 
 	// Try to gather all IPs we are listening on by going through the config.
 	// If we encounter 0.0.0.0 or ::, we'll gather all local IPs afterwards.
@@ -1208,7 +1208,7 @@ func IPs(ctx context.Context, receiveOnly bool) ([]net.IP, error) {
 			for _, addr := range addrs {
 				ip, _, err := net.ParseCIDR(addr.String())
 				if err != nil {
-					log.Errorx("bad interface addr", err, mlog.Field("address", addr))
+					log.Errorx("bad interface addr", err, slog.Any("address", addr))
 					continue
 				}
 				v4 := ip.To4() != nil

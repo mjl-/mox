@@ -21,6 +21,7 @@ import (
 )
 
 var ctxbg = context.Background()
+var pkglog = mlog.New("ctl", nil)
 
 func tcheck(t *testing.T, err error, errmsg string) {
 	if err != nil {
@@ -36,19 +37,17 @@ func TestCtl(t *testing.T) {
 	os.RemoveAll("testdata/ctl/data")
 	mox.ConfigStaticPath = filepath.FromSlash("testdata/ctl/mox.conf")
 	mox.ConfigDynamicPath = filepath.FromSlash("testdata/ctl/domains.conf")
-	if errs := mox.LoadConfig(ctxbg, true, false); len(errs) > 0 {
+	if errs := mox.LoadConfig(ctxbg, pkglog, true, false); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}
 	defer store.Switchboard()()
-
-	xlog := mlog.New("ctl")
 
 	testctl := func(fn func(clientctl *ctl)) {
 		t.Helper()
 
 		cconn, sconn := net.Pipe()
-		clientctl := ctl{conn: cconn, log: xlog}
-		serverctl := ctl{conn: sconn, log: xlog}
+		clientctl := ctl{conn: cconn, log: pkglog}
+		serverctl := ctl{conn: sconn, log: pkglog}
 		go servectlcmd(ctxbg, &serverctl, func() {})
 		fn(&clientctl)
 		cconn.Close()
@@ -148,8 +147,8 @@ func TestCtl(t *testing.T) {
 	})
 
 	// Export data, import it again
-	xcmdExport(true, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, nil)
-	xcmdExport(false, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/maildir/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, nil)
+	xcmdExport(true, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, &cmd{log: pkglog})
+	xcmdExport(false, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/maildir/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, &cmd{log: pkglog})
 	testctl(func(ctl *ctl) {
 		ctlcmdImport(ctl, true, "mjl", "inbox", filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/Inbox.mbox"))
 	})
@@ -167,7 +166,7 @@ func TestCtl(t *testing.T) {
 		ctlcmdFixmsgsize(ctl, "mjl")
 	})
 	testctl(func(ctl *ctl) {
-		acc, err := store.OpenAccount("mjl")
+		acc, err := store.OpenAccount(ctl.log, "mjl")
 		tcheck(t, err, "open account")
 		defer acc.Close()
 
@@ -176,13 +175,13 @@ func TestCtl(t *testing.T) {
 		deliver := func(m *store.Message) {
 			t.Helper()
 			m.Size = int64(len(content))
-			msgf, err := store.CreateMessageTemp("ctltest")
+			msgf, err := store.CreateMessageTemp(ctl.log, "ctltest")
 			tcheck(t, err, "create temp file")
 			defer os.Remove(msgf.Name())
 			defer msgf.Close()
 			_, err = msgf.Write(content)
 			tcheck(t, err, "write message file")
-			err = acc.DeliverMailbox(xlog, "Inbox", m, msgf)
+			err = acc.DeliverMailbox(ctl.log, "Inbox", m, msgf)
 			tcheck(t, err, "deliver message")
 		}
 

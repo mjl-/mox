@@ -6,11 +6,12 @@ import (
 	"net/http"
 	"strings"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"rsc.io/qr"
 
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/smtp"
 )
@@ -55,7 +56,7 @@ var (
 // User should create a DNS record: autoconfig.<domain> (CNAME or A).
 // See https://wiki.mozilla.org/Thunderbird:Autoconfiguration:ConfigFileFormat
 func autoconfHandle(w http.ResponseWriter, r *http.Request) {
-	log := xlog.WithContext(r.Context())
+	log := pkglog.WithContext(r.Context())
 
 	var addrDom string
 	defer func() {
@@ -63,7 +64,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	email := r.FormValue("emailaddress")
-	log.Debug("autoconfig request", mlog.Field("email", email))
+	log.Debug("autoconfig request", slog.String("email", email))
 	addr, err := smtp.ParseAddress(email)
 	if err != nil {
 		http.Error(w, "400 - bad request - invalid parameter emailaddress", http.StatusBadRequest)
@@ -143,7 +144,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 //
 // Thunderbird does understand autodiscover.
 func autodiscoverHandle(w http.ResponseWriter, r *http.Request) {
-	log := xlog.WithContext(r.Context())
+	log := pkglog.WithContext(r.Context())
 
 	var addrDom string
 	defer func() {
@@ -161,7 +162,7 @@ func autodiscoverHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Debug("autodiscover request", mlog.Field("email", req.Request.EmailAddress))
+	log.Debug("autodiscover request", slog.String("email", req.Request.EmailAddress))
 
 	addr, err := smtp.ParseAddress(req.Request.EmailAddress)
 	if err != nil {

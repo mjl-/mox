@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slog"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/mjl-/bstore"
@@ -64,10 +65,10 @@ var importers = struct {
 
 // ImportManage should be run as a goroutine, it manages imports of mboxes/maildirs, propagating progress over SSE connections.
 func ImportManage() {
-	log := mlog.New("httpimport")
+	log := mlog.New("httpimport", nil)
 	defer func() {
 		if x := recover(); x != nil {
-			log.Error("import manage panic", mlog.Field("err", x))
+			log.Error("import manage panic", slog.Any("err", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Importmanage)
 		}
@@ -94,7 +95,7 @@ func ImportManage() {
 				sendEvent := func(kind string, v any) {
 					buf, err := json.Marshal(v)
 					if err != nil {
-						log.Errorx("marshal event", err, mlog.Field("kind", kind), mlog.Field("event", v))
+						log.Errorx("marshal event", err, slog.String("kind", kind), slog.Any("event", v))
 						return
 					}
 					ssemsg := fmt.Sprintf("event: %s\ndata: %s\n\n", kind, buf)
@@ -199,7 +200,7 @@ type importStep struct {
 
 // importStart prepare the import and launches the goroutine to actually import.
 // importStart is responsible for closing f and removing f.
-func importStart(log *mlog.Log, accName string, f *os.File, skipMailboxPrefix string) (string, error) {
+func importStart(log mlog.Log, accName string, f *os.File, skipMailboxPrefix string) (string, error) {
 	defer func() {
 		if f != nil {
 			store.CloseRemoveTempFile(log, f, "upload for import")
@@ -249,7 +250,7 @@ func importStart(log *mlog.Log, accName string, f *os.File, skipMailboxPrefix st
 		tr = tar.NewReader(gzr)
 	}
 
-	acc, err := store.OpenAccount(accName)
+	acc, err := store.OpenAccount(log, accName)
 	if err != nil {
 		return "", fmt.Errorf("open acount: %v", err)
 	}
@@ -276,7 +277,7 @@ func importStart(log *mlog.Log, accName string, f *os.File, skipMailboxPrefix st
 
 // importMessages imports the messages from zip/tgz file f.
 // importMessages is responsible for unlocking and closing acc, and closing tx and f.
-func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store.Account, tx *bstore.Tx, zr *zip.Reader, tr *tar.Reader, f *os.File, skipMailboxPrefix string) {
+func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.Account, tx *bstore.Tx, zr *zip.Reader, tr *tar.Reader, f *os.File, skipMailboxPrefix string) {
 	// If a fatal processing error occurs, we panic with this type.
 	type importError struct{ Err error }
 
@@ -289,7 +290,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 	sendEvent := func(kind string, v any) {
 		buf, err := json.Marshal(v)
 		if err != nil {
-			log.Errorx("marshal event", err, mlog.Field("kind", kind), mlog.Field("event", v))
+			log.Errorx("marshal event", err, slog.String("kind", kind), slog.Any("event", v))
 			return
 		}
 		ssemsg := fmt.Sprintf("event: %s\ndata: %s\n\n", kind, buf)
@@ -317,7 +318,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		for _, id := range deliveredIDs {
 			p := acc.MessagePath(id)
 			err := os.Remove(p)
-			log.Check(err, "closing message file after import error", mlog.Field("path", p))
+			log.Check(err, "closing message file after import error", slog.String("path", p))
 		}
 		if tx != nil {
 			err := tx.Rollback()
@@ -338,7 +339,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 			problemf("%s (aborting)", err.Err)
 			sendEvent("aborted", importAborted{})
 		} else {
-			log.Error("import panic", mlog.Field("err", x))
+			log.Error("import panic", slog.Any("err", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Importmessages)
 		}
@@ -511,7 +512,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		}
 
 		// Parse message and store parsed information for later fast retrieval.
-		p, err := message.EnsurePart(log, false, f, m.Size)
+		p, err := message.EnsurePart(log.Logger, false, f, m.Size)
 		if err != nil {
 			problemf("parsing message %s: %s (continuing)", pos, err)
 		}
@@ -562,7 +563,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		}
 		mb := xensureMailbox(mailbox)
 
-		mr := store.NewMboxReader(store.CreateMessageTemp, filename, r, log)
+		mr := store.NewMboxReader(log, store.CreateMessageTemp, filename, r)
 		for {
 			m, mf, pos, err := mr.Next()
 			if err == io.EOF {
@@ -582,7 +583,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 		}
 		mb := xensureMailbox(mailbox)
 
-		f, err := store.CreateMessageTemp("import")
+		f, err := store.CreateMessageTemp(log, "import")
 		ximportcheckf(err, "creating temp message")
 		defer func() {
 			if f != nil {
@@ -707,7 +708,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 				mailbox := path.Dir(name)
 				dovecotKeywords := map[rune]string{}
 				words, err := store.ParseDovecotKeywordsFlags(r, log)
-				log.Check(err, "parsing dovecot keywords for mailbox", mlog.Field("mailbox", mailbox))
+				log.Check(err, "parsing dovecot keywords for mailbox", slog.String("mailbox", mailbox))
 				for i, kw := range words {
 					dovecotKeywords['a'+rune(i)] = kw
 				}
@@ -801,7 +802,7 @@ func importMessages(ctx context.Context, log *mlog.Log, token string, acc *store
 	for _, count := range messages {
 		total += count
 	}
-	log.Debug("messages imported", mlog.Field("total", total))
+	log.Debug("messages imported", slog.Int("total", total))
 
 	// Send final update for count of last-imported mailbox.
 	if prevMailbox != "" {

@@ -8,7 +8,6 @@ import (
 
 	"github.com/mjl-/bstore"
 
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/store"
 )
 
@@ -66,7 +65,7 @@ func xcmdExport(mbox bool, args []string, c *cmd) {
 	}()
 
 	a := store.DirArchiver{Dir: dst}
-	err = store.ExportMessages(context.Background(), mlog.New("export"), db, accountDir, a, !mbox, mailbox)
+	err = store.ExportMessages(context.Background(), c.log, db, accountDir, a, !mbox, mailbox)
 	xcheckf(err, "exporting messages")
 	err = a.Close()
 	xcheckf(err, "closing archiver")

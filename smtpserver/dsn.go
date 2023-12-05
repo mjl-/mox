@@ -24,7 +24,7 @@ func queueDSN(ctx context.Context, c *conn, rcptTo smtp.Path, m dsn.Message, req
 		}
 	}
 
-	f, err := store.CreateMessageTemp("smtp-dsn")
+	f, err := store.CreateMessageTemp(c.log, "smtp-dsn")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}

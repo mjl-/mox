@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/dns"
@@ -39,7 +41,7 @@ func tcompare(t *testing.T, got, expect any) {
 }
 
 func TestSendReports(t *testing.T) {
-	mlog.SetConfig(map[string]mlog.Level{"": mlog.LevelDebug})
+	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelDebug})
 
 	os.RemoveAll("../testdata/tlsrptsend/data")
 	mox.Context = ctxbg
@@ -411,7 +413,7 @@ func TestSendReports(t *testing.T) {
 		var mutex sync.Mutex
 
 		var index int
-		queueAdd = func(ctx context.Context, log *mlog.Log, qm *queue.Msg, msgFile *os.File) error {
+		queueAdd = func(ctx context.Context, log mlog.Log, qm *queue.Msg, msgFile *os.File) error {
 			mutex.Lock()
 			defer mutex.Unlock()
 
@@ -423,7 +425,7 @@ func TestSendReports(t *testing.T) {
 			err = os.WriteFile(p, append(append([]byte{}, qm.MsgPrefix...), buf...), 0600)
 			tcheckf(t, err, "write report message")
 
-			report, err := tlsrpt.ParseMessage(log, msgFile)
+			report, err := tlsrpt.ParseMessage(log.Logger, msgFile)
 			tcheckf(t, err, "parsing generated report message")
 
 			addr := qm.Recipient().String()

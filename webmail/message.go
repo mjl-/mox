@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
@@ -32,19 +34,19 @@ import (
 // "filename*0*=UTF-8”%...; filename*1*=%.... We'll look for Q/B-word encoding
 // markers ("=?"-prefix or "?="-suffix) and try to decode if present. This would
 // only cause trouble for filenames having this prefix/suffix.
-func tryDecodeParam(log *mlog.Log, name string) string {
+func tryDecodeParam(log mlog.Log, name string) string {
 	if name == "" || !strings.HasPrefix(name, "=?") && !strings.HasSuffix(name, "?=") {
 		return name
 	}
 	// todo: find where this is allowed. it seems quite common. perhaps we should remove the pedantic check?
 	if moxvar.Pedantic {
-		log.Debug("attachment contains rfc2047 q/b-word-encoded mime parameter instead of rfc2231-encoded", mlog.Field("name", name))
+		log.Debug("attachment contains rfc2047 q/b-word-encoded mime parameter instead of rfc2231-encoded", slog.String("name", name))
 		return name
 	}
 	dec := mime.WordDecoder{}
 	s, err := dec.DecodeHeader(name)
 	if err != nil {
-		log.Debugx("q/b-word decoding mime parameter", err, mlog.Field("name", name))
+		log.Debugx("q/b-word decoding mime parameter", err, slog.String("name", name))
 		return name
 	}
 	return s
@@ -52,7 +54,7 @@ func tryDecodeParam(log *mlog.Log, name string) string {
 
 // todo: mime.FormatMediaType does not wrap long lines. should do it ourselves, and split header into several parts (if commonly supported).
 
-func messageItem(log *mlog.Log, m store.Message, state *msgState) (MessageItem, error) {
+func messageItem(log mlog.Log, m store.Message, state *msgState) (MessageItem, error) {
 	pm, err := parsedMessage(log, m, state, false, true)
 	if err != nil {
 		return MessageItem{}, fmt.Errorf("parsing message %d for item: %v", m.ID, err)
@@ -161,7 +163,7 @@ func formatFirstLine(r io.Reader) (string, error) {
 	return result, scanner.Err()
 }
 
-func parsedMessage(log *mlog.Log, m store.Message, state *msgState, full, msgitem bool) (pm ParsedMessage, rerr error) {
+func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem bool) (pm ParsedMessage, rerr error) {
 	if full || msgitem {
 		if !state.ensurePart(m, true) {
 			return pm, state.err
@@ -240,11 +242,11 @@ func parsedMessage(log *mlog.Log, m store.Message, state *msgState, full, msgite
 			if full || msgitem {
 				// todo: should have this, and perhaps all content-* headers, preparsed in message.Part?
 				h, err := p.Header()
-				log.Check(err, "parsing attachment headers", mlog.Field("msgid", m.ID))
+				log.Check(err, "parsing attachment headers", slog.Int64("msgid", m.ID))
 				cp := h.Get("Content-Disposition")
 				if cp != "" {
 					disp, params, err := mime.ParseMediaType(cp)
-					log.Check(err, "parsing content-disposition", mlog.Field("cp", cp))
+					log.Check(err, "parsing content-disposition", slog.String("cp", cp))
 					if strings.EqualFold(disp, "attachment") {
 						name := tryDecodeParam(log, p.ContentTypeParams["name"])
 						if name == "" {
@@ -322,11 +324,11 @@ func parsedMessage(log *mlog.Log, m store.Message, state *msgState, full, msgite
 				if name == "" && (full || msgitem) {
 					// todo: should have this, and perhaps all content-* headers, preparsed in message.Part?
 					h, err := p.Header()
-					log.Check(err, "parsing attachment headers", mlog.Field("msgid", m.ID))
+					log.Check(err, "parsing attachment headers", slog.Int64("msgid", m.ID))
 					cp := h.Get("Content-Disposition")
 					if cp != "" {
 						_, params, err := mime.ParseMediaType(cp)
-						log.Check(err, "parsing content-disposition", mlog.Field("cp", cp))
+						log.Check(err, "parsing content-disposition", slog.String("cp", cp))
 						name = tryDecodeParam(log, params["filename"])
 					}
 				}

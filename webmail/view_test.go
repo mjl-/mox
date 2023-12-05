@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/store"
 )
@@ -28,13 +29,14 @@ func TestView(t *testing.T) {
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
 
-	acc, err := store.OpenAccount("mjl")
+	log := mlog.New("webmail", nil)
+	acc, err := store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
-	err = acc.SetPassword("test1234")
+	err = acc.SetPassword(log, "test1234")
 	tcheck(t, err, "set password")
 	defer func() {
 		err := acc.Close()
-		xlog.Check(err, "closing account")
+		pkglog.Check(err, "closing account")
 	}()
 
 	api := Webmail{maxMessageSize: 1024 * 1024}
@@ -465,7 +467,7 @@ type eventReader struct {
 func (r eventReader) Get(name string, event any) {
 	timer := time.AfterFunc(2*time.Second, func() {
 		r.r.Close()
-		xlog.Print("event timeout")
+		pkglog.Print("event timeout")
 	})
 	defer timer.Stop()
 

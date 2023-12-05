@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -34,8 +36,6 @@ import (
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/smtp"
 )
-
-var xlog = mlog.New("dkim")
 
 var (
 	metricSign = promauto.NewCounterVec(
@@ -123,11 +123,11 @@ type Result struct {
 // todo: use some io.Writer to hash the body and the header.
 
 // Sign returns line(s) with DKIM-Signature headers, generated according to the configuration.
-func Sign(ctx context.Context, localpart smtp.Localpart, domain dns.Domain, c config.DKIM, smtputf8 bool, msg io.ReaderAt) (headers string, rerr error) {
-	log := xlog.WithContext(ctx)
+func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, domain dns.Domain, c config.DKIM, smtputf8 bool, msg io.ReaderAt) (headers string, rerr error) {
+	log := mlog.New("dkim", elog)
 	start := timeNow()
 	defer func() {
-		log.Debugx("dkim sign result", rerr, mlog.Field("localpart", localpart), mlog.Field("domain", domain), mlog.Field("smtputf8", smtputf8), mlog.Field("duration", time.Since(start)))
+		log.Debugx("dkim sign result", rerr, slog.Any("localpart", localpart), slog.Any("domain", domain), slog.Bool("smtputf8", smtputf8), slog.Duration("duration", time.Since(start)))
 	}()
 
 	hdrs, bodyOffset, err := parseHeaders(bufio.NewReader(&moxio.AtReader{R: msg}))
@@ -270,11 +270,11 @@ func Sign(ctx context.Context, localpart smtp.Localpart, domain dns.Domain, c co
 // record should be present.
 //
 // authentic indicates if DNS results were DNSSEC-verified.
-func Lookup(ctx context.Context, resolver dns.Resolver, selector, domain dns.Domain) (rstatus Status, rrecord *Record, rtxt string, authentic bool, rerr error) {
-	log := xlog.WithContext(ctx)
+func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, selector, domain dns.Domain) (rstatus Status, rrecord *Record, rtxt string, authentic bool, rerr error) {
+	log := mlog.New("dkim", elog)
 	start := timeNow()
 	defer func() {
-		log.Debugx("dkim lookup result", rerr, mlog.Field("selector", selector), mlog.Field("domain", domain), mlog.Field("status", rstatus), mlog.Field("record", rrecord), mlog.Field("duration", time.Since(start)))
+		log.Debugx("dkim lookup result", rerr, slog.Any("selector", selector), slog.Any("domain", domain), slog.Any("status", rstatus), slog.Any("record", rrecord), slog.Duration("duration", time.Since(start)))
 	}()
 
 	name := selector.ASCII + "._domainkey." + domain.ASCII + "."
@@ -338,8 +338,8 @@ func Lookup(ctx context.Context, resolver dns.Resolver, selector, domain dns.Dom
 // verification failure is treated as actual failure. With ignoreTestMode
 // false, such verification failures are treated as if there is no signature by
 // returning StatusNone.
-func Verify(ctx context.Context, resolver dns.Resolver, smtputf8 bool, policy func(*Sig) error, r io.ReaderAt, ignoreTestMode bool) (results []Result, rerr error) {
-	log := xlog.WithContext(ctx)
+func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, smtputf8 bool, policy func(*Sig) error, r io.ReaderAt, ignoreTestMode bool) (results []Result, rerr error) {
+	log := mlog.New("dkim", elog)
 	start := timeNow()
 	defer func() {
 		duration := float64(time.Since(start)) / float64(time.Second)
@@ -353,10 +353,10 @@ func Verify(ctx context.Context, resolver dns.Resolver, smtputf8 bool, policy fu
 		}
 
 		if len(results) == 0 {
-			log.Debugx("dkim verify result", rerr, mlog.Field("smtputf8", smtputf8), mlog.Field("duration", time.Since(start)))
+			log.Debugx("dkim verify result", rerr, slog.Bool("smtputf8", smtputf8), slog.Duration("duration", time.Since(start)))
 		}
 		for _, result := range results {
-			log.Debugx("dkim verify result", result.Err, mlog.Field("smtputf8", smtputf8), mlog.Field("status", result.Status), mlog.Field("sig", result.Sig), mlog.Field("record", result.Record), mlog.Field("duration", time.Since(start)))
+			log.Debugx("dkim verify result", result.Err, slog.Bool("smtputf8", smtputf8), slog.Any("status", result.Status), slog.Any("sig", result.Sig), slog.Any("record", result.Record), slog.Duration("duration", time.Since(start)))
 		}
 	}()
 
@@ -380,7 +380,7 @@ func Verify(ctx context.Context, resolver dns.Resolver, smtputf8 bool, policy fu
 			continue
 		}
 
-		h, canonHeaderSimple, canonDataSimple, err := checkSignatureParams(ctx, sig)
+		h, canonHeaderSimple, canonDataSimple, err := checkSignatureParams(ctx, log, sig)
 		if err != nil {
 			results = append(results, Result{StatusPermerror, sig, nil, false, err})
 			continue
@@ -394,7 +394,7 @@ func Verify(ctx context.Context, resolver dns.Resolver, smtputf8 bool, policy fu
 		}
 
 		br := bufio.NewReader(&moxio.AtReader{R: r, Offset: int64(bodyOffset)})
-		status, txt, authentic, err := verifySignature(ctx, resolver, sig, h, canonHeaderSimple, canonDataSimple, hdrs, verifySig, br, ignoreTestMode)
+		status, txt, authentic, err := verifySignature(ctx, log.Logger, resolver, sig, h, canonHeaderSimple, canonDataSimple, hdrs, verifySig, br, ignoreTestMode)
 		results = append(results, Result{status, sig, txt, authentic, err})
 	}
 	return results, nil
@@ -402,7 +402,7 @@ func Verify(ctx context.Context, resolver dns.Resolver, smtputf8 bool, policy fu
 
 // check if signature is acceptable.
 // Only looks at the signature parameters, not at the DNS record.
-func checkSignatureParams(ctx context.Context, sig *Sig) (hash crypto.Hash, canonHeaderSimple, canonBodySimple bool, rerr error) {
+func checkSignatureParams(ctx context.Context, log mlog.Log, sig *Sig) (hash crypto.Hash, canonHeaderSimple, canonBodySimple bool, rerr error) {
 	// "From" header is required, ../rfc/6376:2122 ../rfc/6376:2546
 	var from bool
 	for _, h := range sig.SignedHeaders {
@@ -431,7 +431,7 @@ func checkSignatureParams(ctx context.Context, sig *Sig) (hash crypto.Hash, cano
 	if subdom.Unicode != "" {
 		subdom.Unicode = "x." + subdom.Unicode
 	}
-	if orgDom := publicsuffix.Lookup(ctx, subdom); subdom.ASCII == orgDom.ASCII {
+	if orgDom := publicsuffix.Lookup(ctx, log.Logger, subdom); subdom.ASCII == orgDom.ASCII {
 		return 0, false, false, fmt.Errorf("%w: %s", ErrTLD, sig.Domain)
 	}
 
@@ -480,9 +480,9 @@ func checkSignatureParams(ctx context.Context, sig *Sig) (hash crypto.Hash, cano
 }
 
 // lookup the public key in the DNS and verify the signature.
-func verifySignature(ctx context.Context, resolver dns.Resolver, sig *Sig, hash crypto.Hash, canonHeaderSimple, canonDataSimple bool, hdrs []header, verifySig []byte, body *bufio.Reader, ignoreTestMode bool) (Status, *Record, bool, error) {
+func verifySignature(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, sig *Sig, hash crypto.Hash, canonHeaderSimple, canonDataSimple bool, hdrs []header, verifySig []byte, body *bufio.Reader, ignoreTestMode bool) (Status, *Record, bool, error) {
 	// ../rfc/6376:2604
-	status, record, _, authentic, err := Lookup(ctx, resolver, sig.Selector, sig.Domain)
+	status, record, _, authentic, err := Lookup(ctx, elog, resolver, sig.Selector, sig.Domain)
 	if err != nil {
 		// todo: for temporary errors, we could pass on information so caller returns a 4.7.5 ecode, ../rfc/6376:2777
 		return status, nil, authentic, err

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -81,9 +83,7 @@ func reportDB(ctx context.Context) (rdb *bstore.DB, rerr error) {
 // domain. Only reports for known domains are added to the database.
 //
 // Prometheus metrics are updated only for configured domains.
-func AddReport(ctx context.Context, verifiedFromDomain dns.Domain, mailFrom string, hostReport bool, r *tlsrpt.Report) error {
-	log := xlog.WithContext(ctx)
-
+func AddReport(ctx context.Context, log mlog.Log, verifiedFromDomain dns.Domain, mailFrom string, hostReport bool, r *tlsrpt.Report) error {
 	db, err := reportDB(ctx)
 	if err != nil {
 		return err
@@ -103,14 +103,14 @@ func AddReport(ctx context.Context, verifiedFromDomain dns.Domain, mailFrom stri
 		// coalesce TLS results for different policy domains in a single report.
 		d, err := dns.ParseDomain(pp.Domain)
 		if err != nil {
-			log.Errorx("invalid domain in tls report", err, mlog.Field("domain", pp.Domain), mlog.Field("mailfrom", mailFrom))
+			log.Errorx("invalid domain in tls report", err, slog.Any("domain", pp.Domain), slog.String("mailfrom", mailFrom))
 			continue
 		}
 		if hostReport && d != mox.Conf.Static.HostnameDomain {
-			log.Info("unknown mail host policy domain in tls report, not storing", mlog.Field("domain", d), mlog.Field("mailfrom", mailFrom))
+			log.Info("unknown mail host policy domain in tls report, not storing", slog.Any("domain", d), slog.String("mailfrom", mailFrom))
 			return fmt.Errorf("unknown mail host policy domain")
 		} else if _, ok := mox.Conf.Domain(d); !hostReport && !ok {
-			log.Info("unknown recipient policy domain in tls report, not storing", mlog.Field("domain", d), mlog.Field("mailfrom", mailFrom))
+			log.Info("unknown recipient policy domain in tls report, not storing", slog.Any("domain", d), slog.String("mailfrom", mailFrom))
 			return fmt.Errorf("unknown recipient policy domain")
 		}
 		if reportdom != zerodom && d != reportdom {

@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 )
 
 func TestLookup(t *testing.T) {
+	log := mlog.New("tlsrpt", nil)
 	resolver := dns.MockResolver{
 		TXT: map[string][]string{
 			"_smtp._tls.basic.example.":     {"v=TLSRPTv1; rua=mailto:tlsrpt@basic.example"},
@@ -27,7 +29,7 @@ func TestLookup(t *testing.T) {
 		t.Helper()
 
 		d := dns.Domain{ASCII: domain}
-		record, _, err := Lookup(context.Background(), resolver, d)
+		record, _, err := Lookup(context.Background(), log.Logger, resolver, d)
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("lookup, got err %#v, expected %#v", err, expErr)
 		}

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -13,8 +15,8 @@ import (
 )
 
 func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
-	log := func() *mlog.Log {
-		return xlog.WithContext(r.Context())
+	log := func() mlog.Log {
+		return pkglog.WithContext(r.Context())
 	}
 
 	host := strings.ToLower(r.Host)
@@ -30,7 +32,7 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 	}
 	domain, err := dns.ParseDomain(host)
 	if err != nil {
-		log().Errorx("mtasts policy request: bad domain", err, mlog.Field("host", host))
+		log().Errorx("mtasts policy request: bad domain", err, slog.String("host", host))
 		http.NotFound(w, r)
 		return
 	}
@@ -51,7 +53,7 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 		}
 		d, err := dns.ParseDomain(s)
 		if err != nil {
-			log().Errorx("bad domain in mtasts config", err, mlog.Field("domain", s))
+			log().Errorx("bad domain in mtasts config", err, slog.String("domain", s))
 			http.Error(w, "500 - internal server error - invalid domain in configuration", http.StatusInternalServerError)
 			return
 		}

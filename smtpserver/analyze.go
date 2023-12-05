@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/dkim"
@@ -89,7 +91,7 @@ func isListDomain(d delivery, ld dns.Domain) bool {
 	return false
 }
 
-func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delivery) analysis {
+func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d delivery) analysis {
 	var headers string
 
 	mailbox := d.rcptAcc.destination.Mailbox
@@ -158,7 +160,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 			d.m.MailboxID = mb.ID
 			d.m.MailboxDestinedID = mb.ID
 		} else {
-			log.Debug("mailbox not found in database", mlog.Field("mailbox", mailbox))
+			log.Debug("mailbox not found in database", slog.String("mailbox", mailbox))
 		}
 		return nil
 	}
@@ -206,17 +208,17 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		if d.dmarcResult.Status != dmarc.StatusPass {
 			log.Info("received dmarc aggregate report without dmarc pass, not processing as dmarc report")
 			headers += "X-Mox-DMARCReport-Error: no DMARC pass\r\n"
-		} else if report, err := dmarcrpt.ParseMessageReport(log, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
+		} else if report, err := dmarcrpt.ParseMessageReport(log.Logger, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
 			log.Infox("parsing dmarc aggregate report", err)
 			headers += "X-Mox-DMARCReport-Error: could not parse report\r\n"
 		} else if d, err := dns.ParseDomain(report.PolicyPublished.Domain); err != nil {
 			log.Infox("parsing domain in dmarc aggregate report", err)
 			headers += "X-Mox-DMARCReport-Error: could not parse domain in published policy\r\n"
 		} else if _, ok := mox.Conf.Domain(d); !ok {
-			log.Info("dmarc aggregate report for domain not configured, ignoring", mlog.Field("domain", d))
+			log.Info("dmarc aggregate report for domain not configured, ignoring", slog.Any("domain", d))
 			headers += "X-Mox-DMARCReport-Error: published policy domain unrecognized\r\n"
 		} else if report.ReportMetadata.DateRange.End > time.Now().Unix()+60 {
-			log.Info("dmarc aggregate report with end date in the future, ignoring", mlog.Field("domain", d), mlog.Field("end", time.Unix(report.ReportMetadata.DateRange.End, 0)))
+			log.Info("dmarc aggregate report with end date in the future, ignoring", slog.Any("domain", d), slog.Time("end", time.Unix(report.ReportMetadata.DateRange.End, 0)))
 			headers += "X-Mox-DMARCReport-Error: report has end date in the future\r\n"
 		} else {
 			dmarcReport = report
@@ -230,7 +232,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		matchesDomain := func(sigDomain dns.Domain) bool {
 			// RFC seems to require exact DKIM domain match with submitt and message From, we
 			// also allow msgFrom to be subdomain. ../rfc/8460:322
-			return sigDomain == d.msgFrom.Domain || strings.HasSuffix(d.msgFrom.Domain.ASCII, "."+sigDomain.ASCII) && publicsuffix.Lookup(ctx, d.msgFrom.Domain) == publicsuffix.Lookup(ctx, sigDomain)
+			return sigDomain == d.msgFrom.Domain || strings.HasSuffix(d.msgFrom.Domain.ASCII, "."+sigDomain.ASCII) && publicsuffix.Lookup(ctx, log.Logger, d.msgFrom.Domain) == publicsuffix.Lookup(ctx, log.Logger, sigDomain)
 		}
 		// Valid DKIM signature for domain must be present. We take "valid" to assume
 		// "passing", not "syntactically valid". We also check for "tlsrpt" as service.
@@ -255,13 +257,13 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		if !ok {
 			log.Info("received mail to tlsrpt without acceptable DKIM signature, not processing as tls report")
 			headers += "X-Mox-TLSReport-Error: no acceptable DKIM signature\r\n"
-		} else if report, err := tlsrpt.ParseMessage(log, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
+		} else if report, err := tlsrpt.ParseMessage(log.Logger, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
 			log.Infox("parsing tls report", err)
 			headers += "X-Mox-TLSReport-Error: could not parse TLS report\r\n"
 		} else {
 			var known bool
 			for _, p := range report.Policies {
-				log.Info("tlsrpt policy domain", mlog.Field("domain", p.Policy.Domain))
+				log.Info("tlsrpt policy domain", slog.String("domain", p.Policy.Domain))
 				if d, err := dns.ParseDomain(p.Policy.Domain); err != nil {
 					log.Infox("parsing domain in tls report", err)
 				} else if _, ok := mox.Conf.Domain(d); ok || d == mox.Conf.Static.HostnameDomain {
@@ -297,10 +299,10 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		})
 	})
 	if err != nil {
-		log.Infox("determining reputation", err, mlog.Field("message", d.m))
+		log.Infox("determining reputation", err, slog.Any("message", d.m))
 		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonReputationError)
 	}
-	log.Info("reputation analyzed", mlog.Field("conclusive", conclusive), mlog.Field("isjunk", isjunk), mlog.Field("method", string(method)))
+	log.Info("reputation analyzed", slog.Bool("conclusive", conclusive), slog.Any("isjunk", isjunk), slog.String("method", string(method)))
 	if conclusive {
 		if !*isjunk {
 			return analysis{accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reason, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
@@ -340,9 +342,9 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 			log.Errorx("get key for verifying subject token", err)
 			return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonSubjectpassError)
 		}
-		err = subjectpass.Verify(log, d.dataFile, []byte(subjectpassKey), conf.SubjectPass.Period)
+		err = subjectpass.Verify(log.Logger, d.dataFile, []byte(subjectpassKey), conf.SubjectPass.Period)
 		pass := err == nil
-		log.Infox("pass by subject token", err, mlog.Field("pass", pass))
+		log.Infox("pass by subject token", err, slog.Bool("pass", pass))
 		if pass {
 			return analysis{accept: true, mailbox: mailbox, reason: reasonSubjectpass, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
 		}
@@ -395,11 +397,11 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		reason = reasonJunkContent
 		if suspiciousIPrevFail && threshold > 0.25 {
 			threshold = 0.25
-			log.Info("setting junk threshold due to iprev fail", mlog.Field("threshold", threshold))
+			log.Info("setting junk threshold due to iprev fail", slog.Float64("threshold", threshold))
 			reason = reasonJunkContentStrict
 		} else if !d.tls && threshold > 0.25 {
 			threshold = 0.25
-			log.Info("setting junk threshold due to plaintext smtp", mlog.Field("threshold", threshold))
+			log.Info("setting junk threshold due to plaintext smtp", slog.Float64("threshold", threshold))
 			reason = reasonJunkContentStrict
 		} else if (rs == nil || !rs.IsForward) && threshold > 0.25 && !rcptToMatch(d.msgTo) && !rcptToMatch(d.msgCc) {
 			// A common theme in junk messages is your recipient address not being in the To/Cc
@@ -407,12 +409,12 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 			// providers (e.g. gmail) does not DKIM-sign Bcc headers, so junk messages can be
 			// sent with matching Bcc headers. We don't get here for known senders.
 			threshold = 0.25
-			log.Info("setting junk threshold due to smtp rcpt to and message to/cc address mismatch", mlog.Field("threshold", threshold))
+			log.Info("setting junk threshold due to smtp rcpt to and message to/cc address mismatch", slog.Float64("threshold", threshold))
 			reason = reasonJunkContentStrict
 		}
 		accept = contentProb <= threshold
 		junkSubjectpass = contentProb < threshold-0.2
-		log.Info("content analyzed", mlog.Field("accept", accept), mlog.Field("contentprob", contentProb), mlog.Field("subjectpass", junkSubjectpass))
+		log.Info("content analyzed", slog.Bool("accept", accept), slog.Float64("contentprob", contentProb), slog.Bool("subjectpass", junkSubjectpass))
 	} else if err != store.ErrNoJunkFilter {
 		log.Errorx("open junkfilter", err)
 		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonJunkFilterError)
@@ -426,18 +428,18 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 		blocked := func(zone dns.Domain) bool {
 			dnsblctx, dnsblcancel := context.WithTimeout(ctx, 30*time.Second)
 			defer dnsblcancel()
-			if !checkDNSBLHealth(dnsblctx, resolver, zone) {
-				log.Info("dnsbl not healthy, skipping", mlog.Field("zone", zone))
+			if !checkDNSBLHealth(dnsblctx, log, resolver, zone) {
+				log.Info("dnsbl not healthy, skipping", slog.Any("zone", zone))
 				return false
 			}
 
-			status, expl, err := dnsbl.Lookup(dnsblctx, resolver, zone, net.ParseIP(d.m.RemoteIP))
+			status, expl, err := dnsbl.Lookup(dnsblctx, log.Logger, resolver, zone, net.ParseIP(d.m.RemoteIP))
 			dnsblcancel()
 			if status == dnsbl.StatusFail {
-				log.Info("rejecting due to listing in dnsbl", mlog.Field("zone", zone), mlog.Field("explanation", expl))
+				log.Info("rejecting due to listing in dnsbl", slog.Any("zone", zone), slog.String("explanation", expl))
 				return true
 			} else if err != nil {
-				log.Infox("dnsbl lookup", err, mlog.Field("zone", zone), mlog.Field("status", status))
+				log.Infox("dnsbl lookup", err, slog.Any("zone", zone), slog.Any("status", status))
 			}
 			return false
 		}
@@ -459,7 +461,7 @@ func analyze(ctx context.Context, log *mlog.Log, resolver dns.Resolver, d delive
 
 	if subjectpassKey != "" && d.dmarcResult.Status == dmarc.StatusPass && method == methodNone && (dnsblocklisted || junkSubjectpass) {
 		log.Info("permanent reject with subjectpass hint of moderately spammy email without reputation")
-		pass := subjectpass.Generate(d.msgFrom, []byte(subjectpassKey), time.Now())
+		pass := subjectpass.Generate(log.Logger, d.msgFrom, []byte(subjectpassKey), time.Now())
 		return reject(smtp.C550MailboxUnavail, smtp.SePol7DeliveryUnauth1, subjectpass.Explanation+pass, nil, reasonGiveSubjectpass)
 	}
 

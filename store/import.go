@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/mlog"
 )
@@ -25,25 +26,25 @@ type MsgSource interface {
 
 // MboxReader reads messages from an mbox file, implementing MsgSource.
 type MboxReader struct {
-	createTemp func(pattern string) (*os.File, error)
+	log        mlog.Log
+	createTemp func(log mlog.Log, pattern string) (*os.File, error)
 	path       string
 	line       int
 	r          *bufio.Reader
 	prevempty  bool
 	nonfirst   bool
-	log        *mlog.Log
 	eof        bool
 	fromLine   string // "From "-line for this message.
 	header     bool   // Now in header section.
 }
 
-func NewMboxReader(createTemp func(pattern string) (*os.File, error), filename string, r io.Reader, log *mlog.Log) *MboxReader {
+func NewMboxReader(log mlog.Log, createTemp func(log mlog.Log, pattern string) (*os.File, error), filename string, r io.Reader) *MboxReader {
 	return &MboxReader{
+		log:        log,
 		createTemp: createTemp,
 		path:       filename,
 		line:       1,
 		r:          bufio.NewReader(r),
-		log:        log,
 	}
 }
 
@@ -78,7 +79,7 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 		mr.fromLine = strings.TrimSpace(string(line))
 	}
 
-	f, err := mr.createTemp("mboxreader")
+	f, err := mr.createTemp(mr.log, "mboxreader")
 	if err != nil {
 		return nil, nil, mr.Position(), err
 	}
@@ -202,22 +203,22 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 }
 
 type MaildirReader struct {
-	createTemp   func(pattern string) (*os.File, error)
+	log          mlog.Log
+	createTemp   func(log mlog.Log, pattern string) (*os.File, error)
 	newf, curf   *os.File
 	f            *os.File // File we are currently reading from. We first read newf, then curf.
 	dir          string   // Name of directory for f. Can be empty on first call.
 	entries      []os.DirEntry
 	dovecotFlags []string // Lower-case flags/keywords.
-	log          *mlog.Log
 }
 
-func NewMaildirReader(createTemp func(pattern string) (*os.File, error), newf, curf *os.File, log *mlog.Log) *MaildirReader {
+func NewMaildirReader(log mlog.Log, createTemp func(log mlog.Log, pattern string) (*os.File, error), newf, curf *os.File) *MaildirReader {
 	mr := &MaildirReader{
+		log:        log,
 		createTemp: createTemp,
 		newf:       newf,
 		curf:       curf,
 		f:          newf,
-		log:        log,
 	}
 
 	// Best-effort parsing of dovecot keywords.
@@ -263,7 +264,7 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 		err := sf.Close()
 		mr.log.Check(err, "closing message file after error")
 	}()
-	f, err := mr.createTemp("maildirreader")
+	f, err := mr.createTemp(mr.log, "maildirreader")
 	if err != nil {
 		return nil, nil, p, err
 	}
@@ -273,7 +274,7 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 			err := f.Close()
 			mr.log.Check(err, "closing temporary message file after maildir read error")
 			err = os.Remove(name)
-			mr.log.Check(err, "removing temporary message file after maildir read error", mlog.Field("path", name))
+			mr.log.Check(err, "removing temporary message file after maildir read error", slog.String("path", name))
 		}
 	}()
 
@@ -370,7 +371,7 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 // returns valid flags/keywords, as lower-case. If an error is encountered and
 // returned, any keywords that were found are still returned. The returned list has
 // both system/well-known flags and custom keywords.
-func ParseDovecotKeywordsFlags(r io.Reader, log *mlog.Log) ([]string, error) {
+func ParseDovecotKeywordsFlags(r io.Reader, log mlog.Log) ([]string, error) {
 	/*
 		If the dovecot-keywords file is present, we parse its additional flags, see
 		https://doc.dovecot.org/admin_manual/mailbox_formats/maildir/

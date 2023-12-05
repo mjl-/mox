@@ -17,7 +17,10 @@ import (
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 )
+
+var pkglog = mlog.New("dkim", nil)
 
 func policyOK(sig *Sig) error {
 	return nil
@@ -143,7 +146,7 @@ test
 		},
 	}
 
-	results, err := Verify(context.Background(), resolver, false, policyOK, strings.NewReader(message), false)
+	results, err := Verify(context.Background(), pkglog.Logger, resolver, false, policyOK, strings.NewReader(message), false)
 	if err != nil {
 		t.Fatalf("dkim verify: %v", err)
 	}
@@ -190,7 +193,7 @@ Joe.
 		},
 	}
 
-	results, err := Verify(context.Background(), resolver, false, policyOK, strings.NewReader(message), false)
+	results, err := Verify(context.Background(), pkglog.Logger, resolver, false, policyOK, strings.NewReader(message), false)
 	if err != nil {
 		t.Fatalf("dkim verify: %v", err)
 	}
@@ -262,7 +265,7 @@ test
 	}
 
 	ctx := context.Background()
-	headers, err := Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader(message))
+	headers, err := Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader(message))
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -293,7 +296,7 @@ test
 
 	nmsg := headers + message
 
-	results, err := Verify(ctx, resolver, false, policyOK, strings.NewReader(nmsg), false)
+	results, err := Verify(ctx, pkglog.Logger, resolver, false, policyOK, strings.NewReader(nmsg), false)
 	if err != nil {
 		t.Fatalf("verify: %s", err)
 	}
@@ -304,31 +307,31 @@ test
 	//log.Infof("nmsg\n%s", nmsg)
 
 	// Multiple From headers.
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("From: <mjl@mox.example>\r\nFrom: <mjl@mox.example>\r\n\r\ntest"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("From: <mjl@mox.example>\r\nFrom: <mjl@mox.example>\r\n\r\ntest"))
 	if !errors.Is(err, ErrFrom) {
 		t.Fatalf("sign, got err %v, expected ErrFrom", err)
 	}
 
 	// No From header.
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("Brom: <mjl@mox.example>\r\n\r\ntest"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("Brom: <mjl@mox.example>\r\n\r\ntest"))
 	if !errors.Is(err, ErrFrom) {
 		t.Fatalf("sign, got err %v, expected ErrFrom", err)
 	}
 
 	// Malformed headers.
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader(":\r\n\r\ntest"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader(":\r\n\r\ntest"))
 	if !errors.Is(err, ErrHeaderMalformed) {
 		t.Fatalf("sign, got err %v, expected ErrHeaderMalformed", err)
 	}
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader(" From:<mjl@mox.example>\r\n\r\ntest"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader(" From:<mjl@mox.example>\r\n\r\ntest"))
 	if !errors.Is(err, ErrHeaderMalformed) {
 		t.Fatalf("sign, got err %v, expected ErrHeaderMalformed", err)
 	}
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("Frøm:<mjl@mox.example>\r\n\r\ntest"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("Frøm:<mjl@mox.example>\r\n\r\ntest"))
 	if !errors.Is(err, ErrHeaderMalformed) {
 		t.Fatalf("sign, got err %v, expected ErrHeaderMalformed", err)
 	}
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("From:<mjl@mox.example>"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("From:<mjl@mox.example>"))
 	if !errors.Is(err, ErrHeaderMalformed) {
 		t.Fatalf("sign, got err %v, expected ErrHeaderMalformed", err)
 	}
@@ -408,7 +411,7 @@ test
 
 		msg = strings.ReplaceAll(msg, "\n", "\r\n")
 
-		headers, err := Sign(context.Background(), "mjl", signDomain, dkimConf, false, strings.NewReader(msg))
+		headers, err := Sign(context.Background(), pkglog.Logger, "mjl", signDomain, dkimConf, false, strings.NewReader(msg))
 		if err != nil {
 			t.Fatalf("sign: %v", err)
 		}
@@ -425,7 +428,7 @@ test
 			sign()
 		}
 
-		results, err := Verify(context.Background(), resolver, true, policy, strings.NewReader(msg), false)
+		results, err := Verify(context.Background(), pkglog.Logger, resolver, true, policy, strings.NewReader(msg), false)
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("got verify error %v, expected %v", err, expErr)
 		}

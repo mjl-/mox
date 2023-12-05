@@ -22,14 +22,14 @@ func TestExport(t *testing.T) {
 	os.RemoveAll("../testdata/store/data")
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
-	acc, err := OpenAccount("mjl")
+	acc, err := OpenAccount(pkglog, "mjl")
 	tcheck(t, err, "open account")
 	defer acc.Close()
 	defer Switchboard()()
 
-	log := mlog.New("export")
+	log := mlog.New("export", nil)
 
-	msgFile, err := CreateMessageTemp("mox-test-export")
+	msgFile, err := CreateMessageTemp(pkglog, "mox-test-export")
 	tcheck(t, err, "create temp")
 	defer os.Remove(msgFile.Name()) // To be sure.
 	defer msgFile.Close()
@@ -38,11 +38,11 @@ func TestExport(t *testing.T) {
 	tcheck(t, err, "write message")
 
 	m := Message{Received: time.Now(), Size: int64(len(msg))}
-	err = acc.DeliverMailbox(xlog, "Inbox", &m, msgFile)
+	err = acc.DeliverMailbox(pkglog, "Inbox", &m, msgFile)
 	tcheck(t, err, "deliver")
 
 	m = Message{Received: time.Now(), Size: int64(len(msg))}
-	err = acc.DeliverMailbox(xlog, "Trash", &m, msgFile)
+	err = acc.DeliverMailbox(pkglog, "Trash", &m, msgFile)
 	tcheck(t, err, "deliver")
 
 	var maildirZip, maildirTar, mboxZip, mboxTar bytes.Buffer

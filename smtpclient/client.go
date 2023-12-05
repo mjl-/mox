@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -118,7 +120,7 @@ type Client struct {
 	w                       *bufio.Writer
 	tr                      *moxio.TraceReader // Kept for changing trace levels between cmd/auth/data.
 	tw                      *moxio.TraceWriter
-	log                     *mlog.Log
+	log                     mlog.Log
 	lastlog                 time.Time // For adding delta timestamps between log lines.
 	cmds                    []string  // Last or active command, for generating errors and metrics.
 	cmdStart                time.Time // Start of command.
@@ -237,7 +239,7 @@ type Opts struct {
 // with opportunistic TLS without PKIX verification by default. Recipient domains
 // can opt-in to PKIX verification by publishing an MTA-STS policy, or opt-in to
 // DANE verification by publishing DNSSEC-protected TLSA records in DNS.
-func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, tlsVerifyPKIX bool, ehloHostname, remoteHostname dns.Domain, opts Opts) (*Client, error) {
+func New(ctx context.Context, elog *slog.Logger, conn net.Conn, tlsMode TLSMode, tlsVerifyPKIX bool, ehloHostname, remoteHostname dns.Domain, opts Opts) (*Client, error) {
 	ensureResult := func(r *tlsrpt.Result) *tlsrpt.Result {
 		if r == nil {
 			return &tlsrpt.Result{}
@@ -259,10 +261,10 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, tls
 		recipientDomainResult: ensureResult(opts.RecipientDomainResult),
 		hostResult:            ensureResult(opts.HostResult),
 	}
-	c.log = log.Fields(mlog.Field("smtpclient", "")).MoreFields(func() []mlog.Pair {
+	c.log = mlog.New("smtpclient", elog).WithFunc(func() []slog.Attr {
 		now := time.Now()
-		l := []mlog.Pair{
-			mlog.Field("delta", now.Sub(c.lastlog)),
+		l := []slog.Attr{
+			slog.Duration("delta", now.Sub(c.lastlog)),
 		}
 		c.lastlog = now
 		return l
@@ -280,7 +282,7 @@ func New(ctx context.Context, log *mlog.Log, conn net.Conn, tlsMode TLSMode, tls
 		c.tlsResultAdd(1, 0, nil)
 		c.conn = tlsconn
 		tlsversion, ciphersuite := mox.TLSInfo(tlsconn)
-		c.log.Debug("tls client handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite), mlog.Field("servername", remoteHostname))
+		c.log.Debug("tls client handshake done", slog.String("tls", tlsversion), slog.String("ciphersuite", ciphersuite), slog.Any("servername", remoteHostname))
 		c.tls = true
 	} else {
 		c.conn = conn
@@ -329,8 +331,8 @@ func (c *Client) tlsConfig() *tls.Config {
 		// DANE verification.
 		// daneRecords can be non-nil and empty, that's intended.
 		if c.daneRecords != nil {
-			verified, record, err := dane.Verify(c.log, c.daneRecords, cs, c.remoteHostname, c.daneMoreHostnames)
-			c.log.Debugx("dane verification", err, mlog.Field("verified", verified), mlog.Field("record", record))
+			verified, record, err := dane.Verify(c.log.Logger, c.daneRecords, cs, c.remoteHostname, c.daneMoreHostnames)
+			c.log.Debugx("dane verification", err, slog.Bool("verified", verified), slog.Any("record", record))
 			if verified {
 				if c.daneVerifiedRecord != nil {
 					*c.daneVerifiedRecord = record
@@ -426,7 +428,7 @@ func (c *Client) xerrorf(permanent bool, code int, secode, lastLine, format stri
 type timeoutWriter struct {
 	conn    net.Conn
 	timeout time.Duration
-	log     *mlog.Log
+	log     mlog.Log
 }
 
 func (w timeoutWriter) Write(buf []byte) (int, error) {
@@ -445,7 +447,7 @@ func (c *Client) readline() (string, error) {
 		c.log.Errorx("setting read deadline", err)
 	}
 
-	line, err := bufs.Readline(c.r)
+	line, err := bufs.Readline(c.log, c.r)
 	if err != nil {
 		// See if this is a TLS alert from remote, and one other than 0 (which notifies
 		// that the connection is being closed. If so, we register a TLS connection
@@ -463,7 +465,7 @@ func (c *Client) readline() (string, error) {
 	return line, nil
 }
 
-func (c *Client) xtrace(level mlog.Level) func() {
+func (c *Client) xtrace(level slog.Level) func() {
 	c.xflush()
 	c.tr.SetTrace(level)
 	c.tw.SetTrace(level)
@@ -543,7 +545,7 @@ func (c *Client) readecode(ecodes bool) (code int, secode, lastLine string, text
 					}
 				}
 				metricCommands.WithLabelValues(cmd, fmt.Sprintf("%d", co), sec).Observe(float64(time.Since(c.cmdStart)) / float64(time.Second))
-				c.log.Debug("smtpclient command result", mlog.Field("cmd", cmd), mlog.Field("code", co), mlog.Field("secode", sec), mlog.Field("duration", time.Since(c.cmdStart)))
+				c.log.Debug("smtpclient command result", slog.String("cmd", cmd), slog.Int("code", co), slog.String("secode", sec), slog.Duration("duration", time.Since(c.cmdStart)))
 			}
 			return co, sec, line, texts, nil
 		}
@@ -726,7 +728,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 
 	// Attempt TLS if remote understands STARTTLS and we aren't doing immediate TLS or if caller requires it.
 	if c.extStartTLS && tlsMode == TLSOpportunistic || tlsMode == TLSRequiredStartTLS {
-		c.log.Debug("starting tls client", mlog.Field("tlsmode", tlsMode), mlog.Field("servername", c.remoteHostname))
+		c.log.Debug("starting tls client", slog.Any("tlsmode", tlsMode), slog.Any("servername", c.remoteHostname))
 		c.cmds[0] = "starttls"
 		c.cmdStart = time.Now()
 		c.xwritelinef("STARTTLS")
@@ -772,14 +774,14 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 
 		tlsversion, ciphersuite := mox.TLSInfo(nconn)
 		c.log.Debug("starttls client handshake done",
-			mlog.Field("tlsmode", tlsMode),
-			mlog.Field("verifypkix", c.tlsVerifyPKIX),
-			mlog.Field("verifydane", c.daneRecords != nil),
-			mlog.Field("ignoretlsverifyerrors", c.ignoreTLSVerifyErrors),
-			mlog.Field("tls", tlsversion),
-			mlog.Field("ciphersuite", ciphersuite),
-			mlog.Field("servername", c.remoteHostname),
-			mlog.Field("danerecord", c.daneVerifiedRecord))
+			slog.Any("tlsmode", tlsMode),
+			slog.Bool("verifypkix", c.tlsVerifyPKIX),
+			slog.Bool("verifydane", c.daneRecords != nil),
+			slog.Bool("ignoretlsverifyerrors", c.ignoreTLSVerifyErrors),
+			slog.String("tls", tlsversion),
+			slog.String("ciphersuite", ciphersuite),
+			slog.Any("servername", c.remoteHostname),
+			slog.Any("danerecord", c.daneVerifiedRecord))
 		c.tls = true
 		// Track successful TLS connection. ../rfc/8460:515
 		c.tlsResultAdd(1, 0, nil)
@@ -1171,7 +1173,7 @@ func (c *Client) Close() (rerr error) {
 		c.xwriteline("QUIT")
 		if err := c.conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
 			c.log.Infox("setting read deadline for reading quit response", err)
-		} else if _, err := bufs.Readline(c.r); err != nil {
+		} else if _, err := bufs.Readline(c.log, c.r); err != nil {
 			rerr = fmt.Errorf("reading response to quit command: %v", err)
 			c.log.Debugx("reading quit response", err)
 		}

@@ -1,30 +1,21 @@
-// Package mlog provides logging with log levels and fields.
+// Package mlog providers helpers on top of slog.Logger.
 //
-// Each log level has a function to log with and without error.
-// Each such function takes a varargs list of fields (key value pairs) to log.
-// Variable data should be in fields. Logging strings themselves should be
-// constant, for easier log processing (e.g. building metrics based on log
-// messages).
+// Packages of mox that are fit or use by external code take an *slog.Logger as
+// parameter for logging. Internally, and packages not intended for reuse,
+// logging is done with mlog.Log. It providers convenience functions for:
+// logging error values, tracing (protocol messages), uncoditional printing
+// optionally exiting.
 //
-// The log levels can be configured per originating package, e.g. smtpclient,
-// imapserver. The configuration is application-global, so each Log instance
-// uses the same log levels.
-//
-// Print* should be used for lines that always should be printed, regardless of
-// configured log levels. Useful for startup logging and subcommands.
-//
-// Fatal* stops the program. Its log text is always printed.
+// An mlog provides a handler for an mlog.Log for formatting log lines. Lines are
+// logged as "logfmt" lines for "mox serve". For command-line tools, the lines are
+// printed with colon-separated level, message and error, followed by
+// semicolon-separated attributes.
 package mlog
-
-// todo: log with source=path:linenumber? and/or stacktrace (perhaps optional)
-// todo: should we turn errors logged with an context.Canceled from a level error into level info?
-// todo: rethink format. perhaps simply using %#v is more useful for many types?
 
 import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -32,48 +23,16 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
+
+	"golang.org/x/exp/slog"
 )
 
+var noctx = context.Background()
+
+// Logfmt enabled output in logfmt, instead of output more suitable for
+// command-line tools. Must be set early in a program lifecycle.
 var Logfmt bool
-
-type Level int
-
-func (l Level) String() string {
-	return LevelStrings[l]
-}
-
-var LevelStrings = map[Level]string{
-	LevelPrint:     "print",
-	LevelFatal:     "fatal",
-	LevelError:     "error",
-	LevelInfo:      "info",
-	LevelDebug:     "debug",
-	LevelTrace:     "trace",
-	LevelTraceauth: "traceauth",
-	LevelTracedata: "tracedata",
-}
-
-var Levels = map[string]Level{
-	"print":     LevelPrint,
-	"fatal":     LevelFatal,
-	"error":     LevelError,
-	"info":      LevelInfo,
-	"debug":     LevelDebug,
-	"trace":     LevelTrace,
-	"traceauth": LevelTraceauth,
-	"tracedata": LevelTracedata,
-}
-
-const (
-	LevelPrint     Level = 0 // Printed regardless of configured log level.
-	LevelFatal     Level = 1 // Printed regardless of configured log level.
-	LevelError     Level = 2
-	LevelInfo      Level = 3
-	LevelDebug     Level = 4
-	LevelTrace     Level = 5
-	LevelTraceauth Level = 6
-	LevelTracedata Level = 7
-)
 
 // LogStringer is used when formatting field values during logging. If a value
 // implements it, LogString is called for the value to log.
@@ -81,42 +40,84 @@ type LogStringer interface {
 	LogString() string
 }
 
-// Holds a map[string]Level, mapping a package (field pkg in logs) to a log level.
-// The empty string is the default/fallback log level.
-var config atomic.Value
+var lowestLevel atomic.Int32                     // For quick initial check.
+var config atomic.Pointer[map[string]slog.Level] // For secondary complete check for match.
 
 func init() {
-	config.Store(map[string]Level{"": LevelError})
+	SetConfig(map[string]slog.Level{"": LevelInfo})
 }
 
 // SetConfig atomically sets the new log levels used by all Log instances.
-func SetConfig(c map[string]Level) {
-	config.Store(c)
-}
-
-// Pair is a field/value pair, for use in logged lines.
-type Pair struct {
-	Key   string
-	Value any
-}
-
-// Field is a shorthand for making a Pair.
-func Field(k string, v any) Pair {
-	return Pair{k, v}
-}
-
-// Log is an instance potentially with its own field/value pair added to any
-// logging output.
-type Log struct {
-	fields     []Pair
-	moreFields func() []Pair
-}
-
-// New returns a new Log instance. Each log invocation adds field "pkg".
-func New(pkg string) *Log {
-	return &Log{
-		fields: []Pair{{"pkg", pkg}},
+func SetConfig(c map[string]slog.Level) {
+	lowest := c[""]
+	for _, l := range c {
+		if l < lowest {
+			lowest = l
+		}
 	}
+	lowestLevel.Store(int32(lowest))
+	config.Store(&c)
+}
+
+var (
+	// When the configured log level is any of the Trace levels, all protocol messages
+	// are printed. But protocol "data" (like an email message in the SMTP DATA
+	// command) is replaced with "..." unless the configured level is LevelTracedata.
+	// Likewise, protocol messages with authentication data (e.g. plaintext base64
+	// passwords) are replaced with "***" unless the configured level is LevelTraceauth
+	// or LevelTracedata.
+	LevelTracedata = slog.LevelDebug - 8
+	LevelTraceauth = slog.LevelDebug - 6
+	LevelTrace     = slog.LevelDebug - 4
+	LevelDebug     = slog.LevelDebug
+	LevelInfo      = slog.LevelInfo
+	LevelError     = slog.LevelError
+	LevelFatal     = slog.LevelError + 4 // Printed regardless of configured log level.
+	LevelPrint     = slog.LevelError + 8 // Printed regardless of configured log level.
+)
+
+// Levelstrings map log levels to human-readable names.
+var LevelStrings = map[slog.Level]string{
+	LevelTracedata: "tracedata",
+	LevelTraceauth: "traceauth",
+	LevelTrace:     "trace",
+	LevelDebug:     "debug",
+	LevelInfo:      "info",
+	LevelError:     "error",
+	LevelFatal:     "fatal",
+	LevelPrint:     "print",
+}
+
+// Levels map the human-readable log level to a level.
+var Levels = map[string]slog.Level{
+	"tracedata": LevelTracedata,
+	"traceauth": LevelTraceauth,
+	"trace":     LevelTrace,
+	"debug":     LevelDebug,
+	"info":      LevelInfo,
+	"error":     LevelError,
+	"fatal":     LevelFatal,
+	"print":     LevelPrint,
+}
+
+// Log wraps an slog.Logger, providing convenience functions.
+type Log struct {
+	*slog.Logger
+}
+
+// New returns a Log that adds a "pkg" attribute. If logger is nil, a new
+// Logger is created with a custom handler.
+func New(pkg string, logger *slog.Logger) Log {
+	if logger == nil {
+		logger = slog.New(&handler{})
+	}
+	return Log{logger}.WithPkg(pkg)
+}
+
+// WithCid adds a attribute "cid".
+// Also see WithContext.
+func (l Log) WithCid(cid int64) Log {
+	return l.With(slog.Int64("cid", cid))
 }
 
 type key string
@@ -124,19 +125,13 @@ type key string
 // CidKey can be used with context.WithValue to store a "cid" in a context, for logging.
 var CidKey key = "cid"
 
-// WithCid adds a field "cid".
-// Also see WithContext.
-func (l *Log) WithCid(cid int64) *Log {
-	return l.Fields(Pair{"cid", cid})
-}
-
 // WithContext adds cid from context, if present. Context are often passed to
 // functions, especially between packages, to pass a "cid" for an operation. At the
 // start of a function (especially if exported) a variable "log" is often
-// instantiated from a package-level variable "xlog", with WithContext for its cid.
-// A *Log could be passed instead, but contexts are more pervasive. For the same
+// instantiated from a package-level logger, with WithContext for its cid.
+// Ideally, a Log could be passed instead, but contexts are more pervasive. For the same
 // reason WithContext is more common than WithCid.
-func (l *Log) WithContext(ctx context.Context) *Log {
+func (l Log) WithContext(ctx context.Context) Log {
 	cidv := ctx.Value(CidKey)
 	if cidv == nil {
 		return l
@@ -145,86 +140,200 @@ func (l *Log) WithContext(ctx context.Context) *Log {
 	return l.WithCid(cid)
 }
 
-// Field adds fields to the logger. Each logged line adds these fields.
-func (l *Log) Fields(fields ...Pair) *Log {
-	nl := *l
-	nl.fields = append(fields, nl.fields...)
-	return &nl
+// With adds attributes to to each logged line.
+func (l Log) With(attrs ...slog.Attr) Log {
+	return Log{slog.New(l.Logger.Handler().WithAttrs(attrs))}
 }
 
-// MoreFields sets a function on the logger that is called just before logging,
-// to retrieve additional fields to log.
-func (l *Log) MoreFields(fn func() []Pair) *Log {
-	nl := *l
-	nl.moreFields = fn
-	return &nl
+// WithPkg ensures pkg is added as attribute to logged lines. If the handler is
+// an mlog handler, pkg is only added if not already the last added package.
+func (l Log) WithPkg(pkg string) Log {
+	h := l.Logger.Handler()
+	if ph, ok := h.(*handler); ok {
+		if len(ph.Pkgs) > 0 && ph.Pkgs[len(ph.Pkgs)-1] == pkg {
+			return l
+		}
+		return Log{slog.New(ph.WithPkg(pkg))}
+	}
+	return Log{slog.New(h.WithAttrs([]slog.Attr{slog.String("pkg", pkg)}))}
+}
+
+// WithFunc sets fn to be called for additional attributes. Fn is only called
+// when the line is logged.
+// If the underlying handler is not an mlog.handler, this method has no effect.
+// Caller must take care of preventing data races.
+func (l Log) WithFunc(fn func() []slog.Attr) Log {
+	h := l.Logger.Handler()
+	if ph, ok := h.(*handler); ok {
+		return Log{slog.New(ph.WithFunc(fn))}
+	}
+	// Ignored for other handlers, only used internally (smtpserver, imapserver).
+	return l
 }
 
 // Check logs an error if err is not nil. Intended for logging errors that are good
 // to know, but would not influence program flow.
-func (l *Log) Check(err error, text string, fields ...Pair) {
+func (l Log) Check(err error, msg string, attrs ...slog.Attr) {
 	if err != nil {
-		l.Errorx(text, err, fields...)
+		l.Errorx(msg, err, attrs...)
 	}
 }
 
-func (l *Log) Trace(traceLevel Level, text string) bool {
-	return l.logx(traceLevel, nil, text)
+func errAttr(err error) slog.Attr {
+	return slog.Any("err", err)
 }
 
-func (l *Log) Fatal(text string, fields ...Pair) { l.Fatalx(text, nil, fields...) }
-func (l *Log) Fatalx(text string, err error, fields ...Pair) {
-	l.plog(LevelFatal, err, text, fields...)
+// todo: consider taking a context parameter. it would require all code be refactored. we may want to do this if callers really depend on passing attrs through context. the mox code base does not do that. it makes all call sites more tedious, and requires passing around ctx everywhere, so consider carefully.
+
+func (l Log) Debug(msg string, attrs ...slog.Attr) {
+	l.Logger.LogAttrs(noctx, LevelDebug, msg, attrs...)
+}
+
+func (l Log) Debugx(msg string, err error, attrs ...slog.Attr) {
+	if err != nil {
+		attrs = append([]slog.Attr{errAttr(err)}, attrs...)
+	}
+	l.Logger.LogAttrs(noctx, LevelDebug, msg, attrs...)
+}
+
+func (l Log) Info(msg string, attrs ...slog.Attr) {
+	l.Logger.LogAttrs(noctx, LevelInfo, msg, attrs...)
+}
+
+func (l Log) Infox(msg string, err error, attrs ...slog.Attr) {
+	if err != nil {
+		attrs = append([]slog.Attr{errAttr(err)}, attrs...)
+	}
+	l.Logger.LogAttrs(noctx, LevelInfo, msg, attrs...)
+}
+
+func (l Log) Error(msg string, attrs ...slog.Attr) {
+	l.Logger.LogAttrs(noctx, LevelError, msg, attrs...)
+}
+
+func (l Log) Errorx(msg string, err error, attrs ...slog.Attr) {
+	if err != nil {
+		attrs = append([]slog.Attr{errAttr(err)}, attrs...)
+	}
+	l.Logger.LogAttrs(noctx, LevelError, msg, attrs...)
+}
+
+func (l Log) Fatal(msg string, attrs ...slog.Attr) {
+	l.Logger.LogAttrs(noctx, LevelFatal, msg, attrs...)
 	os.Exit(1)
 }
 
-func (l *Log) Print(text string, fields ...Pair) bool {
-	return l.logx(LevelPrint, nil, text, fields...)
-}
-func (l *Log) Printx(text string, err error, fields ...Pair) bool {
-	return l.logx(LevelPrint, err, text, fields...)
-}
-
-func (l *Log) Debug(text string, fields ...Pair) bool {
-	return l.logx(LevelDebug, nil, text, fields...)
-}
-func (l *Log) Debugx(text string, err error, fields ...Pair) bool {
-	return l.logx(LevelDebug, err, text, fields...)
+func (l Log) Fatalx(msg string, err error, attrs ...slog.Attr) {
+	if err != nil {
+		attrs = append([]slog.Attr{errAttr(err)}, attrs...)
+	}
+	l.Logger.LogAttrs(noctx, LevelFatal, msg, attrs...)
+	os.Exit(1)
 }
 
-func (l *Log) Info(text string, fields ...Pair) bool { return l.logx(LevelInfo, nil, text, fields...) }
-func (l *Log) Infox(text string, err error, fields ...Pair) bool {
-	return l.logx(LevelInfo, err, text, fields...)
+func (l Log) Print(msg string, attrs ...slog.Attr) {
+	l.Logger.LogAttrs(noctx, LevelPrint, msg, attrs...)
 }
 
-func (l *Log) Error(text string, fields ...Pair) bool {
-	return l.logx(LevelError, nil, text, fields...)
-}
-func (l *Log) Errorx(text string, err error, fields ...Pair) bool {
-	return l.logx(LevelError, err, text, fields...)
+func (l Log) Printx(msg string, err error, attrs ...slog.Attr) {
+	if err != nil {
+		attrs = append([]slog.Attr{errAttr(err)}, attrs...)
+	}
+	l.Logger.LogAttrs(noctx, LevelPrint, msg, attrs...)
 }
 
-func (l *Log) logx(level Level, err error, text string, fields ...Pair) bool {
-	if ok, high := l.match(level); ok {
-		// Nothing.
-	} else if high >= LevelTrace && level == LevelTraceauth {
-		text = "***"
-	} else if high >= LevelTrace && level == LevelTracedata {
-		text = "..."
+// Trace logs at trace/traceauth/tracedata level.
+// If the active log level is any of the trace levels, the data is logged.
+// If level is for tracedata, but the active level doesn't trace data, data is replaced with "...".
+// If level is for traceauth, but the active level doesn't trace auth, data is replaced with "***".
+func (l Log) Trace(level slog.Level, prefix string, data []byte) {
+	h := l.Handler()
+	if !h.Enabled(noctx, level) {
+		return
+	}
+	ph, ok := h.(*handler)
+	if !ok {
+		msg := prefix + string(data)
+		r := slog.NewRecord(time.Now(), level, msg, 0)
+		h.Handle(noctx, r)
+		return
+	}
+	filterLevel, ok := ph.configMatch(level)
+	if !ok {
+		return
+	}
+
+	var msg string
+	if hideData, hideAuth := traceLevel(filterLevel, level); hideData {
+		msg = prefix + "..."
+	} else if hideAuth {
+		msg = prefix + "***"
 	} else {
-		return false
+		msg = prefix + string(data)
 	}
-	if level > LevelTrace {
-		level = LevelTrace
+	r := slog.NewRecord(time.Time{}, level, msg, 0)
+	ph.write(filterLevel, r)
+}
+
+func traceLevel(level, recordLevel slog.Level) (hideData, hideAuth bool) {
+	hideData = recordLevel == LevelTracedata && level > LevelTracedata
+	hideAuth = recordLevel == LevelTraceauth && level > LevelTraceauth
+	return
+}
+
+type handler struct {
+	Pkgs  []string
+	Attrs []slog.Attr
+	Group string             // Empty or with dot-separated names, ending with a dot.
+	Fn    func() []slog.Attr // Only called when record is actually being logged.
+}
+
+func match(minLevel, level slog.Level) bool {
+	return level >= LevelFatal || level >= minLevel || minLevel <= LevelTrace && level <= LevelTrace
+}
+
+func (h *handler) Enabled(ctx context.Context, level slog.Level) bool {
+	return match(slog.Level(lowestLevel.Load()), level)
+}
+
+func (h *handler) configMatch(level slog.Level) (slog.Level, bool) {
+	c := *config.Load()
+	for i := len(h.Pkgs) - 1; i >= 0; i-- {
+		if l, ok := c[h.Pkgs[i]]; ok {
+			return l, match(l, level)
+		}
 	}
-	l.plog(level, err, text, fields...)
-	return true
+	l := c[""]
+	return l, match(l, level)
+}
+
+func (h *handler) Handle(ctx context.Context, r slog.Record) error {
+	l, ok := h.configMatch(r.Level)
+	if !ok {
+		return nil
+	}
+	if hideData, hideAuth := traceLevel(l, r.Level); hideData {
+		r.Message = "..."
+	} else if hideAuth {
+		r.Message = "***"
+	}
+	return h.write(l, r)
+}
+
+// Reuse buffers to format log lines into.
+var logBuffersStore [32][256]byte
+var logBuffers = make(chan []byte, 200)
+
+func init() {
+	for i := range logBuffersStore {
+		logBuffers <- logBuffersStore[i][:]
+	}
 }
 
 // escape logfmt string if required, otherwise return original string.
-func logfmtValue(s string) string {
+func formatString(s string) string {
 	for _, c := range s {
-		if c == '"' || c == '\\' || c <= ' ' || c == '=' || c >= 0x7f {
+		if c <= ' ' || c == '"' || c == '\\' || c == '=' || c >= 0x7f {
 			return fmt.Sprintf("%q", s)
 		}
 	}
@@ -261,6 +370,8 @@ func stringValue(iscid, nested bool, v any) string {
 			return ""
 		}
 		return "[" + strings.Join(r, ",") + "]"
+	case error:
+		return r.Error()
 	}
 
 	rv := reflect.ValueOf(v)
@@ -320,100 +431,188 @@ func stringValue(iscid, nested bool, v any) string {
 		}
 		first = false
 		k := strings.ToLower(t.Field(i).Name)
-		b.WriteString(k + "=" + logfmtValue(vs))
+		b.WriteString(k + "=" + vs)
 	}
 	return b.String()
 }
 
-func (l *Log) plog(level Level, err error, text string, fields ...Pair) {
-	fields = append(l.fields, fields...)
-	if l.moreFields != nil {
-		fields = append(fields, l.moreFields()...)
+func writeAttr(w io.Writer, separator, group string, a slog.Attr) {
+	switch a.Value.Kind() {
+	case slog.KindGroup:
+		if group != "" {
+			group += "."
+		}
+		group += a.Key
+		for _, a := range a.Value.Group() {
+			writeAttr(w, separator, group, a)
+		}
+		return
+	default:
+		var vv any
+		if a.Value.Kind() == slog.KindLogValuer {
+			vv = a.Value.Resolve().Any()
+		} else {
+			vv = a.Value.Any()
+		}
+		s := stringValue(a.Key == "cid", false, vv)
+		fmt.Fprint(w, separator, group, a.Key, "=", formatString(s))
 	}
-	// We build up a buffer so we can do a single atomic write of the data. Otherwise partial log lines may interleaf.
-	b := &bytes.Buffer{}
-	if Logfmt {
-		fmt.Fprintf(b, "l=%s m=%s", LevelStrings[level], logfmtValue(text))
-		if err != nil {
-			fmt.Fprintf(b, " err=%s", logfmtValue(err.Error()))
-		}
-		for i := 0; i < len(fields); i++ {
-			kv := fields[i]
-			fmt.Fprintf(b, " %s=%s", kv.Key, logfmtValue(stringValue(kv.Key == "cid", false, kv.Value)))
-		}
-		b.WriteString("\n")
-	} else {
-		fmt.Fprintf(b, "%s: %s", LevelStrings[level], logfmtValue(text))
-		if err != nil {
-			fmt.Fprintf(b, ": %s", logfmtValue(err.Error()))
-		}
-		if len(fields) > 0 {
-			fmt.Fprint(b, " (")
-			for i := 0; i < len(fields); i++ {
-				if i > 0 {
-					fmt.Fprint(b, "; ")
-				}
-				kv := fields[i]
-				fmt.Fprintf(b, "%s: %s", kv.Key, logfmtValue(stringValue(kv.Key == "cid", false, kv.Value)))
-			}
-			fmt.Fprint(b, ")")
-		}
-		b.WriteString("\n")
-	}
-	os.Stderr.Write(b.Bytes())
 }
 
-func (l *Log) match(level Level) (bool, Level) {
-	if level == LevelPrint || level == LevelFatal {
-		return true, level
+func (h *handler) write(l slog.Level, r slog.Record) error {
+	// Reuse a buffer, or temporarily allocate a new one.
+	var buf []byte
+	select {
+	case buf = <-logBuffers:
+		defer func() {
+			logBuffers <- buf
+		}()
+	default:
+		buf = make([]byte, 128)
 	}
 
-	cl := config.Load().(map[string]Level)
+	b := bytes.NewBuffer(buf[:0])
+	eb := &errWriter{b, nil}
 
-	seen := false
-	var high Level
-	for _, kv := range l.fields {
-		if kv.Key != "pkg" {
-			continue
+	if Logfmt {
+		var wrotePkgs bool
+		ensurePkgs := func() {
+			if !wrotePkgs {
+				wrotePkgs = true
+				for _, pkg := range h.Pkgs {
+					writeAttr(eb, " ", "", slog.String("pkg", pkg))
+				}
+			}
 		}
-		pkg, ok := kv.Value.(string)
-		if !ok {
-			continue
+
+		fmt.Fprint(eb, "l=", LevelStrings[r.Level], " m=")
+		fmt.Fprintf(eb, "%q", r.Message)
+		n := 0
+		r.Attrs(func(a slog.Attr) bool {
+			if n > 0 || a.Key != "err" || h.Group != "" {
+				ensurePkgs()
+			}
+			writeAttr(eb, " ", h.Group, a)
+			n++
+			return true
+		})
+		ensurePkgs()
+		for _, a := range h.Attrs {
+			writeAttr(eb, " ", h.Group, a)
 		}
-		v, ok := cl[pkg]
-		if v > high {
-			high = v
+		if h.Fn != nil {
+			for _, a := range h.Fn() {
+				writeAttr(eb, " ", h.Group, a)
+			}
 		}
-		if ok && v >= level {
-			return true, high
+		fmt.Fprint(eb, "\n")
+	} else {
+		var wrotePkgs bool
+		ensurePkgs := func() {
+			if !wrotePkgs {
+				wrotePkgs = true
+				for _, pkg := range h.Pkgs {
+					writeAttr(eb, "; ", "", slog.String("pkg", pkg))
+				}
+			}
 		}
-		seen = seen || ok
+
+		fmt.Fprint(eb, LevelStrings[r.Level], ": ", r.Message)
+		n := 0
+		r.Attrs(func(a slog.Attr) bool {
+			if n == 0 && a.Key == "err" && h.Group == "" {
+				fmt.Fprint(eb, ": ", a.Value.String())
+				ensurePkgs()
+			} else {
+				ensurePkgs()
+				writeAttr(eb, "; ", h.Group, a)
+			}
+			n++
+			return true
+		})
+		ensurePkgs()
+		for _, a := range h.Attrs {
+			writeAttr(eb, "; ", h.Group, a)
+		}
+		if h.Fn != nil {
+			for _, a := range h.Fn() {
+				writeAttr(eb, "; ", h.Group, a)
+				n++
+			}
+		}
+		fmt.Fprint(eb, "\n")
 	}
-	if seen {
-		return false, high
+	if eb.Err != nil {
+		return eb.Err
 	}
-	v, ok := cl[""]
-	if v > high {
-		high = v
-	}
-	return ok && v >= level, v
+
+	// todo: for mox serve, do writes in separate goroutine.
+	_, err := os.Stderr.Write(b.Bytes())
+	return err
 }
 
 type errWriter struct {
-	log   *Log
-	level Level
-	msg   string
+	Writer *bytes.Buffer
+	Err    error
 }
 
 func (w *errWriter) Write(buf []byte) (int, error) {
-	err := errors.New(strings.TrimSpace(string(buf)))
-	w.log.logx(w.level, err, w.msg)
+	if w.Err != nil {
+		return 0, w.Err
+	}
+	var n int
+	n, w.Err = w.Writer.Write(buf)
+	return n, w.Err
+}
+
+func (h *handler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	nh := *h
+	if h.Attrs != nil {
+		nh.Attrs = append([]slog.Attr{}, h.Attrs...)
+	}
+	nh.Attrs = append(nh.Attrs, attrs...)
+	return &nh
+}
+
+func (h *handler) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return h
+	}
+	nh := *h
+	nh.Group += name + "."
+	return &nh
+}
+
+func (h *handler) WithPkg(pkg string) *handler {
+	nh := *h
+	if nh.Pkgs != nil {
+		nh.Pkgs = append([]string{}, nh.Pkgs...)
+	}
+	nh.Pkgs = append(nh.Pkgs, pkg)
+	return &nh
+}
+
+func (h *handler) WithFunc(fn func() []slog.Attr) *handler {
+	nh := *h
+	nh.Fn = fn
+	return &nh
+}
+
+type logWriter struct {
+	log   Log
+	level slog.Level
+	msg   string
+}
+
+func (w logWriter) Write(buf []byte) (int, error) {
+	err := strings.TrimSpace(string(buf))
+	w.log.LogAttrs(noctx, w.level, w.msg, slog.String("err", err))
 	return len(buf), nil
 }
 
-// ErrWriter returns a writer that turns each write into a logging call on "log"
+// LogWriter returns a writer that turns each write into a logging call on "log"
 // with given "level" and "msg" and the written content as an error.
 // Can be used for making a Go log.Logger for use in http.Server.ErrorLog.
-func ErrWriter(log *Log, level Level, msg string) io.Writer {
-	return &errWriter{log, level, msg}
+func LogWriter(log Log, level slog.Level, msg string) io.Writer {
+	return logWriter{log, level, msg}
 }

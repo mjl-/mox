@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -32,12 +34,12 @@ import (
 	"github.com/mjl-/mox/updates"
 )
 
-func monitorDNSBL(log *mlog.Log) {
+func monitorDNSBL(log mlog.Log) {
 	defer func() {
 		// On error, don't bring down the entire server.
 		x := recover()
 		if x != nil {
-			log.Error("monitordnsbl panic", mlog.Field("panic", x))
+			log.Error("monitordnsbl panic", slog.Any("panic", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Serve)
 		}
@@ -53,7 +55,7 @@ func monitorDNSBL(log *mlog.Log) {
 	for _, zone := range l.SMTP.DNSBLs {
 		d, err := dns.ParseDomain(zone)
 		if err != nil {
-			log.Fatalx("parsing dnsbls zone", err, mlog.Field("zone", zone))
+			log.Fatalx("parsing dnsbls zone", err, slog.Any("zone", zone))
 		}
 		zones = append(zones, d)
 	}
@@ -86,9 +88,9 @@ func monitorDNSBL(log *mlog.Log) {
 			}
 
 			for _, zone := range zones {
-				status, expl, err := dnsbl.Lookup(mox.Context, resolver, zone, ip)
+				status, expl, err := dnsbl.Lookup(mox.Context, log.Logger, resolver, zone, ip)
 				if err != nil {
-					log.Errorx("dnsbl monitor lookup", err, mlog.Field("ip", ip), mlog.Field("zone", zone), mlog.Field("expl", expl), mlog.Field("status", status))
+					log.Errorx("dnsbl monitor lookup", err, slog.Any("ip", ip), slog.Any("zone", zone), slog.String("expl", expl), slog.Any("status", status))
 				}
 				k := key{zone, ip.String()}
 
@@ -145,7 +147,7 @@ Only implemented on unix systems, not Windows.
 
 	checkACMEHosts := os.Getuid() != 0
 
-	log := mlog.New("serve")
+	log := c.log
 
 	if os.Getuid() == 0 {
 		mox.MustLoadConfig(true, checkACMEHosts)
@@ -159,7 +161,7 @@ Only implemented on unix systems, not Windows.
 		domainsconf, err := filepath.Abs(mox.ConfigDynamicPath)
 		log.Check(err, "finding absolute domains.conf path")
 
-		log.Print("starting as root, initializing network listeners", mlog.Field("version", moxvar.Version), mlog.Field("pid", os.Getpid()), mlog.Field("moxconf", moxconf), mlog.Field("domainsconf", domainsconf))
+		log.Print("starting as root, initializing network listeners", slog.String("version", moxvar.Version), slog.Any("pid", os.Getpid()), slog.String("moxconf", moxconf), slog.String("domainsconf", domainsconf))
 		if os.Getenv("MOX_SOCKETS") != "" {
 			log.Fatal("refusing to start as root with $MOX_SOCKETS set")
 		}
@@ -185,7 +187,7 @@ Only implemented on unix systems, not Windows.
 	} else {
 		mox.RestorePassedFiles()
 		mox.MustLoadConfig(true, checkACMEHosts)
-		log.Print("starting as unprivileged user", mlog.Field("user", mox.Conf.Static.User), mlog.Field("uid", mox.Conf.Static.UID), mlog.Field("gid", mox.Conf.Static.GID), mlog.Field("pid", os.Getpid()))
+		log.Print("starting as unprivileged user", slog.String("user", mox.Conf.Static.User), slog.Any("uid", mox.Conf.Static.UID), slog.Any("gid", mox.Conf.Static.GID), slog.Any("pid", os.Getpid()))
 	}
 
 	syscall.Umask(syscall.Umask(007) | 007)
@@ -200,12 +202,12 @@ Only implemented on unix systems, not Windows.
 			log.Fatalx("reading random recvid data", err)
 		}
 		if err := os.WriteFile(recvidpath, recvidbuf, 0660); err != nil {
-			log.Fatalx("writing recvidpath", err, mlog.Field("path", recvidpath))
+			log.Fatalx("writing recvidpath", err, slog.String("path", recvidpath))
 		}
 		err := os.Chown(recvidpath, int(mox.Conf.Static.UID), 0)
-		log.Check(err, "chown receveidid.key", mlog.Field("path", recvidpath), mlog.Field("uid", mox.Conf.Static.UID), mlog.Field("gid", 0))
+		log.Check(err, "chown receveidid.key", slog.String("path", recvidpath), slog.Any("uid", mox.Conf.Static.UID), slog.Any("gid", 0))
 		err = os.Chmod(recvidpath, 0640)
-		log.Check(err, "chmod receveidid.key to 0640", mlog.Field("path", recvidpath))
+		log.Check(err, "chmod receveidid.key to 0640", slog.String("path", recvidpath))
 	}
 	if err := mox.ReceivedIDInit(recvidbuf[:16], recvidbuf[16:]); err != nil {
 		log.Fatalx("init receivedid", err)
@@ -242,7 +244,7 @@ Only implemented on unix systems, not Windows.
 			// mtime. But file won't exist initially.
 			if !mtime.IsZero() && time.Since(mtime) < 24*time.Hour {
 				d := 24*time.Hour - time.Since(mtime)
-				log.Debug("sleeping for next check for updates", mlog.Field("sleep", d))
+				log.Debug("sleeping for next check for updates", slog.Duration("sleep", d))
 				time.Sleep(d)
 				next = 0
 			}
@@ -253,12 +255,12 @@ Only implemented on unix systems, not Windows.
 				}
 			}
 
-			log.Debug("checking for updates", mlog.Field("lastknown", lastknown))
+			log.Debug("checking for updates", slog.Any("lastknown", lastknown))
 			updatesctx, updatescancel := context.WithTimeout(mox.Context, time.Minute)
-			latest, _, changelog, err := updates.Check(updatesctx, dns.StrictResolver{}, dns.Domain{ASCII: changelogDomain}, lastknown, changelogURL, changelogPubKey)
+			latest, _, changelog, err := updates.Check(updatesctx, log.Logger, dns.StrictResolver{Log: log.Logger}, dns.Domain{ASCII: changelogDomain}, lastknown, changelogURL, changelogPubKey)
 			updatescancel()
 			if err != nil {
-				log.Infox("checking for updates", err, mlog.Field("latest", latest))
+				log.Infox("checking for updates", err, slog.Any("latest", latest))
 				return next
 			}
 			if !latest.After(lastknown) {
@@ -266,7 +268,7 @@ Only implemented on unix systems, not Windows.
 				return next
 			}
 			if len(changelog.Changes) == 0 {
-				log.Info("new version available, but changelog is empty, ignoring", mlog.Field("latest", latest))
+				log.Info("new version available, but changelog is empty, ignoring", slog.Any("latest", latest))
 				return next
 			}
 
@@ -276,7 +278,7 @@ Only implemented on unix systems, not Windows.
 			}
 			cl += "----"
 
-			a, err := store.OpenAccount(mox.Conf.Static.Postmaster.Account)
+			a, err := store.OpenAccount(log, mox.Conf.Static.Postmaster.Account)
 			if err != nil {
 				log.Infox("open account for postmaster changelog delivery", err)
 				return next
@@ -285,7 +287,7 @@ Only implemented on unix systems, not Windows.
 				err := a.Close()
 				log.Check(err, "closing account")
 			}()
-			f, err := store.CreateMessageTemp("changelog")
+			f, err := store.CreateMessageTemp(log, "changelog")
 			if err != nil {
 				log.Infox("making temporary message file for changelog delivery", err)
 				return next
@@ -306,7 +308,7 @@ Only implemented on unix systems, not Windows.
 				log.Errorx("changelog delivery", err)
 				return next
 			}
-			log.Info("delivered changelog", mlog.Field("current", current), mlog.Field("lastknown", lastknown), mlog.Field("latest", latest))
+			log.Info("delivered changelog", slog.Any("current", current), slog.Any("lastknown", lastknown), slog.Any("latest", latest))
 			if err := mox.StoreLastKnown(latest); err != nil {
 				// This will be awkward, we'll keep notifying the postmaster once every 24h...
 				log.Infox("updating last known version", err)
@@ -353,13 +355,13 @@ Only implemented on unix systems, not Windows.
 		now := time.Now()
 		for _, e := range tmps {
 			if fi, err := e.Info(); err != nil {
-				log.Errorx("stat tmp file", err, mlog.Field("filename", e.Name()))
+				log.Errorx("stat tmp file", err, slog.String("filename", e.Name()))
 			} else if now.Sub(fi.ModTime()) > 7*24*time.Hour && !fi.IsDir() {
 				p := filepath.Join(tmpdir, e.Name())
 				if err := os.Remove(p); err != nil {
-					log.Errorx("removing stale temporary file", err, mlog.Field("path", p))
+					log.Errorx("removing stale temporary file", err, slog.String("path", p))
 				} else {
-					log.Info("removed stale temporary file", mlog.Field("path", p))
+					log.Info("removed stale temporary file", slog.String("path", p))
 				}
 			}
 		}
@@ -369,7 +371,7 @@ Only implemented on unix systems, not Windows.
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 	sig := <-sigc
-	log.Print("shutting down, waiting max 3s for existing connections", mlog.Field("signal", sig))
+	log.Print("shutting down, waiting max 3s for existing connections", slog.Any("signal", sig))
 	shutdown(log)
 	if num, ok := sig.(syscall.Signal); ok {
 		os.Exit(int(num))
@@ -383,7 +385,7 @@ Only implemented on unix systems, not Windows.
 // We require being able to stat the basic non-optional paths. Then we'll try to
 // fix up permissions. If an error occurs when fixing permissions, we log and
 // continue (could not be an actual problem).
-func fixperms(log *mlog.Log, workdir, configdir, datadir string, moxuid, moxgid uint32) (rerr error) {
+func fixperms(log mlog.Log, workdir, configdir, datadir string, moxuid, moxgid uint32) (rerr error) {
 	type fserr struct{ Err error }
 	defer func() {
 		x := recover()
@@ -483,33 +485,33 @@ func fixperms(log *mlog.Log, workdir, configdir, datadir string, moxuid, moxgid 
 	for _, ch := range changes {
 		if ch.uid != nil {
 			err := os.Chown(ch.path, int(*ch.uid), int(*ch.gid))
-			log.Printx("chown, fixing uid/gid", err, mlog.Field("path", ch.path), mlog.Field("olduid", ch.olduid), mlog.Field("oldgid", ch.oldgid), mlog.Field("newuid", *ch.uid), mlog.Field("newgid", *ch.gid))
+			log.Printx("chown, fixing uid/gid", err, slog.String("path", ch.path), slog.Any("olduid", ch.olduid), slog.Any("oldgid", ch.oldgid), slog.Any("newuid", *ch.uid), slog.Any("newgid", *ch.gid))
 		}
 		if ch.mode != nil {
 			err := os.Chmod(ch.path, *ch.mode)
-			log.Printx("chmod, fixing permissions", err, mlog.Field("path", ch.path), mlog.Field("oldmode", fmt.Sprintf("%03o", ch.oldmode)), mlog.Field("newmode", fmt.Sprintf("%03o", *ch.mode)))
+			log.Printx("chmod, fixing permissions", err, slog.String("path", ch.path), slog.Any("oldmode", fmt.Sprintf("%03o", ch.oldmode)), slog.Any("newmode", fmt.Sprintf("%03o", *ch.mode)))
 		}
 	}
 
 	walkchange := func(dir string) {
 		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
-				log.Printx("walk error, continuing", err, mlog.Field("path", path))
+				log.Printx("walk error, continuing", err, slog.String("path", path))
 				return nil
 			}
 			fi, err := d.Info()
 			if err != nil {
-				log.Printx("stat during walk, continuing", err, mlog.Field("path", path))
+				log.Printx("stat during walk, continuing", err, slog.String("path", path))
 				return nil
 			}
 			st, ok := fi.Sys().(*syscall.Stat_t)
 			if !ok {
-				log.Printx("syscall stat during walk, continuing", err, mlog.Field("path", path))
+				log.Printx("syscall stat during walk, continuing", err, slog.String("path", path))
 				return nil
 			}
 			if st.Uid != moxuid || st.Gid != root {
 				err := os.Chown(path, int(moxuid), root)
-				log.Printx("walk chown, fixing uid/gid", err, mlog.Field("path", path), mlog.Field("olduid", st.Uid), mlog.Field("oldgid", st.Gid), mlog.Field("newuid", moxuid), mlog.Field("newgid", root))
+				log.Printx("walk chown, fixing uid/gid", err, slog.String("path", path), slog.Any("olduid", st.Uid), slog.Any("oldgid", st.Gid), slog.Any("newuid", moxuid), slog.Any("newgid", root))
 			}
 			omode := fi.Mode() & (fs.ModeSetgid | 0777)
 			var nmode fs.FileMode
@@ -520,21 +522,21 @@ func fixperms(log *mlog.Log, workdir, configdir, datadir string, moxuid, moxgid 
 			}
 			if omode != nmode {
 				err := os.Chmod(path, nmode)
-				log.Printx("walk chmod, fixing permissions", err, mlog.Field("path", path), mlog.Field("oldmode", fmt.Sprintf("%03o", omode)), mlog.Field("newmode", fmt.Sprintf("%03o", nmode)))
+				log.Printx("walk chmod, fixing permissions", err, slog.String("path", path), slog.Any("oldmode", fmt.Sprintf("%03o", omode)), slog.Any("newmode", fmt.Sprintf("%03o", nmode)))
 			}
 			return nil
 		})
-		log.Check(err, "walking dir to fix permissions", mlog.Field("dir", dir))
+		log.Check(err, "walking dir to fix permissions", slog.String("dir", dir))
 	}
 
 	// If config or data dir needed fixing, also set uid/gid and mode and files/dirs
 	// inside, recursively. We don't always recurse, data probably contains many files.
 	if fixconfig {
-		log.Print("fixing permissions in config dir", mlog.Field("configdir", configdir))
+		log.Print("fixing permissions in config dir", slog.String("configdir", configdir))
 		walkchange(configdir)
 	}
 	if fixdata {
-		log.Print("fixing permissions in data dir", mlog.Field("configdir", configdir))
+		log.Print("fixing permissions in data dir", slog.String("configdir", configdir))
 		walkchange(datadir)
 	}
 	return nil

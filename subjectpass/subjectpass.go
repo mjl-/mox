@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -19,8 +21,6 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
 )
-
-var log = mlog.New("subjectpass")
 
 var (
 	metricGenerate = promauto.NewCounter(
@@ -54,9 +54,11 @@ var Explanation = "Your message resembles spam. If your email is legitimate, ple
 // Generate generates a token that is valid for "mailFrom", starting from "tm"
 // and signed with "key".
 // The token is of the form: (pass:<signeddata>)
-func Generate(mailFrom smtp.Address, key []byte, tm time.Time) string {
+func Generate(elog *slog.Logger, mailFrom smtp.Address, key []byte, tm time.Time) string {
+	log := mlog.New("subjectpass", elog)
+
 	metricGenerate.Inc()
-	log.Debug("subjectpass generate", mlog.Field("mailfrom", mailFrom))
+	log.Debug("subjectpass generate", slog.Any("mailfrom", mailFrom))
 
 	// We discard the lower 8 bits of the time, we can do with less precision.
 	t := tm.Unix()
@@ -76,7 +78,9 @@ func Generate(mailFrom smtp.Address, key []byte, tm time.Time) string {
 
 // Verify parses "message" and checks if it includes a subjectpass token in its
 // Subject header that is still valid (within "period") and signed with "key".
-func Verify(log *mlog.Log, r io.ReaderAt, key []byte, period time.Duration) (rerr error) {
+func Verify(elog *slog.Logger, r io.ReaderAt, key []byte, period time.Duration) (rerr error) {
+	log := mlog.New("subjectpass", elog)
+
 	var token string
 
 	defer func() {
@@ -86,10 +90,10 @@ func Verify(log *mlog.Log, r io.ReaderAt, key []byte, period time.Duration) (rer
 		}
 		metricVerify.WithLabelValues(result).Inc()
 
-		log.Debugx("subjectpass verify result", rerr, mlog.Field("token", token), mlog.Field("period", period))
+		log.Debugx("subjectpass verify result", rerr, slog.String("token", token), slog.Duration("period", period))
 	}()
 
-	p, err := message.Parse(log, true, r)
+	p, err := message.Parse(log.Logger, true, r)
 	if err != nil {
 		return fmt.Errorf("%w: parse message: %s", ErrMessage, err)
 	}

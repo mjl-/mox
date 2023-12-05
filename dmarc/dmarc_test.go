@@ -8,8 +8,11 @@ import (
 
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/spf"
 )
+
+var pkglog = mlog.New("dmarc", nil)
 
 func TestLookup(t *testing.T) {
 	resolver := dns.MockResolver{
@@ -29,7 +32,7 @@ func TestLookup(t *testing.T) {
 	test := func(d string, expStatus Status, expDomain string, expRecord *Record, expErr error) {
 		t.Helper()
 
-		status, dom, record, _, _, err := Lookup(context.Background(), resolver, dns.Domain{ASCII: d})
+		status, dom, record, _, _, err := Lookup(context.Background(), pkglog.Logger, resolver, dns.Domain{ASCII: d})
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("got err %#v, expected %#v", err, expErr)
 		}
@@ -68,7 +71,7 @@ func TestLookupExternalReportsAccepted(t *testing.T) {
 	test := func(dom, extdom string, expStatus Status, expAccepts bool, expErr error) {
 		t.Helper()
 
-		accepts, status, _, _, _, err := LookupExternalReportsAccepted(context.Background(), resolver, dns.Domain{ASCII: dom}, dns.Domain{ASCII: extdom})
+		accepts, status, _, _, _, err := LookupExternalReportsAccepted(context.Background(), pkglog.Logger, resolver, dns.Domain{ASCII: dom}, dns.Domain{ASCII: extdom})
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("got err %#v, expected %#v", err, expErr)
 		}
@@ -124,7 +127,7 @@ func TestVerify(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parsing domain: %v", err)
 		}
-		useResult, result := Verify(context.Background(), resolver, from, dkimResults, spfResult, spfIdentity, true)
+		useResult, result := Verify(context.Background(), pkglog.Logger, resolver, from, dkimResults, spfResult, spfIdentity, true)
 		if useResult != expUseResult || !equalResult(result, expResult) {
 			t.Fatalf("verify: got useResult %v, result %#v, expected %v %#v", useResult, result, expUseResult, expResult)
 		}

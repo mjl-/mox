@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/dns"
@@ -35,7 +37,7 @@ type ctl struct {
 	conn net.Conn
 	r    *bufio.Reader // Set for first reader.
 	x    any           // If set, errors are handled by calling panic(x) instead of log.Fatal.
-	log  *mlog.Log     // If set, along with x, logging is done here.
+	log  mlog.Log      // If set, along with x, logging is done here.
 }
 
 // xctl opens a ctl connection.
@@ -59,7 +61,7 @@ func (c *ctl) xerror(msg string) {
 	if c.x == nil {
 		log.Fatalln(msg)
 	}
-	c.log.Debugx("ctl error", fmt.Errorf("%s", msg), mlog.Field("cmd", c.cmd))
+	c.log.Debugx("ctl error", fmt.Errorf("%s", msg), slog.String("cmd", c.cmd))
 	c.xwrite(msg)
 	panic(c.x)
 }
@@ -74,7 +76,7 @@ func (c *ctl) xcheck(err error, msg string) {
 	if c.x == nil {
 		log.Fatalf("%s: %s", msg, err)
 	}
-	c.log.Debugx(msg, err, mlog.Field("cmd", c.cmd))
+	c.log.Debugx(msg, err, slog.String("cmd", c.cmd))
 	fmt.Fprintf(c.conn, "%s: %s\n", msg, err)
 	panic(c.x)
 }
@@ -160,7 +162,7 @@ type ctlwriter struct {
 	conn net.Conn // Ctl socket from which messages are read.
 	buf  []byte   // Scratch buffer, for reading response.
 	x    any      // If not nil, errors in Write and xcheckf are handled with panic(x), otherwise with a log.Fatal.
-	log  *mlog.Log
+	log  mlog.Log
 }
 
 func (s *ctlwriter) Write(buf []byte) (int, error) {
@@ -184,7 +186,7 @@ func (s *ctlwriter) xerror(msg string) {
 	if s.x == nil {
 		log.Fatalln(msg)
 	} else {
-		s.log.Debugx("error", fmt.Errorf("%s", msg), mlog.Field("cmd", s.cmd))
+		s.log.Debugx("error", fmt.Errorf("%s", msg), slog.String("cmd", s.cmd))
 		panic(s.x)
 	}
 }
@@ -196,7 +198,7 @@ func (s *ctlwriter) xcheck(err error, msg string) {
 	if s.x == nil {
 		log.Fatalf("%s: %s", msg, err)
 	} else {
-		s.log.Debugx(msg, err, mlog.Field("cmd", s.cmd))
+		s.log.Debugx(msg, err, slog.String("cmd", s.cmd))
 		panic(s.x)
 	}
 }
@@ -213,7 +215,7 @@ type ctlreader struct {
 	err      error         // If set, returned for each read. can also be io.EOF.
 	npending int           // Number of bytes that can still be read until a new count line must be read.
 	x        any           // If set, errors are handled with panic(x) instead of log.Fatal.
-	log      *mlog.Log     // If x is set, logging goes to log.
+	log      mlog.Log      // If x is set, logging goes to log.
 }
 
 func (s *ctlreader) Read(buf []byte) (N int, Err error) {
@@ -252,7 +254,7 @@ func (s *ctlreader) xerror(msg string) {
 	if s.x == nil {
 		log.Fatalln(msg)
 	} else {
-		s.log.Debugx("error", fmt.Errorf("%s", msg), mlog.Field("cmd", s.cmd))
+		s.log.Debugx("error", fmt.Errorf("%s", msg), slog.String("cmd", s.cmd))
 		panic(s.x)
 	}
 }
@@ -264,13 +266,13 @@ func (s *ctlreader) xcheck(err error, msg string) {
 	if s.x == nil {
 		log.Fatalf("%s: %s", msg, err)
 	} else {
-		s.log.Debugx(msg, err, mlog.Field("cmd", s.cmd))
+		s.log.Debugx(msg, err, slog.String("cmd", s.cmd))
 		panic(s.x)
 	}
 }
 
 // servectl handles requests on the unix domain socket "ctl", e.g. for graceful shutdown, local mail delivery.
-func servectl(ctx context.Context, log *mlog.Log, conn net.Conn, shutdown func()) {
+func servectl(ctx context.Context, log mlog.Log, conn net.Conn, shutdown func()) {
 	log.Debug("ctl connection")
 
 	var stop = struct{}{} // Sentinel value for panic and recover.
@@ -280,7 +282,7 @@ func servectl(ctx context.Context, log *mlog.Log, conn net.Conn, shutdown func()
 		if x == nil || x == stop {
 			return
 		}
-		log.Error("servectl panic", mlog.Field("err", x), mlog.Field("cmd", ctl.cmd))
+		log.Error("servectl panic", slog.Any("err", x), slog.String("cmd", ctl.cmd))
 		debug.PrintStack()
 		metrics.PanicInc(metrics.Ctl)
 	}()
@@ -297,7 +299,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 	log := ctl.log
 	cmd := ctl.xread()
 	ctl.cmd = cmd
-	log.Info("ctl command", mlog.Field("cmd", cmd))
+	log.Info("ctl command", slog.String("cmd", cmd))
 	switch cmd {
 	case "stop":
 		shutdown()
@@ -314,10 +316,10 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		*/
 
 		to := ctl.xread()
-		a, addr, err := store.OpenEmail(to)
+		a, addr, err := store.OpenEmail(ctl.log, to)
 		ctl.xcheck(err, "lookup destination address")
 
-		msgFile, err := store.CreateMessageTemp("ctl-deliver")
+		msgFile, err := store.CreateMessageTemp(ctl.log, "ctl-deliver")
 		ctl.xcheck(err, "creating temporary message file")
 		defer store.CloseRemoveTempFile(log, msgFile, "deliver message")
 		mw := message.NewWriter(msgFile)
@@ -335,7 +337,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		a.WithWLock(func() {
 			err := a.DeliverDestination(log, addr, m, msgFile)
 			ctl.xcheck(err, "delivering message")
-			log.Info("message delivered through ctl", mlog.Field("to", to))
+			log.Info("message delivered through ctl", slog.Any("to", to))
 		})
 
 		err = a.Close()
@@ -353,7 +355,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		account := ctl.xread()
 		pw := ctl.xread()
 
-		acc, err := store.OpenAccount(account)
+		acc, err := store.OpenAccount(ctl.log, account)
 		ctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
@@ -362,7 +364,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			}
 		}()
 
-		err = acc.SetPassword(pw)
+		err = acc.SetPassword(ctl.log, pw)
 		ctl.xcheck(err, "setting password")
 		err = acc.Close()
 		ctl.xcheck(err, "closing account")
@@ -442,7 +444,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			ctl.xcheck(err, "parsing id")
 		}
 
-		count, err := queue.Drop(ctx, id, todomain, recipient)
+		count, err := queue.Drop(ctx, ctl.log, id, todomain, recipient)
 		ctl.xcheck(err, "dropping messages from queue")
 		ctl.xwrite(fmt.Sprintf("%d", count))
 		ctl.xwriteok()
@@ -586,13 +588,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		pkg := ctl.xread()
 		levelstr := ctl.xread()
 		if levelstr == "" {
-			mox.Conf.LogLevelRemove(pkg)
+			mox.Conf.LogLevelRemove(ctl.log, pkg)
 		} else {
 			level, ok := mlog.Levels[levelstr]
 			if !ok {
 				ctl.xerror("bad level")
 			}
-			mox.Conf.LogLevelSet(pkg, level)
+			mox.Conf.LogLevelSet(ctl.log, pkg, level)
 		}
 		ctl.xwriteok()
 
@@ -603,7 +605,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< "ok" or error
 		*/
 		account := ctl.xread()
-		acc, err := store.OpenAccount(account)
+		acc, err := store.OpenAccount(ctl.log, account)
 		ctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
@@ -623,9 +625,9 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			dbPath := filepath.Join(basePath, acc.Name, "junkfilter.db")
 			bloomPath := filepath.Join(basePath, acc.Name, "junkfilter.bloom")
 			err := os.Remove(dbPath)
-			log.Check(err, "removing old junkfilter database file", mlog.Field("path", dbPath))
+			log.Check(err, "removing old junkfilter database file", slog.String("path", dbPath))
 			err = os.Remove(bloomPath)
-			log.Check(err, "removing old junkfilter bloom filter file", mlog.Field("path", bloomPath))
+			log.Check(err, "removing old junkfilter bloom filter file", slog.String("path", bloomPath))
 
 			// Open junk filter, this creates new files.
 			jf, _, err := acc.OpenJunkFilter(ctx, ctl.log)
@@ -651,7 +653,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 				return err
 			})
 			ctl.xcheck(err, "training messages")
-			ctl.log.Info("retrained messages", mlog.Field("total", total), mlog.Field("trained", trained))
+			ctl.log.Info("retrained messages", slog.Int("total", total), slog.Int("trained", trained))
 
 			// Close junk filter, marking success.
 			err = jf.Close()
@@ -668,7 +670,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< stream
 		*/
 		account := ctl.xread()
-		acc, err := store.OpenAccount(account)
+		acc, err := store.OpenAccount(ctl.log, account)
 		ctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
@@ -724,7 +726,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		const batchSize = 10000
 
 		xfixmsgsize := func(accName string) {
-			acc, err := store.OpenAccount(accName)
+			acc, err := store.OpenAccount(ctl.log, accName)
 			ctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
@@ -791,7 +793,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 							m.Size = correctSize
 
 							mr := acc.MessageReader(m)
-							part, err := message.EnsurePart(log, false, mr, m.Size)
+							part, err := message.EnsurePart(log.Logger, false, mr, m.Size)
 							if err != nil {
 								_, werr := fmt.Fprintf(w, "parsing message %d again: %v (continuing)\n", m.ID, err)
 								ctl.xcheck(werr, "write")
@@ -859,7 +861,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		const batchSize = 100
 
 		xreparseAccount := func(accName string) {
-			acc, err := store.OpenAccount(accName)
+			acc, err := store.OpenAccount(ctl.log, accName)
 			ctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
@@ -880,7 +882,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 					return q.ForEach(func(m store.Message) error {
 						lastID = m.ID
 						mr := acc.MessageReader(m)
-						p, err := message.EnsurePart(log, false, mr, m.Size)
+						p, err := message.EnsurePart(log.Logger, false, mr, m.Size)
 						if err != nil {
 							_, err := fmt.Fprintf(w, "parsing message %d: %v (continuing)\n", m.ID, err)
 							ctl.xcheck(err, "write")
@@ -935,7 +937,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		w := ctl.writer()
 
 		xreassignThreads := func(accName string) {
-			acc, err := store.OpenAccount(accName)
+			acc, err := store.OpenAccount(ctl.log, accName)
 			ctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
@@ -982,7 +984,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		backupctl(ctx, ctl)
 
 	default:
-		log.Info("unrecognized command", mlog.Field("cmd", cmd))
+		log.Info("unrecognized command", slog.String("cmd", cmd))
 		ctl.xwrite("unrecognized command")
 		return
 	}

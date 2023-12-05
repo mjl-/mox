@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/mjl-/mox/mlog"
 )
 
 func FuzzParseMessage(f *testing.F) {
@@ -24,7 +26,8 @@ func FuzzParseMessage(f *testing.F) {
 	os.Remove(dbPath)
 	os.Remove(bloomPath)
 	params := Params{Twograms: true}
-	jf, err := NewFilter(ctxbg, xlog, params, dbPath, bloomPath)
+	log := mlog.New("junk", nil)
+	jf, err := NewFilter(ctxbg, log, params, dbPath, bloomPath)
 	if err != nil {
 		f.Fatalf("new filter: %v", err)
 	}

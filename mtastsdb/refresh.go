@@ -8,6 +8,8 @@ import (
 	"runtime/debug"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/dns"
@@ -28,11 +30,9 @@ func refresh() int {
 	for {
 		ticker.Reset(interval)
 
-		ctx := context.WithValue(mox.Context, mlog.CidKey, mox.Cid())
-		n, err := refresh1(ctx, dns.StrictResolver{Pkg: "mtastsdb"}, time.Sleep)
-		if err != nil {
-			xlog.WithContext(ctx).Errorx("periodic refresh of cached mtasts policies", err)
-		}
+		log := mlog.New("mtastsdb", nil).WithCid(mox.Cid())
+		n, err := refresh1(mox.Context, log, dns.StrictResolver{Pkg: "mtastsdb"}, time.Sleep)
+		log.Check(err, "periodic refresh of cached mtasts policies")
 		if n > 0 {
 			refreshed += n
 		}
@@ -51,7 +51,7 @@ func refresh() int {
 // refreshes evenly over the next 3 hours, randomizing the domains, and we add some
 // jitter to the timing. Each refresh is done in a new goroutine, so a single slow
 // refresh doesn't mess up the timing.
-func refresh1(ctx context.Context, resolver dns.Resolver, sleep func(d time.Duration)) (int, error) {
+func refresh1(ctx context.Context, log mlog.Log, resolver dns.Resolver, sleep func(d time.Duration)) (int, error) {
 	db, err := database(ctx)
 	if err != nil {
 		return 0, err
@@ -87,10 +87,10 @@ func refresh1(ctx context.Context, resolver dns.Resolver, sleep func(d time.Dura
 	}
 
 	// Launch goroutine with the refresh.
-	xlog.WithContext(ctx).Debug("will refresh mta-sts policies over next 3 hours", mlog.Field("count", len(prs)))
+	log.Debug("will refresh mta-sts policies over next 3 hours", slog.Int("count", len(prs)))
 	start := timeNow()
 	for i, pr := range prs {
-		go refreshDomain(ctx, db, resolver, pr)
+		go refreshDomain(ctx, log, db, resolver, pr)
 		if i < len(prs)-1 {
 			interval := 3 * int64(time.Hour) / int64(len(prs)-1)
 			extra := time.Duration(rand.Int63n(interval) - interval/2)
@@ -104,13 +104,12 @@ func refresh1(ctx context.Context, resolver dns.Resolver, sleep func(d time.Dura
 	return len(prs), nil
 }
 
-func refreshDomain(ctx context.Context, db *bstore.DB, resolver dns.Resolver, pr PolicyRecord) {
-	log := xlog.WithContext(ctx)
+func refreshDomain(ctx context.Context, log mlog.Log, db *bstore.DB, resolver dns.Resolver, pr PolicyRecord) {
 	defer func() {
 		x := recover()
 		if x != nil {
 			// Should not happen, but make sure errors don't take down the application.
-			log.Error("refresh1", mlog.Field("panic", x))
+			log.Error("refresh1", slog.Any("panic", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Mtastsdb)
 		}
@@ -121,11 +120,11 @@ func refreshDomain(ctx context.Context, db *bstore.DB, resolver dns.Resolver, pr
 
 	d, err := dns.ParseDomain(pr.Domain)
 	if err != nil {
-		log.Errorx("refreshing mta-sts policy: parsing policy domain", err, mlog.Field("domain", d))
+		log.Errorx("refreshing mta-sts policy: parsing policy domain", err, slog.Any("domain", d))
 		return
 	}
-	log.Debug("refreshing mta-sts policy for domain", mlog.Field("domain", d))
-	record, _, err := mtasts.LookupRecord(ctx, resolver, d)
+	log.Debug("refreshing mta-sts policy for domain", slog.Any("domain", d))
+	record, _, err := mtasts.LookupRecord(ctx, log.Logger, resolver, d)
 	if err == nil && record.ID == pr.RecordID {
 		qup := bstore.QueryDB[PolicyRecord](ctx, db)
 		qup.FilterNonzero(PolicyRecord{Domain: pr.Domain, LastUpdate: pr.LastUpdate})
@@ -137,7 +136,7 @@ func refreshDomain(ctx context.Context, db *bstore.DB, resolver dns.Resolver, pr
 		if n, err := qup.UpdateNonzero(update); err != nil {
 			log.Errorx("updating refreshed, unmodified policy in database", err)
 		} else if n != 1 {
-			log.Info("expected to update 1 policy after refresh", mlog.Field("count", n))
+			log.Info("expected to update 1 policy after refresh", slog.Int("count", n))
 		}
 		return
 	}
@@ -152,14 +151,14 @@ func refreshDomain(ctx context.Context, db *bstore.DB, resolver dns.Resolver, pr
 		// ../rfc/8461:587
 		return
 	} else if err != nil {
-		log.Errorx("looking up mta-sts record for domain", err, mlog.Field("domain", d))
+		log.Errorx("looking up mta-sts record for domain", err, slog.Any("domain", d))
 		// Try to fetch new policy. It could be just DNS that is down. We don't want to let our policy expire.
 	}
 
-	p, _, err := mtasts.FetchPolicy(ctx, d)
+	p, _, err := mtasts.FetchPolicy(ctx, log.Logger, d)
 	if err != nil {
 		if !errors.Is(err, mtasts.ErrNoPolicy) || pr.Mode != mtasts.ModeNone {
-			log.Errorx("refreshing mtasts policy for domain", err, mlog.Field("domain", d))
+			log.Errorx("refreshing mtasts policy for domain", err, slog.Any("domain", d))
 		}
 		return
 	}
@@ -178,6 +177,6 @@ func refreshDomain(ctx context.Context, db *bstore.DB, resolver dns.Resolver, pr
 	if n, err := qup.UpdateFields(update); err != nil {
 		log.Errorx("updating refreshed, modified policy in database", err)
 	} else if n != 1 {
-		log.Info("updating refreshed, did not update 1 policy", mlog.Field("count", n))
+		log.Info("updating refreshed, did not update 1 policy", slog.Int("count", n))
 	}
 }

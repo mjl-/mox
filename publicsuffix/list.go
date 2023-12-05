@@ -18,13 +18,12 @@ import (
 
 	_ "embed"
 
+	"golang.org/x/exp/slog"
 	"golang.org/x/net/idna"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 )
-
-var xlog = mlog.New("publicsuffix")
 
 // todo: automatically fetch new lists periodically? compare it with the old one. refuse it if it changed too much, especially if it contains far fewer entries than before.
 
@@ -43,16 +42,19 @@ var publicsuffixList List
 var publicsuffixData []byte
 
 func init() {
-	l, err := ParseList(bytes.NewReader(publicsuffixData))
+	log := mlog.New("publicsuffix", nil)
+	l, err := ParseList(log.Logger, bytes.NewReader(publicsuffixData))
 	if err != nil {
-		xlog.Fatalx("parsing public suffix list", err)
+		log.Fatalx("parsing public suffix list", err)
 	}
 	publicsuffixList = l
 }
 
 // ParseList parses a public suffix list.
 // Only the "ICANN DOMAINS" are used.
-func ParseList(r io.Reader) (List, error) {
+func ParseList(elog *slog.Logger, r io.Reader) (List, error) {
+	log := mlog.New("publicsuffix", elog)
+
 	list := List{labels{}, labels{}}
 	br := bufio.NewReader(r)
 
@@ -79,7 +81,7 @@ func ParseList(r io.Reader) (List, error) {
 				l = list.excludes
 				t = strings.Split(line, ".")
 				if len(t) == 1 {
-					xlog.Print("exclude rule with single label, skipping", mlog.Field("line", oline))
+					log.Print("exclude rule with single label, skipping", slog.String("line", oline))
 					continue
 				}
 			} else {
@@ -88,19 +90,19 @@ func ParseList(r io.Reader) (List, error) {
 			for i := len(t) - 1; i >= 0; i-- {
 				w := t[i]
 				if w == "" {
-					xlog.Print("empty label in rule, skipping", mlog.Field("line", oline))
+					log.Print("empty label in rule, skipping", slog.String("line", oline))
 					break
 				}
 				if w != "" && w != "*" {
 					w, err = idna.Lookup.ToUnicode(w)
 					if err != nil {
-						xlog.Printx("invalid label, skipping", err, mlog.Field("line", oline))
+						log.Printx("invalid label, skipping", err, slog.String("line", oline))
 					}
 				}
 				m, ok := l[w]
 				if ok {
 					if _, dup := m[""]; i == 0 && dup {
-						xlog.Print("duplicate rule", mlog.Field("line", oline))
+						log.Print("duplicate rule", slog.String("line", oline))
 					}
 					l = m
 				} else {
@@ -123,16 +125,16 @@ func ParseList(r io.Reader) (List, error) {
 
 // Lookup calls Lookup on the builtin public suffix list, from
 // https://publicsuffix.org/list/.
-func Lookup(ctx context.Context, domain dns.Domain) (orgDomain dns.Domain) {
-	return publicsuffixList.Lookup(ctx, domain)
+func Lookup(ctx context.Context, elog *slog.Logger, domain dns.Domain) (orgDomain dns.Domain) {
+	return publicsuffixList.Lookup(ctx, elog, domain)
 }
 
 // Lookup returns the organizational domain. If domain is an organizational
 // domain, or higher-level, the same domain is returned.
-func (l List) Lookup(ctx context.Context, domain dns.Domain) (orgDomain dns.Domain) {
-	log := xlog.WithContext(ctx)
+func (l List) Lookup(ctx context.Context, elog *slog.Logger, domain dns.Domain) (orgDomain dns.Domain) {
+	log := mlog.New("publicsuffix", elog)
 	defer func() {
-		log.Debug("publicsuffix lookup result", mlog.Field("reqdom", domain), mlog.Field("orgdom", orgDomain))
+		log.Debug("publicsuffix lookup result", slog.Any("reqdom", domain), slog.Any("orgdom", orgDomain))
 	}()
 
 	t := strings.Split(domain.Name(), ".")

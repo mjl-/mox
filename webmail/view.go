@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/slices"
+	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
@@ -486,7 +487,7 @@ type ioErr struct {
 
 // serveEvents serves an SSE connection. Authentication is done through a query
 // string parameter "token", a one-time-use token returned by the Token API call.
-func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *http.Request) {
+func serveEvents(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
 		return
@@ -569,7 +570,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 		} else if _, ok := x.(ioErr); ok {
 			return
 		} else {
-			log.WithContext(ctx).Error("serveEvents panic", mlog.Field("err", x))
+			log.WithContext(ctx).Error("serveEvents panic", slog.Any("err", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Webmail)
 			panic(x)
@@ -597,7 +598,7 @@ func serveEvents(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *h
 	defer writer.close()
 
 	// Fetch initial data.
-	acc, err := store.OpenAccount(accName)
+	acc, err := store.OpenAccount(log, accName)
 	xcheckf(ctx, err, "open account")
 	defer func() {
 		err := acc.Close()
@@ -1123,7 +1124,7 @@ func (v view) inRange(m store.Message) bool {
 // message). getmsg retrieves the message, which may be necessary depending on the
 // active filters. Used to determine if a store.Change with a new message should be
 // sent, and for the destination and anchor messages in view requests.
-func (v view) matches(log *mlog.Log, acc *store.Account, checkRange bool, messageID int64, mailboxID int64, uid store.UID, flags store.Flags, keywords []string, getmsg func(int64, int64, store.UID) (store.Message, error)) (match bool, rerr error) {
+func (v view) matches(log mlog.Log, acc *store.Account, checkRange bool, messageID int64, mailboxID int64, uid store.UID, flags store.Flags, keywords []string, getmsg func(int64, int64, store.UID) (store.Message, error)) (match bool, rerr error) {
 	var m store.Message
 	ensureMessage := func() bool {
 		if m.ID == 0 && rerr == nil {
@@ -1208,7 +1209,7 @@ type msgResp struct {
 // and sending Event* to the SSE connection.
 //
 // It always closes tx.
-func viewRequestTx(ctx context.Context, log *mlog.Log, acc *store.Account, tx *bstore.Tx, v view, msgc chan EventViewMsgs, errc chan EventViewErr, resetc chan EventViewReset, donec chan int64) {
+func viewRequestTx(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, v view, msgc chan EventViewMsgs, errc chan EventViewErr, resetc chan EventViewReset, donec chan int64) {
 	defer func() {
 		err := tx.Rollback()
 		log.Check(err, "rolling back query transaction")
@@ -1217,7 +1218,7 @@ func viewRequestTx(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 
 		x := recover() // Should not happen, but don't take program down if it does.
 		if x != nil {
-			log.WithContext(ctx).Error("viewRequestTx panic", mlog.Field("err", x))
+			log.WithContext(ctx).Error("viewRequestTx panic", slog.Any("err", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Webmailrequest)
 		}
@@ -1296,11 +1297,11 @@ func viewRequestTx(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 // It sends on msgc, with several types of messages: errors, whether the view is
 // reset due to missing AnchorMessageID, and when the end of the view was reached
 // and/or for a message.
-func queryMessages(ctx context.Context, log *mlog.Log, acc *store.Account, tx *bstore.Tx, v view, mrc chan msgResp) {
+func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, v view, mrc chan msgResp) {
 	defer func() {
 		x := recover() // Should not happen, but don't take program down if it does.
 		if x != nil {
-			log.WithContext(ctx).Error("queryMessages panic", mlog.Field("err", x))
+			log.WithContext(ctx).Error("queryMessages panic", slog.Any("err", x))
 			debug.PrintStack()
 			mrc <- msgResp{err: fmt.Errorf("query failed")}
 			metrics.PanicInc(metrics.Webmailquery)
@@ -1542,7 +1543,7 @@ func queryMessages(ctx context.Context, log *mlog.Log, acc *store.Account, tx *b
 	}
 }
 
-func gatherThread(log *mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m store.Message, destMessageID int64, first bool) ([]MessageItem, *ParsedMessage, error) {
+func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m store.Message, destMessageID int64, first bool) ([]MessageItem, *ParsedMessage, error) {
 	if m.ThreadID == 0 {
 		// If we would continue, FilterNonzero would fail because there are no non-zero fields.
 		return nil, nil, fmt.Errorf("message has threadid 0, account is probably still being upgraded, try turning threading off until the upgrade is done")
@@ -1717,7 +1718,7 @@ func (q Query) flagFilterFn() func(store.Flags, []string) bool {
 // attachmentFilterFn returns a function that filters for the attachment-related
 // filter from the query. A nil function is returned if there are attachment
 // filters.
-func (q Query) attachmentFilterFn(log *mlog.Log, acc *store.Account, state *msgState) func(m store.Message) bool {
+func (q Query) attachmentFilterFn(log mlog.Log, acc *store.Account, state *msgState) func(m store.Message) bool {
 	if q.Filter.Attachments == AttachmentIndifferent && q.NotFilter.Attachments == AttachmentIndifferent {
 		return nil
 	}
@@ -1774,7 +1775,7 @@ var attachmentExtensions = map[string]AttachmentType{
 	".pptx":    AttachmentPresentation,
 }
 
-func attachmentTypes(log *mlog.Log, m store.Message, state *msgState) (map[AttachmentType]bool, error) {
+func attachmentTypes(log mlog.Log, m store.Message, state *msgState) (map[AttachmentType]bool, error) {
 	types := map[AttachmentType]bool{}
 
 	pm, err := parsedMessage(log, m, state, false, false)
@@ -1810,7 +1811,7 @@ func attachmentTypes(log *mlog.Log, m store.Message, state *msgState) (map[Attac
 // used by IMAP, i.e. basic message headers from/to/subject, an unfortunate name
 // clash with SMTP envelope) for the query. A nil function is returned if no
 // filtering is needed.
-func (q Query) envFilterFn(log *mlog.Log, state *msgState) func(m store.Message) bool {
+func (q Query) envFilterFn(log mlog.Log, state *msgState) func(m store.Message) bool {
 	if len(q.Filter.From) == 0 && len(q.Filter.To) == 0 && len(q.Filter.Subject) == 0 && len(q.NotFilter.From) == 0 && len(q.NotFilter.To) == 0 && len(q.NotFilter.Subject) == 0 {
 		return nil
 	}
@@ -1898,7 +1899,7 @@ func (q Query) envFilterFn(log *mlog.Log, state *msgState) func(m store.Message)
 
 // headerFilterFn returns a function that filters for the header filters in the
 // query. A nil function is returned if there are no header filters.
-func (q Query) headerFilterFn(log *mlog.Log, state *msgState) func(m store.Message) bool {
+func (q Query) headerFilterFn(log mlog.Log, state *msgState) func(m store.Message) bool {
 	if len(q.Filter.Headers) == 0 {
 		return nil
 	}
@@ -1939,7 +1940,7 @@ func (q Query) headerFilterFn(log *mlog.Log, state *msgState) func(m store.Messa
 
 // wordFiltersFn returns a function that applies the word filters of the query. A
 // nil function is returned when query does not contain a word filter.
-func (q Query) wordsFilterFn(log *mlog.Log, state *msgState) func(m store.Message) bool {
+func (q Query) wordsFilterFn(log mlog.Log, state *msgState) func(m store.Message) bool {
 	if len(q.Filter.Words) == 0 && len(q.NotFilter.Words) == 0 {
 		return nil
 	}

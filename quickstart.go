@@ -535,7 +535,7 @@ messages over SMTP.
 		for _, zone := range zones {
 			for _, ip := range hostIPs {
 				dnsblctx, dnsblcancel := context.WithTimeout(resolveCtx, 5*time.Second)
-				status, expl, err := dnsbl.Lookup(dnsblctx, resolver, zone, net.ParseIP(ip))
+				status, expl, err := dnsbl.Lookup(dnsblctx, c.log.Logger, resolver, zone, net.ParseIP(ip))
 				dnsblcancel()
 				if status == dnsbl.StatusPass {
 					continue
@@ -813,7 +813,7 @@ and check the admin page for the needed DNS records.`)
 
 	// Verify config.
 	loadTLSKeyCerts := !existingWebserver
-	mc, errs := mox.ParseConfig(context.Background(), filepath.FromSlash("config/mox.conf"), true, loadTLSKeyCerts, false)
+	mc, errs := mox.ParseConfig(context.Background(), c.log, filepath.FromSlash("config/mox.conf"), true, loadTLSKeyCerts, false)
 	if len(errs) > 0 {
 		if len(errs) > 1 {
 			log.Printf("checking generated config, multiple errors:")
@@ -834,14 +834,14 @@ and check the admin page for the needed DNS records.`)
 		fatalf("cannot find domain in new config")
 	}
 
-	acc, _, err := store.OpenEmail(args[0])
+	acc, _, err := store.OpenEmail(c.log, args[0])
 	if err != nil {
 		fatalf("open account: %s", err)
 	}
 	cleanupPaths = append(cleanupPaths, dataDir, filepath.Join(dataDir, "accounts"), filepath.Join(dataDir, "accounts", accountName), filepath.Join(dataDir, "accounts", accountName, "index.db"))
 
 	password := pwgen()
-	if err := acc.SetPassword(password); err != nil {
+	if err := acc.SetPassword(c.log, password); err != nil {
 		fatalf("setting password: %s", err)
 	}
 	if err := acc.Close(); err != nil {

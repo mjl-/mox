@@ -8,13 +8,13 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/mjl-/mox/mlog"
 )
-
-var xlog = mlog.New("metrics")
 
 var (
 	metricHTTPClient = promauto.NewHistogramVec(
@@ -34,8 +34,8 @@ var (
 
 // HTTPClientObserve tracks the result of an HTTP transaction in a metric, and
 // logs the result.
-func HTTPClientObserve(ctx context.Context, pkg, method string, statusCode int, err error, start time.Time) {
-	log := xlog.WithContext(ctx)
+func HTTPClientObserve(ctx context.Context, log mlog.Log, pkg, method string, statusCode int, err error, start time.Time) {
+	log = log.WithPkg("metrics")
 	var result string
 	switch {
 	case err == nil:
@@ -57,5 +57,5 @@ func HTTPClientObserve(ctx context.Context, pkg, method string, statusCode int, 
 		result = "error"
 	}
 	metricHTTPClient.WithLabelValues(pkg, method, result, fmt.Sprintf("%d", statusCode)).Observe(float64(time.Since(start)) / float64(time.Second))
-	log.Debugx("httpclient result", err, mlog.Field("pkg", pkg), mlog.Field("method", method), mlog.Field("code", statusCode), mlog.Field("duration", time.Since(start)))
+	log.Debugx("httpclient result", err, slog.String("pkg", pkg), slog.String("method", method), slog.Int("code", statusCode), slog.Duration("duration", time.Since(start)))
 }

@@ -17,12 +17,14 @@ import (
 	"time"
 
 	"github.com/mjl-/mox/imapclient"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/store"
 )
 
 var ctxbg = context.Background()
+var pkglog = mlog.New("imapserver", nil)
 
 func init() {
 	sanityChecks = true
@@ -341,10 +343,10 @@ func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn 
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
 	mox.MustLoadConfig(true, false)
-	acc, err := store.OpenAccount("mjl")
+	acc, err := store.OpenAccount(pkglog, "mjl")
 	tcheck(t, err, "open account")
 	if first {
-		err = acc.SetPassword("testtest")
+		err = acc.SetPassword(pkglog, "testtest")
 		tcheck(t, err, "set password")
 	}
 	switchStop := func() {}

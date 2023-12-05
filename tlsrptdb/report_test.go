@@ -11,11 +11,13 @@ import (
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/tlsrpt"
 )
 
 var ctxbg = context.Background()
+var pkglog = mlog.New("tlsrptdb", nil)
 
 const reportJSON = `{
      "organization-name": "Company-X",
@@ -89,12 +91,12 @@ func TestReport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open %q: %s", file, err)
 		}
-		report, err := tlsrpt.ParseMessage(xlog, f)
+		report, err := tlsrpt.ParseMessage(pkglog.Logger, f)
 		f.Close()
 		if err != nil {
 			t.Fatalf("parsing TLSRPT from message %q: %s", file.Name(), err)
 		}
-		if err := AddReport(ctxbg, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", false, report); err != nil {
+		if err := AddReport(ctxbg, pkglog, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", false, report); err != nil {
 			t.Fatalf("adding report to database: %s", err)
 		}
 	}
@@ -102,7 +104,7 @@ func TestReport(t *testing.T) {
 	report, err := tlsrpt.Parse(strings.NewReader(reportJSON))
 	if err != nil {
 		t.Fatalf("parsing report: %v", err)
-	} else if err := AddReport(ctxbg, dns.Domain{ASCII: "company-y.example"}, "tlsrpt@company-y.example", false, report); err != nil {
+	} else if err := AddReport(ctxbg, pkglog, dns.Domain{ASCII: "company-y.example"}, "tlsrpt@company-y.example", false, report); err != nil {
 		t.Fatalf("adding report to database: %s", err)
 	}
 

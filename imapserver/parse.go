@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mjl-/mox/mlog"
+	"golang.org/x/exp/slog"
 )
 
 var (
@@ -402,7 +402,7 @@ func (p *parser) xmailbox() string {
 	if !p.conn.enabled[capIMAP4rev2] {
 		ns, err := utf7decode(s)
 		if err != nil {
-			p.conn.log.Infox("decoding utf7 or mailbox name", err, mlog.Field("name", s))
+			p.conn.log.Infox("decoding utf7 or mailbox name", err, slog.String("name", s))
 		} else {
 			s = ns
 		}

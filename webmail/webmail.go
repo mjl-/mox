@@ -26,10 +26,11 @@ import (
 
 	_ "embed"
 
+	"golang.org/x/exp/slog"
+	"golang.org/x/net/html"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-
-	"golang.org/x/net/html"
 
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
@@ -48,7 +49,7 @@ func init() {
 	mox.LimitersInit()
 }
 
-var xlog = mlog.New("webmail")
+var pkglog = mlog.New("webmail", nil)
 
 // We pass the request to the sherpa handler so the TLS info can be used for
 // the Received header in submitted messages. Most API calls need just the
@@ -115,7 +116,7 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 	}
 	msg := fmt.Sprintf(format, args...)
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
-	xlog.WithContext(ctx).Errorx(msg, err)
+	pkglog.WithContext(ctx).Errorx(msg, err)
 	panic(&sherpa.Error{Code: "server:error", Message: errmsg})
 }
 
@@ -125,7 +126,7 @@ func xcheckuserf(ctx context.Context, err error, format string, args ...any) {
 	}
 	msg := fmt.Sprintf(format, args...)
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
-	xlog.WithContext(ctx).Errorx(msg, err)
+	pkglog.WithContext(ctx).Errorx(msg, err)
 	panic(&sherpa.Error{Code: "user:error", Message: errmsg})
 }
 
@@ -166,7 +167,7 @@ var webmail = &merged{
 
 // fallbackMtime returns a time to use for the Last-Modified header in case we
 // cannot find a file, e.g. when used in production.
-func fallbackMtime(log *mlog.Log) time.Time {
+func fallbackMtime(log mlog.Log) time.Time {
 	p, err := os.Executable()
 	log.Check(err, "finding executable for mtime")
 	if err == nil {
@@ -180,7 +181,7 @@ func fallbackMtime(log *mlog.Log) time.Time {
 	return time.Now()
 }
 
-func (m *merged) serve(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *http.Request) {
+func (m *merged) serve(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *http.Request) {
 	// We typically return the embedded file, but during development it's handy
 	// to load from disk.
 	fhtml, _ := os.Open(m.htmlPath)
@@ -304,7 +305,7 @@ func (w gzipInjector) WriteHeader(statusCode int) {
 // should already have set the content-type. We use this to return a file from
 // the local file system (during development), or embedded in the binary (when
 // deployed).
-func serveContentFallback(log *mlog.Log, w http.ResponseWriter, r *http.Request, path string, fallback []byte) {
+func serveContentFallback(log mlog.Log, w http.ResponseWriter, r *http.Request, path string, fallback []byte) {
 	f, err := os.Open(path)
 	if err == nil {
 		defer f.Close()
@@ -332,7 +333,7 @@ func Handler(maxMessageSize int64) func(w http.ResponseWriter, r *http.Request) 
 
 func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	log := xlog.WithContext(ctx).Fields(mlog.Field("userauth", ""))
+	log := pkglog.WithContext(ctx).With(slog.String("userauth", ""))
 
 	// Server-sent event connection, for all initial data (list of mailboxes), list of
 	// messages, and all events afterwards. Authenticated through a token in the query
@@ -349,8 +350,8 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if lw, ok := w.(interface{ AddField(f mlog.Pair) }); ok {
-		lw.AddField(mlog.Field("authaccount", accName))
+	if lw, ok := w.(interface{ AddAttr(a slog.Attr) }); ok {
+		lw.AddAttr(slog.String("authaccount", accName))
 	}
 
 	defer func() {
@@ -360,7 +361,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		}
 		err, ok := x.(*sherpa.Error)
 		if !ok {
-			log.WithContext(ctx).Error("handle panic", mlog.Field("err", x))
+			log.WithContext(ctx).Error("handle panic", slog.Any("err", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Webmailhandle)
 			panic(x)
@@ -462,7 +463,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 
 		var err error
 
-		acc, err = store.OpenAccount(accName)
+		acc, err = store.OpenAccount(log, accName)
 		xcheckf(ctx, err, "open account")
 
 		m = store.Message{ID: id}
@@ -922,7 +923,7 @@ func acceptsGzip(r *http.Request) bool {
 // HTML, setHeaders is called to write the required headers for content-type and
 // CSP. On error, setHeader is not called, no output is written and the caller
 // should write an error response.
-func inlineSanitizeHTML(log *mlog.Log, setHeaders func(), w io.Writer, p *message.Part, parents []*message.Part) error {
+func inlineSanitizeHTML(log mlog.Log, setHeaders func(), w io.Writer, p *message.Part, parents []*message.Part) error {
 	// Prepare cids if there is a chance we will use them.
 	cids := map[string]*message.Part{}
 	for _, parent := range parents {

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/sconf"
 
@@ -75,18 +76,17 @@ during those commands instead of during "data".
 		c.Usage()
 	}
 
-	log := mlog.New("localserve")
-
+	log := c.log
 	mox.FilesImmediate = true
 
 	if initOnly {
 		if _, err := os.Stat(dir); err == nil {
 			log.Print("warning: directory for configuration files already exists, continuing")
 		}
-		log.Print("creating mox localserve config", mlog.Field("dir", dir))
+		log.Print("creating mox localserve config", slog.String("dir", dir))
 		err := writeLocalConfig(log, dir, ip)
 		if err != nil {
-			log.Fatalx("creating mox localserve config", err, mlog.Field("dir", dir))
+			log.Fatalx("creating mox localserve config", err, slog.String("dir", dir))
 		}
 		return
 	}
@@ -96,12 +96,12 @@ during those commands instead of during "data".
 	if _, err := os.Stat(dir); err != nil && os.IsNotExist(err) {
 		err := writeLocalConfig(log, dir, ip)
 		if err != nil {
-			log.Fatalx("creating mox localserve config", err, mlog.Field("dir", dir))
+			log.Fatalx("creating mox localserve config", err, slog.String("dir", dir))
 		}
 	} else if err != nil {
-		log.Fatalx("stat config dir", err, mlog.Field("dir", dir))
+		log.Fatalx("stat config dir", err, slog.String("dir", dir))
 	} else if err := localLoadConfig(log, dir); err != nil {
-		log.Fatalx("loading mox localserve config (hint: when creating a new config with -dir, the directory must not yet exist)", err, mlog.Field("dir", dir))
+		log.Fatalx("loading mox localserve config (hint: when creating a new config with -dir, the directory must not yet exist)", err, slog.String("dir", dir))
 	} else if ip != "" {
 		log.Fatal("can only use -ip when writing a new config file")
 	} else {
@@ -112,7 +112,7 @@ during those commands instead of during "data".
 		mox.Conf.Log[""] = level
 		mlog.SetConfig(mox.Conf.Log)
 	} else if loglevel != "" && !ok {
-		log.Fatal("unknown loglevel", mlog.Field("loglevel", loglevel))
+		log.Fatal("unknown loglevel", slog.String("loglevel", loglevel))
 	}
 
 	// Initialize receivedid.
@@ -201,7 +201,7 @@ during those commands instead of during "data".
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 	sig := <-sigc
-	log.Print("shutting down, waiting max 3s for existing connections", mlog.Field("signal", sig))
+	log.Print("shutting down, waiting max 3s for existing connections", slog.Any("signal", sig))
 	shutdown(log)
 	if num, ok := sig.(syscall.Signal); ok {
 		os.Exit(int(num))
@@ -210,7 +210,7 @@ during those commands instead of during "data".
 	}
 }
 
-func writeLocalConfig(log *mlog.Log, dir, ip string) (rerr error) {
+func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 	defer func() {
 		x := recover()
 		if x != nil {
@@ -220,7 +220,7 @@ func writeLocalConfig(log *mlog.Log, dir, ip string) (rerr error) {
 		}
 		if rerr != nil {
 			err := os.RemoveAll(dir)
-			log.Check(err, "removing config directory", mlog.Field("dir", dir))
+			log.Check(err, "removing config directory", slog.String("dir", dir))
 		}
 	}()
 
@@ -430,10 +430,10 @@ func writeLocalConfig(log *mlog.Log, dir, ip string) (rerr error) {
 	xcheck(err, "loading config")
 
 	// Set password on account.
-	a, _, err := store.OpenEmail("mox@localhost")
+	a, _, err := store.OpenEmail(log, "mox@localhost")
 	xcheck(err, "opening account to set password")
 	password := "moxmoxmox"
-	err = a.SetPassword(password)
+	err = a.SetPassword(log, password)
 	xcheck(err, "setting password")
 	err = a.Close()
 	xcheck(err, "closing account")
@@ -442,10 +442,10 @@ func writeLocalConfig(log *mlog.Log, dir, ip string) (rerr error) {
 	return nil
 }
 
-func localLoadConfig(log *mlog.Log, dir string) error {
+func localLoadConfig(log mlog.Log, dir string) error {
 	mox.ConfigStaticPath = filepath.Join(dir, "mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(dir, "domains.conf")
-	errs := mox.LoadConfig(context.Background(), true, false)
+	errs := mox.LoadConfig(context.Background(), log, true, false)
 	if len(errs) > 1 {
 		log.Error("loading config generated config file: multiple errors")
 		for _, err := range errs {

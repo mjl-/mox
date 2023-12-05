@@ -12,11 +12,11 @@ import (
 	"strings"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/message"
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/store"
@@ -233,7 +233,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 
 		for _, uid := range uids {
 			cmd.uid = uid
-			mlog.Field("processing uid", mlog.Field("uid", uid))
+			cmd.conn.log.Debug("processing uid", slog.Any("uid", uid))
 			cmd.process(atts)
 		}
 
@@ -326,7 +326,7 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 			cmd.expungeIssued = true
 			return
 		}
-		cmd.conn.log.Infox("processing fetch attribute", err, mlog.Field("uid", cmd.uid))
+		cmd.conn.log.Infox("processing fetch attribute", err, slog.Any("uid", cmd.uid))
 		xuserErrorf("processing fetch attribute: %v", err)
 	}()
 

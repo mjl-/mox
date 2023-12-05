@@ -20,6 +20,8 @@ import (
 
 	_ "embed"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/sherpa"
 	"github.com/mjl-/sherpadoc"
 	"github.com/mjl-/sherpaprom"
@@ -37,7 +39,7 @@ func init() {
 	mox.LimitersInit()
 }
 
-var xlog = mlog.New("webaccount")
+var pkglog = mlog.New("webaccount", nil)
 
 //go:embed accountapi.json
 var accountapiJSON []byte
@@ -52,7 +54,7 @@ var accountSherpaHandler http.Handler
 func mustParseAPI(api string, buf []byte) (doc sherpadoc.Section) {
 	err := json.Unmarshal(buf, &doc)
 	if err != nil {
-		xlog.Fatalx("parsing webaccount api docs", err, mlog.Field("api", api))
+		pkglog.Fatalx("parsing webaccount api docs", err, slog.String("api", api))
 	}
 	return doc
 }
@@ -60,12 +62,12 @@ func mustParseAPI(api string, buf []byte) (doc sherpadoc.Section) {
 func init() {
 	collector, err := sherpaprom.NewCollector("moxaccount", nil)
 	if err != nil {
-		xlog.Fatalx("creating sherpa prometheus collector", err)
+		pkglog.Fatalx("creating sherpa prometheus collector", err)
 	}
 
 	accountSherpaHandler, err = sherpa.NewHandler("/api/", moxvar.Version, Account{}, &accountDoc, &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none"})
 	if err != nil {
-		xlog.Fatalx("sherpa handler", err)
+		pkglog.Fatalx("sherpa handler", err)
 	}
 }
 
@@ -75,7 +77,7 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 	}
 	msg := fmt.Sprintf(format, args...)
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
-	xlog.WithContext(ctx).Errorx(msg, err)
+	pkglog.WithContext(ctx).Errorx(msg, err)
 	panic(&sherpa.Error{Code: "server:error", Message: errmsg})
 }
 
@@ -85,7 +87,7 @@ func xcheckuserf(ctx context.Context, err error, format string, args ...any) {
 	}
 	msg := fmt.Sprintf(format, args...)
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
-	xlog.WithContext(ctx).Errorx(msg, err)
+	pkglog.WithContext(ctx).Errorx(msg, err)
 	panic(&sherpa.Error{Code: "user:error", Message: errmsg})
 }
 
@@ -96,7 +98,7 @@ type Account struct{}
 
 // CheckAuth checks http basic auth, returns login address and account name if
 // valid, and writes http response and returns empty string otherwise.
-func CheckAuth(ctx context.Context, log *mlog.Log, kind string, w http.ResponseWriter, r *http.Request) (address, account string) {
+func CheckAuth(ctx context.Context, log mlog.Log, kind string, w http.ResponseWriter, r *http.Request) (address, account string) {
 	authResult := "error"
 	start := time.Now()
 	var addr *net.TCPAddr
@@ -111,7 +113,7 @@ func CheckAuth(ctx context.Context, log *mlog.Log, kind string, w http.ResponseW
 	var remoteIP net.IP
 	addr, err = net.ResolveTCPAddr("tcp", r.RemoteAddr)
 	if err != nil {
-		log.Errorx("parsing remote address", err, mlog.Field("addr", r.RemoteAddr))
+		log.Errorx("parsing remote address", err, slog.Any("addr", r.RemoteAddr))
 	} else if addr != nil {
 		remoteIP = addr.IP
 	}
@@ -127,10 +129,10 @@ func CheckAuth(ctx context.Context, log *mlog.Log, kind string, w http.ResponseW
 		log.Debugx("parsing base64", err)
 	} else if t := strings.SplitN(string(authBuf), ":", 2); len(t) != 2 {
 		log.Debug("bad user:pass form")
-	} else if acc, err := store.OpenEmailAuth(t[0], t[1]); err != nil {
+	} else if acc, err := store.OpenEmailAuth(log, t[0], t[1]); err != nil {
 		if errors.Is(err, store.ErrUnknownCredentials) {
 			authResult = "badcreds"
-			log.Info("failed authentication attempt", mlog.Field("username", t[0]), mlog.Field("remote", remoteIP))
+			log.Info("failed authentication attempt", slog.String("username", t[0]), slog.Any("remote", remoteIP))
 		}
 		log.Errorx("open account", err)
 	} else {
@@ -148,7 +150,7 @@ func CheckAuth(ctx context.Context, log *mlog.Log, kind string, w http.ResponseW
 
 func Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
-	log := xlog.WithContext(ctx).Fields(mlog.Field("userauth", ""))
+	log := pkglog.WithContext(ctx).With(slog.String("userauth", ""))
 
 	// Without authentication. The token is unguessable.
 	if r.URL.Path == "/importprogress" {
@@ -213,8 +215,8 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if lw, ok := w.(interface{ AddField(p mlog.Pair) }); ok {
-		lw.AddField(mlog.Field("authaccount", accName))
+	if lw, ok := w.(interface{ AddAttr(a slog.Attr) }); ok {
+		lw.AddAttr(slog.String("authaccount", accName))
 	}
 
 	switch r.URL.Path {
@@ -239,7 +241,7 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		maildir := strings.Contains(r.URL.Path, "maildir")
 		tgz := strings.Contains(r.URL.Path, ".tgz")
 
-		acc, err := store.OpenAccount(accName)
+		acc, err := store.OpenAccount(log, accName)
 		if err != nil {
 			log.Errorx("open account for export", err)
 			http.Error(w, "500 - internal server error", http.StatusInternalServerError)
@@ -336,17 +338,18 @@ var authCtxKey ctxKey = "account"
 // Sessions are not interrupted, and will keep working. New login attempts must use the new password.
 // Password must be at least 8 characters.
 func (Account) SetPassword(ctx context.Context, password string) {
+	log := pkglog.WithContext(ctx)
 	if len(password) < 8 {
 		panic(&sherpa.Error{Code: "user:error", Message: "password must be at least 8 characters"})
 	}
 	accountName := ctx.Value(authCtxKey).(string)
-	acc, err := store.OpenAccount(accountName)
+	acc, err := store.OpenAccount(log, accountName)
 	xcheckf(ctx, err, "open account")
 	defer func() {
 		err := acc.Close()
-		xlog.Check(err, "closing account")
+		log.Check(err, "closing account")
 	}()
-	err = acc.SetPassword(password)
+	err = acc.SetPassword(log, password)
 	xcheckf(ctx, err, "setting password")
 }
 

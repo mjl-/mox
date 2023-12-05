@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/mox/dmarcrpt"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
@@ -156,7 +158,7 @@ func TestEvaluations(t *testing.T) {
 }
 
 func TestSendReports(t *testing.T) {
-	mlog.SetConfig(map[string]mlog.Level{"": mlog.LevelDebug})
+	mlog.SetConfig(map[string]slog.Level{"": slog.LevelDebug})
 
 	os.RemoveAll("../testdata/dmarcdb/data")
 	mox.Context = ctxbg
@@ -294,7 +296,7 @@ func TestSendReports(t *testing.T) {
 		aggrAddrs := map[string]struct{}{}
 		errorAddrs := map[string]struct{}{}
 
-		queueAdd = func(ctx context.Context, log *mlog.Log, qm *queue.Msg, msgFile *os.File) error {
+		queueAdd = func(ctx context.Context, log mlog.Log, qm *queue.Msg, msgFile *os.File) error {
 			// Read message file. Also write copy to disk for inspection.
 			buf, err := io.ReadAll(&moxio.AtReader{R: msgFile})
 			tcheckf(t, err, "read report message")
@@ -309,7 +311,7 @@ func TestSendReports(t *testing.T) {
 			} else {
 				aggrAddrs[addr] = struct{}{}
 
-				feedback, err = dmarcrpt.ParseMessageReport(log, msgFile)
+				feedback, err = dmarcrpt.ParseMessageReport(log.Logger, msgFile)
 				tcheckf(t, err, "parsing generated report message")
 			}
 

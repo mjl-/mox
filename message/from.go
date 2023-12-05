@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/textproto"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
@@ -17,12 +19,14 @@ import (
 // From headers may be present. From returns an error if there is not exactly
 // one address. This address can be used for evaluating a DMARC policy against
 // SPF and DKIM results.
-func From(log *mlog.Log, strict bool, r io.ReaderAt) (raddr smtp.Address, envelope *Envelope, header textproto.MIMEHeader, rerr error) {
+func From(elog *slog.Logger, strict bool, r io.ReaderAt) (raddr smtp.Address, envelope *Envelope, header textproto.MIMEHeader, rerr error) {
+	log := mlog.New("message", elog)
+
 	// ../rfc/7489:1243
 
 	// todo: only allow utf8 if enabled in session/message?
 
-	p, err := Parse(log, strict, r)
+	p, err := Parse(log.Logger, strict, r)
 	if err != nil {
 		// todo: should we continue with p, perhaps headers can be parsed?
 		return raddr, nil, nil, fmt.Errorf("parsing message: %v", err)

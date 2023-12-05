@@ -56,10 +56,12 @@ import (
 	"runtime/debug"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
+	"golang.org/x/exp/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -77,10 +79,6 @@ import (
 	"github.com/mjl-/mox/scram"
 	"github.com/mjl-/mox/store"
 )
-
-// Most logging should be done through conn.log* functions.
-// Only use imaplog in contexts without connection.
-var xlog = mlog.New("imapserver")
 
 var (
 	metricIMAPConnection = promauto.NewCounterVec(
@@ -180,7 +178,7 @@ type conn struct {
 	cmdMetric         string // Currently executing, for metrics.
 	cmdStart          time.Time
 	ncmds             int // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
-	log               *mlog.Log
+	log               mlog.Log
 	enabled           map[capability]bool // All upper-case.
 
 	// Set by SEARCH with SAVE. Can be used by commands accepting a sequence-set with
@@ -338,14 +336,15 @@ func Listen() {
 var servers []func()
 
 func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config, xtls, noRequireSTARTTLS bool) {
+	log := mlog.New("imapserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
-		xlog.Print("listening for imap", mlog.Field("listener", listenerName), mlog.Field("addr", addr), mlog.Field("protocol", protocol))
+		log.Print("listening for imap", slog.String("listener", listenerName), slog.String("addr", addr), slog.String("protocol", protocol))
 	}
 	network := mox.Network(ip)
 	ln, err := mox.Listen(network, addr)
 	if err != nil {
-		xlog.Fatalx("imap: listen for imap", err, mlog.Field("protocol", protocol), mlog.Field("listener", listenerName))
+		log.Fatalx("imap: listen for imap", err, slog.String("protocol", protocol), slog.String("listener", listenerName))
 	}
 	if xtls {
 		ln = tls.NewListener(ln, tlsConfig)
@@ -355,7 +354,7 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
-				xlog.Infox("imap: accept", err, mlog.Field("protocol", protocol), mlog.Field("listener", listenerName))
+				log.Infox("imap: accept", err, slog.String("protocol", protocol), slog.String("listener", listenerName))
 				continue
 			}
 
@@ -441,7 +440,7 @@ func (c *conn) Write(buf []byte) (int, error) {
 	return n, nil
 }
 
-func (c *conn) xtrace(level mlog.Level) func() {
+func (c *conn) xtrace(level slog.Level) func() {
 	c.xflush()
 	c.tr.SetTrace(level)
 	c.tw.SetTrace(level)
@@ -469,7 +468,7 @@ func (c *conn) readline0() (string, error) {
 	err := c.conn.SetReadDeadline(time.Now().Add(d))
 	c.log.Check(err, "setting read deadline")
 
-	line, err := bufpool.Readline(c.br)
+	line, err := bufpool.Readline(c.log, c.br)
 	if err != nil && errors.Is(err, moxio.ErrLineTooLong) {
 		return "", fmt.Errorf("%s (%w)", err, errProtocol)
 	} else if err != nil {
@@ -629,15 +628,18 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		cmd:               "(greeting)",
 		cmdStart:          time.Now(),
 	}
-	c.log = xlog.MoreFields(func() []mlog.Pair {
+	var logmutex sync.Mutex
+	c.log = mlog.New("imapserver", nil).WithFunc(func() []slog.Attr {
+		logmutex.Lock()
+		defer logmutex.Unlock()
 		now := time.Now()
-		l := []mlog.Pair{
-			mlog.Field("cid", c.cid),
-			mlog.Field("delta", now.Sub(c.lastlog)),
+		l := []slog.Attr{
+			slog.Int64("cid", c.cid),
+			slog.Duration("delta", now.Sub(c.lastlog)),
 		}
 		c.lastlog = now
 		if c.username != "" {
-			l = append(l, mlog.Field("username", c.username))
+			l = append(l, slog.String("username", c.username))
 		}
 		return l
 	})
@@ -662,7 +664,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		}
 	}
 
-	c.log.Info("new connection", mlog.Field("remote", c.conn.RemoteAddr()), mlog.Field("local", c.conn.LocalAddr()), mlog.Field("tls", xtls), mlog.Field("listener", listenerName))
+	c.log.Info("new connection", slog.Any("remote", c.conn.RemoteAddr()), slog.Any("local", c.conn.LocalAddr()), slog.Bool("tls", xtls), slog.String("listener", listenerName))
 
 	defer func() {
 		c.conn.Close()
@@ -681,7 +683,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		} else if err, ok := x.(error); ok && isClosed(err) {
 			c.log.Infox("connection closed", err)
 		} else {
-			c.log.Error("unhandled panic", mlog.Field("err", x))
+			c.log.Error("unhandled panic", slog.Any("err", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Imapserver)
 		}
@@ -703,13 +705,13 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	// If remote IP/network resulted in too many authentication failures, refuse to serve.
 	if !mox.LimiterFailedAuth.CanAdd(c.remoteIP, time.Now(), 1) {
 		metrics.AuthenticationRatelimitedInc("imap")
-		c.log.Debug("refusing connection due to many auth failures", mlog.Field("remoteip", c.remoteIP))
+		c.log.Debug("refusing connection due to many auth failures", slog.Any("remoteip", c.remoteIP))
 		c.writelinef("* BYE too many auth failures")
 		return
 	}
 
 	if !limiterConnections.Add(c.remoteIP, time.Now(), 1) {
-		c.log.Debug("refusing connection due to many open connections", mlog.Field("remoteip", c.remoteIP))
+		c.log.Debug("refusing connection due to many open connections", slog.Any("remoteip", c.remoteIP))
 		c.writelinef("* BYE too many open connections from your ip or network")
 		return
 	}
@@ -744,9 +746,9 @@ func (c *conn) command() {
 			metricIMAPCommands.WithLabelValues(c.cmdMetric, result).Observe(float64(time.Since(c.cmdStart)) / float64(time.Second))
 		}()
 
-		logFields := []mlog.Pair{
-			mlog.Field("cmd", c.cmd),
-			mlog.Field("duration", time.Since(c.cmdStart)),
+		logFields := []slog.Attr{
+			slog.String("cmd", c.cmd),
+			slog.Duration("duration", time.Since(c.cmdStart)),
 		}
 		c.cmd = ""
 
@@ -761,7 +763,7 @@ func (c *conn) command() {
 		}
 		err, ok := x.(error)
 		if !ok {
-			c.log.Error("imap command panic", append([]mlog.Pair{mlog.Field("panic", x)}, logFields...)...)
+			c.log.Error("imap command panic", append([]slog.Attr{slog.Any("panic", x)}, logFields...)...)
 			result = "panic"
 			panic(x)
 		}
@@ -786,7 +788,7 @@ func (c *conn) command() {
 				panic(errIO)
 			}
 			c.log.Debugx("imap command syntax error", sxerr.err, logFields...)
-			c.log.Info("imap syntax error", mlog.Field("lastline", c.lastLine))
+			c.log.Info("imap syntax error", slog.String("lastline", c.lastLine))
 			fatal := strings.HasSuffix(c.lastLine, "+}")
 			if fatal {
 				err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
@@ -865,7 +867,7 @@ func (c *conn) broadcast(changes []store.Change) {
 	if len(changes) == 0 {
 		return
 	}
-	c.log.Debug("broadcast changes", mlog.Field("changes", changes))
+	c.log.Debug("broadcast changes", slog.Any("changes", changes))
 	c.comm.Broadcast(changes)
 }
 
@@ -1184,7 +1186,7 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 	err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Minute))
 	c.log.Check(err, "setting write deadline")
 
-	c.log.Debug("applying changes", mlog.Field("changes", changes))
+	c.log.Debug("applying changes", slog.Any("changes", changes))
 
 	// Only keep changes for the selected mailbox, and changes that are always relevant.
 	var n []store.Change
@@ -1404,7 +1406,7 @@ func (c *conn) cmdID(tag, cmd string, p *parser) {
 	p.xempty()
 
 	// We just log the client id.
-	c.log.Info("client id", mlog.Field("params", params))
+	c.log.Info("client id", slog.Any("params", params))
 
 	// Response syntax: ../rfc/2971:243
 	// We send our name and version. ../rfc/2971:193
@@ -1448,7 +1450,7 @@ func (c *conn) cmdStarttls(tag, cmd string, p *parser) {
 	}
 	cancel()
 	tlsversion, ciphersuite := mox.TLSInfo(tlsConn)
-	c.log.Debug("tls server handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite))
+	c.log.Debug("tls server handshake done", slog.String("tls", tlsversion), slog.String("ciphersuite", ciphersuite))
 
 	c.conn = tlsConn
 	c.tr = moxio.NewTraceReader(c.log, "C: ", c.conn)
@@ -1560,11 +1562,11 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xusercodeErrorf("AUTHORIZATIONFAILED", "cannot assume role")
 		}
 
-		acc, err := store.OpenEmailAuth(authc, password)
+		acc, err := store.OpenEmailAuth(c.log, authc, password)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
 				authResult = "badcreds"
-				c.log.Info("authentication failed", mlog.Field("username", authc))
+				c.log.Info("authentication failed", slog.String("username", authc))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			}
 			xusercodeErrorf("", "error")
@@ -1588,11 +1590,11 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xsyntaxErrorf("malformed cram-md5 response")
 		}
 		addr := t[0]
-		c.log.Debug("cram-md5 auth", mlog.Field("address", addr))
-		acc, _, err := store.OpenEmail(addr)
+		c.log.Debug("cram-md5 auth", slog.String("address", addr))
+		acc, _, err := store.OpenEmail(c.log, addr)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
-				c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+				c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			}
 			xserverErrorf("looking up address: %v", err)
@@ -1608,7 +1610,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
 				if err == bstore.ErrAbsent {
-					c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+					c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 					xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 				}
 				if err != nil {
@@ -1622,8 +1624,8 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xcheckf(err, "tx read")
 		})
 		if ipadhash == nil || opadhash == nil {
-			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", mlog.Field("username", addr))
-			c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", slog.String("username", addr))
+			c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 			xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 		}
 
@@ -1632,7 +1634,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		opadhash.Write(ipadhash.Sum(nil))
 		digest := fmt.Sprintf("%x", opadhash.Sum(nil))
 		if digest != t[1] {
-			c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+			c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 			xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 		}
 
@@ -1659,8 +1661,8 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		if err != nil {
 			xsyntaxErrorf("starting scram: %s", err)
 		}
-		c.log.Debug("scram auth", mlog.Field("authentication", ss.Authentication))
-		acc, _, err := store.OpenEmail(ss.Authentication)
+		c.log.Debug("scram auth", slog.String("authentication", ss.Authentication))
+		acc, _, err := store.OpenEmail(c.log, ss.Authentication)
 		if err != nil {
 			// todo: we could continue scram with a generated salt, deterministically generated
 			// from the username. that way we don't have to store anything but attackers cannot
@@ -1686,7 +1688,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 					xscram = password.SCRAMSHA256
 				}
 				if err == bstore.ErrAbsent || err == nil && (len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0) {
-					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", mlog.Field("address", ss.Authentication))
+					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", slog.String("address", ss.Authentication))
 					xuserErrorf("scram not possible")
 				}
 				xcheckf(err, "fetching credentials")
@@ -1706,7 +1708,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			c.readline(false) // Should be "*" for cancellation.
 			if errors.Is(err, scram.ErrInvalidProof) {
 				authResult = "badcreds"
-				c.log.Info("failed authentication attempt", mlog.Field("username", ss.Authentication), mlog.Field("remote", c.remoteIP))
+				c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			}
 			xuserErrorf("server final: %w", err)
@@ -1770,13 +1772,13 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 		}
 	}()
 
-	acc, err := store.OpenEmailAuth(userid, password)
+	acc, err := store.OpenEmailAuth(c.log, userid, password)
 	if err != nil {
 		authResult = "badcreds"
 		var code string
 		if errors.Is(err, store.ErrUnknownCredentials) {
 			code = "AUTHENTICATIONFAILED"
-			c.log.Info("failed authentication attempt", mlog.Field("username", userid), mlog.Field("remote", c.remoteIP))
+			c.log.Info("failed authentication attempt", slog.String("username", userid), slog.Any("remote", c.remoteIP))
 		}
 		xusercodeErrorf(code, "login failed")
 	}
@@ -2251,7 +2253,7 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 	for _, mID := range removeMessageIDs {
 		p := c.account.MessagePath(mID)
 		err := os.Remove(p)
-		c.log.Check(err, "removing message file for mailbox delete", mlog.Field("path", p))
+		c.log.Check(err, "removing message file for mailbox delete", slog.String("path", p))
 	}
 
 	c.ok(tag, cmd)
@@ -2674,7 +2676,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 	}
 
 	// Read the message into a temporary file.
-	msgFile, err := store.CreateMessageTemp("imap-append")
+	msgFile, err := store.CreateMessageTemp(c.log, "imap-append")
 	xcheckf(err, "creating temp file for message")
 	defer func() {
 		p := msgFile.Name()
@@ -3273,7 +3275,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			}
 
 			for dir := range syncDirs {
-				err := moxio.SyncDir(dir)
+				err := moxio.SyncDir(c.log, dir)
 				xcheckf(err, "sync directory")
 			}
 

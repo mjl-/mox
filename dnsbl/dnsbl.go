@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 )
-
-var xlog = mlog.New("dnsbl")
 
 var (
 	metricLookup = promauto.NewHistogramVec(
@@ -45,12 +45,12 @@ var (
 )
 
 // Lookup checks if "ip" occurs in the DNS block list "zone" (e.g. dnsbl.example.org).
-func Lookup(ctx context.Context, resolver dns.Resolver, zone dns.Domain, ip net.IP) (rstatus Status, rexplanation string, rerr error) {
-	log := xlog.WithContext(ctx)
+func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, zone dns.Domain, ip net.IP) (rstatus Status, rexplanation string, rerr error) {
+	log := mlog.New("dnsbl", elog)
 	start := time.Now()
 	defer func() {
 		metricLookup.WithLabelValues(zone.Name(), string(rstatus)).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("dnsbl lookup result", rerr, mlog.Field("zone", zone), mlog.Field("ip", ip), mlog.Field("status", rstatus), mlog.Field("explanation", rexplanation), mlog.Field("duration", time.Since(start)))
+		log.Debugx("dnsbl lookup result", rerr, slog.Any("zone", zone), slog.Any("ip", ip), slog.Any("status", rstatus), slog.String("explanation", rexplanation), slog.Duration("duration", time.Since(start)))
 	}()
 
 	b := &strings.Builder{}
@@ -93,7 +93,7 @@ func Lookup(ctx context.Context, resolver dns.Resolver, zone dns.Domain, ip net.
 	if dns.IsNotFound(err) {
 		return StatusFail, "", nil
 	} else if err != nil {
-		log.Debugx("looking up txt record from dnsbl", err, mlog.Field("addr", addr))
+		log.Debugx("looking up txt record from dnsbl", err, slog.String("addr", addr))
 		return StatusFail, "", nil
 	}
 	return StatusFail, strings.Join(txts, "; "), nil
@@ -104,16 +104,16 @@ func Lookup(ctx context.Context, resolver dns.Resolver, zone dns.Domain, ip net.
 // Users of a DNSBL should periodically check if the DNSBL is still operating
 // properly.
 // For temporary errors, ErrDNS is returned.
-func CheckHealth(ctx context.Context, resolver dns.Resolver, zone dns.Domain) (rerr error) {
-	log := xlog.WithContext(ctx)
+func CheckHealth(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, zone dns.Domain) (rerr error) {
+	log := mlog.New("dnsbl", elog)
 	start := time.Now()
 	defer func() {
-		log.Debugx("dnsbl healthcheck result", rerr, mlog.Field("zone", zone), mlog.Field("duration", time.Since(start)))
+		log.Debugx("dnsbl healthcheck result", rerr, slog.Any("zone", zone), slog.Duration("duration", time.Since(start)))
 	}()
 
 	// ../rfc/5782:355
-	status1, _, err1 := Lookup(ctx, resolver, zone, net.IPv4(127, 0, 0, 1))
-	status2, _, err2 := Lookup(ctx, resolver, zone, net.IPv4(127, 0, 0, 2))
+	status1, _, err1 := Lookup(ctx, log.Logger, resolver, zone, net.IPv4(127, 0, 0, 1))
+	status2, _, err2 := Lookup(ctx, log.Logger, resolver, zone, net.IPv4(127, 0, 0, 2))
 	if status1 == StatusPass && status2 == StatusFail {
 		return nil
 	} else if status1 == StatusFail {

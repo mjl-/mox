@@ -20,7 +20,7 @@ import (
 	"github.com/mjl-/mox/smtp"
 )
 
-var xlog = mlog.New("dsn")
+var pkglog = mlog.New("dsn", nil)
 
 func xparseDomain(s string) dns.Domain {
 	d, err := dns.ParseDomain(s)
@@ -36,7 +36,7 @@ func xparseIPDomain(s string) dns.IPDomain {
 
 func tparseMessage(t *testing.T, data []byte, nparts int) (*Message, *message.Part) {
 	t.Helper()
-	m, p, err := Parse(xlog, bytes.NewReader(data))
+	m, p, err := Parse(pkglog.Logger, bytes.NewReader(data))
 	if err != nil {
 		t.Fatalf("parsing dsn: %v", err)
 	}
@@ -75,7 +75,7 @@ func tcompareReader(t *testing.T, r io.Reader, exp []byte) {
 }
 
 func TestDSN(t *testing.T) {
-	log := mlog.New("dsn")
+	log := mlog.New("dsn", nil)
 
 	now := time.Now()
 
@@ -143,7 +143,7 @@ func TestDSN(t *testing.T) {
 			"testsel._domainkey.mox.example.": {"v=DKIM1;h=sha256;t=s;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3ZId3ys70VFspp/VMFaxMOrNjHNPg04NOE1iShih16b3Ex7hHBOgC1UvTGSmrMlbCB1OxTXkvf6jW6S4oYRnZYVNygH6zKUwYYhaSaGIg1xA/fDn+IgcTRyLoXizMUgUgpTGyxhNrwIIWv+i7jjbs3TKpP3NU4owQ/rxowmSNqg+fHIF1likSvXvljYS" + "jaFXXnWfYibW7TdDCFFpN4sB5o13+as0u4vLw6MvOi59B1tLype1LcHpi1b9PfxNtznTTdet3kL0paxIcWtKHT0LDPUos8YYmiPa5nGbUqlC7d+4YT2jQPvwGxCws1oo2Tw6nj1UaihneYGAyvEky49FBwIDAQAB"},
 		},
 	}
-	results, err := dkim.Verify(context.Background(), resolver, false, func(*dkim.Sig) error { return nil }, bytes.NewReader(msgbuf), false)
+	results, err := dkim.Verify(context.Background(), log.Logger, resolver, false, func(*dkim.Sig) error { return nil }, bytes.NewReader(msgbuf), false)
 	if err != nil {
 		t.Fatalf("dkim verify: %v", err)
 	}

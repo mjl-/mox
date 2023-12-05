@@ -252,14 +252,14 @@ type testmsg struct {
 }
 
 func tdeliver(t *testing.T, acc *store.Account, tm *testmsg) {
-	msgFile, err := store.CreateMessageTemp("webmail-test")
+	msgFile, err := store.CreateMessageTemp(pkglog, "webmail-test")
 	tcheck(t, err, "create message temp")
 	defer os.Remove(msgFile.Name())
 	defer msgFile.Close()
 	size, err := msgFile.Write(tm.msg.Marshal(t))
 	tcheck(t, err, "write message temp")
 	m := store.Message{Flags: tm.Flags, Keywords: tm.Keywords, Size: int64(size)}
-	err = acc.DeliverMailbox(xlog, tm.Mailbox, &m, msgFile)
+	err = acc.DeliverMailbox(pkglog, tm.Mailbox, &m, msgFile)
 	tcheck(t, err, "deliver test message")
 	err = msgFile.Close()
 	tcheck(t, err, "closing test message")
@@ -279,13 +279,13 @@ func TestWebmail(t *testing.T) {
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
 
-	acc, err := store.OpenAccount("mjl")
+	acc, err := store.OpenAccount(pkglog, "mjl")
 	tcheck(t, err, "open account")
-	err = acc.SetPassword("test1234")
+	err = acc.SetPassword(pkglog, "test1234")
 	tcheck(t, err, "set password")
 	defer func() {
 		err := acc.Close()
-		xlog.Check(err, "closing account")
+		pkglog.Check(err, "closing account")
 	}()
 
 	api := Webmail{maxMessageSize: 1024 * 1024}

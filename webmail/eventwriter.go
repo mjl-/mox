@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 )
@@ -69,7 +71,7 @@ var waitGen = mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
 
 // Schedule an event for writing to the connection. If events get a delay, this
 // function still returns immediately.
-func (ew *eventWriter) xsendEvent(ctx context.Context, log *mlog.Log, name string, v any) {
+func (ew *eventWriter) xsendEvent(ctx context.Context, log mlog.Log, name string, v any) {
 	if (ew.waitMin > 0 || ew.waitMax > 0) && ew.events == nil {
 		// First write on a connection with delay.
 		ew.events = make(chan struct {
@@ -82,7 +84,7 @@ func (ew *eventWriter) xsendEvent(ctx context.Context, log *mlog.Log, name strin
 			defer func() {
 				x := recover() // Should not happen, but don't take program down if it does.
 				if x != nil {
-					log.WithContext(ctx).Error("writeEvent panic", mlog.Field("err", x))
+					log.WithContext(ctx).Error("writeEvent panic", slog.Any("err", x))
 					debug.PrintStack()
 					metrics.PanicInc(metrics.Webmailsendevent)
 				}

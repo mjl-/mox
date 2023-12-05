@@ -13,6 +13,7 @@ import (
 	"github.com/mjl-/sherpa"
 
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/store"
@@ -49,13 +50,14 @@ func TestAPI(t *testing.T) {
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
 
-	acc, err := store.OpenAccount("mjl")
+	log := mlog.New("webmail", nil)
+	acc, err := store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
-	err = acc.SetPassword("test1234")
+	err = acc.SetPassword(log, "test1234")
 	tcheck(t, err, "set password")
 	defer func() {
 		err := acc.Close()
-		xlog.Check(err, "closing account")
+		pkglog.Check(err, "closing account")
 	}()
 
 	var zerom store.Message

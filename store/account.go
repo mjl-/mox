@@ -44,6 +44,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/exp/slices"
+	"golang.org/x/exp/slog"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/mjl-/bstore"
@@ -66,8 +67,6 @@ import (
 // because of all the packages with tests, the mox main function sets it to
 // false again.
 var CheckConsistencyOnClose = true
-
-var xlog = mlog.New("store")
 
 var (
 	ErrUnknownMailbox     = errors.New("no such mailbox")
@@ -577,15 +576,15 @@ func (m *Message) PrepareExpunge() {
 
 // PrepareThreading sets MessageID and SubjectBase (used in threading) based on the
 // envelope in part.
-func (m *Message) PrepareThreading(log *mlog.Log, part *message.Part) {
+func (m *Message) PrepareThreading(log mlog.Log, part *message.Part) {
 	if part.Envelope == nil {
 		return
 	}
 	messageID, raw, err := message.MessageIDCanonical(part.Envelope.MessageID)
 	if err != nil {
-		log.Debugx("parsing message-id, ignoring", err, mlog.Field("messageid", part.Envelope.MessageID))
+		log.Debugx("parsing message-id, ignoring", err, slog.String("messageid", part.Envelope.MessageID))
 	} else if raw {
-		log.Debug("could not parse message-id as address, continuing with raw value", mlog.Field("messageid", part.Envelope.MessageID))
+		log.Debug("could not parse message-id as address, continuing with raw value", slog.String("messageid", part.Envelope.MessageID))
 	}
 	m.MessageID = messageID
 	m.SubjectBase, _ = message.ThreadSubject(part.Envelope.Subject, false)
@@ -747,7 +746,7 @@ func closeAccount(acc *Account) (rerr error) {
 //
 // No additional data path prefix or ".db" suffix should be added to the name.
 // A single shared account exists per name.
-func OpenAccount(name string) (*Account, error) {
+func OpenAccount(log mlog.Log, name string) (*Account, error) {
 	openAccounts.Lock()
 	defer openAccounts.Unlock()
 	if acc, ok := openAccounts.names[name]; ok {
@@ -759,7 +758,7 @@ func OpenAccount(name string) (*Account, error) {
 		return nil, ErrAccountUnknown
 	}
 
-	acc, err := openAccount(name)
+	acc, err := openAccount(log, name)
 	if err != nil {
 		return nil, err
 	}
@@ -768,15 +767,15 @@ func OpenAccount(name string) (*Account, error) {
 }
 
 // openAccount opens an existing account, or creates it if it is missing.
-func openAccount(name string) (a *Account, rerr error) {
+func openAccount(log mlog.Log, name string) (a *Account, rerr error) {
 	dir := filepath.Join(mox.DataDirPath("accounts"), name)
-	return OpenAccountDB(dir, name)
+	return OpenAccountDB(log, dir, name)
 }
 
 // OpenAccountDB opens an account database file and returns an initialized account
 // or error. Only exported for use by subcommands that verify the database file.
 // Almost all account opens must go through OpenAccount/OpenEmail/OpenEmailAuth.
-func OpenAccountDB(accountDir, accountName string) (a *Account, rerr error) {
+func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, rerr error) {
 	dbpath := filepath.Join(accountDir, "index.db")
 
 	// Create account if it doesn't exist yet.
@@ -823,7 +822,7 @@ func OpenAccountDB(accountDir, accountName string) (a *Account, rerr error) {
 		return bstore.QueryTx[Mailbox](tx).FilterEqual("HaveCounts", false).ForEach(func(mb Mailbox) error {
 			if !mentioned {
 				mentioned = true
-				xlog.Info("first calculation of mailbox counts for account", mlog.Field("account", accountName))
+				log.Info("first calculation of mailbox counts for account", slog.String("account", accountName))
 			}
 			mc, err := mb.CalculateCounts(tx)
 			if err != nil {
@@ -866,17 +865,17 @@ func OpenAccountDB(accountDir, accountName string) (a *Account, rerr error) {
 	// Ensure all messages have a MessageID and SubjectBase, which are needed when
 	// matching threads.
 	// Then assign messages to threads, in the same way we do during imports.
-	xlog.Info("upgrading account for threading, in background", mlog.Field("account", acc.Name))
+	log.Info("upgrading account for threading, in background", slog.String("account", acc.Name))
 	go func() {
 		defer func() {
 			err := closeAccount(acc)
-			xlog.Check(err, "closing use of account after upgrading account storage for threads", mlog.Field("account", a.Name))
+			log.Check(err, "closing use of account after upgrading account storage for threads", slog.String("account", a.Name))
 		}()
 
 		defer func() {
 			x := recover() // Should not happen, but don't take program down if it does.
 			if x != nil {
-				xlog.Error("upgradeThreads panic", mlog.Field("err", x))
+				log.Error("upgradeThreads panic", slog.Any("err", x))
 				debug.PrintStack()
 				metrics.PanicInc(metrics.Upgradethreads)
 				acc.threadsErr = fmt.Errorf("panic during upgradeThreads: %v", x)
@@ -886,12 +885,12 @@ func OpenAccountDB(accountDir, accountName string) (a *Account, rerr error) {
 			close(acc.threadsCompleted)
 		}()
 
-		err := upgradeThreads(mox.Shutdown, acc, &up)
+		err := upgradeThreads(mox.Shutdown, log, acc, &up)
 		if err != nil {
 			a.threadsErr = err
-			xlog.Errorx("upgrading account for threading, aborted", err, mlog.Field("account", a.Name))
+			log.Errorx("upgrading account for threading, aborted", err, slog.String("account", a.Name))
 		} else {
-			xlog.Info("upgrading account for threading, completed", mlog.Field("account", a.Name))
+			log.Info("upgrading account for threading, completed", slog.String("account", a.Name))
 		}
 	}()
 	return acc, nil
@@ -901,7 +900,7 @@ func OpenAccountDB(accountDir, accountName string) (a *Account, rerr error) {
 // account has completed, and returns an error if not successful.
 //
 // To be used before starting an import of messages.
-func (a *Account) ThreadingWait(log *mlog.Log) error {
+func (a *Account) ThreadingWait(log mlog.Log) error {
 	select {
 	case <-a.threadsCompleted:
 		return a.threadsErr
@@ -1224,7 +1223,7 @@ func (a *Account) WithRLock(fn func()) {
 // Caller must broadcast new message.
 //
 // Caller must update mailbox counts.
-func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, sync, notrain, nothreads bool) error {
+func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, sync, notrain, nothreads bool) error {
 	if m.Expunged {
 		return fmt.Errorf("cannot deliver expunged message")
 	}
@@ -1245,9 +1244,9 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 	mr := FileMsgReader(m.MsgPrefix, msgFile) // We don't close, it would close the msgFile.
 	var part *message.Part
 	if m.ParsedBuf == nil {
-		p, err := message.EnsurePart(log, false, mr, m.Size)
+		p, err := message.EnsurePart(log.Logger, false, mr, m.Size)
 		if err != nil {
-			log.Infox("parsing delivered message", err, mlog.Field("parse", ""), mlog.Field("message", m.ID))
+			log.Infox("parsing delivered message", err, slog.String("parse", ""), slog.Int64("message", m.ID))
 			// We continue, p is still valid.
 		}
 		part = &p
@@ -1259,7 +1258,7 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 	} else {
 		var p message.Part
 		if err := json.Unmarshal(m.ParsedBuf, &p); err != nil {
-			log.Errorx("unmarshal parsed message, continuing", err, mlog.Field("parse", ""))
+			log.Errorx("unmarshal parsed message, continuing", err, slog.String("parse", ""))
 		} else {
 			part = &p
 		}
@@ -1328,19 +1327,19 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 		for _, addr := range addrs {
 			if addr.User == "" {
 				// Would trigger error because Recipient.Localpart must be nonzero. todo: we could allow empty localpart in db, and filter by not using FilterNonzero.
-				log.Info("to/cc/bcc address with empty localpart, not inserting as recipient", mlog.Field("address", addr))
+				log.Info("to/cc/bcc address with empty localpart, not inserting as recipient", slog.Any("address", addr))
 				continue
 			}
 			d, err := dns.ParseDomain(addr.Host)
 			if err != nil {
-				log.Debugx("parsing domain in to/cc/bcc address", err, mlog.Field("address", addr))
+				log.Debugx("parsing domain in to/cc/bcc address", err, slog.Any("address", addr))
 				continue
 			}
 			mr := Recipient{
 				MessageID: m.ID,
 				Localpart: smtp.Localpart(addr.User),
 				Domain:    d.Name(),
-				OrgDomain: publicsuffix.Lookup(context.TODO(), d).Name(),
+				OrgDomain: publicsuffix.Lookup(context.TODO(), log.Logger, d).Name(),
 				Sent:      sent,
 			}
 			if err := tx.Insert(&mr); err != nil {
@@ -1365,9 +1364,9 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 	}
 
 	if sync {
-		if err := moxio.SyncDir(msgDir); err != nil {
+		if err := moxio.SyncDir(log, msgDir); err != nil {
 			xerr := os.Remove(msgPath)
-			log.Check(xerr, "removing message after syncdir error", mlog.Field("path", msgPath))
+			log.Check(xerr, "removing message after syncdir error", slog.String("path", msgPath))
 			return fmt.Errorf("sync directory: %w", err)
 		}
 	}
@@ -1376,7 +1375,7 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 		l := []Message{*m}
 		if err := a.RetrainMessages(context.TODO(), log, tx, l, false); err != nil {
 			xerr := os.Remove(msgPath)
-			log.Check(xerr, "removing message after syncdir error", mlog.Field("path", msgPath))
+			log.Check(xerr, "removing message after syncdir error", slog.String("path", msgPath))
 			return fmt.Errorf("training junkfilter: %w", err)
 		}
 		*m = l[0]
@@ -1387,7 +1386,7 @@ func (a *Account) DeliverMessage(log *mlog.Log, tx *bstore.Tx, m *Message, msgFi
 
 // SetPassword saves a new password for this account. This password is used for
 // IMAP, SMTP (submission) sessions and the HTTP account web page.
-func (a *Account) SetPassword(password string) error {
+func (a *Account) SetPassword(log mlog.Log, password string) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("generating password hash: %w", err)
@@ -1439,7 +1438,7 @@ func (a *Account) SetPassword(password string) error {
 		return nil
 	})
 	if err == nil {
-		xlog.Info("new password set for account", mlog.Field("account", a.Name))
+		log.Info("new password set for account", slog.String("account", a.Name))
 	}
 	return err
 }
@@ -1590,21 +1589,21 @@ func (a *Account) SubscriptionEnsure(tx *bstore.Tx, name string) ([]Change, erro
 
 // MessageRuleset returns the first ruleset (if any) that message the message
 // represented by msgPrefix and msgFile, with smtp and validation fields from m.
-func MessageRuleset(log *mlog.Log, dest config.Destination, m *Message, msgPrefix []byte, msgFile *os.File) *config.Ruleset {
+func MessageRuleset(log mlog.Log, dest config.Destination, m *Message, msgPrefix []byte, msgFile *os.File) *config.Ruleset {
 	if len(dest.Rulesets) == 0 {
 		return nil
 	}
 
 	mr := FileMsgReader(msgPrefix, msgFile) // We don't close, it would close the msgFile.
-	p, err := message.Parse(log, false, mr)
+	p, err := message.Parse(log.Logger, false, mr)
 	if err != nil {
-		log.Errorx("parsing message for evaluating rulesets, continuing with headers", err, mlog.Field("parse", ""))
+		log.Errorx("parsing message for evaluating rulesets, continuing with headers", err, slog.String("parse", ""))
 		// note: part is still set.
 	}
 	// todo optimize: only parse header if needed for rulesets. and probably reuse an earlier parsing.
 	header, err := p.Header()
 	if err != nil {
-		log.Errorx("parsing message headers for evaluating rulesets, delivering to default mailbox", err, mlog.Field("parse", ""))
+		log.Errorx("parsing message headers for evaluating rulesets, delivering to default mailbox", err, slog.String("parse", ""))
 		// todo: reject message?
 		return nil
 	}
@@ -1678,7 +1677,7 @@ func (a *Account) MessageReader(m Message) *MsgReader {
 // Caller must hold account wlock (mailbox may be created).
 // Message delivery, possible mailbox creation, and updated mailbox counts are
 // broadcasted.
-func (a *Account) DeliverDestination(log *mlog.Log, dest config.Destination, m *Message, msgFile *os.File) error {
+func (a *Account) DeliverDestination(log mlog.Log, dest config.Destination, m *Message, msgFile *os.File) error {
 	var mailbox string
 	rs := MessageRuleset(log, dest, m, m.MsgPrefix, msgFile)
 	if rs != nil {
@@ -1696,7 +1695,7 @@ func (a *Account) DeliverDestination(log *mlog.Log, dest config.Destination, m *
 // Caller must hold account wlock (mailbox may be created).
 // Message delivery, possible mailbox creation, and updated mailbox counts are
 // broadcasted.
-func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgFile *os.File) error {
+func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFile *os.File) error {
 	var changes []Change
 	err := a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
 		mb, chl, err := a.MailboxEnsure(tx, mailbox, true)
@@ -1734,7 +1733,7 @@ func (a *Account) DeliverMailbox(log *mlog.Log, mailbox string, m *Message, msgF
 //
 // Caller most hold account wlock.
 // Changes are broadcasted.
-func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasSpace bool, rerr error) {
+func (a *Account) TidyRejectsMailbox(log mlog.Log, rejectsMailbox string) (hasSpace bool, rerr error) {
 	var changes []Change
 
 	var remove []Message
@@ -1742,7 +1741,7 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 		for _, m := range remove {
 			p := a.MessagePath(m.ID)
 			err := os.Remove(p)
-			log.Check(err, "removing rejects message file", mlog.Field("path", p))
+			log.Check(err, "removing rejects message file", slog.String("path", p))
 		}
 	}()
 
@@ -1796,7 +1795,7 @@ func (a *Account) TidyRejectsMailbox(log *mlog.Log, rejectsMailbox string) (hasS
 	return hasSpace, nil
 }
 
-func (a *Account) rejectsRemoveMessages(ctx context.Context, log *mlog.Log, tx *bstore.Tx, mb *Mailbox, l []Message) ([]Change, error) {
+func (a *Account) rejectsRemoveMessages(ctx context.Context, log mlog.Log, tx *bstore.Tx, mb *Mailbox, l []Message) ([]Change, error) {
 	if len(l) == 0 {
 		return nil, nil
 	}
@@ -1858,7 +1857,7 @@ func (a *Account) rejectsRemoveMessages(ctx context.Context, log *mlog.Log, tx *
 // RejectsRemove removes a message from the rejects mailbox if present.
 // Caller most hold account wlock.
 // Changes are broadcasted.
-func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string) error {
+func (a *Account) RejectsRemove(log mlog.Log, rejectsMailbox, messageID string) error {
 	var changes []Change
 
 	var remove []Message
@@ -1866,7 +1865,7 @@ func (a *Account) RejectsRemove(log *mlog.Log, rejectsMailbox, messageID string)
 		for _, m := range remove {
 			p := a.MessagePath(m.ID)
 			err := os.Remove(p)
-			log.Check(err, "removing rejects message file", mlog.Field("path", p))
+			log.Check(err, "removing rejects message file", slog.String("path", p))
 		}
 	}()
 
@@ -1933,8 +1932,8 @@ func manageAuthCache() {
 // OpenEmailAuth opens an account given an email address and password.
 //
 // The email address may contain a catchall separator.
-func OpenEmailAuth(email string, password string) (acc *Account, rerr error) {
-	acc, _, rerr = OpenEmail(email)
+func OpenEmailAuth(log mlog.Log, email string, password string) (acc *Account, rerr error) {
+	acc, _, rerr = OpenEmail(log, email)
 	if rerr != nil {
 		return
 	}
@@ -1942,7 +1941,7 @@ func OpenEmailAuth(email string, password string) (acc *Account, rerr error) {
 	defer func() {
 		if rerr != nil && acc != nil {
 			err := acc.Close()
-			xlog.Check(err, "closing account after open auth failure")
+			log.Check(err, "closing account after open auth failure")
 			acc = nil
 		}
 	}()
@@ -1973,7 +1972,7 @@ func OpenEmailAuth(email string, password string) (acc *Account, rerr error) {
 // OpenEmail opens an account given an email address.
 //
 // The email address may contain a catchall separator.
-func OpenEmail(email string) (*Account, config.Destination, error) {
+func OpenEmail(log mlog.Log, email string) (*Account, config.Destination, error) {
 	addr, err := smtp.ParseAddress(email)
 	if err != nil {
 		return nil, config.Destination{}, fmt.Errorf("%w: %v", ErrUnknownCredentials, err)
@@ -1984,7 +1983,7 @@ func OpenEmail(email string) (*Account, config.Destination, error) {
 	} else if err != nil {
 		return nil, config.Destination{}, fmt.Errorf("looking up address: %v", err)
 	}
-	acc, err := OpenAccount(accountName)
+	acc, err := OpenAccount(log, accountName)
 	if err != nil {
 		return nil, config.Destination{}, err
 	}
@@ -2383,7 +2382,7 @@ func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc Mailbox, dst string) (chang
 // indicates that and an error is returned.
 //
 // Caller should broadcast the changes and remove files for the removed message IDs.
-func (a *Account) MailboxDelete(ctx context.Context, log *mlog.Log, tx *bstore.Tx, mailbox Mailbox) (changes []Change, removeMessageIDs []int64, hasChildren bool, rerr error) {
+func (a *Account) MailboxDelete(ctx context.Context, log mlog.Log, tx *bstore.Tx, mailbox Mailbox) (changes []Change, removeMessageIDs []int64, hasChildren bool, rerr error) {
 	// Look for existence of child mailboxes. There is a lot of text in the IMAP RFCs about
 	// NoInferior and NoSelect. We just require only leaf mailboxes are deleted.
 	qmb := bstore.QueryTx[Mailbox](tx)

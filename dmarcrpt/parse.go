@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"strings"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
@@ -34,9 +36,10 @@ func ParseReport(r io.Reader) (*Feedback, error) {
 // ParseMessageReport parses an aggregate feedback report from a mail message. The
 // maximum message size is 15MB, the maximum report size after decompression is
 // 20MB.
-func ParseMessageReport(log *mlog.Log, r io.ReaderAt) (*Feedback, error) {
+func ParseMessageReport(elog *slog.Logger, r io.ReaderAt) (*Feedback, error) {
+	log := mlog.New("dmarcrpt", elog)
 	// ../rfc/7489:1801
-	p, err := message.Parse(log, true, &moxio.LimitAtReader{R: r, Limit: 15 * 1024 * 1024})
+	p, err := message.Parse(log.Logger, true, &moxio.LimitAtReader{R: r, Limit: 15 * 1024 * 1024})
 	if err != nil {
 		return nil, fmt.Errorf("parsing mail message: %s", err)
 	}
@@ -44,7 +47,7 @@ func ParseMessageReport(log *mlog.Log, r io.ReaderAt) (*Feedback, error) {
 	return parseMessageReport(log, p)
 }
 
-func parseMessageReport(log *mlog.Log, p message.Part) (*Feedback, error) {
+func parseMessageReport(log mlog.Log, p message.Part) (*Feedback, error) {
 	// Pretty much any mime structure is allowed. ../rfc/7489:1861
 	// In practice, some parties will send the report as the only (non-multipart)
 	// content of the message.
@@ -54,7 +57,7 @@ func parseMessageReport(log *mlog.Log, p message.Part) (*Feedback, error) {
 	}
 
 	for {
-		sp, err := p.ParseNextPart(log)
+		sp, err := p.ParseNextPart(log.Logger)
 		if err == io.EOF {
 			return nil, ErrNoReport
 		}

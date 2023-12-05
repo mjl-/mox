@@ -59,6 +59,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -132,8 +134,8 @@ func (e VerifyError) Unwrap() error {
 //     indicate DNSSEC errors.
 //   - ErrInsecure
 //   - VerifyError, potentially wrapping errors from crypto/x509.
-func Dial(ctx context.Context, resolver dns.Resolver, network, address string, allowedUsages []adns.TLSAUsage) (net.Conn, adns.TLSA, error) {
-	log := mlog.New("dane").WithContext(ctx)
+func Dial(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, network, address string, allowedUsages []adns.TLSAUsage) (net.Conn, adns.TLSA, error) {
+	log := mlog.New("dane", elog)
 
 	// Split host and port.
 	host, portstr, err := net.SplitHostPort(address)
@@ -272,7 +274,7 @@ func Dial(ctx context.Context, resolver dns.Resolver, network, address string, a
 	}
 
 	var verifiedRecord adns.TLSA
-	config := TLSClientConfig(log, records, baseDom, moreAllowedHosts, &verifiedRecord)
+	config := TLSClientConfig(log.Logger, records, baseDom, moreAllowedHosts, &verifiedRecord)
 	tlsConn := tls.Client(conn, &config)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		conn.Close()
@@ -295,13 +297,14 @@ func Dial(ctx context.Context, resolver dns.Resolver, network, address string, a
 //
 // If verifiedRecord is not nil, it is set to the record that was successfully
 // verified, if any.
-func TLSClientConfig(log *mlog.Log, records []adns.TLSA, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, verifiedRecord *adns.TLSA) tls.Config {
+func TLSClientConfig(elog *slog.Logger, records []adns.TLSA, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, verifiedRecord *adns.TLSA) tls.Config {
+	log := mlog.New("dane", elog)
 	return tls.Config{
 		ServerName:         allowedHost.ASCII, // For SNI.
 		InsecureSkipVerify: true,
 		VerifyConnection: func(cs tls.ConnectionState) error {
-			verified, record, err := Verify(log, records, cs, allowedHost, moreAllowedHosts)
-			log.Debugx("dane verification", err, mlog.Field("verified", verified), mlog.Field("record", record))
+			verified, record, err := Verify(log.Logger, records, cs, allowedHost, moreAllowedHosts)
+			log.Debugx("dane verification", err, slog.Bool("verified", verified), slog.Any("record", record))
 			if verified {
 				if verifiedRecord != nil {
 					*verifiedRecord = record
@@ -332,7 +335,8 @@ func TLSClientConfig(log *mlog.Log, records []adns.TLSA, allowedHost dns.Domain,
 // If an error is encountered while verifying a record, e.g. for x509
 // trusted-anchor verification, an error may be returned, typically one or more
 // (wrapped) errors of type VerifyError.
-func Verify(log *mlog.Log, records []adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain) (verified bool, matching adns.TLSA, rerr error) {
+func Verify(elog *slog.Logger, records []adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain) (verified bool, matching adns.TLSA, rerr error) {
+	log := mlog.New("dane", elog)
 	metricVerify.Inc()
 	if len(records) == 0 {
 		metricVerifyErrors.Inc()
@@ -360,7 +364,7 @@ func Verify(log *mlog.Log, records []adns.TLSA, cs tls.ConnectionState, allowedH
 // errors while verifying certificates against a trust-anchor, an error can be
 // returned with one or more underlying x509 verification errors. A nil-nil error
 // is only returned when verified is false.
-func verifySingle(log *mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain) (verified bool, rerr error) {
+func verifySingle(log mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain) (verified bool, rerr error) {
 	if len(cs.PeerCertificates) == 0 {
 		return false, fmt.Errorf("no server certificate")
 	}
@@ -513,7 +517,7 @@ func verifySingle(log *mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowed
 
 	default:
 		// Unknown, perhaps defined in the future. Not an error.
-		log.Debug("unrecognized tlsa usage, skipping", mlog.Field("tlsausage", tlsa.Usage))
+		log.Debug("unrecognized tlsa usage, skipping", slog.Any("tlsausage", tlsa.Usage))
 		return false, nil
 	}
 }

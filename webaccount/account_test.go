@@ -41,15 +41,14 @@ func TestAccount(t *testing.T) {
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/httpaccount/mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
-	acc, err := store.OpenAccount("mjl")
+	log := mlog.New("webaccount", nil)
+	acc, err := store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
 	defer func() {
 		err = acc.Close()
 		tcheck(t, err, "closing account")
 	}()
 	defer store.Switchboard()()
-
-	log := mlog.New("store")
 
 	test := func(userpass string, expect string) {
 		t.Helper()

@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/exp/slog"
+
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/config"
@@ -106,15 +108,16 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 		dmarcdb.EvalDB = nil
 	}
 
+	log := mlog.New("smtpserver", nil)
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = configPath
 	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)
 	var err error
-	ts.acc, err = store.OpenAccount("mjl")
+	ts.acc, err = store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
-	err = ts.acc.SetPassword("testtest")
+	err = ts.acc.SetPassword(log, "testtest")
 	tcheck(t, err, "set password")
 	ts.switchStop = store.Switchboard()
 	err = queue.Init()
@@ -169,7 +172,8 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 		Auth:    auth,
 		RootCAs: mox.Conf.Static.TLS.CertPool,
 	}
-	client, err := smtpclient.New(ctxbg, xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, ts.tlspkix, ourHostname, remoteHostname, opts)
+	log := pkglog.WithCid(ts.cid - 1)
+	client, err := smtpclient.New(ctxbg, log.Logger, clientConn, ts.tlsmode, ts.tlspkix, ourHostname, remoteHostname, opts)
 	if err != nil {
 		clientConn.Close()
 	} else {
@@ -355,13 +359,13 @@ func TestDelivery(t *testing.T) {
 }
 
 func tinsertmsg(t *testing.T, acc *store.Account, mailbox string, m *store.Message, msg string) {
-	mf, err := store.CreateMessageTemp("queue-dsn")
+	mf, err := store.CreateMessageTemp(pkglog, "queue-dsn")
 	tcheck(t, err, "temp message")
 	defer os.Remove(mf.Name())
 	defer mf.Close()
 	_, err = mf.Write([]byte(msg))
 	tcheck(t, err, "write message")
-	err = acc.DeliverMailbox(xlog, mailbox, m, mf)
+	err = acc.DeliverMailbox(pkglog, mailbox, m, mf)
 	tcheck(t, err, "deliver message")
 	err = mf.Close()
 	tcheck(t, err, "close message")
@@ -376,7 +380,7 @@ func tretrain(t *testing.T, acc *store.Account) {
 	bloomPath := filepath.Join(basePath, acc.Name, "junkfilter.bloom")
 	os.Remove(dbPath)
 	os.Remove(bloomPath)
-	jf, _, err := acc.OpenJunkFilter(ctxbg, xlog)
+	jf, _, err := acc.OpenJunkFilter(ctxbg, pkglog)
 	tcheck(t, err, "open junk filter")
 	defer jf.Close()
 
@@ -1004,7 +1008,7 @@ func TestTLSReport(t *testing.T) {
 			tcheck(t, xerr, "write msg")
 			msg := msgb.String()
 
-			headers, xerr := dkim.Sign(ctxbg, "remote", dns.Domain{ASCII: "example.org"}, dkimConf, false, strings.NewReader(msg))
+			headers, xerr := dkim.Sign(ctxbg, pkglog.Logger, "remote", dns.Domain{ASCII: "example.org"}, dkimConf, false, strings.NewReader(msg))
 			tcheck(t, xerr, "dkim sign")
 			msg = headers + msg
 
@@ -1040,7 +1044,7 @@ func TestRatelimitConnectionrate(t *testing.T) {
 
 	// We'll be creating 300 connections, no TLS and reduce noise.
 	ts.tlsmode = smtpclient.TLSSkip
-	mlog.SetConfig(map[string]mlog.Level{"": mlog.LevelInfo})
+	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelInfo})
 
 	// We may be passing a window boundary during this tests. The limit is 300/minute.
 	// So make twice that many connections and hope the tests don't take too long.
@@ -1272,7 +1276,7 @@ func TestCatchall(t *testing.T) {
 	tcheck(t, err, "checking delivered messages")
 	tcompare(t, n, 3)
 
-	acc, err := store.OpenAccount("catchall")
+	acc, err := store.OpenAccount(pkglog, "catchall")
 	tcheck(t, err, "open account")
 	defer acc.Close()
 	n, err = bstore.QueryDB[store.Message](ctxbg, acc.DB).Count()
@@ -1361,7 +1365,7 @@ test email
 			f, err := queue.OpenMessage(ctxbg, msgs[0].ID)
 			tcheck(t, err, "open message in queue")
 			defer f.Close()
-			results, err := dkim.Verify(ctxbg, resolver, false, dkim.DefaultPolicy, f, false)
+			results, err := dkim.Verify(ctxbg, pkglog.Logger, resolver, false, dkim.DefaultPolicy, f, false)
 			tcheck(t, err, "verifying dkim message")
 			tcompare(t, len(results), 1)
 			tcompare(t, results[0].Status, dkim.StatusPass)
@@ -1504,7 +1508,7 @@ test email
 			tcheck(t, err, "listing queue")
 			tcompare(t, len(msgs), 1)
 			tcompare(t, msgs[0].RequireTLS, expRequireTLS)
-			_, err = queue.Drop(ctxbg, msgs[0].ID, "", "")
+			_, err = queue.Drop(ctxbg, pkglog, msgs[0].ID, "", "")
 			tcheck(t, err, "deleting message from queue")
 		})
 	}
