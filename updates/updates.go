@@ -90,7 +90,11 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domai
 			result = "error"
 		}
 		metricLookup.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("updates lookup result", rerr, slog.Any("domain", domain), slog.Any("version", rversion), slog.Any("record", rrecord), slog.Duration("duration", time.Since(start)))
+		log.Debugx("updates lookup result", rerr,
+			slog.Any("domain", domain),
+			slog.Any("version", rversion),
+			slog.Any("record", rrecord),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	nctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -141,7 +145,10 @@ func FetchChangelog(ctx context.Context, elog *slog.Logger, baseURL string, base
 			result = "error"
 		}
 		metricFetchChangelog.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("updates fetch changelog result", rerr, slog.String("baseurl", baseURL), slog.Any("base", base), slog.Duration("duration", time.Since(start)))
+		log.Debugx("updates fetch changelog result", rerr,
+			slog.String("baseurl", baseURL),
+			slog.Any("base", base),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	url := baseURL + "?from=" + base.String()
@@ -186,7 +193,13 @@ func Check(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain
 	log := mlog.New("updates", elog)
 	start := time.Now()
 	defer func() {
-		log.Debugx("updates check result", rerr, slog.Any("domain", domain), slog.Any("lastknown", lastKnown), slog.String("changelogbaseurl", changelogBaseURL), slog.Any("version", rversion), slog.Any("record", rrecord), slog.Duration("duration", time.Since(start)))
+		log.Debugx("updates check result", rerr,
+			slog.Any("domain", domain),
+			slog.Any("lastknown", lastKnown),
+			slog.String("changelogbaseurl", changelogBaseURL),
+			slog.Any("version", rversion),
+			slog.Any("record", rrecord),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	latest, record, err := Lookup(ctx, log.Logger, resolver, domain)

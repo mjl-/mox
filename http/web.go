@@ -746,7 +746,10 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 	if tlsConfig == nil {
 		protocol = "http"
 		if os.Getuid() == 0 {
-			pkglog.Print("http listener", slog.String("name", name), slog.String("kinds", strings.Join(kinds, ",")), slog.String("address", addr))
+			pkglog.Print("http listener",
+				slog.String("name", name),
+				slog.String("kinds", strings.Join(kinds, ",")),
+				slog.String("address", addr))
 		}
 		ln, err = mox.Listen(mox.Network(ip), addr)
 		if err != nil {
@@ -755,7 +758,10 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 	} else {
 		protocol = "https"
 		if os.Getuid() == 0 {
-			pkglog.Print("https listener", slog.String("name", name), slog.String("kinds", strings.Join(kinds, ",")), slog.String("address", addr))
+			pkglog.Print("https listener",
+				slog.String("name", name),
+				slog.String("kinds", strings.Join(kinds, ",")),
+				slog.String("address", addr))
 		}
 		ln, err = mox.Listen(mox.Network(ip), addr)
 		if err != nil {

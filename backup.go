@@ -166,7 +166,10 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			return nil
 		})
 		if err != nil {
-			xerrx("copying directory (not backed up properly)", err, slog.String("srcdir", srcdir), slog.String("dstdir", dstdir), slog.Duration("duration", time.Since(tmDir)))
+			xerrx("copying directory (not backed up properly)", err,
+				slog.String("srcdir", srcdir),
+				slog.String("dstdir", dstdir),
+				slog.Duration("duration", time.Since(tmDir)))
 			return
 		}
 		xvlog("backed up directory", slog.String("dir", dir), slog.Duration("duration", time.Since(tmDir)))
@@ -341,7 +344,10 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		if err != nil {
 			xerrx("processing queue messages (not backed up properly)", err, slog.Duration("duration", time.Since(tmMsgs)))
 		} else {
-			xvlog("queue message files linked/copied", slog.Int("linked", nlinked), slog.Int("copied", ncopied), slog.Duration("duration", time.Since(tmMsgs)))
+			xvlog("queue message files linked/copied",
+				slog.Int("linked", nlinked),
+				slog.Int("copied", ncopied),
+				slog.Duration("duration", time.Since(tmMsgs)))
 		}
 
 		// Read through all files in queue directory and warn about anything we haven't handled yet.
@@ -445,7 +451,10 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		if err != nil {
 			xerrx("processing account messages (not backed up properly)", err, slog.Duration("duration", time.Since(tmMsgs)))
 		} else {
-			xvlog("account message files linked/copied", slog.Int("linked", nlinked), slog.Int("copied", ncopied), slog.Duration("duration", time.Since(tmMsgs)))
+			xvlog("account message files linked/copied",
+				slog.Int("linked", nlinked),
+				slog.Int("copied", ncopied),
+				slog.Duration("duration", time.Since(tmMsgs)))
 		}
 
 		// Read through all files in account directory and warn about anything we haven't handled yet.

@@ -194,7 +194,10 @@ func LookupRecord(ctx context.Context, elog *slog.Logger, resolver dns.Resolver,
 	log := mlog.New("mtasts", elog)
 	start := time.Now()
 	defer func() {
-		log.Debugx("mtasts lookup result", rerr, slog.Any("domain", domain), slog.Any("record", rrecord), slog.Duration("duration", time.Since(start)))
+		log.Debugx("mtasts lookup result", rerr,
+			slog.Any("domain", domain),
+			slog.Any("record", rrecord),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	// ../rfc/8461:289
@@ -265,7 +268,11 @@ func FetchPolicy(ctx context.Context, elog *slog.Logger, domain dns.Domain) (pol
 	log := mlog.New("mtasts", elog)
 	start := time.Now()
 	defer func() {
-		log.Debugx("mtasts fetch policy result", rerr, slog.Any("domain", domain), slog.Any("policy", policy), slog.String("policytext", policyText), slog.Duration("duration", time.Since(start)))
+		log.Debugx("mtasts fetch policy result", rerr,
+			slog.Any("domain", domain),
+			slog.Any("policy", policy),
+			slog.String("policytext", policyText),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	// Timeout of 1 minute. ../rfc/8461:569
@@ -335,7 +342,11 @@ func Get(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain d
 	result := "lookuperror"
 	defer func() {
 		metricGet.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("mtasts get result", err, slog.Any("domain", domain), slog.Any("record", record), slog.Any("policy", policy), slog.Duration("duration", time.Since(start)))
+		log.Debugx("mtasts get result", err,
+			slog.Any("domain", domain),
+			slog.Any("record", record),
+			slog.Any("policy", policy),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	record, _, err = LookupRecord(ctx, log.Logger, resolver, domain)

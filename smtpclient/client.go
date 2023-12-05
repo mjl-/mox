@@ -282,7 +282,10 @@ func New(ctx context.Context, elog *slog.Logger, conn net.Conn, tlsMode TLSMode,
 		c.tlsResultAdd(1, 0, nil)
 		c.conn = tlsconn
 		tlsversion, ciphersuite := mox.TLSInfo(tlsconn)
-		c.log.Debug("tls client handshake done", slog.String("tls", tlsversion), slog.String("ciphersuite", ciphersuite), slog.Any("servername", remoteHostname))
+		c.log.Debug("tls client handshake done",
+			slog.String("tls", tlsversion),
+			slog.String("ciphersuite", ciphersuite),
+			slog.Any("servername", remoteHostname))
 		c.tls = true
 	} else {
 		c.conn = conn
@@ -545,7 +548,11 @@ func (c *Client) readecode(ecodes bool) (code int, secode, lastLine string, text
 					}
 				}
 				metricCommands.WithLabelValues(cmd, fmt.Sprintf("%d", co), sec).Observe(float64(time.Since(c.cmdStart)) / float64(time.Second))
-				c.log.Debug("smtpclient command result", slog.String("cmd", cmd), slog.Int("code", co), slog.String("secode", sec), slog.Duration("duration", time.Since(c.cmdStart)))
+				c.log.Debug("smtpclient command result",
+					slog.String("cmd", cmd),
+					slog.Int("code", co),
+					slog.String("secode", sec),
+					slog.Duration("duration", time.Since(c.cmdStart)))
 			}
 			return co, sec, line, texts, nil
 		}

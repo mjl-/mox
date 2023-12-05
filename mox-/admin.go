@@ -291,7 +291,10 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("adding domain", rerr, slog.Any("domain", domain), slog.String("account", accountName), slog.Any("localpart", localpart))
+			log.Errorx("adding domain", rerr,
+				slog.Any("domain", domain),
+				slog.String("account", accountName),
+				slog.Any("localpart", localpart))
 		}
 	}()
 
@@ -929,7 +932,10 @@ func DestinationSave(ctx context.Context, account, destName string, newDest conf
 	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("saving destination", rerr, slog.String("account", account), slog.String("destname", destName), slog.Any("destination", newDest))
+			log.Errorx("saving destination", rerr,
+				slog.String("account", account),
+				slog.String("destname", destName),
+				slog.Any("destination", newDest))
 		}
 	}()
 

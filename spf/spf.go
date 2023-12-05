@@ -133,7 +133,11 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domai
 	log := mlog.New("spf", elog)
 	start := time.Now()
 	defer func() {
-		log.Debugx("spf lookup result", rerr, slog.Any("domain", domain), slog.Any("status", rstatus), slog.Any("record", rrecord), slog.Duration("duration", time.Since(start)))
+		log.Debugx("spf lookup result", rerr,
+			slog.Any("domain", domain),
+			slog.Any("status", rstatus),
+			slog.Any("record", rrecord),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	// ../rfc/7208:586
@@ -199,7 +203,12 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, args 
 	start := time.Now()
 	defer func() {
 		metricSPFVerify.WithLabelValues(string(received.Result)).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("spf verify result", rerr, slog.Any("domain", args.domain), slog.Any("ip", args.RemoteIP), slog.Any("status", received.Result), slog.String("explanation", explanation), slog.Duration("duration", time.Since(start)))
+		log.Debugx("spf verify result", rerr,
+			slog.Any("domain", args.domain),
+			slog.Any("ip", args.RemoteIP),
+			slog.Any("status", received.Result),
+			slog.String("explanation", explanation),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	isHello, ok := prepare(&args)
@@ -298,7 +307,14 @@ func Evaluate(ctx context.Context, elog *slog.Logger, record *Record, resolver d
 func evaluate(ctx context.Context, log mlog.Log, record *Record, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rauthentic bool, rerr error) {
 	start := time.Now()
 	defer func() {
-		log.Debugx("spf evaluate result", rerr, slog.Int("dnsrequests", *args.dnsRequests), slog.Int("voidlookups", *args.voidLookups), slog.Any("domain", args.domain), slog.Any("status", rstatus), slog.String("mechanism", mechanism), slog.String("explanation", rexplanation), slog.Duration("duration", time.Since(start)))
+		log.Debugx("spf evaluate result", rerr,
+			slog.Int("dnsrequests", *args.dnsRequests),
+			slog.Int("voidlookups", *args.voidLookups),
+			slog.Any("domain", args.domain),
+			slog.Any("status", rstatus),
+			slog.String("mechanism", mechanism),
+			slog.String("explanation", rexplanation),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	if args.dnsRequests == nil {

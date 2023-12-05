@@ -240,7 +240,11 @@ func (m *Manager) SetAllowedHostnames(log mlog.Log, resolver dns.Resolver, hostn
 				}
 				for _, ip := range ips {
 					if _, ok := publicIPstrs[ip.String()]; !ok {
-						log.Error("warning: acme tls cert validation for host is likely to fail because not all its ips are being listened on", slog.Any("hostname", h), slog.Any("listenedips", publicIPs), slog.Any("hostips", ips), slog.Any("missingip", ip))
+						log.Error("warning: acme tls cert validation for host is likely to fail because not all its ips are being listened on",
+							slog.Any("hostname", h),
+							slog.Any("listenedips", publicIPs),
+							slog.Any("hostips", ips),
+							slog.Any("missingip", ip))
 					}
 				}
 			}

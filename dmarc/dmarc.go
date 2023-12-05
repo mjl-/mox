@@ -103,7 +103,12 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from 
 	log := mlog.New("dmarc", elog)
 	start := time.Now()
 	defer func() {
-		log.Debugx("dmarc lookup result", rerr, slog.Any("fromdomain", from), slog.Any("status", status), slog.Any("domain", domain), slog.Any("record", record), slog.Duration("duration", time.Since(start)))
+		log.Debugx("dmarc lookup result", rerr,
+			slog.Any("fromdomain", from),
+			slog.Any("status", status),
+			slog.Any("domain", domain),
+			slog.Any("record", record),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	// ../rfc/7489:859 ../rfc/7489:1370
@@ -206,7 +211,12 @@ func LookupExternalReportsAccepted(ctx context.Context, elog *slog.Logger, resol
 	log := mlog.New("dmarc", elog)
 	start := time.Now()
 	defer func() {
-		log.Debugx("dmarc externalreports result", rerr, slog.Bool("accepts", accepts), slog.Any("dmarcdomain", dmarcDomain), slog.Any("extdestdomain", extDestDomain), slog.Any("records", records), slog.Duration("duration", time.Since(start)))
+		log.Debugx("dmarc externalreports result", rerr,
+			slog.Bool("accepts", accepts),
+			slog.Any("dmarcdomain", dmarcDomain),
+			slog.Any("extdestdomain", extDestDomain),
+			slog.Any("records", records),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	status, records, txts, authentic, rerr = lookupReportsRecord(ctx, resolver, dmarcDomain, extDestDomain)
@@ -239,7 +249,14 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from 
 			reject = "yes"
 		}
 		metricDMARCVerify.WithLabelValues(string(result.Status), reject, use).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("dmarc verify result", result.Err, slog.Any("fromdomain", from), slog.Any("dkimresults", dkimResults), slog.Any("spfresult", spfResult), slog.Any("status", result.Status), slog.Bool("reject", result.Reject), slog.Bool("use", useResult), slog.Duration("duration", time.Since(start)))
+		log.Debugx("dmarc verify result", result.Err,
+			slog.Any("fromdomain", from),
+			slog.Any("dkimresults", dkimResults),
+			slog.Any("spfresult", spfResult),
+			slog.Any("status", result.Status),
+			slog.Bool("reject", result.Reject),
+			slog.Bool("use", useResult),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	status, recordDomain, record, _, authentic, err := Lookup(ctx, log.Logger, resolver, from)

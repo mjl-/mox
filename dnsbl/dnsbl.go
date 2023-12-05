@@ -50,7 +50,12 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, zone 
 	start := time.Now()
 	defer func() {
 		metricLookup.WithLabelValues(zone.Name(), string(rstatus)).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("dnsbl lookup result", rerr, slog.Any("zone", zone), slog.Any("ip", ip), slog.Any("status", rstatus), slog.String("explanation", rexplanation), slog.Duration("duration", time.Since(start)))
+		log.Debugx("dnsbl lookup result", rerr,
+			slog.Any("zone", zone),
+			slog.Any("ip", ip),
+			slog.Any("status", rstatus),
+			slog.String("explanation", rexplanation),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	b := &strings.Builder{}

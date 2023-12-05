@@ -236,7 +236,9 @@ func sendReports(ctx context.Context, log mlog.Log, resolver dns.Resolver, db *b
 				}()
 				defer wg.Done()
 
-				rlog := log.WithCid(mox.Cid()).With(slog.String("policydomain", k.policyDomain), slog.String("daytutc", k.dayUTC), slog.Bool("isrcptdom", isRcptDom))
+				rlog := log.WithCid(mox.Cid()).With(slog.String("policydomain", k.policyDomain),
+					slog.String("daytutc", k.dayUTC),
+					slog.Bool("isrcptdom", isRcptDom))
 				rlog.Info("looking to send tls report for domain")
 				cleanup, err := sendReportDomain(ctx, rlog, resolver, db, endTimeUTC, isRcptDom, k.policyDomain, k.dayUTC)
 				if err != nil {

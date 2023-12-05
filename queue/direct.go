@@ -293,7 +293,10 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			}
 
 			// todo future: add a configuration option to not fall back?
-			nqlog.Info("connecting again for delivery attempt without tls", slog.Bool("enforcemtasts", enforceMTASTS), slog.Bool("tlsdane", tlsDANE), slog.Any("requiretls", m.RequireTLS))
+			nqlog.Info("connecting again for delivery attempt without tls",
+				slog.Bool("enforcemtasts", enforceMTASTS),
+				slog.Bool("tlsdane", tlsDANE),
+				slog.Any("requiretls", m.RequireTLS))
 			permanent, _, _, secodeOpt, remoteIP, errmsg, _, ok = deliverHost(nqlog, resolver, dialer, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, &m, smtpclient.TLSSkip, false, &tlsrpt.Result{})
 		}
 

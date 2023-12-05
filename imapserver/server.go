@@ -339,7 +339,10 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 	log := mlog.New("imapserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
-		log.Print("listening for imap", slog.String("listener", listenerName), slog.String("addr", addr), slog.String("protocol", protocol))
+		log.Print("listening for imap",
+			slog.String("listener", listenerName),
+			slog.String("addr", addr),
+			slog.String("protocol", protocol))
 	}
 	network := mox.Network(ip)
 	ln, err := mox.Listen(network, addr)
@@ -664,7 +667,11 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		}
 	}
 
-	c.log.Info("new connection", slog.Any("remote", c.conn.RemoteAddr()), slog.Any("local", c.conn.LocalAddr()), slog.Bool("tls", xtls), slog.String("listener", listenerName))
+	c.log.Info("new connection",
+		slog.Any("remote", c.conn.RemoteAddr()),
+		slog.Any("local", c.conn.LocalAddr()),
+		slog.Bool("tls", xtls),
+		slog.String("listener", listenerName))
 
 	defer func() {
 		c.conn.Close()

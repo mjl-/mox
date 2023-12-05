@@ -330,7 +330,10 @@ func newPart(log mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Par
 			p.MediaType = "APPLICATION"
 			p.MediaSubType = "OCTET-STREAM"
 		}
-		log.Debugx("malformed content-type, attempting to recover and continuing", err, slog.String("contenttype", p.header.Get("Content-Type")), slog.String("mediatype", p.MediaType), slog.String("mediasubtype", p.MediaSubType))
+		log.Debugx("malformed content-type, attempting to recover and continuing", err,
+			slog.String("contenttype", p.header.Get("Content-Type")),
+			slog.String("mediatype", p.MediaType),
+			slog.String("mediasubtype", p.MediaSubType))
 	} else if mt != "" {
 		t := strings.SplitN(strings.ToUpper(mt), "/", 2)
 		if len(t) != 2 {

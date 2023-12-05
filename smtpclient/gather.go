@@ -301,7 +301,10 @@ func GatherTLSA(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, h
 	}
 	daneRequired = len(l) > 0
 	l = filterUsableTLSARecords(log, l)
-	log.Debug("tlsa records exist", slog.Bool("danerequired", daneRequired), slog.Any("records", l), slog.Any("basedomain", tlsaBaseDomain))
+	log.Debug("tlsa records exist",
+		slog.Bool("danerequired", daneRequired),
+		slog.Any("records", l),
+		slog.Any("basedomain", tlsaBaseDomain))
 	return daneRequired, l, tlsaBaseDomain, err
 }
 
@@ -333,7 +336,10 @@ func lookupTLSACNAME(ctx context.Context, log mlog.Log, resolver dns.Resolver, p
 	var err error
 	l, result, err = resolver.LookupTLSA(ctx, 0, "", name)
 	if dns.IsNotFound(err) || err == nil && len(l) == 0 {
-		log.Debugx("no tlsa records for host, not doing dane", err, slog.Any("host", host), slog.String("name", name), slog.Bool("authentic", result.Authentic))
+		log.Debugx("no tlsa records for host, not doing dane", err,
+			slog.Any("host", host),
+			slog.String("name", name),
+			slog.Bool("authentic", result.Authentic))
 		return nil, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("looking up tlsa records for tlsa candidate base domain: %w", err)

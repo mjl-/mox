@@ -378,7 +378,10 @@ func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (
 		expect[w] = struct{}{}
 	}
 	if len(unknowns) > 0 {
-		f.log.Debug("unknown words in bloom filter, showing max 50", slog.Any("words", unknowns), slog.Any("totalunknown", totalUnknown), slog.Any("totalwords", len(words)))
+		f.log.Debug("unknown words in bloom filter, showing max 50",
+			slog.Any("words", unknowns),
+			slog.Any("totalunknown", totalUnknown),
+			slog.Any("totalwords", len(words)))
 	}
 
 	// Fetch words from database.
@@ -391,7 +394,10 @@ func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (
 			delete(expect, w)
 			f.cache[w] = c
 		}
-		f.log.Debug("unknown words in db", slog.Any("words", expect), slog.Any("totalunknown", len(expect)), slog.Any("totalwords", len(words)))
+		f.log.Debug("unknown words in db",
+			slog.Any("words", expect),
+			slog.Any("totalunknown", len(expect)),
+			slog.Any("totalwords", len(words)))
 	}
 
 	for w := range words {

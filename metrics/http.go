@@ -57,5 +57,9 @@ func HTTPClientObserve(ctx context.Context, log mlog.Log, pkg, method string, st
 		result = "error"
 	}
 	metricHTTPClient.WithLabelValues(pkg, method, result, fmt.Sprintf("%d", statusCode)).Observe(float64(time.Since(start)) / float64(time.Second))
-	log.Debugx("httpclient result", err, slog.String("pkg", pkg), slog.String("method", method), slog.Int("code", statusCode), slog.Duration("duration", time.Since(start)))
+	log.Debugx("httpclient result", err,
+		slog.String("pkg", pkg),
+		slog.String("method", method),
+		slog.Int("code", statusCode),
+		slog.Duration("duration", time.Since(start)))
 }

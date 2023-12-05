@@ -525,7 +525,10 @@ func queueDelete(ctx context.Context, msgID int64) error {
 // The queue is updated, either by removing a delivered or permanently failed
 // message, or updating the time for the next attempt. A DSN may be sent.
 func deliver(log mlog.Log, resolver dns.Resolver, m Msg) {
-	qlog := log.WithCid(mox.Cid()).With(slog.Any("from", m.Sender()), slog.Any("recipient", m.Recipient()), slog.Int("attempts", m.Attempts), slog.Int64("msgid", m.ID))
+	qlog := log.WithCid(mox.Cid()).With(slog.Any("from", m.Sender()),
+		slog.Any("recipient", m.Recipient()),
+		slog.Int("attempts", m.Attempts),
+		slog.Int64("msgid", m.ID))
 
 	defer func() {
 		deliveryResult <- formatIPDomain(m.RecipientDomain)

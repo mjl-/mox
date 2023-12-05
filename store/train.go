@@ -98,7 +98,11 @@ func (a *Account) RetrainMessage(ctx context.Context, log mlog.Log, tx *bstore.T
 		return nil
 	}
 
-	log.Debug("updating junk filter", slog.Bool("untrain", untrain), slog.Bool("untrainjunk", untrainJunk), slog.Bool("train", train), slog.Bool("trainjunk", trainJunk))
+	log.Debug("updating junk filter",
+		slog.Bool("untrain", untrain),
+		slog.Bool("untrainjunk", untrainJunk),
+		slog.Bool("train", train),
+		slog.Bool("trainjunk", trainJunk))
 
 	mr := a.MessageReader(*m)
 	defer func() {

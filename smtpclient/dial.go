@@ -76,12 +76,18 @@ func Dial(ctx context.Context, elog *slog.Logger, dialer Dialer, host dns.IPDoma
 		}
 		conn, err := dial(ctx, dialer, timeout, addr, laddr)
 		if err == nil {
-			log.Debug("connected to host", slog.Any("host", host), slog.String("addr", addr), slog.Any("laddr", laddr))
+			log.Debug("connected to host",
+				slog.Any("host", host),
+				slog.String("addr", addr),
+				slog.Any("laddr", laddr))
 			name := host.String()
 			dialedIPs[name] = append(dialedIPs[name], ip)
 			return conn, ip, nil
 		}
-		log.Debugx("connection attempt", err, slog.Any("host", host), slog.String("addr", addr), slog.Any("laddr", laddr))
+		log.Debugx("connection attempt", err,
+			slog.Any("host", host),
+			slog.String("addr", addr),
+			slog.Any("laddr", laddr))
 		lastErr = err
 		lastIP = ip
 	}

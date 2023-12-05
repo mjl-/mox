@@ -54,7 +54,15 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	var success bool
 	defer func() {
 		metricDelivery.WithLabelValues(fmt.Sprintf("%d", m.Attempts), transportName, string(tlsMode), deliveryResult).Observe(float64(time.Since(start)) / float64(time.Second))
-		qlog.Debug("queue deliversubmit result", slog.Any("host", transport.DNSHost), slog.Int("port", port), slog.Int("attempt", m.Attempts), slog.Bool("permanent", permanent), slog.String("secodeopt", secodeOpt), slog.String("errmsg", errmsg), slog.Bool("ok", success), slog.Duration("duration", time.Since(start)))
+		qlog.Debug("queue deliversubmit result",
+			slog.Any("host", transport.DNSHost),
+			slog.Int("port", port),
+			slog.Int("attempt", m.Attempts),
+			slog.Bool("permanent", permanent),
+			slog.String("secodeopt", secodeOpt),
+			slog.String("errmsg", errmsg),
+			slog.Bool("ok", success),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	// todo: SMTP-DANE should be used when relaying on port 25.

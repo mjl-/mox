@@ -176,7 +176,11 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	if mbox {
 		kind = "mbox"
 	}
-	ctl.log.Info("importing messages", slog.String("kind", kind), slog.String("account", account), slog.String("mailbox", mailbox), slog.String("source", src))
+	ctl.log.Info("importing messages",
+		slog.String("kind", kind),
+		slog.String("account", account),
+		slog.String("mailbox", mailbox),
+		slog.String("source", src))
 
 	var err error
 	var mboxf *os.File

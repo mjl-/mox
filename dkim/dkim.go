@@ -127,7 +127,11 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 	log := mlog.New("dkim", elog)
 	start := timeNow()
 	defer func() {
-		log.Debugx("dkim sign result", rerr, slog.Any("localpart", localpart), slog.Any("domain", domain), slog.Bool("smtputf8", smtputf8), slog.Duration("duration", time.Since(start)))
+		log.Debugx("dkim sign result", rerr,
+			slog.Any("localpart", localpart),
+			slog.Any("domain", domain),
+			slog.Bool("smtputf8", smtputf8),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	hdrs, bodyOffset, err := parseHeaders(bufio.NewReader(&moxio.AtReader{R: msg}))
@@ -274,7 +278,12 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, selec
 	log := mlog.New("dkim", elog)
 	start := timeNow()
 	defer func() {
-		log.Debugx("dkim lookup result", rerr, slog.Any("selector", selector), slog.Any("domain", domain), slog.Any("status", rstatus), slog.Any("record", rrecord), slog.Duration("duration", time.Since(start)))
+		log.Debugx("dkim lookup result", rerr,
+			slog.Any("selector", selector),
+			slog.Any("domain", domain),
+			slog.Any("status", rstatus),
+			slog.Any("record", rrecord),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	name := selector.ASCII + "._domainkey." + domain.ASCII + "."
@@ -356,7 +365,12 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, smtpu
 			log.Debugx("dkim verify result", rerr, slog.Bool("smtputf8", smtputf8), slog.Duration("duration", time.Since(start)))
 		}
 		for _, result := range results {
-			log.Debugx("dkim verify result", result.Err, slog.Bool("smtputf8", smtputf8), slog.Any("status", result.Status), slog.Any("sig", result.Sig), slog.Any("record", result.Record), slog.Duration("duration", time.Since(start)))
+			log.Debugx("dkim verify result", result.Err,
+				slog.Bool("smtputf8", smtputf8),
+				slog.Any("status", result.Status),
+				slog.Any("sig", result.Sig),
+				slog.Any("record", result.Record),
+				slog.Duration("duration", time.Since(start)))
 		}
 	}()
 

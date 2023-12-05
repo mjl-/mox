@@ -90,7 +90,11 @@ func monitorDNSBL(log mlog.Log) {
 			for _, zone := range zones {
 				status, expl, err := dnsbl.Lookup(mox.Context, log.Logger, resolver, zone, ip)
 				if err != nil {
-					log.Errorx("dnsbl monitor lookup", err, slog.Any("ip", ip), slog.Any("zone", zone), slog.String("expl", expl), slog.Any("status", status))
+					log.Errorx("dnsbl monitor lookup", err,
+						slog.Any("ip", ip),
+						slog.Any("zone", zone),
+						slog.String("expl", expl),
+						slog.Any("status", status))
 				}
 				k := key{zone, ip.String()}
 
@@ -161,7 +165,11 @@ Only implemented on unix systems, not Windows.
 		domainsconf, err := filepath.Abs(mox.ConfigDynamicPath)
 		log.Check(err, "finding absolute domains.conf path")
 
-		log.Print("starting as root, initializing network listeners", slog.String("version", moxvar.Version), slog.Any("pid", os.Getpid()), slog.String("moxconf", moxconf), slog.String("domainsconf", domainsconf))
+		log.Print("starting as root, initializing network listeners",
+			slog.String("version", moxvar.Version),
+			slog.Any("pid", os.Getpid()),
+			slog.String("moxconf", moxconf),
+			slog.String("domainsconf", domainsconf))
 		if os.Getenv("MOX_SOCKETS") != "" {
 			log.Fatal("refusing to start as root with $MOX_SOCKETS set")
 		}
@@ -187,7 +195,11 @@ Only implemented on unix systems, not Windows.
 	} else {
 		mox.RestorePassedFiles()
 		mox.MustLoadConfig(true, checkACMEHosts)
-		log.Print("starting as unprivileged user", slog.String("user", mox.Conf.Static.User), slog.Any("uid", mox.Conf.Static.UID), slog.Any("gid", mox.Conf.Static.GID), slog.Any("pid", os.Getpid()))
+		log.Print("starting as unprivileged user",
+			slog.String("user", mox.Conf.Static.User),
+			slog.Any("uid", mox.Conf.Static.UID),
+			slog.Any("gid", mox.Conf.Static.GID),
+			slog.Any("pid", os.Getpid()))
 	}
 
 	syscall.Umask(syscall.Umask(007) | 007)
@@ -205,7 +217,10 @@ Only implemented on unix systems, not Windows.
 			log.Fatalx("writing recvidpath", err, slog.String("path", recvidpath))
 		}
 		err := os.Chown(recvidpath, int(mox.Conf.Static.UID), 0)
-		log.Check(err, "chown receveidid.key", slog.String("path", recvidpath), slog.Any("uid", mox.Conf.Static.UID), slog.Any("gid", 0))
+		log.Check(err, "chown receveidid.key",
+			slog.String("path", recvidpath),
+			slog.Any("uid", mox.Conf.Static.UID),
+			slog.Any("gid", 0))
 		err = os.Chmod(recvidpath, 0640)
 		log.Check(err, "chmod receveidid.key to 0640", slog.String("path", recvidpath))
 	}
@@ -308,7 +323,10 @@ Only implemented on unix systems, not Windows.
 				log.Errorx("changelog delivery", err)
 				return next
 			}
-			log.Info("delivered changelog", slog.Any("current", current), slog.Any("lastknown", lastknown), slog.Any("latest", latest))
+			log.Info("delivered changelog",
+				slog.Any("current", current),
+				slog.Any("lastknown", lastknown),
+				slog.Any("latest", latest))
 			if err := mox.StoreLastKnown(latest); err != nil {
 				// This will be awkward, we'll keep notifying the postmaster once every 24h...
 				log.Infox("updating last known version", err)
@@ -485,11 +503,19 @@ func fixperms(log mlog.Log, workdir, configdir, datadir string, moxuid, moxgid u
 	for _, ch := range changes {
 		if ch.uid != nil {
 			err := os.Chown(ch.path, int(*ch.uid), int(*ch.gid))
-			log.Printx("chown, fixing uid/gid", err, slog.String("path", ch.path), slog.Any("olduid", ch.olduid), slog.Any("oldgid", ch.oldgid), slog.Any("newuid", *ch.uid), slog.Any("newgid", *ch.gid))
+			log.Printx("chown, fixing uid/gid", err,
+				slog.String("path", ch.path),
+				slog.Any("olduid", ch.olduid),
+				slog.Any("oldgid", ch.oldgid),
+				slog.Any("newuid", *ch.uid),
+				slog.Any("newgid", *ch.gid))
 		}
 		if ch.mode != nil {
 			err := os.Chmod(ch.path, *ch.mode)
-			log.Printx("chmod, fixing permissions", err, slog.String("path", ch.path), slog.Any("oldmode", fmt.Sprintf("%03o", ch.oldmode)), slog.Any("newmode", fmt.Sprintf("%03o", *ch.mode)))
+			log.Printx("chmod, fixing permissions", err,
+				slog.String("path", ch.path),
+				slog.Any("oldmode", fmt.Sprintf("%03o", ch.oldmode)),
+				slog.Any("newmode", fmt.Sprintf("%03o", *ch.mode)))
 		}
 	}
 
@@ -511,7 +537,12 @@ func fixperms(log mlog.Log, workdir, configdir, datadir string, moxuid, moxgid u
 			}
 			if st.Uid != moxuid || st.Gid != root {
 				err := os.Chown(path, int(moxuid), root)
-				log.Printx("walk chown, fixing uid/gid", err, slog.String("path", path), slog.Any("olduid", st.Uid), slog.Any("oldgid", st.Gid), slog.Any("newuid", moxuid), slog.Any("newgid", root))
+				log.Printx("walk chown, fixing uid/gid", err,
+					slog.String("path", path),
+					slog.Any("olduid", st.Uid),
+					slog.Any("oldgid", st.Gid),
+					slog.Any("newuid", moxuid),
+					slog.Any("newgid", root))
 			}
 			omode := fi.Mode() & (fs.ModeSetgid | 0777)
 			var nmode fs.FileMode
@@ -522,7 +553,10 @@ func fixperms(log mlog.Log, workdir, configdir, datadir string, moxuid, moxgid u
 			}
 			if omode != nmode {
 				err := os.Chmod(path, nmode)
-				log.Printx("walk chmod, fixing permissions", err, slog.String("path", path), slog.Any("oldmode", fmt.Sprintf("%03o", omode)), slog.Any("newmode", fmt.Sprintf("%03o", nmode)))
+				log.Printx("walk chmod, fixing permissions", err,
+					slog.String("path", path),
+					slog.Any("oldmode", fmt.Sprintf("%03o", omode)),
+					slog.Any("newmode", fmt.Sprintf("%03o", nmode)))
 			}
 			return nil
 		})

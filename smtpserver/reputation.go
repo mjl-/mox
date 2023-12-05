@@ -143,7 +143,10 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 	xmessageList := func(q *bstore.Query[store.Message], descr string) []store.Message {
 		t0 := time.Now()
 		l, err := q.List()
-		log.Debugx("querying messages for reputation", err, slog.Int("msgs", len(l)), slog.String("descr", descr), slog.Duration("queryduration", time.Since(t0)))
+		log.Debugx("querying messages for reputation", err,
+			slog.Int("msgs", len(l)),
+			slog.String("descr", descr),
+			slog.Duration("queryduration", time.Since(t0)))
 		if err != nil {
 			panic(queryError(fmt.Sprintf("listing messages: %v", err)))
 		}

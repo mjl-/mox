@@ -302,7 +302,10 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		log.Infox("determining reputation", err, slog.Any("message", d.m))
 		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonReputationError)
 	}
-	log.Info("reputation analyzed", slog.Bool("conclusive", conclusive), slog.Any("isjunk", isjunk), slog.String("method", string(method)))
+	log.Info("reputation analyzed",
+		slog.Bool("conclusive", conclusive),
+		slog.Any("isjunk", isjunk),
+		slog.String("method", string(method)))
 	if conclusive {
 		if !*isjunk {
 			return analysis{accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reason, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
@@ -414,7 +417,10 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		}
 		accept = contentProb <= threshold
 		junkSubjectpass = contentProb < threshold-0.2
-		log.Info("content analyzed", slog.Bool("accept", accept), slog.Float64("contentprob", contentProb), slog.Bool("subjectpass", junkSubjectpass))
+		log.Info("content analyzed",
+			slog.Bool("accept", accept),
+			slog.Float64("contentprob", contentProb),
+			slog.Bool("subjectpass", junkSubjectpass))
 	} else if err != store.ErrNoJunkFilter {
 		log.Errorx("open junkfilter", err)
 		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonJunkFilterError)

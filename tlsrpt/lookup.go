@@ -54,7 +54,10 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domai
 			}
 		}
 		metricLookup.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("tlsrpt lookup result", rerr, slog.Any("domain", domain), slog.Any("record", rrecord), slog.Duration("duration", time.Since(start)))
+		log.Debugx("tlsrpt lookup result", rerr,
+			slog.Any("domain", domain),
+			slog.Any("record", rrecord),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	name := "_smtp._tls." + domain.ASCII + "."

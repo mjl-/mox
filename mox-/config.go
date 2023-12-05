@@ -568,10 +568,16 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 				key = findACMEHostPrivateKey(acmeName, host, keyType, 2)
 			}
 			if key != nil {
-				log.Debug("found existing private key for certificate for host", slog.String("acmename", acmeName), slog.String("host", host), slog.Any("keytype", keyType))
+				log.Debug("found existing private key for certificate for host",
+					slog.String("acmename", acmeName),
+					slog.String("host", host),
+					slog.Any("keytype", keyType))
 				return key, nil
 			}
-			log.Debug("generating new private key for certificate for host", slog.String("acmename", acmeName), slog.String("host", host), slog.Any("keytype", keyType))
+			log.Debug("generating new private key for certificate for host",
+				slog.String("acmename", acmeName),
+				slog.String("host", host),
+				slog.Any("keytype", keyType))
 			switch keyType {
 			case autocert.KeyRSA2048:
 				return rsa.GenerateKey(cryptorand.Reader, 2048)
@@ -657,7 +663,10 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 				switch k := privKey.(type) {
 				case *rsa.PrivateKey:
 					if k.N.BitLen() != 2048 {
-						log.Error("need rsa key with 2048 bits, for host private key for DANE/ACME certificates, ignoring", slog.String("listener", name), slog.String("file", keyPath), slog.Int("bits", k.N.BitLen()))
+						log.Error("need rsa key with 2048 bits, for host private key for DANE/ACME certificates, ignoring",
+							slog.String("listener", name),
+							slog.String("file", keyPath),
+							slog.Int("bits", k.N.BitLen()))
 						continue
 					}
 					l.TLS.HostPrivateRSA2048Keys = append(l.TLS.HostPrivateRSA2048Keys, k)
@@ -668,7 +677,10 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 					}
 					l.TLS.HostPrivateECDSAP256Keys = append(l.TLS.HostPrivateECDSAP256Keys, k)
 				default:
-					log.Error("unrecognized key type for host private key for DANE/ACME certificates, ignoring", slog.String("listener", name), slog.String("file", keyPath), slog.String("keytype", fmt.Sprintf("%T", privKey)))
+					log.Error("unrecognized key type for host private key for DANE/ACME certificates, ignoring",
+						slog.String("listener", name),
+						slog.String("file", keyPath),
+						slog.String("keytype", fmt.Sprintf("%T", privKey)))
 					continue
 				}
 			}
@@ -1318,7 +1330,10 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			if !ok {
 				addErrorf("could not find localpart %q to replace with address in destinations", lp)
 			} else {
-				log.Error(`deprecation warning: support for account destination addresses specified as just localpart ("username") instead of full email address will be removed in the future; update domains.conf, for each Account, for each Destination, ensure each key is an email address by appending "@" and the default domain for the account`, slog.Any("localpart", lp), slog.Any("address", addr), slog.String("account", accName))
+				log.Error(`deprecation warning: support for account destination addresses specified as just localpart ("username") instead of full email address will be removed in the future; update domains.conf, for each Account, for each Destination, ensure each key is an email address by appending "@" and the default domain for the account`,
+					slog.Any("localpart", lp),
+					slog.Any("address", addr),
+					slog.String("account", accName))
 				acc.Destinations[addr] = dest
 				delete(acc.Destinations, lp)
 			}

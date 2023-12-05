@@ -115,7 +115,10 @@ func loadStaticGzipCache(dir string, maxSize int64) {
 		if err != nil {
 			pkglog.Infox("removing unusable/unrecognized file in static gzip cache dir", err)
 			xerr := os.Remove(filepath.Join(dir, name))
-			pkglog.Check(xerr, "removing unusable file in static gzip cache dir", slog.Any("error", err), slog.String("dir", dir), slog.String("filename", name))
+			pkglog.Check(xerr, "removing unusable file in static gzip cache dir",
+				slog.Any("error", err),
+				slog.String("dir", dir),
+				slog.String("filename", name))
 			continue
 		}
 		staticgzcache.paths[path] = gzfile{

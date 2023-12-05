@@ -233,7 +233,10 @@ func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig
 	log := mlog.New("smtpserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
-		log.Print("listening for smtp", slog.String("listener", name), slog.String("address", addr), slog.String("protocol", protocol))
+		log.Print("listening for smtp",
+			slog.String("listener", name),
+			slog.String("address", addr),
+			slog.String("protocol", protocol))
 	}
 	network := mox.Network(ip)
 	ln, err := mox.Listen(network, addr)
@@ -476,7 +479,12 @@ func (c *conn) bwritecodeline(code int, secode string, msg string, err error) {
 		ecode = fmt.Sprintf("%d.%s", code/100, secode)
 	}
 	metricCommands.WithLabelValues(c.kind(), c.cmd, fmt.Sprintf("%d", code), ecode).Observe(float64(time.Since(c.cmdStart)) / float64(time.Second))
-	c.log.Debugx("smtp command result", err, slog.String("kind", c.kind()), slog.String("cmd", c.cmd), slog.Int("code", code), slog.String("ecode", ecode), slog.Duration("duration", time.Since(c.cmdStart)))
+	c.log.Debugx("smtp command result", err,
+		slog.String("kind", c.kind()),
+		slog.String("cmd", c.cmd),
+		slog.Int("code", code),
+		slog.String("ecode", ecode),
+		slog.Duration("duration", time.Since(c.cmdStart)))
 
 	var sep string
 	if ecode != "" {
@@ -584,7 +592,12 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 	c.w = bufio.NewWriter(c.tw)
 
 	metricConnection.WithLabelValues(c.kind()).Inc()
-	c.log.Info("new connection", slog.Any("remote", c.conn.RemoteAddr()), slog.Any("local", c.conn.LocalAddr()), slog.Bool("submission", submission), slog.Bool("tls", tls), slog.String("listener", listenerName))
+	c.log.Info("new connection",
+		slog.Any("remote", c.conn.RemoteAddr()),
+		slog.Any("local", c.conn.LocalAddr()),
+		slog.Bool("submission", submission),
+		slog.Bool("tls", tls),
+		slog.String("listener", listenerName))
 
 	defer func() {
 		c.origConn.Close() // Close actual TCP socket, regardless of TLS on top.
@@ -1897,7 +1910,11 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 			xsmtpServerErrorf(errCodes(smtp.C451LocalErr, smtp.SeSys3Other0, err), "error delivering message: %v", err)
 		}
 		metricSubmission.WithLabelValues("ok").Inc()
-		c.log.Info("message queued for delivery", slog.Any("mailfrom", *c.mailFrom), slog.Any("rcptto", rcptAcc.rcptTo), slog.Bool("smtputf8", c.smtputf8), slog.Int64("msgsize", msgSize))
+		c.log.Info("message queued for delivery",
+			slog.Any("mailfrom", *c.mailFrom),
+			slog.Any("rcptto", rcptAcc.rcptTo),
+			slog.Bool("smtputf8", c.smtputf8),
+			slog.Int64("msgsize", msgSize))
 
 		err := c.account.DB.Insert(ctx, &store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)})
 		xcheckf(err, "adding outgoing message")
@@ -2150,7 +2167,13 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			errmsg = r.Err.Error()
 		}
 		authResAddDKIM(string(r.Status), comment, errmsg, props)
-		c.log.Debugx("dkim verification result", r.Err, slog.Int("index", i), slog.Any("mailfrom", c.mailFrom), slog.Any("status", r.Status), slog.Any("domain", domain), slog.Any("selector", selector), slog.Any("identity", identity))
+		c.log.Debugx("dkim verification result", r.Err,
+			slog.Int("index", i),
+			slog.Any("mailfrom", c.mailFrom),
+			slog.Any("status", r.Status),
+			slog.Any("domain", domain),
+			slog.Any("selector", selector),
+			slog.Any("identity", identity))
 	}
 
 	// Add SPF results to Authentication-Results header. ../rfc/7208:2141
@@ -2307,7 +2330,12 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	var deliverErrors []deliverError
 	addError := func(rcptAcc rcptAccount, code int, secode string, userError bool, errmsg string) {
 		e := deliverError{rcptAcc.rcptTo, code, secode, userError, errmsg}
-		c.log.Info("deliver error", slog.Any("rcptto", e.rcptTo), slog.Int("code", code), slog.String("secode", "secode"), slog.Bool("usererror", userError), slog.String("errmsg", errmsg))
+		c.log.Info("deliver error",
+			slog.Any("rcptto", e.rcptTo),
+			slog.Int("code", code),
+			slog.String("secode", "secode"),
+			slog.Bool("usererror", userError),
+			slog.String("errmsg", errmsg))
 		deliverErrors = append(deliverErrors, e)
 	}
 
