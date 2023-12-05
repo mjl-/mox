@@ -22,28 +22,17 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/adns"
 
 	"github.com/mjl-/mox/dns"
-	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/stub"
 )
 
 var (
-	metricGet = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_mtasts_get_duration_seconds",
-			Help:    "MTA-STS get of policy, including lookup, duration and result.",
-			Buckets: []float64{0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20},
-		},
-		[]string{
-			"result", // ok, lookuperror, fetcherror
-		},
-	)
+	MetricGet         stub.HistogramVec                                                                                           = stub.HistogramVecIgnore{}
+	HTTPClientObserve func(ctx context.Context, log *slog.Logger, pkg, method string, statusCode int, err error, start time.Time) = stub.HTTPClientObserveIgnore
 )
 
 // Pair is an extension key/value pair in a MTA-STS DNS record or policy.
@@ -298,7 +287,7 @@ func FetchPolicy(ctx context.Context, elog *slog.Logger, domain dns.Domain) (pol
 		// We pass along underlying TLS certificate errors.
 		return nil, "", fmt.Errorf("%w: http get: %w", ErrPolicyFetch, err)
 	}
-	metrics.HTTPClientObserve(ctx, log, "mtasts", req.Method, resp.StatusCode, err, start)
+	HTTPClientObserve(ctx, log.Logger, "mtasts", req.Method, resp.StatusCode, err, start)
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, "", ErrNoPolicy
@@ -341,7 +330,7 @@ func Get(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain d
 	start := time.Now()
 	result := "lookuperror"
 	defer func() {
-		metricGet.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
+		MetricGet.ObserveLabels(float64(time.Since(start))/float64(time.Second), result)
 		log.Debugx("mtasts get result", err,
 			slog.Any("domain", domain),
 			slog.Any("record", record),

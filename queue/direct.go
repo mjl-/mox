@@ -90,14 +90,14 @@ var (
 )
 
 // todo: rename function, perhaps put some of the params in a delivery struct so we don't pass all the params all the time?
-func fail(qlog mlog.Log, m Msg, backoff time.Duration, permanent bool, remoteMTA dsn.NameIP, secodeOpt, errmsg string) {
+func fail(ctx context.Context, qlog mlog.Log, m Msg, backoff time.Duration, permanent bool, remoteMTA dsn.NameIP, secodeOpt, errmsg string) {
 	// todo future: when we implement relaying, we should be able to send DSNs to non-local users. and possibly specify a null mailfrom. ../rfc/5321:1503
 	// todo future: when we implement relaying, and a dsn cannot be delivered, and requiretls was active, we cannot drop the message. instead deliver to local postmaster? though ../rfc/8689:383 may intend to say the dsn should be delivered without requiretls?
 	// todo future: when we implement smtp dsn extension, parameter RET=FULL must be disregarded for messages with REQUIRETLS. ../rfc/8689:379
 
 	if permanent || m.MaxAttempts == 0 && m.Attempts >= 8 || m.MaxAttempts > 0 && m.Attempts >= m.MaxAttempts {
 		qlog.Errorx("permanent failure delivering from queue", errors.New(errmsg))
-		deliverDSNFailure(qlog, m, remoteMTA, secodeOpt, errmsg)
+		deliverDSNFailure(ctx, qlog, m, remoteMTA, secodeOpt, errmsg)
 
 		if err := queueDelete(context.Background(), m.ID); err != nil {
 			qlog.Errorx("deleting message from queue after permanent failure", err)
@@ -117,7 +117,7 @@ func fail(qlog mlog.Log, m Msg, backoff time.Duration, permanent bool, remoteMTA
 		qlog.Errorx("temporary failure delivering from queue, sending delayed dsn", errors.New(errmsg), slog.Duration("backoff", backoff))
 
 		retryUntil := m.LastAttempt.Add((4 + 8 + 16) * time.Hour)
-		deliverDSNDelay(qlog, m, remoteMTA, secodeOpt, errmsg, retryUntil)
+		deliverDSNDelay(ctx, qlog, m, remoteMTA, secodeOpt, errmsg, retryUntil)
 	} else {
 		qlog.Errorx("temporary failure delivering from queue", errors.New(errmsg), slog.Duration("backoff", backoff), slog.Time("nextattempt", m.NextAttempt))
 	}
@@ -169,7 +169,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			recipientDomainResult.Summary.TotalFailureSessionCount++
 		}
 
-		fail(qlog, m, backoff, permanent, dsn.NameIP{}, "", err.Error())
+		fail(ctx, qlog, m, backoff, permanent, dsn.NameIP{}, "", err.Error())
 		return
 	}
 
@@ -189,7 +189,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			} else {
 				qlog.Infox("mtasts lookup temporary error, aborting delivery attempt", err, slog.Any("domain", origNextHop))
 				recipientDomainResult.Summary.TotalFailureSessionCount++
-				fail(qlog, m, backoff, false, dsn.NameIP{}, "", err.Error())
+				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", err.Error())
 				return
 			}
 		}
@@ -333,7 +333,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		permanent = true
 	}
 
-	fail(qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg)
+	fail(ctx, qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg)
 	return
 }
 
@@ -527,7 +527,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 		if m.DialedIPs == nil {
 			m.DialedIPs = map[string][]net.IP{}
 		}
-		conn, remoteIP, err = smtpclient.Dial(ctx, log.Logger, dialer, host, ips, 25, m.DialedIPs)
+		conn, remoteIP, err = smtpclient.Dial(ctx, log.Logger, dialer, host, ips, 25, m.DialedIPs, mox.Conf.Static.SpecifiedSMTPListenIPs)
 	}
 	cancel()
 

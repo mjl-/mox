@@ -26,7 +26,6 @@ import (
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
 )
 
 func tcheckf(t *testing.T, err error, format string, args ...any) {
@@ -137,11 +136,13 @@ func TestDial(t *testing.T) {
 	dialHost := "localhost"
 	var allowedUsages []adns.TLSAUsage
 
+	pkixRoots := x509.NewCertPool()
+
 	// Helper function for dialing with DANE.
 	test := func(resolver dns.Resolver, expRecord adns.TLSA, expErr any) {
 		t.Helper()
 
-		conn, record, err := Dial(context.Background(), log.Logger, resolver, "tcp", net.JoinHostPort(dialHost, portstr), allowedUsages)
+		conn, record, err := Dial(context.Background(), log.Logger, resolver, "tcp", net.JoinHostPort(dialHost, portstr), allowedUsages, pkixRoots)
 		if err == nil {
 			conn.Close()
 		}
@@ -457,11 +458,8 @@ func TestDial(t *testing.T) {
 	}
 	test(resolver, zeroRecord, &x509.UnknownAuthorityError{})
 
-	// Now we add the TA to the "system" trusted roots and try again.
-	pool, err := x509.SystemCertPool()
-	tcheckf(t, err, "get system certificate pool")
-	mox.Conf.Static.TLS.CertPool = pool
-	pool.AddCert(taCert)
+	// Now we add the TA to the "pkix" trusted roots and try again.
+	pkixRoots.AddCert(taCert)
 
 	// PKIXEE, will now succeed.
 	resolver = dns.MockResolver{

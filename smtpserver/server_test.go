@@ -1008,7 +1008,8 @@ func TestTLSReport(t *testing.T) {
 			tcheck(t, xerr, "write msg")
 			msg := msgb.String()
 
-			headers, xerr := dkim.Sign(ctxbg, pkglog.Logger, "remote", dns.Domain{ASCII: "example.org"}, dkimConf, false, strings.NewReader(msg))
+			selectors := mox.DKIMSelectors(dkimConf)
+			headers, xerr := dkim.Sign(ctxbg, pkglog.Logger, "remote", dns.Domain{ASCII: "example.org"}, selectors, false, strings.NewReader(msg))
 			tcheck(t, xerr, "dkim sign")
 			msg = headers + msg
 

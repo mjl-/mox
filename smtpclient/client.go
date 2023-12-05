@@ -18,46 +18,24 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/adns"
 
 	"github.com/mjl-/mox/dane"
 	"github.com/mjl-/mox/dns"
-	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/stub"
 	"github.com/mjl-/mox/tlsrpt"
 )
 
 // todo future: add function to deliver message to multiple recipients. requires more elaborate return value, indicating success per message: some recipients may succeed, others may fail, and we should still deliver. to prevent backscatter, we also sometimes don't allow multiple recipients. ../rfc/5321:1144
 
 var (
-	metricCommands = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_smtpclient_command_duration_seconds",
-			Help:    "SMTP client command duration and result codes in seconds.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20, 30, 60, 120},
-		},
-		[]string{
-			"cmd",
-			"code",
-			"secode",
-		},
-	)
-	metricTLSRequiredNoIgnored = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "mox_smtpclient_tlsrequiredno_ignored_total",
-			Help: "Connection attempts with TLS policy findings ignored due to message with TLS-Required: No header. Does not cover case where TLS certificate cannot be PKIX-verified.",
-		},
-		[]string{
-			"ignored", // daneverification (no matching tlsa record)
-		},
-	)
+	MetricCommands             stub.HistogramVec = stub.HistogramVecIgnore{}
+	MetricTLSRequiredNoIgnored stub.CounterVec   = stub.CounterVecIgnore{}
+	MetricPanicInc                               = func() {}
 )
 
 var (
@@ -281,7 +259,7 @@ func New(ctx context.Context, elog *slog.Logger, conn net.Conn, tlsMode TLSMode,
 		c.firstReadAfterHandshake = true
 		c.tlsResultAdd(1, 0, nil)
 		c.conn = tlsconn
-		tlsversion, ciphersuite := mox.TLSInfo(tlsconn)
+		tlsversion, ciphersuite := moxio.TLSInfo(tlsconn)
 		c.log.Debug("tls client handshake done",
 			slog.String("tls", tlsversion),
 			slog.String("ciphersuite", ciphersuite),
@@ -334,7 +312,7 @@ func (c *Client) tlsConfig() *tls.Config {
 		// DANE verification.
 		// daneRecords can be non-nil and empty, that's intended.
 		if c.daneRecords != nil {
-			verified, record, err := dane.Verify(c.log.Logger, c.daneRecords, cs, c.remoteHostname, c.daneMoreHostnames)
+			verified, record, err := dane.Verify(c.log.Logger, c.daneRecords, cs, c.remoteHostname, c.daneMoreHostnames, c.rootCAs)
 			c.log.Debugx("dane verification", err, slog.Bool("verified", verified), slog.Any("record", record))
 			if verified {
 				if c.daneVerifiedRecord != nil {
@@ -355,7 +333,7 @@ func (c *Client) tlsConfig() *tls.Config {
 				if c.ignoreTLSVerifyErrors {
 					// We ignore the failure and continue the connection.
 					c.log.Infox("verifying dane failed, continuing with connection", err)
-					metricTLSRequiredNoIgnored.WithLabelValues("daneverification").Inc()
+					MetricTLSRequiredNoIgnored.IncLabels("daneverification")
 				} else {
 					// This connection will fail.
 					daneErr = dane.ErrNoMatch
@@ -547,7 +525,7 @@ func (c *Client) readecode(ecodes bool) (code int, secode, lastLine string, text
 						c.cmds = c.cmds[1:]
 					}
 				}
-				metricCommands.WithLabelValues(cmd, fmt.Sprintf("%d", co), sec).Observe(float64(time.Since(c.cmdStart)) / float64(time.Second))
+				MetricCommands.ObserveLabels(float64(time.Since(c.cmdStart))/float64(time.Second), cmd, fmt.Sprintf("%d", co), sec)
 				c.log.Debug("smtpclient command result",
 					slog.String("cmd", cmd),
 					slog.Int("code", co),
@@ -651,7 +629,7 @@ func (c *Client) recover(rerr *error) {
 	}
 	cerr, ok := x.(Error)
 	if !ok {
-		metrics.PanicInc(metrics.Smtpclient)
+		MetricPanicInc()
 		panic(x)
 	}
 	*rerr = cerr
@@ -779,7 +757,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 		c.r = bufio.NewReader(c.tr)
 		c.w = bufio.NewWriter(c.tw)
 
-		tlsversion, ciphersuite := mox.TLSInfo(nconn)
+		tlsversion, ciphersuite := moxio.TLSInfo(nconn)
 		c.log.Debug("starttls client handshake done",
 			slog.Any("tlsmode", tlsMode),
 			slog.Bool("verifypkix", c.tlsVerifyPKIX),

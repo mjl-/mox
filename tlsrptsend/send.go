@@ -688,15 +688,14 @@ func composeMessage(ctx context.Context, log mlog.Log, mf *os.File, policyDomain
 
 	xc.Flush()
 
-	selectors := map[string]config.Selector{}
-	for name, sel := range confDKIM.Selectors {
+	selectors := mox.DKIMSelectors(confDKIM)
+	for i, sel := range selectors {
 		// Also sign the TLS-Report headers. ../rfc/8460:940
-		sel.HeadersEffective = append(append([]string{}, sel.HeadersEffective...), "TLS-Report-Domain", "TLS-Report-Submitter")
-		selectors[name] = sel
+		sel.Headers = append(append([]string{}, sel.Headers...), "TLS-Report-Domain", "TLS-Report-Submitter")
+		selectors[i] = sel
 	}
-	confDKIM.Selectors = selectors
 
-	dkimHeader, err := dkim.Sign(ctx, log.Logger, fromAddr.Localpart, fromAddr.Domain, confDKIM, smtputf8, mf)
+	dkimHeader, err := dkim.Sign(ctx, log.Logger, fromAddr.Localpart, fromAddr.Domain, selectors, smtputf8, mf)
 	xc.Checkf(err, "dkim-signing report message")
 
 	return dkimHeader, xc.Has8bit, xc.SMTPUTF8, messageID, nil

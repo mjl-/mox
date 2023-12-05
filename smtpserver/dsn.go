@@ -5,22 +5,32 @@ import (
 	"fmt"
 
 	"github.com/mjl-/mox/dsn"
+	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
 )
 
 // compose dsn message and add it to the queue for delivery to rcptTo.
-func queueDSN(ctx context.Context, c *conn, rcptTo smtp.Path, m dsn.Message, requireTLS bool) error {
+func queueDSN(ctx context.Context, log mlog.Log, c *conn, rcptTo smtp.Path, m dsn.Message, requireTLS bool) error {
 	buf, err := m.Compose(c.log, false)
 	if err != nil {
 		return err
 	}
+	bufDKIM, err := mox.DKIMSign(ctx, c.log, m.From, false, buf)
+	log.Check(err, "dkim signing dsn")
+	buf = append([]byte(bufDKIM), buf...)
+
 	var bufUTF8 []byte
 	if c.smtputf8 {
 		bufUTF8, err = m.Compose(c.log, true)
 		if err != nil {
 			c.log.Errorx("composing dsn with utf-8 for incoming delivery for unknown user, continuing with ascii-only dsn", err)
+		} else {
+			bufUTF8DKIM, err := mox.DKIMSign(ctx, log, m.From, true, bufUTF8)
+			log.Check(err, "dkim signing dsn with utf8")
+			bufUTF8 = append([]byte(bufUTF8DKIM), bufUTF8...)
 		}
 	}
 

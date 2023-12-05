@@ -2,6 +2,7 @@ package queue
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -29,7 +30,7 @@ var (
 	)
 )
 
-func deliverDSNFailure(log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string) {
+func deliverDSNFailure(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string) {
 	const subject = "mail delivery failed"
 	message := fmt.Sprintf(`
 Delivery has failed permanently for your email to:
@@ -43,10 +44,10 @@ Error during the last delivery attempt:
 	%s
 `, m.Recipient().XString(m.SMTPUTF8), errmsg)
 
-	deliverDSN(log, m, remoteMTA, secodeOpt, errmsg, true, nil, subject, message)
+	deliverDSN(ctx, log, m, remoteMTA, secodeOpt, errmsg, true, nil, subject, message)
 }
 
-func deliverDSNDelay(log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, retryUntil time.Time) {
+func deliverDSNDelay(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, retryUntil time.Time) {
 	// Should not happen, but doesn't hurt to prevent sending delayed delivery
 	// notifications for DMARC reports. We don't want to waste postmaster attention.
 	if m.IsDMARCReport {
@@ -67,14 +68,14 @@ Error during the last delivery attempt:
 	%s
 `, m.Recipient().XString(false), errmsg)
 
-	deliverDSN(log, m, remoteMTA, secodeOpt, errmsg, false, &retryUntil, subject, message)
+	deliverDSN(ctx, log, m, remoteMTA, secodeOpt, errmsg, false, &retryUntil, subject, message)
 }
 
 // We only queue DSNs for delivery failures for emails submitted by authenticated
 // users. So we are delivering to local users. ../rfc/5321:1466
 // ../rfc/5321:1494
 // ../rfc/7208:490
-func deliverDSN(log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, permanent bool, retryUntil *time.Time, subject, textBody string) {
+func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, permanent bool, retryUntil *time.Time, subject, textBody string) {
 	kind := "delayed delivery"
 	if permanent {
 		kind = "failure"
@@ -124,6 +125,7 @@ func deliverDSN(log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg str
 		From:       smtp.Path{Localpart: "postmaster", IPDomain: dns.IPDomain{Domain: mox.Conf.Static.HostnameDomain}},
 		To:         m.Sender(),
 		Subject:    subject,
+		MessageID:  mox.MessageIDGen(false),
 		References: m.MessageID,
 		TextBody:   textBody,
 
@@ -150,7 +152,7 @@ func deliverDSN(log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg str
 		return
 	}
 
-	msgData = append(msgData, []byte("Return-Path: <"+dsnMsg.From.XString(m.SMTPUTF8)+">\r\n")...)
+	msgData = append([]byte("Return-Path: <"+dsnMsg.From.XString(m.SMTPUTF8)+">\r\n"), msgData...)
 
 	mailbox := "Inbox"
 	senderAccount := m.SenderAccount

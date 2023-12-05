@@ -1456,7 +1456,7 @@ func (c *conn) cmdStarttls(tag, cmd string, p *parser) {
 		panic(fmt.Errorf("starttls handshake: %s (%w)", err, errIO))
 	}
 	cancel()
-	tlsversion, ciphersuite := mox.TLSInfo(tlsConn)
+	tlsversion, ciphersuite := moxio.TLSInfo(tlsConn)
 	c.log.Debug("tls server handshake done", slog.String("tls", tlsversion), slog.String("ciphersuite", ciphersuite))
 
 	c.conn = tlsConn

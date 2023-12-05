@@ -525,6 +525,8 @@ func queueDelete(ctx context.Context, msgID int64) error {
 // The queue is updated, either by removing a delivered or permanently failed
 // message, or updating the time for the next attempt. A DSN may be sent.
 func deliver(log mlog.Log, resolver dns.Resolver, m Msg) {
+	ctx := mox.Shutdown
+
 	qlog := log.WithCid(mox.Cid()).With(slog.Any("from", m.Sender()),
 		slog.Any("recipient", m.Recipient()),
 		slog.Int("attempts", m.Attempts),
@@ -572,7 +574,7 @@ func deliver(log mlog.Log, resolver dns.Resolver, m Msg) {
 		transport, ok = mox.Conf.Static.Transports[m.Transport]
 		if !ok {
 			var remoteMTA dsn.NameIP // Zero value, will not be included in DSN. ../rfc/3464:1027
-			fail(qlog, m, backoff, false, remoteMTA, "", fmt.Sprintf("cannot find transport %q", m.Transport))
+			fail(ctx, qlog, m, backoff, false, remoteMTA, "", fmt.Sprintf("cannot find transport %q", m.Transport))
 			return
 		}
 		transportName = m.Transport
@@ -683,10 +685,10 @@ func deliver(log mlog.Log, resolver dns.Resolver, m Msg) {
 		if transport.Socks != nil {
 			socksdialer, err := proxy.SOCKS5("tcp", transport.Socks.Address, nil, &net.Dialer{})
 			if err != nil {
-				fail(qlog, m, backoff, false, dsn.NameIP{}, "", fmt.Sprintf("socks dialer: %v", err))
+				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", fmt.Sprintf("socks dialer: %v", err))
 				return
 			} else if d, ok := socksdialer.(smtpclient.Dialer); !ok {
-				fail(qlog, m, backoff, false, dsn.NameIP{}, "", "socks dialer is not a contextdialer")
+				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", "socks dialer is not a contextdialer")
 				return
 			} else {
 				dialer = d

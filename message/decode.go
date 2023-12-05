@@ -1,4 +1,4 @@
-package moxio
+package message
 
 import (
 	"io"

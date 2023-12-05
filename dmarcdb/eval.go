@@ -1068,8 +1068,9 @@ func dkimSign(ctx context.Context, log mlog.Log, fromAddr smtp.Address, smtputf8
 	var zerodom dns.Domain
 	for fd != zerodom {
 		confDom, ok := mox.Conf.Domain(fd)
-		if len(confDom.DKIM.Sign) > 0 {
-			dkimHeaders, err := dkim.Sign(ctx, log.Logger, fromAddr.Localpart, fd, confDom.DKIM, smtputf8, mf)
+		selectors := mox.DKIMSelectors(confDom.DKIM)
+		if len(selectors) > 0 {
+			dkimHeaders, err := dkim.Sign(ctx, log.Logger, fromAddr.Localpart, fd, selectors, smtputf8, mf)
 			if err != nil {
 				log.Errorx("dkim-signing dmarc report, continuing without signature", err)
 				metricReportError.Inc()

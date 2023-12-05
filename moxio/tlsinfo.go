@@ -1,4 +1,4 @@
-package mox
+package moxio
 
 import (
 	"crypto/tls"

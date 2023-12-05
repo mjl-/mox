@@ -56,7 +56,6 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/scram"
 	"github.com/mjl-/mox/smtp"
@@ -2086,7 +2085,7 @@ func ParseFlagsKeywords(l []string) (flags Flags, keywords []string, rerr error)
 		if field, ok := fields[f]; ok {
 			*field = true
 		} else if seen[f] {
-			if moxvar.Pedantic {
+			if mox.Pedantic {
 				return Flags{}, nil, fmt.Errorf("duplicate keyword %s", f)
 			}
 		} else {

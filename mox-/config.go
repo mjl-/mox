@@ -37,15 +37,19 @@ import (
 
 	"github.com/mjl-/mox/autotls"
 	"github.com/mjl-/mox/config"
+	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/smtp"
 )
 
 var pkglog = mlog.New("mox", nil)
+
+// Pedantic enables stricter parsing.
+var Pedantic bool
 
 // Config paths are set early in program startup. They will point to files in
 // the same directory.
@@ -397,7 +401,16 @@ func SetConfig(c *Config) {
 		}
 	}
 
-	moxvar.Pedantic = c.Static.Pedantic
+	SetPedantic(c.Static.Pedantic)
+}
+
+// Set pedantic in all packages.
+func SetPedantic(p bool) {
+	dkim.Pedantic = p
+	dns.Pedantic = p
+	message.Pedantic = p
+	smtp.Pedantic = p
+	Pedantic = p
 }
 
 // ParseConfig parses the static config at path p. If checkOnly is true, no changes

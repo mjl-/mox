@@ -804,7 +804,7 @@ func (c *conn) cmdEhlo(p *parser) {
 // ../rfc/5321:1783
 func (c *conn) cmdHello(p *parser, ehlo bool) {
 	var remote dns.IPDomain
-	if c.submission && !moxvar.Pedantic {
+	if c.submission && !mox.Pedantic {
 		// Mail clients regularly put bogus information in the hostname/ip. For submission,
 		// the value is of no use, so there is not much point in annoying the user with
 		// errors they cannot fix themselves. Except when in pedantic mode.
@@ -907,7 +907,7 @@ func (c *conn) cmdStarttls(p *parser) {
 		panic(fmt.Errorf("starttls handshake: %s (%w)", err, errIO))
 	}
 	cancel()
-	tlsversion, ciphersuite := mox.TLSInfo(tlsConn)
+	tlsversion, ciphersuite := moxio.TLSInfo(tlsConn)
 	c.log.Debug("tls server handshake done", slog.String("tls", tlsversion), slog.String("ciphersuite", ciphersuite))
 	c.conn = tlsConn
 	c.tr = moxio.NewTraceReader(c.log, "RC: ", c)
@@ -982,7 +982,7 @@ func (c *conn) cmdAuth(p *parser) {
 			}
 		} else {
 			p.xspace()
-			if !moxvar.Pedantic {
+			if !mox.Pedantic {
 				// Windows Mail 16005.14326.21606.0 sends two spaces between "AUTH PLAIN" and the
 				// base64 data.
 				for p.space() {
@@ -1304,7 +1304,7 @@ func (c *conn) cmdMail(p *parser) {
 	// note: no space allowed after colon. ../rfc/5321:1093
 	// Microsoft Outlook 365 Apps for Enterprise sends it with submission. For delivery
 	// it is mostly used by spammers, but has been seen with legitimate senders too.
-	if !moxvar.Pedantic {
+	if !mox.Pedantic {
 		p.space()
 	}
 	rawRevPath := p.xrawReversePath()
@@ -1445,7 +1445,7 @@ func (c *conn) cmdRcpt(p *parser) {
 	// note: no space allowed after colon. ../rfc/5321:1093
 	// Microsoft Outlook 365 Apps for Enterprise sends it with submission. For delivery
 	// it is mostly used by spammers, but has been seen with legitimate senders too.
-	if !moxvar.Pedantic {
+	if !mox.Pedantic {
 		p.space()
 	}
 	var fpath smtp.Path
@@ -1639,13 +1639,13 @@ func (c *conn) cmdData(p *parser) {
 		}
 		// Check only for pedantic mode because ios mail will attempt to send smtputf8 with
 		// non-ascii in message from localpart without using 8bitmime.
-		if moxvar.Pedantic && msgWriter.Has8bit && !c.has8bitmime {
+		if mox.Pedantic && msgWriter.Has8bit && !c.has8bitmime {
 			// ../rfc/5321:906
 			xsmtpUserErrorf(smtp.C500BadSyntax, smtp.SeMsg6Other0, "message with non-us-ascii requires 8bitmime extension")
 		}
 	}
 
-	if Localserve && moxvar.Pedantic {
+	if Localserve && mox.Pedantic {
 		// Require that message can be parsed fully.
 		p, err := message.Parse(c.log.Logger, false, dataFile)
 		if err == nil {
@@ -1855,11 +1855,11 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "internal error")
 	}
 
-	dkimConfig := confDom.DKIM
-	if len(dkimConfig.Sign) > 0 {
+	selectors := mox.DKIMSelectors(confDom.DKIM)
+	if len(selectors) > 0 {
 		if canonical, err := mox.CanonicalLocalpart(msgFrom.Localpart, confDom); err != nil {
 			c.log.Errorx("determining canonical localpart for dkim signing", err, slog.Any("localpart", msgFrom.Localpart))
-		} else if dkimHeaders, err := dkim.Sign(ctx, c.log.Logger, canonical, msgFrom.Domain, dkimConfig, c.smtputf8, store.FileMsgReader(msgPrefix, dataFile)); err != nil {
+		} else if dkimHeaders, err := dkim.Sign(ctx, c.log.Logger, canonical, msgFrom.Domain, selectors, c.smtputf8, store.FileMsgReader(msgPrefix, dataFile)); err != nil {
 			c.log.Errorx("dkim sign for domain", err, slog.Any("domain", msgFrom.Domain))
 			metricServerErrors.WithLabelValues("dkimsign").Inc()
 		} else {
@@ -2841,6 +2841,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			From:       smtp.Path{Localpart: "postmaster", IPDomain: deliverErrors[0].rcptTo.IPDomain},
 			To:         *c.mailFrom,
 			Subject:    "mail delivery failure",
+			MessageID:  mox.MessageIDGen(false),
 			References: messageID,
 
 			// Per-message details.
@@ -2876,7 +2877,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 		if Localserve {
 			c.log.Error("not queueing dsn for incoming delivery due to localserve")
-		} else if err := queueDSN(context.TODO(), c, *c.mailFrom, dsnMsg, c.requireTLS != nil && *c.requireTLS); err != nil {
+		} else if err := queueDSN(context.TODO(), c.log, c, *c.mailFrom, dsnMsg, c.requireTLS != nil && *c.requireTLS); err != nil {
 			metricServerErrors.WithLabelValues("queuedsn").Inc()
 			c.log.Errorx("queuing DSN for incoming delivery, no DSN sent", err)
 		}

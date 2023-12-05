@@ -8,7 +8,7 @@ import (
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/imapclient"
-	"github.com/mjl-/mox/moxvar"
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/store"
 )
 
@@ -150,9 +150,9 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 		imapclient.UntaggedFetch{Seq: 6, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(6), noflags, imapclient.FetchModSeq(clientModseq + 4)}},
 	)
 
-	moxvar.Pedantic = true
+	mox.SetPedantic(true)
 	tc.transactf("bad", `Fetch 1 Flags (Changedsince 0)`) // 0 not allowed in syntax.
-	moxvar.Pedantic = false
+	mox.SetPedantic(false)
 	tc.transactf("ok", "Uid fetch 1 (Flags) (Changedsince 0)")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(1), noflags, imapclient.FetchModSeq(clientModseq)}})
 

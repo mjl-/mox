@@ -13,8 +13,8 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
 )
@@ -39,7 +39,7 @@ func tryDecodeParam(log mlog.Log, name string) string {
 		return name
 	}
 	// todo: find where this is allowed. it seems quite common. perhaps we should remove the pedantic check?
-	if moxvar.Pedantic {
+	if mox.Pedantic {
 		log.Debug("attachment contains rfc2047 q/b-word-encoded mime parameter instead of rfc2231-encoded", slog.String("name", name))
 		return name
 	}

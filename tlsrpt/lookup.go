@@ -8,22 +8,13 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/stub"
 )
 
 var (
-	metricLookup = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_tlsrpt_lookup_duration_seconds",
-			Help:    "TLSRPT lookups with result.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20, 30},
-		},
-		[]string{"result"},
-	)
+	MetricLookup stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
 var (
@@ -53,7 +44,7 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domai
 				result = "error"
 			}
 		}
-		metricLookup.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
+		MetricLookup.ObserveLabels(float64(time.Since(start))/float64(time.Second), result)
 		log.Debugx("tlsrpt lookup result", rerr,
 			slog.Any("domain", domain),
 			slog.Any("record", rrecord),

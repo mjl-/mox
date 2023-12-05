@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/moxvar"
 )
 
 var pkglog = mlog.New("message", nil)
@@ -54,7 +53,7 @@ func TestBadContentType(t *testing.T) {
 	expBody := "test"
 
 	// Pedantic is like strict.
-	moxvar.Pedantic = true
+	Pedantic = true
 	s := "content-type: text/html;;\r\n\r\ntest"
 	p, err := EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
 	tfail(t, err, ErrBadContentType)
@@ -63,7 +62,7 @@ func TestBadContentType(t *testing.T) {
 	tcompare(t, string(buf), expBody)
 	tcompare(t, p.MediaType, "APPLICATION")
 	tcompare(t, p.MediaSubType, "OCTET-STREAM")
-	moxvar.Pedantic = false
+	Pedantic = false
 
 	// Strict
 	s = "content-type: text/html;;\r\n\r\ntest"
@@ -111,12 +110,12 @@ func TestBareCR(t *testing.T) {
 	expBody := "bare\rcr\r\n"
 
 	// Pedantic is like strict.
-	moxvar.Pedantic = true
+	Pedantic = true
 	p, err := EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
 	tfail(t, err, errBareCR)
 	_, err = io.ReadAll(p.Reader())
 	tfail(t, err, errBareCR)
-	moxvar.Pedantic = false
+	Pedantic = false
 
 	// Strict.
 	p, err = EnsurePart(pkglog.Logger, true, strings.NewReader(s), int64(len(s)))
@@ -291,12 +290,12 @@ func TestBareCrLf(t *testing.T) {
 	err = parse(false, "\r\ntest\ntest\r\n")
 	tfail(t, err, errBareLF)
 
-	moxvar.Pedantic = true
+	Pedantic = true
 	err = parse(false, "subject: test\rtest\r\n")
 	tfail(t, err, errBareCR)
 	err = parse(false, "\r\ntest\rtest\r\n")
 	tfail(t, err, errBareCR)
-	moxvar.Pedantic = false
+	Pedantic = false
 
 	err = parse(true, "subject: test\rtest\r\n")
 	tfail(t, err, errBareCR)

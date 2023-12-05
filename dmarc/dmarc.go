@@ -17,31 +17,18 @@ import (
 	mathrand "math/rand"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/spf"
+	"github.com/mjl-/mox/stub"
 
 	"golang.org/x/exp/slog"
 )
 
 var (
-	metricDMARCVerify = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_dmarc_verify_duration_seconds",
-			Help:    "DMARC verify, including lookup, duration and result.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20},
-		},
-		[]string{
-			"status",
-			"reject", // yes/no
-			"use",    // yes/no, if policy is used after random selection
-		},
-	)
+	MetricVerify stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
 // link errata:
@@ -248,7 +235,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from 
 		if result.Reject {
 			reject = "yes"
 		}
-		metricDMARCVerify.WithLabelValues(string(result.Status), reject, use).Observe(float64(time.Since(start)) / float64(time.Second))
+		MetricVerify.ObserveLabels(float64(time.Since(start))/float64(time.Second), string(result.Status), reject, use)
 		log.Debugx("dmarc verify result", result.Err,
 			slog.Any("fromdomain", from),
 			slog.Any("dkimresults", dkimResults),

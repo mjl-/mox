@@ -70,16 +70,18 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 
 	// todo: for submission, understand SRV records, and even DANE.
 
+	ctx := mox.Shutdown
+
 	// If submit was done with REQUIRETLS extension for SMTP, we must verify TLS
 	// certificates. If our submission connection is not configured that way, abort.
 	requireTLS := m.RequireTLS != nil && *m.RequireTLS
 	if requireTLS && (tlsMode != smtpclient.TLSRequiredStartTLS && tlsMode != smtpclient.TLSImmediate || !tlsPKIX) {
 		errmsg = fmt.Sprintf("transport %s: message requires verified tls but transport does not verify tls", transportName)
-		fail(qlog, m, backoff, true, dsn.NameIP{}, smtp.SePol7MissingReqTLS, errmsg)
+		fail(ctx, qlog, m, backoff, true, dsn.NameIP{}, smtp.SePol7MissingReqTLS, errmsg)
 		return
 	}
 
-	dialctx, dialcancel := context.WithTimeout(context.Background(), 30*time.Second)
+	dialctx, dialcancel := context.WithTimeout(ctx, 30*time.Second)
 	defer dialcancel()
 	if m.DialedIPs == nil {
 		m.DialedIPs = map[string][]net.IP{}
@@ -90,7 +92,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		if m.DialedIPs == nil {
 			m.DialedIPs = map[string][]net.IP{}
 		}
-		conn, _, err = smtpclient.Dial(dialctx, qlog.Logger, dialer, dns.IPDomain{Domain: transport.DNSHost}, ips, port, m.DialedIPs)
+		conn, _, err = smtpclient.Dial(dialctx, qlog.Logger, dialer, dns.IPDomain{Domain: transport.DNSHost}, ips, port, m.DialedIPs, mox.Conf.Static.SpecifiedSMTPListenIPs)
 	}
 	addr := net.JoinHostPort(transport.Host, fmt.Sprintf("%d", port))
 	var result string
@@ -112,7 +114,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		}
 		qlog.Errorx("dialing for submission", err, slog.String("remote", addr))
 		errmsg = fmt.Sprintf("transport %s: dialing %s for submission: %v", transportName, addr, err)
-		fail(qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
+		fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
 		return
 	}
 	dialcancel()
@@ -134,7 +136,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 				// Should not happen.
 				qlog.Error("missing smtp authentication mechanisms implementation", slog.String("mechanism", mech))
 				errmsg = fmt.Sprintf("transport %s: authentication mechanisms %q not implemented", transportName, mech)
-				fail(qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
+				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
 				return
 			}
 		}
@@ -155,7 +157,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		qlog.Errorx("establishing smtp session for submission", err, slog.String("remote", addr))
 		errmsg = fmt.Sprintf("transport %s: establishing smtp session with %s for submission: %v", transportName, addr, err)
 		secodeOpt = smtperr.Secode
-		fail(qlog, m, backoff, false, remoteMTA, secodeOpt, errmsg)
+		fail(ctx, qlog, m, backoff, false, remoteMTA, secodeOpt, errmsg)
 		return
 	}
 	defer func() {
@@ -180,7 +182,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		if err != nil {
 			qlog.Errorx("opening message for delivery", err, slog.String("remote", addr), slog.String("path", p))
 			errmsg = fmt.Sprintf("transport %s: opening message file for submission: %v", transportName, err)
-			fail(qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
+			fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
 			return
 		}
 		msgr = store.FileMsgReader(m.MsgPrefix, f)
@@ -223,7 +225,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		permanent = smtperr.Permanent
 		secodeOpt = smtperr.Secode
 		errmsg = fmt.Sprintf("transport %s: submitting email to %s: %v", transportName, addr, err)
-		fail(qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg)
+		fail(ctx, qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg)
 		return
 	}
 	qlog.Info("delivered from queue with transport")

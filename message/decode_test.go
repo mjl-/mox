@@ -1,4 +1,4 @@
-package moxio
+package message
 
 import (
 	"io"
@@ -10,7 +10,7 @@ func TestDecodeReader(t *testing.T) {
 	check := func(charset, input, output string) {
 		t.Helper()
 		buf, err := io.ReadAll(DecodeReader(charset, strings.NewReader(input)))
-		tcheckf(t, err, "decode")
+		tcheck(t, err, "decode")
 		if string(buf) != output {
 			t.Fatalf("decoding %q with charset %q, got %q, expected %q", input, charset, buf, output)
 		}

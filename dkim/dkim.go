@@ -26,38 +26,17 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
-	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/stub"
 )
 
 var (
-	metricSign = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "mox_dkim_sign_total",
-			Help: "DKIM messages signings, label key is the type of key, rsa or ed25519.",
-		},
-		[]string{
-			"key",
-		},
-	)
-	metricVerify = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_dkim_verify_duration_seconds",
-			Help:    "DKIM verify, including lookup, duration and result.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20},
-		},
-		[]string{
-			"algorithm",
-			"status",
-		},
-	)
+	MetricSign   stub.CounterVec   = stub.CounterVecIgnore{}
+	MetricVerify stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
 var timeNow = time.Now // Replaced during tests.
@@ -122,8 +101,28 @@ type Result struct {
 
 // todo: use some io.Writer to hash the body and the header.
 
+// Selector holds selectors and key material to generate DKIM signatures.
+type Selector struct {
+	Hash          string   // "sha256" or the older "sha1".
+	HeaderRelaxed bool     // If the header is canonicalized in relaxed instead of simple mode.
+	BodyRelaxed   bool     // If the body is canonicalized in relaxed instead of simple mode.
+	Headers       []string // Headers to include in signature.
+
+	// Whether to "oversign" headers, ensuring additional/new values of existing
+	// headers cannot be added.
+	SealHeaders bool
+
+	// If > 0, period a signature is valid after signing, as duration, e.g. 72h. The
+	// period should be enough for delivery at the final destination, potentially with
+	// several hops/relays. In the order of days at least.
+	Expiration time.Duration
+
+	PrivateKey crypto.Signer // Either an *rsa.PrivateKey or ed25519.PrivateKey.
+	Domain     dns.Domain    // Of selector only, not FQDN.
+}
+
 // Sign returns line(s) with DKIM-Signature headers, generated according to the configuration.
-func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, domain dns.Domain, c config.DKIM, smtputf8 bool, msg io.ReaderAt) (headers string, rerr error) {
+func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, domain dns.Domain, selectors []Selector, smtputf8 bool, msg io.ReaderAt) (headers string, rerr error) {
 	log := mlog.New("dkim", elog)
 	start := timeNow()
 	defer func() {
@@ -155,26 +154,25 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 
 	var bodyHashes = map[hashKey][]byte{}
 
-	for _, sign := range c.Sign {
-		sel := c.Selectors[sign]
+	for _, sel := range selectors {
 		sig := newSigWithDefaults()
 		sig.Version = 1
-		switch sel.Key.(type) {
+		switch sel.PrivateKey.(type) {
 		case *rsa.PrivateKey:
 			sig.AlgorithmSign = "rsa"
-			metricSign.WithLabelValues("rsa").Inc()
+			MetricSign.IncLabels("rsa")
 		case ed25519.PrivateKey:
 			sig.AlgorithmSign = "ed25519"
-			metricSign.WithLabelValues("ed25519").Inc()
+			MetricSign.IncLabels("ed25519")
 		default:
-			return "", fmt.Errorf("internal error, unknown pivate key %T", sel.Key)
+			return "", fmt.Errorf("internal error, unknown pivate key %T", sel.PrivateKey)
 		}
-		sig.AlgorithmHash = sel.HashEffective
+		sig.AlgorithmHash = sel.Hash
 		sig.Domain = domain
 		sig.Selector = sel.Domain
 		sig.Identity = &Identity{&localpart, domain}
-		sig.SignedHeaders = append([]string{}, sel.HeadersEffective...)
-		if !sel.DontSealHeaders {
+		sig.SignedHeaders = append([]string{}, sel.Headers...)
+		if sel.SealHeaders {
 			// ../rfc/6376:2156
 			// Each time a header name is added to the signature, the next unused value is
 			// signed (in reverse order as they occur in the message). So we can add each
@@ -184,23 +182,23 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 			for _, h := range hdrs {
 				counts[h.lkey]++
 			}
-			for _, h := range sel.HeadersEffective {
+			for _, h := range sel.Headers {
 				for j := counts[strings.ToLower(h)]; j > 0; j-- {
 					sig.SignedHeaders = append(sig.SignedHeaders, h)
 				}
 			}
 		}
 		sig.SignTime = timeNow().Unix()
-		if sel.ExpirationSeconds > 0 {
-			sig.ExpireTime = sig.SignTime + int64(sel.ExpirationSeconds)
+		if sel.Expiration > 0 {
+			sig.ExpireTime = sig.SignTime + int64(sel.Expiration/time.Second)
 		}
 
 		sig.Canonicalization = "simple"
-		if sel.Canonicalization.HeaderRelaxed {
+		if sel.HeaderRelaxed {
 			sig.Canonicalization = "relaxed"
 		}
 		sig.Canonicalization += "/"
-		if sel.Canonicalization.BodyRelaxed {
+		if sel.BodyRelaxed {
 			sig.Canonicalization += "relaxed"
 		} else {
 			sig.Canonicalization += "simple"
@@ -217,12 +215,12 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 		// DKIM-Signature header.
 		// ../rfc/6376:1700
 
-		hk := hashKey{!sel.Canonicalization.BodyRelaxed, strings.ToLower(sig.AlgorithmHash)}
+		hk := hashKey{!sel.BodyRelaxed, strings.ToLower(sig.AlgorithmHash)}
 		if bh, ok := bodyHashes[hk]; ok {
 			sig.BodyHash = bh
 		} else {
 			br := bufio.NewReader(&moxio.AtReader{R: msg, Offset: int64(bodyOffset)})
-			bh, err = bodyHash(h.New(), !sel.Canonicalization.BodyRelaxed, br)
+			bh, err = bodyHash(h.New(), !sel.BodyRelaxed, br)
 			if err != nil {
 				return "", err
 			}
@@ -236,12 +234,12 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 		}
 		verifySig := []byte(strings.TrimSuffix(sigh, "\r\n"))
 
-		dh, err := dataHash(h.New(), !sel.Canonicalization.HeaderRelaxed, sig, hdrs, verifySig)
+		dh, err := dataHash(h.New(), !sel.HeaderRelaxed, sig, hdrs, verifySig)
 		if err != nil {
 			return "", err
 		}
 
-		switch key := sel.Key.(type) {
+		switch key := sel.PrivateKey.(type) {
 		case *rsa.PrivateKey:
 			sig.Signature, err = key.Sign(cryptorand.Reader, dh, h)
 			if err != nil {
@@ -358,7 +356,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, smtpu
 				alg = r.Sig.Algorithm()
 			}
 			status := string(r.Status)
-			metricVerify.WithLabelValues(alg, status).Observe(duration)
+			MetricVerify.ObserveLabels(duration, alg, status)
 		}
 
 		if len(results) == 0 {

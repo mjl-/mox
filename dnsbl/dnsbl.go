@@ -12,25 +12,13 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/stub"
 )
 
 var (
-	metricLookup = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_dnsbl_lookup_duration_seconds",
-			Help:    "DNSBL lookup",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20},
-		},
-		[]string{
-			"zone",
-			"status",
-		},
-	)
+	MetricLookup stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
 var ErrDNS = errors.New("dnsbl: dns error")
@@ -49,7 +37,7 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, zone 
 	log := mlog.New("dnsbl", elog)
 	start := time.Now()
 	defer func() {
-		metricLookup.WithLabelValues(zone.Name(), string(rstatus)).Observe(float64(time.Since(start)) / float64(time.Second))
+		MetricLookup.ObserveLabels(float64(time.Since(start))/float64(time.Second), zone.Name(), string(rstatus))
 		log.Debugx("dnsbl lookup result", rerr,
 			slog.Any("zone", zone),
 			slog.Any("ip", ip),

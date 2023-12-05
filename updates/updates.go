@@ -23,32 +23,16 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/mox/dns"
-	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/stub"
 )
 
 var (
-	metricLookup = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_updates_lookup_duration_seconds",
-			Help:    "Updates lookup with result.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20, 30},
-		},
-		[]string{"result"},
-	)
-	metricFetchChangelog = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_updates_fetchchangelog_duration_seconds",
-			Help:    "Fetch changelog with result.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20, 30},
-		},
-		[]string{"result"},
-	)
+	MetricLookup         stub.HistogramVec                                                                                           = stub.HistogramVecIgnore{}
+	MetricFetchChangelog stub.HistogramVec                                                                                           = stub.HistogramVecIgnore{}
+	HTTPClientObserve    func(ctx context.Context, log *slog.Logger, pkg, method string, statusCode int, err error, start time.Time) = stub.HTTPClientObserveIgnore
 )
 
 var (
@@ -89,7 +73,7 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domai
 		if rerr != nil {
 			result = "error"
 		}
-		metricLookup.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
+		MetricLookup.ObserveLabels(float64(time.Since(start))/float64(time.Second), result)
 		log.Debugx("updates lookup result", rerr,
 			slog.Any("domain", domain),
 			slog.Any("version", rversion),
@@ -144,7 +128,7 @@ func FetchChangelog(ctx context.Context, elog *slog.Logger, baseURL string, base
 		if rerr != nil {
 			result = "error"
 		}
-		metricFetchChangelog.WithLabelValues(result).Observe(float64(time.Since(start)) / float64(time.Second))
+		MetricFetchChangelog.ObserveLabels(float64(time.Since(start))/float64(time.Second), result)
 		log.Debugx("updates fetch changelog result", rerr,
 			slog.String("baseurl", baseURL),
 			slog.Any("base", base),
@@ -163,7 +147,7 @@ func FetchChangelog(ctx context.Context, elog *slog.Logger, baseURL string, base
 	if resp == nil {
 		resp = &http.Response{StatusCode: 0}
 	}
-	metrics.HTTPClientObserve(ctx, log, "updates", req.Method, resp.StatusCode, err, start)
+	HTTPClientObserve(ctx, log.Logger, "updates", req.Method, resp.StatusCode, err, start)
 	if err != nil {
 		return nil, fmt.Errorf("%w: making http request: %s", ErrChangelogFetch, err)
 	}

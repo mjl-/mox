@@ -394,7 +394,7 @@ func mustLoadConfig() {
 		log.Fatal("unknown loglevel", slog.String("loglevel", loglevel))
 	}
 	if pedantic {
-		moxvar.Pedantic = true
+		mox.SetPedantic(true)
 	}
 }
 
@@ -445,7 +445,7 @@ func main() {
 	defer profile(cpuprofile, memprofile)()
 
 	if pedantic {
-		moxvar.Pedantic = true
+		mox.SetPedantic(true)
 	}
 
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
@@ -1600,8 +1600,11 @@ connection.
 		}
 	}
 
+	pkixRoots, err := x509.SystemCertPool()
+	xcheckf(err, "get system pkix certificate pool")
+
 	resolver := dns.StrictResolver{Pkg: "danedial"}
-	conn, record, err := dane.Dial(context.Background(), c.log.Logger, resolver, "tcp", args[0], allowedUsages)
+	conn, record, err := dane.Dial(context.Background(), c.log.Logger, resolver, "tcp", args[0], allowedUsages, pkixRoots)
 	xcheckf(err, "dial")
 	log.Printf("(connected, verified with %s)", record)
 
@@ -1756,7 +1759,7 @@ sharing most of its code.
 		log.Printf("gathered valid tls certificate names for potential verification with dane-ta: %s", strings.Join(l, ", "))
 
 		dialer := &net.Dialer{Timeout: 5 * time.Second}
-		conn, _, err := smtpclient.Dial(ctxbg, c.log.Logger, dialer, dns.IPDomain{Domain: expandedHost}, ips, 25, dialedIPs)
+		conn, _, err := smtpclient.Dial(ctxbg, c.log.Logger, dialer, dns.IPDomain{Domain: expandedHost}, ips, 25, dialedIPs, nil)
 		if err != nil {
 			log.Printf("dial %s: %v, skipping", expandedHost, err)
 			continue
@@ -2238,7 +2241,8 @@ headers prepended.
 		log.Fatalf("domain %s not configured", dom)
 	}
 
-	headers, err := dkim.Sign(context.Background(), c.log.Logger, localpart, dom, domConf.DKIM, false, msgf)
+	selectors := mox.DKIMSelectors(domConf.DKIM)
+	headers, err := dkim.Sign(context.Background(), c.log.Logger, localpart, dom, selectors, false, msgf)
 	xcheckf(err, "signing message with dkim")
 	if headers == "" {
 		log.Fatalf("no DKIM configured for domain %s", dom)

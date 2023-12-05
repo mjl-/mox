@@ -61,29 +61,16 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/adns"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/stub"
 )
 
 var (
-	metricVerify = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "mox_dane_verify_total",
-			Help: "Total number of DANE verification attempts, including mox_dane_verify_errors_total.",
-		},
-	)
-	metricVerifyErrors = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "mox_dane_verify_errors_total",
-			Help: "Total number of DANE verification failures, causing connections to fail.",
-		},
-	)
+	MetricVerify       stub.Counter = stub.CounterIgnore{}
+	MetricVerifyErrors stub.Counter = stub.CounterIgnore{}
 )
 
 var (
@@ -134,7 +121,7 @@ func (e VerifyError) Unwrap() error {
 //     indicate DNSSEC errors.
 //   - ErrInsecure
 //   - VerifyError, potentially wrapping errors from crypto/x509.
-func Dial(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, network, address string, allowedUsages []adns.TLSAUsage) (net.Conn, adns.TLSA, error) {
+func Dial(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, network, address string, allowedUsages []adns.TLSAUsage, pkixRoots *x509.CertPool) (net.Conn, adns.TLSA, error) {
 	log := mlog.New("dane", elog)
 
 	// Split host and port.
@@ -274,7 +261,7 @@ func Dial(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, network
 	}
 
 	var verifiedRecord adns.TLSA
-	config := TLSClientConfig(log.Logger, records, baseDom, moreAllowedHosts, &verifiedRecord)
+	config := TLSClientConfig(log.Logger, records, baseDom, moreAllowedHosts, &verifiedRecord, pkixRoots)
 	tlsConn := tls.Client(conn, &config)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		conn.Close()
@@ -297,13 +284,13 @@ func Dial(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, network
 //
 // If verifiedRecord is not nil, it is set to the record that was successfully
 // verified, if any.
-func TLSClientConfig(elog *slog.Logger, records []adns.TLSA, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, verifiedRecord *adns.TLSA) tls.Config {
+func TLSClientConfig(elog *slog.Logger, records []adns.TLSA, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, verifiedRecord *adns.TLSA, pkixRoots *x509.CertPool) tls.Config {
 	log := mlog.New("dane", elog)
 	return tls.Config{
 		ServerName:         allowedHost.ASCII, // For SNI.
 		InsecureSkipVerify: true,
 		VerifyConnection: func(cs tls.ConnectionState) error {
-			verified, record, err := Verify(log.Logger, records, cs, allowedHost, moreAllowedHosts)
+			verified, record, err := Verify(log.Logger, records, cs, allowedHost, moreAllowedHosts, pkixRoots)
 			log.Debugx("dane verification", err, slog.Bool("verified", verified), slog.Any("record", record))
 			if verified {
 				if verifiedRecord != nil {
@@ -335,23 +322,23 @@ func TLSClientConfig(elog *slog.Logger, records []adns.TLSA, allowedHost dns.Dom
 // If an error is encountered while verifying a record, e.g. for x509
 // trusted-anchor verification, an error may be returned, typically one or more
 // (wrapped) errors of type VerifyError.
-func Verify(elog *slog.Logger, records []adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain) (verified bool, matching adns.TLSA, rerr error) {
+func Verify(elog *slog.Logger, records []adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, pkixRoots *x509.CertPool) (verified bool, matching adns.TLSA, rerr error) {
 	log := mlog.New("dane", elog)
-	metricVerify.Inc()
+	MetricVerify.Inc()
 	if len(records) == 0 {
-		metricVerifyErrors.Inc()
+		MetricVerifyErrors.Inc()
 		return false, adns.TLSA{}, fmt.Errorf("verify requires at least one tlsa record")
 	}
 	var errs []error
 	for _, r := range records {
-		ok, err := verifySingle(log, r, cs, allowedHost, moreAllowedHosts)
+		ok, err := verifySingle(log, r, cs, allowedHost, moreAllowedHosts, pkixRoots)
 		if err != nil {
 			errs = append(errs, VerifyError{err, r})
 		} else if ok {
 			return true, r, nil
 		}
 	}
-	metricVerifyErrors.Inc()
+	MetricVerifyErrors.Inc()
 	return false, adns.TLSA{}, errors.Join(errs...)
 }
 
@@ -364,7 +351,7 @@ func Verify(elog *slog.Logger, records []adns.TLSA, cs tls.ConnectionState, allo
 // errors while verifying certificates against a trust-anchor, an error can be
 // returned with one or more underlying x509 verification errors. A nil-nil error
 // is only returned when verified is false.
-func verifySingle(log mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain) (verified bool, rerr error) {
+func verifySingle(log mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, pkixRoots *x509.CertPool) (verified bool, rerr error) {
 	if len(cs.PeerCertificates) == 0 {
 		return false, fmt.Errorf("no server certificate")
 	}
@@ -401,7 +388,7 @@ func verifySingle(log mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowedH
 		opts := x509.VerifyOptions{
 			DNSName:       host.ASCII,
 			Intermediates: x509.NewCertPool(),
-			Roots:         mox.Conf.Static.TLS.CertPool,
+			Roots:         pkixRoots,
 		}
 		for _, cert := range cs.PeerCertificates[1:] {
 			opts.Intermediates.AddCert(cert)

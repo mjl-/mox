@@ -10,9 +10,10 @@ import (
 	"golang.org/x/net/idna"
 
 	"github.com/mjl-/adns"
-
-	"github.com/mjl-/mox/moxvar"
 )
+
+// Pedantic enables stricter parsing.
+var Pedantic bool
 
 var (
 	errTrailingDot = errors.New("dns name has trailing dot")
@@ -113,7 +114,7 @@ func ParseDomain(s string) (Domain, error) {
 // is not enabled. Used for interoperability, e.g. domains may specify MX
 // targets with underscores.
 func ParseDomainLax(s string) (Domain, error) {
-	if moxvar.Pedantic || !strings.Contains(s, "_") {
+	if Pedantic || !strings.Contains(s, "_") {
 		return ParseDomain(s)
 	}
 

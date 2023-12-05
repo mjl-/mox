@@ -18,12 +18,10 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/stub"
 )
 
 // The net package always returns DNS names in absolute, lower-case form. We make
@@ -31,16 +29,7 @@ import (
 // verify names relative to our local search domain.
 
 var (
-	metricSPFVerify = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_spf_verify_duration_seconds",
-			Help:    "SPF verify, including lookup, duration and result.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20},
-		},
-		[]string{
-			"status",
-		},
-	)
+	MetricVerify stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
 // cross-link rfc and errata
@@ -202,7 +191,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, args 
 	log := mlog.New("spf", elog)
 	start := time.Now()
 	defer func() {
-		metricSPFVerify.WithLabelValues(string(received.Result)).Observe(float64(time.Since(start)) / float64(time.Second))
+		MetricVerify.ObserveLabels(float64(time.Since(start))/float64(time.Second), string(received.Result))
 		log.Debugx("spf verify result", rerr,
 			slog.Any("domain", args.domain),
 			slog.Any("ip", args.RemoteIP),

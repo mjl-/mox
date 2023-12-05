@@ -10,7 +10,6 @@ import (
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
 )
 
 // DialHook can be used during tests to override the regular dialer from being used.
@@ -50,10 +49,9 @@ type Dialer interface {
 // Dial updates dialedIPs, callers may want to save it so it can be taken into
 // account for future delivery attempts.
 //
-// If we have fully specified local SMTP listener IPs, we set those for the
-// outgoing connection. The admin probably configured these same IPs in SPF, but
-// others possibly not.
-func Dial(ctx context.Context, elog *slog.Logger, dialer Dialer, host dns.IPDomain, ips []net.IP, port int, dialedIPs map[string][]net.IP) (conn net.Conn, ip net.IP, rerr error) {
+// The first matching protocol family from localIPs is set for the local side
+// of the TCP connection.
+func Dial(ctx context.Context, elog *slog.Logger, dialer Dialer, host dns.IPDomain, ips []net.IP, port int, dialedIPs map[string][]net.IP, localIPs []net.IP) (conn net.Conn, ip net.IP, rerr error) {
 	log := mlog.New("smtpclient", elog)
 	timeout := 30 * time.Second
 	if deadline, ok := ctx.Deadline(); ok && len(ips) > 0 {
@@ -66,7 +64,7 @@ func Dial(ctx context.Context, elog *slog.Logger, dialer Dialer, host dns.IPDoma
 		addr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
 		log.Debug("dialing host", slog.String("addr", addr))
 		var laddr net.Addr
-		for _, lip := range mox.Conf.Static.SpecifiedSMTPListenIPs {
+		for _, lip := range localIPs {
 			ipIs4 := ip.To4() != nil
 			lipIs4 := lip.To4() != nil
 			if ipIs4 == lipIs4 {

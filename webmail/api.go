@@ -557,8 +557,9 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	var msgPrefix string
 	fd := fromAddr.Address.Domain
 	confDom, _ := mox.Conf.Domain(fd)
-	if len(confDom.DKIM.Sign) > 0 {
-		dkimHeaders, err := dkim.Sign(ctx, log.Logger, fromAddr.Address.Localpart, fd, confDom.DKIM, smtputf8, dataFile)
+	selectors := mox.DKIMSelectors(confDom.DKIM)
+	if len(selectors) > 0 {
+		dkimHeaders, err := dkim.Sign(ctx, log.Logger, fromAddr.Address.Localpart, fd, selectors, smtputf8, dataFile)
 		if err != nil {
 			metricServerErrors.WithLabelValues("dkimsign").Inc()
 		}

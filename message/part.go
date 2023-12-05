@@ -25,10 +25,11 @@ import (
 	"golang.org/x/text/encoding/ianaindex"
 
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 )
+
+// Pedantic enables stricter parsing.
+var Pedantic bool
 
 var (
 	ErrBadContentType = errors.New("bad content-type")
@@ -207,7 +208,7 @@ func (p *Part) Walk(elog *slog.Logger, parent *Part) error {
 				// If this is a DSN and we are not in pedantic mode, accept unexpected end of
 				// message. This is quite common because MTA's sometimes just truncate the original
 				// message in a place that makes the message invalid.
-				if errors.Is(err, errUnexpectedEOF) && !moxvar.Pedantic && parent != nil && len(parent.Parts) >= 3 && p == &parent.Parts[2] && parent.MediaType == "MULTIPART" && parent.MediaSubType == "REPORT" {
+				if errors.Is(err, errUnexpectedEOF) && !Pedantic && parent != nil && len(parent.Parts) >= 3 && p == &parent.Parts[2] && parent.MediaType == "MULTIPART" && parent.MediaSubType == "REPORT" {
 					mp, err = fallbackPart(mp, br, int64(len(buf)))
 					if err != nil {
 						return fmt.Errorf("parsing invalid embedded message: %w", err)
@@ -305,7 +306,7 @@ func newPart(log mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Par
 	ct := p.header.Get("Content-Type")
 	mt, params, err := mime.ParseMediaType(ct)
 	if err != nil && ct != "" {
-		if moxvar.Pedantic || strict {
+		if Pedantic || strict {
 			return p, fmt.Errorf("%w: %s: %q", ErrBadContentType, err, ct)
 		}
 
@@ -337,7 +338,7 @@ func newPart(log mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Par
 	} else if mt != "" {
 		t := strings.SplitN(strings.ToUpper(mt), "/", 2)
 		if len(t) != 2 {
-			if moxvar.Pedantic || strict {
+			if Pedantic || strict {
 				return p, fmt.Errorf("bad content-type: %q (content-type %q)", mt, ct)
 			}
 			log.Debug("malformed media-type, ignoring and continuing", slog.String("type", mt))
@@ -584,7 +585,7 @@ func (p *Part) Reader() io.Reader {
 // already). For unknown or missing character sets/encodings, the original reader
 // is returned.
 func (p *Part) ReaderUTF8OrBinary() io.Reader {
-	return moxio.DecodeReader(p.ContentTypeParams["charset"], p.Reader())
+	return DecodeReader(p.ContentTypeParams["charset"], p.Reader())
 }
 
 func (p *Part) bodyReader(r io.Reader) io.Reader {
@@ -689,7 +690,7 @@ func (r *crlfReader) Read(buf []byte) (int, error) {
 			if b == '\n' && !r.prevcr {
 				err = errBareLF
 				break
-			} else if b != '\n' && r.prevcr && (r.strict || moxvar.Pedantic) {
+			} else if b != '\n' && r.prevcr && (r.strict || Pedantic) {
 				err = errBareCR
 				break
 			}
@@ -719,7 +720,7 @@ type bufAt struct {
 const maxLineLength = 8 * 1024
 
 func (b *bufAt) maxLineLength() int {
-	if b.strict || moxvar.Pedantic {
+	if b.strict || Pedantic {
 		return 1000
 	}
 	return maxLineLength
@@ -777,7 +778,7 @@ func (b *bufAt) line(consume, requirecrlf bool) (buf []byte, crlf bool, err erro
 		}
 		i++
 		if i >= b.nbuf || b.buf[i] != '\n' {
-			if b.strict || moxvar.Pedantic {
+			if b.strict || Pedantic {
 				return nil, false, errBareCR
 			}
 			continue
@@ -833,7 +834,7 @@ func (r *offsetReader) Read(buf []byte) (int, error) {
 	if n > 0 {
 		r.offset += int64(n)
 		max := maxLineLength
-		if r.strict || moxvar.Pedantic {
+		if r.strict || Pedantic {
 			max = 1000
 		}
 
@@ -844,7 +845,7 @@ func (r *offsetReader) Read(buf []byte) (int, error) {
 			if err == nil || err == io.EOF {
 				if c == '\n' && !r.prevcr {
 					err = errBareLF
-				} else if c != '\n' && r.prevcr && (r.strict || moxvar.Pedantic) {
+				} else if c != '\n' && r.prevcr && (r.strict || Pedantic) {
 					err = errBareCR
 				}
 			}

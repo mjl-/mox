@@ -12,12 +12,10 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/adns"
 
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/stub"
 )
 
 // todo future: replace with a dnssec capable resolver
@@ -29,18 +27,7 @@ func init() {
 }
 
 var (
-	metricLookup = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_dns_lookup_duration_seconds",
-			Help:    "DNS lookups.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20, 30},
-		},
-		[]string{
-			"pkg",
-			"type",   // Lower-case Resolver method name without leading Lookup.
-			"result", // ok, nxdomain, temporary, timeout, canceled, error
-		},
-	)
+	MetricLookup stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
 // Resolver is the interface strict resolver implements.
@@ -106,7 +93,7 @@ func metricLookupObserve(pkg, typ string, err error, start time.Time) {
 	default:
 		result = "error"
 	}
-	metricLookup.WithLabelValues(pkg, typ, result).Observe(float64(time.Since(start)) / float64(time.Second))
+	MetricLookup.ObserveLabels(float64(time.Since(start))/float64(time.Second), pkg, typ, result)
 }
 
 func (r StrictResolver) WithPackage(name string) Resolver {

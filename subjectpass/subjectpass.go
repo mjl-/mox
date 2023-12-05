@@ -13,31 +13,16 @@ import (
 
 	"golang.org/x/exp/slog"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/stub"
 )
 
 var (
-	metricGenerate = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "mox_subjectpass_generate_total",
-			Help: "Number of generated subjectpass challenges.",
-		},
-	)
-	metricVerify = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "mox_subjectpass_verify_total",
-			Help: "Number of subjectpass verifications.",
-		},
-		[]string{
-			"result", // ok, fail
-		},
-	)
+	MetricGenerate stub.Counter    = stub.CounterIgnore{}
+	MetricVerify   stub.CounterVec = stub.CounterVecIgnore{}
 )
 
 var (
@@ -57,7 +42,7 @@ var Explanation = "Your message resembles spam. If your email is legitimate, ple
 func Generate(elog *slog.Logger, mailFrom smtp.Address, key []byte, tm time.Time) string {
 	log := mlog.New("subjectpass", elog)
 
-	metricGenerate.Inc()
+	MetricGenerate.Inc()
 	log.Debug("subjectpass generate", slog.Any("mailfrom", mailFrom))
 
 	// We discard the lower 8 bits of the time, we can do with less precision.
@@ -88,7 +73,7 @@ func Verify(elog *slog.Logger, r io.ReaderAt, key []byte, period time.Duration) 
 		if rerr == nil {
 			result = "ok"
 		}
-		metricVerify.WithLabelValues(result).Inc()
+		MetricVerify.IncLabels(result)
 
 		log.Debugx("subjectpass verify result", rerr, slog.String("token", token), slog.Duration("period", period))
 	}()
