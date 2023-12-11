@@ -10,6 +10,22 @@
 # After following the quickstart instructions you can start mox:
 #
 # 	docker-compose up
+#
+#
+# If you want to run "mox localserve", you could start it like this:
+#
+#	docker run \
+#		-p 127.0.0.1:25:1025 \
+#		-p 127.0.0.1:465:1465 \
+#		-p 127.0.0.1:587:1587 \
+#		-p 127.0.0.1:993:1993 \
+#		-p 127.0.0.1:143:1143 \
+#		-p 127.0.0.1:443:1443 \
+#		-p 127.0.0.1:80:1080 \
+#		r.xmox.nl/mox:latest mox localserve -ip 0.0.0.0
+#
+# The -ip flag ensures connections to the published ports make it to mox, and it
+# prevents listening on ::1 (IPv6 is not enabled in docker by default).
 
 version: '3.7'
 services:
