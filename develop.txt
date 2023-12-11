@@ -19,6 +19,14 @@ This file has notes useful for mox developers.
   for reuse do use mlog as it is more convenient. Internally, we always use
   mlog.Log to do the logging, wrapping an slog.Logger.
 
+# Reusable packages
+
+Most non-server Go packages are meant to be reusable. This means internal
+details are not exposed in the API, and we don't make unneeded changes. We can
+still make breaking changes when it improves mox: We don't want to be stuck
+with bad API. Third party users aren't affected too seriously due to Go's
+minimal version selection. The reusable packages are in apidiff/packages.txt.
+We generate the incompatible changes with each release.
 
 # TLS certificates
 
@@ -216,6 +224,7 @@ done
 - Gather feedback on recent changes.
 - Check if dependencies need updates.
 - Check code if there are deprecated features that can be removed.
+- Generate apidiff and check if breaking changes can be prevented.
 - Update features & roadmap in README.md
 - Write release notes.
 - Build and run tests with previous major Go release.

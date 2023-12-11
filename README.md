@@ -34,6 +34,7 @@ See Quickstart below to get started.
 - Prometheus metrics and structured logging for operational insight.
 - "mox localserve" subcommand for running mox locally for email-related
   testing/developing, including pedantic mode.
+- Most non-server Go packages mox consists of are written to be reusable.
 
 Mox is available under the MIT-license and was created by Mechiel Lukkien,
 mechiel@ueber.net. Mox includes BSD-3-claused code from the Go Authors, and the
@@ -116,8 +117,6 @@ https://nlnet.nl/project/Mox/.
 
 - Authentication other than HTTP-basic for webmail/webadmin/webaccount
 - Per-domain webmail and IMAP/SMTP host name (and TLS cert) and client settings
-- Make mox Go packages more easily reusable, each pulling in fewer (internal)
-  dependencies
 - HTTP-based API for sending messages and receiving delivery feedback
 - Calendaring with CalDAV/iCal
 - More IMAP extensions (PREVIEW, WITHIN, IMPORTANT, COMPRESS=DEFLATE,
@@ -126,7 +125,7 @@ https://nlnet.nl/project/Mox/.
 - ARC, with forwarded email from trusted source
 - Forwarding (to an external address)
 - Add special IMAP mailbox ("Queue?") that contains queued but
-  not-yet-delivered messages, updated with IMAP flags/keywords/tags.
+  undelivered messages, updated with IMAP flags/keywords/tags and message headers.
 - Sieve for filtering (for now see Rulesets in the account config)
 - Expose threading through IMAP extension
 - Autoresponder (out of office/vacation)
