@@ -59,6 +59,10 @@ func TestAppend(t *testing.T) {
 	tc2.xuntagged(imapclient.UntaggedExists(2))
 	tc2.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UID: 2})
 
+	tc2.transactf("ok", "append inbox (\\Seen) \" 1-Jan-2022 10:10:00 +0100\" UTF8 ({31+}\r\ncontent-type: text/plain;\n\ntest)")
+	tc2.xuntagged(imapclient.UntaggedExists(3))
+	tc2.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UID: 3})
+
 	// Messages that we cannot parse are marked as application/octet-stream. Perhaps
 	// the imap client knows how to deal with them.
 	tc2.transactf("ok", "uid fetch 2 body")

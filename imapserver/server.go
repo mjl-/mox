@@ -2732,7 +2732,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				Received:      tm,
 				Flags:         storeFlags,
 				Keywords:      keywords,
-				Size:          size,
+				Size:          mw.Size,
 			}
 
 			mb.Add(m.MailboxCounts())
