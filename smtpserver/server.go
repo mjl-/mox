@@ -1285,10 +1285,10 @@ func (c *conn) cmdMail(p *parser) {
 		}
 	}()
 	p.xtake(" FROM:")
-	// note: no space after colon. ../rfc/5321:1093
-	// Allow illegal space for submission only, not for regular SMTP. Microsoft Outlook
-	// 365 Apps for Enterprise sends it.
-	if c.submission && !moxvar.Pedantic {
+	// note: no space allowed after colon. ../rfc/5321:1093
+	// Microsoft Outlook 365 Apps for Enterprise sends it with submission. For delivery
+	// it is mostly used by spammers, but has been seen with legitimate senders too.
+	if !moxvar.Pedantic {
 		p.space()
 	}
 	rawRevPath := p.xrawReversePath()
@@ -1426,10 +1426,10 @@ func (c *conn) cmdRcpt(p *parser) {
 
 	// ../rfc/5321:1985
 	p.xtake(" TO:")
-	// note: no space after colon. ../rfc/5321:1093
-	// Allow illegal space for submission only, not for regular SMTP. Microsoft Outlook
-	// 365 Apps for Enterprise sends it.
-	if c.submission && !moxvar.Pedantic {
+	// note: no space allowed after colon. ../rfc/5321:1093
+	// Microsoft Outlook 365 Apps for Enterprise sends it with submission. For delivery
+	// it is mostly used by spammers, but has been seen with legitimate senders too.
+	if !moxvar.Pedantic {
 		p.space()
 	}
 	var fpath smtp.Path
