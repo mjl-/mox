@@ -102,6 +102,10 @@ webaccount/account.htmlx:
 
 frontend: webadmin/admin.htmlx webaccount/account.htmlx webmail/webmail.js webmail/msg.js webmail/text.js
 
+genapidiff:
+	# needs file next.txt containing next version number, and golang.org/x/exp/cmd/apidiff@v0.0.0-20231206192017-f3f8817b8deb installed
+	./apidiff.sh
+
 docker:
 	docker build -t mox:dev .
 
