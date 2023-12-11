@@ -596,7 +596,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 		// be accurate for the whole domain, but we're only storing a hint.
 		rdt := store.RecipientDomainTLS{
 			Domain:     m.RecipientDomain.Domain.Name(),
-			STARTTLS:   sc.TLSEnabled(),
+			STARTTLS:   sc.TLSConnectionState() != nil,
 			RequireTLS: sc.SupportsRequireTLS(),
 		}
 		if err = updateRecipientDomainTLS(ctx, log, m.SenderAccount, rdt); err != nil {

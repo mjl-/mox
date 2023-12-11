@@ -941,9 +941,13 @@ func (c *Client) SupportsRequireTLS() bool {
 	return c.extRequireTLS
 }
 
-// TLSEnabled returns whether TLS is enabled for this connection.
-func (c *Client) TLSEnabled() bool {
-	return c.tls
+// TLSConnectionState returns TLS details if TLS is enabled, and nil otherwise.
+func (c *Client) TLSConnectionState() *tls.ConnectionState {
+	if tlsConn, ok := c.conn.(*tls.Conn); ok {
+		cs := tlsConn.ConnectionState()
+		return &cs
+	}
+	return nil
 }
 
 // Deliver attempts to deliver a message to a mail server.
@@ -1140,8 +1144,8 @@ func (c *Client) Botched() bool {
 
 // Close cleans up the client, closing the underlying connection.
 //
-// If the connection is in initialized and not botched, a QUIT command is sent and
-// the response read with a short timeout before closing the underlying connection.
+// If the connection is initialized and not botched, a QUIT command is sent and the
+// response read with a short timeout before closing the underlying connection.
 //
 // Close returns any error encountered during QUIT and closing.
 func (c *Client) Close() (rerr error) {
