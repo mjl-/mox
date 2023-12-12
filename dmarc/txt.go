@@ -55,17 +55,17 @@ const (
 //
 //	v=DMARC1; p=reject; rua=mailto:postmaster@mox.example
 type Record struct {
-	Version                    string      // "v=DMARC1"
+	Version                    string      // "v=DMARC1", fixed.
 	Policy                     DMARCPolicy // Required, for "p=".
 	SubdomainPolicy            DMARCPolicy // Like policy but for subdomains. Optional, for "sp=".
-	AggregateReportAddresses   []URI       // Optional, for "rua=".
-	FailureReportAddresses     []URI       // Optional, for "ruf="
-	ADKIM                      Align       // "r" (default) for relaxed or "s" for simple. For "adkim=".
-	ASPF                       Align       // "r" (default) for relaxed or "s" for simple. For "aspf=".
-	AggregateReportingInterval int         // Default 86400. For "ri="
+	AggregateReportAddresses   []URI       // Optional, for "rua=". Destination addresses for aggregate reports.
+	FailureReportAddresses     []URI       // Optional, for "ruf=". Destination addresses for failure reports.
+	ADKIM                      Align       // Alignment: "r" (default) for relaxed or "s" for simple. For "adkim=".
+	ASPF                       Align       // Alignment: "r" (default) for relaxed or "s" for simple. For "aspf=".
+	AggregateReportingInterval int         // In seconds, default 86400. For "ri="
 	FailureReportingOptions    []string    // "0" (default), "1", "d", "s". For "fo=".
-	ReportingFormat            []string    // "afrf" (default). Ffor "rf=".
-	Percentage                 int         // Between 0 and 100, default 100. For "pct=".
+	ReportingFormat            []string    // "afrf" (default). For "rf=".
+	Percentage                 int         // Between 0 and 100, default 100. For "pct=". Policy applies randomly to this percentage of messages.
 }
 
 // DefaultRecord holds the defaults for a DMARC record.

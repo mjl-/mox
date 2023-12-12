@@ -2,7 +2,8 @@
 //
 // SCRAM-SHA-256 and SCRAM-SHA-1 allow a client to authenticate to a server using a
 // password without handing plaintext password over to the server. The client also
-// verifies the server knows (a derivative of) the password.
+// verifies the server knows (a derivative of) the password. Both the client and
+// server side are implemented.
 package scram
 
 // todo: test with messages that contains extensions
@@ -88,8 +89,8 @@ func SaltPassword(h func() hash.Hash, password string, salt []byte, iterations i
 	return pbkdf2.Key([]byte(password), salt, iterations, h().Size(), h)
 }
 
-// HMAC returns the hmac with key over msg.
-func HMAC(h func() hash.Hash, key []byte, msg string) []byte {
+// hmac0 returns the hmac with key over msg.
+func hmac0(h func() hash.Hash, key []byte, msg string) []byte {
 	mac := hmac.New(h, key)
 	mac.Write([]byte(msg))
 	return mac.Sum(nil)
@@ -211,19 +212,19 @@ func (s *Server) Finish(clientFinal []byte, saltedPassword []byte) (serverFinal 
 
 	msg := s.clientFirstBare + "," + s.serverFirst + "," + s.clientFinalWithoutProof
 
-	clientKey := HMAC(s.h, saltedPassword, "Client Key")
+	clientKey := hmac0(s.h, saltedPassword, "Client Key")
 	h := s.h()
 	h.Write(clientKey)
 	storedKey := h.Sum(nil)
 
-	clientSig := HMAC(s.h, storedKey, msg)
+	clientSig := hmac0(s.h, storedKey, msg)
 	xor(clientSig, clientKey) // Now clientProof.
 	if !bytes.Equal(clientSig, proof) {
 		return "e=" + string(ErrInvalidProof), ErrInvalidProof
 	}
 
-	serverKey := HMAC(s.h, saltedPassword, "Server Key")
-	serverSig := HMAC(s.h, serverKey, msg)
+	serverKey := hmac0(s.h, saltedPassword, "Server Key")
+	serverSig := hmac0(s.h, serverKey, msg)
 	return fmt.Sprintf("v=%s", base64.StdEncoding.EncodeToString(serverSig)), nil
 }
 
@@ -321,11 +322,11 @@ func (c *Client) ServerFirst(serverFirst []byte, password string) (clientFinal s
 	c.authMessage = c.clientFirstBare + "," + c.serverFirst + "," + c.clientFinalWithoutProof
 
 	c.saltedPassword = SaltPassword(c.h, password, salt, iterations)
-	clientKey := HMAC(c.h, c.saltedPassword, "Client Key")
+	clientKey := hmac0(c.h, c.saltedPassword, "Client Key")
 	h := c.h()
 	h.Write(clientKey)
 	storedKey := h.Sum(nil)
-	clientSig := HMAC(c.h, storedKey, c.authMessage)
+	clientSig := hmac0(c.h, storedKey, c.authMessage)
 	xor(clientSig, clientKey) // Now clientProof.
 	clientProof := clientSig
 
@@ -350,8 +351,8 @@ func (c *Client) ServerFinal(serverFinal []byte) (rerr error) {
 	p.xtake("v=")
 	verifier := p.xbase64()
 
-	serverKey := HMAC(c.h, c.saltedPassword, "Server Key")
-	serverSig := HMAC(c.h, serverKey, c.authMessage)
+	serverKey := hmac0(c.h, c.saltedPassword, "Server Key")
+	serverSig := hmac0(c.h, serverKey, c.authMessage)
 	if !bytes.Equal(verifier, serverSig) {
 		return fmt.Errorf("incorrect server signature")
 	}

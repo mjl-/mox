@@ -83,8 +83,8 @@ func quotedString(s string) string {
 	return w.String()
 }
 
-// Header returns a Received-SPF header line including trailing crlf that can
-// be prepended to an incoming message.
+// Header returns a Received-SPF header including trailing crlf that can be
+// prepended to an incoming message.
 func (r Received) Header() string {
 	// ../rfc/7208:2043
 	w := &message.HeaderWriter{}

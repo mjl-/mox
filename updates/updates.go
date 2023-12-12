@@ -173,6 +173,14 @@ func FetchChangelog(ctx context.Context, elog *slog.Logger, baseURL string, base
 
 // Check checks for an updated version through DNS and fetches a
 // changelog if so.
+//
+// Check looks up a TXT record at _updates.<domain>, and parses the record. If the
+// latest version is more recent than lastKnown, an update is available, and Check
+// will fetch the signed changes since lastKnown, verify the signatures, and
+// return the changelog. The latest version and parsed DNS record is returned
+// regardless of whether a new version was found. A non-nil changelog is only
+// returned when a new version was found and a changelog could be fetched and
+// verified.
 func Check(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain dns.Domain, lastKnown Version, changelogBaseURL string, pubKey []byte) (rversion Version, rrecord *Record, changelog *Changelog, rerr error) {
 	log := mlog.New("updates", elog)
 	start := time.Now()

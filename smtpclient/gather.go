@@ -42,11 +42,11 @@ var (
 // expandedNextHopAuthentic indicates if the DNS records after following CNAMEs were
 // DNSSEC secure.
 //
-// These authentic flags are used by DANE, to determine where to look up TLSA
+// These authentic results are needed for DANE, to determine where to look up TLSA
 // records, and which names to allow in the remote TLS certificate. If MX records
 // were found, both the original and expanded next-hops must be authentic for DANE
-// to apply. For a non-IP with no MX records found, the authentic result can be
-// used to decide which of the names to use as TLSA base domain.
+// to be option. For a non-IP with no MX records found, the authentic result can
+// be used to decide which of the names to use as TLSA base domain.
 func GatherDestinations(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, origNextHop dns.IPDomain) (haveMX, origNextHopAuthentic, expandedNextHopAuthentic bool, expandedNextHop dns.Domain, hosts []dns.IPDomain, permanent bool, err error) {
 	// ../rfc/5321:3824
 

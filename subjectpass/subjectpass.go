@@ -1,4 +1,10 @@
 // Package subjectpass implements a mechanism for reject an incoming message with a challenge to include a token in a next delivery attempt.
+//
+// An SMTP server can reject a message with instructions to send another
+// message, this time including a special token. The sender will receive a DSN,
+// which will include the error message with instructions. By sending the
+// message again with the token, as instructed, the SMTP server can recognize
+// the token, verify it, and accept the message.
 package subjectpass
 
 import (
@@ -38,7 +44,9 @@ var Explanation = "Your message resembles spam. If your email is legitimate, ple
 
 // Generate generates a token that is valid for "mailFrom", starting from "tm"
 // and signed with "key".
-// The token is of the form: (pass:<signeddata>)
+//
+// The token is of the form: (pass:<signeddata>). Instructions to the sender should
+// be to include this token in the Subject header of a new message.
 func Generate(elog *slog.Logger, mailFrom smtp.Address, key []byte, tm time.Time) string {
 	log := mlog.New("subjectpass", elog)
 

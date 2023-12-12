@@ -120,10 +120,11 @@ export interface MessageAddress {
 
 // Domain is a domain name, with one or more labels, with at least an ASCII
 // representation, and for IDNA non-ASCII domains a unicode representation.
-// The ASCII string must be used for DNS lookups.
+// The ASCII string must be used for DNS lookups. The strings do not have a
+// trailing dot. When using with StrictResolver, add the trailing dot.
 export interface Domain {
-	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case.
-	Unicode: string  // Name as U-labels. Empty if this is an ASCII-only domain.
+	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.
+	Unicode: string  // Name as U-labels. Empty if this is an ASCII-only domain. No trailing dot.
 }
 
 // SubmitMessage is an email message to be sent to one or more recipients.

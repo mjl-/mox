@@ -44,6 +44,7 @@ Below are the incompatible changes between v0.0.8 and v0.0.9, per package.
 # sasl
 
 # scram
+- HMAC: removed
 
 # smtp
 

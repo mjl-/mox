@@ -23,13 +23,14 @@ var (
 
 // Domain is a domain name, with one or more labels, with at least an ASCII
 // representation, and for IDNA non-ASCII domains a unicode representation.
-// The ASCII string must be used for DNS lookups.
+// The ASCII string must be used for DNS lookups. The strings do not have a
+// trailing dot. When using with StrictResolver, add the trailing dot.
 type Domain struct {
 	// A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved
-	// letters/digits/hyphens) labels. Always in lower case.
+	// letters/digits/hyphens) labels. Always in lower case. No trailing dot.
 	ASCII string
 
-	// Name as U-labels. Empty if this is an ASCII-only domain.
+	// Name as U-labels. Empty if this is an ASCII-only domain. No trailing dot.
 	Unicode string
 }
 
@@ -68,7 +69,8 @@ func (d Domain) String() string {
 }
 
 // LogString returns a domain for logging.
-// For IDNA names, the string contains both the unicode and ASCII name.
+// For IDNA names, the string is the slash-separated Unicode and ASCII name.
+// For ASCII-only domain names, just the ASCII string is returned.
 func (d Domain) LogString() string {
 	if d.Unicode == "" {
 		return d.ASCII
@@ -151,8 +153,8 @@ func ParseDomainLax(s string) (Domain, error) {
 //
 // A DNS server can respond to a lookup with an error "nxdomain" to indicate a
 // name does not exist (at all), or with a success status with an empty list.
-// The Go resolver returns an IsNotFound error for both cases, there is no need
-// to explicitly check for zero entries.
+// The adns resolver (just like the Go resolver) returns an IsNotFound error for
+// both cases, there is no need to explicitly check for zero entries.
 func IsNotFound(err error) bool {
 	var dnsErr *adns.DNSError
 	return err != nil && errors.As(err, &dnsErr) && dnsErr.IsNotFound

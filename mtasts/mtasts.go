@@ -72,7 +72,7 @@ type Mode string
 
 const (
 	ModeEnforce Mode = "enforce" // Policy must be followed, i.e. deliveries must fail if a TLS connection cannot be made.
-	ModeTesting Mode = "testing" // In case TLS cannot be negotiated, plain SMTP can be used, but failures must be reported, e.g. with TLS-RPT.
+	ModeTesting Mode = "testing" // In case TLS cannot be negotiated, plain SMTP can be used, but failures must be reported, e.g. with TLSRPT.
 	ModeNone    Mode = "none"    // In case MTA-STS is not or no longer implemented.
 )
 

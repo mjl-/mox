@@ -1267,18 +1267,18 @@
 		},
 		{
 			"Name": "Domain",
-			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups.",
+			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups. The strings do not have a\ntrailing dot. When using with StrictResolver, add the trailing dot.",
 			"Fields": [
 				{
 					"Name": "ASCII",
-					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case.",
+					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
 					"Name": "Unicode",
-					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain.",
+					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain. No trailing dot.",
 					"Typewords": [
 						"string"
 					]
@@ -1767,7 +1767,7 @@
 			"Fields": [
 				{
 					"Name": "Version",
-					"Docs": "\"v=DMARC1\"",
+					"Docs": "\"v=DMARC1\", fixed.",
 					"Typewords": [
 						"string"
 					]
@@ -1788,7 +1788,7 @@
 				},
 				{
 					"Name": "AggregateReportAddresses",
-					"Docs": "Optional, for \"rua=\".",
+					"Docs": "Optional, for \"rua=\". Destination addresses for aggregate reports.",
 					"Typewords": [
 						"[]",
 						"URI"
@@ -1796,7 +1796,7 @@
 				},
 				{
 					"Name": "FailureReportAddresses",
-					"Docs": "Optional, for \"ruf=\"",
+					"Docs": "Optional, for \"ruf=\". Destination addresses for failure reports.",
 					"Typewords": [
 						"[]",
 						"URI"
@@ -1804,21 +1804,21 @@
 				},
 				{
 					"Name": "ADKIM",
-					"Docs": "\"r\" (default) for relaxed or \"s\" for simple. For \"adkim=\".",
+					"Docs": "Alignment: \"r\" (default) for relaxed or \"s\" for simple. For \"adkim=\".",
 					"Typewords": [
 						"Align"
 					]
 				},
 				{
 					"Name": "ASPF",
-					"Docs": "\"r\" (default) for relaxed or \"s\" for simple. For \"aspf=\".",
+					"Docs": "Alignment: \"r\" (default) for relaxed or \"s\" for simple. For \"aspf=\".",
 					"Typewords": [
 						"Align"
 					]
 				},
 				{
 					"Name": "AggregateReportingInterval",
-					"Docs": "Default 86400. For \"ri=\"",
+					"Docs": "In seconds, default 86400. For \"ri=\"",
 					"Typewords": [
 						"int32"
 					]
@@ -1833,7 +1833,7 @@
 				},
 				{
 					"Name": "ReportingFormat",
-					"Docs": "\"afrf\" (default). Ffor \"rf=\".",
+					"Docs": "\"afrf\" (default). For \"rf=\".",
 					"Typewords": [
 						"[]",
 						"string"
@@ -1841,7 +1841,7 @@
 				},
 				{
 					"Name": "Percentage",
-					"Docs": "Between 0 and 100, default 100. For \"pct=\".",
+					"Docs": "Between 0 and 100, default 100. For \"pct=\". Policy applies randomly to this percentage of messages.",
 					"Typewords": [
 						"int32"
 					]
@@ -4206,7 +4206,7 @@
 				{
 					"Name": "ModeTesting",
 					"Value": "testing",
-					"Docs": "In case TLS cannot be negotiated, plain SMTP can be used, but failures must be reported, e.g. with TLS-RPT."
+					"Docs": "In case TLS cannot be negotiated, plain SMTP can be used, but failures must be reported, e.g. with TLSRPT."
 				},
 				{
 					"Name": "ModeNone",

@@ -9,6 +9,9 @@ import (
 // always required to match to an existing thread, both if
 // References/In-Reply-To header(s) are present, and if not.
 //
+// isResponse indicates if this message is a response, such as a reply or a
+// forward.
+//
 // Subject should already be q/b-word-decoded.
 //
 // If allowNull is true, base subjects with a \0 can be returned. If not set,

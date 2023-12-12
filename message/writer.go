@@ -9,9 +9,9 @@ import (
 type Writer struct {
 	writer io.Writer
 
-	HaveBody bool // Body is optional. ../rfc/5322:343
-	Has8bit  bool // Whether a byte with the high/8bit has been read. So whether this is 8BITMIME instead of 7BIT.
-	Size     int64
+	HaveBody bool  // Body is optional in a message. ../rfc/5322:343
+	Has8bit  bool  // Whether a byte with the high/8bit has been read. So whether this needs SMTP 8BITMIME instead of 7BIT.
+	Size     int64 // Number of bytes written, may be different from bytes read due to LF to CRLF conversion.
 
 	tail [3]byte // For detecting header/body-separating crlf.
 	// todo: should be parsing headers here, as we go
@@ -22,7 +22,9 @@ func NewWriter(w io.Writer) *Writer {
 	return &Writer{writer: w, tail: [3]byte{0, '\r', '\n'}}
 }
 
-// Write implements io.Writer.
+// Write implements io.Writer, and writes buf as message to the Writer's underlying
+// io.Writer. It converts bare new lines (LF) to carriage returns with new lines
+// (CRLF).
 func (w *Writer) Write(buf []byte) (int, error) {
 	origtail := w.tail
 

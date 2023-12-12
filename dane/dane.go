@@ -36,11 +36,11 @@
 //
 // For TLS certificate verification that requires PKIX/WebPKI/trusted-anchor
 // verification (all except DANE-EE), the potential second TLSA candidate base
-// domain name is also valid. With SMTP, additionally for hosts found in MX records
-// for a "next-hop domain", the "original next-hop domain" (domain of an email
-// address to deliver to) is also a valid name, as is the "CNAME-expanded original
-// next-hop domain", bringing the potential total allowed names to four (if CNAMEs
-// are followed for the MX hosts).
+// domain name is also a valid hostname. With SMTP, additionally for hosts found in
+// MX records for a "next-hop domain", the "original next-hop domain" (domain of an
+// email address to deliver to) is also a valid name, as is the "CNAME-expanded
+// original next-hop domain", bringing the potential total allowed names to four
+// (if CNAMEs are followed for the MX hosts).
 package dane
 
 // todo: why is https://datatracker.ietf.org/doc/html/draft-barnes-dane-uks-00 not in use? sounds reasonable.
@@ -105,10 +105,10 @@ func (e VerifyError) Unwrap() error {
 	return e.Err
 }
 
-// Dial looks up a DNSSEC-protected DANE TLSA record for the domain name and
+// Dial looks up DNSSEC-protected DANE TLSA records for the domain name and
 // port/service in address, checks for allowed usages, makes a network connection
-// and verifies the remote certificate against the TLSA records. If
-// verification succeeds, the verified record is returned.
+// and verifies the remote certificate against the TLSA records. If verification
+// succeeds, the verified record is returned.
 //
 // Different protocols require different usages. For example, SMTP with STARTTLS
 // for delivery only allows usages DANE-TA and DANE-EE. If allowedUsages is
@@ -273,7 +273,7 @@ func Dial(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, network
 // TLSClientConfig returns a tls.Config to be used for dialing/handshaking a
 // TLS connection with DANE verification.
 //
-// Callers should only pass records that are allowed for the use of DANE. DANE
+// Callers should only pass records that are allowed for the intended use. DANE
 // with SMTP only allows DANE-EE and DANE-TA usages, not the PKIX-usages.
 //
 // The config has InsecureSkipVerify set to true, with a custom VerifyConnection
@@ -317,11 +317,16 @@ func TLSClientConfig(elog *slog.Logger, records []adns.TLSA, allowedHost dns.Dom
 //
 // When one of the records matches, Verify returns true, along with the matching
 // record and a nil error.
-// If there is no match, then in the typical case false, a zero record value and a
-// nil error is returned.
+// If there is no match, then in the typical case Verify returns: false, a zero
+// record value and a nil error.
 // If an error is encountered while verifying a record, e.g. for x509
 // trusted-anchor verification, an error may be returned, typically one or more
 // (wrapped) errors of type VerifyError.
+//
+// Verify is useful when DANE verification and its results has to be done
+// separately from other validation, e.g. for MTA-STS. The caller can create a
+// tls.Config with a VerifyConnection function that checks DANE and MTA-STS
+// separately.
 func Verify(elog *slog.Logger, records []adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, pkixRoots *x509.CertPool) (verified bool, matching adns.TLSA, rerr error) {
 	log := mlog.New("dane", elog)
 	MetricVerify.Inc()

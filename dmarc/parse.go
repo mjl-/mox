@@ -19,12 +19,17 @@ func (e parseErr) Error() string {
 // for easy comparison.
 //
 // DefaultRecord provides default values for tags not present in s.
+//
+// isdmarc indicates if the record starts tag "v" with value "DMARC1", and should
+// be treated as a valid DMARC record. Used to detect possibly multiple DMARC
+// records (invalid) for a domain with multiple TXT record (quite common).
 func ParseRecord(s string) (record *Record, isdmarc bool, rerr error) {
 	return parseRecord(s, true)
 }
 
 // ParseRecordNoRequired is like ParseRecord, but don't check for required fields
-// for regular DMARC records. Useful for checking the _report._dmarc record.
+// for regular DMARC records. Useful for checking the _report._dmarc record,
+// used for opting into receiving reports for other domains.
 func ParseRecordNoRequired(s string) (record *Record, isdmarc bool, rerr error) {
 	return parseRecord(s, false)
 }

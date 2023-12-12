@@ -25,7 +25,7 @@ var (
 // Lookup errors.
 var (
 	ErrNoRecord = errors.New("iprev: no reverse dns record")
-	ErrDNS      = errors.New("iprev: dns lookup")
+	ErrDNS      = errors.New("iprev: dns lookup") // Temporary error.
 )
 
 // ../rfc/8601:1082

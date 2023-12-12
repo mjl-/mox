@@ -12,16 +12,28 @@ import (
 	"github.com/mjl-/mox/scram"
 )
 
-// Client is a SASL client
+// Client is a SASL client.
+//
+// A SASL client can be used for authentication in IMAP, SMTP and other protocols.
+// A client and server exchange messages in step lock. In IMAP and SMTP, these
+// messages are encoded with base64. Each SASL mechanism has predefined steps, but
+// the transaction can be aborted by either side at any time. An IMAP or SMTP
+// client must choose a SASL mechanism, instantiate a SASL client, and call Next
+// with a nil parameter. The resulting data must be written to the server, properly
+// encoded. The client must then read the response from the server and feed it to
+// the SASL client, which will return more data to send, or an error.
 type Client interface {
-	// Name as used in SMTP AUTH, e.g. PLAIN, CRAM-MD5, SCRAM-SHA-256.
-	// cleartextCredentials indicates if credentials are exchanged in clear text, which influences whether they are logged.
+	// Name as used in SMTP or IMAP authentication, e.g. PLAIN, CRAM-MD5,
+	// SCRAM-SHA-256. cleartextCredentials indicates if credentials are exchanged in
+	// clear text, which can be used to decide if the exchange is logged.
 	Info() (name string, cleartextCredentials bool)
 
-	// Next is called for each step of the SASL communication. The first call has a nil
-	// fromServer and serves to get a possible "initial response" from the client. If
-	// the client sends its final message it indicates so with last. Returning an error
-	// aborts the authentication attempt.
+	// Next must be called for each step of the SASL transaction. The first call has a
+	// nil fromServer and serves to get a possible "initial response" from the client
+	// to the server. When last is true, the message from client to server is the last
+	// one, and the server must send a verdict. If err is set, the transaction must be
+	// aborted.
+	//
 	// For the first toServer ("initial response"), a nil toServer indicates there is
 	// no data, which is different from a non-nil zero-length toServer.
 	Next(fromServer []byte) (toServer []byte, last bool, err error)
@@ -35,6 +47,9 @@ type clientPlain struct {
 var _ Client = (*clientPlain)(nil)
 
 // NewClientPlain returns a client for SASL PLAIN authentication.
+//
+// PLAIN is specified in RFC 4616, The PLAIN Simple Authentication and Security
+// Layer (SASL) Mechanism.
 func NewClientPlain(username, password string) Client {
 	return &clientPlain{username, password, 0}
 }
@@ -61,6 +76,7 @@ type clientLogin struct {
 var _ Client = (*clientLogin)(nil)
 
 // NewClientLogin returns a client for the obsolete SASL LOGIN authentication.
+//
 // See https://datatracker.ietf.org/doc/html/draft-murchison-sasl-login-00
 func NewClientLogin(username, password string) Client {
 	return &clientLogin{username, password, 0}
@@ -90,6 +106,9 @@ type clientCRAMMD5 struct {
 var _ Client = (*clientCRAMMD5)(nil)
 
 // NewClientCRAMMD5 returns a client for SASL CRAM-MD5 authentication.
+//
+// CRAM-MD5 is specified in RFC 2195, IMAP/POP AUTHorize Extension for Simple
+// Challenge/Response.
 func NewClientCRAMMD5(username, password string) Client {
 	return &clientCRAMMD5{username, password, 0}
 }
@@ -160,11 +179,17 @@ type clientSCRAMSHA struct {
 var _ Client = (*clientSCRAMSHA)(nil)
 
 // NewClientSCRAMSHA1 returns a client for SASL SCRAM-SHA-1 authentication.
+//
+// SCRAM-SHA-1 is specified in RFC 5802, Salted Challenge Response Authentication
+// Mechanism (SCRAM) SASL and GSS-API Mechanisms.
 func NewClientSCRAMSHA1(username, password string) Client {
 	return &clientSCRAMSHA{username, password, "SCRAM-SHA-1", 0, nil}
 }
 
 // NewClientSCRAMSHA256 returns a client for SASL SCRAM-SHA-256 authentication.
+//
+// SCRAM-SHA-256 is specified in RFC 7677, SCRAM-SHA-256 and SCRAM-SHA-256-PLUS
+// Simple Authentication and Security Layer (SASL) Mechanisms.
 func NewClientSCRAMSHA256(username, password string) Client {
 	return &clientSCRAMSHA{username, password, "SCRAM-SHA-256", 0, nil}
 }

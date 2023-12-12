@@ -58,7 +58,8 @@ const (
 // Result is a DMARC policy evaluation.
 type Result struct {
 	// Whether to reject the message based on policies. If false, the message should
-	// not necessarily be accepted, e.g. due to reputation or content-based analysis.
+	// not necessarily be accepted: other checks such as reputation-based and
+	// content-based analysis may lead to reject the message.
 	Reject bool
 	// Result of DMARC validation. A message can fail validation, but still
 	// not be rejected, e.g. if the policy is "none".
@@ -86,12 +87,12 @@ type Result struct {
 // domain is the domain with the DMARC record.
 //
 // rauthentic indicates if the DNS results were DNSSEC-verified.
-func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from dns.Domain) (status Status, domain dns.Domain, record *Record, txt string, rauthentic bool, rerr error) {
+func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, msgFrom dns.Domain) (status Status, domain dns.Domain, record *Record, txt string, rauthentic bool, rerr error) {
 	log := mlog.New("dmarc", elog)
 	start := time.Now()
 	defer func() {
 		log.Debugx("dmarc lookup result", rerr,
-			slog.Any("fromdomain", from),
+			slog.Any("fromdomain", msgFrom),
 			slog.Any("status", status),
 			slog.Any("domain", domain),
 			slog.Any("record", record),
@@ -99,15 +100,15 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from 
 	}()
 
 	// ../rfc/7489:859 ../rfc/7489:1370
-	domain = from
+	domain = msgFrom
 	status, record, txt, authentic, err := lookupRecord(ctx, resolver, domain)
 	if status != StatusNone {
 		return status, domain, record, txt, authentic, err
 	}
 	if record == nil {
 		// ../rfc/7489:761 ../rfc/7489:1377
-		domain = publicsuffix.Lookup(ctx, log.Logger, from)
-		if domain == from {
+		domain = publicsuffix.Lookup(ctx, log.Logger, msgFrom)
+		if domain == msgFrom {
 			return StatusNone, domain, nil, txt, authentic, err
 		}
 
@@ -222,8 +223,9 @@ func LookupExternalReportsAccepted(ctx context.Context, elog *slog.Logger, resol
 // Verify always returns the result of verifying the DMARC policy
 // against the message (for inclusion in Authentication-Result headers).
 //
-// useResult indicates if the result should be applied in a policy decision.
-func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from dns.Domain, dkimResults []dkim.Result, spfResult spf.Status, spfIdentity *dns.Domain, applyRandomPercentage bool) (useResult bool, result Result) {
+// useResult indicates if the result should be applied in a policy decision,
+// based on the "pct" field in the DMARC record.
+func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, msgFrom dns.Domain, dkimResults []dkim.Result, spfResult spf.Status, spfIdentity *dns.Domain, applyRandomPercentage bool) (useResult bool, result Result) {
 	log := mlog.New("dmarc", elog)
 	start := time.Now()
 	defer func() {
@@ -237,7 +239,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from 
 		}
 		MetricVerify.ObserveLabels(float64(time.Since(start))/float64(time.Second), string(result.Status), reject, use)
 		log.Debugx("dmarc verify result", result.Err,
-			slog.Any("fromdomain", from),
+			slog.Any("fromdomain", msgFrom),
 			slog.Any("dkimresults", dkimResults),
 			slog.Any("spfresult", spfResult),
 			slog.Any("status", result.Status),
@@ -246,7 +248,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from 
 			slog.Duration("duration", time.Since(start)))
 	}()
 
-	status, recordDomain, record, _, authentic, err := Lookup(ctx, log.Logger, resolver, from)
+	status, recordDomain, record, _, authentic, err := Lookup(ctx, log.Logger, resolver, msgFrom)
 	if record == nil {
 		return false, Result{false, status, false, false, recordDomain, record, authentic, err}
 	}
@@ -261,7 +263,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from 
 	// We treat "quarantine" and "reject" the same. Thus, we also don't "downgrade"
 	// from reject to quarantine if this message was sampled out.
 	// ../rfc/7489:1446 ../rfc/7489:1024
-	if recordDomain != from && record.SubdomainPolicy != PolicyEmpty {
+	if recordDomain != msgFrom && record.SubdomainPolicy != PolicyEmpty {
 		result.Reject = record.SubdomainPolicy != PolicyNone
 	} else {
 		result.Reject = record.Policy != PolicyNone
@@ -288,7 +290,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from 
 
 	// ../rfc/7489:1319
 	// ../rfc/7489:544
-	if spfResult == spf.StatusPass && spfIdentity != nil && (*spfIdentity == from || result.Record.ASPF == "r" && pubsuffix(from) == pubsuffix(*spfIdentity)) {
+	if spfResult == spf.StatusPass && spfIdentity != nil && (*spfIdentity == msgFrom || result.Record.ASPF == "r" && pubsuffix(msgFrom) == pubsuffix(*spfIdentity)) {
 		result.AlignedSPFPass = true
 	}
 
@@ -299,7 +301,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, from 
 			continue
 		}
 		// ../rfc/7489:511
-		if dkimResult.Status == dkim.StatusPass && dkimResult.Sig != nil && (dkimResult.Sig.Domain == from || result.Record.ADKIM == "r" && pubsuffix(from) == pubsuffix(dkimResult.Sig.Domain)) {
+		if dkimResult.Status == dkim.StatusPass && dkimResult.Sig != nil && (dkimResult.Sig.Domain == msgFrom || result.Record.ADKIM == "r" && pubsuffix(msgFrom) == pubsuffix(dkimResult.Sig.Domain)) {
 			// ../rfc/7489:535
 			result.AlignedDKIMPass = true
 			break

@@ -117,7 +117,7 @@ var timeNow = time.Now
 
 // Lookup looks up and parses an SPF TXT record for domain.
 //
-// authentic indicates if the DNS results were DNSSEC-verified.
+// Authentic indicates if the DNS results were DNSSEC-verified.
 func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain dns.Domain) (rstatus Status, rtxt string, rrecord *Record, authentic bool, rerr error) {
 	log := mlog.New("spf", elog)
 	start := time.Now()
@@ -186,7 +186,7 @@ func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domai
 // Verify takes the maximum number of 10 DNS requests into account, and the maximum
 // of 2 lookups resulting in no records ("void lookups").
 //
-// authentic indicates if the DNS results were DNSSEC-verified.
+// Authentic indicates if the DNS results were DNSSEC-verified.
 func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, args Args) (received Received, domain dns.Domain, explanation string, authentic bool, rerr error) {
 	log := mlog.New("spf", elog)
 	start := time.Now()
@@ -869,7 +869,7 @@ func expandIP(ip net.IP) string {
 }
 
 // validateDNS checks if a DNS name is valid. Must not end in dot. This does not
-// check valid host names, e.g. _ is allows in DNS but not in a host name.
+// check valid host names, e.g. _ is allowed in DNS but not in a host name.
 func validateDNS(s string) error {
 	// ../rfc/7208:800
 	// note: we are not checking for max 253 bytes length, because one of the callers may be chopping off labels to "correct" the name.

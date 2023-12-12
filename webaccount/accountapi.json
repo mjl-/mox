@@ -97,18 +97,18 @@
 	"Structs": [
 		{
 			"Name": "Domain",
-			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups.",
+			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups. The strings do not have a\ntrailing dot. When using with StrictResolver, add the trailing dot.",
 			"Fields": [
 				{
 					"Name": "ASCII",
-					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case.",
+					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
 					"Name": "Unicode",
-					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain.",
+					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain. No trailing dot.",
 					"Typewords": [
 						"string"
 					]

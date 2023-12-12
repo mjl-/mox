@@ -41,8 +41,9 @@ type Dialer interface {
 // Dial connects to host by dialing ips, taking previous attempts in dialedIPs into
 // accounts (for greylisting, blocklisting and ipv4/ipv6).
 //
-// If the previous attempt used IPv4, this attempt will use IPv6 (in case one of
-// the IPs is in a DNSBL).
+// If the previous attempt used IPv4, this attempt will use IPv6 (useful in case
+// one of the IPs is in a DNSBL).
+//
 // The second attempt for an address family we prefer the same IP as earlier, to
 // increase our chances if remote is doing greylisting.
 //

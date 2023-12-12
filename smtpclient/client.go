@@ -1,4 +1,29 @@
-// Package smtpclient is an SMTP client, used by the queue for sending outgoing messages.
+// Package smtpclient is an SMTP client, for submitting to an SMTP server or
+// delivering from a queue.
+//
+// Email clients can submit a message to SMTP server, after which the server is
+// responsible for delivery to the final destination. A submission client
+// typically connects with TLS, and PKIX-verifies the server's certificate. The
+// client then authenticates using a SASL mechanism.
+//
+// Email servers manage a message queue, from which they will try to deliver
+// messages. In case of temporary failures, the message is kept in the queue and
+// tried again later. For delivery, no authentication is done. TLS is opportunistic
+// by default (TLS certificates not verified), but TLS and certificate verification
+// can be opted into by domains by specifying an MTA-STS policy for the domain, or
+// DANE TLSA records for their MX hosts.
+//
+// Delivering a message from a queue would involve:
+//  1. Looking up an MTA-STS policy, through a cache.
+//  2. Resolving the MX targets for a domain, through smtpclient.GatherDestinations,
+//     and for each destination try delivery through:
+//  3. Looking up IP addresses for the destination, with smtpclient.GatherIPs.
+//  4. Looking up TLSA records for DANE, in case of authentic DNS responses
+//     (DNSSEC), with smtpclient.GatherTLSA.
+//  5. Dialing the MX target with smtpclient.Dial.
+//  6. Initializing a SMTP session with smtpclient.New, with proper TLS
+//     configuration based on discovered MTA-STS and DANE policies, and finally calling
+//     client.Deliver.
 package smtpclient
 
 import (
@@ -201,22 +226,28 @@ type Opts struct {
 // returned on which eventually Close must be called. Otherwise an error is
 // returned and the caller is responsible for closing the connection.
 //
-// Connecting to the correct host is outside the scope of the client. The queue
-// managing outgoing messages decides which host to deliver to, taking multiple MX
-// records with preferences, other DNS records, MTA-STS, retries and special
-// cases into account.
+// Connecting to the correct host for delivery can be done using the Gather
+// functions, and with Dial. The queue managing outgoing messages typically decides
+// which host to deliver to, taking multiple MX records with preferences, other DNS
+// records, MTA-STS, retries and special cases into account.
 //
-// tlsMode indicates if and how TLS may/must (not) be used. tlsVerifyPKIX
-// indicates if TLS certificates must be validated against the PKIX/WebPKI
-// certificate authorities (if TLS is done). DANE-verification is done when
-// opts.DANERecords is not nil. TLS verification errors will be ignored if
-// opts.IgnoreTLSVerification is set. If TLS is done, PKIX verification is
-// always performed for tracking the results for TLS reporting, but if
-// tlsVerifyPKIX is false, the verification result does not affect the
-// connection. At the time of writing, delivery of email on the internet is done
-// with opportunistic TLS without PKIX verification by default. Recipient domains
-// can opt-in to PKIX verification by publishing an MTA-STS policy, or opt-in to
-// DANE verification by publishing DNSSEC-protected TLSA records in DNS.
+// tlsMode indicates if and how TLS may/must (not) be used.
+//
+// tlsVerifyPKIX indicates if TLS certificates must be validated against the
+// PKIX/WebPKI certificate authorities (if TLS is done).
+//
+// DANE-verification is done when opts.DANERecords is not nil.
+//
+// TLS verification errors will be ignored if opts.IgnoreTLSVerification is set.
+//
+// If TLS is done, PKIX verification is always performed for tracking the results
+// for TLS reporting, but if tlsVerifyPKIX is false, the verification result does
+// not affect the connection.
+//
+// At the time of writing, delivery of email on the internet is done with
+// opportunistic TLS without PKIX verification by default. Recipient domains can
+// opt-in to PKIX verification by publishing an MTA-STS policy, or opt-in to DANE
+// verification by publishing DNSSEC-protected TLSA records in DNS.
 func New(ctx context.Context, elog *slog.Logger, conn net.Conn, tlsMode TLSMode, tlsVerifyPKIX bool, ehloHostname, remoteHostname dns.Domain, opts Opts) (*Client, error) {
 	ensureResult := func(r *tlsrpt.Result) *tlsrpt.Result {
 		if r == nil {

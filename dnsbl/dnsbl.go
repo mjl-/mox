@@ -1,4 +1,17 @@
 // Package dnsbl implements DNS block lists (RFC 5782), for checking incoming messages from sources without reputation.
+//
+// A DNS block list contains IP addresses that should be blocked. The DNSBL is
+// queried using DNS "A" lookups. The DNSBL starts at a "zone", e.g.
+// "dnsbl.example". To look up whether an IP address is listed, a DNS name is
+// composed: For 10.11.12.13, that name would be "13.12.11.10.dnsbl.example". If
+// the lookup returns "record does not exist", the IP is not listed. If an IP
+// address is returned, the IP is listed. If an IP is listed, an additional TXT
+// lookup is done for more information about the block. IPv6 addresses are also
+// looked up with an DNS "A" lookup of a name similar to an IPv4 address, but with
+// 4-bit hexadecimal dot-separated characters, in reverse.
+//
+// The health of a DNSBL "zone" can be check through a lookup of 127.0.0.1
+// (must not be present) and 127.0.0.2 (must be present).
 package dnsbl
 
 import (
@@ -21,7 +34,7 @@ var (
 	MetricLookup stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
-var ErrDNS = errors.New("dnsbl: dns error")
+var ErrDNS = errors.New("dnsbl: dns error") // Temporary error.
 
 // Status is the result of a DNSBL lookup.
 type Status string
