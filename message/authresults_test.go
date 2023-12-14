@@ -19,7 +19,7 @@ func TestAuthResults(t *testing.T) {
 		},
 	}
 	s := authRes.Header()
-	const exp = "Authentication-Results: (xn--mx-lka.example) møx.example; dkim=pass\r\n\theader.d=møx.example (xn--mx-lka.example)\r\n"
+	const exp = "Authentication-Results: (xn--mx-lka.example) møx.example;\r\n\tdkim=pass header.d=møx.example (xn--mx-lka.example)\r\n"
 	if s != exp {
 		t.Fatalf("got %q, expected %q", s, exp)
 	}

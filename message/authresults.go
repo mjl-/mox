@@ -66,6 +66,8 @@ func (h AuthResults) Header() string {
 	w := &HeaderWriter{}
 	w.Add("", "Authentication-Results:"+optComment(h.Comment)+" "+value(h.Hostname)+";")
 	for i, m := range h.Methods {
+		w.Newline()
+
 		tokens := []string{}
 		addf := func(format string, args ...any) {
 			s := fmt.Sprintf(format, args...)
@@ -86,10 +88,14 @@ func (h AuthResults) Header() string {
 			addf("%s.%s=%s%s", p.Type, p.Property, v, optComment(p.Comment))
 		}
 		for j, t := range tokens {
+			var sep string
+			if j > 0 {
+				sep = " "
+			}
 			if j == len(tokens)-1 && i < len(h.Methods)-1 {
 				t += ";"
 			}
-			w.Add(" ", t)
+			w.Add(sep, t)
 		}
 	}
 	return w.String()
