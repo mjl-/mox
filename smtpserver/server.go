@@ -412,17 +412,21 @@ func (c *conn) Write(buf []byte) (int, error) {
 		chunk = 1
 	}
 
+	// We set a single deadline for Write and Read. This may be a TLS connection.
+	// SetDeadline works on the underlying connection. If we wouldn't touch the read
+	// deadline, and only set the write deadline and do a bunch of writes, the TLS
+	// library would still have to do reads on the underlying connection, and may reach
+	// a read deadline that was set for some earlier read.
+	// We have one deadline for the whole write. In case of slow writing, we'll write
+	// the last chunk in one go, so remote smtp clients don't abort the connection for
+	// being slow.
+	deadline := c.earliestDeadline(30 * time.Second)
+	if err := c.conn.SetDeadline(deadline); err != nil {
+		c.log.Errorx("setting deadline for write", err)
+	}
+
 	var n int
 	for len(buf) > 0 {
-		// We set a single deadline for Write and Read. This may be a TLS connection.
-		// SetDeadline works on the underlying connection. If we wouldn't touch the read
-		// deadline, and only set the write deadline and do a bunch of writes, the TLS
-		// library would still have to do reads on the underlying connection, and may reach
-		// a read deadline that was set for some earlier read.
-		if err := c.conn.SetDeadline(c.earliestDeadline(30 * time.Second)); err != nil {
-			c.log.Errorx("setting deadline for write", err)
-		}
-
 		nn, err := c.conn.Write(buf[:chunk])
 		if err != nil {
 			panic(fmt.Errorf("write: %s (%w)", err, errIO))
@@ -431,6 +435,12 @@ func (c *conn) Write(buf []byte) (int, error) {
 		buf = buf[chunk:]
 		if len(buf) > 0 && badClientDelay > 0 {
 			mox.Sleep(mox.Context, badClientDelay)
+
+			// Make sure we don't take too long, otherwise the remote SMTP client may close the
+			// connection.
+			if time.Until(deadline) < 2*badClientDelay {
+				chunk = len(buf)
+			}
 		}
 	}
 	return n, nil
