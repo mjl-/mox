@@ -1311,7 +1311,12 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 		case store.ChangeAddMailbox:
 			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.Flags, " "), astring(ch.Mailbox.Name).pack(c))
 		case store.ChangeRenameMailbox:
-			c.bwritelinef(`* LIST (%s) "/" %s ("OLDNAME" (%s))`, strings.Join(ch.Flags, " "), astring(ch.NewName).pack(c), string0(ch.OldName).pack(c))
+			// OLDNAME only with IMAP4rev2 or NOTIFY ../rfc/9051:2726 ../rfc/5465:628
+			var oldname string
+			if c.enabled[capIMAP4rev2] {
+				oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, string0(ch.OldName).pack(c))
+			}
+			c.bwritelinef(`* LIST (%s) "/" %s%s`, strings.Join(ch.Flags, " "), astring(ch.NewName).pack(c), oldname)
 		case store.ChangeAddSubscription:
 			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.Flags...), " "), astring(ch.Name).pack(c))
 		default:
@@ -2211,11 +2216,12 @@ func (c *conn) cmdCreate(tag, cmd string, p *parser) {
 	})
 
 	for _, n := range created {
-		var more string
-		if n == name && name != origName && !(name == "Inbox" || strings.HasPrefix(name, "Inbox/")) {
-			more = fmt.Sprintf(` ("OLDNAME" (%s))`, string0(origName).pack(c))
+		var oldname string
+		// OLDNAME only with IMAP4rev2 or NOTIFY ../rfc/9051:2726 ../rfc/5465:628
+		if c.enabled[capIMAP4rev2] && n == name && name != origName && !(name == "Inbox" || strings.HasPrefix(name, "Inbox/")) {
+			oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, string0(origName).pack(c))
 		}
-		c.bwritelinef(`* LIST (\Subscribed) "/" %s%s`, astring(n).pack(c), more)
+		c.bwritelinef(`* LIST (\Subscribed) "/" %s%s`, astring(n).pack(c), oldname)
 	}
 	c.ok(tag, cmd)
 }

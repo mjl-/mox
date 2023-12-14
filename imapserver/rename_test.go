@@ -32,9 +32,15 @@ func TestRename(t *testing.T) {
 	tc.client.Subscribe("x/y/c") // For later rename, but not affected by rename of x.
 	tc2.transactf("ok", "noop")  // Drain.
 
-	tc.transactf("ok", "rename x y")
+	tc.transactf("ok", "rename x z")
 	tc2.transactf("ok", "noop")
-	tc2.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "y", OldName: "x"})
+	tc2.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "z"})
+
+	// OldName is only set for IMAP4rev2 or NOTIFY.
+	tc2.client.Enable("IMAP4rev2")
+	tc.transactf("ok", "rename z y")
+	tc2.transactf("ok", "noop")
+	tc2.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "y", OldName: "z"})
 
 	// Rename to a mailbox that only exists in database as subscribed.
 	tc.transactf("ok", "rename y sub")

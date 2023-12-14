@@ -36,10 +36,15 @@ func TestCreate(t *testing.T) {
 
 	// ../rfc/9051:1934
 	tc.transactf("ok", "create mailbox/")
-	tc.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "mailbox", OldName: "mailbox/"})
+	tc.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "mailbox"})
+
+	// OldName is only set for IMAP4rev2 or NOTIFY.
+	tc.client.Enable("imap4rev2")
+	tc.transactf("ok", "create mailbox2/")
+	tc.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "mailbox2", OldName: "mailbox2/"})
 
 	tc2.transactf("ok", "noop")
-	tc2.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "mailbox"})
+	tc2.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "mailbox"}, imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "mailbox2"})
 
 	// If we are already subscribed, create should still work, and we still want to see the subscribed flag.
 	tc.transactf("ok", "subscribe newbox")
