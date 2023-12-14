@@ -115,8 +115,14 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- Authentication other than HTTP-basic for webmail/webadmin/webaccount
+- Quota support in backend
+- SASL SCRAM TLS binding
+- Improve documentation
+- Integrate account page into webmail
 - Per-domain webmail and IMAP/SMTP host name (and TLS cert) and client settings
+- Authentication other than HTTP-basic for webmail/webadmin
+- Improve SMTP delivery from queue
+- Webmail improvements
 - HTTP-based API for sending messages and receiving delivery feedback
 - Calendaring with CalDAV/iCal
 - More IMAP extensions (PREVIEW, WITHIN, IMPORTANT, COMPRESS=DEFLATE,
