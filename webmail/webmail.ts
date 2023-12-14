@@ -577,6 +577,8 @@ const newAddressComplete = (): any => {
 	let completeSearch: string
 	let completeFull: boolean
 
+	let aborter: {abort?: () => void} = {}
+
 	return async function keydown(e: KeyboardEvent) {
 		const target = e.target as HTMLInputElement
 		if (!datalist) {
@@ -603,12 +605,18 @@ const newAddressComplete = (): any => {
 		} else if (search === completeSearch) {
 			return
 		}
+		if (aborter.abort) {
+			aborter.abort()
+		}
+		aborter = {}
 		try {
-			[completeMatches, completeFull] = await withStatus('Autocompleting addresses', client.CompleteRecipient(search))
+			[completeMatches, completeFull] = await withStatus('Autocompleting addresses', client.withOptions({aborter: aborter}).CompleteRecipient(search))
 			completeSearch = search
 			dom._kids(datalist, (completeMatches || []).map(s => dom.option(s)))
 		} catch (err) {
 			log('autocomplete error', errmsg(err))
+		} finally {
+			aborter = {}
 		}
 	}
 }

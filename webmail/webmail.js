@@ -1609,6 +1609,7 @@ const newAddressComplete = () => {
 	let completeMatches;
 	let completeSearch;
 	let completeFull;
+	let aborter = {};
 	return async function keydown(e) {
 		const target = e.target;
 		if (!datalist) {
@@ -1634,13 +1635,20 @@ const newAddressComplete = () => {
 		else if (search === completeSearch) {
 			return;
 		}
+		if (aborter.abort) {
+			aborter.abort();
+		}
+		aborter = {};
 		try {
-			[completeMatches, completeFull] = await withStatus('Autocompleting addresses', client.CompleteRecipient(search));
+			[completeMatches, completeFull] = await withStatus('Autocompleting addresses', client.withOptions({ aborter: aborter }).CompleteRecipient(search));
 			completeSearch = search;
 			dom._kids(datalist, (completeMatches || []).map(s => dom.option(s)));
 		}
 		catch (err) {
 			log('autocomplete error', errmsg(err));
+		}
+		finally {
+			aborter = {};
 		}
 	};
 };
