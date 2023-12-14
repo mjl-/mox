@@ -372,6 +372,8 @@ func stringValue(iscid, nested bool, v any) string {
 		return "[" + strings.Join(r, ",") + "]"
 	case error:
 		return r.Error()
+	case time.Time:
+		return r.Format(time.RFC3339)
 	}
 
 	rv := reflect.ValueOf(v)
