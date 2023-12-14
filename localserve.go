@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -144,7 +145,7 @@ during those commands instead of during "data".
 	if err := start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec); err != nil {
 		log.Fatalx("starting mox", err)
 	}
-	golog.Printf("mox, version %s", moxvar.Version)
+	golog.Printf("mox, version %s, %s %s/%s", moxvar.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	golog.Print("")
 	golog.Printf("the default user is mox@localhost, with password moxmoxmox")
 	golog.Printf("the default admin password is moxadmin")

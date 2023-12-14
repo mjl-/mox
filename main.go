@@ -2863,6 +2863,7 @@ func cmdVersion(c *cmd) {
 		c.Usage()
 	}
 	fmt.Println(moxvar.Version)
+	fmt.Printf("%s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 }
 
 // todo: should make it possible to run this command against a running mox. it should disconnect existing clients for accounts with a bumped uidvalidity, so they will reconnect and refetch the data.
