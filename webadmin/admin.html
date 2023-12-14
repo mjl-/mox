@@ -301,7 +301,7 @@ const config = async () => {
 const loglevels = async () => {
 	const loglevels = await api.LogLevels()
 
-	const levels = ['error', 'info', 'debug', 'trace', 'traceauth', 'tracedata']
+	const levels = ['error', 'info', 'warn', 'debug', 'trace', 'traceauth', 'tracedata']
 
 	let form, fieldset, pkg, level
 

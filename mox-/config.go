@@ -1343,7 +1343,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			if !ok {
 				addErrorf("could not find localpart %q to replace with address in destinations", lp)
 			} else {
-				log.Error(`deprecation warning: support for account destination addresses specified as just localpart ("username") instead of full email address will be removed in the future; update domains.conf, for each Account, for each Destination, ensure each key is an email address by appending "@" and the default domain for the account`,
+				log.Warn(`deprecation warning: support for account destination addresses specified as just localpart ("username") instead of full email address will be removed in the future; update domains.conf, for each Account, for each Destination, ensure each key is an email address by appending "@" and the default domain for the account`,
 					slog.Any("localpart", lp),
 					slog.Any("address", addr),
 					slog.String("account", accName))

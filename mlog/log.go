@@ -71,6 +71,7 @@ var (
 	LevelTrace     = slog.LevelDebug - 4
 	LevelDebug     = slog.LevelDebug
 	LevelInfo      = slog.LevelInfo
+	LevelWarn      = slog.LevelWarn
 	LevelError     = slog.LevelError
 	LevelFatal     = slog.LevelError + 4 // Printed regardless of configured log level.
 	LevelPrint     = slog.LevelError + 8 // Printed regardless of configured log level.
@@ -83,6 +84,7 @@ var LevelStrings = map[slog.Level]string{
 	LevelTrace:     "trace",
 	LevelDebug:     "debug",
 	LevelInfo:      "info",
+	LevelWarn:      "warn",
 	LevelError:     "error",
 	LevelFatal:     "fatal",
 	LevelPrint:     "print",
@@ -95,6 +97,7 @@ var Levels = map[string]slog.Level{
 	"trace":     LevelTrace,
 	"debug":     LevelDebug,
 	"info":      LevelInfo,
+	"warn":      LevelWarn,
 	"error":     LevelError,
 	"fatal":     LevelFatal,
 	"print":     LevelPrint,
@@ -205,6 +208,17 @@ func (l Log) Infox(msg string, err error, attrs ...slog.Attr) {
 		attrs = append([]slog.Attr{errAttr(err)}, attrs...)
 	}
 	l.Logger.LogAttrs(noctx, LevelInfo, msg, attrs...)
+}
+
+func (l Log) Warn(msg string, attrs ...slog.Attr) {
+	l.Logger.LogAttrs(noctx, LevelWarn, msg, attrs...)
+}
+
+func (l Log) Warnx(msg string, err error, attrs ...slog.Attr) {
+	if err != nil {
+		attrs = append([]slog.Attr{errAttr(err)}, attrs...)
+	}
+	l.Logger.LogAttrs(noctx, LevelWarn, msg, attrs...)
 }
 
 func (l Log) Error(msg string, attrs ...slog.Attr) {
