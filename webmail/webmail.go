@@ -117,7 +117,11 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
 	pkglog.WithContext(ctx).Errorx(msg, err)
-	panic(&sherpa.Error{Code: "server:error", Message: errmsg})
+	code := "server:error"
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		code = "user:error"
+	}
+	panic(&sherpa.Error{Code: code, Message: errmsg})
 }
 
 func xcheckuserf(ctx context.Context, err error, format string, args ...any) {
