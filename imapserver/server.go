@@ -1150,7 +1150,7 @@ func xcheckmailboxname(name string, allowInbox bool) string {
 	if isinbox {
 		xuserErrorf("special mailboxname Inbox not allowed")
 	} else if err != nil {
-		xusercodeErrorf("CANNOT", err.Error())
+		xusercodeErrorf("CANNOT", "%s", err)
 	}
 	return name
 }

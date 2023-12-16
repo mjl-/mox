@@ -1209,7 +1209,7 @@ Ensure a DNS TXT record like the following exists:
 		addf(&result.Instructions, instr)
 	}
 
-	// Hots TLSRPT
+	// Host TLSRPT
 	wg.Add(1)
 	var hostTLSRPTAddr smtp.Address
 	if mox.Conf.Static.HostTLSRPT.Localpart != "" {

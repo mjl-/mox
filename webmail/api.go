@@ -628,7 +628,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 				}
 			}
 
-			sentmb, err := bstore.QueryDB[store.Mailbox](ctx, acc.DB).FilterEqual("Sent", true).Get()
+			sentmb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Sent", true).Get()
 			if err == bstore.ErrAbsent {
 				// There is no mailbox designated as Sent mailbox, so we're done.
 				return
