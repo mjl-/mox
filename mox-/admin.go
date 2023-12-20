@@ -976,7 +976,7 @@ func DestinationSave(ctx context.Context, account, destName string, newDest conf
 }
 
 // AccountLimitsSave saves new message sending limits for an account.
-func AccountLimitsSave(ctx context.Context, account string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int) (rerr error) {
+func AccountLimitsSave(ctx context.Context, account string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, quotaMessageSize int64) (rerr error) {
 	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
@@ -1002,6 +1002,7 @@ func AccountLimitsSave(ctx context.Context, account string, maxOutgoingMessagesP
 	}
 	acc.MaxOutgoingMessagesPerDay = maxOutgoingMessagesPerDay
 	acc.MaxFirstTimeRecipientsPerDay = maxFirstTimeRecipientsPerDay
+	acc.QuotaMessageSize = quotaMessageSize
 	nc.Accounts[account] = acc
 
 	if err := writeDynamic(ctx, log, nc); err != nil {

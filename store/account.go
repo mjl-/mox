@@ -71,6 +71,7 @@ var (
 	ErrUnknownMailbox     = errors.New("no such mailbox")
 	ErrUnknownCredentials = errors.New("credentials not found")
 	ErrAccountUnknown     = errors.New("no such account")
+	ErrOverQuota          = errors.New("account over quota")
 )
 
 var DefaultInitialMailboxes = config.InitialMailboxes{
@@ -684,8 +685,14 @@ type RecipientDomainTLS struct {
 	RequireTLS bool      // Supports RequireTLS SMTP extension.
 }
 
+// DiskUsage tracks quota use.
+type DiskUsage struct {
+	ID          int64 // Always one record with ID 1.
+	MessageSize int64 // Sum of all messages, for quota accounting.
+}
+
 // Types stored in DB.
-var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}, SyncState{}, Upgrade{}, RecipientDomainTLS{}}
+var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}, SyncState{}, Upgrade{}, RecipientDomainTLS{}, DiskUsage{}}
 
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.
 type Account struct {
@@ -815,10 +822,10 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		return acc, nil
 	}
 
-	// Ensure mailbox counts are set.
+	// Ensure mailbox counts and total message size are set.
 	var mentioned bool
 	err = db.Write(context.TODO(), func(tx *bstore.Tx) error {
-		return bstore.QueryTx[Mailbox](tx).FilterEqual("HaveCounts", false).ForEach(func(mb Mailbox) error {
+		err := bstore.QueryTx[Mailbox](tx).FilterEqual("HaveCounts", false).ForEach(func(mb Mailbox) error {
 			if !mentioned {
 				mentioned = true
 				log.Info("first calculation of mailbox counts for account", slog.String("account", accountName))
@@ -831,6 +838,24 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 			mb.MailboxCounts = mc
 			return tx.Update(&mb)
 		})
+		if err != nil {
+			return err
+		}
+
+		du := DiskUsage{ID: 1}
+		err = tx.Get(&du)
+		if err == nil || !errors.Is(err, bstore.ErrAbsent) {
+			return err
+		}
+		// No DiskUsage record yet, calculate total size and insert.
+		err = bstore.QueryTx[Mailbox](tx).ForEach(func(mb Mailbox) error {
+			du.MessageSize += mb.Size
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		return tx.Insert(&du)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("calculating counts for mailbox: %v", err)
@@ -916,6 +941,9 @@ func initAccount(db *bstore.DB) error {
 		uidvalidity := InitialUIDValidity()
 
 		if err := tx.Insert(&Upgrade{ID: 1, Threads: 2}); err != nil {
+			return err
+		}
+		if err := tx.Insert(&DiskUsage{ID: 1}); err != nil {
 			return err
 		}
 
@@ -1024,6 +1052,7 @@ func (a *Account) Close() error {
 // - Mismatch between message size and length of MsgPrefix and on-disk file.
 // - Missing HaveCounts.
 // - Incorrect mailbox counts.
+// - Incorrect total message size.
 // - Message with UID >= mailbox uid next.
 // - Mailbox uidvalidity >= account uid validity.
 // - ModSeq > 0, CreateSeq > 0, CreateSeq <= ModSeq.
@@ -1114,7 +1143,9 @@ func (a *Account) CheckConsistency() error {
 			return fmt.Errorf("reading messages: %v", err)
 		}
 
+		var totalSize int64
 		for _, mb := range mailboxes {
+			totalSize += mb.Size
 			if !mb.HaveCounts {
 				errmsg := fmt.Sprintf("mailbox %q (id %d) does not have counts, should be %#v", mb.Name, mb.ID, counts[mb.ID])
 				errors = append(errors, errmsg)
@@ -1122,6 +1153,15 @@ func (a *Account) CheckConsistency() error {
 				mbcounterr := fmt.Sprintf("mailbox %q (id %d) has wrong counts %s, should be %s", mb.Name, mb.ID, mb.MailboxCounts, counts[mb.ID])
 				errors = append(errors, mbcounterr)
 			}
+		}
+
+		du := DiskUsage{ID: 1}
+		if err := tx.Get(&du); err != nil {
+			return fmt.Errorf("get diskusage")
+		}
+		if du.MessageSize != totalSize {
+			errmsg := fmt.Sprintf("total message size in database is %d, sum of mailbox message sizes is %d", du.MessageSize, totalSize)
+			errors = append(errors, errmsg)
 		}
 
 		return nil
@@ -1215,6 +1255,10 @@ func (a *Account) WithRLock(fn func()) {
 // If sync is true, the message file and its directory are synced. Should be true
 // for regular mail delivery, but can be false when importing many messages.
 //
+// If updateDiskUsage is true, the account total message size (for quota) is
+// updated. Callers must check if a message can be added within quota before
+// calling DeliverMessage.
+//
 // If CreateSeq/ModSeq is not set, it is assigned automatically.
 //
 // Must be called with account rlock or wlock.
@@ -1222,7 +1266,7 @@ func (a *Account) WithRLock(fn func()) {
 // Caller must broadcast new message.
 //
 // Caller must update mailbox counts.
-func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, sync, notrain, nothreads bool) error {
+func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, sync, notrain, nothreads, updateDiskUsage bool) error {
 	if m.Expunged {
 		return fmt.Errorf("cannot deliver expunged message")
 	}
@@ -1235,6 +1279,17 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 	mb.UIDNext++
 	if err := tx.Update(&mb); err != nil {
 		return fmt.Errorf("updating mailbox nextuid: %w", err)
+	}
+
+	if updateDiskUsage {
+		du := DiskUsage{ID: 1}
+		if err := tx.Get(&du); err != nil {
+			return fmt.Errorf("get disk usage: %v", err)
+		}
+		du.MessageSize += m.Size
+		if err := tx.Update(&du); err != nil {
+			return fmt.Errorf("update disk usage: %v", err)
+		}
 	}
 
 	conf, _ := a.Conf()
@@ -1673,6 +1728,8 @@ func (a *Account) MessageReader(m Message) *MsgReader {
 
 // DeliverDestination delivers an email to dest, based on the configured rulesets.
 //
+// Returns ErrOverQuota when account would be over quota after adding message.
+//
 // Caller must hold account wlock (mailbox may be created).
 // Message delivery, possible mailbox creation, and updated mailbox counts are
 // broadcasted.
@@ -1691,12 +1748,20 @@ func (a *Account) DeliverDestination(log mlog.Log, dest config.Destination, m *M
 
 // DeliverMailbox delivers an email to the specified mailbox.
 //
+// Returns ErrOverQuota when account would be over quota after adding message.
+//
 // Caller must hold account wlock (mailbox may be created).
 // Message delivery, possible mailbox creation, and updated mailbox counts are
 // broadcasted.
 func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFile *os.File) error {
 	var changes []Change
 	err := a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
+		if ok, _, err := a.CanAddMessageSize(tx, m.Size); err != nil {
+			return err
+		} else if !ok {
+			return ErrOverQuota
+		}
+
 		mb, chl, err := a.MailboxEnsure(tx, mailbox, true)
 		if err != nil {
 			return fmt.Errorf("ensuring mailbox: %w", err)
@@ -1711,7 +1776,7 @@ func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFi
 			return fmt.Errorf("updating mailbox for delivery: %w", err)
 		}
 
-		if err := a.DeliverMessage(log, tx, m, msgFile, true, false, false); err != nil {
+		if err := a.DeliverMessage(log, tx, m, msgFile, true, false, false, true); err != nil {
 			return err
 		}
 
@@ -1828,12 +1893,17 @@ func (a *Account) rejectsRemoveMessages(ctx context.Context, log mlog.Log, tx *b
 		return nil, fmt.Errorf("expunging messages: %w", err)
 	}
 
+	var totalSize int64
 	for _, m := range expunged {
 		m.Expunged = false // Was set by update, but would cause wrong count.
 		mb.MailboxCounts.Sub(m.MailboxCounts())
+		totalSize += m.Size
 	}
 	if err := tx.Update(mb); err != nil {
 		return nil, fmt.Errorf("updating mailbox counts: %w", err)
+	}
+	if err := a.AddMessageSize(log, tx, -totalSize); err != nil {
+		return nil, fmt.Errorf("updating disk usage: %w", err)
 	}
 
 	// Mark as neutral and train so junk filter gets untrained with these (junk) messages.
@@ -1900,6 +1970,54 @@ func (a *Account) RejectsRemove(log mlog.Log, rejectsMailbox, messageID string) 
 	BroadcastChanges(a, changes)
 
 	return nil
+}
+
+// AddMessageSize adjusts the DiskUsage.MessageSize by size.
+func (a *Account) AddMessageSize(log mlog.Log, tx *bstore.Tx, size int64) error {
+	du := DiskUsage{ID: 1}
+	if err := tx.Get(&du); err != nil {
+		return fmt.Errorf("get diskusage: %v", err)
+	}
+	du.MessageSize += size
+	if du.MessageSize < 0 {
+		log.Error("negative total message size", slog.Int64("delta", size), slog.Int64("newtotalsize", du.MessageSize))
+	}
+	if err := tx.Update(&du); err != nil {
+		return fmt.Errorf("update total message size: %v", err)
+	}
+	return nil
+}
+
+// QuotaMessageSize returns the effective maximum total message size for an
+// account. Returns 0 if there is no maximum.
+func (a *Account) QuotaMessageSize() int64 {
+	conf, _ := a.Conf()
+	size := conf.QuotaMessageSize
+	if size <= 0 {
+		size = mox.Conf.Static.QuotaMessageSize
+	}
+	if size < 0 {
+		size = 0
+	}
+	return size
+}
+
+// CanAddMessageSize checks if a message of size bytes can be added, depending on
+// total message size and configured quota for account.
+func (a *Account) CanAddMessageSize(tx *bstore.Tx, size int64) (ok bool, maxSize int64, err error) {
+	defer func() {
+		mlog.New("x", nil).Printx("canaddsize", err, slog.Int64("size", size), slog.Bool("ok", ok), slog.Int64("maxsize", maxSize))
+	}()
+	maxSize = a.QuotaMessageSize()
+	if maxSize <= 0 {
+		return true, 0, nil
+	}
+
+	du := DiskUsage{ID: 1}
+	if err := tx.Get(&du); err != nil {
+		return false, maxSize, fmt.Errorf("get diskusage: %v", err)
+	}
+	return du.MessageSize+size <= maxSize, maxSize, nil
 }
 
 // We keep a cache of recent successful authentications, so we don't have to bcrypt successful calls each time.
@@ -2421,10 +2539,15 @@ func (a *Account) MailboxDelete(ctx context.Context, log mlog.Log, tx *bstore.Tx
 			return nil, nil, false, fmt.Errorf("removing messages: %v", err)
 		}
 
+		var totalSize int64
 		for _, m := range remove {
 			if !m.Expunged {
 				removeMessageIDs = append(removeMessageIDs, m.ID)
+				totalSize += m.Size
 			}
+		}
+		if err := a.AddMessageSize(log, tx, -totalSize); err != nil {
+			return nil, nil, false, fmt.Errorf("updating disk usage: %v", err)
 		}
 
 		// Mark messages as not needing training. Then retrain them, so they are untrained if they were.

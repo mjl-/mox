@@ -1852,8 +1852,8 @@ func (Admin) SetPassword(ctx context.Context, accountName, password string) {
 }
 
 // SetAccountLimits set new limits on outgoing messages for an account.
-func (Admin) SetAccountLimits(ctx context.Context, accountName string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int) {
-	err := mox.AccountLimitsSave(ctx, accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay)
+func (Admin) SetAccountLimits(ctx context.Context, accountName string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, maxMsgSize int64) {
+	err := mox.AccountLimitsSave(ctx, accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize)
 	xcheckf(ctx, err, "saving account limits")
 }
 

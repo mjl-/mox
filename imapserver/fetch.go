@@ -243,6 +243,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 			err := tx.Update(&mb)
 			xcheckf(err, "updating mailbox counts")
 			cmd.changes = append(cmd.changes, mb.ChangeCounts())
+			// No need to update account total message size.
 		}
 	})
 
@@ -349,6 +350,7 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 		m.ModSeq = cmd.xmodseq()
 		err := cmd.tx.Update(m)
 		xcheckf(err, "marking message as seen")
+		// No need to update account total message size.
 
 		cmd.changes = append(cmd.changes, m.ChangeFlags(origFlags))
 	}

@@ -284,7 +284,7 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf, msg)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest1.DeliverMessage(c.log, tx, &m, mf, false, true, false)
+		err = accTest1.DeliverMessage(c.log, tx, &m, mf, false, true, false, true)
 
 		mfname := mf.Name()
 		xcheckf(err, "add message to account test1")
@@ -344,7 +344,7 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf0, msg0)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(c.log, tx, &m0, mf0, false, false, false)
+		err = accTest2.DeliverMessage(c.log, tx, &m0, mf0, false, false, false, true)
 		xcheckf(err, "add message to account test2")
 
 		mf0name := mf0.Name()
@@ -375,7 +375,7 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf1, msg1)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(c.log, tx, &m1, mf1, false, false, false)
+		err = accTest2.DeliverMessage(c.log, tx, &m1, mf1, false, false, false, true)
 		xcheckf(err, "add message to account test2")
 
 		mf1name := mf1.Name()

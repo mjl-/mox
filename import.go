@@ -282,7 +282,8 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		const sync = false
 		const notrain = true
 		const nothreads = true
-		err := a.DeliverMessage(ctl.log, tx, m, mf, sync, notrain, nothreads)
+		const updateDiskUsage = false
+		err := a.DeliverMessage(ctl.log, tx, m, mf, sync, notrain, nothreads, updateDiskUsage)
 		ctl.xcheck(err, "delivering message")
 		deliveredIDs = append(deliveredIDs, m.ID)
 		ctl.log.Debug("delivered message", slog.Int64("id", m.ID))
@@ -313,8 +314,19 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 
 		conf, _ := a.Conf()
 
+		maxSize := a.QuotaMessageSize()
+		var addSize int64
+		du := store.DiskUsage{ID: 1}
+		err = tx.Get(&du)
+		ctl.xcheck(err, "get disk usage")
+
 		process := func(m *store.Message, msgf *os.File, origPath string) {
 			defer store.CloseRemoveTempFile(ctl.log, msgf, "message to import")
+
+			addSize += m.Size
+			if maxSize > 0 && du.MessageSize+addSize > maxSize {
+				ctl.xcheck(fmt.Errorf("account over maximum total message size %d", maxSize), "checking quota")
+			}
 
 			for _, kw := range m.Keywords {
 				mailboxKeywords[kw] = true
@@ -406,6 +418,9 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		err = tx.Update(&mb)
 		ctl.xcheck(err, "updating message counts and keywords in mailbox")
 		changes = append(changes, mb.ChangeCounts())
+
+		err = a.AddMessageSize(ctl.log, tx, addSize)
+		xcheckf(err, "updating total message size")
 
 		err = tx.Commit()
 		ctl.xcheck(err, "commit")

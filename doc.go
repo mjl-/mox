@@ -977,12 +977,13 @@ Ensure messages in the database have a pre-parsed MIME form in the database.
 
 # mox recalculatemailboxcounts
 
-Recalculate message counts for all mailboxes in the account.
+Recalculate message counts for all mailboxes in the account, and total message size for quota.
 
 When a message is added to/removed from a mailbox, or when message flags change,
-the total, unread, unseen and deleted messages are accounted, and the total size
-of the mailbox. In case of a bug in this accounting, the numbers could become
-incorrect. This command will find, fix and print them.
+the total, unread, unseen and deleted messages are accounted, the total size of
+the mailbox, and the total message size for the account. In case of a bug in
+this accounting, the numbers could become incorrect. This command will find, fix
+and print them.
 
 	usage: mox recalculatemailboxcounts account
 

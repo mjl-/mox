@@ -588,6 +588,14 @@ describe-static" and "mox config describe-domains":
 	# (optional)
 	OutgoingTLSReportsForAllSuccess: false
 
+	# Default maximum total message size for accounts, only applicable if greater than
+	# zero. Can be overridden per account. Attempting to add new messages beyond the
+	# maximum size will result in an error. Useful to prevent a single account from
+	# filling storage. The quota only applies to the email message files, not to any
+	# file system overhead and also not the message index database file (account for
+	# approximately 15% overhead). (optional)
+	QuotaMessageSize: 0
+
 # domains.conf
 
 	# NOTE: This config file is in 'sconf' format. Indent with tabs. Comments must be
@@ -848,6 +856,13 @@ describe-static" and "mox config describe-domains":
 
 				# How long unique values are accepted after generating, e.g. 12h.
 				Period: 0s
+
+			# Default maximum total message size for the account, overriding any globally
+			# configured maximum size if non-zero. A negative value can be used to have no
+			# limit in case there is a limit by default. Attempting to add new messages beyond
+			# the maximum size will result in an error. Useful to prevent a single account
+			# from filling storage. (optional)
+			QuotaMessageSize: 0
 
 			# Mail that looks like spam will be rejected, but a copy can be stored temporarily
 			# in a mailbox, e.g. Rejects. If mail isn't coming in when you expect, you can

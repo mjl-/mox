@@ -685,11 +685,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		acc.WithWLock(func() {
 			var changes []store.Change
 			err = acc.DB.Write(ctx, func(tx *bstore.Tx) error {
-				return bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
+				var totalSize int64
+				err := bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
 					mc, err := mb.CalculateCounts(tx)
 					if err != nil {
 						return fmt.Errorf("calculating counts for mailbox %q: %w", mb.Name, err)
 					}
+					totalSize += mc.Size
 
 					if !mb.HaveCounts || mc != mb.MailboxCounts {
 						_, err := fmt.Fprintf(w, "for %s setting new counts %s (was %s)\n", mb.Name, mc, mb.MailboxCounts)
@@ -703,6 +705,23 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 					}
 					return nil
 				})
+				if err != nil {
+					return err
+				}
+
+				du := store.DiskUsage{ID: 1}
+				if err := tx.Get(&du); err != nil {
+					return fmt.Errorf("get disk usage: %v", err)
+				}
+				if du.MessageSize != totalSize {
+					_, err := fmt.Fprintf(w, "setting new total message size %d (was %d)\n", totalSize, du.MessageSize)
+					ctl.xcheck(err, "write")
+					du.MessageSize = totalSize
+					if err := tx.Update(&du); err != nil {
+						return fmt.Errorf("update disk usage: %v", err)
+					}
+				}
+				return nil
 			})
 			ctl.xcheck(err, "write transaction for mailbox counts")
 

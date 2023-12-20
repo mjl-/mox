@@ -265,6 +265,7 @@ possibly making them potentially no longer readable by the previous version.
 			checkf(err, dbpath, "reading mailboxes to check uidnext consistency")
 
 			mbCounts := map[int64]store.MailboxCounts{}
+			var totalSize int64
 			err = bstore.QueryDB[store.Message](ctxbg, db).ForEach(func(m store.Message) error {
 				mb := mailboxes[m.MailboxID]
 				if m.UID >= mb.UIDNext {
@@ -282,6 +283,7 @@ possibly making them potentially no longer readable by the previous version.
 				if m.Expunged {
 					return nil
 				}
+				totalSize += m.Size
 
 				mp := store.MessagePath(m.ID)
 				seen[mp] = struct{}{}
@@ -317,10 +319,26 @@ possibly making them potentially no longer readable by the previous version.
 			})
 			checkf(err, dbpath, "reading messages in account database to check files")
 
+			haveCounts := true
 			for _, mb := range mailboxes {
 				// We only check if database doesn't have zero values, i.e. not yet set.
+				if !mb.HaveCounts {
+					haveCounts = false
+				}
 				if mb.HaveCounts && mb.MailboxCounts != mbCounts[mb.ID] {
 					checkf(errors.New(`wrong mailbox counts, see "mox recalculatemailboxcounts"`), dbpath, "mailbox %q (id %d) has wrong counts %s, should be %s", mb.Name, mb.ID, mb.MailboxCounts, mbCounts[mb.ID])
+				}
+			}
+
+			if haveCounts {
+				du := store.DiskUsage{ID: 1}
+				err := db.Get(ctxbg, &du)
+				if err == nil {
+					if du.MessageSize != totalSize {
+						checkf(errors.New(`wrong total message size, see mox recalculatemailboxcounts"`), dbpath, "account has wrong total message size %d, should be %d", du.MessageSize, totalSize)
+					}
+				} else if err != nil && !errors.Is(err, bstore.ErrAbsent) {
+					checkf(err, dbpath, "get disk usage")
 				}
 			}
 		}

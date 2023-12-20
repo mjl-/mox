@@ -371,6 +371,12 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	mailboxes := map[string]store.Mailbox{}
 	messages := map[string]int{}
 
+	maxSize := acc.QuotaMessageSize()
+	du := store.DiskUsage{ID: 1}
+	err = tx.Get(&du)
+	ximportcheckf(err, "get disk usage")
+	var addSize int64
+
 	// For maildirs, we are likely to get a possible dovecot-keywords file after having
 	// imported the messages. Once we see the keywords, we use them. But before that
 	// time we remember which messages miss a keywords. Once the keywords become
@@ -490,6 +496,11 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		m.MailboxID = mb.ID
 		m.MailboxOrigID = mb.ID
 
+		addSize += m.Size
+		if maxSize > 0 && du.MessageSize+addSize > maxSize {
+			ximportcheckf(fmt.Errorf("account over maximum total size %d", maxSize), "checking quota")
+		}
+
 		if modseq == 0 {
 			var err error
 			modseq, err = acc.NextModSeq(tx)
@@ -543,7 +554,8 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		const sync = false
 		const notrain = true
 		const nothreads = true
-		if err := acc.DeliverMessage(log, tx, m, f, sync, notrain, nothreads); err != nil {
+		const updateDiskUsage = false
+		if err := acc.DeliverMessage(log, tx, m, f, sync, notrain, nothreads, updateDiskUsage); err != nil {
 			problemf("delivering message %s: %s (continuing)", pos, err)
 			return
 		}
@@ -837,6 +849,9 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 			changes = append(changes, mb.ChangeKeywords())
 		}
 	}
+
+	err = acc.AddMessageSize(log, tx, addSize)
+	ximportcheckf(err, "updating disk usage after import")
 
 	err = tx.Commit()
 	tx = nil

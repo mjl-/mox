@@ -3197,12 +3197,13 @@ func cmdEnsureParsed(c *cmd) {
 
 func cmdRecalculateMailboxCounts(c *cmd) {
 	c.params = "account"
-	c.help = `Recalculate message counts for all mailboxes in the account.
+	c.help = `Recalculate message counts for all mailboxes in the account, and total message size for quota.
 
 When a message is added to/removed from a mailbox, or when message flags change,
-the total, unread, unseen and deleted messages are accounted, and the total size
-of the mailbox. In case of a bug in this accounting, the numbers could become
-incorrect. This command will find, fix and print them.
+the total, unread, unseen and deleted messages are accounted, the total size of
+the mailbox, and the total message size for the account. In case of a bug in
+this accounting, the numbers could become incorrect. This command will find, fix
+and print them.
 `
 	args := c.Parse()
 	if len(args) != 1 {

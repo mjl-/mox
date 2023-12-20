@@ -2750,13 +2750,20 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				Size:          mw.Size,
 			}
 
+			ok, maxSize, err := c.account.CanAddMessageSize(tx, m.Size)
+			xcheckf(err, "checking quota")
+			if !ok {
+				// ../rfc/9051:5155
+				xusercodeErrorf("OVERQUOTA", "account over maximum total message size %d", maxSize)
+			}
+
 			mb.Add(m.MailboxCounts())
 
 			// Update mailbox before delivering, which updates uidnext which we mustn't overwrite.
 			err = tx.Update(&mb)
 			xcheckf(err, "updating mailbox counts")
 
-			err := c.account.DeliverMessage(c.log, tx, &m, msgFile, true, false, false)
+			err = c.account.DeliverMessage(c.log, tx, &m, msgFile, true, false, false, true)
 			xcheckf(err, "delivering message")
 		})
 
@@ -2923,10 +2930,12 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 
 			removeIDs := make([]int64, len(remove))
 			anyIDs := make([]any, len(remove))
+			var totalSize int64
 			for i, m := range remove {
 				removeIDs[i] = m.ID
 				anyIDs[i] = m.ID
 				mb.Sub(m.MailboxCounts())
+				totalSize += m.Size
 				// Update "remove", because RetrainMessage below will save the message.
 				remove[i].Expunged = true
 				remove[i].ModSeq = modseq
@@ -2946,6 +2955,9 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 
 			err = tx.Update(&mb)
 			xcheckf(err, "updating mailbox counts")
+
+			err = c.account.AddMessageSize(c.log, tx, -totalSize)
+			xcheckf(err, "updating disk usage")
 
 			// Mark expunged messages as not needing training, then retrain them, so if they
 			// were trained, they get untrained.
@@ -3207,6 +3219,20 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			if len(xmsgs) != len(uidargs) {
 				xserverErrorf("uid and message mismatch")
 			}
+
+			// See if quota allows copy.
+			var totalSize int64
+			for _, m := range xmsgs {
+				totalSize += m.Size
+			}
+			if ok, maxSize, err := c.account.CanAddMessageSize(tx, totalSize); err != nil {
+				xcheckf(err, "checking quota")
+			} else if !ok {
+				// ../rfc/9051:5155
+				xusercodeErrorf("OVERQUOTA", "account over maximum total message size %d", maxSize)
+			}
+			err = c.account.AddMessageSize(c.log, tx, totalSize)
+			xcheckf(err, "updating disk usage")
 
 			msgs := map[store.UID]store.Message{}
 			for _, m := range xmsgs {

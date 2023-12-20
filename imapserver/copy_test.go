@@ -58,4 +58,15 @@ func TestCopy(t *testing.T) {
 		imapclient.UntaggedFetch{Seq: 3, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(3), imapclient.FetchFlags(nil)}},
 		imapclient.UntaggedFetch{Seq: 4, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(4), imapclient.FetchFlags(nil)}},
 	)
+
+	tclimit := startArgs(t, false, false, true, true, "limit")
+	defer tclimit.close()
+	tclimit.client.Login("limit@mox.example", "testtest")
+	tclimit.client.Select("inbox")
+	// First message of 1 byte is within limits.
+	tclimit.transactf("ok", "append inbox (\\Seen Label1 $label2) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
+	tclimit.xuntagged(imapclient.UntaggedExists(1))
+	// Second message would take account past limit.
+	tclimit.transactf("no", "copy 1:* Trash")
+	tclimit.xcode("OVERQUOTA")
 }

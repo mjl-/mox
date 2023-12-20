@@ -559,6 +559,12 @@
 					"Typewords": [
 						"int32"
 					]
+				},
+				{
+					"Name": "maxMsgSize",
+					"Typewords": [
+						"int64"
+					]
 				}
 			],
 			"Returns": []

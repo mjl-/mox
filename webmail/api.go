@@ -650,12 +650,18 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 				MsgPrefix:     []byte(msgPrefix),
 			}
 
+			if ok, maxSize, err := acc.CanAddMessageSize(tx, sentm.Size); err != nil {
+				xcheckf(ctx, err, "checking quota")
+			} else if !ok {
+				xcheckuserf(ctx, fmt.Errorf("account over maximum total message size %d", maxSize), "checking quota")
+			}
+
 			// Update mailbox before delivery, which changes uidnext.
 			sentmb.Add(sentm.MailboxCounts())
 			err = tx.Update(&sentmb)
 			xcheckf(ctx, err, "updating sent mailbox for counts")
 
-			err = acc.DeliverMessage(log, tx, &sentm, dataFile, true, false, false)
+			err = acc.DeliverMessage(log, tx, &sentm, dataFile, true, false, false, true)
 			if err != nil {
 				metricSubmission.WithLabelValues("storesenterror").Inc()
 				metricked = true
@@ -825,8 +831,10 @@ func (Webmail) MessageDelete(ctx context.Context, messageIDs []int64) {
 			var mb store.Mailbox
 			remove := make([]store.Message, 0, len(messageIDs))
 
+			var totalSize int64
 			for _, mid := range messageIDs {
 				m := xmessageID(ctx, tx, mid)
+				totalSize += m.Size
 
 				if m.MailboxID != mb.ID {
 					if mb.ID != 0 {
@@ -866,6 +874,9 @@ func (Webmail) MessageDelete(ctx context.Context, messageIDs []int64) {
 				xcheckf(ctx, err, "updating count in mailbox")
 				changes = append(changes, mb.ChangeCounts())
 			}
+
+			err = acc.AddMessageSize(log, tx, -totalSize)
+			xcheckf(ctx, err, "updating disk usage")
 
 			// Mark removed messages as not needing training, then retrain them, so if they
 			// were trained, they get untrained.
@@ -1171,10 +1182,12 @@ func (Webmail) MailboxEmpty(ctx context.Context, mailboxID int64) {
 			xcheckf(ctx, err, "removing message recipients")
 
 			// Adjust mailbox counts, gather UIDs for broadcasted change, prepare for untraining.
+			var totalSize int64
 			uids := make([]store.UID, len(expunged))
 			for i, m := range expunged {
 				m.Expunged = false // Gather returns updated values.
 				mb.Sub(m.MailboxCounts())
+				totalSize += m.Size
 				uids[i] = m.UID
 
 				expunged[i].Junk = false
@@ -1183,6 +1196,9 @@ func (Webmail) MailboxEmpty(ctx context.Context, mailboxID int64) {
 
 			err = tx.Update(&mb)
 			xcheckf(ctx, err, "updating mailbox for counts")
+
+			err = acc.AddMessageSize(log, tx, -totalSize)
+			xcheckf(ctx, err, "updating disk usage")
 
 			err = acc.RetrainMessages(ctx, log, tx, expunged, true)
 			xcheckf(ctx, err, "retraining expunged messages")

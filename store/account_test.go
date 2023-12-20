@@ -81,7 +81,7 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "sent mailbox")
 			msent.MailboxID = mbsent.ID
 			msent.MailboxOrigID = mbsent.ID
-			err = acc.DeliverMessage(pkglog, tx, &msent, msgFile, true, false, false)
+			err = acc.DeliverMessage(pkglog, tx, &msent, msgFile, true, false, false, true)
 			tcheck(t, err, "deliver message")
 			if !msent.ThreadMuted || !msent.ThreadCollapsed {
 				t.Fatalf("thread muted & collapsed should have been copied from parent (duplicate message-id) m")
@@ -97,7 +97,7 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "insert rejects mailbox")
 			mreject.MailboxID = mbrejects.ID
 			mreject.MailboxOrigID = mbrejects.ID
-			err = acc.DeliverMessage(pkglog, tx, &mreject, msgFile, true, false, false)
+			err = acc.DeliverMessage(pkglog, tx, &mreject, msgFile, true, false, false, true)
 			tcheck(t, err, "deliver message")
 
 			err = tx.Get(&mbrejects)

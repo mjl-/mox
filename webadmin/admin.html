@@ -491,8 +491,49 @@ const account = async (name) => {
 	const config = await api.Account(name)
 
 	let form, fieldset, email
-	let formSendlimits, fieldsetSendlimits, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay
+	let formLimits, fieldsetLimits, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, quotaMessageSize
 	let formPassword, fieldsetPassword, password, passwordHint
+
+	const xparseSize = (s) => {
+		const origs = s
+		s = s.toLowerCase()
+		let mult = 1
+		if (s.endsWith('k')) {
+			mult = 1024
+		} else if (s.endsWith('m')) {
+			mult = 1024*1024
+		} else if (s.endsWith('g')) {
+			mult = 1024*1024*1024
+		} else if (s.endsWith('t')) {
+			mult = 1024*1024*1024*1024
+		}
+		if (mult !== 1) {
+			s = s.substring(0, s.length-1)
+		}
+		let v = parseInt(s)
+		console.log('x', s, v, mult, formatQuotaSize(v*mult))
+		if (isNaN(v) || origs !== formatQuotaSize(v*mult)) {
+			throw new Error('invalid number')
+		}
+		return v*mult
+	}
+
+	const formatQuotaSize = (v) => {
+		if (v === 0) {
+			return '0'
+		}
+		const m = 1024*1024
+		const g = m*1024
+		const t = g*1024
+		if (Math.floor(v/t)*t === v) {
+			return ''+(v/t)+'t'
+		} else if (Math.floor(v/g)*g === v) {
+			return ''+(v/g)+'g'
+		} else if (Math.floor(v/m)*m === v) {
+			return ''+(v/m)+'m'
+		}
+		return ''+v
+	}
 
 	const page = document.getElementById('page')
 	dom._kids(page,
@@ -595,38 +636,42 @@ const account = async (name) => {
 			),
 		),
 		dom.br(),
-		dom.h2('Send limits'),
-		formSendlimits=dom.form(
-			fieldsetSendlimits=dom.fieldset(
+		dom.h2('Limits'),
+		formLimits=dom.form(
+			fieldsetLimits=dom.fieldset(
 				dom.label(
-					style({display: 'inline-block'}),
+					style({display: 'block', marginBottom: '.5ex'}),
 					dom.span('Maximum outgoing messages per day', attr({title: 'Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.'})),
 					dom.br(),
 					maxOutgoingMessagesPerDay=dom.input(attr({type: 'number', required: '', value: config.MaxOutgoingMessagesPerDay || 1000})),
 				),
-				' ',
 				dom.label(
-					style({display: 'inline-block'}),
+					style({display: 'block', marginBottom: '.5ex'}),
 					dom.span('Maximum first-time recipients per day', attr({title: 'Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.'})),
 					dom.br(),
 					maxFirstTimeRecipientsPerDay=dom.input(attr({type: 'number', required: '', value: config.MaxFirstTimeRecipientsPerDay || 200})),
 				),
-				' ',
+				dom.label(
+					style({display: 'block', marginBottom: '.5ex'}),
+					dom.span('Disk usage quota: Maximum total message size ', attr({title: 'Default maximum total message size for the account, overriding any globally configured maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages beyond the maximum size will result in an error. Useful to prevent a single account from filling storage.'})),
+					dom.br(),
+					quotaMessageSize=dom.input(attr({value: formatQuotaSize(config.QuotaMessageSize)})),
+				),
 				dom.button('Save'),
 			),
 			async function submit(e) {
 				e.stopPropagation()
 				e.preventDefault()
-				fieldsetSendlimits.disabled = true
+				fieldsetLimits.disabled = true
 				try {
-					await api.SetAccountLimits(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0)
-					window.alert('Send limits saved.')
+					await api.SetAccountLimits(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value))
+					window.alert('Limits saved.')
 				} catch (err) {
 					console.log({err})
 					window.alert('Error: ' + err.message)
 					return
 				} finally {
-					fieldsetSendlimits.disabled = false
+					fieldsetLimits.disabled = false
 				}
 			},
 		),

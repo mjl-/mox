@@ -2789,7 +2789,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			if err := acc.DeliverMailbox(log, a.mailbox, &m, dataFile); err != nil {
 				log.Errorx("delivering", err)
 				metricDelivery.WithLabelValues("delivererror", a.reason).Inc()
-				addError(rcptAcc, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
+				if errors.Is(err, store.ErrOverQuota) {
+					addError(rcptAcc, smtp.C452StorageFull, smtp.SeMailbox2Full2, true, "account storage full")
+				} else {
+					addError(rcptAcc, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
+				}
 				return
 			}
 			metricDelivery.WithLabelValues("delivered", a.reason).Inc()
