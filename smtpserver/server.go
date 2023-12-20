@@ -1819,9 +1819,9 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// Outgoing messages should not have a Return-Path header. The final receiving mail
 	// server will add it.
 	// ../rfc/5321:3233
-	if header.Values("Return-Path") != nil {
+	if mox.Pedantic && header.Values("Return-Path") != nil {
 		metricSubmission.WithLabelValues("badheader").Inc()
-		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeMsg6Other0, "message must not have Return-Path header")
+		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeMsg6Other0, "message should not have Return-Path header")
 	}
 
 	// Add Message-Id header if missing.
