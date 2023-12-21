@@ -42,20 +42,21 @@ func main() {
 	var release bool
 	flag.BoolVar(&release, "release", false, "generate cross-references for a release, highlighting the release version as active page")
 	flag.Usage = func() {
-		log.Println("usage: go run xr.go destdir revision latestrelease ../*.go ../*/*.go")
+		log.Println("usage: go run xr.go destdir revision date latestrelease ../*.go ../*/*.go")
 		flag.PrintDefaults()
 		os.Exit(2)
 	}
 	flag.Parse()
 	args := flag.Args()
-	if len(args) < 3 {
+	if len(args) < 4 {
 		flag.Usage()
 	}
 
 	destdir = args[0]
 	revision := args[1]
-	latestRelease := args[2]
-	srcfiles := args[3:]
+	date := args[2]
+	latestRelease := args[3]
+	srcfiles := args[4:]
 
 	// Generate code.html index.
 	srcdirs := map[string][]string{}
@@ -278,6 +279,7 @@ for (const a of document.querySelectorAll('a')) {
 		index = strings.ReplaceAll(index, "REVISIONWEIGHT", "bold")
 	}
 	index = strings.ReplaceAll(index, "REVISION", revision)
+	index = strings.ReplaceAll(index, "DATE", date)
 	index = strings.ReplaceAll(index, "RELEASE", latestRelease)
 	xwritefile("index.html", []byte(index))
 }
@@ -294,7 +296,7 @@ body { margin: 0; padding: 0; font-family: 'ubuntu', 'lato', sans-serif; }
 	</head>
 	<body>
 		<div style="display: flex; flex-direction: column; height: 100vh">
-			<div style="padding: .5em"><a href="../../">mox</a>, <span title="The mox code contains references to RFCs, often with specific line numbers. RFCs are generated that point back to the source code. This page shows code and RFCs side by side, with cross-references hyperlinked.">cross-referenced code and RFCs</span>: <a href="../RELEASE/" style="font-weight: RELEASEWEIGHT" title="released version">RELEASE</a> <a href="../dev/" style="font-weight: REVISIONWEIGHT" title="branch main">dev</a> (<a href="https://github.com/mjl-/mox/commit/REVISION" title="Source code commit for this revision.">commit REVISION</a>)</div>
+			<div style="padding: .5em"><a href="../../">mox</a>, <span title="The mox code contains references to RFCs, often with specific line numbers. RFCs are generated that point back to the source code. This page shows code and RFCs side by side, with cross-references hyperlinked.">cross-referenced code and RFCs</span>: <a href="../RELEASE/" style="font-weight: RELEASEWEIGHT" title="released version">RELEASE</a> <a href="../dev/" style="font-weight: REVISIONWEIGHT" title="branch main">dev</a> (<a href="https://github.com/mjl-/mox/commit/REVISION" title="Source code commit for this revision.">commit REVISION</a>, DATE)</div>
 			<div style="flex-grow: 1; display: flex; align-items: stretch">
 				<div style="flex-grow: 1; margin: 1ex; position: relative; display: flex; flex-direction: column">
 					<div style="margin-bottom: .5ex"><span id="codefile" style="font-weight: bold">...</span>, <a href="code.html" target="code">index</a></div>
