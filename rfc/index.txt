@@ -319,6 +319,10 @@ See implementation guide, https://jmap.io/server.html
 8555	Automatic Certificate Management Environment (ACME)
 8737	Automated Certificate Management Environment (ACME) TLS Application-Layer Protocol Negotiation (ALPN) Challenge Extension
 
+# CAA
+8657	Certification Authority Authorization (CAA) Record Extensions for Account URI and Automatic Certificate Management Environment (ACME) Method Binding
+8659	DNS Certification Authority Authorization (CAA) Resource Record
+
 # DNS
 1034	DOMAIN NAMES - CONCEPTS AND FACILITIES
 1035	DOMAIN NAMES - IMPLEMENTATION AND SPECIFICATION

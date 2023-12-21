@@ -458,10 +458,16 @@ func WebserverConfigSet(ctx context.Context, domainRedirects map[string]string, 
 
 // DomainRecords returns text lines describing DNS records required for configuring
 // a domain.
-func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]string, error) {
+//
+// If certIssuerDomainName is set, CAA records to limit TLS certificate issuance to
+// that caID will be suggested. If acmeAccountURI is also set, CAA records also
+// restricting issuance to that account ID will be suggested.
+func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, certIssuerDomainName, acmeAccountURI string) ([]string, error) {
 	d := domain.ASCII
 	h := Conf.Static.HostnameDomain.ASCII
 
+	// The first line with ";" is used by ../testdata/integration/moxacmepebble.sh and
+	// ../testdata/integration/moxmail2.sh for selecting DNS records
 	records := []string{
 		"; Time To Live of 5 minutes, may be recognized if importing as a zone file.",
 		"; Once your setup is working, you may want to increase the TTL.",
@@ -471,15 +477,15 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 
 	if public, ok := Conf.Static.Listeners["public"]; ok && public.TLS != nil && (len(public.TLS.HostPrivateRSA2048Keys) > 0 || len(public.TLS.HostPrivateECDSAP256Keys) > 0) {
 		records = append(records,
-			"; DANE: These records indicate that a remote mail server trying to deliver email",
-			"; with SMTP (TCP port 25) must verify the TLS certificate with DANE-EE (3), based",
-			"; on the certificate public key (\"SPKI\", 1) that is SHA2-256-hashed (1) to the",
-			"; hexadecimal hash. DANE-EE verification means only the certificate or public",
-			"; key is verified, not whether the certificate is signed by a (centralized)",
-			"; certificate authority (CA), is expired, or matches the host name.",
-			";",
-			"; NOTE: Create the records below only once: They are for the machine, and apply",
-			"; to all hosted domains.",
+			`; DANE: These records indicate that a remote mail server trying to deliver email`,
+			`; with SMTP (TCP port 25) must verify the TLS certificate with DANE-EE (3), based`,
+			`; on the certificate public key ("SPKI", 1) that is SHA2-256-hashed (1) to the`,
+			`; hexadecimal hash. DANE-EE verification means only the certificate or public`,
+			`; key is verified, not whether the certificate is signed by a (centralized)`,
+			`; certificate authority (CA), is expired, or matches the host name.`,
+			`;`,
+			`; NOTE: Create the records below only once: They are for the machine, and apply`,
+			`; to all hosted domains.`,
 		)
 		if !hasDNSSEC {
 			records = append(records,
@@ -666,13 +672,48 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 		fmt.Sprintf(`_submission._tcp.%s.   SRV 0 1 587 .`, d),
 		fmt.Sprintf(`_pop3._tcp.%s.         SRV 0 1 110 .`, d),
 		fmt.Sprintf(`_pop3s._tcp.%s.        SRV 0 1 995 .`, d),
-		"",
-
-		"; Optional:",
-		"; You could mark Let's Encrypt as the only Certificate Authority allowed to",
-		"; sign TLS certificates for your domain.",
-		fmt.Sprintf("%s.                    CAA 0 issue \"letsencrypt.org\"", d),
 	)
+
+	if certIssuerDomainName != "" {
+		// ../rfc/8659:18 for CAA records.
+		records = append(records,
+			"",
+			"; Optional:",
+			"; You could mark Let's Encrypt as the only Certificate Authority allowed to",
+			"; sign TLS certificates for your domain.",
+			fmt.Sprintf(`%s.                    CAA 0 issue "%s"`, d, certIssuerDomainName),
+		)
+		if acmeAccountURI != "" {
+			// ../rfc/8657:99 for accounturi.
+			// ../rfc/8657:147 for validationmethods.
+			records = append(records,
+				";",
+				"; Optionally limit certificates for this domain to the account ID and methods used by mox.",
+				fmt.Sprintf(`;; %s.                 CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
+				";",
+				"; Or alternatively only limit for email-specific subdomains, so you can use",
+				"; other accounts/methods for other subdomains.",
+				fmt.Sprintf(`;; autoconfig.%s.      CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
+				fmt.Sprintf(`;; mtasts.%s.          CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
+			)
+			if strings.HasSuffix(h, "."+d) {
+				records = append(records,
+					";",
+					"; And the mail hostname.",
+					fmt.Sprintf(`;; %-*s CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, 20-3+len(d), h+".", certIssuerDomainName, acmeAccountURI),
+				)
+			}
+		} else {
+			// The string "will be suggested" is used by
+			// ../testdata/integration/moxacmepebble.sh and ../testdata/integration/moxmail2.sh
+			// as end of DNS records.
+			records = append(records,
+				";",
+				"; Note: After starting up, once an ACME account has been created, CAA records",
+				"; that restrict issuance to the account will be suggested.",
+			)
+		}
+	}
 	return records, nil
 }
 

@@ -96,6 +96,11 @@ describe-static" and "mox config describe-domains":
 			# configuring port forwarding. (optional)
 			Port: 0
 
+			# If set, used for suggested CAA DNS records, for restricting TLS certificate
+			# issuance to a Certificate Authority. If empty and DirectyURL is for Let's
+			# Encrypt, this value is set automatically to letsencrypt.org. (optional)
+			IssuerDomainName:
+
 	# File containing hash of admin password, for authentication in the web admin
 	# pages (if enabled). (optional)
 	AdminPasswordFile:

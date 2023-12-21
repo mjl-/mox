@@ -609,8 +609,9 @@ many authentication failures).
 	if !existingWebserver {
 		sc.ACME = map[string]config.ACME{
 			"letsencrypt": {
-				DirectoryURL: "https://acme-v02.api.letsencrypt.org/directory",
-				ContactEmail: args[0], // todo: let user specify an alternative fallback address?
+				DirectoryURL:     "https://acme-v02.api.letsencrypt.org/directory",
+				ContactEmail:     args[0], // todo: let user specify an alternative fallback address?
+				IssuerDomainName: "letsencrypt.org",
 			},
 		}
 	}
@@ -893,7 +894,7 @@ configured correctly.
 	// priming dns caches with negative/absent records, causing our "quick setup" to
 	// appear to fail or take longer than "quick".
 
-	records, err := mox.DomainRecords(confDomain, domain, domainDNSSECResult.Authentic)
+	records, err := mox.DomainRecords(confDomain, domain, domainDNSSECResult.Authentic, "letsencrypt.org", "")
 	if err != nil {
 		fatalf("making required DNS records")
 	}

@@ -612,6 +612,12 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 			addErrorf("loading ACME identity for %q: %s", name, err)
 		}
 		acme.Manager = manager
+
+		// Help configurations from older quickstarts.
+		if acme.IssuerDomainName == "" && acme.DirectoryURL == "https://acme-v02.api.letsencrypt.org/directory" {
+			acme.IssuerDomainName = "letsencrypt.org"
+		}
+
 		c.ACME[name] = acme
 	}
 

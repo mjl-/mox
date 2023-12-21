@@ -792,7 +792,21 @@ configured.
 		xcheckf(err, "looking up record for dnssec-status")
 	}
 
-	records, err := mox.DomainRecords(domConf, d, result.Authentic)
+	var certIssuerDomainName, acmeAccountURI string
+	public := mox.Conf.Static.Listeners["public"]
+	if public.TLS != nil && public.TLS.ACME != "" {
+		acme, ok := mox.Conf.Static.ACME[public.TLS.ACME]
+		if ok && acme.Manager.Manager.Client != nil {
+			certIssuerDomainName = acme.IssuerDomainName
+			acc, err := acme.Manager.Manager.Client.GetReg(context.Background(), "")
+			c.log.Check(err, "get public acme account")
+			if err == nil {
+				acmeAccountURI = acc.URI
+			}
+		}
+	}
+
+	records, err := mox.DomainRecords(domConf, d, result.Authentic, certIssuerDomainName, acmeAccountURI)
 	xcheckf(err, "records")
 	fmt.Print(strings.Join(records, "\n") + "\n")
 }

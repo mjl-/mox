@@ -1774,6 +1774,13 @@ func dnsblsStatus(ctx context.Context, log mlog.Log, resolver dns.Resolver) map[
 // DomainRecords returns lines describing DNS records that should exist for the
 // configured domain.
 func (Admin) DomainRecords(ctx context.Context, domain string) []string {
+	log := pkglog.WithContext(ctx)
+	return DomainRecords(ctx, log, domain)
+}
+
+// DomainRecords is the implementation of API function Admin.DomainRecords, taking
+// a logger.
+func DomainRecords(ctx context.Context, log mlog.Log, domain string) []string {
 	d, err := dns.ParseDomain(domain)
 	xcheckuserf(ctx, err, "parsing domain")
 	dc, ok := mox.Conf.Domain(d)
@@ -1785,7 +1792,22 @@ func (Admin) DomainRecords(ctx context.Context, domain string) []string {
 	if !dns.IsNotFound(err) {
 		xcheckf(ctx, err, "looking up record to determine if dnssec is implemented")
 	}
-	records, err := mox.DomainRecords(dc, d, result.Authentic)
+
+	var certIssuerDomainName, acmeAccountURI string
+	public := mox.Conf.Static.Listeners["public"]
+	if public.TLS != nil && public.TLS.ACME != "" {
+		acme, ok := mox.Conf.Static.ACME[public.TLS.ACME]
+		if ok && acme.Manager.Manager.Client != nil {
+			certIssuerDomainName = acme.IssuerDomainName
+			acc, err := acme.Manager.Manager.Client.GetReg(ctx, "")
+			log.Check(err, "get public acme account")
+			if err == nil {
+				acmeAccountURI = acc.URI
+			}
+		}
+	}
+
+	records, err := mox.DomainRecords(dc, d, result.Authentic, certIssuerDomainName, acmeAccountURI)
 	xcheckf(ctx, err, "dns records")
 	return records
 }

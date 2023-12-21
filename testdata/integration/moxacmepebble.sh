@@ -25,7 +25,7 @@ sed -i -e 's/moxtest1@mox1.example: nil/moxtest1@mox1.example: nil\n\t\t\tpostfi
 
 (
 	cat /integration/example.zone;
-	sed -n '/^;/,/CAA /p' output.txt |
+	sed -n '/^;/,/will be suggested/p' output.txt |
 		# allow sending from postfix for mox1.example.
 		sed 's/mox1.example.  *TXT "v=spf1 mx ~all"/mox1.example. TXT "v=spf1 mx ip4:172.28.1.70 ~all"/'
 ) >/integration/example-integration.zone

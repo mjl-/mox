@@ -914,7 +914,7 @@ const domainDNSRecords = async (d) => {
 			'DNS Records',
 		),
 		dom.h1('Required DNS records'),
-		dom('pre.literal', style({maxWidth: '70em'}), records.join('\n')),
+		dom('pre.literal', records.join('\n')),
 		dom.br(),
 	)
 }
