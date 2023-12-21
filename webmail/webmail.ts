@@ -1991,6 +1991,66 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 			}
 		}
 
+		const correspondentAddrs = (miv: MsgitemView): [api.MessageAddress[], api.MessageAddress[]] => {
+			let fromAddrs = miv.messageitem.Envelope.From || []
+			let toAddrs: api.MessageAddress[] = []
+			if (listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID)?.Sent) {
+				toAddrs = [...(miv.messageitem.Envelope.To || []), ...(miv.messageitem.Envelope.CC || []), ...(miv.messageitem.Envelope.BCC || [])]
+			}
+			return [fromAddrs, toAddrs]
+		}
+
+		// Correspondents for a message, possibly a collapsed thread root.
+		const correspondents = () => {
+			let fromAddrs: api.MessageAddress[] = []
+			let toAddrs: api.MessageAddress[] = []
+			if (msgitemView.isCollapsedThreadRoot()) {
+				// Gather both all correspondents in thread.
+				;[msgitemView, ...(msgitemView.descendants())].forEach(miv => {
+					const [fa, ta] = correspondentAddrs(miv)
+					fromAddrs = [...fromAddrs, ...fa]
+					toAddrs = [...toAddrs, ...ta]
+				})
+			} else {
+				[fromAddrs, toAddrs] = correspondentAddrs(msgitemView)
+			}
+
+			const seen = new Set<string>()
+			let fa: api.MessageAddress[] = []
+			let ta: api.MessageAddress[] = []
+			for (const a of fromAddrs) {
+				const k = a.User+'@'+a.Domain.ASCII
+				if (!seen.has(k)) {
+					seen.add(k)
+					fa.push(a)
+				}
+			}
+			for (const a of toAddrs) {
+				const k = a.User+'@'+a.Domain.ASCII
+				if (!seen.has(k)) {
+					seen.add(k)
+					ta.push(a)
+				}
+			}
+			let title = fa.map(a => formatAddressFull(a)).join(', ')
+			if (ta.length > 0) {
+				if (title) {
+					title += ',\n'
+				}
+				title += 'addressed: '+ta.map(a => formatAddressFull(a)).join(', ')
+			}
+			return [
+				attr.title(title),
+				join(
+					[
+						...fa.map(a => formatAddressShort(a)),
+						...ta.map(a => dom.span(style({fontStyle: 'italic'}), formatAddressShort(a))),
+					],
+					() => ', '
+				),
+			]
+		}
+
 		// When rerendering, we remember active & focus states. So we don't have to make
 		// the caller also call redraw on MsglistView.
 		const active = msgitemView.root && msgitemView.root.classList.contains('active')
@@ -2053,11 +2113,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 			),
 			dom.div(dom._class('msgitemcell', 'msgitemfrom'),
 				dom.div(style({display: 'flex', justifyContent: 'space-between'}),
-					dom.div(dom._class('msgitemfromtext', 'silenttitle'),
-						// todo: for collapsed messages, show all participants in thread?
-						attr.title((mi.Envelope.From || []).map(a => formatAddressFull(a)).join(', ')),
-						join((mi.Envelope.From || []).map(a => formatAddressShort(a)), () => ', ')
-					),
+					dom.div(dom._class('msgitemfromtext', 'silenttitle'), correspondents()),
 					identityHeader,
 				),
 				// Thread messages are connected by a vertical bar. The first and last message are
