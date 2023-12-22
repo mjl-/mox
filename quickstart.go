@@ -31,6 +31,7 @@ import (
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dnsbl"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
@@ -842,9 +843,17 @@ and check the admin page for the needed DNS records.`)
 	cleanupPaths = append(cleanupPaths, dataDir, filepath.Join(dataDir, "accounts"), filepath.Join(dataDir, "accounts", accountName), filepath.Join(dataDir, "accounts", accountName, "index.db"))
 
 	password := pwgen()
+
+	// Kludge to cause no logging to be printed about setting a new password.
+	loglevel := mox.Conf.Log[""]
+	mox.Conf.Log[""] = mlog.LevelWarn
+	mlog.SetConfig(mox.Conf.Log)
 	if err := acc.SetPassword(c.log, password); err != nil {
 		fatalf("setting password: %s", err)
 	}
+	mox.Conf.Log[""] = loglevel
+	mlog.SetConfig(mox.Conf.Log)
+
 	if err := acc.Close(); err != nil {
 		fatalf("closing account: %s", err)
 	}
