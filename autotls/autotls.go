@@ -69,12 +69,15 @@ type Manager struct {
 // contactEmail must be a valid email address to which notifications about ACME can
 // be sent. directoryURL is the ACME starting point.
 //
+// eabKeyID and eabKey are for external account binding when making a new account,
+// which some ACME providers require.
+//
 // getPrivateKey is called to get the private key for the host and key type. It
 // can be used to deliver a specific (e.g. always the same) private key for a
 // host, or a newly generated key.
 //
 // When shutdown is closed, no new TLS connections can be created.
-func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(host string, keyType autocert.KeyType) (crypto.Signer, error), shutdown <-chan struct{}) (*Manager, error) {
+func Load(name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eabKey []byte, getPrivateKey func(host string, keyType autocert.KeyType) (crypto.Signer, error), shutdown <-chan struct{}) (*Manager, error) {
 	if directoryURL == "" {
 		return nil, fmt.Errorf("empty ACME directory URL")
 	}
@@ -145,6 +148,14 @@ func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(h
 		},
 		GetPrivateKey: getPrivateKey,
 		// HostPolicy set below.
+	}
+	// If external account binding key is provided, use it for registering a new account.
+	// todo: ideally the key and its id are provided temporarily by the admin when registering a new account. but we don't do that interactive setup yet. in the future, an interactive setup/quickstart would ask for the key once to register a new acme account.
+	if eabKeyID != "" {
+		m.ExternalAccountBinding = &acme.ExternalAccountBinding{
+			KID: eabKeyID,
+			Key: eabKey,
+		}
 	}
 
 	loggingGetCertificate := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {

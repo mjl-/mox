@@ -101,6 +101,22 @@ describe-static" and "mox config describe-domains":
 			# Encrypt, this value is set automatically to letsencrypt.org. (optional)
 			IssuerDomainName:
 
+			# ACME providers can require that a request for a new ACME account reference an
+			# existing non-ACME account known to the provider. External account binding
+			# references that account by a key id, and authorizes new ACME account requests by
+			# signing it with a key known both by the ACME client and ACME provider.
+			# (optional)
+			ExternalAccountBinding:
+
+				# Key identifier, from ACME provider.
+				KeyID:
+
+				# File containing the base64url-encoded key used to sign account requests with
+				# external account binding. The ACME provider will verify the account request is
+				# correctly signed by the key. File is evaluated relative to the directory of
+				# mox.conf.
+				KeyFile:
+
 	# File containing hash of admin password, for authentication in the web admin
 	# pages (if enabled). (optional)
 	AdminPasswordFile:

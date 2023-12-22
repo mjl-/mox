@@ -116,13 +116,20 @@ type Dynamic struct {
 }
 
 type ACME struct {
-	DirectoryURL     string        `sconf-doc:"For letsencrypt, use https://acme-v02.api.letsencrypt.org/directory."`
-	RenewBefore      time.Duration `sconf:"optional" sconf-doc:"How long before expiration to renew the certificate. Default is 30 days."`
-	ContactEmail     string        `sconf-doc:"Email address to register at ACME provider. The provider can email you when certificates are about to expire. If you configure an address for which email is delivered by this server, keep in mind that TLS misconfigurations could result in such notification emails not arriving."`
-	Port             int           `sconf:"optional" sconf-doc:"TLS port for ACME validation, 443 by default. You should only override this if you cannot listen on port 443 directly. ACME will make requests to port 443, so you'll have to add an external mechanism to get the connection here, e.g. by configuring port forwarding."`
-	IssuerDomainName string        `sconf:"optional" sconf-doc:"If set, used for suggested CAA DNS records, for restricting TLS certificate issuance to a Certificate Authority. If empty and DirectyURL is for Let's Encrypt, this value is set automatically to letsencrypt.org."`
+	DirectoryURL           string                  `sconf-doc:"For letsencrypt, use https://acme-v02.api.letsencrypt.org/directory."`
+	RenewBefore            time.Duration           `sconf:"optional" sconf-doc:"How long before expiration to renew the certificate. Default is 30 days."`
+	ContactEmail           string                  `sconf-doc:"Email address to register at ACME provider. The provider can email you when certificates are about to expire. If you configure an address for which email is delivered by this server, keep in mind that TLS misconfigurations could result in such notification emails not arriving."`
+	Port                   int                     `sconf:"optional" sconf-doc:"TLS port for ACME validation, 443 by default. You should only override this if you cannot listen on port 443 directly. ACME will make requests to port 443, so you'll have to add an external mechanism to get the connection here, e.g. by configuring port forwarding."`
+	IssuerDomainName       string                  `sconf:"optional" sconf-doc:"If set, used for suggested CAA DNS records, for restricting TLS certificate issuance to a Certificate Authority. If empty and DirectyURL is for Let's Encrypt, this value is set automatically to letsencrypt.org."`
+	ExternalAccountBinding *ExternalAccountBinding `sconf:"optional" sconf-doc:"ACME providers can require that a request for a new ACME account reference an existing non-ACME account known to the provider. External account binding references that account by a key id, and authorizes new ACME account requests by signing it with a key known both by the ACME client and ACME provider."`
+	// ../rfc/8555:2111
 
 	Manager *autotls.Manager `sconf:"-" json:"-"`
+}
+
+type ExternalAccountBinding struct {
+	KeyID   string `sconf-doc:"Key identifier, from ACME provider."`
+	KeyFile string `sconf-doc:"File containing the base64url-encoded key used to sign account requests with external account binding. The ACME provider will verify the account request is correctly signed by the key. File is evaluated relative to the directory of mox.conf."`
 }
 
 type Listener struct {

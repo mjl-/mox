@@ -11,6 +11,7 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -602,12 +603,32 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		}
 	}
 	for name, acme := range c.ACME {
+		var eabKeyID string
+		var eabKey []byte
+		if acme.ExternalAccountBinding != nil {
+			eabKeyID = acme.ExternalAccountBinding.KeyID
+			p := configDirPath(configFile, acme.ExternalAccountBinding.KeyFile)
+			buf, err := os.ReadFile(p)
+			if err != nil {
+				addErrorf("reading external account binding key for acme provider %q: %s", name, err)
+			} else {
+				dec := make([]byte, base64.RawURLEncoding.DecodedLen(len(buf)))
+				n, err := base64.RawURLEncoding.Decode(dec, buf)
+				if err != nil {
+					addErrorf("parsing external account binding key as base64 for acme provider %q: %s", name, err)
+				} else {
+					eabKey = dec[:n]
+				}
+			}
+		}
+
 		if checkOnly {
 			continue
 		}
+
 		acmeDir := dataDirPath(configFile, c.DataDir, "acme")
 		os.MkdirAll(acmeDir, 0770)
-		manager, err := autotls.Load(name, acmeDir, acme.ContactEmail, acme.DirectoryURL, makeGetPrivateKey(name), Shutdown.Done())
+		manager, err := autotls.Load(name, acmeDir, acme.ContactEmail, acme.DirectoryURL, eabKeyID, eabKey, makeGetPrivateKey(name), Shutdown.Done())
 		if err != nil {
 			addErrorf("loading ACME identity for %q: %s", name, err)
 		}
