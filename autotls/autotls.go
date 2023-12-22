@@ -200,6 +200,40 @@ func Load(name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eab
 	return a, nil
 }
 
+// CertAvailable checks whether a non-expired ECDSA certificate is available in the
+// cache for host. No other checks than expiration are done.
+func (m *Manager) CertAvailable(ctx context.Context, log mlog.Log, host dns.Domain) (bool, error) {
+	ck := host.ASCII // Would be "+rsa" for rsa keys.
+	data, err := m.Manager.Cache.Get(ctx, ck)
+	if err != nil && errors.Is(err, autocert.ErrCacheMiss) {
+		return false, nil
+	} else if err != nil {
+		return false, fmt.Errorf("attempt to get certificate from cache: %v", err)
+	}
+
+	// The cached keycert is of the form: private key, leaf certificate, intermediate certificates...
+	privb, rem := pem.Decode(data)
+	if privb == nil {
+		return false, fmt.Errorf("missing private key in cached keycert file")
+	}
+	pubb, _ := pem.Decode(rem)
+	if pubb == nil {
+		return false, fmt.Errorf("missing certificate in cached keycert file")
+	} else if pubb.Type != "CERTIFICATE" {
+		return false, fmt.Errorf("second pem block is %q, expected CERTIFICATE", pubb.Type)
+	}
+	cert, err := x509.ParseCertificate(pubb.Bytes)
+	if err != nil {
+		return false, fmt.Errorf("parsing certificate from cached keycert file: %v", err)
+	}
+	// We assume the certificate has a matching hostname, and is properly CA-signed. We
+	// only check the expiration time.
+	if time.Until(cert.NotBefore) > 0 || time.Since(cert.NotAfter) > 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
 // SetAllowedHostnames sets a new list of allowed hostnames for automatic TLS.
 // After setting the host names, a goroutine is start to check that new host names
 // are fully served by publicIPs (only if non-empty and there is no unspecified

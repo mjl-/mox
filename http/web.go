@@ -801,6 +801,14 @@ func Serve() {
 		i := 0
 		for m, hosts := range ensureManagerHosts {
 			for host := range hosts {
+				// Check if certificate is already available. If so, we don't print as much after a
+				// restart, and finish more quickly if only a few certificates are missing/old.
+				if avail, err := m.CertAvailable(mox.Shutdown, pkglog, host); err != nil {
+					pkglog.Errorx("checking acme certificate availability", err, slog.Any("host", host))
+				} else if avail {
+					continue
+				}
+
 				if i >= 10 {
 					// Just in case someone adds quite some domains to their config. We don't want to
 					// hit any ACME rate limits.
