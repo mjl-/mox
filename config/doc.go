@@ -501,8 +501,10 @@ describe-static" and "mox config describe-domains":
 					Username:
 					Password:
 
-					# Allowed authentication mechanisms. Defaults to SCRAM-SHA-256, SCRAM-SHA-1,
-					# CRAM-MD5. Not included by default: PLAIN. (optional)
+					# Allowed authentication mechanisms. Defaults to SCRAM-SHA-256-PLUS,
+					# SCRAM-SHA-256, SCRAM-SHA-1-PLUS, SCRAM-SHA-1, CRAM-MD5. Not included by default:
+					# PLAIN. Specify the strongest mechanism known to be implemented by the server to
+					# prevent mechanism downgrade attacks. (optional)
 					Mechanisms:
 						-
 
@@ -532,8 +534,10 @@ describe-static" and "mox config describe-domains":
 					Username:
 					Password:
 
-					# Allowed authentication mechanisms. Defaults to SCRAM-SHA-256, SCRAM-SHA-1,
-					# CRAM-MD5. Not included by default: PLAIN. (optional)
+					# Allowed authentication mechanisms. Defaults to SCRAM-SHA-256-PLUS,
+					# SCRAM-SHA-256, SCRAM-SHA-1-PLUS, SCRAM-SHA-1, CRAM-MD5. Not included by default:
+					# PLAIN. Specify the strongest mechanism known to be implemented by the server to
+					# prevent mechanism downgrade attacks. (optional)
 					Mechanisms:
 						-
 
@@ -563,8 +567,10 @@ describe-static" and "mox config describe-domains":
 					Username:
 					Password:
 
-					# Allowed authentication mechanisms. Defaults to SCRAM-SHA-256, SCRAM-SHA-1,
-					# CRAM-MD5. Not included by default: PLAIN. (optional)
+					# Allowed authentication mechanisms. Defaults to SCRAM-SHA-256-PLUS,
+					# SCRAM-SHA-256, SCRAM-SHA-1-PLUS, SCRAM-SHA-1, CRAM-MD5. Not included by default:
+					# PLAIN. Specify the strongest mechanism known to be implemented by the server to
+					# prevent mechanism downgrade attacks. (optional)
 					Mechanisms:
 						-
 

@@ -60,22 +60,31 @@ func TestAuthenticatePlain(t *testing.T) {
 }
 
 func TestAuthenticateSCRAMSHA1(t *testing.T) {
-	testAuthenticateSCRAM(t, "SCRAM-SHA-1", sha1.New)
+	testAuthenticateSCRAM(t, false, "SCRAM-SHA-1", sha1.New)
 }
 
 func TestAuthenticateSCRAMSHA256(t *testing.T) {
-	testAuthenticateSCRAM(t, "SCRAM-SHA-256", sha256.New)
+	testAuthenticateSCRAM(t, false, "SCRAM-SHA-256", sha256.New)
 }
 
-func testAuthenticateSCRAM(t *testing.T, method string, h func() hash.Hash) {
-	tc := start(t)
+func TestAuthenticateSCRAMSHA1PLUS(t *testing.T) {
+	testAuthenticateSCRAM(t, true, "SCRAM-SHA-1-PLUS", sha1.New)
+}
+
+func TestAuthenticateSCRAMSHA256PLUS(t *testing.T) {
+	testAuthenticateSCRAM(t, true, "SCRAM-SHA-256-PLUS", sha256.New)
+}
+
+func testAuthenticateSCRAM(t *testing.T, tls bool, method string, h func() hash.Hash) {
+	tc := startArgs(t, true, tls, true, true, "mjl")
 	tc.client.AuthenticateSCRAM(method, h, "mjl@mox.example", "testtest")
 	tc.close()
 
 	auth := func(status string, serverFinalError error, username, password string) {
 		t.Helper()
 
-		sc := scram.NewClient(h, username, "")
+		noServerPlus := false
+		sc := scram.NewClient(h, username, "", noServerPlus, tc.client.TLSConnectionState())
 		clientFirst, err := sc.ClientFirst()
 		tc.check(err, "scram clientFirst")
 		tc.client.LastTag = "x001"
@@ -116,7 +125,7 @@ func testAuthenticateSCRAM(t *testing.T, method string, h func() hash.Hash) {
 		}
 	}
 
-	tc = start(t)
+	tc = startArgs(t, true, tls, true, true, "mjl")
 	auth("no", scram.ErrInvalidProof, "mjl@mox.example", "badpass")
 	auth("no", scram.ErrInvalidProof, "mjl@mox.example", "")
 	// todo: server aborts due to invalid username. we should probably make client continue with fake determinisitically generated salt and result in error in the end.

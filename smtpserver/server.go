@@ -869,7 +869,12 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 	if c.submission {
 		// ../rfc/4954:123
 		if c.tls || !c.requireTLSForAuth {
-			c.bwritelinef("250-AUTH SCRAM-SHA-256 SCRAM-SHA-1 CRAM-MD5 PLAIN LOGIN")
+			// We always mention the SCRAM PLUS variants, even if TLS is not active: It is a
+			// hint to the client that a TLS connection can use TLS channel binding during
+			// authentication. The client should select the bare variant when TLS isn't
+			// present, and also not indicate the server supports the PLUS variant in that
+			// case, or it would trigger the mechanism downgrade detection.
+			c.bwritelinef("250-AUTH SCRAM-SHA-256-PLUS SCRAM-SHA-256 SCRAM-SHA-1-PLUS SCRAM-SHA-1 CRAM-MD5 PLAIN LOGIN")
 		} else {
 			c.bwritelinef("250-AUTH ")
 		}
@@ -1190,22 +1195,35 @@ func (c *conn) cmdAuth(p *parser) {
 		// ../rfc/4954:276
 		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
 
-	case "SCRAM-SHA-1", "SCRAM-SHA-256":
+	case "SCRAM-SHA-256-PLUS", "SCRAM-SHA-256", "SCRAM-SHA-1-PLUS", "SCRAM-SHA-1":
 		// todo: improve handling of errors during scram. e.g. invalid parameters. should we abort the imap command, or continue until the end and respond with a scram-level error?
 		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
 
-		authVariant = strings.ToLower(mech)
-		var h func() hash.Hash
-		if authVariant == "scram-sha-1" {
-			h = sha1.New
-		} else {
-			h = sha256.New
-		}
-
 		// Passwords cannot be retrieved or replayed from the trace.
 
+		authVariant = strings.ToLower(mech)
+		var h func() hash.Hash
+		switch authVariant {
+		case "scram-sha-1", "scram-sha-1-plus":
+			h = sha1.New
+		case "scram-sha-256", "scram-sha-256-plus":
+			h = sha256.New
+		default:
+			xsmtpServerErrorf(codes{smtp.C554TransactionFailed, smtp.SeSys3Other0}, "missing scram auth method case")
+		}
+
+		var cs *tls.ConnectionState
+		channelBindingRequired := strings.HasSuffix(authVariant, "-plus")
+		if channelBindingRequired && !c.tls {
+			// ../rfc/4954:630
+			xsmtpUserErrorf(smtp.C538EncReqForAuth, smtp.SePol7EncReqForAuth11, "scram plus mechanism requires tls connection")
+		}
+		if c.tls {
+			xcs := c.conn.(*tls.Conn).ConnectionState()
+			cs = &xcs
+		}
 		c0 := xreadInitial()
-		ss, err := scram.NewServer(h, c0)
+		ss, err := scram.NewServer(h, c0, cs, channelBindingRequired)
 		xcheckf(err, "starting scram")
 		c.log.Debug("scram auth", slog.String("authentication", ss.Authentication))
 		acc, _, err := store.OpenEmail(c.log, ss.Authentication)
@@ -1229,10 +1247,13 @@ func (c *conn) cmdAuth(p *parser) {
 		acc.WithRLock(func() {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
-				if authVariant == "scram-sha-1" {
+				switch authVariant {
+				case "scram-sha-1", "scram-sha-1-plus":
 					xscram = password.SCRAMSHA1
-				} else {
+				case "scram-sha-256", "scram-sha-256-plus":
 					xscram = password.SCRAMSHA256
+				default:
+					xsmtpServerErrorf(codes{smtp.C554TransactionFailed, smtp.SeSys3Other0}, "missing scram auth credentials case")
 				}
 				if err == bstore.ErrAbsent || err == nil && (len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0) {
 					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", slog.String("address", ss.Authentication))

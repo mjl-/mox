@@ -286,12 +286,18 @@ See implementation guide, https://jmap.io/server.html
 5518	Vouch By Reference
 
 # TLS
+5056	On the Use of Channel Bindings to Secure Channels
+5705	Keying Material Exporters for Transport Layer Security (TLS)
+5929	Channel Bindings for TLS
 6125	Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)
 7250	Using Raw Public Keys in Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
 7525	Recommendations for Secure Use of Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
+7627	Transport Layer Security (TLS) Session Hash and Extended Master Secret Extension
 8314	Cleartext Considered Obsolete: Use of Transport Layer Security (TLS) for Email Submission and Access
+8446	The Transport Layer Security (TLS) Protocol Version 1.3
 8996	Deprecating TLS 1.0 and TLS 1.1
 8997	Deprecation of TLS 1.1 for Email Submission and Access
+9266	Channel Bindings for TLS 1.3
 
 # SASL
 

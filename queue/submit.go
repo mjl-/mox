@@ -3,6 +3,7 @@ package queue
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"golang.org/x/exp/slices"
 	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/config"
@@ -40,7 +42,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	if dialTLS {
 		tlsMode = smtpclient.TLSImmediate
 	} else if transport.STARTTLSInsecureSkipVerify {
-		tlsMode = smtpclient.TLSOpportunistic
+		tlsMode = smtpclient.TLSRequiredStartTLS
 		tlsPKIX = false
 	} else if transport.NoSTARTTLS {
 		tlsMode = smtpclient.TLSSkip
@@ -119,26 +121,39 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	}
 	dialcancel()
 
-	var auth []sasl.Client
+	var auth func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)
 	if transport.Auth != nil {
 		a := transport.Auth
-		for _, mech := range a.EffectiveMechanisms {
-			switch mech {
-			case "PLAIN":
-				auth = append(auth, sasl.NewClientPlain(a.Username, a.Password))
-			case "CRAM-MD5":
-				auth = append(auth, sasl.NewClientCRAMMD5(a.Username, a.Password))
-			case "SCRAM-SHA-1":
-				auth = append(auth, sasl.NewClientSCRAMSHA1(a.Username, a.Password))
-			case "SCRAM-SHA-256":
-				auth = append(auth, sasl.NewClientSCRAMSHA256(a.Username, a.Password))
-			default:
-				// Should not happen.
-				qlog.Error("missing smtp authentication mechanisms implementation", slog.String("mechanism", mech))
-				errmsg = fmt.Sprintf("transport %s: authentication mechanisms %q not implemented", transportName, mech)
-				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
-				return
+		auth = func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+			var supportsscramsha1plus, supportsscramsha256plus bool
+			for _, mech := range a.EffectiveMechanisms {
+				if !slices.Contains(mechanisms, mech) {
+					switch mech {
+					case "SCRAM-SHA-1-PLUS":
+						supportsscramsha1plus = cs != nil
+					case "SCRAM-SHA-256-PLUS":
+						supportsscramsha256plus = cs != nil
+					}
+					continue
+				}
+				if mech == "SCRAM-SHA-256-PLUS" && cs != nil {
+					return sasl.NewClientSCRAMSHA256PLUS(a.Username, a.Password, *cs), nil
+				} else if mech == "SCRAM-SHA-256" {
+					return sasl.NewClientSCRAMSHA256(a.Username, a.Password, supportsscramsha256plus), nil
+				} else if mech == "SCRAM-SHA-1-PLUS" && cs != nil {
+					return sasl.NewClientSCRAMSHA1PLUS(a.Username, a.Password, *cs), nil
+				} else if mech == "SCRAM-SHA-1" {
+					return sasl.NewClientSCRAMSHA1(a.Username, a.Password, supportsscramsha1plus), nil
+				} else if mech == "CRAM-MD5" {
+					return sasl.NewClientCRAMMD5(a.Username, a.Password), nil
+				} else if mech == "PLAIN" {
+					return sasl.NewClientPlain(a.Username, a.Password), nil
+				}
+				return nil, fmt.Errorf("internal error: unrecognized authentication mechanism %q for transport %s", mech, transportName)
 			}
+
+			// No mutually supported algorithm.
+			return nil, nil
 		}
 	}
 	clientctx, clientcancel := context.WithTimeout(context.Background(), 60*time.Second)

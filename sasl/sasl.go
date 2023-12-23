@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/tls"
 	"fmt"
 	"hash"
 	"strings"
@@ -171,6 +172,15 @@ func (a *clientCRAMMD5) Next(fromServer []byte) (toServer []byte, last bool, rer
 type clientSCRAMSHA struct {
 	Username, Password string
 
+	hash func() hash.Hash
+
+	plus bool
+	cs   tls.ConnectionState
+
+	// When not doing PLUS variant, this field indicates whether that is because the
+	// server doesn't support the PLUS variant. Used for detecting MitM attempts.
+	noServerPlus bool
+
 	name  string
 	step  int
 	scram *scram.Client
@@ -180,18 +190,52 @@ var _ Client = (*clientSCRAMSHA)(nil)
 
 // NewClientSCRAMSHA1 returns a client for SASL SCRAM-SHA-1 authentication.
 //
-// SCRAM-SHA-1 is specified in RFC 5802, Salted Challenge Response Authentication
-// Mechanism (SCRAM) SASL and GSS-API Mechanisms.
-func NewClientSCRAMSHA1(username, password string) Client {
-	return &clientSCRAMSHA{username, password, "SCRAM-SHA-1", 0, nil}
+// Clients should prefer using the PLUS-variant with TLS channel binding, if
+// supported by a server. If noServerPlus is set, this mechanism was chosen because
+// the PLUS-variant was not supported by the server. If the server actually does
+// implement the PLUS variant, this can indicate a MitM attempt, which is detected
+// by the server and causes the authentication attempt to be aborted.
+//
+// SCRAM-SHA-1 is specified in RFC 5802, "Salted Challenge Response Authentication
+// Mechanism (SCRAM) SASL and GSS-API Mechanisms".
+func NewClientSCRAMSHA1(username, password string, noServerPlus bool) Client {
+	return &clientSCRAMSHA{username, password, sha1.New, false, tls.ConnectionState{}, noServerPlus, "SCRAM-SHA-1", 0, nil}
+}
+
+// NewClientSCRAMSHA1PLUS returns a client for SASL SCRAM-SHA-1-PLUS authentication.
+//
+// The PLUS-variant binds the authentication exchange to the TLS connection,
+// detecting any MitM attempt.
+//
+// SCRAM-SHA-1-PLUS is specified in RFC 5802, "Salted Challenge Response
+// Authentication Mechanism (SCRAM) SASL and GSS-API Mechanisms".
+func NewClientSCRAMSHA1PLUS(username, password string, cs tls.ConnectionState) Client {
+	return &clientSCRAMSHA{username, password, sha1.New, true, cs, false, "SCRAM-SHA-1-PLUS", 0, nil}
 }
 
 // NewClientSCRAMSHA256 returns a client for SASL SCRAM-SHA-256 authentication.
 //
-// SCRAM-SHA-256 is specified in RFC 7677, SCRAM-SHA-256 and SCRAM-SHA-256-PLUS
-// Simple Authentication and Security Layer (SASL) Mechanisms.
-func NewClientSCRAMSHA256(username, password string) Client {
-	return &clientSCRAMSHA{username, password, "SCRAM-SHA-256", 0, nil}
+// Clients should prefer using the PLUS-variant with TLS channel binding, if
+// supported by a server. If noServerPlus is set, this mechanism was chosen because
+// the PLUS-variant was not supported by the server. If the server actually does
+// implement the PLUS variant, this can indicate a MitM attempt, which is detected
+// by the server and causes the authentication attempt to be aborted.
+//
+// SCRAM-SHA-256 is specified in RFC 7677, "SCRAM-SHA-256 and SCRAM-SHA-256-PLUS
+// Simple Authentication and Security Layer (SASL) Mechanisms".
+func NewClientSCRAMSHA256(username, password string, noServerPlus bool) Client {
+	return &clientSCRAMSHA{username, password, sha256.New, false, tls.ConnectionState{}, noServerPlus, "SCRAM-SHA-256", 0, nil}
+}
+
+// NewClientSCRAMSHA256PLUS returns a client for SASL SCRAM-SHA-256-PLUS authentication.
+//
+// The PLUS-variant binds the authentication exchange to the TLS connection,
+// detecting any MitM attempt.
+//
+// SCRAM-SHA-256-PLUS is specified in RFC 7677, "SCRAM-SHA-256 and SCRAM-SHA-256-PLUS
+// Simple Authentication and Security Layer (SASL) Mechanisms".
+func NewClientSCRAMSHA256PLUS(username, password string, cs tls.ConnectionState) Client {
+	return &clientSCRAMSHA{username, password, sha256.New, true, cs, false, "SCRAM-SHA-256-PLUS", 0, nil}
 }
 
 func (a *clientSCRAMSHA) Info() (name string, hasCleartextCredentials bool) {
@@ -202,17 +246,11 @@ func (a *clientSCRAMSHA) Next(fromServer []byte) (toServer []byte, last bool, re
 	defer func() { a.step++ }()
 	switch a.step {
 	case 0:
-		var h func() hash.Hash
-		switch a.name {
-		case "SCRAM-SHA-1":
-			h = sha1.New
-		case "SCRAM-SHA-256":
-			h = sha256.New
-		default:
-			return nil, false, fmt.Errorf("invalid SCRAM-SHA variant %q", a.name)
+		var cs *tls.ConnectionState
+		if a.plus {
+			cs = &a.cs
 		}
-
-		a.scram = scram.NewClient(h, a.Username, "")
+		a.scram = scram.NewClient(a.hash, a.Username, "", a.noServerPlus, cs)
 		toserver, err := a.scram.ClientFirst()
 		return []byte(toserver), false, err
 

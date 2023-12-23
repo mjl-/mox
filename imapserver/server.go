@@ -150,13 +150,18 @@ var authFailDelay = time.Second  // After authentication failure.
 // SPECIAL-USE: ../rfc/6154
 // LIST-STATUS: ../rfc/5819
 // ID: ../rfc/2971
-// AUTH=SCRAM-SHA-256: ../rfc/7677 ../rfc/5802
-// AUTH=SCRAM-SHA-1: ../rfc/5802
+// AUTH=SCRAM-SHA-256-PLUS and AUTH=SCRAM-SHA-256: ../rfc/7677 ../rfc/5802
+// AUTH=SCRAM-SHA-1-PLUS and AUTH=SCRAM-SHA-1: ../rfc/5802
 // AUTH=CRAM-MD5: ../rfc/2195
 // APPENDLIMIT, we support the max possible size, 1<<63 - 1: ../rfc/7889:129
 // CONDSTORE: ../rfc/7162:411
 // QRESYNC: ../rfc/7162:1323
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ONLY LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC"
+//
+// We always announce support for SCRAM PLUS-variants, also on connections without
+// TLS. The client should not be selecting PLUS variants on non-TLS connections,
+// instead opting to do the bare SCRAM variant without indicating the server claims
+// to support the PLUS variant (skipping the server downgrade detection check).
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ONLY LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC"
 
 type conn struct {
 	cid               int64
@@ -1654,22 +1659,34 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		acc = nil // Cancel cleanup.
 		c.username = addr
 
-	case "SCRAM-SHA-1", "SCRAM-SHA-256":
+	case "SCRAM-SHA-256-PLUS", "SCRAM-SHA-256", "SCRAM-SHA-1-PLUS", "SCRAM-SHA-1":
 		// todo: improve handling of errors during scram. e.g. invalid parameters. should we abort the imap command, or continue until the end and respond with a scram-level error?
 		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
 
-		authVariant = strings.ToLower(authType)
-		var h func() hash.Hash
-		if authVariant == "scram-sha-1" {
-			h = sha1.New
-		} else {
-			h = sha256.New
-		}
-
 		// No plaintext credentials, we can log these normally.
 
+		authVariant = strings.ToLower(authType)
+		var h func() hash.Hash
+		switch authVariant {
+		case "scram-sha-1", "scram-sha-1-plus":
+			h = sha1.New
+		case "scram-sha-256", "scram-sha-256-plus":
+			h = sha256.New
+		default:
+			xserverErrorf("missing case for scram variant")
+		}
+
+		var cs *tls.ConnectionState
+		requireChannelBinding := strings.HasSuffix(authVariant, "-plus")
+		if requireChannelBinding && !c.tls {
+			xuserErrorf("cannot use plus variant with tls channel binding without tls")
+		}
+		if c.tls {
+			xcs := c.conn.(*tls.Conn).ConnectionState()
+			cs = &xcs
+		}
 		c0 := xreadInitial()
-		ss, err := scram.NewServer(h, c0)
+		ss, err := scram.NewServer(h, c0, cs, requireChannelBinding)
 		if err != nil {
 			xsyntaxErrorf("starting scram: %s", err)
 		}
@@ -1694,10 +1711,13 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		acc.WithRLock(func() {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
-				if authVariant == "scram-sha-1" {
+				switch authVariant {
+				case "scram-sha-1", "scram-sha-1-plus":
 					xscram = password.SCRAMSHA1
-				} else {
+				case "scram-sha-256", "scram-sha-256-plus":
 					xscram = password.SCRAMSHA256
+				default:
+					xserverErrorf("missing case for scram credentials")
 				}
 				if err == bstore.ErrAbsent || err == nil && (len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0) {
 					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", slog.String("address", ss.Authentication))

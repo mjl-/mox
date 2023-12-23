@@ -2,10 +2,12 @@ package smtpclient_test
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"net"
 	"strings"
 
+	"golang.org/x/exp/slices"
 	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/dns"
@@ -29,11 +31,31 @@ func ExampleClient() {
 	ctx := context.Background()
 	tlsVerifyPKIX := true
 	opts := smtpclient.Opts{
-		Auth: []sasl.Client{
+		Auth: func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+			// If the server is known to support a SCRAM PLUS variant, you should only use
+			// that, detecting and preventing authentication mechanism downgrade attacks
+			// through TLS channel binding.
+			username := "mjl"
+			password := "test1234"
+
 			// Prefer strongest authentication mechanism, allow up to older CRAM-MD5.
-			sasl.NewClientSCRAMSHA256("mjl", "test1234"),
-			sasl.NewClientSCRAMSHA1("mjl", "test1234"),
-			sasl.NewClientCRAMMD5("mjl", "test1234"),
+			if cs != nil && slices.Contains(mechanisms, "SCRAM-SHA-256-PLUS") {
+				return sasl.NewClientSCRAMSHA256PLUS(username, password, *cs), nil
+			}
+			if slices.Contains(mechanisms, "SCRAM-SHA-256") {
+				return sasl.NewClientSCRAMSHA256(username, password, true), nil
+			}
+			if cs != nil && slices.Contains(mechanisms, "SCRAM-SHA-1-PLUS") {
+				return sasl.NewClientSCRAMSHA1PLUS(username, password, *cs), nil
+			}
+			if slices.Contains(mechanisms, "SCRAM-SHA-1") {
+				return sasl.NewClientSCRAMSHA1(username, password, true), nil
+			}
+			if slices.Contains(mechanisms, "CRAM-MD5") {
+				return sasl.NewClientCRAMMD5(username, password), nil
+			}
+			// No mutually supported mechanism found, connection will fail.
+			return nil, nil
 		},
 	}
 	localname := dns.Domain{ASCII: "localhost"}

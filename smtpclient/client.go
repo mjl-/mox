@@ -192,10 +192,17 @@ func (e Error) Error() string {
 
 // Opts influence behaviour of Client.
 type Opts struct {
-	// If auth is non-empty, authentication will be done with the first algorithm
-	// supported by the server. If none of the algorithms are supported, an error is
-	// returned.
-	Auth []sasl.Client
+	// If auth is non-nil, authentication will be done with the returned sasl client.
+	// The function should select the preferred mechanism. Mechanisms are in upper
+	// case.
+	//
+	// The TLS connection state can be used for the SCRAM PLUS mechanisms, binding the
+	// authentication exchange to a TLS connection. It is only present for TLS
+	// connections.
+	//
+	// If no mechanism is supported, a nil client and nil error can be returned, and
+	// the connection will fail.
+	Auth func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)
 
 	DANERecords        []adns.TLSA  // If not nil, DANE records to verify.
 	DANEMoreHostnames  []dns.Domain // For use with DANE, where additional certificate host names are allowed.
@@ -666,7 +673,7 @@ func (c *Client) recover(rerr *error) {
 	*rerr = cerr
 }
 
-func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Domain, auth []sasl.Client) (rerr error) {
+func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Domain, auth func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)) (rerr error) {
 	defer c.recover(&rerr)
 
 	// perform EHLO handshake, falling back to HELO if server does not appear to
@@ -808,7 +815,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 		c.tlsResultAddFailureDetails(0, 0, c.tlsrptFailureDetails(tlsrpt.ResultSTARTTLSNotSupported, ""))
 	}
 
-	if len(auth) > 0 {
+	if auth != nil {
 		return c.auth(auth)
 	}
 	return
@@ -859,27 +866,23 @@ func (c *Client) tlsResultAddFailureDetails(success, failure int64, fds ...tlsrp
 }
 
 // ../rfc/4954:139
-func (c *Client) auth(auth []sasl.Client) (rerr error) {
+func (c *Client) auth(auth func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)) (rerr error) {
 	defer c.recover(&rerr)
 
 	c.cmds[0] = "auth"
 	c.cmdStart = time.Now()
 
-	var a sasl.Client
-	var name string
-	var cleartextCreds bool
-	for _, x := range auth {
-		name, cleartextCreds = x.Info()
-		for _, s := range c.extAuthMechanisms {
-			if s == name {
-				a = x
-				break
-			}
-		}
+	mechanisms := make([]string, len(c.extAuthMechanisms))
+	for i, m := range c.extAuthMechanisms {
+		mechanisms[i] = strings.ToUpper(m)
 	}
-	if a == nil {
+	a, err := auth(mechanisms, c.TLSConnectionState())
+	if err != nil {
+		c.xerrorf(true, 0, "", "", "get authentication mechanism: %s, server supports %s", err, strings.Join(c.extAuthMechanisms, ", "))
+	} else if a == nil {
 		c.xerrorf(true, 0, "", "", "no matching authentication mechanisms, server supports %s", strings.Join(c.extAuthMechanisms, ", "))
 	}
+	name, cleartextCreds := a.Info()
 
 	abort := func() (int, string, string) {
 		// Abort authentication. ../rfc/4954:193

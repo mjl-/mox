@@ -260,7 +260,7 @@ type TransportSMTP struct {
 type SMTPAuth struct {
 	Username   string
 	Password   string
-	Mechanisms []string `sconf:"optional" sconf-doc:"Allowed authentication mechanisms. Defaults to SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5. Not included by default: PLAIN."`
+	Mechanisms []string `sconf:"optional" sconf-doc:"Allowed authentication mechanisms. Defaults to SCRAM-SHA-256-PLUS, SCRAM-SHA-256, SCRAM-SHA-1-PLUS, SCRAM-SHA-1, CRAM-MD5. Not included by default: PLAIN. Specify the strongest mechanism known to be implemented by the server to prevent mechanism downgrade attacks."`
 
 	EffectiveMechanisms []string `sconf:"-" json:"-"`
 }

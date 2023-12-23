@@ -30,12 +30,12 @@ func Example() {
 	// Make a new client for authenticating user mjl with SCRAM-SHA-256.
 	username := "mjl"
 	authz := ""
-	client := scram.NewClient(sha256.New, username, authz)
+	client := scram.NewClient(sha256.New, username, authz, false, nil)
 	clientFirst, err := client.ClientFirst()
 	check(err, "client.ClientFirst")
 
-	// Instantia a new server with the initial message from the client.
-	server, err := scram.NewServer(sha256.New, []byte(clientFirst))
+	// Instantiate a new server with the initial message from the client.
+	server, err := scram.NewServer(sha256.New, []byte(clientFirst), nil, false)
 	check(err, "NewServer")
 
 	// Generate first message from server to client, with a challenge.

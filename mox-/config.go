@@ -881,7 +881,9 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 			}
 			seen[m] = true
 			switch m {
+			case "SCRAM-SHA-256-PLUS":
 			case "SCRAM-SHA-256":
+			case "SCRAM-SHA-1-PLUS":
 			case "SCRAM-SHA-1":
 			case "CRAM-MD5":
 			case "PLAIN":
@@ -892,7 +894,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 
 		t.Auth.EffectiveMechanisms = t.Auth.Mechanisms
 		if len(t.Auth.EffectiveMechanisms) == 0 {
-			t.Auth.EffectiveMechanisms = []string{"SCRAM-SHA-256", "SCRAM-SHA-1", "CRAM-MD5"}
+			t.Auth.EffectiveMechanisms = []string{"SCRAM-SHA-256-PLUS", "SCRAM-SHA-256", "SCRAM-SHA-1-PLUS", "SCRAM-SHA-1", "CRAM-MD5"}
 		}
 	}
 

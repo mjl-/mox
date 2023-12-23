@@ -89,7 +89,7 @@ type testserver struct {
 	comm       *store.Comm
 	cid        int64
 	resolver   dns.Resolver
-	auth       []sasl.Client
+	auth       func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)
 	user, pass string
 	submission bool
 	requiretls bool
@@ -159,11 +159,11 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 		close(serverdone)
 	}()
 
-	var auth []sasl.Client
-	if len(ts.auth) > 0 {
-		auth = ts.auth
-	} else if ts.user != "" {
-		auth = append(auth, sasl.NewClientPlain(ts.user, ts.pass))
+	auth := ts.auth
+	if auth == nil && ts.user != "" {
+		auth = func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+			return sasl.NewClientPlain(ts.user, ts.pass), nil
+		}
 	}
 
 	ourHostname := mox.Conf.Static.HostnameDomain
@@ -234,10 +234,12 @@ func TestSubmission(t *testing.T) {
 	}
 	mox.Conf.Dynamic.Domains["mox.example"] = dom
 
-	testAuth := func(authfn func(user, pass string) sasl.Client, user, pass string, expErr *smtpclient.Error) {
+	testAuth := func(authfn func(user, pass string, cs *tls.ConnectionState) sasl.Client, user, pass string, expErr *smtpclient.Error) {
 		t.Helper()
 		if authfn != nil {
-			ts.auth = []sasl.Client{authfn(user, pass)}
+			ts.auth = func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+				return authfn(user, pass, cs), nil
+			}
 		} else {
 			ts.auth = nil
 		}
@@ -258,12 +260,22 @@ func TestSubmission(t *testing.T) {
 
 	ts.submission = true
 	testAuth(nil, "", "", &smtpclient.Error{Permanent: true, Code: smtp.C530SecurityRequired, Secode: smtp.SePol7Other0})
-	authfns := []func(user, pass string) sasl.Client{
-		sasl.NewClientPlain,
-		sasl.NewClientLogin,
-		sasl.NewClientCRAMMD5,
-		sasl.NewClientSCRAMSHA1,
-		sasl.NewClientSCRAMSHA256,
+	authfns := []func(user, pass string, cs *tls.ConnectionState) sasl.Client{
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client { return sasl.NewClientPlain(user, pass) },
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client { return sasl.NewClientLogin(user, pass) },
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client { return sasl.NewClientCRAMMD5(user, pass) },
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+			return sasl.NewClientSCRAMSHA1(user, pass, false)
+		},
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+			return sasl.NewClientSCRAMSHA256(user, pass, false)
+		},
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+			return sasl.NewClientSCRAMSHA1PLUS(user, pass, *cs)
+		},
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+			return sasl.NewClientSCRAMSHA256PLUS(user, pass, *cs)
+		},
 	}
 	for _, fn := range authfns {
 		testAuth(fn, "mjl@mox.example", "test", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8})         // Bad (short) password.

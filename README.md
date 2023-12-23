@@ -115,10 +115,8 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- Quota support in backend
-- SASL SCRAM TLS binding
-- Improve documentation
 - Integrate account page into webmail
+- Improve documentation
 - Per-domain webmail and IMAP/SMTP host name (and TLS cert) and client settings
 - Authentication other than HTTP-basic for webmail/webadmin
 - Improve SMTP delivery from queue

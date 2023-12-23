@@ -130,7 +130,9 @@ Subject: test message
 This is the message.
 `, mailfrom, rcptto)
 		msg = strings.ReplaceAll(msg, "\n", "\r\n")
-		auth := []sasl.Client{sasl.NewClientPlain(mailfrom, password)}
+		auth := func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+			return sasl.NewClientPlain(mailfrom, password), nil
+		}
 		c, err := smtpclient.New(mox.Context, log.Logger, conn, smtpclient.TLSSkip, false, ourHostname, dns.Domain{ASCII: desthost}, smtpclient.Opts{Auth: auth})
 		tcheck(t, err, "smtp hello")
 		err = c.Deliver(mox.Context, mailfrom, rcptto, int64(len(msg)), strings.NewReader(msg), false, false, false)

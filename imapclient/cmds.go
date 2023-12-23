@@ -61,13 +61,26 @@ func (c *Conn) AuthenticatePlain(username, password string) (untagged []Untagged
 	return
 }
 
-// Authenticate with SCRAM-SHA-1 or SCRAM-SHA-256, where the password is not
-// exchanged in original plaintext form, but only derived hashes are exchanged by
-// both parties as proof of knowledge of password.
+// Authenticate with SCRAM-SHA-256(-PLUS) or SCRAM-SHA-1(-PLUS). With SCRAM, the
+// password is not exchanged in plaintext form, but only derived hashes are
+// exchanged by both parties as proof of knowledge of password.
+//
+// The PLUS variants bind the authentication exchange to the TLS connection,
+// detecting MitM attacks.
 func (c *Conn) AuthenticateSCRAM(method string, h func() hash.Hash, username, password string) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
 
-	sc := scram.NewClient(h, username, "")
+	var cs *tls.ConnectionState
+	lmethod := strings.ToLower(method)
+	if strings.HasSuffix(lmethod, "-plus") {
+		tlsConn, ok := c.conn.(*tls.Conn)
+		if !ok {
+			c.xerrorf("cannot use scram plus without tls")
+		}
+		xcs := tlsConn.ConnectionState()
+		cs = &xcs
+	}
+	sc := scram.NewClient(h, username, "", false, cs)
 	clientFirst, err := sc.ClientFirst()
 	c.xcheckf(err, "scram clientFirst")
 	c.LastTag = c.nextTag()

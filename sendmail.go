@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"golang.org/x/exp/slices"
 
 	"github.com/mjl-/sconf"
 
@@ -30,8 +33,8 @@ var submitconf struct {
 	TLS                bool             `sconf-doc:"Connect with TLS. Usually for connections to port 465."`
 	STARTTLS           bool             `sconf-doc:"After starting in plain text, use STARTTLS to enable TLS. For port 587 and 25."`
 	Username           string           `sconf-doc:"For SMTP authentication."`
-	Password           string           `sconf-doc:"For password-based SMTP authentication, e.g. SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5, PLAIN."`
-	AuthMethod         string           `sconf-doc:"If set, only attempt this authentication mechanism. E.g. SCRAM-SHA-256. If not set, any mutually supported algorithm can be used, in order of most to least secure."`
+	Password           string           `sconf-doc:"For password-based SMTP authentication, e.g. SCRAM-SHA-256-PLUS, CRAM-MD5, PLAIN."`
+	AuthMethod         string           `sconf-doc:"If set, only attempt this authentication mechanism. E.g. SCRAM-SHA-256-PLUS, SCRAM-SHA-256, SCRAM-SHA-1-PLUS, SCRAM-SHA-1, CRAM-MD5, PLAIN. If not set, any mutually supported algorithm can be used, in order listed, from most to least secure. It is recommended to specify the strongest authentication mechanism known to be implemented by the server, to prevent mechanism downgrade attacks."`
 	From               string           `sconf-doc:"Address for MAIL FROM in SMTP and From-header in message."`
 	DefaultDestination string           `sconf:"optional" sconf-doc:"Used when specified address does not contain an @ and may be a local user (eg root)."`
 	RequireTLS         RequireTLSOption `sconf:"optional" sconf-doc:"If yes, submission server must implement SMTP REQUIRETLS extension, and connection to submission server must use verified TLS. If no, a TLS-Required header with value no is added to the message, allowing fallback to unverified TLS or plain text delivery despite recpient domain policies. By default, the submission server will follow the policies of the recipient domain (MTA-STS and/or DANE), and apply unverified opportunistic TLS with STARTTLS."`
@@ -252,23 +255,45 @@ binary should be setgid that group:
 	conn, err := d.Dial("tcp", addr)
 	xsavecheckf(err, "dial submit server")
 
-	var auth []sasl.Client
-	switch submitconf.AuthMethod {
-	case "SCRAM-SHA-256":
-		auth = []sasl.Client{sasl.NewClientSCRAMSHA256(submitconf.Username, submitconf.Password)}
-	case "SCRAM-SHA-1":
-		auth = []sasl.Client{sasl.NewClientSCRAMSHA1(submitconf.Username, submitconf.Password)}
-	case "CRAM-MD5":
-		auth = []sasl.Client{sasl.NewClientCRAMMD5(submitconf.Username, submitconf.Password)}
-	case "PLAIN":
-		auth = []sasl.Client{sasl.NewClientPlain(submitconf.Username, submitconf.Password)}
-	default:
-		auth = []sasl.Client{
-			sasl.NewClientSCRAMSHA256(submitconf.Username, submitconf.Password),
-			sasl.NewClientSCRAMSHA1(submitconf.Username, submitconf.Password),
-			sasl.NewClientCRAMMD5(submitconf.Username, submitconf.Password),
-			sasl.NewClientPlain(submitconf.Username, submitconf.Password),
+	auth := func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+		// Check explicitly configured mechanisms.
+		switch submitconf.AuthMethod {
+		case "SCRAM-SHA-256-PLUS":
+			if cs == nil {
+				return nil, fmt.Errorf("scram plus authentication mechanism requires tls")
+			}
+			return sasl.NewClientSCRAMSHA256PLUS(submitconf.Username, submitconf.Password, *cs), nil
+		case "SCRAM-SHA-256":
+			return sasl.NewClientSCRAMSHA256(submitconf.Username, submitconf.Password, false), nil
+		case "SCRAM-SHA-1-PLUS":
+			if cs == nil {
+				return nil, fmt.Errorf("scram plus authentication mechanism requires tls")
+			}
+			return sasl.NewClientSCRAMSHA1PLUS(submitconf.Username, submitconf.Password, *cs), nil
+		case "SCRAM-SHA-1":
+			return sasl.NewClientSCRAMSHA1(submitconf.Username, submitconf.Password, false), nil
+		case "CRAM-MD5":
+			return sasl.NewClientCRAMMD5(submitconf.Username, submitconf.Password), nil
+		case "PLAIN":
+			return sasl.NewClientPlain(submitconf.Username, submitconf.Password), nil
 		}
+
+		// Try the defaults, from more to less secure.
+		if cs != nil && slices.Contains(mechanisms, "SCRAM-SHA-256-PLUS") {
+			return sasl.NewClientSCRAMSHA256PLUS(submitconf.Username, submitconf.Password, *cs), nil
+		} else if slices.Contains(mechanisms, "SCRAM-SHA-256") {
+			return sasl.NewClientSCRAMSHA256(submitconf.Username, submitconf.Password, true), nil
+		} else if cs != nil && slices.Contains(mechanisms, "SCRAM-SHA-1-PLUS") {
+			return sasl.NewClientSCRAMSHA1PLUS(submitconf.Username, submitconf.Password, *cs), nil
+		} else if slices.Contains(mechanisms, "SCRAM-SHA-1") {
+			return sasl.NewClientSCRAMSHA1(submitconf.Username, submitconf.Password, true), nil
+		} else if slices.Contains(mechanisms, "CRAM-MD5") {
+			return sasl.NewClientCRAMMD5(submitconf.Username, submitconf.Password), nil
+		} else if slices.Contains(mechanisms, "PLAIN") {
+			return sasl.NewClientPlain(submitconf.Username, submitconf.Password), nil
+		}
+		// No mutually supported mechanism.
+		return nil, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

@@ -16,6 +16,7 @@ package imapclient
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"reflect"
@@ -115,6 +116,15 @@ func (c *Conn) xcheck(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// TLSConnectionState returns the TLS connection state if the connection uses TLS.
+func (c *Conn) TLSConnectionState() *tls.ConnectionState {
+	if conn, ok := c.conn.(*tls.Conn); ok {
+		cs := conn.ConnectionState()
+		return &cs
+	}
+	return nil
 }
 
 // Commandf writes a free-form IMAP command to the server.

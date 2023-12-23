@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	cryptorand "crypto/rand"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -102,6 +103,20 @@ func xor(a, b []byte) {
 	}
 }
 
+func channelBindData(cs *tls.ConnectionState) ([]byte, error) {
+	if cs.Version <= tls.VersionTLS12 {
+		if cs.TLSUnique == nil {
+			return nil, fmt.Errorf("no channel binding data available")
+		}
+		return cs.TLSUnique, nil
+	}
+
+	// "tls-exporter", ../rfc/9266:95
+	// Since TLS 1.3, a zero-length and absent context have the same behaviour. ../rfc/8446:5385 ../rfc/8446:5405
+	// This is different from TLS 1.2 and earlier. ../rfc/5705:206 ../rfc/5705:245
+	return cs.ExportKeyingMaterial("EXPORTER-Channel-Binding", []byte{}, 32)
+}
+
 // Server represents the server-side of a SCRAM-SHA-* authentication.
 type Server struct {
 	Authentication string // Username for authentication, "authc". Always set and non-empty.
@@ -118,15 +133,24 @@ type Server struct {
 	clientNonce         string // Client-part of the nonce.
 	serverNonceOverride string // If set, server does not generate random nonce, but uses this. For tests with the test vector.
 	nonce               string // Full client + server nonce.
+	channelBinding      []byte
 }
 
 // NewServer returns a server given the first SCRAM message from a client.
+//
+// If cs is set, the PLUS variant can be negotiated, binding the authentication
+// exchange to the TLS channel (preventing MitM attempts). If a client
+// indicates it supports the PLUS variant, but thinks the server does not, the
+// authentication attempt will fail.
+//
+// If channelBindingRequired is set, the client has indicated it will do channel
+// binding and not doing so will cause the authentication to fail.
 //
 // The sequence for data and calls on a server:
 //
 //   - Read initial data from client, call NewServer (this call), then ServerFirst and write to the client.
 //   - Read response from client, call Finish or FinishFinal and write the resulting string.
-func NewServer(h func() hash.Hash, clientFirst []byte) (server *Server, rerr error) {
+func NewServer(h func() hash.Hash, clientFirst []byte, cs *tls.ConnectionState, channelBindingRequired bool) (server *Server, rerr error) {
 	p := newParser(clientFirst)
 	defer p.recover(&rerr)
 
@@ -135,9 +159,58 @@ func NewServer(h func() hash.Hash, clientFirst []byte) (server *Server, rerr err
 	// ../rfc/5802:949 ../rfc/5802:910
 	gs2cbindFlag := p.xbyte()
 	switch gs2cbindFlag {
-	case 'n', 'y':
+	case 'n':
+		// Client does not support channel binding.
+		if channelBindingRequired {
+			p.xerrorf("channel binding is required when specifying scram plus: %w", ErrChannelBindingsDontMatch)
+		}
+	case 'y':
+		// Client supports channel binding but thinks we as server do not.
+		p.xerrorf("gs2 channel bind flag is y, client believes server does not support channel binding: %w", ErrServerDoesSupportChannelBinding)
 	case 'p':
-		p.xerrorf("gs2 header with p: %w", ErrChannelBindingNotSupported)
+		// Use channel binding.
+		// It seems a cyrus-sasl client tells a server it is using the bare (non-PLUS)
+		// scram authentication mechanism, but then does use channel binding. It seems to
+		// use the server announcement of the plus variant only to learn the server
+		// supports channel binding.
+		p.xtake("=")
+		cbname := p.xcbname()
+		// Assume the channel binding name is case-sensitive, and lower-case as used in
+		// examples. The ABNF rule accepts both lower and upper case. But the ABNF for
+		// attribute names also allows that, while the text claims they are case
+		// sensitive... ../rfc/5802:547
+		switch cbname {
+		case "tls-unique":
+			if cs == nil {
+				p.xerrorf("no tls connection: %w", ErrChannelBindingsDontMatch)
+			} else if cs.Version >= tls.VersionTLS13 {
+				// ../rfc/9266:122
+				p.xerrorf("tls-unique not defined for tls 1.3 and later, use tls-exporter: %w", ErrChannelBindingsDontMatch)
+			} else if cs.TLSUnique == nil {
+				// As noted in the crypto/tls documentation.
+				p.xerrorf("no tls-unique channel binding value for this tls connection, possibly due to missing extended master key support and/or resumed connection: %w", ErrChannelBindingsDontMatch)
+			}
+		case "tls-exporter":
+			if cs == nil {
+				p.xerrorf("no tls connection: %w", ErrChannelBindingsDontMatch)
+			} else if cs.Version < tls.VersionTLS13 {
+				// Using tls-exporter with pre-1.3 TLS would require more precautions. Perhaps later.
+				// ../rfc/9266:201
+				p.xerrorf("tls-exporter with tls before 1.3 not implemented, use tls-unique: %w", ErrChannelBindingsDontMatch)
+			}
+		default:
+			p.xerrorf("unknown parameter p %s: %w", cbname, ErrUnsupportedChannelBindingType)
+		}
+		cb, err := channelBindData(cs)
+		if err != nil {
+			// We can pass back the error, it should never contain sensitive data, and only
+			// happen due to incorrect calling or a TLS config that is currently impossible
+			// (renegotiation enabled).
+			p.xerrorf("error fetching channel binding data: %v: %w", err, ErrOtherError)
+		}
+		server.channelBinding = cb
+	default:
+		p.xerrorf("unrecognized gs2 channel bind flag")
 	}
 	p.xtake(",")
 	if !p.take(",") {
@@ -150,9 +223,10 @@ func NewServer(h func() hash.Hash, clientFirst []byte) (server *Server, rerr err
 	server.gs2header = p.s[:p.o]
 	server.clientFirstBare = p.s[p.o:]
 
-	// ../rfc/5802:945
+	// ../rfc/5802:632
+	// ../rfc/5802:946
 	if p.take("m=") {
-		p.xerrorf("unexpected mandatory extension: %w", ErrExtensionsNotSupported)
+		p.xerrorf("unexpected mandatory extension: %w", ErrExtensionsNotSupported) // ../rfc/5802:973
 	}
 	server.Authentication = p.xusername()
 	if norm.NFC.String(server.Authentication) != server.Authentication {
@@ -192,8 +266,12 @@ func (s *Server) Finish(clientFinal []byte, saltedPassword []byte) (serverFinal 
 	p := newParser(clientFinal)
 	defer p.recover(&rerr)
 
+	// If there is any channel binding, and it doesn't match, this may be a
+	// MitM-attack. If the MitM would replace the channel binding, the signature
+	// calculated below would not match.
 	cbind := p.xchannelBinding()
-	if cbind != s.gs2header {
+	cbindExp := append([]byte(s.gs2header), s.channelBinding...)
+	if !bytes.Equal(cbind, cbindExp) {
 		return "e=" + string(ErrChannelBindingsDontMatch), ErrChannelBindingsDontMatch
 	}
 	p.xtake(",")
@@ -210,21 +288,21 @@ func (s *Server) Finish(clientFinal []byte, saltedPassword []byte) (serverFinal 
 	proof := p.xproof()
 	p.xempty()
 
-	msg := s.clientFirstBare + "," + s.serverFirst + "," + s.clientFinalWithoutProof
+	authMsg := s.clientFirstBare + "," + s.serverFirst + "," + s.clientFinalWithoutProof
 
 	clientKey := hmac0(s.h, saltedPassword, "Client Key")
 	h := s.h()
 	h.Write(clientKey)
 	storedKey := h.Sum(nil)
 
-	clientSig := hmac0(s.h, storedKey, msg)
+	clientSig := hmac0(s.h, storedKey, authMsg)
 	xor(clientSig, clientKey) // Now clientProof.
 	if !bytes.Equal(clientSig, proof) {
 		return "e=" + string(ErrInvalidProof), ErrInvalidProof
 	}
 
 	serverKey := hmac0(s.h, saltedPassword, "Server Key")
-	serverSig := hmac0(s.h, serverKey, msg)
+	serverSig := hmac0(s.h, serverKey, authMsg)
 	return fmt.Sprintf("v=%s", base64.StdEncoding.EncodeToString(serverSig)), nil
 }
 
@@ -239,7 +317,9 @@ type Client struct {
 	authc string
 	authz string
 
-	h func() hash.Hash // sha1.New or sha256.New
+	h            func() hash.Hash     // sha1.New or sha256.New
+	noServerPlus bool                 // Server did not announce support for PLUS-variant.
+	cs           *tls.ConnectionState // If set, use PLUS-variant.
 
 	// Messages used in hash calculations.
 	clientFirstBare         string
@@ -247,31 +327,69 @@ type Client struct {
 	clientFinalWithoutProof string
 	authMessage             string
 
-	gs2header      string
-	clientNonce    string
-	nonce          string // Full client + server nonce.
-	saltedPassword []byte
+	gs2header       string
+	clientNonce     string
+	nonce           string // Full client + server nonce.
+	saltedPassword  []byte
+	channelBindData []byte // For PLUS-variant.
 }
 
 // NewClient returns a client for authentication authc, optionally for
 // authorization with role authz, for the hash (sha1.New or sha256.New).
+//
+// If noServerPlus is true, the client would like to have used the PLUS-variant,
+// that binds the authentication attempt to the TLS connection, but the client did
+// not see support for the PLUS variant announced by the server. Used during
+// negotiation to detect possible MitM attempt.
+//
+// If cs is not nil, the SCRAM PLUS-variant is negotiated, with channel binding to
+// the unique TLS connection, either using "tls-exporter" for TLS 1.3 and later, or
+// "tls-unique" otherwise.
+//
+// If cs is nil, no channel binding is done. If noServerPlus is also false, the
+// client is configured to not attempt/"support" the PLUS-variant, ensuring servers
+// that do support the PLUS-variant do not abort the connection.
 //
 // The sequence for data and calls on a client:
 //
 //   - ClientFirst, write result to server.
 //   - Read response from server, feed to ServerFirst, write response to server.
 //   - Read response from server, feed to ServerFinal.
-func NewClient(h func() hash.Hash, authc, authz string) *Client {
+func NewClient(h func() hash.Hash, authc, authz string, noServerPlus bool, cs *tls.ConnectionState) *Client {
 	authc = norm.NFC.String(authc)
 	authz = norm.NFC.String(authz)
-	return &Client{authc: authc, authz: authz, h: h}
+	return &Client{authc: authc, authz: authz, h: h, noServerPlus: noServerPlus, cs: cs}
 }
 
 // ClientFirst returns the first client message to write to the server.
 // No channel binding is done/supported.
 // A random nonce is generated.
 func (c *Client) ClientFirst() (clientFirst string, rerr error) {
-	c.gs2header = fmt.Sprintf("n,%s,", saslname(c.authz))
+	if c.noServerPlus && c.cs != nil {
+		return "", fmt.Errorf("cannot set both claim channel binding is not supported, and use channel binding")
+	}
+	// The first byte of the gs2header indicates if/how channel binding should be used.
+	// ../rfc/5802:903
+	if c.cs != nil {
+		if c.cs.Version >= tls.VersionTLS13 {
+			c.gs2header = "p=tls-exporter"
+		} else {
+			c.gs2header = "p=tls-unique"
+		}
+		cbdata, err := channelBindData(c.cs)
+		if err != nil {
+			return "", fmt.Errorf("get channel binding data: %v", err)
+		}
+		c.channelBindData = cbdata
+	} else if c.noServerPlus {
+		// We support it, but we think server does not. If server does support it, we may
+		// have been downgraded, and the server will tell us.
+		c.gs2header = "y"
+	} else {
+		// We don't want to do channel binding.
+		c.gs2header = "n"
+	}
+	c.gs2header += fmt.Sprintf(",%s,", saslname(c.authz))
 	if c.clientNonce == "" {
 		c.clientNonce = base64.StdEncoding.EncodeToString(MakeRandom())
 	}
@@ -288,9 +406,10 @@ func (c *Client) ServerFirst(serverFirst []byte, password string) (clientFinal s
 	p := newParser(serverFirst)
 	defer p.recover(&rerr)
 
+	// ../rfc/5802:632
 	// ../rfc/5802:959
 	if p.take("m=") {
-		p.xerrorf("unsupported mandatory extension: %w", ErrExtensionsNotSupported)
+		p.xerrorf("unsupported mandatory extension: %w", ErrExtensionsNotSupported) // ../rfc/5802:973
 	}
 
 	c.nonce = p.xnonce()
@@ -317,7 +436,12 @@ func (c *Client) ServerFirst(serverFirst []byte, password string) (clientFinal s
 		return "", fmt.Errorf("%w: too few iterations", ErrUnsafe)
 	}
 
-	c.clientFinalWithoutProof = fmt.Sprintf("c=%s,r=%s", base64.StdEncoding.EncodeToString([]byte(c.gs2header)), c.nonce)
+	// We send our channel binding data if present. If the server has different values,
+	// we'll get an error. If any MitM would try to modify the channel binding data,
+	// the server cannot verify our signature and will fail the attempt.
+	// ../rfc/5802:925 ../rfc/5802:1015
+	cbindInput := append([]byte(c.gs2header), c.channelBindData...)
+	c.clientFinalWithoutProof = fmt.Sprintf("c=%s,r=%s", base64.StdEncoding.EncodeToString(cbindInput), c.nonce)
 
 	c.authMessage = c.clientFirstBare + "," + c.serverFirst + "," + c.clientFinalWithoutProof
 
