@@ -638,6 +638,14 @@ describe-static" and "mox config describe-domains":
 			# Free-form description of domain. (optional)
 			Description:
 
+			# Hostname for client settings instead of the mail server hostname. E.g.
+			# mail.<domain>. For future migration to another mail operator without requiring
+			# all clients to update their settings, it is convenient to have client settings
+			# that reference a subdomain of the hosted domain instead of the hostname of the
+			# server where the mail is currently hosted. If empty, the hostname of the mail
+			# server is used for client configurations. (optional)
+			ClientSettingsDomain:
+
 			# If not empty, only the string before the separator is used to for email delivery
 			# decisions. For example, if set to "+", you+anything@example.com will be
 			# delivered to you@example.com. (optional)

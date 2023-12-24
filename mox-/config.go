@@ -279,6 +279,10 @@ func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 					hostnames[d] = struct{}{}
 				}
 			}
+
+			if dom.ClientSettingsDomain != "" {
+				hostnames[dom.ClientSettingsDNSDomain] = struct{}{}
+			}
 		}
 
 		if l.WebserverHTTPS.Enabled {
@@ -1085,6 +1089,14 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		}
 
 		domain.Domain = dnsdomain
+
+		if domain.ClientSettingsDomain != "" {
+			csd, err := dns.ParseDomain(domain.ClientSettingsDomain)
+			if err != nil {
+				addErrorf("bad client settings domain %q: %s", domain.ClientSettingsDomain, err)
+			}
+			domain.ClientSettingsDNSDomain = csd
+		}
 
 		for _, sign := range domain.DKIM.Sign {
 			if _, ok := domain.DKIM.Selectors[sign]; !ok {

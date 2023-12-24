@@ -343,7 +343,8 @@ type SRVConfCheckResult struct {
 }
 
 type AutoconfCheckResult struct {
-	IPs []string
+	ClientSettingsDomainIPs []string
+	IPs                     []string
 	Result
 }
 
@@ -440,7 +441,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		*l = append(*l, fmt.Sprintf(format, args...))
 	}
 
-	// host must be an absolute dns name, ending with a dot.
+	// Host must be an absolute dns name, ending with a dot.
 	lookupIPs := func(errors *[]string, host string) (ips []string, ourIPs, notOurIPs []net.IP, rerr error) {
 		addrs, _, err := resolver.LookupHost(ctx, host)
 		if err != nil {
@@ -1382,6 +1383,23 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 	go func() {
 		defer logPanic(ctx)
 		defer wg.Done()
+
+		if domConf.ClientSettingsDomain != "" {
+			addf(&r.Autoconf.Instructions, "Ensure a DNS CNAME record like the following exists:\n\n\t%s CNAME %s\n\nNote: the trailing dot is relevant, it makes the host name absolute instead of relative to the domain name.", domConf.ClientSettingsDNSDomain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
+
+			ips, ourIPs, notOurIPs, err := lookupIPs(&r.Autoconf.Errors, domConf.ClientSettingsDNSDomain.ASCII+".")
+			if err != nil {
+				addf(&r.Autoconf.Errors, "Looking up client settings DNS CNAME: %s", err)
+			}
+			r.Autoconf.ClientSettingsDomainIPs = ips
+			if !isUnspecifiedNAT {
+				if len(ourIPs) == 0 {
+					addf(&r.Autoconf.Errors, "Client settings domain does not point to one of our IPs.")
+				} else if len(notOurIPs) > 0 {
+					addf(&r.Autoconf.Errors, "Client settings domain points to some IPs that are not ours: %v", notOurIPs)
+				}
+			}
+		}
 
 		addf(&r.Autoconf.Instructions, "Ensure a DNS CNAME record like the following exists:\n\n\tautoconfig.%s CNAME %s\n\nNote: the trailing dot is relevant, it makes the host name absolute instead of relative to the domain name.", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 

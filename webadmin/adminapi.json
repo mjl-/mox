@@ -2226,6 +2226,14 @@
 			"Docs": "",
 			"Fields": [
 				{
+					"Name": "ClientSettingsDomainIPs",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
 					"Name": "IPs",
 					"Docs": "",
 					"Typewords": [

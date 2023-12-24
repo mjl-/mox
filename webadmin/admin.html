@@ -1025,8 +1025,9 @@ const domainDNSCheck = async (d) => {
 			}),
 		),
 	]
-	const detailsAutoconf = !checks.Autoconf.IPs ? [] : [
-		dom.div('IPs: ' + checks.Autoconf.IPs.join(', ')),
+	const detailsAutoconf = [
+		...(!checks.Autoconf.ClientSettingsDomainIPs ? [] : [dom.div('Client settings domain IPs: ' + checks.Autoconf.ClientSettingsDomainIPs.join(', '))]),
+		...(!checks.Autoconf.IPs ? [] : [dom.div('IPs: ' + checks.Autoconf.IPs.join(', '))]),
 	]
 	const detailsAutodiscover = !checks.Autodiscover.Records ? [] : [
 		dom.table(

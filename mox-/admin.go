@@ -250,6 +250,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 	confDKIM.Sign = []string{year + "a", year + "b"}
 
 	confDomain := config.Domain{
+		ClientSettingsDomain:       "mail." + domain.Name(),
 		LocalpartCatchallSeparator: "+",
 		DKIM:                       confDKIM,
 		DMARC: &config.DMARC{
@@ -653,6 +654,16 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 		)
 	}
 
+	if domConf.ClientSettingsDomain != "" && domConf.ClientSettingsDNSDomain != Conf.Static.HostnameDomain {
+		records = append(records,
+			"; Client settings will reference a subdomain of the hosted domain, making it",
+			"; easier to migrate to a different server in the future by not requiring settings",
+			"; in all clients to be updated.",
+			fmt.Sprintf(`%-*s CNAME %s.`, 20+len(d), domConf.ClientSettingsDNSDomain.ASCII+".", h),
+			"",
+		)
+	}
+
 	records = append(records,
 		"; Autoconfig is used by Thunderbird. Autodiscover is (in theory) used by Microsoft.",
 		fmt.Sprintf(`autoconfig.%s.         CNAME %s.`, d, h),
@@ -694,8 +705,13 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 				"; Or alternatively only limit for email-specific subdomains, so you can use",
 				"; other accounts/methods for other subdomains.",
 				fmt.Sprintf(`;; autoconfig.%s.      CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
-				fmt.Sprintf(`;; mtasts.%s.          CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
+				fmt.Sprintf(`;; mta-sts.%s.         CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
 			)
+			if domConf.ClientSettingsDomain != "" && domConf.ClientSettingsDNSDomain != Conf.Static.HostnameDomain {
+				records = append(records,
+					fmt.Sprintf(`;; %-*s CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, 20-3+len(d), domConf.ClientSettingsDNSDomain.ASCII, certIssuerDomainName, acmeAccountURI),
+				)
+			}
 			if strings.HasSuffix(h, "."+d) {
 				records = append(records,
 					";",
@@ -1077,7 +1093,8 @@ type ClientConfig struct {
 func ClientConfigDomain(d dns.Domain) (rconfig ClientConfig, rerr error) {
 	var haveIMAP, haveSubmission bool
 
-	if _, ok := Conf.Domain(d); !ok {
+	domConf, ok := Conf.Domain(d)
+	if !ok {
 		return ClientConfig{}, fmt.Errorf("unknown domain")
 	}
 
@@ -1085,6 +1102,9 @@ func ClientConfigDomain(d dns.Domain) (rconfig ClientConfig, rerr error) {
 		host := Conf.Static.HostnameDomain
 		if l.Hostname != "" {
 			host = l.HostnameDomain
+		}
+		if domConf.ClientSettingsDomain != "" {
+			host = domConf.ClientSettingsDNSDomain
 		}
 		if !haveIMAP && l.IMAPS.Enabled {
 			rconfig.IMAP.Host = host
@@ -1153,7 +1173,7 @@ type ClientConfigsEntry struct {
 // ClientConfigsDomain returns the client configs for IMAP/Submission for a
 // domain.
 func ClientConfigsDomain(d dns.Domain) (ClientConfigs, error) {
-	_, ok := Conf.Domain(d)
+	domConf, ok := Conf.Domain(d)
 	if !ok {
 		return ClientConfigs{}, fmt.Errorf("unknown domain")
 	}
@@ -1184,6 +1204,9 @@ func ClientConfigsDomain(d dns.Domain) (ClientConfigs, error) {
 		host := Conf.Static.HostnameDomain
 		if l.Hostname != "" {
 			host = l.HostnameDomain
+		}
+		if domConf.ClientSettingsDomain != "" {
+			host = domConf.ClientSettingsDNSDomain
 		}
 		if l.Submissions.Enabled {
 			c.Entries = append(c.Entries, ClientConfigsEntry{"Submission (SMTP)", host, config.Port(l.Submissions.Port, 465), name, "with TLS"})
