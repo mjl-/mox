@@ -71,8 +71,10 @@ Below are the incompatible changes between v0.0.8 and v0.0.9, per package.
 - Verify: changed from func(*github.com/mjl-/mox/mlog.Log, io.ReaderAt, []byte, time.Duration) error to func(*golang.org/x/exp/slog.Logger, io.ReaderAt, []byte, time.Duration) error
 
 # tlsrpt
+- (*TLSRPTDateRange).UnmarshalJSON: removed
 - Lookup: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (*Record, string, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (*Record, string, error)
-- ParseMessage: changed from func(*github.com/mjl-/mox/mlog.Log, io.ReaderAt) (*Report, error) to func(*golang.org/x/exp/slog.Logger, io.ReaderAt) (*Report, error)
+- Parse: changed from func(io.Reader) (*Report, error) to func(io.Reader) (*ReportJSON, error)
+- ParseMessage: changed from func(*github.com/mjl-/mox/mlog.Log, io.ReaderAt) (*Report, error) to func(*golang.org/x/exp/slog.Logger, io.ReaderAt) (*ReportJSON, error)
 
 # updates
 - Check: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, Version, string, []byte) (Version, *Record, *Changelog, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, Version, string, []byte) (Version, *Record, *Changelog, error)

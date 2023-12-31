@@ -1,16 +1,22 @@
 default: build
 
-build:
+build: build0 frontend build1
+
+build0:
 	# build early to catch syntax errors
 	CGO_ENABLED=0 go build
 	CGO_ENABLED=0 go vet ./...
 	CGO_ENABLED=0 go vet -tags integration
 	./gendoc.sh
-	(cd webadmin && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Admin) >webadmin/adminapi.json
-	(cd webaccount && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Account) >webaccount/accountapi.json
+	(cd webadmin && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Admin) >webadmin/api.json
+	(cd webaccount && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Account) >webaccount/api.json
 	(cd webmail && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Webmail) >webmail/api.json
-	go run vendor/github.com/mjl-/sherpats/cmd/sherpats/main.go -bytes-to-string -slices-nullable -maps-nullable -nullable-optional -namespace api api <webmail/api.json >webmail/api.ts
-	# build again, api json files above are embedded
+	./gents.sh webadmin/api.json webadmin/api.ts
+	./gents.sh webaccount/api.json webaccount/api.ts
+	./gents.sh webmail/api.json webmail/api.ts
+
+build1:
+	# build again, api json files above are embedded and new frontend code generated
 	CGO_ENABLED=0 go build
 
 test:
@@ -75,7 +81,7 @@ fmt:
 	gofmt -w -s *.go */*.go
 
 jswatch:
-	bash -c 'while true; do inotifywait -q -e close_write webadmin/*.html webaccount/*.html webmail/*.ts; make frontend; done'
+	bash -c 'while true; do inotifywait -q -e close_write *.ts webadmin/*.ts webaccount/*.ts webmail/*.ts; make frontend; done'
 
 jsinstall:
 	-mkdir -p node_modules/.bin
@@ -83,24 +89,24 @@ jsinstall:
 
 jsinstall0:
 	-mkdir -p node_modules/.bin
-	npm install --save-dev --save-exact jshint@2.13.6 typescript@5.1.6
+	npm install --save-dev --save-exact typescript@5.1.6
 
-webmail/webmail.js: webmail/api.ts webmail/lib.ts webmail/webmail.ts
+webmail/webmail.js: lib.ts webmail/api.ts webmail/lib.ts webmail/webmail.ts
 	./tsc.sh $@ $^
 
-webmail/msg.js: webmail/api.ts webmail/lib.ts webmail/msg.ts
+webmail/msg.js: lib.ts webmail/api.ts webmail/lib.ts webmail/msg.ts
 	./tsc.sh $@ $^
 
-webmail/text.js: webmail/api.ts webmail/lib.ts webmail/text.ts
+webmail/text.js: lib.ts webmail/api.ts webmail/lib.ts webmail/text.ts
 	./tsc.sh $@ $^
 
-webadmin/admin.htmlx:
-	./node_modules/.bin/jshint --extract always webadmin/admin.html | ./fixjshintlines.sh
+webadmin/admin.js: lib.ts webadmin/api.ts webadmin/admin.ts
+	./tsc.sh $@ $^
 
-webaccount/account.htmlx:
-	./node_modules/.bin/jshint --extract always webaccount/account.html | ./fixjshintlines.sh
+webaccount/account.js: lib.ts webaccount/api.ts webaccount/account.ts
+	./tsc.sh $@ $^
 
-frontend: webadmin/admin.htmlx webaccount/account.htmlx webmail/webmail.js webmail/msg.js webmail/text.js
+frontend: webadmin/admin.js webaccount/account.js webmail/webmail.js webmail/msg.js webmail/text.js
 
 genapidiff:
 	# needs file next.txt containing next version number, and golang.org/x/exp/cmd/apidiff@v0.0.0-20231206192017-f3f8817b8deb installed

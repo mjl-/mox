@@ -6,7 +6,6 @@ package webmail
 import (
 	"archive/zip"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -21,8 +20,6 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	_ "embed"
 
@@ -40,7 +37,6 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/webaccount"
 )
@@ -150,159 +146,11 @@ func xdbread(ctx context.Context, acc *store.Account, fn func(tx *bstore.Tx)) {
 	xcheckf(ctx, err, "transaction")
 }
 
-// We merge the js into the html at first load, cache a gzipped version that is
-// generated on first need, and respond with a Last-Modified header. For quickly
-// serving a single, compressed, cacheable file.
-type merged struct {
-	sync.Mutex
-	combined                 []byte
-	combinedGzip             []byte
-	mtime                    time.Time // For Last-Modified and conditional request.
-	fallbackHTML, fallbackJS []byte    // The embedded html/js files.
-	htmlPath, jsPath         string    // Paths used during development.
-}
-
-var webmail = &merged{
-	fallbackHTML: webmailHTML,
-	fallbackJS:   webmailJS,
-	htmlPath:     filepath.FromSlash("webmail/webmail.html"),
-	jsPath:       filepath.FromSlash("webmail/webmail.js"),
-}
-
-// fallbackMtime returns a time to use for the Last-Modified header in case we
-// cannot find a file, e.g. when used in production.
-func fallbackMtime(log mlog.Log) time.Time {
-	p, err := os.Executable()
-	log.Check(err, "finding executable for mtime")
-	if err == nil {
-		st, err := os.Stat(p)
-		log.Check(err, "stat on executable for mtime")
-		if err == nil {
-			return st.ModTime()
-		}
-	}
-	log.Info("cannot find executable for webmail mtime, using current time")
-	return time.Now()
-}
-
-func (m *merged) serve(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *http.Request) {
-	// We typically return the embedded file, but during development it's handy
-	// to load from disk.
-	fhtml, _ := os.Open(m.htmlPath)
-	if fhtml != nil {
-		defer fhtml.Close()
-	}
-	fjs, _ := os.Open(m.jsPath)
-	if fjs != nil {
-		defer fjs.Close()
-	}
-
-	html := m.fallbackHTML
-	js := m.fallbackJS
-
-	var diskmtime time.Time
-	var refreshdisk bool
-	if fhtml != nil && fjs != nil {
-		sth, err := fhtml.Stat()
-		xcheckf(ctx, err, "stat html")
-		stj, err := fjs.Stat()
-		xcheckf(ctx, err, "stat js")
-
-		maxmtime := sth.ModTime()
-		if stj.ModTime().After(maxmtime) {
-			maxmtime = stj.ModTime()
-		}
-
-		m.Lock()
-		refreshdisk = maxmtime.After(m.mtime) || m.combined == nil
-		m.Unlock()
-
-		if refreshdisk {
-			html, err = io.ReadAll(fhtml)
-			xcheckf(ctx, err, "reading html")
-			js, err = io.ReadAll(fjs)
-			xcheckf(ctx, err, "reading js")
-			diskmtime = maxmtime
-		}
-	}
-
-	gz := acceptsGzip(r)
-	var out []byte
-	var mtime time.Time
-	var origSize int64
-
-	func() {
-		m.Lock()
-		defer m.Unlock()
-
-		if refreshdisk || m.combined == nil {
-			script := []byte(`<script>/* placeholder */</script>`)
-			index := bytes.Index(html, script)
-			if index < 0 {
-				xcheckf(ctx, errors.New("script not found"), "generating combined html")
-			}
-			var b bytes.Buffer
-			b.Write(html[:index])
-			fmt.Fprintf(&b, "<script>\n// Javascript is generated from typescript, don't modify the javascript because changes will be lost.\nconst moxversion = \"%s\";\n", moxvar.Version)
-			b.Write(js)
-			b.WriteString("\t\t</script>")
-			b.Write(html[index+len(script):])
-			out = b.Bytes()
-			m.combined = out
-			if refreshdisk {
-				m.mtime = diskmtime
-			} else {
-				m.mtime = fallbackMtime(log)
-			}
-			m.combinedGzip = nil
-		} else {
-			out = m.combined
-		}
-		if gz {
-			if m.combinedGzip == nil {
-				var b bytes.Buffer
-				gzw, err := gzip.NewWriterLevel(&b, gzip.BestCompression)
-				if err == nil {
-					_, err = gzw.Write(out)
-				}
-				if err == nil {
-					err = gzw.Close()
-				}
-				xcheckf(ctx, err, "gzipping combined html")
-				m.combinedGzip = b.Bytes()
-			}
-			origSize = int64(len(out))
-			out = m.combinedGzip
-		}
-		mtime = m.mtime
-	}()
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	http.ServeContent(gzipInjector{w, gz, origSize}, r, "", mtime, bytes.NewReader(out))
-}
-
-// gzipInjector is a http.ResponseWriter that optionally injects a
-// Content-Encoding: gzip header, only in case of status 200 OK. Used with
-// http.ServeContent to serve gzipped content if the client supports it. We cannot
-// just unconditionally add the content-encoding header, because we don't know
-// enough if we will be sending data: http.ServeContent may be sending a "not
-// modified" response, and possibly others.
-type gzipInjector struct {
-	http.ResponseWriter // Keep most methods.
-	gz                  bool
-	origSize            int64
-}
-
-// WriteHeader adds a Content-Encoding: gzip header before actually writing the
-// headers and status.
-func (w gzipInjector) WriteHeader(statusCode int) {
-	if w.gz && statusCode == http.StatusOK {
-		w.ResponseWriter.Header().Set("Content-Encoding", "gzip")
-		if lw, ok := w.ResponseWriter.(interface{ SetUncompressedSize(int64) }); ok {
-			lw.SetUncompressedSize(w.origSize)
-		}
-	}
-	w.ResponseWriter.WriteHeader(statusCode)
+var webmailFile = &mox.WebappFile{
+	HTML:     webmailHTML,
+	JS:       webmailJS,
+	HTMLPath: filepath.FromSlash("webmail/webmail.html"),
+	JSPath:   filepath.FromSlash("webmail/webmail.js"),
 }
 
 // Serve content, either from a file, or return the fallback data. Caller
@@ -319,7 +167,7 @@ func serveContentFallback(log mlog.Log, w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
-	http.ServeContent(w, r, "", fallbackMtime(log), bytes.NewReader(fallback))
+	http.ServeContent(w, r, "", mox.FallbackMtime(log), bytes.NewReader(fallback))
 }
 
 // Handler returns a handler for the webmail endpoints, customized for the max
@@ -388,7 +236,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		case "GET", "HEAD":
 		}
 
-		webmail.serve(ctx, log, w, r)
+		webmailFile.Serve(ctx, log, w, r)
 		return
 
 	case "/msg.js", "/text.js":
@@ -902,22 +750,6 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
-}
-
-func acceptsGzip(r *http.Request) bool {
-	s := r.Header.Get("Accept-Encoding")
-	t := strings.Split(s, ",")
-	for _, e := range t {
-		e = strings.TrimSpace(e)
-		tt := strings.Split(e, ";")
-		if len(tt) > 1 && t[1] == "q=0" {
-			continue
-		}
-		if tt[0] == "gzip" {
-			return true
-		}
-	}
-	return false
 }
 
 // inlineSanitizeHTML writes the part as HTML, with "cid:" URIs for html "src"

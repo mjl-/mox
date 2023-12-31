@@ -425,11 +425,11 @@ func TestSendReports(t *testing.T) {
 			err = os.WriteFile(p, append(append([]byte{}, qm.MsgPrefix...), buf...), 0600)
 			tcheckf(t, err, "write report message")
 
-			report, err := tlsrpt.ParseMessage(log.Logger, msgFile)
+			reportJSON, err := tlsrpt.ParseMessage(log.Logger, msgFile)
 			tcheckf(t, err, "parsing generated report message")
 
 			addr := qm.Recipient().String()
-			haveReports[addr] = append(haveReports[addr], *report)
+			haveReports[addr] = append(haveReports[addr], reportJSON.Convert())
 
 			return nil
 		}

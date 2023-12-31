@@ -584,7 +584,7 @@ func serveEvents(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *ht
 	// We'll be sending quite a bit of message data (text) in JSON (plenty duplicate
 	// keys), so should be quite compressible.
 	var out writeFlusher
-	gz := acceptsGzip(r)
+	gz := mox.AcceptsGzip(r)
 	if gz {
 		h.Set("Content-Encoding", "gzip")
 		out, _ = gzip.NewWriterLevel(w, gzip.BestSpeed)

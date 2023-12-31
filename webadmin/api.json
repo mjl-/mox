@@ -2157,7 +2157,6 @@
 					"Typewords": [
 						"{}",
 						"[]",
-						"nullable",
 						"SRV"
 					]
 				},
@@ -2496,38 +2495,38 @@
 		},
 		{
 			"Name": "Report",
-			"Docs": "Report is a TLSRPT report, transmitted in JSON format.",
+			"Docs": "Report is a TLSRPT report.",
 			"Fields": [
 				{
-					"Name": "organization-name",
+					"Name": "OrganizationName",
 					"Docs": "",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
-					"Name": "date-range",
+					"Name": "DateRange",
 					"Docs": "",
 					"Typewords": [
 						"TLSRPTDateRange"
 					]
 				},
 				{
-					"Name": "contact-info",
-					"Docs": "Email address.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "report-id",
+					"Name": "ContactInfo",
 					"Docs": "",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
-					"Name": "policies",
+					"Name": "ReportID",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Policies",
 					"Docs": "",
 					"Typewords": [
 						"[]",
@@ -2541,14 +2540,14 @@
 			"Docs": "note: with TLSRPT prefix to prevent clash in sherpadoc types.",
 			"Fields": [
 				{
-					"Name": "start-datetime",
+					"Name": "Start",
 					"Docs": "",
 					"Typewords": [
 						"timestamp"
 					]
 				},
 				{
-					"Name": "end-datetime",
+					"Name": "End",
 					"Docs": "",
 					"Typewords": [
 						"timestamp"
@@ -2561,21 +2560,21 @@
 			"Docs": "",
 			"Fields": [
 				{
-					"Name": "policy",
+					"Name": "Policy",
 					"Docs": "",
 					"Typewords": [
 						"ResultPolicy"
 					]
 				},
 				{
-					"Name": "summary",
+					"Name": "Summary",
 					"Docs": "",
 					"Typewords": [
 						"Summary"
 					]
 				},
 				{
-					"Name": "failure-details",
+					"Name": "FailureDetails",
 					"Docs": "",
 					"Typewords": [
 						"[]",
@@ -2589,14 +2588,14 @@
 			"Docs": "",
 			"Fields": [
 				{
-					"Name": "policy-type",
+					"Name": "Type",
 					"Docs": "",
 					"Typewords": [
 						"PolicyType"
 					]
 				},
 				{
-					"Name": "policy-string",
+					"Name": "String",
 					"Docs": "",
 					"Typewords": [
 						"[]",
@@ -2604,15 +2603,15 @@
 					]
 				},
 				{
-					"Name": "policy-domain",
+					"Name": "Domain",
 					"Docs": "",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
-					"Name": "mx-host",
-					"Docs": "Example in RFC has errata, it originally was a single string. ../rfc/8460-eid6241 ../rfc/8460:1779",
+					"Name": "MXHost",
+					"Docs": "",
 					"Typewords": [
 						"[]",
 						"string"
@@ -2625,14 +2624,14 @@
 			"Docs": "",
 			"Fields": [
 				{
-					"Name": "total-successful-session-count",
+					"Name": "TotalSuccessfulSessionCount",
 					"Docs": "",
 					"Typewords": [
 						"int64"
 					]
 				},
 				{
-					"Name": "total-failure-session-count",
+					"Name": "TotalFailureSessionCount",
 					"Docs": "",
 					"Typewords": [
 						"int64"
@@ -2645,57 +2644,56 @@
 			"Docs": "",
 			"Fields": [
 				{
-					"Name": "result-type",
+					"Name": "ResultType",
 					"Docs": "",
 					"Typewords": [
 						"ResultType"
 					]
 				},
 				{
-					"Name": "sending-mta-ip",
+					"Name": "SendingMTAIP",
 					"Docs": "",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
-					"Name": "receiving-mx-hostname",
+					"Name": "ReceivingMXHostname",
 					"Docs": "",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
-					"Name": "receiving-mx-helo",
-					"Docs": "",
-					"Typewords": [
-						"nullable",
-						"string"
-					]
-				},
-				{
-					"Name": "receiving-ip",
+					"Name": "ReceivingMXHelo",
 					"Docs": "",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
-					"Name": "failed-session-count",
+					"Name": "ReceivingIP",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "FailedSessionCount",
 					"Docs": "",
 					"Typewords": [
 						"int64"
 					]
 				},
 				{
-					"Name": "additional-information",
+					"Name": "AdditionalInformation",
 					"Docs": "",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
-					"Name": "failure-reason-code",
+					"Name": "FailureReasonCode",
 					"Docs": "",
 					"Typewords": [
 						"string"

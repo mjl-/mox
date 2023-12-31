@@ -486,7 +486,7 @@ func sendReportDomain(ctx context.Context, log mlog.Log, resolver dns.Resolver, 
 	enc := json.NewEncoder(gzw)
 	enc.SetIndent("", "\t")
 	if err == nil {
-		err = enc.Encode(report)
+		err = enc.Encode(report.Convert())
 	}
 	if err == nil {
 		err = gzw.Close()

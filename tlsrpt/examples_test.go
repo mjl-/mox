@@ -59,10 +59,10 @@ hg9Oqa4bc7N46W67vwF2Eq+hDAYAAA==
 	msg = strings.ReplaceAll(msg, "\n", "\r\n")
 
 	// Parse the email message, and the TLSRPT report within.
-	report, err := tlsrpt.ParseMessage(slog.Default(), strings.NewReader(msg))
+	reportJSON, err := tlsrpt.ParseMessage(slog.Default(), strings.NewReader(msg))
 	if err != nil {
 		log.Fatalf("parsing tlsrpt report in message: %v", err)
 	}
 
-	log.Printf("report: %#v", report)
+	log.Printf("report: %#v", reportJSON)
 }

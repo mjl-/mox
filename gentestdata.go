@@ -214,9 +214,10 @@ Accounts:
 	// Populate tlsrpt.db.
 	err = tlsrptdb.Init()
 	xcheckf(err, "tlsrptdb init")
-	tlsr, err := tlsrpt.Parse(strings.NewReader(tlsReport))
+	tlsreportJSON, err := tlsrpt.Parse(strings.NewReader(tlsReport))
 	xcheckf(err, "parsing tls report")
-	err = tlsrptdb.AddReport(ctxbg, c.log, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", false, tlsr)
+	tlsr := tlsreportJSON.Convert()
+	err = tlsrptdb.AddReport(ctxbg, c.log, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", false, &tlsr)
 	xcheckf(err, "adding tls report")
 
 	// Populate queue, with a message.

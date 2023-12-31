@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -41,11 +42,21 @@ func init() {
 
 var pkglog = mlog.New("webaccount", nil)
 
-//go:embed accountapi.json
+//go:embed api.json
 var accountapiJSON []byte
 
 //go:embed account.html
 var accountHTML []byte
+
+//go:embed account.js
+var accountJS []byte
+
+var webaccountFile = &mox.WebappFile{
+	HTML:     accountHTML,
+	JS:       accountJS,
+	HTMLPath: filepath.FromSlash("webaccount/account.html"),
+	JSPath:   filepath.FromSlash("webaccount/account.js"),
+}
 
 var accountDoc = mustParseAPI("account", accountapiJSON)
 
@@ -225,21 +236,15 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 
 	switch r.URL.Path {
 	case "/":
-		if r.Method != "GET" {
-			http.Error(w, "405 - method not allowed - get required", http.StatusMethodNotAllowed)
+		switch r.Method {
+		default:
+			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
 			return
+		case "GET", "HEAD":
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache; max-age=0")
-		// We typically return the embedded admin.html, but during development it's handy
-		// to load from disk.
-		f, err := os.Open("webaccount/account.html")
-		if err == nil {
-			defer f.Close()
-			_, _ = io.Copy(w, f)
-		} else {
-			_, _ = w.Write(accountHTML)
-		}
+
+		webaccountFile.Serve(ctx, log, w, r)
+		return
 
 	case "/mail-export-maildir.tgz", "/mail-export-maildir.zip", "/mail-export-mbox.tgz", "/mail-export-mbox.zip":
 		maildir := strings.Contains(r.URL.Path, "maildir")
@@ -322,7 +327,7 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		tmpf = nil // importStart is now responsible for cleanup.
 
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"ImportToken": token})
+		_ = json.NewEncoder(w).Encode(ImportProgress{Token: token})
 
 	default:
 		if strings.HasPrefix(r.URL.Path, "/api/") {
@@ -332,6 +337,12 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		}
 		http.NotFound(w, r)
 	}
+}
+
+// ImportProgress is returned after uploading a file to import.
+type ImportProgress struct {
+	// For fetching progress, or cancelling an import.
+	Token string
 }
 
 type ctxKey string
@@ -413,4 +424,9 @@ func (Account) ImportAbort(ctx context.Context, importToken string) error {
 	req := importAbortRequest{importToken, make(chan error)}
 	importers.Abort <- req
 	return <-req.Response
+}
+
+// Types exposes types not used in API method signatures, such as the import form upload.
+func (Account) Types() (importProgress ImportProgress) {
+	return
 }

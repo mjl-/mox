@@ -31,13 +31,41 @@ var ErrNoReport = errors.New("no tlsrpt report found")
 
 // ../rfc/8460:628
 
-// Report is a TLSRPT report, transmitted in JSON format.
+// Report is a TLSRPT report.
 type Report struct {
-	OrganizationName string          `json:"organization-name"`
-	DateRange        TLSRPTDateRange `json:"date-range"`
-	ContactInfo      string          `json:"contact-info"` // Email address.
-	ReportID         string          `json:"report-id"`
-	Policies         []Result        `json:"policies"`
+	OrganizationName string
+	DateRange        TLSRPTDateRange
+	ContactInfo      string
+	ReportID         string
+	Policies         []Result
+}
+
+// ReportJSON is a TLS report with field names as used in the specification. These field names are inconvenient to use in JavaScript, so after parsing a ReportJSON is turned into a Report.
+type ReportJSON struct {
+	OrganizationName string              `json:"organization-name"`
+	DateRange        TLSRPTDateRangeJSON `json:"date-range"`
+	ContactInfo      string              `json:"contact-info"` // Email address.
+	ReportID         string              `json:"report-id"`
+	Policies         []ResultJSON        `json:"policies"`
+}
+
+func convertSlice[T interface{ Convert() S }, S any](l []T) []S {
+	if l == nil {
+		return nil
+	}
+	r := make([]S, len(l))
+	for i, e := range l {
+		r[i] = e.Convert()
+	}
+	return r
+}
+
+func (v Report) Convert() ReportJSON {
+	return ReportJSON{v.OrganizationName, v.DateRange.Convert(), v.ContactInfo, v.ReportID, convertSlice[Result, ResultJSON](v.Policies)}
+}
+
+func (v ReportJSON) Convert() Report {
+	return Report{v.OrganizationName, v.DateRange.Convert(), v.ContactInfo, v.ReportID, convertSlice[ResultJSON, Result](v.Policies)}
 }
 
 // Merge combines the counts and failure details of results into the report.
@@ -124,14 +152,27 @@ func MakeResult(policyType PolicyType, domain dns.Domain, fds ...FailureDetails)
 
 // note: with TLSRPT prefix to prevent clash in sherpadoc types.
 type TLSRPTDateRange struct {
+	Start time.Time
+	End   time.Time
+}
+
+func (v TLSRPTDateRange) Convert() TLSRPTDateRangeJSON {
+	return TLSRPTDateRangeJSON(v)
+}
+
+type TLSRPTDateRangeJSON struct {
 	Start time.Time `json:"start-datetime"`
 	End   time.Time `json:"end-datetime"`
+}
+
+func (v TLSRPTDateRangeJSON) Convert() TLSRPTDateRange {
+	return TLSRPTDateRange(v)
 }
 
 // UnmarshalJSON is defined on the date range, not the individual time.Time fields
 // because it is easier to keep the unmodified time.Time fields stored in the
 // database.
-func (dr *TLSRPTDateRange) UnmarshalJSON(buf []byte) error {
+func (dr *TLSRPTDateRangeJSON) UnmarshalJSON(buf []byte) error {
 	var v struct {
 		Start xtime `json:"start-datetime"`
 		End   xtime `json:"end-datetime"`
@@ -170,14 +211,35 @@ func (x *xtime) UnmarshalJSON(buf []byte) error {
 }
 
 type Result struct {
-	Policy         ResultPolicy     `json:"policy"`
-	Summary        Summary          `json:"summary"`
-	FailureDetails []FailureDetails `json:"failure-details"`
+	Policy         ResultPolicy
+	Summary        Summary
+	FailureDetails []FailureDetails
+}
+
+func (r Result) Convert() ResultJSON {
+	return ResultJSON{ResultPolicyJSON(r.Policy), SummaryJSON(r.Summary), convertSlice[FailureDetails, FailureDetailsJSON](r.FailureDetails)}
+}
+
+type ResultJSON struct {
+	Policy         ResultPolicyJSON     `json:"policy"`
+	Summary        SummaryJSON          `json:"summary"`
+	FailureDetails []FailureDetailsJSON `json:"failure-details"`
+}
+
+func (r ResultJSON) Convert() Result {
+	return Result{ResultPolicy(r.Policy), Summary(r.Summary), convertSlice[FailureDetailsJSON, FailureDetails](r.FailureDetails)}
 }
 
 // todo spec: ../rfc/8460:437 says policy is a string, with rules for turning dane records into a single string. perhaps a remnant of an earlier version (for mtasts a single string would have made more sense). i doubt the intention is to always have a single element in policy-string (though the field name is singular).
 
 type ResultPolicy struct {
+	Type   PolicyType
+	String []string
+	Domain string
+	MXHost []string
+}
+
+type ResultPolicyJSON struct {
 	Type   PolicyType `json:"policy-type"`
 	String []string   `json:"policy-string"`
 	Domain string     `json:"policy-domain"`
@@ -205,6 +267,11 @@ func (rp ResultPolicy) equal(orp ResultPolicy) bool {
 }
 
 type Summary struct {
+	TotalSuccessfulSessionCount int64
+	TotalFailureSessionCount    int64
+}
+
+type SummaryJSON struct {
 	TotalSuccessfulSessionCount int64 `json:"total-successful-session-count"`
 	TotalFailureSessionCount    int64 `json:"total-failure-session-count"`
 }
@@ -232,6 +299,19 @@ const (
 // todo spec: ../rfc/8460:719 more of these fields should be optional. some sts failure details, like failed policy fetches, won't have an ip or mx, the failure happens earlier in the delivery process.
 
 type FailureDetails struct {
+	ResultType            ResultType
+	SendingMTAIP          string
+	ReceivingMXHostname   string
+	ReceivingMXHelo       string
+	ReceivingIP           string
+	FailedSessionCount    int64
+	AdditionalInformation string
+	FailureReasonCode     string
+}
+
+func (v FailureDetails) Convert() FailureDetailsJSON { return FailureDetailsJSON(v) }
+
+type FailureDetailsJSON struct {
 	ResultType            ResultType `json:"result-type"`
 	SendingMTAIP          string     `json:"sending-mta-ip"`
 	ReceivingMXHostname   string     `json:"receiving-mx-hostname"`
@@ -241,6 +321,8 @@ type FailureDetails struct {
 	AdditionalInformation string     `json:"additional-information"`
 	FailureReasonCode     string     `json:"failure-reason-code"`
 }
+
+func (v FailureDetailsJSON) Convert() FailureDetails { return FailureDetails(v) }
 
 // equalKey returns whether FailureDetails have the same values, expect for
 // FailedSessionCount. Useful for aggregating FailureDetails.
@@ -356,9 +438,9 @@ func TLSFailureDetails(err error) (ResultType, string) {
 
 // Parse parses a Report.
 // The maximum size is 20MB.
-func Parse(r io.Reader) (*Report, error) {
+func Parse(r io.Reader) (*ReportJSON, error) {
 	r = &moxio.LimitReader{R: r, Limit: 20 * 1024 * 1024}
-	var report Report
+	var report ReportJSON
 	if err := json.NewDecoder(r).Decode(&report); err != nil {
 		return nil, err
 	}
@@ -369,7 +451,7 @@ func Parse(r io.Reader) (*Report, error) {
 // ParseMessage parses a Report from a mail message.
 // The maximum size of the message is 15MB, the maximum size of the
 // decompressed report is 20MB.
-func ParseMessage(elog *slog.Logger, r io.ReaderAt) (*Report, error) {
+func ParseMessage(elog *slog.Logger, r io.ReaderAt) (*ReportJSON, error) {
 	log := mlog.New("tlsrpt", elog)
 
 	// ../rfc/8460:905
@@ -384,7 +466,7 @@ func ParseMessage(elog *slog.Logger, r io.ReaderAt) (*Report, error) {
 	return parseMessageReport(log, p, allow)
 }
 
-func parseMessageReport(log mlog.Log, p message.Part, allow bool) (*Report, error) {
+func parseMessageReport(log mlog.Log, p message.Part, allow bool) (*ReportJSON, error) {
 	if p.MediaType != "MULTIPART" {
 		if !allow {
 			return nil, ErrNoReport
@@ -412,7 +494,7 @@ func parseMessageReport(log mlog.Log, p message.Part, allow bool) (*Report, erro
 	}
 }
 
-func parseReport(p message.Part) (*Report, error) {
+func parseReport(p message.Part) (*ReportJSON, error) {
 	mt := strings.ToLower(p.MediaType + "/" + p.MediaSubType)
 	switch mt {
 	case "application/tlsrpt+json":

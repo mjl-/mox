@@ -257,12 +257,12 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		if !ok {
 			log.Info("received mail to tlsrpt without acceptable DKIM signature, not processing as tls report")
 			headers += "X-Mox-TLSReport-Error: no acceptable DKIM signature\r\n"
-		} else if report, err := tlsrpt.ParseMessage(log.Logger, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
+		} else if reportJSON, err := tlsrpt.ParseMessage(log.Logger, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
 			log.Infox("parsing tls report", err)
 			headers += "X-Mox-TLSReport-Error: could not parse TLS report\r\n"
 		} else {
 			var known bool
-			for _, p := range report.Policies {
+			for _, p := range reportJSON.Policies {
 				log.Info("tlsrpt policy domain", slog.String("domain", p.Policy.Domain))
 				if d, err := dns.ParseDomain(p.Policy.Domain); err != nil {
 					log.Infox("parsing domain in tls report", err)
@@ -275,7 +275,8 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 				log.Info("tls report without one of configured domains, ignoring")
 				headers += "X-Mox-TLSReport-Error: report for unknown domain\r\n"
 			} else {
-				tlsReport = report
+				report := reportJSON.Convert()
+				tlsReport = &report
 			}
 		}
 	}

@@ -91,6 +91,19 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "Types",
+			"Docs": "Types exposes types not used in API method signatures, such as the import form upload.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "importProgress",
+					"Typewords": [
+						"ImportProgress"
+					]
+				}
+			]
 		}
 	],
 	"Sections": [],
@@ -209,6 +222,19 @@
 					"Docs": "",
 					"Typewords": [
 						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ImportProgress",
+			"Docs": "ImportProgress is returned after uploading a file to import.",
+			"Fields": [
+				{
+					"Name": "Token",
+					"Docs": "For fetching progress, or cancelling an import.",
+					"Typewords": [
+						"string"
 					]
 				}
 			]

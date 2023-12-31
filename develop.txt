@@ -28,6 +28,32 @@ with bad API. Third party users aren't affected too seriously due to Go's
 minimal version selection. The reusable packages are in apidiff/packages.txt.
 We generate the incompatible changes with each release.
 
+# Web interfaces/frontend
+
+The web interface frontends (for webmail/, webadmin/ and webaccount/) are
+written in strict TypeScript. The web API is a simple self-documenting
+HTTP/JSON RPC API mechanism called sherpa,
+https://www.ueber.net/who/mjl/sherpa/. The web API exposes types and functions
+as implemented in Go, using https://github.com/mjl-/sherpa. API definitions in
+JSON form are generated with https://github.com/mjl-/sherpadoc. Those API
+definitions are used to generate TypeScript clients with by
+https://github.com/mjl-/sherpats/.
+
+The JavaScript that is generated from the TypeScript is included in the
+repository. This makes it available for inclusion in the binary, which is
+practical for users, and desirable given Go's reproducible builds. When
+developing, run "make" to also build the frontend code. Run "make jsinstall"
+once to install the TypeScript compiler into ./node_modules/.
+
+There are no other external (runtime or devtime) frontend dependencies. A
+light-weight abstraction over the DOM is provided by ./lib.ts. A bit more
+manual UI state management must be done compared to "frameworks", but it is
+little code, and this allows JavaScript/TypeScript developer to quickly get
+started. UI state is often encapsulated in a JavaScript object with a
+TypeScript interface exposing a "root" HTMLElement that is added to the DOM,
+and functions for accessing/changing the internal state, keeping the UI
+managable.
+
 # TLS certificates
 
 https://github.com/cloudflare/cfssl is useful for testing with TLS

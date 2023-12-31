@@ -115,7 +115,7 @@ Content-Disposition: attachment;
 func TestReport(t *testing.T) {
 	// ../rfc/8460:1756
 
-	var report Report
+	var report ReportJSON
 	dec := json.NewDecoder(strings.NewReader(reportJSON))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&report); err != nil {

@@ -104,13 +104,12 @@ func TestAccount(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("import, got status code %d, expected 200: %s", w.Code, w.Body.Bytes())
 		}
-		m := map[string]string{}
+		var m ImportProgress
 		if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
 			t.Fatalf("parsing import response: %v", err)
 		}
-		token := m["ImportToken"]
 
-		l := importListener{token, make(chan importEvent, 100), make(chan bool)}
+		l := importListener{m.Token, make(chan importEvent, 100), make(chan bool)}
 		importers.Register <- &l
 		if !<-l.Register {
 			t.Fatalf("register failed")

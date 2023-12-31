@@ -2599,12 +2599,12 @@ The report is printed in formatted JSON.
 	for _, arg := range args {
 		f, err := os.Open(arg)
 		xcheckf(err, "open %q", arg)
-		report, err := tlsrpt.ParseMessage(c.log.Logger, f)
+		reportJSON, err := tlsrpt.ParseMessage(c.log.Logger, f)
 		xcheckf(err, "parse report in %q", arg)
 		// todo future: only print the highlights?
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "\t")
-		err = enc.Encode(report)
+		err = enc.Encode(reportJSON)
 		xcheckf(err, "write report")
 	}
 }
@@ -2754,11 +2754,12 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 	from := part.Envelope.From[0]
 	domain := xparseDomain(from.Host, "domain")
 
-	report, err := tlsrpt.ParseMessage(c.log.Logger, bytes.NewReader(buf))
+	reportJSON, err := tlsrpt.ParseMessage(c.log.Logger, bytes.NewReader(buf))
 	xcheckf(err, "parsing tls report in message")
 
 	mailfrom := from.User + "@" + from.Host // todo future: should escape and such
-	err = tlsrptdb.AddReport(context.Background(), c.log, domain, mailfrom, hostReport, report)
+	report := reportJSON.Convert()
+	err = tlsrptdb.AddReport(context.Background(), c.log, domain, mailfrom, hostReport, &report)
 	xcheckf(err, "add tls report to database")
 }
 

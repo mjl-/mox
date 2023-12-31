@@ -18,11 +18,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime/debug"
 	"sort"
@@ -67,11 +67,21 @@ import (
 
 var pkglog = mlog.New("webadmin", nil)
 
-//go:embed adminapi.json
+//go:embed api.json
 var adminapiJSON []byte
 
 //go:embed admin.html
 var adminHTML []byte
+
+//go:embed admin.js
+var adminJS []byte
+
+var webadminFile = &mox.WebappFile{
+	HTML:     adminHTML,
+	JS:       adminJS,
+	HTMLPath: filepath.FromSlash("webadmin/admin.html"),
+	JSPath:   filepath.FromSlash("webadmin/admin.js"),
+}
 
 var adminDoc = mustParseAPI("admin", adminapiJSON)
 
@@ -206,18 +216,15 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		lw.AddAttr(slog.Bool("authadmin", true))
 	}
 
-	if r.Method == "GET" && r.URL.Path == "/" {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache; max-age=0")
-		// We typically return the embedded admin.html, but during development it's handy
-		// to load from disk.
-		f, err := os.Open("webadmin/admin.html")
-		if err == nil {
-			defer f.Close()
-			_, _ = io.Copy(w, f)
-		} else {
-			_, _ = w.Write(adminHTML)
+	if r.URL.Path == "/" {
+		switch r.Method {
+		default:
+			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
+			return
+		case "GET", "HEAD":
 		}
+
+		webadminFile.Serve(ctx, pkglog.WithContext(ctx), w, r)
 		return
 	}
 	adminSherpaHandler.ServeHTTP(w, r.WithContext(ctx))
@@ -338,7 +345,7 @@ type MTASTSCheckResult struct {
 }
 
 type SRVConfCheckResult struct {
-	SRVs map[string][]*net.SRV // Service (e.g. "_imaps") to records.
+	SRVs map[string][]net.SRV // Service (e.g. "_imaps") to records.
 	Result
 }
 
@@ -414,6 +421,17 @@ func (Admin) CheckDomain(ctx context.Context, domainName string) (r CheckResult)
 	nctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	return checkDomain(nctx, resolver, dialer, domainName)
+}
+
+func unptr[T any](l []*T) []T {
+	if l == nil {
+		return nil
+	}
+	r := make([]T, len(l))
+	for i, e := range l {
+		r[i] = *e
+	}
+	return r
 }
 
 func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer, domainName string) (r CheckResult) {
@@ -1362,11 +1380,11 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		srvwg.Wait()
 
 		instr := "Ensure DNS records like the following exist:\n\n"
-		r.SRVConf.SRVs = map[string][]*net.SRV{}
+		r.SRVConf.SRVs = map[string][]net.SRV{}
 		for _, req := range reqs {
 			name := req.name + "_.tcp." + domain.ASCII
 			instr += fmt.Sprintf("\t%s._tcp.%-*s SRV 0 1 %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", req.port, req.host)
-			r.SRVConf.SRVs[req.name] = req.srvs
+			r.SRVConf.SRVs[req.name] = unptr(req.srvs)
 			if err != nil {
 				addf(&r.SRVConf.Errors, "Looking up SRV record %q: %s", name, err)
 			} else if len(req.srvs) == 0 {
