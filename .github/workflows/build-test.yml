@@ -12,6 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Trigger rebuilding frontends, should be the same as committed.
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+          cache: 'npm'
+      - run: npm ci
+      - run: 'touch */*.ts'
+
       - uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go-version }}
@@ -23,14 +31,6 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           path: cover.html
-
-      # Rebuild webmail frontend code, should be the same as committed.
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 16
-          cache: 'npm'
-      - run: npm ci
-      - run: 'touch webmail/*.ts && make frontend'
 
       # Format code, we check below if nothing changed.
       - run: 'make fmt'
