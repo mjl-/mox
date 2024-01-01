@@ -2599,12 +2599,18 @@ func CheckMailboxName(name string, allowInbox bool) (normalizedName string, isIn
 	if strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.Contains(name, "//") {
 		return "", false, errors.New("bad slashes in mailbox name")
 	}
+
+	// "%" and "*" are difficult to use with the IMAP LIST command, but we allow mostly
+	// allow them. ../rfc/3501:1002 ../rfc/9051:983
+	if strings.HasPrefix(name, "#") {
+		return "", false, errors.New("mailbox name cannot start with hash due to conflict with imap namespaces")
+	}
+
+	// "#" and "&" are special in IMAP mailbox names. "#" for namespaces, "&" for
+	// IMAP-UTF-7 encoding. We do allow them. ../rfc/3501:1018 ../rfc/9051:991
+
 	for _, c := range name {
-		switch c {
-		case '%', '*', '#', '&':
-			return "", false, fmt.Errorf("character %c not allowed in mailbox name", c)
-		}
-		// ../rfc/6855:192
+		// ../rfc/3501:999 ../rfc/6855:192 ../rfc/9051:979
 		if c <= 0x1f || c >= 0x7f && c <= 0x9f || c == 0x2028 || c == 0x2029 {
 			return "", false, errors.New("control characters not allowed in mailbox name")
 		}

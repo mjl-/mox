@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/exp/slog"
 )
 
 var (
@@ -392,30 +390,37 @@ func (p *parser) xatom() string {
 	return p.xtakechars(atomChar, "atom")
 }
 
+func (p *parser) xdecodeMailbox(s string) string {
+	// UTF-7 is deprecated for IMAP4rev2-only clients, and not used with UTF8=ACCEPT.
+	// The future should be without UTF-7, we don't encode/decode it with modern
+	// clients. Most clients are IMAP4rev1, we need to handle UTF-7.
+	// ../rfc/3501:964 ../rfc/9051:7885
+	// Thunderbird will enable UTF8=ACCEPT and send "&" unencoded. ../rfc/9051:7953
+	if p.conn.utf8strings() {
+		return s
+	}
+	ns, err := utf7decode(s)
+	if err != nil {
+		p.xerrorf("decoding utf7 mailbox name: %v", err)
+	}
+	return ns
+}
+
 func (p *parser) xmailbox() string {
 	s := p.xastring()
-	// UTF-7 is deprecated in IMAP4rev2. IMAP4rev1 does not fully forbid
-	// UTF-8 returned in mailbox names. We'll do our best by attempting to
-	// decode utf-7. But if that doesn't work, we'll just use the original
-	// string.
-	// ../rfc/3501:964
-	if !p.conn.enabled[capIMAP4rev2] {
-		ns, err := utf7decode(s)
-		if err != nil {
-			p.conn.log.Infox("decoding utf7 or mailbox name", err, slog.String("name", s))
-		} else {
-			s = ns
-		}
-	}
-	return s
+	return p.xdecodeMailbox(s)
 }
 
 // ../rfc/9051:6605
 func (p *parser) xlistMailbox() string {
+	var s string
 	if p.hasPrefix(`"`) || p.hasPrefix("{") {
-		return p.xstring()
+		s = p.xstring()
+	} else {
+		s = p.xtakechars(atomChar+listWildcards+respSpecials, "list-char")
 	}
-	return p.xtakechars(atomChar+listWildcards+respSpecials, "list-char")
+	// Presumably UTF-7 encoding applies to mailbox patterns too.
+	return p.xdecodeMailbox(s)
 }
 
 // ../rfc/9051:6707 ../rfc/9051:6848 ../rfc/5258:1095 ../rfc/5258:1169 ../rfc/5258:1196

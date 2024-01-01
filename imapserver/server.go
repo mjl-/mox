@@ -13,11 +13,8 @@ LIST-EXTENDED, SPECIAL-USE, MOVE, UTF8=ONLY.
 
 We take a liberty with UTF8=ONLY. We are supposed to wait for ENABLE of
 UTF8=ACCEPT or IMAP4rev2 before we respond with quoted strings that contain
-non-ASCII UTF-8. But we will unconditionally accept UTF-8 at the moment. See
+non-ASCII UTF-8. Until that's enabled, we do use UTF-7 for mailbox names. See
 ../rfc/6855:251
-
-We always respond with utf8 mailbox names. We do parse utf7 (only in IMAP4rev1,
-not in IMAP4rev2). ../rfc/3501:964
 
 - We never execute multiple commands at the same time for a connection. We expect a client to open multiple connections instead. ../rfc/9051:1110
 - Do not write output on a connection with an account lock held. Writing can block, a slow client could block account operations.
@@ -161,7 +158,7 @@ var authFailDelay = time.Second  // After authentication failure.
 // TLS. The client should not be selecting PLUS variants on non-TLS connections,
 // instead opting to do the bare SCRAM variant without indicating the server claims
 // to support the PLUS variant (skipping the server downgrade detection check).
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ONLY LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC"
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC"
 
 type conn struct {
 	cid               int64
@@ -385,6 +382,13 @@ func Serve() {
 // returns whether this connection accepts utf-8 in strings.
 func (c *conn) utf8strings() bool {
 	return c.enabled[capIMAP4rev2] || c.enabled[capUTF8Accept]
+}
+
+func (c *conn) encodeMailbox(s string) string {
+	if c.utf8strings() {
+		return s
+	}
+	return utf7encode(s)
 }
 
 func (c *conn) xdbwrite(fn func(tx *bstore.Tx)) {
@@ -1311,19 +1315,19 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 			// unrecognized \NonExistent and interpret this as a newly created mailbox, while
 			// the goal was to remove it...
 			if c.enabled[capIMAP4rev2] {
-				c.bwritelinef(`* LIST (\NonExistent) "/" %s`, astring(ch.Name).pack(c))
+				c.bwritelinef(`* LIST (\NonExistent) "/" %s`, astring(c.encodeMailbox(ch.Name)).pack(c))
 			}
 		case store.ChangeAddMailbox:
-			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.Flags, " "), astring(ch.Mailbox.Name).pack(c))
+			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.Flags, " "), astring(c.encodeMailbox(ch.Mailbox.Name)).pack(c))
 		case store.ChangeRenameMailbox:
 			// OLDNAME only with IMAP4rev2 or NOTIFY ../rfc/9051:2726 ../rfc/5465:628
 			var oldname string
 			if c.enabled[capIMAP4rev2] {
-				oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, string0(ch.OldName).pack(c))
+				oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, string0(c.encodeMailbox(ch.OldName)).pack(c))
 			}
-			c.bwritelinef(`* LIST (%s) "/" %s%s`, strings.Join(ch.Flags, " "), astring(ch.NewName).pack(c), oldname)
+			c.bwritelinef(`* LIST (%s) "/" %s%s`, strings.Join(ch.Flags, " "), astring(c.encodeMailbox(ch.NewName)).pack(c), oldname)
 		case store.ChangeAddSubscription:
-			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.Flags...), " "), astring(ch.Name).pack(c))
+			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.Flags...), " "), astring(c.encodeMailbox(ch.Name)).pack(c))
 		default:
 			panic(fmt.Sprintf("internal error, missing case for %#v", change))
 		}
@@ -2041,7 +2045,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 	}
 	c.bwritelinef(`* OK [UIDVALIDITY %d] x`, mb.UIDValidity)
 	c.bwritelinef(`* OK [UIDNEXT %d] x`, mb.UIDNext)
-	c.bwritelinef(`* LIST () "/" %s`, astring(mb.Name).pack(c))
+	c.bwritelinef(`* LIST () "/" %s`, astring(c.encodeMailbox(mb.Name)).pack(c))
 	if c.enabled[capCondstore] {
 		// ../rfc/7162:417
 		// ../rfc/7162-eid5055 ../rfc/7162:484 ../rfc/7162:1167
@@ -2239,9 +2243,9 @@ func (c *conn) cmdCreate(tag, cmd string, p *parser) {
 		var oldname string
 		// OLDNAME only with IMAP4rev2 or NOTIFY ../rfc/9051:2726 ../rfc/5465:628
 		if c.enabled[capIMAP4rev2] && n == name && name != origName && !(name == "Inbox" || strings.HasPrefix(name, "Inbox/")) {
-			oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, string0(origName).pack(c))
+			oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, string0(c.encodeMailbox(origName)).pack(c))
 		}
-		c.bwritelinef(`* LIST (\Subscribed) "/" %s%s`, astring(n).pack(c), oldname)
+		c.bwritelinef(`* LIST (\Subscribed) "/" %s%s`, astring(c.encodeMailbox(n)).pack(c), oldname)
 	}
 	c.ok(tag, cmd)
 }
@@ -2526,7 +2530,7 @@ func (c *conn) cmdLsub(tag, cmd string, p *parser) {
 				continue
 			}
 			have[name] = true
-			line := fmt.Sprintf(`* LSUB () "/" %s`, astring(name).pack(c))
+			line := fmt.Sprintf(`* LSUB () "/" %s`, astring(c.encodeMailbox(name)).pack(c))
 			lines = append(lines, line)
 
 		}
@@ -2541,7 +2545,7 @@ func (c *conn) cmdLsub(tag, cmd string, p *parser) {
 			if have[mb.Name] || !subscribedKids[mb.Name] || !re.MatchString(mb.Name) {
 				return nil
 			}
-			line := fmt.Sprintf(`* LSUB (\NoSelect) "/" %s`, astring(mb.Name).pack(c))
+			line := fmt.Sprintf(`* LSUB (\NoSelect) "/" %s`, astring(c.encodeMailbox(mb.Name)).pack(c))
 			lines = append(lines, line)
 			return nil
 		})
@@ -2639,7 +2643,7 @@ func (c *conn) xstatusLine(tx *bstore.Tx, mb store.Mailbox, attrs []string) stri
 			xsyntaxErrorf("unknown attribute %q", a)
 		}
 	}
-	return fmt.Sprintf("* STATUS %s (%s)", astring(mb.Name).pack(c), strings.Join(status, " "))
+	return fmt.Sprintf("* STATUS %s (%s)", astring(c.encodeMailbox(mb.Name)).pack(c), strings.Join(status, " "))
 }
 
 func flaglist(fl store.Flags, keywords []string) listspace {
