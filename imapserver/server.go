@@ -28,7 +28,7 @@ non-ASCII UTF-8. Until that's enabled, we do use UTF-7 for mailbox names. See
 - todo: do not return binary data for a fetch body. at least not for imap4rev1. we should be encoding it as base64?
 - todo: on expunge we currently remove the message even if other sessions still have a reference to the uid. if they try to query the uid, they'll get an error. we could be nicer and only actually remove the message when the last reference has gone. we could add a new flag to store.Message marking the message as expunged, not give new session access to such messages, and make store remove them at startup, and clean them when the last session referencing the session goes. however, it will get much more complicated. renaming messages would need special handling. and should we do the same for removed mailboxes?
 - todo: try to recover from syntax errors when the last command line ends with a }, i.e. a literal. we currently abort the entire connection. we may want to read some amount of literal data and continue with a next command.
-- todo future: more extensions: STATUS=SIZE, OBJECTID, MULTISEARCH, REPLACE, NOTIFY, CATENATE, MULTIAPPEND, SORT, THREAD, CREATE-SPECIAL-USE.
+- todo future: more extensions: OBJECTID, MULTISEARCH, REPLACE, NOTIFY, CATENATE, MULTIAPPEND, SORT, THREAD, CREATE-SPECIAL-USE.
 */
 
 import (
@@ -153,12 +153,13 @@ var authFailDelay = time.Second  // After authentication failure.
 // APPENDLIMIT, we support the max possible size, 1<<63 - 1: ../rfc/7889:129
 // CONDSTORE: ../rfc/7162:411
 // QRESYNC: ../rfc/7162:1323
+// STATUS=SIZE: ../rfc/8438 ../rfc/9051:8024
 //
 // We always announce support for SCRAM PLUS-variants, also on connections without
 // TLS. The client should not be selecting PLUS variants on non-TLS connections,
 // instead opting to do the bare SCRAM variant without indicating the server claims
 // to support the PLUS variant (skipping the server downgrade detection check).
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC"
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE"
 
 type conn struct {
 	cid               int64
