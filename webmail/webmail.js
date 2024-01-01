@@ -367,6 +367,8 @@ var api;
 	};
 	let defaultOptions = { slicesNullable: true, mapsNullable: true, nullableOptional: true };
 	class Client {
+		baseURL;
+		options;
 		constructor(baseURL = api.defaultBaseURL, options) {
 			this.baseURL = baseURL;
 			this.options = options;
@@ -566,6 +568,10 @@ var api;
 	};
 	api.parse = (name, v) => api.verifyArg(name, v, [name], true, false, api.types, defaultOptions);
 	class verifier {
+		types;
+		toJS;
+		allowUnknownKeys;
+		opts;
 		constructor(types, toJS, allowUnknownKeys, opts) {
 			this.types = types;
 			this.toJS = toJS;
