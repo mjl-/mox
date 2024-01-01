@@ -228,7 +228,7 @@ let domainAddressConfigs: {[domainASCII: string]: api.DomainAddressConfig} = {}
 let rejectsMailbox: string = ''
 
 // Last known server version. For asking to reload.
-let moxVersion: string = ''
+let lastServerVersion: string = ''
 
 const client = new api.Client()
 
@@ -6340,13 +6340,13 @@ const init = async () => {
 
 		eventSource.addEventListener('start', (e: MessageEvent) => {
 			const data = JSON.parse(e.data)
-			if (moxVersion && data.Version !== moxVersion) {
+			if (lastServerVersion && data.Version !== lastServerVersion) {
 				if (window.confirm('Server has been updated to a new version. Reload?')) {
 					window.location.reload()
 					return
 				}
 			}
-			moxVersion = data.Version
+			lastServerVersion = data.Version
 
 			const start = checkParse(() => api.parser.EventStart(data))
 			log('event start', start)

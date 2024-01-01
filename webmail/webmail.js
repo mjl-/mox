@@ -1291,7 +1291,7 @@ let domainAddressConfigs = {};
 // Mailbox containing rejects.
 let rejectsMailbox = '';
 // Last known server version. For asking to reload.
-let moxVersion = '';
+let lastServerVersion = '';
 const client = new api.Client();
 // Link returns a clickable link with rel="noopener noreferrer".
 const link = (href, anchorOpt) => dom.a(attr.href(href), attr.rel('noopener noreferrer'), attr.target('_blank'), anchorOpt || href);
@@ -6017,13 +6017,13 @@ const init = async () => {
 		};
 		eventSource.addEventListener('start', (e) => {
 			const data = JSON.parse(e.data);
-			if (moxVersion && data.Version !== moxVersion) {
+			if (lastServerVersion && data.Version !== lastServerVersion) {
 				if (window.confirm('Server has been updated to a new version. Reload?')) {
 					window.location.reload();
 					return;
 				}
 			}
-			moxVersion = data.Version;
+			lastServerVersion = data.Version;
 			const start = checkParse(() => api.parser.EventStart(data));
 			log('event start', start);
 			connecting = false;
