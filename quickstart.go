@@ -868,8 +868,9 @@ autoconfig/autodiscover does not work, use these settings:
 Configuration files have been written to config/mox.conf and
 config/domains.conf.
 
-Create the DNS records below. The admin interface can show these same records, and
-has a page to check they have been configured correctly.
+Create the DNS records below, by adding them to your zone file or through the
+web interface of your DNS operator. The admin interface can show these same
+records, and has a page to check they have been configured correctly.
 
 You must configure your existing webserver to forward requests for:
 
@@ -888,14 +889,17 @@ The paths are relative to config/ directory that holds mox.conf! To test if your
 config is valid, run:
 
 	./mox config test
+
+The DNS records to add:
 `, domain.ASCII, domain.ASCII, dnshostname.ASCII)
 	} else {
 		fmt.Printf(`
 Configuration files have been written to config/mox.conf and
-config/domains.conf. You should review them. Then create the DNS records below.
-You can also skip creating the DNS records and start mox immediately. The admin
-interface can show these same records, and has a page to check they have been
-configured correctly.
+config/domains.conf. You should review them. Then create the DNS records below,
+by adding them to your zone file or through the web interface of your DNS
+operator. You can also skip creating the DNS records and start mox immediately.
+The admin interface can show these same records, and has a page to check they
+have been configured correctly. The DNS records to add:
 `)
 	}
 
