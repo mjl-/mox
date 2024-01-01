@@ -1239,6 +1239,54 @@ examples with "mox example", and print a specific example with "mox example
 				ResponseHeaders:
 					X-Frame-Options: deny
 					X-Content-Type-Options: nosniff
+
+# Example transport
+
+	# Snippet for mox.conf, defining a transport called Example that connects on the
+	# SMTP submission with TLS port 465 ("submissions), authenticating with
+	# SCRAM-SHA-256-PLUS (other providers may not support SCRAM-SHA-256-PLUS, but they
+	# typically do support the older CRAM-MD5).:
+
+	# Transport are mechanisms for delivering messages. Transports can be referenced
+	# from Routes in accounts, domains and the global configuration. There is always
+	# an implicit/fallback delivery transport doing direct delivery with SMTP from the
+	# outgoing message queue. Transports are typically only configured when using
+	# smarthosts, i.e. when delivering through another SMTP server. Zero or one
+	# transport methods must be set in a transport, never multiple. When using an
+	# external party to send email for a domain, keep in mind you may have to add
+	# their IP address to your domain's SPF record, and possibly additional DKIM
+	# records. (optional)
+	Transports:
+		Example:
+			# Submission SMTP over a TLS connection to submit email to a remote queue.
+			# (optional)
+			Submissions:
+				# Host name to connect to and for verifying its TLS certificate.
+				Host: smtp.example.com
+
+				# If set, authentication credentials for the remote server. (optional)
+				Auth:
+					Username: user@example.com
+					Password: test1234
+					Mechanisms:
+						# Allowed authentication mechanisms. Defaults to SCRAM-SHA-256-PLUS,
+						# SCRAM-SHA-256, SCRAM-SHA-1-PLUS, SCRAM-SHA-1, CRAM-MD5. Not included by default:
+						# PLAIN. Specify the strongest mechanism known to be implemented by the server to
+						# prevent mechanism downgrade attacks. (optional)
+
+						- SCRAM-SHA-256-PLUS
+
+
+	# Snippet for domains.conf, specifying a route that sends through the transport:
+
+	# Routes for delivering outgoing messages through the queue. Each delivery attempt
+	# evaluates account routes, domain routes and finally these global routes. The
+	# transport of the first matching route is used in the delivery attempt. If no
+	# routes match, which is the default with no configured routes, messages are
+	# delivered directly from the queue. (optional)
+	Routes:
+		-
+			Transport: Example
 */
 package config
 
