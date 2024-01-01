@@ -44,11 +44,11 @@ func TestMsgWriter(t *testing.T) {
 	// Check \n is replaced with \r\n.
 	var b strings.Builder
 	mw := NewWriter(&b)
-	msg := "key: value\n\nline1\r\nline2\n"
+	msg := "key: value\n\nline1\r\nline2\nx\n.\n"
 	_, err := mw.Write([]byte(msg))
 	tcheck(t, err, "write")
 	got := b.String()
-	exp := "key: value\r\n\r\nline1\r\nline2\r\n"
+	exp := "key: value\r\n\r\nline1\r\nline2\r\nx\r\n.\r\n"
 	if got != exp {
 		t.Fatalf("got %q, expected %q", got, exp)
 	}

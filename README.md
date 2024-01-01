@@ -193,6 +193,42 @@ Mox is still in early stages, and documentation is still limited. Please create
 an issue describing what is unclear or confusing, and we'll try to improve the
 documentation.
 
+## Is Mox affected by SMTP smuggling?
+
+Mox itself is not affected: it only treats "\r\n.\r\n" as SMTP end-of-message.
+But read on for caveats.
+
+SMTP smuggling exploits differences in handling by SMTP servers of: carriage
+returns (CR, or "\r"), newlines (line feeds, LF, "\n") in the context of "dot
+stuffing".  SMTP is a text-based protocol. An SMTP transaction to send a
+message is finalized with a "\r\n.\r\n" sequence. This sequence could occur in
+the message being transferred, so any verbatim "." at the start of a line in a
+message is "escaped" with another dot ("dot stuffing"), to not trigger the SMTP
+end-of-message. SMTP smuggling takes advantage of bugs in some mail servers
+that interpret other sequences than "\r\n.\r\n" as SMTP end-of-message. For
+example "\n.\n" or even "\r.\r", and perhaps even other magic character
+combinations.
+
+Before v0.0.9, mox accepted SMTP transactions with bare carriage returns
+(without newline) for compatibility with real-world email messages, considering
+them meaningless and therefore innocuous.
+
+Since v0.0.9, SMTP transactions with bare carriage returns are rejected.
+Sending messages with bare carriage returns to buggy mail servers can cause
+those mail servers to materialize non-existent messages. Now that mox rejects
+messages with bare carriage returns, sending a message through mox can no
+longer be used to trigger those bugs.
+
+Mox can still handle bare carriage returns in email messages, e.g. those
+imported from mbox files or Maildirs, or from messages added over IMAP. Mox
+still fixes up messages with bare newlines by adding the missing carriage
+returns.
+
+Before v0.0.9, an SMTP transaction for a message containing "\n.\n" would
+result in a non-specific error message, and "\r\n.\n" would result in the dot
+being dropped. Since v0.0.9, these sequences are rejected with a message
+mentioning SMTP smuggling.
+
 ## How do I import/export email?
 
 Use the import functionality on the accounts web page to import a zip/tgz with

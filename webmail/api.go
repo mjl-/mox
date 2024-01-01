@@ -233,6 +233,18 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 	// todo: consider making this an HTTP POST, so we can upload as regular form, which is probably more efficient for encoding for the client and we can stream the data in.
 
+	// Prevent any accidental control characters, or attempts at getting bare \r or \n
+	// into messages.
+	for _, l := range [][]string{m.To, m.Cc, m.Bcc, {m.From, m.Subject, m.ReplyTo, m.UserAgent}} {
+		for _, s := range l {
+			for _, c := range s {
+				if c < 0x20 {
+					xcheckuserf(ctx, errors.New("control characters not allowed"), "checking header values")
+				}
+			}
+		}
+	}
+
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	log := pkglog.WithContext(ctx).With(slog.String("account", reqInfo.AccountName))
 	acc, err := store.OpenAccount(log, reqInfo.AccountName)

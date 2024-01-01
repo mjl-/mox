@@ -141,6 +141,34 @@ func (ts *testserver) close() {
 }
 
 func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
+	ts.runRaw(func(conn net.Conn) {
+		ts.t.Helper()
+
+		auth := ts.auth
+		if auth == nil && ts.user != "" {
+			auth = func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+				return sasl.NewClientPlain(ts.user, ts.pass), nil
+			}
+		}
+
+		ourHostname := mox.Conf.Static.HostnameDomain
+		remoteHostname := dns.Domain{ASCII: "mox.example"}
+		opts := smtpclient.Opts{
+			Auth:    auth,
+			RootCAs: mox.Conf.Static.TLS.CertPool,
+		}
+		log := pkglog.WithCid(ts.cid - 1)
+		client, err := smtpclient.New(ctxbg, log.Logger, conn, ts.tlsmode, ts.tlspkix, ourHostname, remoteHostname, opts)
+		if err != nil {
+			conn.Close()
+		} else {
+			defer client.Close()
+		}
+		fn(err, client)
+	})
+}
+
+func (ts *testserver) runRaw(fn func(clientConn net.Conn)) {
 	ts.t.Helper()
 
 	ts.cid += 2
@@ -159,27 +187,7 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 		close(serverdone)
 	}()
 
-	auth := ts.auth
-	if auth == nil && ts.user != "" {
-		auth = func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
-			return sasl.NewClientPlain(ts.user, ts.pass), nil
-		}
-	}
-
-	ourHostname := mox.Conf.Static.HostnameDomain
-	remoteHostname := dns.Domain{ASCII: "mox.example"}
-	opts := smtpclient.Opts{
-		Auth:    auth,
-		RootCAs: mox.Conf.Static.TLS.CertPool,
-	}
-	log := pkglog.WithCid(ts.cid - 1)
-	client, err := smtpclient.New(ctxbg, log.Logger, clientConn, ts.tlsmode, ts.tlspkix, ourHostname, remoteHostname, opts)
-	if err != nil {
-		clientConn.Close()
-	} else {
-		defer client.Close()
-	}
-	fn(err, client)
+	fn(clientConn)
 }
 
 // Just a cert that appears valid. SMTP client will not verify anything about it
@@ -1581,4 +1589,73 @@ test email
 			t.Fatalf("got err %v, expected ErrRequireTLSUnsupported", err)
 		}
 	})
+}
+
+func TestSmuggle(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"example.org.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"example.org."}, // For iprev check.
+		},
+	}
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtpsmuggle/mox.conf"), resolver)
+	ts.tlsmode = smtpclient.TLSSkip
+	defer ts.close()
+
+	test := func(data string) {
+		t.Helper()
+
+		ts.runRaw(func(conn net.Conn) {
+			t.Helper()
+
+			ourHostname := mox.Conf.Static.HostnameDomain
+			remoteHostname := dns.Domain{ASCII: "mox.example"}
+			opts := smtpclient.Opts{
+				RootCAs: mox.Conf.Static.TLS.CertPool,
+			}
+			log := pkglog.WithCid(ts.cid - 1)
+			_, err := smtpclient.New(ctxbg, log.Logger, conn, ts.tlsmode, ts.tlspkix, ourHostname, remoteHostname, opts)
+			tcheck(t, err, "smtpclient")
+			defer conn.Close()
+
+			write := func(s string) {
+				_, err := conn.Write([]byte(s))
+				tcheck(t, err, "write")
+			}
+
+			readPrefixLine := func(prefix string) string {
+				t.Helper()
+				buf := make([]byte, 512)
+				n, err := conn.Read(buf)
+				tcheck(t, err, "read")
+				s := strings.TrimRight(string(buf[:n]), "\r\n")
+				if !strings.HasPrefix(s, prefix) {
+					t.Fatalf("got smtp response %q, expected line with prefix %q", s, prefix)
+				}
+				return s
+			}
+
+			write("MAIL FROM:<remote@example.org>\r\n")
+			readPrefixLine("2")
+			write("RCPT TO:<mjl@mox.example>\r\n")
+			readPrefixLine("2")
+
+			write("DATA\r\n")
+			readPrefixLine("3")
+			write("\r\n") // Empty header.
+			write(data)
+			write("\r\n.\r\n") // End of message.
+			line := readPrefixLine("5")
+			if !strings.Contains(line, "smug") {
+				t.Errorf("got 5xx error with message %q, expected error text containing smug", line)
+			}
+		})
+	}
+
+	test("\r\n.\n")
+	test("\n.\n")
+	test("\r.\r")
+	test("\n.\r\n")
 }

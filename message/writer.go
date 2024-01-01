@@ -66,7 +66,7 @@ Top:
 		for i := o; i < len(buf); i++ {
 			if buf[i] == '\n' && (i > 0 && buf[i-1] != '\r' || i == 0 && origtail[2] != '\r') {
 				// Write buffer leading up to missing \r.
-				if i > o+1 {
+				if i > o {
 					n, err := w.writer.Write(buf[o:i])
 					if n > 0 {
 						wrote += n

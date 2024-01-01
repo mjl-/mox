@@ -1650,6 +1650,11 @@ func (c *conn) cmdData(p *parser) {
 			panic(fmt.Errorf("remote sent too much DATA: %w", errIO))
 		}
 
+		if errors.Is(err, smtp.ErrCRLF) {
+			c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Syntax2, fmt.Sprintf("invalid bare \\r or \\n, may be smtp smuggling (%s)", mox.ReceivedID(c.cid)), err)
+			return
+		}
+
 		// Something is failing on our side. We want to let remote know. So write an error response,
 		// then discard the remaining data so the remote client is more likely to see our
 		// response. Our write is synchronous, there is a risk no window/buffer space is

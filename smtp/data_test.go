@@ -9,12 +9,23 @@ import (
 )
 
 func TestDataWrite(t *testing.T) {
-	if err := DataWrite(io.Discard, strings.NewReader("bad")); err == nil || !errors.Is(err, errMissingCRLF) {
-		t.Fatalf("got err %v, expected errMissingCRLF", err)
+	checkBad := func(s string, expErr error) {
+		t.Helper()
+		if err := DataWrite(io.Discard, strings.NewReader(s)); err == nil || !errors.Is(err, expErr) {
+			t.Fatalf("got err %v, expected %v", err, expErr)
+		}
 	}
-	if err := DataWrite(io.Discard, strings.NewReader(".")); err == nil || !errors.Is(err, errMissingCRLF) {
-		t.Fatalf("got err %v, expected errMissingCRLF", err)
-	}
+
+	checkBad("bad", errMissingCRLF)
+	checkBad(".", errMissingCRLF)
+	checkBad("bare \r is bad\r\n", ErrCRLF)
+	checkBad("bare \n is bad\r\n", ErrCRLF)
+	checkBad("\n.\nis bad\r\n", ErrCRLF)
+	checkBad("\r.\ris bad\r\n", ErrCRLF)
+	checkBad("\r\n.\ris bad\r\n", ErrCRLF)
+	checkBad("\r\n.\nis bad\r\n", ErrCRLF)
+	checkBad("\n.\ris bad\r\n", ErrCRLF)
+	checkBad("\n.\r\nis bad\r\n", ErrCRLF)
 
 	check := func(msg, want string) {
 		t.Helper()
@@ -58,13 +69,15 @@ func TestDataReader(t *testing.T) {
 		return wrote, nil
 	}
 
-	check := func(data, want string) {
+	check := func(data, want string, expErr error) {
 		t.Helper()
 
 		s := &strings.Builder{}
 		dr := NewDataReader(bufio.NewReader(strings.NewReader(data)))
 		if _, err := io.Copy(s, dr); err != nil {
-			t.Fatalf("got err %v", err)
+			if expErr == nil || !errors.Is(err, expErr) {
+				t.Fatalf("got err %v, expected %v", err, expErr)
+			}
 		} else if got := s.String(); got != want {
 			t.Fatalf("got %q, expected %q, for %q", got, want, data)
 		}
@@ -72,16 +85,43 @@ func TestDataReader(t *testing.T) {
 		s = &strings.Builder{}
 		dr = NewDataReader(bufio.NewReader(strings.NewReader(data)))
 		if _, err := smallCopy(s, dr); err != nil {
-			t.Fatalf("got err %v", err)
+			if expErr == nil || !errors.Is(err, expErr) {
+				t.Fatalf("got err %v, expected %v", err, expErr)
+			}
 		} else if got := s.String(); got != want {
 			t.Fatalf("got %q, expected %q, for %q", got, want, data)
 		}
 	}
 
-	check("test\r\n.\r\n", "test\r\n")
-	check(".\r\n", "")
-	check(".test\r\n.\r\n", "test\r\n") // Unnecessary dot, but valid in SMTP.
-	check("..test\r\n.\r\n", ".test\r\n")
+	check("test\r\n.\r\n", "test\r\n", nil)
+	check(".\r\n", "", nil)
+	check(".test\r\n.\r\n", "test\r\n", nil) // Unnecessary dot, but valid in SMTP.
+	check("..test\r\n.\r\n", ".test\r\n", nil)
+
+	check("..test\ntest.\n\r\n.\r\n", ".test\ntest.\n\r\n", nil) // Bare newlines are allowed.
+	check("..test\ntest\n", "", io.ErrUnexpectedEOF)             // Missing end-of-message.
+
+	// Bare \r is rejected.
+	check("bare \r is rejected\r\n.\r\n", "", ErrCRLF)
+	check("bad:\r.\ris rejected\r\n.\r\n", "", ErrCRLF)
+	check("bad:\r.\nis rejected\r\n.\r\n", "", ErrCRLF)
+
+	// Suspicious bare newlines around a dot are rejected.
+	check("bad:\n.\nis rejected\r\n.\r\n", "", ErrCRLF)
+	check("bad:\n.\r\nis rejected\r\n.\r\n", "", ErrCRLF)
+	check("bad:\r\n.\nis rejected\r\n.\r\n", "", ErrCRLF)
+
+	// Suspicious near-smtp-endings at start of message.
+	check(".\ris rejected\r\n.\r\n", "", ErrCRLF)
+	check(".\nis rejected\r\n.\r\n", "", ErrCRLF)
+	check("\n.\ris rejected\r\n.\r\n", "", ErrCRLF)
+	check("\r.\ris rejected\r\n.\r\n", "", ErrCRLF)
+	check("\n.\nis rejected\r\n.\r\n", "", ErrCRLF)
+	check("\r.\nis rejected\r\n.\r\n", "", ErrCRLF)
+	check("\r.\r\nis rejected\r\n.\r\n", "", ErrCRLF)
+	check("\n.\r\nis rejected\r\n.\r\n", "", ErrCRLF)
+	check("\r\n.\ris rejected\r\n.\r\n", "", ErrCRLF)
+	check("\r\n.\nis rejected\r\n.\r\n", "", ErrCRLF)
 
 	s := &strings.Builder{}
 	dr := NewDataReader(bufio.NewReader(strings.NewReader("no end")))
