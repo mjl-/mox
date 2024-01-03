@@ -2005,9 +2005,6 @@ func (a *Account) QuotaMessageSize() int64 {
 // CanAddMessageSize checks if a message of size bytes can be added, depending on
 // total message size and configured quota for account.
 func (a *Account) CanAddMessageSize(tx *bstore.Tx, size int64) (ok bool, maxSize int64, err error) {
-	defer func() {
-		mlog.New("x", nil).Printx("canaddsize", err, slog.Int64("size", size), slog.Bool("ok", ok), slog.Int64("maxsize", maxSize))
-	}()
 	maxSize = a.QuotaMessageSize()
 	if maxSize <= 0 {
 		return true, 0, nil
