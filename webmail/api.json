@@ -3,6 +3,57 @@
 	"Docs": "",
 	"Functions": [
 		{
+			"Name": "LoginPrep",
+			"Docs": "LoginPrep returns a login token, and also sets it as cookie. Both must be\npresent in the call to Login.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Login",
+			"Docs": "Login returns a session token for the credentials, or fails with error code\n\"user:badLogin\". Call LoginPrep to get a loginToken.",
+			"Params": [
+				{
+					"Name": "loginToken",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "username",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "password",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"CSRFToken"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Logout",
+			"Docs": "Logout invalidates the session token.",
+			"Params": [],
+			"Returns": []
+		},
+		{
 			"Name": "Token",
 			"Docs": "Token returns a token to use for an SSE connection. A token can only be used for\na single SSE connection. Tokens are stored in memory for a maximum of 1 minute,\nwith at most 10 unused tokens (the most recently created) per account.",
 			"Params": [],
@@ -2626,6 +2677,11 @@
 		}
 	],
 	"Strings": [
+		{
+			"Name": "CSRFToken",
+			"Docs": "",
+			"Values": null
+		},
 		{
 			"Name": "ThreadMode",
 			"Docs": "",

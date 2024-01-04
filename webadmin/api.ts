@@ -647,6 +647,8 @@ export interface TLSRPTSuppressAddress {
 	Comment: string
 }
 
+export type CSRFToken = string
+
 // Policy as used in DMARC DNS record for "p=" or "sp=".
 export enum DMARCPolicy {
 	PolicyEmpty = "",  // Only for the optional Record.SubdomainPolicy.
@@ -769,7 +771,7 @@ export type Localpart = string
 export type IP = string
 
 export const structTypes: {[typename: string]: boolean} = {"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"DANECheckResult":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"Reverse":true,"Row":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
-export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"Alignment":true,"DKIMResult":true,"DMARCPolicy":true,"DMARCResult":true,"Disposition":true,"IP":true,"Localpart":true,"Mode":true,"PolicyOverride":true,"PolicyType":true,"RUA":true,"ResultType":true,"SPFDomainScope":true,"SPFResult":true}
+export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"Alignment":true,"CSRFToken":true,"DKIMResult":true,"DMARCPolicy":true,"DMARCResult":true,"Disposition":true,"IP":true,"Localpart":true,"Mode":true,"PolicyOverride":true,"PolicyType":true,"RUA":true,"ResultType":true,"SPFDomainScope":true,"SPFResult":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
 	"CheckResult": {"Name":"CheckResult","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"DNSSEC","Docs":"","Typewords":["DNSSECResult"]},{"Name":"IPRev","Docs":"","Typewords":["IPRevCheckResult"]},{"Name":"MX","Docs":"","Typewords":["MXCheckResult"]},{"Name":"TLS","Docs":"","Typewords":["TLSCheckResult"]},{"Name":"DANE","Docs":"","Typewords":["DANECheckResult"]},{"Name":"SPF","Docs":"","Typewords":["SPFCheckResult"]},{"Name":"DKIM","Docs":"","Typewords":["DKIMCheckResult"]},{"Name":"DMARC","Docs":"","Typewords":["DMARCCheckResult"]},{"Name":"HostTLSRPT","Docs":"","Typewords":["TLSRPTCheckResult"]},{"Name":"DomainTLSRPT","Docs":"","Typewords":["TLSRPTCheckResult"]},{"Name":"MTASTS","Docs":"","Typewords":["MTASTSCheckResult"]},{"Name":"SRVConf","Docs":"","Typewords":["SRVConfCheckResult"]},{"Name":"Autoconf","Docs":"","Typewords":["AutoconfCheckResult"]},{"Name":"Autodiscover","Docs":"","Typewords":["AutodiscoverCheckResult"]}]},
@@ -844,6 +846,7 @@ export const types: TypenameMap = {
 	"SuppressAddress": {"Name":"SuppressAddress","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Inserted","Docs":"","Typewords":["timestamp"]},{"Name":"ReportingAddress","Docs":"","Typewords":["string"]},{"Name":"Until","Docs":"","Typewords":["timestamp"]},{"Name":"Comment","Docs":"","Typewords":["string"]}]},
 	"TLSResult": {"Name":"TLSResult","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"PolicyDomain","Docs":"","Typewords":["string"]},{"Name":"DayUTC","Docs":"","Typewords":["string"]},{"Name":"RecipientDomain","Docs":"","Typewords":["string"]},{"Name":"Created","Docs":"","Typewords":["timestamp"]},{"Name":"Updated","Docs":"","Typewords":["timestamp"]},{"Name":"IsHost","Docs":"","Typewords":["bool"]},{"Name":"SendReport","Docs":"","Typewords":["bool"]},{"Name":"SentToRecipientDomain","Docs":"","Typewords":["bool"]},{"Name":"RecipientDomainReportingAddresses","Docs":"","Typewords":["[]","string"]},{"Name":"SentToPolicyDomain","Docs":"","Typewords":["bool"]},{"Name":"Results","Docs":"","Typewords":["[]","Result"]}]},
 	"TLSRPTSuppressAddress": {"Name":"TLSRPTSuppressAddress","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Inserted","Docs":"","Typewords":["timestamp"]},{"Name":"ReportingAddress","Docs":"","Typewords":["string"]},{"Name":"Until","Docs":"","Typewords":["timestamp"]},{"Name":"Comment","Docs":"","Typewords":["string"]}]},
+	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"DMARCPolicy": {"Name":"DMARCPolicy","Docs":"","Values":[{"Name":"PolicyEmpty","Value":"","Docs":""},{"Name":"PolicyNone","Value":"none","Docs":""},{"Name":"PolicyQuarantine","Value":"quarantine","Docs":""},{"Name":"PolicyReject","Value":"reject","Docs":""}]},
 	"Align": {"Name":"Align","Docs":"","Values":[{"Name":"AlignStrict","Value":"s","Docs":""},{"Name":"AlignRelaxed","Value":"r","Docs":""}]},
 	"RUA": {"Name":"RUA","Docs":"","Values":null},
@@ -934,6 +937,7 @@ export const parser = {
 	SuppressAddress: (v: any) => parse("SuppressAddress", v) as SuppressAddress,
 	TLSResult: (v: any) => parse("TLSResult", v) as TLSResult,
 	TLSRPTSuppressAddress: (v: any) => parse("TLSRPTSuppressAddress", v) as TLSRPTSuppressAddress,
+	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 	DMARCPolicy: (v: any) => parse("DMARCPolicy", v) as DMARCPolicy,
 	Align: (v: any) => parse("Align", v) as Align,
 	RUA: (v: any) => parse("RUA", v) as RUA,
@@ -957,14 +961,57 @@ export const parser = {
 let defaultOptions: ClientOptions = {slicesNullable: true, mapsNullable: true, nullableOptional: true}
 
 export class Client {
-	constructor(private baseURL=defaultBaseURL, public options?: ClientOptions) {
-		if (!options) {
-			this.options = defaultOptions
-		}
+	private baseURL: string
+	public authState: AuthState
+	public options: ClientOptions
+
+	constructor() {
+		this.authState = {}
+		this.options = {...defaultOptions}
+		this.baseURL = this.options.baseURL || defaultBaseURL
+	}
+
+	withAuthToken(token: string): Client {
+		const c = new Client()
+		c.authState.token = token
+		c.options = this.options
+		return c
 	}
 
 	withOptions(options: ClientOptions): Client {
-		return new Client(this.baseURL, { ...this.options, ...options })
+		const c = new Client()
+		c.authState = this.authState
+		c.options = { ...this.options, ...options }
+		return c
+	}
+
+	// LoginPrep returns a login token, and also sets it as cookie. Both must be
+	// present in the call to Login.
+	async LoginPrep(): Promise<string> {
+		const fn: string = "LoginPrep"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["string"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string
+	}
+
+	// Login returns a session token for the credentials, or fails with error code
+	// "user:badLogin". Call LoginPrep to get a loginToken.
+	async Login(loginToken: string, password: string): Promise<CSRFToken> {
+		const fn: string = "Login"
+		const paramTypes: string[][] = [["string"],["string"]]
+		const returnTypes: string[][] = [["CSRFToken"]]
+		const params: any[] = [loginToken, password]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as CSRFToken
+	}
+
+	// Logout invalidates the session token.
+	async Logout(): Promise<void> {
+		const fn: string = "Logout"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = []
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// CheckDomain checks the configuration for the domain, such as MX, SMTP STARTTLS,
@@ -974,7 +1021,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["CheckResult"]]
 		const params: any[] = [domainName]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as CheckResult
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as CheckResult
 	}
 
 	// Domains returns all configured domain names, in UTF-8 for IDNA domains.
@@ -983,7 +1030,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["[]","Domain"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as Domain[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Domain[] | null
 	}
 
 	// Domain returns the dns domain for a (potentially unicode as IDNA) domain name.
@@ -992,7 +1039,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["Domain"]]
 		const params: any[] = [domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as Domain
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Domain
 	}
 
 	// ParseDomain parses a domain, possibly an IDNA domain.
@@ -1001,7 +1048,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["Domain"]]
 		const params: any[] = [domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as Domain
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Domain
 	}
 
 	// DomainLocalparts returns the encoded localparts and accounts configured in domain.
@@ -1010,7 +1057,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["{}","string"]]
 		const params: any[] = [domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: string }
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: string }
 	}
 
 	// Accounts returns the names of all configured accounts.
@@ -1019,7 +1066,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["[]","string"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as string[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string[] | null
 	}
 
 	// Account returns the parsed configuration of an account.
@@ -1028,7 +1075,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["{}","any"]]
 		const params: any[] = [account]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: any }
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: any }
 	}
 
 	// ConfigFiles returns the paths and contents of the static and dynamic configuration files.
@@ -1037,7 +1084,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["string"],["string"],["string"],["string"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, string, string, string]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, string, string, string]
 	}
 
 	// MTASTSPolicies returns all mtasts policies from the cache.
@@ -1046,7 +1093,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["[]","PolicyRecord"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as PolicyRecord[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as PolicyRecord[] | null
 	}
 
 	// TLSReports returns TLS reports overlapping with period start/end, for the given
@@ -1057,7 +1104,7 @@ export class Client {
 		const paramTypes: string[][] = [["timestamp"],["timestamp"],["string"]]
 		const returnTypes: string[][] = [["[]","TLSReportRecord"]]
 		const params: any[] = [start, end, policyDomain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSReportRecord[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSReportRecord[] | null
 	}
 
 	// TLSReportID returns a single TLS report.
@@ -1066,7 +1113,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["int64"]]
 		const returnTypes: string[][] = [["TLSReportRecord"]]
 		const params: any[] = [domain, reportID]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSReportRecord
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSReportRecord
 	}
 
 	// TLSRPTSummaries returns a summary of received TLS reports overlapping with
@@ -1077,7 +1124,7 @@ export class Client {
 		const paramTypes: string[][] = [["timestamp"],["timestamp"],["string"]]
 		const returnTypes: string[][] = [["[]","TLSRPTSummary"]]
 		const params: any[] = [start, end, policyDomain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSRPTSummary[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSRPTSummary[] | null
 	}
 
 	// DMARCReports returns DMARC reports overlapping with period start/end, for the
@@ -1088,7 +1135,7 @@ export class Client {
 		const paramTypes: string[][] = [["timestamp"],["timestamp"],["string"]]
 		const returnTypes: string[][] = [["[]","DomainFeedback"]]
 		const params: any[] = [start, end, domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as DomainFeedback[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as DomainFeedback[] | null
 	}
 
 	// DMARCReportID returns a single DMARC report.
@@ -1097,7 +1144,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["int64"]]
 		const returnTypes: string[][] = [["DomainFeedback"]]
 		const params: any[] = [domain, reportID]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as DomainFeedback
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as DomainFeedback
 	}
 
 	// DMARCSummaries returns a summary of received DMARC reports overlapping with
@@ -1108,7 +1155,7 @@ export class Client {
 		const paramTypes: string[][] = [["timestamp"],["timestamp"],["string"]]
 		const returnTypes: string[][] = [["[]","DMARCSummary"]]
 		const params: any[] = [start, end, domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as DMARCSummary[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as DMARCSummary[] | null
 	}
 
 	// LookupIP does a reverse lookup of ip.
@@ -1117,7 +1164,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["Reverse"]]
 		const params: any[] = [ip]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as Reverse
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Reverse
 	}
 
 	// DNSBLStatus returns the IPs from which outgoing connections may be made and
@@ -1132,7 +1179,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["{}","{}","string"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: { [key: string]: string } }
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: { [key: string]: string } }
 	}
 
 	// DomainRecords returns lines describing DNS records that should exist for the
@@ -1142,7 +1189,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["[]","string"]]
 		const params: any[] = [domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as string[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string[] | null
 	}
 
 	// DomainAdd adds a new domain and reloads the configuration.
@@ -1151,7 +1198,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["string"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [domain, accountName, localpart]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// DomainRemove removes an existing domain and reloads the configuration.
@@ -1160,7 +1207,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// AccountAdd adds existing a new account, with an initial email address, and
@@ -1170,7 +1217,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [accountName, address]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// AccountRemove removes an existing account and reloads the configuration.
@@ -1179,7 +1226,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [accountName]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// AddressAdd adds a new address to the account, which must already exist.
@@ -1188,7 +1235,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [address, accountName]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// AddressRemove removes an existing address.
@@ -1197,7 +1244,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [address]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// SetPassword saves a new password for an account, invalidating the previous password.
@@ -1208,7 +1255,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [accountName, password]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// SetAccountLimits set new limits on outgoing messages for an account.
@@ -1217,7 +1264,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["int32"],["int32"],["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// ClientConfigsDomain returns configurations for email clients, IMAP and
@@ -1227,7 +1274,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["ClientConfigs"]]
 		const params: any[] = [domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as ClientConfigs
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as ClientConfigs
 	}
 
 	// QueueList returns the messages currently in the outgoing queue.
@@ -1236,7 +1283,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["[]","Msg"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as Msg[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Msg[] | null
 	}
 
 	// QueueSize returns the number of messages currently in the outgoing queue.
@@ -1245,7 +1292,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["int32"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
 	}
 
 	// QueueKick initiates delivery of a message from the queue and sets the transport
@@ -1255,7 +1302,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [id, transport]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// QueueDrop removes a message from the queue.
@@ -1264,7 +1311,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [id]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// QueueSaveRequireTLS updates the requiretls field for a message in the queue,
@@ -1274,7 +1321,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"],["nullable","bool"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [id, requireTLS]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// LogLevels returns the current log levels.
@@ -1283,7 +1330,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["{}","string"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: string }
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: string }
 	}
 
 	// LogLevelSet sets a log level for a package.
@@ -1292,7 +1339,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [pkg, levelStr]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// LogLevelRemove removes a log level for a package, which cannot be the empty string.
@@ -1301,7 +1348,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [pkg]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// CheckUpdatesEnabled returns whether checking for updates is enabled.
@@ -1310,7 +1357,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["bool"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as boolean
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as boolean
 	}
 
 	// WebserverConfig returns the current webserver config
@@ -1319,7 +1366,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["WebserverConfig"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as WebserverConfig
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as WebserverConfig
 	}
 
 	// WebserverConfigSave saves a new webserver config. If oldConf is not equal to
@@ -1329,7 +1376,7 @@ export class Client {
 		const paramTypes: string[][] = [["WebserverConfig"],["WebserverConfig"]]
 		const returnTypes: string[][] = [["WebserverConfig"]]
 		const params: any[] = [oldConf, newConf]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as WebserverConfig
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as WebserverConfig
 	}
 
 	// Transports returns the configured transports, for sending email.
@@ -1338,7 +1385,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["{}","Transport"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: Transport }
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: Transport }
 	}
 
 	// DMARCEvaluationStats returns a map of all domains with evaluations to a count of
@@ -1348,7 +1395,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["{}","EvaluationStat"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: EvaluationStat }
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: EvaluationStat }
 	}
 
 	// DMARCEvaluationsDomain returns all evaluations for aggregate reports for the
@@ -1358,7 +1405,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["Domain"],["[]","Evaluation"]]
 		const params: any[] = [domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as [Domain, Evaluation[] | null]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [Domain, Evaluation[] | null]
 	}
 
 	// DMARCRemoveEvaluations removes evaluations for a domain.
@@ -1367,7 +1414,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// DMARCSuppressAdd adds a reporting address to the suppress list. Outgoing
@@ -1377,7 +1424,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["timestamp"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [reportingAddress, until, comment]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// DMARCSuppressList returns all reporting addresses on the suppress list.
@@ -1386,7 +1433,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["[]","SuppressAddress"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as SuppressAddress[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as SuppressAddress[] | null
 	}
 
 	// DMARCSuppressRemove removes a reporting address record from the suppress list.
@@ -1395,7 +1442,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [id]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// DMARCSuppressExtend updates the until field of a suppressed reporting address record.
@@ -1404,7 +1451,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"],["timestamp"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [id, until]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// TLSRPTResults returns all TLSRPT results in the database.
@@ -1413,7 +1460,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["[]","TLSResult"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSResult[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSResult[] | null
 	}
 
 	// TLSRPTResultsPolicyDomain returns the TLS results for a domain.
@@ -1422,7 +1469,7 @@ export class Client {
 		const paramTypes: string[][] = [["bool"],["string"]]
 		const returnTypes: string[][] = [["Domain"],["[]","TLSResult"]]
 		const params: any[] = [isRcptDom, policyDomain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as [Domain, TLSResult[] | null]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [Domain, TLSResult[] | null]
 	}
 
 	// LookupTLSRPTRecord looks up a TLSRPT record and returns the parsed form, original txt
@@ -1432,7 +1479,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["nullable","TLSRPTRecord"],["string"],["string"]]
 		const params: any[] = [domain]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as [TLSRPTRecord | null, string, string]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [TLSRPTRecord | null, string, string]
 	}
 
 	// TLSRPTRemoveResults removes the TLS results for a domain for the given day. If
@@ -1442,7 +1489,7 @@ export class Client {
 		const paramTypes: string[][] = [["bool"],["string"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [isRcptDom, domain, day]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// TLSRPTSuppressAdd adds a reporting address to the suppress list. Outgoing
@@ -1452,7 +1499,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["timestamp"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [reportingAddress, until, comment]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// TLSRPTSuppressList returns all reporting addresses on the suppress list.
@@ -1461,7 +1508,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["[]","TLSRPTSuppressAddress"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSRPTSuppressAddress[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSRPTSuppressAddress[] | null
 	}
 
 	// TLSRPTSuppressRemove removes a reporting address record from the suppress list.
@@ -1470,7 +1517,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [id]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// TLSRPTSuppressExtend updates the until field of a suppressed reporting address record.
@@ -1479,7 +1526,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"],["timestamp"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [id, until]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 }
 
@@ -1591,7 +1638,7 @@ class verifier {
 
 		const ensure = (ok: boolean, expect: string): any => {
 			if (!ok) {
-				error('got ' + JSON.stringify(v) +  ', expected ' + expect)
+				error('got ' + JSON.stringify(v) + ', expected ' + expect)
 			}
 			return v
 		}
@@ -1732,6 +1779,7 @@ class verifier {
 
 
 export interface ClientOptions {
+	baseURL?: string
 	aborter?: {abort?: () => void}
 	timeoutMsec?: number
 	skipParamCheck?: boolean
@@ -1739,9 +1787,16 @@ export interface ClientOptions {
 	slicesNullable?: boolean
 	mapsNullable?: boolean
 	nullableOptional?: boolean
+	csrfHeader?: string
+	login?: (reason: string) => Promise<string>
 }
 
-const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: string[][], returnTypes: string[][], name: string, params: any[]): Promise<any> => {
+export interface AuthState {
+	token?: string // For csrf request header.
+	loginPromise?: Promise<void> // To let multiple API calls wait for a single login attempt, not each opening a login popup.
+}
+
+const _sherpaCall = async (baseURL: string, authState: AuthState, options: ClientOptions, paramTypes: string[][], returnTypes: string[][], name: string, params: any[]): Promise<any> => {
 	if (!options.skipParamCheck) {
 		if (params.length !== paramTypes.length) {
 			return Promise.reject({ message: 'wrong number of parameters in sherpa call, saw ' + params.length + ' != expected ' + paramTypes.length })
@@ -1782,14 +1837,36 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 		await simulate(json)
 	}
 
-	// Immediately create promise, so options.aborter is changed before returning.
-	const promise = new Promise((resolve, reject) => {
-		let resolve1 = (v: { code: string, message: string }) => {
+	const fn = (resolve: (v: any) => void, reject: (v: any) => void) => {
+		let resolve1 = (v: any) => {
 			resolve(v)
 			resolve1 = () => { }
 			reject1 = () => { }
 		}
 		let reject1 = (v: { code: string, message: string }) => {
+			if ((v.code === 'user:noAuth' || v.code === 'user:badAuth')  && options.login) {
+				const login = options.login
+				if (!authState.loginPromise) {
+					authState.loginPromise = new Promise((aresolve, areject) => {
+						login(v.code === 'user:badAuth' ? (v.message || '') : '')
+						.then((token) => {
+							authState.token = token
+							authState.loginPromise = undefined
+							aresolve()
+						}, (err: any) => {
+							authState.loginPromise = undefined
+							areject(err)
+						})
+					})
+				}
+				authState.loginPromise
+				.then(() => {
+					fn(resolve, reject)
+				}, (err: any) => {
+					reject(err)
+				})
+				return
+			}
 			reject(v)
 			resolve1 = () => { }
 			reject1 = () => { }
@@ -1804,6 +1881,9 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 			}
 		}
 		req.open('POST', url, true)
+		if (options.csrfHeader && authState.token) {
+			req.setRequestHeader(options.csrfHeader, authState.token)
+		}
 		if (options.timeoutMsec) {
 			req.timeout = options.timeoutMsec
 		}
@@ -1872,8 +1952,8 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 		} catch (err) {
 			reject1({ code: 'sherpa:badData', message: 'cannot marshal to JSON' })
 		}
-	})
-	return await promise
+	}
+	return await new Promise(fn)
 }
 
 }

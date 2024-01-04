@@ -15,6 +15,7 @@ table td, table th { padding: .15em .25em; }
 .silenttitle { text-decoration: none; }
 fieldset { border: 0; }
 .loading { opacity: 0.1; animation: fadeout 1s ease-out; }
+@keyframes fadein { 0% { opacity: 0 } 100% { opacity: 1 } }
 @keyframes fadeout { 0% { opacity: 1 } 100% { opacity: 0.1 } }
 .button { display: inline-block; }
 button, .button { border-radius: .15em; background-color: #eee; border: 1px solid #888; padding: 0 .15em; color: inherit; /* for ipad, which shows blue or white text */ }
@@ -78,7 +79,7 @@ table.search td { padding: .25em; }
 		</style>
 	</head>
 	<body>
-		<div id="page"><div style="padding: 1em">Loading...</div></div>
+		<div id="page"><div style="padding: 1em; text-align: center">Loading...</div></div>
 		<script>/* placeholder */</script>
 	</body>
 </html>

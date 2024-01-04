@@ -174,37 +174,13 @@ type Listener struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 993."`
 	} `sconf:"optional" sconf-doc:"IMAP over TLS for reading email, by email applications. Requires a TLS config."`
-	AccountHTTP struct {
-		Enabled bool
-		Port    int    `sconf:"optional" sconf-doc:"Default 80."`
-		Path    string `sconf:"optional" sconf-doc:"Path to serve account requests on, e.g. /mox/. Useful if domain serves other resources. Default is /."`
-	} `sconf:"optional" sconf-doc:"Account web interface, for email users wanting to change their accounts, e.g. set new password, set new delivery rulesets. Served at /."`
-	AccountHTTPS struct {
-		Enabled bool
-		Port    int    `sconf:"optional" sconf-doc:"Default 80."`
-		Path    string `sconf:"optional" sconf-doc:"Path to serve account requests on, e.g. /mox/. Useful if domain serves other resources. Default is /."`
-	} `sconf:"optional" sconf-doc:"Account web interface listener for HTTPS. Requires a TLS config."`
-	AdminHTTP struct {
-		Enabled bool
-		Port    int    `sconf:"optional" sconf-doc:"Default 80."`
-		Path    string `sconf:"optional" sconf-doc:"Path to serve admin requests on, e.g. /moxadmin/. Useful if domain serves other resources. Default is /admin/."`
-	} `sconf:"optional" sconf-doc:"Admin web interface, for managing domains, accounts, etc. Served at /admin/. Preferably only enable on non-public IPs. Hint: use 'ssh -L 8080:localhost:80 you@yourmachine' and open http://localhost:8080/admin/, or set up a tunnel (e.g. WireGuard) and add its IP to the mox 'internal' listener."`
-	AdminHTTPS struct {
-		Enabled bool
-		Port    int    `sconf:"optional" sconf-doc:"Default 443."`
-		Path    string `sconf:"optional" sconf-doc:"Path to serve admin requests on, e.g. /moxadmin/. Useful if domain serves other resources. Default is /admin/."`
-	} `sconf:"optional" sconf-doc:"Admin web interface listener for HTTPS. Requires a TLS config. Preferably only enable on non-public IPs."`
-	WebmailHTTP struct {
-		Enabled bool
-		Port    int    `sconf:"optional" sconf-doc:"Default 80."`
-		Path    string `sconf:"optional" sconf-doc:"Path to serve account requests on. Useful if domain serves other resources. Default is /webmail/."`
-	} `sconf:"optional" sconf-doc:"Webmail client, for reading email."`
-	WebmailHTTPS struct {
-		Enabled bool
-		Port    int    `sconf:"optional" sconf-doc:"Default 443."`
-		Path    string `sconf:"optional" sconf-doc:"Path to serve account requests on. Useful if domain serves other resources. Default is /webmail/."`
-	} `sconf:"optional" sconf-doc:"Webmail client, for reading email."`
-	MetricsHTTP struct {
+	AccountHTTP  WebService `sconf:"optional" sconf-doc:"Account web interface, for email users wanting to change their accounts, e.g. set new password, set new delivery rulesets. Default path is /."`
+	AccountHTTPS WebService `sconf:"optional" sconf-doc:"Account web interface listener like AccountHTTP, but for HTTPS. Requires a TLS config."`
+	AdminHTTP    WebService `sconf:"optional" sconf-doc:"Admin web interface, for managing domains, accounts, etc. Default path is /admin/. Preferably only enable on non-public IPs. Hint: use 'ssh -L 8080:localhost:80 you@yourmachine' and open http://localhost:8080/admin/, or set up a tunnel (e.g. WireGuard) and add its IP to the mox 'internal' listener."`
+	AdminHTTPS   WebService `sconf:"optional" sconf-doc:"Admin web interface listener like AdminHTTP, but for HTTPS. Requires a TLS config."`
+	WebmailHTTP  WebService `sconf:"optional" sconf-doc:"Webmail client, for reading email. Default path is /webmail/."`
+	WebmailHTTPS WebService `sconf:"optional" sconf-doc:"Webmail client, like WebmailHTTP, but for HTTPS. Requires a TLS config."`
+	MetricsHTTP  struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 8010."`
 	} `sconf:"optional" sconf-doc:"Serve prometheus metrics, for monitoring. You should not enable this on a public IP."`
@@ -230,6 +206,14 @@ type Listener struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Port for HTTPS webserver."`
 	} `sconf:"optional" sconf-doc:"All configured WebHandlers will serve on an enabled listener. Either ACME must be configured, or for each WebHandler domain a TLS certificate must be configured."`
+}
+
+// WebService is an internal web interface: webmail, account, admin.
+type WebService struct {
+	Enabled   bool
+	Port      int    `sconf:"optional" sconf-doc:"Default 80 for HTTP and 443 for HTTPS."`
+	Path      string `sconf:"optional" sconf-doc:"Path to serve requests on."`
+	Forwarded bool   `sconf:"optional" sconf-doc:"If set, X-Forwarded-* headers are used for the remote IP address for rate limiting and for the \"secure\" status of cookies."`
 }
 
 // Transport is a method to delivery a message. At most one of the fields can

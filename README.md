@@ -115,9 +115,7 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- Integrate account page into webmail
 - Improve documentation
-- Authentication other than HTTP-basic for webmail/webadmin
 - Improve SMTP delivery from queue
 - Webmail improvements
 - HTTP-based API for sending messages and receiving delivery feedback

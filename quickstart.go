@@ -714,12 +714,15 @@ and check the admin page for the needed DNS records.`)
 	}
 	internal.AccountHTTP.Enabled = true
 	internal.AdminHTTP.Enabled = true
-	internal.MetricsHTTP.Enabled = true
 	internal.WebmailHTTP.Enabled = true
+	internal.MetricsHTTP.Enabled = true
 	if existingWebserver {
 		internal.AccountHTTP.Port = 1080
+		internal.AccountHTTP.Forwarded = true
 		internal.AdminHTTP.Port = 1080
+		internal.AdminHTTP.Forwarded = true
 		internal.WebmailHTTP.Port = 1080
+		internal.WebmailHTTP.Forwarded = true
 		internal.AutoconfigHTTPS.Enabled = true
 		internal.AutoconfigHTTPS.Port = 81
 		internal.AutoconfigHTTPS.NonTLS = true

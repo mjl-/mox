@@ -3,6 +3,57 @@
 	"Docs": "Account exports web API functions for the account web interface. All its\nmethods are exported under api/. Function calls require valid HTTP\nAuthentication credentials of a user.",
 	"Functions": [
 		{
+			"Name": "LoginPrep",
+			"Docs": "LoginPrep returns a login token, and also sets it as cookie. Both must be\npresent in the call to Login.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Login",
+			"Docs": "Login returns a session token for the credentials, or fails with error code\n\"user:badLogin\". Call LoginPrep to get a loginToken.",
+			"Params": [
+				{
+					"Name": "loginToken",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "username",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "password",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"CSRFToken"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Logout",
+			"Docs": "Logout invalidates the session token.",
+			"Params": [],
+			"Returns": []
+		},
+		{
 			"Name": "SetPassword",
 			"Docs": "SetPassword saves a new password for the account, invalidating the previous password.\nSessions are not interrupted, and will keep working. New login attempts must use the new password.\nPassword must be at least 8 characters.",
 			"Params": [
@@ -241,7 +292,13 @@
 		}
 	],
 	"Ints": [],
-	"Strings": [],
+	"Strings": [
+		{
+			"Name": "CSRFToken",
+			"Docs": "",
+			"Values": null
+		}
+	],
 	"SherpaVersion": 0,
 	"SherpadocVersion": 1
 }

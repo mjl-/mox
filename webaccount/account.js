@@ -215,6 +215,8 @@ const [dom, style, attr, prop] = (function () {
 		name: (s) => _attr('name', s),
 		min: (s) => _attr('min', s),
 		max: (s) => _attr('max', s),
+		action: (s) => _attr('action', s),
+		method: (s) => _attr('method', s),
 	};
 	const style = (x) => { return { _styles: x }; };
 	const prop = (x) => { return { _props: x }; };
@@ -224,19 +226,21 @@ const [dom, style, attr, prop] = (function () {
 var api;
 (function (api) {
 	api.structTypes = { "Destination": true, "Domain": true, "ImportProgress": true, "Ruleset": true };
-	api.stringsTypes = {};
+	api.stringsTypes = { "CSRFToken": true };
 	api.intsTypes = {};
 	api.types = {
 		"Domain": { "Name": "Domain", "Docs": "", "Fields": [{ "Name": "ASCII", "Docs": "", "Typewords": ["string"] }, { "Name": "Unicode", "Docs": "", "Typewords": ["string"] }] },
 		"Destination": { "Name": "Destination", "Docs": "", "Fields": [{ "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Rulesets", "Docs": "", "Typewords": ["[]", "Ruleset"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }] },
 		"Ruleset": { "Name": "Ruleset", "Docs": "", "Fields": [{ "Name": "SMTPMailFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "HeadersRegexp", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListAllowDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "AcceptRejectsToMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "ListAllowDNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"ImportProgress": { "Name": "ImportProgress", "Docs": "", "Fields": [{ "Name": "Token", "Docs": "", "Typewords": ["string"] }] },
+		"CSRFToken": { "Name": "CSRFToken", "Docs": "", "Values": null },
 	};
 	api.parser = {
 		Domain: (v) => api.parse("Domain", v),
 		Destination: (v) => api.parse("Destination", v),
 		Ruleset: (v) => api.parse("Ruleset", v),
 		ImportProgress: (v) => api.parse("ImportProgress", v),
+		CSRFToken: (v) => api.parse("CSRFToken", v),
 	};
 	// Account exports web API functions for the account web interface. All its
 	// methods are exported under api/. Function calls require valid HTTP
@@ -244,16 +248,50 @@ var api;
 	let defaultOptions = { slicesNullable: true, mapsNullable: true, nullableOptional: true };
 	class Client {
 		baseURL;
+		authState;
 		options;
-		constructor(baseURL = api.defaultBaseURL, options) {
-			this.baseURL = baseURL;
-			this.options = options;
-			if (!options) {
-				this.options = defaultOptions;
-			}
+		constructor() {
+			this.authState = {};
+			this.options = { ...defaultOptions };
+			this.baseURL = this.options.baseURL || api.defaultBaseURL;
+		}
+		withAuthToken(token) {
+			const c = new Client();
+			c.authState.token = token;
+			c.options = this.options;
+			return c;
 		}
 		withOptions(options) {
-			return new Client(this.baseURL, { ...this.options, ...options });
+			const c = new Client();
+			c.authState = this.authState;
+			c.options = { ...this.options, ...options };
+			return c;
+		}
+		// LoginPrep returns a login token, and also sets it as cookie. Both must be
+		// present in the call to Login.
+		async LoginPrep() {
+			const fn = "LoginPrep";
+			const paramTypes = [];
+			const returnTypes = [["string"]];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// Login returns a session token for the credentials, or fails with error code
+		// "user:badLogin". Call LoginPrep to get a loginToken.
+		async Login(loginToken, username, password) {
+			const fn = "Login";
+			const paramTypes = [["string"], ["string"], ["string"]];
+			const returnTypes = [["CSRFToken"]];
+			const params = [loginToken, username, password];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// Logout invalidates the session token.
+		async Logout() {
+			const fn = "Logout";
+			const paramTypes = [];
+			const returnTypes = [];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// SetPassword saves a new password for the account, invalidating the previous password.
 		// Sessions are not interrupted, and will keep working. New login attempts must use the new password.
@@ -263,7 +301,7 @@ var api;
 			const paramTypes = [["string"]];
 			const returnTypes = [];
 			const params = [password];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// Account returns information about the account: full name, the default domain,
 		// and the destinations (keys are email addresses, or localparts to the default
@@ -274,14 +312,14 @@ var api;
 			const paramTypes = [];
 			const returnTypes = [["string"], ["Domain"], ["{}", "Destination"]];
 			const params = [];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		async AccountSaveFullName(fullName) {
 			const fn = "AccountSaveFullName";
 			const paramTypes = [["string"]];
 			const returnTypes = [];
 			const params = [fullName];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// DestinationSave updates a destination.
 		// OldDest is compared against the current destination. If it does not match, an
@@ -291,7 +329,7 @@ var api;
 			const paramTypes = [["string"], ["Destination"], ["Destination"]];
 			const returnTypes = [];
 			const params = [destName, oldDest, newDest];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// ImportAbort aborts an import that is in progress. If the import exists and isn't
 		// finished, no changes will have been made by the import.
@@ -300,7 +338,7 @@ var api;
 			const paramTypes = [["string"]];
 			const returnTypes = [];
 			const params = [importToken];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// Types exposes types not used in API method signatures, such as the import form upload.
 		async Types() {
@@ -308,7 +346,7 @@ var api;
 			const paramTypes = [];
 			const returnTypes = [["ImportProgress"]];
 			const params = [];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 	}
 	api.Client = Client;
@@ -496,7 +534,7 @@ var api;
 			}
 		}
 	}
-	const _sherpaCall = async (baseURL, options, paramTypes, returnTypes, name, params) => {
+	const _sherpaCall = async (baseURL, authState, options, paramTypes, returnTypes, name, params) => {
 		if (!options.skipParamCheck) {
 			if (params.length !== paramTypes.length) {
 				return Promise.reject({ message: 'wrong number of parameters in sherpa call, saw ' + params.length + ' != expected ' + paramTypes.length });
@@ -538,14 +576,36 @@ var api;
 		if (json) {
 			await simulate(json);
 		}
-		// Immediately create promise, so options.aborter is changed before returning.
-		const promise = new Promise((resolve, reject) => {
+		const fn = (resolve, reject) => {
 			let resolve1 = (v) => {
 				resolve(v);
 				resolve1 = () => { };
 				reject1 = () => { };
 			};
 			let reject1 = (v) => {
+				if ((v.code === 'user:noAuth' || v.code === 'user:badAuth') && options.login) {
+					const login = options.login;
+					if (!authState.loginPromise) {
+						authState.loginPromise = new Promise((aresolve, areject) => {
+							login(v.code === 'user:badAuth' ? (v.message || '') : '')
+								.then((token) => {
+								authState.token = token;
+								authState.loginPromise = undefined;
+								aresolve();
+							}, (err) => {
+								authState.loginPromise = undefined;
+								areject(err);
+							});
+						});
+					}
+					authState.loginPromise
+						.then(() => {
+						fn(resolve, reject);
+					}, (err) => {
+						reject(err);
+					});
+					return;
+				}
 				reject(v);
 				resolve1 = () => { };
 				reject1 = () => { };
@@ -559,6 +619,9 @@ var api;
 				};
 			}
 			req.open('POST', url, true);
+			if (options.csrfHeader && authState.token) {
+				req.setRequestHeader(options.csrfHeader, authState.token);
+			}
 			if (options.timeoutMsec) {
 				req.timeout = options.timeoutMsec;
 			}
@@ -632,15 +695,91 @@ var api;
 			catch (err) {
 				reject1({ code: 'sherpa:badData', message: 'cannot marshal to JSON' });
 			}
-		});
-		return await promise;
+		};
+		return await new Promise(fn);
 	};
 })(api || (api = {}));
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
-const client = new api.Client();
+const login = async (reason) => {
+	return new Promise((resolve, _) => {
+		const origFocus = document.activeElement;
+		let reasonElem;
+		let fieldset;
+		let username;
+		let password;
+		const root = dom.div(style({ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '1', animation: 'fadein .15s ease-in' }), dom.div(reasonElem = reason ? dom.div(style({ marginBottom: '2ex', textAlign: 'center' }), reason) : dom.div(), dom.div(style({ backgroundColor: 'white', borderRadius: '.25em', padding: '1em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto', marginBottom: '20vh' }), dom.form(async function submit(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			reasonElem.remove();
+			try {
+				fieldset.disabled = true;
+				const loginToken = await client.LoginPrep();
+				const token = await client.Login(loginToken, username.value, password.value);
+				try {
+					window.localStorage.setItem('webaccountaddress', username.value);
+					window.localStorage.setItem('webaccountcsrftoken', token);
+				}
+				catch (err) {
+					console.log('saving csrf token in localStorage', err);
+				}
+				root.remove();
+				if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
+					origFocus.focus();
+				}
+				resolve(token);
+			}
+			catch (err) {
+				console.log('login error', err);
+				window.alert('Error: ' + errmsg(err));
+			}
+			finally {
+				fieldset.disabled = false;
+			}
+		}, fieldset = dom.fieldset(dom.h1('Account'), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Email address', style({ marginBottom: '.5ex' })), username = dom.input(attr.required(''), attr.placeholder('jane@example.org'))), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Password', style({ marginBottom: '.5ex' })), password = dom.input(attr.type('password'), attr.required(''))), dom.div(style({ textAlign: 'center' }), dom.submitbutton('Login')))))));
+		document.body.appendChild(root);
+		username.focus();
+	});
+};
+const localStorageGet = (k) => {
+	try {
+		return window.localStorage.getItem(k);
+	}
+	catch (err) {
+		return null;
+	}
+};
+const localStorageRemove = (k) => {
+	try {
+		return window.localStorage.removeItem(k);
+	}
+	catch (err) {
+	}
+};
+const client = new api.Client().withOptions({ csrfHeader: 'x-mox-csrf', login: login }).withAuthToken(localStorageGet('webaccountcsrftoken') || '');
 const link = (href, anchorOpt) => dom.a(attr.href(href), attr.rel('noopener noreferrer'), anchorOpt || href);
 const crumblink = (text, link) => dom.a(text, attr.href(link));
-const crumbs = (...l) => [dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])), dom.br()];
+const crumbs = (...l) => [
+	dom.div(style({ float: 'right' }), localStorageGet('webaccountaddress') || '(unknown)', ' ', dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e) {
+		const b = e.target;
+		try {
+			b.disabled = true;
+			await client.Logout();
+		}
+		catch (err) {
+			console.log('logout', err);
+			window.alert('Error: ' + errmsg(err));
+		}
+		finally {
+			b.disabled = false;
+		}
+		localStorageRemove('webaccountaddress');
+		localStorageRemove('webaccountcsrftoken');
+		// Reload so all state is cleared from memory.
+		window.location.reload();
+	})),
+	dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])),
+	dom.br()
+];
 const errmsg = (err) => '' + (err.message || '(no error message)');
 const footer = dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://github.com/mjl-/mox', 'mox'), ' ', moxversion);
 const domainName = (d) => {
@@ -755,6 +894,9 @@ const index = async () => {
 			});
 		});
 	};
+	const exportForm = (filename) => {
+		return dom.form(attr.target('_blank'), attr.method('POST'), attr.action('export/' + filename), dom.input(attr.type('hidden'), attr.name('csrf'), attr.value(localStorageGet('webaccountcsrftoken') || '')), dom.submitbutton('Export'));
+	};
 	dom._kids(page, crumbs('Mox Account'), dom.p('NOTE: Not all account settings can be configured through these pages yet. See the configuration file for more options.'), dom.div('Default domain: ', domain.ASCII ? domainString(domain) : '(none)'), dom.br(), fullNameForm = dom.form(fullNameFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Full name', dom.br(), fullName = dom.input(attr.value(accountFullName), attr.title('Name to use in From header when composing messages. Can be overridden per configured address.'))), ' ', dom.submitbutton('Save')), async function submit(e) {
 		e.preventDefault();
 		fullNameFieldset.disabled = true;
@@ -809,7 +951,7 @@ const index = async () => {
 		finally {
 			passwordFieldset.disabled = false;
 		}
-	}), dom.br(), dom.h2('Export'), dom.p('Export all messages in all mailboxes. In maildir or mbox format, as .zip or .tgz file.'), dom.ul(dom.li(dom.a('mail-export-maildir.tgz', attr.href('mail-export-maildir.tgz'))), dom.li(dom.a('mail-export-maildir.zip', attr.href('mail-export-maildir.zip'))), dom.li(dom.a('mail-export-mbox.tgz', attr.href('mail-export-mbox.tgz'))), dom.li(dom.a('mail-export-mbox.zip', attr.href('mail-export-mbox.zip')))), dom.br(), dom.h2('Import'), dom.p('Import messages from a .zip or .tgz file with maildirs and/or mbox files.'), importForm = dom.form(async function submit(e) {
+	}), dom.br(), dom.h2('Export'), dom.p('Export all messages in all mailboxes. In maildir or mbox format, as .zip or .tgz file.'), dom.table(dom._class('slim'), dom.tr(dom.td('Maildirs in .tgz'), dom.td(exportForm('mail-export-maildir.tgz'))), dom.tr(dom.td('Maildirs in .zip'), dom.td(exportForm('mail-export-maildir.zip'))), dom.tr(dom.td('Mbox files in .tgz'), dom.td(exportForm('mail-export-mbox.tgz'))), dom.tr(dom.td('Mbox files in .zip'), dom.td(exportForm('mail-export-mbox.zip')))), dom.br(), dom.h2('Import'), dom.p('Import messages from a .zip or .tgz file with maildirs and/or mbox files.'), importForm = dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		const request = async () => {
@@ -820,6 +962,7 @@ const index = async () => {
 				importProgress.style.display = '';
 				const xhr = new window.XMLHttpRequest();
 				xhr.open('POST', 'import', true);
+				xhr.setRequestHeader('x-mox-csrf', localStorageGet('webaccountcsrftoken') || '');
 				xhr.upload.addEventListener('progress', (e) => {
 					if (!e.lengthComputable) {
 						return;

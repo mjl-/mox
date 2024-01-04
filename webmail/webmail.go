@@ -38,25 +38,23 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/store"
-	"github.com/mjl-/mox/webaccount"
+	"github.com/mjl-/mox/webauth"
 )
 
-func init() {
-	mox.LimitersInit()
-}
-
 var pkglog = mlog.New("webmail", nil)
+
+type ctxKey string
 
 // We pass the request to the sherpa handler so the TLS info can be used for
 // the Received header in submitted messages. Most API calls need just the
 // account name.
-type ctxKey string
-
 var requestInfoCtxKey ctxKey = "requestInfo"
 
 type requestInfo struct {
 	LoginAddress string
 	AccountName  string
+	SessionToken store.SessionToken
+	Response     http.ResponseWriter
 	Request      *http.Request // For Proto and TLS connection state during message submit.
 }
 
@@ -171,19 +169,19 @@ func serveContentFallback(log mlog.Log, w http.ResponseWriter, r *http.Request, 
 }
 
 // Handler returns a handler for the webmail endpoints, customized for the max
-// message size coming from the listener.
-func Handler(maxMessageSize int64) func(w http.ResponseWriter, r *http.Request) {
-	sh, err := makeSherpaHandler(maxMessageSize)
+// message size coming from the listener and cookiePath.
+func Handler(maxMessageSize int64, cookiePath string, isForwarded bool) func(w http.ResponseWriter, r *http.Request) {
+	sh, err := makeSherpaHandler(maxMessageSize, cookiePath, isForwarded)
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, "500 - internal server error - cannot handle requests", http.StatusInternalServerError)
 			return
 		}
-		handle(sh, w, r)
+		handle(sh, isForwarded, w, r)
 	}
 }
 
-func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
+func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := pkglog.WithContext(ctx).With(slog.String("userauth", ""))
 
@@ -193,17 +191,6 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/events" {
 		serveEvents(ctx, log, w, r)
 		return
-	}
-
-	// HTTP Basic authentication for all requests.
-	loginAddress, accName := webaccount.CheckAuth(ctx, log, "webmail", w, r)
-	if accName == "" {
-		// Error response already sent.
-		return
-	}
-
-	if lw, ok := w.(interface{ AddAttr(a slog.Attr) }); ok {
-		lw.AddAttr(slog.String("authaccount", accName))
 	}
 
 	defer func() {
@@ -230,13 +217,14 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/":
 		switch r.Method {
+		case "GET", "HEAD":
+			h := w.Header()
+			h.Set("X-Frame-Options", "deny")
+			h.Set("Referrer-Policy", "same-origin")
+			webmailFile.Serve(ctx, log, w, r)
 		default:
 			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
-			return
-		case "GET", "HEAD":
 		}
-
-		webmailFile.Serve(ctx, log, w, r)
 		return
 
 	case "/msg.js", "/text.js":
@@ -258,9 +246,27 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// API calls.
-	if strings.HasPrefix(r.URL.Path, "/api/") {
-		reqInfo := requestInfo{loginAddress, accName, r}
+	isAPI := strings.HasPrefix(r.URL.Path, "/api/")
+	// Only allow POST for calls, they will not work cross-domain without CORS.
+	if isAPI && r.URL.Path != "/api/" && r.Method != "POST" {
+		http.Error(w, "405 - method not allowed - use post", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var loginAddress, accName string
+	var sessionToken store.SessionToken
+	// All other URLs, except the login endpoint require some authentication.
+	if r.URL.Path != "/api/LoginPrep" && r.URL.Path != "/api/Login" {
+		var ok bool
+		accName, sessionToken, loginAddress, ok = webauth.Check(ctx, log, webauth.Accounts, "webmail", isForwarded, w, r, isAPI, isAPI, false)
+		if !ok {
+			// Response has been written already.
+			return
+		}
+	}
+
+	if isAPI {
+		reqInfo := requestInfo{loginAddress, accName, sessionToken, w, r}
 		ctx = context.WithValue(ctx, requestInfoCtxKey, reqInfo)
 		apiHandler.ServeHTTP(w, r.WithContext(ctx))
 		return
@@ -412,7 +418,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 
 		headers(false, false, false)
 		h.Set("Content-Type", "application/zip")
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 		var subjectSlug string
 		if p.Envelope != nil {
 			s := p.Envelope.Subject
@@ -537,7 +543,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 			params["charset"] = charset
 		}
 		h.Set("Content-Type", mime.FormatMediaType(ct, params))
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 
 		_, err := io.Copy(w, &moxio.AtReader{R: msgr})
 		log.Check(err, "writing raw")
@@ -567,7 +573,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		allowSelfScript := true
 		headers(sameorigin, loadExternal, allowSelfScript)
 		h.Set("Content-Type", "text/html; charset=utf-8")
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 
 		path := filepath.FromSlash("webmail/msg.html")
 		fallback := webmailmsgHTML
@@ -600,7 +606,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 
 		headers(false, false, false)
 		h.Set("Content-Type", "application/javascript; charset=utf-8")
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 
 		_, err = fmt.Fprintf(w, "window.messageItem = %s;\nwindow.parsedMessage = %s;\n", mijson, pmjson)
 		log.Check(err, "writing parsedmessage.js")
@@ -632,7 +638,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		allowSelfScript := true
 		headers(sameorigin, false, allowSelfScript)
 		h.Set("Content-Type", "text/html; charset=utf-8")
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 
 		// We typically return the embedded file, but during development it's handy to load
 		// from disk.
@@ -659,7 +665,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 			headers(sameorigin, allowExternal, false)
 
 			h.Set("Content-Type", "text/html; charset=utf-8")
-			h.Set("Cache-Control", "no-cache, max-age=0")
+			h.Set("Cache-Control", "no-store, max-age=0")
 		}
 
 		// todo: skip certain html parts? e.g. with content-disposition: attachment?
@@ -726,7 +732,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 			ct = strings.ToLower(ap.MediaType + "/" + ap.MediaSubType)
 		}
 		h.Set("Content-Type", ct)
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 		if t[1] == "download" {
 			name := tryDecodeParam(log, ap.ContentTypeParams["name"])
 			if name == "" {

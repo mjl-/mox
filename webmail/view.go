@@ -413,10 +413,11 @@ func sseGet(id int64, accountName string) (sse, bool) {
 // ssetoken is a temporary token that has not yet been used to start an SSE
 // connection. Created by Token, consumed by a new SSE connection.
 type ssetoken struct {
-	token      string // Uniquely generated.
-	accName    string
-	address    string // Address used to authenticate in call that created the token.
-	validUntil time.Time
+	token        string // Uniquely generated.
+	accName      string
+	address      string             // Address used to authenticate in call that created the token.
+	sessionToken store.SessionToken // SessionToken that created this token, checked before sending updates.
+	validUntil   time.Time
 }
 
 // ssetokens maintains unused tokens. We have just one, but it's a type so we
@@ -434,11 +435,11 @@ var sseTokens = ssetokens{
 
 // xgenerate creates and saves a new token. It ensures no more than 10 tokens
 // per account exist, removing old ones if needed.
-func (x *ssetokens) xgenerate(ctx context.Context, accName, address string) string {
+func (x *ssetokens) xgenerate(ctx context.Context, accName, address string, sessionToken store.SessionToken) string {
 	buf := make([]byte, 16)
 	_, err := cryptrand.Read(buf)
 	xcheckf(ctx, err, "generating token")
-	st := ssetoken{base64.RawURLEncoding.EncodeToString(buf), accName, address, time.Now().Add(time.Minute)}
+	st := ssetoken{base64.RawURLEncoding.EncodeToString(buf), accName, address, sessionToken, time.Now().Add(time.Minute)}
 
 	x.Lock()
 	defer x.Unlock()
@@ -456,17 +457,17 @@ func (x *ssetokens) xgenerate(ctx context.Context, accName, address string) stri
 }
 
 // check verifies a token, and consumes it if valid.
-func (x *ssetokens) check(token string) (string, string, bool, error) {
+func (x *ssetokens) check(token string) (string, string, store.SessionToken, bool, error) {
 	x.Lock()
 	defer x.Unlock()
 
 	st, ok := x.tokens[token]
 	if !ok {
-		return "", "", false, nil
+		return "", "", "", false, nil
 	}
 	delete(x.tokens, token)
 	if i := slices.Index(x.accountTokens[st.accName], st); i < 0 {
-		return "", "", false, errors.New("internal error, could not find token in account")
+		return "", "", "", false, errors.New("internal error, could not find token in account")
 	} else {
 		copy(x.accountTokens[st.accName][i:], x.accountTokens[st.accName][i+1:])
 		x.accountTokens[st.accName] = x.accountTokens[st.accName][:len(x.accountTokens[st.accName])-1]
@@ -475,9 +476,9 @@ func (x *ssetokens) check(token string) (string, string, bool, error) {
 		}
 	}
 	if time.Now().After(st.validUntil) {
-		return "", "", false, nil
+		return "", "", "", false, nil
 	}
-	return st.accName, st.address, true, nil
+	return st.accName, st.address, st.sessionToken, true, nil
 }
 
 // ioErr is panicked on i/o errors in serveEvents and handled in a defer.
@@ -506,13 +507,17 @@ func serveEvents(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *ht
 		http.Error(w, "400 - bad request - missing credentials", http.StatusBadRequest)
 		return
 	}
-	accName, address, ok, err := sseTokens.check(token)
+	accName, address, sessionToken, ok, err := sseTokens.check(token)
 	if err != nil {
 		http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if !ok {
 		http.Error(w, "400 - bad request - bad token", http.StatusBadRequest)
+		return
+	}
+	if _, err := store.SessionUse(ctx, log, accName, sessionToken, ""); err != nil {
+		http.Error(w, "400 - bad request - bad session token", http.StatusBadRequest)
 		return
 	}
 
@@ -594,7 +599,7 @@ func serveEvents(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *ht
 	out = httpFlusher{out, flusher}
 
 	// We'll be writing outgoing SSE events through writer.
-	writer = newEventWriter(out, waitMin, waitMax)
+	writer = newEventWriter(out, waitMin, waitMax, accName, sessionToken)
 	defer writer.close()
 
 	// Fetch initial data.

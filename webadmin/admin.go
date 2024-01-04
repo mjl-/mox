@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ed25519"
+	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/tls"
@@ -32,7 +33,6 @@ import (
 
 	_ "embed"
 
-	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slog"
 
@@ -63,6 +63,7 @@ import (
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/tlsrpt"
 	"github.com/mjl-/mox/tlsrptdb"
+	"github.com/mjl-/mox/webauth"
 )
 
 var pkglog = mlog.New("webadmin", nil)
@@ -85,8 +86,6 @@ var webadminFile = &mox.WebappFile{
 
 var adminDoc = mustParseAPI("admin", adminapiJSON)
 
-var adminSherpaHandler http.Handler
-
 func mustParseAPI(api string, buf []byte) (doc sherpadoc.Section) {
 	err := json.Unmarshal(buf, &doc)
 	if err != nil {
@@ -95,139 +94,98 @@ func mustParseAPI(api string, buf []byte) (doc sherpadoc.Section) {
 	return doc
 }
 
+var sherpaHandlerOpts *sherpa.HandlerOpts
+
+func makeSherpaHandler(cookiePath string, isForwarded bool) (http.Handler, error) {
+	return sherpa.NewHandler("/api/", moxvar.Version, Admin{cookiePath, isForwarded}, &adminDoc, sherpaHandlerOpts)
+}
+
 func init() {
 	collector, err := sherpaprom.NewCollector("moxadmin", nil)
 	if err != nil {
 		pkglog.Fatalx("creating sherpa prometheus collector", err)
 	}
 
-	adminSherpaHandler, err = sherpa.NewHandler("/api/", moxvar.Version, Admin{}, &adminDoc, &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none"})
+	sherpaHandlerOpts = &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none", NoCORS: true}
+	// Just to validate.
+	_, err = makeSherpaHandler("", false)
 	if err != nil {
 		pkglog.Fatalx("sherpa handler", err)
+	}
+}
+
+// Handler returns a handler for the webadmin endpoints, customized for the
+// cookiePath.
+func Handler(cookiePath string, isForwarded bool) func(w http.ResponseWriter, r *http.Request) {
+	sh, err := makeSherpaHandler(cookiePath, isForwarded)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err != nil {
+			http.Error(w, "500 - internal server error - cannot handle requests", http.StatusInternalServerError)
+			return
+		}
+		handle(sh, isForwarded, w, r)
 	}
 }
 
 // Admin exports web API functions for the admin web interface. All its methods are
 // exported under api/. Function calls require valid HTTP Authentication
 // credentials of a user.
-type Admin struct{}
-
-// We keep a cache for authentication so we don't bcrypt for each incoming HTTP request with HTTP basic auth.
-// We keep track of the last successful password hash and Authorization header.
-// The cache is cleared periodically, see below.
-var authCache struct {
-	sync.Mutex
-	lastSuccessHash, lastSuccessAuth string
+type Admin struct {
+	cookiePath  string // From listener, for setting authentication cookies.
+	isForwarded bool   // From listener, whether we look at X-Forwarded-* headers.
 }
 
-// started when we start serving. not at package init time, because we don't want
-// to make goroutines that early.
-func ManageAuthCache() {
-	for {
-		authCache.Lock()
-		authCache.lastSuccessHash = ""
-		authCache.lastSuccessAuth = ""
-		authCache.Unlock()
-		time.Sleep(15 * time.Minute)
-	}
+type ctxKey string
+
+var requestInfoCtxKey ctxKey = "requestInfo"
+
+type requestInfo struct {
+	SessionToken store.SessionToken
+	Response     http.ResponseWriter
+	Request      *http.Request // For Proto and TLS connection state during message submit.
 }
 
-// check whether authentication from the config (passwordfile with bcrypt hash)
-// matches the authorization header "authHdr". we don't care about any username.
-// on (auth) failure, a http response is sent and false returned.
-func checkAdminAuth(ctx context.Context, passwordfile string, w http.ResponseWriter, r *http.Request) bool {
-	log := pkglog.WithContext(ctx)
-
-	respondAuthFail := func() bool {
-		// note: browsers don't display the realm to prevent users getting confused by malicious realm messages.
-		w.Header().Set("WWW-Authenticate", `Basic realm="mox admin - login with empty username and admin password"`)
-		http.Error(w, "http 401 - unauthorized - mox admin - login with empty username and admin password", http.StatusUnauthorized)
-		return false
-	}
-
-	authResult := "error"
-	start := time.Now()
-	var addr *net.TCPAddr
-	defer func() {
-		metrics.AuthenticationInc("webadmin", "httpbasic", authResult)
-		if authResult == "ok" && addr != nil {
-			mox.LimiterFailedAuth.Reset(addr.IP, start)
-		}
-	}()
-
-	var err error
-	var remoteIP net.IP
-	addr, err = net.ResolveTCPAddr("tcp", r.RemoteAddr)
-	if err != nil {
-		log.Errorx("parsing remote address", err, slog.Any("addr", r.RemoteAddr))
-	} else if addr != nil {
-		remoteIP = addr.IP
-	}
-	if remoteIP != nil && !mox.LimiterFailedAuth.Add(remoteIP, start, 1) {
-		metrics.AuthenticationRatelimitedInc("webadmin")
-		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
-		return false
-	}
-
-	authHdr := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHdr, "Basic ") || passwordfile == "" {
-		return respondAuthFail()
-	}
-	buf, err := os.ReadFile(passwordfile)
-	if err != nil {
-		log.Errorx("reading admin password file", err, slog.String("path", passwordfile))
-		return respondAuthFail()
-	}
-	passwordhash := strings.TrimSpace(string(buf))
-	authCache.Lock()
-	defer authCache.Unlock()
-	if passwordhash != "" && passwordhash == authCache.lastSuccessHash && authHdr != "" && authCache.lastSuccessAuth == authHdr {
-		authResult = "ok"
-		return true
-	}
-	auth, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHdr, "Basic "))
-	if err != nil {
-		return respondAuthFail()
-	}
-	t := strings.SplitN(string(auth), ":", 2)
-	if len(t) != 2 || len(t[1]) < 8 {
-		log.Info("failed authentication attempt", slog.String("username", "admin"), slog.Any("remote", remoteIP))
-		return respondAuthFail()
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordhash), []byte(t[1])); err != nil {
-		authResult = "badcreds"
-		log.Info("failed authentication attempt", slog.String("username", "admin"), slog.Any("remote", remoteIP))
-		return respondAuthFail()
-	}
-	authCache.lastSuccessHash = passwordhash
-	authCache.lastSuccessAuth = authHdr
-	authResult = "ok"
-	return true
-}
-
-func Handle(w http.ResponseWriter, r *http.Request) {
+func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
-	if !checkAdminAuth(ctx, mox.ConfigDirPath(mox.Conf.Static.AdminPasswordFile), w, r) {
-		// Response already sent.
-		return
-	}
+	log := pkglog.WithContext(ctx).With(slog.String("adminauth", ""))
 
-	if lw, ok := w.(interface{ AddAttr(a slog.Attr) }); ok {
-		lw.AddAttr(slog.Bool("authadmin", true))
-	}
-
+	// HTML/JS can be retrieved without authentication.
 	if r.URL.Path == "/" {
 		switch r.Method {
+		case "GET", "HEAD":
+			webadminFile.Serve(ctx, log, w, r)
 		default:
 			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
-			return
-		case "GET", "HEAD":
 		}
-
-		webadminFile.Serve(ctx, pkglog.WithContext(ctx), w, r)
 		return
 	}
-	adminSherpaHandler.ServeHTTP(w, r.WithContext(ctx))
+
+	isAPI := strings.HasPrefix(r.URL.Path, "/api/")
+	// Only allow POST for calls, they will not work cross-domain without CORS.
+	if isAPI && r.URL.Path != "/api/" && r.Method != "POST" {
+		http.Error(w, "405 - method not allowed - use post", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// All other URLs, except the login endpoint require some authentication.
+	var sessionToken store.SessionToken
+	if r.URL.Path != "/api/LoginPrep" && r.URL.Path != "/api/Login" {
+		var ok bool
+		_, sessionToken, _, ok = webauth.Check(ctx, log, webauth.Admin, "webadmin", isForwarded, w, r, isAPI, isAPI, false)
+		if !ok {
+			// Response has been written already.
+			return
+		}
+	}
+
+	if isAPI {
+		reqInfo := requestInfo{sessionToken, w, r}
+		ctx = context.WithValue(ctx, requestInfoCtxKey, reqInfo)
+		apiHandler.ServeHTTP(w, r.WithContext(ctx))
+		return
+	}
+
+	http.NotFound(w, r)
 }
 
 func xcheckf(ctx context.Context, err error, format string, args ...any) {
@@ -252,6 +210,45 @@ func xcheckuserf(ctx context.Context, err error, format string, args ...any) {
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
 	pkglog.WithContext(ctx).Errorx(msg, err)
 	panic(&sherpa.Error{Code: "user:error", Message: errmsg})
+}
+
+// LoginPrep returns a login token, and also sets it as cookie. Both must be
+// present in the call to Login.
+func (w Admin) LoginPrep(ctx context.Context) string {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	var data [8]byte
+	_, err := cryptorand.Read(data[:])
+	xcheckf(ctx, err, "generate token")
+	loginToken := base64.RawURLEncoding.EncodeToString(data[:])
+
+	webauth.LoginPrep(ctx, log, "webadmin", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, loginToken)
+
+	return loginToken
+}
+
+// Login returns a session token for the credentials, or fails with error code
+// "user:badLogin". Call LoginPrep to get a loginToken.
+func (w Admin) Login(ctx context.Context, loginToken, password string) store.CSRFToken {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	csrfToken, err := webauth.Login(ctx, log, webauth.Admin, "webadmin", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, loginToken, "", password)
+	if _, ok := err.(*sherpa.Error); ok {
+		panic(err)
+	}
+	xcheckf(ctx, err, "login")
+	return csrfToken
+}
+
+// Logout invalidates the session token.
+func (w Admin) Logout(ctx context.Context) {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	err := webauth.Logout(ctx, log, webauth.Admin, "webadmin", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, "", reqInfo.SessionToken)
+	xcheckf(ctx, err, "logout")
 }
 
 type Result struct {

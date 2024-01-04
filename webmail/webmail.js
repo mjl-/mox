@@ -215,6 +215,8 @@ const [dom, style, attr, prop] = (function () {
 		name: (s) => _attr('name', s),
 		min: (s) => _attr('min', s),
 		max: (s) => _attr('max', s),
+		action: (s) => _attr('action', s),
+		method: (s) => _attr('method', s),
 	};
 	const style = (x) => { return { _styles: x }; };
 	const prop = (x) => { return { _props: x }; };
@@ -269,7 +271,7 @@ var api;
 		SecurityResult["SecurityResultUnknown"] = "unknown";
 	})(SecurityResult = api.SecurityResult || (api.SecurityResult = {}));
 	api.structTypes = { "Address": true, "Attachment": true, "ChangeMailboxAdd": true, "ChangeMailboxCounts": true, "ChangeMailboxKeywords": true, "ChangeMailboxRemove": true, "ChangeMailboxRename": true, "ChangeMailboxSpecialUse": true, "ChangeMsgAdd": true, "ChangeMsgFlags": true, "ChangeMsgRemove": true, "ChangeMsgThread": true, "Domain": true, "DomainAddressConfig": true, "Envelope": true, "EventStart": true, "EventViewChanges": true, "EventViewErr": true, "EventViewMsgs": true, "EventViewReset": true, "File": true, "Filter": true, "Flags": true, "ForwardAttachments": true, "Mailbox": true, "Message": true, "MessageAddress": true, "MessageEnvelope": true, "MessageItem": true, "NotFilter": true, "Page": true, "ParsedMessage": true, "Part": true, "Query": true, "RecipientSecurity": true, "Request": true, "SpecialUse": true, "SubmitMessage": true };
-	api.stringsTypes = { "AttachmentType": true, "Localpart": true, "SecurityResult": true, "ThreadMode": true };
+	api.stringsTypes = { "AttachmentType": true, "CSRFToken": true, "Localpart": true, "SecurityResult": true, "ThreadMode": true };
 	api.intsTypes = { "ModSeq": true, "UID": true, "Validation": true };
 	api.types = {
 		"Request": { "Name": "Request", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Cancel", "Docs": "", "Typewords": ["bool"] }, { "Name": "Query", "Docs": "", "Typewords": ["Query"] }, { "Name": "Page", "Docs": "", "Typewords": ["Page"] }] },
@@ -313,6 +315,7 @@ var api;
 		"UID": { "Name": "UID", "Docs": "", "Values": null },
 		"ModSeq": { "Name": "ModSeq", "Docs": "", "Values": null },
 		"Validation": { "Name": "Validation", "Docs": "", "Values": [{ "Name": "ValidationUnknown", "Value": 0, "Docs": "" }, { "Name": "ValidationStrict", "Value": 1, "Docs": "" }, { "Name": "ValidationDMARC", "Value": 2, "Docs": "" }, { "Name": "ValidationRelaxed", "Value": 3, "Docs": "" }, { "Name": "ValidationPass", "Value": 4, "Docs": "" }, { "Name": "ValidationNeutral", "Value": 5, "Docs": "" }, { "Name": "ValidationTemperror", "Value": 6, "Docs": "" }, { "Name": "ValidationPermerror", "Value": 7, "Docs": "" }, { "Name": "ValidationFail", "Value": 8, "Docs": "" }, { "Name": "ValidationSoftfail", "Value": 9, "Docs": "" }, { "Name": "ValidationNone", "Value": 10, "Docs": "" }] },
+		"CSRFToken": { "Name": "CSRFToken", "Docs": "", "Values": null },
 		"ThreadMode": { "Name": "ThreadMode", "Docs": "", "Values": [{ "Name": "ThreadOff", "Value": "off", "Docs": "" }, { "Name": "ThreadOn", "Value": "on", "Docs": "" }, { "Name": "ThreadUnread", "Value": "unread", "Docs": "" }] },
 		"AttachmentType": { "Name": "AttachmentType", "Docs": "", "Values": [{ "Name": "AttachmentIndifferent", "Value": "", "Docs": "" }, { "Name": "AttachmentNone", "Value": "none", "Docs": "" }, { "Name": "AttachmentAny", "Value": "any", "Docs": "" }, { "Name": "AttachmentImage", "Value": "image", "Docs": "" }, { "Name": "AttachmentPDF", "Value": "pdf", "Docs": "" }, { "Name": "AttachmentArchive", "Value": "archive", "Docs": "" }, { "Name": "AttachmentSpreadsheet", "Value": "spreadsheet", "Docs": "" }, { "Name": "AttachmentDocument", "Value": "document", "Docs": "" }, { "Name": "AttachmentPresentation", "Value": "presentation", "Docs": "" }] },
 		"SecurityResult": { "Name": "SecurityResult", "Docs": "", "Values": [{ "Name": "SecurityResultError", "Value": "error", "Docs": "" }, { "Name": "SecurityResultNo", "Value": "no", "Docs": "" }, { "Name": "SecurityResultYes", "Value": "yes", "Docs": "" }, { "Name": "SecurityResultUnknown", "Value": "unknown", "Docs": "" }] },
@@ -360,6 +363,7 @@ var api;
 		UID: (v) => api.parse("UID", v),
 		ModSeq: (v) => api.parse("ModSeq", v),
 		Validation: (v) => api.parse("Validation", v),
+		CSRFToken: (v) => api.parse("CSRFToken", v),
 		ThreadMode: (v) => api.parse("ThreadMode", v),
 		AttachmentType: (v) => api.parse("AttachmentType", v),
 		SecurityResult: (v) => api.parse("SecurityResult", v),
@@ -368,16 +372,50 @@ var api;
 	let defaultOptions = { slicesNullable: true, mapsNullable: true, nullableOptional: true };
 	class Client {
 		baseURL;
+		authState;
 		options;
-		constructor(baseURL = api.defaultBaseURL, options) {
-			this.baseURL = baseURL;
-			this.options = options;
-			if (!options) {
-				this.options = defaultOptions;
-			}
+		constructor() {
+			this.authState = {};
+			this.options = { ...defaultOptions };
+			this.baseURL = this.options.baseURL || api.defaultBaseURL;
+		}
+		withAuthToken(token) {
+			const c = new Client();
+			c.authState.token = token;
+			c.options = this.options;
+			return c;
 		}
 		withOptions(options) {
-			return new Client(this.baseURL, { ...this.options, ...options });
+			const c = new Client();
+			c.authState = this.authState;
+			c.options = { ...this.options, ...options };
+			return c;
+		}
+		// LoginPrep returns a login token, and also sets it as cookie. Both must be
+		// present in the call to Login.
+		async LoginPrep() {
+			const fn = "LoginPrep";
+			const paramTypes = [];
+			const returnTypes = [["string"]];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// Login returns a session token for the credentials, or fails with error code
+		// "user:badLogin". Call LoginPrep to get a loginToken.
+		async Login(loginToken, username, password) {
+			const fn = "Login";
+			const paramTypes = [["string"], ["string"], ["string"]];
+			const returnTypes = [["CSRFToken"]];
+			const params = [loginToken, username, password];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// Logout invalidates the session token.
+		async Logout() {
+			const fn = "Logout";
+			const paramTypes = [];
+			const returnTypes = [];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// Token returns a token to use for an SSE connection. A token can only be used for
 		// a single SSE connection. Tokens are stored in memory for a maximum of 1 minute,
@@ -387,7 +425,7 @@ var api;
 			const paramTypes = [];
 			const returnTypes = [["string"]];
 			const params = [];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// Requests sends a new request for an open SSE connection. Any currently active
 		// request for the connection will be canceled, but this is done asynchrously, so
@@ -399,7 +437,7 @@ var api;
 			const paramTypes = [["Request"]];
 			const returnTypes = [];
 			const params = [req];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// ParsedMessage returns enough to render the textual body of a message. It is
 		// assumed the client already has other fields through MessageItem.
@@ -408,7 +446,7 @@ var api;
 			const paramTypes = [["int64"]];
 			const returnTypes = [["ParsedMessage"]];
 			const params = [msgID];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MessageSubmit sends a message by submitting it the outgoing email queue. The
 		// message is sent to all addresses listed in the To, Cc and Bcc addresses, without
@@ -421,7 +459,7 @@ var api;
 			const paramTypes = [["SubmitMessage"]];
 			const returnTypes = [];
 			const params = [m];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MessageMove moves messages to another mailbox. If the message is already in
 		// the mailbox an error is returned.
@@ -430,7 +468,7 @@ var api;
 			const paramTypes = [["[]", "int64"], ["int64"]];
 			const returnTypes = [];
 			const params = [messageIDs, mailboxID];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MessageDelete permanently deletes messages, without moving them to the Trash mailbox.
 		async MessageDelete(messageIDs) {
@@ -438,7 +476,7 @@ var api;
 			const paramTypes = [["[]", "int64"]];
 			const returnTypes = [];
 			const params = [messageIDs];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// FlagsAdd adds flags, either system flags like \Seen or custom keywords. The
 		// flags should be lower-case, but will be converted and verified.
@@ -447,7 +485,7 @@ var api;
 			const paramTypes = [["[]", "int64"], ["[]", "string"]];
 			const returnTypes = [];
 			const params = [messageIDs, flaglist];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// FlagsClear clears flags, either system flags like \Seen or custom keywords.
 		async FlagsClear(messageIDs, flaglist) {
@@ -455,7 +493,7 @@ var api;
 			const paramTypes = [["[]", "int64"], ["[]", "string"]];
 			const returnTypes = [];
 			const params = [messageIDs, flaglist];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MailboxCreate creates a new mailbox.
 		async MailboxCreate(name) {
@@ -463,7 +501,7 @@ var api;
 			const paramTypes = [["string"]];
 			const returnTypes = [];
 			const params = [name];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MailboxDelete deletes a mailbox and all its messages.
 		async MailboxDelete(mailboxID) {
@@ -471,7 +509,7 @@ var api;
 			const paramTypes = [["int64"]];
 			const returnTypes = [];
 			const params = [mailboxID];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MailboxEmpty empties a mailbox, removing all messages from the mailbox, but not
 		// its child mailboxes.
@@ -480,7 +518,7 @@ var api;
 			const paramTypes = [["int64"]];
 			const returnTypes = [];
 			const params = [mailboxID];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MailboxRename renames a mailbox, possibly moving it to a new parent. The mailbox
 		// ID and its messages are unchanged.
@@ -489,7 +527,7 @@ var api;
 			const paramTypes = [["int64"], ["string"]];
 			const returnTypes = [];
 			const params = [mailboxID, newName];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// CompleteRecipient returns autocomplete matches for a recipient, returning the
 		// matches, most recently used first, and whether this is the full list and further
@@ -499,7 +537,7 @@ var api;
 			const paramTypes = [["string"]];
 			const returnTypes = [["[]", "string"], ["bool"]];
 			const params = [search];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MailboxSetSpecialUse sets the special use flags of a mailbox.
 		async MailboxSetSpecialUse(mb) {
@@ -507,7 +545,7 @@ var api;
 			const paramTypes = [["Mailbox"]];
 			const returnTypes = [];
 			const params = [mb];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// ThreadCollapse saves the ThreadCollapse field for the messages and its
 		// children. The messageIDs are typically thread roots. But not all roots
@@ -517,7 +555,7 @@ var api;
 			const paramTypes = [["[]", "int64"], ["bool"]];
 			const returnTypes = [];
 			const params = [messageIDs, collapse];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// ThreadMute saves the ThreadMute field for the messages and their children.
 		// If messages are muted, they are also marked collapsed.
@@ -526,7 +564,7 @@ var api;
 			const paramTypes = [["[]", "int64"], ["bool"]];
 			const returnTypes = [];
 			const params = [messageIDs, mute];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// RecipientSecurity looks up security properties of the address in the
 		// single-address message addressee (as it appears in a To/Cc/Bcc/etc header).
@@ -535,7 +573,7 @@ var api;
 			const paramTypes = [["string"]];
 			const returnTypes = [["RecipientSecurity"]];
 			const params = [messageAddressee];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// SSETypes exists to ensure the generated API contains the types, for use in SSE events.
 		async SSETypes() {
@@ -543,7 +581,7 @@ var api;
 			const paramTypes = [];
 			const returnTypes = [["EventStart"], ["EventViewErr"], ["EventViewReset"], ["EventViewMsgs"], ["EventViewChanges"], ["ChangeMsgAdd"], ["ChangeMsgRemove"], ["ChangeMsgFlags"], ["ChangeMsgThread"], ["ChangeMailboxRemove"], ["ChangeMailboxAdd"], ["ChangeMailboxRename"], ["ChangeMailboxCounts"], ["ChangeMailboxSpecialUse"], ["ChangeMailboxKeywords"], ["Flags"]];
 			const params = [];
-			return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params);
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 	}
 	api.Client = Client;
@@ -731,7 +769,7 @@ var api;
 			}
 		}
 	}
-	const _sherpaCall = async (baseURL, options, paramTypes, returnTypes, name, params) => {
+	const _sherpaCall = async (baseURL, authState, options, paramTypes, returnTypes, name, params) => {
 		if (!options.skipParamCheck) {
 			if (params.length !== paramTypes.length) {
 				return Promise.reject({ message: 'wrong number of parameters in sherpa call, saw ' + params.length + ' != expected ' + paramTypes.length });
@@ -773,14 +811,36 @@ var api;
 		if (json) {
 			await simulate(json);
 		}
-		// Immediately create promise, so options.aborter is changed before returning.
-		const promise = new Promise((resolve, reject) => {
+		const fn = (resolve, reject) => {
 			let resolve1 = (v) => {
 				resolve(v);
 				resolve1 = () => { };
 				reject1 = () => { };
 			};
 			let reject1 = (v) => {
+				if ((v.code === 'user:noAuth' || v.code === 'user:badAuth') && options.login) {
+					const login = options.login;
+					if (!authState.loginPromise) {
+						authState.loginPromise = new Promise((aresolve, areject) => {
+							login(v.code === 'user:badAuth' ? (v.message || '') : '')
+								.then((token) => {
+								authState.token = token;
+								authState.loginPromise = undefined;
+								aresolve();
+							}, (err) => {
+								authState.loginPromise = undefined;
+								areject(err);
+							});
+						});
+					}
+					authState.loginPromise
+						.then(() => {
+						fn(resolve, reject);
+					}, (err) => {
+						reject(err);
+					});
+					return;
+				}
 				reject(v);
 				resolve1 = () => { };
 				reject1 = () => { };
@@ -794,6 +854,9 @@ var api;
 				};
 			}
 			req.open('POST', url, true);
+			if (options.csrfHeader && authState.token) {
+				req.setRequestHeader(options.csrfHeader, authState.token);
+			}
 			if (options.timeoutMsec) {
 				req.timeout = options.timeoutMsec;
 			}
@@ -867,8 +930,8 @@ var api;
 			catch (err) {
 				reject1({ code: 'sherpa:badData', message: 'cannot marshal to JSON' });
 			}
-		});
-		return await promise;
+		};
+		return await new Promise(fn);
 	};
 })(api || (api = {}));
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
@@ -1181,6 +1244,7 @@ const zindexes = {
 	popover: '5',
 	attachments: '5',
 	shortcut: '6',
+	login: '7',
 };
 // All logging goes through log() instead of console.log, except "should not happen" logging.
 let log = () => { };
@@ -1292,7 +1356,61 @@ let domainAddressConfigs = {};
 let rejectsMailbox = '';
 // Last known server version. For asking to reload.
 let lastServerVersion = '';
-const client = new api.Client();
+const login = async (reason) => {
+	return new Promise((resolve, _) => {
+		const origFocus = document.activeElement;
+		let reasonElem;
+		let fieldset;
+		let username;
+		let password;
+		const root = dom.div(style({ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zindexes.login, animation: 'fadein .15s ease-in' }), dom.div(reasonElem = reason ? dom.div(style({ marginBottom: '2ex', textAlign: 'center' }), reason) : dom.div(), dom.div(style({ backgroundColor: 'white', borderRadius: '.25em', padding: '1em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto', marginBottom: '20vh' }), dom.form(async function submit(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			reasonElem.remove();
+			try {
+				fieldset.disabled = true;
+				const loginToken = await client.LoginPrep();
+				const token = await client.Login(loginToken, username.value, password.value);
+				try {
+					window.localStorage.setItem('webmailcsrftoken', token);
+				}
+				catch (err) {
+					console.log('saving csrf token in localStorage', err);
+				}
+				root.remove();
+				if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
+					origFocus.focus();
+				}
+				resolve(token);
+			}
+			catch (err) {
+				console.log('login error', err);
+				window.alert('Error: ' + errmsg(err));
+			}
+			finally {
+				fieldset.disabled = false;
+			}
+		}, fieldset = dom.fieldset(dom.h1('Mail'), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Email address', style({ marginBottom: '.5ex' })), username = dom.input(attr.required(''), attr.placeholder('jane@example.org'))), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Password', style({ marginBottom: '.5ex' })), password = dom.input(attr.type('password'), attr.required(''))), dom.div(style({ textAlign: 'center' }), dom.submitbutton('Login')))))));
+		document.body.appendChild(root);
+		username.focus();
+	});
+};
+const localStorageGet = (k) => {
+	try {
+		return window.localStorage.getItem(k);
+	}
+	catch (err) {
+		return null;
+	}
+};
+const localStorageRemove = (k) => {
+	try {
+		return window.localStorage.removeItem(k);
+	}
+	catch (err) {
+	}
+};
+const client = new api.Client().withOptions({ csrfHeader: 'x-mox-csrf', login: login }).withAuthToken(localStorageGet('webmailcsrftoken') || '');
 // Link returns a clickable link with rel="noopener noreferrer".
 const link = (href, anchorOpt) => dom.a(attr.href(href), attr.rel('noopener noreferrer'), attr.target('_blank'), anchorOpt || href);
 // Returns first own account address matching an address in l.
@@ -5289,6 +5407,7 @@ const newSearchView = (searchbarElem, mailboxlistView, startSearch, searchViewCl
 const init = async () => {
 	let connectionElem; // SSE connection status/error. Empty when connected.
 	let layoutElem; // Select dropdown for layout.
+	let loginAddressElem;
 	let msglistscrollElem;
 	let queryactivityElem; // We show ... when a query is active and data is forthcoming.
 	// Shown at the bottom of msglistscrollElem, immediately below the msglistView, when appropriate.
@@ -5679,7 +5798,16 @@ const init = async () => {
 		else {
 			selectLayout(layoutElem.value);
 		}
-	}), ' ', dom.clickbutton('Tooltip', attr.title('Show tooltips, based on the title attributes (underdotted text) for the focused element and all user interface elements below it. Use the keyboard shortcut "ctrl ?" instead of clicking on the tooltip button, which changes focus to the tooltip button.'), clickCmd(cmdTooltip, shortcuts)), ' ', dom.clickbutton('Help', attr.title('Show popup with basic usage information and a keyboard shortcuts.'), clickCmd(cmdHelp, shortcuts)), ' ', link('https://github.com/mjl-/mox', 'mox')))), dom.div(style({ flexGrow: '1' }), style({ position: 'relative' }), mailboxesElem = dom.div(dom._class('mailboxesbar'), style({ position: 'absolute', left: 0, width: settings.mailboxesWidth + 'px', top: 0, bottom: 0 }), style({ display: 'flex', flexDirection: 'column', alignContent: 'stretch' }), dom.div(dom._class('pad', 'yscrollauto'), style({ flexGrow: '1' }), style({ position: 'relative' }), mailboxlistView.root)), mailboxessplitElem = dom.div(style({ position: 'absolute', left: 'calc(' + settings.mailboxesWidth + 'px - 2px)', width: '5px', top: 0, bottom: 0, cursor: 'ew-resize', zIndex: zindexes.splitter }), dom.div(style({ position: 'absolute', width: '1px', top: 0, bottom: 0, left: '2px', right: '2px', backgroundColor: '#aaa' })), function mousedown(e) {
+	}), ' ', dom.clickbutton('Tooltip', attr.title('Show tooltips, based on the title attributes (underdotted text) for the focused element and all user interface elements below it. Use the keyboard shortcut "ctrl ?" instead of clicking on the tooltip button, which changes focus to the tooltip button.'), clickCmd(cmdTooltip, shortcuts)), ' ', dom.clickbutton('Help', attr.title('Show popup with basic usage information and a keyboard shortcuts.'), clickCmd(cmdHelp, shortcuts)), ' ', loginAddressElem = dom.span(), ' ', dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e) {
+		await withStatus('Logging out', client.Logout(), e.target);
+		localStorageRemove('webmailcsrftoken');
+		if (eventSource) {
+			eventSource.close();
+			eventSource = null;
+		}
+		// Reload so all state is cleared from memory.
+		window.location.reload();
+	})))), dom.div(style({ flexGrow: '1' }), style({ position: 'relative' }), mailboxesElem = dom.div(dom._class('mailboxesbar'), style({ position: 'absolute', left: 0, width: settings.mailboxesWidth + 'px', top: 0, bottom: 0 }), style({ display: 'flex', flexDirection: 'column', alignContent: 'stretch' }), dom.div(dom._class('pad', 'yscrollauto'), style({ flexGrow: '1' }), style({ position: 'relative' }), mailboxlistView.root)), mailboxessplitElem = dom.div(style({ position: 'absolute', left: 'calc(' + settings.mailboxesWidth + 'px - 2px)', width: '5px', top: 0, bottom: 0, cursor: 'ew-resize', zIndex: zindexes.splitter }), dom.div(style({ position: 'absolute', width: '1px', top: 0, bottom: 0, left: '2px', right: '2px', backgroundColor: '#aaa' })), function mousedown(e) {
 		startDrag(e, (e) => {
 			mailboxesElem.style.width = Math.round(e.clientX) + 'px';
 			topcomposeboxElem.style.width = Math.round(e.clientX) + 'px';
@@ -6029,6 +6157,7 @@ const init = async () => {
 			connecting = false;
 			sseID = start.SSEID;
 			loginAddress = start.LoginAddress;
+			dom._kids(loginAddressElem, loginAddress.User + '@' + (loginAddress.Domain.Unicode || loginAddress.Domain.ASCII));
 			const loginAddr = formatEmailASCII(loginAddress);
 			accountAddresses = start.Addresses || [];
 			accountAddresses.sort((a, b) => {

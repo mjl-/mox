@@ -271,75 +271,96 @@ describe-static" and "mox config describe-domains":
 				Port: 0
 
 			# Account web interface, for email users wanting to change their accounts, e.g.
-			# set new password, set new delivery rulesets. Served at /. (optional)
+			# set new password, set new delivery rulesets. Default path is /. (optional)
 			AccountHTTP:
 				Enabled: false
 
-				# Default 80. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. (optional)
 				Port: 0
 
-				# Path to serve account requests on, e.g. /mox/. Useful if domain serves other
-				# resources. Default is /. (optional)
+				# Path to serve requests on. (optional)
 				Path:
 
-			# Account web interface listener for HTTPS. Requires a TLS config. (optional)
+				# If set, X-Forwarded-* headers are used for the remote IP address for rate
+				# limiting and for the "secure" status of cookies. (optional)
+				Forwarded: false
+
+			# Account web interface listener like AccountHTTP, but for HTTPS. Requires a TLS
+			# config. (optional)
 			AccountHTTPS:
 				Enabled: false
 
-				# Default 80. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. (optional)
 				Port: 0
 
-				# Path to serve account requests on, e.g. /mox/. Useful if domain serves other
-				# resources. Default is /. (optional)
+				# Path to serve requests on. (optional)
 				Path:
 
-			# Admin web interface, for managing domains, accounts, etc. Served at /admin/.
-			# Preferably only enable on non-public IPs. Hint: use 'ssh -L 8080:localhost:80
-			# you@yourmachine' and open http://localhost:8080/admin/, or set up a tunnel (e.g.
-			# WireGuard) and add its IP to the mox 'internal' listener. (optional)
+				# If set, X-Forwarded-* headers are used for the remote IP address for rate
+				# limiting and for the "secure" status of cookies. (optional)
+				Forwarded: false
+
+			# Admin web interface, for managing domains, accounts, etc. Default path is
+			# /admin/. Preferably only enable on non-public IPs. Hint: use 'ssh -L
+			# 8080:localhost:80 you@yourmachine' and open http://localhost:8080/admin/, or set
+			# up a tunnel (e.g. WireGuard) and add its IP to the mox 'internal' listener.
+			# (optional)
 			AdminHTTP:
 				Enabled: false
 
-				# Default 80. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. (optional)
 				Port: 0
 
-				# Path to serve admin requests on, e.g. /moxadmin/. Useful if domain serves other
-				# resources. Default is /admin/. (optional)
+				# Path to serve requests on. (optional)
 				Path:
 
-			# Admin web interface listener for HTTPS. Requires a TLS config. Preferably only
-			# enable on non-public IPs. (optional)
+				# If set, X-Forwarded-* headers are used for the remote IP address for rate
+				# limiting and for the "secure" status of cookies. (optional)
+				Forwarded: false
+
+			# Admin web interface listener like AdminHTTP, but for HTTPS. Requires a TLS
+			# config. (optional)
 			AdminHTTPS:
 				Enabled: false
 
-				# Default 443. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. (optional)
 				Port: 0
 
-				# Path to serve admin requests on, e.g. /moxadmin/. Useful if domain serves other
-				# resources. Default is /admin/. (optional)
+				# Path to serve requests on. (optional)
 				Path:
 
-			# Webmail client, for reading email. (optional)
+				# If set, X-Forwarded-* headers are used for the remote IP address for rate
+				# limiting and for the "secure" status of cookies. (optional)
+				Forwarded: false
+
+			# Webmail client, for reading email. Default path is /webmail/. (optional)
 			WebmailHTTP:
 				Enabled: false
 
-				# Default 80. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. (optional)
 				Port: 0
 
-				# Path to serve account requests on. Useful if domain serves other resources.
-				# Default is /webmail/. (optional)
+				# Path to serve requests on. (optional)
 				Path:
 
-			# Webmail client, for reading email. (optional)
+				# If set, X-Forwarded-* headers are used for the remote IP address for rate
+				# limiting and for the "secure" status of cookies. (optional)
+				Forwarded: false
+
+			# Webmail client, like WebmailHTTP, but for HTTPS. Requires a TLS config.
+			# (optional)
 			WebmailHTTPS:
 				Enabled: false
 
-				# Default 443. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. (optional)
 				Port: 0
 
-				# Path to serve account requests on. Useful if domain serves other resources.
-				# Default is /webmail/. (optional)
+				# Path to serve requests on. (optional)
 				Path:
+
+				# If set, X-Forwarded-* headers are used for the remote IP address for rate
+				# limiting and for the "secure" status of cookies. (optional)
+				Forwarded: false
 
 			# Serve prometheus metrics, for monitoring. You should not enable this on a public
 			# IP. (optional)

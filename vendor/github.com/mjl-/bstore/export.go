@@ -337,9 +337,16 @@ func (ft fieldType) parseValue(p *parser) any {
 		return l
 	case kindArray:
 		n := ft.ArrayLength
-		var l []any
+		l := make([]any, n)
+		fm := p.Fieldmap(n)
 		for i := 0; i < n; i++ {
-			l = append(l, ft.ListElem.parseValue(p))
+			if fm.Nonzero(i) {
+				l[i] = ft.ListElem.parseValue(p)
+			} else {
+				// Always add non-zero elements, or we would
+				// change the number of elements in a list.
+				l[i] = ft.ListElem.zeroExportValue()
+			}
 		}
 		return l
 	case kindMap:

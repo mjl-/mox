@@ -13,7 +13,7 @@ var (
 		},
 		[]string{
 			"kind",    // submission, imap, webmail, webaccount, webadmin (formerly httpaccount, httpadmin)
-			"variant", // login, plain, scram-sha-256, scram-sha-1, cram-md5, httpbasic
+			"variant", // login, plain, scram-sha-256, scram-sha-1, cram-md5, weblogin, websessionuse. formerly: httpbasic.
 			// todo: we currently only use badcreds, but known baduser can be helpful
 			"result", // ok, baduser, badpassword, badcreds, error, aborted
 		},

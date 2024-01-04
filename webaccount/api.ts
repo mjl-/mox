@@ -34,14 +34,17 @@ export interface ImportProgress {
 	Token: string  // For fetching progress, or cancelling an import.
 }
 
+export type CSRFToken = string
+
 export const structTypes: {[typename: string]: boolean} = {"Destination":true,"Domain":true,"ImportProgress":true,"Ruleset":true}
-export const stringsTypes: {[typename: string]: boolean} = {}
+export const stringsTypes: {[typename: string]: boolean} = {"CSRFToken":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
 	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
 	"Destination": {"Name":"Destination","Docs":"","Fields":[{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Rulesets","Docs":"","Typewords":["[]","Ruleset"]},{"Name":"FullName","Docs":"","Typewords":["string"]}]},
 	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"ImportProgress": {"Name":"ImportProgress","Docs":"","Fields":[{"Name":"Token","Docs":"","Typewords":["string"]}]},
+	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 }
 
 export const parser = {
@@ -49,6 +52,7 @@ export const parser = {
 	Destination: (v: any) => parse("Destination", v) as Destination,
 	Ruleset: (v: any) => parse("Ruleset", v) as Ruleset,
 	ImportProgress: (v: any) => parse("ImportProgress", v) as ImportProgress,
+	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 }
 
 // Account exports web API functions for the account web interface. All its
@@ -57,14 +61,57 @@ export const parser = {
 let defaultOptions: ClientOptions = {slicesNullable: true, mapsNullable: true, nullableOptional: true}
 
 export class Client {
-	constructor(private baseURL=defaultBaseURL, public options?: ClientOptions) {
-		if (!options) {
-			this.options = defaultOptions
-		}
+	private baseURL: string
+	public authState: AuthState
+	public options: ClientOptions
+
+	constructor() {
+		this.authState = {}
+		this.options = {...defaultOptions}
+		this.baseURL = this.options.baseURL || defaultBaseURL
+	}
+
+	withAuthToken(token: string): Client {
+		const c = new Client()
+		c.authState.token = token
+		c.options = this.options
+		return c
 	}
 
 	withOptions(options: ClientOptions): Client {
-		return new Client(this.baseURL, { ...this.options, ...options })
+		const c = new Client()
+		c.authState = this.authState
+		c.options = { ...this.options, ...options }
+		return c
+	}
+
+	// LoginPrep returns a login token, and also sets it as cookie. Both must be
+	// present in the call to Login.
+	async LoginPrep(): Promise<string> {
+		const fn: string = "LoginPrep"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["string"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string
+	}
+
+	// Login returns a session token for the credentials, or fails with error code
+	// "user:badLogin". Call LoginPrep to get a loginToken.
+	async Login(loginToken: string, username: string, password: string): Promise<CSRFToken> {
+		const fn: string = "Login"
+		const paramTypes: string[][] = [["string"],["string"],["string"]]
+		const returnTypes: string[][] = [["CSRFToken"]]
+		const params: any[] = [loginToken, username, password]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as CSRFToken
+	}
+
+	// Logout invalidates the session token.
+	async Logout(): Promise<void> {
+		const fn: string = "Logout"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = []
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// SetPassword saves a new password for the account, invalidating the previous password.
@@ -75,7 +122,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [password]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// Account returns information about the account: full name, the default domain,
@@ -87,7 +134,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["string"],["Domain"],["{}","Destination"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, Domain, { [key: string]: Destination }]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, Domain, { [key: string]: Destination }]
 	}
 
 	async AccountSaveFullName(fullName: string): Promise<void> {
@@ -95,7 +142,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [fullName]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// DestinationSave updates a destination.
@@ -106,7 +153,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["Destination"],["Destination"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [destName, oldDest, newDest]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// ImportAbort aborts an import that is in progress. If the import exists and isn't
@@ -116,7 +163,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [importToken]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// Types exposes types not used in API method signatures, such as the import form upload.
@@ -125,7 +172,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["ImportProgress"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as ImportProgress
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as ImportProgress
 	}
 }
 
@@ -237,7 +284,7 @@ class verifier {
 
 		const ensure = (ok: boolean, expect: string): any => {
 			if (!ok) {
-				error('got ' + JSON.stringify(v) +  ', expected ' + expect)
+				error('got ' + JSON.stringify(v) + ', expected ' + expect)
 			}
 			return v
 		}
@@ -378,6 +425,7 @@ class verifier {
 
 
 export interface ClientOptions {
+	baseURL?: string
 	aborter?: {abort?: () => void}
 	timeoutMsec?: number
 	skipParamCheck?: boolean
@@ -385,9 +433,16 @@ export interface ClientOptions {
 	slicesNullable?: boolean
 	mapsNullable?: boolean
 	nullableOptional?: boolean
+	csrfHeader?: string
+	login?: (reason: string) => Promise<string>
 }
 
-const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: string[][], returnTypes: string[][], name: string, params: any[]): Promise<any> => {
+export interface AuthState {
+	token?: string // For csrf request header.
+	loginPromise?: Promise<void> // To let multiple API calls wait for a single login attempt, not each opening a login popup.
+}
+
+const _sherpaCall = async (baseURL: string, authState: AuthState, options: ClientOptions, paramTypes: string[][], returnTypes: string[][], name: string, params: any[]): Promise<any> => {
 	if (!options.skipParamCheck) {
 		if (params.length !== paramTypes.length) {
 			return Promise.reject({ message: 'wrong number of parameters in sherpa call, saw ' + params.length + ' != expected ' + paramTypes.length })
@@ -428,14 +483,36 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 		await simulate(json)
 	}
 
-	// Immediately create promise, so options.aborter is changed before returning.
-	const promise = new Promise((resolve, reject) => {
-		let resolve1 = (v: { code: string, message: string }) => {
+	const fn = (resolve: (v: any) => void, reject: (v: any) => void) => {
+		let resolve1 = (v: any) => {
 			resolve(v)
 			resolve1 = () => { }
 			reject1 = () => { }
 		}
 		let reject1 = (v: { code: string, message: string }) => {
+			if ((v.code === 'user:noAuth' || v.code === 'user:badAuth')  && options.login) {
+				const login = options.login
+				if (!authState.loginPromise) {
+					authState.loginPromise = new Promise((aresolve, areject) => {
+						login(v.code === 'user:badAuth' ? (v.message || '') : '')
+						.then((token) => {
+							authState.token = token
+							authState.loginPromise = undefined
+							aresolve()
+						}, (err: any) => {
+							authState.loginPromise = undefined
+							areject(err)
+						})
+					})
+				}
+				authState.loginPromise
+				.then(() => {
+					fn(resolve, reject)
+				}, (err: any) => {
+					reject(err)
+				})
+				return
+			}
 			reject(v)
 			resolve1 = () => { }
 			reject1 = () => { }
@@ -450,6 +527,9 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 			}
 		}
 		req.open('POST', url, true)
+		if (options.csrfHeader && authState.token) {
+			req.setRequestHeader(options.csrfHeader, authState.token)
+		}
 		if (options.timeoutMsec) {
 			req.timeout = options.timeoutMsec
 		}
@@ -518,8 +598,8 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 		} catch (err) {
 			reject1({ code: 'sherpa:badData', message: 'cannot marshal to JSON' })
 		}
-	})
-	return await promise
+	}
+	return await new Promise(fn)
 }
 
 }

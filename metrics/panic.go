@@ -33,6 +33,7 @@ const (
 	Upgradethreads   Panic = "upgradethreads"
 	Importmanage     Panic = "importmanage"
 	Importmessages   Panic = "importmessages"
+	Store            Panic = "store"
 	Webadmin         Panic = "webadmin"
 	Webmailsendevent Panic = "webmailsendevent"
 	Webmail          Panic = "webmail"

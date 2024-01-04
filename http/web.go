@@ -534,7 +534,7 @@ func Listen() {
 				path = l.AccountHTTP.Path
 			}
 			srv := ensureServe(false, port, "account-http at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handle)))
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handler(path, l.AccountHTTP.Forwarded))))
 			srv.Handle("account", nil, path, handler)
 			redirectToTrailingSlash(srv, "account", path)
 		}
@@ -545,7 +545,7 @@ func Listen() {
 				path = l.AccountHTTPS.Path
 			}
 			srv := ensureServe(true, port, "account-https at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handle)))
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handler(path, l.AccountHTTPS.Forwarded))))
 			srv.Handle("account", nil, path, handler)
 			redirectToTrailingSlash(srv, "account", path)
 		}
@@ -557,7 +557,7 @@ func Listen() {
 				path = l.AdminHTTP.Path
 			}
 			srv := ensureServe(false, port, "admin-http at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handle)))
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handler(path, l.AdminHTTP.Forwarded))))
 			srv.Handle("admin", nil, path, handler)
 			redirectToTrailingSlash(srv, "admin", path)
 		}
@@ -568,7 +568,7 @@ func Listen() {
 				path = l.AdminHTTPS.Path
 			}
 			srv := ensureServe(true, port, "admin-https at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handle)))
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handler(path, l.AdminHTTPS.Forwarded))))
 			srv.Handle("admin", nil, path, handler)
 			redirectToTrailingSlash(srv, "admin", path)
 		}
@@ -584,7 +584,8 @@ func Listen() {
 				path = l.WebmailHTTP.Path
 			}
 			srv := ensureServe(false, port, "webmail-http at "+path)
-			srv.Handle("webmail", nil, path, http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize))))
+			handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTP.Forwarded)))
+			srv.Handle("webmail", nil, path, handler)
 			redirectToTrailingSlash(srv, "webmail", path)
 		}
 		if l.WebmailHTTPS.Enabled {
@@ -594,7 +595,8 @@ func Listen() {
 				path = l.WebmailHTTPS.Path
 			}
 			srv := ensureServe(true, port, "webmail-https at "+path)
-			srv.Handle("webmail", nil, path, http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize))))
+			handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTPS.Forwarded)))
+			srv.Handle("webmail", nil, path, handler)
 			redirectToTrailingSlash(srv, "webmail", path)
 		}
 
@@ -788,7 +790,6 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 func Serve() {
 	loadStaticGzipCache(mox.DataDirPath("tmp/httpstaticcompresscache"), 512*1024*1024)
 
-	go webadmin.ManageAuthCache()
 	go webaccount.ImportManage()
 
 	for _, serve := range servers {

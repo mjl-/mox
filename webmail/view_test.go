@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 )
 
 func TestView(t *testing.T) {
+	mox.LimitersInit()
 	os.RemoveAll("../testdata/webmail/data")
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webmail/mox.conf")
@@ -39,9 +41,36 @@ func TestView(t *testing.T) {
 		pkglog.Check(err, "closing account")
 	}()
 
-	api := Webmail{maxMessageSize: 1024 * 1024}
-	reqInfo := requestInfo{"mjl@mox.example", "mjl", &http.Request{}}
+	api := Webmail{maxMessageSize: 1024 * 1024, cookiePath: "/"}
+
+	respRec := httptest.NewRecorder()
+	reqInfo := requestInfo{"mjl@mox.example", "mjl", "", respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
 	ctx := context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
+
+	// Prepare loginToken.
+	loginCookie := &http.Cookie{Name: "webmaillogin"}
+	loginCookie.Value = api.LoginPrep(ctx)
+	reqInfo.Request.Header = http.Header{"Cookie": []string{loginCookie.String()}}
+
+	api.Login(ctx, loginCookie.Value, "mjl@mox.example", "test1234")
+	var sessionCookie *http.Cookie
+	for _, c := range respRec.Result().Cookies() {
+		if c.Name == "webmailsession" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatalf("missing session cookie")
+	}
+	sct := strings.SplitN(sessionCookie.Value, " ", 2)
+	if len(sct) != 2 || sct[1] != "mjl" {
+		t.Fatalf("unexpected accountname %q in session cookie", sct[1])
+	}
+	sessionToken := store.SessionToken(sct[0])
+
+	reqInfo = requestInfo{"mjl@mox.example", "mjl", sessionToken, respRec, &http.Request{}}
+	ctx = context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	api.MailboxCreate(ctx, "Lists/Go/Nuts")
 
@@ -74,7 +103,7 @@ func TestView(t *testing.T) {
 	// We start an actual HTTP server to easily get a body we can do blocking reads on.
 	// With a httptest.ResponseRecorder, it's a bit more work to parse SSE events as
 	// they come in.
-	server := httptest.NewServer(http.HandlerFunc(Handler(1024 * 1024)))
+	server := httptest.NewServer(http.HandlerFunc(Handler(1024*1024, "/webmail/", false)))
 	defer server.Close()
 
 	serverURL, err := url.Parse(server.URL)
@@ -113,7 +142,7 @@ func TestView(t *testing.T) {
 	tcheck(t, err, "http transaction")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("got statuscode %d, expected %d", resp.StatusCode, http.StatusOK)
+		t.Fatalf("got statuscode %d, expected %d (%s)", resp.StatusCode, http.StatusOK, readBody(resp.Body))
 	}
 
 	evr := eventReader{t, bufio.NewReader(resp.Body), resp.Body}

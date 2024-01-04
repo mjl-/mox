@@ -479,6 +479,8 @@ export enum Validation {
 	ValidationNone = 10,  // E.g. No records.
 }
 
+export type CSRFToken = string
+
 export enum ThreadMode {
 	ThreadOff = "off",
 	ThreadOn = "on",
@@ -515,7 +517,7 @@ export enum SecurityResult {
 export type Localpart = string
 
 export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"SpecialUse":true,"SubmitMessage":true}
-export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"Localpart":true,"SecurityResult":true,"ThreadMode":true}
+export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"CSRFToken":true,"Localpart":true,"SecurityResult":true,"ThreadMode":true}
 export const intsTypes: {[typename: string]: boolean} = {"ModSeq":true,"UID":true,"Validation":true}
 export const types: TypenameMap = {
 	"Request": {"Name":"Request","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"Cancel","Docs":"","Typewords":["bool"]},{"Name":"Query","Docs":"","Typewords":["Query"]},{"Name":"Page","Docs":"","Typewords":["Page"]}]},
@@ -559,6 +561,7 @@ export const types: TypenameMap = {
 	"UID": {"Name":"UID","Docs":"","Values":null},
 	"ModSeq": {"Name":"ModSeq","Docs":"","Values":null},
 	"Validation": {"Name":"Validation","Docs":"","Values":[{"Name":"ValidationUnknown","Value":0,"Docs":""},{"Name":"ValidationStrict","Value":1,"Docs":""},{"Name":"ValidationDMARC","Value":2,"Docs":""},{"Name":"ValidationRelaxed","Value":3,"Docs":""},{"Name":"ValidationPass","Value":4,"Docs":""},{"Name":"ValidationNeutral","Value":5,"Docs":""},{"Name":"ValidationTemperror","Value":6,"Docs":""},{"Name":"ValidationPermerror","Value":7,"Docs":""},{"Name":"ValidationFail","Value":8,"Docs":""},{"Name":"ValidationSoftfail","Value":9,"Docs":""},{"Name":"ValidationNone","Value":10,"Docs":""}]},
+	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"ThreadMode": {"Name":"ThreadMode","Docs":"","Values":[{"Name":"ThreadOff","Value":"off","Docs":""},{"Name":"ThreadOn","Value":"on","Docs":""},{"Name":"ThreadUnread","Value":"unread","Docs":""}]},
 	"AttachmentType": {"Name":"AttachmentType","Docs":"","Values":[{"Name":"AttachmentIndifferent","Value":"","Docs":""},{"Name":"AttachmentNone","Value":"none","Docs":""},{"Name":"AttachmentAny","Value":"any","Docs":""},{"Name":"AttachmentImage","Value":"image","Docs":""},{"Name":"AttachmentPDF","Value":"pdf","Docs":""},{"Name":"AttachmentArchive","Value":"archive","Docs":""},{"Name":"AttachmentSpreadsheet","Value":"spreadsheet","Docs":""},{"Name":"AttachmentDocument","Value":"document","Docs":""},{"Name":"AttachmentPresentation","Value":"presentation","Docs":""}]},
 	"SecurityResult": {"Name":"SecurityResult","Docs":"","Values":[{"Name":"SecurityResultError","Value":"error","Docs":""},{"Name":"SecurityResultNo","Value":"no","Docs":""},{"Name":"SecurityResultYes","Value":"yes","Docs":""},{"Name":"SecurityResultUnknown","Value":"unknown","Docs":""}]},
@@ -607,6 +610,7 @@ export const parser = {
 	UID: (v: any) => parse("UID", v) as UID,
 	ModSeq: (v: any) => parse("ModSeq", v) as ModSeq,
 	Validation: (v: any) => parse("Validation", v) as Validation,
+	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 	ThreadMode: (v: any) => parse("ThreadMode", v) as ThreadMode,
 	AttachmentType: (v: any) => parse("AttachmentType", v) as AttachmentType,
 	SecurityResult: (v: any) => parse("SecurityResult", v) as SecurityResult,
@@ -616,14 +620,57 @@ export const parser = {
 let defaultOptions: ClientOptions = {slicesNullable: true, mapsNullable: true, nullableOptional: true}
 
 export class Client {
-	constructor(private baseURL=defaultBaseURL, public options?: ClientOptions) {
-		if (!options) {
-			this.options = defaultOptions
-		}
+	private baseURL: string
+	public authState: AuthState
+	public options: ClientOptions
+
+	constructor() {
+		this.authState = {}
+		this.options = {...defaultOptions}
+		this.baseURL = this.options.baseURL || defaultBaseURL
+	}
+
+	withAuthToken(token: string): Client {
+		const c = new Client()
+		c.authState.token = token
+		c.options = this.options
+		return c
 	}
 
 	withOptions(options: ClientOptions): Client {
-		return new Client(this.baseURL, { ...this.options, ...options })
+		const c = new Client()
+		c.authState = this.authState
+		c.options = { ...this.options, ...options }
+		return c
+	}
+
+	// LoginPrep returns a login token, and also sets it as cookie. Both must be
+	// present in the call to Login.
+	async LoginPrep(): Promise<string> {
+		const fn: string = "LoginPrep"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["string"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string
+	}
+
+	// Login returns a session token for the credentials, or fails with error code
+	// "user:badLogin". Call LoginPrep to get a loginToken.
+	async Login(loginToken: string, username: string, password: string): Promise<CSRFToken> {
+		const fn: string = "Login"
+		const paramTypes: string[][] = [["string"],["string"],["string"]]
+		const returnTypes: string[][] = [["CSRFToken"]]
+		const params: any[] = [loginToken, username, password]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as CSRFToken
+	}
+
+	// Logout invalidates the session token.
+	async Logout(): Promise<void> {
+		const fn: string = "Logout"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = []
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// Token returns a token to use for an SSE connection. A token can only be used for
@@ -634,7 +681,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["string"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as string
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string
 	}
 
 	// Requests sends a new request for an open SSE connection. Any currently active
@@ -647,7 +694,7 @@ export class Client {
 		const paramTypes: string[][] = [["Request"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [req]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// ParsedMessage returns enough to render the textual body of a message. It is
@@ -657,7 +704,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"]]
 		const returnTypes: string[][] = [["ParsedMessage"]]
 		const params: any[] = [msgID]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as ParsedMessage
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as ParsedMessage
 	}
 
 	// MessageSubmit sends a message by submitting it the outgoing email queue. The
@@ -671,7 +718,7 @@ export class Client {
 		const paramTypes: string[][] = [["SubmitMessage"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [m]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MessageMove moves messages to another mailbox. If the message is already in
@@ -681,7 +728,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"],["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, mailboxID]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MessageDelete permanently deletes messages, without moving them to the Trash mailbox.
@@ -690,7 +737,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// FlagsAdd adds flags, either system flags like \Seen or custom keywords. The
@@ -700,7 +747,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"],["[]","string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, flaglist]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// FlagsClear clears flags, either system flags like \Seen or custom keywords.
@@ -709,7 +756,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"],["[]","string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, flaglist]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MailboxCreate creates a new mailbox.
@@ -718,7 +765,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [name]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MailboxDelete deletes a mailbox and all its messages.
@@ -727,7 +774,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [mailboxID]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MailboxEmpty empties a mailbox, removing all messages from the mailbox, but not
@@ -737,7 +784,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [mailboxID]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MailboxRename renames a mailbox, possibly moving it to a new parent. The mailbox
@@ -747,7 +794,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [mailboxID, newName]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// CompleteRecipient returns autocomplete matches for a recipient, returning the
@@ -758,7 +805,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["[]","string"],["bool"]]
 		const params: any[] = [search]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as [string[] | null, boolean]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string[] | null, boolean]
 	}
 
 	// MailboxSetSpecialUse sets the special use flags of a mailbox.
@@ -767,7 +814,7 @@ export class Client {
 		const paramTypes: string[][] = [["Mailbox"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [mb]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// ThreadCollapse saves the ThreadCollapse field for the messages and its
@@ -778,7 +825,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"],["bool"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, collapse]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// ThreadMute saves the ThreadMute field for the messages and their children.
@@ -788,7 +835,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"],["bool"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, mute]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// RecipientSecurity looks up security properties of the address in the
@@ -798,7 +845,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["RecipientSecurity"]]
 		const params: any[] = [messageAddressee]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as RecipientSecurity
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as RecipientSecurity
 	}
 
 	// SSETypes exists to ensure the generated API contains the types, for use in SSE events.
@@ -807,7 +854,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["EventStart"],["EventViewErr"],["EventViewReset"],["EventViewMsgs"],["EventViewChanges"],["ChangeMsgAdd"],["ChangeMsgRemove"],["ChangeMsgFlags"],["ChangeMsgThread"],["ChangeMailboxRemove"],["ChangeMailboxAdd"],["ChangeMailboxRename"],["ChangeMailboxCounts"],["ChangeMailboxSpecialUse"],["ChangeMailboxKeywords"],["Flags"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as [EventStart, EventViewErr, EventViewReset, EventViewMsgs, EventViewChanges, ChangeMsgAdd, ChangeMsgRemove, ChangeMsgFlags, ChangeMsgThread, ChangeMailboxRemove, ChangeMailboxAdd, ChangeMailboxRename, ChangeMailboxCounts, ChangeMailboxSpecialUse, ChangeMailboxKeywords, Flags]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [EventStart, EventViewErr, EventViewReset, EventViewMsgs, EventViewChanges, ChangeMsgAdd, ChangeMsgRemove, ChangeMsgFlags, ChangeMsgThread, ChangeMailboxRemove, ChangeMailboxAdd, ChangeMailboxRename, ChangeMailboxCounts, ChangeMailboxSpecialUse, ChangeMailboxKeywords, Flags]
 	}
 }
 
@@ -919,7 +966,7 @@ class verifier {
 
 		const ensure = (ok: boolean, expect: string): any => {
 			if (!ok) {
-				error('got ' + JSON.stringify(v) +  ', expected ' + expect)
+				error('got ' + JSON.stringify(v) + ', expected ' + expect)
 			}
 			return v
 		}
@@ -1060,6 +1107,7 @@ class verifier {
 
 
 export interface ClientOptions {
+	baseURL?: string
 	aborter?: {abort?: () => void}
 	timeoutMsec?: number
 	skipParamCheck?: boolean
@@ -1067,9 +1115,16 @@ export interface ClientOptions {
 	slicesNullable?: boolean
 	mapsNullable?: boolean
 	nullableOptional?: boolean
+	csrfHeader?: string
+	login?: (reason: string) => Promise<string>
 }
 
-const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: string[][], returnTypes: string[][], name: string, params: any[]): Promise<any> => {
+export interface AuthState {
+	token?: string // For csrf request header.
+	loginPromise?: Promise<void> // To let multiple API calls wait for a single login attempt, not each opening a login popup.
+}
+
+const _sherpaCall = async (baseURL: string, authState: AuthState, options: ClientOptions, paramTypes: string[][], returnTypes: string[][], name: string, params: any[]): Promise<any> => {
 	if (!options.skipParamCheck) {
 		if (params.length !== paramTypes.length) {
 			return Promise.reject({ message: 'wrong number of parameters in sherpa call, saw ' + params.length + ' != expected ' + paramTypes.length })
@@ -1110,14 +1165,36 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 		await simulate(json)
 	}
 
-	// Immediately create promise, so options.aborter is changed before returning.
-	const promise = new Promise((resolve, reject) => {
-		let resolve1 = (v: { code: string, message: string }) => {
+	const fn = (resolve: (v: any) => void, reject: (v: any) => void) => {
+		let resolve1 = (v: any) => {
 			resolve(v)
 			resolve1 = () => { }
 			reject1 = () => { }
 		}
 		let reject1 = (v: { code: string, message: string }) => {
+			if ((v.code === 'user:noAuth' || v.code === 'user:badAuth')  && options.login) {
+				const login = options.login
+				if (!authState.loginPromise) {
+					authState.loginPromise = new Promise((aresolve, areject) => {
+						login(v.code === 'user:badAuth' ? (v.message || '') : '')
+						.then((token) => {
+							authState.token = token
+							authState.loginPromise = undefined
+							aresolve()
+						}, (err: any) => {
+							authState.loginPromise = undefined
+							areject(err)
+						})
+					})
+				}
+				authState.loginPromise
+				.then(() => {
+					fn(resolve, reject)
+				}, (err: any) => {
+					reject(err)
+				})
+				return
+			}
 			reject(v)
 			resolve1 = () => { }
 			reject1 = () => { }
@@ -1132,6 +1209,9 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 			}
 		}
 		req.open('POST', url, true)
+		if (options.csrfHeader && authState.token) {
+			req.setRequestHeader(options.csrfHeader, authState.token)
+		}
 		if (options.timeoutMsec) {
 			req.timeout = options.timeoutMsec
 		}
@@ -1200,8 +1280,8 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 		} catch (err) {
 			reject1({ code: 'sherpa:badData', message: 'cannot marshal to JSON' })
 		}
-	})
-	return await promise
+	}
+	return await new Promise(fn)
 }
 
 }

@@ -4,7 +4,83 @@
 declare let page: HTMLElement
 declare let moxversion: string
 
-const client = new api.Client()
+const login = async (reason: string) => {
+	return new Promise<string>((resolve: (v: string) => void, _) => {
+		const origFocus = document.activeElement
+		let reasonElem: HTMLElement
+		let fieldset: HTMLFieldSetElement
+		let password: HTMLInputElement
+		const root = dom.div(
+			style({position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '1', animation: 'fadein .15s ease-in'}),
+			dom.div(
+				reasonElem=reason ? dom.div(style({marginBottom: '2ex', textAlign: 'center'}), reason) : dom.div(),
+				dom.div(
+					style({backgroundColor: 'white', borderRadius: '.25em', padding: '1em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto', marginBottom: '20vh'}),
+					dom.form(
+						async function submit(e: SubmitEvent) {
+							e.preventDefault()
+							e.stopPropagation()
+
+							reasonElem.remove()
+
+							try {
+								fieldset.disabled = true
+								const loginToken = await client.LoginPrep()
+								const token = await client.Login(loginToken, password.value)
+								try {
+									window.localStorage.setItem('webadmincsrftoken', token)
+								} catch (err) {
+									console.log('saving csrf token in localStorage', err)
+								}
+								root.remove()
+								if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
+									origFocus.focus()
+								}
+								resolve(token)
+							} catch (err) {
+								console.log('login error', err)
+								window.alert('Error: ' + errmsg(err))
+							} finally {
+								fieldset.disabled = false
+							}
+						},
+						fieldset=dom.fieldset(
+							dom.h1('Admin'),
+							dom.label(
+								style({display: 'block', marginBottom: '2ex'}),
+								dom.div('Password', style({marginBottom: '.5ex'})),
+								password=dom.input(attr.type('password'), attr.required('')),
+							),
+							dom.div(
+								style({textAlign: 'center'}),
+								dom.submitbutton('Login'),
+							),
+						),
+					)
+				)
+			)
+		)
+		document.body.appendChild(root)
+		password.focus()
+	})
+}
+
+const localStorageGet = (k: string): string | null => {
+	try {
+		return window.localStorage.getItem(k)
+	} catch (err) {
+		return null
+	}
+}
+
+const localStorageRemove = (k: string) => {
+	try {
+		return window.localStorage.removeItem(k)
+	} catch (err) {
+	}
+}
+
+const client = new api.Client().withOptions({csrfHeader: 'x-mox-csrf', login: login}).withAuthToken(localStorageGet('webadmincsrftoken') || '')
 
 const green = '#1dea20'
 const yellow = '#ffe400'
@@ -14,7 +90,29 @@ const blue = '#8bc8ff'
 const link = (href: string, anchorOpt?: string) => dom.a(attr.href(href), attr.rel('noopener noreferrer'), anchorOpt || href)
 
 const crumblink = (text: string, link: string) => dom.a(text, attr.href(link))
-const crumbs = (...l: ElemArg[]) => [dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])), dom.br()]
+const crumbs = (...l: ElemArg[]) => [
+	dom.div(
+		style({float: 'right'}),
+		dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e: MouseEvent) {
+			const b = e.target! as HTMLButtonElement
+			try {
+				b.disabled = true
+				await client.Logout()
+			} catch (err) {
+				console.log('logout', err)
+				window.alert('Error: ' + errmsg(err))
+			} finally {
+				b.disabled = false
+			}
+
+			localStorageRemove('webadmincsrftoken')
+			// Reload so all state is cleared from memory.
+			window.location.reload()
+		}),
+	),
+	dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])),
+	dom.br()
+]
 
 const errmsg = (err: unknown) => ''+((err as any).message || '(no error message)')
 

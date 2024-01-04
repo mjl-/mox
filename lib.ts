@@ -211,6 +211,8 @@ const attr = {
 	name: (s: string) => _attr('name', s),
 	min: (s: string) => _attr('min', s),
 	max: (s: string) => _attr('max', s),
+	action: (s: string) => _attr('action', s),
+	method: (s: string) => _attr('method', s),
 }
 const style = (x: {[k: string]: string | number}) => { return {_styles: x}}
 const prop = (x: {[k: string]: any}) => { return {_props: x}}

@@ -7,17 +7,16 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	_ "embed"
 
@@ -29,16 +28,12 @@ import (
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
-	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/store"
+	"github.com/mjl-/mox/webauth"
 )
-
-func init() {
-	mox.LimitersInit()
-}
 
 var pkglog = mlog.New("webaccount", nil)
 
@@ -60,8 +55,6 @@ var webaccountFile = &mox.WebappFile{
 
 var accountDoc = mustParseAPI("account", accountapiJSON)
 
-var accountSherpaHandler http.Handler
-
 func mustParseAPI(api string, buf []byte) (doc sherpadoc.Section) {
 	err := json.Unmarshal(buf, &doc)
 	if err != nil {
@@ -70,15 +63,36 @@ func mustParseAPI(api string, buf []byte) (doc sherpadoc.Section) {
 	return doc
 }
 
+var sherpaHandlerOpts *sherpa.HandlerOpts
+
+func makeSherpaHandler(cookiePath string, isForwarded bool) (http.Handler, error) {
+	return sherpa.NewHandler("/api/", moxvar.Version, Account{cookiePath, isForwarded}, &accountDoc, sherpaHandlerOpts)
+}
+
 func init() {
 	collector, err := sherpaprom.NewCollector("moxaccount", nil)
 	if err != nil {
 		pkglog.Fatalx("creating sherpa prometheus collector", err)
 	}
 
-	accountSherpaHandler, err = sherpa.NewHandler("/api/", moxvar.Version, Account{}, &accountDoc, &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none"})
+	sherpaHandlerOpts = &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none", NoCORS: true}
+	// Just to validate.
+	_, err = makeSherpaHandler("", false)
 	if err != nil {
 		pkglog.Fatalx("sherpa handler", err)
+	}
+}
+
+// Handler returns a handler for the webaccount endpoints, customized for the
+// cookiePath.
+func Handler(cookiePath string, isForwarded bool) func(w http.ResponseWriter, r *http.Request) {
+	sh, err := makeSherpaHandler(cookiePath, isForwarded)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err != nil {
+			http.Error(w, "500 - internal server error - cannot handle requests", http.StatusInternalServerError)
+			return
+		}
+		handle(sh, isForwarded, w, r)
 	}
 }
 
@@ -109,61 +123,12 @@ func xcheckuserf(ctx context.Context, err error, format string, args ...any) {
 // Account exports web API functions for the account web interface. All its
 // methods are exported under api/. Function calls require valid HTTP
 // Authentication credentials of a user.
-type Account struct{}
-
-// CheckAuth checks http basic auth, returns login address and account name if
-// valid, and writes http response and returns empty string otherwise.
-func CheckAuth(ctx context.Context, log mlog.Log, kind string, w http.ResponseWriter, r *http.Request) (address, account string) {
-	authResult := "error"
-	start := time.Now()
-	var addr *net.TCPAddr
-	defer func() {
-		metrics.AuthenticationInc(kind, "httpbasic", authResult)
-		if authResult == "ok" && addr != nil {
-			mox.LimiterFailedAuth.Reset(addr.IP, start)
-		}
-	}()
-
-	var err error
-	var remoteIP net.IP
-	addr, err = net.ResolveTCPAddr("tcp", r.RemoteAddr)
-	if err != nil {
-		log.Errorx("parsing remote address", err, slog.Any("addr", r.RemoteAddr))
-	} else if addr != nil {
-		remoteIP = addr.IP
-	}
-	if remoteIP != nil && !mox.LimiterFailedAuth.Add(remoteIP, start, 1) {
-		metrics.AuthenticationRatelimitedInc(kind)
-		http.Error(w, "429 - too many auth attempts", http.StatusTooManyRequests)
-		return "", ""
-	}
-
-	// store.OpenEmailAuth has an auth cache, so we don't bcrypt for every auth attempt.
-	if auth := r.Header.Get("Authorization"); !strings.HasPrefix(auth, "Basic ") {
-	} else if authBuf, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err != nil {
-		log.Debugx("parsing base64", err)
-	} else if t := strings.SplitN(string(authBuf), ":", 2); len(t) != 2 {
-		log.Debug("bad user:pass form")
-	} else if acc, err := store.OpenEmailAuth(log, t[0], t[1]); err != nil {
-		if errors.Is(err, store.ErrUnknownCredentials) {
-			authResult = "badcreds"
-			log.Info("failed authentication attempt", slog.String("username", t[0]), slog.Any("remote", remoteIP))
-		}
-		log.Errorx("open account", err)
-	} else {
-		authResult = "ok"
-		accName := acc.Name
-		err := acc.Close()
-		log.Check(err, "closing account")
-		return t[0], accName
-	}
-	// note: browsers don't display the realm to prevent users getting confused by malicious realm messages.
-	w.Header().Set("WWW-Authenticate", `Basic realm="mox account - login with account email address and password"`)
-	http.Error(w, "http 401 - unauthorized - mox account - login with account email address and password", http.StatusUnauthorized)
-	return "", ""
+type Account struct {
+	cookiePath  string // From listener, for setting authentication cookies.
+	isForwarded bool   // From listener, whether we look at X-Forwarded-* headers.
 }
 
-func Handle(w http.ResponseWriter, r *http.Request) {
+func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), mlog.CidKey, mox.Cid())
 	log := pkglog.WithContext(ctx).With(slog.String("userauth", ""))
 
@@ -224,29 +189,52 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, accName := CheckAuth(ctx, log, "webaccount", w, r)
-	if accName == "" {
-		// Response already sent.
+	// HTML/JS can be retrieved without authentication.
+	if r.URL.Path == "/" {
+		switch r.Method {
+		case "GET", "HEAD":
+			webaccountFile.Serve(ctx, log, w, r)
+		default:
+			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
+		}
 		return
 	}
 
-	if lw, ok := w.(interface{ AddAttr(a slog.Attr) }); ok {
-		lw.AddAttr(slog.String("authaccount", accName))
+	isAPI := strings.HasPrefix(r.URL.Path, "/api/")
+	// Only allow POST for calls, they will not work cross-domain without CORS.
+	if isAPI && r.URL.Path != "/api/" && r.Method != "POST" {
+		http.Error(w, "405 - method not allowed - use post", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var loginAddress, accName string
+	var sessionToken store.SessionToken
+	// All other URLs, except the login endpoint require some authentication.
+	if r.URL.Path != "/api/LoginPrep" && r.URL.Path != "/api/Login" {
+		var ok bool
+		isExport := strings.HasPrefix(r.URL.Path, "/export/")
+		requireCSRF := isAPI || r.URL.Path == "/import" || isExport
+		accName, sessionToken, loginAddress, ok = webauth.Check(ctx, log, webauth.Accounts, "webaccount", isForwarded, w, r, isAPI, requireCSRF, isExport)
+		if !ok {
+			// Response has been written already.
+			return
+		}
+	}
+
+	if isAPI {
+		reqInfo := requestInfo{loginAddress, accName, sessionToken, w, r}
+		ctx = context.WithValue(ctx, requestInfoCtxKey, reqInfo)
+		apiHandler.ServeHTTP(w, r.WithContext(ctx))
+		return
 	}
 
 	switch r.URL.Path {
-	case "/":
-		switch r.Method {
-		default:
-			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
+	case "/export/mail-export-maildir.tgz", "/export/mail-export-maildir.zip", "/export/mail-export-mbox.tgz", "/export/mail-export-mbox.zip":
+		if r.Method != "POST" {
+			http.Error(w, "405 - method not allowed - use post", http.StatusMethodNotAllowed)
 			return
-		case "GET", "HEAD":
 		}
 
-		webaccountFile.Serve(ctx, log, w, r)
-		return
-
-	case "/mail-export-maildir.tgz", "/mail-export-maildir.zip", "/mail-export-mbox.tgz", "/mail-export-mbox.zip":
 		maildir := strings.Contains(r.URL.Path, "maildir")
 		tgz := strings.Contains(r.URL.Path, ".tgz")
 
@@ -330,11 +318,6 @@ func Handle(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(ImportProgress{Token: token})
 
 	default:
-		if strings.HasPrefix(r.URL.Path, "/api/") {
-			ctx = context.WithValue(ctx, authCtxKey, accName)
-			accountSherpaHandler.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
 		http.NotFound(w, r)
 	}
 }
@@ -347,7 +330,54 @@ type ImportProgress struct {
 
 type ctxKey string
 
-var authCtxKey ctxKey = "account"
+var requestInfoCtxKey ctxKey = "requestInfo"
+
+type requestInfo struct {
+	LoginAddress string
+	AccountName  string
+	SessionToken store.SessionToken
+	Response     http.ResponseWriter
+	Request      *http.Request // For Proto and TLS connection state during message submit.
+}
+
+// LoginPrep returns a login token, and also sets it as cookie. Both must be
+// present in the call to Login.
+func (w Account) LoginPrep(ctx context.Context) string {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	var data [8]byte
+	_, err := cryptorand.Read(data[:])
+	xcheckf(ctx, err, "generate token")
+	loginToken := base64.RawURLEncoding.EncodeToString(data[:])
+
+	webauth.LoginPrep(ctx, log, "webaccount", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, loginToken)
+
+	return loginToken
+}
+
+// Login returns a session token for the credentials, or fails with error code
+// "user:badLogin". Call LoginPrep to get a loginToken.
+func (w Account) Login(ctx context.Context, loginToken, username, password string) store.CSRFToken {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	csrfToken, err := webauth.Login(ctx, log, webauth.Accounts, "webaccount", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, loginToken, username, password)
+	if _, ok := err.(*sherpa.Error); ok {
+		panic(err)
+	}
+	xcheckf(ctx, err, "login")
+	return csrfToken
+}
+
+// Logout invalidates the session token.
+func (w Account) Logout(ctx context.Context) {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	err := webauth.Logout(ctx, log, webauth.Accounts, "webaccount", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, reqInfo.AccountName, reqInfo.SessionToken)
+	xcheckf(ctx, err, "logout")
+}
 
 // SetPassword saves a new password for the account, invalidating the previous password.
 // Sessions are not interrupted, and will keep working. New login attempts must use the new password.
@@ -357,15 +387,25 @@ func (Account) SetPassword(ctx context.Context, password string) {
 	if len(password) < 8 {
 		panic(&sherpa.Error{Code: "user:error", Message: "password must be at least 8 characters"})
 	}
-	accountName := ctx.Value(authCtxKey).(string)
-	acc, err := store.OpenAccount(log, accountName)
+
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc, err := store.OpenAccount(log, reqInfo.AccountName)
 	xcheckf(ctx, err, "open account")
 	defer func() {
 		err := acc.Close()
 		log.Check(err, "closing account")
 	}()
+
+	// Retrieve session, resetting password invalidates it.
+	ls, err := store.SessionUse(ctx, log, reqInfo.AccountName, reqInfo.SessionToken, "")
+	xcheckf(ctx, err, "get session")
+
 	err = acc.SetPassword(log, password)
 	xcheckf(ctx, err, "setting password")
+
+	// Session has been invalidated. Add it again.
+	err = store.SessionAddToken(ctx, log, &ls)
+	xcheckf(ctx, err, "restoring session after password reset")
 }
 
 // Account returns information about the account: full name, the default domain,
@@ -373,8 +413,8 @@ func (Account) SetPassword(ctx context.Context, password string) {
 // domain). todo: replace with a function that returns the whole account, when
 // sherpadoc understands unnamed struct fields.
 func (Account) Account(ctx context.Context) (string, dns.Domain, map[string]config.Destination) {
-	accountName := ctx.Value(authCtxKey).(string)
-	accConf, ok := mox.Conf.Account(accountName)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	accConf, ok := mox.Conf.Account(reqInfo.AccountName)
 	if !ok {
 		xcheckf(ctx, errors.New("not found"), "looking up account")
 	}
@@ -382,12 +422,12 @@ func (Account) Account(ctx context.Context) (string, dns.Domain, map[string]conf
 }
 
 func (Account) AccountSaveFullName(ctx context.Context, fullName string) {
-	accountName := ctx.Value(authCtxKey).(string)
-	_, ok := mox.Conf.Account(accountName)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	_, ok := mox.Conf.Account(reqInfo.AccountName)
 	if !ok {
 		xcheckf(ctx, errors.New("not found"), "looking up account")
 	}
-	err := mox.AccountFullNameSave(ctx, accountName, fullName)
+	err := mox.AccountFullNameSave(ctx, reqInfo.AccountName, fullName)
 	xcheckf(ctx, err, "saving account full name")
 }
 
@@ -395,8 +435,8 @@ func (Account) AccountSaveFullName(ctx context.Context, fullName string) {
 // OldDest is compared against the current destination. If it does not match, an
 // error is returned. Otherwise newDest is saved and the configuration reloaded.
 func (Account) DestinationSave(ctx context.Context, destName string, oldDest, newDest config.Destination) {
-	accountName := ctx.Value(authCtxKey).(string)
-	accConf, ok := mox.Conf.Account(accountName)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	accConf, ok := mox.Conf.Account(reqInfo.AccountName)
 	if !ok {
 		xcheckf(ctx, errors.New("not found"), "looking up account")
 	}
@@ -414,7 +454,7 @@ func (Account) DestinationSave(ctx context.Context, destName string, oldDest, ne
 	newDest.HostTLSReports = curDest.HostTLSReports
 	newDest.DomainTLSReports = curDest.DomainTLSReports
 
-	err := mox.DestinationSave(ctx, accountName, destName, newDest)
+	err := mox.DestinationSave(ctx, reqInfo.AccountName, destName, newDest)
 	xcheckf(ctx, err, "saving destination")
 }
 

@@ -691,8 +691,29 @@ type DiskUsage struct {
 	MessageSize int64 // Sum of all messages, for quota accounting.
 }
 
+// SessionToken and CSRFToken are types to prevent mixing them up.
+// Base64 raw url encoded.
+type SessionToken string
+type CSRFToken string
+
+// LoginSession represents a login session. We keep a limited number of sessions
+// for a user, removing the oldest session when a new one is created.
+type LoginSession struct {
+	ID                 int64
+	Created            time.Time `bstore:"nonzero,default now"` // Of original login.
+	Expires            time.Time `bstore:"nonzero"`             // Extended each time it is used.
+	SessionTokenBinary [16]byte  `bstore:"nonzero"`             // Stored in cookie, like "webmailsession" or "webaccountsession".
+	CSRFTokenBinary    [16]byte  // For API requests, in "x-mox-csrf" header.
+	AccountName        string    `bstore:"nonzero"`
+	LoginAddress       string    `bstore:"nonzero"`
+
+	// Set when loading from database.
+	sessionToken SessionToken
+	csrfToken    CSRFToken
+}
+
 // Types stored in DB.
-var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}, SyncState{}, Upgrade{}, RecipientDomainTLS{}, DiskUsage{}}
+var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}, SyncState{}, Upgrade{}, RecipientDomainTLS{}, DiskUsage{}, LoginSession{}}
 
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.
 type Account struct {
@@ -1489,7 +1510,8 @@ func (a *Account) SetPassword(log mlog.Log, password string) error {
 		if err := tx.Insert(&pw); err != nil {
 			return fmt.Errorf("inserting new password: %v", err)
 		}
-		return nil
+
+		return sessionRemoveAll(context.TODO(), log, tx, a.Name)
 	})
 	if err == nil {
 		log.Info("new password set for account", slog.String("account", a.Name))

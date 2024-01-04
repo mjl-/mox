@@ -3,6 +3,51 @@
 	"Docs": "Admin exports web API functions for the admin web interface. All its methods are\nexported under api/. Function calls require valid HTTP Authentication\ncredentials of a user.",
 	"Functions": [
 		{
+			"Name": "LoginPrep",
+			"Docs": "LoginPrep returns a login token, and also sets it as cookie. Both must be\npresent in the call to Login.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Login",
+			"Docs": "Login returns a session token for the credentials, or fails with error code\n\"user:badLogin\". Call LoginPrep to get a loginToken.",
+			"Params": [
+				{
+					"Name": "loginToken",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "password",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"CSRFToken"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Logout",
+			"Docs": "Logout invalidates the session token.",
+			"Params": [],
+			"Returns": []
+		},
+		{
 			"Name": "CheckDomain",
 			"Docs": "CheckDomain checks the configuration for the domain, such as MX, SMTP STARTTLS,\nSPF, DKIM, DMARC, TLSRPT, MTASTS, autoconfig, autodiscover.",
 			"Params": [
@@ -4159,6 +4204,11 @@
 	],
 	"Ints": [],
 	"Strings": [
+		{
+			"Name": "CSRFToken",
+			"Docs": "",
+			"Values": null
+		},
 		{
 			"Name": "DMARCPolicy",
 			"Docs": "Policy as used in DMARC DNS record for \"p=\" or \"sp=\".",

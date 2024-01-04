@@ -2,6 +2,7 @@ package webmail
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -43,13 +44,16 @@ import (
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
+	"github.com/mjl-/mox/webauth"
 )
 
 //go:embed api.json
 var webmailapiJSON []byte
 
 type Webmail struct {
-	maxMessageSize int64 // From listener.
+	maxMessageSize int64  // From listener.
+	cookiePath     string // From listener.
+	isForwarded    bool   // From listener, whether we look at X-Forwarded-* headers.
 }
 
 func mustParseAPI(api string, buf []byte) (doc sherpadoc.Section) {
@@ -64,8 +68,8 @@ var webmailDoc = mustParseAPI("webmail", webmailapiJSON)
 
 var sherpaHandlerOpts *sherpa.HandlerOpts
 
-func makeSherpaHandler(maxMessageSize int64) (http.Handler, error) {
-	return sherpa.NewHandler("/api/", moxvar.Version, Webmail{maxMessageSize}, &webmailDoc, sherpaHandlerOpts)
+func makeSherpaHandler(maxMessageSize int64, cookiePath string, isForwarded bool) (http.Handler, error) {
+	return sherpa.NewHandler("/api/", moxvar.Version, Webmail{maxMessageSize, cookiePath, isForwarded}, &webmailDoc, sherpaHandlerOpts)
 }
 
 func init() {
@@ -74,12 +78,51 @@ func init() {
 		pkglog.Fatalx("creating sherpa prometheus collector", err)
 	}
 
-	sherpaHandlerOpts = &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none"}
+	sherpaHandlerOpts = &sherpa.HandlerOpts{Collector: collector, AdjustFunctionNames: "none", NoCORS: true}
 	// Just to validate.
-	_, err = makeSherpaHandler(0)
+	_, err = makeSherpaHandler(0, "", false)
 	if err != nil {
 		pkglog.Fatalx("sherpa handler", err)
 	}
+}
+
+// LoginPrep returns a login token, and also sets it as cookie. Both must be
+// present in the call to Login.
+func (w Webmail) LoginPrep(ctx context.Context) string {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	var data [8]byte
+	_, err := cryptorand.Read(data[:])
+	xcheckf(ctx, err, "generate token")
+	loginToken := base64.RawURLEncoding.EncodeToString(data[:])
+
+	webauth.LoginPrep(ctx, log, "webmail", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, loginToken)
+
+	return loginToken
+}
+
+// Login returns a session token for the credentials, or fails with error code
+// "user:badLogin". Call LoginPrep to get a loginToken.
+func (w Webmail) Login(ctx context.Context, loginToken, username, password string) store.CSRFToken {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	csrfToken, err := webauth.Login(ctx, log, webauth.Accounts, "webmail", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, loginToken, username, password)
+	if _, ok := err.(*sherpa.Error); ok {
+		panic(err)
+	}
+	xcheckf(ctx, err, "login")
+	return csrfToken
+}
+
+// Logout invalidates the session token.
+func (w Webmail) Logout(ctx context.Context) {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	err := webauth.Logout(ctx, log, webauth.Accounts, "webmail", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, reqInfo.AccountName, reqInfo.SessionToken)
+	xcheckf(ctx, err, "logout")
 }
 
 // Token returns a token to use for an SSE connection. A token can only be used for
@@ -87,7 +130,7 @@ func init() {
 // with at most 10 unused tokens (the most recently created) per account.
 func (Webmail) Token(ctx context.Context) string {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	return sseTokens.xgenerate(ctx, reqInfo.AccountName, reqInfo.LoginAddress)
+	return sseTokens.xgenerate(ctx, reqInfo.AccountName, reqInfo.LoginAddress, reqInfo.SessionToken)
 }
 
 // Requests sends a new request for an open SSE connection. Any currently active

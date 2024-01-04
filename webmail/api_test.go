@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"testing"
+
+	"golang.org/x/exp/slices"
 
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
@@ -19,7 +22,7 @@ import (
 	"github.com/mjl-/mox/store"
 )
 
-func tneedError(t *testing.T, fn func()) {
+func tneedErrorCode(t *testing.T, code string, fn func()) {
 	t.Helper()
 	defer func() {
 		t.Helper()
@@ -30,14 +33,18 @@ func tneedError(t *testing.T, fn func()) {
 		}
 		if err, ok := x.(*sherpa.Error); !ok {
 			debug.PrintStack()
-			t.Fatalf("expected sherpa user error, saw %#v", x)
-		} else if err.Code != "user:error" {
+			t.Fatalf("expected sherpa error, saw %#v", x)
+		} else if err.Code != code {
 			debug.PrintStack()
-			t.Fatalf("expected sherpa user error, saw other sherpa error %#v", err)
+			t.Fatalf("expected sherpa error code %q, saw other sherpa error %#v", code, err)
 		}
 	}()
 
 	fn()
+}
+
+func tneedError(t *testing.T, fn func()) {
+	tneedErrorCode(t, "user:error", fn)
 }
 
 // Test API calls.
@@ -77,8 +84,55 @@ func TestAPI(t *testing.T) {
 		tdeliver(t, acc, tm)
 	}
 
-	api := Webmail{maxMessageSize: 1024 * 1024}
-	reqInfo := requestInfo{"mjl@mox.example", "mjl", &http.Request{}}
+	api := Webmail{maxMessageSize: 1024 * 1024, cookiePath: "/webmail/"}
+
+	// Test login, and rate limiter.
+	loginReqInfo := requestInfo{"mjl@mox.example", "mjl", "", httptest.NewRecorder(), &http.Request{RemoteAddr: "1.1.1.1:1234"}}
+	loginctx := context.WithValue(ctxbg, requestInfoCtxKey, loginReqInfo)
+
+	// Missing login token.
+	tneedErrorCode(t, "user:error", func() { api.Login(loginctx, "", "mjl@mox.example", "test1234") })
+
+	// Login with loginToken.
+	loginCookie := &http.Cookie{Name: "webmaillogin"}
+	loginCookie.Value = api.LoginPrep(loginctx)
+	loginReqInfo.Request.Header = http.Header{"Cookie": []string{loginCookie.String()}}
+
+	testLogin := func(username, password string, expErrCodes ...string) {
+		t.Helper()
+
+		defer func() {
+			x := recover()
+			expErr := len(expErrCodes) > 0
+			if (x != nil) != expErr {
+				t.Fatalf("got %v, expected codes %v", x, expErrCodes)
+			}
+			if x == nil {
+				return
+			} else if err, ok := x.(*sherpa.Error); !ok {
+				t.Fatalf("got %#v, expected at most *sherpa.Error", x)
+			} else if !slices.Contains(expErrCodes, err.Code) {
+				t.Fatalf("got error code %q, expected %v", err.Code, expErrCodes)
+			}
+		}()
+
+		api.Login(loginctx, loginCookie.Value, username, password)
+	}
+	testLogin("mjl@mox.example", "test1234")
+	testLogin("mjl@mox.example", "bad", "user:loginFailed")
+	testLogin("nouser@mox.example", "test1234", "user:loginFailed")
+	testLogin("nouser@bad.example", "test1234", "user:loginFailed")
+	for i := 3; i < 10; i++ {
+		testLogin("bad@bad.example", "test1234", "user:loginFailed")
+	}
+	// Ensure rate limiter is triggered, also for slow tests.
+	for i := 0; i < 10; i++ {
+		testLogin("bad@bad.example", "test1234", "user:loginFailed", "user:error")
+	}
+	testLogin("bad@bad.example", "test1234", "user:error")
+
+	// Context with different IP, for clear rate limit history.
+	reqInfo := requestInfo{"mjl@mox.example", "mjl", "", nil, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
 	ctx := context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	// FlagsAdd

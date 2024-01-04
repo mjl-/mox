@@ -5,12 +5,12 @@ go 1.20
 require (
 	github.com/mjl-/adns v0.0.0-20231109160910-82839fe3e6ae
 	github.com/mjl-/autocert v0.0.0-20231013072455-c361ae2e20a6
-	github.com/mjl-/bstore v0.0.3
+	github.com/mjl-/bstore v0.0.4
 	github.com/mjl-/sconf v0.0.5
-	github.com/mjl-/sherpa v0.6.6
+	github.com/mjl-/sherpa v0.6.7
 	github.com/mjl-/sherpadoc v0.0.12
 	github.com/mjl-/sherpaprom v0.0.2
-	github.com/mjl-/sherpats v0.0.4
+	github.com/mjl-/sherpats v0.0.5
 	github.com/prometheus/client_golang v1.17.0
 	go.etcd.io/bbolt v1.3.8
 	golang.org/x/crypto v0.15.0

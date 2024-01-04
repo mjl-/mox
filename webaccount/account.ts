@@ -4,12 +4,121 @@
 declare let page: HTMLElement
 declare let moxversion: string
 
-const client = new api.Client()
+const login = async (reason: string) => {
+	return new Promise<string>((resolve: (v: string) => void, _) => {
+		const origFocus = document.activeElement
+		let reasonElem: HTMLElement
+		let fieldset: HTMLFieldSetElement
+		let username: HTMLInputElement
+		let password: HTMLInputElement
+
+		const root = dom.div(
+			style({position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '1', animation: 'fadein .15s ease-in'}),
+			dom.div(
+				reasonElem=reason ? dom.div(style({marginBottom: '2ex', textAlign: 'center'}), reason) : dom.div(),
+				dom.div(
+					style({backgroundColor: 'white', borderRadius: '.25em', padding: '1em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto', marginBottom: '20vh'}),
+					dom.form(
+						async function submit(e: SubmitEvent) {
+							e.preventDefault()
+							e.stopPropagation()
+
+							reasonElem.remove()
+
+							try {
+								fieldset.disabled = true
+								const loginToken = await client.LoginPrep()
+								const token = await client.Login(loginToken, username.value, password.value)
+								try {
+									window.localStorage.setItem('webaccountaddress', username.value)
+									window.localStorage.setItem('webaccountcsrftoken', token)
+								} catch (err) {
+									console.log('saving csrf token in localStorage', err)
+								}
+								root.remove()
+								if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
+									origFocus.focus()
+								}
+								resolve(token)
+							} catch (err) {
+								console.log('login error', err)
+								window.alert('Error: ' + errmsg(err))
+							} finally {
+								fieldset.disabled = false
+							}
+						},
+						fieldset=dom.fieldset(
+							dom.h1('Account'),
+							dom.label(
+								style({display: 'block', marginBottom: '2ex'}),
+								dom.div('Email address', style({marginBottom: '.5ex'})),
+								username=dom.input(attr.required(''), attr.placeholder('jane@example.org')),
+							),
+							dom.label(
+								style({display: 'block', marginBottom: '2ex'}),
+								dom.div('Password', style({marginBottom: '.5ex'})),
+								password=dom.input(attr.type('password'), attr.required('')),
+							),
+							dom.div(
+								style({textAlign: 'center'}),
+								dom.submitbutton('Login'),
+							),
+						),
+					)
+				)
+			)
+		)
+		document.body.appendChild(root)
+		username.focus()
+	})
+}
+
+const localStorageGet = (k: string): string | null => {
+	try {
+		return window.localStorage.getItem(k)
+	} catch (err) {
+		return null
+	}
+}
+
+const localStorageRemove = (k: string) => {
+	try {
+		return window.localStorage.removeItem(k)
+	} catch (err) {
+	}
+}
+
+const client = new api.Client().withOptions({csrfHeader: 'x-mox-csrf', login: login}).withAuthToken(localStorageGet('webaccountcsrftoken') || '')
 
 const link = (href: string, anchorOpt: string) => dom.a(attr.href(href), attr.rel('noopener noreferrer'), anchorOpt || href)
 
 const crumblink = (text: string, link: string) => dom.a(text, attr.href(link))
-const crumbs = (...l: ElemArg[]) => [dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])), dom.br()]
+const crumbs = (...l: ElemArg[]) => [
+	dom.div(
+		style({float: 'right'}),
+		localStorageGet('webaccountaddress') || '(unknown)',
+		' ',
+		dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e: MouseEvent) {
+			const b = e.target! as HTMLButtonElement
+			try {
+				b.disabled = true
+				await client.Logout()
+			} catch (err) {
+				console.log('logout', err)
+				window.alert('Error: ' + errmsg(err))
+			} finally {
+				b.disabled = false
+			}
+
+			localStorageRemove('webaccountaddress')
+			localStorageRemove('webaccountcsrftoken')
+			// Reload so all state is cleared from memory.
+			window.location.reload()
+		}),
+	),
+	dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])),
+	dom.br()
+]
 
 const errmsg = (err: unknown) => ''+((err as any).message || '(no error message)')
 
@@ -175,6 +284,14 @@ const index = async () => {
 		})
 	}
 
+	const exportForm = (filename: string) => {
+		return dom.form(
+			attr.target('_blank'), attr.method('POST'), attr.action('export/'+filename),
+			dom.input(attr.type('hidden'), attr.name('csrf'), attr.value(localStorageGet('webaccountcsrftoken') || '')),
+			dom.submitbutton('Export'),
+		)
+	}
+
 	dom._kids(page,
 		crumbs('Mox Account'),
 		dom.p('NOTE: Not all account settings can be configured through these pages yet. See the configuration file for more options.'),
@@ -291,11 +408,23 @@ const index = async () => {
 		dom.br(),
 		dom.h2('Export'),
 		dom.p('Export all messages in all mailboxes. In maildir or mbox format, as .zip or .tgz file.'),
-		dom.ul(
-			dom.li(dom.a('mail-export-maildir.tgz', attr.href('mail-export-maildir.tgz'))),
-			dom.li(dom.a('mail-export-maildir.zip', attr.href('mail-export-maildir.zip'))),
-			dom.li(dom.a('mail-export-mbox.tgz', attr.href('mail-export-mbox.tgz'))),
-			dom.li(dom.a('mail-export-mbox.zip', attr.href('mail-export-mbox.zip'))),
+		dom.table(dom._class('slim'),
+			dom.tr(
+				dom.td('Maildirs in .tgz'),
+				dom.td(exportForm('mail-export-maildir.tgz')),
+			),
+			dom.tr(
+				dom.td('Maildirs in .zip'),
+				dom.td(exportForm('mail-export-maildir.zip')),
+			),
+			dom.tr(
+				dom.td('Mbox files in .tgz'),
+				dom.td(exportForm('mail-export-mbox.tgz')),
+			),
+			dom.tr(
+				dom.td('Mbox files in .zip'),
+				dom.td(exportForm('mail-export-mbox.zip')),
+			),
 		),
 		dom.br(),
 		dom.h2('Import'),
@@ -318,6 +447,7 @@ const index = async () => {
 
 						const xhr = new window.XMLHttpRequest()
 						xhr.open('POST', 'import', true)
+						xhr.setRequestHeader('x-mox-csrf', localStorageGet('webaccountcsrftoken') || '')
 						xhr.upload.addEventListener('progress', (e) => {
 							if (!e.lengthComputable) {
 								return
