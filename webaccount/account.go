@@ -306,10 +306,14 @@ func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r 
 			http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		token, err := importStart(log, accName, tmpf, skipMailboxPrefix)
+		token, isUserError, err := importStart(log, accName, tmpf, skipMailboxPrefix)
 		if err != nil {
-			log.Errorx("starting import", err)
-			http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
+			log.Errorx("starting import", err, slog.Bool("usererror", isUserError))
+			if isUserError {
+				http.Error(w, "400 - bad request - "+err.Error(), http.StatusBadRequest)
+			} else {
+				http.Error(w, "500 - internal server error - "+err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 		tmpf = nil // importStart is now responsible for cleanup.

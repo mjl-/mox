@@ -458,7 +458,7 @@ const index = async () => {
 						xhr.addEventListener('load', () => {
 							console.log('upload done', {xhr: xhr, status: xhr.status})
 							if (xhr.status !== 200) {
-								reject({message: 'status '+xhr.status})
+								reject({message: xhr.status === 400 || xhr.status === 500 ? xhr.responseText : 'status '+xhr.status})
 								return
 							}
 							let resp: api.ImportProgress

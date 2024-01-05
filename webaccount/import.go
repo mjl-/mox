@@ -200,7 +200,7 @@ type importStep struct {
 
 // importStart prepare the import and launches the goroutine to actually import.
 // importStart is responsible for closing f and removing f.
-func importStart(log mlog.Log, accName string, f *os.File, skipMailboxPrefix string) (string, error) {
+func importStart(log mlog.Log, accName string, f *os.File, skipMailboxPrefix string) (string, bool, error) {
 	defer func() {
 		if f != nil {
 			store.CloseRemoveTempFile(log, f, "upload for import")
@@ -209,12 +209,12 @@ func importStart(log mlog.Log, accName string, f *os.File, skipMailboxPrefix str
 
 	buf := make([]byte, 16)
 	if _, err := cryptrand.Read(buf); err != nil {
-		return "", err
+		return "", false, err
 	}
 	token := fmt.Sprintf("%x", buf)
 
 	if _, err := f.Seek(0, 0); err != nil {
-		return "", fmt.Errorf("seek to start of file: %v", err)
+		return "", false, fmt.Errorf("seek to start of file: %v", err)
 	}
 
 	// Recognize file format.
@@ -223,12 +223,12 @@ func importStart(log mlog.Log, accName string, f *os.File, skipMailboxPrefix str
 	magicGzip := []byte{0x1f, 0x8b}
 	magic := make([]byte, 4)
 	if _, err := f.ReadAt(magic, 0); err != nil {
-		return "", fmt.Errorf("detecting file format: %v", err)
+		return "", true, fmt.Errorf("detecting file format: %v", err)
 	}
 	if bytes.Equal(magic, magicZip) {
 		iszip = true
 	} else if !bytes.Equal(magic[:2], magicGzip) {
-		return "", fmt.Errorf("file is not a zip or gzip file")
+		return "", true, fmt.Errorf("file is not a zip or gzip file")
 	}
 
 	var zr *zip.Reader
@@ -236,23 +236,23 @@ func importStart(log mlog.Log, accName string, f *os.File, skipMailboxPrefix str
 	if iszip {
 		fi, err := f.Stat()
 		if err != nil {
-			return "", fmt.Errorf("stat temporary import zip file: %v", err)
+			return "", false, fmt.Errorf("stat temporary import zip file: %v", err)
 		}
 		zr, err = zip.NewReader(f, fi.Size())
 		if err != nil {
-			return "", fmt.Errorf("opening zip file: %v", err)
+			return "", true, fmt.Errorf("opening zip file: %v", err)
 		}
 	} else {
 		gzr, err := gzip.NewReader(f)
 		if err != nil {
-			return "", fmt.Errorf("gunzip: %v", err)
+			return "", true, fmt.Errorf("gunzip: %v", err)
 		}
 		tr = tar.NewReader(gzr)
 	}
 
 	acc, err := store.OpenAccount(log, accName)
 	if err != nil {
-		return "", fmt.Errorf("open acount: %v", err)
+		return "", false, fmt.Errorf("open acount: %v", err)
 	}
 	acc.Lock() // Not using WithWLock because importMessage is responsible for unlocking.
 
@@ -261,7 +261,7 @@ func importStart(log mlog.Log, accName string, f *os.File, skipMailboxPrefix str
 		acc.Unlock()
 		xerr := acc.Close()
 		log.Check(xerr, "closing account")
-		return "", fmt.Errorf("start transaction: %v", err)
+		return "", false, fmt.Errorf("start transaction: %v", err)
 	}
 
 	// Ensure token is registered before returning, with context that can be canceled.
@@ -272,7 +272,7 @@ func importStart(log mlog.Log, accName string, f *os.File, skipMailboxPrefix str
 	go importMessages(ctx, log.WithCid(mox.Cid()), token, acc, tx, zr, tr, f, skipMailboxPrefix)
 	f = nil // importMessages is now responsible for closing and removing.
 
-	return token, nil
+	return token, false, nil
 }
 
 // importMessages imports the messages from zip/tgz file f.
