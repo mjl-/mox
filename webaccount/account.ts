@@ -348,7 +348,7 @@ const index = async () => {
 					style({display: 'inline-block'}),
 					'New password',
 					dom.br(),
-					password1=dom.input(attr.type('password'), attr.required(''), function focus() {
+					password1=dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
 						passwordHint.style.display = ''
 					}),
 				),
@@ -357,7 +357,7 @@ const index = async () => {
 					style({display: 'inline-block'}),
 					'New password repeat',
 					dom.br(),
-					password2=dom.input(attr.type('password'), attr.required('')),
+					password2=dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required('')),
 				),
 				' ',
 				dom.submitbutton('Change password'),

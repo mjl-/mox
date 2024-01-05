@@ -757,7 +757,7 @@ const account = async (name: string) => {
 					style({display: 'inline-block'}),
 					'New password',
 					dom.br(),
-					password=dom.input(attr.type('password'), attr.required(''), function focus() {
+					password=dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
 						passwordHint.style.display = ''
 					}),
 				),

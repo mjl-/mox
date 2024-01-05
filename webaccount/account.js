@@ -217,6 +217,7 @@ const [dom, style, attr, prop] = (function () {
 		max: (s) => _attr('max', s),
 		action: (s) => _attr('action', s),
 		method: (s) => _attr('method', s),
+		autocomplete: (s) => _attr('autocomplete', s),
 	};
 	const style = (x) => { return { _styles: x }; };
 	const prop = (x) => { return { _props: x }; };
@@ -913,9 +914,9 @@ const index = async () => {
 		finally {
 			fullNameFieldset.disabled = false;
 		}
-	}), dom.br(), dom.h2('Addresses'), dom.ul(Object.entries(destinations).sort().map(t => dom.li(dom.a(t[0], attr.href('#destinations/' + t[0])), t[0].startsWith('@') ? ' (catchall)' : []))), dom.br(), dom.h2('Change password'), passwordForm = dom.form(passwordFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'New password', dom.br(), password1 = dom.input(attr.type('password'), attr.required(''), function focus() {
+	}), dom.br(), dom.h2('Addresses'), dom.ul(Object.entries(destinations).sort().map(t => dom.li(dom.a(t[0], attr.href('#destinations/' + t[0])), t[0].startsWith('@') ? ' (catchall)' : []))), dom.br(), dom.h2('Change password'), passwordForm = dom.form(passwordFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'New password', dom.br(), password1 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
 		passwordHint.style.display = '';
-	})), ' ', dom.label(style({ display: 'inline-block' }), 'New password repeat', dom.br(), password2 = dom.input(attr.type('password'), attr.required(''))), ' ', dom.submitbutton('Change password')), passwordHint = dom.div(style({ display: 'none', marginTop: '.5ex' }), dom.clickbutton('Generate random password', function click(e) {
+	})), ' ', dom.label(style({ display: 'inline-block' }), 'New password repeat', dom.br(), password2 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''))), ' ', dom.submitbutton('Change password')), passwordHint = dom.div(style({ display: 'none', marginTop: '.5ex' }), dom.clickbutton('Generate random password', function click(e) {
 		e.preventDefault();
 		let b = new Uint8Array(1);
 		let s = '';

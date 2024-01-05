@@ -217,6 +217,7 @@ const [dom, style, attr, prop] = (function () {
 		max: (s) => _attr('max', s),
 		action: (s) => _attr('action', s),
 		method: (s) => _attr('method', s),
+		autocomplete: (s) => _attr('autocomplete', s),
 	};
 	const style = (x) => { return { _styles: x }; };
 	const prop = (x) => { return { _props: x }; };
@@ -1850,7 +1851,7 @@ const account = async (name) => {
 		finally {
 			fieldsetLimits.disabled = false;
 		}
-	}), dom.br(), dom.h2('Set new password'), formPassword = dom.form(fieldsetPassword = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'New password', dom.br(), password = dom.input(attr.type('password'), attr.required(''), function focus() {
+	}), dom.br(), dom.h2('Set new password'), formPassword = dom.form(fieldsetPassword = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'New password', dom.br(), password = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
 		passwordHint.style.display = '';
 	})), ' ', dom.submitbutton('Change password')), passwordHint = dom.div(style({ display: 'none', marginTop: '.5ex' }), dom.clickbutton('Generate random password', function click(e) {
 		e.preventDefault();

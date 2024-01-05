@@ -213,6 +213,7 @@ const attr = {
 	max: (s: string) => _attr('max', s),
 	action: (s: string) => _attr('action', s),
 	method: (s: string) => _attr('method', s),
+	autocomplete: (s: string) => _attr('autocomplete', s),
 }
 const style = (x: {[k: string]: string | number}) => { return {_styles: x}}
 const prop = (x: {[k: string]: any}) => { return {_props: x}}
