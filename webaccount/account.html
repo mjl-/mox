@@ -26,6 +26,9 @@ fieldset { border: 0; }
 #page.loading { opacity: 0.1; animation: fadeout 1s ease-out; }
 @keyframes fadein { 0% { opacity: 0 } 100% { opacity: 1 } }
 @keyframes fadeout { 0% { opacity: 1 } 100% { opacity: 0.1 } }
+.autosize { display: inline-grid; max-width: 90vw; }
+.autosize.input { grid-area: 1 / 2; }
+.autosize::after { content: attr(data-value); margin-right: 1em; line-height: 0; visibility: hidden; white-space: pre-wrap; overflow-x: hidden; }
 		</style>
 	</head>
 	<body>

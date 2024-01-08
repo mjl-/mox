@@ -9,6 +9,7 @@ const login = async (reason: string) => {
 		const origFocus = document.activeElement
 		let reasonElem: HTMLElement
 		let fieldset: HTMLFieldSetElement
+		let autosize: HTMLElement
 		let username: HTMLInputElement
 		let password: HTMLInputElement
 
@@ -52,7 +53,14 @@ const login = async (reason: string) => {
 							dom.label(
 								style({display: 'block', marginBottom: '2ex'}),
 								dom.div('Email address', style({marginBottom: '.5ex'})),
-								username=dom.input(attr.required(''), attr.placeholder('jane@example.org')),
+								autosize=dom.span(dom._class('autosize'),
+									username=dom.input(
+										attr.required(''),
+										attr.placeholder('jane@example.org'),
+										function change() { autosize.dataset.value = username.value },
+										function input() { autosize.dataset.value = username.value },
+									),
+								),
 							),
 							dom.label(
 								style({display: 'block', marginBottom: '2ex'}),
