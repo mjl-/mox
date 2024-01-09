@@ -528,6 +528,13 @@ func printClientConfig(d dns.Domain) {
 	for _, e := range cc.Entries {
 		fmt.Printf("%-20s %-30s %5d %-15s %s\n", e.Protocol, e.Host, e.Port, e.Listener, e.Note)
 	}
+	fmt.Printf(`
+To prevent authentication mechanism downgrade attempts that may result in
+clients sending plain text passwords to a MitM, clients should always be
+explicitly configured with the most secure authentication mechanism supported,
+the first of: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1,
+CRAM-MD5.
+`)
 }
 
 func cmdConfigTest(c *cmd) {

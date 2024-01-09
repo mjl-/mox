@@ -852,7 +852,7 @@ const domain = async (d: string) => {
 		),
 		dom.br(),
 		dom.h2('Client configuration'),
-		dom.div('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password.'),
+		dom.p('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password. ', dom.span('Explicitly configure', attr.title('To prevent authentication mechanism downgrade attempts that may result in clients sending plain text passwords to a MitM.')), ' the first supported authentication mechanism: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5.'),
 		dom.table(
 			dom.thead(
 				dom.tr(
