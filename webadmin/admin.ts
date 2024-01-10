@@ -118,7 +118,7 @@ const errmsg = (err: unknown) => ''+((err as any).message || '(no error message)
 
 const footer = dom.div(
 	style({marginTop: '6ex', opacity: 0.75}),
-	link('https://github.com/mjl-/mox', 'mox'),
+	link('https://www.xmox.nl', 'mox'),
 	' ',
 	moxversion,
 )

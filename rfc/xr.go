@@ -165,10 +165,10 @@ for (const a of document.querySelectorAll('a')) {
 			continue
 		}
 		t := strings.Split(line, "\t")
-		if len(t) != 2 {
+		if len(t) != 4 {
 			continue
 		}
-		topics[topic] = append(topics[topic], rfc{strings.TrimSpace(t[0]), t[1]})
+		topics[topic] = append(topics[topic], rfc{strings.TrimSpace(t[0]), t[3]})
 	}
 	for _, l := range topics {
 		sort.Slice(l, func(i, j int) bool {

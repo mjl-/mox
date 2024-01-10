@@ -12,6 +12,7 @@ require (
 	github.com/mjl-/sherpaprom v0.0.2
 	github.com/mjl-/sherpats v0.0.5
 	github.com/prometheus/client_golang v1.18.0
+	github.com/russross/blackfriday/v2 v2.1.0
 	go.etcd.io/bbolt v1.3.8
 	golang.org/x/crypto v0.17.0
 	golang.org/x/exp v0.0.0-20240103183307-be819d1f06fc

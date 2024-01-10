@@ -1,5 +1,7 @@
 Mox is a modern full-featured open source secure mail server for low-maintenance self-hosted email.
 
+For more details, see the mox website, https://www.xmox.nl.
+
 See Quickstart below to get started.
 
 ## Features
@@ -48,12 +50,12 @@ proton.me.
 
 The code is heavily cross-referenced with the RFCs for readability/maintainability.
 
-
 # Quickstart
 
 The easiest way to get started with serving email for your domain is to get a
-(virtual) machine dedicated to serving email, name it [host].[domain] (e.g.
-mail.example.com), login as root, and run:
+(virtual) machine dedicated to serving email, name it `[host].[domain]` (e.g.
+mail.example.com). Having a DNSSEC-verifying resolver installed, such as
+unbound, is highly recommended. Run as root:
 
 	# Create mox user and homedir (or pick another name or homedir):
 	useradd -m -d /home/mox mox
@@ -64,48 +66,62 @@ mail.example.com), login as root, and run:
 	# Generate config files for your address/domain:
 	./mox quickstart you@example.com
 
-The quickstart creates configuration files for the domain and account,
-generates an admin and account password, prints the DNS records you need to add
-and prints commands to start mox and optionally install mox as a service.
+The quickstart:
+
+- Creates configuration files mox.conf and domains.conf.
+- Adds the domain and an account for the email address to domains.conf
+- Generates an admin and account password.
+- Prints the DNS records you need to add, for the machine and domain.
+- Prints commands to start mox, and optionally install mox as a service.
 
 A machine that doesn't already run a webserver is highly recommended because
-modern email requires HTTPS, and mox currently needs it for automatic TLS.  You
-could combine mox with an existing webserver, but it requires a lot more
-configuration. If you want to serve websites on the same machine, consider using
-the webserver built into mox. It's pretty good! If you want to run an existing
-webserver on port 443/80, see "mox help quickstart".
+modern email requires HTTPS, and mox currently needs to run a webserver for
+automatic TLS with ACME.  You could combine mox with an existing webserver, but
+it requires a lot more configuration. If you want to serve websites on the same
+machine, consider using the webserver built into mox. It's pretty good! If you
+want to run an existing webserver on port 443/80, see `mox help quickstart`.
 
 After starting, you can access the admin web interface on internal IPs.
 
 # Download
 
-You can easily (cross) compile mox if you have a recent Go toolchain installed
-(see "go version", it must be >= 1.20; otherwise, see https://go.dev/dl/ or
-https://go.dev/doc/manage-install and $HOME/go/bin):
+Download a mox binary from
+https://beta.gobuilds.org/github.com/mjl-/mox@latest/linux-amd64-latest/.
+
+Symlink or rename it to "mox".
+
+The URL above always resolves to the latest release for linux/amd64 built with
+the latest Go toolchain.  See the links at the bottom of that page for binaries
+for other platforms.
+
+# Compiling
+
+You can easily (cross) compile mox yourself. You need a recent Go toolchain
+installed.  Run `go version`, it must be >= 1.20. Download the latest version
+from https://go.dev/dl/ or see https://go.dev/doc/manage-install.
+
+To download the source code of the latest release, and compile it to binary "mox":
 
 	GOBIN=$PWD CGO_ENABLED=0 go install github.com/mjl-/mox@latest
-
-Or you can download a binary built with the latest Go toolchain from
-https://beta.gobuilds.org/github.com/mjl-/mox@latest/linux-amd64-latest/, and
-symlink or rename it to "mox".
-
-Verify you have a working mox binary:
-
-	./mox version
 
 Mox only compiles for and fully works on unix systems. Mox also compiles for
 Windows, but "mox serve" does not yet work, though "mox localserve" (for a
 local test instance) and most other subcommands do. Mox does not compile for
 Plan 9.
 
-You can also run mox with docker image `r.xmox.nl/mox`, with tags like `v0.0.1`
-and `v0.0.1-go1.20.1-alpine3.17.2`, see https://r.xmox.nl/r/mox/. Though new
-docker images aren't (automatically) generated for new Go runtime/compile
-releases. See docker-compose.yml in this repository for instructions on
-starting. It is important to run with docker host networking, so mox can use
-the public IPs and has correct remote IP information for incoming connections
-(important for junk filtering and rate-limiting). Given these caveats, it's
-recommended to run mox without docker.
+# Docker
+
+Although not recommended, you can also run mox with docker image
+`r.xmox.nl/mox`, with tags like `v0.0.1` and `v0.0.1-go1.20.1-alpine3.17.2`, see
+https://r.xmox.nl/r/mox/.  See
+https://github.com/mjl-/mox/blob/main/docker-compose.yml to get started.
+
+New docker images aren't (automatically) generated for new Go runtime/compile
+releases.
+
+It is important to run with docker host networking, so mox can use the public
+IPs and has correct remote IP information for incoming connections (important
+for junk filtering and rate-limiting).
 
 # Future/development
 
@@ -115,7 +131,6 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- Improve documentation
 - Improve SMTP delivery from queue
 - Webmail improvements
 - HTTP-based API for sending messages and receiving delivery feedback
@@ -143,14 +158,15 @@ https://nlnet.nl/project/Mox/.
   new deliveries)
 - Improve support for mobile clients with extensions: IMAP URLAUTH, SMTP
   CHUNKING and BINARYMIME, IMAP CATENATE
+- Mailing list manager
 
 There are many smaller improvements to make as well, search for "todo" in the code.
 
 ## Not supported/planned
 
-But perhaps in the future...
+There is currently no plan to implement the following. Though this may
+change in the future.
 
-- Mailing list manager
 - Functioning as SMTP relay
 - POP3
 - Delivery to (unix) OS system users
@@ -175,11 +191,15 @@ make that easy.
 
 ## Where is the documentation?
 
-See all commands and help output at https://pkg.go.dev/github.com/mjl-/mox/.
+To keep mox as a project maintainable, documentation is integrated into, and
+generated from the code.
 
-See the commented example config files at
-https://pkg.go.dev/github.com/mjl-/mox/config/. They often contain enough
-documentation about a feature and how to configure it.
+A list of mox commands, and their help output, are at
+https://www.xmox.nl/commands/.
+
+Mox is configured through configuration files, and each field comes with
+documentation. See https://www.xmox.nl/config/ for config files containing all
+fields and their documentation.
 
 You can get the same information by running "mox" without arguments to list its
 subcommands and usage, and "mox help [subcommand]" for more details.
@@ -187,9 +207,8 @@ subcommands and usage, and "mox help [subcommand]" for more details.
 The example config files are printed by "mox config describe-static" and "mox
 config describe-dynamic".
 
-Mox is still in early stages, and documentation is still limited. Please create
-an issue describing what is unclear or confusing, and we'll try to improve the
-documentation.
+If you're missing some documentation, please create an issue describing what is
+unclear or confusing, and we'll try to improve the documentation.
 
 ## Is Mox affected by SMTP smuggling?
 
@@ -272,16 +291,16 @@ For bug reports, please file an issue at https://github.com/mjl-/mox/issues/new.
 ## How do I change my password?
 
 Regular users (doing IMAP/SMTP with authentication) can change their password
-at the account page, e.g. http://localhost/. Or you can set a password with "mox
+at the account page, e.g. `http://localhost/`. Or you can set a password with "mox
 setaccountpassword".
 
 The admin can change the password of any account through the admin page, at
-http://localhost/admin/ by default (leave username empty when logging in).
+`http://localhost/admin/` by default (leave username empty when logging in).
 
 The account and admin pages are served on localhost for configs created with
 the quickstart.  To access these from your browser, run
 `ssh -L 8080:localhost:80 you@yourmachine` locally and open
-http://localhost:8080/[...].
+`http://localhost:8080/[...]`.
 
 The admin password can be changed with "mox setadminpassword".
 
@@ -371,19 +390,6 @@ should account for the size of the email messages (no compression currently),
 an additional 15% overhead for the meta data, and add some more headroom.
 Expand as necessary.
 
-## Can I see some screenshots?
-
-Yes, see https://www.xmox.nl/screenshots/.
-
-Mox has a webmail for reading/writing messages.
-
-Mox also has an "account" web interface where users can view their account and
-manage their address configuration, such as rules for automatically delivering
-certain incoming messages to a specific mailbox.
-
-And mox has an "admin" web interface where the administrator can make changes,
-e.g. add/remove/modify domains/accounts/addresses.
-
 ## Won't the big email providers block my email?
 
 It is a common misconception that it is impossible to run your own email server
@@ -417,8 +423,8 @@ domain. Sending messages with content that resembles known spam messages.
 
 Should your email be rejected, you will typically get an error message during
 the SMTP transaction that explains why. In the case of big email providers the
-error message often has instructions on how to prove to them you are a legimate
-sender.
+error message often has instructions on how to prove to them you are a
+legitimate sender.
 
 ## Can I use existing TLS certificates/keys?
 
@@ -426,18 +432,19 @@ Yes. The quickstart command creates a config that uses ACME with Let's Encrypt,
 but you can change the config file to use existing certificate and key files.
 
 You'll see "ACME: letsencrypt" in the "TLS" section of the "public" Listener.
-Remove or comment out the ACME-line, and add a "KeyCerts" section like in the
-example config file in
-https://pkg.go.dev/github.com/mjl-/mox/config#hdr-mox_conf. You can have
-multiple certificates and keys: The line with the "-" (dash) is the start of a
-list item. Duplicate that line up to and including the line with KeyFile for
-each certificate/key you have. Mox makes a TLS config that holds all specified
-certificates/keys, and uses it for all services for that Listener (including a
-webserver), choosing the correct certificate for incoming requests.
+Remove or comment out the ACME-line, and add a "KeyCerts" section, see
+https://www.xmox.nl/config/#cfg-mox-conf-Listeners-x-TLS-KeyCerts
+
+You can have multiple certificates and keys: The line with the "-" (dash) is
+the start of a list item. Duplicate that line up to and including the line with
+KeyFile for each certificate/key you have. Mox makes a TLS config that holds
+all specified certificates/keys, and uses it for all services for that Listener
+(including a webserver), choosing the correct certificate for incoming
+requests.
 
 Keep in mind that for each email domain you host, you will need a certificate
-for `mta-sts.<domain>` and `autoconfig.<domain>`, unless you disable MTA-STS
-and autoconfig for that domain.
+for `mta-sts.<domain>`, `autoconfig.<domain>` and `mail.<domain>`, unless you
+disable MTA-STS, autoconfig and the client-settings-domain for that domain.
 
 Mox opens the key and certificate files during initial startup, as root (and
 passes file descriptors to the unprivileged process).  No special permissions

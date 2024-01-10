@@ -118,6 +118,9 @@ docker:
 docker-release:
 	./docker-release.sh
 
+genwebsite:
+	./genwebsite.sh
+
 buildall:
 	GOOS=linux GOARCH=arm go build
 	GOOS=linux GOARCH=arm64 go build
