@@ -139,7 +139,7 @@ func main() {
 		inputstr = inputstr[len(lines[0])+1+len(lines[1])+1:]
 		lines[0] = strings.TrimPrefix(lines[0], "#")
 		lines[1] = strings.TrimPrefix(lines[1], "##")
-		sep := "## Background"
+		sep := "## Quickstart demo"
 		inleft, inright, found := strings.Cut(inputstr, sep)
 		if !found {
 			log.Fatalf("did not find separator %q", sep)
@@ -410,7 +410,7 @@ dt { font-weight: bold; margin-bottom: .5ex; }
 dd { max-width: 50em; padding-left: 2em; margin-bottom: 1em; }
 table { margin-bottom: 2ex; }
 
-.video { box-shadow: 0 0 20px 0 #bbb; }
+video { display: block; max-width: 100%; box-shadow: 0 0 20px 0 #ddd; margin: 0 auto; }
 .img1 { width: 1050px; max-width: 100%; box-shadow: 0 0 20px 0 #bbb; }
 .img2 { width: 1500px; max-width: 100%; box-shadow: 0 0 20px 0 #bbb; }
 
@@ -443,7 +443,7 @@ h2 { background: linear-gradient(90deg, #6dd5fd 0%, #77e8e3 100%); display: inli
 .main { padding: 1em; }
 .main ul, .main ol { padding-left: 1em; }
 .two { display: flex; gap: 2em; }
-.two > div { max-width: 50em; }
+.two > div { flex-basis: 50%; max-width: 50em; }
 .toc { display: flex; gap: 2em; margin-bottom: 3ex; }
 .toc ul { margin-bottom: 0; }
 

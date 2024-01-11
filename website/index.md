@@ -44,6 +44,17 @@ or see [all releases](https://github.com/mjl-/mox/releases).
 - 2023-09-24, [v0.0.7](https://github.com/mjl-/mox/releases/tag/v0.0.7) released
 
 
+## Quickstart demo
+
+Mox is real easy to set up. Get a machine, download the mox binary, run the
+quickstart, add the printed DNS records, and you're good to go. See the demo
+below, or continue reading at [Install](install/).
+
+<video controls preload="none" poster="files/video/quickstart-20240111.jpg">
+	<source type="video/webm" src="files/video/quickstart-20240111.webm" />
+	<source type="video/mp4" src="files/video/quickstart-20240111.mp4" />
+</video>
+
 ## Background
 
 Work on mox started in 2021. Admins were migrating their emails to just a few
