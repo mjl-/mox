@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"golang.org/x/exp/slog"
+	"golang.org/x/text/encoding/ianaindex"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
@@ -20,6 +21,23 @@ import (
 )
 
 // todo: we should have all needed information for messageItem in store.Message (perhaps some data in message.Part) for fast access, not having to parse the on-disk message file.
+
+var wordDecoder = mime.WordDecoder{
+	CharsetReader: func(charset string, r io.Reader) (io.Reader, error) {
+		switch strings.ToLower(charset) {
+		case "", "us-ascii", "utf-8":
+			return r, nil
+		}
+		enc, _ := ianaindex.MIME.Encoding(charset)
+		if enc == nil {
+			enc, _ = ianaindex.IANA.Encoding(charset)
+		}
+		if enc == nil {
+			return r, fmt.Errorf("unknown charset %q", charset)
+		}
+		return enc.NewDecoder().Reader(r), nil
+	},
+}
 
 // Attempt q/b-word-decode name, coming from Content-Type "name" field or
 // Content-Disposition "filename" field.
@@ -43,8 +61,7 @@ func tryDecodeParam(log mlog.Log, name string) string {
 		log.Debug("attachment contains rfc2047 q/b-word-encoded mime parameter instead of rfc2231-encoded", slog.String("name", name))
 		return name
 	}
-	dec := mime.WordDecoder{}
-	s, err := dec.DecodeHeader(name)
+	s, err := wordDecoder.DecodeHeader(name)
 	if err != nil {
 		log.Debugx("q/b-word decoding mime parameter", err, slog.String("name", name))
 		return name
