@@ -727,7 +727,7 @@ const account = async (name: string) => {
 				),
 				dom.label(
 					style({display: 'block', marginBottom: '.5ex'}),
-					dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size for the account, overriding any globally configured maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages beyond the maximum size will result in an error. Useful to prevent a single account from filling storage.')),
+					dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')),
 					dom.br(),
 					quotaMessageSize=dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize))),
 				),

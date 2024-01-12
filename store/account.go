@@ -2015,7 +2015,7 @@ func (a *Account) AddMessageSize(log mlog.Log, tx *bstore.Tx, size int64) error 
 func (a *Account) QuotaMessageSize() int64 {
 	conf, _ := a.Conf()
 	size := conf.QuotaMessageSize
-	if size <= 0 {
+	if size == 0 {
 		size = mox.Conf.Static.QuotaMessageSize
 	}
 	if size < 0 {
