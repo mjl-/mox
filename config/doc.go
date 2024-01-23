@@ -889,7 +889,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 							# matches this ruleset. Can only be used together with SMTPMailFromRegexp and
 							# VerifiedDomain. SMTPMailFromRegexp must be set to the address used to deliver
 							# the forwarded message, e.g. '^user(|\+.*)@forward\.example$'. Changes to junk
-							# analysis: 1. Messages are not rejects for failing a DMARC policy, because a
+							# analysis: 1. Messages are not rejected for failing a DMARC policy, because a
 							# legitimate forwarded message without valid/intact/aligned DKIM signature would
 							# be rejected because any verified SPF domain will be 'unaligned', of the
 							# forwarding mail server. 2. The sending mail server IP address, and sending EHLO
