@@ -12,6 +12,16 @@ type numSet struct {
 	ranges       []numRange
 }
 
+type numRange struct {
+	first setNumber
+	last  *setNumber // if nil, this numRange is just a setNumber in "first" and first.star will be false
+}
+
+type setNumber struct {
+	number uint32
+	star   bool // References last message (max sequence number/uid). ../rfc/9051:799
+}
+
 // containsSeq returns whether seq is in the numSet, given uids and (saved) searchResult.
 // uids and searchResult must be sorted. searchResult can have uids that are no longer in uids.
 func (ss numSet) containsSeq(seq msgseq, uids []store.UID, searchResult []store.UID) bool {
@@ -24,19 +34,21 @@ func (ss numSet) containsSeq(seq msgseq, uids []store.UID, searchResult []store.
 	}
 	for _, r := range ss.ranges {
 		first := r.first.number
-		if r.first.star {
-			first = 1
+		if r.first.star || first > uint32(len(uids)) {
+			first = uint32(len(uids))
 		}
+
 		last := first
 		if r.last != nil {
 			last = r.last.number
-			if r.last.star {
+			if r.last.star || last > uint32(len(uids)) {
 				last = uint32(len(uids))
 			}
 		}
-		if last > uint32(len(uids)) {
-			last = uint32(len(uids))
+		if first > last {
+			first, last = last, first
 		}
+
 		if uint32(seq) >= first && uint32(seq) <= last {
 			return true
 		}
@@ -53,27 +65,22 @@ func (ss numSet) containsUID(uid store.UID, uids []store.UID, searchResult []sto
 	}
 	for _, r := range ss.ranges {
 		first := store.UID(r.first.number)
-		if r.first.star {
-			first = uids[0]
+		if r.first.star || first > uids[len(uids)-1] {
+			first = uids[len(uids)-1]
 		}
 		last := first
 		// Num in <num>:* can be larger than last, but it still matches the last...
 		// Similar for *:<num>. ../rfc/9051:4814
 		if r.last != nil {
 			last = store.UID(r.last.number)
-			if r.last.star {
+			if r.last.star || last > uids[len(uids)-1] {
 				last = uids[len(uids)-1]
-				if first > last {
-					first = last
-				}
-			} else if r.first.star && last < first {
-				last = first
 			}
 		}
-		if uid < first || uid > last {
-			continue
+		if first > last {
+			first, last = last, first
 		}
-		if uidSearch(uids, uid) > 0 {
+		if uid >= first && uid <= last && uidSearch(uids, uid) > 0 {
 			return true
 		}
 	}
@@ -151,41 +158,24 @@ func (ss numSet) String() string {
 	return l[0]
 }
 
-type setNumber struct {
-	number uint32
-	star   bool
-}
-
-type numRange struct {
-	first setNumber
-	last  *setNumber // if nil, this numRange is just a setNumber in "first" and first.star will be false
-}
-
 // interpretStar returns a numset that interprets stars in a numset, returning a new
 // numset without stars with increasing first/last.
 func (s numSet) interpretStar(uids []store.UID) numSet {
 	var ns numSet
+	if len(uids) == 0 {
+		return ns
+	}
+
 	for _, r := range s.ranges {
 		first := r.first.number
-		if r.first.star {
-			if len(uids) == 0 {
-				continue
-			}
-			first = uint32(uids[0])
+		if r.first.star || first > uint32(uids[len(uids)-1]) {
+			first = uint32(uids[len(uids)-1])
 		}
 		last := first
 		if r.last != nil {
 			last = r.last.number
-			if r.last.star {
-				if len(uids) == 0 {
-					continue
-				}
+			if r.last.star || last > uint32(uids[len(uids)-1]) {
 				last = uint32(uids[len(uids)-1])
-				if first > last {
-					first = last
-				}
-			} else if r.first.star && last < first {
-				last = first
 			}
 		}
 		if first > last {
@@ -226,18 +216,18 @@ type numIter struct {
 
 // newIter must only be called on a numSet that is basic (no star/search) and ascending.
 func (s numSet) newIter() *numIter {
-	return &numIter{s: s, i: 0, r: s.ranges[0].newIter()}
+	return &numIter{s: s}
 }
 
 func (i *numIter) Next() (uint32, bool) {
 	if v, ok := i.r.Next(); ok {
 		return v, ok
 	}
-	i.i++
 	if i.i >= len(i.s.ranges) {
 		return 0, false
 	}
 	i.r = i.s.ranges[i.i].newIter()
+	i.i++
 	return i.r.Next()
 }
 
@@ -252,6 +242,9 @@ func (r numRange) newIter() *rangeIter {
 }
 
 func (r *rangeIter) Next() (uint32, bool) {
+	if r == nil {
+		return 0, false
+	}
 	if r.o == 0 {
 		r.o++
 		return r.r.first.number, true
