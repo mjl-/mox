@@ -274,6 +274,7 @@ var api;
 	// Alignment is the identifier alignment.
 	let Alignment;
 	(function (Alignment) {
+		Alignment["AlignmentAbsent"] = "";
 		Alignment["AlignmentRelaxed"] = "r";
 		Alignment["AlignmentStrict"] = "s";
 	})(Alignment = api.Alignment || (api.Alignment = {}));
@@ -281,6 +282,7 @@ var api;
 	// DMARC policy in DNS.
 	let Disposition;
 	(function (Disposition) {
+		Disposition["DispositionAbsent"] = "";
 		Disposition["DispositionNone"] = "none";
 		Disposition["DispositionQuarantine"] = "quarantine";
 		Disposition["DispositionReject"] = "reject";
@@ -288,6 +290,7 @@ var api;
 	// DMARCResult is the final validation and alignment verdict for SPF and DKIM.
 	let DMARCResult;
 	(function (DMARCResult) {
+		DMARCResult["DMARCAbsent"] = "";
 		DMARCResult["DMARCPass"] = "pass";
 		DMARCResult["DMARCFail"] = "fail";
 	})(DMARCResult = api.DMARCResult || (api.DMARCResult = {}));
@@ -304,6 +307,7 @@ var api;
 	})(PolicyOverride = api.PolicyOverride || (api.PolicyOverride = {}));
 	let DKIMResult;
 	(function (DKIMResult) {
+		DKIMResult["DKIMAbsent"] = "";
 		DKIMResult["DKIMNone"] = "none";
 		DKIMResult["DKIMPass"] = "pass";
 		DKIMResult["DKIMFail"] = "fail";
@@ -314,11 +318,13 @@ var api;
 	})(DKIMResult = api.DKIMResult || (api.DKIMResult = {}));
 	let SPFDomainScope;
 	(function (SPFDomainScope) {
+		SPFDomainScope["SPFDomainScopeAbsent"] = "";
 		SPFDomainScope["SPFDomainScopeHelo"] = "helo";
 		SPFDomainScope["SPFDomainScopeMailFrom"] = "mfrom";
 	})(SPFDomainScope = api.SPFDomainScope || (api.SPFDomainScope = {}));
 	let SPFResult;
 	(function (SPFResult) {
+		SPFResult["SPFAbsent"] = "";
 		SPFResult["SPFNone"] = "none";
 		SPFResult["SPFNeutral"] = "neutral";
 		SPFResult["SPFPass"] = "pass";
@@ -410,13 +416,13 @@ var api;
 		"Mode": { "Name": "Mode", "Docs": "", "Values": [{ "Name": "ModeEnforce", "Value": "enforce", "Docs": "" }, { "Name": "ModeTesting", "Value": "testing", "Docs": "" }, { "Name": "ModeNone", "Value": "none", "Docs": "" }] },
 		"PolicyType": { "Name": "PolicyType", "Docs": "", "Values": [{ "Name": "TLSA", "Value": "tlsa", "Docs": "" }, { "Name": "STS", "Value": "sts", "Docs": "" }, { "Name": "NoPolicyFound", "Value": "no-policy-found", "Docs": "" }] },
 		"ResultType": { "Name": "ResultType", "Docs": "", "Values": [{ "Name": "ResultSTARTTLSNotSupported", "Value": "starttls-not-supported", "Docs": "" }, { "Name": "ResultCertificateHostMismatch", "Value": "certificate-host-mismatch", "Docs": "" }, { "Name": "ResultCertificateExpired", "Value": "certificate-expired", "Docs": "" }, { "Name": "ResultTLSAInvalid", "Value": "tlsa-invalid", "Docs": "" }, { "Name": "ResultDNSSECInvalid", "Value": "dnssec-invalid", "Docs": "" }, { "Name": "ResultDANERequired", "Value": "dane-required", "Docs": "" }, { "Name": "ResultCertificateNotTrusted", "Value": "certificate-not-trusted", "Docs": "" }, { "Name": "ResultSTSPolicyInvalid", "Value": "sts-policy-invalid", "Docs": "" }, { "Name": "ResultSTSWebPKIInvalid", "Value": "sts-webpki-invalid", "Docs": "" }, { "Name": "ResultValidationFailure", "Value": "validation-failure", "Docs": "" }, { "Name": "ResultSTSPolicyFetch", "Value": "sts-policy-fetch-error", "Docs": "" }] },
-		"Alignment": { "Name": "Alignment", "Docs": "", "Values": [{ "Name": "AlignmentRelaxed", "Value": "r", "Docs": "" }, { "Name": "AlignmentStrict", "Value": "s", "Docs": "" }] },
-		"Disposition": { "Name": "Disposition", "Docs": "", "Values": [{ "Name": "DispositionNone", "Value": "none", "Docs": "" }, { "Name": "DispositionQuarantine", "Value": "quarantine", "Docs": "" }, { "Name": "DispositionReject", "Value": "reject", "Docs": "" }] },
-		"DMARCResult": { "Name": "DMARCResult", "Docs": "", "Values": [{ "Name": "DMARCPass", "Value": "pass", "Docs": "" }, { "Name": "DMARCFail", "Value": "fail", "Docs": "" }] },
+		"Alignment": { "Name": "Alignment", "Docs": "", "Values": [{ "Name": "AlignmentAbsent", "Value": "", "Docs": "" }, { "Name": "AlignmentRelaxed", "Value": "r", "Docs": "" }, { "Name": "AlignmentStrict", "Value": "s", "Docs": "" }] },
+		"Disposition": { "Name": "Disposition", "Docs": "", "Values": [{ "Name": "DispositionAbsent", "Value": "", "Docs": "" }, { "Name": "DispositionNone", "Value": "none", "Docs": "" }, { "Name": "DispositionQuarantine", "Value": "quarantine", "Docs": "" }, { "Name": "DispositionReject", "Value": "reject", "Docs": "" }] },
+		"DMARCResult": { "Name": "DMARCResult", "Docs": "", "Values": [{ "Name": "DMARCAbsent", "Value": "", "Docs": "" }, { "Name": "DMARCPass", "Value": "pass", "Docs": "" }, { "Name": "DMARCFail", "Value": "fail", "Docs": "" }] },
 		"PolicyOverride": { "Name": "PolicyOverride", "Docs": "", "Values": [{ "Name": "PolicyOverrideForwarded", "Value": "forwarded", "Docs": "" }, { "Name": "PolicyOverrideSampledOut", "Value": "sampled_out", "Docs": "" }, { "Name": "PolicyOverrideTrustedForwarder", "Value": "trusted_forwarder", "Docs": "" }, { "Name": "PolicyOverrideMailingList", "Value": "mailing_list", "Docs": "" }, { "Name": "PolicyOverrideLocalPolicy", "Value": "local_policy", "Docs": "" }, { "Name": "PolicyOverrideOther", "Value": "other", "Docs": "" }] },
-		"DKIMResult": { "Name": "DKIMResult", "Docs": "", "Values": [{ "Name": "DKIMNone", "Value": "none", "Docs": "" }, { "Name": "DKIMPass", "Value": "pass", "Docs": "" }, { "Name": "DKIMFail", "Value": "fail", "Docs": "" }, { "Name": "DKIMPolicy", "Value": "policy", "Docs": "" }, { "Name": "DKIMNeutral", "Value": "neutral", "Docs": "" }, { "Name": "DKIMTemperror", "Value": "temperror", "Docs": "" }, { "Name": "DKIMPermerror", "Value": "permerror", "Docs": "" }] },
-		"SPFDomainScope": { "Name": "SPFDomainScope", "Docs": "", "Values": [{ "Name": "SPFDomainScopeHelo", "Value": "helo", "Docs": "" }, { "Name": "SPFDomainScopeMailFrom", "Value": "mfrom", "Docs": "" }] },
-		"SPFResult": { "Name": "SPFResult", "Docs": "", "Values": [{ "Name": "SPFNone", "Value": "none", "Docs": "" }, { "Name": "SPFNeutral", "Value": "neutral", "Docs": "" }, { "Name": "SPFPass", "Value": "pass", "Docs": "" }, { "Name": "SPFFail", "Value": "fail", "Docs": "" }, { "Name": "SPFSoftfail", "Value": "softfail", "Docs": "" }, { "Name": "SPFTemperror", "Value": "temperror", "Docs": "" }, { "Name": "SPFPermerror", "Value": "permerror", "Docs": "" }] },
+		"DKIMResult": { "Name": "DKIMResult", "Docs": "", "Values": [{ "Name": "DKIMAbsent", "Value": "", "Docs": "" }, { "Name": "DKIMNone", "Value": "none", "Docs": "" }, { "Name": "DKIMPass", "Value": "pass", "Docs": "" }, { "Name": "DKIMFail", "Value": "fail", "Docs": "" }, { "Name": "DKIMPolicy", "Value": "policy", "Docs": "" }, { "Name": "DKIMNeutral", "Value": "neutral", "Docs": "" }, { "Name": "DKIMTemperror", "Value": "temperror", "Docs": "" }, { "Name": "DKIMPermerror", "Value": "permerror", "Docs": "" }] },
+		"SPFDomainScope": { "Name": "SPFDomainScope", "Docs": "", "Values": [{ "Name": "SPFDomainScopeAbsent", "Value": "", "Docs": "" }, { "Name": "SPFDomainScopeHelo", "Value": "helo", "Docs": "" }, { "Name": "SPFDomainScopeMailFrom", "Value": "mfrom", "Docs": "" }] },
+		"SPFResult": { "Name": "SPFResult", "Docs": "", "Values": [{ "Name": "SPFAbsent", "Value": "", "Docs": "" }, { "Name": "SPFNone", "Value": "none", "Docs": "" }, { "Name": "SPFNeutral", "Value": "neutral", "Docs": "" }, { "Name": "SPFPass", "Value": "pass", "Docs": "" }, { "Name": "SPFFail", "Value": "fail", "Docs": "" }, { "Name": "SPFSoftfail", "Value": "softfail", "Docs": "" }, { "Name": "SPFTemperror", "Value": "temperror", "Docs": "" }, { "Name": "SPFPermerror", "Value": "permerror", "Docs": "" }] },
 		"Localpart": { "Name": "Localpart", "Docs": "", "Values": null },
 		"IP": { "Name": "IP", "Docs": "", "Values": [] },
 	};
@@ -2253,7 +2259,7 @@ const domainDMARC = async (d) => {
 			if (r.PolicyPublished.Domain !== d) {
 				policy.push(r.PolicyPublished.Domain);
 			}
-			const alignments = { 'r': 'relaxed', 's': 'strict' };
+			const alignments = { '': '', 'r': 'relaxed', 's': 'strict' };
 			if (r.PolicyPublished.ADKIM !== '') {
 				policy.push('dkim ' + (alignments[r.PolicyPublished.ADKIM] || r.PolicyPublished.ADKIM));
 			}
@@ -2297,6 +2303,7 @@ const domainDMARC = async (d) => {
 				const recordRowspan = attr.rowspan('' + (dkims.length + spfs.length));
 				const valignTop = style({ verticalAlign: 'top' });
 				const dmarcStatuses = {
+					'': '(missing)',
 					none: 'DMARC checks or were not applied. This does not mean these messages are definitely not spam though, and they may have been rejected based on other checks, such as reputation or content-based filters.',
 					quarantine: 'DMARC policy is to mark message as spam.',
 					reject: 'DMARC policy is to reject the message during SMTP delivery.',
@@ -2322,6 +2329,7 @@ const domainDMARC = async (d) => {
 				};
 				for (const dkim of dkims) {
 					const statuses = {
+						'': '(missing)',
 						none: 'Message was not signed',
 						pass: 'Message was signed and signature was verified.',
 						fail: 'Message was signed, but signature was invalid.',
@@ -2337,6 +2345,7 @@ const domainDMARC = async (d) => {
 				}
 				for (const spf of spfs) {
 					const statuses = {
+						'': '(missing)',
 						none: 'No SPF policy found.',
 						neutral: 'Policy states nothing about IP, typically due to "?" qualifier in SPF record.',
 						pass: 'IP is authorized.',

@@ -47,6 +47,8 @@ type PolicyPublished struct {
 type Alignment string
 
 const (
+	AlignmentAbsent Alignment = ""
+
 	AlignmentRelaxed Alignment = "r" // Subdomains match the DMARC from-domain.
 	AlignmentStrict  Alignment = "s" // Only exact from-domain match.
 )
@@ -56,6 +58,8 @@ const (
 type Disposition string
 
 const (
+	DispositionAbsent Disposition = ""
+
 	DispositionNone       Disposition = "none"
 	DispositionQuarantine Disposition = "quarantine"
 	DispositionReject     Disposition = "reject"
@@ -87,6 +91,8 @@ type PolicyEvaluated struct {
 type DMARCResult string
 
 const (
+	DMARCAbsent DMARCResult = ""
+
 	DMARCPass DMARCResult = "pass"
 	DMARCFail DMARCResult = "fail"
 )
@@ -130,6 +136,8 @@ type DKIMAuthResult struct {
 type DKIMResult string
 
 const (
+	DKIMAbsent DKIMResult = ""
+
 	DKIMNone      DKIMResult = "none"
 	DKIMPass      DKIMResult = "pass"
 	DKIMFail      DKIMResult = "fail"
@@ -148,6 +156,8 @@ type SPFAuthResult struct {
 type SPFDomainScope string
 
 const (
+	SPFDomainScopeAbsent SPFDomainScope = ""
+
 	SPFDomainScopeHelo     SPFDomainScope = "helo"  // SMTP EHLO
 	SPFDomainScopeMailFrom SPFDomainScope = "mfrom" // SMTP "MAIL FROM".
 )
@@ -155,6 +165,8 @@ const (
 type SPFResult string
 
 const (
+	SPFAbsent SPFResult = ""
+
 	SPFNone      SPFResult = "none"
 	SPFNeutral   SPFResult = "neutral"
 	SPFPass      SPFResult = "pass"

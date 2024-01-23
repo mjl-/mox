@@ -4364,6 +4364,11 @@
 			"Docs": "Alignment is the identifier alignment.",
 			"Values": [
 				{
+					"Name": "AlignmentAbsent",
+					"Value": "",
+					"Docs": ""
+				},
+				{
 					"Name": "AlignmentRelaxed",
 					"Value": "r",
 					"Docs": "Subdomains match the DMARC from-domain."
@@ -4379,6 +4384,11 @@
 			"Name": "Disposition",
 			"Docs": "Disposition is the requested action for a DMARC fail as specified in the\nDMARC policy in DNS.",
 			"Values": [
+				{
+					"Name": "DispositionAbsent",
+					"Value": "",
+					"Docs": ""
+				},
 				{
 					"Name": "DispositionNone",
 					"Value": "none",
@@ -4400,6 +4410,11 @@
 			"Name": "DMARCResult",
 			"Docs": "DMARCResult is the final validation and alignment verdict for SPF and DKIM.",
 			"Values": [
+				{
+					"Name": "DMARCAbsent",
+					"Value": "",
+					"Docs": ""
+				},
 				{
 					"Name": "DMARCPass",
 					"Value": "pass",
@@ -4453,6 +4468,11 @@
 			"Docs": "",
 			"Values": [
 				{
+					"Name": "DKIMAbsent",
+					"Value": "",
+					"Docs": ""
+				},
+				{
 					"Name": "DKIMNone",
 					"Value": "none",
 					"Docs": ""
@@ -4494,6 +4514,11 @@
 			"Docs": "",
 			"Values": [
 				{
+					"Name": "SPFDomainScopeAbsent",
+					"Value": "",
+					"Docs": ""
+				},
+				{
 					"Name": "SPFDomainScopeHelo",
 					"Value": "helo",
 					"Docs": "SMTP EHLO"
@@ -4509,6 +4534,11 @@
 			"Name": "SPFResult",
 			"Docs": "",
 			"Values": [
+				{
+					"Name": "SPFAbsent",
+					"Value": "",
+					"Docs": ""
+				},
 				{
 					"Name": "SPFNone",
 					"Value": "none",

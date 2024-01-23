@@ -1548,7 +1548,7 @@ const domainDMARC = async (d: string) => {
 					if (r.PolicyPublished.Domain !== d) {
 						policy.push(r.PolicyPublished.Domain)
 					}
-					const alignments = {'r': 'relaxed', 's': 'strict'}
+					const alignments = {'': '', 'r': 'relaxed', 's': 'strict'}
 					if (r.PolicyPublished.ADKIM as string !== '') {
 						policy.push('dkim '+(alignments[r.PolicyPublished.ADKIM] || r.PolicyPublished.ADKIM))
 					}
@@ -1595,6 +1595,7 @@ const domainDMARC = async (d: string) => {
 						const valignTop = style({verticalAlign: 'top'})
 
 						const dmarcStatuses = {
+							'': '(missing)',
 							none: 'DMARC checks or were not applied. This does not mean these messages are definitely not spam though, and they may have been rejected based on other checks, such as reputation or content-based filters.',
 							quarantine: 'DMARC policy is to mark message as spam.',
 							reject: 'DMARC policy is to reject the message during SMTP delivery.',
@@ -1627,6 +1628,7 @@ const domainDMARC = async (d: string) => {
 						}
 						for (const dkim of dkims) {
 							const statuses = {
+								'': '(missing)',
 								none: 'Message was not signed',
 								pass: 'Message was signed and signature was verified.',
 								fail: 'Message was signed, but signature was invalid.',
@@ -1646,6 +1648,7 @@ const domainDMARC = async (d: string) => {
 						}
 						for (const spf of spfs) {
 							const statuses = {
+								'': '(missing)',
 								none: 'No SPF policy found.',
 								neutral: 'Policy states nothing about IP, typically due to "?" qualifier in SPF record.',
 								pass: 'IP is authorized.',

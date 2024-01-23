@@ -700,6 +700,7 @@ export enum ResultType {
 
 // Alignment is the identifier alignment.
 export enum Alignment {
+	AlignmentAbsent = "",
 	AlignmentRelaxed = "r",  // Subdomains match the DMARC from-domain.
 	AlignmentStrict = "s",  // Only exact from-domain match.
 }
@@ -707,6 +708,7 @@ export enum Alignment {
 // Disposition is the requested action for a DMARC fail as specified in the
 // DMARC policy in DNS.
 export enum Disposition {
+	DispositionAbsent = "",
 	DispositionNone = "none",
 	DispositionQuarantine = "quarantine",
 	DispositionReject = "reject",
@@ -714,6 +716,7 @@ export enum Disposition {
 
 // DMARCResult is the final validation and alignment verdict for SPF and DKIM.
 export enum DMARCResult {
+	DMARCAbsent = "",
 	DMARCPass = "pass",
 	DMARCFail = "fail",
 }
@@ -730,6 +733,7 @@ export enum PolicyOverride {
 }
 
 export enum DKIMResult {
+	DKIMAbsent = "",
 	DKIMNone = "none",
 	DKIMPass = "pass",
 	DKIMFail = "fail",
@@ -740,11 +744,13 @@ export enum DKIMResult {
 }
 
 export enum SPFDomainScope {
+	SPFDomainScopeAbsent = "",
 	SPFDomainScopeHelo = "helo",  // SMTP EHLO
 	SPFDomainScopeMailFrom = "mfrom",  // SMTP "MAIL FROM".
 }
 
 export enum SPFResult {
+	SPFAbsent = "",
 	SPFNone = "none",
 	SPFNeutral = "neutral",
 	SPFPass = "pass",
@@ -853,13 +859,13 @@ export const types: TypenameMap = {
 	"Mode": {"Name":"Mode","Docs":"","Values":[{"Name":"ModeEnforce","Value":"enforce","Docs":""},{"Name":"ModeTesting","Value":"testing","Docs":""},{"Name":"ModeNone","Value":"none","Docs":""}]},
 	"PolicyType": {"Name":"PolicyType","Docs":"","Values":[{"Name":"TLSA","Value":"tlsa","Docs":""},{"Name":"STS","Value":"sts","Docs":""},{"Name":"NoPolicyFound","Value":"no-policy-found","Docs":""}]},
 	"ResultType": {"Name":"ResultType","Docs":"","Values":[{"Name":"ResultSTARTTLSNotSupported","Value":"starttls-not-supported","Docs":""},{"Name":"ResultCertificateHostMismatch","Value":"certificate-host-mismatch","Docs":""},{"Name":"ResultCertificateExpired","Value":"certificate-expired","Docs":""},{"Name":"ResultTLSAInvalid","Value":"tlsa-invalid","Docs":""},{"Name":"ResultDNSSECInvalid","Value":"dnssec-invalid","Docs":""},{"Name":"ResultDANERequired","Value":"dane-required","Docs":""},{"Name":"ResultCertificateNotTrusted","Value":"certificate-not-trusted","Docs":""},{"Name":"ResultSTSPolicyInvalid","Value":"sts-policy-invalid","Docs":""},{"Name":"ResultSTSWebPKIInvalid","Value":"sts-webpki-invalid","Docs":""},{"Name":"ResultValidationFailure","Value":"validation-failure","Docs":""},{"Name":"ResultSTSPolicyFetch","Value":"sts-policy-fetch-error","Docs":""}]},
-	"Alignment": {"Name":"Alignment","Docs":"","Values":[{"Name":"AlignmentRelaxed","Value":"r","Docs":""},{"Name":"AlignmentStrict","Value":"s","Docs":""}]},
-	"Disposition": {"Name":"Disposition","Docs":"","Values":[{"Name":"DispositionNone","Value":"none","Docs":""},{"Name":"DispositionQuarantine","Value":"quarantine","Docs":""},{"Name":"DispositionReject","Value":"reject","Docs":""}]},
-	"DMARCResult": {"Name":"DMARCResult","Docs":"","Values":[{"Name":"DMARCPass","Value":"pass","Docs":""},{"Name":"DMARCFail","Value":"fail","Docs":""}]},
+	"Alignment": {"Name":"Alignment","Docs":"","Values":[{"Name":"AlignmentAbsent","Value":"","Docs":""},{"Name":"AlignmentRelaxed","Value":"r","Docs":""},{"Name":"AlignmentStrict","Value":"s","Docs":""}]},
+	"Disposition": {"Name":"Disposition","Docs":"","Values":[{"Name":"DispositionAbsent","Value":"","Docs":""},{"Name":"DispositionNone","Value":"none","Docs":""},{"Name":"DispositionQuarantine","Value":"quarantine","Docs":""},{"Name":"DispositionReject","Value":"reject","Docs":""}]},
+	"DMARCResult": {"Name":"DMARCResult","Docs":"","Values":[{"Name":"DMARCAbsent","Value":"","Docs":""},{"Name":"DMARCPass","Value":"pass","Docs":""},{"Name":"DMARCFail","Value":"fail","Docs":""}]},
 	"PolicyOverride": {"Name":"PolicyOverride","Docs":"","Values":[{"Name":"PolicyOverrideForwarded","Value":"forwarded","Docs":""},{"Name":"PolicyOverrideSampledOut","Value":"sampled_out","Docs":""},{"Name":"PolicyOverrideTrustedForwarder","Value":"trusted_forwarder","Docs":""},{"Name":"PolicyOverrideMailingList","Value":"mailing_list","Docs":""},{"Name":"PolicyOverrideLocalPolicy","Value":"local_policy","Docs":""},{"Name":"PolicyOverrideOther","Value":"other","Docs":""}]},
-	"DKIMResult": {"Name":"DKIMResult","Docs":"","Values":[{"Name":"DKIMNone","Value":"none","Docs":""},{"Name":"DKIMPass","Value":"pass","Docs":""},{"Name":"DKIMFail","Value":"fail","Docs":""},{"Name":"DKIMPolicy","Value":"policy","Docs":""},{"Name":"DKIMNeutral","Value":"neutral","Docs":""},{"Name":"DKIMTemperror","Value":"temperror","Docs":""},{"Name":"DKIMPermerror","Value":"permerror","Docs":""}]},
-	"SPFDomainScope": {"Name":"SPFDomainScope","Docs":"","Values":[{"Name":"SPFDomainScopeHelo","Value":"helo","Docs":""},{"Name":"SPFDomainScopeMailFrom","Value":"mfrom","Docs":""}]},
-	"SPFResult": {"Name":"SPFResult","Docs":"","Values":[{"Name":"SPFNone","Value":"none","Docs":""},{"Name":"SPFNeutral","Value":"neutral","Docs":""},{"Name":"SPFPass","Value":"pass","Docs":""},{"Name":"SPFFail","Value":"fail","Docs":""},{"Name":"SPFSoftfail","Value":"softfail","Docs":""},{"Name":"SPFTemperror","Value":"temperror","Docs":""},{"Name":"SPFPermerror","Value":"permerror","Docs":""}]},
+	"DKIMResult": {"Name":"DKIMResult","Docs":"","Values":[{"Name":"DKIMAbsent","Value":"","Docs":""},{"Name":"DKIMNone","Value":"none","Docs":""},{"Name":"DKIMPass","Value":"pass","Docs":""},{"Name":"DKIMFail","Value":"fail","Docs":""},{"Name":"DKIMPolicy","Value":"policy","Docs":""},{"Name":"DKIMNeutral","Value":"neutral","Docs":""},{"Name":"DKIMTemperror","Value":"temperror","Docs":""},{"Name":"DKIMPermerror","Value":"permerror","Docs":""}]},
+	"SPFDomainScope": {"Name":"SPFDomainScope","Docs":"","Values":[{"Name":"SPFDomainScopeAbsent","Value":"","Docs":""},{"Name":"SPFDomainScopeHelo","Value":"helo","Docs":""},{"Name":"SPFDomainScopeMailFrom","Value":"mfrom","Docs":""}]},
+	"SPFResult": {"Name":"SPFResult","Docs":"","Values":[{"Name":"SPFAbsent","Value":"","Docs":""},{"Name":"SPFNone","Value":"none","Docs":""},{"Name":"SPFNeutral","Value":"neutral","Docs":""},{"Name":"SPFPass","Value":"pass","Docs":""},{"Name":"SPFFail","Value":"fail","Docs":""},{"Name":"SPFSoftfail","Value":"softfail","Docs":""},{"Name":"SPFTemperror","Value":"temperror","Docs":""},{"Name":"SPFPermerror","Value":"permerror","Docs":""}]},
 	"Localpart": {"Name":"Localpart","Docs":"","Values":null},
 	"IP": {"Name":"IP","Docs":"","Values":[]},
 }
