@@ -2648,6 +2648,8 @@ const newMsgitemView = (mi, msglistView, otherMailbox, listMailboxes, receivedTi
 			if (t < 60) {
 				s = '<1min';
 				nextSecs = 60 - t;
+				// Prevent showing '-<1min' when browser and server have relatively small time drift of max 1 minute.
+				negative = '';
 			}
 			dom._kids(r, negative + s);
 			// note: Cannot have delays longer than 24.8 days due to storage as 32 bit in
