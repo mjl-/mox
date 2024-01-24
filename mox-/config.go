@@ -520,7 +520,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 	if err != nil {
 		addErrorf("parsing hostname: %s", err)
 	} else if hostname.Name() != c.Hostname {
-		addErrorf("hostname must be in IDNA form %q", hostname.Name())
+		addErrorf("hostname must be in unicode form %q instead of %q", hostname.Name(), c.Hostname)
 	}
 	c.HostnameDomain = hostname
 
@@ -1085,7 +1085,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		if err != nil {
 			addErrorf("bad domain %q: %s", d, err)
 		} else if dnsdomain.Name() != d {
-			addErrorf("domain %s must be specified in IDNA form, %s", d, dnsdomain.Name())
+			addErrorf("domain %s must be specified in unicode form, %s", d, dnsdomain.Name())
 		}
 
 		domain.Domain = dnsdomain
@@ -1108,7 +1108,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			if err != nil {
 				addErrorf("bad selector %q: %s", name, err)
 			} else if seld.Name() != name {
-				addErrorf("selector %q must be specified in IDNA form, %q", name, seld.Name())
+				addErrorf("selector %q must be specified in unicode form, %q", name, seld.Name())
 			}
 			sel.Domain = seld
 

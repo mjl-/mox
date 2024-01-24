@@ -686,7 +686,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# all clients to update their settings, it is convenient to have client settings
 			# that reference a subdomain of the hosted domain instead of the hostname of the
 			# server where the mail is currently hosted. If empty, the hostname of the mail
-			# server is used for client configurations. (optional)
+			# server is used for client configurations. Unicode name. (optional)
 			ClientSettingsDomain:
 
 			# If not empty, only the string before the separator is used to for email delivery
