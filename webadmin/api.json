@@ -2649,7 +2649,7 @@
 				},
 				{
 					"Name": "Domain",
-					"Docs": "",
+					"Docs": "ASCII/A-labels, ../rfc/8460:704",
 					"Typewords": [
 						"string"
 					]

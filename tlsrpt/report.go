@@ -235,7 +235,7 @@ func (r ResultJSON) Convert() Result {
 type ResultPolicy struct {
 	Type   PolicyType
 	String []string
-	Domain string
+	Domain string // ASCII/A-labels, ../rfc/8460:704
 	MXHost []string
 }
 

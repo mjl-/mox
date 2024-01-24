@@ -320,7 +320,7 @@ export interface Result {
 export interface ResultPolicy {
 	Type: PolicyType
 	String?: string[] | null
-	Domain: string
+	Domain: string  // ASCII/A-labels, ../rfc/8460:704
 	MXHost?: string[] | null
 }
 
