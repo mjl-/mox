@@ -273,6 +273,11 @@ type Domain struct {
 
 	Domain                  dns.Domain `sconf:"-" json:"-"`
 	ClientSettingsDNSDomain dns.Domain `sconf:"-" json:"-"`
+
+	// Set when DMARC and TLSRPT (when set) has an address with different domain (we're
+	// hosting the reporting), and there are no destination addresses configured for
+	// the domain. Disables some functionality related to hosting a domain.
+	ReportsOnly bool `sconf:"-" json:"-"`
 }
 
 type DMARC struct {

@@ -54,7 +54,9 @@ func FindAccount(localpart smtp.Localpart, domain dns.Domain, allowPostmaster bo
 	}
 
 	d, ok := Conf.Domain(domain)
-	if !ok {
+	if !ok || d.ReportsOnly {
+		// For ReportsOnly, we also return ErrDomainNotFound, so this domain isn't
+		// considered local/authoritative during delivery.
 		return "", "", config.Destination{}, ErrDomainNotFound
 	}
 

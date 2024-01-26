@@ -257,9 +257,9 @@ func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 		}
 
 		for _, dom := range c.Dynamic.Domains {
-			if dom.DMARC != nil && dom.DMARC.Domain != "" && dom.DMARC.DNSDomain != dom.Domain {
-				// Do not allow TLS certificates for domains for which we only accept DMARC reports
-				// as external party.
+			// Do not allow TLS certificates for domains for which we only accept DMARC/TLS
+			// reports as external party.
+			if dom.ReportsOnly {
 				continue
 			}
 
@@ -1210,6 +1210,9 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		c.Domains[d] = domain
 	}
 
+	// To determine ReportsOnly.
+	domainHasAddress := map[string]bool{}
+
 	// Validate email addresses.
 	for accName, acc := range c.Accounts {
 		var err error
@@ -1331,6 +1334,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 					addErrorf("unknown domain for address %q in account %q", addrName, accName)
 					continue
 				}
+				domainHasAddress[d.Name()] = true
 				addrFull := "@" + d.Name()
 				if _, ok := accDests[addrFull]; ok {
 					addErrorf("duplicate canonicalized catchall destination address %s", addrFull)
@@ -1365,6 +1369,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 
 			origLP := address.Localpart
 			dc := c.Domains[address.Domain.Name()]
+			domainHasAddress[address.Domain.Name()] = true
 			if lp, err := CanonicalLocalpart(address.Localpart, dc); err != nil {
 				addErrorf("canonicalizing localpart %s: %v", address.Localpart, err)
 			} else if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(address.Localpart), dc.LocalpartCatchallSeparator) {
@@ -1419,8 +1424,11 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			if err != nil {
 				addErrorf("DMARC domain %q: %s", dmarc.Domain, err)
 			} else if _, ok := c.Domains[addrdom.Name()]; !ok {
-				addErrorf("unknown domain %q for DMARC address in domain %q", dmarc.Domain, d)
+				addErrorf("unknown domain %q for DMARC address in domain %q", addrdom, d)
 			}
+		}
+		if addrdom == domain.Domain {
+			domainHasAddress[addrdom.Name()] = true
 		}
 
 		domain.DMARC.ParsedLocalpart = lp
@@ -1462,6 +1470,9 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				addErrorf("unknown domain %q for TLSRPT address in domain %q", tlsrpt.Domain, d)
 			}
 		}
+		if addrdom == domain.Domain {
+			domainHasAddress[addrdom.Name()] = true
+		}
 
 		domain.TLSRPT.ParsedLocalpart = lp
 		domain.TLSRPT.DNSDomain = addrdom
@@ -1473,6 +1484,13 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		}
 		checkMailboxNormf(tlsrpt.Mailbox, "TLSRPT mailbox for account %q", tlsrpt.Account)
 		accDests[addrFull] = AccountDestination{false, lp, tlsrpt.Account, dest}
+	}
+
+	// Set ReportsOnly for domains, based on whether we have seen addresses (possibly
+	// from DMARC or TLS reporting).
+	for d, domain := range c.Domains {
+		domain.ReportsOnly = !domainHasAddress[domain.Domain.Name()]
+		c.Domains[d] = domain
 	}
 
 	// Check webserver configs.
