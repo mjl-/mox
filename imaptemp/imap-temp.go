@@ -110,7 +110,7 @@ func (i *ImapTemp) CreateSocket(dir ...string) (imapConn net.Conn, err error) {
 		if i.dir, err = os.MkdirTemp(useDefaultTempDir, dirTemplate); err != nil {
 			return
 		}
-		i.noRemove.Store(true)
+		i.doRemove.Store(true)
 	}
 
 	// make mox able to run
@@ -276,7 +276,7 @@ func (i *ImapTemp) unCreate() (err error) {
 		}
 	}
 	// remove temporary files, ignore error if an error is already present
-	if !i.noRemove.Load() {
+	if i.doRemove.Load() {
 		if e := os.RemoveAll(i.dir); e != nil && err == nil {
 			err = e
 		}
@@ -338,7 +338,7 @@ type ImapTemp struct {
 	// true if timeouts should not be disabled
 	useTimeouts atomic.Bool
 	// true if file system is not temporary and should not be removed
-	noRemove atomic.Bool
+	doRemove atomic.Bool
 
 	// absolute path to temporary file-system storage
 	//	- thread-safe through isCreateServer read and write
