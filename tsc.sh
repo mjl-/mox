@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # - todo: get tsc to not emit semicolons except for the handful cases where it is needed.
