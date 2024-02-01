@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 mkdir website/html 2>/dev/null
 rm -r website/html/* 2>/dev/null
