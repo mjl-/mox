@@ -1020,33 +1020,29 @@ const displayName = (s) => {
 	}
 	return s;
 };
+const formatDomain = (dom) => dom.Unicode || dom.ASCII;
 // format an address with both name and email address.
 const formatAddress = (a) => {
-	let s = '<' + a.User + '@' + a.Domain.ASCII + '>';
+	let s = '<' + a.User + '@' + formatDomain(a.Domain) + '>';
 	if (a.Name) {
 		s = displayName(a.Name) + ' ' + s;
 	}
 	return s;
 };
-// returns an address with all available details, including unicode version if
-// available.
-const formatAddressFull = (a) => {
-	let s = '';
-	if (a.Name) {
-		s = a.Name + ' ';
+// Like formatAddress, but returns an element with a title (for hover) with the ASCII domain, in case of IDN.
+const formatAddressElem = (a) => {
+	if (!a.Domain.Unicode) {
+		return formatAddress(a);
 	}
-	s += '<' + a.User + '@' + a.Domain.ASCII + '>';
-	if (a.Domain.Unicode) {
-		s += ' (' + a.User + '@' + a.Domain.Unicode + ')';
-	}
-	return s;
+	return dom.span(a.Name ? [displayName(a.Name), ' '] : '', '<', a.User, '@', dom.span(attr.title(a.Domain.ASCII), formatDomain(a.Domain)), '>');
 };
-// like formatAddressFull, but underline domain with dmarc-like validation if appropriate.
-const formatAddressFullValidated = (a, m, use) => {
-	const domainText = (s) => {
+// like formatAddress, but underline domain with dmarc-like validation if appropriate.
+const formatAddressValidated = (a, m, use) => {
+	const domainText = (domstr, ascii) => {
 		if (!use) {
-			return s;
+			return domstr;
 		}
+		const extra = domstr === ascii ? '' : '; domain ' + ascii;
 		// We want to show how "approved" this message is given the message From's domain.
 		// We have MsgFromValidation available. It's not the greatest, being a mix of
 		// potential strict validations, actual DMARC policy validation, potential relaxed
@@ -1081,21 +1077,18 @@ const formatAddressFullValidated = (a, m, use) => {
 				break;
 			default:
 				// Also for zero value, when unknown. E.g. for sent messages added with IMAP.
-				return dom.span(attr.title('Unknown DMARC verification result.'), s);
+				title = 'Unknown DMARC verification result.';
+				return dom.span(attr.title(title + extra), domstr);
 		}
-		return dom.span(attr.title(title), style({ borderBottom: '1.5px solid ' + color, textDecoration: 'none' }), s);
+		return dom.span(attr.title(title + extra), style({ borderBottom: '1.5px solid ' + color, textDecoration: 'none' }), domstr);
 	};
 	let l = [];
 	if (a.Name) {
 		l.push(a.Name + ' ');
 	}
 	l.push('<' + a.User + '@');
-	l.push(domainText(a.Domain.ASCII));
+	l.push(domainText(formatDomain(a.Domain), a.Domain.ASCII));
 	l.push('>');
-	if (a.Domain.Unicode) {
-		// Not underlining because unicode domain may already cause underlining.
-		l.push(' (' + a.User + '@' + a.Domain.Unicode + ')');
-	}
 	return l;
 };
 // format just the name if present and it doesn't look like an address, or otherwise just the email address.
@@ -1104,21 +1097,19 @@ const formatAddressShort = (a) => {
 	if (n && !n.includes('<') && !n.includes('@') && !n.includes('>')) {
 		return n;
 	}
-	return '<' + a.User + '@' + a.Domain.ASCII + '>';
+	return '<' + a.User + '@' + formatDomain(a.Domain) + '>';
 };
 // return just the email address.
-const formatEmailASCII = (a) => {
-	return a.User + '@' + a.Domain.ASCII;
-};
+const formatEmail = (a) => a.User + '@' + formatDomain(a.Domain);
 const equalAddress = (a, b) => {
 	return (!a.User || !b.User || a.User === b.User) && a.Domain.ASCII === b.Domain.ASCII;
 };
 const addressList = (allAddrs, l) => {
 	if (l.length <= 5 || allAddrs) {
-		return dom.span(join(l.map(a => formatAddressFull(a)), () => ', '));
+		return dom.span(join(l.map(a => formatAddressElem(a)), () => ', '));
 	}
-	let elem = dom.span(join(l.slice(0, 4).map(a => formatAddressFull(a)), () => ', '), ' ', dom.clickbutton('More...', attr.title('More addresses:\n' + l.slice(4).map(a => formatAddressFull(a)).join(',\n')), function click() {
-		const nelem = dom.span(join(l.map(a => formatAddressFull(a)), () => ', '), ' ', dom.clickbutton('Less...', function click() {
+	let elem = dom.span(join(l.slice(0, 4).map(a => formatAddressElem(a)), () => ', '), ' ', dom.clickbutton('More...', attr.title('More addresses:\n' + l.slice(4).map(a => formatAddress(a)).join(',\n')), function click() {
+		const nelem = dom.span(join(l.map(a => formatAddressElem(a)), () => ', '), ' ', dom.clickbutton('Less...', function click() {
 			elem.replaceWith(addressList(allAddrs, l));
 		}));
 		elem.replaceWith(nelem);
@@ -1135,7 +1126,7 @@ const loadMsgheaderView = (msgheaderelem, mi, moreHeaders, refineKeyword, allAdd
 	const receivedlocal = new Date(received.getTime());
 	dom._kids(msgheaderelem, 
 	// todo: make addresses clickable, start search (keep current mailbox if any)
-	dom.tr(dom.td('From:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(style({ width: '100%' }), dom.div(style({ display: 'flex', justifyContent: 'space-between' }), dom.div(join((msgenv.From || []).map(a => formatAddressFullValidated(a, mi.Message, !!msgenv.From && msgenv.From.length === 1)), () => ', ')), dom.div(attr.title('Received: ' + received.toString() + ';\nDate header in message: ' + (msgenv.Date ? msgenv.Date.toString() : '(missing/invalid)')), receivedlocal.toDateString() + ' ' + receivedlocal.toTimeString().split(' ')[0])))), (msgenv.ReplyTo || []).length === 0 ? [] : dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(join((msgenv.ReplyTo || []).map(a => formatAddressFull(a)), () => ', '))), dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(addressList(allAddrs, msgenv.To || []))), (msgenv.CC || []).length === 0 ? [] : dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(addressList(allAddrs, msgenv.CC || []))), (msgenv.BCC || []).length === 0 ? [] : dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(addressList(allAddrs, msgenv.BCC || []))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(dom.div(style({ display: 'flex', justifyContent: 'space-between' }), dom.div(msgenv.Subject || ''), dom.div(mi.Message.IsForward ? dom.span(style({ padding: '0px 0.15em', fontSize: '.9em' }), 'Forwarded', attr.title('Message came in from a forwarded address. Some message authentication policies, like DMARC, were not evaluated.')) : [], mi.Message.IsMailingList ? dom.span(style({ padding: '0px 0.15em', fontSize: '.9em' }), 'Mailing list', attr.title('Message was received from a mailing list. Some message authentication policies, like DMARC, were not evaluated.')) : [], mi.Message.ReceivedTLSVersion === 1 ? dom.span(style({ padding: '0px 0.15em', fontSize: '.9em', borderBottom: '1.5px solid #e15d1c' }), 'Without TLS', attr.title('Message received (last hop) without TLS.')) : [], mi.Message.ReceivedTLSVersion > 1 && !mi.Message.ReceivedRequireTLS ? dom.span(style({ padding: '0px 0.15em', fontSize: '.9em', borderBottom: '1.5px solid #50c40f' }), 'With TLS', attr.title('Message received (last hop) with TLS.')) : [], mi.Message.ReceivedRequireTLS ? dom.span(style({ padding: '.1em .3em', fontSize: '.9em', backgroundColor: '#d2f791', border: '1px solid #ccc', borderRadius: '3px' }), 'With RequireTLS', attr.title('Transported with RequireTLS, ensuring TLS along the entire delivery path from sender to recipient, with TLS certificate verification through MTA-STS and/or DANE.')) : [], mi.IsSigned ? dom.span(style({ backgroundColor: '#666', padding: '0px 0.15em', fontSize: '.9em', color: 'white', borderRadius: '.15em' }), 'Message has a signature') : [], mi.IsEncrypted ? dom.span(style({ backgroundColor: '#666', padding: '0px 0.15em', fontSize: '.9em', color: 'white', borderRadius: '.15em' }), 'Message is encrypted') : [], refineKeyword ? (mi.Message.Keywords || []).map(kw => dom.clickbutton(dom._class('keyword'), kw, async function click() {
+	dom.tr(dom.td('From:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(style({ width: '100%' }), dom.div(style({ display: 'flex', justifyContent: 'space-between' }), dom.div(join((msgenv.From || []).map(a => formatAddressValidated(a, mi.Message, !!msgenv.From && msgenv.From.length === 1)), () => ', ')), dom.div(attr.title('Received: ' + received.toString() + ';\nDate header in message: ' + (msgenv.Date ? msgenv.Date.toString() : '(missing/invalid)')), receivedlocal.toDateString() + ' ' + receivedlocal.toTimeString().split(' ')[0])))), (msgenv.ReplyTo || []).length === 0 ? [] : dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(join((msgenv.ReplyTo || []).map(a => formatAddressElem(a)), () => ', '))), dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(addressList(allAddrs, msgenv.To || []))), (msgenv.CC || []).length === 0 ? [] : dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(addressList(allAddrs, msgenv.CC || []))), (msgenv.BCC || []).length === 0 ? [] : dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(addressList(allAddrs, msgenv.BCC || []))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td(dom.div(style({ display: 'flex', justifyContent: 'space-between' }), dom.div(msgenv.Subject || ''), dom.div(mi.Message.IsForward ? dom.span(style({ padding: '0px 0.15em', fontSize: '.9em' }), 'Forwarded', attr.title('Message came in from a forwarded address. Some message authentication policies, like DMARC, were not evaluated.')) : [], mi.Message.IsMailingList ? dom.span(style({ padding: '0px 0.15em', fontSize: '.9em' }), 'Mailing list', attr.title('Message was received from a mailing list. Some message authentication policies, like DMARC, were not evaluated.')) : [], mi.Message.ReceivedTLSVersion === 1 ? dom.span(style({ padding: '0px 0.15em', fontSize: '.9em', borderBottom: '1.5px solid #e15d1c' }), 'Without TLS', attr.title('Message received (last hop) without TLS.')) : [], mi.Message.ReceivedTLSVersion > 1 && !mi.Message.ReceivedRequireTLS ? dom.span(style({ padding: '0px 0.15em', fontSize: '.9em', borderBottom: '1.5px solid #50c40f' }), 'With TLS', attr.title('Message received (last hop) with TLS.')) : [], mi.Message.ReceivedRequireTLS ? dom.span(style({ padding: '.1em .3em', fontSize: '.9em', backgroundColor: '#d2f791', border: '1px solid #ccc', borderRadius: '3px' }), 'With RequireTLS', attr.title('Transported with RequireTLS, ensuring TLS along the entire delivery path from sender to recipient, with TLS certificate verification through MTA-STS and/or DANE.')) : [], mi.IsSigned ? dom.span(style({ backgroundColor: '#666', padding: '0px 0.15em', fontSize: '.9em', color: 'white', borderRadius: '.15em' }), 'Message has a signature') : [], mi.IsEncrypted ? dom.span(style({ backgroundColor: '#666', padding: '0px 0.15em', fontSize: '.9em', color: 'white', borderRadius: '.15em' }), 'Message is encrypted') : [], refineKeyword ? (mi.Message.Keywords || []).map(kw => dom.clickbutton(dom._class('keyword'), kw, async function click() {
 		await refineKeyword(kw);
 	})) : [])))), moreHeaders.map(k => dom.tr(dom.td(k + ':', style({ textAlign: 'right', color: '#555', whiteSpace: 'nowrap' })), dom.td())));
 };

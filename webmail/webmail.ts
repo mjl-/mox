@@ -1578,7 +1578,7 @@ const compose = (opts: ComposeOptions) => {
 	let haveFrom = false
 	const fromOptions = accountAddresses.map(a => {
 		const selected = opts.from && opts.from.length === 1 && equalAddress(a, opts.from[0]) || loginAddress && equalAddress(a, loginAddress) && (!opts.from || envelopeIdentity(opts.from))
-		const o = dom.option(formatAddressFull(a), selected ? attr.selected('') : [])
+		const o = dom.option(formatAddress(a), selected ? attr.selected('') : [])
 		if (selected) {
 			haveFrom = true
 		}
@@ -1588,7 +1588,7 @@ const compose = (opts: ComposeOptions) => {
 		const a = addressSelf(opts.from[0])
 		if (a) {
 			const fromAddr: api.MessageAddress = {Name: a.Name, User: opts.from[0].User, Domain: a.Domain}
-			const o = dom.option(formatAddressFull(fromAddr), attr.selected(''))
+			const o = dom.option(formatAddress(fromAddr), attr.selected(''))
 			fromOptions.unshift(o)
 		}
 	}
@@ -2126,12 +2126,12 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 					ta.push(a)
 				}
 			}
-			let title = fa.map(a => formatAddressFull(a)).join(', ')
+			let title = fa.map(a => formatAddress(a)).join(', ')
 			if (ta.length > 0) {
 				if (title) {
 					title += ',\n'
 				}
-				title += 'addressed: '+ta.map(a => formatAddressFull(a)).join(', ')
+				title += 'addressed: '+ta.map(a => formatAddress(a)).join(', ')
 			}
 			return [
 				attr.title(title),
@@ -2331,8 +2331,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	const mi = miv.messageitem
 	const m = mi.Message
 
-	const formatEmailAddress = (a: api.MessageAddress) => a.User + '@' + a.Domain.ASCII
-	const fromAddress = mi.Envelope.From && mi.Envelope.From.length === 1 ? formatEmailAddress(mi.Envelope.From[0]) : ''
+	const fromAddress = mi.Envelope.From && mi.Envelope.From.length === 1 ? formatEmail(mi.Envelope.From[0]) : ''
 
 	// Some operations below, including those that can be reached through shortcuts,
 	// need a parsed message. So we keep a promise around for having that parsed
@@ -2370,7 +2369,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				let onWroteLine = ''
 				if (mi.Envelope.Date && mi.Envelope.From && mi.Envelope.From.length === 1) {
 					const from = mi.Envelope.From[0]
-					const name = from.Name || formatEmailAddress(from)
+					const name = from.Name || formatEmail(from)
 					const datetime = mi.Envelope.Date.toLocaleDateString(undefined, {weekday: "short", year: "numeric", month: "short", day: "numeric"}) + ' at ' + mi.Envelope.Date.toLocaleTimeString()
 					onWroteLine = 'On ' + datetime + ', ' + name + ' wrote:\n'
 				}
@@ -2565,7 +2564,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		dom._kids(msgbuttonElem,
 			dom.div(dom._class('pad'),
 				(!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ',
-				(pm && pm.ListReplyAddress && formatEmailAddress(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ',
+				(pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ',
 				(mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
 					dom.clickbutton('Reply all', attr.title('Compose a reply to all participants of this message.'), clickCmd(cmdReplyAll, shortcuts)), ' ',
 				dom.clickbutton('Forward', attr.title('Compose a forwarding message, optionally including attachments.'), clickCmd(cmdForward, shortcuts)), ' ',
@@ -5471,7 +5470,7 @@ const init = async () => {
 
 	const updatePageTitle = () => {
 		const mb = mailboxlistView && mailboxlistView.activeMailbox()
-		const addr = loginAddress ? loginAddress.User+'@'+(loginAddress.Domain.Unicode || loginAddress.Domain.ASCII) : ''
+		const addr = loginAddress ? loginAddress.User+'@'+formatDomain(loginAddress.Domain) : ''
 		if (!mb) {
 			document.title = [addr, 'Mox Webmail'].join(' - ')
 		} else {
@@ -6413,7 +6412,7 @@ const init = async () => {
 				window.clearTimeout(eventID)
 				eventID = 0
 			}
-			document.title = ['(not connected)', loginAddress ? (loginAddress.User+'@'+(loginAddress.Domain.Unicode || loginAddress.Domain.ASCII)) : '', 'Mox Webmail'].filter(s => s).join(' - ')
+			document.title = ['(not connected)', loginAddress ? (loginAddress.User+'@'+formatDomain(loginAddress.Domain)) : '', 'Mox Webmail'].filter(s => s).join(' - ')
 			dom._kids(connectionElem)
 			if (noreconnect) {
 				dom._kids(statusElem, capitalizeFirst(errmsg)+', not automatically retrying. ')
@@ -6460,14 +6459,14 @@ const init = async () => {
 			connecting = false
 			sseID = start.SSEID
 			loginAddress = start.LoginAddress
-			dom._kids(loginAddressElem, loginAddress.User + '@' + (loginAddress.Domain.Unicode || loginAddress.Domain.ASCII))
-			const loginAddr = formatEmailASCII(loginAddress)
+			dom._kids(loginAddressElem, formatEmail(loginAddress))
+			const loginAddr = formatEmail(loginAddress)
 			accountAddresses = start.Addresses || []
 			accountAddresses.sort((a, b) => {
-				if (formatEmailASCII(a) === loginAddr) {
+				if (formatEmail(a) === loginAddr) {
 					return -1
 				}
-				if (formatEmailASCII(b) === loginAddr) {
+				if (formatEmail(b) === loginAddr) {
 					return 1
 				}
 				if (a.Domain.ASCII !== b.Domain.ASCII) {

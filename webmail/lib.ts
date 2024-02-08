@@ -88,35 +88,32 @@ const displayName = (s: string) => {
 	return s
 }
 
+const formatDomain = (dom: api.Domain) => dom.Unicode || dom.ASCII
+
 // format an address with both name and email address.
 const formatAddress = (a: api.MessageAddress): string => {
-	let s = '<' + a.User + '@' + a.Domain.ASCII + '>'
+	let s = '<' + a.User + '@' + formatDomain(a.Domain) + '>'
 	if (a.Name) {
 		s = displayName(a.Name) + ' ' + s
 	}
 	return s
 }
 
-// returns an address with all available details, including unicode version if
-// available.
-const formatAddressFull = (a: api.MessageAddress): string => {
-	let s = ''
-	if (a.Name) {
-		s = a.Name + ' '
+// Like formatAddress, but returns an element with a title (for hover) with the ASCII domain, in case of IDN.
+const formatAddressElem = (a: api.MessageAddress): string | HTMLElement => {
+	if (!a.Domain.Unicode) {
+		return formatAddress(a)
 	}
-	s += '<' + a.User + '@' + a.Domain.ASCII + '>'
-	if (a.Domain.Unicode) {
-		s += ' (' + a.User + '@' + a.Domain.Unicode + ')'
-	}
-	return s
+	return dom.span(a.Name ? [displayName(a.Name), ' '] : '', '<', a.User, '@', dom.span(attr.title(a.Domain.ASCII), formatDomain(a.Domain)), '>')
 }
 
-// like formatAddressFull, but underline domain with dmarc-like validation if appropriate.
-const formatAddressFullValidated = (a: api.MessageAddress, m: api.Message, use: boolean): (string | HTMLElement)[] => {
-	const domainText = (s: string): HTMLElement | string => {
+// like formatAddress, but underline domain with dmarc-like validation if appropriate.
+const formatAddressValidated = (a: api.MessageAddress, m: api.Message, use: boolean): (string | HTMLElement)[] => {
+	const domainText = (domstr: string, ascii: string): HTMLElement | string => {
 		if (!use) {
-			return s
+			return domstr
 		}
+		const extra = domstr === ascii ? '' : '; domain '+ascii
 		// We want to show how "approved" this message is given the message From's domain.
 		// We have MsgFromValidation available. It's not the greatest, being a mix of
 		// potential strict validations, actual DMARC policy validation, potential relaxed
@@ -150,9 +147,10 @@ const formatAddressFullValidated = (a: api.MessageAddress, m: api.Message, use: 
 			break;
 		default:
 			// Also for zero value, when unknown. E.g. for sent messages added with IMAP.
-			return dom.span(attr.title('Unknown DMARC verification result.'), s)
+			title = 'Unknown DMARC verification result.'
+			return dom.span(attr.title(title+extra), domstr)
 		}
-		return dom.span(attr.title(title), style({borderBottom: '1.5px solid '+color, textDecoration: 'none'}), s)
+		return dom.span(attr.title(title+extra), style({borderBottom: '1.5px solid '+color, textDecoration: 'none'}), domstr)
 	}
 
 	let l: (string | HTMLElement)[] = []
@@ -160,12 +158,8 @@ const formatAddressFullValidated = (a: api.MessageAddress, m: api.Message, use: 
 		l.push(a.Name + ' ')
 	}
 	l.push('<' + a.User + '@')
-	l.push(domainText(a.Domain.ASCII))
+	l.push(domainText(formatDomain(a.Domain), a.Domain.ASCII))
 	l.push('>')
-	if (a.Domain.Unicode) {
-		// Not underlining because unicode domain may already cause underlining.
-		l.push(' (' + a.User + '@' + a.Domain.Unicode+')')
-	}
 	return l
 }
 
@@ -175,13 +169,11 @@ const formatAddressShort = (a: api.MessageAddress): string => {
 	if (n && !n.includes('<') && !n.includes('@') && !n.includes('>')) {
 		return n
 	}
-	return '<' + a.User + '@' + a.Domain.ASCII + '>'
+	return '<' + a.User + '@' + formatDomain(a.Domain) + '>'
 }
 
 // return just the email address.
-const formatEmailASCII = (a: api.MessageAddress): string => {
-	return a.User + '@' + a.Domain.ASCII
-}
+const formatEmail = (a: api.MessageAddress) => a.User + '@' + formatDomain(a.Domain)
 
 const equalAddress = (a: api.MessageAddress, b: api.MessageAddress) => {
 	return (!a.User || !b.User || a.User === b.User) && a.Domain.ASCII === b.Domain.ASCII
@@ -189,17 +181,17 @@ const equalAddress = (a: api.MessageAddress, b: api.MessageAddress) => {
 
 const addressList = (allAddrs: boolean, l: api.MessageAddress[]) => {
 	if (l.length <= 5 || allAddrs) {
-		return dom.span(join(l.map(a => formatAddressFull(a)), () => ', '))
+		return dom.span(join(l.map(a => formatAddressElem(a)), () => ', '))
 	}
 	let elem = dom.span(
 		join(
-			l.slice(0, 4).map(a => formatAddressFull(a)),
+			l.slice(0, 4).map(a => formatAddressElem(a)),
 			() => ', '
 		),
 		' ',
-		dom.clickbutton('More...', attr.title('More addresses:\n'+l.slice(4).map(a => formatAddressFull(a)).join(',\n')), function click() {
+		dom.clickbutton('More...', attr.title('More addresses:\n'+l.slice(4).map(a => formatAddress(a)).join(',\n')), function click() {
 			const nelem = dom.span(
-				join(l.map(a => formatAddressFull(a)), () => ', '),
+				join(l.map(a => formatAddressElem(a)), () => ', '),
 				' ',
 				dom.clickbutton('Less...', function click() {
 					elem.replaceWith(addressList(allAddrs, l))
@@ -226,7 +218,7 @@ const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, more
 			dom.td(
 				style({width: '100%'}),
 				dom.div(style({display: 'flex', justifyContent: 'space-between'}),
-					dom.div(join((msgenv.From || []).map(a => formatAddressFullValidated(a, mi.Message, !!msgenv.From && msgenv.From.length === 1)), () => ', ')),
+					dom.div(join((msgenv.From || []).map(a => formatAddressValidated(a, mi.Message, !!msgenv.From && msgenv.From.length === 1)), () => ', ')),
 					dom.div(
 						attr.title('Received: ' + received.toString() + ';\nDate header in message: ' + (msgenv.Date ? msgenv.Date.toString() : '(missing/invalid)')),
 						receivedlocal.toDateString() + ' ' + receivedlocal.toTimeString().split(' ')[0],
@@ -236,7 +228,7 @@ const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, more
 		),
 		(msgenv.ReplyTo || []).length === 0 ? [] : dom.tr(
 			dom.td('Reply-To:', style({textAlign: 'right', color: '#555', whiteSpace: 'nowrap'})),
-			dom.td(join((msgenv.ReplyTo || []).map(a => formatAddressFull(a)), () => ', ')),
+			dom.td(join((msgenv.ReplyTo || []).map(a => formatAddressElem(a)), () => ', ')),
 		),
 		dom.tr(
 			dom.td('To:', style({textAlign: 'right', color: '#555', whiteSpace: 'nowrap'})),
