@@ -11,13 +11,14 @@ import (
 	"fmt"
 	htmltemplate "html/template"
 	"log"
-	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"golang.org/x/exp/maps"
 )
 
 var destdir string
@@ -32,7 +33,7 @@ func xwritefile(path string, buf []byte) {
 	p := filepath.Join(destdir, path)
 	os.MkdirAll(filepath.Dir(p), 0755)
 	err := os.WriteFile(p, buf, 0644)
-	xcheckf(err, "writing file", p)
+	xcheckf(err, "writing file %s", p)
 }
 
 func main() {
