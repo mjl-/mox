@@ -5,7 +5,7 @@ prevversion=$(go list -mod=readonly -m -f '{{ .Version }}' github.com/mjl-/mox@l
 nextversion=$(cat next.txt)
 if ! test -d tmp/mox-$prevversion; then
 	mkdir -p tmp/mox-$prevversion
-	git archive --format=tar v0.0.8 | tar -C tmp/mox-$prevversion -xf -
+	git archive --format=tar $prevversion | tar -C tmp/mox-$prevversion -xf -
 fi
 (rm -r tmp/apidiff || exit 0)
 mkdir -p tmp/apidiff/$prevversion tmp/apidiff/next
