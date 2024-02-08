@@ -31,10 +31,10 @@ func main() {
 	var commitdate = os.Getenv("commitdate")
 
 	var pageRoot, pageProtocols bool
-	var title string
+	var pageTitle string
 	flag.BoolVar(&pageRoot, "root", false, "is top-level index page, instead of in a sub directory")
 	flag.BoolVar(&pageProtocols, "protocols", false, "is protocols page")
-	flag.StringVar(&title, "title", "", "html title of page, set to value of link name with a suffix")
+	flag.StringVar(&pageTitle, "title", "", "html title of page, set to value of link name with a suffix")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) != 1 {
@@ -43,8 +43,8 @@ func main() {
 	}
 	linkname := args[0]
 
-	if title == "" && linkname != "" {
-		title = linkname + " - Mox"
+	if pageTitle == "" && linkname != "" {
+		pageTitle = linkname + " - Mox"
 	}
 
 	// Often the website markdown file.
@@ -67,11 +67,11 @@ func main() {
 		var title string
 
 		// Get the h2's, split them over the columns.
-		type link struct {
+		type toclink struct {
 			Title string
 			ID    string
 		}
-		var links []link
+		var links []toclink
 
 		node := blackfriday.New(opts...).Parse(input)
 		if node == nil {
@@ -84,10 +84,8 @@ func main() {
 			if c.Level == 1 {
 				title = string(c.FirstChild.Literal)
 			} else if c.Level == 2 {
-				link := link{string(c.FirstChild.Literal), c.HeadingID}
+				link := toclink{string(c.FirstChild.Literal), c.HeadingID}
 				links = append(links, link)
-			} else {
-				// log.Fatalf("heading, level %d", c.Level)
 			}
 		}
 
@@ -176,13 +174,13 @@ func main() {
 			xinput = bytes.SplitN(xinput, []byte("\n"), 2)[1]
 		}
 		output = blackfriday.Run(xinput, opts...)
-		title, toc := makeTOC()
+		titlebuf, toc := makeTOC()
 		output = append(toc, output...)
-		output = append(title, output...)
+		output = append(titlebuf, output...)
 	}
 
 	// HTML preamble.
-	before = strings.Replace(before, "<title>...</title>", "<title>"+html.EscapeString(title)+"</title>", 1)
+	before = strings.Replace(before, "<title>...</title>", "<title>"+html.EscapeString(pageTitle)+"</title>", 1)
 	before = strings.Replace(before, ">"+linkname+"<", ` style="font-weight: bold">`+linkname+"<", 1)
 	if !pageRoot {
 		before = strings.ReplaceAll(before, `"./`, `"../`)
