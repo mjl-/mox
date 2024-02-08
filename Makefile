@@ -6,7 +6,6 @@ build0:
 	# build early to catch syntax errors
 	CGO_ENABLED=0 go build
 	CGO_ENABLED=0 go vet ./...
-	CGO_ENABLED=0 go vet -tags integration
 	./gendoc.sh
 	(cd webadmin && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Admin) >webadmin/api.json
 	(cd webaccount && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Account) >webaccount/api.json
@@ -33,13 +32,27 @@ test-upgrade:
 	nice ./test-upgrade.sh
 
 check:
+	CGO_ENABLED=0 go vet -tags integration
+	CGO_ENABLED=0 go vet -tags website website/website.go
+	CGO_ENABLED=0 go vet -tags link rfc/link.go
+	CGO_ENABLED=0 go vet -tags errata rfc/errata.go
+	CGO_ENABLED=0 go vet -tags xr rfc/xr.go
+	GOARCH=386 CGO_ENABLED=0 go vet ./...
 	staticcheck ./...
 	staticcheck -tags integration
-	GOARCH=386 CGO_ENABLED=0 go vet ./...
+	staticcheck -tags website website/website.go
+	staticcheck -tags link rfc/link.go
+	staticcheck -tags errata rfc/errata.go
+	staticcheck -tags xr rfc/xr.go
 
 # having "err" shadowed is common, best to not have others
 check-shadow:
 	go vet -vettool=$$(which shadow) ./... 2>&1 | grep -v '"err"'
+	go vet -tags integration -vettool=$$(which shadow) 2>&1 | grep -v '"err"'
+	go vet -tags website -vettool=$$(which shadow) website/website.go 2>&1 | grep -v '"err"'
+	go vet -tags link -vettool=$$(which shadow) rfc/link.go 2>&1 | grep -v '"err"'
+	go vet -tags errata -vettool=$$(which shadow) rfc/errata.go 2>&1 | grep -v '"err"'
+	go vet -tags xr -vettool=$$(which shadow) rfc/xr.go 2>&1 | grep -v '"err"'
 
 fuzz:
 	go test -fuzz FuzzParseSignature -fuzztime 5m ./dkim
