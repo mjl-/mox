@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	mathrand "math/rand"
 	"time"
 
@@ -23,8 +24,6 @@ import (
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/spf"
 	"github.com/mjl-/mox/stub"
-
-	"golang.org/x/exp/slog"
 )
 
 var (

@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/fs"
 	golog "log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -24,8 +25,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"

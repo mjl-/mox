@@ -3,12 +3,11 @@
 package mox
 
 import (
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
-
-	"golang.org/x/exp/slog"
 )
 
 // Fork and exec as unprivileged user.

@@ -3,9 +3,8 @@ package dnsbl_test
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dnsbl"

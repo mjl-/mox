@@ -8,13 +8,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/bstore"
 

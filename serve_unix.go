@@ -7,6 +7,7 @@ import (
 	cryptorand "crypto/rand"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -17,8 +18,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"

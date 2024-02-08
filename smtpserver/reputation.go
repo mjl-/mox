@@ -3,9 +3,8 @@ package smtpserver
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/bstore"
 

@@ -4,11 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net/url"
 	"strings"
 
-	"golang.org/x/exp/slog"
 	"golang.org/x/text/encoding/ianaindex"
 
 	"github.com/mjl-/mox/dns"

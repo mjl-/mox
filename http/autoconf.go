@@ -3,10 +3,9 @@ package http
 import (
 	"encoding/xml"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"

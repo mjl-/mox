@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -34,7 +35,6 @@ import (
 	_ "embed"
 
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/adns"
 

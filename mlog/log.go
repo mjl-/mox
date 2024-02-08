@@ -18,14 +18,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/exp/slog"
 )
 
 var noctx = context.Background()

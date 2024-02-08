@@ -7,12 +7,11 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"sort"
 	"strings"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/adns"
 

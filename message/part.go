@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"mime/quotedprintable"
 	"net/mail"
@@ -21,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/exp/slog"
 	"golang.org/x/text/encoding/ianaindex"
 
 	"github.com/mjl-/mox/mlog"

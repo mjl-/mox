@@ -3,8 +3,7 @@ package mox
 import (
 	"crypto/tls"
 	"fmt"
-
-	"golang.org/x/exp/slog"
+	"log/slog"
 
 	"github.com/mjl-/mox/mlog"
 )

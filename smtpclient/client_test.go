@@ -14,14 +14,13 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"log/slog"
 	"math/big"
 	"net"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"

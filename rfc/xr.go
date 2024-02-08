@@ -11,14 +11,13 @@ import (
 	"fmt"
 	htmltemplate "html/template"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-
-	"golang.org/x/exp/maps"
 )
 
 var destdir string

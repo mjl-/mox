@@ -4,11 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"log"
+	"log/slog"
 	"net"
+	"slices"
 	"strings"
-
-	"golang.org/x/exp/slices"
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/sasl"

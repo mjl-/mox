@@ -13,14 +13,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	_ "embed"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/sherpa"
 	"github.com/mjl-/sherpadoc"

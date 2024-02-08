@@ -6,14 +6,13 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/dmarcrpt"
 	"github.com/mjl-/mox/dns"

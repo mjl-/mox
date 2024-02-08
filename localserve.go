@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	golog "log"
+	"log/slog"
 	"math/big"
 	"net"
 	"os"
@@ -21,7 +22,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/sconf"
 

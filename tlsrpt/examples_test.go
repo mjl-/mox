@@ -3,9 +3,8 @@ package tlsrpt_test
 import (
 	"context"
 	"log"
+	"log/slog"
 	"strings"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/tlsrpt"

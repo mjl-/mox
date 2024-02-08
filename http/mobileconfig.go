@@ -6,11 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/xml"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/smtp"

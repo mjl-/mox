@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/bstore"
 

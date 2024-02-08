@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"os"
@@ -23,7 +24,6 @@ import (
 
 	_ "embed"
 
-	"golang.org/x/exp/slog"
 	"golang.org/x/net/html"
 
 	"github.com/prometheus/client_golang/prometheus"

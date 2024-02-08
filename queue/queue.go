@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/exp/slog"
 	"golang.org/x/net/proxy"
 
 	"github.com/prometheus/client_golang/prometheus"

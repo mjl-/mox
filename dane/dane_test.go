@@ -12,6 +12,7 @@ import (
 	"crypto/x509/pkix"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net"
 	"reflect"
@@ -19,8 +20,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/adns"
 

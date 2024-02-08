@@ -21,18 +21,18 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/exp/slices"
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/adns"
 

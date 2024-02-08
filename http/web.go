@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	golog "log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -21,7 +22,6 @@ import (
 	_ "net/http/pprof"
 
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"

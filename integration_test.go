@@ -7,14 +7,13 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/imapclient"

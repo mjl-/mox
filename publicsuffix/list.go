@@ -14,11 +14,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	_ "embed"
 
-	"golang.org/x/exp/slog"
 	"golang.org/x/net/idna"
 
 	"github.com/mjl-/mox/dns"

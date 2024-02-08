@@ -2,10 +2,9 @@ package imapserver
 
 import (
 	"fmt"
+	"log/slog"
 	"net/textproto"
 	"strings"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/bstore"
 

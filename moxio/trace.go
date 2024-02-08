@@ -2,8 +2,7 @@ package moxio
 
 import (
 	"io"
-
-	"golang.org/x/exp/slog"
+	"log/slog"
 
 	"github.com/mjl-/mox/mlog"
 )

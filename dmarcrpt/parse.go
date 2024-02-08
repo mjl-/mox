@@ -9,10 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"

@@ -1,12 +1,11 @@
 package http
 
 import (
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"

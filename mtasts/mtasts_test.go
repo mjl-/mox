@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	golog "log"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -17,8 +18,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/adns"
 

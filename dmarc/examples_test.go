@@ -3,10 +3,9 @@ package dmarc_test
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net"
 	"strings"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"

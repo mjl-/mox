@@ -4,8 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"log"
-
-	"golang.org/x/exp/slog"
+	"log/slog"
 
 	"github.com/mjl-/adns"
 

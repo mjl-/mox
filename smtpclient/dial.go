@@ -3,10 +3,9 @@ package smtpclient
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"

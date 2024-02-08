@@ -8,10 +8,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
-
-	"golang.org/x/exp/slices"
 
 	bolt "go.etcd.io/bbolt"
 

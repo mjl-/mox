@@ -2,9 +2,8 @@ package stub
 
 import (
 	"context"
+	"log/slog"
 	"time"
-
-	"golang.org/x/exp/slog"
 )
 
 func HTTPClientObserveIgnore(ctx context.Context, log *slog.Logger, pkg, method string, statusCode int, err error, start time.Time) {

@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -29,7 +30,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/exp/slog"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/mjl-/autocert"

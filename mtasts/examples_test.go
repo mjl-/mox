@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
-
-	"golang.org/x/exp/slog"
+	"log/slog"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mtasts"

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"runtime/debug"
@@ -21,7 +22,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slog"
+
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/mjl-/bstore"

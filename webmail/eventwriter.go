@@ -6,13 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	mathrand "math/rand"
 	"net/http"
 	"runtime/debug"
 	"sync"
 	"time"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"

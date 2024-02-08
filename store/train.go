@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/bstore"
 

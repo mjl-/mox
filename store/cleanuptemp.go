@@ -1,9 +1,8 @@
 package store
 
 import (
+	"log/slog"
 	"os"
-
-	"golang.org/x/exp/slog"
 
 	"github.com/mjl-/mox/mlog"
 )

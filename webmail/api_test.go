@@ -8,9 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"testing"
-
-	"golang.org/x/exp/slices"
 
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
