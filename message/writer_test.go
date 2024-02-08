@@ -53,3 +53,29 @@ func TestMsgWriter(t *testing.T) {
 		t.Fatalf("got %q, expected %q", got, exp)
 	}
 }
+
+func TestMsgWriterIssue117(t *testing.T) {
+	var b strings.Builder
+	mw := NewWriter(&b)
+
+	// Write header and header/body separator, but with CR missing.
+	_, err := mw.Write([]byte("a: b\n\n"))
+	tcheck(t, err, "write")
+
+	// Write start of a line. The newline follows in a second write. Just because of buffering.
+	_, err = mw.Write([]byte("body\r"))
+	tcheck(t, err, "write")
+
+	// Finish the line. The bug is that w.tail was only updated while writing headers,
+	// not while writing message data for the body. That makes the code think this \n
+	// wasn't preceded by a \r, causing it to add a \r. And we end up with \r\r\n in
+	// the file.
+	_, err = mw.Write([]byte("\n"))
+	tcheck(t, err, "write")
+
+	got := b.String()
+	exp := "a: b\r\n\r\nbody\r\n"
+	if got != exp {
+		t.Fatalf("got %q, expected %q", got, exp)
+	}
+}

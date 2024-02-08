@@ -13,7 +13,9 @@ type Writer struct {
 	Has8bit  bool  // Whether a byte with the high/8bit has been read. So whether this needs SMTP 8BITMIME instead of 7BIT.
 	Size     int64 // Number of bytes written, may be different from bytes read due to LF to CRLF conversion.
 
-	tail [3]byte // For detecting header/body-separating crlf.
+	// For detecting header/body-separating crlf and fixing up bare lf. These are the
+	// incoming bytes, not the fixed up bytes. So CRs may be missing from tail.
+	tail [3]byte
 	// todo: should be parsing headers here, as we go
 }
 
@@ -26,9 +28,16 @@ func NewWriter(w io.Writer) *Writer {
 // io.Writer. It converts bare new lines (LF) to carriage returns with new lines
 // (CRLF).
 func (w *Writer) Write(buf []byte) (int, error) {
-	origtail := w.tail
+	if !w.Has8bit {
+		for _, b := range buf {
+			if b >= 0x80 {
+				w.Has8bit = true
+				break
+			}
+		}
+	}
 
-	if !w.HaveBody && len(buf) > 0 {
+	if !w.HaveBody {
 		get := func(i int) byte {
 			if i < 0 {
 				return w.tail[3+i]
@@ -42,29 +51,27 @@ func (w *Writer) Write(buf []byte) (int, error) {
 				break
 			}
 		}
+	}
 
+	// Update w.tail after having written. Regardless of error, writers can't expect
+	// subsequent writes to work again properly anyway.
+	defer func() {
 		n := len(buf)
 		if n > 3 {
 			n = 3
 		}
 		copy(w.tail[:], w.tail[n:])
 		copy(w.tail[3-n:], buf[len(buf)-n:])
-	}
-	if !w.Has8bit {
-		for _, b := range buf {
-			if b&0x80 != 0 {
-				w.Has8bit = true
-				break
-			}
-		}
-	}
+	}()
 
 	wrote := 0
 	o := 0
 Top:
 	for o < len(buf) {
+		// Look for bare newline. If present, write up to that position while adding the
+		// missing carriage return. Then start the loop again.
 		for i := o; i < len(buf); i++ {
-			if buf[i] == '\n' && (i > 0 && buf[i-1] != '\r' || i == 0 && origtail[2] != '\r') {
+			if buf[i] == '\n' && (i > 0 && buf[i-1] != '\r' || i == 0 && w.tail[2] != '\r') {
 				// Write buffer leading up to missing \r.
 				if i > o {
 					n, err := w.writer.Write(buf[o:i])
