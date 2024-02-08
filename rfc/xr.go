@@ -252,11 +252,9 @@ body { font-family: 'ubuntu mono', monospace; }
 				xcheckf(err, "writing rfc line")
 			}
 
-			fmt.Fprint(&b, `
-<script>
+			fmt.Fprint(&b, `<script>
 for (const a of document.querySelectorAll('a')) {
 	a.addEventListener('click', function(e) {
-		console.log('click', e.target.closest('.l').id)
 		location.hash = '#'+e.target.closest('.l').id
 	})
 }
@@ -288,7 +286,8 @@ var indexHTML = `<!doctype html>
 <html>
 	<head>
 		<meta charset="utf-8" />
-		<title>mox cross-referenced code and RFCs</title>
+		<title>Cross-referenced code and RFCs - Mox</title>
+		<link rel="icon" href="noNeedlessFaviconRequestsPlease:" />
 		<style>
 body { margin: 0; padding: 0; font-family: 'ubuntu', 'lato', sans-serif; }
 [title] { text-decoration: underline; text-decoration-style: dotted; }
@@ -301,11 +300,11 @@ body { margin: 0; padding: 0; font-family: 'ubuntu', 'lato', sans-serif; }
 			<div style="flex-grow: 1; display: flex; align-items: stretch">
 				<div style="flex-grow: 1; margin: 1ex; position: relative; display: flex; flex-direction: column">
 					<div style="margin-bottom: .5ex"><span id="codefile" style="font-weight: bold">...</span>, <a href="code.html" target="code">index</a></div>
-					<iframe id="codeiframe" class="iframe"></iframe>
+					<iframe name="code" id="codeiframe" class="iframe"></iframe>
 				</div>
 				<div style="flex-grow: 1; margin: 1ex; position: relative; display: flex; flex-direction: column">
 					<div style="margin-bottom: .5ex"><span id="rfcfile" style="font-weight: bold">...</span>, <a href="rfc.html" target="rfc">index</a></div>
-					<iframe id="rfciframe" clsas="iframe"></iframe>
+					<iframe name="rfc" id="rfciframe" class="iframe"></iframe>
 				</div>
 			</div>
 		</div>
@@ -324,6 +323,11 @@ function hashline(s) {
 function updateHash() {
 	const code = trimDotHTML(codeiframe.contentWindow.location.pathname.substring(basepath.length))+hashline(codeiframe.contentWindow.location.hash)
 	const rfc = trimDotHTML(rfciframe.contentWindow.location.pathname.substring(basepath.length))+hashline(rfciframe.contentWindow.location.hash)
+	if (!code || !rfc) {
+		// Safari and Chromium seem to raise hashchanged for the initial load. Skip if one
+		// of the iframes isn't loaded yet initially.
+		return
+	}
 	codefile.innerText = code
 	rfcfile.innerText = rfc
 	const nhash = '#' + code + ',' + rfc
@@ -337,28 +341,6 @@ function updateHash() {
 		changinghash = false
 	}, 0)
 }
-codeiframe.addEventListener('load', function(e) {
-	console.log('codeiframe load', e, codeiframe.src)
-	if (!rfciframe.src) {
-		return
-	}
-	updateHash()
-	codeiframe.contentWindow.addEventListener('hashchange', function(e) {
-		console.log('hash of codeiframe changed', codeiframe.contentWindow.location.hash)
-		updateHash()
-	})
-})
-rfciframe.addEventListener('load', function(e) {
-	console.log('rfciframe load', e, rfciframe.src)
-	if (!rfciframe.src) {
-		return
-	}
-	updateHash()
-	rfciframe.contentWindow.addEventListener('hashchange', function(e) {
-		console.log('hash of rfciframe changed', rfciframe.contentWindow.location.hash)
-		updateHash()
-	})
-})
 window.addEventListener('hashchange', function() {
 	console.log('window hashchange', location.hash, changinghash)
 	if (!changinghash) {
@@ -383,8 +365,18 @@ function hashlink2src(s) {
 // not. The added entries would break the browser back button...
 function replaceIframe(iframe, src) {
 	const o = iframe
+	let prevsrc = o ? o.src : undefined
 	iframe = document.createElement('iframe')
 	iframe.classList.add('iframe')
+	iframe.setAttribute('name', o.getAttribute('name'))
+	iframe.addEventListener('load', function() {
+		if (prevsrc !== iframe.src && (prevsrc || prevsrc !== 'code.html' && prevsrc !== 'rfc.html')) {
+			updateHash()
+		}
+		iframe.contentWindow.addEventListener('hashchange', function(e) {
+			updateHash()
+		})
+	})
 	iframe.setAttribute('src', src)
 	o.replaceWith(iframe)
 	return iframe
