@@ -1,4 +1,4 @@
-//go:build !quickstart && !integration
+//go:build !integration
 
 package main
 
