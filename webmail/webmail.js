@@ -576,6 +576,14 @@ var api;
 			const params = [messageAddressee];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		// DecodeMIMEWords decodes Q/B-encoded words for a mime headers into UTF-8 text.
+		async DecodeMIMEWords(text) {
+			const fn = "DecodeMIMEWords";
+			const paramTypes = [["string"]];
+			const returnTypes = [["string"]];
+			const params = [text];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 		// SSETypes exists to ensure the generated API contains the types, for use in SSE events.
 		async SSETypes() {
 			const fn = "SSETypes";
@@ -961,7 +969,7 @@ const join = (l, efn) => {
 // interpunction moved to the next string instead.
 const addLinks = (text) => {
 	// todo: look at ../rfc/3986 and fix up regexp. we should probably accept utf-8.
-	const re = RegExp('(http|https):\/\/([:%0-9a-zA-Z._~!$&\'/()*+,;=-]+@)?([\\[\\]0-9a-zA-Z.-]+)(:[0-9]+)?([:@%0-9a-zA-Z._~!$&\'/()*+,;=-]*)(\\?[:@%0-9a-zA-Z._~!$&\'/()*+,;=?-]*)?(#[:@%0-9a-zA-Z._~!$&\'/()*+,;=?-]*)?');
+	const re = RegExp('(?:(http|https):\/\/|mailto:)([:%0-9a-zA-Z._~!$&\'/()*+,;=-]+@)?([\\[\\]0-9a-zA-Z.-]+)(:[0-9]+)?([:@%0-9a-zA-Z._~!$&\'/()*+,;=-]*)(\\?[:@%0-9a-zA-Z._~!$&\'/()*+,;=?-]*)?(#[:@%0-9a-zA-Z._~!$&\'/()*+,;=?-]*)?');
 	const r = [];
 	while (text.length > 0) {
 		const l = re.exec(text);
@@ -985,7 +993,7 @@ const addLinks = (text) => {
 				url = url.substring(0, url.length - 1);
 			}
 		}
-		r.push(dom.a(url, attr.href(url), attr.target('_blank'), attr.rel('noopener noreferrer')));
+		r.push(dom.a(url, attr.href(url), url.startsWith('mailto:') ? [] : [attr.target('_blank'), attr.rel('noopener noreferrer')]));
 	}
 	return r;
 };
@@ -1875,10 +1883,15 @@ const focusPlaceholder = (s) => {
 		},
 	];
 };
-// Parse a location hash into search terms (if any), selected message id (if
-// any) and filters.
-// Optional message id at the end, with ",<num>".
-// Otherwise mailbox or 'search '-prefix search string: #Inbox or #Inbox,1 or "#search mb:Inbox" or "#search mb:Inbox,1"
+// Parse a location hash, with either mailbox or search terms, and optional
+// selected message id. The special "#compose " hash, used for handling
+// "mailto:"-links, must be handled before calling this function.
+//
+// Examples:
+// #Inbox
+// #Inbox,1
+// #search mb:Inbox
+// #search mb:Inbox,1
 const parseLocationHash = (mailboxlistView) => {
 	let hash = decodeURIComponent((window.location.hash || '#').substring(1));
 	const m = hash.match(/,([0-9]+)$/);
@@ -2144,7 +2157,32 @@ const cmdHelp = async () => {
 			settingsPut({ ...settings, showShortcuts: true });
 			remove();
 			cmdHelp();
-		})), dom.div(style({ marginTop: '2ex' }), 'Mox is open source email server software, this is version ' + moxversion + '. Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new'), '.'))));
+		})), dom.div(style({ marginTop: '2ex' }), 'To start composing a message when opening a "mailto:" link, register this application with your browser/system. ', dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
+		if (!window.navigator.registerProtocolHandler) {
+			window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.');
+			return;
+		}
+		try {
+			window.navigator.registerProtocolHandler('mailto', '#compose %s');
+		}
+		catch (err) {
+			window.alert('Error registering "mailto:" protocol handler: ' + errmsg(err));
+		}
+	}), ' ', dom.clickbutton('Unregister', attr.title('Not all browsers implement unregistering via JavaScript.'), function click() {
+		// Not supported on firefox at the time of writing, and the signature is not in the types.
+		if (!window.navigator.unregisterProtocolHandler) {
+			window.alert('Unregistering a protocol handler ("mailto:") via JavaScript is not supported by your browser. See your browser settings to unregister.');
+			return;
+		}
+		try {
+			window.navigator.unregisterProtocolHandler('mailto', '#compose %s');
+		}
+		catch (err) {
+			window.alert('Error unregistering "mailto:" protocol handler: ' + errmsg(err));
+			return;
+		}
+		window.alert('"mailto:" protocol handler unregistered.');
+	})), dom.div(style({ marginTop: '2ex' }), 'Mox is open source email server software, this is version ' + moxversion + '. Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new'), '.'))));
 };
 // Show tooltips for either the focused element, or otherwise for all elements
 // that aren't reachable with tabindex and aren't marked specially to prevent
@@ -5399,6 +5437,35 @@ const newSearchView = (searchbarElem, mailboxlistView, startSearch, searchViewCl
 	};
 	return searchView;
 };
+// parse the "mailto:..." part (already decoded) of a "#compose mailto:..." url hash.
+const parseComposeMailto = (mailto) => {
+	const u = new URL(mailto);
+	const addresses = (s) => s.split(',').filter(s => !!s);
+	const opts = {};
+	opts.to = addresses(u.pathname).map(s => decodeURIComponent(s));
+	for (const [xk, v] of new URLSearchParams(u.search)) {
+		const k = xk.toLowerCase();
+		if (k === 'to') {
+			opts.to = [...opts.to, ...addresses(v)];
+		}
+		else if (k === 'cc') {
+			opts.cc = [...(opts.cc || []), ...addresses(v)];
+		}
+		else if (k === 'bcc') {
+			opts.bcc = [...(opts.bcc || []), ...addresses(v)];
+		}
+		else if (k === 'subject') {
+			// q/b-word encoding is allowed, we let the server decode when we start composoing,
+			// only if needed. ../rfc/6068:267
+			opts.subject = v;
+		}
+		else if (k === 'body') {
+			opts.body = v;
+		}
+		// todo: we ignore other headers for now. we should handle in-reply-to and references at some point. but we don't allow any custom headers at the time of writing.
+	}
+	return opts;
+};
 const init = async () => {
 	let connectionElem; // SSE connection status/error. Empty when connected.
 	let layoutElem; // Select dropdown for layout.
@@ -5968,7 +6035,33 @@ const init = async () => {
 		}
 		checkMsglistWidth();
 	});
-	window.addEventListener('hashchange', async () => {
+	window.addEventListener('hashchange', async (e) => {
+		const hash = decodeURIComponent(window.location.hash);
+		if (hash.startsWith('#compose ')) {
+			try {
+				const opts = parseComposeMailto(hash.substring('#compose '.length));
+				// Restore previous hash.
+				if (e.oldURL) {
+					const ou = new URL(e.oldURL);
+					window.location.hash = ou.hash;
+				}
+				else {
+					window.location.hash = '';
+				}
+				(async () => {
+					// Resolve Q/B-word mime encoding for subject. ../rfc/6068:267 ../rfc/2047:180
+					if (opts.subject && opts.subject.includes('=?')) {
+						opts.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(opts.subject));
+					}
+					compose(opts);
+				})();
+			}
+			catch (err) {
+				window.alert('Error parsing compose mailto URL: ' + errmsg(err));
+				window.location.hash = '';
+			}
+			return;
+		}
 		const [search, msgid, f, notf] = parseLocationHash(mailboxlistView);
 		requestMsgID = msgid;
 		if (search) {
@@ -6019,6 +6112,9 @@ const init = async () => {
 		}));
 	};
 	const capitalizeFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+	// Set to compose options when we were opened with a mailto URL. We open the
+	// compose window after we received the "start" message with our addresses.
+	let openComposeOptions;
 	const connect = async (isreconnect) => {
 		connectionElem.classList.toggle('loading', true);
 		dom._kids(connectionElem);
@@ -6036,6 +6132,18 @@ const init = async () => {
 			dom._kids(statusElem, (capitalizeFirst(err.message || 'Error fetching connection token')) + ', not automatically retrying. ');
 			showNotConnected();
 			return;
+		}
+		const h = decodeURIComponent(window.location.hash);
+		if (h.startsWith('#compose ')) {
+			try {
+				// The compose window is opened when we get the "start" event, which gives us our
+				// configuration.
+				openComposeOptions = parseComposeMailto(h.substring('#compose '.length));
+			}
+			catch (err) {
+				window.alert('Error parsing mailto URL: ' + errmsg(err));
+			}
+			window.location.hash = '';
 		}
 		let [searchQuery, msgid, f, notf] = parseLocationHash(mailboxlistView);
 		requestMsgID = msgid;
@@ -6170,6 +6278,17 @@ const init = async () => {
 			domainAddressConfigs = start.DomainAddressConfigs || {};
 			rejectsMailbox = start.RejectsMailbox;
 			clearList();
+			// If we were opened through a mailto: link, it's time to open the compose window.
+			if (openComposeOptions) {
+				(async () => {
+					// Resolve Q/B-word mime encoding for subject. ../rfc/6068:267 ../rfc/2047:180
+					if (openComposeOptions.subject && openComposeOptions.subject.includes('=?')) {
+						openComposeOptions.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(openComposeOptions.subject));
+					}
+					compose(openComposeOptions);
+					openComposeOptions = undefined;
+				})();
+			}
 			let mailboxName = start.MailboxName;
 			let mb = (start.Mailboxes || []).find(mb => mb.Name === start.MailboxName);
 			if (mb) {

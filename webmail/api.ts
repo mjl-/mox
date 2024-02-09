@@ -848,6 +848,15 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as RecipientSecurity
 	}
 
+	// DecodeMIMEWords decodes Q/B-encoded words for a mime headers into UTF-8 text.
+	async DecodeMIMEWords(text: string): Promise<string> {
+		const fn: string = "DecodeMIMEWords"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = [["string"]]
+		const params: any[] = [text]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string
+	}
+
 	// SSETypes exists to ensure the generated API contains the types, for use in SSE events.
 	async SSETypes(): Promise<[EventStart, EventViewErr, EventViewReset, EventViewMsgs, EventViewChanges, ChangeMsgAdd, ChangeMsgRemove, ChangeMsgFlags, ChangeMsgThread, ChangeMailboxRemove, ChangeMailboxAdd, ChangeMailboxRename, ChangeMailboxCounts, ChangeMailboxSpecialUse, ChangeMailboxKeywords, Flags]> {
 		const fn: string = "SSETypes"

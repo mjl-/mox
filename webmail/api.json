@@ -347,6 +347,26 @@
 			]
 		},
 		{
+			"Name": "DecodeMIMEWords",
+			"Docs": "DecodeMIMEWords decodes Q/B-encoded words for a mime headers into UTF-8 text.",
+			"Params": [
+				{
+					"Name": "text",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
 			"Name": "SSETypes",
 			"Docs": "SSETypes exists to ensure the generated API contains the types, for use in SSE events.",
 			"Params": [],

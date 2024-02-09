@@ -27,7 +27,7 @@ const join = (l: any, efn: () => any): any[] => {
 // interpunction moved to the next string instead.
 const addLinks = (text: string): (HTMLAnchorElement | string)[] => {
 	// todo: look at ../rfc/3986 and fix up regexp. we should probably accept utf-8.
-	const re = RegExp('(http|https):\/\/([:%0-9a-zA-Z._~!$&\'/()*+,;=-]+@)?([\\[\\]0-9a-zA-Z.-]+)(:[0-9]+)?([:@%0-9a-zA-Z._~!$&\'/()*+,;=-]*)(\\?[:@%0-9a-zA-Z._~!$&\'/()*+,;=?-]*)?(#[:@%0-9a-zA-Z._~!$&\'/()*+,;=?-]*)?')
+	const re = RegExp('(?:(http|https):\/\/|mailto:)([:%0-9a-zA-Z._~!$&\'/()*+,;=-]+@)?([\\[\\]0-9a-zA-Z.-]+)(:[0-9]+)?([:@%0-9a-zA-Z._~!$&\'/()*+,;=-]*)(\\?[:@%0-9a-zA-Z._~!$&\'/()*+,;=?-]*)?(#[:@%0-9a-zA-Z._~!$&\'/()*+,;=?-]*)?')
 	const r = []
 	while (text.length > 0) {
 		const l = re.exec(text)
@@ -50,7 +50,7 @@ const addLinks = (text: string): (HTMLAnchorElement | string)[] => {
 				url = url.substring(0, url.length-1)
 			}
 		}
-		r.push(dom.a(url, attr.href(url), attr.target('_blank'), attr.rel('noopener noreferrer')))
+		r.push(dom.a(url, attr.href(url), url.startsWith('mailto:') ? [] : [attr.target('_blank'), attr.rel('noopener noreferrer')]))
 	}
 	return r
 }

@@ -1782,6 +1782,13 @@ func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddres
 	return rs, nil
 }
 
+// DecodeMIMEWords decodes Q/B-encoded words for a mime headers into UTF-8 text.
+func (Webmail) DecodeMIMEWords(ctx context.Context, text string) string {
+	s, err := wordDecoder.DecodeHeader(text)
+	xcheckuserf(ctx, err, "decoding mime q/b-word encoded header")
+	return s
+}
+
 func slicesAny[T any](l []T) []any {
 	r := make([]any, len(l))
 	for i, v := range l {
