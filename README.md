@@ -449,3 +449,41 @@ disable MTA-STS, autoconfig and the client-settings-domain for that domain.
 Mox opens the key and certificate files during initial startup, as root (and
 passes file descriptors to the unprivileged process).  No special permissions
 are needed on the key and certificate files.
+
+## Can I directly access mailboxes through the file system?
+
+No, mox only provides access to email through protocols like IMAP.
+
+While it can be convenient for users/email clients to access email through
+conventions like Maildir, providing such access puts quite a burden on the
+server: The server has to continuously watch for changes made to the mail store
+by external programs, and sync its internal state. By only providing access to
+emails through mox, the storage/state management is simpler and easier to
+implement reliably.
+
+Not providing direct file system access also allows future improvements in the
+storage mechanism. Such as encryption of all stored messages. Programs won't be
+able to access such messages directly.
+
+Mox stores metadata about delivered messages in its per-account message index
+database, more than fits in a simple (filename-based) format like Maildir. The
+IP address of the remote SMTP server during delivery, SPF/DKIM/DMARC domains
+and validation status, and more...
+
+For efficiency, mox doesn't prepend message headers generated during delivery
+(e.g. Authentication-Results) to the on-disk message file, but only stores it
+in the database. This prevents a rewrite of the entire message file. When
+reading a message, mox combines the prepended headers from the database with
+the message file.
+
+Mox user accounts have no relation to operating system user accounts. Multiple
+system users reading their email on a single machine is not very common
+anymore. All data (for all accounts) stored by mox is accessible only by the
+mox process.  Messages are currently stored as individual files in standard
+Internet Message Format (IMF), at `data/accounts/<account>/msg/<dir>/<msgid>`:
+`msgid` is a consecutive unique integer id assigned by the per-account message
+index database; `dir` groups 8k consecutive message ids into a directory,
+ensuring they don't become too large.  The message index database file for an
+account is at `data/accounts/<account>/index.db`, accessed with the bstore
+database library, which uses bbolt (formerly BoltDB) for storage, a
+transactional key/value library/file format inspired by LMDB.

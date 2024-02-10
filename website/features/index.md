@@ -120,7 +120,7 @@ These are published in DNS and must also be protected with DNSSEC. If a
 connection is intercepted by a different server, the TLS certificate validation
 would not pass.
 
-MTA-STS uses PKIX (pool of trusted Certificate Authorities (CAs))to protect
+MTA-STS uses PKIX (pool of trusted Certificate Authorities (CAs)) to protect
 both MX records and to verify TLS during SMTP STARTTLS. MTA-STS serves
 existence/version of a policy at DNS record `_mta-sts.<recipientdomain>`, and
 the policy itself at the PKIX-verified `https://mta-sts.<recipientdomain>`,
