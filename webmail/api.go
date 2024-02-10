@@ -201,10 +201,11 @@ type SubmitMessage struct {
 	Attachments        []File
 	ForwardAttachments ForwardAttachments
 	IsForward          bool
-	ResponseMessageID  int64  // If set, this was a reply or forward, based on IsForward.
-	ReplyTo            string // If non-empty, Reply-To header to add to message.
-	UserAgent          string // User-Agent header added if not empty.
-	RequireTLS         *bool  // For "Require TLS" extension during delivery.
+	ResponseMessageID  int64      // If set, this was a reply or forward, based on IsForward.
+	ReplyTo            string     // If non-empty, Reply-To header to add to message.
+	UserAgent          string     // User-Agent header added if not empty.
+	RequireTLS         *bool      // For "Require TLS" extension during delivery.
+	FutureRelease      *time.Time // If set, time (in the future) when message should be delivered from queue.
 }
 
 // ForwardAttachments references attachments by a list of message.Part paths.
@@ -635,6 +636,17 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			IPDomain:  dns.IPDomain{Domain: rcpt.Domain},
 		}
 		qm := queue.MakeMsg(reqInfo.AccountName, fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS)
+		if m.FutureRelease != nil {
+			ival := time.Until(*m.FutureRelease)
+			if ival < 0 {
+				xcheckuserf(ctx, errors.New("date/time is in the past"), "scheduling delivery")
+			} else if ival > queue.FutureReleaseIntervalMax {
+				xcheckuserf(ctx, fmt.Errorf("date/time can not be further than %v in the future", queue.FutureReleaseIntervalMax), "scheduling delivery")
+			}
+			qm.NextAttempt = *m.FutureRelease
+			qm.FutureReleaseRequest = "until;" + m.FutureRelease.Format(time.RFC3339)
+			// todo: possibly add a header to the message stored in the Sent mailbox to indicate it was scheduled for later delivery.
+		}
 		err := queue.Add(ctx, log, &qm, dataFile)
 		if err != nil {
 			metricSubmission.WithLabelValues("queueerror").Inc()

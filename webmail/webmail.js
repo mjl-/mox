@@ -286,7 +286,7 @@ var api;
 		"Address": { "Name": "Address", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Host", "Docs": "", "Typewords": ["string"] }] },
 		"MessageAddress": { "Name": "MessageAddress", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
 		"Domain": { "Name": "Domain", "Docs": "", "Fields": [{ "Name": "ASCII", "Docs": "", "Typewords": ["string"] }, { "Name": "Unicode", "Docs": "", "Typewords": ["string"] }] },
-		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }] },
+		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureRelease", "Docs": "", "Typewords": ["nullable", "timestamp"] }] },
 		"File": { "Name": "File", "Docs": "", "Fields": [{ "Name": "Filename", "Docs": "", "Typewords": ["string"] }, { "Name": "DataURI", "Docs": "", "Typewords": ["string"] }] },
 		"ForwardAttachments": { "Name": "ForwardAttachments", "Docs": "", "Fields": [{ "Name": "MessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Paths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }] },
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
@@ -2287,6 +2287,7 @@ const compose = (opts) => {
 			IsForward: opts.isForward || false,
 			ResponseMessageID: opts.responseMessageID || 0,
 			RequireTLS: requiretls.value === '' ? null : requiretls.value === 'yes',
+			FutureRelease: scheduleTime.value ? new Date(scheduleTime.value) : null,
 		};
 		await client.MessageSubmit(message);
 		cmdCancel();
@@ -2513,6 +2514,18 @@ const compose = (opts) => {
 			fromOptions.unshift(o);
 		}
 	}
+	let scheduleLink;
+	let scheduleElem;
+	let scheduleTime;
+	let scheduleWeekday;
+	const pad0 = (v) => v >= 10 ? '' + v : '0' + v;
+	const localdate = (d) => [d.getFullYear(), pad0(d.getMonth() + 1), pad0(d.getDate())].join('-');
+	const localdatetime = (d) => localdate(d) + 'T' + pad0(d.getHours()) + ':' + pad0(d.getMinutes()) + ':00';
+	const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+	const scheduleTimeChanged = () => {
+		console.log('datetime change', scheduleTime.value);
+		dom._kids(scheduleWeekday, weekdays[new Date(scheduleTime.value).getDay()]);
+	};
 	const composeElem = dom.div(style({
 		position: 'fixed',
 		bottom: '1ex',
@@ -2548,7 +2561,42 @@ const compose = (opts) => {
 		return v;
 	}), dom.label(style({ color: '#666' }), dom.input(attr.type('checkbox'), function change(e) {
 		forwardAttachmentViews.forEach(v => v.checkbox.checked = e.target.checked);
-	}), ' (Toggle all)')), noAttachmentsWarning = dom.div(style({ display: 'none', backgroundColor: '#fcd284', padding: '0.15em .25em', margin: '.5em 0' }), 'Message mentions attachments, but no files are attached.'), dom.label(style({ margin: '1ex 0', display: 'block' }), 'Attachments ', attachments = dom.input(attr.type('file'), attr.multiple(''), function change() { checkAttachments(); })), dom.label(style({ margin: '1ex 0', display: 'block' }), attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'), 'TLS ', requiretls = dom.select(dom.option(attr.value(''), 'Default'), dom.option(attr.value('yes'), 'With RequireTLS'), dom.option(attr.value('no'), 'Fallback to insecure'))), dom.div(style({ margin: '3ex 0 1ex 0', display: 'block' }), dom.submitbutton('Send'))), async function submit(e) {
+	}), ' (Toggle all)')), noAttachmentsWarning = dom.div(style({ display: 'none', backgroundColor: '#fcd284', padding: '0.15em .25em', margin: '.5em 0' }), 'Message mentions attachments, but no files are attached.'), dom.label(style({ margin: '1ex 0', display: 'block' }), 'Attachments ', attachments = dom.input(attr.type('file'), attr.multiple(''), function change() { checkAttachments(); })), dom.label(style({ margin: '1ex 0', display: 'block' }), attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'), 'TLS ', requiretls = dom.select(dom.option(attr.value(''), 'Default'), dom.option(attr.value('yes'), 'With RequireTLS'), dom.option(attr.value('no'), 'Fallback to insecure'))), dom.div(scheduleLink = dom.a(attr.href(''), 'Schedule', function click(e) {
+		e.preventDefault();
+		scheduleTime.value = localdatetime(new Date());
+		scheduleTimeChanged();
+		scheduleLink.style.display = 'none';
+		scheduleElem.style.display = '';
+		scheduleTime.setAttribute('required', '');
+	}), scheduleElem = dom.div(style({ display: 'none' }), dom.clickbutton('Start of next day', function click(e) {
+		e.preventDefault();
+		const d = new Date(scheduleTime.value);
+		const nextday = new Date(d.getTime() + 24 * 3600 * 1000);
+		scheduleTime.value = localdate(nextday) + 'T09:00:00';
+		scheduleTimeChanged();
+	}), ' ', dom.clickbutton('+1 hour', function click(e) {
+		e.preventDefault();
+		const d = new Date(scheduleTime.value);
+		scheduleTime.value = localdatetime(new Date(d.getTime() + 3600 * 1000));
+		scheduleTimeChanged();
+	}), ' ', dom.clickbutton('+1 day', function click(e) {
+		e.preventDefault();
+		const d = new Date(scheduleTime.value);
+		scheduleTime.value = localdatetime(new Date(d.getTime() + 24 * 3600 * 1000));
+		scheduleTimeChanged();
+	}), ' ', dom.clickbutton('Now', function click(e) {
+		e.preventDefault();
+		scheduleTime.value = localdatetime(new Date());
+		scheduleTimeChanged();
+	}), ' ', dom.clickbutton('Cancel', function click(e) {
+		e.preventDefault();
+		scheduleLink.style.display = '';
+		scheduleElem.style.display = 'none';
+		scheduleTime.removeAttribute('required');
+		scheduleTime.value = '';
+	}), dom.div(style({ marginTop: '1ex' }), scheduleTime = dom.input(attr.type('datetime-local'), function change() {
+		scheduleTimeChanged();
+	}), ' in local timezone ' + (Intl.DateTimeFormat().resolvedOptions().timeZone || '') + ', ', scheduleWeekday = dom.span()))), dom.div(style({ margin: '3ex 0 1ex 0', display: 'block' }), dom.submitbutton('Send'))), async function submit(e) {
 		e.preventDefault();
 		shortcutCmd(cmdSend, shortcuts);
 	}));

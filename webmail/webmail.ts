@@ -1363,6 +1363,7 @@ const compose = (opts: ComposeOptions) => {
 			IsForward: opts.isForward || false,
 			ResponseMessageID: opts.responseMessageID || 0,
 			RequireTLS: requiretls.value === '' ? null : requiretls.value === 'yes',
+			FutureRelease: scheduleTime.value ? new Date(scheduleTime.value) : null,
 		}
 		await client.MessageSubmit(message)
 		cmdCancel()
@@ -1628,6 +1629,19 @@ const compose = (opts: ComposeOptions) => {
 		}
 	}
 
+	let scheduleLink: HTMLElement
+	let scheduleElem: HTMLElement
+	let scheduleTime: HTMLInputElement
+	let scheduleWeekday: HTMLElement
+	const pad0 = (v: number) => v >= 10 ? ''+v : '0'+v
+	const localdate = (d: Date) => [d.getFullYear(), pad0(d.getMonth()+1), pad0(d.getDate())].join('-')
+	const localdatetime = (d: Date) => localdate(d) + 'T' + pad0(d.getHours()) + ':' + pad0(d.getMinutes()) + ':00'
+	const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+	const scheduleTimeChanged = () => {
+		console.log('datetime change', scheduleTime.value)
+		dom._kids(scheduleWeekday, weekdays[new Date(scheduleTime.value).getDay()])
+	}
+
 	const composeElem = dom.div(
 		style({
 			position: 'fixed',
@@ -1741,6 +1755,58 @@ const compose = (opts: ComposeOptions) => {
 						dom.option(attr.value(''), 'Default'),
 						dom.option(attr.value('yes'), 'With RequireTLS'),
 						dom.option(attr.value('no'), 'Fallback to insecure'),
+					),
+				),
+				dom.div(
+					scheduleLink=dom.a(attr.href(''), 'Schedule', function click(e: MouseEvent) {
+						e.preventDefault()
+						scheduleTime.value = localdatetime(new Date())
+						scheduleTimeChanged()
+						scheduleLink.style.display = 'none'
+						scheduleElem.style.display = ''
+						scheduleTime.setAttribute('required', '')
+					}),
+					scheduleElem=dom.div(
+						style({display: 'none'}),
+						dom.clickbutton('Start of next day', function click(e: MouseEvent) {
+							e.preventDefault()
+							const d = new Date(scheduleTime.value)
+							const nextday = new Date(d.getTime() + 24*3600*1000)
+							scheduleTime.value = localdate(nextday) + 'T09:00:00'
+							scheduleTimeChanged()
+						}), ' ',
+						dom.clickbutton('+1 hour', function click(e: MouseEvent) {
+							e.preventDefault()
+							const d = new Date(scheduleTime.value)
+							scheduleTime.value = localdatetime(new Date(d.getTime() + 3600*1000))
+							scheduleTimeChanged()
+						}), ' ',
+						dom.clickbutton('+1 day', function click(e: MouseEvent) {
+							e.preventDefault()
+							const d = new Date(scheduleTime.value)
+							scheduleTime.value = localdatetime(new Date(d.getTime() + 24*3600*1000))
+							scheduleTimeChanged()
+						}), ' ',
+						dom.clickbutton('Now', function click(e: MouseEvent) {
+							e.preventDefault()
+							scheduleTime.value = localdatetime(new Date())
+							scheduleTimeChanged()
+						}), ' ',
+						dom.clickbutton('Cancel', function click(e: MouseEvent) {
+							e.preventDefault()
+							scheduleLink.style.display = ''
+							scheduleElem.style.display = 'none'
+							scheduleTime.removeAttribute('required')
+							scheduleTime.value = ''
+						}),
+						dom.div(
+							style({marginTop: '1ex'}),
+							scheduleTime=dom.input(attr.type('datetime-local'), function change() {
+								scheduleTimeChanged()
+							}),
+							' in local timezone ' + (Intl.DateTimeFormat().resolvedOptions().timeZone || '') + ', ',
+							scheduleWeekday=dom.span(),
+						),
 					),
 				),
 				dom.div(

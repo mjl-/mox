@@ -3489,6 +3489,13 @@
 						"nullable",
 						"bool"
 					]
+				},
+				{
+					"Name": "FutureReleaseRequest",
+					"Docs": "For DSNs, where the original FUTURERELEASE value must be included as per-message field. This field should be of the form \"for;\" plus interval, or \"until;\" plus utc date-time.",
+					"Typewords": [
+						"string"
+					]
 				}
 			]
 		},

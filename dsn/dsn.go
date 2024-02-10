@@ -48,6 +48,12 @@ type Message struct {
 	// mail user-agents will thread the DSN with the original message.
 	References string
 
+	// For message submitted with FUTURERELEASE SMTP extension. Value is either "for;"
+	// plus original interval in seconds or "until;" plus original UTC RFC3339
+	// date-time.
+	FutureReleaseRequest string
+	// ../rfc/4865:315
+
 	// Human-readable text explaining the failure. Line endings should be
 	// bare newlines, not \r\n. They are converted to \r\n when composing.
 	TextBody string
@@ -230,6 +236,10 @@ func (m *Message) Compose(log mlog.Log, smtputf8 bool) ([]byte, error) {
 		status("Received-From-MTA", fmt.Sprintf("dns;%s (%s)", m.ReceivedFromMTA.Name, smtp.AddressLiteral(m.ReceivedFromMTA.ConnIP)))
 	}
 	status("Arrival-Date", m.ArrivalDate.Format(message.RFC5322Z)) // ../rfc/3464:758
+	if m.FutureReleaseRequest != "" {
+		// ../rfc/4865:320
+		status("Future-Release-Request", m.FutureReleaseRequest)
+	}
 
 	// Then per-recipient fields. ../rfc/3464:769
 	// todo: should also handle other address types. at least recognize "unknown". Probably just store this field. ../rfc/3464:819

@@ -85,9 +85,10 @@ func TestDSN(t *testing.T) {
 		MessageID: "test@localhost",
 		TextBody:  "delivery failure\n",
 
-		ReportingMTA:    "mox.example",
-		ReceivedFromMTA: smtp.Ehlo{Name: xparseIPDomain("relay.example"), ConnIP: net.ParseIP("10.10.10.10")},
-		ArrivalDate:     now,
+		ReportingMTA:         "mox.example",
+		ReceivedFromMTA:      smtp.Ehlo{Name: xparseIPDomain("relay.example"), ConnIP: net.ParseIP("10.10.10.10")},
+		ArrivalDate:          now,
+		FutureReleaseRequest: "for;123",
 
 		Recipients: []Recipient{
 			{

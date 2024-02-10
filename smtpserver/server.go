@@ -321,11 +321,13 @@ type conn struct {
 	transactionBad  int
 
 	// Message transaction.
-	mailFrom    *smtp.Path
-	requireTLS  *bool // MAIL FROM with REQUIRETLS set.
-	has8bitmime bool  // If MAIL FROM parameter BODY=8BITMIME was sent. Required for SMTPUTF8.
-	smtputf8    bool  // todo future: we should keep track of this per recipient. perhaps only a specific recipient requires smtputf8, e.g. due to a utf8 localpart. we should decide ourselves if the message needs smtputf8, e.g. due to utf8 header values.
-	recipients  []rcptAccount
+	mailFrom             *smtp.Path
+	requireTLS           *bool     // MAIL FROM with REQUIRETLS set.
+	futureRelease        time.Time // MAIL FROM with HOLDFOR or HOLDUNTIL.
+	futureReleaseRequest string    // For use in DSNs, either "for;" or "until;" plus original value. ../rfc/4865:305
+	has8bitmime          bool      // If MAIL FROM parameter BODY=8BITMIME was sent. Required for SMTPUTF8.
+	smtputf8             bool      // todo future: we should keep track of this per recipient. perhaps only a specific recipient requires smtputf8, e.g. due to a utf8 localpart. we should decide ourselves if the message needs smtputf8, e.g. due to utf8 header values.
+	recipients           []rcptAccount
 }
 
 type rcptAccount struct {
@@ -361,6 +363,8 @@ func (c *conn) reset() {
 func (c *conn) rset() {
 	c.mailFrom = nil
 	c.requireTLS = nil
+	c.futureRelease = time.Time{}
+	c.futureReleaseRequest = ""
 	c.has8bitmime = false
 	c.smtputf8 = false
 	c.recipients = nil
@@ -878,6 +882,9 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 		} else {
 			c.bwritelinef("250-AUTH ")
 		}
+		// ../rfc/4865:127
+		t := time.Now().Add(queue.FutureReleaseIntervalMax).UTC() // ../rfc/4865:98
+		c.bwritelinef("250-FUTURERELEASE %d %s", queue.FutureReleaseIntervalMax/time.Second, t.Format(time.RFC3339))
 	}
 	c.bwritelinef("250-ENHANCEDSTATUSCODES") // ../rfc/2034:71
 	// todo future? c.writelinef("250-DSN")
@@ -1306,7 +1313,7 @@ func (c *conn) cmdAuth(p *parser) {
 func (c *conn) cmdMail(p *parser) {
 	// requirements for maximum line length:
 	// ../rfc/5321:3500 (base max of 512 including crlf) ../rfc/4954:134 (+500) ../rfc/1870:92 (+26) ../rfc/6152:90 (none specified) ../rfc/6531:231 (+10)
-	// todo future: enforce?
+	// todo future: enforce? doesn't really seem worth it...
 
 	if c.transactionBad > 10 && c.transactionGood == 0 {
 		// If we get many bad transactions, it's probably a spammer that is guessing user names.
@@ -1354,7 +1361,7 @@ func (c *conn) cmdMail(p *parser) {
 		switch K {
 		case "SIZE":
 			p.xtake("=")
-			size := p.xnumber(20) // ../rfc/1870:90
+			size := p.xnumber(20, true) // ../rfc/1870:90
 			if size > c.maxMessageSize {
 				// ../rfc/1870:136 ../rfc/3463:382
 				ecode := smtp.SeSys3MsgLimitExceeded4
@@ -1402,6 +1409,39 @@ func (c *conn) cmdMail(p *parser) {
 			}
 			v := true
 			c.requireTLS = &v
+		case "HOLDFOR", "HOLDUNTIL":
+			// Only for submission ../rfc/4865:163
+			if !c.submission {
+				xsmtpUserErrorf(smtp.C555UnrecognizedAddrParams, smtp.SeSys3NotSupported3, "unrecognized parameter %q", key)
+			}
+			if K == "HOLDFOR" && paramSeen["HOLDUNTIL"] || K == "HOLDUNTIL" && paramSeen["HOLDFOR"] {
+				// ../rfc/4865:260
+				xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5BadParams4, "cannot use both HOLDUNTIL and HOLFOR")
+			}
+			p.xtake("=")
+			// ../rfc/4865:263 ../rfc/4865:267 We are not following the advice of treating
+			// semantic errors as syntax errors
+			if K == "HOLDFOR" {
+				n := p.xnumber(9, false) // ../rfc/4865:92
+				if n > int64(queue.FutureReleaseIntervalMax/time.Second) {
+					// ../rfc/4865:250
+					xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeProto5BadParams4, "future release interval too far in the future")
+				}
+				c.futureRelease = time.Now().Add(time.Duration(n) * time.Second)
+				c.futureReleaseRequest = fmt.Sprintf("for;%d", n)
+			} else {
+				t, s := p.xdatetimeutc()
+				ival := time.Until(t)
+				if ival <= 0 {
+					// Likely a mistake by the user.
+					xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeProto5BadParams4, "requested future release time is in the past")
+				} else if ival > queue.FutureReleaseIntervalMax {
+					// ../rfc/4865:255
+					xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeProto5BadParams4, "requested future release time is too far in the future")
+				}
+				c.futureRelease = t
+				c.futureReleaseRequest = "until;" + s
+			}
 		default:
 			// ../rfc/5321:2230
 			xsmtpUserErrorf(smtp.C555UnrecognizedAddrParams, smtp.SeSys3NotSupported3, "unrecognized parameter %q", key)
@@ -1938,6 +1978,11 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 
 		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
 		qm := queue.MakeMsg(c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS)
+		if !c.futureRelease.IsZero() {
+			qm.NextAttempt = c.futureRelease
+			qm.FutureReleaseRequest = c.futureReleaseRequest
+		}
+		// todo: it would be good to have a limit on messages (count and total size) a user has in the queue. also/especially with futurerelease. ../rfc/4865:387
 		if err := queue.Add(ctx, c.log, &qm, dataFile); err != nil {
 			// Aborting the transaction is not great. But continuing and generating DSNs will
 			// probably result in errors as well...

@@ -128,8 +128,9 @@ func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, 
 		References: m.MessageID,
 		TextBody:   textBody,
 
-		ReportingMTA: mox.Conf.Static.HostnameDomain.ASCII,
-		ArrivalDate:  m.Queued,
+		ReportingMTA:         mox.Conf.Static.HostnameDomain.ASCII,
+		ArrivalDate:          m.Queued,
+		FutureReleaseRequest: m.FutureReleaseRequest,
 
 		Recipients: []dsn.Recipient{
 			{

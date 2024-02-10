@@ -1658,3 +1658,75 @@ func TestSmuggle(t *testing.T) {
 	test("\r.\r")
 	test("\n.\r\n")
 }
+
+func TestFutureRelease(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
+	ts.tlsmode = smtpclient.TLSSkip
+	ts.user = "mjl@mox.example"
+	ts.pass = "testtest"
+	ts.submission = true
+	defer ts.close()
+
+	ts.auth = func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+		return sasl.NewClientPlain(ts.user, ts.pass), nil
+	}
+
+	test := func(mailtoMore, expResponsePrefix string) {
+		t.Helper()
+
+		ts.runRaw(func(conn net.Conn) {
+			t.Helper()
+
+			ourHostname := mox.Conf.Static.HostnameDomain
+			remoteHostname := dns.Domain{ASCII: "mox.example"}
+			opts := smtpclient.Opts{Auth: ts.auth}
+			log := pkglog.WithCid(ts.cid - 1)
+			_, err := smtpclient.New(ctxbg, log.Logger, conn, ts.tlsmode, false, ourHostname, remoteHostname, opts)
+			tcheck(t, err, "smtpclient")
+			defer conn.Close()
+
+			write := func(s string) {
+				_, err := conn.Write([]byte(s))
+				tcheck(t, err, "write")
+			}
+
+			readPrefixLine := func(prefix string) string {
+				t.Helper()
+				buf := make([]byte, 512)
+				n, err := conn.Read(buf)
+				tcheck(t, err, "read")
+				s := strings.TrimRight(string(buf[:n]), "\r\n")
+				if !strings.HasPrefix(s, prefix) {
+					t.Fatalf("got smtp response %q, expected line with prefix %q", s, prefix)
+				}
+				return s
+			}
+
+			write(fmt.Sprintf("MAIL FROM:<mjl@mox.example>%s\r\n", mailtoMore))
+			readPrefixLine(expResponsePrefix)
+			if expResponsePrefix != "2" {
+				return
+			}
+			write("RCPT TO:<mjl@mox.example>\r\n")
+			readPrefixLine("2")
+
+			write("DATA\r\n")
+			readPrefixLine("3")
+			write("From: <mjl@mox.example>\r\n\r\nbody\r\n\r\n.\r\n")
+			readPrefixLine("2")
+		})
+	}
+
+	test(" HOLDFOR=1", "2")
+	test(" HOLDUNTIL="+time.Now().Add(time.Minute).UTC().Format(time.RFC3339), "2")
+	test(" HOLDUNTIL="+time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano), "2")
+
+	test(" HOLDFOR=0", "501")                                                                                        // 0 is invalid syntax.
+	test(fmt.Sprintf(" HOLDFOR=%d", int64((queue.FutureReleaseIntervalMax+time.Minute)/time.Second)), "554")         // Too far in the future.
+	test(" HOLDUNTIL="+time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), "554")                               // In the past.
+	test(" HOLDUNTIL="+time.Now().Add(queue.FutureReleaseIntervalMax+time.Minute).UTC().Format(time.RFC3339), "554") // Too far in the future.
+	test(" HOLDUNTIL=2024-02-10T17:28:00+00:00", "501")                                                              // "Z" required.
+	test(" HOLDUNTIL=24-02-10T17:28:00Z", "501")                                                                     // Invalid.
+	test(" HOLDFOR=1 HOLDFOR=1", "501")                                                                              // Duplicate.
+	test(" HOLDFOR=1 HOLDUNTIL="+time.Now().Add(time.Hour).UTC().Format(time.RFC3339), "501")                        // Duplicate.
+}

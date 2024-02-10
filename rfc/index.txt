@@ -66,7 +66,8 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 3974	-	-	SMTP Operational Experience in Mixed IPv4/v6 Environments
 4409	-	Obs	(RFC 6409) Message Submission for Mail
 4468	Roadmap	-	Message Submission BURL Extension
-4865	Roadmap	-	SMTP Submission Service Extension for Future Message Release
+4865	Yes	-	SMTP Submission Service Extension for Future Message Release
+4865-eid2040	-	errata: Internet-style-date-time-UTC -> date-time from rfc 3339
 4954	Yes	-	SMTP Service Extension for Authentication
 5068	-	-	Email Submission Operations: Access and Accountability Requirements
 5248	-	-	A Registry for SMTP Enhanced Mail System Status Codes
@@ -83,6 +84,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 6532	Yes	-	Internationalized Email Headers
 6533	Yes	-	Internationalized Delivery Status and Disposition Notifications
 6647	Partial	-	Email Greylisting: An Applicability Statement for SMTP
+6710	No	-	Simple Mail Transfer Protocol Extension for Message Transfer Priorities
 6729	No	-	Indicating Email Handling States in Trace Fields
 6857	No	-	Post-Delivery Message Downgrading for Internationalized Email Messages
 7293	No	-	The Require-Recipient-Valid-Since Header Field and SMTP Service Extension

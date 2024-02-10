@@ -1169,6 +1169,14 @@
 						"nullable",
 						"bool"
 					]
+				},
+				{
+					"Name": "FutureRelease",
+					"Docs": "If set, time (in the future) when message should be delivered from queue.",
+					"Typewords": [
+						"nullable",
+						"timestamp"
+					]
 				}
 			]
 		},

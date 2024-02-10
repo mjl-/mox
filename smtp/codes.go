@@ -132,14 +132,16 @@ var (
 	SePol7PasswdTransitionReq12 = "7.12" // ../rfc/4954:578
 	SePol7AccountDisabled13     = "7.13" // ../rfc/5248:399
 	SePol7TrustReq14            = "7.14" // ../rfc/5248:418
-	SePol7NoDKIMPass20          = "7.20" // ../rfc/7372:137
-	SePol7NoDKIMAccept21        = "7.21" // ../rfc/7372:148
-	SePol7NoDKIMAuthorMatch22   = "7.22" // ../rfc/7372:175
-	SePol7SPFResultFail23       = "7.23" // ../rfc/7372:192
-	SePol7SPFError24            = "7.24" // ../rfc/7372:204
-	SePol7RevDNSFail25          = "7.25" // ../rfc/7372:233
-	SePol7MultiAuthFails26      = "7.26" // ../rfc/7372:246
-	SePol7SenderHasNullMX27     = "7.27" // ../rfc/7505:246
-	SePol7ARCFail               = "7.29" // ../rfc/8617:1438
-	SePol7MissingReqTLS         = "7.30" // ../rfc/8689:448
+	// todo spec: duplicate spec of 7.16 ../rfc/4865:412 ../rfc/6710:878
+	// todo spec: duplicate spec of 7.17 ../rfc/4865:418 ../rfc/7293:1137
+	SePol7NoDKIMPass20        = "7.20" // ../rfc/7372:137
+	SePol7NoDKIMAccept21      = "7.21" // ../rfc/7372:148
+	SePol7NoDKIMAuthorMatch22 = "7.22" // ../rfc/7372:175
+	SePol7SPFResultFail23     = "7.23" // ../rfc/7372:192
+	SePol7SPFError24          = "7.24" // ../rfc/7372:204
+	SePol7RevDNSFail25        = "7.25" // ../rfc/7372:233
+	SePol7MultiAuthFails26    = "7.26" // ../rfc/7372:246
+	SePol7SenderHasNullMX27   = "7.27" // ../rfc/7505:246
+	SePol7ARCFail             = "7.29" // ../rfc/8617:1438
+	SePol7MissingReqTLS       = "7.30" // ../rfc/8689:448
 )

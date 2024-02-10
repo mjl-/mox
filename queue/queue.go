@@ -67,6 +67,9 @@ var jitter = mox.NewPseudoRand()
 var DBTypes = []any{Msg{}} // Types stored in DB.
 var DB *bstore.DB          // Exported for making backups.
 
+// Allow requesting delivery starting from up to this interval from time of submission.
+const FutureReleaseIntervalMax = 60 * 24 * time.Hour
+
 // Set for mox localserve, to prevent queueing.
 var Localserve bool
 
@@ -122,6 +125,12 @@ type Msg struct {
 	// i.e. falling back to SMTP delivery with unverified STARTTLS or plain text.
 	RequireTLS *bool
 	// ../rfc/8689:250
+
+	// For DSNs, where the original FUTURERELEASE value must be included as per-message
+	// field. This field should be of the form "for;" plus interval, or "until;" plus
+	// utc date-time.
+	FutureReleaseRequest string
+	// ../rfc/4865:305
 }
 
 // Sender of message as used in MAIL FROM.
@@ -200,6 +209,7 @@ func Count(ctx context.Context) (int, error) {
 
 // MakeMsg is a convenience function that sets the commonly used fields for a Msg.
 func MakeMsg(senderAccount string, sender, recipient smtp.Path, has8bit, smtputf8 bool, size int64, messageID string, prefix []byte, requireTLS *bool) Msg {
+	now := time.Now()
 	return Msg{
 		SenderAccount:      mox.Conf.Static.Postmaster.Account,
 		SenderLocalpart:    sender.Localpart,
@@ -212,6 +222,9 @@ func MakeMsg(senderAccount string, sender, recipient smtp.Path, has8bit, smtputf
 		MessageID:          messageID,
 		MsgPrefix:          prefix,
 		RequireTLS:         requireTLS,
+		Queued:             now,
+		NextAttempt:        now,
+		RecipientDomainStr: formatIPDomain(recipient.IPDomain),
 	}
 }
 
@@ -228,12 +241,6 @@ func Add(ctx context.Context, log mlog.Log, qm *Msg, msgFile *os.File) error {
 	if qm.ID != 0 {
 		return fmt.Errorf("id of queued message must be 0")
 	}
-	qm.Queued = time.Now()
-	qm.DialedIPs = nil
-	qm.NextAttempt = qm.Queued
-	qm.LastAttempt = nil
-	qm.LastError = ""
-	qm.RecipientDomainStr = formatIPDomain(qm.RecipientDomain)
 
 	if Localserve {
 		if qm.SenderAccount == "" {
