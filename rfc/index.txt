@@ -37,6 +37,7 @@ Also see IANA assignments, https://www.iana.org/protocols
 5598	-	-	Internet Mail Architecture
 6854	-	-	Update to Internet Message Format to Allow Group Syntax in the "From:" and "Sender:" Header Fields
 7405	-	-	Case-Sensitive String Support in ABNF
+9078	-	-	Reaction: Indicating Summary Reaction to a Message
 9228	Yes	-	Delivered-To Email Header Field
 
 https://www.iana.org/assignments/message-headers/message-headers.xhtml
