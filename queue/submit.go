@@ -78,7 +78,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	requireTLS := m.RequireTLS != nil && *m.RequireTLS
 	if requireTLS && (tlsMode != smtpclient.TLSRequiredStartTLS && tlsMode != smtpclient.TLSImmediate || !tlsPKIX) {
 		errmsg = fmt.Sprintf("transport %s: message requires verified tls but transport does not verify tls", transportName)
-		fail(ctx, qlog, m, backoff, true, dsn.NameIP{}, smtp.SePol7MissingReqTLS, errmsg)
+		fail(ctx, qlog, m, backoff, true, dsn.NameIP{}, smtp.SePol7MissingReqTLS, errmsg, nil)
 		return
 	}
 
@@ -115,7 +115,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		}
 		qlog.Errorx("dialing for submission", err, slog.String("remote", addr))
 		errmsg = fmt.Sprintf("transport %s: dialing %s for submission: %v", transportName, addr, err)
-		fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
+		fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", errmsg, nil)
 		return
 	}
 	dialcancel()
@@ -171,7 +171,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		qlog.Errorx("establishing smtp session for submission", err, slog.String("remote", addr))
 		errmsg = fmt.Sprintf("transport %s: establishing smtp session with %s for submission: %v", transportName, addr, err)
 		secodeOpt = smtperr.Secode
-		fail(ctx, qlog, m, backoff, false, remoteMTA, secodeOpt, errmsg)
+		fail(ctx, qlog, m, backoff, false, remoteMTA, secodeOpt, errmsg, smtperr.MoreLines)
 		return
 	}
 	defer func() {
@@ -196,7 +196,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		if err != nil {
 			qlog.Errorx("opening message for delivery", err, slog.String("remote", addr), slog.String("path", p))
 			errmsg = fmt.Sprintf("transport %s: opening message file for submission: %v", transportName, err)
-			fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
+			fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", errmsg, nil)
 			return
 		}
 		msgr = store.FileMsgReader(m.MsgPrefix, f)
@@ -239,7 +239,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		permanent = smtperr.Permanent
 		secodeOpt = smtperr.Secode
 		errmsg = fmt.Sprintf("transport %s: submitting email to %s: %v", transportName, addr, err)
-		fail(ctx, qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg)
+		fail(ctx, qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg, smtperr.MoreLines)
 		return
 	}
 	qlog.Info("delivered from queue with transport")

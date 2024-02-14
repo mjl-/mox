@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -29,7 +30,7 @@ var (
 	)
 )
 
-func deliverDSNFailure(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string) {
+func deliverDSNFailure(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, moreLines []string) {
 	const subject = "mail delivery failed"
 	message := fmt.Sprintf(`
 Delivery has failed permanently for your email to:
@@ -41,12 +42,12 @@ No further deliveries will be attempted.
 Error during the last delivery attempt:
 
 	%s
-`, m.Recipient().XString(m.SMTPUTF8), errmsg)
+`, m.Recipient().XString(m.SMTPUTF8), strings.Join(append([]string{errmsg}, moreLines...), "\n\t"))
 
 	deliverDSN(ctx, log, m, remoteMTA, secodeOpt, errmsg, true, nil, subject, message)
 }
 
-func deliverDSNDelay(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, retryUntil time.Time) {
+func deliverDSNDelay(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, moreLines []string, retryUntil time.Time) {
 	// Should not happen, but doesn't hurt to prevent sending delayed delivery
 	// notifications for DMARC reports. We don't want to waste postmaster attention.
 	if m.IsDMARCReport {
@@ -65,7 +66,7 @@ If these attempts all fail, you will receive a notice.
 Error during the last delivery attempt:
 
 	%s
-`, m.Recipient().XString(false), errmsg)
+`, m.Recipient().XString(false), strings.Join(append([]string{errmsg}, moreLines...), "\n\t"))
 
 	deliverDSN(ctx, log, m, remoteMTA, secodeOpt, errmsg, false, &retryUntil, subject, message)
 }

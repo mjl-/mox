@@ -581,7 +581,7 @@ func deliver(log mlog.Log, resolver dns.Resolver, m Msg) {
 		transport, ok = mox.Conf.Static.Transports[m.Transport]
 		if !ok {
 			var remoteMTA dsn.NameIP // Zero value, will not be included in DSN. ../rfc/3464:1027
-			fail(ctx, qlog, m, backoff, false, remoteMTA, "", fmt.Sprintf("cannot find transport %q", m.Transport))
+			fail(ctx, qlog, m, backoff, false, remoteMTA, "", fmt.Sprintf("cannot find transport %q", m.Transport), nil)
 			return
 		}
 		transportName = m.Transport
@@ -692,10 +692,10 @@ func deliver(log mlog.Log, resolver dns.Resolver, m Msg) {
 		if transport.Socks != nil {
 			socksdialer, err := proxy.SOCKS5("tcp", transport.Socks.Address, nil, &net.Dialer{})
 			if err != nil {
-				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", fmt.Sprintf("socks dialer: %v", err))
+				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", fmt.Sprintf("socks dialer: %v", err), nil)
 				return
 			} else if d, ok := socksdialer.(smtpclient.Dialer); !ok {
-				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", "socks dialer is not a contextdialer")
+				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", "socks dialer is not a contextdialer", nil)
 				return
 			} else {
 				dialer = d
