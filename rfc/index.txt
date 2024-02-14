@@ -67,7 +67,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 4409	-	Obs	(RFC 6409) Message Submission for Mail
 4468	Roadmap	-	Message Submission BURL Extension
 4865	Yes	-	SMTP Submission Service Extension for Future Message Release
-4865-eid2040	-	errata: Internet-style-date-time-UTC -> date-time from rfc 3339
+4865-eid2040	-Yes	-	errata: Internet-style-date-time-UTC -> date-time from rfc 3339
 4954	Yes	-	SMTP Service Extension for Authentication
 5068	-	-	Email Submission Operations: Access and Accountability Requirements
 5248	-	-	A Registry for SMTP Enhanced Mail System Status Codes
@@ -183,7 +183,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 4315	Yes	-	Internet Message Access Protocol (IMAP) - UIDPLUS extension
 4466	-Yes	-	Collected Extensions to IMAP4 ABNF
 4467	Roadmap	-	Internet Message Access Protocol (IMAP) - URLAUTH Extension
-4469	Roadmap	Internet Message Access Protocol (IMAP) CATENATE Extension
+4469	Roadmap	-	Internet Message Access Protocol (IMAP) CATENATE Extension
 4549	-Yes	-	Synchronization Operations for Disconnected IMAP4 Clients
 4551	Yes	Obs	(RFC 7162) IMAP Extension for Conditional STORE Operation or Quick Flag Changes Resynchronization
 4731	Yes	-	IMAP4 Extension to SEARCH Command for Controlling What Kind of Information Is Returned
