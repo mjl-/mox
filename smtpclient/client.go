@@ -136,7 +136,7 @@ type Client struct {
 	extEcodes         bool   // Remote server supports sending extended error codes.
 	extStartTLS       bool   // Remote server supports STARTTLS.
 	ext8bitmime       bool
-	extSize           bool     // Remote server supports SIZE parameter.
+	extSize           bool     // Remote server supports SIZE parameter. Must only be used if > 0.
 	maxSize           int64    // Max size of email message.
 	extPipelining     bool     // Remote server supports command pipelining.
 	extSMTPUTF8       bool     // Remote server supports SMTPUTF8 extension.
@@ -724,6 +724,7 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 				if s == "SMTPUTF8" || strings.HasPrefix(s, "SMTPUTF8 ") {
 					c.extSMTPUTF8 = true
 				} else if strings.HasPrefix(s, "SIZE ") {
+					// ../rfc/1870:77
 					c.extSize = true
 					if v, err := strconv.ParseInt(s[len("SIZE "):], 10, 64); err == nil {
 						c.maxSize = v
@@ -1031,7 +1032,8 @@ func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, ms
 		c.xerrorf(false, 0, "", "", "%w", ErrRequireTLSUnsupported)
 	}
 
-	if c.extSize && msgSize > c.maxSize {
+	// Max size enforced, only when not zero. ../rfc/1870:79
+	if c.extSize && c.maxSize > 0 && msgSize > c.maxSize {
 		c.xerrorf(true, 0, "", "", "%w: message is %d bytes, remote has a %d bytes maximum size", ErrSize, msgSize, c.maxSize)
 	}
 
