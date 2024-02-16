@@ -129,3 +129,27 @@ func TestDataReader(t *testing.T) {
 		t.Fatalf("got err %v, expected io.ErrUnexpectedEOF", err)
 	}
 }
+
+func TestDataWriteLineBoundaries(t *testing.T) {
+	const valid = "Subject: test\r\n\r\nbody\r\n"
+	if err := DataWrite(io.Discard, &oneReader{[]byte(valid)}); err != nil {
+		t.Fatalf("data write: %v", err)
+	}
+}
+
+// oneReader returns data one byte at a time.
+type oneReader struct {
+	buf []byte
+}
+
+func (r *oneReader) Read(buf []byte) (int, error) {
+	if len(r.buf) == 0 {
+		return 0, io.EOF
+	}
+	if len(buf) == 0 {
+		return 0, nil
+	}
+	buf[0] = r.buf[0]
+	r.buf = r.buf[1:]
+	return 1, nil
+}

@@ -40,8 +40,10 @@ func DataWrite(w io.Writer, r io.Reader) error {
 					c := p[n]
 					if c == '\n' {
 						if firstcr < 0 {
-							// Bare newline.
-							return ErrCRLF
+							if n > 0 || last != '\r' {
+								// Bare newline.
+								return ErrCRLF
+							}
 						} else if firstcr != n-1 {
 							// Bare carriage return.
 							return ErrCRLF
