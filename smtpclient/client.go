@@ -897,16 +897,16 @@ func (c *Client) auth(auth func(mechanisms []string, cs *tls.ConnectionState) (s
 	}
 	name, cleartextCreds := a.Info()
 
-	abort := func() (int, string, string) {
+	abort := func() (int, string, string, []string) {
 		// Abort authentication. ../rfc/4954:193
 		c.xwriteline("*")
 
 		// Server must respond with 501. // ../rfc/4954:195
-		code, secode, firstLine, _ := c.xread()
+		code, secode, firstLine, moreLines := c.xread()
 		if code != smtp.C501BadParamSyntax {
 			c.botched = true
 		}
-		return code, secode, firstLine
+		return code, secode, firstLine, moreLines
 	}
 
 	toserver, last, err := a.Next(nil)
@@ -952,8 +952,8 @@ func (c *Client) auth(auth func(mechanisms []string, cs *tls.ConnectionState) (s
 				// For failing SCRAM, the client stops due to message about invalid proof. The
 				// server still sends an authentication result (it probably should send 501
 				// instead).
-				xcode, xsecode, firstLine := abort()
-				c.xerrorf(false, xcode, xsecode, firstLine, moreLines, "client aborted authentication: %w", err)
+				xcode, xsecode, xfirstLine, xmoreLines := abort()
+				c.xerrorf(false, xcode, xsecode, xfirstLine, xmoreLines, "client aborted authentication: %w", err)
 			}
 			c.xwriteline(base64.StdEncoding.EncodeToString(toserver))
 		} else {
