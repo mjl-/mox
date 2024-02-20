@@ -27,6 +27,7 @@ Also see IANA assignments, https://www.iana.org/protocols
 2046	Yes	-	Multipurpose Internet Mail Extensions (MIME) Part Two: Media Types
 2047	Yes	-	MIME (Multipurpose Internet Mail Extensions) Part Three: Message Header Extensions for Non-ASCII Text
 2049	-	-	Multipurpose Internet Mail Extensions (MIME) Part Five: Conformance Criteria and Examples
+2076	-	-	Common Internet Message Headers
 2183	Yes	-	Communicating Presentation Information in Internet Messages: The Content-Disposition Header Field
 2231	Yes	-	MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
 3629	-	-	UTF-8, a transformation format of ISO 10646
@@ -241,9 +242,11 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 5550	-?	-	The Internet Email to Support Diverse Service Environments (Lemonade) Profile
 5551	-?	-	Lemonade Notifications Architecture
 
-# Mailing list
+# Mailing list and automated responses
 2369	?	-	The Use of URLs as Meta-Syntax for Core Mail List Commands and their Transport through Message Header Fields
 2919	?	-	List-Id: A Structured Field and Namespace for the Identification of Mailing Lists
+3834 	?	-	Recommendations for Automatic Responses to Electronic Mail
+8058	?	-	Signaling One-Click Functionality for List Email Headers
 
 # Sieve
 3028	Roadmap	Obs	(RFC 5228) Sieve: A Mail Filtering Language
