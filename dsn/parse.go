@@ -226,6 +226,13 @@ func parseRecipientHeader(mr *textproto.Reader, utf8 bool) (Recipient, error) {
 		case "Status":
 			// todo: parse the enhanced status code?
 			r.Status = v
+			t := strings.SplitN(v, "(", 2)
+			v = strings.TrimSpace(v)
+			if len(t) == 2 && strings.HasSuffix(v, ")") {
+				r.Status = strings.TrimSpace(t[0])
+				r.StatusComment = strings.TrimSpace(strings.TrimSuffix(t[1], ")"))
+			}
+
 		case "Remote-Mta":
 			r.RemoteMTA = NameIP{Name: v}
 		case "Diagnostic-Code":

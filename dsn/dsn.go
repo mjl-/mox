@@ -11,7 +11,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/textproto"
-	"strconv"
 	"strings"
 	"time"
 
@@ -100,9 +99,10 @@ type Recipient struct {
 	Action         Action
 
 	// Enhanced status code. First digit indicates permanent or temporary
-	// error. If the string contains more than just a status, that
-	// additional text is added as comment when composing a DSN.
+	// error.
 	Status string
+	// For additional details, included in comment.
+	StatusComment string
 
 	// Optional fields.
 	// Original intended recipient of message. Used with the DSN extensions ORCPT
@@ -114,10 +114,10 @@ type Recipient struct {
 	// deliveries.
 	RemoteMTA NameIP
 
-	// If RemoteMTA is present, DiagnosticCode is from remote. When
-	// creating a DSN, additional text in the string will be added to the
-	// DSN as comment.
-	DiagnosticCode  string
+	// DiagnosticCode should either be empty, or start with "smtp; " followed by the
+	// literal full SMTP response lines, space separated.
+	DiagnosticCode string
+
 	LastAttemptDate time.Time
 	FinalLogID      string
 
@@ -272,11 +272,9 @@ func (m *Message) Compose(log mlog.Log, smtputf8 bool) ([]byte, error) {
 				st = "2.0.0"
 			}
 		}
-		var rest string
-		st, rest = codeLine(st)
 		statusLine := st
-		if rest != "" {
-			statusLine += " (" + rest + ")"
+		if r.StatusComment != "" {
+			statusLine += " (" + r.StatusComment + ")"
 		}
 		status("Status", statusLine) // ../rfc/3464:975
 		if !r.RemoteMTA.IsZero() {
@@ -289,13 +287,8 @@ func (m *Message) Compose(log mlog.Log, smtputf8 bool) ([]byte, error) {
 		}
 		// Presence of Diagnostic-Code indicates the code is from Remote-MTA. ../rfc/3464:1053
 		if r.DiagnosticCode != "" {
-			diagCode, rest := codeLine(r.DiagnosticCode)
-			diagLine := diagCode
-			if rest != "" {
-				diagLine += " (" + rest + ")"
-			}
-			// ../rfc/6533:589
-			status("Diagnostic-Code", "smtp; "+diagLine)
+			// ../rfc/3461:1342 ../rfc/6533:589
+			status("Diagnostic-Code", r.DiagnosticCode)
 		}
 		if !r.LastAttemptDate.IsZero() {
 			status("Last-Attempt-Date", r.LastAttemptDate.Format(message.RFC5322Z)) // ../rfc/3464:1076
@@ -387,35 +380,4 @@ func (w *errWriter) Write(buf []byte) (int, error) {
 	n, err := w.w.Write(buf)
 	w.err = err
 	return n, err
-}
-
-// split a line into enhanced status code and rest.
-func codeLine(s string) (string, string) {
-	t := strings.SplitN(s, " ", 2)
-	l := strings.Split(t[0], ".")
-	if len(l) != 3 {
-		return "", s
-	}
-	for i, e := range l {
-		_, err := strconv.ParseInt(e, 10, 32)
-		if err != nil {
-			return "", s
-		}
-		if i == 0 && len(e) != 1 {
-			return "", s
-		}
-	}
-
-	var rest string
-	if len(t) == 2 {
-		rest = t[1]
-	}
-	return t[0], rest
-}
-
-// HasCode returns whether line starts with an enhanced SMTP status code.
-func HasCode(line string) bool {
-	// ../rfc/3464:986
-	ecode, _ := codeLine(line)
-	return ecode != ""
 }

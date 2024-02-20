@@ -161,7 +161,7 @@ type Error struct {
 	// SMTP command causing failure.
 	Command string
 	// For errors due to SMTP responses, the full SMTP line excluding CRLF that caused
-	// the error. Typically the last line read.
+	// the error. First line of a multi-line response.
 	Line string
 	// Optional additional lines in case of multi-line SMTP response.  Most SMTP
 	// responses are single-line, leaving this field empty.

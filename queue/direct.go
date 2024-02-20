@@ -89,14 +89,19 @@ var (
 )
 
 // todo: rename function, perhaps put some of the params in a delivery struct so we don't pass all the params all the time?
-func fail(ctx context.Context, qlog mlog.Log, m Msg, backoff time.Duration, permanent bool, remoteMTA dsn.NameIP, secodeOpt, errmsg string, moreLines []string) {
+func fail(ctx context.Context, qlog mlog.Log, m Msg, backoff time.Duration, permanent bool, remoteMTA dsn.NameIP, secodeOpt, errmsg, firstLine string, moreLines []string) {
 	// todo future: when we implement relaying, we should be able to send DSNs to non-local users. and possibly specify a null mailfrom. ../rfc/5321:1503
 	// todo future: when we implement relaying, and a dsn cannot be delivered, and requiretls was active, we cannot drop the message. instead deliver to local postmaster? though ../rfc/8689:383 may intend to say the dsn should be delivered without requiretls?
 	// todo future: when we implement smtp dsn extension, parameter RET=FULL must be disregarded for messages with REQUIRETLS. ../rfc/8689:379
 
+	var smtpLines []string
+	if firstLine != "" {
+		smtpLines = append([]string{firstLine}, moreLines...)
+	}
+
 	if permanent || m.MaxAttempts == 0 && m.Attempts >= 8 || m.MaxAttempts > 0 && m.Attempts >= m.MaxAttempts {
 		qlog.Errorx("permanent failure delivering from queue", errors.New(errmsg))
-		deliverDSNFailure(ctx, qlog, m, remoteMTA, secodeOpt, errmsg, moreLines)
+		deliverDSNFailure(ctx, qlog, m, remoteMTA, secodeOpt, errmsg, smtpLines)
 
 		if err := queueDelete(context.Background(), m.ID); err != nil {
 			qlog.Errorx("deleting message from queue after permanent failure", err)
@@ -116,7 +121,7 @@ func fail(ctx context.Context, qlog mlog.Log, m Msg, backoff time.Duration, perm
 		qlog.Errorx("temporary failure delivering from queue, sending delayed dsn", errors.New(errmsg), slog.Duration("backoff", backoff))
 
 		retryUntil := m.LastAttempt.Add((4 + 8 + 16) * time.Hour)
-		deliverDSNDelay(ctx, qlog, m, remoteMTA, secodeOpt, errmsg, moreLines, retryUntil)
+		deliverDSNDelay(ctx, qlog, m, remoteMTA, secodeOpt, errmsg, smtpLines, retryUntil)
 	} else {
 		qlog.Errorx("temporary failure delivering from queue", errors.New(errmsg), slog.Duration("backoff", backoff), slog.Time("nextattempt", m.NextAttempt))
 	}
@@ -168,7 +173,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			recipientDomainResult.Summary.TotalFailureSessionCount++
 		}
 
-		fail(ctx, qlog, m, backoff, permanent, dsn.NameIP{}, "", err.Error(), nil)
+		fail(ctx, qlog, m, backoff, permanent, dsn.NameIP{}, "", err.Error(), "", nil)
 		return
 	}
 
@@ -188,7 +193,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			} else {
 				qlog.Infox("mtasts lookup temporary error, aborting delivery attempt", err, slog.Any("domain", origNextHop))
 				recipientDomainResult.Summary.TotalFailureSessionCount++
-				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", err.Error(), nil)
+				fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", err.Error(), "", nil)
 				return
 			}
 		}
@@ -205,7 +210,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	// RFC 5321 does not specify a clear algorithm, but common practice is probably
 	// ../rfc/3974:268.
 	var remoteMTA dsn.NameIP
-	var secodeOpt, errmsg string
+	var firstLine, secodeOpt, errmsg string
 	var moreLines []string // For additional SMTP response lines, included in DSN.
 	permanent = false
 	nmissingRequireTLS := 0
@@ -231,6 +236,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 					metricTLSRequiredNoIgnored.WithLabelValues("mtastsmx").Inc()
 				} else {
 					errmsg = fmt.Sprintf("mx host %s does not match enforced mta-sts policy with hosts %s", h.Domain, strings.Join(policyHosts, ","))
+					firstLine = ""
 					moreLines = nil
 					qlog.Error("mx host does not match mta-sts policy in mode enforce, skipping", slog.Any("host", h.Domain), slog.Any("policyhosts", policyHosts))
 					recipientDomainResult.Summary.TotalFailureSessionCount++
@@ -271,7 +277,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 
 		var badTLS, ok bool
 		var hostResult tlsrpt.Result
-		permanent, tlsDANE, badTLS, secodeOpt, remoteIP, errmsg, moreLines, hostResult, ok = deliverHost(nqlog, resolver, dialer, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, &m, tlsMode, tlsPKIX, &recipientDomainResult)
+		permanent, tlsDANE, badTLS, secodeOpt, remoteIP, errmsg, firstLine, moreLines, hostResult, ok = deliverHost(nqlog, resolver, dialer, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, &m, tlsMode, tlsPKIX, &recipientDomainResult)
 
 		var zerotype tlsrpt.PolicyType
 		if hostResult.Policy.Type != zerotype {
@@ -298,7 +304,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 				slog.Bool("enforcemtasts", enforceMTASTS),
 				slog.Bool("tlsdane", tlsDANE),
 				slog.Any("requiretls", m.RequireTLS))
-			permanent, _, _, secodeOpt, remoteIP, errmsg, moreLines, _, ok = deliverHost(nqlog, resolver, dialer, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, &m, smtpclient.TLSSkip, false, &tlsrpt.Result{})
+			permanent, _, _, secodeOpt, remoteIP, errmsg, firstLine, moreLines, _, ok = deliverHost(nqlog, resolver, dialer, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, &m, smtpclient.TLSSkip, false, &tlsrpt.Result{})
 		}
 
 		if ok {
@@ -334,7 +340,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		permanent = true
 	}
 
-	fail(ctx, qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg, moreLines)
+	fail(ctx, qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg, firstLine, moreLines)
 	return
 }
 
@@ -354,7 +360,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 // The returned hostResult holds TLSRPT reporting results for the connection
 // attempt. Its policy type can be the zero value, indicating there was no finding
 // (e.g. internal error).
-func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, ourHostname dns.Domain, transportName string, host dns.IPDomain, enforceMTASTS, haveMX, origNextHopAuthentic bool, origNextHop dns.Domain, expandedNextHopAuthentic bool, expandedNextHop dns.Domain, m *Msg, tlsMode smtpclient.TLSMode, tlsPKIX bool, recipientDomainResult *tlsrpt.Result) (permanent, tlsDANE, badTLS bool, secodeOpt string, remoteIP net.IP, errmsg string, moreLines []string, hostResult tlsrpt.Result, ok bool) {
+func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, ourHostname dns.Domain, transportName string, host dns.IPDomain, enforceMTASTS, haveMX, origNextHopAuthentic bool, origNextHop dns.Domain, expandedNextHopAuthentic bool, expandedNextHop dns.Domain, m *Msg, tlsMode smtpclient.TLSMode, tlsPKIX bool, recipientDomainResult *tlsrpt.Result) (permanent, tlsDANE, badTLS bool, secodeOpt string, remoteIP net.IP, errmsg, firstLine string, moreLines []string, hostResult tlsrpt.Result, ok bool) {
 	// About attempting delivery to multiple addresses of a host: ../rfc/5321:3898
 
 	tlsRequiredNo := m.RequireTLS != nil && !*m.RequireTLS
@@ -388,7 +394,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 	// Open message to deliver.
 	f, err := os.Open(m.MessagePath())
 	if err != nil {
-		return false, false, false, "", nil, fmt.Sprintf("open message file: %s", err), nil, hostResult, false
+		return false, false, false, "", nil, fmt.Sprintf("open message file: %s", err), "", nil, hostResult, false
 	}
 	msgr := store.FileMsgReader(m.MsgPrefix, f)
 	defer func() {
@@ -519,7 +525,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 		log.Info("verified tls is required, but destination has no usable dane records and no mta-sts policy, canceling delivery attempt to host")
 		metricRequireTLSUnsupported.WithLabelValues("nopolicy").Inc()
 		// Resond with proper enhanced status code. ../rfc/8689:301
-		return false, tlsDANE, false, smtp.SePol7MissingReqTLS, remoteIP, "missing required tls verification mechanism", nil, hostResult, false
+		return false, tlsDANE, false, smtp.SePol7MissingReqTLS, remoteIP, "missing required tls verification mechanism", "", nil, hostResult, false
 	}
 
 	// Dial the remote host given the IPs if no error yet.
@@ -547,7 +553,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 	metricConnection.WithLabelValues(result).Inc()
 	if err != nil {
 		log.Debugx("connecting to remote smtp", err, slog.Any("host", host))
-		return false, tlsDANE, false, "", remoteIP, fmt.Sprintf("dialing smtp server: %v", err), nil, hostResult, false
+		return false, tlsDANE, false, "", remoteIP, fmt.Sprintf("dialing smtp server: %v", err), "", nil, hostResult, false
 	}
 
 	var mailFrom string
@@ -638,7 +644,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 		deliveryResult = "error"
 	}
 	if err == nil {
-		return false, tlsDANE, false, "", remoteIP, "", nil, hostResult, true
+		return false, tlsDANE, false, "", remoteIP, "", "", nil, hostResult, true
 	} else if cerr, ok := err.(smtpclient.Error); ok {
 		// If we are being rejected due to policy reasons on the first
 		// attempt and remote has both IPv4 and IPv6, we'll give it
@@ -654,9 +660,9 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 			secode = smtp.SePol7MissingReqTLS
 			metricRequireTLSUnsupported.WithLabelValues("norequiretls").Inc()
 		}
-		return permanent, tlsDANE, errors.Is(cerr, smtpclient.ErrTLS), secode, remoteIP, cerr.Error(), cerr.MoreLines, hostResult, false
+		return permanent, tlsDANE, errors.Is(cerr, smtpclient.ErrTLS), secode, remoteIP, cerr.Error(), cerr.Line, cerr.MoreLines, hostResult, false
 	} else {
-		return false, tlsDANE, errors.Is(cerr, smtpclient.ErrTLS), "", remoteIP, err.Error(), nil, hostResult, false
+		return false, tlsDANE, errors.Is(cerr, smtpclient.ErrTLS), "", remoteIP, err.Error(), "", nil, hostResult, false
 	}
 }
 

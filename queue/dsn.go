@@ -30,7 +30,7 @@ var (
 	)
 )
 
-func deliverDSNFailure(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, moreLines []string) {
+func deliverDSNFailure(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, smtpLines []string) {
 	const subject = "mail delivery failed"
 	message := fmt.Sprintf(`
 Delivery has failed permanently for your email to:
@@ -42,12 +42,15 @@ No further deliveries will be attempted.
 Error during the last delivery attempt:
 
 	%s
-`, m.Recipient().XString(m.SMTPUTF8), strings.Join(append([]string{errmsg}, moreLines...), "\n\t"))
+`, m.Recipient().XString(m.SMTPUTF8), errmsg)
+	if len(smtpLines) > 0 {
+		message += "\nFull SMTP response:\n\n\t" + strings.Join(smtpLines, "\n\t") + "\n"
+	}
 
-	deliverDSN(ctx, log, m, remoteMTA, secodeOpt, errmsg, true, nil, subject, message)
+	deliverDSN(ctx, log, m, remoteMTA, secodeOpt, errmsg, smtpLines, true, nil, subject, message)
 }
 
-func deliverDSNDelay(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, moreLines []string, retryUntil time.Time) {
+func deliverDSNDelay(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, smtpLines []string, retryUntil time.Time) {
 	// Should not happen, but doesn't hurt to prevent sending delayed delivery
 	// notifications for DMARC reports. We don't want to waste postmaster attention.
 	if m.IsDMARCReport {
@@ -66,16 +69,19 @@ If these attempts all fail, you will receive a notice.
 Error during the last delivery attempt:
 
 	%s
-`, m.Recipient().XString(false), strings.Join(append([]string{errmsg}, moreLines...), "\n\t"))
+`, m.Recipient().XString(false), errmsg)
+	if len(smtpLines) > 0 {
+		message += "\nFull SMTP response:\n\n\t" + strings.Join(smtpLines, "\n\t") + "\n"
+	}
 
-	deliverDSN(ctx, log, m, remoteMTA, secodeOpt, errmsg, false, &retryUntil, subject, message)
+	deliverDSN(ctx, log, m, remoteMTA, secodeOpt, errmsg, smtpLines, false, &retryUntil, subject, message)
 }
 
 // We only queue DSNs for delivery failures for emails submitted by authenticated
 // users. So we are delivering to local users. ../rfc/5321:1466
 // ../rfc/5321:1494
 // ../rfc/7208:490
-func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, permanent bool, retryUntil *time.Time, subject, textBody string) {
+func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, smtpLines []string, permanent bool, retryUntil *time.Time, subject, textBody string) {
 	kind := "delayed delivery"
 	if permanent {
 		kind = "failure"
@@ -115,9 +121,11 @@ func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, 
 	} else {
 		status += "0.0"
 	}
-	diagCode := errmsg
-	if !dsn.HasCode(diagCode) {
-		diagCode = status + " " + errmsg
+
+	// ../rfc/3461:1329
+	var smtpDiag string
+	if len(smtpLines) > 0 {
+		smtpDiag = "smtp; " + strings.Join(smtpLines, " ")
 	}
 
 	dsnMsg := &dsn.Message{
@@ -138,8 +146,9 @@ func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, 
 				FinalRecipient:  m.Recipient(),
 				Action:          action,
 				Status:          status,
+				StatusComment:   errmsg,
 				RemoteMTA:       remoteMTA,
-				DiagnosticCode:  diagCode,
+				DiagnosticCode:  smtpDiag,
 				LastAttemptDate: *m.LastAttempt,
 				WillRetryUntil:  retryUntil,
 			},

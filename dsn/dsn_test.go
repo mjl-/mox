@@ -192,34 +192,3 @@ func TestDSN(t *testing.T) {
 	tcheckType(t, &part.Parts[1], "message", "global-delivery-status", "8bit")
 	tcompare(t, pmsg.Recipients[0].FinalRecipient, m.Recipients[0].FinalRecipient)
 }
-
-func TestCode(t *testing.T) {
-	testCodeLine := func(line, ecode, rest string) {
-		t.Helper()
-		e, r := codeLine(line)
-		if e != ecode || r != rest {
-			t.Fatalf("codeLine %q: got %q %q, expected %q %q", line, e, r, ecode, rest)
-		}
-	}
-	testCodeLine("4.0.0", "4.0.0", "")
-	testCodeLine("4.0.0 more", "4.0.0", "more")
-	testCodeLine("other", "", "other")
-	testCodeLine("other more", "", "other more")
-
-	testHasCode := func(line string, exp bool) {
-		t.Helper()
-		got := HasCode(line)
-		if got != exp {
-			t.Fatalf("HasCode %q: got %v, expected %v", line, got, exp)
-		}
-	}
-	testHasCode("4.0.0", true)
-	testHasCode("5.7.28", true)
-	testHasCode("10.0.0", false) // first number must be single digit.
-	testHasCode("4.1.1 more", true)
-	testHasCode("other ", false)
-	testHasCode("4.2.", false)
-	testHasCode("4.2. ", false)
-	testHasCode(" 4.2.4", false)
-	testHasCode(" 4.2.4 ", false)
-}
