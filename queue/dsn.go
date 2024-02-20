@@ -162,7 +162,8 @@ func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, 
 		return
 	}
 
-	msgData = append([]byte("Return-Path: <"+dsnMsg.From.XString(m.SMTPUTF8)+">\r\n"), msgData...)
+	prefix := []byte("Return-Path: <" + dsnMsg.From.XString(m.SMTPUTF8) + ">\r\n" + "Delivered-To: " + m.Sender().XString(m.SMTPUTF8) + "\r\n")
+	msgData = append(prefix, msgData...)
 
 	mailbox := "Inbox"
 	senderAccount := m.SenderAccount
