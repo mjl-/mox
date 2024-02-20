@@ -211,7 +211,7 @@ func Count(ctx context.Context) (int, error) {
 func MakeMsg(senderAccount string, sender, recipient smtp.Path, has8bit, smtputf8 bool, size int64, messageID string, prefix []byte, requireTLS *bool) Msg {
 	now := time.Now()
 	return Msg{
-		SenderAccount:      mox.Conf.Static.Postmaster.Account,
+		SenderAccount:      senderAccount,
 		SenderLocalpart:    sender.Localpart,
 		SenderDomain:       sender.IPDomain,
 		RecipientLocalpart: recipient.Localpart,
