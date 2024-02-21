@@ -217,6 +217,7 @@ func parseRecipientHeader(mr *textproto.Reader, utf8 bool) (Recipient, error) {
 			for _, x := range actions {
 				if a == x {
 					ok = true
+					r.Action = a
 					break
 				}
 			}
