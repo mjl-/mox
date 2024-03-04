@@ -11,9 +11,10 @@ set -e
 
 # We'll set a max memory limit during upgrades. We modify the softlimit when
 # importing the potentially large mbox file.
-# Currently at 768MB, needed for upgrading with 500k messages from v0.0.5 to
-# v0.0.6 (two new indexes on store.Message).
-ulimit -S -d 768000
+# Currently at 1024MB, needed for upgrading with 500k messages from v0.0.5 to
+# v0.0.9 (two new indexes on store.Message).
+memlimit=1024000
+ulimit -S -d $memlimit
 
 (rm -r testdata/upgrade 2>/dev/null || exit 0)
 mkdir testdata/upgrade
@@ -59,7 +60,7 @@ ulimit -S -d unlimited
 echo 'Importing bulk data for upgrading.'
 gunzip < ../upgradetest.mbox.gz | time ./$tag/mox ximport mbox ./stepdata/accounts/test0 upgradetest /dev/stdin
 echo
-ulimit -S -d 768000
+ulimit -S -d $memlimit
 time ../../mox -cpuprof ../../upgrade0-verifydata.cpu.pprof -memprof ../../upgrade0-verifydata.mem.pprof verifydata -skip-size-check stepdata
 time ../../mox -loglevel info -cpuprof ../../upgrade0-openaccounts.cpu.pprof -memprof ../../upgrade0-openaccounts.mem.pprof openaccounts stepdata test0 test1 test2
 rm -r stepdata
@@ -82,7 +83,7 @@ for tag in $tags; do
 			echo 'Importing bulk data for upgrading.'
 			gunzip < ../upgradetest.mbox.gz | time ./$tag/mox ximport mbox ./stepdata/accounts/test0 upgradetest /dev/stdin
 			echo
-			ulimit -S -d 768000
+			ulimit -S -d $memlimit
 		fi
 
 		echo "Upgrade data to $tag."
