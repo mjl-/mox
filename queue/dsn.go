@@ -202,6 +202,7 @@ func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, 
 		Received:  time.Now(),
 		Size:      msgWriter.Size,
 		MsgPrefix: []byte{},
+		DSN:       true,
 	}
 
 	// If this is a DMARC report, deliver it as seen message to a submailbox of the

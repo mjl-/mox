@@ -1917,6 +1917,13 @@
 					]
 				},
 				{
+					"Name": "DSN",
+					"Docs": "If this message is a DSN. For DSNs, we don't look at the subject when matching threads.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
 					"Name": "ReceivedTLSVersion",
 					"Docs": "0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.",
 					"Typewords": [

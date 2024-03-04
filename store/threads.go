@@ -58,7 +58,7 @@ func assignThread(log mlog.Log, tx *bstore.Tx, m *Message, part *message.Part) e
 		if messageID == m.MessageID {
 			continue
 		}
-		tm, _, err := lookupThreadMessage(tx, m.ID, messageID, m.SubjectBase)
+		tm, _, err := lookupThreadMessage(tx, m.ID, messageID, m.SubjectBase, m.DSN)
 		if err != nil {
 			return fmt.Errorf("looking up thread message for new message: %v", err)
 		} else if tm != nil {
@@ -302,7 +302,7 @@ func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore
 			if messageID == m.MessageID {
 				continue
 			}
-			tm, exists, err := lookupThreadMessage(tx, m.ID, messageID, m.SubjectBase)
+			tm, exists, err := lookupThreadMessage(tx, m.ID, messageID, m.SubjectBase, m.DSN)
 			if err != nil {
 				return false, fmt.Errorf("lookup up thread by message-id %s for message id %d: %w", messageID, m.ID, err)
 			} else if tm != nil {
@@ -485,7 +485,7 @@ func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore
 			return nil
 		}
 
-		// Use multiple worker goroutines to read parse headers from on-disk messages.
+		// Use multiple worker goroutines to parse headers from on-disk messages.
 		procs := runtime.GOMAXPROCS(0)
 		wq := moxio.NewWorkQueue[Message, threadPrep](2*procs, 4*procs, prepareMessages, processMessage)
 
@@ -674,16 +674,18 @@ func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore
 	return nil
 }
 
-// lookupThreadMessage tries to find the parent message with messageID that must
-// have a matching subjectBase.
+// lookupThreadMessage tries to find the parent message with messageID, that must
+// have a matching subjectBase (unless it is a DSN).
 //
 // If the message isn't present (with a valid thread id), a nil message and nil
 // error is returned. The bool return value indicates if a message with the
 // message-id exists at all.
-func lookupThreadMessage(tx *bstore.Tx, mID int64, messageID, subjectBase string) (*Message, bool, error) {
+func lookupThreadMessage(tx *bstore.Tx, mID int64, messageID, subjectBase string, isDSN bool) (*Message, bool, error) {
 	q := bstore.QueryTx[Message](tx)
 	q.FilterNonzero(Message{MessageID: messageID})
-	q.FilterEqual("SubjectBase", subjectBase)
+	if !isDSN {
+		q.FilterEqual("SubjectBase", subjectBase)
+	}
 	q.FilterEqual("Expunged", false)
 	q.FilterNotEqual("ID", mID)
 	q.SortAsc("ID")

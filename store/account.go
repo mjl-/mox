@@ -484,6 +484,10 @@ type Message struct {
 	// filtering).
 	IsMailingList bool
 
+	// If this message is a DSN. For DSNs, we don't look at the subject when matching
+	// threads.
+	DSN bool
+
 	ReceivedTLSVersion     uint16 // 0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.
 	ReceivedTLSCipherSuite uint16
 	ReceivedRequireTLS     bool // Whether RequireTLS was known to be used for incoming delivery.
@@ -574,9 +578,11 @@ func (m *Message) PrepareExpunge() {
 	}
 }
 
-// PrepareThreading sets MessageID and SubjectBase (used in threading) based on the
-// envelope in part.
+// PrepareThreading sets MessageID, SubjectBase and DSN (used in threading) based
+// on the part.
 func (m *Message) PrepareThreading(log mlog.Log, part *message.Part) {
+	m.DSN = part.IsDSN()
+
 	if part.Envelope == nil {
 		return
 	}

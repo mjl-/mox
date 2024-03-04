@@ -575,6 +575,15 @@ func (p *Part) ParseNextPart(elog *slog.Logger) (*Part, error) {
 	return &p.Parts[len(p.Parts)-1], nil
 }
 
+// IsDSN returns whether the MIME structure of the part is a DSN.
+func (p *Part) IsDSN() bool {
+	return p.MediaType == "MULTIPART" &&
+		p.MediaSubType == "REPORT" &&
+		len(p.Parts) >= 2 &&
+		p.Parts[1].MediaType == "MESSAGE" &&
+		(p.Parts[1].MediaSubType == "DELIVERY-STATUS" || p.Parts[1].MediaSubType == "GLOBAL-DELIVERY-STATUS")
+}
+
 // Reader returns a reader for the decoded body content.
 func (p *Part) Reader() io.Reader {
 	return p.bodyReader(p.RawReader())
