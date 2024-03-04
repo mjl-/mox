@@ -3057,7 +3057,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		parsedMessageResolve = resolve;
 		parsedMessageReject = reject;
 	});
-	const react = async (to, cc, bcc, forward, all) => {
+	const react = async (to, cc, bcc, forward) => {
 		const pm = await parsedMessagePromise;
 		let body = '';
 		const sel = window.getSelection();
@@ -3104,26 +3104,45 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			responseMessageID: m.ID,
 			isList: m.IsMailingList,
 		};
-		if (all) {
-			opts.to = (to || []).concat((mi.Envelope.To || []).filter(a => !envelopeIdentity([a]))).map(a => formatAddress(a));
-			opts.cc = (mi.Envelope.CC || []).map(a => formatAddress(a));
-			opts.bcc = (mi.Envelope.BCC || []).map(a => formatAddress(a));
-		}
 		compose(opts);
 	};
-	const reply = async (all, toOpt) => {
-		if (!all && !toOpt && (mi.Envelope.From || []).length === 1 && envelopeIdentity(mi.Envelope.From || [])) {
-			await react(mi.Envelope.To || [], mi.Envelope.CC || [], mi.Envelope.BCC || [], false, all);
+	const reply = async (all) => {
+		const contains = (l, a) => !!l.find(e => equalAddress(e, a));
+		let to = [];
+		let cc = [];
+		let bcc = [];
+		if ((mi.Envelope.From || []).length === 1 && envelopeIdentity(mi.Envelope.From || [])) {
+			// Replying to our own message, copy the original cc/bcc.
+			to = mi.Envelope.To || [];
 		}
 		else {
-			await react(toOpt || ((mi.Envelope.ReplyTo || []).length > 0 ? mi.Envelope.ReplyTo : mi.Envelope.From) || [], [], [], false, all);
+			if (mi.Envelope.ReplyTo && mi.Envelope.ReplyTo.length > 0) {
+				to = mi.Envelope.ReplyTo;
+			}
+			else {
+				to = mi.Envelope.From || [];
+			}
+			if (all) {
+				for (const a of (mi.Envelope.To || [])) {
+					if (!contains(to, a) && !envelopeIdentity([a])) {
+						to.push(a);
+					}
+				}
+			}
 		}
+		if (all) {
+			cc = mi.Envelope.CC || [];
+			bcc = mi.Envelope.BCC || [];
+		}
+		cc = cc.filter((a, i) => !envelopeIdentity([a]) && !contains(to, a) && !contains(cc.slice(0, i), a));
+		bcc = bcc.filter(a => !envelopeIdentity([a]));
+		await react(to, cc, bcc, false);
 	};
-	const cmdForward = async () => { react([], [], [], true, false); };
+	const cmdForward = async () => { react([], [], [], true); };
 	const cmdReplyList = async () => {
 		const pm = await parsedMessagePromise;
 		if (pm.ListReplyAddress) {
-			await reply(false, [pm.ListReplyAddress]);
+			await react([pm.ListReplyAddress], [], [], false);
 		}
 	};
 	const cmdReply = async () => { await reply(false); };
