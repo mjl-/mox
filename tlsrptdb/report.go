@@ -78,8 +78,9 @@ func reportDB(ctx context.Context) (rdb *bstore.DB, rerr error) {
 // verifiedFromDomain. Using HTTPS for reports is not recommended as there is no
 // authentication on the reports origin.
 //
-// The report is currently required to only cover a single domain in its policy
-// domain. Only reports for known domains are added to the database.
+// Only reports for known domains are added to the database. Unknown domains are
+// ignored without causing an error, unless no known domain was found in the report
+// at all.
 //
 // Prometheus metrics are updated only for configured domains.
 func AddReport(ctx context.Context, log mlog.Log, verifiedFromDomain dns.Domain, mailFrom string, hostReport bool, r *tlsrpt.Report) error {
@@ -92,44 +93,43 @@ func AddReport(ctx context.Context, log mlog.Log, verifiedFromDomain dns.Domain,
 		return fmt.Errorf("no policies in report")
 	}
 
-	var reportdom, zerodom dns.Domain
-	record := TLSReportRecord{0, "", verifiedFromDomain.Name(), mailFrom, hostReport, *r}
+	var inserted int
+	return db.Write(ctx, func(tx *bstore.Tx) error {
+		for _, p := range r.Policies {
+			pp := p.Policy
 
-	for _, p := range r.Policies {
-		pp := p.Policy
-
-		// Check domain, they must all be the same for now. We are not expecting senders to
-		// coalesce TLS results for different policy domains in a single report.
-		d, err := dns.ParseDomain(pp.Domain)
-		if err != nil {
-			log.Errorx("invalid domain in tls report", err, slog.Any("domain", pp.Domain), slog.String("mailfrom", mailFrom))
-			continue
-		}
-		if hostReport && d != mox.Conf.Static.HostnameDomain {
-			log.Info("unknown mail host policy domain in tls report, not storing", slog.Any("domain", d), slog.String("mailfrom", mailFrom))
-			return fmt.Errorf("unknown mail host policy domain")
-		} else if _, ok := mox.Conf.Domain(d); !hostReport && !ok {
-			log.Info("unknown recipient policy domain in tls report, not storing", slog.Any("domain", d), slog.String("mailfrom", mailFrom))
-			return fmt.Errorf("unknown recipient policy domain")
-		}
-		if reportdom != zerodom && d != reportdom {
-			return fmt.Errorf("multiple domains in report %s and %s", reportdom, d)
-		}
-		reportdom = d
-
-		metricSession.WithLabelValues("success").Add(float64(p.Summary.TotalSuccessfulSessionCount))
-		for _, f := range p.FailureDetails {
-			var result string
-			if _, ok := knownResultTypes[f.ResultType]; ok {
-				result = string(f.ResultType)
-			} else {
-				result = "other"
+			d, err := dns.ParseDomain(pp.Domain)
+			if err != nil {
+				return fmt.Errorf("invalid domain %v in tls report: %v", d, err)
 			}
-			metricSession.WithLabelValues(result).Add(float64(f.FailedSessionCount))
+
+			if _, ok := mox.Conf.Domain(d); !ok && d != mox.Conf.Static.HostnameDomain {
+				log.Info("unknown host/recipient policy domain in tls report, not storing", slog.Any("domain", d), slog.String("mailfrom", mailFrom))
+				continue
+			}
+
+			metricSession.WithLabelValues("success").Add(float64(p.Summary.TotalSuccessfulSessionCount))
+			for _, f := range p.FailureDetails {
+				var result string
+				if _, ok := knownResultTypes[f.ResultType]; ok {
+					result = string(f.ResultType)
+				} else {
+					result = "other"
+				}
+				metricSession.WithLabelValues(result).Add(float64(f.FailedSessionCount))
+			}
+
+			record := TLSReportRecord{0, d.Name(), verifiedFromDomain.Name(), mailFrom, d == mox.Conf.Static.HostnameDomain, *r}
+			if err := tx.Insert(&record); err != nil {
+				return fmt.Errorf("inserting report for domain: %w", err)
+			}
+			inserted++
 		}
-	}
-	record.Domain = reportdom.Name()
-	return db.Insert(ctx, &record)
+		if inserted == 0 {
+			return fmt.Errorf("no domains in report recognized")
+		}
+		return nil
+	})
 }
 
 // Records returns all TLS reports in the database.

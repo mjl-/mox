@@ -62,14 +62,183 @@ const reportJSON = `{
      }]
    }`
 
+const reportMultipleJSON = `{
+	"organization-name": "remote.example",
+	"date-range": {
+		"start-datetime": "2024-02-25T00:00:00Z",
+		"end-datetime": "2024-02-25T23:59:59Z"
+	},
+	"contact-info": "postmaster@remote.example",
+	"report-id": "20240225.mail.mox.example@remote.example",
+	"policies": [
+		{
+			"policy": {
+				"policy-type": "tlsa",
+				"policy-string": [
+					"3 1 1 206d5f55ecb9f8389bc57b5ba14716dd5b23d0834fd2c99fd402f0bda32e9523",
+					"3 1 1 4201e4b741c746b62ff806c142158c35ecbbbd9ac56b6d791f760e272736f8d0"
+				],
+				"policy-domain": "test2.xmox.nl",
+				"mx-host": [
+					"mail.mox.example"
+				]
+			},
+			"summary": {
+				"total-successful-session-count": 1,
+				"total-failure-session-count": 0
+			},
+			"failure-details": []
+		},
+		{
+			"policy": {
+				"policy-type": "tlsa",
+				"policy-string": [
+					"3 1 1 206d5f55ecb9f8389bc57b5ba14716dd5b23d0834fd2c99fd402f0bda32e9523",
+					"3 1 1 4201e4b741c746b62ff806c142158c35ecbbbd9ac56b6d791f760e272736f8d0"
+				],
+				"policy-domain": "test.xmox.nl",
+				"mx-host": [
+					"mail.mox.example"
+				]
+			},
+			"summary": {
+				"total-successful-session-count": 1,
+				"total-failure-session-count": 0
+			},
+			"failure-details": []
+		}
+	]
+}
+`
+
+const reportMixedJSON = `{
+	"organization-name": "remote.example",
+	"date-range": {
+		"start-datetime": "2024-02-25T00:00:00Z",
+		"end-datetime": "2024-02-25T23:59:59Z"
+	},
+	"contact-info": "postmaster@remote.example",
+	"report-id": "20240225.test.xmox.nl@remote.example",
+	"policies": [
+		{
+			"policy": {
+				"policy-type": "tlsa",
+				"policy-string": [
+					"3 1 1 206d5f55ecb9f8389bc57b5ba14716dd5b23d0834fd2c99fd402f0bda32e9523",
+					"3 1 1 4201e4b741c746b62ff806c142158c35ecbbbd9ac56b6d791f760e272736f8d0"
+				],
+				"policy-domain": "mail.mox.example",
+				"mx-host": []
+			},
+			"summary": {
+				"total-successful-session-count": 1,
+				"total-failure-session-count": 0
+			},
+			"failure-details": []
+		},
+		{
+			"policy": {
+				"policy-type": "sts",
+				"policy-string": [
+					"version: STSv1",
+					"mode: enforce",
+					"max_age: 86400",
+					"mx: mail.mox.example"
+				],
+				"policy-domain": "unknown.xmox.nl",
+				"mx-host": [
+					"mail.mox.example"
+				]
+			},
+			"summary": {
+				"total-successful-session-count": 1,
+				"total-failure-session-count": 0
+			},
+			"failure-details": []
+		},
+		{
+			"policy": {
+				"policy-type": "sts",
+				"policy-string": [
+					"version: STSv1",
+					"mode: enforce",
+					"max_age: 86400",
+					"mx: mail.mox.example"
+				],
+				"policy-domain": "test.xmox.nl",
+				"mx-host": [
+					"mail.mox.example"
+				]
+			},
+			"summary": {
+				"total-successful-session-count": 1,
+				"total-failure-session-count": 0
+			},
+			"failure-details": []
+		}
+	]
+}
+`
+
+const reportUnknownJSON = `{
+        "organization-name": "remote.example",
+        "date-range": {
+                "start-datetime": "2024-02-25T00:00:00Z",
+                "end-datetime": "2024-02-25T23:59:59Z"
+        },
+        "contact-info": "postmaster@remote.example",
+        "report-id": "20240225.test.xmox.nl@remote.example",
+        "policies": [
+                {
+                        "policy": {
+                                "policy-type": "tlsa",
+                                "policy-string": [
+                                        "3 1 1 206d5f55ecb9f8389bc57b5ba14716dd5b23d0834fd2c99fd402f0bda32e9523",
+                                        "3 1 1 4201e4b741c746b62ff806c142158c35ecbbbd9ac56b6d791f760e272736f8d0"
+                                ],
+                                "policy-domain": "unknown.mox.example",
+                                "mx-host": []
+                        },
+                        "summary": {
+                                "total-successful-session-count": 1,
+                                "total-failure-session-count": 0
+                        },
+                        "failure-details": []
+                },
+                {
+                        "policy": {
+                                "policy-type": "sts",
+                                "policy-string": [
+                                        "version: STSv1",
+                                        "mode: enforce",
+                                        "max_age: 86400",
+                                        "mx: mail.mox.example"
+                                ],
+                                "policy-domain": "unknown.xmox.nl",
+                                "mx-host": [
+                                        "unknown.mox.example"
+                                ]
+                        },
+                        "summary": {
+                                "total-successful-session-count": 1,
+                                "total-failure-session-count": 0
+                        },
+                        "failure-details": []
+                }
+        ]
+}
+`
+
 func TestReport(t *testing.T) {
 	mox.Context = ctxbg
 	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/tlsrpt/fake.conf")
+	mox.Conf.Static.HostnameDomain = dns.Domain{ASCII: "mail.mox.example"}
 	mox.Conf.Static.DataDir = "."
 	// Recognize as configured domain.
 	mox.Conf.Dynamic.Domains = map[string]config.Domain{
-		"test.xmox.nl": {},
+		"test.xmox.nl":  {},
+		"test2.xmox.nl": {},
 	}
 
 	dbpath := mox.DataDirPath("tlsrpt.db")
@@ -132,5 +301,35 @@ func TestReport(t *testing.T) {
 	records, err = RecordsPeriodDomain(ctxbg, start, end, dns.Domain{ASCII: "test.xmox.nl"})
 	if err != nil || len(records) != 1 {
 		t.Fatalf("got err %v, records %#v, expected no error with 1 record", err, records)
+	}
+
+	// Add report with multiple recipient domains.
+	reportJSON, err = tlsrpt.Parse(strings.NewReader(reportMultipleJSON))
+	if err != nil {
+		t.Fatalf("parsing report: %v", err)
+	}
+	report = reportJSON.Convert()
+	if err := AddReport(ctxbg, pkglog, dns.Domain{ASCII: "remote.example"}, "postmaster@remote.example", false, &report); err != nil {
+		t.Errorf("adding report to database: %s", err)
+	}
+
+	// Add report with mixed host and domain policies. The unknown domain is ignored.
+	reportJSON, err = tlsrpt.Parse(strings.NewReader(reportMixedJSON))
+	if err != nil {
+		t.Fatalf("parsing report: %v", err)
+	}
+	report = reportJSON.Convert()
+	if err := AddReport(ctxbg, pkglog, dns.Domain{ASCII: "remote.example"}, "postmaster@remote.example", false, &report); err != nil {
+		t.Errorf("adding report to database: %s", err)
+	}
+
+	// All unknown domains in report should cause error.
+	reportJSON, err = tlsrpt.Parse(strings.NewReader(reportUnknownJSON))
+	if err != nil {
+		t.Fatalf("parsing report: %v", err)
+	}
+	report = reportJSON.Convert()
+	if err := AddReport(ctxbg, pkglog, dns.Domain{ASCII: "remote.example"}, "postmaster@remote.example", false, &report); err == nil {
+		t.Errorf("adding report with all unknown domains, expected error")
 	}
 }
