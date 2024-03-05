@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -210,6 +211,12 @@ func xcheckuserf(ctx context.Context, err error, format string, args ...any) {
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
 	pkglog.WithContext(ctx).Errorx(msg, err)
 	panic(&sherpa.Error{Code: "user:error", Message: errmsg})
+}
+
+func xusererrorf(ctx context.Context, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	pkglog.WithContext(ctx).Error(msg)
+	panic(&sherpa.Error{Code: "user:error", Message: msg})
 }
 
 // LoginPrep returns a login token, and also sets it as cookie. Both must be
@@ -1765,20 +1772,20 @@ func (Admin) LookupIP(ctx context.Context, ip string) Reverse {
 //
 // The returned value maps IPs to per DNSBL statuses, where "pass" means not listed and
 // anything else is an error string, e.g. "fail: ..." or "temperror: ...".
-func (Admin) DNSBLStatus(ctx context.Context) map[string]map[string]string {
+func (Admin) DNSBLStatus(ctx context.Context) (results map[string]map[string]string, using, monitoring []dns.Domain) {
 	log := mlog.New("webadmin", nil).WithContext(ctx)
 	resolver := dns.StrictResolver{Pkg: "check", Log: log.Logger}
 	return dnsblsStatus(ctx, log, resolver)
 }
 
-func dnsblsStatus(ctx context.Context, log mlog.Log, resolver dns.Resolver) map[string]map[string]string {
+func dnsblsStatus(ctx context.Context, log mlog.Log, resolver dns.Resolver) (results map[string]map[string]string, using, monitoring []dns.Domain) {
 	// todo: check health before using dnsbl?
-	var dnsbls []dns.Domain
-	if l, ok := mox.Conf.Static.Listeners["public"]; ok {
-		for _, dnsbl := range l.SMTP.DNSBLs {
-			zone, err := dns.ParseDomain(dnsbl)
-			xcheckf(ctx, err, "parse dnsbl zone")
-			dnsbls = append(dnsbls, zone)
+	using = mox.Conf.Static.Listeners["public"].SMTP.DNSBLZones
+	zones := append([]dns.Domain{}, using...)
+	for _, zone := range mox.Conf.MonitorDNSBLs() {
+		if !slices.Contains(zones, zone) {
+			zones = append(zones, zone)
+			monitoring = append(monitoring, zone)
 		}
 	}
 
@@ -1789,7 +1796,7 @@ func dnsblsStatus(ctx context.Context, log mlog.Log, resolver dns.Resolver) map[
 		}
 		ipstr := ip.String()
 		r[ipstr] = map[string]string{}
-		for _, zone := range dnsbls {
+		for _, zone := range zones {
 			status, expl, err := dnsbl.Lookup(ctx, log.Logger, resolver, zone, ip)
 			result := string(status)
 			if err != nil {
@@ -1801,7 +1808,29 @@ func dnsblsStatus(ctx context.Context, log mlog.Log, resolver dns.Resolver) map[
 			r[ipstr][zone.LogString()] = result
 		}
 	}
-	return r
+	return r, using, monitoring
+}
+
+func (Admin) MonitorDNSBLsSave(ctx context.Context, text string) {
+	var zones []dns.Domain
+	publicZones := mox.Conf.Static.Listeners["public"].SMTP.DNSBLZones
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		d, err := dns.ParseDomain(line)
+		xcheckuserf(ctx, err, "parsing dnsbl zone %s", line)
+		if slices.Contains(zones, d) {
+			xusererrorf(ctx, "duplicate dnsbl zone %s", line)
+		}
+		if slices.Contains(publicZones, d) {
+			xusererrorf(ctx, "dnsbl zone %s already present in public listener", line)
+		}
+		zones = append(zones, d)
+	}
+	err := mox.MonitorDNSBLsSave(ctx, zones)
+	xcheckf(ctx, err, "saving monitoring dnsbl zones")
 }
 
 // DomainRecords returns lines describing DNS records that should exist for the
@@ -1894,7 +1923,7 @@ func (Admin) AddressRemove(ctx context.Context, address string) {
 func (Admin) SetPassword(ctx context.Context, accountName, password string) {
 	log := pkglog.WithContext(ctx)
 	if len(password) < 8 {
-		panic(&sherpa.Error{Code: "user:error", Message: "password must be at least 8 characters"})
+		xusererrorf(ctx, "message must be at least 8 characters")
 	}
 	acc, err := store.OpenAccount(log, accountName)
 	xcheckf(ctx, err, "open account")

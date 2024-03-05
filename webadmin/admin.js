@@ -714,8 +714,15 @@ var api;
 		async DNSBLStatus() {
 			const fn = "DNSBLStatus";
 			const paramTypes = [];
-			const returnTypes = [["{}", "{}", "string"]];
+			const returnTypes = [["{}", "{}", "string"], ["[]", "Domain"], ["[]", "Domain"]];
 			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async MonitorDNSBLsSave(text) {
+			const fn = "MonitorDNSBLsSave";
+			const paramTypes = [["string"]];
+			const returnTypes = [];
+			const params = [text];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// DomainRecords returns lines describing DNS records that should exist for the
@@ -1624,7 +1631,7 @@ const index = async () => {
 			fieldset.disabled = false;
 		}
 		window.location.hash = '#domains/' + domain.value;
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Domain', dom.br(), domain = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), 'Postmaster/reporting account', dom.br(), account = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Localpart (optional)', attr.title('Must be set if and only if account does not yet exist. The localpart for the user of this domain. E.g. postmaster.')), dom.br(), localpart = dom.input()), ' ', dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. You should add the required DNS records after adding the domain.')))), dom.br(), dom.h2('Reports'), dom.div(dom.a('DMARC', attr.href('#dmarc/reports'))), dom.div(dom.a('TLS', attr.href('#tlsrpt/reports'))), dom.br(), dom.h2('Operations'), dom.div(dom.a('MTA-STS policies', attr.href('#mtasts'))), dom.div(dom.a('DMARC evaluations', attr.href('#dmarc/evaluations'))), dom.div(dom.a('TLS connection results', attr.href('#tlsrpt/results'))), dom.div(style({ marginTop: '.5ex' }), dom.form(async function submit(e) {
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Domain', dom.br(), domain = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), 'Postmaster/reporting account', dom.br(), account = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Localpart (optional)', attr.title('Must be set if and only if account does not yet exist. The localpart for the user of this domain. E.g. postmaster.')), dom.br(), localpart = dom.input()), ' ', dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. You should add the required DNS records after adding the domain.')))), dom.br(), dom.h2('Reports'), dom.div(dom.a('DMARC', attr.href('#dmarc/reports'))), dom.div(dom.a('TLS', attr.href('#tlsrpt/reports'))), dom.br(), dom.h2('Operations'), dom.div(dom.a('MTA-STS policies', attr.href('#mtasts'))), dom.div(dom.a('DMARC evaluations', attr.href('#dmarc/evaluations'))), dom.div(dom.a('TLS connection results', attr.href('#tlsrpt/results'))), dom.div(dom.a('DNSBL', attr.href('#dnsbl'))), dom.div(style({ marginTop: '.5ex' }), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		try {
@@ -1642,7 +1649,7 @@ const index = async () => {
 		}
 	}, recvIDFieldset = dom.fieldset(dom.label('Received ID', attr.title('The ID in the Received header that was added during incoming delivery.')), ' ', recvID = dom.input(attr.required('')), ' ', dom.submitbutton('Lookup cid', attr.title('Logging about an incoming message includes an attribute "cid", a counter identifying the transaction related to delivery of the message. The ID in the received header is an encrypted cid, which this form decrypts, after which you can look it up in the logging.')), ' ', cidElem = dom.span()))), 
 	// todo: routing, globally, per domain and per account
-	dom.br(), dom.h2('DNS blocklist status'), dom.div(dom.a('DNSBL status', attr.href('#dnsbl'))), dom.br(), dom.h2('Configuration'), dom.div(dom.a('Webserver', attr.href('#webserver'))), dom.div(dom.a('Files', attr.href('#config'))), dom.div(dom.a('Log levels', attr.href('#loglevels'))), footer);
+	dom.br(), dom.h2('Configuration'), dom.div(dom.a('Webserver', attr.href('#webserver'))), dom.div(dom.a('Files', attr.href('#config'))), dom.div(dom.a('Log levels', attr.href('#loglevels'))), footer);
 };
 const config = async () => {
 	const [staticPath, dynamicPath, staticText, dynamicText] = await client.ConfigFiles();
@@ -2653,14 +2660,31 @@ const makeMTASTSTable = (items) => {
 	].map(v => dom.td(v === null ? [] : (v instanceof HTMLElement ? v : '' + v)))))));
 };
 const dnsbl = async () => {
-	const ipZoneResults = await client.DNSBLStatus();
-	const url = (ip) => {
-		return 'https://multirbl.valli.org/lookup/' + encodeURIComponent(ip) + '.html';
-	};
+	const [ipZoneResults, usingZones, monitorZones] = await client.DNSBLStatus();
+	const url = (ip) => 'https://multirbl.valli.org/lookup/' + encodeURIComponent(ip) + '.html';
+	let fieldset;
+	let monitorTextarea;
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'DNS blocklist status for IPs'), dom.p('Follow the external links to a third party DNSBL checker to see if the IP is on one of the many blocklist.'), dom.ul(Object.entries(ipZoneResults).sort().map(ipZones => {
 		const [ip, zoneResults] = ipZones;
 		return dom.li(link(url(ip), ip), !ipZones.length ? [] : dom.ul(Object.entries(zoneResults).sort().map(zoneResult => dom.li(zoneResult[0] + ': ', zoneResult[1] === 'pass' ? 'pass' : box(red, zoneResult[1])))));
-	})), !Object.entries(ipZoneResults).length ? box(red, 'No IPs found.') : []);
+	})), !Object.entries(ipZoneResults).length ? box(red, 'No IPs found.') : [], dom.br(), dom.h2('DNSBL zones checked due to being used for incoming deliveries'), (usingZones || []).length === 0 ?
+		dom.div('None') :
+		dom.ul((usingZones || []).map(zone => dom.li(domainString(zone)))), dom.br(), dom.h2('DNSBL zones to monitor only'), dom.form(async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		fieldset.disabled = true;
+		try {
+			await client.MonitorDNSBLsSave(monitorTextarea.value);
+			dnsbl(); // Render page again.
+		}
+		catch (err) {
+			console.log({ err });
+			window.alert('Error: ' + errmsg(err));
+		}
+		finally {
+			fieldset.disabled = false;
+		}
+	}, fieldset = dom.fieldset(dom.div('One per line'), dom.div(style({ marginBottom: '.5ex' }), monitorTextarea = dom.textarea(style({ width: '20rem' }), attr.rows('' + Math.max(5, 1 + (monitorZones || []).length)), new String((monitorZones || []).map(zone => domainName(zone)).join('\n'))), dom.div('Examples: sbl.spamhaus.org or bl.spamcop.net')), dom.div(dom.submitbutton('Save')))));
 };
 const queueList = async () => {
 	const [msgs, transports] = await Promise.all([

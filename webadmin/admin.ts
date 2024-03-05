@@ -333,6 +333,7 @@ const index = async () => {
 		dom.div(dom.a('MTA-STS policies', attr.href('#mtasts'))),
 		dom.div(dom.a('DMARC evaluations', attr.href('#dmarc/evaluations'))),
 		dom.div(dom.a('TLS connection results', attr.href('#tlsrpt/results'))),
+		dom.div(dom.a('DNSBL', attr.href('#dnsbl'))),
 		dom.div(
 			style({marginTop: '.5ex'}),
 			dom.form(
@@ -360,9 +361,6 @@ const index = async () => {
 			),
 		),
 		// todo: routing, globally, per domain and per account
-		dom.br(),
-		dom.h2('DNS blocklist status'),
-		dom.div(dom.a('DNSBL status', attr.href('#dnsbl'))),
 		dom.br(),
 		dom.h2('Configuration'),
 		dom.div(dom.a('Webserver', attr.href('#webserver'))),
@@ -2219,11 +2217,12 @@ const makeMTASTSTable = (items: api.PolicyRecord[]) => {
 }
 
 const dnsbl = async () => {
-	const ipZoneResults = await client.DNSBLStatus()
+	const [ipZoneResults, usingZones, monitorZones] = await client.DNSBLStatus()
 
-	const url = (ip: string) => {
-		return 'https://multirbl.valli.org/lookup/' + encodeURIComponent(ip) + '.html'
-	}
+	const url = (ip: string) => 'https://multirbl.valli.org/lookup/' + encodeURIComponent(ip) + '.html'
+
+	let fieldset: HTMLFieldSetElement
+	let monitorTextarea: HTMLTextAreaElement
 
 	dom._kids(page,
 		crumbs(
@@ -2248,6 +2247,43 @@ const dnsbl = async () => {
 			})
 		),
 		!Object.entries(ipZoneResults).length ? box(red, 'No IPs found.') : [],
+		dom.br(),
+		dom.h2('DNSBL zones checked due to being used for incoming deliveries'),
+		(usingZones || []).length === 0 ?
+			dom.div('None') :
+			dom.ul((usingZones || []).map(zone => dom.li(domainString(zone)))),
+		dom.br(),
+		dom.h2('DNSBL zones to monitor only'),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				fieldset.disabled = true
+				try {
+					await client.MonitorDNSBLsSave(monitorTextarea.value)
+					dnsbl() // Render page again.
+				} catch (err) {
+					console.log({err})
+					window.alert('Error: ' + errmsg(err))
+				} finally {
+					fieldset.disabled = false
+				}
+			},
+			fieldset=dom.fieldset(
+				dom.div('One per line'),
+				dom.div(
+					style({marginBottom: '.5ex'}),
+					monitorTextarea=dom.textarea(
+						style({width: '20rem'}),
+						attr.rows('' + Math.max(5, 1+(monitorZones || []).length)),
+						new String((monitorZones || []).map(zone => domainName(zone)).join('\n')),
+					),
+					dom.div('Examples: sbl.spamhaus.org or bl.spamcop.net'),
+				),
+				dom.div(dom.submitbutton('Save')),
+			),
+		),
 	)
 }
 

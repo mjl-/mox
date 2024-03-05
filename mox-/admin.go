@@ -1069,6 +1069,35 @@ func AccountLimitsSave(ctx context.Context, account string, maxOutgoingMessagesP
 	return nil
 }
 
+func MonitorDNSBLsSave(ctx context.Context, zones []dns.Domain) (rerr error) {
+	log := pkglog.WithContext(ctx)
+	defer func() {
+		if rerr != nil {
+			log.Errorx("saving monitor dnsbl zones", rerr)
+		}
+	}()
+
+	Conf.dynamicMutex.Lock()
+	defer Conf.dynamicMutex.Unlock()
+
+	c := Conf.Dynamic
+
+	// Compose new config without modifying existing data structures. If we fail, we
+	// leave no trace.
+	nc := c
+	nc.MonitorDNSBLs = make([]string, len(zones))
+	nc.MonitorDNSBLZones = nil
+	for i, z := range zones {
+		nc.MonitorDNSBLs[i] = z.Name()
+	}
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %v", err)
+	}
+	log.Info("monitor dnsbl zones saved")
+	return nil
+}
+
 type TLSMode uint8
 
 const (

@@ -111,8 +111,10 @@ type Dynamic struct {
 	WebDomainRedirects map[string]string  `sconf:"optional" sconf-doc:"Redirect all requests from domain (key) to domain (value). Always redirects to HTTPS. For plain HTTP redirects, use a WebHandler with a WebRedirect."`
 	WebHandlers        []WebHandler       `sconf:"optional" sconf-doc:"Handle webserver requests by serving static files, redirecting or reverse-proxying HTTP(s). The first matching WebHandler will handle the request. Built-in handlers, e.g. for account, admin, autoconfig and mta-sts always run first. If no handler matches, the response status code is file not found (404). If functionality you need is missng, simply forward the requests to an application that can provide the needed functionality."`
 	Routes             []Route            `sconf:"optional" sconf-doc:"Routes for delivering outgoing messages through the queue. Each delivery attempt evaluates account routes, domain routes and finally these global routes. The transport of the first matching route is used in the delivery attempt. If no routes match, which is the default with no configured routes, messages are delivered directly from the queue."`
+	MonitorDNSBLs      []string           `sconf:"optional" sconf-doc:"DNS blocklists to periodically check with if IPs we send from are present, without using them for checking incoming deliveries.. Also see DNSBLs in SMTP listeners in mox.conf, which specifies DNSBLs to use both for incoming deliveries and for checking our IPs against. Example DNSBLs: sbl.spamhaus.org, bl.spamcop.net."`
 
 	WebDNSDomainRedirects map[dns.Domain]dns.Domain `sconf:"-" json:"-"`
+	MonitorDNSBLZones     []dns.Domain              `sconf:"-"`
 }
 
 type ACME struct {
@@ -150,7 +152,7 @@ type Listener struct {
 		// Reoriginated messages (such as messages sent to mailing list subscribers) should
 		// keep REQUIRETLS. ../rfc/8689:412
 
-		DNSBLs []string `sconf:"optional" sconf-doc:"Addresses of DNS block lists for incoming messages. Block lists are only consulted for connections/messages without enough reputation to make an accept/reject decision. This prevents sending IPs of all communications to the block list provider. If any of the listed DNSBLs contains a requested IP address, the message is rejected as spam. The DNSBLs are checked for healthiness before use, at most once per 4 hours. Example DNSBLs: sbl.spamhaus.org, bl.spamcop.net. See https://www.spamhaus.org/sbl/ and https://www.spamcop.net/ for more information and terms of use."`
+		DNSBLs []string `sconf:"optional" sconf-doc:"Addresses of DNS block lists for incoming messages. Block lists are only consulted for connections/messages without enough reputation to make an accept/reject decision. This prevents sending IPs of all communications to the block list provider. If any of the listed DNSBLs contains a requested IP address, the message is rejected as spam. The DNSBLs are checked for healthiness before use, at most once per 4 hours. IPs we can send from are periodically checked for being in the configured DNSBLs. See MonitorDNSBLs in domains.conf to only monitor IPs we send from, without using those DNSBLs for incoming messages. Example DNSBLs: sbl.spamhaus.org, bl.spamcop.net. See https://www.spamhaus.org/sbl/ and https://www.spamcop.net/ for more information and terms of use."`
 
 		FirstTimeSenderDelay *time.Duration `sconf:"optional" sconf-doc:"Delay before accepting a message from a first-time sender for the destination account. Default: 15s."`
 

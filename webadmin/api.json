@@ -432,14 +432,41 @@
 			"Params": [],
 			"Returns": [
 				{
-					"Name": "r0",
+					"Name": "results",
 					"Typewords": [
 						"{}",
 						"{}",
 						"string"
 					]
+				},
+				{
+					"Name": "using",
+					"Typewords": [
+						"[]",
+						"Domain"
+					]
+				},
+				{
+					"Name": "monitoring",
+					"Typewords": [
+						"[]",
+						"Domain"
+					]
 				}
 			]
+		},
+		{
+			"Name": "MonitorDNSBLsSave",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "text",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
 		},
 		{
 			"Name": "DomainRecords",

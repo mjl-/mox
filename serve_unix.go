@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -29,8 +29,20 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxvar"
+	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/updates"
+)
+
+var metricDNSBL = promauto.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "mox_dnsbl_ips_success",
+		Help: "DNSBL lookups to configured DNSBLs of our IPs.",
+	},
+	[]string{
+		"zone",
+		"ip",
+	},
 )
 
 func monitorDNSBL(log mlog.Log) {
@@ -44,48 +56,71 @@ func monitorDNSBL(log mlog.Log) {
 		}
 	}()
 
-	l, ok := mox.Conf.Static.Listeners["public"]
-	if !ok {
-		log.Info("no listener named public, not monitoring our ips at dnsbls")
-		return
-	}
+	publicListener := mox.Conf.Static.Listeners["public"]
 
-	var zones []dns.Domain
-	for _, zone := range l.SMTP.DNSBLs {
-		d, err := dns.ParseDomain(zone)
-		if err != nil {
-			log.Fatalx("parsing dnsbls zone", err, slog.Any("zone", zone))
-		}
-		zones = append(zones, d)
-	}
-	if len(zones) == 0 {
-		return
-	}
-
+	// We keep track of the previous metric values, so we can delete those we no longer
+	// monitor.
 	type key struct {
 		zone dns.Domain
 		ip   string
 	}
-	metrics := map[key]prometheus.GaugeFunc{}
-	var statusMutex sync.Mutex
-	statuses := map[key]bool{}
+	prevResults := map[key]struct{}{}
+
+	// Last time we checked, and how many outgoing delivery connections were made at that time.
+	var last time.Time
+	var lastConns int64
 
 	resolver := dns.StrictResolver{Pkg: "dnsblmonitor"}
 	var sleep time.Duration // No sleep on first iteration.
 	for {
 		time.Sleep(sleep)
-		sleep = 3 * time.Hour
+		// We check more often when we send more. Every 100 messages, and between 5 mins
+		// and 3 hours.
+		conns := queue.ConnectionCounter()
+		if sleep > 0 && conns < lastConns+100 && time.Since(last) < 3*time.Hour {
+			continue
+		}
+		sleep = 5 * time.Minute
+		lastConns = conns
+		last = time.Now()
 
+		// Gather zones.
+		zones := append([]dns.Domain{}, publicListener.SMTP.DNSBLZones...)
+		for _, zone := range mox.Conf.MonitorDNSBLs() {
+			if !slices.Contains(zones, zone) {
+				zones = append(zones, zone)
+			}
+		}
+		// And gather IPs.
 		ips, err := mox.IPs(mox.Context, false)
 		if err != nil {
 			log.Errorx("listing ips for dnsbl monitor", err)
+			// Mark checks as broken.
+			for k := range prevResults {
+				metricDNSBL.WithLabelValues(k.zone.Name(), k.ip).Set(-1)
+			}
 			continue
 		}
+		var publicIPs []net.IP
+		var publicIPstrs []string
 		for _, ip := range ips {
 			if ip.IsLoopback() || ip.IsPrivate() {
 				continue
 			}
+			publicIPs = append(publicIPs, ip)
+			publicIPstrs = append(publicIPstrs, ip.String())
+		}
 
+		// Remove labels that no longer exist from metric.
+		for k := range prevResults {
+			if !slices.Contains(zones, k.zone) || !slices.Contains(publicIPstrs, k.ip) {
+				metricDNSBL.DeleteLabelValues(k.zone.Name(), k.ip)
+				delete(prevResults, k)
+			}
+		}
+
+		// Do DNSBL checks and update metric.
+		for _, ip := range publicIPs {
 			for _, zone := range zones {
 				status, expl, err := dnsbl.Lookup(mox.Context, log.Logger, resolver, zone, ip)
 				if err != nil {
@@ -95,32 +130,14 @@ func monitorDNSBL(log mlog.Log) {
 						slog.String("expl", expl),
 						slog.Any("status", status))
 				}
-				k := key{zone, ip.String()}
-
-				statusMutex.Lock()
-				statuses[k] = status == dnsbl.StatusPass
-				statusMutex.Unlock()
-
-				if _, ok := metrics[k]; !ok {
-					metrics[k] = promauto.NewGaugeFunc(
-						prometheus.GaugeOpts{
-							Name: "mox_dnsbl_ips_success",
-							Help: "DNSBL lookups to configured DNSBLs of our IPs.",
-							ConstLabels: prometheus.Labels{
-								"zone": zone.LogString(),
-								"ip":   k.ip,
-							},
-						},
-						func() float64 {
-							statusMutex.Lock()
-							defer statusMutex.Unlock()
-							if statuses[k] {
-								return 1
-							}
-							return 0
-						},
-					)
+				var v float64
+				if status == dnsbl.StatusPass {
+					v = 1
 				}
+				metricDNSBL.WithLabelValues(zone.Name(), ip.String()).Set(v)
+				k := key{zone, ip.String()}
+				prevResults[k] = struct{}{}
+
 				time.Sleep(time.Second)
 			}
 		}

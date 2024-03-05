@@ -24,6 +24,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -238,6 +239,13 @@ func (c *Config) Routes(accountName string, domain dns.Domain) (accountRoutes, d
 		domainRoutes = dom.Routes
 
 		globalRoutes = c.Dynamic.Routes
+	})
+	return
+}
+
+func (c *Config) MonitorDNSBLs() (zones []dns.Domain) {
+	c.withDynamicLock(func() {
+		zones = c.Dynamic.MonitorDNSBLZones
 	})
 	return
 }
@@ -1607,6 +1615,19 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		if n != 1 {
 			addErrorf("webhandler %s %s: must have exactly one handler, not %d", wh.Domain, wh.PathRegexp, n)
 		}
+	}
+
+	for _, s := range c.MonitorDNSBLs {
+		d, err := dns.ParseDomain(s)
+		if err != nil {
+			addErrorf("invalid monitor dnsbl zone %s: %v", s, err)
+			continue
+		}
+		if slices.Contains(c.MonitorDNSBLZones, d) {
+			addErrorf("duplicate zone %s in monitor dnsbl zones", d)
+			continue
+		}
+		c.MonitorDNSBLZones = append(c.MonitorDNSBLZones, d)
 	}
 
 	return

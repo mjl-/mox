@@ -239,9 +239,12 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# accept/reject decision. This prevents sending IPs of all communications to the
 				# block list provider. If any of the listed DNSBLs contains a requested IP
 				# address, the message is rejected as spam. The DNSBLs are checked for healthiness
-				# before use, at most once per 4 hours. Example DNSBLs: sbl.spamhaus.org,
-				# bl.spamcop.net. See https://www.spamhaus.org/sbl/ and https://www.spamcop.net/
-				# for more information and terms of use. (optional)
+				# before use, at most once per 4 hours. IPs we can send from are periodically
+				# checked for being in the configured DNSBLs. See MonitorDNSBLs in domains.conf to
+				# only monitor IPs we send from, without using those DNSBLs for incoming messages.
+				# Example DNSBLs: sbl.spamhaus.org, bl.spamcop.net. See
+				# https://www.spamhaus.org/sbl/ and https://www.spamcop.net/ for more information
+				# and terms of use. (optional)
 				DNSBLs:
 					-
 
@@ -1197,6 +1200,14 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# for several times. (optional)
 			MinimumAttempts: 0
 			Transport:
+
+	# DNS blocklists to periodically check with if IPs we send from are present,
+	# without using them for checking incoming deliveries.. Also see DNSBLs in SMTP
+	# listeners in mox.conf, which specifies DNSBLs to use both for incoming
+	# deliveries and for checking our IPs against. Example DNSBLs: sbl.spamhaus.org,
+	# bl.spamcop.net. (optional)
+	MonitorDNSBLs:
+		-
 
 # Examples
 

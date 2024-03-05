@@ -708,6 +708,11 @@ and check the admin page for the needed DNS records.`)
 		public.SMTP.DNSBLs = append(public.SMTP.DNSBLs, zone.Name())
 	}
 
+	// Monitor DNSBLs by default, without using them for incoming deliveries.
+	for _, zone := range zones {
+		dc.MonitorDNSBLs = append(dc.MonitorDNSBLs, zone.Name())
+	}
+
 	internal := config.Listener{
 		IPs:      privateListenerIPs,
 		Hostname: "localhost",

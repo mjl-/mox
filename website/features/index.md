@@ -241,9 +241,9 @@ another account can accept messages from the same sender.
 
 ### DNSBL
 
-Mox can be configured to use an IP-based DNS blocklist (DNSBL). These are
+Mox can be configured to use an IP-based DNS blocklist (DNSBL). In other software, these are
 typically employed early in the SMTP session, to see if the remote IP is a
-known spammer. If so, the delivery attempt is stopped early. Mox doesn't use
+known spammer. If so, the delivery attempt is stopped immediately. Mox doesn't use
 DNSBLs in its default installation. But if it is configured to use a DNSBL, it
 is only invoked when the other reputation-based checks are not conclusive. For
 these reasons:
@@ -255,6 +255,9 @@ these reasons:
    possible.
 3. No leaking of IP addresses of mail servers a mox instance is communicating
    with to the DNSBL operator.
+
+Mox can also monitor DNSBLs for its own IPs only, without using those
+blocklists to analyze incoming deliveries. The status is exported in metrics.
 
 ### Greylisting
 

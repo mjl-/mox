@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -29,6 +30,10 @@ import (
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/tlsrpt"
 )
+
+// Increased each time an outgoing connection is made for direct delivery. Used by
+// dnsbl monitoring to pace querying.
+var connectionCounter atomic.Int64
 
 var (
 	metricDestinations = promauto.NewCounter(
@@ -87,6 +92,10 @@ var (
 		},
 	)
 )
+
+func ConnectionCounter() int64 {
+	return connectionCounter.Load()
+}
 
 // todo: rename function, perhaps put some of the params in a delivery struct so we don't pass all the params all the time?
 func fail(ctx context.Context, qlog mlog.Log, m Msg, backoff time.Duration, permanent bool, remoteMTA dsn.NameIP, secodeOpt, errmsg, firstLine string, moreLines []string) {
@@ -534,6 +543,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 		if m.DialedIPs == nil {
 			m.DialedIPs = map[string][]net.IP{}
 		}
+		connectionCounter.Add(1)
 		conn, remoteIP, err = smtpclient.Dial(ctx, log.Logger, dialer, host, ips, 25, m.DialedIPs, mox.Conf.Static.SpecifiedSMTPListenIPs)
 	}
 	cancel()

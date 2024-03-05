@@ -1181,12 +1181,20 @@ export class Client {
 	// 
 	// The returned value maps IPs to per DNSBL statuses, where "pass" means not listed and
 	// anything else is an error string, e.g. "fail: ..." or "temperror: ...".
-	async DNSBLStatus(): Promise<{ [key: string]: { [key: string]: string } }> {
+	async DNSBLStatus(): Promise<[{ [key: string]: { [key: string]: string } }, Domain[] | null, Domain[] | null]> {
 		const fn: string = "DNSBLStatus"
 		const paramTypes: string[][] = []
-		const returnTypes: string[][] = [["{}","{}","string"]]
+		const returnTypes: string[][] = [["{}","{}","string"],["[]","Domain"],["[]","Domain"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: { [key: string]: string } }
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [{ [key: string]: { [key: string]: string } }, Domain[] | null, Domain[] | null]
+	}
+
+	async MonitorDNSBLsSave(text: string): Promise<void> {
+		const fn: string = "MonitorDNSBLsSave"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [text]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// DomainRecords returns lines describing DNS records that should exist for the
