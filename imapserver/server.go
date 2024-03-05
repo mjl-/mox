@@ -1495,8 +1495,17 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	if c.authFailed > 3 && authFailDelay > 0 {
 		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*authFailDelay)
 	}
+
+	// If authentication fails due to missing derived secrets, we don't hold it against
+	// the connection. There is no way to indicate server support for an authentication
+	// mechanism, but that a mechanism won't work for an account.
+	var missingDerivedSecrets bool
+
 	c.authFailed++ // Compensated on success.
 	defer func() {
+		if missingDerivedSecrets {
+			c.authFailed--
+		}
 		// On the 3rd failed authentication, start responding slowly. Successful auth will
 		// cause fast responses again.
 		if c.authFailed >= 3 {
@@ -1508,10 +1517,9 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	authResult := "error"
 	defer func() {
 		metrics.AuthenticationInc("imap", authVariant, authResult)
-		switch authResult {
-		case "ok":
+		if authResult == "ok" {
 			mox.LimiterFailedAuth.Reset(c.remoteIP, time.Now())
-		default:
+		} else if !missingDerivedSecrets {
 			mox.LimiterFailedAuth.Add(c.remoteIP, time.Now(), 1)
 		}
 	}()
@@ -1648,6 +1656,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		if ipadhash == nil || opadhash == nil {
 			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", slog.String("username", addr))
 			c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
+			missingDerivedSecrets = true
 			xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 		}
 
@@ -1716,6 +1725,11 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		acc.WithRLock(func() {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
+				if err == bstore.ErrAbsent {
+					c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
+					xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
+				}
+				xcheckf(err, "fetching credentials")
 				switch authVariant {
 				case "scram-sha-1", "scram-sha-1-plus":
 					xscram = password.SCRAMSHA1
@@ -1724,12 +1738,12 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 				default:
 					xserverErrorf("missing case for scram credentials")
 				}
-				if err == bstore.ErrAbsent || err == nil && (len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0) {
+				if len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0 {
+					missingDerivedSecrets = true
 					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", slog.String("address", ss.Authentication))
 					xuserErrorf("scram not possible")
 				}
-				xcheckf(err, "fetching credentials")
-				return err
+				return nil
 			})
 			xcheckf(err, "read tx")
 		})

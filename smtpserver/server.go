@@ -959,6 +959,11 @@ func (c *conn) cmdAuth(p *parser) {
 
 	// todo future: we may want to normalize usernames and passwords, see stringprep in ../rfc/4013:38 and possibly newer mechanisms (though they are opt-in and that may not have happened yet).
 
+	// If authentication fails due to missing derived secrets, we don't hold it against
+	// the connection. There is no way to indicate server support for an authentication
+	// mechanism, but that a mechanism won't work for an account.
+	var missingDerivedSecrets bool
+
 	// For many failed auth attempts, slow down verification attempts.
 	// Dropping the connection could also work, but more so when we have a connection rate limiter.
 	// ../rfc/4954:770
@@ -968,6 +973,9 @@ func (c *conn) cmdAuth(p *parser) {
 	}
 	c.authFailed++ // Compensated on success.
 	defer func() {
+		if missingDerivedSecrets {
+			c.authFailed--
+		}
 		// On the 3rd failed authentication, start responding slowly. Successful auth will
 		// cause fast responses again.
 		if c.authFailed >= 3 {
@@ -979,10 +987,9 @@ func (c *conn) cmdAuth(p *parser) {
 	authResult := "error"
 	defer func() {
 		metrics.AuthenticationInc("submission", authVariant, authResult)
-		switch authResult {
-		case "ok":
+		if authResult == "ok" {
 			mox.LimiterFailedAuth.Reset(c.remoteIP, time.Now())
-		default:
+		} else if !missingDerivedSecrets {
 			mox.LimiterFailedAuth.Add(c.remoteIP, time.Now(), 1)
 		}
 	}()
@@ -1179,6 +1186,7 @@ func (c *conn) cmdAuth(p *parser) {
 			xcheckf(err, "tx read")
 		})
 		if ipadhash == nil || opadhash == nil {
+			missingDerivedSecrets = true
 			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", slog.String("username", addr))
 			c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
@@ -1254,6 +1262,11 @@ func (c *conn) cmdAuth(p *parser) {
 		acc.WithRLock(func() {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
+				if err == bstore.ErrAbsent {
+					c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
+					xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
+				}
+				xcheckf(err, "fetching credentials")
 				switch authVariant {
 				case "scram-sha-1", "scram-sha-1-plus":
 					xscram = password.SCRAMSHA1
@@ -1262,13 +1275,13 @@ func (c *conn) cmdAuth(p *parser) {
 				default:
 					xsmtpServerErrorf(codes{smtp.C554TransactionFailed, smtp.SeSys3Other0}, "missing scram auth credentials case")
 				}
-				if err == bstore.ErrAbsent || err == nil && (len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0) {
+				if len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0 {
+					missingDerivedSecrets = true
 					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", slog.String("address", ss.Authentication))
 					c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
 					xsmtpUserErrorf(smtp.C454TempAuthFail, smtp.SeSys3Other0, "scram not possible")
 				}
-				xcheckf(err, "fetching credentials")
-				return err
+				return nil
 			})
 			xcheckf(err, "read tx")
 		})
