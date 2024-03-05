@@ -2217,3 +2217,10 @@ func (Admin) TLSRPTSuppressExtend(ctx context.Context, id int64, until time.Time
 	err := tlsrptdb.SuppressUpdate(ctx, id, until)
 	xcheckf(ctx, err, "updating reporting address in suppresslist")
 }
+
+// LookupCid turns an ID from a Received header into a cid as used in logging.
+func (Admin) LookupCid(ctx context.Context, recvID string) (cid string) {
+	v, err := mox.ReceivedToCid(recvID)
+	xcheckf(ctx, err, "received id to cid")
+	return fmt.Sprintf("%x", v)
+}

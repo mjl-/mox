@@ -1125,6 +1125,26 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "LookupCid",
+			"Docs": "LookupCid turns an ID from a Received header into a cid as used in logging.",
+			"Params": [
+				{
+					"Name": "recvID",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "cid",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
 		}
 	],
 	"Sections": [],

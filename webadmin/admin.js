@@ -1028,6 +1028,14 @@ var api;
 			const params = [id, until];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		// LookupCid turns an ID from a Received header into a cid as used in logging.
+		async LookupCid(recvID) {
+			const fn = "LookupCid";
+			const paramTypes = [["string"]];
+			const returnTypes = [["string"]];
+			const params = [recvID];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 	}
 	api.Client = Client;
 	api.defaultBaseURL = (function () {
@@ -1596,6 +1604,9 @@ const index = async () => {
 	let domain;
 	let account;
 	let localpart;
+	let recvIDFieldset;
+	let recvID;
+	let cidElem;
 	dom._kids(page, crumbs('Mox Admin'), checkUpdatesEnabled ? [] : dom.p(box(yellow, 'Warning: Checking for updates has not been enabled in mox.conf (CheckUpdates: true).', dom.br(), 'Make sure you stay up to date through another mechanism!', dom.br(), 'You have a responsibility to keep the internet-connected software you run up to date and secure!', dom.br(), 'See ', link('https://updates.xmox.nl/changelog'))), dom.p(dom.a('Accounts', attr.href('#accounts')), dom.br(), dom.a('Queue', attr.href('#queue')), ' (' + queueSize + ')', dom.br()), dom.h2('Domains'), (domains || []).length === 0 ? box(red, 'No domains') :
 		dom.ul((domains || []).map(d => dom.li(dom.a(attr.href('#domains/' + domainName(d)), domainString(d))))), dom.br(), dom.h2('Add domain'), dom.form(async function submit(e) {
 		e.preventDefault();
@@ -1613,7 +1624,23 @@ const index = async () => {
 			fieldset.disabled = false;
 		}
 		window.location.hash = '#domains/' + domain.value;
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Domain', dom.br(), domain = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), 'Postmaster/reporting account', dom.br(), account = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Localpart (optional)', attr.title('Must be set if and only if account does not yet exist. The localpart for the user of this domain. E.g. postmaster.')), dom.br(), localpart = dom.input()), ' ', dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. You should add the required DNS records after adding the domain.')))), dom.br(), dom.h2('Reports'), dom.div(dom.a('DMARC', attr.href('#dmarc/reports'))), dom.div(dom.a('TLS', attr.href('#tlsrpt/reports'))), dom.br(), dom.h2('Operations'), dom.div(dom.a('MTA-STS policies', attr.href('#mtasts'))), dom.div(dom.a('DMARC evaluations', attr.href('#dmarc/evaluations'))), dom.div(dom.a('TLS connection results', attr.href('#tlsrpt/results'))), 
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Domain', dom.br(), domain = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), 'Postmaster/reporting account', dom.br(), account = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Localpart (optional)', attr.title('Must be set if and only if account does not yet exist. The localpart for the user of this domain. E.g. postmaster.')), dom.br(), localpart = dom.input()), ' ', dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. You should add the required DNS records after adding the domain.')))), dom.br(), dom.h2('Reports'), dom.div(dom.a('DMARC', attr.href('#dmarc/reports'))), dom.div(dom.a('TLS', attr.href('#tlsrpt/reports'))), dom.br(), dom.h2('Operations'), dom.div(dom.a('MTA-STS policies', attr.href('#mtasts'))), dom.div(dom.a('DMARC evaluations', attr.href('#dmarc/evaluations'))), dom.div(dom.a('TLS connection results', attr.href('#tlsrpt/results'))), dom.div(style({ marginTop: '.5ex' }), dom.form(async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		try {
+			dom._kids(cidElem);
+			recvIDFieldset.disabled = true;
+			const cid = await client.LookupCid(recvID.value);
+			dom._kids(cidElem, cid);
+		}
+		catch (err) {
+			console.log({ err });
+			window.alert('Error: ' + errmsg(err));
+		}
+		finally {
+			recvIDFieldset.disabled = false;
+		}
+	}, recvIDFieldset = dom.fieldset(dom.label('Received ID', attr.title('The ID in the Received header that was added during incoming delivery.')), ' ', recvID = dom.input(attr.required('')), ' ', dom.submitbutton('Lookup cid', attr.title('Logging about an incoming message includes an attribute "cid", a counter identifying the transaction related to delivery of the message. The ID in the received header is an encrypted cid, which this form decrypts, after which you can look it up in the logging.')), ' ', cidElem = dom.span()))), 
 	// todo: routing, globally, per domain and per account
 	dom.br(), dom.h2('DNS blocklist status'), dom.div(dom.a('DNSBL status', attr.href('#dnsbl'))), dom.br(), dom.h2('Configuration'), dom.div(dom.a('Webserver', attr.href('#webserver'))), dom.div(dom.a('Files', attr.href('#config'))), dom.div(dom.a('Log levels', attr.href('#loglevels'))), footer);
 };

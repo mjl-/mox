@@ -1535,6 +1535,15 @@ export class Client {
 		const params: any[] = [id, until]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
+
+	// LookupCid turns an ID from a Received header into a cid as used in logging.
+	async LookupCid(recvID: string): Promise<string> {
+		const fn: string = "LookupCid"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = [["string"]]
+		const params: any[] = [recvID]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string
+	}
 }
 
 export const defaultBaseURL = (function() {
