@@ -1100,9 +1100,9 @@ const formatAddressValidated = (a, m, use) => {
 	return l;
 };
 // format just the name if present and it doesn't look like an address, or otherwise just the email address.
-const formatAddressShort = (a) => {
+const formatAddressShort = (a, junk) => {
 	const n = a.Name;
-	if (n && !n.includes('<') && !n.includes('@') && !n.includes('>')) {
+	if (!junk && n && !n.includes('<') && !n.includes('@') && !n.includes('>')) {
 		return n;
 	}
 	return '<' + a.User + '@' + formatDomain(a.Domain) + '>';
@@ -1201,9 +1201,8 @@ Enable consistency checking in UI updates:
 
 	settingsPut({...settings, checkConsistency: true})
 
-- todo: in msglistView, show names of people we have sent to, and address otherwise.
+- todo: in msglistView, show names of people we have sent to, and address otherwise. or at don't show names for first-time senders.
 - todo: implement settings stored in the server, such as mailboxCollapsed, keyboard shortcuts. also new settings for displaying email as html by default for configured sender address or domain. name to use for "From", optional default Reply-To and Bcc addresses, signatures (per address), configured labels/keywords with human-readable name, colors and toggling with shortcut keys 1-9.
-- todo: in msglist, if our address is in the from header, list addresses in the to/cc/bcc, it's likely a sent folder
 - todo: automated tests? perhaps some unit tests, then ui scenario's.
 - todo: compose, wrap lines
 - todo: composing of html messages. possibly based on contenteditable. would be good if we can include original html, but quoted. must make sure to not include dangerous scripts/resources, or sandbox it.
@@ -2871,6 +2870,7 @@ const newMsgitemView = (mi, msglistView, otherMailbox, listMailboxes, receivedTi
 		const correspondents = () => {
 			let fromAddrs = [];
 			let toAddrs = [];
+			let junk = m.Junk || !!listMailboxes().find(mb => mb.ID === m.MailboxID && (mb.Name === rejectsMailbox || mb.Junk));
 			if (msgitemView.isCollapsedThreadRoot()) {
 				// Gather both all correspondents in thread.
 				;
@@ -2878,6 +2878,7 @@ const newMsgitemView = (mi, msglistView, otherMailbox, listMailboxes, receivedTi
 					const [fa, ta] = correspondentAddrs(miv);
 					fromAddrs = [...fromAddrs, ...fa];
 					toAddrs = [...toAddrs, ...ta];
+					junk = junk || miv.messageitem.Message.Junk;
 				});
 			}
 			else {
@@ -2910,8 +2911,8 @@ const newMsgitemView = (mi, msglistView, otherMailbox, listMailboxes, receivedTi
 			return [
 				attr.title(title),
 				join([
-					...fa.map(a => formatAddressShort(a)),
-					...ta.map(a => dom.span(style({ fontStyle: 'italic' }), formatAddressShort(a))),
+					...fa.map(a => formatAddressShort(a, junk)),
+					...ta.map(a => dom.span(style({ fontStyle: 'italic' }), formatAddressShort(a, junk))),
 				], () => ', '),
 			];
 		};

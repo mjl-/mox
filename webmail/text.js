@@ -1100,9 +1100,9 @@ const formatAddressValidated = (a, m, use) => {
 	return l;
 };
 // format just the name if present and it doesn't look like an address, or otherwise just the email address.
-const formatAddressShort = (a) => {
+const formatAddressShort = (a, junk) => {
 	const n = a.Name;
-	if (n && !n.includes('<') && !n.includes('@') && !n.includes('>')) {
+	if (!junk && n && !n.includes('<') && !n.includes('@') && !n.includes('>')) {
 		return n;
 	}
 	return '<' + a.User + '@' + formatDomain(a.Domain) + '>';

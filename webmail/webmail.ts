@@ -62,9 +62,8 @@ Enable consistency checking in UI updates:
 
 	settingsPut({...settings, checkConsistency: true})
 
-- todo: in msglistView, show names of people we have sent to, and address otherwise.
+- todo: in msglistView, show names of people we have sent to, and address otherwise. or at don't show names for first-time senders.
 - todo: implement settings stored in the server, such as mailboxCollapsed, keyboard shortcuts. also new settings for displaying email as html by default for configured sender address or domain. name to use for "From", optional default Reply-To and Bcc addresses, signatures (per address), configured labels/keywords with human-readable name, colors and toggling with shortcut keys 1-9.
-- todo: in msglist, if our address is in the from header, list addresses in the to/cc/bcc, it's likely a sent folder
 - todo: automated tests? perhaps some unit tests, then ui scenario's.
 - todo: compose, wrap lines
 - todo: composing of html messages. possibly based on contenteditable. would be good if we can include original html, but quoted. must make sure to not include dangerous scripts/resources, or sandbox it.
@@ -2199,12 +2198,14 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 		const correspondents = () => {
 			let fromAddrs: api.MessageAddress[] = []
 			let toAddrs: api.MessageAddress[] = []
+			let junk = m.Junk || !!listMailboxes().find(mb => mb.ID === m.MailboxID && (mb.Name === rejectsMailbox || mb.Junk))
 			if (msgitemView.isCollapsedThreadRoot()) {
 				// Gather both all correspondents in thread.
 				;[msgitemView, ...(msgitemView.descendants())].forEach(miv => {
 					const [fa, ta] = correspondentAddrs(miv)
 					fromAddrs = [...fromAddrs, ...fa]
 					toAddrs = [...toAddrs, ...ta]
+					junk = junk || miv.messageitem.Message.Junk
 				})
 			} else {
 				[fromAddrs, toAddrs] = correspondentAddrs(msgitemView)
@@ -2238,8 +2239,8 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 				attr.title(title),
 				join(
 					[
-						...fa.map(a => formatAddressShort(a)),
-						...ta.map(a => dom.span(style({fontStyle: 'italic'}), formatAddressShort(a))),
+						...fa.map(a => formatAddressShort(a, junk)),
+						...ta.map(a => dom.span(style({fontStyle: 'italic'}), formatAddressShort(a, junk))),
 					],
 					() => ', '
 				),
