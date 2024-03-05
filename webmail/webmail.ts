@@ -902,7 +902,7 @@ const withStatus = async <T>(action: string, promise: Promise<T>, disablable?: D
 		if (disablable) {
 			disablable.disabled = false
 		}
-		if (origFocus && document.activeElement !== origFocus && origFocus instanceof HTMLElement) {
+		if (disablable && origFocus && document.activeElement !== origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
 			origFocus.focus()
 		}
 		if (id) {

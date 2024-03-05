@@ -1967,7 +1967,7 @@ const withStatus = async (action, promise, disablable, noAlert) => {
 		if (disablable) {
 			disablable.disabled = false;
 		}
-		if (origFocus && document.activeElement !== origFocus && origFocus instanceof HTMLElement) {
+		if (disablable && origFocus && document.activeElement !== origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
 			origFocus.focus();
 		}
 		if (id) {
