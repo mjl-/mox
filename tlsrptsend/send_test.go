@@ -412,7 +412,11 @@ func TestSendReports(t *testing.T) {
 		var mutex sync.Mutex
 
 		var index int
-		queueAdd = func(ctx context.Context, log mlog.Log, qm *queue.Msg, msgFile *os.File) error {
+		queueAdd = func(ctx context.Context, log mlog.Log, senderAccount string, msgFile *os.File, qml ...queue.Msg) error {
+			if len(qml) != 1 {
+				return fmt.Errorf("queued %d messages, expect 1", len(qml))
+			}
+
 			mutex.Lock()
 			defer mutex.Unlock()
 
@@ -421,13 +425,13 @@ func TestSendReports(t *testing.T) {
 			tcheckf(t, err, "read report message")
 			p := fmt.Sprintf("../testdata/tlsrptsend/data/report%d.eml", index)
 			index++
-			err = os.WriteFile(p, append(append([]byte{}, qm.MsgPrefix...), buf...), 0600)
+			err = os.WriteFile(p, append(append([]byte{}, qml[0].MsgPrefix...), buf...), 0600)
 			tcheckf(t, err, "write report message")
 
 			reportJSON, err := tlsrpt.ParseMessage(log.Logger, msgFile)
 			tcheckf(t, err, "parsing generated report message")
 
-			addr := qm.Recipient().String()
+			addr := qml[0].Recipient().String()
 			haveReports[addr] = append(haveReports[addr], reportJSON.Convert())
 
 			return nil

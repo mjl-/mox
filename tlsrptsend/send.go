@@ -589,7 +589,7 @@ Period: %s - %s UTC
 			continue
 		}
 
-		qm := queue.MakeMsg(mox.Conf.Static.Postmaster.Account, from.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
+		qm := queue.MakeMsg(from.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsTLSReport.
 		// ../rfc/8460:1077
@@ -599,7 +599,7 @@ Period: %s - %s UTC
 		no := false
 		qm.RequireTLS = &no
 
-		err = queueAdd(ctx, log, &qm, msgf)
+		err = queueAdd(ctx, log, mox.Conf.Static.Postmaster.Account, msgf, qm)
 		if err != nil {
 			tempError = !queued
 			log.Errorx("queueing message with tls report", err)

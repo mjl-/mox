@@ -842,13 +842,13 @@ Period: %s - %s UTC
 			continue
 		}
 
-		qm := queue.MakeMsg(mox.Conf.Static.Postmaster.Account, from.Path(), rcpt.address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
+		qm := queue.MakeMsg(from.Path(), rcpt.address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsDMARCReport.
 		qm.MaxAttempts = 5
 		qm.IsDMARCReport = true
 
-		err = queueAdd(ctx, log, &qm, msgf)
+		err = queueAdd(ctx, log, mox.Conf.Static.Postmaster.Account, msgf, qm)
 		if err != nil {
 			tempError = true
 			log.Errorx("queueing message with dmarc aggregate report", err)
@@ -997,13 +997,13 @@ Submitting-URI: %s
 			continue
 		}
 
-		qm := queue.MakeMsg(mox.Conf.Static.Postmaster.Account, fromAddr.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
+		qm := queue.MakeMsg(fromAddr.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsDMARCReport.
 		qm.MaxAttempts = 5
 		qm.IsDMARCReport = true
 
-		if err := queueAdd(ctx, log, &qm, msgf); err != nil {
+		if err := queueAdd(ctx, log, mox.Conf.Static.Postmaster.Account, msgf, qm); err != nil {
 			log.Errorx("queueing message with dmarc error report", err)
 			metricReportError.Inc()
 		} else {

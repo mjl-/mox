@@ -628,14 +628,15 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		Localpart: fromAddr.Address.Localpart,
 		IPDomain:  dns.IPDomain{Domain: fromAddr.Address.Domain},
 	}
-	for _, rcpt := range recipients {
+	qml := make([]queue.Msg, len(recipients))
+	for i, rcpt := range recipients {
 		rcptMsgPrefix := recvHdrFor(rcpt.Pack(smtputf8)) + msgPrefix
 		msgSize := int64(len(rcptMsgPrefix)) + xc.Size
 		toPath := smtp.Path{
 			Localpart: rcpt.Localpart,
 			IPDomain:  dns.IPDomain{Domain: rcpt.Domain},
 		}
-		qm := queue.MakeMsg(reqInfo.AccountName, fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS)
+		qm := queue.MakeMsg(fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS)
 		if m.FutureRelease != nil {
 			ival := time.Until(*m.FutureRelease)
 			if ival < 0 {
@@ -647,13 +648,13 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			qm.FutureReleaseRequest = "until;" + m.FutureRelease.Format(time.RFC3339)
 			// todo: possibly add a header to the message stored in the Sent mailbox to indicate it was scheduled for later delivery.
 		}
-		err := queue.Add(ctx, log, &qm, dataFile)
-		if err != nil {
-			metricSubmission.WithLabelValues("queueerror").Inc()
-		}
-		xcheckf(ctx, err, "adding message to the delivery queue")
-		metricSubmission.WithLabelValues("ok").Inc()
+		qml[i] = qm
 	}
+	if err := queue.Add(ctx, log, reqInfo.AccountName, dataFile, qml...); err != nil {
+		metricSubmission.WithLabelValues("queueerror").Inc()
+	}
+	xcheckf(ctx, err, "adding messages to the delivery queue")
+	metricSubmission.WithLabelValues("ok").Inc()
 
 	var modseq store.ModSeq // Only set if needed.
 

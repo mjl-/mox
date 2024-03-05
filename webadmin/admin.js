@@ -393,7 +393,7 @@ var api;
 		"Reverse": { "Name": "Reverse", "Docs": "", "Fields": [{ "Name": "Hostnames", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"ClientConfigs": { "Name": "ClientConfigs", "Docs": "", "Fields": [{ "Name": "Entries", "Docs": "", "Typewords": ["[]", "ClientConfigsEntry"] }] },
 		"ClientConfigsEntry": { "Name": "ClientConfigsEntry", "Docs": "", "Fields": [{ "Name": "Protocol", "Docs": "", "Typewords": ["string"] }, { "Name": "Host", "Docs": "", "Typewords": ["Domain"] }, { "Name": "Port", "Docs": "", "Typewords": ["int32"] }, { "Name": "Listener", "Docs": "", "Typewords": ["string"] }, { "Name": "Note", "Docs": "", "Typewords": ["string"] }] },
-		"Msg": { "Name": "Msg", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Queued", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "SenderAccount", "Docs": "", "Typewords": ["string"] }, { "Name": "SenderLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "SenderDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "RecipientLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "RecipientDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "Attempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxAttempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "DialedIPs", "Docs": "", "Typewords": ["{}", "[]", "IP"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "LastAttempt", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "LastError", "Docs": "", "Typewords": ["string"] }, { "Name": "Has8bit", "Docs": "", "Typewords": ["bool"] }, { "Name": "SMTPUTF8", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsDMARCReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsTLSReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgPrefix", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "DSNUTF8", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureReleaseRequest", "Docs": "", "Typewords": ["string"] }] },
+		"Msg": { "Name": "Msg", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "BaseID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Queued", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "SenderAccount", "Docs": "", "Typewords": ["string"] }, { "Name": "SenderLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "SenderDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "RecipientLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "RecipientDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "Attempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxAttempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "DialedIPs", "Docs": "", "Typewords": ["{}", "[]", "IP"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "LastAttempt", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "LastError", "Docs": "", "Typewords": ["string"] }, { "Name": "Has8bit", "Docs": "", "Typewords": ["bool"] }, { "Name": "SMTPUTF8", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsDMARCReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsTLSReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgPrefix", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "DSNUTF8", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureReleaseRequest", "Docs": "", "Typewords": ["string"] }] },
 		"IPDomain": { "Name": "IPDomain", "Docs": "", "Fields": [{ "Name": "IP", "Docs": "", "Typewords": ["IP"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
 		"WebserverConfig": { "Name": "WebserverConfig", "Docs": "", "Fields": [{ "Name": "WebDNSDomainRedirects", "Docs": "", "Typewords": ["[]", "[]", "Domain"] }, { "Name": "WebDomainRedirects", "Docs": "", "Typewords": ["[]", "[]", "string"] }, { "Name": "WebHandlers", "Docs": "", "Typewords": ["[]", "WebHandler"] }] },
 		"WebHandler": { "Name": "WebHandler", "Docs": "", "Fields": [{ "Name": "LogName", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "PathRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "DontRedirectPlainHTTP", "Docs": "", "Typewords": ["bool"] }, { "Name": "Compress", "Docs": "", "Typewords": ["bool"] }, { "Name": "WebStatic", "Docs": "", "Typewords": ["nullable", "WebStatic"] }, { "Name": "WebRedirect", "Docs": "", "Typewords": ["nullable", "WebRedirect"] }, { "Name": "WebForward", "Docs": "", "Typewords": ["nullable", "WebForward"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
@@ -2692,67 +2692,65 @@ const queueList = async () => {
 		client.Transports(),
 	]);
 	const nowSecs = new Date().getTime() / 1000;
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Queue'), (msgs || []).length === 0 ? 'Currently no messages in the queue.' : [
-		dom.p('The messages below are currently in the queue.'),
-		// todo: sorting by address/timestamps/attempts. perhaps filtering.
-		dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('ID'), dom.th('Submitted'), dom.th('From'), dom.th('To'), dom.th('Size'), dom.th('Attempts'), dom.th('Next attempt'), dom.th('Last attempt'), dom.th('Last error'), dom.th('Require TLS'), dom.th('Transport/Retry'), dom.th('Remove'))), dom.tbody((msgs || []).map(m => {
-			let requiretlsFieldset;
-			let requiretls;
-			let transport;
-			return dom.tr(dom.td('' + m.ID), dom.td(age(new Date(m.Queued), false, nowSecs)), dom.td(m.SenderLocalpart + "@" + ipdomainString(m.SenderDomain)), // todo: escaping of localpart
-			dom.td(m.RecipientLocalpart + "@" + ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
-			dom.td(formatSize(m.Size)), dom.td('' + m.Attempts), dom.td(age(new Date(m.NextAttempt), true, nowSecs)), dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'), dom.td(m.LastError || '-'), dom.td(dom.form(requiretlsFieldset = dom.fieldset(requiretls = dom.select(attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'), dom.option('Default', attr.value('')), dom.option('With RequireTLS', attr.value('yes'), m.RequireTLS === true ? attr.selected('') : []), dom.option('Fallback to insecure', attr.value('no'), m.RequireTLS === false ? attr.selected('') : [])), ' ', dom.submitbutton('Save')), async function submit(e) {
-				e.preventDefault();
-				try {
-					requiretlsFieldset.disabled = true;
-					await client.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes');
-				}
-				catch (err) {
-					console.log({ err });
-					window.alert('Error: ' + errmsg(err));
-					return;
-				}
-				finally {
-					requiretlsFieldset.disabled = false;
-				}
-			})), dom.td(dom.form(transport = dom.select(attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'), dom.option('(default)', attr.value('')), Object.keys(transports || []).sort().map(t => dom.option(t, m.Transport === t ? attr.checked('') : []))), ' ', dom.submitbutton('Retry now'), async function submit(e) {
-				e.preventDefault();
-				const target = e.target;
-				try {
-					target.disabled = true;
-					await client.QueueKick(m.ID, transport.value);
-				}
-				catch (err) {
-					console.log({ err });
-					window.alert('Error: ' + errmsg(err));
-					return;
-				}
-				finally {
-					target.disabled = false;
-				}
-				window.location.reload(); // todo: only refresh the list
-			})), dom.td(dom.clickbutton('Remove', async function click(e) {
-				e.preventDefault();
-				if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
-					return;
-				}
-				const target = e.target;
-				try {
-					target.disabled = true;
-					await client.QueueDrop(m.ID);
-				}
-				catch (err) {
-					console.log({ err });
-					window.alert('Error: ' + errmsg(err));
-					return;
-				}
-				finally {
-					target.disabled = false;
-				}
-				window.location.reload(); // todo: only refresh the list
-			})));
-		}))),
-	]);
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Queue'), 
+	// todo: sorting by address/timestamps/attempts. perhaps filtering.
+	dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('ID'), dom.th('Submitted'), dom.th('From'), dom.th('To'), dom.th('Size'), dom.th('Attempts'), dom.th('Next attempt'), dom.th('Last attempt'), dom.th('Last error'), dom.th('Require TLS'), dom.th('Transport/Retry'), dom.th('Remove'))), dom.tbody((msgs || []).length === 0 ? dom.tr(dom.td(attr.colspan('12'), 'Currently no messages in the queue.')) : [], (msgs || []).map(m => {
+		let requiretlsFieldset;
+		let requiretls;
+		let transport;
+		return dom.tr(dom.td('' + m.ID + (m.BaseID > 0 ? '/' + m.BaseID : '')), dom.td(age(new Date(m.Queued), false, nowSecs)), dom.td(m.SenderLocalpart + "@" + ipdomainString(m.SenderDomain)), // todo: escaping of localpart
+		dom.td(m.RecipientLocalpart + "@" + ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
+		dom.td(formatSize(m.Size)), dom.td('' + m.Attempts), dom.td(age(new Date(m.NextAttempt), true, nowSecs)), dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'), dom.td(m.LastError || '-'), dom.td(dom.form(requiretlsFieldset = dom.fieldset(requiretls = dom.select(attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'), dom.option('Default', attr.value('')), dom.option('With RequireTLS', attr.value('yes'), m.RequireTLS === true ? attr.selected('') : []), dom.option('Fallback to insecure', attr.value('no'), m.RequireTLS === false ? attr.selected('') : [])), ' ', dom.submitbutton('Save')), async function submit(e) {
+			e.preventDefault();
+			try {
+				requiretlsFieldset.disabled = true;
+				await client.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes');
+			}
+			catch (err) {
+				console.log({ err });
+				window.alert('Error: ' + errmsg(err));
+				return;
+			}
+			finally {
+				requiretlsFieldset.disabled = false;
+			}
+		})), dom.td(dom.form(transport = dom.select(attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'), dom.option('(default)', attr.value('')), Object.keys(transports || []).sort().map(t => dom.option(t, m.Transport === t ? attr.checked('') : []))), ' ', dom.submitbutton('Retry now'), async function submit(e) {
+			e.preventDefault();
+			const target = e.target;
+			try {
+				target.disabled = true;
+				await client.QueueKick(m.ID, transport.value);
+			}
+			catch (err) {
+				console.log({ err });
+				window.alert('Error: ' + errmsg(err));
+				return;
+			}
+			finally {
+				target.disabled = false;
+			}
+			window.location.reload(); // todo: only refresh the list
+		})), dom.td(dom.clickbutton('Remove', async function click(e) {
+			e.preventDefault();
+			if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
+				return;
+			}
+			const target = e.target;
+			try {
+				target.disabled = true;
+				await client.QueueDrop(m.ID);
+			}
+			catch (err) {
+				console.log({ err });
+				window.alert('Error: ' + errmsg(err));
+				return;
+			}
+			finally {
+				target.disabled = false;
+			}
+			window.location.reload(); // todo: only refresh the list
+		})));
+	}))));
 };
 const webserver = async () => {
 	let conf = await client.WebserverConfig();

@@ -72,6 +72,10 @@ var limiterConnectionRate, limiterConnections *ratelimit.Limiter
 var limitIPMasked1MessagesPerMinute int = 500
 var limitIPMasked1SizePerMinute int64 = 1000 * 1024 * 1024
 
+// Maximum number of RCPT TO commands (i.e. recipients) for a single message
+// delivery. Must be at least 100. Announced in LIMIT extension.
+const rcptToLimit = 1000
+
 func init() {
 	// Also called by tests, so they don't trigger the rate limiter.
 	limitersInit()
@@ -888,8 +892,9 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 	}
 	c.bwritelinef("250-ENHANCEDSTATUSCODES") // ../rfc/2034:71
 	// todo future? c.writelinef("250-DSN")
-	c.bwritelinef("250-8BITMIME")              // ../rfc/6152:86
-	c.bwritecodeline(250, "", "SMTPUTF8", nil) // ../rfc/6531:201
+	c.bwritelinef("250-8BITMIME")                       // ../rfc/6152:86
+	c.bwritelinef("250-LIMITS RCPTMAX=%d", rcptToLimit) // rfc/9422:301
+	c.bwritecodeline(250, "", "SMTPUTF8", nil)          // ../rfc/6531:201
 	c.xflush()
 }
 
@@ -1556,9 +1561,9 @@ func (c *conn) cmdRcpt(p *parser) {
 
 	// todo future: for submission, should we do explicit verification that domains are fully qualified? also for mail from. ../rfc/6409:420
 
-	if len(c.recipients) >= 100 {
+	if len(c.recipients) >= rcptToLimit {
 		// ../rfc/5321:3535 ../rfc/5321:3571
-		xsmtpUserErrorf(smtp.C452StorageFull, smtp.SeProto5TooManyRcpts3, "max of 100 recipients reached")
+		xsmtpUserErrorf(smtp.C452StorageFull, smtp.SeProto5TooManyRcpts3, "max of %d recipients reached", rcptToLimit)
 	}
 
 	// We don't want to allow delivery to multiple recipients with a null reverse path.
@@ -1974,7 +1979,8 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// We always deliver through the queue. It would be more efficient to deliver
 	// directly, but we don't want to circumvent all the anti-spam measures. Accounts
 	// on a single mox instance should be allowed to block each other.
-	for _, rcptAcc := range c.recipients {
+	qml := make([]queue.Msg, len(c.recipients))
+	for i, rcptAcc := range c.recipients {
 		if Localserve {
 			code, timeout := localserveNeedsError(rcptAcc.rcptTo.Localpart)
 			if timeout {
@@ -1988,31 +1994,42 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		}
 
 		xmsgPrefix := append([]byte(recvHdrFor(rcptAcc.rcptTo.String())), msgPrefix...)
-
 		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-		qm := queue.MakeMsg(c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS)
+		qm := queue.MakeMsg(*c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS)
 		if !c.futureRelease.IsZero() {
 			qm.NextAttempt = c.futureRelease
 			qm.FutureReleaseRequest = c.futureReleaseRequest
 		}
-		// todo: it would be good to have a limit on messages (count and total size) a user has in the queue. also/especially with futurerelease. ../rfc/4865:387
-		if err := queue.Add(ctx, c.log, &qm, dataFile); err != nil {
-			// Aborting the transaction is not great. But continuing and generating DSNs will
-			// probably result in errors as well...
-			metricSubmission.WithLabelValues("queueerror").Inc()
-			c.log.Errorx("queuing message", err)
-			xsmtpServerErrorf(errCodes(smtp.C451LocalErr, smtp.SeSys3Other0, err), "error delivering message: %v", err)
-		}
-		metricSubmission.WithLabelValues("ok").Inc()
-		c.log.Info("message queued for delivery",
+		qml[i] = qm
+	}
+
+	// todo: it would be good to have a limit on messages (count and total size) a user has in the queue. also/especially with futurerelease. ../rfc/4865:387
+	if err := queue.Add(ctx, c.log, c.account.Name, dataFile, qml...); err != nil {
+		// Aborting the transaction is not great. But continuing and generating DSNs will
+		// probably result in errors as well...
+		metricSubmission.WithLabelValues("queueerror").Inc()
+		c.log.Errorx("queuing message", err)
+		xsmtpServerErrorf(errCodes(smtp.C451LocalErr, smtp.SeSys3Other0, err), "error delivering message: %v", err)
+	}
+	metricSubmission.WithLabelValues("ok").Inc()
+	for i, rcptAcc := range c.recipients {
+		c.log.Info("messages queued for delivery",
 			slog.Any("mailfrom", *c.mailFrom),
 			slog.Any("rcptto", rcptAcc.rcptTo),
 			slog.Bool("smtputf8", c.smtputf8),
-			slog.Int64("msgsize", msgSize))
-
-		err := c.account.DB.Insert(ctx, &store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)})
-		xcheckf(err, "adding outgoing message")
+			slog.Int64("msgsize", qml[i].Size))
 	}
+
+	err = c.account.DB.Write(ctx, func(tx *bstore.Tx) error {
+		for _, rcptAcc := range c.recipients {
+			outgoing := store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)}
+			if err := tx.Insert(&outgoing); err != nil {
+				return fmt.Errorf("adding outgoing message: %v", err)
+			}
+		}
+		return nil
+	})
+	xcheckf(err, "adding outgoing messages")
 
 	c.transactionGood++
 	c.transactionBad-- // Compensate for early earlier pessimistic increase.

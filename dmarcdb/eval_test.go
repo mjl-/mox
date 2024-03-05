@@ -295,7 +295,12 @@ func TestSendReports(t *testing.T) {
 		aggrAddrs := map[string]struct{}{}
 		errorAddrs := map[string]struct{}{}
 
-		queueAdd = func(ctx context.Context, log mlog.Log, qm *queue.Msg, msgFile *os.File) error {
+		queueAdd = func(ctx context.Context, log mlog.Log, senderAccount string, msgFile *os.File, qml ...queue.Msg) error {
+			if len(qml) != 1 {
+				return fmt.Errorf("queued %d messages, expected 1", len(qml))
+			}
+			qm := qml[0]
+
 			// Read message file. Also write copy to disk for inspection.
 			buf, err := io.ReadAll(&moxio.AtReader{R: msgFile})
 			tcheckf(t, err, "read report message")

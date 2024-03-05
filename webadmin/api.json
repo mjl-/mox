@@ -3371,6 +3371,13 @@
 					]
 				},
 				{
+					"Name": "BaseID",
+					"Docs": "A message for multiple recipients will get a BaseID that is identical to the first Msg.ID queued. They may be delivered in a single SMTP transaction if they are going to the same mail server. For messages with a single recipient, this field will be 0.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
 					"Name": "Queued",
 					"Docs": "",
 					"Typewords": [

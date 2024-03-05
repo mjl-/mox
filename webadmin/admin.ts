@@ -2300,104 +2300,82 @@ const queueList = async () => {
 			crumblink('Mox Admin', '#'),
 			'Queue',
 		),
-		(msgs || []).length === 0 ? 'Currently no messages in the queue.' : [
-			dom.p('The messages below are currently in the queue.'),
 			// todo: sorting by address/timestamps/attempts. perhaps filtering.
-			dom.table(dom._class('hover'),
-				dom.thead(
-					dom.tr(
-						dom.th('ID'),
-						dom.th('Submitted'),
-						dom.th('From'),
-						dom.th('To'),
-						dom.th('Size'),
-						dom.th('Attempts'),
-						dom.th('Next attempt'),
-						dom.th('Last attempt'),
-						dom.th('Last error'),
-						dom.th('Require TLS'),
-						dom.th('Transport/Retry'),
-						dom.th('Remove'),
-					),
+		dom.table(dom._class('hover'),
+			dom.thead(
+				dom.tr(
+					dom.th('ID'),
+					dom.th('Submitted'),
+					dom.th('From'),
+					dom.th('To'),
+					dom.th('Size'),
+					dom.th('Attempts'),
+					dom.th('Next attempt'),
+					dom.th('Last attempt'),
+					dom.th('Last error'),
+					dom.th('Require TLS'),
+					dom.th('Transport/Retry'),
+					dom.th('Remove'),
 				),
-				dom.tbody(
-					(msgs || []).map(m => {
-						let requiretlsFieldset: HTMLFieldSetElement
-						let requiretls: HTMLSelectElement
-						let transport: HTMLSelectElement
-						return dom.tr(
-							dom.td(''+m.ID),
-							dom.td(age(new Date(m.Queued), false, nowSecs)),
-							dom.td(m.SenderLocalpart+"@"+ipdomainString(m.SenderDomain)), // todo: escaping of localpart
-							dom.td(m.RecipientLocalpart+"@"+ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
-							dom.td(formatSize(m.Size)),
-							dom.td(''+m.Attempts),
-							dom.td(age(new Date(m.NextAttempt), true, nowSecs)),
-							dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'),
-							dom.td(m.LastError || '-'),
-							dom.td(
-								dom.form(
-									requiretlsFieldset=dom.fieldset(
-										requiretls=dom.select(
-											attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'),
-											dom.option('Default', attr.value('')),
-											dom.option('With RequireTLS', attr.value('yes'), m.RequireTLS === true ? attr.selected('') : []),
-											dom.option('Fallback to insecure', attr.value('no'), m.RequireTLS === false ? attr.selected('') : []),
-										),
-										' ',
-										dom.submitbutton('Save'),
-									),
-									async function submit(e: SubmitEvent) {
-										e.preventDefault()
-										try {
-											requiretlsFieldset.disabled = true
-											await client.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes')
-										} catch (err) {
-											console.log({err})
-											window.alert('Error: ' + errmsg(err))
-											return
-										} finally {
-											requiretlsFieldset.disabled = false
-										}
-									}
-								),
-							),
-							dom.td(
-								dom.form(
-									transport=dom.select(
-										attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'),
-										dom.option('(default)', attr.value('')),
-										Object.keys(transports || []).sort().map(t => dom.option(t, m.Transport === t ? attr.checked('') : [])),
+			),
+			dom.tbody(
+				(msgs || []).length === 0 ? dom.tr(dom.td(attr.colspan('12'), 'Currently no messages in the queue.')) : [],
+				(msgs || []).map(m => {
+					let requiretlsFieldset: HTMLFieldSetElement
+					let requiretls: HTMLSelectElement
+					let transport: HTMLSelectElement
+					return dom.tr(
+						dom.td(''+m.ID + (m.BaseID > 0 ? '/'+m.BaseID : '')),
+						dom.td(age(new Date(m.Queued), false, nowSecs)),
+						dom.td(m.SenderLocalpart+"@"+ipdomainString(m.SenderDomain)), // todo: escaping of localpart
+						dom.td(m.RecipientLocalpart+"@"+ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
+						dom.td(formatSize(m.Size)),
+						dom.td(''+m.Attempts),
+						dom.td(age(new Date(m.NextAttempt), true, nowSecs)),
+						dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'),
+						dom.td(m.LastError || '-'),
+						dom.td(
+							dom.form(
+								requiretlsFieldset=dom.fieldset(
+									requiretls=dom.select(
+										attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'),
+										dom.option('Default', attr.value('')),
+										dom.option('With RequireTLS', attr.value('yes'), m.RequireTLS === true ? attr.selected('') : []),
+										dom.option('Fallback to insecure', attr.value('no'), m.RequireTLS === false ? attr.selected('') : []),
 									),
 									' ',
-									dom.submitbutton('Retry now'),
-									async function submit(e: SubmitEvent) {
-										e.preventDefault()
-										const target = e.target! as HTMLButtonElement
-										try {
-											target.disabled = true
-											await client.QueueKick(m.ID, transport.value)
-										} catch (err) {
-											console.log({err})
-											window.alert('Error: ' + errmsg(err))
-											return
-										} finally {
-											target.disabled = false
-										}
-										window.location.reload() // todo: only refresh the list
-									}
+									dom.submitbutton('Save'),
 								),
-							),
-							dom.td(
-								dom.clickbutton('Remove', async function click(e: MouseEvent) {
+								async function submit(e: SubmitEvent) {
 									e.preventDefault()
-									if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
+									try {
+										requiretlsFieldset.disabled = true
+										await client.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes')
+									} catch (err) {
+										console.log({err})
+										window.alert('Error: ' + errmsg(err))
 										return
+									} finally {
+										requiretlsFieldset.disabled = false
 									}
+								}
+							),
+						),
+						dom.td(
+							dom.form(
+								transport=dom.select(
+									attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'),
+									dom.option('(default)', attr.value('')),
+									Object.keys(transports || []).sort().map(t => dom.option(t, m.Transport === t ? attr.checked('') : [])),
+								),
+								' ',
+								dom.submitbutton('Retry now'),
+								async function submit(e: SubmitEvent) {
+									e.preventDefault()
 									const target = e.target! as HTMLButtonElement
 									try {
 										target.disabled = true
-										await client.QueueDrop(m.ID)
+										await client.QueueKick(m.ID, transport.value)
 									} catch (err) {
 										console.log({err})
 										window.alert('Error: ' + errmsg(err))
@@ -2406,13 +2384,33 @@ const queueList = async () => {
 										target.disabled = false
 									}
 									window.location.reload() // todo: only refresh the list
-								}),
+								}
 							),
-						)
-					})
-				),
+						),
+						dom.td(
+							dom.clickbutton('Remove', async function click(e: MouseEvent) {
+								e.preventDefault()
+								if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
+									return
+								}
+								const target = e.target! as HTMLButtonElement
+								try {
+									target.disabled = true
+									await client.QueueDrop(m.ID)
+								} catch (err) {
+									console.log({err})
+									window.alert('Error: ' + errmsg(err))
+									return
+								} finally {
+									target.disabled = false
+								}
+								window.location.reload() // todo: only refresh the list
+							}),
+						),
+					)
+				})
 			),
-		],
+		),
 	)
 }
 
