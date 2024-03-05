@@ -419,7 +419,10 @@ to determine if your email message could be spam and should be rejected. Mox
 helps you set up a system that doesn't trigger most of the technical signals
 (e.g. with SPF/DKIM/DMARC). But there are more signals, for example: Sending to
 a mail server or address for the first time. Sending from a newly registered
-domain. Sending messages with content that resembles known spam messages.
+domain (especially if you're sending automated messages, and if you send more
+messages after previous messages were rejected), domains that existed for a few
+weeks to a month are treated more friendly. Sending messages with content that
+resembles known spam messages.
 
 Should your email be rejected, you will typically get an error message during
 the SMTP transaction that explains why. In the case of big email providers the
