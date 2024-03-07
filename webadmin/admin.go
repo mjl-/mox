@@ -534,7 +534,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		if err != nil {
 			addf(&r.DNSSEC.Errors, "Looking up NS for DNS root (.) to check support in resolver for DNSSEC-verification: %s", err)
 		} else if !result.Authentic {
-			addf(&r.DNSSEC.Warnings, `It looks like the DNS resolvers configured on your system do not verify DNSSEC, or aren't trusted (by having loopback IPs or through "options trust-ad" in /etc/resolv.conf).  Without DNSSEC, outbound delivery with SMTP used unprotected MX records, and SMTP STARTTLS connections cannot verify the TLS certificate with DANE (based on a public key in DNS), and will fallback to either MTA-STS for verification, or use "opportunistic TLS" with no certificate verification.`)
+			addf(&r.DNSSEC.Warnings, `It looks like the DNS resolvers configured on your system do not verify DNSSEC, or aren't trusted (by having loopback IPs or through "options trust-ad" in /etc/resolv.conf).  Without DNSSEC, outbound delivery with SMTP uses unprotected MX records, and SMTP STARTTLS connections cannot verify the TLS certificate with DANE (based on public keys in DNS), and will fall back to either MTA-STS for verification, or use "opportunistic TLS" with no certificate verification.`)
 		} else {
 			_, result, _ := resolver.LookupMX(ctx, domain.ASCII+".")
 			if !result.Authentic {
@@ -544,7 +544,7 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 
 		addf(&r.DNSSEC.Instructions, `Enable DNSSEC-signing of the DNS records of your domain (zone) at your DNS hosting provider.`)
 
-		addf(&r.DNSSEC.Instructions, `If your DNS records are already DNSSEC-signed, you may not have a DNSSEC-verifying recursive resolver in use. Install unbound, and enable support for "extended DNS errors" (EDE), for example:
+		addf(&r.DNSSEC.Instructions, `If your DNS records are already DNSSEC-signed, you may not have a DNSSEC-verifying recursive resolver configured. Install unbound, ensure it has DNSSEC root keys (see unbound-anchor), and enable support for "extended dns errors" (EDE, available since unbound v1.16.0). Test with "dig com. ns" and look for "ad" (authentic data) in response "flags".
 
 cat <<EOF >/etc/unbound/unbound.conf.d/ede.conf
 server:

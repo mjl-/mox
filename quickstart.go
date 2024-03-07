@@ -175,12 +175,14 @@ WARNING: It looks like the DNS resolvers configured on your system do not
 verify DNSSEC, or aren't trusted (by having loopback IPs or through "options
 trust-ad" in /etc/resolv.conf).  Without DNSSEC, outbound delivery with SMTP
 used unprotected MX records, and SMTP STARTTLS connections cannot verify the TLS
-certificate with DANE (based on a public key in DNS), and will fallback to
+certificate with DANE (based on a public key in DNS), and will fall back to
 either MTA-STS for verification, or use "opportunistic TLS" with no certificate
 verification.
 
 Recommended action: Install unbound, a DNSSEC-verifying recursive DNS resolver,
-and enable support for "extended dns errors" (EDE):
+ensure it has DNSSEC root keys (see unbound-anchor), and enable support for
+"extended dns errors" (EDE, available since unbound v1.16.0). Test with
+"dig com. ns" and look for "ad" (authentic data) in response "flags".
 
 cat <<EOF >/etc/unbound/unbound.conf.d/ede.conf
 server:
