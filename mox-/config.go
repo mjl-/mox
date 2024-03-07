@@ -1617,6 +1617,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		}
 	}
 
+	c.MonitorDNSBLZones = nil
 	for _, s := range c.MonitorDNSBLs {
 		d, err := dns.ParseDomain(s)
 		if err != nil {
