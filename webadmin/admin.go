@@ -529,7 +529,8 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 		defer logPanic(ctx)
 		defer wg.Done()
 
-		_, result, err := resolver.LookupNS(ctx, ".")
+		// Some DNSSEC-verifying resolvers return unauthentic data for ".", so we check "com".
+		_, result, err := resolver.LookupNS(ctx, "com.")
 		if err != nil {
 			addf(&r.DNSSEC.Errors, "Looking up NS for DNS root (.) to check support in resolver for DNSSEC-verification: %s", err)
 		} else if !result.Authentic {

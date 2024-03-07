@@ -162,8 +162,9 @@ logging in with IMAP.
 	resolveCtx, resolveCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer resolveCancel()
 
+	// Some DNSSEC-verifying resolvers return unauthentic data for ".", so we check "com".
 	fmt.Printf("Checking if DNS resolvers are DNSSEC-verifying...")
-	_, resolverDNSSECResult, err := resolver.LookupNS(resolveCtx, ".")
+	_, resolverDNSSECResult, err := resolver.LookupNS(resolveCtx, "com.")
 	if err != nil {
 		fmt.Println("")
 		fatalf("checking dnssec support in resolver: %v", err)
