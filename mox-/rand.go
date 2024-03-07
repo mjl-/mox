@@ -9,20 +9,32 @@ import (
 )
 
 type rand struct {
-	*mathrand.Rand
+	rand *mathrand.Rand
 	sync.Mutex
 }
 
-// NewPseudoRand returns a new PRNG seeded with random bytes from crypto/rand.
+// NewPseudoRand returns a new PRNG seeded with random bytes from crypto/rand. Its
+// functions can be called concurrently.
 func NewPseudoRand() *rand {
-	return &rand{Rand: mathrand.New(mathrand.NewSource(CryptoRandInt()))}
+	return &rand{rand: mathrand.New(mathrand.NewSource(CryptoRandInt()))}
 }
 
-// Read can be called concurrently.
+func (r *rand) Float64() float64 {
+	r.Lock()
+	defer r.Unlock()
+	return r.rand.Float64()
+}
+
+func (r *rand) Intn(n int) int {
+	r.Lock()
+	defer r.Unlock()
+	return r.rand.Intn(n)
+}
+
 func (r *rand) Read(buf []byte) (int, error) {
 	r.Lock()
 	defer r.Unlock()
-	return r.Rand.Read(buf)
+	return r.rand.Read(buf)
 }
 
 // CryptoRandInt returns a cryptographically random number.
