@@ -247,11 +247,6 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		// recipientDomainResult. If DANE is encountered, it will add a DANE reporting
 		// result for generic TLS and DANE-specific errors.
 
-		// Set if TLSA records were found. Means TLS is required for this host, usually
-		// with verification of the certificate, and that we cannot fall back to
-		// opportunistic TLS.
-		var tlsDANE bool
-
 		msgResps := make([]*msgResp, len(msgs))
 		for i := range msgs {
 			msgResps[i] = &msgResp{msg: msgs[i]}
@@ -273,7 +268,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		// We don't fall back to plain text for DMARC reports. ../rfc/7489:1768 ../rfc/7489:2683
 		// We queue outgoing TLS reports with tlsRequiredNo, so reports can be delivered in
 		// case of broken TLS.
-		if result.err != nil && errors.Is(result.err, smtpclient.ErrTLS) && (!enforceMTASTS && tlsMode == smtpclient.TLSOpportunistic && !tlsDANE && !m0.IsDMARCReport || tlsRequiredNo) {
+		if result.err != nil && errors.Is(result.err, smtpclient.ErrTLS) && (!enforceMTASTS && tlsMode == smtpclient.TLSOpportunistic && !result.tlsDANE && !m0.IsDMARCReport || tlsRequiredNo) {
 			metricPlaintextFallback.Inc()
 			if tlsRequiredNo {
 				metricTLSRequiredNoIgnored.WithLabelValues("badtls").Inc()
@@ -282,7 +277,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			// todo future: add a configuration option to not fall back?
 			nqlog.Info("connecting again for delivery attempt without tls",
 				slog.Bool("enforcemtasts", enforceMTASTS),
-				slog.Bool("tlsdane", tlsDANE),
+				slog.Bool("tlsdane", result.tlsDANE),
 				slog.Any("requiretls", m0.RequireTLS))
 			result = deliverHost(nqlog, resolver, dialer, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, msgResps, smtpclient.TLSSkip, false, &tlsrpt.Result{})
 		}
