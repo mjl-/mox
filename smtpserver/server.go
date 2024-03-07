@@ -893,7 +893,7 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 	c.bwritelinef("250-ENHANCEDSTATUSCODES") // ../rfc/2034:71
 	// todo future? c.writelinef("250-DSN")
 	c.bwritelinef("250-8BITMIME")                       // ../rfc/6152:86
-	c.bwritelinef("250-LIMITS RCPTMAX=%d", rcptToLimit) // rfc/9422:301
+	c.bwritelinef("250-LIMITS RCPTMAX=%d", rcptToLimit) // ../rfc/9422:301
 	c.bwritecodeline(250, "", "SMTPUTF8", nil)          // ../rfc/6531:201
 	c.xflush()
 }
