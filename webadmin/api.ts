@@ -471,7 +471,7 @@ export interface ClientConfigsEntry {
 // queueing related fields.
 export interface Msg {
 	ID: number
-	BaseID: number  // A message for multiple recipients will get a BaseID that is identical to the first Msg.ID queued. They may be delivered in a single SMTP transaction if they are going to the same mail server. For messages with a single recipient, this field will be 0.
+	BaseID: number  // A message for multiple recipients will get a BaseID that is identical to the first Msg.ID queued. The message contents will be identical for each recipient, including MsgPrefix. If other properties are identical too, including recipient domain, multiple Msgs may be delivered in a single SMTP transaction. For messages with a single recipient, this field will be 0.
 	Queued: Date
 	SenderAccount: string  // Failures are delivered back to this local account. Also used for routing.
 	SenderLocalpart: Localpart  // Should be a local user and domain.

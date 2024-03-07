@@ -142,6 +142,6 @@ var (
 	SePol7RevDNSFail25        = "7.25" // ../rfc/7372:233
 	SePol7MultiAuthFails26    = "7.26" // ../rfc/7372:246
 	SePol7SenderHasNullMX27   = "7.27" // ../rfc/7505:246
-	SePol7ARCFail             = "7.29" // ../rfc/8617:1438
-	SePol7MissingReqTLS       = "7.30" // ../rfc/8689:448
+	SePol7ARCFail29           = "7.29" // ../rfc/8617:1438
+	SePol7MissingReqTLS30     = "7.30" // ../rfc/8689:448
 )

@@ -629,14 +629,21 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		IPDomain:  dns.IPDomain{Domain: fromAddr.Address.Domain},
 	}
 	qml := make([]queue.Msg, len(recipients))
+	now := time.Now()
 	for i, rcpt := range recipients {
-		rcptMsgPrefix := recvHdrFor(rcpt.Pack(smtputf8)) + msgPrefix
+		// Don't use per-recipient unique message prefix when multiple recipients are
+		// present, or the queue cannot deliver it in a single smtp transaction.
+		var recvRcpt string
+		if len(recipients) == 1 {
+			recvRcpt = rcpt.Pack(smtputf8)
+		}
+		rcptMsgPrefix := recvHdrFor(recvRcpt) + msgPrefix
 		msgSize := int64(len(rcptMsgPrefix)) + xc.Size
 		toPath := smtp.Path{
 			Localpart: rcpt.Localpart,
 			IPDomain:  dns.IPDomain{Domain: rcpt.Domain},
 		}
-		qm := queue.MakeMsg(fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS)
+		qm := queue.MakeMsg(fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS, now)
 		if m.FutureRelease != nil {
 			ival := time.Until(*m.FutureRelease)
 			if ival < 0 {

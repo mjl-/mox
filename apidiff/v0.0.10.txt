@@ -47,6 +47,8 @@ Below are the incompatible changes between v0.0.9 and v0.0.10, per package.
 # scram
 
 # smtp
+- SePol7ARCFail: removed
+- SePol7MissingReqTLS: removed
 
 # smtpclient
 - Dial: changed from func(context.Context, *golang.org/x/exp/slog.Logger, Dialer, github.com/mjl-/mox/dns.IPDomain, []net.IP, int, map[string][]net.IP, []net.IP) (net.Conn, net.IP, error) to func(context.Context, *log/slog.Logger, Dialer, github.com/mjl-/mox/dns.IPDomain, []net.IP, int, map[string][]net.IP, []net.IP) (net.Conn, net.IP, error)

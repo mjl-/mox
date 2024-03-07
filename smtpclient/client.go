@@ -28,6 +28,7 @@ package smtpclient
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -132,16 +133,20 @@ type Client struct {
 	botched  bool // If set, protocol is out of sync and no further commands can be sent.
 	needRset bool // If set, a new delivery requires an RSET command.
 
-	remoteHelo        string // From 220 greeting line.
-	extEcodes         bool   // Remote server supports sending extended error codes.
-	extStartTLS       bool   // Remote server supports STARTTLS.
-	ext8bitmime       bool
-	extSize           bool     // Remote server supports SIZE parameter. Must only be used if > 0.
-	maxSize           int64    // Max size of email message.
-	extPipelining     bool     // Remote server supports command pipelining.
-	extSMTPUTF8       bool     // Remote server supports SMTPUTF8 extension.
-	extAuthMechanisms []string // Supported authentication mechanisms.
-	extRequireTLS     bool     // Remote supports REQUIRETLS extension.
+	remoteHelo            string // From 220 greeting line.
+	extEcodes             bool   // Remote server supports sending extended error codes.
+	extStartTLS           bool   // Remote server supports STARTTLS.
+	ext8bitmime           bool
+	extSize               bool              // Remote server supports SIZE parameter. Must only be used if > 0.
+	maxSize               int64             // Max size of email message.
+	extPipelining         bool              // Remote server supports command pipelining.
+	extSMTPUTF8           bool              // Remote server supports SMTPUTF8 extension.
+	extAuthMechanisms     []string          // Supported authentication mechanisms.
+	extRequireTLS         bool              // Remote supports REQUIRETLS extension.
+	ExtLimits             map[string]string // For LIMITS extension, only if present and valid, with uppercase keys.
+	ExtLimitMailMax       int               // Max "MAIL" commands in a connection, if > 0.
+	ExtLimitRcptMax       int               // Max "RCPT" commands in a transaction, if > 0.
+	ExtLimitRcptDomainMax int               // Max unique domains in a connection, if > 0.
 }
 
 // Error represents a failure to deliver a message.
@@ -169,6 +174,8 @@ type Error struct {
 	// Underlying error, e.g. one of the Err variables in this package, or io errors.
 	Err error
 }
+
+type Response Error
 
 // Unwrap returns the underlying Err.
 func (e Error) Unwrap() error {
@@ -744,6 +751,8 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 					}
 				} else if strings.HasPrefix(s, "AUTH ") {
 					c.extAuthMechanisms = strings.Split(s[len("AUTH "):], " ")
+				} else if strings.HasPrefix(s, "LIMITS ") {
+					c.ExtLimits, c.ExtLimitMailMax, c.ExtLimitRcptMax, c.ExtLimitRcptDomainMax = parseLimits([]byte(s[len("LIMITS"):]))
 				}
 			}
 		}
@@ -832,6 +841,79 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 		return c.auth(auth)
 	}
 	return
+}
+
+// parse text after "LIMITS", including leading space.
+func parseLimits(b []byte) (map[string]string, int, int, int) {
+	// ../rfc/9422:150
+	var o int
+	// Read next " name=value".
+	pair := func() ([]byte, []byte) {
+		if o >= len(b) || b[o] != ' ' {
+			return nil, nil
+		}
+		o++
+
+		ns := o
+		for o < len(b) {
+			c := b[o]
+			if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' {
+				o++
+			} else {
+				break
+			}
+		}
+		es := o
+		if ns == es || o >= len(b) || b[o] != '=' {
+			return nil, nil
+		}
+		o++
+		vs := o
+		for o < len(b) {
+			c := b[o]
+			if c > 0x20 && c < 0x7f && c != ';' {
+				o++
+			} else {
+				break
+			}
+		}
+		if vs == o {
+			return nil, nil
+		}
+		return b[ns:es], b[vs:o]
+	}
+	limits := map[string]string{}
+	var mailMax, rcptMax, rcptDomainMax int
+	for o < len(b) {
+		name, value := pair()
+		if name == nil {
+			// We skip the entire LIMITS extension for syntax errors. ../rfc/9422:232
+			return nil, 0, 0, 0
+		}
+		k := strings.ToUpper(string(name))
+		if _, ok := limits[k]; ok {
+			// Not specified, but we treat duplicates as error.
+			return nil, 0, 0, 0
+		}
+		limits[k] = string(value)
+		// For individual value syntax errors, we skip that value, leaving the default 0.
+		// ../rfc/9422:254
+		switch string(name) {
+		case "MAILMAX":
+			if v, err := strconv.Atoi(string(value)); err == nil && v > 0 && len(value) <= 6 {
+				mailMax = v
+			}
+		case "RCPTMAX":
+			if v, err := strconv.Atoi(string(value)); err == nil && v > 0 && len(value) <= 6 {
+				rcptMax = v
+			}
+		case "RCPTDOMAINMAX":
+			if v, err := strconv.Atoi(string(value)); err == nil && v > 0 && len(value) <= 6 {
+				rcptDomainMax = v
+			}
+		}
+	}
+	return limits, mailMax, rcptMax, rcptDomainMax
 }
 
 func addrIP(addr net.Addr) string {
@@ -1019,15 +1101,39 @@ func (c *Client) TLSConnectionState() *tls.ConnectionState {
 // Returned errors can be of type Error, one of the Err-variables in this package
 // or other underlying errors, e.g. for i/o. Use errors.Is to check.
 func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, msgSize int64, msg io.Reader, req8bitmime, reqSMTPUTF8, requireTLS bool) (rerr error) {
+	_, err := c.DeliverMultiple(ctx, mailFrom, []string{rcptTo}, msgSize, msg, req8bitmime, reqSMTPUTF8, requireTLS)
+	return err
+}
+
+var errNoRecipientsPipelined = errors.New("no recipients accepted in pipelined transaction")
+var errNoRecipients = errors.New("no recipients accepted in transaction")
+
+// DeliverMultiple is like Deliver, but attempts to deliver a message to multiple
+// recipients.  Errors about the entire transaction, such as i/o errors or error
+// responses to the MAIL FROM or DATA commands, are returned by a non-nil rerr. If
+// rcptTo has a single recipient, an error to the RCPT TO command is returned in
+// rerr instead of rcptResps. Otherwise, the SMTP response for each recipient is
+// returned in rcptResps.
+//
+// The caller should take extLimit* into account when sending. And recognize
+// recipient response code "452" to mean that a recipient limit was reached,
+// another transaction can be attempted immediately after instead of marking the
+// delivery attempt as failed. Also code "552" must be treated like temporary error
+// code "452" for historic reasons.
+func (c *Client) DeliverMultiple(ctx context.Context, mailFrom string, rcptTo []string, msgSize int64, msg io.Reader, req8bitmime, reqSMTPUTF8, requireTLS bool) (rcptResps []Response, rerr error) {
 	defer c.recover(&rerr)
 
+	if len(rcptTo) == 0 {
+		return nil, fmt.Errorf("need at least one recipient")
+	}
+
 	if c.origConn == nil {
-		return ErrClosed
+		return nil, ErrClosed
 	} else if c.botched {
-		return ErrBotched
+		return nil, ErrBotched
 	} else if c.needRset {
 		if err := c.Reset(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -1077,45 +1183,122 @@ func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, ms
 	// RCPT TO: ../rfc/5321:1916
 	// DATA: ../rfc/5321:1992
 	lineMailFrom := fmt.Sprintf("MAIL FROM:<%s>%s%s%s%s", mailFrom, mailSize, bodyType, smtputf8Arg, requiretlsArg)
-	lineRcptTo := fmt.Sprintf("RCPT TO:<%s>", rcptTo)
 
 	// We are going into a transaction. We'll clear this when done.
 	c.needRset = true
 
 	if c.extPipelining {
-		c.cmds = []string{"mailfrom", "rcptto", "data"}
+		c.cmds = make([]string, 1+len(rcptTo)+1)
+		c.cmds[0] = "mailfrom"
+		for i := range rcptTo {
+			c.cmds[1+i] = "rcptto"
+		}
+		c.cmds[len(c.cmds)-1] = "data"
 		c.cmdStart = time.Now()
-		// todo future: write in a goroutine to prevent potential deadlock if remote does not consume our writes before expecting us to read. could potentially happen with greylisting and a small tcp send window?
-		c.xbwriteline(lineMailFrom)
-		c.xbwriteline(lineRcptTo)
-		c.xbwriteline("DATA")
-		c.xflush()
 
-		// We read the response to RCPT TO and DATA without panic on read error. Servers
+		// Write and read in separte goroutines. Otherwise, writing a large recipient list
+		// could block when a server doesn't read more commands before we read their
+		// response.
+		errc := make(chan error, 1)
+		// Make sure we don't return before we're done writing to the connection.
+		defer func() {
+			if errc != nil {
+				<-errc
+			}
+		}()
+		go func() {
+			var b bytes.Buffer
+			b.WriteString(lineMailFrom)
+			b.WriteString("\r\n")
+			for _, rcpt := range rcptTo {
+				b.WriteString("RCPT TO:<")
+				b.WriteString(rcpt)
+				b.WriteString(">\r\n")
+			}
+			b.WriteString("DATA\r\n")
+			_, err := c.w.Write(b.Bytes())
+			if err == nil {
+				err = c.w.Flush()
+			}
+			errc <- err
+		}()
+
+		// Read response to MAIL FROM.
+		mfcode, mfsecode, mffirstLine, mfmoreLines := c.xread()
+
+		// We read the response to RCPT TOs and DATA without panic on read error. Servers
 		// may be aborting the connection after a failed MAIL FROM, e.g. outlook when it
 		// has blocklisted your IP. We don't want the read for the response to RCPT TO to
 		// cause a read error as it would result in an unhelpful error message and a
 		// temporary instead of permanent error code.
 
-		mfcode, mfsecode, mffirstLine, mfmoreLines := c.xread()
-		rtcode, rtsecode, rtfirstLine, rtmoreLines, rterr := c.read()
+		// Read responses to RCPT TO.
+		rcptResps = make([]Response, len(rcptTo))
+		nok := 0
+		for i := 0; i < len(rcptTo); i++ {
+			code, secode, firstLine, moreLines, err := c.read()
+			// 552 should be treated as temporary historically, ../rfc/5321:3576
+			permanent := code/100 == 5 && code != smtp.C552MailboxFull
+			rcptResps[i] = Response{permanent, code, secode, "rcptto", firstLine, moreLines, err}
+			if code == smtp.C250Completed {
+				nok++
+			}
+		}
+
+		// Read response to DATA.
 		datacode, datasecode, datafirstLine, datamoreLines, dataerr := c.read()
 
+		writeerr := <-errc
+		errc = nil
+
+		// If MAIL FROM failed, it's an error for the entire transaction. We may have been
+		// blocked.
 		if mfcode != smtp.C250Completed {
+			if writeerr != nil || dataerr != nil {
+				c.botched = true
+			}
 			c.xerrorf(mfcode/100 == 5, mfcode, mfsecode, mffirstLine, mfmoreLines, "%w: got %d, expected 2xx", ErrStatus, mfcode)
 		}
-		if rterr != nil {
-			panic(rterr)
+
+		// If there was an i/o error writing the commands, there is no point continuing.
+		if writeerr != nil {
+			c.xbotchf(0, "", "", nil, "writing pipelined mail/rcpt/data: %w", writeerr)
 		}
-		if rtcode != smtp.C250Completed {
-			c.xerrorf(rtcode/100 == 5, rtcode, rtsecode, rtfirstLine, rtmoreLines, "%w: got %d, expected 2xx", ErrStatus, rtcode)
-		}
+
+		// If the data command had an i/o or protocol error, it's also a failure for the
+		// entire transaction.
 		if dataerr != nil {
 			panic(dataerr)
 		}
+
+		// If we didn't have any successful recipient, there is no point in continuing.
+		if nok == 0 {
+			// Servers may return success for a DATA without valid recipients. Write a dot to
+			// end DATA and restore the connection to a known state.
+			// ../rfc/2920:328
+			if datacode == smtp.C354Continue {
+				_, doterr := fmt.Fprintf(c.w, ".\r\n")
+				if doterr == nil {
+					doterr = c.w.Flush()
+				}
+				if doterr == nil {
+					_, _, _, _, doterr = c.read()
+				}
+				if doterr != nil {
+					c.botched = true
+				}
+			}
+
+			if len(rcptTo) == 1 {
+				panic(Error(rcptResps[0]))
+			}
+			c.xerrorf(false, 0, "", "", nil, "%w", errNoRecipientsPipelined)
+		}
+
 		if datacode != smtp.C354Continue {
 			c.xerrorf(datacode/100 == 5, datacode, datasecode, datafirstLine, datamoreLines, "%w: got %d, expected 354", ErrStatus, datacode)
 		}
+
 	} else {
 		c.cmds[0] = "mailfrom"
 		c.cmdStart = time.Now()
@@ -1125,12 +1308,35 @@ func (c *Client) Deliver(ctx context.Context, mailFrom string, rcptTo string, ms
 			c.xerrorf(code/100 == 5, code, secode, firstLine, moreLines, "%w: got %d, expected 2xx", ErrStatus, code)
 		}
 
-		c.cmds[0] = "rcptto"
-		c.cmdStart = time.Now()
-		c.xwriteline(lineRcptTo)
-		code, secode, firstLine, moreLines = c.xread()
-		if code != smtp.C250Completed {
-			c.xerrorf(code/100 == 5, code, secode, firstLine, moreLines, "%w: got %d, expected 2xx", ErrStatus, code)
+		rcptResps = make([]Response, len(rcptTo))
+		nok := 0
+		for i, rcpt := range rcptTo {
+			c.cmds[0] = "rcptto"
+			c.cmdStart = time.Now()
+			c.xwriteline(fmt.Sprintf("RCPT TO:<%s>", rcpt))
+			code, secode, firstLine, moreLines = c.xread()
+			if i > 0 && (code == smtp.C452StorageFull || code == smtp.C552MailboxFull) {
+				// Remote doesn't accept more recipients for this transaction. Don't send more, give
+				// remaining recipients the same error result.
+				for j := i; j < len(rcptTo); j++ {
+					rcptResps[j] = Response{false, code, secode, "rcptto", firstLine, moreLines, fmt.Errorf("no more recipients accepted in transaction")}
+				}
+				break
+			}
+			var err error
+			if code == smtp.C250Completed {
+				nok++
+			} else {
+				err = fmt.Errorf("%w: got %d, expected 2xx", ErrStatus, code)
+			}
+			rcptResps[i] = Response{code/100 == 5, code, secode, "rcptto", firstLine, moreLines, err}
+		}
+
+		if nok == 0 {
+			if len(rcptTo) == 1 {
+				panic(Error(rcptResps[0]))
+			}
+			c.xerrorf(false, 0, "", "", nil, "%w", errNoRecipients)
 		}
 
 		c.cmds[0] = "data"

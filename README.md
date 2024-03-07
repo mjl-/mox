@@ -131,19 +131,17 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- Improve SMTP delivery from queue
 - Webmail improvements
 - HTTP-based API for sending messages and receiving delivery feedback
 - Calendaring with CalDAV/iCal
 - More IMAP extensions (PREVIEW, WITHIN, IMPORTANT, COMPRESS=DEFLATE,
   CREATE-SPECIAL-USE, SAVEDATE, UNAUTHENTICATE, REPLACE, QUOTA, NOTIFY,
-  MULTIAPPEND, OBJECTID, MULTISEARCH)
+  MULTIAPPEND, OBJECTID, MULTISEARCH, THREAD, SORT)
 - ARC, with forwarded email from trusted source
 - Forwarding (to an external address)
 - Add special IMAP mailbox ("Queue?") that contains queued but
   undelivered messages, updated with IMAP flags/keywords/tags and message headers.
 - Sieve for filtering (for now see Rulesets in the account config)
-- Expose threading through IMAP extension
 - Autoresponder (out of office/vacation)
 - OAUTH2 support, for single sign on
 - Privilege separation, isolating parts of the application to more restricted

@@ -3,8 +3,10 @@ package queue
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -12,12 +14,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
+	"github.com/mjl-/bstore"
+
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dsn"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
 )
 
@@ -29,6 +34,79 @@ var (
 		},
 	)
 )
+
+// todo: rename function, perhaps put some of the params in a delivery struct so we don't pass all the params all the time?
+func fail(ctx context.Context, qlog mlog.Log, msgs []*Msg, dialedIPs map[string][]net.IP, backoff time.Duration, remoteMTA dsn.NameIP, err error) {
+	// todo future: when we implement relaying, we should be able to send DSNs to non-local users. and possibly specify a null mailfrom. ../rfc/5321:1503
+	// todo future: when we implement relaying, and a dsn cannot be delivered, and requiretls was active, we cannot drop the message. instead deliver to local postmaster? though ../rfc/8689:383 may intend to say the dsn should be delivered without requiretls?
+	// todo future: when we implement smtp dsn extension, parameter RET=FULL must be disregarded for messages with REQUIRETLS. ../rfc/8689:379
+
+	m0 := msgs[0]
+
+	var smtpLines []string
+	var cerr smtpclient.Error
+	var permanent bool
+	var errmsg = err.Error()
+	var code int
+	var secodeOpt string
+	if errors.As(err, &cerr) {
+		if cerr.Line != "" {
+			smtpLines = append([]string{cerr.Line}, cerr.MoreLines...)
+		}
+		permanent = cerr.Permanent
+		code = cerr.Code
+		secodeOpt = cerr.Secode
+	}
+	qlog = qlog.With(
+		slog.Bool("permanent", permanent),
+		slog.Int("code", code),
+		slog.String("secode", secodeOpt),
+	)
+
+	ids := make([]int64, len(msgs))
+	for i, m := range msgs {
+		ids[i] = m.ID
+	}
+
+	if permanent || m0.MaxAttempts == 0 && m0.Attempts >= 8 || m0.MaxAttempts > 0 && m0.Attempts >= m0.MaxAttempts {
+		for _, m := range msgs {
+			qmlog := qlog.With(slog.Int64("msgid", m.ID), slog.Any("recipient", m.Recipient()))
+			qmlog.Errorx("permanent failure delivering from queue", err)
+			deliverDSNFailure(ctx, qmlog, *m, remoteMTA, secodeOpt, errmsg, smtpLines)
+		}
+		if err := queueDelete(context.Background(), ids...); err != nil {
+			qlog.Errorx("deleting messages from queue after permanent failure", err)
+		}
+		return
+	}
+
+	// All messages should have the same DialedIPs, so we can update them all at once.
+	qup := bstore.QueryDB[Msg](context.Background(), DB)
+	qup.FilterIDs(ids)
+	if _, xerr := qup.UpdateNonzero(Msg{LastError: errmsg, DialedIPs: dialedIPs}); err != nil {
+		qlog.Errorx("storing delivery error", xerr, slog.String("deliveryerror", errmsg))
+	}
+
+	if m0.Attempts == 5 {
+		// We've attempted deliveries at these intervals: 0, 7.5m, 15m, 30m, 1h, 2u.
+		// Let sender know delivery is delayed.
+
+		retryUntil := m0.LastAttempt.Add((4 + 8 + 16) * time.Hour)
+		for _, m := range msgs {
+			qmlog := qlog.With(slog.Int64("msgid", m.ID), slog.Any("recipient", m.Recipient()))
+			qmlog.Errorx("temporary failure delivering from queue, sending delayed dsn", err, slog.Duration("backoff", backoff))
+			deliverDSNDelay(ctx, qmlog, *m, remoteMTA, secodeOpt, errmsg, smtpLines, retryUntil)
+		}
+	} else {
+		for _, m := range msgs {
+			qlog.Errorx("temporary failure delivering from queue", err,
+				slog.Int64("msgid", m.ID),
+				slog.Any("recipient", m.Recipient()),
+				slog.Duration("backoff", backoff),
+				slog.Time("nextattempt", m0.NextAttempt))
+		}
+	}
+}
 
 func deliverDSNFailure(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, smtpLines []string) {
 	const subject = "mail delivery failed"

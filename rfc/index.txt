@@ -97,7 +97,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 8601	Yes	-	Message Header Field for Indicating Message Authentication Status
 8689	Yes	-	SMTP Require TLS Option
 8904	No	-	DNS Whitelist (DNSWL) Email Authentication Method Extension
-9422	Partial	-	The LIMITS SMTP Service Extension
+9422	Yes	-	The LIMITS SMTP Service Extension
 
 # SPF
 4408	Yes	Obs	(by RFC 7208) Sender Policy Framework (SPF) for Authorizing Use of Domains in E-Mail, Version 1

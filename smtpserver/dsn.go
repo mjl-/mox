@@ -3,6 +3,7 @@ package smtpserver
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/mjl-/mox/dsn"
 	"github.com/mjl-/mox/mlog"
@@ -53,7 +54,7 @@ func queueDSN(ctx context.Context, log mlog.Log, c *conn, rcptTo smtp.Path, m ds
 	if requireTLS {
 		reqTLS = &requireTLS
 	}
-	qm := queue.MakeMsg(smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), m.MessageID, nil, reqTLS)
+	qm := queue.MakeMsg(smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), m.MessageID, nil, reqTLS, time.Now())
 	qm.DSNUTF8 = bufUTF8
 	if err := queue.Add(ctx, c.log, "", f, qm); err != nil {
 		return err

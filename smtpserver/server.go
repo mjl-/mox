@@ -1834,7 +1834,13 @@ func (c *conn) cmdData(p *parser) {
 			tlsComment := mox.TLSReceivedComment(c.log, tlsConn.ConnectionState())
 			recvHdr.Add(" ", tlsComment...)
 		}
-		recvHdr.Add(" ", "for", "<"+rcptTo+">;", time.Now().Format(message.RFC5322Z))
+		// We leave out an empty "for" clause. This is empty for messages submitted to
+		// multiple recipients, so the message stays identical and a single smtp
+		// transaction can deliver, only transferring the data once.
+		if rcptTo != "" {
+			recvHdr.Add(" ", "for", "<"+rcptTo+">;")
+		}
+		recvHdr.Add(" ", time.Now().Format(message.RFC5322Z))
 		return recvHdr.String()
 	}
 
@@ -1979,6 +1985,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// We always deliver through the queue. It would be more efficient to deliver
 	// directly, but we don't want to circumvent all the anti-spam measures. Accounts
 	// on a single mox instance should be allowed to block each other.
+	now := time.Now()
 	qml := make([]queue.Msg, len(c.recipients))
 	for i, rcptAcc := range c.recipients {
 		if Localserve {
@@ -1993,9 +2000,16 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 			}
 		}
 
-		xmsgPrefix := append([]byte(recvHdrFor(rcptAcc.rcptTo.String())), msgPrefix...)
+		// For multiple recipients, we don't make each message prefix unique, leaving out
+		// the "for" clause in the Received header. This allows the queue to deliver the
+		// messages in a single smtp transaction.
+		var rcptTo string
+		if len(c.recipients) == 1 {
+			rcptTo = rcptAcc.rcptTo.String()
+		}
+		xmsgPrefix := append([]byte(recvHdrFor(rcptTo)), msgPrefix...)
 		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-		qm := queue.MakeMsg(*c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS)
+		qm := queue.MakeMsg(*c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS, now)
 		if !c.futureRelease.IsZero() {
 			qm.NextAttempt = c.futureRelease
 			qm.FutureReleaseRequest = c.futureReleaseRequest

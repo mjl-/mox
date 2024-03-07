@@ -117,11 +117,11 @@ func TestQueue(t *testing.T) {
 
 	var qm Msg
 
-	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now())
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 
-	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now())
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 
@@ -162,7 +162,10 @@ func TestQueue(t *testing.T) {
 			"mail.mox.example.":   {"127.0.0.1"},
 			"submission.example.": {"127.0.0.1"},
 		},
-		MX: map[string][]*net.MX{"mox.example.": {{Host: "mail.mox.example", Pref: 10}}},
+		MX: map[string][]*net.MX{
+			"mox.example.":   {{Host: "mail.mox.example", Pref: 10}},
+			"other.example.": {{Host: "mail.mox.example", Pref: 10}},
+		},
 	}
 	// Override dial function. We'll make connecting fail for now.
 	dialed := make(chan struct{}, 1)
@@ -199,7 +202,7 @@ func TestQueue(t *testing.T) {
 	case <-timer.C:
 		t.Fatalf("no dial within 1s")
 	}
-	<-deliveryResult // Deliver sends here.
+	<-deliveryResults // Deliver sends here.
 
 	_, err = OpenMessage(ctxbg, msg.ID+1)
 	if err != bstore.ErrAbsent {
@@ -227,12 +230,13 @@ func TestQueue(t *testing.T) {
 
 	smtpdone := make(chan struct{})
 
-	fakeSMTPServer := func(server net.Conn) {
+	nfakeSMTPServer := func(server net.Conn, rcpts, ntx int, onercpt bool, extensions []string) {
 		defer func() {
 			smtpdone <- struct{}{}
 		}()
 
-		// We do a minimal fake smtp server. We cannot import smtpserver.Serve due to cyclic dependencies.
+		// We do a minimal fake smtp server. We cannot import smtpserver.Serve due to
+		// cyclic dependencies.
 		fmt.Fprintf(server, "220 mail.mox.example\r\n")
 		br := bufio.NewReader(server)
 
@@ -247,16 +251,88 @@ func TestQueue(t *testing.T) {
 		}
 
 		readline("ehlo")
-		writeline("250 mail.mox.example")
+		writeline("250-mail.mox.example")
+		for _, ext := range extensions {
+			writeline("250-" + ext)
+		}
+		writeline("250 pipelining")
+		for tx := 0; tx < ntx; tx++ {
+			readline("mail")
+			writeline("250 ok")
+			for i := 0; i < rcpts; i++ {
+				readline("rcpt")
+				if onercpt && i > 0 {
+					writeline("552 ok")
+				} else {
+					writeline("250 ok")
+				}
+			}
+			readline("data")
+			writeline("354 continue")
+			reader := smtp.NewDataReader(br)
+			io.Copy(io.Discard, reader)
+			writeline("250 ok")
+		}
+		readline("quit")
+		writeline("221 ok")
+	}
+	fakeSMTPServer := func(server net.Conn) {
+		nfakeSMTPServer(server, 1, 1, false, nil)
+	}
+	fakeSMTPServer2Rcpts := func(server net.Conn) {
+		nfakeSMTPServer(server, 2, 1, false, nil)
+	}
+	fakeSMTPServerLimitRcpt1 := func(server net.Conn) {
+		nfakeSMTPServer(server, 1, 2, false, []string{"LIMITS RCPTMAX=1"})
+	}
+	// Server that returns an error after first recipient. We expect another
+	// transaction to deliver the second message.
+	fakeSMTPServerRcpt1 := func(server net.Conn) {
+		defer func() {
+			smtpdone <- struct{}{}
+		}()
+
+		// We do a minimal fake smtp server. We cannot import smtpserver.Serve due to
+		// cyclic dependencies.
+		fmt.Fprintf(server, "220 mail.mox.example\r\n")
+		br := bufio.NewReader(server)
+
+		readline := func(cmd string) {
+			line, err := br.ReadString('\n')
+			if err == nil && !strings.HasPrefix(strings.ToLower(line), cmd) {
+				panic(fmt.Sprintf("unexpected line %q, expected %q", line, cmd))
+			}
+		}
+		writeline := func(s string) {
+			fmt.Fprintf(server, "%s\r\n", s)
+		}
+
+		readline("ehlo")
+		writeline("250-mail.mox.example")
+		writeline("250 pipelining")
+
+		readline("mail")
+		writeline("250 ok")
+		readline("rcpt")
+		writeline("250 ok")
+		readline("rcpt")
+		writeline("552 ok")
+		readline("data")
+		writeline("354 continue")
+		reader := smtp.NewDataReader(br)
+		io.Copy(io.Discard, reader)
+		writeline("250 ok")
+
 		readline("mail")
 		writeline("250 ok")
 		readline("rcpt")
 		writeline("250 ok")
 		readline("data")
 		writeline("354 continue")
-		reader := smtp.NewDataReader(br)
+		reader = smtp.NewDataReader(br)
 		io.Copy(io.Discard, reader)
 		writeline("250 ok")
+
 		readline("quit")
 		writeline("221 ok")
 	}
@@ -271,7 +347,8 @@ func TestQueue(t *testing.T) {
 
 			attempt++
 
-			// We do a minimal fake smtp server. We cannot import smtpserver.Serve due to cyclic dependencies.
+			// We do a minimal fake smtp server. We cannot import smtpserver.Serve due to
+			// cyclic dependencies.
 			fmt.Fprintf(server, "220 mail.mox.example\r\n")
 			br := bufio.NewReader(server)
 
@@ -326,12 +403,13 @@ func TestQueue(t *testing.T) {
 		return makeFakeSMTPSTARTTLSServer(&tls.Config{MaxVersion: tls.VersionTLS10, Certificates: []tls.Certificate{moxCert}}, 1, requiretls)
 	}
 
-	fakeSubmitServer := func(server net.Conn) {
+	nfakeSubmitServer := func(server net.Conn, nrcpt int) {
 		defer func() {
 			smtpdone <- struct{}{}
 		}()
 
-		// We do a minimal fake smtp server. We cannot import smtpserver.Serve due to cyclic dependencies.
+		// We do a minimal fake smtp server. We cannot import smtpserver.Serve due to
+		// cyclic dependencies.
 		fmt.Fprintf(server, "220 mail.mox.example\r\n")
 		br := bufio.NewReader(server)
 		br.ReadString('\n') // Should be EHLO.
@@ -341,8 +419,10 @@ func TestQueue(t *testing.T) {
 		fmt.Fprintf(server, "235 2.7.0 auth ok\r\n")
 		br.ReadString('\n') // Should be MAIL FROM.
 		fmt.Fprintf(server, "250 ok\r\n")
-		br.ReadString('\n') // Should be RCPT TO.
-		fmt.Fprintf(server, "250 ok\r\n")
+		for i := 0; i < nrcpt; i++ {
+			br.ReadString('\n') // Should be RCPT TO.
+			fmt.Fprintf(server, "250 ok\r\n")
+		}
 		br.ReadString('\n') // Should be DATA.
 		fmt.Fprintf(server, "354 continue\r\n")
 		reader := smtp.NewDataReader(br)
@@ -350,6 +430,12 @@ func TestQueue(t *testing.T) {
 		fmt.Fprintf(server, "250 ok\r\n")
 		br.ReadString('\n') // Should be QUIT.
 		fmt.Fprintf(server, "221 ok\r\n")
+	}
+	fakeSubmitServer := func(server net.Conn) {
+		nfakeSubmitServer(server, 1)
+	}
+	fakeSubmitServer2Rcpts := func(server net.Conn) {
+		nfakeSubmitServer(server, 2)
 	}
 
 	testQueue := func(expectDSN bool, fakeServer func(conn net.Conn)) bool {
@@ -367,10 +453,7 @@ func TestQueue(t *testing.T) {
 			// Setting up a pipe. We'll start a fake smtp server on the server-side. And return the
 			// client-side to the invocation dial, for the attempted delivery from the queue.
 			server, client := net.Pipe()
-			for _, c := range pipes {
-				c.Close()
-			}
-			pipes = []net.Conn{server, client}
+			pipes = append(pipes, server, client)
 			go fakeServer(server)
 
 			_, wasNetDialer = dialer.(*net.Dialer)
@@ -427,7 +510,7 @@ func TestQueue(t *testing.T) {
 			case <-timer.C:
 				t.Fatalf("no dial within 1s")
 			}
-			<-deliveryResult // Deliver sends here.
+			<-deliveryResults // Deliver sends here.
 		}
 
 		launchWork(pkglog, resolver, map[string]struct{}{})
@@ -449,9 +532,48 @@ func TestQueue(t *testing.T) {
 		t.Fatalf("expected net.Dialer as dialer")
 	}
 
+	// Single delivery to two recipients at same domain, expecting single connection
+	// and single transaction.
+	qm0 := MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now())
+	qml := []Msg{qm0, qm0} // Same NextAttempt.
+	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
+	tcheck(t, err, "add messages to queue for delivery")
+	testDeliver(fakeSMTPServer2Rcpts)
+
+	// Single enqueue to two recipients at different domain, expecting two connections.
+	otheraddr, _ := smtp.ParseAddress("mjl@other.example")
+	otherpath := otheraddr.Path()
+	t0 := time.Now()
+	qml = []Msg{
+		MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, t0),
+		MakeMsg(path, otherpath, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, t0),
+	}
+	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
+	tcheck(t, err, "add messages to queue for delivery")
+	conns := ConnectionCounter()
+	testDeliver(fakeSMTPServer)
+	nconns := ConnectionCounter()
+	if nconns != conns+2 {
+		t.Errorf("saw %d connections, expected 2", nconns-conns)
+	}
+
+	// Single enqueue with two recipients at same domain, but with smtp server that has
+	// LIMITS RCPTMAX=1, so we expect a single connection with two transactions.
+	qml = []Msg{qm0, qm0}
+	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
+	tcheck(t, err, "add messages to queue for delivery")
+	testDeliver(fakeSMTPServerLimitRcpt1)
+
+	// Single enqueue with two recipients at same domain, but smtp server sends 552 for
+	// 2nd recipient, so we expect a single connection with two transactions.
+	qml = []Msg{qm0, qm0}
+	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
+	tcheck(t, err, "add messages to queue for delivery")
+	testDeliver(fakeSMTPServerRcpt1)
+
 	// Add a message to be delivered with submit because of its route.
 	topath := smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "submit.example"}}}
-	qm = MakeMsg(path, topath, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	qm = MakeMsg(path, topath, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now())
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 	wasNetDialer = testDeliver(fakeSubmitServer)
@@ -459,8 +581,17 @@ func TestQueue(t *testing.T) {
 		t.Fatalf("expected net.Dialer as dialer")
 	}
 
+	// Two messages for submission.
+	qml = []Msg{qm, qm}
+	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
+	tcheck(t, err, "add messages to queue for delivery")
+	wasNetDialer = testDeliver(fakeSubmitServer2Rcpts)
+	if !wasNetDialer {
+		t.Fatalf("expected net.Dialer as dialer")
+	}
+
 	// Add a message to be delivered with submit because of explicitly configured transport, that uses TLS.
-	qml := []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	transportSubmitTLS := "submittls"
@@ -509,7 +640,7 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Add a message to be delivered with socks.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<socks@localhost>", nil, nil)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<socks@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	transportSocks := "socks"
@@ -525,7 +656,7 @@ func TestQueue(t *testing.T) {
 
 	// Add message to be delivered with opportunistic TLS verification.
 	clearTLSResults(t)
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, nil)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
@@ -539,7 +670,7 @@ func TestQueue(t *testing.T) {
 
 	// Test fallback to plain text with TLS handshake fails.
 	clearTLSResults(t)
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<badtls@localhost>", nil, nil)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<badtls@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
@@ -559,7 +690,7 @@ func TestQueue(t *testing.T) {
 			{Usage: adns.TLSAUsageDANEEE, Selector: adns.TLSASelectorSPKI, MatchType: adns.TLSAMatchTypeFull, CertAssoc: moxCert.Leaf.RawSubjectPublicKeyInfo},
 		},
 	}
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<dane@localhost>", nil, nil)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<dane@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
@@ -580,7 +711,7 @@ func TestQueue(t *testing.T) {
 
 	// Add message to be delivered with verified TLS and REQUIRETLS.
 	yes := true
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, &yes)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, &yes, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
@@ -597,7 +728,7 @@ func TestQueue(t *testing.T) {
 			{},
 		},
 	}
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<daneunusable@localhost>", nil, nil)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<daneunusable@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
@@ -618,7 +749,7 @@ func TestQueue(t *testing.T) {
 			{Usage: adns.TLSAUsageDANEEE, Selector: adns.TLSASelectorSPKI, MatchType: adns.TLSAMatchTypeFull, CertAssoc: make([]byte, sha256.Size)},
 		},
 	}
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<daneinsecure@localhost>", nil, nil)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<daneinsecure@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
@@ -640,7 +771,7 @@ func TestQueue(t *testing.T) {
 
 	// Check that message is delivered with TLS-Required: No and non-matching DANE record.
 	no := false
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednostarttls@localhost>", nil, &no)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednostarttls@localhost>", nil, &no, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
@@ -651,7 +782,7 @@ func TestQueue(t *testing.T) {
 	testDeliver(fakeSMTPSTARTTLSServer)
 
 	// Check that message is delivered with TLS-Required: No and bad TLS, falling back to plain text.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednoplaintext@localhost>", nil, &no)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednoplaintext@localhost>", nil, &no, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
@@ -662,7 +793,7 @@ func TestQueue(t *testing.T) {
 	testDeliver(makeBadFakeSMTPSTARTTLSServer(true))
 
 	// Add message with requiretls that fails immediately due to no REQUIRETLS support in all servers.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequiredunsupported@localhost>", nil, &yes)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequiredunsupported@localhost>", nil, &yes, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
@@ -677,7 +808,7 @@ func TestQueue(t *testing.T) {
 	resolver.TLSA = nil
 
 	// Add message with requiretls that fails immediately due to no verification policy for recipient domain.
-	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednopolicy@localhost>", nil, &yes)}
+	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednopolicy@localhost>", nil, &yes, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
@@ -692,7 +823,7 @@ func TestQueue(t *testing.T) {
 	})
 
 	// Add another message that we'll fail to deliver entirely.
-	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now())
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 
@@ -746,7 +877,7 @@ func TestQueue(t *testing.T) {
 	defer comm.Unregister()
 
 	for i := 1; i < 8; i++ {
-		go func() { <-deliveryResult }() // Deliver sends here.
+		go func() { <-deliveryResults }() // Deliver sends here.
 		if i == 4 {
 			resolver.AllAuthentic = true
 			resolver.TLSA = map[string][]adns.TLSA{
@@ -781,7 +912,7 @@ func TestQueue(t *testing.T) {
 	}
 
 	// Trigger final failure.
-	go func() { <-deliveryResult }() // Deliver sends here.
+	go func() { <-deliveryResults }() // Deliver sends here.
 	deliver(pkglog, resolver, msg)
 	err = DB.Get(ctxbg, &msg)
 	if err != bstore.ErrAbsent {
@@ -883,7 +1014,7 @@ func TestQueueStart(t *testing.T) {
 	mf := prepareFile(t)
 	defer os.Remove(mf.Name())
 	defer mf.Close()
-	qm := MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil)
+	qm := MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now())
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 	checkDialed(true)

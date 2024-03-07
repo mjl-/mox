@@ -28,8 +28,11 @@ import (
 
 // deliver via another SMTP server, e.g. relaying to a smart host, possibly
 // with authentication (submission).
-func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, m Msg, backoff time.Duration, transportName string, transport *config.TransportSMTP, dialTLS bool, defaultPort int) {
+func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, msgs []*Msg, backoff time.Duration, transportName string, transport *config.TransportSMTP, dialTLS bool, defaultPort int) {
 	// todo: configurable timeouts
+
+	// For convenience, all messages share the same relevant values.
+	m0 := msgs[0]
 
 	port := transport.Port
 	if port == 0 {
@@ -47,22 +50,27 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		tlsMode = smtpclient.TLSSkip
 		tlsPKIX = false
 	}
+
+	// Prepare values for logging/metrics. They are updated for various error
+	// conditions later on.
 	start := time.Now()
-	var deliveryResult string
-	var permanent bool
-	var secodeOpt string
-	var errmsg string
-	var success bool
+	var submiterr error // Of whole operation, nil for partial failure/success.
+	var delivered int
+	failed := len(msgs) // Reset and updated after smtp transaction.
 	defer func() {
-		metricDelivery.WithLabelValues(fmt.Sprintf("%d", m.Attempts), transportName, string(tlsMode), deliveryResult).Observe(float64(time.Since(start)) / float64(time.Second))
-		qlog.Debug("queue deliversubmit result",
+		r := deliveryResult(submiterr, delivered, failed)
+		d := float64(time.Since(start)) / float64(time.Second)
+		metricDelivery.WithLabelValues(fmt.Sprintf("%d", m0.Attempts), transportName, string(tlsMode), r).Observe(d)
+
+		qlog.Debugx("queue deliversubmit result", submiterr,
 			slog.Any("host", transport.DNSHost),
 			slog.Int("port", port),
-			slog.Int("attempt", m.Attempts),
-			slog.Bool("permanent", permanent),
-			slog.String("secodeopt", secodeOpt),
-			slog.String("errmsg", errmsg),
-			slog.Bool("ok", success),
+			slog.Int("attempt", m0.Attempts),
+			slog.String("result", r),
+			slog.Int("delivered", delivered),
+			slog.Int("failed", failed),
+			slog.Any("tlsmode", tlsMode),
+			slog.Bool("tlspkix", tlsPKIX),
 			slog.Duration("duration", time.Since(start)))
 	}()
 
@@ -75,25 +83,28 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 
 	// If submit was done with REQUIRETLS extension for SMTP, we must verify TLS
 	// certificates. If our submission connection is not configured that way, abort.
-	requireTLS := m.RequireTLS != nil && *m.RequireTLS
+	requireTLS := m0.RequireTLS != nil && *m0.RequireTLS
 	if requireTLS && (tlsMode != smtpclient.TLSRequiredStartTLS && tlsMode != smtpclient.TLSImmediate || !tlsPKIX) {
-		errmsg = fmt.Sprintf("transport %s: message requires verified tls but transport does not verify tls", transportName)
-		fail(ctx, qlog, m, backoff, true, dsn.NameIP{}, smtp.SePol7MissingReqTLS, errmsg, "", nil)
+		submiterr = smtpclient.Error{
+			Permanent: true,
+			Code:      smtp.C554TransactionFailed,
+			Secode:    smtp.SePol7MissingReqTLS30,
+			Err:       fmt.Errorf("transport %s: message requires verified tls but transport does not verify tls", transportName),
+		}
+		fail(ctx, qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
 		return
 	}
 
 	dialctx, dialcancel := context.WithTimeout(ctx, 30*time.Second)
 	defer dialcancel()
-	if m.DialedIPs == nil {
-		m.DialedIPs = map[string][]net.IP{}
+	if msgs[0].DialedIPs == nil {
+		msgs[0].DialedIPs = map[string][]net.IP{}
+		m0 = msgs[0]
 	}
-	_, _, _, ips, _, err := smtpclient.GatherIPs(dialctx, qlog.Logger, resolver, dns.IPDomain{Domain: transport.DNSHost}, m.DialedIPs)
+	_, _, _, ips, _, err := smtpclient.GatherIPs(dialctx, qlog.Logger, resolver, dns.IPDomain{Domain: transport.DNSHost}, m0.DialedIPs)
 	var conn net.Conn
 	if err == nil {
-		if m.DialedIPs == nil {
-			m.DialedIPs = map[string][]net.IP{}
-		}
-		conn, _, err = smtpclient.Dial(dialctx, qlog.Logger, dialer, dns.IPDomain{Domain: transport.DNSHost}, ips, port, m.DialedIPs, mox.Conf.Static.SpecifiedSMTPListenIPs)
+		conn, _, err = smtpclient.Dial(dialctx, qlog.Logger, dialer, dns.IPDomain{Domain: transport.DNSHost}, ips, port, m0.DialedIPs, mox.Conf.Static.SpecifiedSMTPListenIPs)
 	}
 	addr := net.JoinHostPort(transport.Host, fmt.Sprintf("%d", port))
 	var result string
@@ -114,8 +125,8 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			qlog.Check(err, "closing connection")
 		}
 		qlog.Errorx("dialing for submission", err, slog.String("remote", addr))
-		errmsg = fmt.Sprintf("transport %s: dialing %s for submission: %v", transportName, addr, err)
-		fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", errmsg, "", nil)
+		submiterr = fmt.Errorf("transport %s: dialing %s for submission: %w", transportName, addr, err)
+		fail(ctx, qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
 		return
 	}
 	dialcancel()
@@ -165,13 +176,14 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	if err != nil {
 		smtperr, ok := err.(smtpclient.Error)
 		var remoteMTA dsn.NameIP
+		submiterr = fmt.Errorf("transport %s: establishing smtp session with %s for submission: %w", transportName, addr, err)
 		if ok {
 			remoteMTA.Name = transport.Host
+			smtperr.Err = submiterr
+			submiterr = smtperr
 		}
-		qlog.Errorx("establishing smtp session for submission", err, slog.String("remote", addr))
-		errmsg = fmt.Sprintf("transport %s: establishing smtp session with %s for submission: %v", transportName, addr, err)
-		secodeOpt = smtperr.Secode
-		fail(ctx, qlog, m, backoff, false, remoteMTA, secodeOpt, errmsg, smtperr.Line, smtperr.MoreLines)
+		qlog.Errorx("establishing smtp session for submission", submiterr, slog.String("remote", addr))
+		fail(ctx, qlog, msgs, m0.DialedIPs, backoff, remoteMTA, submiterr)
 		return
 	}
 	defer func() {
@@ -183,23 +195,23 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	var msgr io.ReadCloser
 	var size int64
 	var req8bit, reqsmtputf8 bool
-	if len(m.DSNUTF8) > 0 && client.SupportsSMTPUTF8() {
-		msgr = io.NopCloser(bytes.NewReader(m.DSNUTF8))
+	if len(m0.DSNUTF8) > 0 && client.SupportsSMTPUTF8() {
+		msgr = io.NopCloser(bytes.NewReader(m0.DSNUTF8))
 		reqsmtputf8 = true
-		size = int64(len(m.DSNUTF8))
+		size = int64(len(m0.DSNUTF8))
 	} else {
-		req8bit = m.Has8bit // todo: not require this, but just try to submit?
-		size = m.Size
+		req8bit = m0.Has8bit // todo: not require this, but just try to submit?
+		size = m0.Size
 
-		p := m.MessagePath()
+		p := m0.MessagePath()
 		f, err := os.Open(p)
 		if err != nil {
 			qlog.Errorx("opening message for delivery", err, slog.String("remote", addr), slog.String("path", p))
-			errmsg = fmt.Sprintf("transport %s: opening message file for submission: %v", transportName, err)
-			fail(ctx, qlog, m, backoff, false, dsn.NameIP{}, "", errmsg, "", nil)
+			submiterr = fmt.Errorf("transport %s: opening message file for submission: %w", transportName, err)
+			fail(ctx, qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
 			return
 		}
-		msgr = store.FileMsgReader(m.MsgPrefix, f)
+		msgr = store.FileMsgReader(m0.MsgPrefix, f)
 		defer func() {
 			err := msgr.Close()
 			qlog.Check(err, "closing message after delivery attempt")
@@ -208,42 +220,48 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 
 	deliverctx, delivercancel := context.WithTimeout(context.Background(), time.Duration(60+size/(1024*1024))*time.Second)
 	defer delivercancel()
-	err = client.Deliver(deliverctx, m.Sender().String(), m.Recipient().String(), size, msgr, req8bit, reqsmtputf8, requireTLS)
-	if err != nil {
-		qlog.Infox("delivery failed", err)
+	rcpts := make([]string, len(msgs))
+	for i, m := range msgs {
+		rcpts[i] = m.Recipient().String()
 	}
-	var cerr smtpclient.Error
-	switch {
-	case err == nil:
-		deliveryResult = "ok"
-		success = true
-	case errors.Is(err, os.ErrDeadlineExceeded), errors.Is(err, context.DeadlineExceeded):
-		deliveryResult = "timeout"
-	case errors.Is(err, context.Canceled):
-		deliveryResult = "canceled"
-	case errors.As(err, &cerr):
-		deliveryResult = "temperror"
-		if cerr.Permanent {
-			deliveryResult = "permerror"
+	rcptErrs, submiterr := client.DeliverMultiple(deliverctx, m0.Sender().String(), rcpts, size, msgr, req8bit, reqsmtputf8, requireTLS)
+	if submiterr != nil {
+		qlog.Infox("smtp transaction for delivery failed", submiterr)
+	}
+	failed = 0 // Reset, we are looking at the SMTP results below.
+	var delIDs []int64
+	for i, m := range msgs {
+		qmlog := qlog.With(
+			slog.Int64("msgid", m.ID),
+			slog.Any("recipient", m.Recipient()))
+
+		err := submiterr
+		if err == nil && len(rcptErrs) > i {
+			if rcptErrs[i].Code != smtp.C250Completed {
+				err = smtpclient.Error(rcptErrs[i])
+			}
 		}
-	default:
-		deliveryResult = "error"
-	}
-	if err != nil {
-		smtperr, ok := err.(smtpclient.Error)
-		var remoteMTA dsn.NameIP
-		if ok {
-			remoteMTA.Name = transport.Host
+		if err != nil {
+			smtperr, ok := err.(smtpclient.Error)
+			err = fmt.Errorf("transport %s: submitting message to %s: %w", transportName, addr, err)
+			var remoteMTA dsn.NameIP
+			if ok {
+				remoteMTA.Name = transport.Host
+				smtperr.Err = err
+				err = smtperr
+			}
+			qmlog.Errorx("submitting message", err, slog.String("remote", addr))
+			fail(ctx, qmlog, []*Msg{m}, m0.DialedIPs, backoff, remoteMTA, err)
+			failed++
+		} else {
+			delIDs = append(delIDs, m.ID)
+			qmlog.Info("delivered from queue with transport")
+			delivered++
 		}
-		qlog.Errorx("submitting email", err, slog.String("remote", addr))
-		permanent = smtperr.Permanent
-		secodeOpt = smtperr.Secode
-		errmsg = fmt.Sprintf("transport %s: submitting email to %s: %v", transportName, addr, err)
-		fail(ctx, qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg, smtperr.Line, smtperr.MoreLines)
-		return
 	}
-	qlog.Info("delivered from queue with transport")
-	if err := queueDelete(context.Background(), m.ID); err != nil {
-		qlog.Errorx("deleting message from queue after delivery", err)
+	if len(delIDs) > 0 {
+		if err := queueDelete(context.Background(), delIDs...); err != nil {
+			qlog.Errorx("deleting message from queue after delivery", err)
+		}
 	}
 }

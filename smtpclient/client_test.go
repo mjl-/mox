@@ -39,6 +39,7 @@ func TestClient(t *testing.T) {
 	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelTrace})
 
 	type options struct {
+		// Server behaviour.
 		pipelining   bool
 		ecodes       bool
 		maxSize      int
@@ -47,7 +48,11 @@ func TestClient(t *testing.T) {
 		smtputf8     bool
 		requiretls   bool
 		ehlo         bool
+		auths        []string // Allowed mechanisms.
 
+		nodeliver bool // For server, whether client will attempt a delivery.
+
+		// Client behaviour.
 		tlsMode         TLSMode
 		tlsPKIX         bool
 		roots           *x509.CertPool
@@ -55,9 +60,8 @@ func TestClient(t *testing.T) {
 		need8bitmime    bool
 		needsmtputf8    bool
 		needsrequiretls bool
-		auths           []string // Allowed mechanisms.
-
-		nodeliver bool // For server, whether client will attempt a delivery.
+		recipients      []string   // If nil, mjl@mox.example is used.
+		resps           []Response // Checked only if non-nil.
 	}
 
 	// Make fake cert, and make it trusted.
@@ -66,6 +70,13 @@ func TestClient(t *testing.T) {
 	roots.AddCert(cert.Leaf)
 	tlsConfig := tls.Config{
 		Certificates: []tls.Certificate{cert},
+	}
+
+	cleanupResp := func(resps []Response) []Response {
+		for i, r := range resps {
+			resps[i] = Response{Code: r.Code, Secode: r.Secode}
+		}
+		return resps
 	}
 
 	test := func(msg string, opts options, auth func(l []string, cs *tls.ConnectionState) (sasl.Client, error), expClientErr, expDeliverErr, expServerErr error) {
@@ -89,6 +100,7 @@ func TestClient(t *testing.T) {
 			}()
 			fail := func(format string, args ...any) {
 				err := fmt.Errorf("server: %w", fmt.Errorf(format, args...))
+				log.Errorx("failure", err)
 				if err != nil && expServerErr != nil && (errors.Is(err, expServerErr) || errors.As(err, reflect.New(reflect.ValueOf(expServerErr).Type()).Interface())) {
 					err = nil
 				}
@@ -158,6 +170,7 @@ func TestClient(t *testing.T) {
 				if opts.auths != nil {
 					writeline("250-AUTH " + strings.Join(opts.auths, " "))
 				}
+				writeline("250-LIMITS MAILMAX=10 RCPTMAX=100 RCPTDOMAINMAX=1")
 				writeline("250 UNKNOWN") // To be ignored.
 			}
 
@@ -255,8 +268,18 @@ func TestClient(t *testing.T) {
 			if expClientErr == nil && !opts.nodeliver {
 				readline("MAIL FROM:")
 				writeline("250 ok")
-				readline("RCPT TO:")
-				writeline("250 ok")
+				n := len(opts.recipients)
+				if n == 0 {
+					n = 1
+				}
+				for i := 0; i < n; i++ {
+					readline("RCPT TO:")
+					resp := "250 ok"
+					if i < len(opts.resps) {
+						resp = fmt.Sprintf("%d maybe", opts.resps[i].Code)
+					}
+					writeline(resp)
+				}
 				readline("DATA")
 				writeline("354 continue")
 				reader := smtp.NewDataReader(br)
@@ -269,8 +292,14 @@ func TestClient(t *testing.T) {
 
 					readline("MAIL FROM:")
 					writeline("250 ok")
-					readline("RCPT TO:")
-					writeline("250 ok")
+					for i := 0; i < n; i++ {
+						readline("RCPT TO:")
+						resp := "250 ok"
+						if i < len(opts.resps) {
+							resp = fmt.Sprintf("%d maybe", opts.resps[i].Code)
+						}
+						writeline(resp)
+					}
 					readline("DATA")
 					writeline("354 continue")
 					reader = smtp.NewDataReader(br)
@@ -294,6 +323,7 @@ func TestClient(t *testing.T) {
 			}()
 			fail := func(format string, args ...any) {
 				err := fmt.Errorf("client: %w", fmt.Errorf(format, args...))
+				log.Errorx("failure", err)
 				result <- err
 				panic("stop")
 			}
@@ -305,18 +335,26 @@ func TestClient(t *testing.T) {
 				result <- nil
 				return
 			}
-			err = client.Deliver(ctx, "postmaster@mox.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), opts.need8bitmime, opts.needsmtputf8, opts.needsrequiretls)
-			if (err == nil) != (expDeliverErr == nil) || err != nil && !errors.Is(err, expDeliverErr) {
-				fail("first deliver: got err %v, expected %v", err, expDeliverErr)
+			rcptTo := opts.recipients
+			if len(rcptTo) == 0 {
+				rcptTo = []string{"mjl@mox.example"}
+			}
+			resps, err := client.DeliverMultiple(ctx, "postmaster@mox.example", rcptTo, int64(len(msg)), strings.NewReader(msg), opts.need8bitmime, opts.needsmtputf8, opts.needsrequiretls)
+			if (err == nil) != (expDeliverErr == nil) || err != nil && !errors.Is(err, expDeliverErr) && !reflect.DeepEqual(err, expDeliverErr) {
+				fail("first deliver: got err %#v (%s), expected %#v (%s)", err, err, expDeliverErr, expDeliverErr)
+			} else if opts.resps != nil && !reflect.DeepEqual(cleanupResp(resps), opts.resps) {
+				fail("first deliver: got resps %v, expected %v", resps, opts.resps)
 			}
 			if err == nil {
 				err = client.Reset()
 				if err != nil {
 					fail("reset: %v", err)
 				}
-				err = client.Deliver(ctx, "postmaster@mox.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), opts.need8bitmime, opts.needsmtputf8, opts.needsrequiretls)
-				if (err == nil) != (expDeliverErr == nil) || err != nil && !errors.Is(err, expDeliverErr) {
-					fail("second deliver: got err %v, expected %v", err, expDeliverErr)
+				resps, err = client.DeliverMultiple(ctx, "postmaster@mox.example", rcptTo, int64(len(msg)), strings.NewReader(msg), opts.need8bitmime, opts.needsmtputf8, opts.needsrequiretls)
+				if (err == nil) != (expDeliverErr == nil) || err != nil && !errors.Is(err, expDeliverErr) && !reflect.DeepEqual(err, expDeliverErr) {
+					fail("second deliver: got err %#v (%s), expected %#v (%s)", err, err, expDeliverErr, expDeliverErr)
+				} else if opts.resps != nil && !reflect.DeepEqual(cleanupResp(resps), opts.resps) {
+					fail("second: got resps %v, expected %v", resps, opts.resps)
 				}
 			}
 			err = client.Close()
@@ -369,8 +407,57 @@ test
 	test(msg, options{ehlo: true, eightbitmime: true}, nil, nil, nil, nil)
 	test(msg, options{ehlo: true, eightbitmime: false, need8bitmime: true, nodeliver: true}, nil, nil, Err8bitmimeUnsupported, nil)
 	test(msg, options{ehlo: true, smtputf8: false, needsmtputf8: true, nodeliver: true}, nil, nil, ErrSMTPUTF8Unsupported, nil)
-	test(msg, options{ehlo: true, starttls: true, tlsMode: TLSRequiredStartTLS, tlsPKIX: true, tlsHostname: dns.Domain{ASCII: "mismatch.example"}, nodeliver: true}, nil, ErrTLS, nil, &net.OpError{}) // Server TLS handshake is a net.OpError with "remote error" as text.
+
+	// Server TLS handshake is a net.OpError with "remote error" as text.
+	test(msg, options{ehlo: true, starttls: true, tlsMode: TLSRequiredStartTLS, tlsPKIX: true, tlsHostname: dns.Domain{ASCII: "mismatch.example"}, nodeliver: true}, nil, ErrTLS, nil, &net.OpError{})
+
 	test(msg, options{ehlo: true, maxSize: len(msg) - 1, nodeliver: true}, nil, nil, ErrSize, nil)
+
+	// Multiple recipients, not pipelined.
+	multi1 := options{
+		ehlo:       true,
+		pipelining: true,
+		ecodes:     true,
+		recipients: []string{"mjl@mox.example", "mjl2@mox.example", "mjl3@mox.example"},
+		resps: []Response{
+			{Code: smtp.C250Completed},
+			{Code: smtp.C250Completed},
+			{Code: smtp.C250Completed},
+		},
+	}
+	test(msg, multi1, nil, nil, nil, nil)
+	multi1.pipelining = true
+	test(msg, multi1, nil, nil, nil, nil)
+
+	// Multiple recipients with 452 and other error, not pipelined
+	multi2 := options{
+		ehlo:       true,
+		ecodes:     true,
+		recipients: []string{"xmjl@mox.example", "xmjl2@mox.example", "xmjl3@mox.example"},
+		resps: []Response{
+			{Code: smtp.C250Completed},
+			{Code: smtp.C554TransactionFailed}, // Will continue when not pipelined.
+			{Code: smtp.C452StorageFull},       // Will stop sending further recipients.
+		},
+	}
+	test(msg, multi2, nil, nil, nil, nil)
+	multi2.pipelining = true
+	test(msg, multi2, nil, nil, nil, nil)
+	multi2.pipelining = false
+	multi2.resps[2].Code = smtp.C552MailboxFull
+	test(msg, multi2, nil, nil, nil, nil)
+	multi2.pipelining = true
+	test(msg, multi2, nil, nil, nil, nil)
+
+	// Single recipient with error and pipelining is an error.
+	multi3 := options{
+		ehlo:       true,
+		pipelining: true,
+		ecodes:     true,
+		recipients: []string{"xmjl@mox.example"},
+		resps:      []Response{{Code: smtp.C452StorageFull}},
+	}
+	test(msg, multi3, nil, nil, Error{Code: smtp.C452StorageFull, Command: "rcptto", Line: "452 maybe"}, nil)
 
 	authPlain := func(l []string, cs *tls.ConnectionState) (sasl.Client, error) {
 		return sasl.NewClientPlain("test", "test"), nil
@@ -669,6 +756,69 @@ func TestErrors(t *testing.T) {
 			panic(fmt.Errorf("got %#v, expected ErrStatus with Permanent", err))
 		}
 	})
+
+	// If we try multiple recipients and first is 452, it is an error and a
+	// non-pipelined deliver will be aborted.
+	run(t, func(s xserver) {
+		s.writeline("220 mox.example")
+		s.readline("EHLO")
+		s.writeline("250 mox.example")
+		s.readline("MAIL FROM:")
+		s.writeline("250 ok")
+		s.readline("RCPT TO:")
+		s.writeline("451 not now")
+		s.readline("RCPT TO:")
+		s.writeline("451 not now")
+		s.readline("QUIT")
+		s.writeline("250 ok")
+	}, func(conn net.Conn) {
+		c, err := New(ctx, log.Logger, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
+		if err != nil {
+			panic(err)
+		}
+
+		msg := ""
+		_, err = c.DeliverMultiple(ctx, "postmaster@other.example", []string{"mjl@mox.example", "mjl@mox.example"}, int64(len(msg)), strings.NewReader(msg), false, false, false)
+		var xerr Error
+		if err == nil || !errors.Is(err, errNoRecipients) || !errors.As(err, &xerr) || xerr.Permanent {
+			panic(fmt.Errorf("got %#v (%s) expected errNoRecipients with non-Permanent", err, err))
+		}
+		c.Close()
+	})
+
+	// If we try multiple recipients and first is 452, it is an error and a pipelined
+	// deliver will abort an allowed DATA.
+	run(t, func(s xserver) {
+		s.writeline("220 mox.example")
+		s.readline("EHLO")
+		s.writeline("250-mox.example")
+		s.writeline("250 PIPELINING")
+		s.readline("MAIL FROM:")
+		s.writeline("250 ok")
+		s.readline("RCPT TO:")
+		s.writeline("451 not now")
+		s.readline("RCPT TO:")
+		s.writeline("451 not now")
+		s.readline("DATA")
+		s.writeline("354 ok")
+		s.readline(".")
+		s.writeline("503 no recipient")
+		s.readline("QUIT")
+		s.writeline("250 ok")
+	}, func(conn net.Conn) {
+		c, err := New(ctx, log.Logger, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
+		if err != nil {
+			panic(err)
+		}
+
+		msg := ""
+		_, err = c.DeliverMultiple(ctx, "postmaster@other.example", []string{"mjl@mox.example", "mjl@mox.example"}, int64(len(msg)), strings.NewReader(msg), false, false, false)
+		var xerr Error
+		if err == nil || !errors.Is(err, errNoRecipientsPipelined) || !errors.As(err, &xerr) || xerr.Permanent {
+			panic(fmt.Errorf("got %#v (%s), expected errNoRecipientsPipelined with non-Permanent", err, err))
+		}
+		c.Close()
+	})
 }
 
 type xserver struct {
@@ -738,6 +888,21 @@ func run(t *testing.T, server func(s xserver), client func(conn net.Conn)) {
 	if errs != nil {
 		t.Fatalf("errors: %v", errs)
 	}
+}
+
+func TestLimits(t *testing.T) {
+	check := func(s string, expLimits map[string]string, expMailMax, expRcptMax, expRcptDomainMax int) {
+		t.Helper()
+		limits, mailmax, rcptMax, rcptDomainMax := parseLimits([]byte(s))
+		if !reflect.DeepEqual(limits, expLimits) || mailmax != expMailMax || rcptMax != expRcptMax || rcptDomainMax != expRcptDomainMax {
+			t.Errorf("bad limits, got %v %d %d %d, expected %v %d %d %d, for %q", limits, mailmax, rcptMax, rcptDomainMax, expLimits, expMailMax, expRcptMax, expRcptDomainMax, s)
+		}
+	}
+	check(" unknown=a=b -_1oK=xY", map[string]string{"UNKNOWN": "a=b", "-_1OK": "xY"}, 0, 0, 0)
+	check(" MAILMAX=123 OTHER=ignored RCPTDOMAINMAX=1 RCPTMAX=321", map[string]string{"MAILMAX": "123", "OTHER": "ignored", "RCPTDOMAINMAX": "1", "RCPTMAX": "321"}, 123, 321, 1)
+	check(" MAILMAX=invalid", map[string]string{"MAILMAX": "invalid"}, 0, 0, 0)
+	check(" invalid syntax", nil, 0, 0, 0)
+	check(" DUP=1 DUP=2", nil, 0, 0, 0)
 }
 
 // Just a cert that appears valid. SMTP client will not verify anything about it
