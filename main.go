@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/text/secure/precis"
 
 	"github.com/mjl-/adns"
 
@@ -1246,6 +1247,8 @@ The password is read from stdin. Its bcrypt hash is stored in a file named
 	}
 
 	pw := xreadpassword()
+	pw, err := precis.OpaqueString.String(pw)
+	xcheckf(err, `checking password with "precis" requirements`)
 	hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
 	xcheckf(err, "generating hash for password")
 	err = os.WriteFile(path, hash, 0660)

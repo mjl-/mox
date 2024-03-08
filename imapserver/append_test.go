@@ -18,11 +18,11 @@ func TestAppend(t *testing.T) {
 	tc3 := startNoSwitchboard(t)
 	defer tc3.close()
 
-	tc2.client.Login("mjl@mox.example", "testtest")
+	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
-	tc3.client.Login("mjl@mox.example", "testtest")
+	tc3.client.Login("mjl@mox.example", password0)
 
 	tc2.transactf("bad", "append")              // Missing params.
 	tc2.transactf("bad", `append inbox`)        // Missing message.
@@ -32,13 +32,13 @@ func TestAppend(t *testing.T) {
 	tc2.transactf("bad", "append inbox (\\Badflag) {1+}\r\nx") // Unknown flag.
 	tc2 = startNoSwitchboard(t)
 	defer tc2.close()
-	tc2.client.Login("mjl@mox.example", "testtest")
+	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	tc2.transactf("bad", "append inbox () \"bad time\" {1+}\r\nx") // Bad time.
 	tc2 = startNoSwitchboard(t)
 	defer tc2.close()
-	tc2.client.Login("mjl@mox.example", "testtest")
+	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	tc2.transactf("no", "append nobox (\\Seen) \" 1-Jan-2022 10:10:00 +0100\" {1}")
@@ -81,7 +81,7 @@ func TestAppend(t *testing.T) {
 
 	tclimit := startArgs(t, false, false, true, true, "limit")
 	defer tclimit.close()
-	tclimit.client.Login("limit@mox.example", "testtest")
+	tclimit.client.Login("limit@mox.example", password0)
 	tclimit.client.Select("inbox")
 	// First message of 1 byte is within limits.
 	tclimit.transactf("ok", "append inbox (\\Seen Label1 $label2) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")

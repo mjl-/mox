@@ -11,7 +11,7 @@ func TestListBasic(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 
 	ulist := func(name string, flags ...string) imapclient.UntaggedList {
 		if len(flags) == 0 {
@@ -61,7 +61,7 @@ func TestListExtended(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 
 	ulist := func(name string, flags ...string) imapclient.UntaggedList {
 		if len(flags) == 0 {

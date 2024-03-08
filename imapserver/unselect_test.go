@@ -10,7 +10,7 @@ func TestUnselect(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
 	tc.transactf("bad", "unselect bogus") // Leftover data.

@@ -97,6 +97,9 @@ type testserver struct {
 	tlspkix    bool
 }
 
+const password0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
+const password1 = "tést    "                      // PRECIS normalized, with NFC.
+
 func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *testserver {
 	limitersInit() // Reset rate limiters.
 
@@ -116,7 +119,7 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 	var err error
 	ts.acc, err = store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
-	err = ts.acc.SetPassword(log, "testtest")
+	err = ts.acc.SetPassword(log, password0)
 	tcheck(t, err, "set password")
 	ts.switchStop = store.Switchboard()
 	err = queue.Init()
@@ -285,9 +288,14 @@ func TestSubmission(t *testing.T) {
 		},
 	}
 	for _, fn := range authfns {
-		testAuth(fn, "mjl@mox.example", "test", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8})         // Bad (short) password.
-		testAuth(fn, "mjl@mox.example", "testtesttest", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8}) // Bad password.
-		testAuth(fn, "mjl@mox.example", "testtest", nil)
+		testAuth(fn, "mjl@mox.example", "test", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8})           // Bad (short) password.
+		testAuth(fn, "mjl@mox.example", password0+"test", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8}) // Bad password.
+		testAuth(fn, "mjl@mox.example", password0, nil)
+		testAuth(fn, "mjl@mox.example", password1, nil)
+		testAuth(fn, "móx@mox.example", password0, nil)
+		testAuth(fn, "móx@mox.example", password1, nil)
+		testAuth(fn, "mo\u0301x@mox.example", password0, nil)
+		testAuth(fn, "mo\u0301x@mox.example", password1, nil)
 	}
 }
 
@@ -370,12 +378,12 @@ func TestDelivery(t *testing.T) {
 	ts.run(func(err error, client *smtpclient.Client) {
 		recipients := []string{
 			"mjl@mox.example",
-			"o@mox.example",          // ascii o, as configured
-			"\u2126@mox.example",     // ohm sign, as configured
-			"ω@mox.example",          // lower-case omega, we match case-insensitively and this is the lowercase of ohm (!)
-			"\u03a9@mox.example",     // capital omega, also lowercased to omega.
-			"tést@mox.example",       // NFC
-			"te\u0301st@mox.example", // not NFC, but normalized as tést@, see https://go.dev/blog/normalization
+			"o@mox.example",         // ascii o, as configured
+			"\u2126@mox.example",    // ohm sign, as configured
+			"ω@mox.example",         // lower-case omega, we match case-insensitively and this is the lowercase of ohm (!)
+			"\u03a9@mox.example",    // capital omega, also lowercased to omega.
+			"móx@mox.example",       // NFC
+			"mo\u0301x@mox.example", // not NFC, but normalized as móx@, see https://go.dev/blog/normalization
 		}
 
 		for _, rcptTo := range recipients {
@@ -1258,7 +1266,7 @@ func TestLimitOutgoing(t *testing.T) {
 	defer ts.close()
 
 	ts.user = "mjl@mox.example"
-	ts.pass = "testtest"
+	ts.pass = password0
 	ts.submission = true
 
 	err := ts.acc.DB.Insert(ctxbg, &store.Outgoing{Recipient: "a@other.example", Submitted: time.Now().Add(-24*time.Hour - time.Minute)})
@@ -1413,7 +1421,7 @@ func TestDKIMSign(t *testing.T) {
 
 	ts.submission = true
 	ts.user = "mjl@mox.example"
-	ts.pass = "testtest"
+	ts.pass = password0
 
 	n := 0
 	testSubmit := func(mailFrom, msgFrom string) {
@@ -1541,7 +1549,7 @@ func TestRequireTLS(t *testing.T) {
 	ts.submission = true
 	ts.requiretls = true
 	ts.user = "mjl@mox.example"
-	ts.pass = "testtest"
+	ts.pass = password0
 
 	no := false
 	yes := true
@@ -1692,7 +1700,7 @@ func TestFutureRelease(t *testing.T) {
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
 	ts.tlsmode = smtpclient.TLSSkip
 	ts.user = "mjl@mox.example"
-	ts.pass = "testtest"
+	ts.pass = password0
 	ts.submission = true
 	defer ts.close()
 

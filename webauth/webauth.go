@@ -266,7 +266,7 @@ func Login(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind, coo
 		// We don't set a max-age. These makes cookies per-session. Browsers are rarely
 		// restarted nowadays, and they have "continue where you left off", keeping session
 		// cookies. Our sessions are only valid for max 1 day. Convenience can come from
-		// the browser remember the password.
+		// the browser remembering the password.
 	})
 	// Remove cookie used during login.
 	http.SetCookie(w, &http.Cookie{

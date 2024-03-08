@@ -8,7 +8,7 @@ func TestUnsubscribe(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "unsubscribe")       // Missing param.
 	tc.transactf("bad", "unsubscribe ")      // Missing param.

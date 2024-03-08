@@ -11,7 +11,7 @@ func TestStatus(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "status")                      // Missing param.
 	tc.transactf("bad", "status inbox")                // Missing param.

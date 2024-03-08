@@ -10,7 +10,7 @@ func TestLsub(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "lsub")       // Missing params.
 	tc.transactf("bad", `lsub ""`)    // Missing param.

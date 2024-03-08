@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -962,8 +963,6 @@ func (c *conn) cmdAuth(p *parser) {
 		xsmtpUserErrorf(smtp.C503BadCmdSeq, smtp.SeProto5BadCmdOrSeq1, "authentication not allowed during mail transaction")
 	}
 
-	// todo future: we may want to normalize usernames and passwords, see stringprep in ../rfc/4013:38 and possibly newer mechanisms (though they are opt-in and that may not have happened yet).
-
 	// If authentication fails due to missing derived secrets, we don't hold it against
 	// the connection. There is no way to indicate server support for an authentication
 	// mechanism, but that a mechanism won't work for an account.
@@ -1071,8 +1070,8 @@ func (c *conn) cmdAuth(p *parser) {
 		if len(plain) != 3 {
 			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5BadParams4, "auth data should have 3 nul-separated tokens, got %d", len(plain))
 		}
-		authz := string(plain[0])
-		authc := string(plain[1])
+		authz := norm.NFC.String(string(plain[0]))
+		authc := norm.NFC.String(string(plain[1]))
 		password := string(plain[2])
 
 		if authz != "" && authz != authc {
@@ -1115,6 +1114,7 @@ func (c *conn) cmdAuth(p *parser) {
 		// I-D says maximum length must be 64 bytes. We allow more, for long user names
 		// (domains).
 		username := string(xreadInitial())
+		username = norm.NFC.String(username)
 
 		// Again, client should ignore the challenge, we send the same as the example in
 		// the I-D.
@@ -1156,7 +1156,7 @@ func (c *conn) cmdAuth(p *parser) {
 		if len(t) != 2 || len(t[1]) != 2*md5.Size {
 			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5BadParams4, "malformed cram-md5 response")
 		}
-		addr := t[0]
+		addr := norm.NFC.String(t[0])
 		c.log.Debug("cram-md5 auth", slog.String("address", addr))
 		acc, _, err := store.OpenEmail(c.log, addr)
 		if err != nil {
@@ -1245,13 +1245,14 @@ func (c *conn) cmdAuth(p *parser) {
 		c0 := xreadInitial()
 		ss, err := scram.NewServer(h, c0, cs, channelBindingRequired)
 		xcheckf(err, "starting scram")
-		c.log.Debug("scram auth", slog.String("authentication", ss.Authentication))
-		acc, _, err := store.OpenEmail(c.log, ss.Authentication)
+		authc := norm.NFC.String(ss.Authentication)
+		c.log.Debug("scram auth", slog.String("authentication", authc))
+		acc, _, err := store.OpenEmail(c.log, authc)
 		if err != nil {
 			// todo: we could continue scram with a generated salt, deterministically generated
 			// from the username. that way we don't have to store anything but attackers cannot
 			// learn if an account exists. same for absent scram saltedpassword below.
-			c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
+			c.log.Info("failed authentication attempt", slog.String("username", authc), slog.Any("remote", c.remoteIP))
 			xsmtpUserErrorf(smtp.C454TempAuthFail, smtp.SeSys3Other0, "scram not possible")
 		}
 		defer func() {
@@ -1268,7 +1269,7 @@ func (c *conn) cmdAuth(p *parser) {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
 				if err == bstore.ErrAbsent {
-					c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
+					c.log.Info("failed authentication attempt", slog.String("username", authc), slog.Any("remote", c.remoteIP))
 					xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
 				}
 				xcheckf(err, "fetching credentials")
@@ -1282,8 +1283,8 @@ func (c *conn) cmdAuth(p *parser) {
 				}
 				if len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0 {
 					missingDerivedSecrets = true
-					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", slog.String("address", ss.Authentication))
-					c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
+					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", slog.String("address", authc))
+					c.log.Info("failed authentication attempt", slog.String("username", authc), slog.Any("remote", c.remoteIP))
 					xsmtpUserErrorf(smtp.C454TempAuthFail, smtp.SeSys3Other0, "scram not possible")
 				}
 				return nil
@@ -1302,7 +1303,7 @@ func (c *conn) cmdAuth(p *parser) {
 			c.readline() // Should be "*" for cancellation.
 			if errors.Is(err, scram.ErrInvalidProof) {
 				authResult = "badcreds"
-				c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
+				c.log.Info("failed authentication attempt", slog.String("username", authc), slog.Any("remote", c.remoteIP))
 				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad credentials")
 			}
 			xcheckf(err, "server final")
@@ -1317,7 +1318,7 @@ func (c *conn) cmdAuth(p *parser) {
 		c.setSlow(false)
 		c.account = acc
 		acc = nil // Cancel cleanup.
-		c.username = ss.Authentication
+		c.username = authc
 		// ../rfc/4954:276
 		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
 

@@ -14,8 +14,8 @@ func TestRename(t *testing.T) {
 	tc2 := startNoSwitchboard(t)
 	defer tc2.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
-	tc2.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
+	tc2.client.Login("mjl@mox.example", password0)
 
 	tc.transactf("bad", "rename")      // Missing parameters.
 	tc.transactf("bad", "rename x")    // Missing destination.

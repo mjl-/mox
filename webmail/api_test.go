@@ -59,7 +59,9 @@ func TestAPI(t *testing.T) {
 	log := mlog.New("webmail", nil)
 	acc, err := store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
-	err = acc.SetPassword(log, "test1234")
+	const pw0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
+	const pw1 = "tést    "                      // PRECIS normalized, with NFC.
+	err = acc.SetPassword(log, pw0)
 	tcheck(t, err, "set password")
 	defer func() {
 		err := acc.Close()
@@ -90,7 +92,7 @@ func TestAPI(t *testing.T) {
 	loginctx := context.WithValue(ctxbg, requestInfoCtxKey, loginReqInfo)
 
 	// Missing login token.
-	tneedErrorCode(t, "user:error", func() { api.Login(loginctx, "", "mjl@mox.example", "test1234") })
+	tneedErrorCode(t, "user:error", func() { api.Login(loginctx, "", "mjl@mox.example", pw0) })
 
 	// Login with loginToken.
 	loginCookie := &http.Cookie{Name: "webmaillogin"}
@@ -104,7 +106,7 @@ func TestAPI(t *testing.T) {
 			x := recover()
 			expErr := len(expErrCodes) > 0
 			if (x != nil) != expErr {
-				t.Fatalf("got %v, expected codes %v", x, expErrCodes)
+				t.Fatalf("got %v, expected codes %v, for username %q, password %q", x, expErrCodes, username, password)
 			}
 			if x == nil {
 				return
@@ -117,18 +119,21 @@ func TestAPI(t *testing.T) {
 
 		api.Login(loginctx, loginCookie.Value, username, password)
 	}
-	testLogin("mjl@mox.example", "test1234")
-	testLogin("mjl@mox.example", "bad", "user:loginFailed")
-	testLogin("nouser@mox.example", "test1234", "user:loginFailed")
-	testLogin("nouser@bad.example", "test1234", "user:loginFailed")
+	testLogin("mjl@mox.example", pw0)
+	testLogin("mjl@mox.example", pw1)
+	testLogin("móx@mox.example", pw1)       // NFC username
+	testLogin("mo\u0301x@mox.example", pw1) // NFD username
+	testLogin("mjl@mox.example", pw1+" ", "user:loginFailed")
+	testLogin("nouser@mox.example", pw0, "user:loginFailed")
+	testLogin("nouser@bad.example", pw0, "user:loginFailed")
 	for i := 3; i < 10; i++ {
-		testLogin("bad@bad.example", "test1234", "user:loginFailed")
+		testLogin("bad@bad.example", pw0, "user:loginFailed")
 	}
 	// Ensure rate limiter is triggered, also for slow tests.
 	for i := 0; i < 10; i++ {
-		testLogin("bad@bad.example", "test1234", "user:loginFailed", "user:error")
+		testLogin("bad@bad.example", pw0, "user:loginFailed", "user:error")
 	}
-	testLogin("bad@bad.example", "test1234", "user:error")
+	testLogin("bad@bad.example", pw0, "user:error")
 
 	// Context with different IP, for clear rate limit history.
 	reqInfo := requestInfo{"mjl@mox.example", "mjl", "", nil, &http.Request{RemoteAddr: "127.0.0.1:1234"}}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/text/secure/precis"
 
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -48,6 +49,11 @@ func (a *adminSessionAuth) login(ctx context.Context, log mlog.Log, username, pa
 		return false, "", fmt.Errorf("reading password file: %v", err)
 	}
 	passwordhash := strings.TrimSpace(string(buf))
+	// Transform with precis, if valid. ../rfc/8265:679
+	pw, err := precis.OpaqueString.String(password)
+	if err == nil {
+		password = pw
+	}
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordhash), []byte(password)); err != nil {
 		return false, "", nil
 	}

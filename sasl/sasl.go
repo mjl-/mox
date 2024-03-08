@@ -10,6 +10,8 @@ import (
 	"hash"
 	"strings"
 
+	"golang.org/x/text/secure/precis"
+
 	"github.com/mjl-/mox/scram"
 )
 
@@ -52,6 +54,7 @@ var _ Client = (*clientPlain)(nil)
 // PLAIN is specified in RFC 4616, The PLAIN Simple Authentication and Security
 // Layer (SASL) Mechanism.
 func NewClientPlain(username, password string) Client {
+	// No "precis" processing, remote can clean password up. ../rfc/8265:679
 	return &clientPlain{username, password, 0}
 }
 
@@ -80,6 +83,7 @@ var _ Client = (*clientLogin)(nil)
 //
 // See https://datatracker.ietf.org/doc/html/draft-murchison-sasl-login-00
 func NewClientLogin(username, password string) Client {
+	// No "precis" processing, remote can clean password up. ../rfc/8265:679
 	return &clientLogin{username, password, 0}
 }
 
@@ -99,6 +103,17 @@ func (a *clientLogin) Next(fromServer []byte) (toServer []byte, last bool, rerr 
 	}
 }
 
+// Cleanup password with precis, like remote should have done. If the password
+// appears invalid, we'll return the original, there is a chance the server also
+// doesn't enforce requirements and accepts it. ../rfc/8265:679
+func precisPassword(password string) string {
+	pw, err := precis.OpaqueString.String(password)
+	if err != nil {
+		return password
+	}
+	return pw
+}
+
 type clientCRAMMD5 struct {
 	Username, Password string
 	step               int
@@ -111,6 +126,7 @@ var _ Client = (*clientCRAMMD5)(nil)
 // CRAM-MD5 is specified in RFC 2195, IMAP/POP AUTHorize Extension for Simple
 // Challenge/Response.
 func NewClientCRAMMD5(username, password string) Client {
+	password = precisPassword(password)
 	return &clientCRAMMD5{username, password, 0}
 }
 
@@ -199,6 +215,7 @@ var _ Client = (*clientSCRAMSHA)(nil)
 // SCRAM-SHA-1 is specified in RFC 5802, "Salted Challenge Response Authentication
 // Mechanism (SCRAM) SASL and GSS-API Mechanisms".
 func NewClientSCRAMSHA1(username, password string, noServerPlus bool) Client {
+	password = precisPassword(password)
 	return &clientSCRAMSHA{username, password, sha1.New, false, tls.ConnectionState{}, noServerPlus, "SCRAM-SHA-1", 0, nil}
 }
 
@@ -210,6 +227,7 @@ func NewClientSCRAMSHA1(username, password string, noServerPlus bool) Client {
 // SCRAM-SHA-1-PLUS is specified in RFC 5802, "Salted Challenge Response
 // Authentication Mechanism (SCRAM) SASL and GSS-API Mechanisms".
 func NewClientSCRAMSHA1PLUS(username, password string, cs tls.ConnectionState) Client {
+	password = precisPassword(password)
 	return &clientSCRAMSHA{username, password, sha1.New, true, cs, false, "SCRAM-SHA-1-PLUS", 0, nil}
 }
 
@@ -224,6 +242,7 @@ func NewClientSCRAMSHA1PLUS(username, password string, cs tls.ConnectionState) C
 // SCRAM-SHA-256 is specified in RFC 7677, "SCRAM-SHA-256 and SCRAM-SHA-256-PLUS
 // Simple Authentication and Security Layer (SASL) Mechanisms".
 func NewClientSCRAMSHA256(username, password string, noServerPlus bool) Client {
+	password = precisPassword(password)
 	return &clientSCRAMSHA{username, password, sha256.New, false, tls.ConnectionState{}, noServerPlus, "SCRAM-SHA-256", 0, nil}
 }
 
@@ -235,6 +254,7 @@ func NewClientSCRAMSHA256(username, password string, noServerPlus bool) Client {
 // SCRAM-SHA-256-PLUS is specified in RFC 7677, "SCRAM-SHA-256 and SCRAM-SHA-256-PLUS
 // Simple Authentication and Security Layer (SASL) Mechanisms".
 func NewClientSCRAMSHA256PLUS(username, password string, cs tls.ConnectionState) Client {
+	password = precisPassword(password)
 	return &clientSCRAMSHA{username, password, sha256.New, true, cs, false, "SCRAM-SHA-256-PLUS", 0, nil}
 }
 

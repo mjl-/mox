@@ -45,6 +45,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/text/secure/precis"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/mjl-/bstore"
@@ -1473,6 +1474,16 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 // SetPassword saves a new password for this account. This password is used for
 // IMAP, SMTP (submission) sessions and the HTTP account web page.
 func (a *Account) SetPassword(log mlog.Log, password string) error {
+	password, err := precis.OpaqueString.String(password)
+	if err != nil {
+		return fmt.Errorf(`password not allowed by "precis"`)
+	}
+
+	if len(password) < 8 {
+		// We actually check for bytes...
+		return fmt.Errorf("password must be at least 8 characters long")
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("generating password hash: %w", err)
@@ -2080,6 +2091,11 @@ func manageAuthCache() {
 //
 // The email address may contain a catchall separator.
 func OpenEmailAuth(log mlog.Log, email string, password string) (acc *Account, rerr error) {
+	password, err := precis.OpaqueString.String(password)
+	if err != nil {
+		return nil, ErrUnknownCredentials
+	}
+
 	acc, _, rerr = OpenEmail(log, email)
 	if rerr != nil {
 		return

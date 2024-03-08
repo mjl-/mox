@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/pbkdf2"
+	"golang.org/x/text/secure/precis"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -84,9 +85,20 @@ func MakeRandom() []byte {
 	return buf
 }
 
+// Cleanup password with precis, like remote should have done. If the password
+// appears invalid, we'll return the original, there is a chance the server also
+// doesn't enforce requirements and accepts it. ../rfc/8265:679
+func precisPassword(password string) string {
+	pw, err := precis.OpaqueString.String(password)
+	if err != nil {
+		return password
+	}
+	return pw
+}
+
 // SaltPassword returns a salted password.
 func SaltPassword(h func() hash.Hash, password string, salt []byte, iterations int) []byte {
-	password = norm.NFC.String(password)
+	password = precisPassword(password)
 	return pbkdf2.Key([]byte(password), salt, iterations, h().Size(), h)
 }
 
