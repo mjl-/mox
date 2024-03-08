@@ -28,7 +28,7 @@ test-race:
 
 # note: if testdata/upgradetest.mbox.gz exists, its messages will be imported
 # during tests. helpful for performance/resource consumption tests.
-test-upgrade:
+test-upgrade: build
 	nice ./test-upgrade.sh
 
 check:
