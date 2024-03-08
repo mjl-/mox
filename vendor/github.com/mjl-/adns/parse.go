@@ -142,28 +142,6 @@ func dtoi(s string) (n int, i int, ok bool) {
 	return n, i, true
 }
 
-// Number of occurrences of b in s.
-func count(s string, b byte) int {
-	n := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == b {
-			n++
-		}
-	}
-	return n
-}
-
-// Index of rightmost occurrence of b in s.
-func last(s string, b byte) int {
-	i := len(s)
-	for i--; i >= 0; i-- {
-		if s[i] == b {
-			break
-		}
-	}
-	return i
-}
-
 // hasUpperCase tells whether the given string contains at least one upper-case.
 func hasUpperCase(s string) bool {
 	for i := range s {

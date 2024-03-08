@@ -7,10 +7,12 @@ package adns
 import (
 	"context"
 	"net"
+
+	"github.com/mjl-/adns/internal/bytealg"
 )
 
 func parseNetwork(ctx context.Context, network string, needsProto bool) (afnet string, proto int, err error) {
-	i := last(network, ':')
+	i := bytealg.LastIndexByteString(network, ':')
 	if i < 0 { // no colon
 		switch network {
 		case "tcp", "tcp4", "tcp6":

@@ -7,7 +7,7 @@ github.com/cespare/xxhash/v2
 # github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0
 ## explicit; go 1.19
 github.com/matttproud/golang_protobuf_extensions/v2/pbutil
-# github.com/mjl-/adns v0.0.0-20231109160910-82839fe3e6ae
+# github.com/mjl-/adns v0.0.0-20240308133139-6bfb89c3f854
 ## explicit; go 1.20
 github.com/mjl-/adns
 github.com/mjl-/adns/internal/bytealg
