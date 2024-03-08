@@ -85,9 +85,6 @@ func CanonicalLocalpart(localpart smtp.Localpart, d config.Domain) (smtp.Localpa
 	if d.LocalpartCatchallSeparator != "" {
 		t := strings.SplitN(string(localpart), d.LocalpartCatchallSeparator, 2)
 		localpart = smtp.Localpart(t[0])
-		if localpart == "" {
-			return "", fmt.Errorf("empty localpart")
-		}
 	}
 
 	if !d.LocalpartCaseSensitive {

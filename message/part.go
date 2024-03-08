@@ -104,7 +104,7 @@ type Envelope struct {
 // Address as used in From and To headers.
 type Address struct {
 	Name string // Free-form name for display in mail applications.
-	User string // Localpart.
+	User string // Localpart, encoded as string. Must be parsed before using as Localpart.
 	Host string // Domain in ASCII.
 }
 

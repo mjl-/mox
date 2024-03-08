@@ -116,7 +116,11 @@ func Verify(elog *slog.Logger, r io.ReaderAt, key []byte, period time.Duration) 
 	if err != nil {
 		return fmt.Errorf("%w: from address with bad domain: %v", ErrFrom, err)
 	}
-	addr := smtp.Address{Localpart: smtp.Localpart(from.User), Domain: d}.Pack(true)
+	lp, err := smtp.ParseLocalpart(from.User)
+	if err != nil {
+		return fmt.Errorf("%w: from address with bad localpart: %v", ErrFrom, err)
+	}
+	addr := smtp.Address{Localpart: lp, Domain: d}.Pack(true)
 
 	buf, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {

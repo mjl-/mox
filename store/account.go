@@ -667,11 +667,11 @@ func (m *Message) JunkFlagsForMailbox(mb Mailbox, conf config.Account) {
 // copying messages from some place).
 type Recipient struct {
 	ID        int64
-	MessageID int64          `bstore:"nonzero,ref Message"` // Ref gives it its own index, useful for fast removal as well.
-	Localpart smtp.Localpart `bstore:"nonzero"`
-	Domain    string         `bstore:"nonzero,index Domain+Localpart"` // Unicode string.
-	OrgDomain string         `bstore:"nonzero,index"`                  // Unicode string.
-	Sent      time.Time      `bstore:"nonzero"`
+	MessageID int64     `bstore:"nonzero,ref Message"`            // Ref gives it its own index, useful for fast removal as well.
+	Localpart string    `bstore:"nonzero"`                        // Encoded localpart.
+	Domain    string    `bstore:"nonzero,index Domain+Localpart"` // Unicode string.
+	OrgDomain string    `bstore:"nonzero,index"`                  // Unicode string.
+	Sent      time.Time `bstore:"nonzero"`
 }
 
 // Outgoing is a message submitted for delivery from the queue. Used to enforce
@@ -1416,9 +1416,14 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 				log.Debugx("parsing domain in to/cc/bcc address", err, slog.Any("address", addr))
 				continue
 			}
+			lp, err := smtp.ParseLocalpart(addr.User)
+			if err != nil {
+				log.Debugx("parsing localpart in to/cc/bcc address", err, slog.Any("address", addr))
+				continue
+			}
 			mr := Recipient{
 				MessageID: m.ID,
-				Localpart: smtp.Localpart(addr.User),
+				Localpart: lp.String(),
 				Domain:    d.Name(),
 				OrgDomain: publicsuffix.Lookup(context.TODO(), log.Logger, d).Name(),
 				Sent:      sent,

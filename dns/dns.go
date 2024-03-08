@@ -30,7 +30,8 @@ type Domain struct {
 	// letters/digits/hyphens) labels. Always in lower case. No trailing dot.
 	ASCII string
 
-	// Name as U-labels. Empty if this is an ASCII-only domain. No trailing dot.
+	// Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No
+	// trailing dot.
 	Unicode string
 }
 
@@ -87,7 +88,8 @@ func (d Domain) IsZero() bool {
 // labels (unicode).
 // Names are IDN-canonicalized and lower-cased.
 // Characters in unicode can be replaced by equivalents. E.g. "Ⓡ" to "r". This
-// means you should only compare parsed domain names, never strings directly.
+// means you should only compare parsed domain names, never unparsed strings
+// directly.
 func ParseDomain(s string) (Domain, error) {
 	if strings.HasSuffix(s, ".") {
 		return Domain{}, errTrailingDot

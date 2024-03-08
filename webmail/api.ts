@@ -106,7 +106,7 @@ export interface Envelope {
 // Address as used in From and To headers.
 export interface Address {
 	Name: string  // Free-form name for display in mail applications.
-	User: string  // Localpart.
+	User: string  // Localpart, encoded as string. Must be parsed before using as Localpart.
 	Host: string  // Domain in ASCII.
 }
 
@@ -124,7 +124,7 @@ export interface MessageAddress {
 // trailing dot. When using with StrictResolver, add the trailing dot.
 export interface Domain {
 	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.
-	Unicode: string  // Name as U-labels. Empty if this is an ASCII-only domain. No trailing dot.
+	Unicode: string  // Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.
 }
 
 // SubmitMessage is an email message to be sent to one or more recipients.
@@ -516,6 +516,7 @@ export enum SecurityResult {
 // Localpart is a decoded local part of an email address, before the "@".
 // For quoted strings, values do not hold the double quote or escaping backslashes.
 // An empty string can be a valid localpart.
+// Localparts are in Unicode NFC.
 export type Localpart = string
 
 export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"SpecialUse":true,"SubmitMessage":true}

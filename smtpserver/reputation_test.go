@@ -125,7 +125,13 @@ func TestReputation(t *testing.T) {
 				rcptToDomain, err := dns.ParseDomain(hm.RcptToDomain)
 				tcheck(t, err, "parse rcptToDomain")
 				rcptToOrgDomain := publicsuffix.Lookup(ctxbg, log.Logger, rcptToDomain)
-				r := store.Recipient{MessageID: hm.ID, Localpart: hm.RcptToLocalpart, Domain: hm.RcptToDomain, OrgDomain: rcptToOrgDomain.Name(), Sent: hm.Received}
+				r := store.Recipient{
+					MessageID: hm.ID,
+					Localpart: hm.RcptToLocalpart.String(),
+					Domain:    hm.RcptToDomain,
+					OrgDomain: rcptToOrgDomain.Name(),
+					Sent:      hm.Received,
+				}
 				err = tx.Insert(&r)
 				tcheck(t, err, "insert recipient")
 			}

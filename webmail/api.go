@@ -1347,7 +1347,7 @@ func (Webmail) CompleteRecipient(ctx context.Context, search string) ([]string, 
 	acc.WithRLock(func() {
 		xdbread(ctx, acc, func(tx *bstore.Tx) {
 			type key struct {
-				localpart smtp.Localpart
+				localpart string
 				domain    string
 			}
 			seen := map[key]bool{}
@@ -1360,7 +1360,7 @@ func (Webmail) CompleteRecipient(ctx context.Context, search string) ([]string, 
 					return nil
 				}
 				// todo: we should have the address including name available in the database for searching. Will result in better matching, and also for the name.
-				address := fmt.Sprintf("<%s@%s>", r.Localpart.String(), r.Domain)
+				address := fmt.Sprintf("<%s@%s>", r.Localpart, r.Domain)
 				if !strings.Contains(strings.ToLower(address), search) {
 					return nil
 				}
@@ -1382,7 +1382,7 @@ func (Webmail) CompleteRecipient(ctx context.Context, search string) ([]string, 
 					xcheckf(ctx, err, "parsing domain of recipient")
 
 					var found bool
-					lp := r.Localpart.String()
+					lp := r.Localpart
 					checkAddrs := func(l []message.Address) {
 						if found {
 							return

@@ -352,25 +352,55 @@ func TestDelivery(t *testing.T) {
 
 	// Set up iprev to get delivery from unknown user to be accepted.
 	resolver.PTR["127.0.0.10"] = []string{"example.org."}
+
+	// Only ascii o@ is configured, not the greek and cyrillic lookalikes.
 	ts.run(func(err error, client *smtpclient.Client) {
 		mailFrom := "remote@example.org"
-		rcptTo := "mjl@mox.example"
+		rcptTo := "ο@mox.example" // omicron \u03bf, looks like the configured o@
+		msg := strings.ReplaceAll(deliverMessage, "mjl@mox.example", rcptTo)
 		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, true, false)
 		}
-		tcheck(t, err, "deliver to remote")
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
+			t.Fatalf("deliver to omicron @ instead of ascii o @, got err %v, expected smtpclient.Error with code %d", err, smtp.C550MailboxUnavail)
+		}
+	})
 
-		changes := make(chan []store.Change)
-		go func() {
-			changes <- ts.comm.Get()
-		}()
+	ts.run(func(err error, client *smtpclient.Client) {
+		recipients := []string{
+			"mjl@mox.example",
+			"o@mox.example",          // ascii o, as configured
+			"\u2126@mox.example",     // ohm sign, as configured
+			"ω@mox.example",          // lower-case omega, we match case-insensitively and this is the lowercase of ohm (!)
+			"\u03a9@mox.example",     // capital omega, also lowercased to omega.
+			"tést@mox.example",       // NFC
+			"te\u0301st@mox.example", // not NFC, but normalized as tést@, see https://go.dev/blog/normalization
+		}
 
-		timer := time.NewTimer(time.Second)
-		defer timer.Stop()
-		select {
-		case <-changes:
-		case <-timer.C:
-			t.Fatalf("no delivery in 1s")
+		for _, rcptTo := range recipients {
+			// Ensure SMTP RCPT TO and message address headers are the same, otherwise the junk
+			// filter treats us more strictly.
+			msg := strings.ReplaceAll(deliverMessage, "mjl@mox.example", rcptTo)
+
+			mailFrom := "remote@example.org"
+			if err == nil {
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, true, false)
+			}
+			tcheck(t, err, "deliver to remote")
+
+			changes := make(chan []store.Change)
+			go func() {
+				changes <- ts.comm.Get()
+			}()
+
+			timer := time.NewTimer(time.Second)
+			defer timer.Stop()
+			select {
+			case <-changes:
+			case <-timer.C:
+				t.Fatalf("no delivery in 1s")
+			}
 		}
 	})
 
@@ -1005,7 +1035,6 @@ func TestTLSReport(t *testing.T) {
 		},
 		TXT: map[string][]string{
 			"testsel._domainkey.example.org.": {dkimTxt},
-			"example.org.":                    {"v=spf1 ip4:127.0.0.10 -all"},
 			"_dmarc.example.org.":             {"v=DMARC1;p=reject;rua=mailto:dmarcrpt@example.org"},
 		},
 		PTR: map[string][]string{

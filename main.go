@@ -640,18 +640,20 @@ must be set if and only if account does not yet exist.
 
 	d := xparseDomain(args[0], "domain")
 	mustLoadConfig()
-	var localpart string
+	var localpart smtp.Localpart
 	if len(args) == 3 {
-		localpart = args[2]
+		var err error
+		localpart, err = smtp.ParseLocalpart(args[2])
+		xcheckf(err, "parsing localpart")
 	}
 	ctlcmdConfigDomainAdd(xctl(), d, args[1], localpart)
 }
 
-func ctlcmdConfigDomainAdd(ctl *ctl, domain dns.Domain, account, localpart string) {
+func ctlcmdConfigDomainAdd(ctl *ctl, domain dns.Domain, account string, localpart smtp.Localpart) {
 	ctl.xwrite("domainadd")
 	ctl.xwrite(domain.Name())
 	ctl.xwrite(account)
-	ctl.xwrite(localpart)
+	ctl.xwrite(string(localpart))
 	ctl.xreadok()
 	fmt.Printf("domain added, remember to add dns records, see:\n\nmox config dnsrecords %s\nmox config dnscheck %s\n", domain.Name(), domain.Name())
 }
@@ -2128,9 +2130,10 @@ headers prepended.
 	if len(p.Envelope.From) != 1 {
 		log.Fatalf("found %d from headers, need exactly 1", len(p.Envelope.From))
 	}
-	localpart := smtp.Localpart(p.Envelope.From[0].User)
+	localpart, err := smtp.ParseLocalpart(p.Envelope.From[0].User)
+	xcheckf(err, "parsing localpart of address in from-header")
 	dom, err := dns.ParseDomain(p.Envelope.From[0].Host)
-	xcheckf(err, "parsing domain in from header")
+	xcheckf(err, "parsing domain of address in from-header")
 
 	mustLoadConfig()
 

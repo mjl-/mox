@@ -1376,7 +1376,7 @@
 				},
 				{
 					"Name": "Unicode",
-					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain. No trailing dot.",
+					"Docs": "Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.",
 					"Typewords": [
 						"string"
 					]
@@ -4639,7 +4639,7 @@
 		},
 		{
 			"Name": "Localpart",
-			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.",
+			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.\nLocalparts are in Unicode NFC.",
 			"Values": null
 		},
 		{

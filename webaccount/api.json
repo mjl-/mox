@@ -172,7 +172,7 @@
 				},
 				{
 					"Name": "Unicode",
-					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain. No trailing dot.",
+					"Docs": "Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.",
 					"Typewords": [
 						"string"
 					]

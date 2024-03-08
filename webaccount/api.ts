@@ -8,7 +8,7 @@ namespace api {
 // trailing dot. When using with StrictResolver, add the trailing dot.
 export interface Domain {
 	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.
-	Unicode: string  // Name as U-labels. Empty if this is an ASCII-only domain. No trailing dot.
+	Unicode: string  // Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.
 }
 
 export interface Destination {

@@ -388,7 +388,8 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 				if err != nil {
 					continue
 				}
-				if dom == d.rcptAcc.rcptTo.IPDomain.Domain && smtp.Localpart(a.User) == d.rcptAcc.rcptTo.Localpart {
+				lp, err := smtp.ParseLocalpart(a.User)
+				if err == nil && dom == d.rcptAcc.rcptTo.IPDomain.Domain && lp == d.rcptAcc.rcptTo.Localpart {
 					return true
 				}
 			}

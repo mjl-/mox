@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/unicode/norm"
+
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/smtp"
@@ -342,7 +344,7 @@ func (p *parser) xlocalpart() smtp.Localpart {
 		// ../rfc/5321:3486
 		p.xerrorf("localpart longer than 64 octets")
 	}
-	return smtp.Localpart(s)
+	return smtp.Localpart(norm.NFC.String(s))
 }
 
 // ../rfc/5321:2324

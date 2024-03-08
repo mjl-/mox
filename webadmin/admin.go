@@ -36,6 +36,7 @@ import (
 	_ "embed"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/mjl-/adns"
 
@@ -1880,7 +1881,7 @@ func (Admin) DomainAdd(ctx context.Context, domain, accountName, localpart strin
 	d, err := dns.ParseDomain(domain)
 	xcheckuserf(ctx, err, "parsing domain")
 
-	err = mox.DomainAdd(ctx, d, accountName, smtp.Localpart(localpart))
+	err = mox.DomainAdd(ctx, d, accountName, smtp.Localpart(norm.NFC.String(localpart)))
 	xcheckf(ctx, err, "adding domain")
 }
 
