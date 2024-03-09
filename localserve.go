@@ -66,6 +66,11 @@ during those commands instead of during "data".
 	if userConfDir == "" {
 		userConfDir = "."
 	}
+	// If we are being run to gather help output, show a placeholder directory
+	// instead of evaluating to the actual userconfigdir on the host os.
+	if c._gather {
+		userConfDir = "$userconfigdir"
+	}
 
 	var dir, ip string
 	var initOnly bool

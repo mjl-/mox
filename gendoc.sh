@@ -25,15 +25,9 @@ any parameters. Followed by the help and usage information for each command.
 
 EOF
 
-./mox 2>&1 | sed 's/^\( *\|usage: \)/\t/'
-
-cat <<EOF
-
-EOF
-
-# setting XDG_CONFIG_HOME ensures "mox localserve" has reasonable default
-# values in its help output.
-XDG_CONFIG_HOME='$userconfigdir' ./mox helpall 2>&1
+./mox 2>&1 | sed -e 's/^usage: */\t/' -e 's/^  */\t/'
+echo
+./mox helpall 2>&1
 
 cat <<EOF
 */
