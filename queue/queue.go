@@ -253,6 +253,14 @@ func Add(ctx context.Context, log mlog.Log, senderAccount string, msgFile *os.Fi
 		if qm.ID != 0 {
 			return fmt.Errorf("id of queued messages must be 0")
 		}
+		if qm.RecipientDomainStr == "" {
+			return fmt.Errorf("recipient domain cannot be empty")
+		}
+		// Sanity check, internal consistency.
+		rcptDom := formatIPDomain(qm.RecipientDomain)
+		if qm.RecipientDomainStr != rcptDom {
+			return fmt.Errorf("mismatch between recipient domain and string form of domain")
+		}
 	}
 
 	if Localserve {

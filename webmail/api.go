@@ -226,7 +226,7 @@ type File struct {
 func parseAddress(msghdr string) (message.NameAddress, error) {
 	a, err := mail.ParseAddress(msghdr)
 	if err != nil {
-		return message.NameAddress{}, nil
+		return message.NameAddress{}, err
 	}
 
 	// todo: parse more fully according to ../rfc/5322:959
@@ -341,12 +341,12 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	}
 	if err != nil && (errors.Is(err, mox.ErrAccountNotFound) || errors.Is(err, mox.ErrDomainNotFound)) {
 		metricSubmission.WithLabelValues("badfrom").Inc()
-		xcheckuserf(ctx, errors.New("address not found"), "looking from address for account")
+		xcheckuserf(ctx, errors.New("address not found"), `looking up "from" address for account`)
 	}
 	xcheckf(ctx, err, "checking if from address is allowed")
 
 	if len(recipients) == 0 {
-		xcheckuserf(ctx, fmt.Errorf("no recipients"), "composing message")
+		xcheckuserf(ctx, errors.New("no recipients"), "composing message")
 	}
 
 	// Check outgoing message rate limit.
@@ -657,7 +657,8 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		}
 		qml[i] = qm
 	}
-	if err := queue.Add(ctx, log, reqInfo.AccountName, dataFile, qml...); err != nil {
+	err = queue.Add(ctx, log, reqInfo.AccountName, dataFile, qml...)
+	if err != nil {
 		metricSubmission.WithLabelValues("queueerror").Inc()
 	}
 	xcheckf(ctx, err, "adding messages to the delivery queue")
