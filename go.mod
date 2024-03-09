@@ -3,7 +3,7 @@ module github.com/mjl-/mox
 go 1.21
 
 require (
-	github.com/mjl-/adns v0.0.0-20240308133139-6bfb89c3f854
+	github.com/mjl-/adns v0.0.0-20240309142737-2a1aacf346dc
 	github.com/mjl-/autocert v0.0.0-20231214125928-31b7400acb05
 	github.com/mjl-/bstore v0.0.4
 	github.com/mjl-/sconf v0.0.5
