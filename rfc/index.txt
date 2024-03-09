@@ -31,8 +31,7 @@ Also see IANA assignments, https://www.iana.org/protocols
 2183	Yes	-	Communicating Presentation Information in Internet Messages: The Content-Disposition Header Field
 2231	Yes	-	MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
 3629	-	-	UTF-8, a transformation format of ISO 10646
-3676	No	- 	The Text/Plain Format and DelSp Parameters
-3834	Roadmap	-	Recommendations for Automatic Responses to Electronic Mail
+3676	No	-	The Text/Plain Format and DelSp Parameters
 5234	-	-	Augmented BNF for Syntax Specifications: ABNF
 5322	Yes	-	Internet Message Format
 5598	-	-	Internet Mail Architecture
@@ -246,7 +245,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 # Mailing list and automated responses
 2369	?	-	The Use of URLs as Meta-Syntax for Core Mail List Commands and their Transport through Message Header Fields
 2919	?	-	List-Id: A Structured Field and Namespace for the Identification of Mailing Lists
-3834 	?	-	Recommendations for Automatic Responses to Electronic Mail
+3834	?	-	Recommendations for Automatic Responses to Electronic Mail
 8058	?	-	Signaling One-Click Functionality for List Email Headers
 
 # Sieve
