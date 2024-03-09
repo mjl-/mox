@@ -341,7 +341,8 @@ const index = async () => {
 
 		dom.h2('Addresses'),
 		dom.ul(
-			Object.entries(destinations).sort().map(t =>
+			Object.entries(destinations || {}).length === 0 ? dom.li('(None, login disabled)') : [],
+			Object.entries(destinations || {}).sort().map(t =>
 				dom.li(
 					dom.a(t[0], attr.href('#destinations/'+t[0])),
 					t[0].startsWith('@') ? ' (catchall)' : [],
@@ -689,7 +690,7 @@ const destination = async (name: string) => {
 	let fullName: HTMLInputElement
 	let saveButton: HTMLButtonElement
 
-	const addresses = [name, ...Object.keys(destinations).filter(a => !a.startsWith('@') && a !== name)]
+	const addresses = [name, ...Object.keys(destinations || {}).filter(a => !a.startsWith('@') && a !== name)]
 
 	dom._kids(page,
 		crumbs(

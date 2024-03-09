@@ -836,10 +836,10 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 					MinimumAttempts: 0
 					Transport:
 
-	# Account represent mox users, each with a password and one or more email
-	# addresses to which email can be delivered (possibly different domains). Each
-	# account has its own on-disk directory holding its messages and index database.
-	# An account name has is not an email address.
+	# Accounts represent mox users, each with a password and email address(es) to
+	# which email can be delivered (possibly at different domains). Each account has
+	# its own on-disk directory holding its messages and index database. An account
+	# name is not an email address.
 	Accounts:
 		x:
 
@@ -854,11 +854,13 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# be overridden per destination. (optional)
 			FullName:
 
-			# Destinations, keys are email addresses (with IDNA domains). If the address is of
-			# the form '@domain', i.e. with localpart missing, it serves as a catchall for the
-			# domain, matching all messages that are not explicitly configured. Deprecated
-			# behaviour: If the address is not a full address but a localpart, it is combined
-			# with Domain to form a full address.
+			# Destinations, keys are email addresses (with IDNA domains). All destinations are
+			# allowed for logging in with IMAP/SMTP/webmail. If no destinations are
+			# configured, the account can not login. If the address is of the form '@domain',
+			# i.e. with localpart missing, it serves as a catchall for the domain, matching
+			# all messages that are not explicitly configured. Deprecated behaviour: If the
+			# address is not a full address but a localpart, it is combined with Domain to
+			# form a full address. (optional)
 			Destinations:
 				x:
 

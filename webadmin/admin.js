@@ -1761,7 +1761,7 @@ const accounts = async () => {
 		if (!accountModified) {
 			account.value = email.value.split('@')[0];
 		}
-	})), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account name', attr.title('An account has one or more email addresses, a password. Its messages and the message index database are are stored in the file system in a directory with the name of the account. An account name is not an email address. Use a name like a unix user name, or the localpart (the part before the "@") of the initial address.')), dom.br(), account = dom.input(attr.required(''), function change() {
+	})), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account name', attr.title('An account has a password, and email address(es) (possibly at different domains). Its messages and the message index database are are stored in the file system in a directory with the name of the account. An account name is not an email address. Use a name like a unix user name, or the localpart (the part before the "@") of the initial address.')), dom.br(), account = dom.input(attr.required(''), function change() {
 		accountModified = true;
 	})), ' ', dom.submitbutton('Add account', attr.title('The account will be added and the config reloaded.')))));
 };
@@ -1826,7 +1826,7 @@ const account = async (name) => {
 		}
 		return '' + v;
 	};
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), name), dom.div('Default domain: ', config.Domain ? dom.a(config.Domain, attr.href('#domains/' + config.Domain)) : '(none)'), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Action'))), dom.tbody(Object.keys(config.Destinations).map(k => {
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), name), dom.div('Default domain: ', config.Domain ? dom.a(config.Domain, attr.href('#domains/' + config.Domain)) : '(none)'), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Action'))), dom.tbody(Object.keys(config.Destinations || {}).length === 0 ? dom.tr(dom.td(attr.colspan('2'), '(None, login disabled)')) : [], Object.keys(config.Destinations || {}).map(k => {
 		let v = k;
 		const t = k.split('@');
 		if (t.length > 1) {
