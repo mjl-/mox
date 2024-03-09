@@ -287,7 +287,8 @@ done
 - Send and receive email through the major webmail providers, check headers.
 - Send and receive email with imap4/smtp clients.
 - Check DNS check admin page.
-- Check with https://internet.nl
+- Check with https://internet.nl.
+- Add release to the News section of website/index.md.
 - Create git tag, push code.
 - Publish new docker image.
 - Publish signed release notes for updates.xmox.nl and update DNS record.
