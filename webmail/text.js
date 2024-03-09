@@ -218,6 +218,7 @@ const [dom, style, attr, prop] = (function () {
 		action: (s) => _attr('action', s),
 		method: (s) => _attr('method', s),
 		autocomplete: (s) => _attr('autocomplete', s),
+		list: (s) => _attr('list', s),
 	};
 	const style = (x) => { return { _styles: x }; };
 	const prop = (x) => { return { _props: x }; };

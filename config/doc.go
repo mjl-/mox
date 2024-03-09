@@ -836,8 +836,10 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 					MinimumAttempts: 0
 					Transport:
 
-	# Accounts to which email can be delivered. An account can accept email for
-	# multiple domains, for multiple localparts, and deliver to multiple mailboxes.
+	# Account represent mox users, each with a password and one or more email
+	# addresses to which email can be delivered (possibly different domains). Each
+	# account has its own on-disk directory holding its messages and index database.
+	# An account name has is not an email address.
 	Accounts:
 		x:
 

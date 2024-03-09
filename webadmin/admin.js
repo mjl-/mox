@@ -218,6 +218,7 @@ const [dom, style, attr, prop] = (function () {
 		action: (s) => _attr('action', s),
 		method: (s) => _attr('method', s),
 		autocomplete: (s) => _attr('autocomplete', s),
+		list: (s) => _attr('list', s),
 	};
 	const style = (x) => { return { _styles: x }; };
 	const prop = (x) => { return { _props: x }; };
@@ -1602,10 +1603,11 @@ const formatSize = (n) => {
 	return n + ' bytes';
 };
 const index = async () => {
-	const [domains, queueSize, checkUpdatesEnabled] = await Promise.all([
+	const [domains, queueSize, checkUpdatesEnabled, accounts] = await Promise.all([
 		client.Domains(),
 		client.QueueSize(),
 		client.CheckUpdatesEnabled(),
+		client.Accounts(),
 	]);
 	let fieldset;
 	let domain;
@@ -1631,7 +1633,7 @@ const index = async () => {
 			fieldset.disabled = false;
 		}
 		window.location.hash = '#domains/' + domain.value;
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Domain', dom.br(), domain = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), 'Postmaster/reporting account', dom.br(), account = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Localpart (optional)', attr.title('Must be set if and only if account does not yet exist. The localpart for the user of this domain. E.g. postmaster.')), dom.br(), localpart = dom.input()), ' ', dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. You should add the required DNS records after adding the domain.')))), dom.br(), dom.h2('Reports'), dom.div(dom.a('DMARC', attr.href('#dmarc/reports'))), dom.div(dom.a('TLS', attr.href('#tlsrpt/reports'))), dom.br(), dom.h2('Operations'), dom.div(dom.a('MTA-STS policies', attr.href('#mtasts'))), dom.div(dom.a('DMARC evaluations', attr.href('#dmarc/evaluations'))), dom.div(dom.a('TLS connection results', attr.href('#tlsrpt/results'))), dom.div(dom.a('DNSBL', attr.href('#dnsbl'))), dom.div(style({ marginTop: '.5ex' }), dom.form(async function submit(e) {
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Domain', attr.title('Domain for incoming/outgoing email to add to mox. Can also be a subdomain of a domain already configured.')), dom.br(), domain = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Postmaster/reporting account', attr.title('Account that is considered the owner of this domain. If the account does not yet exist, it will be created and a a localpart is required for the initial email address.')), dom.br(), account = dom.input(attr.required(''), attr.list('accountList')), dom.datalist(attr.id('accountList'), (accounts || []).map(a => dom.option(a)))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Localpart (if new account)', attr.title('Must be set if and only if account does not yet exist. A localpart is the part before the "@"-sign of an email address. An account requires an email address, so creating a new account for a domain requires a localpart to form an initial email address.')), dom.br(), localpart = dom.input()), ' ', dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. Add the required DNS records after adding the domain.')))), dom.br(), dom.h2('Reports'), dom.div(dom.a('DMARC', attr.href('#dmarc/reports'))), dom.div(dom.a('TLS', attr.href('#tlsrpt/reports'))), dom.br(), dom.h2('Operations'), dom.div(dom.a('MTA-STS policies', attr.href('#mtasts'))), dom.div(dom.a('DMARC evaluations', attr.href('#dmarc/evaluations'))), dom.div(dom.a('TLS connection results', attr.href('#tlsrpt/results'))), dom.div(dom.a('DNSBL', attr.href('#dnsbl'))), dom.div(style({ marginTop: '.5ex' }), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		try {
@@ -1735,8 +1737,9 @@ const inlineBox = (color, ...l) => dom.span(style({
 const accounts = async () => {
 	const accounts = await client.Accounts();
 	let fieldset;
-	let account;
 	let email;
+	let account;
+	let accountModified = false;
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Accounts'), dom.h2('Accounts'), (accounts || []).length === 0 ? dom.p('No accounts') :
 		dom.ul((accounts || []).map(s => dom.li(dom.a(s, attr.href('#accounts/' + s))))), dom.br(), dom.h2('Add account'), dom.form(async function submit(e) {
 		e.preventDefault();
@@ -1754,13 +1757,23 @@ const accounts = async () => {
 			fieldset.disabled = false;
 		}
 		window.location.hash = '#accounts/' + account.value;
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Account name', dom.br(), account = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), 'Email address', dom.br(), email = dom.input(attr.type('email'), attr.required(''))), ' ', dom.submitbutton('Add account', attr.title('The account will be added and the config reloaded.')))));
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Email address', attr.title('The initial email address for the new account. More addresses can be added after the account has been created.')), dom.br(), email = dom.input(attr.type('email'), attr.required(''), function keyup() {
+		if (!accountModified) {
+			account.value = email.value.split('@')[0];
+		}
+	})), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account name', attr.title('An account has one or more email addresses, a password. Its messages and the message index database are are stored in the file system in a directory with the name of the account. An account name is not an email address. Use a name like a unix user name, or the localpart (the part before the "@") of the initial address.')), dom.br(), account = dom.input(attr.required(''), function change() {
+		accountModified = true;
+	})), ' ', dom.submitbutton('Add account', attr.title('The account will be added and the config reloaded.')))));
 };
 const account = async (name) => {
-	const config = await client.Account(name);
+	const [config, domains] = await Promise.all([
+		client.Account(name),
+		client.Domains(),
+	]);
 	let form;
 	let fieldset;
-	let email;
+	let localpart;
+	let domain;
 	let fieldsetLimits;
 	let maxOutgoingMessagesPerDay;
 	let maxFirstTimeRecipientsPerDay;
@@ -1856,14 +1869,8 @@ const account = async (name) => {
 		e.stopPropagation();
 		fieldset.disabled = true;
 		try {
-			let addr = email.value;
-			if (!addr.includes('@')) {
-				if (!config.Domain) {
-					throw new Error('no default domain configured for account');
-				}
-				addr += '@' + config.Domain;
-			}
-			await client.AddressAdd(addr, name);
+			let address = localpart.value + '@' + domain.value;
+			await client.AddressAdd(address, name);
 		}
 		catch (err) {
 			console.log({ err });
@@ -1875,7 +1882,7 @@ const account = async (name) => {
 		}
 		form.reset();
 		window.location.reload(); // todo: only reload the destinations
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Email address or localpart', attr.title('If empty, or localpart is empty, a catchall address is configured for the domain.')), dom.br(), email = dom.input()), ' ', dom.submitbutton('Add address'))), dom.br(), dom.h2('Limits'), dom.form(fieldsetLimits = dom.fieldset(dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')), dom.br(), maxOutgoingMessagesPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxOutgoingMessagesPerDay || 1000))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum first-time recipients per day', attr.title('Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.')), dom.br(), maxFirstTimeRecipientsPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxFirstTimeRecipientsPerDay || 200))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')), dom.br(), quotaMessageSize = dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize)))), dom.submitbutton('Save')), async function submit(e) {
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an email address. If empty, a catchall address is configured for the domain.')), dom.br(), localpart = dom.input()), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain'), dom.br(), domain = dom.select((domains || []).map(d => dom.option(domainName(d), domainName(d) === config.Domain ? attr.selected('') : [])))), ' ', dom.submitbutton('Add address'))), dom.br(), dom.h2('Limits'), dom.form(fieldsetLimits = dom.fieldset(dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')), dom.br(), maxOutgoingMessagesPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxOutgoingMessagesPerDay || 1000))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum first-time recipients per day', attr.title('Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.')), dom.br(), maxFirstTimeRecipientsPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxFirstTimeRecipientsPerDay || 200))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')), dom.br(), quotaMessageSize = dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize)))), dom.submitbutton('Save')), async function submit(e) {
 		e.stopPropagation();
 		e.preventDefault();
 		fieldsetLimits.disabled = true;
@@ -1948,12 +1955,13 @@ const account = async (name) => {
 const domain = async (d) => {
 	const end = new Date();
 	const start = new Date(new Date().getTime() - 30 * 24 * 3600 * 1000);
-	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfigs] = await Promise.all([
+	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfigs, accounts] = await Promise.all([
 		client.DMARCSummaries(start, end, d),
 		client.TLSRPTSummaries(start, end, d),
 		client.DomainLocalparts(d),
 		client.Domain(d),
 		client.ClientConfigsDomain(d),
+		client.Accounts(),
 	]);
 	let form;
 	let fieldset;
@@ -1995,7 +2003,7 @@ const domain = async (d) => {
 		}
 		form.reset();
 		window.location.reload(); // todo: only reload the addresses
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('An empty localpart is the catchall destination/address for the domain.')), dom.br(), localpart = dom.input()), ' ', dom.label(style({ display: 'inline-block' }), 'Account', dom.br(), account = dom.input(attr.required(''))), ' ', dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')))), dom.br(), dom.h2('External checks'), dom.ul(dom.li(link('https://internet.nl/mail/' + dnsdomain.ASCII + '/', 'Check configuration at internet.nl'))), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove domain', async function click(e) {
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an address. An empty localpart is the catchall destination/address for the domain.')), dom.br(), localpart = dom.input()), '@', domainName(dnsdomain), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account', attr.title('Account to assign the address to.')), dom.br(), account = dom.select(attr.required(''), (accounts || []).map(a => dom.option(a)))), ' ', dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')))), dom.br(), dom.h2('External checks'), dom.ul(dom.li(link('https://internet.nl/mail/' + dnsdomain.ASCII + '/', 'Check configuration at internet.nl'))), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove domain', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this domain?')) {
 			return;

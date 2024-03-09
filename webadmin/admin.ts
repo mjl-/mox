@@ -254,10 +254,11 @@ const formatSize = (n: number) => {
 }
 
 const index = async () => {
-	const [domains, queueSize, checkUpdatesEnabled] = await Promise.all([
+	const [domains, queueSize, checkUpdatesEnabled, accounts] = await Promise.all([
 		client.Domains(),
 		client.QueueSize(),
 		client.CheckUpdatesEnabled(),
+		client.Accounts(),
 	])
 
 	let fieldset: HTMLFieldSetElement
@@ -302,26 +303,27 @@ const index = async () => {
 			fieldset=dom.fieldset(
 				dom.label(
 					style({display: 'inline-block'}),
-					'Domain',
+					dom.span('Domain', attr.title('Domain for incoming/outgoing email to add to mox. Can also be a subdomain of a domain already configured.')),
 					dom.br(),
 					domain=dom.input(attr.required('')),
 				),
 				' ',
 				dom.label(
 					style({display: 'inline-block'}),
-					'Postmaster/reporting account',
+					dom.span('Postmaster/reporting account', attr.title('Account that is considered the owner of this domain. If the account does not yet exist, it will be created and a a localpart is required for the initial email address.')),
 					dom.br(),
-					account=dom.input(attr.required('')),
+					account=dom.input(attr.required(''), attr.list('accountList')),
+					dom.datalist(attr.id('accountList'), (accounts || []).map(a => dom.option(a))),
 				),
 				' ',
 				dom.label(
 					style({display: 'inline-block'}),
-					dom.span('Localpart (optional)', attr.title('Must be set if and only if account does not yet exist. The localpart for the user of this domain. E.g. postmaster.')),
+					dom.span('Localpart (if new account)', attr.title('Must be set if and only if account does not yet exist. A localpart is the part before the "@"-sign of an email address. An account requires an email address, so creating a new account for a domain requires a localpart to form an initial email address.')),
 					dom.br(),
 					localpart=dom.input(),
 				),
 				' ',
-				dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. You should add the required DNS records after adding the domain.')),
+				dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. Add the required DNS records after adding the domain.')),
 			),
 		),
 		dom.br(),
@@ -527,8 +529,9 @@ const accounts = async () => {
 	const accounts = await client.Accounts()
 
 	let fieldset: HTMLFieldSetElement
-	let account: HTMLInputElement
 	let email: HTMLInputElement
+	let account: HTMLInputElement
+	let accountModified = false
 
 	dom._kids(page,
 		crumbs(
@@ -561,16 +564,22 @@ const accounts = async () => {
 			fieldset=dom.fieldset(
 				dom.label(
 					style({display: 'inline-block'}),
-					'Account name',
+					dom.span('Email address', attr.title('The initial email address for the new account. More addresses can be added after the account has been created.')),
 					dom.br(),
-					account=dom.input(attr.required('')),
+					email=dom.input(attr.type('email'), attr.required(''), function keyup() {
+						if (!accountModified) {
+							account.value = email.value.split('@')[0]
+						}
+					}),
 				),
 				' ',
 				dom.label(
 					style({display: 'inline-block'}),
-					'Email address',
+					dom.span('Account name', attr.title('An account has one or more email addresses, a password. Its messages and the message index database are are stored in the file system in a directory with the name of the account. An account name is not an email address. Use a name like a unix user name, or the localpart (the part before the "@") of the initial address.')),
 					dom.br(),
-					email=dom.input(attr.type('email'), attr.required('')),
+					account=dom.input(attr.required(''), function change() {
+						accountModified = true
+					}),
 				),
 				' ',
 				dom.submitbutton('Add account', attr.title('The account will be added and the config reloaded.')),
@@ -580,11 +589,15 @@ const accounts = async () => {
 }
 
 const account = async (name: string) => {
-	const config = await client.Account(name)
+	const [config, domains] = await Promise.all([
+		client.Account(name),
+		client.Domains(),
+	])
 
 	let form: HTMLFormElement
 	let fieldset: HTMLFieldSetElement
-	let email: HTMLInputElement
+	let localpart: HTMLInputElement
+	let domain: HTMLSelectElement
 
 	let fieldsetLimits: HTMLFieldSetElement
 	let maxOutgoingMessagesPerDay: HTMLInputElement
@@ -708,14 +721,8 @@ const account = async (name: string) => {
 				e.stopPropagation()
 				fieldset.disabled = true
 				try {
-					let addr = email.value
-					if (!addr.includes('@')) {
-						if (!config.Domain) {
-							throw new Error('no default domain configured for account')
-						}
-						addr += '@' + config.Domain
-					}
-					await client.AddressAdd(addr, name)
+					let address = localpart.value + '@' + domain.value
+					await client.AddressAdd(address, name)
 				} catch (err) {
 					console.log({err})
 					window.alert('Error: ' + errmsg(err))
@@ -729,9 +736,16 @@ const account = async (name: string) => {
 			fieldset=dom.fieldset(
 				dom.label(
 					style({display: 'inline-block'}),
-					dom.span('Email address or localpart', attr.title('If empty, or localpart is empty, a catchall address is configured for the domain.')),
+					dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an email address. If empty, a catchall address is configured for the domain.')),
 					dom.br(),
-					email=dom.input(),
+					localpart=dom.input(),
+				),
+				'@',
+				dom.label(
+					style({display: 'inline-block'}),
+					dom.span('Domain'),
+					dom.br(),
+					domain=dom.select((domains || []).map(d => dom.option(domainName(d), domainName(d) === config.Domain ? attr.selected('') : []))),
 				),
 				' ',
 				dom.submitbutton('Add address'),
@@ -856,18 +870,19 @@ const account = async (name: string) => {
 const domain = async (d: string) => {
 	const end = new Date()
 	const start = new Date(new Date().getTime() - 30*24*3600*1000)
-	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfigs] = await Promise.all([
+	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfigs, accounts] = await Promise.all([
 		client.DMARCSummaries(start, end, d),
 		client.TLSRPTSummaries(start, end, d),
 		client.DomainLocalparts(d),
 		client.Domain(d),
 		client.ClientConfigsDomain(d),
+		client.Accounts(),
 	])
 
 	let form: HTMLFormElement
 	let fieldset: HTMLFieldSetElement
 	let localpart: HTMLInputElement
-	let account: HTMLInputElement
+	let account: HTMLSelectElement
 
 	dom._kids(page,
 		crumbs(
@@ -964,16 +979,17 @@ const domain = async (d: string) => {
 			fieldset=dom.fieldset(
 				dom.label(
 					style({display: 'inline-block'}),
-					dom.span('Localpart', attr.title('An empty localpart is the catchall destination/address for the domain.')),
+					dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an address. An empty localpart is the catchall destination/address for the domain.')),
 					dom.br(),
 					localpart=dom.input(),
 				),
+				'@', domainName(dnsdomain),
 				' ',
 				dom.label(
 					style({display: 'inline-block'}),
-					'Account',
+					dom.span('Account', attr.title('Account to assign the address to.')),
 					dom.br(),
-					account=dom.input(attr.required('')),
+					account=dom.select(attr.required(''), (accounts || []).map(a => dom.option(a))),
 				),
 				' ',
 				dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')),
