@@ -35,6 +35,7 @@ or see [all releases](https://github.com/mjl-/mox/releases).
 
 ## News
 
+- 2024-03-09, [v0.0.10](https://github.com/mjl-/mox/releases/tag/v0.0.10) released
 - 2024-01-09, [v0.0.9](https://github.com/mjl-/mox/releases/tag/v0.0.9) released
 - 2023-12-08, There will be a
   [talk about mox](https://fosdem.org/2024/schedule/event/fosdem-2024-2261--servers-mox-a-modern-full-featured-mail-server/)
