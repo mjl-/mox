@@ -757,7 +757,7 @@ var api;
 						return v;
 					}
 				}
-				error('unknkown value ' + v + ' for named strings ' + t.Name);
+				error('unknown value ' + v + ' for named strings ' + t.Name);
 			}
 			else if (api.intsTypes[nt.Name]) {
 				const t = nt;
@@ -772,7 +772,7 @@ var api;
 						return v;
 					}
 				}
-				error('unknkown value ' + v + ' for named ints ' + t.Name);
+				error('unknown value ' + v + ' for named ints ' + t.Name);
 			}
 			else {
 				throw new Error('unexpected named type ' + nt);

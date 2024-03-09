@@ -107,6 +107,8 @@ type PolicyOverrideReason struct {
 type PolicyOverride string
 
 const (
+	PolicyOverrideAbsent PolicyOverride = ""
+
 	PolicyOverrideForwarded        PolicyOverride = "forwarded"
 	PolicyOverrideSampledOut       PolicyOverride = "sampled_out"
 	PolicyOverrideTrustedForwarder PolicyOverride = "trusted_forwarder"

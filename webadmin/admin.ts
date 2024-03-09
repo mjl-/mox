@@ -1246,7 +1246,7 @@ const renderDMARCSummaries = (summaries: api.DMARCSummary[]) => {
 						dom.td(style({textAlign: 'right'}), r.DispositionQuarantine === 0 && r.DispositionReject === 0 ? '0/0' : box(red, '' + r.DispositionQuarantine + '/' + r.DispositionReject)),
 						dom.td(style({textAlign: 'right'}), box(r.DKIMFail === 0 ? green : red, '' + r.DKIMFail)),
 						dom.td(style({textAlign: 'right'}), box(r.SPFFail === 0 ? green : red, '' + r.SPFFail)),
-						dom.td(!r.PolicyOverrides ? [] : Object.entries(r.PolicyOverrides).map(kv => kv[0] + ': ' + kv[1]).join('; ')),
+						dom.td(!r.PolicyOverrides ? [] : Object.entries(r.PolicyOverrides).map(kv => ((kv[0] || '(no reason)') + ': ' + kv[1]).join('; ')),
 					)
 				),
 			),

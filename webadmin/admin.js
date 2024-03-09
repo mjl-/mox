@@ -299,6 +299,7 @@ var api;
 	// was not applied.
 	let PolicyOverride;
 	(function (PolicyOverride) {
+		PolicyOverride["PolicyOverrideAbsent"] = "";
 		PolicyOverride["PolicyOverrideForwarded"] = "forwarded";
 		PolicyOverride["PolicyOverrideSampledOut"] = "sampled_out";
 		PolicyOverride["PolicyOverrideTrustedForwarder"] = "trusted_forwarder";
@@ -420,7 +421,7 @@ var api;
 		"Alignment": { "Name": "Alignment", "Docs": "", "Values": [{ "Name": "AlignmentAbsent", "Value": "", "Docs": "" }, { "Name": "AlignmentRelaxed", "Value": "r", "Docs": "" }, { "Name": "AlignmentStrict", "Value": "s", "Docs": "" }] },
 		"Disposition": { "Name": "Disposition", "Docs": "", "Values": [{ "Name": "DispositionAbsent", "Value": "", "Docs": "" }, { "Name": "DispositionNone", "Value": "none", "Docs": "" }, { "Name": "DispositionQuarantine", "Value": "quarantine", "Docs": "" }, { "Name": "DispositionReject", "Value": "reject", "Docs": "" }] },
 		"DMARCResult": { "Name": "DMARCResult", "Docs": "", "Values": [{ "Name": "DMARCAbsent", "Value": "", "Docs": "" }, { "Name": "DMARCPass", "Value": "pass", "Docs": "" }, { "Name": "DMARCFail", "Value": "fail", "Docs": "" }] },
-		"PolicyOverride": { "Name": "PolicyOverride", "Docs": "", "Values": [{ "Name": "PolicyOverrideForwarded", "Value": "forwarded", "Docs": "" }, { "Name": "PolicyOverrideSampledOut", "Value": "sampled_out", "Docs": "" }, { "Name": "PolicyOverrideTrustedForwarder", "Value": "trusted_forwarder", "Docs": "" }, { "Name": "PolicyOverrideMailingList", "Value": "mailing_list", "Docs": "" }, { "Name": "PolicyOverrideLocalPolicy", "Value": "local_policy", "Docs": "" }, { "Name": "PolicyOverrideOther", "Value": "other", "Docs": "" }] },
+		"PolicyOverride": { "Name": "PolicyOverride", "Docs": "", "Values": [{ "Name": "PolicyOverrideAbsent", "Value": "", "Docs": "" }, { "Name": "PolicyOverrideForwarded", "Value": "forwarded", "Docs": "" }, { "Name": "PolicyOverrideSampledOut", "Value": "sampled_out", "Docs": "" }, { "Name": "PolicyOverrideTrustedForwarder", "Value": "trusted_forwarder", "Docs": "" }, { "Name": "PolicyOverrideMailingList", "Value": "mailing_list", "Docs": "" }, { "Name": "PolicyOverrideLocalPolicy", "Value": "local_policy", "Docs": "" }, { "Name": "PolicyOverrideOther", "Value": "other", "Docs": "" }] },
 		"DKIMResult": { "Name": "DKIMResult", "Docs": "", "Values": [{ "Name": "DKIMAbsent", "Value": "", "Docs": "" }, { "Name": "DKIMNone", "Value": "none", "Docs": "" }, { "Name": "DKIMPass", "Value": "pass", "Docs": "" }, { "Name": "DKIMFail", "Value": "fail", "Docs": "" }, { "Name": "DKIMPolicy", "Value": "policy", "Docs": "" }, { "Name": "DKIMNeutral", "Value": "neutral", "Docs": "" }, { "Name": "DKIMTemperror", "Value": "temperror", "Docs": "" }, { "Name": "DKIMPermerror", "Value": "permerror", "Docs": "" }] },
 		"SPFDomainScope": { "Name": "SPFDomainScope", "Docs": "", "Values": [{ "Name": "SPFDomainScopeAbsent", "Value": "", "Docs": "" }, { "Name": "SPFDomainScopeHelo", "Value": "helo", "Docs": "" }, { "Name": "SPFDomainScopeMailFrom", "Value": "mfrom", "Docs": "" }] },
 		"SPFResult": { "Name": "SPFResult", "Docs": "", "Values": [{ "Name": "SPFAbsent", "Value": "", "Docs": "" }, { "Name": "SPFNone", "Value": "none", "Docs": "" }, { "Name": "SPFNeutral", "Value": "neutral", "Docs": "" }, { "Name": "SPFPass", "Value": "pass", "Docs": "" }, { "Name": "SPFFail", "Value": "fail", "Docs": "" }, { "Name": "SPFSoftfail", "Value": "softfail", "Docs": "" }, { "Name": "SPFTemperror", "Value": "temperror", "Docs": "" }, { "Name": "SPFPermerror", "Value": "permerror", "Docs": "" }] },
@@ -1208,7 +1209,7 @@ var api;
 						return v;
 					}
 				}
-				error('unknkown value ' + v + ' for named strings ' + t.Name);
+				error('unknown value ' + v + ' for named strings ' + t.Name);
 			}
 			else if (api.intsTypes[nt.Name]) {
 				const t = nt;
@@ -1223,7 +1224,7 @@ var api;
 						return v;
 					}
 				}
-				error('unknkown value ' + v + ' for named ints ' + t.Name);
+				error('unknown value ' + v + ' for named ints ' + t.Name);
 			}
 			else {
 				throw new Error('unexpected named type ' + nt);

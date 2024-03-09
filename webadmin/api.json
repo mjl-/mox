@@ -4493,6 +4493,11 @@
 			"Docs": "PolicyOverride is a reason the requested DMARC policy from the DNS record\nwas not applied.",
 			"Values": [
 				{
+					"Name": "PolicyOverrideAbsent",
+					"Value": "",
+					"Docs": ""
+				},
+				{
 					"Name": "PolicyOverrideForwarded",
 					"Value": "forwarded",
 					"Docs": ""

@@ -39,8 +39,8 @@ github.com/mjl-/sherpadoc v0.0.12 h1:6hVe2Z0DnwjC0bfuOwfz8ov7JTCUU49cEaj7h22NiPk
 github.com/mjl-/sherpadoc v0.0.12/go.mod h1:vh5zcsk3j/Tvm725EY+unTZb3EZcZcpiEQzrODSa6+I=
 github.com/mjl-/sherpaprom v0.0.2 h1:1dlbkScsNafM5jURI44uiWrZMSwfZtcOFEEq7vx2C1Y=
 github.com/mjl-/sherpaprom v0.0.2/go.mod h1:cl5nMNOvqhzMiQJ2FzccQ9ReivjHXe53JhOVkPfSvw4=
-github.com/mjl-/sherpats v0.0.5 h1:XJBorAxUY/C8IBjCmu741353Ex7CFXrb53NDGCrBu74=
-github.com/mjl-/sherpats v0.0.5/go.mod h1:MoNZJtLmu8oCZ4Ocv5vZksENN4pp6/SJMlg9uTII4KA=
+github.com/mjl-/sherpats v0.0.6 h1:2lSoJbb+jkjLOdlvoMxItq0QQrrnkH+rnm3PMRfpbmA=
+github.com/mjl-/sherpats v0.0.6/go.mod h1:MoNZJtLmu8oCZ4Ocv5vZksENN4pp6/SJMlg9uTII4KA=
 github.com/mjl-/xfmt v0.0.2 h1:6dLgd6U3bmDJKtTxsaSYYyMaORoO4hKBAJo4XKkPRko=
 github.com/mjl-/xfmt v0.0.2/go.mod h1:DIEOLmETMQHHr4OgwPG7iC37rDiN9MaZIZxNm5hBtL8=
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=

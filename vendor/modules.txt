@@ -32,7 +32,7 @@ github.com/mjl-/sherpadoc/cmd/sherpadoc
 # github.com/mjl-/sherpaprom v0.0.2
 ## explicit; go 1.12
 github.com/mjl-/sherpaprom
-# github.com/mjl-/sherpats v0.0.5
+# github.com/mjl-/sherpats v0.0.6
 ## explicit; go 1.12
 github.com/mjl-/sherpats
 github.com/mjl-/sherpats/cmd/sherpats
