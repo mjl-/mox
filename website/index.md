@@ -52,8 +52,8 @@ quickstart, add the printed DNS records, and you're good to go. See the demo
 below, or continue reading at [Install](install/).
 
 <video controls preload="none" poster="files/video/quickstart-20240111.jpg">
-	<source type="video/webm" src="files/video/quickstart-20240111.webm" />
 	<source type="video/mp4" src="files/video/quickstart-20240111.mp4" />
+	<source type="video/webm" src="files/video/quickstart-20240111.webm" />
 </video>
 
 ## Background
