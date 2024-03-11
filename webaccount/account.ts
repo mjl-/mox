@@ -170,8 +170,25 @@ const yellow = '#ffe400'
 const red = '#ff7443'
 const blue = '#8bc8ff'
 
+const formatQuotaSize = (v: number) => {
+	if (v === 0) {
+		return '0'
+	}
+	const m = 1024*1024
+	const g = m*1024
+	const t = g*1024
+	if (Math.floor(v/t)*t === v) {
+		return ''+(v/t)+'t'
+	} else if (Math.floor(v/g)*g === v) {
+		return ''+(v/g)+'g'
+	} else if (Math.floor(v/m)*m === v) {
+		return ''+(v/m)+'m'
+	}
+	return ''+v
+}
+
 const index = async () => {
-	const [accountFullName, domain, destinations] = await client.Account()
+	const [accountFullName, domain, destinations, storageUsed, storageLimit] = await client.Account()
 
 	let fullNameForm: HTMLFormElement
 	let fullNameFieldset: HTMLFieldSetElement
@@ -418,6 +435,14 @@ const index = async () => {
 			},
 		),
 		dom.br(),
+		dom.h2('Disk usage'),
+		dom.p('Storage used is ', dom.b(formatQuotaSize(Math.floor(storageUsed/(1024*1024))*1024*1024)),
+			storageLimit > 0 ? [
+				dom.b('/', formatQuotaSize(storageLimit)),
+				' (',
+				''+Math.floor(100*storageUsed/storageLimit),
+				'%).',
+			] : [', no explicit limit is configured.']),
 		dom.h2('Export'),
 		dom.p('Export all messages in all mailboxes. In maildir or mbox format, as .zip or .tgz file.'),
 		dom.table(dom._class('slim'),

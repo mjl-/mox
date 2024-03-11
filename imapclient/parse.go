@@ -116,7 +116,8 @@ func (c *Conn) xrespText() RespText {
 
 var knownCodes = stringMap(
 	// Without parameters.
-	"ALERT", "PARSE", "READ-ONLY", "READ-WRITE", "TRYCREATE", "UIDNOTSTICKY", "UNAVAILABLE", "AUTHENTICATIONFAILED", "AUTHORIZATIONFAILED", "EXPIRED", "PRIVACYREQUIRED", "CONTACTADMIN", "NOPERM", "INUSE", "EXPUNGEISSUED", "CORRUPTION", "SERVERBUG", "CLIENTBUG", "CANNOT", "LIMIT", "OVERQUOTA", "ALREADYEXISTS", "NONEXISTENT", "NOTSAVED", "HASCHILDREN", "CLOSED", "UNKNOWN-CTE", "OVERQUOTA",
+	"ALERT", "PARSE", "READ-ONLY", "READ-WRITE", "TRYCREATE", "UIDNOTSTICKY", "UNAVAILABLE", "AUTHENTICATIONFAILED", "AUTHORIZATIONFAILED", "EXPIRED", "PRIVACYREQUIRED", "CONTACTADMIN", "NOPERM", "INUSE", "EXPUNGEISSUED", "CORRUPTION", "SERVERBUG", "CLIENTBUG", "CANNOT", "LIMIT", "OVERQUOTA", "ALREADYEXISTS", "NONEXISTENT", "NOTSAVED", "HASCHILDREN", "CLOSED", "UNKNOWN-CTE",
+	"OVERQUOTA", // ../rfc/9208:472
 	// With parameters.
 	"BADCHARSET", "CAPABILITY", "PERMANENTFLAGS", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "APPENDUID", "COPYUID",
 	"HIGHESTMODSEQ", "MODIFIED",
@@ -367,7 +368,7 @@ func (c *Conn) xuntagged() Untagged {
 			if len(attrs) > 0 {
 				c.xspace()
 			}
-			s := c.xword()
+			s := c.xatom()
 			c.xspace()
 			S := strings.ToUpper(s)
 			var num int64
@@ -395,6 +396,8 @@ func (c *Conn) xuntagged() Untagged {
 					num = c.xint64()
 				}
 			case "HIGHESTMODSEQ":
+				num = c.xint64()
+			case "DELETED-STORAGE":
 				num = c.xint64()
 			default:
 				c.xerrorf("status: unknown attribute %q", s)
@@ -488,6 +491,49 @@ func (c *Conn) xuntagged() Untagged {
 		uids := c.xuidset()
 		c.xcrlf()
 		return UntaggedVanished{earlier, NumSet{Ranges: uids}}
+
+	// ../rfc/9208:668 ../2087:242
+	case "QUOTAROOT":
+		c.xspace()
+		c.xastring()
+		var roots []string
+		for c.take(' ') {
+			root := c.xastring()
+			roots = append(roots, root)
+		}
+		c.xcrlf()
+		return UntaggedQuotaroot(roots)
+
+	// ../rfc/9208:666 ../rfc/2087:239
+	case "QUOTA":
+		c.xspace()
+		root := c.xastring()
+		c.xspace()
+		c.xtake("(")
+
+		xresource := func() QuotaResource {
+			name := c.xatom()
+			c.xspace()
+			usage := c.xint64()
+			c.xspace()
+			limit := c.xint64()
+			return QuotaResource{QuotaResourceName(strings.ToUpper(name)), usage, limit}
+		}
+
+		seen := map[QuotaResourceName]bool{}
+		l := []QuotaResource{xresource()}
+		seen[l[0].Name] = true
+		for c.take(' ') {
+			res := xresource()
+			if seen[res.Name] {
+				c.xerrorf("duplicate resource name %q", res.Name)
+			}
+			seen[res.Name] = true
+			l = append(l, res)
+		}
+		c.xtake(")")
+		c.xcrlf()
+		return UntaggedQuota{root, l}
 
 	default:
 		v, err := strconv.ParseUint(w, 10, 32)
@@ -682,7 +728,7 @@ func (c *Conn) xatom() string {
 	var s string
 	for {
 		b, err := c.readbyte()
-		c.xcheckf(err, "read byte for flag")
+		c.xcheckf(err, "read byte for atom")
 		if b <= ' ' || strings.IndexByte("(){%*\"\\]", b) >= 0 {
 			c.r.UnreadByte()
 			if s == "" {

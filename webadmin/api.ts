@@ -1080,12 +1080,12 @@ export class Client {
 	}
 
 	// Account returns the parsed configuration of an account.
-	async Account(account: string): Promise<{ [key: string]: any }> {
+	async Account(account: string): Promise<[{ [key: string]: any }, number]> {
 		const fn: string = "Account"
 		const paramTypes: string[][] = [["string"]]
-		const returnTypes: string[][] = [["{}","any"]]
+		const returnTypes: string[][] = [["{}","any"],["int64"]]
 		const params: any[] = [account]
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as { [key: string]: any }
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [{ [key: string]: any }, number]
 	}
 
 	// ConfigFiles returns the paths and contents of the static and dynamic configuration files.

@@ -216,7 +216,7 @@ func TestAccount(t *testing.T) {
 
 	api.SetPassword(ctx, "test1234")
 
-	fullName, _, dests := api.Account(ctx)
+	fullName, _, dests, _, _ := api.Account(ctx)
 	api.DestinationSave(ctx, "mjl@mox.example", dests["mjl@mox.example"], dests["mjl@mox.example"]) // todo: save modified value and compare it afterwards
 
 	api.AccountSaveFullName(ctx, fullName+" changed") // todo: check if value was changed

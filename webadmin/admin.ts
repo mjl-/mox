@@ -593,8 +593,25 @@ const accounts = async () => {
 	)
 }
 
+const formatQuotaSize = (v: number) => {
+	if (v === 0) {
+		return '0'
+	}
+	const m = 1024*1024
+	const g = m*1024
+	const t = g*1024
+	if (Math.floor(v/t)*t === v) {
+		return ''+(v/t)+'t'
+	} else if (Math.floor(v/g)*g === v) {
+		return ''+(v/g)+'g'
+	} else if (Math.floor(v/m)*m === v) {
+		return ''+(v/m)+'m'
+	}
+	return ''+v
+}
+
 const account = async (name: string) => {
-	const [config, domains] = await Promise.all([
+	const [[config, diskUsage], domains] = await Promise.all([
 		client.Account(name),
 		client.Domains(),
 	])
@@ -631,28 +648,10 @@ const account = async (name: string) => {
 			s = s.substring(0, s.length-1)
 		}
 		let v = parseInt(s)
-		console.log('x', s, v, mult, formatQuotaSize(v*mult))
 		if (isNaN(v) || origs !== formatQuotaSize(v*mult)) {
 			throw new Error('invalid number')
 		}
 		return v*mult
-	}
-
-	const formatQuotaSize = (v: number) => {
-		if (v === 0) {
-			return '0'
-		}
-		const m = 1024*1024
-		const g = m*1024
-		const t = g*1024
-		if (Math.floor(v/t)*t === v) {
-			return ''+(v/t)+'t'
-		} else if (Math.floor(v/g)*g === v) {
-			return ''+(v/g)+'g'
-		} else if (Math.floor(v/m)*m === v) {
-			return ''+(v/m)+'m'
-		}
-		return ''+v
 	}
 
 	dom._kids(page,
@@ -778,6 +777,7 @@ const account = async (name: string) => {
 					dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')),
 					dom.br(),
 					quotaMessageSize=dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize))),
+					' Current usage is ', formatQuotaSize(Math.floor(diskUsage/(1024*1024))*1024*1024), '.',
 				),
 				dom.submitbutton('Save'),
 			),

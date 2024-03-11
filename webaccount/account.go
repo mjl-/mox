@@ -21,6 +21,7 @@ import (
 
 	_ "embed"
 
+	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
 	"github.com/mjl-/sherpadoc"
 	"github.com/mjl-/sherpaprom"
@@ -415,13 +416,34 @@ func (Account) SetPassword(ctx context.Context, password string) {
 // and the destinations (keys are email addresses, or localparts to the default
 // domain). todo: replace with a function that returns the whole account, when
 // sherpadoc understands unnamed struct fields.
-func (Account) Account(ctx context.Context) (string, dns.Domain, map[string]config.Destination) {
+// StorageUsed is the sum of the sizes of all messages, in bytes.
+// StorageLimit is the maximum storage that can be used, or 0 if there is no limit.
+func (Account) Account(ctx context.Context) (fullName string, defaultDomain dns.Domain, destinations map[string]config.Destination, storageUsed, storageLimit int64) {
+	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	accConf, ok := mox.Conf.Account(reqInfo.AccountName)
-	if !ok {
-		xcheckf(ctx, errors.New("not found"), "looking up account")
-	}
-	return accConf.FullName, accConf.DNSDomain, accConf.Destinations
+
+	acc, err := store.OpenAccount(log, reqInfo.AccountName)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+
+	var accConf config.Account
+	acc.WithRLock(func() {
+		accConf, _ = acc.Conf()
+
+		storageLimit = acc.QuotaMessageSize()
+		err := acc.DB.Read(ctx, func(tx *bstore.Tx) error {
+			du := store.DiskUsage{ID: 1}
+			err := tx.Get(&du)
+			storageUsed = du.MessageSize
+			return err
+		})
+		xcheckf(ctx, err, "get disk usage")
+	})
+
+	return accConf.FullName, accConf.DNSDomain, accConf.Destinations, storageUsed, storageLimit
 }
 
 func (Account) AccountSaveFullName(ctx context.Context, fullName string) {

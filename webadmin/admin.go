@@ -1539,11 +1539,31 @@ func (Admin) Accounts(ctx context.Context) []string {
 }
 
 // Account returns the parsed configuration of an account.
-func (Admin) Account(ctx context.Context, account string) map[string]any {
-	ac, ok := mox.Conf.Account(account)
-	if !ok {
-		xcheckuserf(ctx, errors.New("no such account"), "looking up account")
+func (Admin) Account(ctx context.Context, account string) (accountConfig map[string]any, diskUsage int64) {
+	log := pkglog.WithContext(ctx)
+
+	acc, err := store.OpenAccount(log, account)
+	if err != nil && errors.Is(err, store.ErrAccountUnknown) {
+		xcheckuserf(ctx, err, "looking up account")
 	}
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+
+	var ac config.Account
+	acc.WithRLock(func() {
+		ac, _ = mox.Conf.Account(acc.Name)
+
+		err := acc.DB.Read(ctx, func(tx *bstore.Tx) error {
+			du := store.DiskUsage{ID: 1}
+			err := tx.Get(&du)
+			diskUsage = du.MessageSize
+			return err
+		})
+		xcheckf(ctx, err, "get disk usage")
+	})
 
 	// todo: should change sherpa to understand config.Account directly, with its anonymous structs.
 	buf, err := json.Marshal(ac)
@@ -1552,7 +1572,7 @@ func (Admin) Account(ctx context.Context, account string) map[string]any {
 	err = json.Unmarshal(buf, &r)
 	xcheckf(ctx, err, "unmarshal from json")
 
-	return r
+	return r, diskUsage
 }
 
 // ConfigFiles returns the paths and contents of the static and dynamic configuration files.

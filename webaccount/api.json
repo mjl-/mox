@@ -68,26 +68,38 @@
 		},
 		{
 			"Name": "Account",
-			"Docs": "Account returns information about the account: full name, the default domain,\nand the destinations (keys are email addresses, or localparts to the default\ndomain). todo: replace with a function that returns the whole account, when\nsherpadoc understands unnamed struct fields.",
+			"Docs": "Account returns information about the account: full name, the default domain,\nand the destinations (keys are email addresses, or localparts to the default\ndomain). todo: replace with a function that returns the whole account, when\nsherpadoc understands unnamed struct fields.\nStorageUsed is the sum of the sizes of all messages, in bytes.\nStorageLimit is the maximum storage that can be used, or 0 if there is no limit.",
 			"Params": [],
 			"Returns": [
 				{
-					"Name": "r0",
+					"Name": "fullName",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
-					"Name": "r1",
+					"Name": "defaultDomain",
 					"Typewords": [
 						"Domain"
 					]
 				},
 				{
-					"Name": "r2",
+					"Name": "destinations",
 					"Typewords": [
 						"{}",
 						"Destination"
+					]
+				},
+				{
+					"Name": "storageUsed",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "storageLimit",
+					"Typewords": [
+						"int64"
 					]
 				}
 			]

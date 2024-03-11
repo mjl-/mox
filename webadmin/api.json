@@ -169,10 +169,16 @@
 			],
 			"Returns": [
 				{
-					"Name": "r0",
+					"Name": "accountConfig",
 					"Typewords": [
 						"{}",
 						"any"
+					]
+				},
+				{
+					"Name": "diskUsage",
+					"Typewords": [
+						"int64"
 					]
 				}
 			]

@@ -154,12 +154,13 @@ var authFailDelay = time.Second  // After authentication failure.
 // CONDSTORE: ../rfc/7162:411
 // QRESYNC: ../rfc/7162:1323
 // STATUS=SIZE: ../rfc/8438 ../rfc/9051:8024
+// QUOTA QUOTA=RES-STORAGE: ../rfc/9208:111
 //
 // We always announce support for SCRAM PLUS-variants, also on connections without
 // TLS. The client should not be selecting PLUS variants on non-TLS connections,
 // instead opting to do the bare SCRAM variant without indicating the server claims
 // to support the PLUS variant (skipping the server downgrade detection check).
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE"
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE"
 
 type conn struct {
 	cid               int64
@@ -239,7 +240,7 @@ func stateCommands(cmds ...string) map[string]struct{} {
 var (
 	commandsStateAny              = stateCommands("capability", "noop", "logout", "id")
 	commandsStateNotAuthenticated = stateCommands("starttls", "authenticate", "login")
-	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub")
+	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota")
 	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move")
 )
 
@@ -256,20 +257,22 @@ var commands = map[string]func(c *conn, tag, cmd string, p *parser){
 	"login":        (*conn).cmdLogin,
 
 	// Authenticated and selected.
-	"enable":      (*conn).cmdEnable,
-	"select":      (*conn).cmdSelect,
-	"examine":     (*conn).cmdExamine,
-	"create":      (*conn).cmdCreate,
-	"delete":      (*conn).cmdDelete,
-	"rename":      (*conn).cmdRename,
-	"subscribe":   (*conn).cmdSubscribe,
-	"unsubscribe": (*conn).cmdUnsubscribe,
-	"list":        (*conn).cmdList,
-	"lsub":        (*conn).cmdLsub,
-	"namespace":   (*conn).cmdNamespace,
-	"status":      (*conn).cmdStatus,
-	"append":      (*conn).cmdAppend,
-	"idle":        (*conn).cmdIdle,
+	"enable":       (*conn).cmdEnable,
+	"select":       (*conn).cmdSelect,
+	"examine":      (*conn).cmdExamine,
+	"create":       (*conn).cmdCreate,
+	"delete":       (*conn).cmdDelete,
+	"rename":       (*conn).cmdRename,
+	"subscribe":    (*conn).cmdSubscribe,
+	"unsubscribe":  (*conn).cmdUnsubscribe,
+	"list":         (*conn).cmdList,
+	"lsub":         (*conn).cmdLsub,
+	"namespace":    (*conn).cmdNamespace,
+	"status":       (*conn).cmdStatus,
+	"append":       (*conn).cmdAppend,
+	"idle":         (*conn).cmdIdle,
+	"getquotaroot": (*conn).cmdGetquotaroot,
+	"getquota":     (*conn).cmdGetquota,
 
 	// Selected.
 	"check":       (*conn).cmdCheck,
@@ -2628,7 +2631,7 @@ func (c *conn) cmdStatus(tag, cmd string, p *parser) {
 	c.ok(tag, cmd)
 }
 
-// Response syntax: ../rfc/9051:6681 ../rfc/9051:7070 ../rfc/9051:7059 ../rfc/3501:4834
+// Response syntax: ../rfc/9051:6681 ../rfc/9051:7070 ../rfc/9051:7059 ../rfc/3501:4834 ../rfc/9208:712
 func (c *conn) xstatusLine(tx *bstore.Tx, mb store.Mailbox, attrs []string) string {
 	status := []string{}
 	for _, a := range attrs {
@@ -2654,6 +2657,15 @@ func (c *conn) xstatusLine(tx *bstore.Tx, mb store.Mailbox, attrs []string) stri
 		case "HIGHESTMODSEQ":
 			// ../rfc/7162:366
 			status = append(status, A, fmt.Sprintf("%d", c.xhighestModSeq(tx, mb.ID).Client()))
+		case "DELETED-STORAGE":
+			// ../rfc/9208:394
+			// How much storage space could be reclaimed by expunging messages with the
+			// \Deleted flag. We could keep track of this number and return it efficiently.
+			// Calculating it each time can be slow, and we don't know if clients request it.
+			// Clients are not likely to set the deleted flag without immediately expunging
+			// nowadays. Let's wait for something to need it to go through the trouble, and
+			// always return 0 for now.
+			status = append(status, A, "0")
 		default:
 			xsyntaxErrorf("unknown attribute %q", a)
 		}
@@ -2792,7 +2804,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			ok, maxSize, err := c.account.CanAddMessageSize(tx, m.Size)
 			xcheckf(err, "checking quota")
 			if !ok {
-				// ../rfc/9051:5155
+				// ../rfc/9051:5155 ../rfc/9208:472
 				xusercodeErrorf("OVERQUOTA", "account over maximum total message size %d", maxSize)
 			}
 
@@ -2869,6 +2881,87 @@ wait:
 		panic(fmt.Errorf("%w: in IDLE, expected DONE", errIO))
 	}
 
+	c.ok(tag, cmd)
+}
+
+// Return the quota root for a mailbox name and any current quota's.
+//
+// State: Authenticated and selected.
+func (c *conn) cmdGetquotaroot(tag, cmd string, p *parser) {
+	// Command: ../rfc/9208:278 ../rfc/2087:141
+
+	// Request syntax: ../rfc/9208:660 ../rfc/2087:233
+	p.xspace()
+	name := p.xmailbox()
+	p.xempty()
+
+	// This mailbox does not have to exist. Caller just wants to know which limits
+	// would apply. We only have one limit, so we don't use the name otherwise.
+	// ../rfc/9208:295
+	name = xcheckmailboxname(name, true)
+
+	// Get current usage for account.
+	var quota, size int64 // Account only has a quota if > 0.
+	c.account.WithRLock(func() {
+		quota = c.account.QuotaMessageSize()
+		if quota >= 0 {
+			c.xdbread(func(tx *bstore.Tx) {
+				du := store.DiskUsage{ID: 1}
+				err := tx.Get(&du)
+				xcheckf(err, "gather used quota")
+				size = du.MessageSize
+			})
+		}
+	})
+
+	// We only have one per account quota, we name it "" like the examples in the RFC.
+	// Response syntax: ../rfc/9208:668 ../rfc/2087:242
+	c.bwritelinef(`* QUOTAROOT %s ""`, astring(name).pack(c))
+
+	// We only write the quota response if there is a limit. The syntax doesn't allow
+	// an empty list, so we cannot send the current disk usage if there is no limit.
+	if quota > 0 {
+		// Response syntax: ../rfc/9208:666 ../rfc/2087:239
+		c.bwritelinef(`* QUOTA "" (STORAGE %d %d)`, (size+1024-1)/1024, (quota+1024-1)/1024)
+	}
+	c.ok(tag, cmd)
+}
+
+// Return the quota for a quota root.
+//
+// State: Authenticated and selected.
+func (c *conn) cmdGetquota(tag, cmd string, p *parser) {
+	// Command: ../rfc/9208:245 ../rfc/2087:123
+
+	// Request syntax: ../rfc/9208:658 ../rfc/2087:231
+	p.xspace()
+	root := p.xastring()
+	p.xempty()
+
+	// We only have a per-account root called "".
+	if root != "" {
+		xuserErrorf("unknown quota root")
+	}
+
+	var quota, size int64
+	c.account.WithRLock(func() {
+		quota = c.account.QuotaMessageSize()
+		if quota > 0 {
+			c.xdbread(func(tx *bstore.Tx) {
+				du := store.DiskUsage{ID: 1}
+				err := tx.Get(&du)
+				xcheckf(err, "gather used quota")
+				size = du.MessageSize
+			})
+		}
+	})
+
+	// We only write the quota response if there is a limit. The syntax doesn't allow
+	// an empty list, so we cannot send the current disk usage if there is no limit.
+	if quota > 0 {
+		// Response syntax: ../rfc/9208:666 ../rfc/2087:239
+		c.bwritelinef(`* QUOTA "" (STORAGE %d %d)`, (size+1024-1)/1024, (quota+1024-1)/1024)
+	}
 	c.ok(tag, cmd)
 }
 
@@ -3267,7 +3360,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			if ok, maxSize, err := c.account.CanAddMessageSize(tx, totalSize); err != nil {
 				xcheckf(err, "checking quota")
 			} else if !ok {
-				// ../rfc/9051:5155
+				// ../rfc/9051:5155 ../rfc/9208:472
 				xusercodeErrorf("OVERQUOTA", "account over maximum total message size %d", maxSize)
 			}
 			err = c.account.AddMessageSize(c.log, tx, totalSize)

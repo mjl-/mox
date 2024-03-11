@@ -255,6 +255,37 @@ type UntaggedVanished struct {
 	UIDs    NumSet
 }
 
+// UntaggedQuotaroot lists the roots for which quota can be present.
+type UntaggedQuotaroot []string
+
+// UntaggedQuota holds the quota for a quota root.
+type UntaggedQuota struct {
+	Root string
+
+	// Always has at least one. Any QUOTA=RES-* capability not mentioned has no limit
+	// or this quota root.
+	Resources []QuotaResource
+}
+
+// Resource types ../rfc/9208:533
+
+// QuotaResourceName is the name of a resource type. More can be defined in the
+// future and encountered in the wild. Always in upper case.
+type QuotaResourceName string
+
+const (
+	QuotaResourceStorage           = "STORAGE"
+	QuotaResourceMesssage          = "MESSAGE"
+	QuotaResourceMailbox           = "MAILBOX"
+	QuotaResourceAnnotationStorage = "ANNOTATION-STORAGE"
+)
+
+type QuotaResource struct {
+	Name  QuotaResourceName
+	Usage int64 // Currently in use. Count or disk size in 1024 byte blocks.
+	Limit int64 // Maximum allowed usage.
+}
+
 // ../rfc/2971:184
 
 type UntaggedID map[string]string

@@ -436,9 +436,9 @@ func (p *parser) xmboxOrPat() ([]string, bool) {
 	return l, true
 }
 
-// ../rfc/9051:7056, RECENT ../rfc/3501:5047, APPENDLIMIT ../rfc/7889:252, HIGHESTMODSEQ ../rfc/7162:2452
+// ../rfc/9051:7056, RECENT ../rfc/3501:5047, APPENDLIMIT ../rfc/7889:252, HIGHESTMODSEQ ../rfc/7162:2452, DELETED-STORAGE ../rfc/9208:696
 func (p *parser) xstatusAtt() string {
-	w := p.xtakelist("MESSAGES", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "DELETED", "SIZE", "RECENT", "APPENDLIMIT", "HIGHESTMODSEQ")
+	w := p.xtakelist("MESSAGES", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "DELETED-STORAGE", "DELETED", "SIZE", "RECENT", "APPENDLIMIT", "HIGHESTMODSEQ")
 	if w == "HIGHESTMODSEQ" {
 		// HIGHESTMODSEQ is a CONDSTORE-enabling parameter. ../rfc/7162:375
 		p.conn.enabled[capCondstore] = true

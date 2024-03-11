@@ -129,12 +129,14 @@ export class Client {
 	// and the destinations (keys are email addresses, or localparts to the default
 	// domain). todo: replace with a function that returns the whole account, when
 	// sherpadoc understands unnamed struct fields.
-	async Account(): Promise<[string, Domain, { [key: string]: Destination }]> {
+	// StorageUsed is the sum of the sizes of all messages, in bytes.
+	// StorageLimit is the maximum storage that can be used, or 0 if there is no limit.
+	async Account(): Promise<[string, Domain, { [key: string]: Destination }, number, number]> {
 		const fn: string = "Account"
 		const paramTypes: string[][] = []
-		const returnTypes: string[][] = [["string"],["Domain"],["{}","Destination"]]
+		const returnTypes: string[][] = [["string"],["Domain"],["{}","Destination"],["int64"],["int64"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, Domain, { [key: string]: Destination }]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, Domain, { [key: string]: Destination }, number, number]
 	}
 
 	async AccountSaveFullName(fullName: string): Promise<void> {

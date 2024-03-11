@@ -622,7 +622,7 @@ var api;
 		async Account(account) {
 			const fn = "Account";
 			const paramTypes = [["string"]];
-			const returnTypes = [["{}", "any"]];
+			const returnTypes = [["{}", "any"], ["int64"]];
 			const params = [account];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
@@ -1766,8 +1766,26 @@ const accounts = async () => {
 		accountModified = true;
 	})), ' ', dom.submitbutton('Add account', attr.title('The account will be added and the config reloaded.')))));
 };
+const formatQuotaSize = (v) => {
+	if (v === 0) {
+		return '0';
+	}
+	const m = 1024 * 1024;
+	const g = m * 1024;
+	const t = g * 1024;
+	if (Math.floor(v / t) * t === v) {
+		return '' + (v / t) + 't';
+	}
+	else if (Math.floor(v / g) * g === v) {
+		return '' + (v / g) + 'g';
+	}
+	else if (Math.floor(v / m) * m === v) {
+		return '' + (v / m) + 'm';
+	}
+	return '' + v;
+};
 const account = async (name) => {
-	const [config, domains] = await Promise.all([
+	const [[config, diskUsage], domains] = await Promise.all([
 		client.Account(name),
 		client.Domains(),
 	]);
@@ -1803,29 +1821,10 @@ const account = async (name) => {
 			s = s.substring(0, s.length - 1);
 		}
 		let v = parseInt(s);
-		console.log('x', s, v, mult, formatQuotaSize(v * mult));
 		if (isNaN(v) || origs !== formatQuotaSize(v * mult)) {
 			throw new Error('invalid number');
 		}
 		return v * mult;
-	};
-	const formatQuotaSize = (v) => {
-		if (v === 0) {
-			return '0';
-		}
-		const m = 1024 * 1024;
-		const g = m * 1024;
-		const t = g * 1024;
-		if (Math.floor(v / t) * t === v) {
-			return '' + (v / t) + 't';
-		}
-		else if (Math.floor(v / g) * g === v) {
-			return '' + (v / g) + 'g';
-		}
-		else if (Math.floor(v / m) * m === v) {
-			return '' + (v / m) + 'm';
-		}
-		return '' + v;
 	};
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), name), dom.div('Default domain: ', config.Domain ? dom.a(config.Domain, attr.href('#domains/' + config.Domain)) : '(none)'), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Action'))), dom.tbody(Object.keys(config.Destinations || {}).length === 0 ? dom.tr(dom.td(attr.colspan('2'), '(None, login disabled)')) : [], Object.keys(config.Destinations || {}).map(k => {
 		let v = k;
@@ -1883,7 +1882,7 @@ const account = async (name) => {
 		}
 		form.reset();
 		window.location.reload(); // todo: only reload the destinations
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an email address. If empty, a catchall address is configured for the domain.')), dom.br(), localpart = dom.input()), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain'), dom.br(), domain = dom.select((domains || []).map(d => dom.option(domainName(d), domainName(d) === config.Domain ? attr.selected('') : [])))), ' ', dom.submitbutton('Add address'))), dom.br(), dom.h2('Limits'), dom.form(fieldsetLimits = dom.fieldset(dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')), dom.br(), maxOutgoingMessagesPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxOutgoingMessagesPerDay || 1000))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum first-time recipients per day', attr.title('Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.')), dom.br(), maxFirstTimeRecipientsPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxFirstTimeRecipientsPerDay || 200))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')), dom.br(), quotaMessageSize = dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize)))), dom.submitbutton('Save')), async function submit(e) {
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an email address. If empty, a catchall address is configured for the domain.')), dom.br(), localpart = dom.input()), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain'), dom.br(), domain = dom.select((domains || []).map(d => dom.option(domainName(d), domainName(d) === config.Domain ? attr.selected('') : [])))), ' ', dom.submitbutton('Add address'))), dom.br(), dom.h2('Limits'), dom.form(fieldsetLimits = dom.fieldset(dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')), dom.br(), maxOutgoingMessagesPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxOutgoingMessagesPerDay || 1000))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum first-time recipients per day', attr.title('Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.')), dom.br(), maxFirstTimeRecipientsPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxFirstTimeRecipientsPerDay || 200))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')), dom.br(), quotaMessageSize = dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize))), ' Current usage is ', formatQuotaSize(Math.floor(diskUsage / (1024 * 1024)) * 1024 * 1024), '.'), dom.submitbutton('Save')), async function submit(e) {
 		e.stopPropagation();
 		e.preventDefault();
 		fieldsetLimits.disabled = true;
