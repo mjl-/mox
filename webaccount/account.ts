@@ -3,6 +3,9 @@
 // From HTML.
 declare let page: HTMLElement
 declare let moxversion: string
+declare let moxgoversion: string
+declare let moxgoos: string
+declare let moxgoarch: string
 
 const login = async (reason: string) => {
 	return new Promise<string>((resolve: (v: string) => void, _) => {

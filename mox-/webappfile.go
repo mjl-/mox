@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -124,7 +125,7 @@ func (a *WebappFile) Serve(ctx context.Context, log mlog.Log, w http.ResponseWri
 			}
 			var b bytes.Buffer
 			b.Write(html[:index])
-			fmt.Fprintf(&b, "<script>\n// Javascript is generated from typescript, don't modify the javascript because changes will be lost.\nconst moxversion = \"%s\";\n", moxvar.Version)
+			fmt.Fprintf(&b, "<script>\n// Javascript is generated from typescript, don't modify the javascript because changes will be lost.\nconst moxversion = \"%s\";\nconst moxgoversion = \"%s\";\nconst moxgoos = \"%s\";\nconst moxgoarch = \"%s\";\n", moxvar.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 			b.Write(js)
 			b.WriteString("\t\t</script>")
 			b.Write(html[index+len(script):])

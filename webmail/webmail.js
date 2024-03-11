@@ -2182,7 +2182,7 @@ const cmdHelp = async () => {
 			return;
 		}
 		window.alert('"mailto:" protocol handler unregistered.');
-	})), dom.div(style({ marginTop: '2ex' }), 'Mox is open source email server software, this is version ' + moxversion + '. Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new'), '.'))));
+	})), dom.div(style({ marginTop: '2ex' }), 'Mox is open source email server software, this is version ', moxversion, ', built with ', moxgoversion, '. Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new'), '.'))));
 };
 // Show tooltips for either the focused element, or otherwise for all elements
 // that aren't reachable with tabindex and aren't marked specially to prevent

@@ -112,6 +112,9 @@ const zindexes = {
 // From HTML.
 declare let page: HTMLElement
 declare let moxversion: string
+declare let moxgoversion: string
+declare let moxgoos: string
+declare let moxgoarch: string
 
 // All logging goes through log() instead of console.log, except "should not happen" logging.
 let log: (...args: any[]) => void = () => {}
@@ -1197,7 +1200,7 @@ const cmdHelp = async () => {
 						window.alert('"mailto:" protocol handler unregistered.')
 					}),
 				),
-				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version '+moxversion+'. Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new'), '.'),
+				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version ', moxversion, ', built with ', moxgoversion, '. Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new'), '.'),
 			),
 		),
 	)

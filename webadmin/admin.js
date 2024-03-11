@@ -1479,7 +1479,7 @@ const crumbs = (...l) => [
 	dom.br()
 ];
 const errmsg = (err) => '' + (err.message || '(no error message)');
-const footer = dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion);
+const footer = dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion, ' ', moxgoversion, ' ', moxgoos, '/', moxgoarch);
 const age = (date, future, nowSecs) => {
 	if (!nowSecs) {
 		nowSecs = new Date().getTime() / 1000;
