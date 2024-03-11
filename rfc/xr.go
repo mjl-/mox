@@ -320,6 +320,21 @@ let changinghash = false
 function hashline(s) {
 	return s ? ':'+s.substring('#L'.length) : ''
 }
+function updateRFCLink(s) {
+	const t = s.split('/')
+	let e
+	if (t.length === 2 && t[0] === 'rfc' && ''+parseInt(t[1]) === t[1]) {
+		e = document.createElement('a')
+		e.setAttribute('href', 'https://datatracker.ietf.org/doc/html/rfc'+t[1])
+		e.setAttribute('rel', 'noopener')
+	} else {
+		e = document.createElement('span')
+	}
+	e.innerText = s
+	e.style.fontWeight = 'bold'
+	rfcfile.replaceWith(e)
+	rfcfile = e
+}
 function updateHash() {
 	const code = trimDotHTML(codeiframe.contentWindow.location.pathname.substring(basepath.length))+hashline(codeiframe.contentWindow.location.hash)
 	const rfc = trimDotHTML(rfciframe.contentWindow.location.pathname.substring(basepath.length))+hashline(rfciframe.contentWindow.location.hash)
@@ -329,7 +344,7 @@ function updateHash() {
 		return
 	}
 	codefile.innerText = code
-	rfcfile.innerText = rfc
+	updateRFCLink(rfc)
 	const nhash = '#' + code + ',' + rfc
 	if (location.hash === nhash || location.hash === '' && nhash === '#code,rfc') {
 		return
@@ -392,7 +407,7 @@ function updateIframes() {
 	}
 	if (rfciframe.src !== rfcsrc) {
 		rfciframe = replaceIframe(rfciframe, rfcsrc)
-		rfcfile.innerText = t[1]
+		updateRFCLink(t[1])
 	}
 }
 window.addEventListener('load', function() {
