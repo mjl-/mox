@@ -224,8 +224,25 @@ type UntaggedSearchModSeq struct {
 }
 type UntaggedStatus struct {
 	Mailbox string
-	Attrs   map[string]int64 // Upper case status attributes. ../rfc/9051:7059
+	Attrs   map[StatusAttr]int64 // Upper case status attributes.
 }
+
+// ../rfc/9051:7059 ../9208:712
+type StatusAttr string
+
+const (
+	StatusMessages       StatusAttr = "MESSAGES"
+	StatusUIDNext        StatusAttr = "UIDNEXT"
+	StatusUIDValidity    StatusAttr = "UIDVALIDITY"
+	StatusUnseen         StatusAttr = "UNSEEN"
+	StatusDeleted        StatusAttr = "DELETED"
+	StatusSize           StatusAttr = "SIZE"
+	StatusRecent         StatusAttr = "RECENT"
+	StatusAppendLimit    StatusAttr = "APPENDLIMIT"
+	StatusHighestModSeq  StatusAttr = "HIGHESTMODSEQ"
+	StatusDeletedStorage StatusAttr = "DELETED-STORAGE"
+)
+
 type UntaggedNamespace struct {
 	Personal, Other, Shared []NamespaceDescr
 }

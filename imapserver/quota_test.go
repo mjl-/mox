@@ -32,7 +32,7 @@ func TestQuota1(t *testing.T) {
 	// Check that we get a DELETED-STORAGE status attribute with value 0, also if
 	// messages are marked deleted. We don't go through the trouble.
 	tc.transactf("ok", "status inbox (DELETED-STORAGE)")
-	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"DELETED-STORAGE": 0}})
+	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusDeletedStorage: 0}})
 
 	// tclimit does have a limit.
 	tclimit := startArgs(t, false, false, true, true, "limit")
@@ -50,5 +50,5 @@ func TestQuota1(t *testing.T) {
 	tclimit.xuntagged(imapclient.UntaggedQuota{Root: "", Resources: []imapclient.QuotaResource{{Name: imapclient.QuotaResourceStorage, Usage: 0, Limit: 1}}})
 
 	tclimit.transactf("ok", "status inbox (DELETED-STORAGE)")
-	tclimit.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"DELETED-STORAGE": 0}})
+	tclimit.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusDeletedStorage: 0}})
 }

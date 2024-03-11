@@ -90,15 +90,15 @@ func TestListExtended(t *testing.T) {
 	}
 
 	ustatus := func(name string) imapclient.UntaggedStatus {
-		attrs := map[string]int64{
-			"MESSAGES":    0,
-			"UIDNEXT":     1,
-			"UIDVALIDITY": int64(uidval(name)),
-			"UNSEEN":      0,
-			"DELETED":     0,
-			"SIZE":        0,
-			"RECENT":      0,
-			"APPENDLIMIT": 0,
+		attrs := map[imapclient.StatusAttr]int64{
+			imapclient.StatusMessages:    0,
+			imapclient.StatusUIDNext:     1,
+			imapclient.StatusUIDValidity: int64(uidval(name)),
+			imapclient.StatusUnseen:      0,
+			imapclient.StatusDeleted:     0,
+			imapclient.StatusSize:        0,
+			imapclient.StatusRecent:      0,
+			imapclient.StatusAppendLimit: 0,
 		}
 		return imapclient.UntaggedStatus{Mailbox: name, Attrs: attrs}
 	}

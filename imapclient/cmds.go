@@ -206,10 +206,15 @@ func (c *Conn) Namespace() (untagged []Untagged, result Result, rerr error) {
 	return c.Transactf("namespace")
 }
 
-// Status requests information about a mailbox, such as number of messages, size, etc.
-func (c *Conn) Status(mailbox string) (untagged []Untagged, result Result, rerr error) {
+// Status requests information about a mailbox, such as number of messages, size,
+// etc. At least one attribute required.
+func (c *Conn) Status(mailbox string, attrs ...StatusAttr) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
-	return c.Transactf("status %s", astring(mailbox))
+	l := make([]string, len(attrs))
+	for i, a := range attrs {
+		l[i] = string(a)
+	}
+	return c.Transactf("status %s (%s)", astring(mailbox), strings.Join(l, " "))
 }
 
 // Append adds message to mailbox with flags and optional receive time.

@@ -363,14 +363,14 @@ func (c *Conn) xuntagged() Untagged {
 		mailbox := c.xastring()
 		c.xspace()
 		c.xtake("(")
-		attrs := map[string]int64{}
+		attrs := map[StatusAttr]int64{}
 		for !c.take(')') {
 			if len(attrs) > 0 {
 				c.xspace()
 			}
 			s := c.xatom()
 			c.xspace()
-			S := strings.ToUpper(s)
+			S := StatusAttr(strings.ToUpper(s))
 			var num int64
 			// ../rfc/9051:7059
 			switch S {

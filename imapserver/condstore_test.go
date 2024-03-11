@@ -42,7 +42,7 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 	// First some tests without any messages.
 
 	tc.transactf("ok", "Status inbox (Highestmodseq)")
-	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"HIGHESTMODSEQ": 1}})
+	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusHighestModSeq: 1}})
 
 	// No messages, no matches.
 	tc.transactf("ok", "Uid Fetch 1:* (Flags) (Changedsince 12345)")
@@ -160,10 +160,10 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 
 	// Check highestmodseq for mailboxes.
 	tc.transactf("ok", "Status inbox (highestmodseq)")
-	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"HIGHESTMODSEQ": clientModseq}})
+	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusHighestModSeq: clientModseq}})
 
 	tc.transactf("ok", "Status otherbox (highestmodseq)")
-	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "otherbox", Attrs: map[string]int64{"HIGHESTMODSEQ": 3}})
+	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "otherbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusHighestModSeq: 3}})
 
 	// Check highestmodseq when we select.
 	tc.transactf("ok", "Examine otherbox")
@@ -297,7 +297,7 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 
 	// Again after expunge: status, select, conditional store/fetch/search
 	tc.transactf("ok", "Status inbox (Highestmodseq Messages Unseen Deleted)")
-	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"MESSAGES": 4, "UNSEEN": 4, "DELETED": 0, "HIGHESTMODSEQ": clientModseq}})
+	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusMessages: 4, imapclient.StatusUnseen: 4, imapclient.StatusDeleted: 0, imapclient.StatusHighestModSeq: clientModseq}})
 
 	tc.transactf("ok", "Close")
 	tc.transactf("ok", "Select inbox")

@@ -22,5 +22,5 @@ func TestUnselect(t *testing.T) {
 	tc.client.StoreFlagsAdd("1", true, `\Deleted`)
 	tc.transactf("ok", "unselect")
 	tc.transactf("ok", "status inbox (messages)")
-	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"MESSAGES": 1}}) // Message not removed.
+	tc.xuntagged(imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusMessages: 1}}) // Message not removed.
 }
