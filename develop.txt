@@ -288,6 +288,7 @@ done
 - Send and receive email with imap4/smtp clients.
 - Check DNS check admin page.
 - Check with https://internet.nl.
+- Move apidiff/next.txt to apidiff/<version>.txt, and create empty next.txt.
 - Add release to the Latest release & News sections of website/index.md.
 - Create git tag, push code.
 - Publish new docker image.
@@ -298,3 +299,4 @@ done
   instructions to prevent confusion about "assets" github links to.
 - Publish new cross-referenced code/rfc to www.xmox.nl/xr/.
 - Update moxtools with latest version.
+- Update implementations support matrix.
