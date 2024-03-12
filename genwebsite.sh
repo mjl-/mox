@@ -54,3 +54,62 @@ mkdir html/commands
 
 mkdir html/protocols
 go run website.go -protocols 'Protocols' <../rfc/index.txt >html/protocols/index.html
+
+mkdir html/b
+cat <<'EOF' >html/b/index.html
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>mox build</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="icon" href="noNeedlessFaviconRequestsPlease:" />
+		<style>
+body { padding: 1em; }
+* { font-size: 18px; font-family: ubuntu, lato, sans-serif; margin: 0; padding: 0; box-sizing: border-box; }
+p { max-width: 50em; margin-bottom: 2ex; }
+pre { font-family: 'ubuntu mono', monospace; }
+pre, blockquote { padding: 1em; background-color: #eee; border-radius: .25em; display: inline-block; margin-bottom: 1em; }
+h1 { margin: 1em 0 .5em 0; }
+		</style>
+	</head>
+	<body>
+<script>
+const elem = (name, ...s) => {
+	const e = document.createElement(name)
+	e.append(...s)
+	return e
+}
+const link = (url) => {
+	const e = document.createElement('a')
+	e.setAttribute('href', url)
+	e.setAttribute('rel', 'noopener')
+	e.appendChild(document.createTextNode(url))
+	return e
+}
+let h = location.hash.substring(1)
+const ok = /^[a-zA-Z0-9_\.]+$/.test(h)
+if (!ok) {
+	h = '<tag-or-branch-or-commithash>'
+}
+const init = () => {
+	document.body.append(
+		elem('p', 'Compile or download any version of mox, by tag (release), branch or commit hash.'),
+		elem('h1', 'Compile'),
+		elem('p', 'Run:'),
+		elem('pre', 'CGO_ENABLED=0 GOBIN=$PWD go install github.com/mjl-/mox@'+h),
+		elem('p', 'Mox is tested with the Go toolchain versions that are still have support: The most recent version, and the version before.'),
+		elem('h1', 'Download'),
+		elem('p', 'Download a binary for your platform:'),
+		elem('blockquote', ok ?
+			link('https://beta.gobuilds.org/github.com/mjl-/mox@'+h) :
+			'https://beta.gobuilds.org/github.com/mjl-/mox@'+h
+		),
+		elem('p', 'Because mox is written in Go, builds are reproducible, also when cross-compiling. Gobuilds.org is a service that builds Go applications on-demand with the latest Go toolchain/runtime.'),
+	)
+}
+window.addEventListener('load', init)
+</script>
+	</body>
+</html>
+EOF
