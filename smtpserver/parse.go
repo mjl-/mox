@@ -261,7 +261,6 @@ func (p *parser) xdomain() dns.Domain {
 	return d
 }
 
-// ../rfc/5321:2303
 // ../rfc/5321:2303 ../rfc/6531:411
 func (p *parser) xsubdomain() string {
 	return p.xtakefn1("subdomain", func(c rune, i int) bool {
@@ -278,9 +277,16 @@ func (p *parser) xmailbox() smtp.Path {
 
 // ../rfc/5321:2307
 func (p *parser) xldhstr() string {
-	return p.xtakefn1("ldh-str", func(c rune, i int) bool {
-		return c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || i == 0 && c == '-'
+	s := p.xtakefn1("ldh-str", func(c rune, i int) bool {
+		return c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-'
 	})
+	if s == "-" {
+		p.xerrorf("empty ldh-str")
+	} else if strings.HasSuffix(s, "-") {
+		p.o--
+		s = s[:len(s)-1]
+	}
+	return s
 }
 
 // parse address-literal or domain.
