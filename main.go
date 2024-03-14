@@ -3023,7 +3023,7 @@ func ctlcmdFixmsgsize(ctl *ctl, account string) {
 
 func cmdReparse(c *cmd) {
 	c.params = "[account]"
-	c.help = `Parse all messages in the account or all accounts again
+	c.help = `Parse all messages in the account or all accounts again.
 
 Can be useful after upgrading mox with improved message parsing. Messages are
 parsed in batches, so other access to the mailboxes/messages are not blocked

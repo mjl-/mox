@@ -969,7 +969,7 @@ refetch messages.
 
 # mox reparse
 
-# Parse all messages in the account or all accounts again
+Parse all messages in the account or all accounts again.
 
 Can be useful after upgrading mox with improved message parsing. Messages are
 parsed in batches, so other access to the mailboxes/messages are not blocked
