@@ -91,7 +91,8 @@ func ExampleComposer() {
 	var b bytes.Buffer
 
 	// NewComposer. Keep in mind that operations on a Composer will panic on error.
-	xc := message.NewComposer(&b, 10*1024*1024)
+	const smtputf8 = false
+	xc := message.NewComposer(&b, 10*1024*1024, smtputf8)
 
 	// Catch and handle errors when composing.
 	defer func() {

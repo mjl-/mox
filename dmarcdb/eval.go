@@ -875,7 +875,15 @@ Period: %s - %s UTC
 }
 
 func composeAggregateReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text, filename string, reportXMLGzipFile *os.File) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
-	xc := message.NewComposer(mf, 100*1024*1024)
+	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
+	smtputf8 = fromAddr.Localpart.IsInternational()
+	for _, r := range recipients {
+		if smtputf8 {
+			smtputf8 = r.Address.Localpart.IsInternational()
+			break
+		}
+	}
+	xc := message.NewComposer(mf, 100*1024*1024, smtputf8)
 	defer func() {
 		x := recover()
 		if x == nil {
@@ -887,14 +895,6 @@ func composeAggregateReport(ctx context.Context, log mlog.Log, mf *os.File, from
 		}
 		panic(x)
 	}()
-
-	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
-	for _, a := range recipients {
-		if a.Address.Localpart.IsInternational() {
-			xc.SMTPUTF8 = true
-			break
-		}
-	}
 
 	xc.HeaderAddrs("From", []message.NameAddress{{Address: fromAddr}})
 	xc.HeaderAddrs("To", recipients)
@@ -1015,7 +1015,15 @@ Submitting-URI: %s
 }
 
 func composeErrorReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr smtp.Address, recipients []message.NameAddress, subject, text string) (msgPrefix string, has8bit, smtputf8 bool, messageID string, rerr error) {
-	xc := message.NewComposer(mf, 100*1024*1024)
+	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
+	smtputf8 = fromAddr.Localpart.IsInternational()
+	for _, r := range recipients {
+		if smtputf8 {
+			smtputf8 = r.Address.Localpart.IsInternational()
+			break
+		}
+	}
+	xc := message.NewComposer(mf, 100*1024*1024, smtputf8)
 	defer func() {
 		x := recover()
 		if x == nil {
@@ -1027,14 +1035,6 @@ func composeErrorReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr
 		}
 		panic(x)
 	}()
-
-	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
-	for _, a := range recipients {
-		if a.Address.Localpart.IsInternational() {
-			xc.SMTPUTF8 = true
-			break
-		}
-	}
 
 	xc.HeaderAddrs("From", []message.NameAddress{{Address: fromAddr}})
 	xc.HeaderAddrs("To", recipients)

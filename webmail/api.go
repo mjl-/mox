@@ -366,8 +366,6 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		xcheckf(ctx, err, "checking send limit")
 	})
 
-	has8bit := false // We update this later on.
-
 	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
 	smtputf8 := false
 	for _, a := range recipients {
@@ -387,7 +385,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	defer store.CloseRemoveTempFile(log, dataFile, "message to submit")
 
 	// If writing to the message file fails, we abort immediately.
-	xc := message.NewComposer(dataFile, w.maxMessageSize)
+	xc := message.NewComposer(dataFile, w.maxMessageSize, smtputf8)
 	defer func() {
 		x := recover()
 		if x == nil {
@@ -643,7 +641,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			Localpart: rcpt.Localpart,
 			IPDomain:  dns.IPDomain{Domain: rcpt.Domain},
 		}
-		qm := queue.MakeMsg(fromPath, toPath, has8bit, smtputf8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS, now)
+		qm := queue.MakeMsg(fromPath, toPath, xc.Has8bit, xc.SMTPUTF8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS, now)
 		if m.FutureRelease != nil {
 			ival := time.Until(*m.FutureRelease)
 			if ival < 0 {

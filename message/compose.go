@@ -32,10 +32,14 @@ type Composer struct {
 
 // NewComposer initializes a new composer with a buffered writer around w, and
 // with a maximum message size if maxSize is greater than zero.
+//
+// smtputf8 must be set when the message must be delivered with smtputf8: if any
+// email address localpart has non-ascii (utf-8).
+//
 // Operations on a Composer do not return an error. Caller must use recover() to
 // catch ErrCompose and optionally ErrMessageSize errors.
-func NewComposer(w io.Writer, maxSize int64) *Composer {
-	return &Composer{bw: bufio.NewWriter(w), maxSize: maxSize}
+func NewComposer(w io.Writer, maxSize int64, smtputf8 bool) *Composer {
+	return &Composer{bw: bufio.NewWriter(w), maxSize: maxSize, SMTPUTF8: smtputf8, Has8bit: smtputf8}
 }
 
 // Write implements io.Writer, but calls panic (that is handled higher up) on
