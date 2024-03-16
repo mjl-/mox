@@ -1118,18 +1118,26 @@ const domainDNSCheck = async (d: string) => {
 	const detailsIPRev = !checks.IPRev.IPNames || !Object.entries(checks.IPRev.IPNames).length ? [] : [
 		dom.div('Hostname: ' + domainString(checks.IPRev.Hostname)),
 		dom.table(
-			dom.tr(dom.th('IP'), dom.th('Addresses')),
-			Object.entries(checks.IPRev.IPNames).sort().map(t =>
-				dom.tr(dom.td(t[0]), dom.td((t[1] || []).join(', '))),
-			)
+			dom.thead(
+				dom.tr(dom.th('IP'), dom.th('Addresses')),
+			),
+			dom.tbody(
+				Object.entries(checks.IPRev.IPNames).sort().map(t =>
+					dom.tr(dom.td(t[0]), dom.td((t[1] || []).join(', '))),
+				)
+			),
 		),
 	]
 	const detailsMX = (checks.MX.Records || []).length === 0 ? [] : [
 		dom.table(
-			dom.tr(dom.th('Preference'), dom.th('Host'), dom.th('IPs')),
-			(checks.MX.Records || []).map(mx =>
-				dom.tr(dom.td(''+mx.Pref), dom.td(mx.Host), dom.td((mx.IPs || []).join(', '))),
-			)
+			dom.thead(
+				dom.tr(dom.th('Preference'), dom.th('Host'), dom.th('IPs')),
+			),
+			dom.tbody(
+				(checks.MX.Records || []).map(mx =>
+					dom.tr(dom.td(''+mx.Pref), dom.td(mx.Host), dom.td((mx.IPs || []).join(', '))),
+				)
+			),
 		),
 	]
 	const detailsTLS: ElemArg[] = []
@@ -1140,9 +1148,13 @@ const domainDNSCheck = async (d: string) => {
 	]
 	const detailsDKIM = (checks.DKIM.Records || []).length === 0 ? [] : [
 		dom.table(
-			dom.tr(dom.th('Selector'), dom.th('TXT record')),
-			(checks.DKIM.Records || []).map(rec =>
-				dom.tr(dom.td(rec.Selector), dom.td(rec.TXT)),
+			dom.thead(
+				dom.tr(dom.th('Selector'), dom.th('TXT record')),
+			),
+			dom.tbody(
+				(checks.DKIM.Records || []).map(rec =>
+					dom.tr(dom.td(rec.Selector), dom.td(rec.TXT)),
+				),
 			),
 		)
 	]
@@ -1159,14 +1171,18 @@ const domainDNSCheck = async (d: string) => {
 	]
 	const detailsSRVConf = !checks.SRVConf.SRVs || Object.keys(checks.SRVConf.SRVs).length === 0 ? [] : [
 		dom.table(
-			dom.tr(dom.th('Service'), dom.th('Priority'), dom.th('Weight'), dom.th('Port'), dom.th('Host')),
-			Object.entries(checks.SRVConf.SRVs || []).map(t => {
-				const l = t[1]
-				if (!l || !l.length) {
-					return dom.tr(dom.td(t[0]), dom.td(attr.colspan('4'), '(none)'))
-				}
-				return l.map(r => dom.tr([t[0], r.Priority, r.Weight, r.Port, r.Target].map(s => dom.td(''+s))))
-			}),
+			dom.thead(
+				dom.tr(dom.th('Service'), dom.th('Priority'), dom.th('Weight'), dom.th('Port'), dom.th('Host')),
+			),
+			dom.tbody(
+				Object.entries(checks.SRVConf.SRVs || []).map(t => {
+					const l = t[1]
+					if (!l || !l.length) {
+						return dom.tr(dom.td(t[0]), dom.td(attr.colspan('4'), '(none)'))
+					}
+					return l.map(r => dom.tr([t[0], r.Priority, r.Weight, r.Port, r.Target].map(s => dom.td(''+s))))
+				}),
+			),
 		),
 	]
 	const detailsAutoconf = [
@@ -1175,9 +1191,13 @@ const domainDNSCheck = async (d: string) => {
 	]
 	const detailsAutodiscover = !checks.Autodiscover.Records ? [] : [
 		dom.table(
-			dom.tr(dom.th('Host'), dom.th('Port'), dom.th('Priority'), dom.th('Weight'), dom.th('IPs')),
-			(checks.Autodiscover.Records || []).map(r =>
-				dom.tr([r.Target, r.Port, r.Priority, r.Weight, (r.IPs || []).join(', ')].map(s => dom.td(''+s)))
+			dom.thead(
+				dom.tr(dom.th('Host'), dom.th('Port'), dom.th('Priority'), dom.th('Weight'), dom.th('IPs')),
+			),
+			dom.tbody(
+				(checks.Autodiscover.Records || []).map(r =>
+					dom.tr([r.Target, r.Port, r.Priority, r.Weight, (r.IPs || []).join(', ')].map(s => dom.td(''+s)))
+				),
 			),
 		),
 	]

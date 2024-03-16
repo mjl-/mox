@@ -2086,10 +2086,10 @@ const domainDNSCheck = async (d) => {
 	const detailsDNSSEC = [];
 	const detailsIPRev = !checks.IPRev.IPNames || !Object.entries(checks.IPRev.IPNames).length ? [] : [
 		dom.div('Hostname: ' + domainString(checks.IPRev.Hostname)),
-		dom.table(dom.tr(dom.th('IP'), dom.th('Addresses')), Object.entries(checks.IPRev.IPNames).sort().map(t => dom.tr(dom.td(t[0]), dom.td((t[1] || []).join(', '))))),
+		dom.table(dom.thead(dom.tr(dom.th('IP'), dom.th('Addresses'))), dom.tbody(Object.entries(checks.IPRev.IPNames).sort().map(t => dom.tr(dom.td(t[0]), dom.td((t[1] || []).join(', ')))))),
 	];
 	const detailsMX = (checks.MX.Records || []).length === 0 ? [] : [
-		dom.table(dom.tr(dom.th('Preference'), dom.th('Host'), dom.th('IPs')), (checks.MX.Records || []).map(mx => dom.tr(dom.td('' + mx.Pref), dom.td(mx.Host), dom.td((mx.IPs || []).join(', '))))),
+		dom.table(dom.thead(dom.tr(dom.th('Preference'), dom.th('Host'), dom.th('IPs'))), dom.tbody((checks.MX.Records || []).map(mx => dom.tr(dom.td('' + mx.Pref), dom.td(mx.Host), dom.td((mx.IPs || []).join(', ')))))),
 	];
 	const detailsTLS = [];
 	const detailsDANE = [];
@@ -2098,7 +2098,7 @@ const domainDNSCheck = async (d) => {
 		checks.SPF.HostTXT ? [dom.div('Host TXT record: ' + checks.SPF.HostTXT)] : [],
 	];
 	const detailsDKIM = (checks.DKIM.Records || []).length === 0 ? [] : [
-		dom.table(dom.tr(dom.th('Selector'), dom.th('TXT record')), (checks.DKIM.Records || []).map(rec => dom.tr(dom.td(rec.Selector), dom.td(rec.TXT))))
+		dom.table(dom.thead(dom.tr(dom.th('Selector'), dom.th('TXT record'))), dom.tbody((checks.DKIM.Records || []).map(rec => dom.tr(dom.td(rec.Selector), dom.td(rec.TXT)))))
 	];
 	const detailsDMARC = !checks.DMARC.Domain ? [] : [
 		dom.div('Domain: ' + checks.DMARC.Domain),
@@ -2112,20 +2112,20 @@ const domainDNSCheck = async (d) => {
 		!checks.MTASTS.PolicyText ? [] : dom.div('MTA-STS policy: ', dom.pre(dom._class('literal'), style({ maxWidth: '60em' }), checks.MTASTS.PolicyText)),
 	];
 	const detailsSRVConf = !checks.SRVConf.SRVs || Object.keys(checks.SRVConf.SRVs).length === 0 ? [] : [
-		dom.table(dom.tr(dom.th('Service'), dom.th('Priority'), dom.th('Weight'), dom.th('Port'), dom.th('Host')), Object.entries(checks.SRVConf.SRVs || []).map(t => {
+		dom.table(dom.thead(dom.tr(dom.th('Service'), dom.th('Priority'), dom.th('Weight'), dom.th('Port'), dom.th('Host'))), dom.tbody(Object.entries(checks.SRVConf.SRVs || []).map(t => {
 			const l = t[1];
 			if (!l || !l.length) {
 				return dom.tr(dom.td(t[0]), dom.td(attr.colspan('4'), '(none)'));
 			}
 			return l.map(r => dom.tr([t[0], r.Priority, r.Weight, r.Port, r.Target].map(s => dom.td('' + s))));
-		})),
+		}))),
 	];
 	const detailsAutoconf = [
 		...(!checks.Autoconf.ClientSettingsDomainIPs ? [] : [dom.div('Client settings domain IPs: ' + checks.Autoconf.ClientSettingsDomainIPs.join(', '))]),
 		...(!checks.Autoconf.IPs ? [] : [dom.div('IPs: ' + checks.Autoconf.IPs.join(', '))]),
 	];
 	const detailsAutodiscover = !checks.Autodiscover.Records ? [] : [
-		dom.table(dom.tr(dom.th('Host'), dom.th('Port'), dom.th('Priority'), dom.th('Weight'), dom.th('IPs')), (checks.Autodiscover.Records || []).map(r => dom.tr([r.Target, r.Port, r.Priority, r.Weight, (r.IPs || []).join(', ')].map(s => dom.td('' + s))))),
+		dom.table(dom.thead(dom.tr(dom.th('Host'), dom.th('Port'), dom.th('Priority'), dom.th('Weight'), dom.th('IPs'))), dom.tbody((checks.Autodiscover.Records || []).map(r => dom.tr([r.Target, r.Port, r.Priority, r.Weight, (r.IPs || []).join(', ')].map(s => dom.td('' + s)))))),
 	];
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), 'Check DNS'), dom.h1('DNS records and domain configuration check'), resultSection('DNSSEC', checks.DNSSEC, detailsDNSSEC), resultSection('IPRev', checks.IPRev, detailsIPRev), resultSection('MX', checks.MX, detailsMX), resultSection('TLS', checks.TLS, detailsTLS), resultSection('DANE', checks.DANE, detailsDANE), resultSection('SPF', checks.SPF, detailsSPF), resultSection('DKIM', checks.DKIM, detailsDKIM), resultSection('DMARC', checks.DMARC, detailsDMARC), resultSection('Host TLSRPT', checks.HostTLSRPT, detailsTLSRPT(checks.HostTLSRPT)), resultSection('Domain TLSRPT', checks.DomainTLSRPT, detailsTLSRPT(checks.DomainTLSRPT)), resultSection('MTA-STS', checks.MTASTS, detailsMTASTS), resultSection('SRV conf', checks.SRVConf, detailsSRVConf), resultSection('Autoconf', checks.Autoconf, detailsAutoconf), resultSection('Autodiscover', checks.Autodiscover, detailsAutodiscover), dom.br());
 };
