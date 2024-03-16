@@ -2805,8 +2805,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			log.Check(err, "adding dmarc evaluation to database for aggregate report")
 		}
 
+		conf, _ := acc.Conf()
 		if !a.accept {
-			conf, _ := acc.Conf()
 			if conf.RejectsMailbox != "" {
 				present, _, messagehash, err := rejectPresent(log, acc, conf.RejectsMailbox, &m, dataFile)
 				if err != nil {
@@ -2870,10 +2870,10 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 		}
 
-		// If this is a first-time sender and not a forwarded message, wait before actually
-		// delivering. If this turns out to be a spammer, we've kept one of their
-		// connections busy.
-		if delayFirstTime && !m.IsForward && a.reason == reasonNoBadSignals && c.firstTimeSenderDelay > 0 {
+		// If this is a first-time sender and not a forwarded/mailing list message, wait
+		// before actually delivering. If this turns out to be a spammer, we've kept one of
+		// their connections busy.
+		if delayFirstTime && !m.IsForward && !m.IsMailingList && a.reason == reasonNoBadSignals && !conf.NoFirstTimeSenderDelay && c.firstTimeSenderDelay > 0 {
 			log.Debug("delaying before delivering from sender without reputation", slog.Duration("delay", c.firstTimeSenderDelay))
 			mox.Sleep(mox.Context, c.firstTimeSenderDelay)
 		}
@@ -2915,7 +2915,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			metricDelivery.WithLabelValues("delivered", a.reason).Inc()
 			log.Info("incoming message delivered", slog.String("reason", a.reason), slog.Any("msgfrom", msgFrom))
 
-			conf, _ := acc.Conf()
+			conf, _ = acc.Conf()
 			if conf.RejectsMailbox != "" && m.MessageID != "" {
 				if err := acc.RejectsRemove(log, conf.RejectsMailbox, m.MessageID); err != nil {
 					log.Errorx("removing message from rejects mailbox", err, slog.String("messageid", messageID))

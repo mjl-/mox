@@ -795,12 +795,12 @@ var api;
 			const params = [accountName, password];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
-		// SetAccountLimits set new limits on outgoing messages for an account.
-		async SetAccountLimits(accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize) {
-			const fn = "SetAccountLimits";
-			const paramTypes = [["string"], ["int32"], ["int32"], ["int64"]];
+		// AccountSettingsSave set new settings for an account that only an admin can set.
+		async AccountSettingsSave(accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize, firstTimeSenderDelay) {
+			const fn = "AccountSettingsSave";
+			const paramTypes = [["string"], ["int32"], ["int32"], ["int64"], ["bool"]];
 			const returnTypes = [];
-			const params = [accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize];
+			const params = [accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize, firstTimeSenderDelay];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// ClientConfigsDomain returns configurations for email clients, IMAP and
@@ -1807,6 +1807,7 @@ const account = async (name) => {
 	let maxOutgoingMessagesPerDay;
 	let maxFirstTimeRecipientsPerDay;
 	let quotaMessageSize;
+	let firstTimeSenderDelay;
 	let formPassword;
 	let fieldsetPassword;
 	let password;
@@ -1892,13 +1893,13 @@ const account = async (name) => {
 		}
 		form.reset();
 		window.location.reload(); // todo: only reload the destinations
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an email address. If empty, a catchall address is configured for the domain.')), dom.br(), localpart = dom.input()), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain'), dom.br(), domain = dom.select((domains || []).map(d => dom.option(domainName(d), domainName(d) === config.Domain ? attr.selected('') : [])))), ' ', dom.submitbutton('Add address'))), dom.br(), dom.h2('Limits'), dom.form(fieldsetLimits = dom.fieldset(dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')), dom.br(), maxOutgoingMessagesPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxOutgoingMessagesPerDay || 1000))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum first-time recipients per day', attr.title('Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.')), dom.br(), maxFirstTimeRecipientsPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxFirstTimeRecipientsPerDay || 200))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')), dom.br(), quotaMessageSize = dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize))), ' Current usage is ', formatQuotaSize(Math.floor(diskUsage / (1024 * 1024)) * 1024 * 1024), '.'), dom.submitbutton('Save')), async function submit(e) {
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an email address. If empty, a catchall address is configured for the domain.')), dom.br(), localpart = dom.input()), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain'), dom.br(), domain = dom.select((domains || []).map(d => dom.option(domainName(d), domainName(d) === config.Domain ? attr.selected('') : [])))), ' ', dom.submitbutton('Add address'))), dom.br(), dom.h2('Settings'), dom.form(fieldsetLimits = dom.fieldset(dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')), dom.br(), maxOutgoingMessagesPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxOutgoingMessagesPerDay || 1000))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum first-time recipients per day', attr.title('Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.')), dom.br(), maxFirstTimeRecipientsPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxFirstTimeRecipientsPerDay || 200))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')), dom.br(), quotaMessageSize = dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize))), ' Current usage is ', formatQuotaSize(Math.floor(diskUsage / (1024 * 1024)) * 1024 * 1024), '.'), dom.div(style({ display: 'block', marginBottom: '.5ex' }), dom.label(firstTimeSenderDelay = dom.input(attr.type('checkbox'), config.NoFirstTimeSenderDelay ? [] : attr.checked('')), ' ', dom.span('Delay deliveries from first-time senders.', attr.title('To slow down potential spammers, when the message is misclassified as non-junk. Turning off the delay can be useful when the account processes messages automatically and needs fast responses.')))), dom.submitbutton('Save')), async function submit(e) {
 		e.stopPropagation();
 		e.preventDefault();
 		fieldsetLimits.disabled = true;
 		try {
-			await client.SetAccountLimits(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value));
-			window.alert('Limits saved.');
+			await client.AccountSettingsSave(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value), firstTimeSenderDelay.checked);
+			window.alert('Settings saved.');
 		}
 		catch (err) {
 			console.log({ err });

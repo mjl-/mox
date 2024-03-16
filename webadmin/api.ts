@@ -1276,12 +1276,12 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
-	// SetAccountLimits set new limits on outgoing messages for an account.
-	async SetAccountLimits(accountName: string, maxOutgoingMessagesPerDay: number, maxFirstTimeRecipientsPerDay: number, maxMsgSize: number): Promise<void> {
-		const fn: string = "SetAccountLimits"
-		const paramTypes: string[][] = [["string"],["int32"],["int32"],["int64"]]
+	// AccountSettingsSave set new settings for an account that only an admin can set.
+	async AccountSettingsSave(accountName: string, maxOutgoingMessagesPerDay: number, maxFirstTimeRecipientsPerDay: number, maxMsgSize: number, firstTimeSenderDelay: boolean): Promise<void> {
+		const fn: string = "AccountSettingsSave"
+		const paramTypes: string[][] = [["string"],["int32"],["int32"],["int64"],["bool"]]
 		const returnTypes: string[][] = []
-		const params: any[] = [accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize]
+		const params: any[] = [accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize, firstTimeSenderDelay]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 

@@ -1957,10 +1957,10 @@ func (Admin) SetPassword(ctx context.Context, accountName, password string) {
 	xcheckf(ctx, err, "setting password")
 }
 
-// SetAccountLimits set new limits on outgoing messages for an account.
-func (Admin) SetAccountLimits(ctx context.Context, accountName string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, maxMsgSize int64) {
-	err := mox.AccountLimitsSave(ctx, accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize)
-	xcheckf(ctx, err, "saving account limits")
+// AccountSettingsSave set new settings for an account that only an admin can set.
+func (Admin) AccountSettingsSave(ctx context.Context, accountName string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, maxMsgSize int64, firstTimeSenderDelay bool) {
+	err := mox.AccountAdminSettingsSave(ctx, accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize, firstTimeSenderDelay)
+	xcheckf(ctx, err, "saving account settings")
 }
 
 // ClientConfigsDomain returns configurations for email clients, IMAP and

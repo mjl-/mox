@@ -1032,6 +1032,11 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# this mail server in case of account compromise. Default 200. (optional)
 			MaxFirstTimeRecipientsPerDay: 0
 
+			# Do not apply a delay to SMTP connections before accepting an incoming message
+			# from a first-time sender. Can be useful for accounts that sends automated
+			# responses and want instant replies. (optional)
+			NoFirstTimeSenderDelay: false
+
 			# Routes for delivering outgoing messages through the queue. Each delivery attempt
 			# evaluates these account routes, domain routes and finally global routes. The
 			# transport of the first matching route is used in the delivery attempt. If no

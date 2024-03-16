@@ -617,8 +617,8 @@
 			"Returns": []
 		},
 		{
-			"Name": "SetAccountLimits",
-			"Docs": "SetAccountLimits set new limits on outgoing messages for an account.",
+			"Name": "AccountSettingsSave",
+			"Docs": "AccountSettingsSave set new settings for an account that only an admin can set.",
 			"Params": [
 				{
 					"Name": "accountName",
@@ -642,6 +642,12 @@
 					"Name": "maxMsgSize",
 					"Typewords": [
 						"int64"
+					]
+				},
+				{
+					"Name": "firstTimeSenderDelay",
+					"Typewords": [
+						"bool"
 					]
 				}
 			],

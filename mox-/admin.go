@@ -1032,12 +1032,12 @@ func DestinationSave(ctx context.Context, account, destName string, newDest conf
 	return nil
 }
 
-// AccountLimitsSave saves new message sending limits for an account.
-func AccountLimitsSave(ctx context.Context, account string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, quotaMessageSize int64) (rerr error) {
+// AccountAdminSettingsSave saves new account settings for an account only an admin can change.
+func AccountAdminSettingsSave(ctx context.Context, account string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, quotaMessageSize int64, firstTimeSenderDelay bool) (rerr error) {
 	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("saving account limits", rerr, slog.String("account", account))
+			log.Errorx("saving admin account settings", rerr, slog.String("account", account))
 		}
 	}()
 
@@ -1060,12 +1060,13 @@ func AccountLimitsSave(ctx context.Context, account string, maxOutgoingMessagesP
 	acc.MaxOutgoingMessagesPerDay = maxOutgoingMessagesPerDay
 	acc.MaxFirstTimeRecipientsPerDay = maxFirstTimeRecipientsPerDay
 	acc.QuotaMessageSize = quotaMessageSize
+	acc.NoFirstTimeSenderDelay = !firstTimeSenderDelay
 	nc.Accounts[account] = acc
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %v", err)
 	}
-	log.Info("account limits saved", slog.String("account", account))
+	log.Info("admin account settings saved", slog.String("account", account))
 	return nil
 }
 

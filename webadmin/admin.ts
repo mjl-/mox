@@ -637,6 +637,7 @@ const account = async (name: string) => {
 	let maxOutgoingMessagesPerDay: HTMLInputElement
 	let maxFirstTimeRecipientsPerDay: HTMLInputElement
 	let quotaMessageSize: HTMLInputElement
+	let firstTimeSenderDelay: HTMLInputElement
 
 	let formPassword: HTMLFormElement
 	let fieldsetPassword: HTMLFieldSetElement
@@ -769,7 +770,7 @@ const account = async (name: string) => {
 			),
 		),
 		dom.br(),
-		dom.h2('Limits'),
+		dom.h2('Settings'),
 		dom.form(
 			fieldsetLimits=dom.fieldset(
 				dom.label(
@@ -791,6 +792,13 @@ const account = async (name: string) => {
 					quotaMessageSize=dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize))),
 					' Current usage is ', formatQuotaSize(Math.floor(diskUsage/(1024*1024))*1024*1024), '.',
 				),
+				dom.div(
+					style({display: 'block', marginBottom: '.5ex'}),
+					dom.label(
+						firstTimeSenderDelay=dom.input(attr.type('checkbox'), config.NoFirstTimeSenderDelay ? [] : attr.checked('')), ' ',
+						dom.span('Delay deliveries from first-time senders.', attr.title('To slow down potential spammers, when the message is misclassified as non-junk. Turning off the delay can be useful when the account processes messages automatically and needs fast responses.')),
+					),
+				),
 				dom.submitbutton('Save'),
 			),
 			async function submit(e: SubmitEvent) {
@@ -798,8 +806,8 @@ const account = async (name: string) => {
 				e.preventDefault()
 				fieldsetLimits.disabled = true
 				try {
-					await client.SetAccountLimits(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value))
-					window.alert('Limits saved.')
+					await client.AccountSettingsSave(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value), firstTimeSenderDelay.checked)
+					window.alert('Settings saved.')
 				} catch (err) {
 					console.log({err})
 					window.alert('Error: ' + errmsg(err))
