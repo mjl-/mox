@@ -762,29 +762,39 @@ const localStorageRemove = (k) => {
 };
 const client = new api.Client().withOptions({ csrfHeader: 'x-mox-csrf', login: login }).withAuthToken(localStorageGet('webaccountcsrftoken') || '');
 const link = (href, anchorOpt) => dom.a(attr.href(href), attr.rel('noopener noreferrer'), anchorOpt || href);
-const crumblink = (text, link) => dom.a(text, attr.href(link));
-const crumbs = (...l) => [
-	dom.div(style({ float: 'right' }), localStorageGet('webaccountaddress') || '(unknown)', ' ', dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e) {
-		const b = e.target;
-		try {
-			b.disabled = true;
-			await client.Logout();
-		}
-		catch (err) {
-			console.log('logout', err);
-			window.alert('Error: ' + errmsg(err));
-		}
-		finally {
-			b.disabled = false;
-		}
-		localStorageRemove('webaccountaddress');
-		localStorageRemove('webaccountcsrftoken');
-		// Reload so all state is cleared from memory.
-		window.location.reload();
-	})),
-	dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])),
-	dom.br()
-];
+const crumblink = (text, path) => {
+	return {
+		text: text,
+		path: path
+	};
+};
+const crumbs = (...l) => {
+	const crumbtext = (e) => typeof e === 'string' ? e : e.text;
+	document.title = l.map(e => crumbtext(e)).join(' - ');
+	const crumblink = (e) => typeof e === 'string' ? e : dom.a(e.text, attr.href(e.path));
+	return [
+		dom.div(style({ float: 'right' }), localStorageGet('webaccountaddress') || '(unknown)', ' ', dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e) {
+			const b = e.target;
+			try {
+				b.disabled = true;
+				await client.Logout();
+			}
+			catch (err) {
+				console.log('logout', err);
+				window.alert('Error: ' + errmsg(err));
+			}
+			finally {
+				b.disabled = false;
+			}
+			localStorageRemove('webaccountaddress');
+			localStorageRemove('webaccountcsrftoken');
+			// Reload so all state is cleared from memory.
+			window.location.reload();
+		})),
+		dom.h1(l.map((e, index) => index === 0 ? crumblink(e) : [' / ', crumblink(e)])),
+		dom.br()
+	];
+};
 const errmsg = (err) => '' + (err.message || '(no error message)');
 const footer = dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion);
 const domainName = (d) => {

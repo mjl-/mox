@@ -103,33 +103,45 @@ const client = new api.Client().withOptions({csrfHeader: 'x-mox-csrf', login: lo
 
 const link = (href: string, anchorOpt: string) => dom.a(attr.href(href), attr.rel('noopener noreferrer'), anchorOpt || href)
 
-const crumblink = (text: string, link: string) => dom.a(text, attr.href(link))
-const crumbs = (...l: ElemArg[]) => [
-	dom.div(
-		style({float: 'right'}),
-		localStorageGet('webaccountaddress') || '(unknown)',
-		' ',
-		dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e: MouseEvent) {
-			const b = e.target! as HTMLButtonElement
-			try {
-				b.disabled = true
-				await client.Logout()
-			} catch (err) {
-				console.log('logout', err)
-				window.alert('Error: ' + errmsg(err))
-			} finally {
-				b.disabled = false
-			}
+const crumblink = (text: string, path: string) => {
+	return {
+		text: text,
+		path: path
+	}
+}
+const crumbs = (...l: ({text: string, path: string} | string)[]) => {
+	const crumbtext = (e: {text: string, path: string} | string) => typeof e === 'string' ? e : e.text
+	document.title = l.map(e => crumbtext(e)).join(' - ')
 
-			localStorageRemove('webaccountaddress')
-			localStorageRemove('webaccountcsrftoken')
-			// Reload so all state is cleared from memory.
-			window.location.reload()
-		}),
-	),
-	dom.h1(l.map((e, index) => index === 0 ? e : [' / ', e])),
-	dom.br()
-]
+	const crumblink = (e: {text: string, path: string} | string) =>
+		typeof e === 'string' ? e : dom.a(e.text, attr.href(e.path))
+	return [
+		dom.div(
+			style({float: 'right'}),
+			localStorageGet('webaccountaddress') || '(unknown)',
+			' ',
+			dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e: MouseEvent) {
+				const b = e.target! as HTMLButtonElement
+				try {
+					b.disabled = true
+					await client.Logout()
+				} catch (err) {
+					console.log('logout', err)
+					window.alert('Error: ' + errmsg(err))
+				} finally {
+					b.disabled = false
+				}
+
+				localStorageRemove('webaccountaddress')
+				localStorageRemove('webaccountcsrftoken')
+				// Reload so all state is cleared from memory.
+				window.location.reload()
+			}),
+		),
+		dom.h1(l.map((e, index) => index === 0 ? crumblink(e) : [' / ', crumblink(e)])),
+		dom.br()
+	]
+}
 
 const errmsg = (err: unknown) => ''+((err as any).message || '(no error message)')
 
