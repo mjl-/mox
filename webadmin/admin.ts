@@ -673,11 +673,6 @@ const account = async (name: string) => {
 			crumblink('Accounts', '#accounts'),
 			name,
 		),
-		dom.div(
-			'Default domain: ',
-			config.Domain ? dom.a(config.Domain, attr.href('#domains/'+config.Domain)) : '(none)',
-		),
-		dom.br(),
 		dom.h2('Addresses'),
 		dom.table(
 			dom.thead(
@@ -712,11 +707,7 @@ const account = async (name: string) => {
 								const target = e.target! as HTMLButtonElement
 								target.disabled = true
 								try {
-									let addr = k
-									if (!addr.includes('@')) {
-										addr += '@' + config.Domain
-									}
-									await client.AddressRemove(addr)
+									await client.AddressRemove(k)
 								} catch (err) {
 									console.log({err})
 									window.alert('Error: ' + errmsg(err))

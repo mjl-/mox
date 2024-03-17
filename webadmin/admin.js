@@ -1837,7 +1837,7 @@ const account = async (name) => {
 		}
 		return v * mult;
 	};
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), name), dom.div('Default domain: ', config.Domain ? dom.a(config.Domain, attr.href('#domains/' + config.Domain)) : '(none)'), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Action'))), dom.tbody(Object.keys(config.Destinations || {}).length === 0 ? dom.tr(dom.td(attr.colspan('2'), '(None, login disabled)')) : [], Object.keys(config.Destinations || {}).map(k => {
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), name), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Action'))), dom.tbody(Object.keys(config.Destinations || {}).length === 0 ? dom.tr(dom.td(attr.colspan('2'), '(None, login disabled)')) : [], Object.keys(config.Destinations || {}).map(k => {
 		let v = k;
 		const t = k.split('@');
 		if (t.length > 1) {
@@ -1859,11 +1859,7 @@ const account = async (name) => {
 			const target = e.target;
 			target.disabled = true;
 			try {
-				let addr = k;
-				if (!addr.includes('@')) {
-					addr += '@' + config.Domain;
-				}
-				await client.AddressRemove(addr);
+				await client.AddressRemove(k);
 			}
 			catch (err) {
 				console.log({ err });
