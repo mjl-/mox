@@ -85,6 +85,19 @@ const localStorageRemove = (k: string) => {
 
 const client = new api.Client().withOptions({csrfHeader: 'x-mox-csrf', login: login}).withAuthToken(localStorageGet('webadmincsrftoken') || '')
 
+const check = async <T>(elem: {disabled: boolean}, p: Promise<T>): Promise<T> => {
+	try {
+		elem.disabled = true
+		return await p
+	} catch (err) {
+		console.log({err})
+		window.alert('Error: ' + errmsg(err))
+		throw err
+	} finally {
+		elem.disabled = false
+	}
+}
+
 const green = '#1dea20'
 const yellow = '#ffe400'
 const red = '#ff7443'
@@ -305,16 +318,7 @@ const index = async () => {
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
 				e.stopPropagation()
-				fieldset.disabled = true
-				try {
-					await client.DomainAdd(domain.value, account.value, localpart.value)
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-					return
-				} finally {
-					fieldset.disabled = false
-				}
+				await check(fieldset, client.DomainAdd(domain.value, account.value, localpart.value))
 				window.location.hash = '#domains/' + domain.value
 			},
 			fieldset=dom.fieldset(
@@ -359,17 +363,8 @@ const index = async () => {
 				async function submit(e: SubmitEvent) {
 					e.preventDefault()
 					e.stopPropagation()
-					try {
-						dom._kids(cidElem)
-						recvIDFieldset.disabled = true
-						const cid = await client.LookupCid(recvID.value)
-						dom._kids(cidElem, cid)
-					} catch (err) {
-						console.log({err})
-						window.alert('Error: ' + errmsg(err))
-					} finally {
-						recvIDFieldset.disabled = false
-					}
+					dom._kids(cidElem)
+					await check(recvIDFieldset, client.LookupCid(recvID.value))
 				},
 				recvIDFieldset=dom.fieldset(
 					dom.label('Received ID', attr.title('The ID in the Received header that was added during incoming delivery.')), ' ',
@@ -439,33 +434,13 @@ const loglevels = async () => {
 						dom.td(
 							dom.clickbutton('Save', attr.title('Set new log level for package.'), async function click(e: MouseEvent) {
 								e.preventDefault()
-								const target = e.target! as HTMLButtonElement
-								try {
-									target.disabled = true
-									await client.LogLevelSet(t[0], lvl.value)
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + err)
-									return
-								} finally {
-									target.disabled = false
-								}
+								await check(e.target! as HTMLButtonElement, client.LogLevelSet(t[0], lvl.value))
 								window.location.reload() // todo: reload just the current loglevels
 							}),
 							' ',
 							dom.clickbutton('Remove', attr.title('Remove this log level, the default log level will apply.'), t[0] === '' ? attr.disabled('') : [], async function click(e: MouseEvent) {
 								e.preventDefault()
-								const target = e.target! as HTMLButtonElement
-								try {
-									target.disabled = true
-									await client.LogLevelRemove(t[0])
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + err)
-									return
-								} finally {
-									target.disabled = false
-								}
+								await check(e.target! as HTMLButtonElement, client.LogLevelRemove(t[0]))
 								window.location.reload() // todo: reload just the current loglevels
 							}),
 						),
@@ -479,16 +454,7 @@ const loglevels = async () => {
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
 				e.stopPropagation()
-				fieldset.disabled = true
-				try {
-					await client.LogLevelSet(pkg.value, level.value)
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-					return
-				} finally {
-					fieldset.disabled = false
-				}
+				await check(fieldset, client.LogLevelSet(pkg.value, level.value))
 				form.reset()
 				window.location.reload() // todo: reload just the current loglevels
 			},
@@ -566,16 +532,7 @@ const accounts = async () => {
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
 				e.stopPropagation()
-				fieldset.disabled = true
-				try {
-					await client.AccountAdd(account.value, email.value)
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-					return
-				} finally {
-					fieldset.disabled = false
-				}
+				await check(fieldset, client.AccountAdd(account.value, email.value))
 				window.location.hash = '#accounts/'+account.value
 			},
 			fieldset=dom.fieldset(
@@ -633,7 +590,7 @@ const account = async (name: string) => {
 	let localpart: HTMLInputElement
 	let domain: HTMLSelectElement
 
-	let fieldsetLimits: HTMLFieldSetElement
+	let fieldsetSettings: HTMLFieldSetElement
 	let maxOutgoingMessagesPerDay: HTMLInputElement
 	let maxFirstTimeRecipientsPerDay: HTMLInputElement
 	let quotaMessageSize: HTMLInputElement
@@ -704,17 +661,7 @@ const account = async (name: string) => {
 								if (!window.confirm('Are you sure you want to remove this address?')) {
 									return
 								}
-								const target = e.target! as HTMLButtonElement
-								target.disabled = true
-								try {
-									await client.AddressRemove(k)
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + errmsg(err))
-									return
-								} finally {
-									target.disabled = false
-								}
+								await check(e.target! as HTMLButtonElement, client.AddressRemove(k))
 								window.location.reload() // todo: reload just the list
 							}),
 						),
@@ -728,17 +675,8 @@ const account = async (name: string) => {
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
 				e.stopPropagation()
-				fieldset.disabled = true
-				try {
-					let address = localpart.value + '@' + domain.value
-					await client.AddressAdd(address, name)
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-					return
-				} finally {
-					fieldset.disabled = false
-				}
+				let address = localpart.value + '@' + domain.value
+				await check(fieldset, client.AddressAdd(address, name))
 				form.reset()
 				window.location.reload() // todo: only reload the destinations
 			},
@@ -763,7 +701,7 @@ const account = async (name: string) => {
 		dom.br(),
 		dom.h2('Settings'),
 		dom.form(
-			fieldsetLimits=dom.fieldset(
+			fieldsetSettings=dom.fieldset(
 				dom.label(
 					style({display: 'block', marginBottom: '.5ex'}),
 					dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')),
@@ -795,17 +733,7 @@ const account = async (name: string) => {
 			async function submit(e: SubmitEvent) {
 				e.stopPropagation()
 				e.preventDefault()
-				fieldsetLimits.disabled = true
-				try {
-					await client.AccountSettingsSave(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value), firstTimeSenderDelay.checked)
-					window.alert('Settings saved.')
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-					return
-				} finally {
-					fieldsetLimits.disabled = false
-				}
+				await check(fieldsetSettings, client.AccountSettingsSave(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value), firstTimeSenderDelay.checked))
 			},
 		),
 		dom.br(),
@@ -847,18 +775,9 @@ const account = async (name: string) => {
 			async function submit(e: SubmitEvent) {
 				e.stopPropagation()
 				e.preventDefault()
-				fieldsetPassword.disabled = true
-				try {
-					await client.SetPassword(name, password.value)
-					window.alert('Password has been changed.')
-					formPassword.reset()
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-					return
-				} finally {
-					fieldsetPassword.disabled = false
-				}
+				await check(fieldsetPassword, client.SetPassword(name, password.value))
+				window.alert('Password has been changed.')
+				formPassword.reset()
 			},
 		),
 		dom.br(),
@@ -868,17 +787,7 @@ const account = async (name: string) => {
 			if (!window.confirm('Are you sure you want to remove this account?')) {
 				return
 			}
-			const target = e.target! as HTMLButtonElement
-			target.disabled = true
-			try {
-				await client.AccountRemove(name)
-			} catch (err) {
-				console.log({err})
-				window.alert('Error: ' + errmsg(err))
-				return
-			} finally {
-				target.disabled = false
-			}
+			await check(e.target! as HTMLButtonElement, client.AccountRemove(name))
 			window.location.hash = '#accounts'
 		}),
 	)
@@ -956,17 +865,7 @@ const domain = async (d: string) => {
 								if (!window.confirm('Are you sure you want to remove this address?')) {
 									return
 								}
-								const target = e.target! as HTMLButtonElement
-								target.disabled = true
-								try {
-									await client.AddressRemove(t[0] + '@' + d)
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + errmsg(err))
-									return
-								} finally {
-									target.disabled = false
-								}
+								await check(e.target! as HTMLButtonElement, client.AddressRemove(t[0] + '@' + d))
 								window.location.reload() // todo: only reload the localparts
 							}),
 						),
@@ -980,16 +879,7 @@ const domain = async (d: string) => {
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
 				e.stopPropagation()
-				fieldset.disabled = true
-				try {
-					await client.AddressAdd(localpart.value+'@'+d, account.value)
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-					return
-				} finally {
-					fieldset.disabled = false
-				}
+				await check(fieldset, client.AddressAdd(localpart.value+'@'+d, account.value))
 				form.reset()
 				window.location.reload() // todo: only reload the addresses
 			},
@@ -1024,17 +914,7 @@ const domain = async (d: string) => {
 			if (!window.confirm('Are you sure you want to remove this domain?')) {
 				return
 			}
-			const target = e.target! as HTMLButtonElement
-			target.disabled = true
-			try {
-				await client.DomainRemove(d)
-			} catch (err) {
-				console.log({err})
-				window.alert('Error: ' + errmsg(err))
-				return
-			} finally {
-				target.disabled = false
-			}
+			await check(e.target! as HTMLButtonElement, client.DomainRemove(d))
 			window.location.hash = '#'
 		}),
 	)
@@ -1346,16 +1226,7 @@ const dmarcEvaluations = async () => {
 			async function submit(e: SubmitEvent) {
 				e.stopPropagation()
 				e.preventDefault()
-				try {
-					fieldset.disabled = true
-					await client.DMARCSuppressAdd(reportingAddress.value, new Date(until.value), comment.value)
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-					return
-				} finally {
-					fieldset.disabled = false
-				}
+				await check(fieldset, client.DMARCSuppressAdd(reportingAddress.value, new Date(until.value), comment.value))
 				window.location.reload() // todo: add the address to the list, or only reload the list
 			},
 			fieldset=dom.fieldset(
@@ -1402,32 +1273,12 @@ const dmarcEvaluations = async () => {
 						dom.td(ba.Comment),
 						dom.td(
 							dom.clickbutton('Remove', async function click(e: MouseEvent) {
-								const target = e.target! as HTMLButtonElement
-								try {
-									target.disabled = true
-									await client.DMARCSuppressRemove(ba.ID)
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + errmsg(err))
-									return
-								} finally {
-									target.disabled = false
-								}
+								await check(e.target! as HTMLButtonElement, client.DMARCSuppressRemove(ba.ID))
 								window.location.reload() // todo: only reload the list
 							}),
 							' ',
 							dom.clickbutton('Extend for 1 month', async function click(e: MouseEvent) {
-								const target = e.target! as HTMLButtonElement
-								try {
-									target.disabled = true
-									await client.DMARCSuppressExtend(ba.ID, new Date(new Date().getTime() + 31*24*3600*1000))
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + errmsg(err))
-									return
-								} finally {
-									target.disabled = false
-								}
+								await check(e.target! as HTMLButtonElement, client.DMARCSuppressExtend(ba.ID, new Date(new Date().getTime() + 31*24*3600*1000)))
 								window.location.reload() // todo: only reload the list
 							}),
 						),
@@ -1488,17 +1339,8 @@ const dmarcEvaluationsDomain = async (domain: string) => {
 		),
 		dom.div(
 			dom.clickbutton('Remove evaluations', async function click(e: MouseEvent) {
-				const target = e.target! as HTMLButtonElement
-				target.disabled = true
-				try {
-					await client.DMARCRemoveEvaluations(domain)
-					window.location.reload() // todo: only clear the table?
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-				} finally {
-					target.disabled = false
-				}
+				await check(e.target! as HTMLButtonElement, client.DMARCRemoveEvaluations(domain))
+				window.location.reload() // todo: only clear the table?
 			}),
 		),
 		dom.br(),
@@ -1873,16 +1715,7 @@ const tlsrptResults = async () => {
 			async function submit(e: SubmitEvent) {
 				e.stopPropagation()
 				e.preventDefault()
-				try {
-					fieldset.disabled = true
-					await client.TLSRPTSuppressAdd(reportingAddress.value, new Date(until.value), comment.value)
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-					return
-				} finally {
-					fieldset.disabled = false
-				}
+				await check(fieldset, client.TLSRPTSuppressAdd(reportingAddress.value, new Date(until.value), comment.value))
 				window.location.reload() // todo: add the address to the list, or only reload the list
 			},
 			fieldset=dom.fieldset(
@@ -1929,32 +1762,12 @@ const tlsrptResults = async () => {
 						dom.td(ba.Comment),
 						dom.td(
 							dom.clickbutton('Remove', async function click(e: MouseEvent) {
-								const target = e.target! as HTMLButtonElement
-								try {
-									target.disabled = true
-									await client.TLSRPTSuppressRemove(ba.ID)
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + errmsg(err))
-									return
-								} finally {
-									target.disabled = false
-								}
+								await check(e.target! as HTMLButtonElement, client.TLSRPTSuppressRemove(ba.ID))
 								window.location.reload() // todo: only reload the list
 							}),
 							' ',
 							dom.clickbutton('Extend for 1 month', async function click(e: MouseEvent) {
-								const target = e.target! as HTMLButtonElement
-								try {
-									target.disabled = true
-									await client.TLSRPTSuppressExtend(ba.ID, new Date(new Date().getTime() + 31*24*3600*1000))
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + errmsg(err))
-									return
-								} finally {
-									target.disabled = false
-								}
+								await check(e.target! as HTMLButtonElement, client.TLSRPTSuppressExtend(ba.ID, new Date(new Date().getTime() + 31*24*3600*1000)))
 								window.location.reload() // todo: only reload the list
 							}),
 						),
@@ -1980,17 +1793,8 @@ const tlsrptResultsPolicyDomain = async (isrcptdom: boolean, domain: string) => 
 		dom.div(
 			dom.clickbutton('Remove results', async function click(e: MouseEvent) {
 				e.preventDefault()
-				const target = e.target! as HTMLButtonElement
-				target.disabled = true
-				try {
-					await client.TLSRPTRemoveResults(isrcptdom, domain, '')
-					window.location.reload() // todo: only clear the table?
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-				} finally {
-					target.disabled = false
-				}
+				await check(e.target! as HTMLButtonElement, client.TLSRPTRemoveResults(isrcptdom, domain, ''))
+				window.location.reload() // todo: only clear the table?
 			}),
 		),
 		dom.br(),
@@ -2311,17 +2115,8 @@ const dnsbl = async () => {
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
 				e.stopPropagation()
-
-				fieldset.disabled = true
-				try {
-					await client.MonitorDNSBLsSave(monitorTextarea.value)
-					dnsbl() // Render page again.
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-				} finally {
-					fieldset.disabled = false
-				}
+				await check(fieldset, client.MonitorDNSBLsSave(monitorTextarea.value))
+				dnsbl() // Render page again.
 			},
 			fieldset=dom.fieldset(
 				dom.div('One per line'),
@@ -2353,7 +2148,8 @@ const queueList = async () => {
 			crumblink('Mox Admin', '#'),
 			'Queue',
 		),
-			// todo: sorting by address/timestamps/attempts. perhaps filtering.
+
+		// todo: sorting by address/timestamps/attempts. perhaps filtering.
 		dom.table(dom._class('hover'),
 			dom.thead(
 				dom.tr(
@@ -2401,16 +2197,8 @@ const queueList = async () => {
 								),
 								async function submit(e: SubmitEvent) {
 									e.preventDefault()
-									try {
-										requiretlsFieldset.disabled = true
-										await client.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes')
-									} catch (err) {
-										console.log({err})
-										window.alert('Error: ' + errmsg(err))
-										return
-									} finally {
-										requiretlsFieldset.disabled = false
-									}
+									e.stopPropagation()
+									await check(requiretlsFieldset, client.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes'))
 								}
 							),
 						),
@@ -2425,17 +2213,8 @@ const queueList = async () => {
 								dom.submitbutton('Retry now'),
 								async function submit(e: SubmitEvent) {
 									e.preventDefault()
-									const target = e.target! as HTMLButtonElement
-									try {
-										target.disabled = true
-										await client.QueueKick(m.ID, transport.value)
-									} catch (err) {
-										console.log({err})
-										window.alert('Error: ' + errmsg(err))
-										return
-									} finally {
-										target.disabled = false
-									}
+									e.stopPropagation()
+									await check(e.target! as HTMLButtonElement, client.QueueKick(m.ID, transport.value))
 									window.location.reload() // todo: only refresh the list
 								}
 							),
@@ -2446,17 +2225,7 @@ const queueList = async () => {
 								if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
 									return
 								}
-								const target = e.target! as HTMLButtonElement
-								try {
-									target.disabled = true
-									await client.QueueDrop(m.ID)
-								} catch (err) {
-									console.log({err})
-									window.alert('Error: ' + errmsg(err))
-									return
-								} finally {
-									target.disabled = false
-								}
+								await check(e.target! as HTMLButtonElement, client.QueueDrop(m.ID))
 								window.location.reload() // todo: only refresh the list
 							}),
 						),
@@ -3102,18 +2871,7 @@ const webserver = async () => {
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
 				e.stopPropagation()
-
-				fieldset.disabled = true
-				try {
-					const newConf = gatherConf()
-					const savedConf = await client.WebserverConfigSave(conf, newConf)
-					conf = savedConf
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-				} finally {
-					fieldset.disabled = false
-				}
+				conf = await check(fieldset, client.WebserverConfigSave(conf, gatherConf()))
 			}
 		),
 	)

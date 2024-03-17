@@ -1451,6 +1451,20 @@ const localStorageRemove = (k) => {
 	}
 };
 const client = new api.Client().withOptions({ csrfHeader: 'x-mox-csrf', login: login }).withAuthToken(localStorageGet('webadmincsrftoken') || '');
+const check = async (elem, p) => {
+	try {
+		elem.disabled = true;
+		return await p;
+	}
+	catch (err) {
+		console.log({ err });
+		window.alert('Error: ' + errmsg(err));
+		throw err;
+	}
+	finally {
+		elem.disabled = false;
+	}
+};
 const green = '#1dea20';
 const yellow = '#ffe400';
 const red = '#ff7443';
@@ -1631,35 +1645,13 @@ const index = async () => {
 		dom.ul((domains || []).map(d => dom.li(dom.a(attr.href('#domains/' + domainName(d)), domainString(d))))), dom.br(), dom.h2('Add domain'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		fieldset.disabled = true;
-		try {
-			await client.DomainAdd(domain.value, account.value, localpart.value);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			fieldset.disabled = false;
-		}
+		await check(fieldset, client.DomainAdd(domain.value, account.value, localpart.value));
 		window.location.hash = '#domains/' + domain.value;
 	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Domain', attr.title('Domain for incoming/outgoing email to add to mox. Can also be a subdomain of a domain already configured.')), dom.br(), domain = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Postmaster/reporting account', attr.title('Account that is considered the owner of this domain. If the account does not yet exist, it will be created and a a localpart is required for the initial email address.')), dom.br(), account = dom.input(attr.required(''), attr.list('accountList')), dom.datalist(attr.id('accountList'), (accounts || []).map(a => dom.option(a)))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Localpart (if new account)', attr.title('Must be set if and only if account does not yet exist. A localpart is the part before the "@"-sign of an email address. An account requires an email address, so creating a new account for a domain requires a localpart to form an initial email address.')), dom.br(), localpart = dom.input()), ' ', dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. Add the required DNS records after adding the domain.')))), dom.br(), dom.h2('Reports'), dom.div(dom.a('DMARC', attr.href('#dmarc/reports'))), dom.div(dom.a('TLS', attr.href('#tlsrpt/reports'))), dom.br(), dom.h2('Operations'), dom.div(dom.a('MTA-STS policies', attr.href('#mtasts'))), dom.div(dom.a('DMARC evaluations', attr.href('#dmarc/evaluations'))), dom.div(dom.a('TLS connection results', attr.href('#tlsrpt/results'))), dom.div(dom.a('DNSBL', attr.href('#dnsbl'))), dom.div(style({ marginTop: '.5ex' }), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		try {
-			dom._kids(cidElem);
-			recvIDFieldset.disabled = true;
-			const cid = await client.LookupCid(recvID.value);
-			dom._kids(cidElem, cid);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-		}
-		finally {
-			recvIDFieldset.disabled = false;
-		}
+		dom._kids(cidElem);
+		await check(recvIDFieldset, client.LookupCid(recvID.value));
 	}, recvIDFieldset = dom.fieldset(dom.label('Received ID', attr.title('The ID in the Received header that was added during incoming delivery.')), ' ', recvID = dom.input(attr.required('')), ' ', dom.submitbutton('Lookup cid', attr.title('Logging about an incoming message includes an attribute "cid", a counter identifying the transaction related to delivery of the message. The ID in the received header is an encrypted cid, which this form decrypts, after which you can look it up in the logging.')), ' ', cidElem = dom.span()))), 
 	// todo: routing, globally, per domain and per account
 	dom.br(), dom.h2('Configuration'), dom.div(dom.a('Webserver', attr.href('#webserver'))), dom.div(dom.a('Files', attr.href('#config'))), dom.div(dom.a('Log levels', attr.href('#loglevels'))), footer);
@@ -1679,52 +1671,17 @@ const loglevels = async () => {
 		let lvl;
 		return dom.tr(dom.td(t[0] || '(default)'), dom.td(lvl = dom.select(levels.map(l => dom.option(l, t[1] === l ? attr.selected('') : [])))), dom.td(dom.clickbutton('Save', attr.title('Set new log level for package.'), async function click(e) {
 			e.preventDefault();
-			const target = e.target;
-			try {
-				target.disabled = true;
-				await client.LogLevelSet(t[0], lvl.value);
-			}
-			catch (err) {
-				console.log({ err });
-				window.alert('Error: ' + err);
-				return;
-			}
-			finally {
-				target.disabled = false;
-			}
+			await check(e.target, client.LogLevelSet(t[0], lvl.value));
 			window.location.reload(); // todo: reload just the current loglevels
 		}), ' ', dom.clickbutton('Remove', attr.title('Remove this log level, the default log level will apply.'), t[0] === '' ? attr.disabled('') : [], async function click(e) {
 			e.preventDefault();
-			const target = e.target;
-			try {
-				target.disabled = true;
-				await client.LogLevelRemove(t[0]);
-			}
-			catch (err) {
-				console.log({ err });
-				window.alert('Error: ' + err);
-				return;
-			}
-			finally {
-				target.disabled = false;
-			}
+			await check(e.target, client.LogLevelRemove(t[0]));
 			window.location.reload(); // todo: reload just the current loglevels
 		})));
 	}))), dom.br(), dom.h2('Add log level setting'), form = dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		fieldset.disabled = true;
-		try {
-			await client.LogLevelSet(pkg.value, level.value);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			fieldset.disabled = false;
-		}
+		await check(fieldset, client.LogLevelSet(pkg.value, level.value));
 		form.reset();
 		window.location.reload(); // todo: reload just the current loglevels
 	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Package', dom.br(), pkg = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), 'Level', dom.br(), level = dom.select(attr.required(''), levels.map(l => dom.option(l, l === 'debug' ? attr.selected('') : [])))), ' ', dom.submitbutton('Add')), dom.br(), dom.p('Suggestions for packages: autotls dkim dmarc dmarcdb dns dnsbl dsn http imapserver iprev junk message metrics mox moxio mtasts mtastsdb publicsuffix queue sendmail serve smtpserver spf store subjectpass tlsrpt tlsrptdb updates')));
@@ -1755,18 +1712,7 @@ const accounts = async () => {
 		dom.ul((accounts || []).map(s => dom.li(dom.a(s, attr.href('#accounts/' + s))))), dom.br(), dom.h2('Add account'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		fieldset.disabled = true;
-		try {
-			await client.AccountAdd(account.value, email.value);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			fieldset.disabled = false;
-		}
+		await check(fieldset, client.AccountAdd(account.value, email.value));
 		window.location.hash = '#accounts/' + account.value;
 	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Email address', attr.title('The initial email address for the new account. More addresses can be added after the account has been created.')), dom.br(), email = dom.input(attr.type('email'), attr.required(''), function keyup() {
 		if (!accountModified) {
@@ -1803,7 +1749,7 @@ const account = async (name) => {
 	let fieldset;
 	let localpart;
 	let domain;
-	let fieldsetLimits;
+	let fieldsetSettings;
 	let maxOutgoingMessagesPerDay;
 	let maxFirstTimeRecipientsPerDay;
 	let quotaMessageSize;
@@ -1856,55 +1802,20 @@ const account = async (name) => {
 			if (!window.confirm('Are you sure you want to remove this address?')) {
 				return;
 			}
-			const target = e.target;
-			target.disabled = true;
-			try {
-				await client.AddressRemove(k);
-			}
-			catch (err) {
-				console.log({ err });
-				window.alert('Error: ' + errmsg(err));
-				return;
-			}
-			finally {
-				target.disabled = false;
-			}
+			await check(e.target, client.AddressRemove(k));
 			window.location.reload(); // todo: reload just the list
 		})));
 	}))), dom.br(), dom.h2('Add address'), form = dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		fieldset.disabled = true;
-		try {
-			let address = localpart.value + '@' + domain.value;
-			await client.AddressAdd(address, name);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			fieldset.disabled = false;
-		}
+		let address = localpart.value + '@' + domain.value;
+		await check(fieldset, client.AddressAdd(address, name));
 		form.reset();
 		window.location.reload(); // todo: only reload the destinations
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an email address. If empty, a catchall address is configured for the domain.')), dom.br(), localpart = dom.input()), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain'), dom.br(), domain = dom.select((domains || []).map(d => dom.option(domainName(d), domainName(d) === config.Domain ? attr.selected('') : [])))), ' ', dom.submitbutton('Add address'))), dom.br(), dom.h2('Settings'), dom.form(fieldsetLimits = dom.fieldset(dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')), dom.br(), maxOutgoingMessagesPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxOutgoingMessagesPerDay || 1000))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum first-time recipients per day', attr.title('Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.')), dom.br(), maxFirstTimeRecipientsPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxFirstTimeRecipientsPerDay || 200))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')), dom.br(), quotaMessageSize = dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize))), ' Current usage is ', formatQuotaSize(Math.floor(diskUsage / (1024 * 1024)) * 1024 * 1024), '.'), dom.div(style({ display: 'block', marginBottom: '.5ex' }), dom.label(firstTimeSenderDelay = dom.input(attr.type('checkbox'), config.NoFirstTimeSenderDelay ? [] : attr.checked('')), ' ', dom.span('Delay deliveries from first-time senders.', attr.title('To slow down potential spammers, when the message is misclassified as non-junk. Turning off the delay can be useful when the account processes messages automatically and needs fast responses.')))), dom.submitbutton('Save')), async function submit(e) {
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an email address. If empty, a catchall address is configured for the domain.')), dom.br(), localpart = dom.input()), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain'), dom.br(), domain = dom.select((domains || []).map(d => dom.option(domainName(d), domainName(d) === config.Domain ? attr.selected('') : [])))), ' ', dom.submitbutton('Add address'))), dom.br(), dom.h2('Settings'), dom.form(fieldsetSettings = dom.fieldset(dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')), dom.br(), maxOutgoingMessagesPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxOutgoingMessagesPerDay || 1000))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum first-time recipients per day', attr.title('Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.')), dom.br(), maxFirstTimeRecipientsPerDay = dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxFirstTimeRecipientsPerDay || 200))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')), dom.br(), quotaMessageSize = dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize))), ' Current usage is ', formatQuotaSize(Math.floor(diskUsage / (1024 * 1024)) * 1024 * 1024), '.'), dom.div(style({ display: 'block', marginBottom: '.5ex' }), dom.label(firstTimeSenderDelay = dom.input(attr.type('checkbox'), config.NoFirstTimeSenderDelay ? [] : attr.checked('')), ' ', dom.span('Delay deliveries from first-time senders.', attr.title('To slow down potential spammers, when the message is misclassified as non-junk. Turning off the delay can be useful when the account processes messages automatically and needs fast responses.')))), dom.submitbutton('Save')), async function submit(e) {
 		e.stopPropagation();
 		e.preventDefault();
-		fieldsetLimits.disabled = true;
-		try {
-			await client.AccountSettingsSave(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value), firstTimeSenderDelay.checked);
-			window.alert('Settings saved.');
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			fieldsetLimits.disabled = false;
-		}
+		await check(fieldsetSettings, client.AccountSettingsSave(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value), firstTimeSenderDelay.checked));
 	}), dom.br(), dom.h2('Set new password'), formPassword = dom.form(fieldsetPassword = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'New password', dom.br(), password = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
 		passwordHint.style.display = '';
 	})), ' ', dom.submitbutton('Change password')), passwordHint = dom.div(style({ display: 'none', marginTop: '.5ex' }), dom.clickbutton('Generate random password', function click(e) {
@@ -1924,38 +1835,15 @@ const account = async (name) => {
 	}), dom.div(dom._class('text'), box(yellow, 'Important: Bots will try to bruteforce your password. Connections with failed authentication attempts will be rate limited but attackers WILL find weak passwords. If your account is compromised, spammers are likely to abuse your system, spamming your address and the wider internet in your name. So please pick a random, unguessable password, preferrably at least 12 characters.'))), async function submit(e) {
 		e.stopPropagation();
 		e.preventDefault();
-		fieldsetPassword.disabled = true;
-		try {
-			await client.SetPassword(name, password.value);
-			window.alert('Password has been changed.');
-			formPassword.reset();
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			fieldsetPassword.disabled = false;
-		}
+		await check(fieldsetPassword, client.SetPassword(name, password.value));
+		window.alert('Password has been changed.');
+		formPassword.reset();
 	}), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove account', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this account?')) {
 			return;
 		}
-		const target = e.target;
-		target.disabled = true;
-		try {
-			await client.AccountRemove(name);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			target.disabled = false;
-		}
+		await check(e.target, client.AccountRemove(name));
 		window.location.hash = '#accounts';
 	}));
 };
@@ -1979,35 +1867,12 @@ const domain = async (d) => {
 		if (!window.confirm('Are you sure you want to remove this address?')) {
 			return;
 		}
-		const target = e.target;
-		target.disabled = true;
-		try {
-			await client.AddressRemove(t[0] + '@' + d);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			target.disabled = false;
-		}
+		await check(e.target, client.AddressRemove(t[0] + '@' + d));
 		window.location.reload(); // todo: only reload the localparts
 	})))))), dom.br(), dom.h2('Add address'), form = dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		fieldset.disabled = true;
-		try {
-			await client.AddressAdd(localpart.value + '@' + d, account.value);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			fieldset.disabled = false;
-		}
+		await check(fieldset, client.AddressAdd(localpart.value + '@' + d, account.value));
 		form.reset();
 		window.location.reload(); // todo: only reload the addresses
 	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an address. An empty localpart is the catchall destination/address for the domain.')), dom.br(), localpart = dom.input()), '@', domainName(dnsdomain), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account', attr.title('Account to assign the address to.')), dom.br(), account = dom.select(attr.required(''), (accounts || []).map(a => dom.option(a)))), ' ', dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')))), dom.br(), dom.h2('External checks'), dom.ul(dom.li(link('https://internet.nl/mail/' + dnsdomain.ASCII + '/', 'Check configuration at internet.nl'))), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove domain', async function click(e) {
@@ -2015,19 +1880,7 @@ const domain = async (d) => {
 		if (!window.confirm('Are you sure you want to remove this domain?')) {
 			return;
 		}
-		const target = e.target;
-		target.disabled = true;
-		try {
-			await client.DomainRemove(d);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			target.disabled = false;
-		}
+		await check(e.target, client.DomainRemove(d));
 		window.location.hash = '#';
 	}));
 };
@@ -2161,48 +2014,13 @@ const dmarcEvaluations = async () => {
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('DMARC', '#dmarc'), 'Evaluations'), dom.p('Incoming messages are checked against the DMARC policy of the domain in the message From header. If the policy requests reporting on the resulting evaluations, they are stored in the database. Each interval of 1 to 24 hours, the evaluations may be sent to a reporting address specified in the domain\'s DMARC policy. Not all evaluations are a reason to send a report, but if a report is sent all evaluations are included.'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('Domain', attr.title('Domain in the message From header. Keep in mind these can be forged, so this does not necessarily mean someone from this domain authentically tried delivering email.')), dom.th('Dispositions', attr.title('Unique dispositions occurring in report.')), dom.th('Evaluations', attr.title('Total number of message delivery attempts, including retries.')), dom.th('Send report', attr.title('Whether the current evaluations will cause a report to be sent.')))), dom.tbody(Object.entries(evalStats).sort((a, b) => a[0] < b[0] ? -1 : 1).map(t => dom.tr(dom.td(dom.a(attr.href('#dmarc/evaluations/' + domainName(t[1].Domain)), domainString(t[1].Domain))), dom.td((t[1].Dispositions || []).join(' ')), dom.td(style({ textAlign: 'right' }), '' + t[1].Count), dom.td(style({ textAlign: 'right' }), t[1].SendReport ? '✓' : ''))), isEmpty(evalStats) ? dom.tr(dom.td(attr.colspan('3'), 'No evaluations.')) : [])), dom.br(), dom.br(), dom.h2('Suppressed reporting addresses'), dom.p('In practice, sending a DMARC report to a reporting address can cause DSN to be sent back. Such addresses can be added to a supression list for a period, to reduce noise in the postmaster mailbox.'), dom.form(async function submit(e) {
 		e.stopPropagation();
 		e.preventDefault();
-		try {
-			fieldset.disabled = true;
-			await client.DMARCSuppressAdd(reportingAddress.value, new Date(until.value), comment.value);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			fieldset.disabled = false;
-		}
+		await check(fieldset, client.DMARCSuppressAdd(reportingAddress.value, new Date(until.value), comment.value));
 		window.location.reload(); // todo: add the address to the list, or only reload the list
 	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Reporting address', dom.br(), reportingAddress = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), 'Until', dom.br(), until = dom.input(attr.type('date'), attr.required(''), attr.value(nextmonth.getFullYear() + '-' + (1 + nextmonth.getMonth()) + '-' + nextmonth.getDate()))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Comment (optional)'), dom.br(), comment = dom.input()), ' ', dom.submitbutton('Add', attr.title('Outgoing reports to this reporting address will be suppressed until the end time.')))), dom.br(), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('Reporting address'), dom.th('Until'), dom.th('Comment'), dom.th('Action'))), dom.tbody((suppressAddresses || []).length === 0 ? dom.tr(dom.td(attr.colspan('4'), 'No suppressed reporting addresses.')) : [], (suppressAddresses || []).map(ba => dom.tr(dom.td(ba.ReportingAddress), dom.td(ba.Until.toISOString()), dom.td(ba.Comment), dom.td(dom.clickbutton('Remove', async function click(e) {
-		const target = e.target;
-		try {
-			target.disabled = true;
-			await client.DMARCSuppressRemove(ba.ID);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			target.disabled = false;
-		}
+		await check(e.target, client.DMARCSuppressRemove(ba.ID));
 		window.location.reload(); // todo: only reload the list
 	}), ' ', dom.clickbutton('Extend for 1 month', async function click(e) {
-		const target = e.target;
-		try {
-			target.disabled = true;
-			await client.DMARCSuppressExtend(ba.ID, new Date(new Date().getTime() + 31 * 24 * 3600 * 1000));
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			target.disabled = false;
-		}
+		await check(e.target, client.DMARCSuppressExtend(ba.ID, new Date(new Date().getTime() + 31 * 24 * 3600 * 1000)));
 		window.location.reload(); // todo: only reload the list
 	})))))));
 };
@@ -2244,19 +2062,8 @@ const dmarcEvaluationsDomain = async (domain) => {
 		return r;
 	};
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('DMARC', '#dmarc'), crumblink('Evaluations', '#dmarc/evaluations'), 'Domain ' + domainString(d)), dom.div(dom.clickbutton('Remove evaluations', async function click(e) {
-		const target = e.target;
-		target.disabled = true;
-		try {
-			await client.DMARCRemoveEvaluations(domain);
-			window.location.reload(); // todo: only clear the table?
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-		}
-		finally {
-			target.disabled = false;
-		}
+		await check(e.target, client.DMARCRemoveEvaluations(domain));
+		window.location.reload(); // todo: only clear the table?
 	})), dom.br(), dom.p('The evaluations below will be sent in a DMARC aggregate report to the addresses found in the published DMARC DNS record, which is fetched again before sending the report. The fields Interval hours, Addresses and Policy are only filled for the first row and whenever a new value in the published DMARC record is encountered.'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('ID'), dom.th('Evaluated'), dom.th('Optional', attr.title('Some evaluations will not cause a DMARC aggregate report to be sent. But if a report is sent, optional records are included.')), dom.th('Interval hours', attr.title('DMARC policies published by a domain can specify how often they would like to receive reports. The default is 24 hours, but can be as often as each hour. To keep reports comparable between different mail servers that send reports, reports are sent at rounded up intervals of whole hours that can divide a 24 hour day, and are aligned with the start of a day at UTC.')), dom.th('Addresses', attr.title('Addresses that will receive the report. An address can have a maximum report size configured. If there is no address, no report will be sent.')), dom.th('Policy', attr.title('Summary of the policy as encountered in the DMARC DNS record of the domain, and used for evaluation.')), dom.th('IP', attr.title('IP address of delivery attempt that was evaluated, relevant for SPF.')), dom.th('Disposition', attr.title('Our decision to accept/reject this message. It may be different than requested by the published policy. For example, when overriding due to delivery from a mailing list or forwarded address.')), dom.th('Aligned DKIM/SPF', attr.title('Whether DKIM and SPF had an aligned pass, where strict/relaxed alignment means whether the domain of an SPF pass and DKIM pass matches the exact domain (strict) or optionally a subdomain (relaxed). A DMARC pass requires at least one pass.')), dom.th('Envelope to', attr.title('Domain used in SMTP RCPT TO during delivery.')), dom.th('Envelope from', attr.title('Domain used in SMTP MAIL FROM during delivery.')), dom.th('Message from', attr.title('Domain in "From" message header.')), dom.th('DKIM details', attr.title('Results of verifying DKIM-Signature headers in message. Only signatures with matching organizational domain are included, regardless of strict/relaxed DKIM alignment in DMARC policy.')), dom.th('SPF details', attr.title('Results of SPF check used in DMARC evaluation. "mfrom" indicates the "SMTP MAIL FROM" domain was used, "helo" indicates the SMTP EHLO domain was used.')))), dom.tbody((evaluations || []).map(e => {
 		const ival = e.IntervalHours + 'h';
 		const interval = ival === lastInterval ? '' : ival;
@@ -2458,48 +2265,13 @@ const tlsrptResults = async () => {
 	}), (results || []).length === 0 ? dom.tr(dom.td(attr.colspan('9'), 'No results.')) : [])), dom.br(), dom.br(), dom.h2('Suppressed reporting addresses'), dom.p('In practice, sending a TLS report to a reporting address can cause DSN to be sent back. Such addresses can be added to a suppress list for a period, to reduce noise in the postmaster mailbox.'), dom.form(async function submit(e) {
 		e.stopPropagation();
 		e.preventDefault();
-		try {
-			fieldset.disabled = true;
-			await client.TLSRPTSuppressAdd(reportingAddress.value, new Date(until.value), comment.value);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			fieldset.disabled = false;
-		}
+		await check(fieldset, client.TLSRPTSuppressAdd(reportingAddress.value, new Date(until.value), comment.value));
 		window.location.reload(); // todo: add the address to the list, or only reload the list
 	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Reporting address', dom.br(), reportingAddress = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), 'Until', dom.br(), until = dom.input(attr.type('date'), attr.required(''), attr.value(nextmonth.getFullYear() + '-' + (1 + nextmonth.getMonth()) + '-' + nextmonth.getDate()))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Comment (optional)'), dom.br(), comment = dom.input()), ' ', dom.submitbutton('Add', attr.title('Outgoing reports to this reporting address will be suppressed until the end time.')))), dom.br(), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('Reporting address'), dom.th('Until'), dom.th('Comment'), dom.th('Action'))), dom.tbody((suppressAddresses || []).length === 0 ? dom.tr(dom.td(attr.colspan('4'), 'No suppressed reporting addresses.')) : [], (suppressAddresses || []).map(ba => dom.tr(dom.td(ba.ReportingAddress), dom.td(ba.Until.toISOString()), dom.td(ba.Comment), dom.td(dom.clickbutton('Remove', async function click(e) {
-		const target = e.target;
-		try {
-			target.disabled = true;
-			await client.TLSRPTSuppressRemove(ba.ID);
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			target.disabled = false;
-		}
+		await check(e.target, client.TLSRPTSuppressRemove(ba.ID));
 		window.location.reload(); // todo: only reload the list
 	}), ' ', dom.clickbutton('Extend for 1 month', async function click(e) {
-		const target = e.target;
-		try {
-			target.disabled = true;
-			await client.TLSRPTSuppressExtend(ba.ID, new Date(new Date().getTime() + 31 * 24 * 3600 * 1000));
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			return;
-		}
-		finally {
-			target.disabled = false;
-		}
+		await check(e.target, client.TLSRPTSuppressExtend(ba.ID, new Date(new Date().getTime() + 31 * 24 * 3600 * 1000)));
 		window.location.reload(); // todo: only reload the list
 	})))))));
 };
@@ -2509,19 +2281,8 @@ const tlsrptResultsPolicyDomain = async (isrcptdom, domain) => {
 	let recordBox;
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), crumblink('Results', '#tlsrpt/results'), (isrcptdom ? 'Recipient domain ' : 'Host ') + domainString(d)), dom.div(dom.clickbutton('Remove results', async function click(e) {
 		e.preventDefault();
-		const target = e.target;
-		target.disabled = true;
-		try {
-			await client.TLSRPTRemoveResults(isrcptdom, domain, '');
-			window.location.reload(); // todo: only clear the table?
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-		}
-		finally {
-			target.disabled = false;
-		}
+		await check(e.target, client.TLSRPTRemoveResults(isrcptdom, domain, ''));
+		window.location.reload(); // todo: only clear the table?
 	})), dom.br(), dom.div('Fetching TLSRPT DNS record...'), recordBox = dom.div(), dom.br(), dom.p('Below are the results per day and ' + (isrcptdom ? 'policy' : 'recipient') + ' domain that may be sent in a report.'), (tlsresults || []).map(tlsresult => [
 		dom.h2(tlsresult.DayUTC, ' - ', dom.span(attr.title('Recipient domain, as used in SMTP MAIL TO, usually based on message To/Cc/Bcc.'), isrcptdom ? tlsresult.PolicyDomain : tlsresult.RecipientDomain)),
 		dom.p('Send report (if TLSRPT policy exists and has address): ' + (tlsresult.SendReport ? 'Yes' : 'No'), dom.br(), 'Report about (MX) host (instead of recipient domain): ' + (tlsresult.IsHost ? 'Yes' : 'No')),
@@ -2687,18 +2448,8 @@ const dnsbl = async () => {
 		dom.ul((usingZones || []).map(zone => dom.li(domainString(zone)))), dom.br(), dom.h2('DNSBL zones to monitor only'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		fieldset.disabled = true;
-		try {
-			await client.MonitorDNSBLsSave(monitorTextarea.value);
-			dnsbl(); // Render page again.
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-		}
-		finally {
-			fieldset.disabled = false;
-		}
+		await check(fieldset, client.MonitorDNSBLsSave(monitorTextarea.value));
+		dnsbl(); // Render page again.
 	}, fieldset = dom.fieldset(dom.div('One per line'), dom.div(style({ marginBottom: '.5ex' }), monitorTextarea = dom.textarea(style({ width: '20rem' }), attr.rows('' + Math.max(5, 1 + (monitorZones || []).length)), new String((monitorZones || []).map(zone => domainName(zone)).join('\n'))), dom.div('Examples: sbl.spamhaus.org or bl.spamcop.net')), dom.div(dom.submitbutton('Save')))));
 };
 const queueList = async () => {
@@ -2717,52 +2468,19 @@ const queueList = async () => {
 		dom.td(m.RecipientLocalpart + "@" + ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
 		dom.td(formatSize(m.Size)), dom.td('' + m.Attempts), dom.td(age(new Date(m.NextAttempt), true, nowSecs)), dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'), dom.td(m.LastError || '-'), dom.td(dom.form(requiretlsFieldset = dom.fieldset(requiretls = dom.select(attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'), dom.option('Default', attr.value('')), dom.option('With RequireTLS', attr.value('yes'), m.RequireTLS === true ? attr.selected('') : []), dom.option('Fallback to insecure', attr.value('no'), m.RequireTLS === false ? attr.selected('') : [])), ' ', dom.submitbutton('Save')), async function submit(e) {
 			e.preventDefault();
-			try {
-				requiretlsFieldset.disabled = true;
-				await client.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes');
-			}
-			catch (err) {
-				console.log({ err });
-				window.alert('Error: ' + errmsg(err));
-				return;
-			}
-			finally {
-				requiretlsFieldset.disabled = false;
-			}
+			e.stopPropagation();
+			await check(requiretlsFieldset, client.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes'));
 		})), dom.td(dom.form(transport = dom.select(attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'), dom.option('(default)', attr.value('')), Object.keys(transports || []).sort().map(t => dom.option(t, m.Transport === t ? attr.checked('') : []))), ' ', dom.submitbutton('Retry now'), async function submit(e) {
 			e.preventDefault();
-			const target = e.target;
-			try {
-				target.disabled = true;
-				await client.QueueKick(m.ID, transport.value);
-			}
-			catch (err) {
-				console.log({ err });
-				window.alert('Error: ' + errmsg(err));
-				return;
-			}
-			finally {
-				target.disabled = false;
-			}
+			e.stopPropagation();
+			await check(e.target, client.QueueKick(m.ID, transport.value));
 			window.location.reload(); // todo: only refresh the list
 		})), dom.td(dom.clickbutton('Remove', async function click(e) {
 			e.preventDefault();
 			if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
 				return;
 			}
-			const target = e.target;
-			try {
-				target.disabled = true;
-				await client.QueueDrop(m.ID);
-			}
-			catch (err) {
-				console.log({ err });
-				window.alert('Error: ' + errmsg(err));
-				return;
-			}
-			finally {
-				target.disabled = false;
-			}
+			await check(e.target, client.QueueDrop(m.ID));
 			window.location.reload(); // todo: only refresh the list
 		})));
 	}))));
@@ -3069,19 +2787,7 @@ const webserver = async () => {
 	})))), redirectsTbody = dom.tbody((conf.WebDNSDomainRedirects || []).sort().map(t => redirectRow([t[0], t[1]])), noredirect = dom.tr(style({ display: redirectRows.length ? 'none' : '' }), dom.td(attr.colspan('3'), 'No redirects.')))), dom.br(), dom.h2('Handlers', attr.title('Corresponds with WebHandlers in domains.conf')), dom.p('Each incoming request is check against these handlers, in order. The first matching handler serves the request. Don\'t forget to save after making a change.'), dom.table(dom._class('long'), dom.thead(dom.tr(dom.th(), dom.th(handlerActions()))), handlersTbody = dom.tbody((conf.WebHandlers || []).map(wh => handlerRow(wh)), nohandler = dom.tr(style({ display: handlerRows.length ? 'none' : '' }), dom.td(attr.colspan('2'), 'No handlers.'))), dom.tfoot(dom.tr(dom.th(), dom.th(handlerActions())))), dom.br(), dom.submitbutton('Save', attr.title('Save config. If the configuration has changed since this page was loaded, an error will be returned. After saving, the changes take effect immediately.'))), async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		fieldset.disabled = true;
-		try {
-			const newConf = gatherConf();
-			const savedConf = await client.WebserverConfigSave(conf, newConf);
-			conf = savedConf;
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-		}
-		finally {
-			fieldset.disabled = false;
-		}
+		conf = await check(fieldset, client.WebserverConfigSave(conf, gatherConf()));
 	}));
 };
 const init = async () => {

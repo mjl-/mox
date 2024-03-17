@@ -99,6 +99,19 @@ const localStorageRemove = (k: string) => {
 	}
 }
 
+const check = async <T>(elem: {disabled: boolean}, p: Promise<T>): Promise<T> => {
+	try {
+		elem.disabled = true
+		return await p
+	} catch (err) {
+		console.log({err})
+		window.alert('Error: ' + errmsg(err))
+		throw err
+	} finally {
+		elem.disabled = false
+	}
+}
+
 const client = new api.Client().withOptions({csrfHeader: 'x-mox-csrf', login: login}).withAuthToken(localStorageGet('webaccountcsrftoken') || '')
 
 const link = (href: string, anchorOpt: string) => dom.a(attr.href(href), attr.rel('noopener noreferrer'), anchorOpt || href)
@@ -355,18 +368,9 @@ const index = async () => {
 			),
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
-				fullNameFieldset.disabled = true
-				try {
-					await client.AccountSaveFullName(fullName.value)
-					fullName.setAttribute('value', fullName.value)
-					fullNameForm.reset()
-					window.alert('Full name has been changed.')
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-				} finally {
-					fullNameFieldset.disabled = false
-				}
+				await check(fullNameFieldset, client.AccountSaveFullName(fullName.value))
+				fullName.setAttribute('value', fullName.value)
+				fullNameForm.reset()
 			},
 		),
 		dom.br(),
@@ -433,17 +437,8 @@ const index = async () => {
 					window.alert('Passwords do not match.')
 					return
 				}
-				passwordFieldset.disabled = true
-				try {
-					await client.SetPassword(password1.value)
-					window.alert('Password has been changed.')
-					passwordForm.reset()
-				} catch (err) {
-					console.log({err})
-					window.alert('Error: ' + errmsg(err))
-				} finally {
-					passwordFieldset.disabled = false
-				}
+				await check(passwordFieldset, client.SetPassword(password1.value))
+				passwordForm.reset()
 			},
 		),
 		dom.br(),
@@ -791,36 +786,25 @@ const destination = async (name: string) => {
 		),
 		dom.br(),
 		saveButton=dom.clickbutton('Save', async function click() {
-			saveButton.disabled = true
-			try {
-				const newDest = {
-					Mailbox: defaultMailbox.value,
-					FullName: fullName.value,
-					Rulesets: rulesetsRows.map(row => {
-						return {
-							SMTPMailFromRegexp: row.smtpMailFromRegexp.value,
-							VerifiedDomain: row.verifiedDomain.value,
-							HeadersRegexp: Object.fromEntries(row.headers.map(h => [h.key.value, h.value.value])),
-							IsForward: row.isForward.checked,
-							ListAllowDomain: row.listAllowDomain.value,
-							AcceptRejectsToMailbox: row.acceptRejectsToMailbox.value,
-							Mailbox: row.mailbox.value,
-							VerifiedDNSDomain: {ASCII: '', Unicode: ''},
-							ListAllowDNSDomain: {ASCII: '', Unicode: ''},
-						}
-					}),
-				}
-				page.classList.add('loading')
-				await client.DestinationSave(name, dest, newDest)
-				window.location.reload() // todo: only refresh part of ui
-			} catch (err) {
-				console.log({err})
-				window.alert('Error: ' + errmsg(err))
-				page.classList.remove('loading')
-				return
-			} finally {
-				saveButton.disabled = false
+			const newDest = {
+				Mailbox: defaultMailbox.value,
+				FullName: fullName.value,
+				Rulesets: rulesetsRows.map(row => {
+					return {
+						SMTPMailFromRegexp: row.smtpMailFromRegexp.value,
+						VerifiedDomain: row.verifiedDomain.value,
+						HeadersRegexp: Object.fromEntries(row.headers.map(h => [h.key.value, h.value.value])),
+						IsForward: row.isForward.checked,
+						ListAllowDomain: row.listAllowDomain.value,
+						AcceptRejectsToMailbox: row.acceptRejectsToMailbox.value,
+						Mailbox: row.mailbox.value,
+						VerifiedDNSDomain: {ASCII: '', Unicode: ''},
+						ListAllowDNSDomain: {ASCII: '', Unicode: ''},
+					}
+				}),
 			}
+			await check(saveButton, client.DestinationSave(name, dest, newDest))
+			window.location.reload() // todo: only refresh part of ui
 		}),
 		dom.br(),
 		dom.br(),

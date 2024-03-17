@@ -760,6 +760,20 @@ const localStorageRemove = (k) => {
 	catch (err) {
 	}
 };
+const check = async (elem, p) => {
+	try {
+		elem.disabled = true;
+		return await p;
+	}
+	catch (err) {
+		console.log({ err });
+		window.alert('Error: ' + errmsg(err));
+		throw err;
+	}
+	finally {
+		elem.disabled = false;
+	}
+};
 const client = new api.Client().withOptions({ csrfHeader: 'x-mox-csrf', login: login }).withAuthToken(localStorageGet('webaccountcsrftoken') || '');
 const link = (href, anchorOpt) => dom.a(attr.href(href), attr.rel('noopener noreferrer'), anchorOpt || href);
 const crumblink = (text, path) => {
@@ -932,20 +946,9 @@ const index = async () => {
 	};
 	dom._kids(page, crumbs('Mox Account'), dom.p('NOTE: Not all account settings can be configured through these pages yet. See the configuration file for more options.'), dom.div('Default domain: ', domain.ASCII ? domainString(domain) : '(none)'), dom.br(), fullNameForm = dom.form(fullNameFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Full name', dom.br(), fullName = dom.input(attr.value(accountFullName), attr.title('Name to use in From header when composing messages. Can be overridden per configured address.'))), ' ', dom.submitbutton('Save')), async function submit(e) {
 		e.preventDefault();
-		fullNameFieldset.disabled = true;
-		try {
-			await client.AccountSaveFullName(fullName.value);
-			fullName.setAttribute('value', fullName.value);
-			fullNameForm.reset();
-			window.alert('Full name has been changed.');
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-		}
-		finally {
-			fullNameFieldset.disabled = false;
-		}
+		await check(fullNameFieldset, client.AccountSaveFullName(fullName.value));
+		fullName.setAttribute('value', fullName.value);
+		fullNameForm.reset();
 	}), dom.br(), dom.h2('Addresses'), dom.ul(Object.entries(destinations || {}).length === 0 ? dom.li('(None, login disabled)') : [], Object.entries(destinations || {}).sort().map(t => dom.li(dom.a(t[0], attr.href('#destinations/' + t[0])), t[0].startsWith('@') ? ' (catchall)' : []))), dom.br(), dom.h2('Change password'), passwordForm = dom.form(passwordFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'New password', dom.br(), password1 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
 		passwordHint.style.display = '';
 	})), ' ', dom.label(style({ display: 'inline-block' }), 'New password repeat', dom.br(), password2 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''))), ' ', dom.submitbutton('Change password')), passwordHint = dom.div(style({ display: 'none', marginTop: '.5ex' }), dom.clickbutton('Generate random password', function click(e) {
@@ -971,19 +974,8 @@ const index = async () => {
 			window.alert('Passwords do not match.');
 			return;
 		}
-		passwordFieldset.disabled = true;
-		try {
-			await client.SetPassword(password1.value);
-			window.alert('Password has been changed.');
-			passwordForm.reset();
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-		}
-		finally {
-			passwordFieldset.disabled = false;
-		}
+		await check(passwordFieldset, client.SetPassword(password1.value));
+		passwordForm.reset();
 	}), dom.br(), dom.h2('Disk usage'), dom.p('Storage used is ', dom.b(formatQuotaSize(Math.floor(storageUsed / (1024 * 1024)) * 1024 * 1024)), storageLimit > 0 ? [
 		dom.b('/', formatQuotaSize(storageLimit)),
 		' (',
@@ -1166,38 +1158,25 @@ const destination = async (name) => {
 			ListAllowDNSDomain: { ASCII: '', Unicode: '' },
 		});
 	}))))), dom.br(), saveButton = dom.clickbutton('Save', async function click() {
-		saveButton.disabled = true;
-		try {
-			const newDest = {
-				Mailbox: defaultMailbox.value,
-				FullName: fullName.value,
-				Rulesets: rulesetsRows.map(row => {
-					return {
-						SMTPMailFromRegexp: row.smtpMailFromRegexp.value,
-						VerifiedDomain: row.verifiedDomain.value,
-						HeadersRegexp: Object.fromEntries(row.headers.map(h => [h.key.value, h.value.value])),
-						IsForward: row.isForward.checked,
-						ListAllowDomain: row.listAllowDomain.value,
-						AcceptRejectsToMailbox: row.acceptRejectsToMailbox.value,
-						Mailbox: row.mailbox.value,
-						VerifiedDNSDomain: { ASCII: '', Unicode: '' },
-						ListAllowDNSDomain: { ASCII: '', Unicode: '' },
-					};
-				}),
-			};
-			page.classList.add('loading');
-			await client.DestinationSave(name, dest, newDest);
-			window.location.reload(); // todo: only refresh part of ui
-		}
-		catch (err) {
-			console.log({ err });
-			window.alert('Error: ' + errmsg(err));
-			page.classList.remove('loading');
-			return;
-		}
-		finally {
-			saveButton.disabled = false;
-		}
+		const newDest = {
+			Mailbox: defaultMailbox.value,
+			FullName: fullName.value,
+			Rulesets: rulesetsRows.map(row => {
+				return {
+					SMTPMailFromRegexp: row.smtpMailFromRegexp.value,
+					VerifiedDomain: row.verifiedDomain.value,
+					HeadersRegexp: Object.fromEntries(row.headers.map(h => [h.key.value, h.value.value])),
+					IsForward: row.isForward.checked,
+					ListAllowDomain: row.listAllowDomain.value,
+					AcceptRejectsToMailbox: row.acceptRejectsToMailbox.value,
+					Mailbox: row.mailbox.value,
+					VerifiedDNSDomain: { ASCII: '', Unicode: '' },
+					ListAllowDNSDomain: { ASCII: '', Unicode: '' },
+				};
+			}),
+		};
+		await check(saveButton, client.DestinationSave(name, dest, newDest));
+		window.location.reload(); // todo: only refresh part of ui
 	}), dom.br(), dom.br(), dom.br(), dom.p("Apple's mail applications don't do account autoconfiguration, and when adding an account it can choose defaults that don't work with modern email servers. Adding an account through a \"mobileconfig\" profile file can be more convenient: It contains the IMAP/SMTP settings such as host name, port, TLS, authentication mechanism and user name. This profile does not contain a login password. Opening the profile adds it under Profiles in System Preferences (macOS) or Settings (iOS), where you can install it. These profiles are not signed, so users will have to ignore the warnings about them being unsigned. ", dom.br(), dom.a(attr.href('https://autoconfig.' + domainName(domain) + '/profile.mobileconfig?addresses=' + encodeURIComponent(addresses.join(',')) + '&name=' + encodeURIComponent(dest.FullName)), attr.download(''), 'Download .mobileconfig email account profile'), dom.br(), dom.a(attr.href('https://autoconfig.' + domainName(domain) + '/profile.mobileconfig.qrcode.png?addresses=' + encodeURIComponent(addresses.join(',')) + '&name=' + encodeURIComponent(dest.FullName)), attr.download(''), 'Open QR-code with link to .mobileconfig profile')));
 };
 const init = async () => {
