@@ -436,7 +436,7 @@ in the [quickstart command](../commands/#hdr-mox-quickstart).
 
 ## Localserve
 
-The [mox localserve](../commands/#hdr-mox-localserve) starts a local mox
+The [mox localserve](../commands/#hdr-mox-localserve) command starts a local mox
 instance with a lot of its functionality: SMTP/submission, IMAP4, Webmail,
 account and admin web interface and the webserver. Localserve listens on the
 standard ports + 1000, so no special privileges are needed.

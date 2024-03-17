@@ -80,11 +80,11 @@ const elem = (name, ...s) => {
 	e.append(...s)
 	return e
 }
-const link = (url) => {
+const link = (url, anchor) => {
 	const e = document.createElement('a')
 	e.setAttribute('href', url)
 	e.setAttribute('rel', 'noopener')
-	e.appendChild(document.createTextNode(url))
+	e.append(anchor || url)
 	return e
 }
 let h = location.hash.substring(1)
@@ -106,6 +106,8 @@ const init = () => {
 			'https://beta.gobuilds.org/github.com/mjl-/mox@'+h
 		),
 		elem('p', 'Because mox is written in Go, builds are reproducible, also when cross-compiling. Gobuilds.org is a service that builds Go applications on-demand with the latest Go toolchain/runtime.'),
+		elem('h1', 'Localserve'),
+		elem('p', 'Changes to mox can often be most easily tested locally with ', link('../features/#hdr-localserve', '"mox localserve"'), ', without having to update your running mail server.'),
 	)
 }
 window.addEventListener('load', init)
