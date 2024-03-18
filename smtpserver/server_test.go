@@ -1443,7 +1443,7 @@ test email
 			}
 			tcheck(t, err, "deliver")
 
-			msgs, err := queue.List(ctxbg)
+			msgs, err := queue.List(ctxbg, queue.Filter{})
 			tcheck(t, err, "listing queue")
 			n++
 			tcompare(t, len(msgs), n)
@@ -1592,11 +1592,11 @@ test email
 			}
 			tcheck(t, err, "deliver")
 
-			msgs, err := queue.List(ctxbg)
+			msgs, err := queue.List(ctxbg, queue.Filter{})
 			tcheck(t, err, "listing queue")
 			tcompare(t, len(msgs), 1)
 			tcompare(t, msgs[0].RequireTLS, expRequireTLS)
-			_, err = queue.Drop(ctxbg, pkglog, msgs[0].ID, "", "")
+			_, err = queue.Drop(ctxbg, pkglog, queue.Filter{IDs: []int64{msgs[0].ID}})
 			tcheck(t, err, "deleting message from queue")
 		})
 	}

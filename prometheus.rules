@@ -28,6 +28,12 @@ groups:
     annotations:
       summary: http 5xx responses from webserver
 
+  - alert: mox-queue-hold
+    expr: mox_queue_hold > 0
+    for: 2h
+    annotations:
+      summary: messages on hold in queue for at least two hours
+
   - alert: mox-submission-errors
     expr: increase(mox_smtpserver_submission_total{result=~".*error"}[1h]) > 0
     annotations:

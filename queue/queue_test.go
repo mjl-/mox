@@ -104,7 +104,20 @@ func TestQueue(t *testing.T) {
 	err := Init()
 	tcheck(t, err, "queue init")
 
-	msgs, err := List(ctxbg)
+	idfilter := func(msgID int64) Filter {
+		return Filter{IDs: []int64{msgID}}
+	}
+
+	kick := func(expn int, id int64) {
+		t.Helper()
+		n, err := NextAttemptSet(ctxbg, idfilter(id), time.Now())
+		tcheck(t, err, "kick queue")
+		if n != expn {
+			t.Fatalf("kick changed %d messages, expected %d", n, expn)
+		}
+	}
+
+	msgs, err := List(ctxbg, Filter{})
 	tcheck(t, err, "listing messages in queue")
 	if len(msgs) != 0 {
 		t.Fatalf("got %d messages in queue, expected 0", len(msgs))
@@ -125,16 +138,26 @@ func TestQueue(t *testing.T) {
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 
-	msgs, err = List(ctxbg)
+	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now())
+	err = Add(ctxbg, pkglog, "mjl", mf, qm)
+	tcheck(t, err, "add message to queue for delivery")
+
+	msgs, err = List(ctxbg, Filter{})
 	tcheck(t, err, "listing queue")
-	if len(msgs) != 2 {
+	if len(msgs) != 3 {
 		t.Fatalf("got msgs %v, expected 1", msgs)
 	}
+
+	yes := true
+	n, err := RequireTLSSet(ctxbg, Filter{IDs: []int64{msgs[2].ID}}, &yes)
+	tcheck(t, err, "requiretlsset")
+	tcompare(t, n, 1)
+
 	msg := msgs[0]
 	if msg.Attempts != 0 {
 		t.Fatalf("msg attempts %d, expected 0", msg.Attempts)
 	}
-	n, err := Drop(ctxbg, pkglog, msgs[1].ID, "", "")
+	n, err = Drop(ctxbg, pkglog, Filter{IDs: []int64{msgs[1].ID}})
 	tcheck(t, err, "drop")
 	if n != 1 {
 		t.Fatalf("dropped %d, expected 1", n)
@@ -142,6 +165,48 @@ func TestQueue(t *testing.T) {
 	if _, err := os.Stat(msgs[1].MessagePath()); err == nil || !os.IsNotExist(err) {
 		t.Fatalf("dropped message not removed from file system")
 	}
+
+	// Fail a message, check the account has a message afterwards, the DSN.
+	n, err = bstore.QueryDB[store.Message](ctxbg, acc.DB).Count()
+	tcheck(t, err, "count messages in account")
+	tcompare(t, n, 0)
+	n, err = Fail(ctxbg, pkglog, Filter{IDs: []int64{msgs[2].ID}})
+	tcheck(t, err, "fail")
+	if n != 1 {
+		t.Fatalf("failed %d, expected 1", n)
+	}
+	n, err = bstore.QueryDB[store.Message](ctxbg, acc.DB).Count()
+	tcheck(t, err, "count messages in account")
+	tcompare(t, n, 1)
+
+	// Check filter through various List calls. Other code uses the same filtering function.
+	filter := func(f Filter, expn int) {
+		t.Helper()
+		l, err := List(ctxbg, f)
+		tcheck(t, err, "list messages")
+		tcompare(t, len(l), expn)
+	}
+	filter(Filter{}, 1)
+	filter(Filter{Account: "mjl"}, 1)
+	filter(Filter{Account: "bogus"}, 0)
+	filter(Filter{IDs: []int64{msgs[0].ID}}, 1)
+	filter(Filter{IDs: []int64{msgs[2].ID}}, 0)     // Removed.
+	filter(Filter{IDs: []int64{msgs[2].ID + 1}}, 0) // Never existed.
+	filter(Filter{From: "mjl@"}, 1)
+	filter(Filter{From: "bogus@"}, 0)
+	filter(Filter{To: "mjl@"}, 1)
+	filter(Filter{To: "bogus@"}, 0)
+	filter(Filter{Hold: &yes}, 0)
+	no := false
+	filter(Filter{Hold: &no}, 1)
+	filter(Filter{Submitted: "<now"}, 1)
+	filter(Filter{Submitted: ">now"}, 0)
+	filter(Filter{NextAttempt: "<1m"}, 1)
+	filter(Filter{NextAttempt: ">1m"}, 0)
+	var empty string
+	bogus := "bogus"
+	filter(Filter{Transport: &empty}, 1)
+	filter(Filter{Transport: &bogus}, 0)
 
 	next := nextWork(ctxbg, pkglog, nil)
 	if next > 0 {
@@ -217,12 +282,13 @@ func TestQueue(t *testing.T) {
 		t.Fatalf("message mismatch, got %q, expected %q", string(msgbuf), testmsg)
 	}
 
-	n, err = Kick(ctxbg, msg.ID+1, "", "", nil)
+	// Reduce by more than first attempt interval of 7.5 minutes.
+	n, err = NextAttemptAdd(ctxbg, idfilter(msg.ID+1), -10*time.Minute)
 	tcheck(t, err, "kick")
 	if n != 0 {
 		t.Fatalf("kick %d, expected 0", n)
 	}
-	n, err = Kick(ctxbg, msg.ID, "", "", nil)
+	n, err = NextAttemptAdd(ctxbg, idfilter(msg.ID), -10*time.Minute)
 	tcheck(t, err, "kick")
 	if n != 1 {
 		t.Fatalf("kicked %d, expected 1", n)
@@ -485,7 +551,7 @@ func TestQueue(t *testing.T) {
 				case <-smtpdone:
 					i := 0
 					for {
-						xmsgs, err := List(ctxbg)
+						xmsgs, err := List(ctxbg, Filter{})
 						tcheck(t, err, "list queue")
 						if len(xmsgs) == 0 {
 							ninbox, err := bstore.QueryDB[store.Message](ctxbg, acc.DB).FilterNonzero(store.Message{MailboxID: inbox.ID}).Count()
@@ -595,10 +661,10 @@ func TestQueue(t *testing.T) {
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
 	transportSubmitTLS := "submittls"
-	n, err = Kick(ctxbg, qml[0].ID, "", "", &transportSubmitTLS)
-	tcheck(t, err, "kick queue")
+	n, err = TransportSet(ctxbg, Filter{IDs: []int64{qml[0].ID}}, transportSubmitTLS)
+	tcheck(t, err, "set transport")
 	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
+		t.Fatalf("TransportSet changed %d messages, expected 1", n)
 	}
 	// Make fake cert, and make it trusted.
 	cert := fakeCert(t, "submission.example", false)
@@ -643,12 +709,12 @@ func TestQueue(t *testing.T) {
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<socks@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	transportSocks := "socks"
-	n, err = Kick(ctxbg, qml[0].ID, "", "", &transportSocks)
-	tcheck(t, err, "kick queue")
+	n, err = TransportSet(ctxbg, idfilter(qml[0].ID), "socks")
+	tcheck(t, err, "TransportSet")
 	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
+		t.Fatalf("TransportSet changed %d messages, expected 1", n)
 	}
+	kick(1, qml[0].ID)
 	wasNetDialer = testDeliver(fakeSMTPServer)
 	if wasNetDialer {
 		t.Fatalf("expected non-net.Dialer as dialer") // SOCKS5 dialer is a private type, we cannot check for it.
@@ -659,11 +725,7 @@ func TestQueue(t *testing.T) {
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
-	tcheck(t, err, "kick queue")
-	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
-	}
+	kick(1, qml[0].ID)
 	testDeliver(fakeSMTPSTARTTLSServer)
 	checkTLSResults(t, "mox.example", "mox.example", false, addCounts(1, 0, tlsrpt.MakeResult(tlsrpt.NoPolicyFound, mailDomain, fdNotTrusted)))
 	checkTLSResults(t, "mail.mox.example", "mox.example", true, addCounts(1, 0, tlsrpt.MakeResult(tlsrpt.NoPolicyFound, mailHost)))
@@ -673,11 +735,7 @@ func TestQueue(t *testing.T) {
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<badtls@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
-	tcheck(t, err, "kick queue")
-	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
-	}
+	kick(1, qml[0].ID)
 	testDeliver(makeBadFakeSMTPSTARTTLSServer(true))
 	checkTLSResults(t, "mox.example", "mox.example", false, addCounts(0, 1, tlsrpt.MakeResult(tlsrpt.NoPolicyFound, mailDomain, fdBadProtocol)))
 	checkTLSResults(t, "mail.mox.example", "mox.example", true, addCounts(0, 1, tlsrpt.MakeResult(tlsrpt.NoPolicyFound, mailHost, fdBadProtocol)))
@@ -693,11 +751,7 @@ func TestQueue(t *testing.T) {
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<dane@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
-	tcheck(t, err, "kick queue")
-	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
-	}
+	kick(1, qml[0].ID)
 	testDeliver(fakeSMTPSTARTTLSServer)
 	checkTLSResults(t, "mox.example", "mox.example", false, addCounts(1, 0, tlsrpt.MakeResult(tlsrpt.NoPolicyFound, mailDomain, fdNotTrusted)))
 	checkTLSResults(t, "mail.mox.example", "mox.example", true, addCounts(1, 0, tlsrpt.Result{Policy: tlsrpt.TLSAPolicy(resolver.TLSA["_25._tcp.mail.mox.example."], mailHost), FailureDetails: []tlsrpt.FailureDetails{}}))
@@ -710,15 +764,10 @@ func TestQueue(t *testing.T) {
 	tcompare(t, rdt.RequireTLS, true)
 
 	// Add message to be delivered with verified TLS and REQUIRETLS.
-	yes := true
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<opportunistictls@localhost>", nil, &yes, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
-	tcheck(t, err, "kick queue")
-	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
-	}
+	kick(1, qml[0].ID)
 	testDeliver(fakeSMTPSTARTTLSServer)
 
 	// Check that message is delivered with all unusable DANE records.
@@ -731,11 +780,7 @@ func TestQueue(t *testing.T) {
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<daneunusable@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
-	tcheck(t, err, "kick queue")
-	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
-	}
+	kick(1, qml[0].ID)
 	testDeliver(fakeSMTPSTARTTLSServer)
 	checkTLSResults(t, "mox.example", "mox.example", false, addCounts(1, 0, tlsrpt.MakeResult(tlsrpt.NoPolicyFound, mailDomain, fdNotTrusted)))
 	checkTLSResults(t, "mail.mox.example", "mox.example", true, addCounts(1, 0, tlsrpt.Result{Policy: tlsrpt.TLSAPolicy([]adns.TLSA{}, mailHost), FailureDetails: []tlsrpt.FailureDetails{fdTLSAUnusable}}))
@@ -752,11 +797,7 @@ func TestQueue(t *testing.T) {
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<daneinsecure@localhost>", nil, nil, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
-	tcheck(t, err, "kick queue")
-	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
-	}
+	kick(1, qml[0].ID)
 	testDeliver(makeBadFakeSMTPSTARTTLSServer(true))
 	resolver.Inauthentic = nil
 	checkTLSResults(t, "mox.example", "mox.example", false, addCounts(0, 1, tlsrpt.MakeResult(tlsrpt.NoPolicyFound, mailDomain, fdBadProtocol)))
@@ -770,37 +811,24 @@ func TestQueue(t *testing.T) {
 	tcompare(t, rdt.RequireTLS, false)
 
 	// Check that message is delivered with TLS-Required: No and non-matching DANE record.
-	no := false
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednostarttls@localhost>", nil, &no, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
-	tcheck(t, err, "kick queue")
-	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
-	}
+	kick(1, qml[0].ID)
 	testDeliver(fakeSMTPSTARTTLSServer)
 
 	// Check that message is delivered with TLS-Required: No and bad TLS, falling back to plain text.
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednoplaintext@localhost>", nil, &no, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
-	tcheck(t, err, "kick queue")
-	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
-	}
+	kick(1, qml[0].ID)
 	testDeliver(makeBadFakeSMTPSTARTTLSServer(true))
 
 	// Add message with requiretls that fails immediately due to no REQUIRETLS support in all servers.
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequiredunsupported@localhost>", nil, &yes, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
-	tcheck(t, err, "kick queue")
-	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
-	}
+	kick(1, qml[0].ID)
 	testDSN(makeBadFakeSMTPSTARTTLSServer(false))
 
 	// Restore pre-DANE behaviour.
@@ -811,11 +839,7 @@ func TestQueue(t *testing.T) {
 	qml = []Msg{MakeMsg(path, path, false, false, int64(len(testmsg)), "<tlsrequirednopolicy@localhost>", nil, &yes, time.Now())}
 	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add message to queue for delivery")
-	n, err = Kick(ctxbg, qml[0].ID, "", "", nil)
-	tcheck(t, err, "kick queue")
-	if n != 1 {
-		t.Fatalf("kick changed %d messages, expected 1", n)
-	}
+	kick(1, qml[0].ID)
 	// Based on DNS lookups, there won't be any dialing or SMTP connection.
 	dialed <- struct{}{}
 	testDSN(func(conn net.Conn) {
@@ -827,7 +851,7 @@ func TestQueue(t *testing.T) {
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 
-	msgs, err = List(ctxbg)
+	msgs, err = List(ctxbg, Filter{})
 	tcheck(t, err, "list queue")
 	if len(msgs) != 1 {
 		t.Fatalf("queue has %d messages, expected 1", len(msgs))
@@ -1010,6 +1034,14 @@ func TestQueueStart(t *testing.T) {
 		}
 	}
 
+	// HoldRule prevents delivery.
+	hr, err := HoldRuleAdd(ctxbg, pkglog, HoldRule{})
+	tcheck(t, err, "add hold rule")
+
+	hrl, err := HoldRuleList(ctxbg)
+	tcheck(t, err, "listing hold rules")
+	tcompare(t, hrl, []HoldRule{hr})
+
 	path := smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "mox.example"}}}
 	mf := prepareFile(t)
 	defer os.Remove(mf.Name())
@@ -1017,20 +1049,50 @@ func TestQueueStart(t *testing.T) {
 	qm := MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now())
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
+	checkDialed(false) // No delivery attempt yet.
+
+	n, err := Count(ctxbg)
+	tcheck(t, err, "count messages in queue")
+	tcompare(t, n, 1)
+
+	// Take message off hold.
+	n, err = HoldSet(ctxbg, Filter{}, false)
+	tcheck(t, err, "taking message off hold")
+	tcompare(t, n, 1)
 	checkDialed(true)
+
+	// Remove hold rule.
+	err = HoldRuleRemove(ctxbg, pkglog, hr.ID)
+	tcheck(t, err, "removing hold rule")
+	// Check it is gone.
+	hrl, err = HoldRuleList(ctxbg)
+	tcheck(t, err, "listing hold rules")
+	tcompare(t, len(hrl), 0)
 
 	// Don't change message nextattempt time, but kick queue. Message should not be delivered.
 	queuekick()
 	checkDialed(false)
 
-	// Kick for real, should see another attempt.
-	n, err := Kick(ctxbg, 0, "mox.example", "", nil)
+	// Set new next attempt, should see another attempt.
+	n, err = NextAttemptSet(ctxbg, Filter{From: "@mox.example"}, time.Now())
 	tcheck(t, err, "kick queue")
 	if n != 1 {
 		t.Fatalf("kick changed %d messages, expected 1", n)
 	}
 	checkDialed(true)
 	time.Sleep(100 * time.Millisecond) // Racy... we won't get notified when work is done...
+
+	// Submit another, should be delivered immediately without HoldRule.
+	path = smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "mox.example"}}}
+	mf = prepareFile(t)
+	defer os.Remove(mf.Name())
+	defer mf.Close()
+	qm = MakeMsg(path, path, false, false, int64(len(testmsg)), "<test@localhost>", nil, nil, time.Now())
+	err = Add(ctxbg, pkglog, "mjl", mf, qm)
+	tcheck(t, err, "add message to queue for delivery")
+	checkDialed(true) // Immediate.
+
+	time.Sleep(100 * time.Millisecond) // Racy... give time to finish.
 }
 
 // Just a cert that appears valid.

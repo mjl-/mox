@@ -2136,12 +2136,104 @@ const dnsbl = async () => {
 }
 
 const queueList = async () => {
-	const [msgs, transports] = await Promise.all([
-		client.QueueList(),
+	let [holdRules, msgs, transports] = await Promise.all([
+		client.QueueHoldRuleList(),
+		client.QueueList({IDs: [], Account: '', From: '', To: '', Hold: null, Submitted: '', NextAttempt: '', Transport: null}),
 		client.Transports(),
 	])
 
+	// todo: sorting by address/timestamps/attempts.
+	// todo: after making changes, don't reload entire page. probably best to fetch messages by id and rerender. also report on which messages weren't affected (e.g. no longer in queue).
+	// todo: display which transport will be used for a message according to routing rules (in case none is explicitly configured).
+	// todo: live updates with SSE connections
+	// todo: keep updating times/age.
+
 	const nowSecs = new Date().getTime()/1000
+
+	let holdRuleAccount: HTMLInputElement
+	let holdRuleSenderDomain: HTMLInputElement
+	let holdRuleRecipientDomain: HTMLInputElement
+	let holdRuleSubmit: HTMLButtonElement
+
+	let filterForm: HTMLFormElement
+	let filterAccount: HTMLInputElement
+	let filterFrom: HTMLInputElement
+	let filterTo: HTMLInputElement
+	let filterSubmitted: HTMLInputElement
+	let filterHold: HTMLSelectElement
+	let filterNextAttempt: HTMLInputElement
+	let filterTransport: HTMLSelectElement
+
+	let requiretlsFieldset: HTMLFieldSetElement
+	let requiretls: HTMLSelectElement
+	let transport: HTMLSelectElement
+
+	// Message ID to checkbox.
+	let toggles = new Map<number, HTMLInputElement>()
+	// We operate on what the user has selected, not what the filters would currently
+	// evaluate to. This function can throw an error, which is why we have awkward
+	// syntax when calling this as parameter in api client calls below.
+	const gatherIDs = () => {
+		const f: api.Filter = {
+			IDs: Array.from(toggles.entries()).filter(t => t[1].checked).map(t => t[0]),
+			Account: '',
+			From: '',
+			To: '',
+			Hold: null,
+			Submitted: '',
+			NextAttempt: '',
+			Transport: null,
+		}
+		// Don't want to accidentally operate on all messages.
+		if ((f.IDs || []).length === 0) {
+			throw new Error('No messages selected.')
+		}
+		return f
+	}
+
+	const tbody = dom.tbody()
+
+	const render = () => {
+		toggles = new Map<number, HTMLInputElement>()
+		for (const m of (msgs || [])) {
+			toggles.set(m.ID, dom.input(attr.type('checkbox'), attr.checked(''), ))
+		}
+
+		dom._kids(tbody,
+			(msgs || []).length === 0 ? dom.tr(dom.td(attr.colspan('14'), 'No messages.')) : [],
+			(msgs || []).map(m => {
+				return dom.tr(
+					dom.td(toggles.get(m.ID)!),
+					dom.td(''+m.ID + (m.BaseID > 0 ? '/'+m.BaseID : '')),
+					dom.td(age(new Date(m.Queued), false, nowSecs)),
+					dom.td(m.SenderAccount || '-'),
+					dom.td(m.SenderLocalpart+"@"+ipdomainString(m.SenderDomain)), // todo: escaping of localpart
+					dom.td(m.RecipientLocalpart+"@"+ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
+					dom.td(formatSize(m.Size)),
+					dom.td(''+m.Attempts),
+					dom.td(m.Hold ? 'Hold' : ''),
+					dom.td(age(new Date(m.NextAttempt), true, nowSecs)),
+					dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'),
+					dom.td(m.LastError || '-'),
+					dom.td(m.RequireTLS === true ? 'Yes' : (m.RequireTLS === false ? 'No' : 'Default')),
+					dom.td(m.Transport || '(default)'),
+				)
+			}),
+		)
+	}
+	render()
+
+	const buttonNextAttemptSet = (text: string, minutes: number) => dom.clickbutton(text, async function click(e: MouseEvent) {
+		// note: awkward client call because gatherIDs() can throw an exception.
+		const n = await check(e.target! as HTMLButtonElement, (async () => client.QueueNextAttemptSet(gatherIDs(), minutes))())
+		window.alert(''+n+' message(s) updated')
+		window.location.reload() // todo: reload less
+	})
+	const buttonNextAttemptAdd = (text: string, minutes: number) => dom.clickbutton(text, async function click(e: MouseEvent) {
+		const n = await check(e.target! as HTMLButtonElement, (async () => client.QueueNextAttemptAdd(gatherIDs(), minutes))())
+		window.alert(''+n+' message(s) updated')
+		window.location.reload() // todo: reload less
+	})
 
 	dom._kids(page,
 		crumbs(
@@ -2149,88 +2241,298 @@ const queueList = async () => {
 			'Queue',
 		),
 
-		// todo: sorting by address/timestamps/attempts. perhaps filtering.
+		dom.h2('Hold rules', attr.title('Messages submitted to the queue that match a hold rule are automatically marked as "on hold", preventing delivery until explicitly taken off hold again.')),
+		dom.form(
+			attr.id('holdRuleForm'),
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+				const pr: api.HoldRule = {
+					ID: 0,
+					Account: holdRuleAccount.value,
+					SenderDomainStr: holdRuleSenderDomain.value,
+					RecipientDomainStr: holdRuleRecipientDomain.value,
+					// Filled in by backend, we provide dummy values.
+					SenderDomain: {ASCII: '', Unicode: ''},
+					RecipientDomain: {ASCII: '', Unicode: ''},
+				}
+				await check(holdRuleSubmit, client.QueueHoldRuleAdd(pr))
+				window.location.reload() // todo: reload less
+			},
+		),
+		(function() {
+			// We don't show the full form until asked. Too much visual clutter.
+			let show = (holdRules || []).length > 0
+			const box = dom.div()
+			const renderHoldRules = () => {
+				dom._kids(box, !show ?
+					dom.div('No hold rules. ',
+						dom.clickbutton('Add', function click() {
+							show = true
+							renderHoldRules()
+						}),
+					) : [
+						dom.p('Newly submitted messages matching a hold rule will be marked as "on hold" and not be delivered until further action by the admin. To create a rule matching all messages, leave all fields empty.'),
+						dom.table(
+							dom.thead(
+								dom.tr(
+									dom.th('Account'),
+									dom.th('Sender domain'),
+									dom.th('Recipient domain'),
+									dom.th('Action'),
+								),
+							),
+							dom.tbody(
+								(holdRules || []).length === 0 ? dom.tr(dom.td(attr.colspan('4'), 'No hold rules.')) : [],
+								(holdRules || []).map(pr =>
+									dom.tr(
+										!pr.Account && !pr.SenderDomainStr && !pr.RecipientDomainStr ?
+											dom.td(attr.colspan('3'), '(Match all messages)') : [
+												dom.td(pr.Account),
+												dom.td(domainString(pr.SenderDomain)),
+												dom.td(domainString(pr.RecipientDomain)),
+											],
+										dom.td(
+											dom.clickbutton('Remove', attr.title('Removing a hold rule does not modify the "on hold" status of messages in the queue.'), async function click(e: MouseEvent) {
+												await check(e.target! as HTMLButtonElement, client.QueueHoldRuleRemove(pr.ID))
+												window.location.reload() // todo: reload less
+											})
+										),
+									)
+								),
+								dom.tr(
+									dom.td(holdRuleAccount=dom.input(attr.form('holdRuleForm'))),
+									dom.td(holdRuleSenderDomain=dom.input(attr.form('holdRuleForm'))),
+									dom.td(holdRuleRecipientDomain=dom.input(attr.form('holdRuleForm'))),
+									dom.td(holdRuleSubmit=dom.submitbutton('Add hold rule', attr.form('holdRuleForm'), attr.title('When adding a new hold rule, existing messages in queue matching the new rule will be marked as on hold.'))),
+								),
+							),
+						)
+					]
+				)
+			}
+			renderHoldRules()
+			return box
+		})(),
+		dom.br(),
+
+		// Filtering.
+		filterForm=dom.form(
+			attr.id('queuefilter'), // Referenced by input elements in table row.
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				const filter: api.Filter = {
+					IDs: [],
+					Account: filterAccount.value,
+					From: filterFrom.value,
+					To: filterTo.value,
+					Hold: filterHold.value === 'Yes' ? true : (filterHold.value === 'No' ? false : null),
+					Submitted: filterSubmitted.value,
+					NextAttempt: filterNextAttempt.value,
+					Transport: !filterTransport.value ? null : (filterTransport.value === '(default)' ? '' : filterTransport.value),
+				}
+				dom._kids(tbody)
+				msgs = await check({disabled: false}, client.QueueList(filter))
+				render()
+			},
+		),
+
+		dom.h2('Messages'),
 		dom.table(dom._class('hover'),
 			dom.thead(
 				dom.tr(
+					dom.th(),
 					dom.th('ID'),
 					dom.th('Submitted'),
+					dom.th('Account'),
 					dom.th('From'),
 					dom.th('To'),
 					dom.th('Size'),
 					dom.th('Attempts'),
+					dom.th('Hold'),
 					dom.th('Next attempt'),
 					dom.th('Last attempt'),
 					dom.th('Last error'),
 					dom.th('Require TLS'),
-					dom.th('Transport/Retry'),
-					dom.th('Remove'),
+					dom.th('Transport'),
+					dom.th(),
+				),
+				dom.tr(
+					dom.td(
+						dom.input(attr.type('checkbox'), attr.checked(''), attr.form('queuefilter'), function change(e: MouseEvent) {
+							const elem = e.target! as HTMLInputElement
+							for (const [_, toggle] of toggles) {
+								toggle.checked = elem.checked
+							}
+						}),
+					),
+					dom.td(),
+					dom.td(filterSubmitted=dom.input(attr.form('queuefilter'), style({width: '7em'}), attr.title('Example: "<1h" for filtering messages submitted more than 1 minute ago.'))),
+					dom.td(filterAccount=dom.input(attr.form('queuefilter'))),
+					dom.td(filterFrom=dom.input(attr.form('queuefilter')), attr.title('Example: "@sender.example" to filter by domain of sender.')),
+					dom.td(filterTo=dom.input(attr.form('queuefilter')), attr.title('Example: "@recipient.example" to filter by domain of recipient.')),
+					dom.td(), // todo: add filter by size?
+					dom.td(), // todo: add filter by attempts?
+					dom.td(
+						filterHold=dom.select(
+							attr.form('queuefilter'),
+							dom.option('', attr.value('')),
+							dom.option('Yes'),
+							dom.option('No'),
+							function change() {
+								filterForm.requestSubmit()
+							},
+						),
+					),
+					dom.td(filterNextAttempt=dom.input(attr.form('queuefilter'), style({width: '7em'}), attr.title('Example: ">1h" for filtering messages to be delivered in more than 1 hour, or "<now" for messages to be delivered as soon as possible.'))),
+					dom.td(),
+					dom.td(),
+					dom.td(),
+					dom.td(
+						filterTransport=dom.select(
+							Object.keys(transports || []).length === 0 ? style({display: 'none'}) : [],
+							attr.form('queuefilter'),
+							function change() {
+								filterForm.requestSubmit()
+							},
+							dom.option(''),
+							dom.option('(default)'),
+							Object.keys(transports || []).sort().map(t => dom.option(t))
+						),
+					),
+					dom.td(
+						dom.submitbutton('Filter', attr.form('queuefilter')), ' ',
+						dom.clickbutton('Reset', attr.form('queuefilter'), function click() {
+							filterForm.reset()
+							filterForm.requestSubmit()
+						}),
+					),
 				),
 			),
-			dom.tbody(
-				(msgs || []).length === 0 ? dom.tr(dom.td(attr.colspan('12'), 'Currently no messages in the queue.')) : [],
-				(msgs || []).map(m => {
-					let requiretlsFieldset: HTMLFieldSetElement
-					let requiretls: HTMLSelectElement
-					let transport: HTMLSelectElement
-					return dom.tr(
-						dom.td(''+m.ID + (m.BaseID > 0 ? '/'+m.BaseID : '')),
-						dom.td(age(new Date(m.Queued), false, nowSecs)),
-						dom.td(m.SenderLocalpart+"@"+ipdomainString(m.SenderDomain)), // todo: escaping of localpart
-						dom.td(m.RecipientLocalpart+"@"+ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
-						dom.td(formatSize(m.Size)),
-						dom.td(''+m.Attempts),
-						dom.td(age(new Date(m.NextAttempt), true, nowSecs)),
-						dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'),
-						dom.td(m.LastError || '-'),
-						dom.td(
-							dom.form(
-								requiretlsFieldset=dom.fieldset(
-									requiretls=dom.select(
-										attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'),
-										dom.option('Default', attr.value('')),
-										dom.option('With RequireTLS', attr.value('yes'), m.RequireTLS === true ? attr.selected('') : []),
-										dom.option('Fallback to insecure', attr.value('no'), m.RequireTLS === false ? attr.selected('') : []),
-									),
-									' ',
-									dom.submitbutton('Save'),
-								),
-								async function submit(e: SubmitEvent) {
-									e.preventDefault()
-									e.stopPropagation()
-									await check(requiretlsFieldset, client.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes'))
-								}
+			tbody,
+		),
+		dom.br(),
+		dom.br(),
+		dom.h2('Change selected messages'),
+		dom.div(
+			style({display: 'flex', gap: '2em'}),
+			dom.div(
+				dom.div('Hold'),
+				dom.div(
+					dom.clickbutton('On', async function click(e: MouseEvent) {
+						const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueHoldSet(gatherIDs(), true))())
+						window.alert(''+n+' message(s) updated')
+						window.location.reload() // todo: reload less
+					}), ' ',
+					dom.clickbutton('Off', async function click(e: MouseEvent) {
+						const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueHoldSet(gatherIDs(), false))())
+						window.alert(''+n+' message(s) updated')
+						window.location.reload() // todo: reload less
+					}),
+				),
+			),
+			dom.div(
+				dom.div('Schedule next delivery attempt'),
+				buttonNextAttemptSet('Now', 0), ' ',
+				dom.clickbutton('More...', function click(e: MouseEvent) {
+					(e.target! as HTMLButtonElement).replaceWith(
+						dom.div(
+							dom.br(),
+							dom.div('Scheduled time plus'),
+							dom.div(
+								buttonNextAttemptAdd('1m', 1), ' ',
+								buttonNextAttemptAdd('5m', 5), ' ',
+								buttonNextAttemptAdd('30m', 30), ' ',
+								buttonNextAttemptAdd('1h', 60), ' ',
+								buttonNextAttemptAdd('2h', 2*60), ' ',
+								buttonNextAttemptAdd('4h', 4*60), ' ',
+								buttonNextAttemptAdd('8h', 8*60), ' ',
+								buttonNextAttemptAdd('16h', 16*60), ' ',
 							),
-						),
-						dom.td(
-							dom.form(
-								transport=dom.select(
-									attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'),
-									dom.option('(default)', attr.value('')),
-									Object.keys(transports || []).sort().map(t => dom.option(t, m.Transport === t ? attr.checked('') : [])),
-								),
-								' ',
-								dom.submitbutton('Retry now'),
-								async function submit(e: SubmitEvent) {
-									e.preventDefault()
-									e.stopPropagation()
-									await check(e.target! as HTMLButtonElement, client.QueueKick(m.ID, transport.value))
-									window.location.reload() // todo: only refresh the list
-								}
-							),
-						),
-						dom.td(
-							dom.clickbutton('Remove', async function click(e: MouseEvent) {
-								e.preventDefault()
-								if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
-									return
-								}
-								await check(e.target! as HTMLButtonElement, client.QueueDrop(m.ID))
-								window.location.reload() // todo: only refresh the list
-							}),
-						),
+							dom.br(),
+							dom.div('Now plus'),
+							dom.div(
+								buttonNextAttemptSet('1m', 1), ' ',
+								buttonNextAttemptSet('5m', 5), ' ',
+								buttonNextAttemptSet('30m', 30), ' ',
+								buttonNextAttemptSet('1h', 60), ' ',
+								buttonNextAttemptSet('2h', 2*60), ' ',
+								buttonNextAttemptSet('4h', 4*60), ' ',
+								buttonNextAttemptSet('8h', 8*60), ' ',
+								buttonNextAttemptSet('16h', 16*60), ' ',
+							)
+						)
 					)
-				})
+				}),
+			),
+			dom.div(
+				dom.form(
+					dom.label('Require TLS'),
+					requiretlsFieldset=dom.fieldset(
+						requiretls=dom.select(
+							attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'),
+							dom.option('Default', attr.value('')),
+							dom.option('With RequireTLS', attr.value('yes')),
+							dom.option('Fallback to insecure', attr.value('no')),
+						),
+						' ',
+						dom.submitbutton('Change'),
+					),
+					async function submit(e: SubmitEvent) {
+						e.preventDefault()
+						e.stopPropagation()
+						const n = await check(requiretlsFieldset, (async () => await client.QueueRequireTLSSet(gatherIDs(), requiretls.value === '' ? null : requiretls.value === 'yes'))())
+						window.alert(''+n+' message(s) updated')
+						window.location.reload() // todo: only refresh the list
+					}
+				),
+			),
+			dom.div(
+				dom.form(
+					dom.label('Transport'),
+					dom.fieldset(
+						transport=dom.select(
+							attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'),
+							dom.option('(default)', attr.value('')),
+							Object.keys(transports || []).sort().map(t => dom.option(t)),
+						),
+						' ',
+						dom.submitbutton('Change'),
+					),
+					async function submit(e: SubmitEvent) {
+						e.preventDefault()
+						e.stopPropagation()
+						const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueTransportSet(gatherIDs(), transport.value))())
+						window.alert(''+n+' message(s) updated')
+						window.location.reload() // todo: only refresh the list
+					}
+				),
+			),
+			dom.div(
+				dom.div('Delivery'),
+				dom.clickbutton('Fail delivery', attr.title('Cause delivery to fail, sending a DSN to the sender.'), async function click(e: MouseEvent) {
+					e.preventDefault()
+					if (!window.confirm('Are you sure you want to remove this message? Notifications of delivery failure will be sent (DSNs).')) {
+						return
+					}
+					const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueFail(gatherIDs()))())
+					window.alert(''+n+' message(s) updated')
+					window.location.reload() // todo: only refresh the list
+				}),
+			),
+			dom.div(
+				dom.div('Messages'),
+				dom.clickbutton('Remove', attr.title('Completely remove messages from queue, not sending a DSN.'), async function click(e: MouseEvent) {
+					e.preventDefault()
+					if (!window.confirm('Are you sure you want to remove this message? It will be removed completely, no DSN about failure to deliver will be sent.')) {
+						return
+					}
+					const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueDrop(gatherIDs()))())
+					window.alert(''+n+' message(s) updated')
+					window.location.reload() // todo: only refresh the list
+				}),
 			),
 		),
 	)

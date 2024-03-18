@@ -674,20 +674,6 @@
 			]
 		},
 		{
-			"Name": "QueueList",
-			"Docs": "QueueList returns the messages currently in the outgoing queue.",
-			"Params": [],
-			"Returns": [
-				{
-					"Name": "r0",
-					"Typewords": [
-						"[]",
-						"Msg"
-					]
-				}
-			]
-		},
-		{
 			"Name": "QueueSize",
 			"Docs": "QueueSize returns the number of messages currently in the outgoing queue.",
 			"Params": [],
@@ -701,45 +687,199 @@
 			]
 		},
 		{
-			"Name": "QueueKick",
-			"Docs": "QueueKick initiates delivery of a message from the queue and sets the transport\nto use for delivery.",
+			"Name": "QueueHoldRuleList",
+			"Docs": "QueueHoldRuleList lists the hold rules.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"HoldRule"
+					]
+				}
+			]
+		},
+		{
+			"Name": "QueueHoldRuleAdd",
+			"Docs": "QueueHoldRuleAdd adds a hold rule. Newly submitted and existing messages\nmatching the hold rule will be marked \"on hold\".",
 			"Params": [
 				{
-					"Name": "id",
+					"Name": "hr",
+					"Typewords": [
+						"HoldRule"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"HoldRule"
+					]
+				}
+			]
+		},
+		{
+			"Name": "QueueHoldRuleRemove",
+			"Docs": "QueueHoldRuleRemove removes a hold rule. The Hold field of messages in\nthe queue are not changed.",
+			"Params": [
+				{
+					"Name": "holdRuleID",
 					"Typewords": [
 						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "QueueList",
+			"Docs": "QueueList returns the messages currently in the outgoing queue.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"Filter"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"Msg"
+					]
+				}
+			]
+		},
+		{
+			"Name": "QueueNextAttemptSet",
+			"Docs": "QueueNextAttemptSet sets a new time for next delivery attempt of matching\nmessages from the queue.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"Filter"
 					]
 				},
 				{
-					"Name": "transport",
+					"Name": "minutes",
 					"Typewords": [
-						"string"
+						"int32"
 					]
 				}
 			],
-			"Returns": []
+			"Returns": [
+				{
+					"Name": "affected",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "QueueNextAttemptAdd",
+			"Docs": "QueueNextAttemptAdd adds a duration to the time of next delivery attempt of\nmatching messages from the queue.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"Filter"
+					]
+				},
+				{
+					"Name": "minutes",
+					"Typewords": [
+						"int32"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "affected",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "QueueHoldSet",
+			"Docs": "QueueHoldSet sets the Hold field of matching messages in the queue.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"Filter"
+					]
+				},
+				{
+					"Name": "onHold",
+					"Typewords": [
+						"bool"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "affected",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "QueueFail",
+			"Docs": "QueueFail fails delivery for matching messages, causing DSNs to be sent.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"Filter"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "affected",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
 		},
 		{
 			"Name": "QueueDrop",
-			"Docs": "QueueDrop removes a message from the queue.",
+			"Docs": "QueueDrop removes matching messages from the queue.",
 			"Params": [
 				{
-					"Name": "id",
+					"Name": "filter",
 					"Typewords": [
-						"int64"
+						"Filter"
 					]
 				}
 			],
-			"Returns": []
+			"Returns": [
+				{
+					"Name": "affected",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
 		},
 		{
-			"Name": "QueueSaveRequireTLS",
-			"Docs": "QueueSaveRequireTLS updates the requiretls field for a message in the queue,\nto be used for the next delivery.",
+			"Name": "QueueRequireTLSSet",
+			"Docs": "QueueRequireTLSSet updates the requiretls field for matching messages in the\nqueue, to be used for the next delivery.",
 			"Params": [
 				{
-					"Name": "id",
+					"Name": "filter",
 					"Typewords": [
-						"int64"
+						"Filter"
 					]
 				},
 				{
@@ -750,7 +890,40 @@
 					]
 				}
 			],
-			"Returns": []
+			"Returns": [
+				{
+					"Name": "affected",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "QueueTransportSet",
+			"Docs": "QueueTransportSet initiates delivery of a message from the queue and sets the transport\nto use for delivery.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"Filter"
+					]
+				},
+				{
+					"Name": "transport",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "affected",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
 		},
 		{
 			"Name": "LogLevels",
@@ -3372,6 +3545,119 @@
 			]
 		},
 		{
+			"Name": "HoldRule",
+			"Docs": "HoldRule is a set of conditions that cause a matching message to be marked as on\nhold when it is queued. All-empty conditions matches all messages, effectively\npausing the entire queue.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "SenderDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "RecipientDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "SenderDomainStr",
+					"Docs": "Unicode.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RecipientDomainStr",
+					"Docs": "Unicode.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Filter",
+			"Docs": "Filter filters messages to list or operate on. Used by admin web interface\nand cli.\n\nOnly non-empty/non-zero values are applied to the filter. Leaving all fields\nempty/zero matches all messages.",
+			"Fields": [
+				{
+					"Name": "IDs",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "From",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Hold",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"bool"
+					]
+				},
+				{
+					"Name": "Submitted",
+					"Docs": "Whether submitted before/after a time relative to now. \"\u003e$duration\" or \"\u003c$duration\", also with \"now\" for duration.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "NextAttempt",
+					"Docs": "\"\u003e$duration\" or \"\u003c$duration\", also with \"now\" for duration.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Transport",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"string"
+					]
+				}
+			]
+		},
+		{
 			"Name": "Msg",
 			"Docs": "Msg is a message in the queue.\n\nUse MakeMsg to make a message with fields that Add needs. Add will further set\nqueueing related fields.",
 			"Fields": [
@@ -3397,6 +3683,13 @@
 					]
 				},
 				{
+					"Name": "Hold",
+					"Docs": "If set, delivery won't be attempted.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
 					"Name": "SenderAccount",
 					"Docs": "Failures are delivered back to this local account. Also used for routing.",
 					"Typewords": [
@@ -3418,6 +3711,13 @@
 					]
 				},
 				{
+					"Name": "SenderDomainStr",
+					"Docs": "For filtering, unicode.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "RecipientLocalpart",
 					"Docs": "Typically a remote user and domain.",
 					"Typewords": [
@@ -3433,7 +3733,7 @@
 				},
 				{
 					"Name": "RecipientDomainStr",
-					"Docs": "For filtering.",
+					"Docs": "For filtering, unicode.",
 					"Typewords": [
 						"string"
 					]

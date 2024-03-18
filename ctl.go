@@ -294,6 +294,14 @@ func servectl(ctx context.Context, log mlog.Log, conn net.Conn, shutdown func())
 	}
 }
 
+func xparseFilters(ctl *ctl, s string) (f queue.Filter) {
+	dec := json.NewDecoder(strings.NewReader(s))
+	dec.DisallowUnknownFields()
+	err := dec.Decode(&f)
+	ctl.xcheck(err, "parsing filters")
+	return f
+}
+
 func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 	log := ctl.log
 	cmd := ctl.xread()
@@ -315,10 +323,10 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		*/
 
 		to := ctl.xread()
-		a, addr, err := store.OpenEmail(ctl.log, to)
+		a, addr, err := store.OpenEmail(log, to)
 		ctl.xcheck(err, "lookup destination address")
 
-		msgFile, err := store.CreateMessageTemp(ctl.log, "ctl-deliver")
+		msgFile, err := store.CreateMessageTemp(log, "ctl-deliver")
 		ctl.xcheck(err, "creating temporary message file")
 		defer store.CloseRemoveTempFile(log, msgFile, "deliver message")
 		mw := message.NewWriter(msgFile)
@@ -354,7 +362,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		account := ctl.xread()
 		pw := ctl.xread()
 
-		acc, err := store.OpenAccount(ctl.log, account)
+		acc, err := store.OpenAccount(log, account)
 		ctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
@@ -363,25 +371,95 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			}
 		}()
 
-		err = acc.SetPassword(ctl.log, pw)
+		err = acc.SetPassword(log, pw)
 		ctl.xcheck(err, "setting password")
 		err = acc.Close()
 		ctl.xcheck(err, "closing account")
 		acc = nil
 		ctl.xwriteok()
 
-	case "queue":
+	case "queueholdruleslist":
 		/* protocol:
-		> "queue"
+		> "queueholdruleslist"
 		< "ok"
 		< stream
 		*/
-		qmsgs, err := queue.List(ctx)
+		l, err := queue.HoldRuleList(ctx)
+		ctl.xcheck(err, "listing hold rules")
+		ctl.xwriteok()
+		xw := ctl.writer()
+		fmt.Fprintln(xw, "hold rules:")
+		for _, hr := range l {
+			var elems []string
+			if hr.Account != "" {
+				elems = append(elems, fmt.Sprintf("account %q", hr.Account))
+			}
+			var zerodom dns.Domain
+			if hr.SenderDomain != zerodom {
+				elems = append(elems, fmt.Sprintf("sender domain %q", hr.SenderDomain.Name()))
+			}
+			if hr.RecipientDomain != zerodom {
+				elems = append(elems, fmt.Sprintf("sender domain %q", hr.RecipientDomain.Name()))
+			}
+			if len(elems) == 0 {
+				fmt.Fprintf(xw, "id %d: all messages\n", hr.ID)
+			} else {
+				fmt.Fprintf(xw, "id %d: %s\n", hr.ID, strings.Join(elems, ", "))
+			}
+		}
+		if len(l) == 0 {
+			fmt.Fprint(xw, "(none)\n")
+		}
+		xw.xclose()
+
+	case "queueholdrulesadd":
+		/* protocol:
+		> "queueholdrulesadd"
+		> account
+		> senderdomainstr
+		> recipientdomainstr
+		< "ok" or error
+		*/
+		var hr queue.HoldRule
+		hr.Account = ctl.xread()
+		senderdomstr := ctl.xread()
+		rcptdomstr := ctl.xread()
+		var err error
+		hr.SenderDomain, err = dns.ParseDomain(senderdomstr)
+		ctl.xcheck(err, "parsing sender domain")
+		hr.RecipientDomain, err = dns.ParseDomain(rcptdomstr)
+		ctl.xcheck(err, "parsing recipient domain")
+		hr, err = queue.HoldRuleAdd(ctx, log, hr)
+		ctl.xcheck(err, "add hold rule")
+		ctl.xwriteok()
+
+	case "queueholdrulesremove":
+		/* protocol:
+		> "queueholdrulesremove"
+		> id
+		< "ok" or error
+		*/
+		id, err := strconv.ParseInt(ctl.xread(), 10, 64)
+		ctl.xcheck(err, "parsing id")
+		err = queue.HoldRuleRemove(ctx, log, id)
+		ctl.xcheck(err, "remove hold rule")
+		ctl.xwriteok()
+
+	case "queuelist":
+		/* protocol:
+		> "queue"
+		> queuefilters as json
+		< "ok"
+		< stream
+		*/
+		fs := ctl.xread()
+		f := xparseFilters(ctl, fs)
+		qmsgs, err := queue.List(ctx, f)
 		ctl.xcheck(err, "listing queue")
 		ctl.xwriteok()
 
 		xw := ctl.writer()
-		fmt.Fprintln(xw, "queue:")
+		fmt.Fprintln(xw, "messages:")
 		for _, qm := range qmsgs {
 			var lastAttempt string
 			if qm.LastAttempt != nil {
@@ -390,63 +468,127 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			fmt.Fprintf(xw, "%5d %s from:%s to:%s next %s last %s error %q\n", qm.ID, qm.Queued.Format(time.RFC3339), qm.Sender().LogString(), qm.Recipient().LogString(), -time.Since(qm.NextAttempt).Round(time.Second), lastAttempt, qm.LastError)
 		}
 		if len(qmsgs) == 0 {
-			fmt.Fprint(xw, "(empty)\n")
+			fmt.Fprint(xw, "(none)\n")
 		}
 		xw.xclose()
 
-	case "queuekick":
+	case "queueholdset":
 		/* protocol:
-		> "queuekick"
-		> id
-		> todomain
-		> recipient
-		> transport // if empty, transport is left unchanged; in future, we may want to differtiate between "leave unchanged" and "set to empty string".
-		< count
+		> "queueholdset"
+		> queuefilters as json
+		> "true" or "false"
 		< "ok" or error
+		< count
 		*/
 
-		idstr := ctl.xread()
-		todomain := ctl.xread()
-		recipient := ctl.xread()
-		transport := ctl.xread()
-		id, err := strconv.ParseInt(idstr, 10, 64)
-		if err != nil {
-			ctl.xwrite("0")
-			ctl.xcheck(err, "parsing id")
-		}
-
-		var xtransport *string
-		if transport != "" {
-			xtransport = &transport
-		}
-		count, err := queue.Kick(ctx, id, todomain, recipient, xtransport)
-		ctl.xcheck(err, "kicking queue")
-		ctl.xwrite(fmt.Sprintf("%d", count))
+		fs := ctl.xread()
+		f := xparseFilters(ctl, fs)
+		hold := ctl.xread() == "true"
+		count, err := queue.HoldSet(ctx, f, hold)
+		ctl.xcheck(err, "setting on hold status for messages")
 		ctl.xwriteok()
+		ctl.xwrite(fmt.Sprintf("%d", count))
+
+	case "queueschedule":
+		/* protocol:
+		> "queueschedule"
+		> queuefilters as json
+		> relative to now
+		> duration
+		< "ok" or error
+		< count
+		*/
+
+		fs := ctl.xread()
+		f := xparseFilters(ctl, fs)
+		relnow := ctl.xread()
+		d, err := time.ParseDuration(ctl.xread())
+		ctl.xcheck(err, "parsing duration for next delivery attempt")
+		var count int
+		if relnow == "" {
+			count, err = queue.NextAttemptAdd(ctx, f, d)
+		} else {
+			count, err = queue.NextAttemptSet(ctx, f, time.Now().Add(d))
+		}
+		ctl.xcheck(err, "setting next delivery attempts in queue")
+		ctl.xwriteok()
+		ctl.xwrite(fmt.Sprintf("%d", count))
+
+	case "queuetransport":
+		/* protocol:
+		> "queuetransport"
+		> queuefilters as json
+		> transport
+		< "ok" or error
+		< count
+		*/
+
+		fs := ctl.xread()
+		f := xparseFilters(ctl, fs)
+		transport := ctl.xread()
+		count, err := queue.TransportSet(ctx, f, transport)
+		ctl.xcheck(err, "adding to next delivery attempts in queue")
+		ctl.xwriteok()
+		ctl.xwrite(fmt.Sprintf("%d", count))
+
+	case "queuerequiretls":
+		/* protocol:
+		> "queuerequiretls"
+		> queuefilters as json
+		> reqtls (empty string, "true" or "false")
+		< "ok" or error
+		< count
+		*/
+
+		fs := ctl.xread()
+		f := xparseFilters(ctl, fs)
+		reqtls := ctl.xread()
+		var req *bool
+		switch reqtls {
+		case "":
+		case "true":
+			v := true
+			req = &v
+		case "false":
+			v := false
+			req = &v
+		default:
+			ctl.xcheck(fmt.Errorf("unknown value %q", reqtls), "parsing value")
+		}
+		count, err := queue.RequireTLSSet(ctx, f, req)
+		ctl.xcheck(err, "setting tls requirements on messages in queue")
+		ctl.xwriteok()
+		ctl.xwrite(fmt.Sprintf("%d", count))
+
+	case "queuefail":
+		/* protocol:
+		> "queuefail"
+		> queuefilters as json
+		< "ok" or error
+		< count
+		*/
+
+		fs := ctl.xread()
+		f := xparseFilters(ctl, fs)
+		count, err := queue.Fail(ctx, log, f)
+		ctl.xcheck(err, "marking messages from queue as failed")
+		ctl.xwriteok()
+		ctl.xwrite(fmt.Sprintf("%d", count))
 
 	case "queuedrop":
 		/* protocol:
 		> "queuedrop"
-		> id
-		> todomain
-		> recipient
-		< count
+		> queuefilters as json
 		< "ok" or error
+		< count
 		*/
 
-		idstr := ctl.xread()
-		todomain := ctl.xread()
-		recipient := ctl.xread()
-		id, err := strconv.ParseInt(idstr, 10, 64)
-		if err != nil {
-			ctl.xwrite("0")
-			ctl.xcheck(err, "parsing id")
-		}
-
-		count, err := queue.Drop(ctx, ctl.log, id, todomain, recipient)
+		fs := ctl.xread()
+		f := xparseFilters(ctl, fs)
+		count, err := queue.Drop(ctx, log, f)
 		ctl.xcheck(err, "dropping messages from queue")
-		ctl.xwrite(fmt.Sprintf("%d", count))
 		ctl.xwriteok()
+		ctl.xwrite(fmt.Sprintf("%d", count))
 
 	case "queuedump":
 		/* protocol:
@@ -587,13 +729,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		pkg := ctl.xread()
 		levelstr := ctl.xread()
 		if levelstr == "" {
-			mox.Conf.LogLevelRemove(ctl.log, pkg)
+			mox.Conf.LogLevelRemove(log, pkg)
 		} else {
 			level, ok := mlog.Levels[levelstr]
 			if !ok {
 				ctl.xerror("bad level")
 			}
-			mox.Conf.LogLevelSet(ctl.log, pkg, level)
+			mox.Conf.LogLevelSet(log, pkg, level)
 		}
 		ctl.xwriteok()
 
@@ -604,7 +746,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< "ok" or error
 		*/
 		account := ctl.xread()
-		acc, err := store.OpenAccount(ctl.log, account)
+		acc, err := store.OpenAccount(log, account)
 		ctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
@@ -629,7 +771,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			log.Check(err, "removing old junkfilter bloom filter file", slog.String("path", bloomPath))
 
 			// Open junk filter, this creates new files.
-			jf, _, err := acc.OpenJunkFilter(ctx, ctl.log)
+			jf, _, err := acc.OpenJunkFilter(ctx, log)
 			ctl.xcheck(err, "open new junk filter")
 			defer func() {
 				if jf == nil {
@@ -645,14 +787,14 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			q.FilterEqual("Expunged", false)
 			err = q.ForEach(func(m store.Message) error {
 				total++
-				ok, err := acc.TrainMessage(ctx, ctl.log, jf, m)
+				ok, err := acc.TrainMessage(ctx, log, jf, m)
 				if ok {
 					trained++
 				}
 				return err
 			})
 			ctl.xcheck(err, "training messages")
-			ctl.log.Info("retrained messages", slog.Int("total", total), slog.Int("trained", trained))
+			log.Info("retrained messages", slog.Int("total", total), slog.Int("trained", trained))
 
 			// Close junk filter, marking success.
 			err = jf.Close()
@@ -669,7 +811,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< stream
 		*/
 		account := ctl.xread()
-		acc, err := store.OpenAccount(ctl.log, account)
+		acc, err := store.OpenAccount(log, account)
 		ctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
@@ -744,7 +886,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		const batchSize = 10000
 
 		xfixmsgsize := func(accName string) {
-			acc, err := store.OpenAccount(ctl.log, accName)
+			acc, err := store.OpenAccount(log, accName)
 			ctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
@@ -879,7 +1021,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		const batchSize = 100
 
 		xreparseAccount := func(accName string) {
-			acc, err := store.OpenAccount(ctl.log, accName)
+			acc, err := store.OpenAccount(log, accName)
 			ctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
@@ -955,7 +1097,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		w := ctl.writer()
 
 		xreassignThreads := func(accName string) {
-			acc, err := store.OpenAccount(ctl.log, accName)
+			acc, err := store.OpenAccount(log, accName)
 			ctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
@@ -963,20 +1105,20 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			}()
 
 			// We don't want to step on an existing upgrade process.
-			err = acc.ThreadingWait(ctl.log)
+			err = acc.ThreadingWait(log)
 			ctl.xcheck(err, "waiting for threading upgrade to finish")
 			// todo: should we try to continue if the threading upgrade failed? only if there is a chance it will succeed this time...
 
 			// todo: reassigning isn't atomic (in a single transaction), ideally it would be (bstore would need to be able to handle large updates).
 			const batchSize = 50000
-			total, err := acc.ResetThreading(ctx, ctl.log, batchSize, true)
+			total, err := acc.ResetThreading(ctx, log, batchSize, true)
 			ctl.xcheck(err, "resetting threading fields")
 			_, err = fmt.Fprintf(w, "New thread base subject assigned to %d message(s), starting to reassign threads...\n", total)
 			ctl.xcheck(err, "write")
 
 			// Assign threads again. Ideally we would do this in a single transaction, but
 			// bstore/boltdb cannot handle so many pending changes, so we set a high batchsize.
-			err = acc.AssignThreads(ctx, ctl.log, nil, 0, 50000, w)
+			err = acc.AssignThreads(ctx, log, nil, 0, 50000, w)
 			ctl.xcheck(err, "reassign threads")
 
 			_, err = fmt.Fprintf(w, "Threads reassigned. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n")

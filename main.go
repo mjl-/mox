@@ -99,8 +99,16 @@ var commands = []struct {
 	{"setaccountpassword", cmdSetaccountpassword},
 	{"setadminpassword", cmdSetadminpassword},
 	{"loglevels", cmdLoglevels},
+	{"queue holdrules list", cmdQueueHoldrulesList},
+	{"queue holdrules add", cmdQueueHoldrulesAdd},
+	{"queue holdrules remove", cmdQueueHoldrulesRemove},
 	{"queue list", cmdQueueList},
-	{"queue kick", cmdQueueKick},
+	{"queue hold", cmdQueueHold},
+	{"queue unhold", cmdQueueUnhold},
+	{"queue schedule", cmdQueueSchedule},
+	{"queue transport", cmdQueueTransport},
+	{"queue requiretls", cmdQueueRequireTLS},
+	{"queue fail", cmdQueueFail},
 	{"queue drop", cmdQueueDrop},
 	{"queue dump", cmdQueueDump},
 	{"import maildir", cmdImportMaildir},
@@ -1331,124 +1339,6 @@ func ctlcmdDeliver(ctl *ctl, address string) {
 		fmt.Println("message delivered")
 	} else {
 		log.Fatalf("deliver: %s", line)
-	}
-}
-
-func cmdQueueList(c *cmd) {
-	c.help = `List messages in the delivery queue.
-
-This prints the message with its ID, last and next delivery attempts, last
-error.
-`
-	if len(c.Parse()) != 0 {
-		c.Usage()
-	}
-	mustLoadConfig()
-	ctlcmdQueueList(xctl())
-}
-
-func ctlcmdQueueList(ctl *ctl) {
-	ctl.xwrite("queue")
-	ctl.xreadok()
-	if _, err := io.Copy(os.Stdout, ctl.reader()); err != nil {
-		log.Fatalf("%s", err)
-	}
-}
-
-func cmdQueueKick(c *cmd) {
-	c.params = "[-id id] [-todomain domain] [-recipient address] [-transport transport]"
-	c.help = `Schedule matching messages in the queue for immediate delivery.
-
-Messages deliveries are normally attempted with exponential backoff. The first
-retry after 7.5 minutes, and doubling each time. Kicking messages sets their
-next scheduled attempt to now, it can cause delivery to fail earlier than
-without rescheduling.
-
-With the -transport flag, future delivery attempts are done using the specified
-transport. Transports can be configured in mox.conf, e.g. to submit to a remote
-queue over SMTP.
-`
-	var id int64
-	var todomain, recipient, transport string
-	c.flag.Int64Var(&id, "id", 0, "id of message in queue")
-	c.flag.StringVar(&todomain, "todomain", "", "destination domain of messages")
-	c.flag.StringVar(&recipient, "recipient", "", "recipient email address")
-	c.flag.StringVar(&transport, "transport", "", "transport to use for the next delivery")
-	if len(c.Parse()) != 0 {
-		c.Usage()
-	}
-	mustLoadConfig()
-	ctlcmdQueueKick(xctl(), id, todomain, recipient, transport)
-}
-
-func ctlcmdQueueKick(ctl *ctl, id int64, todomain, recipient, transport string) {
-	ctl.xwrite("queuekick")
-	ctl.xwrite(fmt.Sprintf("%d", id))
-	ctl.xwrite(todomain)
-	ctl.xwrite(recipient)
-	ctl.xwrite(transport)
-	count := ctl.xread()
-	line := ctl.xread()
-	if line == "ok" {
-		fmt.Printf("%s messages scheduled\n", count)
-	} else {
-		log.Fatalf("scheduling messages for immediate delivery: %s", line)
-	}
-}
-
-func cmdQueueDrop(c *cmd) {
-	c.params = "[-id id] [-todomain domain] [-recipient address]"
-	c.help = `Remove matching messages from the queue.
-
-Dangerous operation, this completely removes the message. If you want to store
-the message, use "queue dump" before removing.
-`
-	var id int64
-	var todomain, recipient string
-	c.flag.Int64Var(&id, "id", 0, "id of message in queue")
-	c.flag.StringVar(&todomain, "todomain", "", "destination domain of messages")
-	c.flag.StringVar(&recipient, "recipient", "", "recipient email address")
-	if len(c.Parse()) != 0 {
-		c.Usage()
-	}
-	mustLoadConfig()
-	ctlcmdQueueDrop(xctl(), id, todomain, recipient)
-}
-
-func ctlcmdQueueDrop(ctl *ctl, id int64, todomain, recipient string) {
-	ctl.xwrite("queuedrop")
-	ctl.xwrite(fmt.Sprintf("%d", id))
-	ctl.xwrite(todomain)
-	ctl.xwrite(recipient)
-	count := ctl.xread()
-	line := ctl.xread()
-	if line == "ok" {
-		fmt.Printf("%s messages dropped\n", count)
-	} else {
-		log.Fatalf("scheduling messages for immediate delivery: %s", line)
-	}
-}
-
-func cmdQueueDump(c *cmd) {
-	c.params = "id"
-	c.help = `Dump a message from the queue.
-
-The message is printed to stdout and is in standard internet mail format.
-`
-	args := c.Parse()
-	if len(args) != 1 {
-		c.Usage()
-	}
-	mustLoadConfig()
-	ctlcmdQueueDump(xctl(), args[0])
-}
-
-func ctlcmdQueueDump(ctl *ctl, id string) {
-	ctl.xwrite("queuedump")
-	ctl.xwrite(id)
-	ctl.xreadok()
-	if _, err := io.Copy(os.Stdout, ctl.reader()); err != nil {
-		log.Fatalf("%s", err)
 	}
 }
 

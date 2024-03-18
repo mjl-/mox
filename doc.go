@@ -25,9 +25,17 @@ any parameters. Followed by the help and usage information for each command.
 	mox setaccountpassword account
 	mox setadminpassword
 	mox loglevels [level [pkg]]
-	mox queue list
-	mox queue kick [-id id] [-todomain domain] [-recipient address] [-transport transport]
-	mox queue drop [-id id] [-todomain domain] [-recipient address]
+	mox queue holdrules list
+	mox queue holdrules add [ruleflags]
+	mox queue holdrules remove ruleid
+	mox queue list [filterflags]
+	mox queue hold [filterflags]
+	mox queue unhold [filterflags]
+	mox queue schedule [filterflags] duration
+	mox queue transport [filterflags] transport
+	mox queue requiretls [filterflags] {yes | no | default}
+	mox queue fail [filterflags]
+	mox queue drop [filterflags]
 	mox queue dump id
 	mox import maildir accountname mailboxname maildir
 	mox import mbox accountname mailboxname mbox
@@ -195,37 +203,227 @@ Valid labels: error, info, debug, trace, traceauth, tracedata.
 
 	usage: mox loglevels [level [pkg]]
 
+# mox queue holdrules list
+
+List hold rules for the delivery queue.
+
+Messages submitted to the queue that match a hold rule will be marked as on hold
+and not scheduled for delivery.
+
+	usage: mox queue holdrules list
+
+# mox queue holdrules add
+
+Add hold rule for the delivery queue.
+
+Add a hold rule to mark matching newly submitted messages as on hold. Set the
+matching rules with the flags. Don't specify any flags to match all submitted
+messages.
+
+	usage: mox queue holdrules add [ruleflags]
+	  -account string
+	    	account submitting the message
+	  -recipientdom string
+	    	recipient domain
+	  -senderdom string
+	    	sender domain
+
+# mox queue holdrules remove
+
+Remove hold rule for the delivery queue.
+
+Remove a hold rule by its id.
+
+	usage: mox queue holdrules remove ruleid
+
 # mox queue list
 
-List messages in the delivery queue.
+List matching messages in the delivery queue.
 
-This prints the message with its ID, last and next delivery attempts, last
-error.
+Prints the message with its ID, last and next delivery attempts, last error.
 
-	usage: mox queue list
+	usage: mox queue list [filterflags]
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
 
-# mox queue kick
+# mox queue hold
 
-Schedule matching messages in the queue for immediate delivery.
+Mark matching messages on hold.
 
-Messages deliveries are normally attempted with exponential backoff. The first
-retry after 7.5 minutes, and doubling each time. Kicking messages sets their
-next scheduled attempt to now, it can cause delivery to fail earlier than
-without rescheduling.
+Messages that are on hold are not delivered until marked as off hold again, or
+otherwise handled by the admin.
 
-With the -transport flag, future delivery attempts are done using the specified
-transport. Transports can be configured in mox.conf, e.g. to submit to a remote
-queue over SMTP.
+	usage: mox queue hold [filterflags]
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
 
-	usage: mox queue kick [-id id] [-todomain domain] [-recipient address] [-transport transport]
-	  -id int
-	    	id of message in queue
-	  -recipient string
-	    	recipient email address
-	  -todomain string
-	    	destination domain of messages
-	  -transport string
-	    	transport to use for the next delivery
+# mox queue unhold
+
+Mark matching messages off hold.
+
+Once off hold, messages can be delivered according to their current next
+delivery attempt. See the "queue schedule" command.
+
+	usage: mox queue unhold [filterflags]
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
+
+# mox queue schedule
+
+Change next delivery attempt for matching messages.
+
+The next delivery attempt is adjusted by the duration parameter. If the -now
+flag is set, the new delivery attempt is set to the duration added to the
+current time, instead of added to the current scheduled time.
+
+Schedule immediate delivery with "mox queue schedule -now 0".
+
+	usage: mox queue schedule [filterflags] duration
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -now
+	    	schedule for duration relative to current time instead of relative to current next delivery attempt for messages
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
+
+# mox queue transport
+
+Set transport for matching messages.
+
+By default, the routing rules determine how a message is delivered. The default
+and common case is direct delivery with SMTP. Messages can get a previously
+configured transport assigned to use for delivery, e.g. using submission to
+another mail server or with connections over a SOCKS proxy.
+
+	usage: mox queue transport [filterflags] transport
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
+
+# mox queue requiretls
+
+Set TLS requirements for delivery of matching messages.
+
+Value "yes" is handled as if the RequireTLS extension was specified during
+submission.
+
+Value "no" is handled as if the message has a header "TLS-Required: No". This
+header is not added by the queue. If messages without this header are relayed
+through other mail servers they will apply their own default TLS policy.
+
+Value "default" is the default behaviour, currently for unverified opportunistic
+TLS.
+
+	usage: mox queue requiretls [filterflags] {yes | no | default}
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
+
+# mox queue fail
+
+Fail delivery of matching messages, delivering DSNs.
+
+Failing a message is handled similar to how delivery is given up after all
+delivery attempts failed. The DSN (delivery status notification) message
+contains a line saying the message was canceled by the admin.
+
+	usage: mox queue fail [filterflags]
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
 
 # mox queue drop
 
@@ -234,13 +432,23 @@ Remove matching messages from the queue.
 Dangerous operation, this completely removes the message. If you want to store
 the message, use "queue dump" before removing.
 
-	usage: mox queue drop [-id id] [-todomain domain] [-recipient address]
-	  -id int
-	    	id of message in queue
-	  -recipient string
-	    	recipient email address
-	  -todomain string
-	    	destination domain of messages
+	usage: mox queue drop [filterflags]
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
 
 # mox queue dump
 

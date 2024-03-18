@@ -1974,13 +1974,6 @@ func (Admin) ClientConfigsDomain(ctx context.Context, domain string) mox.ClientC
 	return cc
 }
 
-// QueueList returns the messages currently in the outgoing queue.
-func (Admin) QueueList(ctx context.Context) []queue.Msg {
-	l, err := queue.List(ctx)
-	xcheckf(ctx, err, "listing messages in queue")
-	return l
-}
-
 // QueueSize returns the number of messages currently in the outgoing queue.
 func (Admin) QueueSize(ctx context.Context) int {
 	n, err := queue.Count(ctx)
@@ -1988,31 +1981,96 @@ func (Admin) QueueSize(ctx context.Context) int {
 	return n
 }
 
-// QueueKick initiates delivery of a message from the queue and sets the transport
-// to use for delivery.
-func (Admin) QueueKick(ctx context.Context, id int64, transport string) {
-	n, err := queue.Kick(ctx, id, "", "", &transport)
-	if err == nil && n == 0 {
-		err = errors.New("message not found")
-	}
-	xcheckf(ctx, err, "kick message in queue")
+// QueueHoldRuleList lists the hold rules.
+func (Admin) QueueHoldRuleList(ctx context.Context) []queue.HoldRule {
+	l, err := queue.HoldRuleList(ctx)
+	xcheckf(ctx, err, "listing queue hold rules")
+	return l
 }
 
-// QueueDrop removes a message from the queue.
-func (Admin) QueueDrop(ctx context.Context, id int64) {
+// QueueHoldRuleAdd adds a hold rule. Newly submitted and existing messages
+// matching the hold rule will be marked "on hold".
+func (Admin) QueueHoldRuleAdd(ctx context.Context, hr queue.HoldRule) queue.HoldRule {
+	var err error
+	hr.SenderDomain, err = dns.ParseDomain(hr.SenderDomainStr)
+	xcheckuserf(ctx, err, "parsing sender domain %q", hr.SenderDomainStr)
+	hr.RecipientDomain, err = dns.ParseDomain(hr.RecipientDomainStr)
+	xcheckuserf(ctx, err, "parsing recipient domain %q", hr.RecipientDomainStr)
+
 	log := pkglog.WithContext(ctx)
-	n, err := queue.Drop(ctx, log, id, "", "")
-	if err == nil && n == 0 {
-		err = errors.New("message not found")
-	}
-	xcheckf(ctx, err, "drop message from queue")
+	hr, err = queue.HoldRuleAdd(ctx, log, hr)
+	xcheckf(ctx, err, "adding queue hold rule")
+	return hr
 }
 
-// QueueSaveRequireTLS updates the requiretls field for a message in the queue,
-// to be used for the next delivery.
-func (Admin) QueueSaveRequireTLS(ctx context.Context, id int64, requireTLS *bool) {
-	err := queue.SaveRequireTLS(ctx, id, requireTLS)
-	xcheckf(ctx, err, "update requiretls for message in queue")
+// QueueHoldRuleRemove removes a hold rule. The Hold field of messages in
+// the queue are not changed.
+func (Admin) QueueHoldRuleRemove(ctx context.Context, holdRuleID int64) {
+	log := pkglog.WithContext(ctx)
+	err := queue.HoldRuleRemove(ctx, log, holdRuleID)
+	xcheckf(ctx, err, "removing queue hold rule")
+}
+
+// QueueList returns the messages currently in the outgoing queue.
+func (Admin) QueueList(ctx context.Context, filter queue.Filter) []queue.Msg {
+	l, err := queue.List(ctx, filter)
+	xcheckf(ctx, err, "listing messages in queue")
+	return l
+}
+
+// QueueNextAttemptSet sets a new time for next delivery attempt of matching
+// messages from the queue.
+func (Admin) QueueNextAttemptSet(ctx context.Context, filter queue.Filter, minutes int) (affected int) {
+	n, err := queue.NextAttemptSet(ctx, filter, time.Now().Add(time.Duration(minutes)*time.Minute))
+	xcheckf(ctx, err, "setting new next delivery attempt time for matching messages in queue")
+	return n
+}
+
+// QueueNextAttemptAdd adds a duration to the time of next delivery attempt of
+// matching messages from the queue.
+func (Admin) QueueNextAttemptAdd(ctx context.Context, filter queue.Filter, minutes int) (affected int) {
+	n, err := queue.NextAttemptAdd(ctx, filter, time.Duration(minutes)*time.Minute)
+	xcheckf(ctx, err, "adding duration to next delivery attempt for matching messages in queue")
+	return n
+}
+
+// QueueHoldSet sets the Hold field of matching messages in the queue.
+func (Admin) QueueHoldSet(ctx context.Context, filter queue.Filter, onHold bool) (affected int) {
+	n, err := queue.HoldSet(ctx, filter, onHold)
+	xcheckf(ctx, err, "changing onhold for matching messages in queue")
+	return n
+}
+
+// QueueFail fails delivery for matching messages, causing DSNs to be sent.
+func (Admin) QueueFail(ctx context.Context, filter queue.Filter) (affected int) {
+	log := pkglog.WithContext(ctx)
+	n, err := queue.Fail(ctx, log, filter)
+	xcheckf(ctx, err, "drop messages from queue")
+	return n
+}
+
+// QueueDrop removes matching messages from the queue.
+func (Admin) QueueDrop(ctx context.Context, filter queue.Filter) (affected int) {
+	log := pkglog.WithContext(ctx)
+	n, err := queue.Drop(ctx, log, filter)
+	xcheckf(ctx, err, "drop messages from queue")
+	return n
+}
+
+// QueueRequireTLSSet updates the requiretls field for matching messages in the
+// queue, to be used for the next delivery.
+func (Admin) QueueRequireTLSSet(ctx context.Context, filter queue.Filter, requireTLS *bool) (affected int) {
+	n, err := queue.RequireTLSSet(ctx, filter, requireTLS)
+	xcheckf(ctx, err, "update requiretls for messages in queue")
+	return n
+}
+
+// QueueTransportSet initiates delivery of a message from the queue and sets the transport
+// to use for delivery.
+func (Admin) QueueTransportSet(ctx context.Context, filter queue.Filter, transport string) (affected int) {
+	n, err := queue.TransportSet(ctx, filter, transport)
+	xcheckf(ctx, err, "changing transport for messages in queue")
+	return n
 }
 
 // LogLevels returns the current log levels.

@@ -465,6 +465,34 @@ export interface ClientConfigsEntry {
 	Note: string
 }
 
+// HoldRule is a set of conditions that cause a matching message to be marked as on
+// hold when it is queued. All-empty conditions matches all messages, effectively
+// pausing the entire queue.
+export interface HoldRule {
+	ID: number
+	Account: string
+	SenderDomain: Domain
+	RecipientDomain: Domain
+	SenderDomainStr: string  // Unicode.
+	RecipientDomainStr: string  // Unicode.
+}
+
+// Filter filters messages to list or operate on. Used by admin web interface
+// and cli.
+// 
+// Only non-empty/non-zero values are applied to the filter. Leaving all fields
+// empty/zero matches all messages.
+export interface Filter {
+	IDs?: number[] | null
+	Account: string
+	From: string
+	To: string
+	Hold?: boolean | null
+	Submitted: string  // Whether submitted before/after a time relative to now. ">$duration" or "<$duration", also with "now" for duration.
+	NextAttempt: string  // ">$duration" or "<$duration", also with "now" for duration.
+	Transport?: string | null
+}
+
 // Msg is a message in the queue.
 // 
 // Use MakeMsg to make a message with fields that Add needs. Add will further set
@@ -473,12 +501,14 @@ export interface Msg {
 	ID: number
 	BaseID: number  // A message for multiple recipients will get a BaseID that is identical to the first Msg.ID queued. The message contents will be identical for each recipient, including MsgPrefix. If other properties are identical too, including recipient domain, multiple Msgs may be delivered in a single SMTP transaction. For messages with a single recipient, this field will be 0.
 	Queued: Date
+	Hold: boolean  // If set, delivery won't be attempted.
 	SenderAccount: string  // Failures are delivered back to this local account. Also used for routing.
 	SenderLocalpart: Localpart  // Should be a local user and domain.
 	SenderDomain: IPDomain
+	SenderDomainStr: string  // For filtering, unicode.
 	RecipientLocalpart: Localpart  // Typically a remote user and domain.
 	RecipientDomain: IPDomain
-	RecipientDomainStr: string  // For filtering.
+	RecipientDomainStr: string  // For filtering, unicode.
 	Attempts: number  // Next attempt is based on last attempt and exponential back off based on attempts.
 	MaxAttempts: number  // Max number of attempts before giving up. If 0, then the default of 8 attempts is used instead.
 	DialedIPs?: { [key: string]: IP[] | null }  // For each host, the IPs that were dialed. Used for IP selection for later attempts.
@@ -780,7 +810,7 @@ export type Localpart = string
 // be an IPv4 address.
 export type IP = string
 
-export const structTypes: {[typename: string]: boolean} = {"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"DANECheckResult":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"Reverse":true,"Row":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
+export const structTypes: {[typename: string]: boolean} = {"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"DANECheckResult":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"Reverse":true,"Row":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
 export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"Alignment":true,"CSRFToken":true,"DKIMResult":true,"DMARCPolicy":true,"DMARCResult":true,"Disposition":true,"IP":true,"Localpart":true,"Mode":true,"PolicyOverride":true,"PolicyType":true,"RUA":true,"ResultType":true,"SPFDomainScope":true,"SPFResult":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
@@ -840,7 +870,9 @@ export const types: TypenameMap = {
 	"Reverse": {"Name":"Reverse","Docs":"","Fields":[{"Name":"Hostnames","Docs":"","Typewords":["[]","string"]}]},
 	"ClientConfigs": {"Name":"ClientConfigs","Docs":"","Fields":[{"Name":"Entries","Docs":"","Typewords":["[]","ClientConfigsEntry"]}]},
 	"ClientConfigsEntry": {"Name":"ClientConfigsEntry","Docs":"","Fields":[{"Name":"Protocol","Docs":"","Typewords":["string"]},{"Name":"Host","Docs":"","Typewords":["Domain"]},{"Name":"Port","Docs":"","Typewords":["int32"]},{"Name":"Listener","Docs":"","Typewords":["string"]},{"Name":"Note","Docs":"","Typewords":["string"]}]},
-	"Msg": {"Name":"Msg","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"BaseID","Docs":"","Typewords":["int64"]},{"Name":"Queued","Docs":"","Typewords":["timestamp"]},{"Name":"SenderAccount","Docs":"","Typewords":["string"]},{"Name":"SenderLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"SenderDomain","Docs":"","Typewords":["IPDomain"]},{"Name":"RecipientLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"RecipientDomain","Docs":"","Typewords":["IPDomain"]},{"Name":"RecipientDomainStr","Docs":"","Typewords":["string"]},{"Name":"Attempts","Docs":"","Typewords":["int32"]},{"Name":"MaxAttempts","Docs":"","Typewords":["int32"]},{"Name":"DialedIPs","Docs":"","Typewords":["{}","[]","IP"]},{"Name":"NextAttempt","Docs":"","Typewords":["timestamp"]},{"Name":"LastAttempt","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"LastError","Docs":"","Typewords":["string"]},{"Name":"Has8bit","Docs":"","Typewords":["bool"]},{"Name":"SMTPUTF8","Docs":"","Typewords":["bool"]},{"Name":"IsDMARCReport","Docs":"","Typewords":["bool"]},{"Name":"IsTLSReport","Docs":"","Typewords":["bool"]},{"Name":"Size","Docs":"","Typewords":["int64"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"MsgPrefix","Docs":"","Typewords":["nullable","string"]},{"Name":"DSNUTF8","Docs":"","Typewords":["nullable","string"]},{"Name":"Transport","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureReleaseRequest","Docs":"","Typewords":["string"]}]},
+	"HoldRule": {"Name":"HoldRule","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"SenderDomain","Docs":"","Typewords":["Domain"]},{"Name":"RecipientDomain","Docs":"","Typewords":["Domain"]},{"Name":"SenderDomainStr","Docs":"","Typewords":["string"]},{"Name":"RecipientDomainStr","Docs":"","Typewords":["string"]}]},
+	"Filter": {"Name":"Filter","Docs":"","Fields":[{"Name":"IDs","Docs":"","Typewords":["[]","int64"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["string"]},{"Name":"Hold","Docs":"","Typewords":["nullable","bool"]},{"Name":"Submitted","Docs":"","Typewords":["string"]},{"Name":"NextAttempt","Docs":"","Typewords":["string"]},{"Name":"Transport","Docs":"","Typewords":["nullable","string"]}]},
+	"Msg": {"Name":"Msg","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"BaseID","Docs":"","Typewords":["int64"]},{"Name":"Queued","Docs":"","Typewords":["timestamp"]},{"Name":"Hold","Docs":"","Typewords":["bool"]},{"Name":"SenderAccount","Docs":"","Typewords":["string"]},{"Name":"SenderLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"SenderDomain","Docs":"","Typewords":["IPDomain"]},{"Name":"SenderDomainStr","Docs":"","Typewords":["string"]},{"Name":"RecipientLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"RecipientDomain","Docs":"","Typewords":["IPDomain"]},{"Name":"RecipientDomainStr","Docs":"","Typewords":["string"]},{"Name":"Attempts","Docs":"","Typewords":["int32"]},{"Name":"MaxAttempts","Docs":"","Typewords":["int32"]},{"Name":"DialedIPs","Docs":"","Typewords":["{}","[]","IP"]},{"Name":"NextAttempt","Docs":"","Typewords":["timestamp"]},{"Name":"LastAttempt","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"LastError","Docs":"","Typewords":["string"]},{"Name":"Has8bit","Docs":"","Typewords":["bool"]},{"Name":"SMTPUTF8","Docs":"","Typewords":["bool"]},{"Name":"IsDMARCReport","Docs":"","Typewords":["bool"]},{"Name":"IsTLSReport","Docs":"","Typewords":["bool"]},{"Name":"Size","Docs":"","Typewords":["int64"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"MsgPrefix","Docs":"","Typewords":["nullable","string"]},{"Name":"DSNUTF8","Docs":"","Typewords":["nullable","string"]},{"Name":"Transport","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureReleaseRequest","Docs":"","Typewords":["string"]}]},
 	"IPDomain": {"Name":"IPDomain","Docs":"","Fields":[{"Name":"IP","Docs":"","Typewords":["IP"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
 	"WebserverConfig": {"Name":"WebserverConfig","Docs":"","Fields":[{"Name":"WebDNSDomainRedirects","Docs":"","Typewords":["[]","[]","Domain"]},{"Name":"WebDomainRedirects","Docs":"","Typewords":["[]","[]","string"]},{"Name":"WebHandlers","Docs":"","Typewords":["[]","WebHandler"]}]},
 	"WebHandler": {"Name":"WebHandler","Docs":"","Fields":[{"Name":"LogName","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"PathRegexp","Docs":"","Typewords":["string"]},{"Name":"DontRedirectPlainHTTP","Docs":"","Typewords":["bool"]},{"Name":"Compress","Docs":"","Typewords":["bool"]},{"Name":"WebStatic","Docs":"","Typewords":["nullable","WebStatic"]},{"Name":"WebRedirect","Docs":"","Typewords":["nullable","WebRedirect"]},{"Name":"WebForward","Docs":"","Typewords":["nullable","WebForward"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]}]},
@@ -931,6 +963,8 @@ export const parser = {
 	Reverse: (v: any) => parse("Reverse", v) as Reverse,
 	ClientConfigs: (v: any) => parse("ClientConfigs", v) as ClientConfigs,
 	ClientConfigsEntry: (v: any) => parse("ClientConfigsEntry", v) as ClientConfigsEntry,
+	HoldRule: (v: any) => parse("HoldRule", v) as HoldRule,
+	Filter: (v: any) => parse("Filter", v) as Filter,
 	Msg: (v: any) => parse("Msg", v) as Msg,
 	IPDomain: (v: any) => parse("IPDomain", v) as IPDomain,
 	WebserverConfig: (v: any) => parse("WebserverConfig", v) as WebserverConfig,
@@ -1295,15 +1329,6 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as ClientConfigs
 	}
 
-	// QueueList returns the messages currently in the outgoing queue.
-	async QueueList(): Promise<Msg[] | null> {
-		const fn: string = "QueueList"
-		const paramTypes: string[][] = []
-		const returnTypes: string[][] = [["[]","Msg"]]
-		const params: any[] = []
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Msg[] | null
-	}
-
 	// QueueSize returns the number of messages currently in the outgoing queue.
 	async QueueSize(): Promise<number> {
 		const fn: string = "QueueSize"
@@ -1313,33 +1338,109 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
 	}
 
-	// QueueKick initiates delivery of a message from the queue and sets the transport
-	// to use for delivery.
-	async QueueKick(id: number, transport: string): Promise<void> {
-		const fn: string = "QueueKick"
-		const paramTypes: string[][] = [["int64"],["string"]]
-		const returnTypes: string[][] = []
-		const params: any[] = [id, transport]
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	// QueueHoldRuleList lists the hold rules.
+	async QueueHoldRuleList(): Promise<HoldRule[] | null> {
+		const fn: string = "QueueHoldRuleList"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["[]","HoldRule"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as HoldRule[] | null
 	}
 
-	// QueueDrop removes a message from the queue.
-	async QueueDrop(id: number): Promise<void> {
-		const fn: string = "QueueDrop"
+	// QueueHoldRuleAdd adds a hold rule. Newly submitted and existing messages
+	// matching the hold rule will be marked "on hold".
+	async QueueHoldRuleAdd(hr: HoldRule): Promise<HoldRule> {
+		const fn: string = "QueueHoldRuleAdd"
+		const paramTypes: string[][] = [["HoldRule"]]
+		const returnTypes: string[][] = [["HoldRule"]]
+		const params: any[] = [hr]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as HoldRule
+	}
+
+	// QueueHoldRuleRemove removes a hold rule. The Hold field of messages in
+	// the queue are not changed.
+	async QueueHoldRuleRemove(holdRuleID: number): Promise<void> {
+		const fn: string = "QueueHoldRuleRemove"
 		const paramTypes: string[][] = [["int64"]]
 		const returnTypes: string[][] = []
-		const params: any[] = [id]
+		const params: any[] = [holdRuleID]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
-	// QueueSaveRequireTLS updates the requiretls field for a message in the queue,
-	// to be used for the next delivery.
-	async QueueSaveRequireTLS(id: number, requireTLS: boolean | null): Promise<void> {
-		const fn: string = "QueueSaveRequireTLS"
-		const paramTypes: string[][] = [["int64"],["nullable","bool"]]
-		const returnTypes: string[][] = []
-		const params: any[] = [id, requireTLS]
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	// QueueList returns the messages currently in the outgoing queue.
+	async QueueList(filter: Filter): Promise<Msg[] | null> {
+		const fn: string = "QueueList"
+		const paramTypes: string[][] = [["Filter"]]
+		const returnTypes: string[][] = [["[]","Msg"]]
+		const params: any[] = [filter]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Msg[] | null
+	}
+
+	// QueueNextAttemptSet sets a new time for next delivery attempt of matching
+	// messages from the queue.
+	async QueueNextAttemptSet(filter: Filter, minutes: number): Promise<number> {
+		const fn: string = "QueueNextAttemptSet"
+		const paramTypes: string[][] = [["Filter"],["int32"]]
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = [filter, minutes]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// QueueNextAttemptAdd adds a duration to the time of next delivery attempt of
+	// matching messages from the queue.
+	async QueueNextAttemptAdd(filter: Filter, minutes: number): Promise<number> {
+		const fn: string = "QueueNextAttemptAdd"
+		const paramTypes: string[][] = [["Filter"],["int32"]]
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = [filter, minutes]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// QueueHoldSet sets the Hold field of matching messages in the queue.
+	async QueueHoldSet(filter: Filter, onHold: boolean): Promise<number> {
+		const fn: string = "QueueHoldSet"
+		const paramTypes: string[][] = [["Filter"],["bool"]]
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = [filter, onHold]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// QueueFail fails delivery for matching messages, causing DSNs to be sent.
+	async QueueFail(filter: Filter): Promise<number> {
+		const fn: string = "QueueFail"
+		const paramTypes: string[][] = [["Filter"]]
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = [filter]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// QueueDrop removes matching messages from the queue.
+	async QueueDrop(filter: Filter): Promise<number> {
+		const fn: string = "QueueDrop"
+		const paramTypes: string[][] = [["Filter"]]
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = [filter]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// QueueRequireTLSSet updates the requiretls field for matching messages in the
+	// queue, to be used for the next delivery.
+	async QueueRequireTLSSet(filter: Filter, requireTLS: boolean | null): Promise<number> {
+		const fn: string = "QueueRequireTLSSet"
+		const paramTypes: string[][] = [["Filter"],["nullable","bool"]]
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = [filter, requireTLS]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// QueueTransportSet initiates delivery of a message from the queue and sets the transport
+	// to use for delivery.
+	async QueueTransportSet(filter: Filter, transport: string): Promise<number> {
+		const fn: string = "QueueTransportSet"
+		const paramTypes: string[][] = [["Filter"],["string"]]
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = [filter, transport]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
 	}
 
 	// LogLevels returns the current log levels.

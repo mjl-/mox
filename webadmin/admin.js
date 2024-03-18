@@ -219,6 +219,7 @@ const [dom, style, attr, prop] = (function () {
 		method: (s) => _attr('method', s),
 		autocomplete: (s) => _attr('autocomplete', s),
 		list: (s) => _attr('list', s),
+		form: (s) => _attr('form', s),
 	};
 	const style = (x) => { return { _styles: x }; };
 	const prop = (x) => { return { _props: x }; };
@@ -335,7 +336,7 @@ var api;
 		SPFResult["SPFTemperror"] = "temperror";
 		SPFResult["SPFPermerror"] = "permerror";
 	})(SPFResult = api.SPFResult || (api.SPFResult = {}));
-	api.structTypes = { "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "DANECheckResult": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "Reverse": true, "Row": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
+	api.structTypes = { "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "DANECheckResult": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "Reverse": true, "Row": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
 	api.stringsTypes = { "Align": true, "Alignment": true, "CSRFToken": true, "DKIMResult": true, "DMARCPolicy": true, "DMARCResult": true, "Disposition": true, "IP": true, "Localpart": true, "Mode": true, "PolicyOverride": true, "PolicyType": true, "RUA": true, "ResultType": true, "SPFDomainScope": true, "SPFResult": true };
 	api.intsTypes = {};
 	api.types = {
@@ -395,7 +396,9 @@ var api;
 		"Reverse": { "Name": "Reverse", "Docs": "", "Fields": [{ "Name": "Hostnames", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"ClientConfigs": { "Name": "ClientConfigs", "Docs": "", "Fields": [{ "Name": "Entries", "Docs": "", "Typewords": ["[]", "ClientConfigsEntry"] }] },
 		"ClientConfigsEntry": { "Name": "ClientConfigsEntry", "Docs": "", "Fields": [{ "Name": "Protocol", "Docs": "", "Typewords": ["string"] }, { "Name": "Host", "Docs": "", "Typewords": ["Domain"] }, { "Name": "Port", "Docs": "", "Typewords": ["int32"] }, { "Name": "Listener", "Docs": "", "Typewords": ["string"] }, { "Name": "Note", "Docs": "", "Typewords": ["string"] }] },
-		"Msg": { "Name": "Msg", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "BaseID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Queued", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "SenderAccount", "Docs": "", "Typewords": ["string"] }, { "Name": "SenderLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "SenderDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "RecipientLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "RecipientDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "Attempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxAttempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "DialedIPs", "Docs": "", "Typewords": ["{}", "[]", "IP"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "LastAttempt", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "LastError", "Docs": "", "Typewords": ["string"] }, { "Name": "Has8bit", "Docs": "", "Typewords": ["bool"] }, { "Name": "SMTPUTF8", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsDMARCReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsTLSReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgPrefix", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "DSNUTF8", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureReleaseRequest", "Docs": "", "Typewords": ["string"] }] },
+		"HoldRule": { "Name": "HoldRule", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "SenderDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "SenderDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "RecipientDomainStr", "Docs": "", "Typewords": ["string"] }] },
+		"Filter": { "Name": "Filter", "Docs": "", "Fields": [{ "Name": "IDs", "Docs": "", "Typewords": ["[]", "int64"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["string"] }, { "Name": "Hold", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "Submitted", "Docs": "", "Typewords": ["string"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["nullable", "string"] }] },
+		"Msg": { "Name": "Msg", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "BaseID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Queued", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Hold", "Docs": "", "Typewords": ["bool"] }, { "Name": "SenderAccount", "Docs": "", "Typewords": ["string"] }, { "Name": "SenderLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "SenderDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "SenderDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "RecipientLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "RecipientDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "Attempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxAttempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "DialedIPs", "Docs": "", "Typewords": ["{}", "[]", "IP"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "LastAttempt", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "LastError", "Docs": "", "Typewords": ["string"] }, { "Name": "Has8bit", "Docs": "", "Typewords": ["bool"] }, { "Name": "SMTPUTF8", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsDMARCReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsTLSReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgPrefix", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "DSNUTF8", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureReleaseRequest", "Docs": "", "Typewords": ["string"] }] },
 		"IPDomain": { "Name": "IPDomain", "Docs": "", "Fields": [{ "Name": "IP", "Docs": "", "Typewords": ["IP"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
 		"WebserverConfig": { "Name": "WebserverConfig", "Docs": "", "Fields": [{ "Name": "WebDNSDomainRedirects", "Docs": "", "Typewords": ["[]", "[]", "Domain"] }, { "Name": "WebDomainRedirects", "Docs": "", "Typewords": ["[]", "[]", "string"] }, { "Name": "WebHandlers", "Docs": "", "Typewords": ["[]", "WebHandler"] }] },
 		"WebHandler": { "Name": "WebHandler", "Docs": "", "Fields": [{ "Name": "LogName", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "PathRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "DontRedirectPlainHTTP", "Docs": "", "Typewords": ["bool"] }, { "Name": "Compress", "Docs": "", "Typewords": ["bool"] }, { "Name": "WebStatic", "Docs": "", "Typewords": ["nullable", "WebStatic"] }, { "Name": "WebRedirect", "Docs": "", "Typewords": ["nullable", "WebRedirect"] }, { "Name": "WebForward", "Docs": "", "Typewords": ["nullable", "WebForward"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
@@ -485,6 +488,8 @@ var api;
 		Reverse: (v) => api.parse("Reverse", v),
 		ClientConfigs: (v) => api.parse("ClientConfigs", v),
 		ClientConfigsEntry: (v) => api.parse("ClientConfigsEntry", v),
+		HoldRule: (v) => api.parse("HoldRule", v),
+		Filter: (v) => api.parse("Filter", v),
 		Msg: (v) => api.parse("Msg", v),
 		IPDomain: (v) => api.parse("IPDomain", v),
 		WebserverConfig: (v) => api.parse("WebserverConfig", v),
@@ -812,14 +817,6 @@ var api;
 			const params = [domain];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
-		// QueueList returns the messages currently in the outgoing queue.
-		async QueueList() {
-			const fn = "QueueList";
-			const paramTypes = [];
-			const returnTypes = [["[]", "Msg"]];
-			const params = [];
-			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
-		}
 		// QueueSize returns the number of messages currently in the outgoing queue.
 		async QueueSize() {
 			const fn = "QueueSize";
@@ -828,30 +825,98 @@ var api;
 			const params = [];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
-		// QueueKick initiates delivery of a message from the queue and sets the transport
-		// to use for delivery.
-		async QueueKick(id, transport) {
-			const fn = "QueueKick";
-			const paramTypes = [["int64"], ["string"]];
-			const returnTypes = [];
-			const params = [id, transport];
+		// QueueHoldRuleList lists the hold rules.
+		async QueueHoldRuleList() {
+			const fn = "QueueHoldRuleList";
+			const paramTypes = [];
+			const returnTypes = [["[]", "HoldRule"]];
+			const params = [];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
-		// QueueDrop removes a message from the queue.
-		async QueueDrop(id) {
-			const fn = "QueueDrop";
+		// QueueHoldRuleAdd adds a hold rule. Newly submitted and existing messages
+		// matching the hold rule will be marked "on hold".
+		async QueueHoldRuleAdd(hr) {
+			const fn = "QueueHoldRuleAdd";
+			const paramTypes = [["HoldRule"]];
+			const returnTypes = [["HoldRule"]];
+			const params = [hr];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// QueueHoldRuleRemove removes a hold rule. The Hold field of messages in
+		// the queue are not changed.
+		async QueueHoldRuleRemove(holdRuleID) {
+			const fn = "QueueHoldRuleRemove";
 			const paramTypes = [["int64"]];
 			const returnTypes = [];
-			const params = [id];
+			const params = [holdRuleID];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
-		// QueueSaveRequireTLS updates the requiretls field for a message in the queue,
-		// to be used for the next delivery.
-		async QueueSaveRequireTLS(id, requireTLS) {
-			const fn = "QueueSaveRequireTLS";
-			const paramTypes = [["int64"], ["nullable", "bool"]];
-			const returnTypes = [];
-			const params = [id, requireTLS];
+		// QueueList returns the messages currently in the outgoing queue.
+		async QueueList(filter) {
+			const fn = "QueueList";
+			const paramTypes = [["Filter"]];
+			const returnTypes = [["[]", "Msg"]];
+			const params = [filter];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// QueueNextAttemptSet sets a new time for next delivery attempt of matching
+		// messages from the queue.
+		async QueueNextAttemptSet(filter, minutes) {
+			const fn = "QueueNextAttemptSet";
+			const paramTypes = [["Filter"], ["int32"]];
+			const returnTypes = [["int32"]];
+			const params = [filter, minutes];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// QueueNextAttemptAdd adds a duration to the time of next delivery attempt of
+		// matching messages from the queue.
+		async QueueNextAttemptAdd(filter, minutes) {
+			const fn = "QueueNextAttemptAdd";
+			const paramTypes = [["Filter"], ["int32"]];
+			const returnTypes = [["int32"]];
+			const params = [filter, minutes];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// QueueHoldSet sets the Hold field of matching messages in the queue.
+		async QueueHoldSet(filter, onHold) {
+			const fn = "QueueHoldSet";
+			const paramTypes = [["Filter"], ["bool"]];
+			const returnTypes = [["int32"]];
+			const params = [filter, onHold];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// QueueFail fails delivery for matching messages, causing DSNs to be sent.
+		async QueueFail(filter) {
+			const fn = "QueueFail";
+			const paramTypes = [["Filter"]];
+			const returnTypes = [["int32"]];
+			const params = [filter];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// QueueDrop removes matching messages from the queue.
+		async QueueDrop(filter) {
+			const fn = "QueueDrop";
+			const paramTypes = [["Filter"]];
+			const returnTypes = [["int32"]];
+			const params = [filter];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// QueueRequireTLSSet updates the requiretls field for matching messages in the
+		// queue, to be used for the next delivery.
+		async QueueRequireTLSSet(filter, requireTLS) {
+			const fn = "QueueRequireTLSSet";
+			const paramTypes = [["Filter"], ["nullable", "bool"]];
+			const returnTypes = [["int32"]];
+			const params = [filter, requireTLS];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// QueueTransportSet initiates delivery of a message from the queue and sets the transport
+		// to use for delivery.
+		async QueueTransportSet(filter, transport) {
+			const fn = "QueueTransportSet";
+			const paramTypes = [["Filter"], ["string"]];
+			const returnTypes = [["int32"]];
+			const params = [filter, transport];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// LogLevels returns the current log levels.
@@ -2453,36 +2518,187 @@ const dnsbl = async () => {
 	}, fieldset = dom.fieldset(dom.div('One per line'), dom.div(style({ marginBottom: '.5ex' }), monitorTextarea = dom.textarea(style({ width: '20rem' }), attr.rows('' + Math.max(5, 1 + (monitorZones || []).length)), new String((monitorZones || []).map(zone => domainName(zone)).join('\n'))), dom.div('Examples: sbl.spamhaus.org or bl.spamcop.net')), dom.div(dom.submitbutton('Save')))));
 };
 const queueList = async () => {
-	const [msgs, transports] = await Promise.all([
-		client.QueueList(),
+	let [holdRules, msgs, transports] = await Promise.all([
+		client.QueueHoldRuleList(),
+		client.QueueList({ IDs: [], Account: '', From: '', To: '', Hold: null, Submitted: '', NextAttempt: '', Transport: null }),
 		client.Transports(),
 	]);
+	// todo: sorting by address/timestamps/attempts.
+	// todo: after making changes, don't reload entire page. probably best to fetch messages by id and rerender. also report on which messages weren't affected (e.g. no longer in queue).
+	// todo: display which transport will be used for a message according to routing rules (in case none is explicitly configured).
+	// todo: live updates with SSE connections
+	// todo: keep updating times/age.
 	const nowSecs = new Date().getTime() / 1000;
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Queue'), 
-	// todo: sorting by address/timestamps/attempts. perhaps filtering.
-	dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('ID'), dom.th('Submitted'), dom.th('From'), dom.th('To'), dom.th('Size'), dom.th('Attempts'), dom.th('Next attempt'), dom.th('Last attempt'), dom.th('Last error'), dom.th('Require TLS'), dom.th('Transport/Retry'), dom.th('Remove'))), dom.tbody((msgs || []).length === 0 ? dom.tr(dom.td(attr.colspan('12'), 'Currently no messages in the queue.')) : [], (msgs || []).map(m => {
-		let requiretlsFieldset;
-		let requiretls;
-		let transport;
-		return dom.tr(dom.td('' + m.ID + (m.BaseID > 0 ? '/' + m.BaseID : '')), dom.td(age(new Date(m.Queued), false, nowSecs)), dom.td(m.SenderLocalpart + "@" + ipdomainString(m.SenderDomain)), // todo: escaping of localpart
-		dom.td(m.RecipientLocalpart + "@" + ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
-		dom.td(formatSize(m.Size)), dom.td('' + m.Attempts), dom.td(age(new Date(m.NextAttempt), true, nowSecs)), dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'), dom.td(m.LastError || '-'), dom.td(dom.form(requiretlsFieldset = dom.fieldset(requiretls = dom.select(attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'), dom.option('Default', attr.value('')), dom.option('With RequireTLS', attr.value('yes'), m.RequireTLS === true ? attr.selected('') : []), dom.option('Fallback to insecure', attr.value('no'), m.RequireTLS === false ? attr.selected('') : [])), ' ', dom.submitbutton('Save')), async function submit(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			await check(requiretlsFieldset, client.QueueSaveRequireTLS(m.ID, requiretls.value === '' ? null : requiretls.value === 'yes'));
-		})), dom.td(dom.form(transport = dom.select(attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'), dom.option('(default)', attr.value('')), Object.keys(transports || []).sort().map(t => dom.option(t, m.Transport === t ? attr.checked('') : []))), ' ', dom.submitbutton('Retry now'), async function submit(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			await check(e.target, client.QueueKick(m.ID, transport.value));
-			window.location.reload(); // todo: only refresh the list
-		})), dom.td(dom.clickbutton('Remove', async function click(e) {
-			e.preventDefault();
-			if (!window.confirm('Are you sure you want to remove this message? It will be removed completely.')) {
-				return;
-			}
-			await check(e.target, client.QueueDrop(m.ID));
-			window.location.reload(); // todo: only refresh the list
-		})));
+	let holdRuleAccount;
+	let holdRuleSenderDomain;
+	let holdRuleRecipientDomain;
+	let holdRuleSubmit;
+	let filterForm;
+	let filterAccount;
+	let filterFrom;
+	let filterTo;
+	let filterSubmitted;
+	let filterHold;
+	let filterNextAttempt;
+	let filterTransport;
+	let requiretlsFieldset;
+	let requiretls;
+	let transport;
+	// Message ID to checkbox.
+	let toggles = new Map();
+	// We operate on what the user has selected, not what the filters would currently
+	// evaluate to. This function can throw an error, which is why we have awkward
+	// syntax when calling this as parameter in api client calls below.
+	const gatherIDs = () => {
+		const f = {
+			IDs: Array.from(toggles.entries()).filter(t => t[1].checked).map(t => t[0]),
+			Account: '',
+			From: '',
+			To: '',
+			Hold: null,
+			Submitted: '',
+			NextAttempt: '',
+			Transport: null,
+		};
+		// Don't want to accidentally operate on all messages.
+		if ((f.IDs || []).length === 0) {
+			throw new Error('No messages selected.');
+		}
+		return f;
+	};
+	const tbody = dom.tbody();
+	const render = () => {
+		toggles = new Map();
+		for (const m of (msgs || [])) {
+			toggles.set(m.ID, dom.input(attr.type('checkbox'), attr.checked('')));
+		}
+		dom._kids(tbody, (msgs || []).length === 0 ? dom.tr(dom.td(attr.colspan('14'), 'No messages.')) : [], (msgs || []).map(m => {
+			return dom.tr(dom.td(toggles.get(m.ID)), dom.td('' + m.ID + (m.BaseID > 0 ? '/' + m.BaseID : '')), dom.td(age(new Date(m.Queued), false, nowSecs)), dom.td(m.SenderAccount || '-'), dom.td(m.SenderLocalpart + "@" + ipdomainString(m.SenderDomain)), // todo: escaping of localpart
+			dom.td(m.RecipientLocalpart + "@" + ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
+			dom.td(formatSize(m.Size)), dom.td('' + m.Attempts), dom.td(m.Hold ? 'Hold' : ''), dom.td(age(new Date(m.NextAttempt), true, nowSecs)), dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'), dom.td(m.LastError || '-'), dom.td(m.RequireTLS === true ? 'Yes' : (m.RequireTLS === false ? 'No' : 'Default')), dom.td(m.Transport || '(default)'));
+		}));
+	};
+	render();
+	const buttonNextAttemptSet = (text, minutes) => dom.clickbutton(text, async function click(e) {
+		// note: awkward client call because gatherIDs() can throw an exception.
+		const n = await check(e.target, (async () => client.QueueNextAttemptSet(gatherIDs(), minutes))());
+		window.alert('' + n + ' message(s) updated');
+		window.location.reload(); // todo: reload less
+	});
+	const buttonNextAttemptAdd = (text, minutes) => dom.clickbutton(text, async function click(e) {
+		const n = await check(e.target, (async () => client.QueueNextAttemptAdd(gatherIDs(), minutes))());
+		window.alert('' + n + ' message(s) updated');
+		window.location.reload(); // todo: reload less
+	});
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Queue'), dom.h2('Hold rules', attr.title('Messages submitted to the queue that match a hold rule are automatically marked as "on hold", preventing delivery until explicitly taken off hold again.')), dom.form(attr.id('holdRuleForm'), async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		const pr = {
+			ID: 0,
+			Account: holdRuleAccount.value,
+			SenderDomainStr: holdRuleSenderDomain.value,
+			RecipientDomainStr: holdRuleRecipientDomain.value,
+			// Filled in by backend, we provide dummy values.
+			SenderDomain: { ASCII: '', Unicode: '' },
+			RecipientDomain: { ASCII: '', Unicode: '' },
+		};
+		await check(holdRuleSubmit, client.QueueHoldRuleAdd(pr));
+		window.location.reload(); // todo: reload less
+	}), (function () {
+		// We don't show the full form until asked. Too much visual clutter.
+		let show = (holdRules || []).length > 0;
+		const box = dom.div();
+		const renderHoldRules = () => {
+			dom._kids(box, !show ?
+				dom.div('No hold rules. ', dom.clickbutton('Add', function click() {
+					show = true;
+					renderHoldRules();
+				})) : [
+				dom.p('Newly submitted messages matching a hold rule will be marked as "on hold" and not be delivered until further action by the admin. To create a rule matching all messages, leave all fields empty.'),
+				dom.table(dom.thead(dom.tr(dom.th('Account'), dom.th('Sender domain'), dom.th('Recipient domain'), dom.th('Action'))), dom.tbody((holdRules || []).length === 0 ? dom.tr(dom.td(attr.colspan('4'), 'No hold rules.')) : [], (holdRules || []).map(pr => dom.tr(!pr.Account && !pr.SenderDomainStr && !pr.RecipientDomainStr ?
+					dom.td(attr.colspan('3'), '(Match all messages)') : [
+					dom.td(pr.Account),
+					dom.td(domainString(pr.SenderDomain)),
+					dom.td(domainString(pr.RecipientDomain)),
+				], dom.td(dom.clickbutton('Remove', attr.title('Removing a hold rule does not modify the "on hold" status of messages in the queue.'), async function click(e) {
+					await check(e.target, client.QueueHoldRuleRemove(pr.ID));
+					window.location.reload(); // todo: reload less
+				})))), dom.tr(dom.td(holdRuleAccount = dom.input(attr.form('holdRuleForm'))), dom.td(holdRuleSenderDomain = dom.input(attr.form('holdRuleForm'))), dom.td(holdRuleRecipientDomain = dom.input(attr.form('holdRuleForm'))), dom.td(holdRuleSubmit = dom.submitbutton('Add hold rule', attr.form('holdRuleForm'), attr.title('When adding a new hold rule, existing messages in queue matching the new rule will be marked as on hold.'))))))
+			]);
+		};
+		renderHoldRules();
+		return box;
+	})(), dom.br(), 
+	// Filtering.
+	filterForm = dom.form(attr.id('queuefilter'), // Referenced by input elements in table row.
+	async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		const filter = {
+			IDs: [],
+			Account: filterAccount.value,
+			From: filterFrom.value,
+			To: filterTo.value,
+			Hold: filterHold.value === 'Yes' ? true : (filterHold.value === 'No' ? false : null),
+			Submitted: filterSubmitted.value,
+			NextAttempt: filterNextAttempt.value,
+			Transport: !filterTransport.value ? null : (filterTransport.value === '(default)' ? '' : filterTransport.value),
+		};
+		dom._kids(tbody);
+		msgs = await check({ disabled: false }, client.QueueList(filter));
+		render();
+	}), dom.h2('Messages'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th(), dom.th('ID'), dom.th('Submitted'), dom.th('Account'), dom.th('From'), dom.th('To'), dom.th('Size'), dom.th('Attempts'), dom.th('Hold'), dom.th('Next attempt'), dom.th('Last attempt'), dom.th('Last error'), dom.th('Require TLS'), dom.th('Transport'), dom.th()), dom.tr(dom.td(dom.input(attr.type('checkbox'), attr.checked(''), attr.form('queuefilter'), function change(e) {
+		const elem = e.target;
+		for (const [_, toggle] of toggles) {
+			toggle.checked = elem.checked;
+		}
+	})), dom.td(), dom.td(filterSubmitted = dom.input(attr.form('queuefilter'), style({ width: '7em' }), attr.title('Example: "<1h" for filtering messages submitted more than 1 minute ago.'))), dom.td(filterAccount = dom.input(attr.form('queuefilter'))), dom.td(filterFrom = dom.input(attr.form('queuefilter')), attr.title('Example: "@sender.example" to filter by domain of sender.')), dom.td(filterTo = dom.input(attr.form('queuefilter')), attr.title('Example: "@recipient.example" to filter by domain of recipient.')), dom.td(), // todo: add filter by size?
+	dom.td(), // todo: add filter by attempts?
+	dom.td(filterHold = dom.select(attr.form('queuefilter'), dom.option('', attr.value('')), dom.option('Yes'), dom.option('No'), function change() {
+		filterForm.requestSubmit();
+	})), dom.td(filterNextAttempt = dom.input(attr.form('queuefilter'), style({ width: '7em' }), attr.title('Example: ">1h" for filtering messages to be delivered in more than 1 hour, or "<now" for messages to be delivered as soon as possible.'))), dom.td(), dom.td(), dom.td(), dom.td(filterTransport = dom.select(Object.keys(transports || []).length === 0 ? style({ display: 'none' }) : [], attr.form('queuefilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option(''), dom.option('(default)'), Object.keys(transports || []).sort().map(t => dom.option(t)))), dom.td(dom.submitbutton('Filter', attr.form('queuefilter')), ' ', dom.clickbutton('Reset', attr.form('queuefilter'), function click() {
+		filterForm.reset();
+		filterForm.requestSubmit();
+	})))), tbody), dom.br(), dom.br(), dom.h2('Change selected messages'), dom.div(style({ display: 'flex', gap: '2em' }), dom.div(dom.div('Hold'), dom.div(dom.clickbutton('On', async function click(e) {
+		const n = await check(e.target, (async () => await client.QueueHoldSet(gatherIDs(), true))());
+		window.alert('' + n + ' message(s) updated');
+		window.location.reload(); // todo: reload less
+	}), ' ', dom.clickbutton('Off', async function click(e) {
+		const n = await check(e.target, (async () => await client.QueueHoldSet(gatherIDs(), false))());
+		window.alert('' + n + ' message(s) updated');
+		window.location.reload(); // todo: reload less
+	}))), dom.div(dom.div('Schedule next delivery attempt'), buttonNextAttemptSet('Now', 0), ' ', dom.clickbutton('More...', function click(e) {
+		e.target.replaceWith(dom.div(dom.br(), dom.div('Scheduled time plus'), dom.div(buttonNextAttemptAdd('1m', 1), ' ', buttonNextAttemptAdd('5m', 5), ' ', buttonNextAttemptAdd('30m', 30), ' ', buttonNextAttemptAdd('1h', 60), ' ', buttonNextAttemptAdd('2h', 2 * 60), ' ', buttonNextAttemptAdd('4h', 4 * 60), ' ', buttonNextAttemptAdd('8h', 8 * 60), ' ', buttonNextAttemptAdd('16h', 16 * 60), ' '), dom.br(), dom.div('Now plus'), dom.div(buttonNextAttemptSet('1m', 1), ' ', buttonNextAttemptSet('5m', 5), ' ', buttonNextAttemptSet('30m', 30), ' ', buttonNextAttemptSet('1h', 60), ' ', buttonNextAttemptSet('2h', 2 * 60), ' ', buttonNextAttemptSet('4h', 4 * 60), ' ', buttonNextAttemptSet('8h', 8 * 60), ' ', buttonNextAttemptSet('16h', 16 * 60), ' ')));
+	})), dom.div(dom.form(dom.label('Require TLS'), requiretlsFieldset = dom.fieldset(requiretls = dom.select(attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'), dom.option('Default', attr.value('')), dom.option('With RequireTLS', attr.value('yes')), dom.option('Fallback to insecure', attr.value('no'))), ' ', dom.submitbutton('Change')), async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		const n = await check(requiretlsFieldset, (async () => await client.QueueRequireTLSSet(gatherIDs(), requiretls.value === '' ? null : requiretls.value === 'yes'))());
+		window.alert('' + n + ' message(s) updated');
+		window.location.reload(); // todo: only refresh the list
+	})), dom.div(dom.form(dom.label('Transport'), dom.fieldset(transport = dom.select(attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'), dom.option('(default)', attr.value('')), Object.keys(transports || []).sort().map(t => dom.option(t))), ' ', dom.submitbutton('Change')), async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		const n = await check(e.target, (async () => await client.QueueTransportSet(gatherIDs(), transport.value))());
+		window.alert('' + n + ' message(s) updated');
+		window.location.reload(); // todo: only refresh the list
+	})), dom.div(dom.div('Delivery'), dom.clickbutton('Fail delivery', attr.title('Cause delivery to fail, sending a DSN to the sender.'), async function click(e) {
+		e.preventDefault();
+		if (!window.confirm('Are you sure you want to remove this message? Notifications of delivery failure will be sent (DSNs).')) {
+			return;
+		}
+		const n = await check(e.target, (async () => await client.QueueFail(gatherIDs()))());
+		window.alert('' + n + ' message(s) updated');
+		window.location.reload(); // todo: only refresh the list
+	})), dom.div(dom.div('Messages'), dom.clickbutton('Remove', attr.title('Completely remove messages from queue, not sending a DSN.'), async function click(e) {
+		e.preventDefault();
+		if (!window.confirm('Are you sure you want to remove this message? It will be removed completely, no DSN about failure to deliver will be sent.')) {
+			return;
+		}
+		const n = await check(e.target, (async () => await client.QueueDrop(gatherIDs()))());
+		window.alert('' + n + ' message(s) updated');
+		window.location.reload(); // todo: only refresh the list
 	}))));
 };
 const webserver = async () => {

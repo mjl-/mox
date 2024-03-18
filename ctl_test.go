@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/mjl-/mox/dmarcdb"
 	"github.com/mjl-/mox/dns"
@@ -67,19 +68,66 @@ func TestCtl(t *testing.T) {
 	err := queue.Init()
 	tcheck(t, err, "queue init")
 
-	// "queue"
 	testctl(func(ctl *ctl) {
-		ctlcmdQueueList(ctl)
+		ctlcmdQueueHoldrulesList(ctl)
 	})
 
-	// "queuekick"
+	// All messages.
 	testctl(func(ctl *ctl) {
-		ctlcmdQueueKick(ctl, 0, "", "", "")
+		ctlcmdQueueHoldrulesAdd(ctl, "", "", "")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(ctl, "mjl", "", "")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(ctl, "", "☺.mox.example", "")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(ctl, "mox", "☺.mox.example", "example.com")
+	})
+
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesRemove(ctl, 1)
+	})
+
+	// Has entries now.
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesList(ctl)
+	})
+
+	// "queuelist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueList(ctl, queue.Filter{})
+	})
+
+	// "queueholdset"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldSet(ctl, queue.Filter{}, true)
+	})
+
+	// "queueschedule"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSchedule(ctl, queue.Filter{}, true, time.Minute)
+	})
+
+	// "queuetransport"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueTransport(ctl, queue.Filter{}, "socks")
+	})
+
+	// "queuerequiretls"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueRequireTLS(ctl, queue.Filter{}, nil)
+	})
+
+	// "queuefail"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueFail(ctl, queue.Filter{})
 	})
 
 	// "queuedrop"
 	testctl(func(ctl *ctl) {
-		ctlcmdQueueDrop(ctl, 0, "", "")
+		ctlcmdQueueDrop(ctl, queue.Filter{})
 	})
 
 	// no "queuedump", we don't have a message to dump, and the commands exits without a message.
