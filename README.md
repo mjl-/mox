@@ -125,6 +125,8 @@ for junk filtering and rate-limiting).
 
 # Future/development
 
+See develop.txt for instructions/tips for developing on mox.
+
 Mox will receive funding for essentially full-time continued work from August
 2023 to August 2024 through NLnet/EU's NGI0 Entrust, see
 https://nlnet.nl/project/Mox/.

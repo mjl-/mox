@@ -31,6 +31,10 @@ test-race:
 test-upgrade: build
 	nice ./test-upgrade.sh
 
+# needed for "check" target
+install-staticcheck:
+	go install honnef.co/go/tools/cmd/staticcheck@v0.4.7
+
 check:
 	CGO_ENABLED=0 go vet -tags integration
 	CGO_ENABLED=0 go vet -tags website website/website.go
@@ -44,6 +48,10 @@ check:
 	staticcheck -tags link rfc/link.go
 	staticcheck -tags errata rfc/errata.go
 	staticcheck -tags xr rfc/xr.go
+
+# needed for check-shadow
+install-shadow:
+	go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@v0.19.0
 
 # having "err" shadowed is common, best to not have others
 check-shadow:
@@ -96,11 +104,11 @@ fmt:
 jswatch:
 	bash -c 'while true; do inotifywait -q -e close_write *.ts webadmin/*.ts webaccount/*.ts webmail/*.ts; make frontend; done'
 
-jsinstall:
+install-js:
 	-mkdir -p node_modules/.bin
 	npm ci
 
-jsinstall0:
+install-js0:
 	-mkdir -p node_modules/.bin
 	npm install --save-dev --save-exact typescript@5.1.6
 
@@ -121,8 +129,10 @@ webaccount/account.js: lib.ts webaccount/api.ts webaccount/account.ts
 
 frontend: webadmin/admin.js webaccount/account.js webmail/webmail.js webmail/msg.js webmail/text.js
 
+install-apidiff:
+	go install golang.org/x/exp/cmd/apidiff@v0.0.0-20231206192017-f3f8817b8deb
+
 genapidiff:
-	# needs golang.org/x/exp/cmd/apidiff@v0.0.0-20231206192017-f3f8817b8deb installed
 	./apidiff.sh
 
 docker:
