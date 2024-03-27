@@ -218,11 +218,15 @@ func (p *parser) parseStruct0(v reflect.Value) {
 	var zeroValue reflect.Value
 	t := v.Type()
 	for p.next() {
-		s := p.string()
-		s = s[len(p.prefix):]
+		origs := p.string()
+		s := origs[len(p.prefix):]
 		l := strings.SplitN(s, ":", 2)
 		if len(l) != 2 {
-			p.stop("missing key: value")
+			var more string
+			if strings.TrimSpace(s) == "" {
+				more = " (perhaps stray whitespace)"
+			}
+			p.stop(fmt.Sprintf("missing colon for key/value on non-empty line %q%s", origs, more))
 		}
 		k := l[0]
 		if k == "" {
@@ -234,7 +238,7 @@ func (p *parser) parseStruct0(v reflect.Value) {
 		seen[k] = struct{}{}
 		s = l[1]
 		if s != "" && !strings.HasPrefix(s, " ") {
-			p.stop("no space after colon")
+			p.stop("missing space after colon")
 		}
 		if s != "" {
 			s = s[1:]
@@ -243,7 +247,11 @@ func (p *parser) parseStruct0(v reflect.Value) {
 
 		vv := v.FieldByName(k)
 		if vv == zeroValue {
-			p.stop(fmt.Sprintf("unknown key %q", k))
+			var more string
+			if strings.TrimSpace(k) != k {
+				more = " (perhaps stray whitespace in key)"
+			}
+			p.stop(fmt.Sprintf("unknown key %q%s", k, more))
 		}
 		if ft, _ := t.FieldByName(k); !ft.IsExported() || isIgnore(ft.Tag.Get("sconf")) {
 			p.stop(fmt.Sprintf("unknown key %q (has ignore tag or not exported)", k))
@@ -273,11 +281,15 @@ func (p *parser) parseMap0(v reflect.Value) {
 	seen := map[string]struct{}{}
 	t := v.Type()
 	for p.next() {
-		s := p.string()
-		s = s[len(p.prefix):]
+		origs := p.string()
+		s := origs[len(p.prefix):]
 		l := strings.SplitN(s, ":", 2)
 		if len(l) != 2 {
-			p.stop("missing key: value")
+			var more string
+			if strings.TrimSpace(s) == "" {
+				more = " (perhaps stray whitespace)"
+			}
+			p.stop(fmt.Sprintf("missing colon for key/value on non-empty line %q%s", origs, more))
 		}
 		k := l[0]
 		if k == "" {
@@ -289,7 +301,7 @@ func (p *parser) parseMap0(v reflect.Value) {
 		seen[k] = struct{}{}
 		s = l[1]
 		if s != "" && !strings.HasPrefix(s, " ") {
-			p.stop("no space after colon")
+			p.stop("missing space after colon")
 		}
 		if s != "" {
 			s = s[1:]

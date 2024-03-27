@@ -19,7 +19,7 @@ github.com/mjl-/autocert
 # github.com/mjl-/bstore v0.0.4
 ## explicit; go 1.19
 github.com/mjl-/bstore
-# github.com/mjl-/sconf v0.0.5
+# github.com/mjl-/sconf v0.0.6
 ## explicit; go 1.12
 github.com/mjl-/sconf
 # github.com/mjl-/sherpa v0.6.7
