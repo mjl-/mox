@@ -20,7 +20,7 @@ any parameters. Followed by the help and usage information for each command.
 
 	mox [-config config/mox.conf] [-pedantic] ...
 	mox serve
-	mox quickstart [-existing-webserver] [-hostname host] user@domain [user | uid]
+	mox quickstart [-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]
 	mox stop
 	mox setaccountpassword account
 	mox setadminpassword
@@ -146,11 +146,13 @@ traffic to your existing backend applications. Look for "WebHandlers:" in the
 output of "mox config describe-domains" and see the output of "mox example
 webhandlers".
 
-	usage: mox quickstart [-existing-webserver] [-hostname host] user@domain [user | uid]
+	usage: mox quickstart [-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]
 	  -existing-webserver
 	    	use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.
 	  -hostname string
 	    	hostname mox will run on, by default the hostname of the machine quickstart runs on; if specified, the IPs for the hostname are configured for the public listener
+	  -skipdial
+	    	skip check for outgoing smtp (port 25) connectivity
 
 # mox stop
 

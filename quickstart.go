@@ -59,7 +59,7 @@ func pwgen() string {
 }
 
 func cmdQuickstart(c *cmd) {
-	c.params = "[-existing-webserver] [-hostname host] user@domain [user | uid]"
+	c.params = "[-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]"
 	c.help = `Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
 
 Quickstart writes configuration files, prints initial admin and account
@@ -95,8 +95,10 @@ webhandlers".
 `
 	var existingWebserver bool
 	var hostname string
+	var skipDial bool
 	c.flag.BoolVar(&existingWebserver, "existing-webserver", false, "use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.")
 	c.flag.StringVar(&hostname, "hostname", "", "hostname mox will run on, by default the hostname of the machine quickstart runs on; if specified, the IPs for the hostname are configured for the public listener")
+	c.flag.BoolVar(&skipDial, "skipdial", false, "skip check for outgoing smtp (port 25) connectivity")
 	args := c.Parse()
 	if len(args) != 1 && len(args) != 2 {
 		c.Usage()
@@ -529,6 +531,44 @@ messages over SMTP.
 		}
 	}
 
+	// Check outgoing SMTP connectivity.
+	if !skipDial {
+		fmt.Printf("Checking if outgoing smtp connections can be made by connecting to gmail.com mx on port 25...")
+		mxctx, mxcancel := context.WithTimeout(context.Background(), 5*time.Second)
+		mx, _, err := resolver.LookupMX(mxctx, "gmail.com.")
+		mxcancel()
+		if err == nil && len(mx) == 0 {
+			err = errors.New("no mx records")
+		}
+		var ok bool
+		if err != nil {
+			fmt.Printf("\n\nERROR: looking up gmail.com mx record: %s\n", err)
+		} else {
+			dialctx, dialcancel := context.WithTimeout(context.Background(), 10*time.Second)
+			d := net.Dialer{}
+			addr := net.JoinHostPort(mx[0].Host, "25")
+			conn, err := d.DialContext(dialctx, "tcp", addr)
+			dialcancel()
+			if err != nil {
+				fmt.Printf("\n\nERROR: connecting to %s: %s\n", addr, err)
+			} else {
+				conn.Close()
+				fmt.Printf(" OK\n")
+				ok = true
+			}
+		}
+		if !ok {
+			fmt.Printf(`
+WARNING: Could not verify outgoing smtp connections can be made, outgoing
+delivery may not be working. Many providers block outgoing smtp connections by
+default, requiring an explicit request or a cooldown period before allowing
+outgoing smtp connections. To send through a smarthost, configure a "Transport"
+in mox.conf and use it in "Routes" in domains.conf. See "mox example transport".
+
+`)
+		}
+	}
+
 	zones := []dns.Domain{
 		{ASCII: "sbl.spamhaus.org"},
 		{ASCII: "bl.spamcop.net"},
@@ -538,7 +578,7 @@ messages over SMTP.
 		var listed bool
 		for _, zone := range zones {
 			for _, ip := range hostIPs {
-				dnsblctx, dnsblcancel := context.WithTimeout(resolveCtx, 5*time.Second)
+				dnsblctx, dnsblcancel := context.WithTimeout(context.Background(), 5*time.Second)
 				status, expl, err := dnsbl.Lookup(dnsblctx, c.log.Logger, resolver, zone, net.ParseIP(ip))
 				dnsblcancel()
 				if status == dnsbl.StatusPass {

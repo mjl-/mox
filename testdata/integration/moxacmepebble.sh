@@ -7,7 +7,7 @@ apk add unbound curl
 (rm -r /tmp/mox 2>/dev/null || exit 0) # clean slate
 mkdir /tmp/mox
 cd /tmp/mox
-mox quickstart moxtest1@mox1.example "$MOX_UID" > output.txt
+mox quickstart -skipdial moxtest1@mox1.example "$MOX_UID" > output.txt
 
 cp config/mox.conf config/mox.conf.orig
 sed -i -e 's/letsencrypt:/pebble:/g' -e 's/: letsencrypt/: pebble/g' -e 's,DirectoryURL: https://acme-v02.api.letsencrypt.org/directory,DirectoryURL: https://acmepebble.example:14000/dir,' -e 's/SMTP:$/SMTP:\n\t\t\tFirstTimeSenderDelay: 1s/' config/mox.conf
