@@ -135,7 +135,7 @@ WebHandlers:
 		"transport",
 		func() string {
 			const moxconf = `# Snippet for mox.conf, defining a transport called Example that connects on the
-# SMTP submission with TLS port 465 ("submissions), authenticating with
+# SMTP submission with TLS port 465 ("submissions"), authenticating with
 # SCRAM-SHA-256-PLUS (other providers may not support SCRAM-SHA-256-PLUS, but they
 # typically do support the older CRAM-MD5).:
 

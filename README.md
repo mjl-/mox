@@ -429,6 +429,24 @@ the SMTP transaction that explains why. In the case of big email providers the
 error message often has instructions on how to prove to them you are a
 legitimate sender.
 
+## Can mox deliver through a smarthost?
+
+Yes, you can configure a "Transport" in mox.conf and configure "Routes" in
+domains.conf to send some or all messages through the transport. A transport
+can be an SMTP relay or authenticated submission, or making mox make outgoing
+connections through a SOCKS proxy.
+
+For an example, see https://www.xmox.nl/config/#hdr-example-transport. For
+details about Transports and Routes, see
+https://www.xmox.nl/config/#cfg-mox-conf-Transports and
+https://www.xmox.nl/config/#cfg-domains-conf-Routes.
+
+Remember to add the IP addresses of the transport to the SPF records of your
+domains. Keep in mind some 3rd party submission servers may mishandle your
+messages, for example by replacing your Message-Id header and thereby
+invalidating your DKIM-signatures, or rejecting messages with more than one
+DKIM-signature.
+
 ## Can I use existing TLS certificates/keys?
 
 Yes. The quickstart command creates a config that uses ACME with Let's Encrypt,
