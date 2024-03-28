@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"golang.org/x/exp/maps"
 	"golang.org/x/text/unicode/norm"
@@ -331,7 +332,7 @@ type conn struct {
 	futureRelease        time.Time // MAIL FROM with HOLDFOR or HOLDUNTIL.
 	futureReleaseRequest string    // For use in DSNs, either "for;" or "until;" plus original value. ../rfc/4865:305
 	has8bitmime          bool      // If MAIL FROM parameter BODY=8BITMIME was sent. Required for SMTPUTF8.
-	smtputf8             bool      // todo future: we should keep track of this per recipient. perhaps only a specific recipient requires smtputf8, e.g. due to a utf8 localpart. we should decide ourselves if the message needs smtputf8, e.g. due to utf8 header values.
+	smtputf8             bool      // todo future: we should keep track of this per recipient. perhaps only a specific recipient requires smtputf8, e.g. due to a utf8 localpart.
 	recipients           []rcptAccount
 }
 
@@ -1897,6 +1898,34 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		metricSubmission.WithLabelValues("badfrom").Inc()
 		c.log.Infox("verifying message From address", err, slog.String("user", c.username), slog.Any("msgfrom", msgFrom))
 		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SePol7DeliveryUnauth1, "must match authenticated user")
+	}
+
+	// Check if the message contains non-ascii characters. If no such characters are found,
+	// the SMTPUTF8 extension is not required.
+	// ../rfc/6531:497
+	isASCII := func(s string) bool {
+		for _, c := range s {
+			if c > unicode.MaxASCII {
+				return false
+			}
+		}
+		return true
+	}
+	c.smtputf8 = !isASCII(c.mailFrom.Localpart.String())
+	for _, rcpt := range c.recipients {
+		if !isASCII(rcpt.rcptTo.Localpart.String()) {
+			c.smtputf8 = true
+			break
+		}
+	}
+	for _, values := range header {
+		for _, value := range values {
+			if !isASCII(value) {
+				c.smtputf8 = true
+				break
+			}
+		}
+
 	}
 
 	// TLS-Required: No header makes us not enforce recipient domain's TLS policy.

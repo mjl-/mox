@@ -1767,3 +1767,53 @@ func TestFutureRelease(t *testing.T) {
 	test(" HOLDFOR=1 HOLDFOR=1", "501")                                                                              // Duplicate.
 	test(" HOLDFOR=1 HOLDUNTIL="+time.Now().Add(time.Hour).UTC().Format(time.RFC3339), "501")                        // Duplicate.
 }
+
+// Test SMTPUTF8
+func TestSMTPUTF8(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
+	defer ts.close()
+
+	ts.user = "mjl@mox.example"
+	ts.pass = password0
+	ts.submission = true
+
+	test := func(mailFrom string, rcptTo string, headerValue string, clientSmtputf8 bool, expectedSmtputf8 bool, expErr *smtpclient.Error) {
+		t.Helper()
+
+		ts.run(func(_ error, client *smtpclient.Client) {
+			t.Helper()
+			msg := strings.ReplaceAll(fmt.Sprintf(`From: <%s>
+To: <%s>
+Subject: test
+X-Custom-Test-Header: %s
+
+test email
+`, mailFrom, rcptTo, headerValue), "\n", "\r\n")
+
+			err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, clientSmtputf8, false)
+			var cerr smtpclient.Error
+			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
+				t.Fatalf("got err %#v, expected %#v", err, expErr)
+			}
+			if err != nil {
+				return
+			}
+
+			msgs, _ := queue.List(ctxbg, queue.Filter{})
+			queuedMsg := msgs[len(msgs)-1]
+			if queuedMsg.SMTPUTF8 != expectedSmtputf8 {
+				t.Fatalf("[%s / %s / %s] got SMTPUTF8 %t, expected %t", mailFrom, rcptTo, headerValue, queuedMsg.SMTPUTF8, expectedSmtputf8)
+			}
+		})
+	}
+
+	test(`mjl@mox.example`, `remote@example.org`, "ascii", false, false, nil)
+	test(`mjl@mox.example`, `remote@example.org`, "ascii", true, false, nil)
+	test(`mjl@mox.example`, `🙂@example.org`, "ascii", true, true, nil)
+	test(`mjl@mox.example`, `🙂@example.org`, "ascii", false, true, &smtpclient.Error{Permanent: true, Code: smtp.C553BadMailbox, Secode: smtp.SeMsg6NonASCIIAddrNotPermitted7})
+	test(`Ω@mox.example`, `remote@example.org`, "ascii", true, true, nil)
+	test(`Ω@mox.example`, `remote@example.org`, "ascii", false, true, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeMsg6NonASCIIAddrNotPermitted7})
+	test(`mjl@mox.example`, `remote@example.org`, "non-ascii-😍", false, true, nil)
+	test(`mjl@mox.example`, `remote@example.org`, "non-ascii-😍", true, true, nil)
+	test(`Ω@mox.example`, `🙂@example.org`, "non-ascii-😍", true, true, nil)
+}
