@@ -561,7 +561,7 @@ func (db *DB) Register(ctx context.Context, typeValues ...any) error {
 							parsePK(a, prev.buf[prev.pre:]) // Ignore error, nothing to do.
 							parsePK(b, k.buf[k.pre:])       // Ignore error, nothing to do.
 							var dup []any
-							_, values, _ := idx.parseKey(k.buf, true)
+							_, values, _ := idx.parseKey(k.buf, true, false)
 							for i := range values {
 								x := reflect.New(reflect.TypeOf(idx.Fields[i].Type.zeroKey())).Elem()
 								parsePK(x, values[i]) // Ignore error, nothing to do.

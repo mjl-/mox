@@ -1,16 +1,18 @@
 /*
-Package bstore is a database library for storing and querying Go values.
+Package bstore is an in-process database with serializable transactions
+supporting referential/unique/nonzero constraints, (multikey) indices,
+automatic schema management based on Go types and struct tags, and a query API.
 
-Bstore is designed as a small, pure Go library that still provides most of
-the common data consistency requirements for modest database use cases. Bstore
-aims to make basic use of cgo-based libraries, such as sqlite, unnecessary.
+Bstore a small, pure Go library that still provides most of the common data
+consistency requirements for modest database use cases. Bstore aims to make
+basic use of cgo-based libraries, such as sqlite, unnecessary.
 
 Bstore implements autoincrementing primary keys, indices, default values,
 enforcement of nonzero, unique and referential integrity constraints, automatic
 schema updates and a query API for combining filters/sorting/limits. Queries
-are planned and executed using indices for fast execution where possible.
-Bstore is designed with the Go type system in mind: you typically don't have to
-write any (un)marshal code for your types.
+are planned and executed using indices for speed where possible.  Bstore works
+with Go types: you typically don't have to write any (un)marshal code for your
+types. Bstore is not an ORM, it plans and executes queries itself.
 
 # Field types
 
@@ -142,37 +144,37 @@ Conversions that are not currently allowed, but may be in the future:
   - Types of primary keys cannot be changed, also not from one integer type to a
     wider integer type of same signedness.
 
-# BoltDB and storage
+# Bolt and storage
 
-BoltDB is used as underlying storage. BoltDB stores key/values in a single
-file, in multiple/nested buckets (namespaces) in a B+tree and provides ACID
-transactions.  Either a single write transaction or multiple read-only
-transactions can be active at a time.  Do not start a blocking read-only
-transaction while holding a writable transaction or vice versa, this will cause
-deadlock.
+Bolt is used as underlying storage through the bbolt library. Bolt stores
+key/values in a single file, allowing multiple/nested buckets (namespaces) in a
+B+tree and provides ACID serializable transactions.  A single write transaction
+can be active at a time, and one or more read-only transactions.  Do not start
+a blocking read-only transaction in a goroutine while holding a writable
+transaction or vice versa, this can cause deadlock.
 
-BoltDB returns Go values that are memory mapped to the database file.  This
-means BoltDB/bstore database files cannot be transferred between machines with
-different endianness.  BoltDB uses explicit widths for its types, so files can
+Bolt returns Go values that are memory mapped to the database file.  This means
+Bolt/bstore database files cannot be transferred between machines with
+different endianness.  Bolt uses explicit widths for its types, so files can
 be transferred between 32bit and 64bit machines of same endianness. While
-BoltDB returns read-only memory mapped byte slices, bstore only ever returns
+Bolt returns read-only memory mapped byte slices, bstore only ever returns
 parsed/copied regular writable Go values that require no special programmer
 attention.
 
-For each Go type opened for a database file, bstore ensures a BoltDB bucket
+For each Go type opened for a database file, bstore ensures a Bolt bucket
 exists with two subbuckets:
 
   - "types", with type descriptions of the stored records. Each time the database
     file is opened with a modified Go type (add/removed/modified
     field/type/bstore struct tag), a new type description is automatically added,
     identified by sequence number.
-  - "records", containing all data, with the type's primary key as BoltDB key,
+  - "records", containing all data, with the type's primary key as Bolt key,
     and the encoded remaining fields as value. The encoding starts with a
     reference to a type description.
 
 For each index, another subbucket is created, its name starting with "index.".
 The stored keys consist of the index fields followed by the primary key, and an
-empty value.
+empty value. See format.md for details.
 
 # Limitations
 
@@ -189,12 +191,12 @@ equivalent of a nil pointer.
 The first field of a stored struct is always the primary key. Autoincrement is
 only available for the primary key.
 
-BoltDB opens the database file with a lock. Only one process can have the
+Bolt opens the database file with a lock. Only one process can have the
 database open at a time.
 
-An index stored on disk in BoltDB can consume more disk space than other
+An index stored on disk in Bolt can consume more disk space than other
 database systems would: For each record, the indexed field(s) and primary key
-are stored in full. Because bstore uses BoltDB as key/value store, and doesn't
+are stored in full. Because bstore uses Bolt as key/value store, and doesn't
 manage disk pages itself, it cannot as efficiently pack an index page with many
 records.
 
@@ -202,5 +204,36 @@ Interface values cannot be stored. This would require storing the type along
 with the value. Instead, use a type that is a BinaryMarshaler.
 
 Values of builtin type "complex" cannot be stored.
+
+Bstore inherits limitations from Bolt, see
+https://pkg.go.dev/go.etcd.io/bbolt#readme-caveats-amp-limitations.
+
+# Comparison with sqlite
+
+Sqlite is a great library, but Go applications that require cgo are hard to
+cross-compile. With bstore, cross-compiling to most Go-supported platforms
+stays trivial (though not plan9, unfortunately). Although bstore is much more
+limited in so many aspects than sqlite, bstore also offers some advantages as
+well. Some points of comparison:
+
+- Cross-compilation and reproducibility: Trivial with bstore due to pure Go,
+  much harder with sqlite because of cgo.
+- Code complexity: low with bstore (7k lines including comments/docs), high
+  with sqlite.
+- Query language: mostly-type-checked function calls in bstore, free-form query
+  strings only checked at runtime with sqlite.
+- Functionality: very limited with bstore, much more full-featured with sqlite.
+- Schema management: mostly automatic based on Go type definitions in bstore,
+  manual with ALTER statements in sqlite.
+- Types and packing/parsing: automatic/transparent in bstore based on Go types
+  (including maps, slices, structs and custom MarshalBinary encoding), versus
+  manual scanning and parameter passing with sqlite with limited set of SQL
+  types.
+- Performance: low to good performance with bstore, high performance with
+  sqlite.
+- Database files: single file with bstore, several files with sqlite (due to
+  WAL or journal files).
+- Test coverage: decent coverage but limited real-world for bstore, versus
+  extremely thoroughly tested and with enormous real-world use.
 */
 package bstore

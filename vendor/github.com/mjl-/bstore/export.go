@@ -329,8 +329,7 @@ func (ft fieldType) parseValue(p *parser) any {
 			if fm.Nonzero(i) {
 				l = append(l, ft.ListElem.parseValue(p))
 			} else {
-				// Always add non-zero elements, or we would
-				// change the number of elements in a list.
+				// Always add zero elements, or we would change the number of elements in a list.
 				l = append(l, ft.ListElem.zeroExportValue())
 			}
 		}
@@ -343,8 +342,8 @@ func (ft fieldType) parseValue(p *parser) any {
 			if fm.Nonzero(i) {
 				l[i] = ft.ListElem.parseValue(p)
 			} else {
-				// Always add non-zero elements, or we would
-				// change the number of elements in a list.
+				// Always add zero elements, or we would change the number of elements in the
+				// array.
 				l[i] = ft.ListElem.zeroExportValue()
 			}
 		}
