@@ -2176,7 +2176,7 @@ can be found in message headers.
 
 	data, err := io.ReadAll(os.Stdin)
 	xcheckf(err, "read message")
-	dmarcFrom, _, _, err := message.From(c.log.Logger, false, bytes.NewReader(data))
+	dmarcFrom, _, _, err := message.From(c.log.Logger, false, bytes.NewReader(data), nil)
 	xcheckf(err, "extract dmarc from message")
 
 	const ignoreTestMode = false

@@ -37,7 +37,7 @@ func ExampleVerify() {
 
 	// Message to verify.
 	msg := strings.NewReader("From: <sender@example.com>\r\nMore: headers\r\n\r\nBody\r\n")
-	msgFrom, _, _, err := message.From(slog.Default(), true, msg)
+	msgFrom, _, _, err := message.From(slog.Default(), true, msg, nil)
 	if err != nil {
 		log.Fatalf("parsing message for from header: %v", err)
 	}
