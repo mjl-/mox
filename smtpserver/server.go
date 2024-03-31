@@ -1804,9 +1804,8 @@ func (c *conn) cmdData(p *parser) {
 	}
 
 	// Now that we have all the whole message (envelope + data), we can check if the SMTPUTF8 extension is required.
-	// The check happens only when the client required the SMTPUTF8 extension.
 	var part *message.Part
-	if c.smtputf8 {
+	if c.smtputf8 || c.submission || mox.Pedantic {
 		// Try to parse the message.
 		// Do nothing if something bad happen during Parse and Walk, just keep the current value for c.msgsmtputf8.
 		p, err := message.Parse(c.log.Logger, true, dataFile)
@@ -1821,6 +1820,10 @@ func (c *conn) cmdData(p *parser) {
 		if c.smtputf8 != c.msgsmtputf8 {
 			c.log.Debug("SMTPUTF8 flag changed", slog.Bool("received SMTPUTF8", c.smtputf8), slog.Bool("evaluated SMTPUTF8", c.msgsmtputf8))
 		}
+	}
+	if !c.smtputf8 && c.msgsmtputf8 && mox.Pedantic {
+		metricSubmission.WithLabelValues("missingsmtputf8").Inc()
+		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeMsg6Other0, "smtputf8 extension is required but was not added to the MAIL command")
 	}
 
 	// Prepare "Received" header.
