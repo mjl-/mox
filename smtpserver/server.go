@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"golang.org/x/exp/maps"
 	"golang.org/x/text/unicode/norm"
@@ -331,7 +332,8 @@ type conn struct {
 	futureRelease        time.Time // MAIL FROM with HOLDFOR or HOLDUNTIL.
 	futureReleaseRequest string    // For use in DSNs, either "for;" or "until;" plus original value. ../rfc/4865:305
 	has8bitmime          bool      // If MAIL FROM parameter BODY=8BITMIME was sent. Required for SMTPUTF8.
-	smtputf8             bool      // todo future: we should keep track of this per recipient. perhaps only a specific recipient requires smtputf8, e.g. due to a utf8 localpart. we should decide ourselves if the message needs smtputf8, e.g. due to utf8 header values.
+	smtputf8             bool      // todo future: we should keep track of this per recipient. perhaps only a specific recipient requires smtputf8, e.g. due to a utf8 localpart.
+	msgsmtputf8          bool      // Is SMTPUTF8 required for the received message. Default to the same value as `smtputf8`, but is re-evaluated after the whole message (envelope and data) is received.
 	recipients           []rcptAccount
 }
 
@@ -372,6 +374,7 @@ func (c *conn) rset() {
 	c.futureReleaseRequest = ""
 	c.has8bitmime = false
 	c.smtputf8 = false
+	c.msgsmtputf8 = false
 	c.recipients = nil
 }
 
@@ -1419,6 +1422,7 @@ func (c *conn) cmdMail(p *parser) {
 		case "SMTPUTF8":
 			// ../rfc/6531:213
 			c.smtputf8 = true
+			c.msgsmtputf8 = true
 		case "REQUIRETLS":
 			// ../rfc/8689:155
 			if !c.tls {
@@ -1654,6 +1658,53 @@ func (c *conn) cmdRcpt(p *parser) {
 	c.bwritecodeline(smtp.C250Completed, smtp.SeAddr1Other0, "now on the list", nil)
 }
 
+// ../rfc/6531:497
+func (c *conn) isSMTPUTF8Required(part *message.Part) bool {
+	hasNonASCII := func(r io.Reader) bool {
+		br := bufio.NewReader(r)
+		for {
+			b, err := br.ReadByte()
+			if err == io.EOF {
+				break
+			}
+			xcheckf(err, "read header")
+			if b > unicode.MaxASCII {
+				return true
+			}
+		}
+		return false
+	}
+	var hasNonASCIIPartHeader func(p *message.Part) bool
+	hasNonASCIIPartHeader = func(p *message.Part) bool {
+		if hasNonASCII(p.HeaderReader()) {
+			return true
+		}
+		for _, pp := range p.Parts {
+			if hasNonASCIIPartHeader(&pp) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Check "MAIL FROM"
+	if hasNonASCII(strings.NewReader(string(c.mailFrom.Localpart))) {
+		return true
+	}
+	// Check all "RCPT TO"
+	for _, rcpt := range c.recipients {
+		if hasNonASCII(strings.NewReader(string(rcpt.rcptTo.Localpart))) {
+			return true
+		}
+	}
+	// Check header in all message parts
+	if hasNonASCIIPartHeader(part) {
+		return true
+	}
+
+	return false
+}
+
 // ../rfc/5321:1992 ../rfc/5321:1098
 func (c *conn) cmdData(p *parser) {
 	c.xneedHello()
@@ -1752,6 +1803,29 @@ func (c *conn) cmdData(p *parser) {
 		}
 	}
 
+	// Now that we have all the whole message (envelope + data), we can check if the SMTPUTF8 extension is required.
+	var part *message.Part
+	if c.smtputf8 || c.submission || mox.Pedantic {
+		// Try to parse the message.
+		// Do nothing if something bad happen during Parse and Walk, just keep the current value for c.msgsmtputf8.
+		p, err := message.Parse(c.log.Logger, true, dataFile)
+		if err == nil {
+			// Message parsed without error. Keep the result to avoid parsing the message again.
+			part = &p
+			err = part.Walk(c.log.Logger, nil)
+			if err == nil {
+				c.msgsmtputf8 = c.isSMTPUTF8Required(part)
+			}
+		}
+		if c.smtputf8 != c.msgsmtputf8 {
+			c.log.Debug("smtputf8 flag changed", slog.Bool("smtputf8", c.smtputf8), slog.Bool("msgsmtputf8", c.msgsmtputf8))
+		}
+	}
+	if !c.smtputf8 && c.msgsmtputf8 && mox.Pedantic {
+		metricSubmission.WithLabelValues("missingsmtputf8").Inc()
+		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeMsg6Other0, "smtputf8 extension is required but was not added to the MAIL command")
+	}
+
 	// Prepare "Received" header.
 	// ../rfc/5321:2051 ../rfc/5321:3302
 	// ../rfc/5321:3311 ../rfc/6531:578
@@ -1761,14 +1835,14 @@ func (c *conn) cmdData(p *parser) {
 	if c.submission {
 		// Hide internal hosts.
 		// todo future: make this a config option, where admins specify ip ranges that they don't want exposed. also see ../rfc/5321:4321
-		recvFrom = message.HeaderCommentDomain(mox.Conf.Static.HostnameDomain, c.smtputf8)
+		recvFrom = message.HeaderCommentDomain(mox.Conf.Static.HostnameDomain, c.msgsmtputf8)
 	} else {
 		if len(c.hello.IP) > 0 {
 			recvFrom = smtp.AddressLiteral(c.hello.IP)
 		} else {
 			// ASCII-only version added after the extended-domain syntax below, because the
 			// comment belongs to "BY" which comes immediately after "FROM".
-			recvFrom = c.hello.Domain.XName(c.smtputf8)
+			recvFrom = c.hello.Domain.XName(c.msgsmtputf8)
 		}
 		iprevctx, iprevcancel := context.WithTimeout(cmdctx, time.Minute)
 		var revName string
@@ -1787,24 +1861,24 @@ func (c *conn) cmdData(p *parser) {
 		}
 		name = strings.TrimSuffix(name, ".")
 		recvFrom += " ("
-		if name != "" && name != c.hello.Domain.XName(c.smtputf8) {
+		if name != "" && name != c.hello.Domain.XName(c.msgsmtputf8) {
 			recvFrom += name + " "
 		}
 		recvFrom += smtp.AddressLiteral(c.remoteIP) + ")"
-		if c.smtputf8 && c.hello.Domain.Unicode != "" {
+		if c.msgsmtputf8 && c.hello.Domain.Unicode != "" {
 			recvFrom += " (" + c.hello.Domain.ASCII + ")"
 		}
 	}
-	recvBy := mox.Conf.Static.HostnameDomain.XName(c.smtputf8)
+	recvBy := mox.Conf.Static.HostnameDomain.XName(c.msgsmtputf8)
 	recvBy += " (" + smtp.AddressLiteral(c.localIP) + ")" // todo: hide ip if internal?
-	if c.smtputf8 && mox.Conf.Static.HostnameDomain.Unicode != "" {
+	if c.msgsmtputf8 && mox.Conf.Static.HostnameDomain.Unicode != "" {
 		// This syntax is part of "VIA".
 		recvBy += " (" + mox.Conf.Static.HostnameDomain.ASCII + ")"
 	}
 
 	// ../rfc/3848:34 ../rfc/6531:791
 	with := "SMTP"
-	if c.smtputf8 {
+	if c.msgsmtputf8 {
 		with = "UTF8SMTP"
 	} else if c.ehlo {
 		with = "ESMTP"
@@ -1849,7 +1923,7 @@ func (c *conn) cmdData(p *parser) {
 	// handle it first, and leave the rest of the function for handling wild west
 	// internet traffic.
 	if c.submission {
-		c.submit(cmdctx, recvHdrFor, msgWriter, dataFile)
+		c.submit(cmdctx, recvHdrFor, msgWriter, dataFile, part)
 	} else {
 		c.deliver(cmdctx, recvHdrFor, msgWriter, iprevStatus, iprevAuthentic, dataFile)
 	}
@@ -1873,7 +1947,7 @@ func hasTLSRequiredNo(h textproto.MIMEHeader) bool {
 }
 
 // submit is used for mail from authenticated users that we will try to deliver.
-func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, dataFile *os.File) {
+func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, dataFile *os.File, part *message.Part) {
 	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/webmail.go:/MessageSubmit\(
 
 	var msgPrefix []byte
@@ -1882,7 +1956,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// for other users.
 	// We don't check the Sender field, there is no expectation of verification, ../rfc/7489:2948
 	// and with Resent headers it seems valid to have someone else as Sender. ../rfc/5322:1578
-	msgFrom, _, header, err := message.From(c.log.Logger, true, dataFile)
+	msgFrom, _, header, err := message.From(c.log.Logger, true, dataFile, part)
 	if err != nil {
 		metricSubmission.WithLabelValues("badmessage").Inc()
 		c.log.Infox("parsing message From address", err, slog.String("user", c.username))
@@ -1919,7 +1993,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// ../rfc/5321:4131 ../rfc/6409:751
 	messageID := header.Get("Message-Id")
 	if messageID == "" {
-		messageID = mox.MessageIDGen(c.smtputf8)
+		messageID = mox.MessageIDGen(c.msgsmtputf8)
 		msgPrefix = append(msgPrefix, fmt.Sprintf("Message-Id: <%s>\r\n", messageID)...)
 	}
 
@@ -1960,7 +2034,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	if len(selectors) > 0 {
 		if canonical, err := mox.CanonicalLocalpart(msgFrom.Localpart, confDom); err != nil {
 			c.log.Errorx("determining canonical localpart for dkim signing", err, slog.Any("localpart", msgFrom.Localpart))
-		} else if dkimHeaders, err := dkim.Sign(ctx, c.log.Logger, canonical, msgFrom.Domain, selectors, c.smtputf8, store.FileMsgReader(msgPrefix, dataFile)); err != nil {
+		} else if dkimHeaders, err := dkim.Sign(ctx, c.log.Logger, canonical, msgFrom.Domain, selectors, c.msgsmtputf8, store.FileMsgReader(msgPrefix, dataFile)); err != nil {
 			c.log.Errorx("dkim sign for domain", err, slog.Any("domain", msgFrom.Domain))
 			metricServerErrors.WithLabelValues("dkimsign").Inc()
 		} else {
@@ -1969,14 +2043,14 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	}
 
 	authResults := message.AuthResults{
-		Hostname: mox.Conf.Static.HostnameDomain.XName(c.smtputf8),
-		Comment:  mox.Conf.Static.HostnameDomain.ASCIIExtra(c.smtputf8),
+		Hostname: mox.Conf.Static.HostnameDomain.XName(c.msgsmtputf8),
+		Comment:  mox.Conf.Static.HostnameDomain.ASCIIExtra(c.msgsmtputf8),
 		Methods: []message.AuthMethod{
 			{
 				Method: "auth",
 				Result: "pass",
 				Props: []message.AuthProp{
-					message.MakeAuthProp("smtp", "mailfrom", c.mailFrom.XString(c.smtputf8), true, c.mailFrom.ASCIIExtra(c.smtputf8)),
+					message.MakeAuthProp("smtp", "mailfrom", c.mailFrom.XString(c.msgsmtputf8), true, c.mailFrom.ASCIIExtra(c.msgsmtputf8)),
 				},
 			},
 		},
@@ -2010,7 +2084,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		}
 		xmsgPrefix := append([]byte(recvHdrFor(rcptTo)), msgPrefix...)
 		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-		qm := queue.MakeMsg(*c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS, now)
+		qm := queue.MakeMsg(*c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.msgsmtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS, now)
 		if !c.futureRelease.IsZero() {
 			qm.NextAttempt = c.futureRelease
 			qm.FutureReleaseRequest = c.futureReleaseRequest
@@ -2032,6 +2106,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 			slog.Any("mailfrom", *c.mailFrom),
 			slog.Any("rcptto", rcptAcc.rcptTo),
 			slog.Bool("smtputf8", c.smtputf8),
+			slog.Bool("msgsmtputf8", c.msgsmtputf8),
 			slog.Int64("msgsize", qml[i].Size))
 	}
 
@@ -2107,7 +2182,7 @@ func (c *conn) xlocalserveError(lp smtp.Localpart) {
 func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, iprevStatus iprev.Status, iprevAuthentic bool, dataFile *os.File) {
 	// todo: in decision making process, if we run into (some) temporary errors, attempt to continue. if we decide to accept, all good. if we decide to reject, we'll make it a temporary reject.
 
-	msgFrom, envelope, headers, err := message.From(c.log.Logger, false, dataFile)
+	msgFrom, envelope, headers, err := message.From(c.log.Logger, false, dataFile, nil)
 	if err != nil {
 		c.log.Infox("parsing message for From address", err)
 	}
@@ -2129,7 +2204,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 	// We'll be building up an Authentication-Results header.
 	authResults := message.AuthResults{
-		Hostname: mox.Conf.Static.HostnameDomain.XName(c.smtputf8),
+		Hostname: mox.Conf.Static.HostnameDomain.XName(c.msgsmtputf8),
 	}
 
 	commentAuthentic := func(v bool) string {
@@ -2175,7 +2250,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		dkimctx, dkimcancel := context.WithTimeout(ctx, time.Minute)
 		defer dkimcancel()
 		// todo future: we could let user configure which dkim headers they require
-		dkimResults, dkimErr = dkim.Verify(dkimctx, c.log.Logger, c.resolver, c.smtputf8, dkim.DefaultPolicy, dataFile, ignoreTestMode)
+		dkimResults, dkimErr = dkim.Verify(dkimctx, c.log.Logger, c.resolver, c.msgsmtputf8, dkim.DefaultPolicy, dataFile, ignoreTestMode)
 		dkimcancel()
 	}()
 
@@ -2271,8 +2346,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			sig := base64.StdEncoding.EncodeToString(r.Sig.Signature)
 			sig = sig[:12] // Must be at least 8 characters and unique among the signatures.
 			props = []message.AuthProp{
-				message.MakeAuthProp("header", "d", r.Sig.Domain.XName(c.smtputf8), true, r.Sig.Domain.ASCIIExtra(c.smtputf8)),
-				message.MakeAuthProp("header", "s", r.Sig.Selector.XName(c.smtputf8), true, r.Sig.Selector.ASCIIExtra(c.smtputf8)),
+				message.MakeAuthProp("header", "d", r.Sig.Domain.XName(c.msgsmtputf8), true, r.Sig.Domain.ASCIIExtra(c.msgsmtputf8)),
+				message.MakeAuthProp("header", "s", r.Sig.Selector.XName(c.msgsmtputf8), true, r.Sig.Selector.ASCIIExtra(c.msgsmtputf8)),
 				message.MakeAuthProp("header", "a", r.Sig.Algorithm(), false, ""),
 				message.MakeAuthProp("header", "b", sig, false, ""), // ../rfc/6008:147
 			}
@@ -2318,7 +2393,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	}
 	var props []message.AuthProp
 	if spfIdentity != nil {
-		props = []message.AuthProp{message.MakeAuthProp("smtp", string(receivedSPF.Identity), spfIdentity.XName(c.smtputf8), true, spfIdentity.ASCIIExtra(c.smtputf8))}
+		props = []message.AuthProp{message.MakeAuthProp("smtp", string(receivedSPF.Identity), spfIdentity.XName(c.msgsmtputf8), true, spfIdentity.ASCIIExtra(c.msgsmtputf8))}
 	}
 	var spfComment string
 	if spfAuthentic {
@@ -2407,7 +2482,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			Comment: comment,
 			Props: []message.AuthProp{
 				// ../rfc/7489:1489
-				message.MakeAuthProp("header", "from", msgFrom.Domain.ASCII, true, msgFrom.Domain.ASCIIExtra(c.smtputf8)),
+				message.MakeAuthProp("header", "from", msgFrom.Domain.ASCII, true, msgFrom.Domain.ASCIIExtra(c.msgsmtputf8)),
 			},
 		}
 
@@ -2664,7 +2739,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		// Received-SPF header goes before Received. ../rfc/7208:2038
 		m.MsgPrefix = []byte(
 			xmox +
-				"Delivered-To: " + rcptAcc.rcptTo.XString(c.smtputf8) + "\r\n" + // ../rfc/9228:274
+				"Delivered-To: " + rcptAcc.rcptTo.XString(c.msgsmtputf8) + "\r\n" + // ../rfc/9228:274
 				"Return-Path: <" + c.mailFrom.String() + ">\r\n" + // ../rfc/5321:3300
 				rcptAuthResults.Header() +
 				receivedSPF.Header() +
@@ -2967,7 +3042,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	if len(deliverErrors) > 0 {
 		now := time.Now()
 		dsnMsg := dsn.Message{
-			SMTPUTF8:   c.smtputf8,
+			SMTPUTF8:   c.msgsmtputf8,
 			From:       smtp.Path{Localpart: "postmaster", IPDomain: deliverErrors[0].rcptTo.IPDomain},
 			To:         *c.mailFrom,
 			Subject:    "mail delivery failure",
