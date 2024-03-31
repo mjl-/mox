@@ -1799,7 +1799,7 @@ QW4gYXR0YWNoZWQgdGV4dCBmaWxlLg==
 --simple boundary--
 `, mailFrom, rcptTo, headerValue, filename), "\n", "\r\n")
 
-			err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, clientSmtputf8, false)
+			err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, clientSmtputf8, false)
 			var cerr smtpclient.Error
 			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
 				t.Fatalf("got err %#v, expected %#v", err, expErr)
@@ -1823,7 +1823,8 @@ QW4gYXR0YWNoZWQgdGV4dCBmaWxlLg==
 	test(`Ω@mox.example`, `remote@example.org`, "header-ascii", "ascii.txt", true, true, nil)
 	test(`Ω@mox.example`, `remote@example.org`, "header-ascii", "ascii.txt", false, true, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeMsg6NonASCIIAddrNotPermitted7})
 	test(`mjl@mox.example`, `remote@example.org`, "header-utf8-😍", "ascii.txt", true, true, nil)
+	test(`mjl@mox.example`, `remote@example.org`, "header-utf8-😍", "ascii.txt", false, true, nil)
 	test(`mjl@mox.example`, `remote@example.org`, "header-ascii", "utf8-🫠️.txt", true, true, nil)
 	test(`Ω@mox.example`, `🙂@example.org`, "header-utf8-😍", "utf8-🫠️.txt", true, true, nil)
-	test(`mjl@mox.example`, `remote@idn-🌏️.org`, "header-ascii", "ascii.txt", true, true, nil)
+	test(`mjl@mox.example`, `remote@xn--vg8h.example.org`, "header-ascii", "ascii.txt", true, false, nil)
 }
