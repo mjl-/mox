@@ -767,7 +767,7 @@ func command(c *conn) {
 	c.cmd = cmdl
 	c.cmdStart = time.Now()
 
-	p := newParser(args, c.msgsmtputf8, c)
+	p := newParser(args, c.smtputf8, c)
 	fn, ok := commands[cmdl]
 	if !ok {
 		c.cmd = "(unknown)"
@@ -1472,7 +1472,7 @@ func (c *conn) cmdMail(p *parser) {
 	}
 
 	// We now know if we have to parse the address with support for utf8.
-	pp := newParser(rawRevPath, c.msgsmtputf8, c)
+	pp := newParser(rawRevPath, c.smtputf8, c)
 	rpath := pp.xbareReversePath()
 	pp.xempty()
 	pp = nil
