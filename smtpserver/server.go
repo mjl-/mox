@@ -1659,7 +1659,7 @@ func (c *conn) cmdRcpt(p *parser) {
 }
 
 // ../rfc/6531:497
-func (c *conn) isSmtpUtf8Required(part *message.Part) bool {
+func (c *conn) isSMTPUTF8Required(part *message.Part) bool {
 	hasNonASCII := func(r io.Reader) bool {
 		br := bufio.NewReader(r)
 		for {
@@ -1814,11 +1814,11 @@ func (c *conn) cmdData(p *parser) {
 			part = &p
 			err = part.Walk(c.log.Logger, nil)
 			if err == nil {
-				c.msgsmtputf8 = c.isSmtpUtf8Required(part)
+				c.msgsmtputf8 = c.isSMTPUTF8Required(part)
 			}
 		}
 		if c.smtputf8 != c.msgsmtputf8 {
-			c.log.Debug("SMTPUTF8 flag changed", slog.Bool("received SMTPUTF8", c.smtputf8), slog.Bool("evaluated SMTPUTF8", c.msgsmtputf8))
+			c.log.Debug("smtputf8 flag changed", slog.Bool("smtputf8", c.smtputf8), slog.Bool("msgsmtputf8", c.msgsmtputf8))
 		}
 	}
 	if !c.smtputf8 && c.msgsmtputf8 && mox.Pedantic {
