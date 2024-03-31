@@ -1687,22 +1687,18 @@ func (c *conn) isSMTPUTF8Required(part *message.Part) bool {
 		return false
 	}
 
-	// Check "MAIL FROM"
+	// Check "MAIL FROM".
 	if hasNonASCII(strings.NewReader(string(c.mailFrom.Localpart))) {
 		return true
 	}
-	// Check all "RCPT TO"
+	// Check all "RCPT TO".
 	for _, rcpt := range c.recipients {
 		if hasNonASCII(strings.NewReader(string(rcpt.rcptTo.Localpart))) {
 			return true
 		}
 	}
-	// Check header in all message parts
-	if hasNonASCIIPartHeader(part) {
-		return true
-	}
-
-	return false
+	// Check header in all message parts.
+	return hasNonASCIIPartHeader(part)
 }
 
 // ../rfc/5321:1992 ../rfc/5321:1098
