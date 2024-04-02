@@ -306,11 +306,14 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 		return nil, nil, p, fmt.Errorf("writing message: %v", err)
 	}
 
-	// Take received time from filename.
+	// Take received time from filename, falling back to mtime for maildirs
+	// reconstructed some other sources of message files.
 	var received time.Time
 	t := strings.SplitN(filepath.Base(sf.Name()), ".", 2)
 	if v, err := strconv.ParseInt(t[0], 10, 64); err == nil {
 		received = time.Unix(v, 0)
+	} else if fi, err := sf.Stat(); err == nil {
+		received = fi.ModTime()
 	}
 
 	// Parse flags. See https://cr.yp.to/proto/maildir.html.
