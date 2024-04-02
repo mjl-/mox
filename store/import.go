@@ -309,8 +309,8 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 	// Take received time from filename, falling back to mtime for maildirs
 	// reconstructed some other sources of message files.
 	var received time.Time
-	t := strings.SplitN(filepath.Base(sf.Name()), ".", 2)
-	if v, err := strconv.ParseInt(t[0], 10, 64); err == nil {
+	t := strings.SplitN(filepath.Base(sf.Name()), ".", 3)
+	if v, err := strconv.ParseInt(t[0], 10, 64); len(t) == 3 && err == nil {
 		received = time.Unix(v, 0)
 	} else if fi, err := sf.Stat(); err == nil {
 		received = fi.ModTime()
