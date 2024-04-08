@@ -161,6 +161,11 @@ func Load(name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eab
 	loggingGetCertificate := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		log := mlog.New("autotls", nil).WithContext(hello.Context())
 
+		// We handle missing invalid hostnames/ip's by returning a nil certificate and nil
+		// error, which crypto/tls turns into a TLS alert "unrecognized name", which can be
+		// interpreted by clients as a hint that they are using the wrong hostname, or a
+		// certificate is missing.
+
 		// Handle missing SNI to prevent logging an error below.
 		// At startup, during config initialization, we already adjust the tls config to
 		// inject the listener hostname if there isn't one in the TLS client hello. This is
@@ -168,16 +173,15 @@ func Load(name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eab
 		// verification of the certificate.
 		if hello.ServerName == "" {
 			log.Debug("tls request without sni servername, rejecting", slog.Any("localaddr", hello.Conn.LocalAddr()), slog.Any("supportedprotos", hello.SupportedProtos))
-			return nil, fmt.Errorf("sni server name required")
+			return nil, nil
 		}
 
 		cert, err := m.GetCertificate(hello)
-		if err != nil {
-			if errors.Is(err, errHostNotAllowed) {
-				log.Debugx("requesting certificate", err, slog.String("host", hello.ServerName))
-			} else {
-				log.Errorx("requesting certificate", err, slog.String("host", hello.ServerName))
-			}
+		if err != nil && errors.Is(err, errHostNotAllowed) {
+			log.Debugx("requesting certificate", err, slog.String("host", hello.ServerName))
+			return nil, nil
+		} else if err != nil {
+			log.Errorx("requesting certificate", err, slog.String("host", hello.ServerName))
 		}
 		return cert, err
 	}
