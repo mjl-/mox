@@ -728,6 +728,10 @@ func updateRecipientDomainTLS(ctx context.Context, log mlog.Log, senderAccount s
 	if err != nil {
 		return fmt.Errorf("open account: %w", err)
 	}
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
 	err = acc.DB.Write(ctx, func(tx *bstore.Tx) error {
 		// First delete any existing record.
 		if err := tx.Delete(&store.RecipientDomainTLS{Domain: rdt.Domain}); err != nil && err != bstore.ErrAbsent {

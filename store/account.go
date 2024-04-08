@@ -1059,6 +1059,15 @@ func initAccount(db *bstore.DB) error {
 	})
 }
 
+// CheckClosed asserts that the account has a zero reference count. For use in tests.
+func (a *Account) CheckClosed() {
+	openAccounts.Lock()
+	defer openAccounts.Unlock()
+	if a.nused != 0 {
+		panic(fmt.Sprintf("account still in use, %d refs", a.nused))
+	}
+}
+
 // Close reduces the reference count, and closes the database connection when
 // it was the last user.
 func (a *Account) Close() error {

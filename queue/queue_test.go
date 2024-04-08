@@ -49,20 +49,10 @@ func tcompare(t *testing.T, got, exp any) {
 	}
 }
 
-var keepAccount bool
-
 func setup(t *testing.T) (*store.Account, func()) {
 	// Prepare config so email can be delivered to mjl@mox.example.
 
-	// Don't trigger the account consistency checks. Only remove account files on first
-	// (of randomized) runs.
-	if !keepAccount {
-		os.RemoveAll("../testdata/queue/data")
-		keepAccount = true
-	} else {
-		os.RemoveAll("../testdata/queue/data/queue")
-	}
-
+	os.RemoveAll("../testdata/queue/data")
 	log := mlog.New("queue", nil)
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/queue/mox.conf")
@@ -75,6 +65,7 @@ func setup(t *testing.T) (*store.Account, func()) {
 	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 	return acc, func() {
 		acc.Close()
+		acc.CheckClosed()
 		mox.ShutdownCancel()
 		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 		Shutdown()
