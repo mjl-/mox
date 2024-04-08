@@ -929,6 +929,19 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		}
 	}
 
+	checkTransportDirect := func(name string, t *config.TransportDirect) {
+		if t.DisableIPv4 && t.DisableIPv6 {
+			addErrorf("transport %s: both IPv4 and IPv6 are disabled, enable at least one", name)
+		}
+		t.IPFamily = "ip"
+		if t.DisableIPv4 {
+			t.IPFamily = "ip6"
+		}
+		if t.DisableIPv6 {
+			t.IPFamily = "ip4"
+		}
+	}
+
 	for name, t := range c.Transports {
 		n := 0
 		if t.Submissions != nil {
@@ -946,6 +959,10 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		if t.Socks != nil {
 			n++
 			checkTransportSocks(name, t.Socks)
+		}
+		if t.Direct != nil {
+			n++
+			checkTransportDirect(name, t.Direct)
 		}
 		if n > 1 {
 			addErrorf("transport %s: cannot have multiple methods in a transport", name)

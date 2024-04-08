@@ -170,7 +170,7 @@ func GatherDestinations(ctx context.Context, elog *slog.Logger, resolver dns.Res
 // GatherIPs looks up the IPs to try for connecting to host, with the IPs ordered
 // to take previous attempts into account. For use with DANE, the CNAME-expanded
 // name is returned, and whether the DNS responses were authentic.
-func GatherIPs(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, host dns.IPDomain, dialedIPs map[string][]net.IP) (authentic bool, expandedAuthentic bool, expandedHost dns.Domain, ips []net.IP, dualstack bool, rerr error) {
+func GatherIPs(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, network string, host dns.IPDomain, dialedIPs map[string][]net.IP) (authentic bool, expandedAuthentic bool, expandedHost dns.Domain, ips []net.IP, dualstack bool, rerr error) {
 	log := mlog.New("smtpclient", elog)
 
 	if len(host.IP) > 0 {
@@ -216,7 +216,7 @@ func GatherIPs(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, ho
 		}
 	}
 
-	ipaddrs, result, err := resolver.LookupIPAddr(ctx, name)
+	ipaddrs, result, err := resolver.LookupIP(ctx, network, name)
 	authentic = authentic && result.Authentic
 	expandedAuthentic = expandedAuthentic && result.Authentic
 	if err != nil || len(ipaddrs) == 0 {
@@ -224,8 +224,8 @@ func GatherIPs(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, ho
 	}
 	var have4, have6 bool
 	for _, ipaddr := range ipaddrs {
-		ips = append(ips, ipaddr.IP)
-		if ipaddr.IP.To4() == nil {
+		ips = append(ips, ipaddr)
+		if ipaddr.To4() == nil {
 			have6 = true
 		} else {
 			have4 = true

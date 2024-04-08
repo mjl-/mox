@@ -222,10 +222,11 @@ type WebService struct {
 // be non-nil. The non-nil field represents the type of transport. For a
 // transport with all fields nil, regular email delivery is done.
 type Transport struct {
-	Submissions *TransportSMTP  `sconf:"optional" sconf-doc:"Submission SMTP over a TLS connection to submit email to a remote queue."`
-	Submission  *TransportSMTP  `sconf:"optional" sconf-doc:"Submission SMTP over a plain TCP connection (possibly with STARTTLS) to submit email to a remote queue."`
-	SMTP        *TransportSMTP  `sconf:"optional" sconf-doc:"SMTP over a plain connection (possibly with STARTTLS), typically for old-fashioned unauthenticated relaying to a remote queue."`
-	Socks       *TransportSocks `sconf:"optional" sconf-doc:"Like regular direct delivery, but makes outgoing connections through a SOCKS proxy."`
+	Submissions *TransportSMTP   `sconf:"optional" sconf-doc:"Submission SMTP over a TLS connection to submit email to a remote queue."`
+	Submission  *TransportSMTP   `sconf:"optional" sconf-doc:"Submission SMTP over a plain TCP connection (possibly with STARTTLS) to submit email to a remote queue."`
+	SMTP        *TransportSMTP   `sconf:"optional" sconf-doc:"SMTP over a plain connection (possibly with STARTTLS), typically for old-fashioned unauthenticated relaying to a remote queue."`
+	Socks       *TransportSocks  `sconf:"optional" sconf-doc:"Like regular direct delivery, but makes outgoing connections through a SOCKS proxy."`
+	Direct      *TransportDirect `sconf:"optional" sconf-doc:"Like regular direct delivery, but allows to tweak outgoing connections."`
 }
 
 // TransportSMTP delivers messages by "submission" (SMTP, typically
@@ -260,6 +261,13 @@ type TransportSocks struct {
 
 	IPs      []net.IP   `sconf:"-" json:"-"` // Parsed form of RemoteIPs.
 	Hostname dns.Domain `sconf:"-" json:"-"` // Parsed form of RemoteHostname
+}
+
+type TransportDirect struct {
+	DisableIPv4 bool `sconf:"optional" sconf-doc:"If set, outgoing SMTP connections will *NOT* use IPv4 addresses to connect to remote SMTP servers."`
+	DisableIPv6 bool `sconf:"optional" sconf-doc:"If set, outgoing SMTP connections will *NOT* use IPv6 addresses to connect to remote SMTP servers."`
+
+	IPFamily string `sconf:"-" json:"-"`
 }
 
 type Domain struct {

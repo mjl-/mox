@@ -4135,6 +4135,14 @@
 						"nullable",
 						"TransportSocks"
 					]
+				},
+				{
+					"Name": "Direct",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"TransportDirect"
+					]
 				}
 			]
 		},
@@ -4232,6 +4240,26 @@
 					"Docs": "",
 					"Typewords": [
 						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "TransportDirect",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "DisableIPv4",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "DisableIPv6",
+					"Docs": "",
+					"Typewords": [
+						"bool"
 					]
 				}
 			]

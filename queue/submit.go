@@ -101,7 +101,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		msgs[0].DialedIPs = map[string][]net.IP{}
 		m0 = msgs[0]
 	}
-	_, _, _, ips, _, err := smtpclient.GatherIPs(dialctx, qlog.Logger, resolver, dns.IPDomain{Domain: transport.DNSHost}, m0.DialedIPs)
+	_, _, _, ips, _, err := smtpclient.GatherIPs(dialctx, qlog.Logger, resolver, "ip", dns.IPDomain{Domain: transport.DNSHost}, m0.DialedIPs)
 	var conn net.Conn
 	if err == nil {
 		conn, _, err = smtpclient.Dial(dialctx, qlog.Logger, dialer, dns.IPDomain{Domain: transport.DNSHost}, ips, port, m0.DialedIPs, mox.Conf.Static.SpecifiedSMTPListenIPs)

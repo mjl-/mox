@@ -19,6 +19,7 @@ import (
 	"github.com/mjl-/adns"
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dsn"
 	"github.com/mjl-/mox/mlog"
@@ -110,7 +111,7 @@ type msgResp struct {
 // domain (MTA-STS), its policy type can be empty, in which case there is no
 // information (e.g. internal failure). hostResults are per-host details (DANE, one
 // per MX target).
-func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, ourHostname dns.Domain, transportName string, msgs []*Msg, backoff time.Duration) (recipientDomainResult tlsrpt.Result, hostResults []tlsrpt.Result) {
+func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, ourHostname dns.Domain, transportName string, transportDirect *config.TransportDirect, msgs []*Msg, backoff time.Duration) (recipientDomainResult tlsrpt.Result, hostResults []tlsrpt.Result) {
 	// High-level approach:
 	// - Resolve domain to deliver to (CNAME), and determine hosts to try to deliver to (MX)
 	// - Get MTA-STS policy for domain (optional). If present, only deliver to its
@@ -252,7 +253,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			msgResps[i] = &msgResp{msg: msgs[i]}
 		}
 
-		result := deliverHost(nqlog, resolver, dialer, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, msgResps, tlsMode, tlsPKIX, &recipientDomainResult)
+		result := deliverHost(nqlog, resolver, dialer, ourHostname, transportName, transportDirect, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, msgResps, tlsMode, tlsPKIX, &recipientDomainResult)
 
 		var zerotype tlsrpt.PolicyType
 		if result.hostResult.Policy.Type != zerotype {
@@ -279,7 +280,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 				slog.Bool("enforcemtasts", enforceMTASTS),
 				slog.Bool("tlsdane", result.tlsDANE),
 				slog.Any("requiretls", m0.RequireTLS))
-			result = deliverHost(nqlog, resolver, dialer, ourHostname, transportName, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, msgResps, smtpclient.TLSSkip, false, &tlsrpt.Result{})
+			result = deliverHost(nqlog, resolver, dialer, ourHostname, transportName, transportDirect, h, enforceMTASTS, haveMX, origNextHopAuthentic, origNextHop, expandedNextHopAuthentic, expandedNextHop, msgResps, smtpclient.TLSSkip, false, &tlsrpt.Result{})
 		}
 
 		remoteMTA = dsn.NameIP{Name: h.XString(false), IP: remoteIP}
@@ -375,7 +376,7 @@ type deliverResult struct {
 //
 // deliverHost may send a message multiple times: if the server doesn't accept
 // multiple recipients for a message.
-func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, ourHostname dns.Domain, transportName string, host dns.IPDomain, enforceMTASTS, haveMX, origNextHopAuthentic bool, origNextHop dns.Domain, expandedNextHopAuthentic bool, expandedNextHop dns.Domain, msgResps []*msgResp, tlsMode smtpclient.TLSMode, tlsPKIX bool, recipientDomainResult *tlsrpt.Result) (result deliverResult) {
+func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, ourHostname dns.Domain, transportName string, transportDirect *config.TransportDirect, host dns.IPDomain, enforceMTASTS, haveMX, origNextHopAuthentic bool, origNextHop dns.Domain, expandedNextHopAuthentic bool, expandedNextHop dns.Domain, msgResps []*msgResp, tlsMode smtpclient.TLSMode, tlsPKIX bool, recipientDomainResult *tlsrpt.Result) (result deliverResult) {
 	// About attempting delivery to multiple addresses of a host: ../rfc/5321:3898
 
 	m0 := msgResps[0].msg
@@ -451,7 +452,14 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 	}
 
 	metricDestinations.Inc()
-	authentic, expandedAuthentic, expandedHost, ips, dualstack, err := smtpclient.GatherIPs(ctx, log.Logger, resolver, host, m0.DialedIPs)
+	network := "ip"
+	if transportDirect != nil {
+		if network != transportDirect.IPFamily {
+			log.Debug("set custom IP network family for direct transport", slog.Any("network", transportDirect.IPFamily))
+			network = transportDirect.IPFamily
+		}
+	}
+	authentic, expandedAuthentic, expandedHost, ips, dualstack, err := smtpclient.GatherIPs(ctx, log.Logger, resolver, network, host, m0.DialedIPs)
 	destAuthentic := err == nil && authentic && origNextHopAuthentic && (!haveMX || expandedNextHopAuthentic) && host.IsDomain()
 	if !destAuthentic {
 		log.Debugx("not attempting verification with dane", err, slog.Bool("authentic", authentic), slog.Bool("expandedauthentic", expandedAuthentic))
@@ -645,6 +653,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 			// attempt and remote has both IPv4 and IPv6, we'll give it
 			// another try. Our first IP may be in a block list, the address for
 			// the other family perhaps is not.
+
 			if cerr.Permanent && m0.Attempts == 1 && dualstack && strings.HasPrefix(cerr.Secode, "7.") {
 				cerr.Permanent = false
 			}
