@@ -639,13 +639,15 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 			err = fmt.Errorf("storing recipient domain tls status: %w", err)
 		}
 	}
-	if err != nil {
+
+	inspectError := func(err error) error {
 		if cerr, ok := err.(smtpclient.Error); ok {
 			// If we are being rejected due to policy reasons on the first
 			// attempt and remote has both IPv4 and IPv6, we'll give it
 			// another try. Our first IP may be in a block list, the address for
 			// the other family perhaps is not.
 			if cerr.Permanent && m0.Attempts == 1 && dualstack && strings.HasPrefix(cerr.Secode, "7.") {
+				log.Debugx("change error type from permanent to transient", err, slog.Any("host", host), slog.Any("secode", cerr.Secode))
 				cerr.Permanent = false
 			}
 			// If server does not implement requiretls, respond with that code. ../rfc/8689:301
@@ -653,9 +655,13 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 				cerr.Secode = smtp.SePol7MissingReqTLS30
 				metricRequireTLSUnsupported.WithLabelValues("norequiretls").Inc()
 			}
-			err = cerr
+			return cerr
 		}
-		return deliverResult{err: err}
+		return err
+	}
+
+	if err != nil {
+		return deliverResult{err: inspectError(err)}
 	}
 
 	// SMTP session is ready. Finally try to actually deliver.
@@ -695,7 +701,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 		resps, err := sc.DeliverMultiple(ctx, mailFrom, rcpts, size, msg, has8bit, smtputf8, m0.RequireTLS != nil && *m0.RequireTLS)
 		if err != nil && len(resps) == len(msgResps) {
 			// If error and it applies to all recipients, return a single error.
-			return deliverResult{err: err}
+			return deliverResult{err: inspectError(err)}
 		}
 		var ntodo []*msgResp
 		for i, mr := range todo[:n] {
