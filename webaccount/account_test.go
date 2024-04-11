@@ -79,7 +79,7 @@ func TestAccount(t *testing.T) {
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
 	log := mlog.New("webaccount", nil)
-	acc, err := store.OpenAccount(log, "mjl")
+	acc, err := store.OpenAccount(log, "mjl☺")
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(log, "test1234")
 	tcheck(t, err, "set password")
@@ -99,14 +99,14 @@ func TestAccount(t *testing.T) {
 	ctx := context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	// Missing login token.
-	tneedErrorCode(t, "user:error", func() { api.Login(ctx, "", "mjl@mox.example", "test1234") })
+	tneedErrorCode(t, "user:error", func() { api.Login(ctx, "", "mjl☺@mox.example", "test1234") })
 
 	// Login with loginToken.
 	loginCookie := &http.Cookie{Name: "webaccountlogin"}
 	loginCookie.Value = api.LoginPrep(ctx)
 	reqInfo.Request.Header = http.Header{"Cookie": []string{loginCookie.String()}}
 
-	csrfToken := api.Login(ctx, loginCookie.Value, "mjl@mox.example", "test1234")
+	csrfToken := api.Login(ctx, loginCookie.Value, "mjl☺@mox.example", "test1234")
 	var sessionCookie *http.Cookie
 	for _, c := range respRec.Result().Cookies() {
 		if c.Name == "webaccountsession" {
@@ -121,7 +121,7 @@ func TestAccount(t *testing.T) {
 	// Valid loginToken, but bad credentials.
 	loginCookie.Value = api.LoginPrep(ctx)
 	reqInfo.Request.Header = http.Header{"Cookie": []string{loginCookie.String()}}
-	tneedErrorCode(t, "user:loginFailed", func() { api.Login(ctx, loginCookie.Value, "mjl@mox.example", "badauth") })
+	tneedErrorCode(t, "user:loginFailed", func() { api.Login(ctx, loginCookie.Value, "mjl☺@mox.example", "badauth") })
 	tneedErrorCode(t, "user:loginFailed", func() { api.Login(ctx, loginCookie.Value, "baduser@mox.example", "badauth") })
 	tneedErrorCode(t, "user:loginFailed", func() { api.Login(ctx, loginCookie.Value, "baduser@baddomain.example", "badauth") })
 
@@ -211,13 +211,13 @@ func TestAccount(t *testing.T) {
 
 	// SetPassword needs the token.
 	sessionToken := store.SessionToken(strings.SplitN(sessionCookie.Value, " ", 2)[0])
-	reqInfo = requestInfo{"mjl@mox.example", "mjl", sessionToken, respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
+	reqInfo = requestInfo{"mjl☺@mox.example", "mjl☺", sessionToken, respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
 	ctx = context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	api.SetPassword(ctx, "test1234")
 
 	fullName, _, dests, _, _ := api.Account(ctx)
-	api.DestinationSave(ctx, "mjl@mox.example", dests["mjl@mox.example"], dests["mjl@mox.example"]) // todo: save modified value and compare it afterwards
+	api.DestinationSave(ctx, "mjl☺@mox.example", dests["mjl☺@mox.example"], dests["mjl☺@mox.example"]) // todo: save modified value and compare it afterwards
 
 	api.AccountSaveFullName(ctx, fullName+" changed") // todo: check if value was changed
 	api.AccountSaveFullName(ctx, fullName)

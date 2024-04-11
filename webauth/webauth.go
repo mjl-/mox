@@ -41,6 +41,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -154,9 +155,15 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 		return "", "", "", false
 	}
 	sessionToken = store.SessionToken(t[0])
-	accountName = t[1]
 
 	var err error
+	accountName, err = url.QueryUnescape(t[1])
+	if err != nil {
+		time.Sleep(BadAuthDelay)
+		respondAuthError("user:badAuth", "malformed session account name")
+		return "", "", "", false
+	}
+
 	loginAddress, err = sessionAuth.use(ctx, log, accountName, sessionToken, csrfToken)
 	if err != nil {
 		time.Sleep(BadAuthDelay)
@@ -258,7 +265,8 @@ func Login(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind, coo
 	// Add session cookie.
 	http.SetCookie(w, &http.Cookie{
 		Name:     kind + "session",
-		Value:    string(sessionToken) + " " + accountName,
+		// Cookies values are ascii only, so we keep the account name query escaped.
+		Value:    string(sessionToken) + " " + url.QueryEscape(accountName),
 		Path:     cookiePath,
 		Secure:   isHTTPS(isForwarded, r),
 		HttpOnly: true,
