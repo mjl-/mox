@@ -650,15 +650,26 @@ many authentication failures).
 		Hostname:          dnshostname.Name(),
 		AdminPasswordFile: "adminpasswd",
 	}
+
+	// todo: let user specify an alternative fallback address?
+	// Don't attempt to use a non-ascii localpart with Let's Encrypt, it won't work.
+	// Messages to postmaster will get to the account too.
+	var contactEmail string
+	if addr.Localpart.IsInternational() {
+		contactEmail = smtp.Address{Localpart: "postmaster", Domain: addr.Domain}.Pack(false)
+	} else {
+		contactEmail = addr.Pack(false)
+	}
 	if !existingWebserver {
 		sc.ACME = map[string]config.ACME{
 			"letsencrypt": {
 				DirectoryURL:     "https://acme-v02.api.letsencrypt.org/directory",
-				ContactEmail:     args[0], // todo: let user specify an alternative fallback address?
+				ContactEmail:     contactEmail,
 				IssuerDomainName: "letsencrypt.org",
 			},
 		}
 	}
+
 	dataDir := "data" // ../data is relative to config/
 	os.MkdirAll(dataDir, 0770)
 	adminpw := pwgen()
