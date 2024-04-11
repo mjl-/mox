@@ -540,7 +540,10 @@ const accounts = async () => {
 					style({display: 'inline-block'}),
 					dom.span('Email address', attr.title('The initial email address for the new account. More addresses can be added after the account has been created.')),
 					dom.br(),
-					email=dom.input(attr.type('email'), attr.required(''), function keyup() {
+					// Cannot use type=email, it doesn't actually check for valid email addresses,
+					// rejecting any non-ascii localpart, accepting some invalid addresses, and
+					// rejecting other valid addresses. https://github.com/whatwg/html/issues/4562
+					email=dom.input(attr.required(''), function keyup() {
 						if (!accountModified) {
 							account.value = email.value.split('@')[0]
 						}
