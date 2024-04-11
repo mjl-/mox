@@ -264,7 +264,7 @@ func Login(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind, coo
 
 	// Add session cookie.
 	http.SetCookie(w, &http.Cookie{
-		Name:     kind + "session",
+		Name: kind + "session",
 		// Cookies values are ascii only, so we keep the account name query escaped.
 		Value:    string(sessionToken) + " " + url.QueryEscape(accountName),
 		Path:     cookiePath,
