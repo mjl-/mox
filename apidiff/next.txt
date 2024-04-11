@@ -13,6 +13,8 @@ Below are the incompatible changes between v0.0.10 and next, per package.
 # iprev
 
 # message
+- From: changed from func(*log/slog.Logger, bool, io.ReaderAt) (github.com/mjl-/mox/smtp.Address, *Envelope, net/textproto.MIMEHeader, error) to func(*log/slog.Logger, bool, io.ReaderAt, *Part) (github.com/mjl-/mox/smtp.Address, *Envelope, net/textproto.MIMEHeader, error)
+- NewComposer: changed from func(io.Writer, int64) *Composer to func(io.Writer, int64, bool) *Composer
 
 # mtasts
 
