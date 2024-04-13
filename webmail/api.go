@@ -1732,7 +1732,7 @@ func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddres
 
 		// Resolve the IPs. Required for DANE to prevent bad DNS servers from causing an
 		// error result instead of no-DANE result.
-		authentic, expandedAuthentic, expandedHost, _, _, err := smtpclient.GatherIPs(ctx, log.Logger, resolver, host, map[string][]net.IP{})
+		authentic, expandedAuthentic, expandedHost, _, _, err := smtpclient.GatherIPs(ctx, log.Logger, resolver, "ip", host, map[string][]net.IP{})
 		if err != nil {
 			rs.DANE = SecurityResultError
 			return

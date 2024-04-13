@@ -638,6 +638,18 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# typically the hostname of the host in the Address field.
 				RemoteHostname:
 
+			# Like regular direct delivery, but allows to tweak outgoing connections.
+			# (optional)
+			Direct:
+
+				# If set, outgoing SMTP connections will *NOT* use IPv4 addresses to connect to
+				# remote SMTP servers. (optional)
+				DisableIPv4: false
+
+				# If set, outgoing SMTP connections will *NOT* use IPv6 addresses to connect to
+				# remote SMTP servers. (optional)
+				DisableIPv6: false
+
 	# Do not send DMARC reports (aggregate only). By default, aggregate reports on
 	# DMARC evaluations are sent to domains if their DMARC policy requests them.
 	# Reports are sent at whole hours, with a minimum of 1 hour and maximum of 24

@@ -1505,7 +1505,7 @@ sharing most of its code.
 
 		log.Printf("attempting to connect to %s", host)
 
-		authentic, expandedAuthentic, expandedHost, ips, _, err := smtpclient.GatherIPs(ctxbg, c.log.Logger, resolver, host, dialedIPs)
+		authentic, expandedAuthentic, expandedHost, ips, _, err := smtpclient.GatherIPs(ctxbg, c.log.Logger, resolver, "ip", host, dialedIPs)
 		if err != nil {
 			log.Printf("resolving ips for %s: %v, skipping", host, err)
 			continue

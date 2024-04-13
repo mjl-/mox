@@ -155,16 +155,16 @@ func TestGatherIPs(t *testing.T) {
 			"temperror-cname.example.":      "absent.example.",
 		},
 		Fail: []string{
-			"host temperror-a.example.",
+			"ip temperror-a.example.",
 			"cname temperror-cname.example.",
 		},
 		Inauthentic: []string{"cname cnameinauthentic.example."},
 	}
 
-	test := func(host dns.IPDomain, expAuthic, expAuthicExp bool, expHostExp dns.Domain, expIPs []net.IP, expErr any) {
+	test := func(host dns.IPDomain, expAuthic, expAuthicExp bool, expHostExp dns.Domain, expIPs []net.IP, expErr any, network string) {
 		t.Helper()
 
-		authic, authicExp, hostExp, ips, _, err := GatherIPs(ctxbg, log.Logger, resolver, host, nil)
+		authic, authicExp, hostExp, ips, _, err := GatherIPs(ctxbg, log.Logger, resolver, network, host, nil)
 		if (err == nil) != (expErr == nil) || err != nil && !(errors.Is(err, expErr.(error)) || errors.As(err, &expErr)) {
 			// todo: could also check the individual errors?
 			t.Fatalf("gather hosts: %v, expected %v", err, expErr)
@@ -191,18 +191,22 @@ func TestGatherIPs(t *testing.T) {
 		authic := i == 1
 		resolver.AllAuthentic = authic
 
-		test(ipdomain("host1.example"), authic, authic, zerohost, ips("10.0.0.1"), nil)
-		test(ipdomain("host2.example"), authic, authic, zerohost, ips("10.0.0.2", "2001:db8::1"), nil)
-		test(ipdomain("cname-to-inauthentic.example"), authic, false, domain("host1.example"), ips("10.0.0.1"), nil)
-		test(ipdomain("cnameloop.example"), authic, authic, zerohost, nil, errCNAMELimit)
-		test(ipdomain("bogus.example"), authic, authic, zerohost, nil, &adns.DNSError{})
-		test(ipdomain("danglingcname.example"), authic, authic, zerohost, nil, &adns.DNSError{})
-		test(ipdomain("temperror-a.example"), authic, authic, zerohost, nil, &adns.DNSError{})
-		test(ipdomain("temperror-cname.example"), authic, authic, zerohost, nil, &adns.DNSError{})
+		test(ipdomain("host1.example"), authic, authic, zerohost, ips("10.0.0.1"), nil, "ip")
+		test(ipdomain("host1.example"), authic, authic, zerohost, ips("10.0.0.1"), nil, "ip4")
+		test(ipdomain("host1.example"), authic, authic, zerohost, nil, &adns.DNSError{}, "ip6")
+		test(ipdomain("host2.example"), authic, authic, zerohost, ips("10.0.0.2", "2001:db8::1"), nil, "ip")
+		test(ipdomain("host2.example"), authic, authic, zerohost, ips("10.0.0.2"), nil, "ip4")
+		test(ipdomain("host2.example"), authic, authic, zerohost, ips("2001:db8::1"), nil, "ip6")
+		test(ipdomain("cname-to-inauthentic.example"), authic, false, domain("host1.example"), ips("10.0.0.1"), nil, "ip")
+		test(ipdomain("cnameloop.example"), authic, authic, zerohost, nil, errCNAMELimit, "ip")
+		test(ipdomain("bogus.example"), authic, authic, zerohost, nil, &adns.DNSError{}, "ip")
+		test(ipdomain("danglingcname.example"), authic, authic, zerohost, nil, &adns.DNSError{}, "ip")
+		test(ipdomain("temperror-a.example"), authic, authic, zerohost, nil, &adns.DNSError{}, "ip")
+		test(ipdomain("temperror-cname.example"), authic, authic, zerohost, nil, &adns.DNSError{}, "ip")
 
 	}
-	test(ipdomain("cnameinauthentic.example"), false, false, domain("host1.example"), ips("10.0.0.1"), nil)
-	test(ipdomain("cname-to-inauthentic.example"), true, false, domain("host1.example"), ips("10.0.0.1"), nil)
+	test(ipdomain("cnameinauthentic.example"), false, false, domain("host1.example"), ips("10.0.0.1"), nil, "ip")
+	test(ipdomain("cname-to-inauthentic.example"), true, false, domain("host1.example"), ips("10.0.0.1"), nil, "ip")
 }
 
 func TestGatherTLSA(t *testing.T) {

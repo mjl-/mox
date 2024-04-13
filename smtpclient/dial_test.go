@@ -37,7 +37,7 @@ func TestDialHost(t *testing.T) {
 	}
 
 	dialedIPs := map[string][]net.IP{}
-	_, _, _, ips, dualstack, err := GatherIPs(ctxbg, log.Logger, resolver, ipdomain("dualstack.example"), dialedIPs)
+	_, _, _, ips, dualstack, err := GatherIPs(ctxbg, log.Logger, resolver, "ip", ipdomain("dualstack.example"), dialedIPs)
 	if err != nil || !reflect.DeepEqual(ips, []net.IP{net.ParseIP("10.0.0.1"), net.ParseIP("2001:db8::1")}) || !dualstack {
 		t.Fatalf("expected err nil, address 10.0.0.1,2001:db8::1, dualstack true, got %v %v %v", err, ips, dualstack)
 	}
@@ -46,7 +46,7 @@ func TestDialHost(t *testing.T) {
 		t.Fatalf("expected err nil, address 10.0.0.1, dualstack true, got %v %v %v", err, ip, dualstack)
 	}
 
-	_, _, _, ips, dualstack, err = GatherIPs(ctxbg, log.Logger, resolver, ipdomain("dualstack.example"), dialedIPs)
+	_, _, _, ips, dualstack, err = GatherIPs(ctxbg, log.Logger, resolver, "ip", ipdomain("dualstack.example"), dialedIPs)
 	if err != nil || !reflect.DeepEqual(ips, []net.IP{net.ParseIP("2001:db8::1"), net.ParseIP("10.0.0.1")}) || !dualstack {
 		t.Fatalf("expected err nil, address 2001:db8::1,10.0.0.1, dualstack true, got %v %v %v", err, ips, dualstack)
 	}

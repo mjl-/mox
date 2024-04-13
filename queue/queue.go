@@ -1075,7 +1075,7 @@ func deliver(log mlog.Log, resolver dns.Resolver, m Msg) {
 			}
 			ourHostname = transport.Socks.Hostname
 		}
-		recipientDomainResult, hostResults = deliverDirect(qlog, resolver, dialer, ourHostname, transportName, msgs, backoff)
+		recipientDomainResult, hostResults = deliverDirect(qlog, resolver, dialer, ourHostname, transportName, transport.Direct, msgs, backoff)
 	}
 }
 
