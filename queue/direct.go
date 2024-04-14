@@ -708,14 +708,18 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 		}
 
 		resps, err := sc.DeliverMultiple(ctx, mailFrom, rcpts, size, msg, has8bit, smtputf8, m0.RequireTLS != nil && *m0.RequireTLS)
-		if err != nil && len(resps) == len(msgResps) {
+		if err != nil && (len(resps) == 0 && n == len(msgResps) || len(resps) == len(msgResps)) {
 			// If error and it applies to all recipients, return a single error.
 			return deliverResult{err: inspectError(err)}
 		}
 		var ntodo []*msgResp
 		for i, mr := range todo[:n] {
 			if err != nil {
-				mr.resp = smtpclient.Response{Err: err}
+				if cerr, ok := err.(smtpclient.Error); ok {
+					mr.resp = smtpclient.Response(cerr)
+				} else {
+					mr.resp = smtpclient.Response{Err: err}
+				}
 				failed = append(failed, mr)
 			} else if i > 0 && (resps[i].Code == smtp.C452StorageFull || resps[i].Code == smtp.C552MailboxFull) {
 				ntodo = append(ntodo, mr)
