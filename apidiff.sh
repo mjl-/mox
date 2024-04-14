@@ -14,6 +14,9 @@ echo "Below are the incompatible changes between $prevversion and next, per pack
 echo
 ) >>apidiff/next.txt
 for p in $(cat apidiff/packages.txt); do
+	if ! test -d tmp/mox-$prevversion/$p; then
+		continue
+	fi
 	(cd tmp/mox-$prevversion && apidiff -w ../apidiff/$prevversion/$p.api ./$p)
 	apidiff -w tmp/apidiff/next/$p.api ./$p
 	(
