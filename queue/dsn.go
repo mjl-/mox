@@ -276,7 +276,7 @@ func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, 
 		return
 	}
 
-	msg := &store.Message{
+	msg := store.Message{
 		Received:  time.Now(),
 		Size:      msgWriter.Size,
 		MsgPrefix: []byte{},
@@ -294,7 +294,7 @@ func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, 
 	}
 
 	acc.WithWLock(func() {
-		if err := acc.DeliverMailbox(log, mailbox, msg, msgFile); err != nil {
+		if err := acc.DeliverMailbox(log, mailbox, &msg, msgFile); err != nil {
 			qlog("delivering dsn to mailbox", err)
 			return
 		}

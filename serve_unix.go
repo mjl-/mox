@@ -325,7 +325,7 @@ Only implemented on unix systems, not Windows.
 			}
 			defer store.CloseRemoveTempFile(log, f, "message for changelog delivery")
 
-			m := &store.Message{
+			m := store.Message{
 				Received: time.Now(),
 				Flags:    store.Flags{Flagged: true},
 			}
@@ -335,7 +335,7 @@ Only implemented on unix systems, not Windows.
 				return next
 			}
 			m.Size = int64(n)
-			if err := a.DeliverMailbox(log, mox.Conf.Static.Postmaster.Mailbox, m, f); err != nil {
+			if err := a.DeliverMailbox(log, mox.Conf.Static.Postmaster.Mailbox, &m, f); err != nil {
 				log.Errorx("changelog delivery", err)
 				return next
 			}

@@ -336,13 +336,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		err = msgFile.Sync()
 		ctl.xcheck(err, "syncing message to storage")
 
-		m := &store.Message{
+		m := store.Message{
 			Received: time.Now(),
 			Size:     mw.Size,
 		}
 
 		a.WithWLock(func() {
-			err := a.DeliverDestination(log, addr, m, msgFile)
+			err := a.DeliverDestination(log, addr, &m, msgFile)
 			ctl.xcheck(err, "delivering message")
 			log.Info("message delivered through ctl", slog.Any("to", to))
 		})
