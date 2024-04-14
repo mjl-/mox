@@ -709,13 +709,13 @@ const account = async (name: string) => {
 					style({display: 'block', marginBottom: '.5ex'}),
 					dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')),
 					dom.br(),
-					maxOutgoingMessagesPerDay=dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxOutgoingMessagesPerDay || 1000)),
+					maxOutgoingMessagesPerDay=dom.input(attr.type('number'), attr.required(''), attr.value(''+(config.MaxOutgoingMessagesPerDay || 1000))),
 				),
 				dom.label(
 					style({display: 'block', marginBottom: '.5ex'}),
 					dom.span('Maximum first-time recipients per day', attr.title('Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.')),
 					dom.br(),
-					maxFirstTimeRecipientsPerDay=dom.input(attr.type('number'), attr.required(''), attr.value(config.MaxFirstTimeRecipientsPerDay || 200)),
+					maxFirstTimeRecipientsPerDay=dom.input(attr.type('number'), attr.required(''), attr.value(''+(config.MaxFirstTimeRecipientsPerDay || 200))),
 				),
 				dom.label(
 					style({display: 'block', marginBottom: '.5ex'}),

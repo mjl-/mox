@@ -27,7 +27,6 @@ import (
 	"github.com/mjl-/sherpaprom"
 
 	"github.com/mjl-/mox/config"
-	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxvar"
@@ -412,13 +411,10 @@ func (Account) SetPassword(ctx context.Context, password string) {
 	xcheckf(ctx, err, "restoring session after password reset")
 }
 
-// Account returns information about the account: full name, the default domain,
-// and the destinations (keys are email addresses, or localparts to the default
-// domain). todo: replace with a function that returns the whole account, when
-// sherpadoc understands unnamed struct fields.
+// Account returns information about the account.
 // StorageUsed is the sum of the sizes of all messages, in bytes.
 // StorageLimit is the maximum storage that can be used, or 0 if there is no limit.
-func (Account) Account(ctx context.Context) (fullName string, defaultDomain dns.Domain, destinations map[string]config.Destination, storageUsed, storageLimit int64) {
+func (Account) Account(ctx context.Context) (account config.Account, storageUsed, storageLimit int64) {
 	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 
@@ -443,7 +439,7 @@ func (Account) Account(ctx context.Context) (fullName string, defaultDomain dns.
 		xcheckf(ctx, err, "get disk usage")
 	})
 
-	return accConf.FullName, accConf.DNSDomain, accConf.Destinations, storageUsed, storageLimit
+	return accConf, storageUsed, storageLimit
 }
 
 func (Account) AccountSaveFullName(ctx context.Context, fullName string) {

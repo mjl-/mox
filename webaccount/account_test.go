@@ -216,11 +216,11 @@ func TestAccount(t *testing.T) {
 
 	api.SetPassword(ctx, "test1234")
 
-	fullName, _, dests, _, _ := api.Account(ctx)
-	api.DestinationSave(ctx, "mjl☺@mox.example", dests["mjl☺@mox.example"], dests["mjl☺@mox.example"]) // todo: save modified value and compare it afterwards
+	account, _, _ := api.Account(ctx)
+	api.DestinationSave(ctx, "mjl☺@mox.example", account.Destinations["mjl☺@mox.example"], account.Destinations["mjl☺@mox.example"]) // todo: save modified value and compare it afterwards
 
-	api.AccountSaveFullName(ctx, fullName+" changed") // todo: check if value was changed
-	api.AccountSaveFullName(ctx, fullName)
+	api.AccountSaveFullName(ctx, account.FullName+" changed") // todo: check if value was changed
+	api.AccountSaveFullName(ctx, account.FullName)
 
 	go ImportManage()
 

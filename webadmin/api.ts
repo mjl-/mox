@@ -266,6 +266,73 @@ export interface AutodiscoverSRV {
 	IPs?: string[] | null
 }
 
+export interface Account {
+	Domain: string
+	Description: string
+	FullName: string
+	Destinations?: { [key: string]: Destination }
+	SubjectPass: SubjectPass
+	QuotaMessageSize: number
+	RejectsMailbox: string
+	KeepRejects: boolean
+	AutomaticJunkFlags: AutomaticJunkFlags
+	JunkFilter?: JunkFilter | null  // todo: sane defaults for junkfilter
+	MaxOutgoingMessagesPerDay: number
+	MaxFirstTimeRecipientsPerDay: number
+	NoFirstTimeSenderDelay: boolean
+	Routes?: Route[] | null
+	DNSDomain: Domain  // Parsed form of Domain.
+}
+
+export interface Destination {
+	Mailbox: string
+	Rulesets?: Ruleset[] | null
+	FullName: string
+}
+
+export interface Ruleset {
+	SMTPMailFromRegexp: string
+	VerifiedDomain: string
+	HeadersRegexp?: { [key: string]: string }
+	IsForward: boolean  // todo: once we implement ARC, we can use dkim domains that we cannot verify but that the arc-verified forwarding mail server was able to verify.
+	ListAllowDomain: string
+	AcceptRejectsToMailbox: string
+	Mailbox: string
+	VerifiedDNSDomain: Domain
+	ListAllowDNSDomain: Domain
+}
+
+export interface SubjectPass {
+	Period: number  // todo: have a reasonable default for this?
+}
+
+export interface AutomaticJunkFlags {
+	Enabled: boolean
+	JunkMailboxRegexp: string
+	NeutralMailboxRegexp: string
+	NotJunkMailboxRegexp: string
+}
+
+export interface JunkFilter {
+	Threshold: number
+	Onegrams: boolean
+	Twograms: boolean
+	Threegrams: boolean
+	MaxPower: number
+	TopWords: number
+	IgnoreWords: number
+	RareWords: number
+}
+
+export interface Route {
+	FromDomain?: string[] | null
+	ToDomain?: string[] | null
+	MinimumAttempts: number
+	Transport: string
+	FromDomainASCII?: string[] | null
+	ToDomainASCII?: string[] | null
+}
+
 // PolicyRecord is a cached policy or absence of a policy.
 export interface PolicyRecord {
 	Domain: string  // Domain name, with unicode characters.
@@ -816,7 +883,7 @@ export type Localpart = string
 // be an IPv4 address.
 export type IP = string
 
-export const structTypes: {[typename: string]: boolean} = {"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"DANECheckResult":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"Reverse":true,"Row":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
+export const structTypes: {[typename: string]: boolean} = {"Account":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"DANECheckResult":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"JunkFilter":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
 export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"Alignment":true,"CSRFToken":true,"DKIMResult":true,"DMARCPolicy":true,"DMARCResult":true,"Disposition":true,"IP":true,"Localpart":true,"Mode":true,"PolicyOverride":true,"PolicyType":true,"RUA":true,"ResultType":true,"SPFDomainScope":true,"SPFResult":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
@@ -851,6 +918,13 @@ export const types: TypenameMap = {
 	"AutoconfCheckResult": {"Name":"AutoconfCheckResult","Docs":"","Fields":[{"Name":"ClientSettingsDomainIPs","Docs":"","Typewords":["[]","string"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]},{"Name":"Warnings","Docs":"","Typewords":["[]","string"]},{"Name":"Instructions","Docs":"","Typewords":["[]","string"]}]},
 	"AutodiscoverCheckResult": {"Name":"AutodiscoverCheckResult","Docs":"","Fields":[{"Name":"Records","Docs":"","Typewords":["[]","AutodiscoverSRV"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]},{"Name":"Warnings","Docs":"","Typewords":["[]","string"]},{"Name":"Instructions","Docs":"","Typewords":["[]","string"]}]},
 	"AutodiscoverSRV": {"Name":"AutodiscoverSRV","Docs":"","Fields":[{"Name":"Target","Docs":"","Typewords":["string"]},{"Name":"Port","Docs":"","Typewords":["uint16"]},{"Name":"Priority","Docs":"","Typewords":["uint16"]},{"Name":"Weight","Docs":"","Typewords":["uint16"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]}]},
+	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]}]},
+	"Destination": {"Name":"Destination","Docs":"","Fields":[{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Rulesets","Docs":"","Typewords":["[]","Ruleset"]},{"Name":"FullName","Docs":"","Typewords":["string"]}]},
+	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
+	"SubjectPass": {"Name":"SubjectPass","Docs":"","Fields":[{"Name":"Period","Docs":"","Typewords":["int64"]}]},
+	"AutomaticJunkFlags": {"Name":"AutomaticJunkFlags","Docs":"","Fields":[{"Name":"Enabled","Docs":"","Typewords":["bool"]},{"Name":"JunkMailboxRegexp","Docs":"","Typewords":["string"]},{"Name":"NeutralMailboxRegexp","Docs":"","Typewords":["string"]},{"Name":"NotJunkMailboxRegexp","Docs":"","Typewords":["string"]}]},
+	"JunkFilter": {"Name":"JunkFilter","Docs":"","Fields":[{"Name":"Threshold","Docs":"","Typewords":["float64"]},{"Name":"Onegrams","Docs":"","Typewords":["bool"]},{"Name":"Twograms","Docs":"","Typewords":["bool"]},{"Name":"Threegrams","Docs":"","Typewords":["bool"]},{"Name":"MaxPower","Docs":"","Typewords":["float64"]},{"Name":"TopWords","Docs":"","Typewords":["int32"]},{"Name":"IgnoreWords","Docs":"","Typewords":["float64"]},{"Name":"RareWords","Docs":"","Typewords":["int32"]}]},
+	"Route": {"Name":"Route","Docs":"","Fields":[{"Name":"FromDomain","Docs":"","Typewords":["[]","string"]},{"Name":"ToDomain","Docs":"","Typewords":["[]","string"]},{"Name":"MinimumAttempts","Docs":"","Typewords":["int32"]},{"Name":"Transport","Docs":"","Typewords":["string"]},{"Name":"FromDomainASCII","Docs":"","Typewords":["[]","string"]},{"Name":"ToDomainASCII","Docs":"","Typewords":["[]","string"]}]},
 	"PolicyRecord": {"Name":"PolicyRecord","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Inserted","Docs":"","Typewords":["timestamp"]},{"Name":"ValidEnd","Docs":"","Typewords":["timestamp"]},{"Name":"LastUpdate","Docs":"","Typewords":["timestamp"]},{"Name":"LastUse","Docs":"","Typewords":["timestamp"]},{"Name":"Backoff","Docs":"","Typewords":["bool"]},{"Name":"RecordID","Docs":"","Typewords":["string"]},{"Name":"Version","Docs":"","Typewords":["string"]},{"Name":"Mode","Docs":"","Typewords":["Mode"]},{"Name":"MX","Docs":"","Typewords":["[]","STSMX"]},{"Name":"MaxAgeSeconds","Docs":"","Typewords":["int32"]},{"Name":"Extensions","Docs":"","Typewords":["[]","Pair"]},{"Name":"PolicyText","Docs":"","Typewords":["string"]}]},
 	"TLSReportRecord": {"Name":"TLSReportRecord","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"FromDomain","Docs":"","Typewords":["string"]},{"Name":"MailFrom","Docs":"","Typewords":["string"]},{"Name":"HostReport","Docs":"","Typewords":["bool"]},{"Name":"Report","Docs":"","Typewords":["Report"]}]},
 	"Report": {"Name":"Report","Docs":"","Fields":[{"Name":"OrganizationName","Docs":"","Typewords":["string"]},{"Name":"DateRange","Docs":"","Typewords":["TLSRPTDateRange"]},{"Name":"ContactInfo","Docs":"","Typewords":["string"]},{"Name":"ReportID","Docs":"","Typewords":["string"]},{"Name":"Policies","Docs":"","Typewords":["[]","Result"]}]},
@@ -945,6 +1019,13 @@ export const parser = {
 	AutoconfCheckResult: (v: any) => parse("AutoconfCheckResult", v) as AutoconfCheckResult,
 	AutodiscoverCheckResult: (v: any) => parse("AutodiscoverCheckResult", v) as AutodiscoverCheckResult,
 	AutodiscoverSRV: (v: any) => parse("AutodiscoverSRV", v) as AutodiscoverSRV,
+	Account: (v: any) => parse("Account", v) as Account,
+	Destination: (v: any) => parse("Destination", v) as Destination,
+	Ruleset: (v: any) => parse("Ruleset", v) as Ruleset,
+	SubjectPass: (v: any) => parse("SubjectPass", v) as SubjectPass,
+	AutomaticJunkFlags: (v: any) => parse("AutomaticJunkFlags", v) as AutomaticJunkFlags,
+	JunkFilter: (v: any) => parse("JunkFilter", v) as JunkFilter,
+	Route: (v: any) => parse("Route", v) as Route,
 	PolicyRecord: (v: any) => parse("PolicyRecord", v) as PolicyRecord,
 	TLSReportRecord: (v: any) => parse("TLSReportRecord", v) as TLSReportRecord,
 	Report: (v: any) => parse("Report", v) as Report,
@@ -1122,12 +1203,12 @@ export class Client {
 	}
 
 	// Account returns the parsed configuration of an account.
-	async Account(account: string): Promise<[{ [key: string]: any }, number]> {
+	async Account(account: string): Promise<[Account, number]> {
 		const fn: string = "Account"
 		const paramTypes: string[][] = [["string"]]
-		const returnTypes: string[][] = [["{}","any"],["int64"]]
+		const returnTypes: string[][] = [["Account"],["int64"]]
 		const params: any[] = [account]
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [{ [key: string]: any }, number]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [Account, number]
 	}
 
 	// ConfigFiles returns the paths and contents of the static and dynamic configuration files.

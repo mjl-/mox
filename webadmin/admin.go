@@ -1539,7 +1539,7 @@ func (Admin) Accounts(ctx context.Context) []string {
 }
 
 // Account returns the parsed configuration of an account.
-func (Admin) Account(ctx context.Context, account string) (accountConfig map[string]any, diskUsage int64) {
+func (Admin) Account(ctx context.Context, account string) (accountConfig config.Account, diskUsage int64) {
 	log := pkglog.WithContext(ctx)
 
 	acc, err := store.OpenAccount(log, account)
@@ -1565,14 +1565,7 @@ func (Admin) Account(ctx context.Context, account string) (accountConfig map[str
 		xcheckf(ctx, err, "get disk usage")
 	})
 
-	// todo: should change sherpa to understand config.Account directly, with its anonymous structs.
-	buf, err := json.Marshal(ac)
-	xcheckf(ctx, err, "marshal to json")
-	r := map[string]any{}
-	err = json.Unmarshal(buf, &r)
-	xcheckf(ctx, err, "unmarshal from json")
-
-	return r, diskUsage
+	return ac, diskUsage
 }
 
 // ConfigFiles returns the paths and contents of the static and dynamic configuration files.

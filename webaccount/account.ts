@@ -213,7 +213,7 @@ const formatQuotaSize = (v: number) => {
 }
 
 const index = async () => {
-	const [accountFullName, domain, destinations, storageUsed, storageLimit] = await client.Account()
+	const [acc, storageUsed, storageLimit] = await client.Account()
 
 	let fullNameForm: HTMLFormElement
 	let fullNameFieldset: HTMLFieldSetElement
@@ -350,7 +350,7 @@ const index = async () => {
 		dom.p('NOTE: Not all account settings can be configured through these pages yet. See the configuration file for more options.'),
 		dom.div(
 			'Default domain: ',
-			domain.ASCII ? domainString(domain) : '(none)',
+			acc.DNSDomain.ASCII ? domainString(acc.DNSDomain) : '(none)',
 		),
 		dom.br(),
 
@@ -360,7 +360,7 @@ const index = async () => {
 					style({display: 'inline-block'}),
 					'Full name',
 					dom.br(),
-					fullName=dom.input(attr.value(accountFullName), attr.title('Name to use in From header when composing messages. Can be overridden per configured address.')),
+					fullName=dom.input(attr.value(acc.FullName), attr.title('Name to use in From header when composing messages. Can be overridden per configured address.')),
 
 				),
 				' ',
@@ -377,8 +377,8 @@ const index = async () => {
 
 		dom.h2('Addresses'),
 		dom.ul(
-			Object.entries(destinations || {}).length === 0 ? dom.li('(None, login disabled)') : [],
-			Object.entries(destinations || {}).sort().map(t =>
+			Object.entries(acc.Destinations || {}).length === 0 ? dom.li('(None, login disabled)') : [],
+			Object.entries(acc.Destinations || {}).sort().map(t =>
 				dom.li(
 					dom.a(t[0], attr.href('#destinations/'+t[0])),
 					t[0].startsWith('@') ? ' (catchall)' : [],
@@ -606,8 +606,8 @@ const index = async () => {
 }
 
 const destination = async (name: string) => {
-	const [_, domain, destinations] = await client.Account()
-	let dest = destinations[name]
+	const [acc] = await client.Account()
+	let dest = (acc.Destinations || {})[name]
 	if (!dest) {
 		throw new Error('destination not found')
 	}
@@ -725,7 +725,7 @@ const destination = async (name: string) => {
 	let fullName: HTMLInputElement
 	let saveButton: HTMLButtonElement
 
-	const addresses = [name, ...Object.keys(destinations || {}).filter(a => !a.startsWith('@') && a !== name)]
+	const addresses = [name, ...Object.keys(acc.Destinations || {}).filter(a => !a.startsWith('@') && a !== name)]
 
 	dom._kids(page,
 		crumbs(
@@ -811,9 +811,9 @@ const destination = async (name: string) => {
 		dom.br(),
 		dom.p("Apple's mail applications don't do account autoconfiguration, and when adding an account it can choose defaults that don't work with modern email servers. Adding an account through a \"mobileconfig\" profile file can be more convenient: It contains the IMAP/SMTP settings such as host name, port, TLS, authentication mechanism and user name. This profile does not contain a login password. Opening the profile adds it under Profiles in System Preferences (macOS) or Settings (iOS), where you can install it. These profiles are not signed, so users will have to ignore the warnings about them being unsigned. ",
 			dom.br(),
-			dom.a(attr.href('https://autoconfig.'+domainName(domain)+'/profile.mobileconfig?addresses='+encodeURIComponent(addresses.join(','))+'&name='+encodeURIComponent(dest.FullName)), attr.download(''), 'Download .mobileconfig email account profile'),
+			dom.a(attr.href('https://autoconfig.'+domainName(acc.DNSDomain)+'/profile.mobileconfig?addresses='+encodeURIComponent(addresses.join(','))+'&name='+encodeURIComponent(dest.FullName)), attr.download(''), 'Download .mobileconfig email account profile'),
 			dom.br(),
-			dom.a(attr.href('https://autoconfig.'+domainName(domain)+'/profile.mobileconfig.qrcode.png?addresses='+encodeURIComponent(addresses.join(','))+'&name='+encodeURIComponent(dest.FullName)), attr.download(''), 'Open QR-code with link to .mobileconfig profile'),
+			dom.a(attr.href('https://autoconfig.'+domainName(acc.DNSDomain)+'/profile.mobileconfig.qrcode.png?addresses='+encodeURIComponent(addresses.join(','))+'&name='+encodeURIComponent(dest.FullName)), attr.download(''), 'Open QR-code with link to .mobileconfig profile'),
 		),
 	)
 }

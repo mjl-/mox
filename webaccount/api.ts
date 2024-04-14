@@ -2,13 +2,22 @@
 
 namespace api {
 
-// Domain is a domain name, with one or more labels, with at least an ASCII
-// representation, and for IDNA non-ASCII domains a unicode representation.
-// The ASCII string must be used for DNS lookups. The strings do not have a
-// trailing dot. When using with StrictResolver, add the trailing dot.
-export interface Domain {
-	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.
-	Unicode: string  // Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.
+export interface Account {
+	Domain: string
+	Description: string
+	FullName: string
+	Destinations?: { [key: string]: Destination }
+	SubjectPass: SubjectPass
+	QuotaMessageSize: number
+	RejectsMailbox: string
+	KeepRejects: boolean
+	AutomaticJunkFlags: AutomaticJunkFlags
+	JunkFilter?: JunkFilter | null  // todo: sane defaults for junkfilter
+	MaxOutgoingMessagesPerDay: number
+	MaxFirstTimeRecipientsPerDay: number
+	NoFirstTimeSenderDelay: boolean
+	Routes?: Route[] | null
+	DNSDomain: Domain  // Parsed form of Domain.
 }
 
 export interface Destination {
@@ -29,6 +38,46 @@ export interface Ruleset {
 	ListAllowDNSDomain: Domain
 }
 
+// Domain is a domain name, with one or more labels, with at least an ASCII
+// representation, and for IDNA non-ASCII domains a unicode representation.
+// The ASCII string must be used for DNS lookups. The strings do not have a
+// trailing dot. When using with StrictResolver, add the trailing dot.
+export interface Domain {
+	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.
+	Unicode: string  // Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.
+}
+
+export interface SubjectPass {
+	Period: number  // todo: have a reasonable default for this?
+}
+
+export interface AutomaticJunkFlags {
+	Enabled: boolean
+	JunkMailboxRegexp: string
+	NeutralMailboxRegexp: string
+	NotJunkMailboxRegexp: string
+}
+
+export interface JunkFilter {
+	Threshold: number
+	Onegrams: boolean
+	Twograms: boolean
+	Threegrams: boolean
+	MaxPower: number
+	TopWords: number
+	IgnoreWords: number
+	RareWords: number
+}
+
+export interface Route {
+	FromDomain?: string[] | null
+	ToDomain?: string[] | null
+	MinimumAttempts: number
+	Transport: string
+	FromDomainASCII?: string[] | null
+	ToDomainASCII?: string[] | null
+}
+
 // ImportProgress is returned after uploading a file to import.
 export interface ImportProgress {
 	Token: string  // For fetching progress, or cancelling an import.
@@ -36,21 +85,31 @@ export interface ImportProgress {
 
 export type CSRFToken = string
 
-export const structTypes: {[typename: string]: boolean} = {"Destination":true,"Domain":true,"ImportProgress":true,"Ruleset":true}
+export const structTypes: {[typename: string]: boolean} = {"Account":true,"AutomaticJunkFlags":true,"Destination":true,"Domain":true,"ImportProgress":true,"JunkFilter":true,"Route":true,"Ruleset":true,"SubjectPass":true}
 export const stringsTypes: {[typename: string]: boolean} = {"CSRFToken":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
-	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
+	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"Destination": {"Name":"Destination","Docs":"","Fields":[{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Rulesets","Docs":"","Typewords":["[]","Ruleset"]},{"Name":"FullName","Docs":"","Typewords":["string"]}]},
 	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
+	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
+	"SubjectPass": {"Name":"SubjectPass","Docs":"","Fields":[{"Name":"Period","Docs":"","Typewords":["int64"]}]},
+	"AutomaticJunkFlags": {"Name":"AutomaticJunkFlags","Docs":"","Fields":[{"Name":"Enabled","Docs":"","Typewords":["bool"]},{"Name":"JunkMailboxRegexp","Docs":"","Typewords":["string"]},{"Name":"NeutralMailboxRegexp","Docs":"","Typewords":["string"]},{"Name":"NotJunkMailboxRegexp","Docs":"","Typewords":["string"]}]},
+	"JunkFilter": {"Name":"JunkFilter","Docs":"","Fields":[{"Name":"Threshold","Docs":"","Typewords":["float64"]},{"Name":"Onegrams","Docs":"","Typewords":["bool"]},{"Name":"Twograms","Docs":"","Typewords":["bool"]},{"Name":"Threegrams","Docs":"","Typewords":["bool"]},{"Name":"MaxPower","Docs":"","Typewords":["float64"]},{"Name":"TopWords","Docs":"","Typewords":["int32"]},{"Name":"IgnoreWords","Docs":"","Typewords":["float64"]},{"Name":"RareWords","Docs":"","Typewords":["int32"]}]},
+	"Route": {"Name":"Route","Docs":"","Fields":[{"Name":"FromDomain","Docs":"","Typewords":["[]","string"]},{"Name":"ToDomain","Docs":"","Typewords":["[]","string"]},{"Name":"MinimumAttempts","Docs":"","Typewords":["int32"]},{"Name":"Transport","Docs":"","Typewords":["string"]},{"Name":"FromDomainASCII","Docs":"","Typewords":["[]","string"]},{"Name":"ToDomainASCII","Docs":"","Typewords":["[]","string"]}]},
 	"ImportProgress": {"Name":"ImportProgress","Docs":"","Fields":[{"Name":"Token","Docs":"","Typewords":["string"]}]},
 	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 }
 
 export const parser = {
-	Domain: (v: any) => parse("Domain", v) as Domain,
+	Account: (v: any) => parse("Account", v) as Account,
 	Destination: (v: any) => parse("Destination", v) as Destination,
 	Ruleset: (v: any) => parse("Ruleset", v) as Ruleset,
+	Domain: (v: any) => parse("Domain", v) as Domain,
+	SubjectPass: (v: any) => parse("SubjectPass", v) as SubjectPass,
+	AutomaticJunkFlags: (v: any) => parse("AutomaticJunkFlags", v) as AutomaticJunkFlags,
+	JunkFilter: (v: any) => parse("JunkFilter", v) as JunkFilter,
+	Route: (v: any) => parse("Route", v) as Route,
 	ImportProgress: (v: any) => parse("ImportProgress", v) as ImportProgress,
 	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 }
@@ -125,18 +184,15 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
-	// Account returns information about the account: full name, the default domain,
-	// and the destinations (keys are email addresses, or localparts to the default
-	// domain). todo: replace with a function that returns the whole account, when
-	// sherpadoc understands unnamed struct fields.
+	// Account returns information about the account.
 	// StorageUsed is the sum of the sizes of all messages, in bytes.
 	// StorageLimit is the maximum storage that can be used, or 0 if there is no limit.
-	async Account(): Promise<[string, Domain, { [key: string]: Destination }, number, number]> {
+	async Account(): Promise<[Account, number, number]> {
 		const fn: string = "Account"
 		const paramTypes: string[][] = []
-		const returnTypes: string[][] = [["string"],["Domain"],["{}","Destination"],["int64"],["int64"]]
+		const returnTypes: string[][] = [["Account"],["int64"],["int64"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, Domain, { [key: string]: Destination }, number, number]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [Account, number, number]
 	}
 
 	async AccountSaveFullName(fullName: string): Promise<void> {

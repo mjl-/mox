@@ -68,26 +68,13 @@
 		},
 		{
 			"Name": "Account",
-			"Docs": "Account returns information about the account: full name, the default domain,\nand the destinations (keys are email addresses, or localparts to the default\ndomain). todo: replace with a function that returns the whole account, when\nsherpadoc understands unnamed struct fields.\nStorageUsed is the sum of the sizes of all messages, in bytes.\nStorageLimit is the maximum storage that can be used, or 0 if there is no limit.",
+			"Docs": "Account returns information about the account.\nStorageUsed is the sum of the sizes of all messages, in bytes.\nStorageLimit is the maximum storage that can be used, or 0 if there is no limit.",
 			"Params": [],
 			"Returns": [
 				{
-					"Name": "fullName",
+					"Name": "account",
 					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "defaultDomain",
-					"Typewords": [
-						"Domain"
-					]
-				},
-				{
-					"Name": "destinations",
-					"Typewords": [
-						"{}",
-						"Destination"
+						"Account"
 					]
 				},
 				{
@@ -172,21 +159,115 @@
 	"Sections": [],
 	"Structs": [
 		{
-			"Name": "Domain",
-			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups. The strings do not have a\ntrailing dot. When using with StrictResolver, add the trailing dot.",
+			"Name": "Account",
+			"Docs": "",
 			"Fields": [
 				{
-					"Name": "ASCII",
-					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.",
+					"Name": "Domain",
+					"Docs": "",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
-					"Name": "Unicode",
-					"Docs": "Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.",
+					"Name": "Description",
+					"Docs": "",
 					"Typewords": [
 						"string"
+					]
+				},
+				{
+					"Name": "FullName",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Destinations",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"Destination"
+					]
+				},
+				{
+					"Name": "SubjectPass",
+					"Docs": "",
+					"Typewords": [
+						"SubjectPass"
+					]
+				},
+				{
+					"Name": "QuotaMessageSize",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "RejectsMailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "KeepRejects",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "AutomaticJunkFlags",
+					"Docs": "",
+					"Typewords": [
+						"AutomaticJunkFlags"
+					]
+				},
+				{
+					"Name": "JunkFilter",
+					"Docs": "todo: sane defaults for junkfilter",
+					"Typewords": [
+						"nullable",
+						"JunkFilter"
+					]
+				},
+				{
+					"Name": "MaxOutgoingMessagesPerDay",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "MaxFirstTimeRecipientsPerDay",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "NoFirstTimeSenderDelay",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Routes",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Route"
+					]
+				},
+				{
+					"Name": "DNSDomain",
+					"Docs": "Parsed form of Domain.",
+					"Typewords": [
+						"Domain"
 					]
 				}
 			]
@@ -285,6 +366,187 @@
 					"Docs": "",
 					"Typewords": [
 						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Domain",
+			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups. The strings do not have a\ntrailing dot. When using with StrictResolver, add the trailing dot.",
+			"Fields": [
+				{
+					"Name": "ASCII",
+					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Unicode",
+					"Docs": "Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "SubjectPass",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Period",
+					"Docs": "todo: have a reasonable default for this?",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
+			"Name": "AutomaticJunkFlags",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Enabled",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "JunkMailboxRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "NeutralMailboxRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "NotJunkMailboxRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "JunkFilter",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Threshold",
+					"Docs": "",
+					"Typewords": [
+						"float64"
+					]
+				},
+				{
+					"Name": "Onegrams",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Twograms",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Threegrams",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MaxPower",
+					"Docs": "",
+					"Typewords": [
+						"float64"
+					]
+				},
+				{
+					"Name": "TopWords",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "IgnoreWords",
+					"Docs": "",
+					"Typewords": [
+						"float64"
+					]
+				},
+				{
+					"Name": "RareWords",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Route",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "FromDomain",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "ToDomain",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "MinimumAttempts",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "Transport",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "FromDomainASCII",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "ToDomainASCII",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
 					]
 				}
 			]
