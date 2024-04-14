@@ -18,6 +18,9 @@ build1:
 	# build again, api json files above are embedded and new frontend code generated
 	CGO_ENABLED=0 go build
 
+install: build0 frontend
+	CGO_ENABLED=0 go install
+
 test:
 	CGO_ENABLED=0 go test -shuffle=on -coverprofile cover.out ./...
 	go tool cover -html=cover.out -o cover.html
