@@ -108,7 +108,7 @@ var (
 	SeMsg6Other0                    = "6.0"
 	SeMsg6MediaUnsupported1         = "6.1"
 	SeMsg6ConversionProhibited2     = "6.2"
-	SeMsg6ConversoinUnsupported3    = "6.3"
+	SeMsg6ConversionUnsupported3    = "6.3"
 	SeMsg6ConversionWithLoss4       = "6.4"
 	SeMsg6ConversionFailed5         = "6.5"
 	SeMsg6NonASCIIAddrNotPermitted7 = "6.7" // ../rfc/6531:735
