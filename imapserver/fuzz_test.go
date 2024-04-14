@@ -137,9 +137,9 @@ func FuzzServer(f *testing.F) {
 		// Each command brings the connection state one step further. We try the fuzzing
 		// input for each state.
 		run([]string{})
-		run([]string{"login mjl@mox.example testtest"})
-		run([]string{"login mjl@mox.example testtest", "select inbox"})
+		run([]string{`login mjl@mox.example "` + password0 + `"`})
+		run([]string{`login mjl@mox.example "` + password0 + `"`, "select inbox"})
 		xappend := fmt.Sprintf("append inbox () {%d+}\r\n%s", len(exampleMsg), exampleMsg)
-		run([]string{"login mjl@mox.example testtest", "select inbox", xappend})
+		run([]string{`login mjl@mox.example "` + password0 + `"`, "select inbox", xappend})
 	})
 }
