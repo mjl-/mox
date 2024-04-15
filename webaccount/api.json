@@ -88,12 +88,19 @@
 					"Typewords": [
 						"int64"
 					]
+				},
+				{
+					"Name": "suppressions",
+					"Typewords": [
+						"[]",
+						"Suppression"
+					]
 				}
 			]
 		},
 		{
 			"Name": "AccountSaveFullName",
-			"Docs": "",
+			"Docs": "AccountSaveFullName saves the full name (used as display name in email messages)\nfor the account.",
 			"Params": [
 				{
 					"Name": "fullName",
@@ -154,6 +161,231 @@
 					]
 				}
 			]
+		},
+		{
+			"Name": "SuppressionList",
+			"Docs": "SuppressionList lists the addresses on the suppression list of this account.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "suppressions",
+					"Typewords": [
+						"[]",
+						"Suppression"
+					]
+				}
+			]
+		},
+		{
+			"Name": "SuppressionAdd",
+			"Docs": "SuppressionAdd adds an email address to the suppression list.",
+			"Params": [
+				{
+					"Name": "address",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "manual",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "reason",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "suppression",
+					"Typewords": [
+						"Suppression"
+					]
+				}
+			]
+		},
+		{
+			"Name": "SuppressionRemove",
+			"Docs": "SuppressionRemove removes the email address from the suppression list.",
+			"Params": [
+				{
+					"Name": "address",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "OutgoingWebhookSave",
+			"Docs": "OutgoingWebhookSave saves a new webhook url for outgoing deliveries. If url\nis empty, the webhook is disabled. If authorization is non-empty it is used for\nthe Authorization header in HTTP requests. Events specifies the outgoing events\nto be delivered, or all if empty/nil.",
+			"Params": [
+				{
+					"Name": "url",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "authorization",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "events",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "OutgoingWebhookTest",
+			"Docs": "OutgoingWebhookTest makes a test webhook call to urlStr, with optional\nauthorization. If the HTTP request is made this call will succeed also for\nnon-2xx HTTP status codes.",
+			"Params": [
+				{
+					"Name": "urlStr",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "authorization",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "data",
+					"Typewords": [
+						"Outgoing"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "code",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "response",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "errmsg",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "IncomingWebhookSave",
+			"Docs": "IncomingWebhookSave saves a new webhook url for incoming deliveries. If url is\nempty, the webhook is disabled. If authorization is not empty, it is used in\nthe Authorization header in requests.",
+			"Params": [
+				{
+					"Name": "url",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "authorization",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "IncomingWebhookTest",
+			"Docs": "IncomingWebhookTest makes a test webhook HTTP delivery request to urlStr,\nwith optional authorization header. If the HTTP call is made, this function\nreturns non-error regardless of HTTP status code.",
+			"Params": [
+				{
+					"Name": "urlStr",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "authorization",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "data",
+					"Typewords": [
+						"Incoming"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "code",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "response",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "errmsg",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "FromIDLoginAddressesSave",
+			"Docs": "FromIDLoginAddressesSave saves new login addresses to enable unique SMTP\nMAIL FROM addresses (\"fromid\") for deliveries from the queue.",
+			"Params": [
+				{
+					"Name": "loginAddresses",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "KeepRetiredPeriodsSave",
+			"Docs": "KeepRetiredPeriodsSave save periods to save retired messages and webhooks.",
+			"Params": [
+				{
+					"Name": "keepRetiredMessagePeriod",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "keepRetiredWebhookPeriod",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": []
 		}
 	],
 	"Sections": [],
@@ -162,6 +394,44 @@
 			"Name": "Account",
 			"Docs": "",
 			"Fields": [
+				{
+					"Name": "OutgoingWebhook",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"OutgoingWebhook"
+					]
+				},
+				{
+					"Name": "IncomingWebhook",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"IncomingWebhook"
+					]
+				},
+				{
+					"Name": "FromIDLoginAddresses",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "KeepRetiredMessagePeriod",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "KeepRetiredWebhookPeriod",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
 				{
 					"Name": "Domain",
 					"Docs": "",
@@ -268,6 +538,54 @@
 					"Docs": "Parsed form of Domain.",
 					"Typewords": [
 						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "OutgoingWebhook",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "URL",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Authorization",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Events",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "IncomingWebhook",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "URL",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Authorization",
+					"Docs": "",
+					"Typewords": [
+						"string"
 					]
 				}
 			]
@@ -552,6 +870,61 @@
 			]
 		},
 		{
+			"Name": "Suppression",
+			"Docs": "Suppression is an address to which messages will not be delivered. Attempts to\ndeliver or queue will result in an immediate permanent failure to deliver.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Created",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "Suppression applies to this account only.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "BaseAddress",
+					"Docs": "Unicode. Address with fictional simplified localpart: lowercase, dots removed (gmail), first token before any \"-\" or \"+\" (typical catchall separator).",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "OriginalAddress",
+					"Docs": "Unicode. Address that caused this suppression.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Manual",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Reason",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
 			"Name": "ImportProgress",
 			"Docs": "ImportProgress is returned after uploading a file to import.",
 			"Fields": [
@@ -563,6 +936,362 @@
 					]
 				}
 			]
+		},
+		{
+			"Name": "Outgoing",
+			"Docs": "Outgoing is the payload sent to webhook URLs for events about outgoing deliveries.",
+			"Fields": [
+				{
+					"Name": "Version",
+					"Docs": "Format of hook, currently 0.",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "Event",
+					"Docs": "Type of outgoing delivery event.",
+					"Typewords": [
+						"OutgoingEvent"
+					]
+				},
+				{
+					"Name": "DSN",
+					"Docs": "If this event was triggered by a delivery status notification message (DSN).",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Suppressing",
+					"Docs": "If true, this failure caused the address to be added to the suppression list.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "QueueMsgID",
+					"Docs": "ID of message in queue.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "FromID",
+					"Docs": "As used in MAIL FROM, can be empty, for incoming messages.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MessageID",
+					"Docs": "From Message-Id header, as set by submitter or us, with enclosing \u003c\u003e.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "Of original message.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "WebhookQueued",
+					"Docs": "When webhook was first queued for delivery.",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "SMTPCode",
+					"Docs": "Optional, for errors only, e.g. 451, 550. See package smtp for definitions.",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "SMTPEnhancedCode",
+					"Docs": "Optional, for errors only, e.g. 5.1.1.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Error",
+					"Docs": "Error message while delivering, or from DSN from remote, if any.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Extra",
+					"Docs": "Extra fields set for message during submit, through webapi call or through X-Mox-Extra-* headers during SMTP submission.",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Incoming",
+			"Docs": "Incoming is the data sent to a webhook for incoming deliveries over SMTP.",
+			"Fields": [
+				{
+					"Name": "Version",
+					"Docs": "Format of hook, currently 0.",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "From",
+					"Docs": "Message \"From\" header, typically has one address.",
+					"Typewords": [
+						"[]",
+						"NameAddress"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"NameAddress"
+					]
+				},
+				{
+					"Name": "CC",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"NameAddress"
+					]
+				},
+				{
+					"Name": "BCC",
+					"Docs": "Often empty, even if you were a BCC recipient.",
+					"Typewords": [
+						"[]",
+						"NameAddress"
+					]
+				},
+				{
+					"Name": "ReplyTo",
+					"Docs": "Optional Reply-To header, typically absent or with one address.",
+					"Typewords": [
+						"[]",
+						"NameAddress"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MessageID",
+					"Docs": "Of Message-Id header, typically of the form \"\u003crandom@hostname\u003e\", includes \u003c\u003e.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "InReplyTo",
+					"Docs": "Optional, the message-id this message is a reply to. Includes \u003c\u003e.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "References",
+					"Docs": "Optional, zero or more message-ids this message is a reply/forward/related to. The last entry is the most recent/immediate message this is a reply to. Earlier entries are the parents in a thread. Values include \u003c\u003e.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Date",
+					"Docs": "Time in \"Date\" message header, can be different from time received.",
+					"Typewords": [
+						"nullable",
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Text",
+					"Docs": "Contents of text/plain and/or text/html part (if any), with \"\\n\" line-endings, converted from \"\\r\\n\". Values are truncated to 1MB (1024*1024 bytes). Use webapi MessagePartGet to retrieve the full part data.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "HTML",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Structure",
+					"Docs": "Parsed form of MIME message.",
+					"Typewords": [
+						"Structure"
+					]
+				},
+				{
+					"Name": "Meta",
+					"Docs": "Details about message in storage, and SMTP transaction details.",
+					"Typewords": [
+						"IncomingMeta"
+					]
+				}
+			]
+		},
+		{
+			"Name": "NameAddress",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Name",
+					"Docs": "Optional, human-readable \"display name\" of the addressee.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Address",
+					"Docs": "Required, email address.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Structure",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "ContentType",
+					"Docs": "Lower case, e.g. text/plain.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ContentTypeParams",
+					"Docs": "Lower case keys, original case values, e.g. {\"charset\": \"UTF-8\"}.",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				},
+				{
+					"Name": "ContentID",
+					"Docs": "Can be empty. Otherwise, should be a value wrapped in \u003c\u003e's. For use in HTML, referenced as URI `cid:...`.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "DecodedSize",
+					"Docs": "Size of content after decoding content-transfer-encoding. For text and HTML parts, this can be larger than the data returned since this size includes \\r\\n line endings.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Parts",
+					"Docs": "Subparts of a multipart message, possibly recursive.",
+					"Typewords": [
+						"[]",
+						"Structure"
+					]
+				}
+			]
+		},
+		{
+			"Name": "IncomingMeta",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "MsgID",
+					"Docs": "ID of message in storage, and to use in webapi calls like MessageGet.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MailFrom",
+					"Docs": "Address used during SMTP \"MAIL FROM\" command.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MailFromValidated",
+					"Docs": "Whether SMTP MAIL FROM address was SPF-validated.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "MsgFromValidated",
+					"Docs": "Whether address in message \"From\"-header was DMARC(-like) validated.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "RcptTo",
+					"Docs": "SMTP RCPT TO address used in SMTP.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "DKIMVerifiedDomains",
+					"Docs": "Verified domains from DKIM-signature in message. Can be different domain than used in addresses.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "RemoteIP",
+					"Docs": "Where the message was delivered from.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Received",
+					"Docs": "When message was received, may be different from the Date header.",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "MailboxName",
+					"Docs": "Mailbox where message was delivered to, based on configured rules. Defaults to \"Inbox\".",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Automated",
+					"Docs": "Whether this message was automated and should not receive automated replies. E.g. out of office or mailing list messages.",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
 		}
 	],
 	"Ints": [],
@@ -571,6 +1300,52 @@
 			"Name": "CSRFToken",
 			"Docs": "",
 			"Values": null
+		},
+		{
+			"Name": "OutgoingEvent",
+			"Docs": "OutgoingEvent is an activity for an outgoing delivery. Either generated by the\nqueue, or through an incoming DSN (delivery status notification) message.",
+			"Values": [
+				{
+					"Name": "EventDelivered",
+					"Value": "delivered",
+					"Docs": "Message was accepted by a next-hop server. This does not necessarily mean the\nmessage has been delivered in the mailbox of the user."
+				},
+				{
+					"Name": "EventSuppressed",
+					"Value": "suppressed",
+					"Docs": "Outbound delivery was suppressed because the recipient address is on the\nsuppression list of the account, or a simplified/base variant of the address is."
+				},
+				{
+					"Name": "EventDelayed",
+					"Value": "delayed",
+					"Docs": "A delivery attempt failed but delivery will be retried again later."
+				},
+				{
+					"Name": "EventFailed",
+					"Value": "failed",
+					"Docs": "Delivery of the message failed and will not be tried again. Also see the\n\"Suppressing\" field of [Outgoing]."
+				},
+				{
+					"Name": "EventRelayed",
+					"Value": "relayed",
+					"Docs": "Message was relayed into a system that does not generate DSNs. Should only\nhappen when explicitly requested."
+				},
+				{
+					"Name": "EventExpanded",
+					"Value": "expanded",
+					"Docs": "Message was accepted and is being delivered to multiple recipients (e.g. the\naddress was an alias/list), which may generate more DSNs."
+				},
+				{
+					"Name": "EventCanceled",
+					"Value": "canceled",
+					"Docs": "Message was removed from the queue, e.g. canceled by admin/user."
+				},
+				{
+					"Name": "EventUnrecognized",
+					"Value": "unrecognized",
+					"Docs": "An incoming message was received that was either a DSN with an unknown event\ntype (\"action\"), or an incoming non-DSN-message was received for the unique\nper-outgoing-message address used for sending."
+				}
+			]
 		}
 	],
 	"SherpaVersion": 0,

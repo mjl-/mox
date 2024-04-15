@@ -120,7 +120,7 @@ func ExampleComposer() {
 	xc.Header("MIME-Version", "1.0")
 
 	// Write content-* headers for the text body.
-	body, ct, cte := xc.TextPart("this is the body")
+	body, ct, cte := xc.TextPart("plain", "this is the body")
 	xc.Header("Content-Type", ct)
 	xc.Header("Content-Transfer-Encoding", cte)
 

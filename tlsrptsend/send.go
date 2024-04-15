@@ -589,7 +589,7 @@ Period: %s - %s UTC
 			continue
 		}
 
-		qm := queue.MakeMsg(from.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil, time.Now())
+		qm := queue.MakeMsg(from.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil, time.Now(), subject)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsTLSReport.
 		// ../rfc/8460:1077
@@ -662,7 +662,7 @@ func composeMessage(ctx context.Context, log mlog.Log, mf *os.File, policyDomain
 	xc.Line()
 
 	// Textual part, just mentioning this is a TLS report.
-	textBody, ct, cte := xc.TextPart(text)
+	textBody, ct, cte := xc.TextPart("plain", text)
 	textHdr := textproto.MIMEHeader{}
 	textHdr.Set("Content-Type", ct)
 	textHdr.Set("Content-Transfer-Encoding", cte)

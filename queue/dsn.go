@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
+	"github.com/mjl-/mox/webhook"
 )
 
 var (
@@ -35,8 +37,32 @@ var (
 	)
 )
 
-// todo: rename function, perhaps put some of the params in a delivery struct so we don't pass all the params all the time?
-func fail(ctx context.Context, qlog mlog.Log, msgs []*Msg, dialedIPs map[string][]net.IP, backoff time.Duration, remoteMTA dsn.NameIP, err error) {
+// failMsgsDB calls failMsgsTx with a new transaction, logging transaction errors.
+func failMsgsDB(qlog mlog.Log, msgs []*Msg, dialedIPs map[string][]net.IP, backoff time.Duration, remoteMTA dsn.NameIP, err error) {
+	xerr := DB.Write(context.Background(), func(tx *bstore.Tx) error {
+		failMsgsTx(qlog, tx, msgs, dialedIPs, backoff, remoteMTA, err)
+		return nil
+	})
+	if xerr != nil {
+		for _, m := range msgs {
+			qlog.Errorx("error marking delivery as failed", xerr,
+				slog.String("delivererr", err.Error()),
+				slog.Int64("msgid", m.ID),
+				slog.Any("recipient", m.Recipient()),
+				slog.Duration("backoff", backoff),
+				slog.Time("nextattempt", m.NextAttempt))
+		}
+	}
+	kick()
+}
+
+// todo: perhaps put some of the params in a delivery struct so we don't pass all the params all the time?
+
+// failMsgsTx processes a failure to deliver msgs. If the error is permanent, a DSN
+// is delivered to the sender account.
+// Caller must call kick() after commiting the transaction for any (re)scheduling
+// of messages and webhooks.
+func failMsgsTx(qlog mlog.Log, tx *bstore.Tx, msgs []*Msg, dialedIPs map[string][]net.IP, backoff time.Duration, remoteMTA dsn.NameIP, err error) {
 	// todo future: when we implement relaying, we should be able to send DSNs to non-local users. and possibly specify a null mailfrom. ../rfc/5321:1503
 	// todo future: when we implement relaying, and a dsn cannot be delivered, and requiretls was active, we cannot drop the message. instead deliver to local postmaster? though ../rfc/8689:383 may intend to say the dsn should be delivered without requiretls?
 	// todo future: when we implement smtp dsn extension, parameter RET=FULL must be disregarded for messages with REQUIRETLS. ../rfc/8689:379
@@ -49,6 +75,7 @@ func fail(ctx context.Context, qlog mlog.Log, msgs []*Msg, dialedIPs map[string]
 	var errmsg = err.Error()
 	var code int
 	var secodeOpt string
+	var event webhook.OutgoingEvent
 	if errors.As(err, &cerr) {
 		if cerr.Line != "" {
 			smtpLines = append([]string{cerr.Line}, cerr.MoreLines...)
@@ -69,22 +96,56 @@ func fail(ctx context.Context, qlog mlog.Log, msgs []*Msg, dialedIPs map[string]
 	}
 
 	if permanent || m0.MaxAttempts == 0 && m0.Attempts >= 8 || m0.MaxAttempts > 0 && m0.Attempts >= m0.MaxAttempts {
-		for _, m := range msgs {
-			qmlog := qlog.With(slog.Int64("msgid", m.ID), slog.Any("recipient", m.Recipient()))
-			qmlog.Errorx("permanent failure delivering from queue", err)
-			deliverDSNFailure(ctx, qmlog, *m, remoteMTA, secodeOpt, errmsg, smtpLines)
+		event = webhook.EventFailed
+		if errors.Is(err, errSuppressed) {
+			event = webhook.EventSuppressed
 		}
-		if err := queueDelete(context.Background(), ids...); err != nil {
-			qlog.Errorx("deleting messages from queue after permanent failure", err)
-		}
-		return
-	}
 
-	// All messages should have the same DialedIPs, so we can update them all at once.
-	qup := bstore.QueryDB[Msg](context.Background(), DB)
-	qup.FilterIDs(ids)
-	if _, xerr := qup.UpdateNonzero(Msg{LastError: errmsg, DialedIPs: dialedIPs}); err != nil {
-		qlog.Errorx("storing delivery error", xerr, slog.String("deliveryerror", errmsg))
+		rmsgs := make([]Msg, len(msgs))
+		var scl []suppressionCheck
+		for i, m := range msgs {
+			rm := *m
+			rm.DialedIPs = dialedIPs
+			rm.markResult(code, secodeOpt, errmsg, false)
+
+			qmlog := qlog.With(slog.Int64("msgid", rm.ID), slog.Any("recipient", m.Recipient()))
+			qmlog.Errorx("permanent failure delivering from queue", err)
+			deliverDSNFailure(qmlog, rm, remoteMTA, secodeOpt, errmsg, smtpLines)
+
+			rmsgs[i] = rm
+
+			// If this was an smtp error from remote, we'll pass the failure to the
+			// suppression list.
+			if code == 0 {
+				continue
+			}
+			sc := suppressionCheck{
+				MsgID:     rm.ID,
+				Account:   rm.SenderAccount,
+				Recipient: rm.Recipient(),
+				Code:      code,
+				Secode:    secodeOpt,
+				Source:    "queue",
+			}
+			scl = append(scl, sc)
+		}
+		var suppressedMsgIDs []int64
+		if len(scl) > 0 {
+			var err error
+			suppressedMsgIDs, err = suppressionProcess(qlog, tx, scl...)
+			if err != nil {
+				qlog.Errorx("processing delivery failure in suppression list", err)
+				return
+			}
+		}
+		err := retireMsgs(qlog, tx, event, code, secodeOpt, suppressedMsgIDs, rmsgs...)
+		if err != nil {
+			qlog.Errorx("deleting queue messages from database after permanent failure", err)
+		} else if err := removeMsgsFS(qlog, rmsgs...); err != nil {
+			qlog.Errorx("remove queue messages from file system after permanent failure", err)
+		}
+
+		return
 	}
 
 	if m0.Attempts == 5 {
@@ -95,7 +156,7 @@ func fail(ctx context.Context, qlog mlog.Log, msgs []*Msg, dialedIPs map[string]
 		for _, m := range msgs {
 			qmlog := qlog.With(slog.Int64("msgid", m.ID), slog.Any("recipient", m.Recipient()))
 			qmlog.Errorx("temporary failure delivering from queue, sending delayed dsn", err, slog.Duration("backoff", backoff))
-			deliverDSNDelay(ctx, qmlog, *m, remoteMTA, secodeOpt, errmsg, smtpLines, retryUntil)
+			deliverDSNDelay(qmlog, *m, remoteMTA, secodeOpt, errmsg, smtpLines, retryUntil)
 		}
 	} else {
 		for _, m := range msgs {
@@ -106,9 +167,53 @@ func fail(ctx context.Context, qlog mlog.Log, msgs []*Msg, dialedIPs map[string]
 				slog.Time("nextattempt", m0.NextAttempt))
 		}
 	}
+
+	process := func() error {
+		// Update DialedIPs in message, and record the result.
+		qup := bstore.QueryTx[Msg](tx)
+		qup.FilterIDs(ids)
+		umsgs, err := qup.List()
+		if err != nil {
+			return fmt.Errorf("retrieving messages for marking temporary delivery error: %v", err)
+		}
+		for _, um := range umsgs {
+			// All messages should have the same DialedIPs.
+			um.DialedIPs = dialedIPs
+			um.markResult(code, secodeOpt, errmsg, false)
+			if err := tx.Update(&um); err != nil {
+				return fmt.Errorf("updating message after temporary failure to deliver: %v", err)
+			}
+		}
+
+		// If configured, we'll queue webhooks for delivery.
+		accConf, ok := mox.Conf.Account(m0.SenderAccount)
+		if !(ok && accConf.OutgoingWebhook != nil && (len(accConf.OutgoingWebhook.Events) == 0 || slices.Contains(accConf.OutgoingWebhook.Events, string(webhook.EventDelayed)))) {
+			return nil
+		}
+
+		hooks := make([]Hook, len(msgs))
+		for i, m := range msgs {
+			var err error
+			hooks[i], err = hookCompose(*m, accConf.OutgoingWebhook.URL, accConf.OutgoingWebhook.Authorization, webhook.EventDelayed, false, code, secodeOpt)
+			if err != nil {
+				return fmt.Errorf("composing webhook for failed delivery attempt for msg id %d: %v", m.ID, err)
+			}
+		}
+		now := time.Now()
+		for i := range hooks {
+			if err := hookInsert(tx, &hooks[i], now, accConf.KeepRetiredWebhookPeriod); err != nil {
+				return fmt.Errorf("inserting webhook into queue: %v", err)
+			}
+			qlog.Debug("queueing webhook for temporary delivery errors", hooks[i].attrs()...)
+		}
+		return nil
+	}
+	if err := process(); err != nil {
+		qlog.Errorx("processing temporary delivery error", err, slog.String("deliveryerror", errmsg))
+	}
 }
 
-func deliverDSNFailure(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, smtpLines []string) {
+func deliverDSNFailure(log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, smtpLines []string) {
 	const subject = "mail delivery failed"
 	message := fmt.Sprintf(`
 Delivery has failed permanently for your email to:
@@ -125,10 +230,10 @@ Error during the last delivery attempt:
 		message += "\nFull SMTP response:\n\n\t" + strings.Join(smtpLines, "\n\t") + "\n"
 	}
 
-	deliverDSN(ctx, log, m, remoteMTA, secodeOpt, errmsg, smtpLines, true, nil, subject, message)
+	deliverDSN(log, m, remoteMTA, secodeOpt, errmsg, smtpLines, true, nil, subject, message)
 }
 
-func deliverDSNDelay(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, smtpLines []string, retryUntil time.Time) {
+func deliverDSNDelay(log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, smtpLines []string, retryUntil time.Time) {
 	// Should not happen, but doesn't hurt to prevent sending delayed delivery
 	// notifications for DMARC reports. We don't want to waste postmaster attention.
 	if m.IsDMARCReport {
@@ -152,14 +257,14 @@ Error during the last delivery attempt:
 		message += "\nFull SMTP response:\n\n\t" + strings.Join(smtpLines, "\n\t") + "\n"
 	}
 
-	deliverDSN(ctx, log, m, remoteMTA, secodeOpt, errmsg, smtpLines, false, &retryUntil, subject, message)
+	deliverDSN(log, m, remoteMTA, secodeOpt, errmsg, smtpLines, false, &retryUntil, subject, message)
 }
 
 // We only queue DSNs for delivery failures for emails submitted by authenticated
 // users. So we are delivering to local users. ../rfc/5321:1466
 // ../rfc/5321:1494
 // ../rfc/7208:490
-func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, smtpLines []string, permanent bool, retryUntil *time.Time, subject, textBody string) {
+func deliverDSN(log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg string, smtpLines []string, permanent bool, retryUntil *time.Time, subject, textBody string) {
 	kind := "delayed delivery"
 	if permanent {
 		kind = "failure"
@@ -203,7 +308,7 @@ func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, 
 	// ../rfc/3461:1329
 	var smtpDiag string
 	if len(smtpLines) > 0 {
-		smtpDiag = "smtp; " + strings.Join(smtpLines, " ")
+		smtpDiag = strings.Join(smtpLines, " ")
 	}
 
 	dsnMsg := &dsn.Message{
@@ -221,14 +326,14 @@ func deliverDSN(ctx context.Context, log mlog.Log, m Msg, remoteMTA dsn.NameIP, 
 
 		Recipients: []dsn.Recipient{
 			{
-				FinalRecipient:  m.Recipient(),
-				Action:          action,
-				Status:          status,
-				StatusComment:   errmsg,
-				RemoteMTA:       remoteMTA,
-				DiagnosticCode:  smtpDiag,
-				LastAttemptDate: *m.LastAttempt,
-				WillRetryUntil:  retryUntil,
+				FinalRecipient:     m.Recipient(),
+				Action:             action,
+				Status:             status,
+				StatusComment:      errmsg,
+				RemoteMTA:          remoteMTA,
+				DiagnosticCodeSMTP: smtpDiag,
+				LastAttemptDate:    *m.LastAttempt,
+				WillRetryUntil:     retryUntil,
 			},
 		},
 

@@ -1,13 +1,21 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
+	"reflect"
 	"strings"
+	"time"
 
 	"github.com/mjl-/sconf"
 
 	"github.com/mjl-/mox/config"
+	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/webhook"
 )
 
 func cmdExample(c *cmd) {
@@ -36,7 +44,33 @@ func cmdExample(c *cmd) {
 	fmt.Print(match())
 }
 
-var examples = []struct {
+func cmdConfigExample(c *cmd) {
+	c.params = "[name]"
+	c.help = `List available config examples, or print a specific example.`
+
+	args := c.Parse()
+	if len(args) > 1 {
+		c.Usage()
+	}
+
+	var match func() string
+	for _, ex := range configExamples {
+		if len(args) == 0 {
+			fmt.Println(ex.Name)
+		} else if args[0] == ex.Name {
+			match = ex.Get
+		}
+	}
+	if len(args) == 0 {
+		return
+	}
+	if match == nil {
+		log.Fatalln("not found")
+	}
+	fmt.Print(match())
+}
+
+var configExamples = []struct {
 	Name string
 	Get  func() string
 }{
@@ -194,4 +228,98 @@ Routes:
 			return moxconf + "\n\n" + domainsconf
 		},
 	},
+}
+
+var exampleTime = time.Date(2024, time.March, 27, 0, 0, 0, 0, time.UTC)
+
+var examples = []struct {
+	Name string
+	Get  func() string
+}{
+	{
+		"webhook-outgoing-delivered",
+		func() string {
+			v := webhook.Outgoing{
+				Version:       0,
+				Event:         webhook.EventDelivered,
+				QueueMsgID:    101,
+				FromID:        base64.RawURLEncoding.EncodeToString([]byte("0123456789abcdef")),
+				MessageID:     "<QnxzgulZK51utga6agH_rg@mox.example>",
+				Subject:       "subject of original message",
+				WebhookQueued: exampleTime,
+				Extra:         map[string]string{},
+				SMTPCode:      smtp.C250Completed,
+			}
+			return "Example webhook HTTP POST JSON body for successful outgoing delivery:\n\n\t" + formatJSON(v)
+		},
+	},
+	{
+		"webhook-outgoing-dsn-failed",
+		func() string {
+			v := webhook.Outgoing{
+				Version:          0,
+				Event:            webhook.EventFailed,
+				DSN:              true,
+				Suppressing:      true,
+				QueueMsgID:       102,
+				FromID:           base64.RawURLEncoding.EncodeToString([]byte("0123456789abcdef")),
+				MessageID:        "<QnxzgulZK51utga6agH_rg@mox.example>",
+				Subject:          "subject of original message",
+				WebhookQueued:    exampleTime,
+				Extra:            map[string]string{"userid": "456"},
+				Error:            "timeout connecting to host",
+				SMTPCode:         smtp.C554TransactionFailed,
+				SMTPEnhancedCode: "5." + smtp.SeNet4Other0,
+			}
+			return `Example webhook HTTP POST JSON body for failed delivery based on incoming DSN
+message, with custom extra data fields (from original submission), and adding address to the suppression list:
+
+	` + formatJSON(v)
+		},
+	},
+	{
+		"webhook-incoming-basic",
+		func() string {
+			v := webhook.Incoming{
+				Version:   0,
+				From:      []webhook.NameAddress{{Address: "mox@localhost"}},
+				To:        []webhook.NameAddress{{Address: "mjl@localhost"}},
+				Subject:   "hi",
+				MessageID: "<QnxzgulZK51utga6agH_rg@mox.example>",
+				Date:      &exampleTime,
+				Text:      "hello world ☺\n",
+				Structure: webhook.Structure{
+					ContentType:       "text/plain",
+					ContentTypeParams: map[string]string{"charset": "utf-8"},
+					DecodedSize:       int64(len("hello world ☺\r\n")),
+					Parts:             []webhook.Structure{},
+				},
+				Meta: webhook.IncomingMeta{
+					MsgID:               201,
+					MailFrom:            "mox@localhost",
+					MailFromValidated:   false,
+					MsgFromValidated:    true,
+					RcptTo:              "mjl@localhost",
+					DKIMVerifiedDomains: []string{"localhost"},
+					RemoteIP:            "127.0.0.1",
+					Received:            exampleTime.Add(3 * time.Second),
+					MailboxName:         "Inbox",
+					Automated:           false,
+				},
+			}
+			return "Example JSON body for webhooks for incoming delivery of basic message:\n\n\t" + formatJSON(v)
+		},
+	},
+}
+
+func formatJSON(v any) string {
+	nv, _ := mox.FillNil(reflect.ValueOf(v))
+	v = nv.Interface()
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetIndent("\t", "\t")
+	enc.SetEscapeHTML(false)
+	err := enc.Encode(v)
+	xcheckf(err, "encoding to json")
+	return b.String()
 }

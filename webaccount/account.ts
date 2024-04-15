@@ -84,6 +84,48 @@ const login = async (reason: string) => {
 	})
 }
 
+// Popup shows kids in a centered div with white background on top of a
+// transparent overlay on top of the window. Clicking the overlay or hitting
+// Escape closes the popup. Scrollbars are automatically added to the div with
+// kids. Returns a function that removes the popup.
+const popup = (...kids: ElemArg[]) => {
+	const origFocus = document.activeElement
+	const close = () => {
+		if (!root.parentNode) {
+			return
+		}
+		root.remove()
+		if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
+			origFocus.focus()
+		}
+	}
+	let content: HTMLElement
+	const root = dom.div(
+		style({position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0, 0, 0, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '1'}),
+		function keydown(e: KeyboardEvent) {
+			if (e.key === 'Escape') {
+				e.stopPropagation()
+				close()
+			}
+		},
+		function click(e: MouseEvent) {
+			e.stopPropagation()
+			close()
+		},
+		content=dom.div(
+			attr.tabindex('0'),
+			style({backgroundColor: 'white', borderRadius: '.25em', padding: '1em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto'}),
+			function click(e: MouseEvent) {
+				e.stopPropagation()
+			},
+			kids,
+		)
+	)
+	document.body.appendChild(root)
+	content.focus()
+	return close
+}
+
 const localStorageGet = (k: string): string | null => {
 	try {
 		return window.localStorage.getItem(k)
@@ -195,6 +237,42 @@ const yellow = '#ffe400'
 const red = '#ff7443'
 const blue = '#8bc8ff'
 
+const age = (date: Date) => {
+	const r = dom.span(dom._class('notooltip'), attr.title(date.toString()))
+	const nowSecs = new Date().getTime()/1000
+	let t = nowSecs - date.getTime()/1000
+	let negative = ''
+	if (t < 0) {
+		negative = '-'
+		t = -t
+	}
+	const minute = 60
+	const hour = 60*minute
+	const day = 24*hour
+	const month = 30*day
+	const year = 365*day
+	const periods = [year, month, day, hour, minute]
+	const suffix = ['y', 'mo', 'd', 'h', 'min']
+	let s
+	for (let i = 0; i < periods.length; i++) {
+		const p = periods[i]
+		if (t >= 2*p || i === periods.length-1) {
+			const n = Math.round(t/p)
+			s = '' + n + suffix[i]
+			break
+		}
+	}
+	if (t < 60) {
+		s = '<1min'
+		// Prevent showing '-<1min' when browser and server have relatively small time drift of max 1 minute.
+		negative = ''
+	}
+
+	dom._kids(r, negative+s)
+	return r
+}
+
+
 const formatQuotaSize = (v: number) => {
 	if (v === 0) {
 		return '0'
@@ -213,7 +291,7 @@ const formatQuotaSize = (v: number) => {
 }
 
 const index = async () => {
-	const [acc, storageUsed, storageLimit] = await client.Account()
+	const [acc, storageUsed, storageLimit, suppressions] = await client.Account()
 
 	let fullNameForm: HTMLFormElement
 	let fullNameFieldset: HTMLFieldSetElement
@@ -224,12 +302,64 @@ const index = async () => {
 	let password2: HTMLInputElement
 	let passwordHint: HTMLElement
 
+	let outgoingWebhookFieldset: HTMLFieldSetElement
+	let outgoingWebhookURL: HTMLInputElement
+	let outgoingWebhookAuthorization: HTMLInputElement
+	let outgoingWebhookEvents: HTMLSelectElement
+
+	let incomingWebhookFieldset: HTMLFieldSetElement
+	let incomingWebhookURL: HTMLInputElement
+	let incomingWebhookAuthorization: HTMLInputElement
+
+	let keepRetiredPeriodsFieldset: HTMLFieldSetElement
+	let keepRetiredMessagePeriod: HTMLInputElement
+	let keepRetiredWebhookPeriod: HTMLInputElement
+
+	let fromIDLoginAddressesFieldset: HTMLFieldSetElement
+
+	const second = 1000*1000*1000
+	const minute = 60*second
+	const hour = 60*minute
+	const day = 24*hour
+	const week = 7*day
+	const parseDuration = (s: string) => {
+		if (!s) { return 0 }
+		const xparseint = () => {
+			const v = parseInt(s.substring(0, s.length-1))
+			if (isNaN(v) || Math.round(v) !== v) {
+				throw new Error('bad number in duration')
+			}
+			return v
+		}
+		if (s.endsWith('w')) { return xparseint()*week }
+		if (s.endsWith('d')) { return xparseint()*day }
+		if (s.endsWith('h')) { return xparseint()*hour }
+		if (s.endsWith('m')) { return xparseint()*minute }
+		if (s.endsWith('s')) { return xparseint()*second }
+		throw new Error('bad duration '+s)
+	}
+	const formatDuration = (v: number) => {
+		if (v === 0) {
+			return ''
+		}
+		const is = (period: number) => v > 0 && Math.round(v/period) === v/period
+		const format = (period: number, s: string) => ''+(v/period)+s
+		if (is(week)) { return format(week, 'w') }
+		if (is(day)) { return format(day, 'd') }
+		if (is(hour)) { return format(hour, 'h') }
+		if (is(minute)) { return format(minute, 'm') }
+		return format(second, 's')
+	}
+
 	let importForm: HTMLFormElement
 	let importFieldset: HTMLFieldSetElement
 	let mailboxFileHint: HTMLElement
 	let mailboxPrefixHint: HTMLElement
 	let importProgress: HTMLElement
 	let importAbortBox: HTMLElement
+
+	let suppressionAddress: HTMLInputElement
+	let suppressionReason: HTMLInputElement
 
 	const importTrack = async (token: string) => {
 		const importConnection = dom.div('Waiting for updates...')
@@ -345,6 +475,252 @@ const index = async () => {
 		)
 	}
 
+	const authorizationPopup = (dest: HTMLInputElement) => {
+		let username: HTMLInputElement
+		let password: HTMLInputElement
+		const close = popup(
+			dom.form(
+				function submit(e: SubmitEvent) {
+					e.preventDefault()
+					e.stopPropagation()
+					dest.value = 'Basic '+window.btoa(username.value+':'+password.value)
+					close()
+				},
+				dom.p('Compose HTTP Basic authentication header'),
+				dom.div(
+					style({marginBottom: '1ex'}),
+					dom.div(dom.label('Username')),
+					username=dom.input(attr.required('')),
+				),
+				dom.div(
+					style({marginBottom: '1ex'}),
+					dom.div(dom.label('Password (shown in clear)')),
+					password=dom.input(attr.required('')),
+				),
+				dom.div(
+					style({marginBottom: '1ex'}),
+					dom.submitbutton('Set'),
+				),
+				dom.div('A HTTP Basic authorization header contains the password in plain text, as base64.'),
+			),
+		)
+		username.focus()
+	}
+
+	const popupTestOutgoing = () => {
+		let fieldset: HTMLFieldSetElement
+		let event: HTMLSelectElement
+		let dsn: HTMLInputElement
+		let suppressing: HTMLInputElement
+		let queueMsgID: HTMLInputElement
+		let fromID: HTMLInputElement
+		let messageID: HTMLInputElement
+		let error: HTMLInputElement
+		let extra: HTMLInputElement
+		let body: HTMLTextAreaElement
+		let curl: HTMLElement
+		let result: HTMLElement
+
+		let data: api.Outgoing = {
+			Version: 0,
+			Event: api.OutgoingEvent.EventDelivered,
+			DSN: false,
+			Suppressing: false,
+			QueueMsgID: 123,
+			FromID: 'MDEyMzQ1Njc4OWFiY2RlZg',
+			MessageID: '<QnxzgulZK51utga6agH_rg@mox.example>',
+			Subject: 'test from mox web pages',
+			WebhookQueued: new Date(),
+			SMTPCode: 0,
+			SMTPEnhancedCode: '',
+			Error: '',
+			Extra: {},
+		}
+		const onchange = function change() {
+			data = {
+				Version: 0,
+				Event: event.value as api.OutgoingEvent,
+				DSN: dsn.checked,
+				Suppressing: suppressing.checked,
+				QueueMsgID: parseInt(queueMsgID.value),
+				FromID: fromID.value,
+				MessageID: messageID.value,
+				Subject: 'test from mox web pages',
+				WebhookQueued: new Date(),
+				SMTPCode: 0,
+				SMTPEnhancedCode: '',
+				Error: error.value,
+				Extra: JSON.parse(extra.value),
+			}
+			const curlStr = "curl " + (outgoingWebhookAuthorization.value ? "-H 'Authorization: "+outgoingWebhookAuthorization.value+"' " : "") + "-H 'X-Mox-Webhook-ID: 1' -H 'X-Mox-Webhook-Attempt: 1' --json '"+JSON.stringify(data)+"' '"+outgoingWebhookURL.value+"'"
+			dom._kids(curl, style({maxWidth: '45em', wordBreak: 'break-all'}), curlStr)
+			body.value = JSON.stringify(data, undefined, "\t")
+		}
+
+		popup(
+			dom.h1('Test webhook for outgoing delivery'),
+			dom.form(
+				async function submit(e: SubmitEvent) {
+					e.preventDefault()
+					e.stopPropagation()
+					result.classList.add('loadstart')
+					const [code, response, errmsg] = await check(fieldset, client.OutgoingWebhookTest(outgoingWebhookURL.value, outgoingWebhookAuthorization.value, data))
+					const nresult = dom.div(
+						dom._class('loadend'),
+						dom.table(
+							dom.tr(dom.td('HTTP status code'), dom.td(''+code)),
+							dom.tr(dom.td('Error message'), dom.td(errmsg)),
+							dom.tr(dom.td('Response'), dom.td(response)),
+						),
+					)
+					result.replaceWith(nresult)
+					result = nresult
+				},
+				fieldset=dom.fieldset(
+					dom.p('Make a test call to ', dom.b(outgoingWebhookURL.value), '.'),
+					dom.div(style({display: 'flex', gap: '1em'}),
+						dom.div(
+							dom.h2('Parameters'),
+							dom.div(
+								style({marginBottom: '.5ex'}), 
+								dom.label(
+									'Event',
+									dom.div(
+										event=dom.select(onchange,
+											["delivered", "suppressed", "delayed", "failed", "relayed", "expanded", "canceled", "unrecognized"].map(s => dom.option(s.substring(0, 1).toUpperCase()+s.substring(1), attr.value(s))),
+										),
+									),
+								),
+							),
+							dom.div(style({marginBottom: '.5ex'}), dom.label(dsn=dom.input(attr.type('checkbox')), ' DSN', onchange)),
+							dom.div(style({marginBottom: '.5ex'}), dom.label(suppressing=dom.input(attr.type('checkbox')), ' Suppressing', onchange)),
+							dom.div(style({marginBottom: '.5ex'}), dom.label('Queue message ID ', dom.div(queueMsgID=dom.input(attr.required(''), attr.type('number'), attr.value('123'), onchange)))),
+							dom.div(style({marginBottom: '.5ex'}), dom.label('From ID ', dom.div(fromID=dom.input(attr.required(''), attr.value(data.FromID), onchange)))),
+							dom.div(style({marginBottom: '.5ex'}), dom.label('MessageID', dom.div(messageID=dom.input(attr.required(''), attr.value(data.MessageID), onchange)))),
+							dom.div(style({marginBottom: '.5ex'}), dom.label('Error', dom.div(error=dom.input(onchange)))),
+							dom.div(style({marginBottom: '.5ex'}), dom.label('Extra', dom.div(extra=dom.input(attr.required(''), attr.value('{}'), onchange)))),
+						),
+						dom.div(
+							dom.h2('Headers'),
+							dom.pre('X-Mox-Webhook-ID: 1\nX-Mox-Webhook-Attempt: 1'),
+							dom.br(),
+							dom.h2('JSON'),
+							body=dom.textarea(attr.disabled(''), attr.rows('15'), style({width: '30em'})),
+							dom.br(),
+							dom.h2('curl'),
+							curl=dom.div(dom._class('literal')),
+						),
+					),
+					dom.br(),
+					dom.div(style({textAlign: 'right'}), dom.submitbutton('Post')),
+					dom.br(),
+					result=dom.div(),
+				),
+			),
+		)
+
+		onchange()
+	}
+
+	const popupTestIncoming = () => {
+		let fieldset: HTMLFieldSetElement
+		let body: HTMLTextAreaElement
+		let curl: HTMLElement
+		let result: HTMLElement
+
+		let data: api.Incoming = {
+			Version: 0,
+			From: [{Name: 'remote', Address: 'remote@remote.example'}],
+			To: [{Name: 'mox', Address: 'mox@mox.example'}],
+			CC: [],
+			BCC: [],
+			ReplyTo: [],
+			Subject: 'test webhook for incoming message',
+			MessageID: '<QnxzgulZK51utga6agH_rg@mox.example>',
+			InReplyTo: '',
+			References: [],
+			Date: new Date(),
+			Text: 'hi ☺\n',
+			HTML: '',
+			Structure: {
+				ContentType: 'text/plain',
+				ContentTypeParams: {charset: 'utf-8'},
+				ContentID: '',
+				DecodedSize: 8,
+				Parts: [],
+			},
+			Meta: {
+				MsgID: 1,
+				MailFrom: 'remote@remote.example',
+				MailFromValidated: true,
+				MsgFromValidated: true,
+				RcptTo: 'mox@localhost',
+				DKIMVerifiedDomains: ['remote.example'],
+				RemoteIP: '127.0.0.1',
+				Received: new Date(),
+				MailboxName: 'Inbox',
+				Automated: false,
+			},
+		}
+
+		const onchange = function change() {
+			try {
+				api.parser.Incoming(JSON.parse(body.value))
+			} catch (err) {
+				console.log({err})
+				window.alert('Error parsing data: '+errmsg(err))
+			}
+			const curlStr = "curl " + (incomingWebhookAuthorization.value ? "-H 'Authorization: "+incomingWebhookAuthorization.value+"' " : "") + "-H 'X-Mox-Webhook-ID: 1' -H 'X-Mox-Webhook-Attempt: 1' --json '"+JSON.stringify(data)+"' '"+incomingWebhookURL.value+"'"
+			dom._kids(curl, style({maxWidth: '45em', wordBreak: 'break-all'}), curlStr)
+		}
+
+		popup(
+			dom.h1('Test webhook for incoming delivery'),
+			dom.form(
+				async function submit(e: SubmitEvent) {
+					e.preventDefault()
+					e.stopPropagation()
+					result.classList.add('loadstart')
+					const [code, response, errmsg] = await check(fieldset, (async () => await client.IncomingWebhookTest(incomingWebhookURL.value, incomingWebhookAuthorization.value, api.parser.Incoming(JSON.parse(body.value))))())
+					const nresult = dom.div(
+						dom._class('loadend'),
+						dom.table(
+							dom.tr(dom.td('HTTP status code'), dom.td(''+code)),
+							dom.tr(dom.td('Error message'), dom.td(errmsg)),
+							dom.tr(dom.td('Response'), dom.td(response)),
+						),
+					)
+					result.replaceWith(nresult)
+					result = nresult
+				},
+				fieldset=dom.fieldset(
+					dom.p('Make a test call to ', dom.b(incomingWebhookURL.value), '.'),
+					dom.div(style({display: 'flex', gap: '1em'}),
+						dom.div(
+							dom.h2('JSON'),
+							body=dom.textarea(style({maxHeight: '90vh'}), style({width: '30em'}), onchange),
+						),
+						dom.div(
+							dom.h2('Headers'),
+							dom.pre('X-Mox-Webhook-ID: 1\nX-Mox-Webhook-Attempt: 1'),
+							dom.br(),
+
+							dom.h2('curl'),
+							curl=dom.div(dom._class('literal')),
+						),
+					),
+					dom.br(),
+					dom.div(style({textAlign: 'right'}), dom.submitbutton('Post')),
+					dom.br(),
+					result=dom.div(),
+				),
+			),
+		)
+		body.value = JSON.stringify(data, undefined, '\t')
+		body.setAttribute('rows', ''+Math.min(40, (body.value.split('\n').length+1)))
+		onchange()
+	}
+
 	dom._kids(page,
 		crumbs('Mox Account'),
 		dom.p('NOTE: Not all account settings can be configured through these pages yet. See the configuration file for more options.'),
@@ -386,6 +762,7 @@ const index = async () => {
 			),
 		),
 		dom.br(),
+
 		dom.h2('Change password'),
 		passwordForm=dom.form(
 			passwordFieldset=dom.fieldset(
@@ -442,6 +819,7 @@ const index = async () => {
 			},
 		),
 		dom.br(),
+
 		dom.h2('Disk usage'),
 		dom.p('Storage used is ', dom.b(formatQuotaSize(Math.floor(storageUsed/(1024*1024))*1024*1024)),
 			storageLimit > 0 ? [
@@ -450,6 +828,256 @@ const index = async () => {
 				''+Math.floor(100*storageUsed/storageLimit),
 				'%).',
 			] : [', no explicit limit is configured.']),
+
+		dom.h2('Webhooks'),
+		dom.h3('Outgoing', attr.title('Webhooks for outgoing messages are called for each attempt to deliver a message in the outgoing queue, e.g. when the queue has delivered a message to the next hop, when a single attempt failed with a temporary error, when delivery permanently failed, or when DSN (delivery status notification) messages were received about a previously sent message.')),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				await check(outgoingWebhookFieldset, client.OutgoingWebhookSave(outgoingWebhookURL.value, outgoingWebhookAuthorization.value, [...outgoingWebhookEvents.selectedOptions].map(o => o.value)))
+			},
+			outgoingWebhookFieldset=dom.fieldset(
+				dom.div(style({display: 'flex', gap: '1em'}),
+					dom.div(
+						dom.label(
+							dom.div('URL', attr.title('URL to do an HTTP POST to for each event. Webhooks are disabled if empty.')),
+							outgoingWebhookURL=dom.input(attr.value(acc.OutgoingWebhook?.URL || ''), style({width: '30em'})),
+						),
+					),
+					dom.div(
+						dom.label(
+							dom.div(
+								'Authorization header ',
+								dom.a(
+									'Basic',
+									attr.href(''),
+									function click(e: MouseEvent) {
+										e.preventDefault()
+										authorizationPopup(outgoingWebhookAuthorization)
+									},
+								),
+								attr.title('If non-empty, HTTP requests have this value as Authorization header, e.g. Basic <base64-encoded-username-password>.'),
+							),
+							outgoingWebhookAuthorization=dom.input(attr.value(acc.OutgoingWebhook?.Authorization || '')),
+						),
+					),
+					dom.div(
+						dom.label(
+							style({verticalAlign: 'top'}),
+							dom.div('Events', attr.title('Either limit to specific events, or receive all events (default).')),
+							outgoingWebhookEvents=dom.select(
+								style({verticalAlign: 'bottom'}),
+								attr.multiple(''),
+								attr.size('8'), // Number of options.
+								["delivered", "suppressed", "delayed", "failed", "relayed", "expanded", "canceled", "unrecognized"].map(s => dom.option(s.substring(0, 1).toUpperCase()+s.substring(1), attr.value(s), acc.OutgoingWebhook?.Events?.includes(s) ? attr.selected('') : [])),
+							),
+						),
+					),
+					dom.div(
+						dom.div(dom.label('\u00a0')),
+						dom.submitbutton('Save'), ' ',
+						dom.clickbutton('Test', function click() {
+							popupTestOutgoing()
+						}),
+					),
+				),
+			),
+		),
+		dom.br(),
+		dom.h3('Incoming', attr.title('Webhooks for incoming messages are called for each message received over SMTP, excluding DSN messages about previous deliveries.')),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				await check(incomingWebhookFieldset, client.IncomingWebhookSave(incomingWebhookURL.value, incomingWebhookAuthorization.value))
+			},
+			incomingWebhookFieldset=dom.fieldset(
+				dom.div(
+					style({display: 'flex', gap: '1em'}),
+					dom.div(
+						dom.label(
+							dom.div('URL'),
+							incomingWebhookURL=dom.input(attr.value(acc.IncomingWebhook?.URL || ''), style({width: '30em'})),
+						),
+					),
+					dom.div(
+						dom.label(
+							dom.div(
+								'Authorization header ',
+								dom.a(
+									'Basic',
+									attr.href(''),
+									function click(e: MouseEvent) {
+										e.preventDefault()
+										authorizationPopup(incomingWebhookAuthorization)
+									},
+								),
+								attr.title('If non-empty, HTTP requests have this value as Authorization header, e.g. Basic <base64-encoded-username-password>.'),
+							),
+							incomingWebhookAuthorization=dom.input(attr.value(acc.IncomingWebhook?.Authorization || '')),
+						),
+					),
+					dom.div(
+						dom.div(dom.label('\u00a0')),
+						dom.submitbutton('Save'), ' ',
+						dom.clickbutton('Test', function click() {
+							popupTestIncoming()
+						}),
+					),
+				),
+			),
+		),
+		dom.br(),
+
+		dom.h2('Keep messages/webhooks retired from queue', attr.title('After delivering a message or webhook from the queue it is removed by default. But you can also keep these "retired" messages/webhooks around for a while. With unique SMTP MAIL FROM addresses configured below, this allows relating incoming delivery status notification messages (DSNs) to previously sent messages and their original recipients, which is needed for automatic management of recipient suppression lists, which is important for managing the reputation of your mail server. For both messages and webhooks, this can be useful for debugging. Use values like "3d" for 3 days, or units "s" for second, "m" for minute, "h" for hour, "w" for week.')),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				await check(keepRetiredPeriodsFieldset, (async () => await client.KeepRetiredPeriodsSave(parseDuration(keepRetiredMessagePeriod.value), parseDuration(keepRetiredWebhookPeriod.value)))())
+			},
+			keepRetiredPeriodsFieldset=dom.fieldset(
+				dom.div(
+					style({display: 'flex', gap: '1em', alignItems: 'flex-end'}),
+					dom.div(
+						dom.label(
+							'Messages deliveries',
+							dom.br(),
+							keepRetiredMessagePeriod=dom.input(attr.value(formatDuration(acc.KeepRetiredMessagePeriod))),
+						),
+					),
+					dom.div(
+						dom.label(
+							'Webhook deliveries',
+							dom.br(),
+							keepRetiredWebhookPeriod=dom.input(attr.value(formatDuration(acc.KeepRetiredWebhookPeriod))),
+						),
+					),
+					dom.div(
+						dom.submitbutton('Save'),
+					),
+				),
+			),
+		),
+		dom.br(),
+
+		dom.h2('Unique SMTP MAIL FROM login addresses', attr.title('Outgoing messages are normally sent using your email address in the SMTP MAIL FROM command. By using unique addresses (by using the localpart catchall separator, e.g. addresses of the form "localpart+<uniquefromid>@domain"), future incoming DSNs can be related to the original outgoing messages and recipients, which allows for automatic management of recipient suppression lists when keeping retired messages for as long as you expect DSNs to come in as configured above. Configure the addresses used for logging in with SMTP submission, the webapi or webmail for which unique SMTP MAIL FROM addesses should be enabled. Note: These are addresses used for authenticating, not the address in the message "From" header.')),
+		(() => {
+			let inputs: HTMLInputElement[] = []
+			let elem: HTMLElement
+
+			const render = () => {
+				inputs = []
+
+				const e = dom.form(
+					async function submit(e: SubmitEvent) {
+						e.preventDefault()
+						e.stopPropagation()
+
+						await check(fromIDLoginAddressesFieldset, client.FromIDLoginAddressesSave(inputs.map(e => e.value)))
+					},
+					fromIDLoginAddressesFieldset=dom.fieldset(
+						dom.table(
+							dom.tbody(
+								(acc.FromIDLoginAddresses || []).length === 0 ? dom.tr(dom.td('(None)'), dom.td()) : [],
+								(acc.FromIDLoginAddresses || []).map((s, index) => {
+									const input = dom.input(attr.required(''), attr.value(s))
+									inputs.push(input)
+									const x = dom.tr(
+										dom.td(input),
+										dom.td(
+											dom.clickbutton('Remove', function click() {
+												acc.FromIDLoginAddresses!.splice(index, 1)
+												render()
+											}),
+										),
+									)
+									return x
+								}),
+							),
+							dom.tfoot(
+								dom.tr(
+									dom.td(),
+									dom.td(
+										dom.clickbutton('Add', function click() {
+											acc.FromIDLoginAddresses = (acc.FromIDLoginAddresses || []).concat([''])
+											render()
+										}),
+									),
+								),
+								dom.tr(
+									dom.td(attr.colspan('2'), dom.submitbutton('Save')),
+								),
+							),
+						),
+					),
+				)
+				if (elem) {
+					elem.replaceWith(e)
+					elem = e
+				}
+				return e
+			}
+			elem = render()
+			return elem
+		})(),
+		dom.br(),
+
+		dom.h2('Suppression list'),
+		dom.p('Messages queued for delivery to recipients on the suppression list will immediately fail. If delivery to a recipient fails repeatedly, it can be added to the suppression list automatically. Repeated rejected delivery attempts can have a negative influence of mail server reputation. Applications sending email can implement their own handling of delivery failure notifications, but not all do.'),
+		dom.form(
+			attr.id('suppressionAdd'),
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				await check(e.target! as HTMLButtonElement, client.SuppressionAdd(suppressionAddress.value, true, suppressionReason.value))
+				window.location.reload() // todo: reload less
+			},
+		),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('Address', attr.title('Address that caused this entry to be added to the list. The title (shown on hover) displays an address with a fictional simplified localpart, with lower-cased, dots removed, only first part before "+" or "-" (typicaly catchall separators). When checking if an address is on the suppression list, it is checked against this address.')),
+					dom.th('Manual', attr.title('Whether suppression was added manually, instead of automatically based on bounces.')),
+					dom.th('Reason'),
+					dom.th('Since'),
+					dom.th('Action'),
+				),
+			),
+			dom.tbody(
+				(suppressions || []).length === 0 ? dom.tr(dom.td(attr.colspan('5'), '(None)')) : [],
+				(suppressions || []).map(s =>
+					dom.tr(
+						dom.td(s.OriginalAddress, attr.title(s.BaseAddress)),
+						dom.td(s.Manual ? '✓' : ''),
+						dom.td(s.Reason),
+						dom.td(age(s.Created)),
+						dom.td(
+							dom.clickbutton('Remove', async function click(e: MouseEvent) {
+								await check(e.target! as HTMLButtonElement, client.SuppressionRemove(s.OriginalAddress))
+								window.location.reload() // todo: reload less
+							})
+						),
+					),
+				),
+			),
+			dom.tfoot(
+				dom.tr(
+					dom.td(suppressionAddress=dom.input(attr.type('required'), attr.form('suppressionAdd'))),
+					dom.td(),
+					dom.td(suppressionReason=dom.input(style({width: '100%'}), attr.form('suppressionAdd'))),
+					dom.td(),
+					dom.td(dom.submitbutton('Add suppression', attr.form('suppressionAdd'))),
+				),
+			),
+		),
+		dom.br(),
+
 		dom.h2('Export'),
 		dom.p('Export all messages in all mailboxes. In maildir or mbox format, as .zip or .tgz file.'),
 		dom.table(dom._class('slim'),
@@ -471,6 +1099,7 @@ const index = async () => {
 			),
 		),
 		dom.br(),
+
 		dom.h2('Import'),
 		dom.p('Import messages from a .zip or .tgz file with maildirs and/or mbox files.'),
 		importForm=dom.form(
@@ -570,6 +1199,8 @@ const index = async () => {
 		importProgress=dom.div(
 			style({display: 'none'}),
 		),
+		dom.br(),
+
 		footer,
 	)
 
@@ -744,6 +1375,7 @@ const destination = async (name: string) => {
 			fullName=dom.input(attr.value(dest.FullName)),
 		),
 		dom.br(),
+
 		dom.h2('Rulesets'),
 		dom.p('Incoming messages are checked against the rulesets. If a ruleset matches, the message is delivered to the mailbox configured for the ruleset instead of to the default mailbox.'),
 		dom.p('"Is Forward" does not affect matching, but changes prevents the sending mail server from being included in future junk classifications by clearing fields related to the forwarding email server (IP address, EHLO domain, MAIL FROM domain and a matching DKIM domain), and prevents DMARC rejects for forwarded messages.'),

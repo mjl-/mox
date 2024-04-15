@@ -49,8 +49,9 @@ automatically initialized with configuration files, an account with email
 address mox@localhost and password moxmoxmox, and a newly generated self-signed
 TLS certificate.
 
-All incoming email to any address is accepted (if checks pass), unless the
-recipient localpart ends with:
+All incoming email to any address is accepted (if checks pass) and delivered to
+the account that is submitting the message, unless the recipient localpart ends
+with:
 
 - "temperror": fail with a temporary error code
 - "permerror": fail with a permanent error code
@@ -58,7 +59,8 @@ recipient localpart ends with:
 - "timeout": no response (for an hour)
 
 If the localpart begins with "mailfrom" or "rcptto", the error is returned
-during those commands instead of during "data".
+during those commands instead of during "data". If the localpart beings with
+"queue", the submission is accepted but delivery from the queue will fail.
 `
 	golog.SetFlags(0)
 
@@ -163,7 +165,9 @@ during those commands instead of during "data".
 	golog.Printf(`- [45][0-9][0-9]: fail with the specific error code.`)
 	golog.Printf(`- "timeout": no response (for an hour).`)
 	golog.Print("")
-	golog.Printf(`if the localpart begins with "mailfrom" or "rcptto", the error is returned during those commands instead of during "data"`)
+	golog.Print(`if the localpart begins with "mailfrom" or "rcptto", the error is returned`)
+	golog.Print(`during those commands instead of during "data".  if the localpart beings with`)
+	golog.Print(`"queue", the submission is accepted but delivery from the queue will fail.`)
 	golog.Print("")
 	golog.Print(" smtp://localhost:1025                           - receive email")
 	golog.Print("smtps://mox%40localhost:moxmoxmox@localhost:1465 - send email")
@@ -174,6 +178,8 @@ during those commands instead of during "data".
 	golog.Print(" http://localhost:1080/account/                  - account http (without tls)")
 	golog.Print("https://localhost:1443/webmail/                  - webmail https (email mox@localhost, password moxmoxmox)")
 	golog.Print(" http://localhost:1080/webmail/                  - webmail http (without tls)")
+	golog.Print("https://localhost:1443/webapi/                   - webmail https (email mox@localhost, password moxmoxmox)")
+	golog.Print(" http://localhost:1080/webapi/                   - webmail http (without tls)")
 	golog.Print("https://localhost:1443/admin/                    - admin https (password moxadmin)")
 	golog.Print(" http://localhost:1080/admin/                    - admin http (without tls)")
 	golog.Print("")
@@ -332,6 +338,12 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 	local.WebmailHTTPS.Enabled = true
 	local.WebmailHTTPS.Port = 1443
 	local.WebmailHTTPS.Path = "/webmail/"
+	local.WebAPIHTTP.Enabled = true
+	local.WebAPIHTTP.Port = 1080
+	local.WebAPIHTTP.Path = "/webapi/"
+	local.WebAPIHTTPS.Enabled = true
+	local.WebAPIHTTPS.Port = 1443
+	local.WebAPIHTTPS.Path = "/webapi/"
 	local.AdminHTTP.Enabled = true
 	local.AdminHTTP.Port = 1080
 	local.AdminHTTPS.Enabled = true
@@ -375,7 +387,9 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 
 	// Write domains.conf.
 	acc := config.Account{
-		RejectsMailbox: "Rejects",
+		KeepRetiredMessagePeriod: 72 * time.Hour,
+		KeepRetiredWebhookPeriod: 72 * time.Hour,
+		RejectsMailbox:           "Rejects",
 		Destinations: map[string]config.Destination{
 			"mox@localhost": {},
 		},

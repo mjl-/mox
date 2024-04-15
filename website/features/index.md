@@ -307,6 +307,35 @@ and can enable REQUIRETLS by default.
 See [webmail screenshots](../screenshots/#hdr-webmail).
 
 
+## Webapi and webhooks
+
+The webapi and webhooks make it easy to send/receive transactional email with
+only HTTP/JSON, not requiring detailed knowledge of and/or libraries for
+composing email messages (internet message format, IMF), SMTP for submission,
+and IMAP for handling incoming messages including delivery status notifications
+(DSNs).
+
+Outgoing webhooks notify about events for outgoing deliveries (such as
+"delivered", "delayed", "failed", "suppressed").
+
+Incoming webhooks notify about incoming deliveries.
+
+The webapi can be used to submit messages to the queue, and to process incoming
+messages, for example by moving them to another mailbox, setting/clearing flags
+or deleting them.
+
+Per-account suppression lists, automatically managed based on SMTP status codes
+and DSN messages, protect the reputation of your mail server.
+
+For API documentation and examples of the webapi and webhooks, see
+https://pkg.go.dev/github.com/mjl-/mox/webapi/. Earlier mox versions can be
+selected in the top left (at the time of writing).
+
+The mox webapi endpoint at /webapi/v0/ lists available methods and links to
+them, each method page showing an example request and response JSON object and
+lets you call the method.
+
+
 ## Internationalized email
 
 Originally, email addresses were ASCII-only. An email address consists of a

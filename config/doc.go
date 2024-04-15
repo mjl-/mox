@@ -386,6 +386,35 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# limiting and for the "secure" status of cookies. (optional)
 				Forwarded: false
 
+			# Like WebAPIHTTP, but with plain HTTP, without TLS. (optional)
+			WebAPIHTTP:
+				Enabled: false
+
+				# Default 80 for HTTP and 443 for HTTPS. (optional)
+				Port: 0
+
+				# Path to serve requests on. (optional)
+				Path:
+
+				# If set, X-Forwarded-* headers are used for the remote IP address for rate
+				# limiting and for the "secure" status of cookies. (optional)
+				Forwarded: false
+
+			# WebAPI, a simple HTTP/JSON-based API for email, with HTTPS (requires a TLS
+			# config). Default path is /webapi/. (optional)
+			WebAPIHTTPS:
+				Enabled: false
+
+				# Default 80 for HTTP and 443 for HTTPS. (optional)
+				Port: 0
+
+				# Path to serve requests on. (optional)
+				Path:
+
+				# If set, X-Forwarded-* headers are used for the remote IP address for rate
+				# limiting and for the "secure" status of cookies. (optional)
+				Forwarded: false
+
 			# Serve prometheus metrics, for monitoring. You should not enable this on a public
 			# IP. (optional)
 			MetricsHTTP:
@@ -855,6 +884,53 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 	Accounts:
 		x:
 
+			# Webhooks for events about outgoing deliveries. (optional)
+			OutgoingWebhook:
+
+				# URL to POST webhooks.
+				URL:
+
+				# If not empty, value of Authorization header to add to HTTP requests. (optional)
+				Authorization:
+
+				# Events to send outgoing delivery notifications for. If absent, all events are
+				# sent. Valid values: delivered, suppressed, delayed, failed, relayed, expanded,
+				# canceled, unrecognized. (optional)
+				Events:
+					-
+
+			# Webhooks for events about incoming deliveries over SMTP. (optional)
+			IncomingWebhook:
+
+				# URL to POST webhooks to for incoming deliveries over SMTP.
+				URL:
+
+				# If not empty, value of Authorization header to add to HTTP requests. (optional)
+				Authorization:
+
+			# Login addresses that cause outgoing email to be sent with SMTP MAIL FROM
+			# addresses with a unique id after the localpart catchall separator (which must be
+			# enabled when addresses are specified here). Any delivery status notifications
+			# (DSN, e.g. for bounces), can be related to the original message and recipient
+			# with unique id's. You can login to an account with any valid email address,
+			# including variants with the localpart catchall separator. You can use this
+			# mechanism to both send outgoing messages both with and without unique fromid for
+			# a given address. (optional)
+			FromIDLoginAddresses:
+				-
+
+			# Period to keep messages retired from the queue (delivered or failed) around.
+			# Keeping retired messages is useful for maintaining the suppression list for
+			# transactional email, for matching incoming DSNs to sent messages, and for
+			# debugging. The time at which to clean up (remove) is calculated at retire time.
+			# E.g. 168h (1 week). (optional)
+			KeepRetiredMessagePeriod: 0s
+
+			# Period to keep webhooks retired from the queue (delivered or failed) around.
+			# Useful for debugging. The time at which to clean up (remove) is calculated at
+			# retire time. E.g. 168h (1 week). (optional)
+			KeepRetiredWebhookPeriod: 0s
+
 			# Default domain for account. Deprecated behaviour: If a destination is not a full
 			# address but only a localpart, this domain is added to form a full address.
 			Domain:
@@ -1233,8 +1309,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 # Examples
 
 Mox includes configuration files to illustrate common setups. You can see these
-examples with "mox example", and print a specific example with "mox example
-<name>". Below are all examples included in mox.
+examples with "mox config example", and print a specific example with "mox
+config example <name>". Below are all examples included in mox.
 
 # Example webhandlers
 

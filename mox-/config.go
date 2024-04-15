@@ -61,6 +61,8 @@ var (
 	Conf              = Config{Log: map[string]slog.Level{"": slog.LevelError}}
 )
 
+var ErrConfig = errors.New("config error")
+
 // Config as used in the code, a processed version of what is in the config file.
 //
 // Use methods to lookup a domain/account/address in the dynamic configuration.
@@ -317,10 +319,11 @@ func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 // todo future: write config parsing & writing code that can read a config and remembers the exact tokens including newlines and comments, and can write back a modified file. the goal is to be able to write a config file automatically (after changing fields through the ui), but not loose comments and whitespace, to still get useful diffs for storing the config in a version control system.
 
 // must be called with lock held.
+// Returns ErrConfig if the configuration is not valid.
 func writeDynamic(ctx context.Context, log mlog.Log, c config.Dynamic) error {
 	accDests, errs := prepareDynamicConfig(ctx, log, ConfigDynamicPath, Conf.Static, &c)
 	if len(errs) > 0 {
-		return errs[0]
+		return fmt.Errorf("%w: %v", ErrConfig, errs[0])
 	}
 
 	var b bytes.Buffer
@@ -1272,7 +1275,51 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			}
 			acc.NotJunkMailbox = r
 		}
+
+		acc.ParsedFromIDLoginAddresses = make([]smtp.Address, len(acc.FromIDLoginAddresses))
+		for i, s := range acc.FromIDLoginAddresses {
+			a, err := smtp.ParseAddress(s)
+			if err != nil {
+				addErrorf("invalid fromid login address %q in account %q: %v", s, accName, err)
+			}
+			// We check later on if address belongs to account.
+			dom, ok := c.Domains[a.Domain.Name()]
+			if !ok {
+				addErrorf("unknown domain in fromid login address %q for account %q", s, accName)
+			} else if dom.LocalpartCatchallSeparator == "" {
+				addErrorf("localpart catchall separator not configured for domain for fromid login address %q for account %q", s, accName)
+			}
+			acc.ParsedFromIDLoginAddresses[i] = a
+		}
+
 		c.Accounts[accName] = acc
+
+		if acc.OutgoingWebhook != nil {
+			u, err := url.Parse(acc.OutgoingWebhook.URL)
+			if err == nil && (u.Scheme != "http" && u.Scheme != "https") {
+				err = errors.New("scheme must be http or https")
+			}
+			if err != nil {
+				addErrorf("parsing outgoing hook url %q in account %q: %v", acc.OutgoingWebhook.URL, accName, err)
+			}
+
+			// note: outgoing hook events are in ../queue/hooks.go, ../mox-/config.go, ../queue.go and ../webapi/gendoc.sh. keep in sync.
+			outgoingHookEvents := []string{"delivered", "suppressed", "delayed", "failed", "relayed", "expanded", "canceled", "unrecognized"}
+			for _, e := range acc.OutgoingWebhook.Events {
+				if !slices.Contains(outgoingHookEvents, e) {
+					addErrorf("unknown outgoing hook event %q", e)
+				}
+			}
+		}
+		if acc.IncomingWebhook != nil {
+			u, err := url.Parse(acc.IncomingWebhook.URL)
+			if err == nil && (u.Scheme != "http" && u.Scheme != "https") {
+				err = errors.New("scheme must be http or https")
+			}
+			if err != nil {
+				addErrorf("parsing incoming hook url %q in account %q: %v", acc.IncomingWebhook.URL, accName, err)
+			}
+		}
 
 		// todo deprecated: only localpart as keys for Destinations, we are replacing them with full addresses. if domains.conf is written, we won't have to do this again.
 		replaceLocalparts := map[string]string{}
@@ -1420,6 +1467,25 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 					slog.String("account", accName))
 				acc.Destinations[addr] = dest
 				delete(acc.Destinations, lp)
+			}
+		}
+
+		// Now that all addresses are parsed, check if all fromid login addresses match
+		// configured addresses.
+		for i, a := range acc.ParsedFromIDLoginAddresses {
+			// For domain catchall.
+			if _, ok := accDests["@"+a.Domain.Name()]; ok {
+				continue
+			}
+			dc := c.Domains[a.Domain.Name()]
+			lp, err := CanonicalLocalpart(a.Localpart, dc)
+			if err != nil {
+				addErrorf("canonicalizing localpart for fromid login address %q in account %q: %v", acc.FromIDLoginAddresses[i], accName, err)
+				continue
+			}
+			a.Localpart = lp
+			if _, ok := accDests[a.Pack(true)]; !ok {
+				addErrorf("fromid login address %q for account %q does not match its destination addresses", acc.FromIDLoginAddresses[i], accName)
 			}
 		}
 

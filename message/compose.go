@@ -141,7 +141,7 @@ func (c *Composer) Line() {
 // with newlines (lf), which are replaced with crlf. The returned text may be
 // quotedprintable, if needed. The returned ct and cte headers are for use with
 // Content-Type and Content-Transfer-Encoding headers.
-func (c *Composer) TextPart(text string) (textBody []byte, ct, cte string) {
+func (c *Composer) TextPart(subtype, text string) (textBody []byte, ct, cte string) {
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
@@ -162,7 +162,7 @@ func (c *Composer) TextPart(text string) (textBody []byte, ct, cte string) {
 		cte = "7bit"
 	}
 
-	ct = mime.FormatMediaType("text/plain", map[string]string{"charset": charset})
+	ct = mime.FormatMediaType("text/"+subtype, map[string]string{"charset": charset})
 	return []byte(text), ct, cte
 }
 

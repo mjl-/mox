@@ -35,6 +35,7 @@ const (
 	Importmessages   Panic = "importmessages"
 	Store            Panic = "store"
 	Webadmin         Panic = "webadmin"
+	Webapi           Panic = "webapi"
 	Webmailsendevent Panic = "webmailsendevent"
 	Webmail          Panic = "webmail"
 	Webmailrequest   Panic = "webmailrequest"

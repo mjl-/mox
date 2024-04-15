@@ -5,6 +5,7 @@ package webaccount
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"context"
 	cryptorand "crypto/rand"
@@ -15,9 +16,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "embed"
 
@@ -30,8 +33,12 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxvar"
+	"github.com/mjl-/mox/queue"
+	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
+	"github.com/mjl-/mox/webapi"
 	"github.com/mjl-/mox/webauth"
+	"github.com/mjl-/mox/webhook"
 )
 
 var pkglog = mlog.New("webaccount", nil)
@@ -414,7 +421,7 @@ func (Account) SetPassword(ctx context.Context, password string) {
 // Account returns information about the account.
 // StorageUsed is the sum of the sizes of all messages, in bytes.
 // StorageLimit is the maximum storage that can be used, or 0 if there is no limit.
-func (Account) Account(ctx context.Context) (account config.Account, storageUsed, storageLimit int64) {
+func (Account) Account(ctx context.Context) (account config.Account, storageUsed, storageLimit int64, suppressions []webapi.Suppression) {
 	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 
@@ -439,16 +446,19 @@ func (Account) Account(ctx context.Context) (account config.Account, storageUsed
 		xcheckf(ctx, err, "get disk usage")
 	})
 
-	return accConf, storageUsed, storageLimit
+	suppressions, err = queue.SuppressionList(ctx, reqInfo.AccountName)
+	xcheckf(ctx, err, "list suppressions")
+
+	return accConf, storageUsed, storageLimit, suppressions
 }
 
+// AccountSaveFullName saves the full name (used as display name in email messages)
+// for the account.
 func (Account) AccountSaveFullName(ctx context.Context, fullName string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	_, ok := mox.Conf.Account(reqInfo.AccountName)
-	if !ok {
-		xcheckf(ctx, errors.New("not found"), "looking up account")
-	}
-	err := mox.AccountFullNameSave(ctx, reqInfo.AccountName, fullName)
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		acc.FullName = fullName
+	})
 	xcheckf(ctx, err, "saving account full name")
 }
 
@@ -457,25 +467,29 @@ func (Account) AccountSaveFullName(ctx context.Context, fullName string) {
 // error is returned. Otherwise newDest is saved and the configuration reloaded.
 func (Account) DestinationSave(ctx context.Context, destName string, oldDest, newDest config.Destination) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	accConf, ok := mox.Conf.Account(reqInfo.AccountName)
-	if !ok {
-		xcheckf(ctx, errors.New("not found"), "looking up account")
-	}
-	curDest, ok := accConf.Destinations[destName]
-	if !ok {
-		xcheckuserf(ctx, errors.New("not found"), "looking up destination")
-	}
 
-	if !curDest.Equal(oldDest) {
-		xcheckuserf(ctx, errors.New("modified"), "checking stored destination")
-	}
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(conf *config.Account) {
+		curDest, ok := conf.Destinations[destName]
+		if !ok {
+			xcheckuserf(ctx, errors.New("not found"), "looking up destination")
+		}
+		if !curDest.Equal(oldDest) {
+			xcheckuserf(ctx, errors.New("modified"), "checking stored destination")
+		}
 
-	// Keep fields we manage.
-	newDest.DMARCReports = curDest.DMARCReports
-	newDest.HostTLSReports = curDest.HostTLSReports
-	newDest.DomainTLSReports = curDest.DomainTLSReports
+		// Keep fields we manage.
+		newDest.DMARCReports = curDest.DMARCReports
+		newDest.HostTLSReports = curDest.HostTLSReports
+		newDest.DomainTLSReports = curDest.DomainTLSReports
 
-	err := mox.DestinationSave(ctx, reqInfo.AccountName, destName, newDest)
+		// Make copy of reference values.
+		nd := map[string]config.Destination{}
+		for dn, d := range conf.Destinations {
+			nd[dn] = d
+		}
+		nd[destName] = newDest
+		conf.Destinations = nd
+	})
 	xcheckf(ctx, err, "saving destination")
 }
 
@@ -490,4 +504,160 @@ func (Account) ImportAbort(ctx context.Context, importToken string) error {
 // Types exposes types not used in API method signatures, such as the import form upload.
 func (Account) Types() (importProgress ImportProgress) {
 	return
+}
+
+// SuppressionList lists the addresses on the suppression list of this account.
+func (Account) SuppressionList(ctx context.Context) (suppressions []webapi.Suppression) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	l, err := queue.SuppressionList(ctx, reqInfo.AccountName)
+	xcheckf(ctx, err, "list suppressions")
+	return l
+}
+
+// SuppressionAdd adds an email address to the suppression list.
+func (Account) SuppressionAdd(ctx context.Context, address string, manual bool, reason string) (suppression webapi.Suppression) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	addr, err := smtp.ParseAddress(address)
+	xcheckuserf(ctx, err, "parsing address")
+	sup := webapi.Suppression{
+		Account: reqInfo.AccountName,
+		Manual:  manual,
+		Reason:  reason,
+	}
+	err = queue.SuppressionAdd(ctx, addr.Path(), &sup)
+	if err != nil && errors.Is(err, bstore.ErrUnique) {
+		xcheckuserf(ctx, err, "add suppression")
+	}
+	xcheckf(ctx, err, "add suppression")
+	return sup
+}
+
+// SuppressionRemove removes the email address from the suppression list.
+func (Account) SuppressionRemove(ctx context.Context, address string) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	addr, err := smtp.ParseAddress(address)
+	xcheckuserf(ctx, err, "parsing address")
+	err = queue.SuppressionRemove(ctx, reqInfo.AccountName, addr.Path())
+	if err != nil && err == bstore.ErrAbsent {
+		xcheckuserf(ctx, err, "remove suppression")
+	}
+	xcheckf(ctx, err, "remove suppression")
+}
+
+// OutgoingWebhookSave saves a new webhook url for outgoing deliveries. If url
+// is empty, the webhook is disabled. If authorization is non-empty it is used for
+// the Authorization header in HTTP requests. Events specifies the outgoing events
+// to be delivered, or all if empty/nil.
+func (Account) OutgoingWebhookSave(ctx context.Context, url, authorization string, events []string) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		if url == "" {
+			acc.OutgoingWebhook = nil
+		} else {
+			acc.OutgoingWebhook = &config.OutgoingWebhook{URL: url, Authorization: authorization, Events: events}
+		}
+	})
+	if err != nil && errors.Is(err, mox.ErrConfig) {
+		xcheckuserf(ctx, err, "saving account outgoing webhook")
+	}
+	xcheckf(ctx, err, "saving account outgoing webhook")
+}
+
+// OutgoingWebhookTest makes a test webhook call to urlStr, with optional
+// authorization. If the HTTP request is made this call will succeed also for
+// non-2xx HTTP status codes.
+func (Account) OutgoingWebhookTest(ctx context.Context, urlStr, authorization string, data webhook.Outgoing) (code int, response string, errmsg string) {
+	log := pkglog.WithContext(ctx)
+
+	xvalidURL(ctx, urlStr)
+	log.Debug("making webhook test call for outgoing message", slog.String("url", urlStr))
+
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetIndent("", "\t")
+	enc.SetEscapeHTML(false)
+	err := enc.Encode(data)
+	xcheckf(ctx, err, "encoding outgoing webhook data")
+
+	code, response, err = queue.HookPost(ctx, log, 1, 1, urlStr, authorization, b.String())
+	if err != nil {
+		errmsg = err.Error()
+	}
+	log.Debugx("result for webhook test call for outgoing message", err, slog.Int("code", code), slog.String("response", response))
+	return code, response, errmsg
+}
+
+// IncomingWebhookSave saves a new webhook url for incoming deliveries. If url is
+// empty, the webhook is disabled. If authorization is not empty, it is used in
+// the Authorization header in requests.
+func (Account) IncomingWebhookSave(ctx context.Context, url, authorization string) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		if url == "" {
+			acc.IncomingWebhook = nil
+		} else {
+			acc.IncomingWebhook = &config.IncomingWebhook{URL: url, Authorization: authorization}
+		}
+	})
+	if err != nil && errors.Is(err, mox.ErrConfig) {
+		xcheckuserf(ctx, err, "saving account incoming webhook")
+	}
+	xcheckf(ctx, err, "saving account incoming webhook")
+}
+
+func xvalidURL(ctx context.Context, s string) {
+	u, err := url.Parse(s)
+	xcheckuserf(ctx, err, "parsing url")
+	if u.Scheme != "http" && u.Scheme != "https" {
+		xcheckuserf(ctx, errors.New("scheme must be http or https"), "parsing url")
+	}
+}
+
+// IncomingWebhookTest makes a test webhook HTTP delivery request to urlStr,
+// with optional authorization header. If the HTTP call is made, this function
+// returns non-error regardless of HTTP status code.
+func (Account) IncomingWebhookTest(ctx context.Context, urlStr, authorization string, data webhook.Incoming) (code int, response string, errmsg string) {
+	log := pkglog.WithContext(ctx)
+
+	xvalidURL(ctx, urlStr)
+	log.Debug("making webhook test call for incoming message", slog.String("url", urlStr))
+
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "\t")
+	err := enc.Encode(data)
+	xcheckf(ctx, err, "encoding incoming webhook data")
+	code, response, err = queue.HookPost(ctx, log, 1, 1, urlStr, authorization, b.String())
+	if err != nil {
+		errmsg = err.Error()
+	}
+	log.Debugx("result for webhook test call for incoming message", err, slog.Int("code", code), slog.String("response", response))
+	return code, response, errmsg
+}
+
+// FromIDLoginAddressesSave saves new login addresses to enable unique SMTP
+// MAIL FROM addresses ("fromid") for deliveries from the queue.
+func (Account) FromIDLoginAddressesSave(ctx context.Context, loginAddresses []string) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		acc.FromIDLoginAddresses = loginAddresses
+	})
+	if err != nil && errors.Is(err, mox.ErrConfig) {
+		xcheckuserf(ctx, err, "saving account fromid login addresses")
+	}
+	xcheckf(ctx, err, "saving account fromid login addresses")
+}
+
+// KeepRetiredPeriodsSave save periods to save retired messages and webhooks.
+func (Account) KeepRetiredPeriodsSave(ctx context.Context, keepRetiredMessagePeriod, keepRetiredWebhookPeriod time.Duration) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		acc.KeepRetiredMessagePeriod = keepRetiredMessagePeriod
+		acc.KeepRetiredWebhookPeriod = keepRetiredWebhookPeriod
+	})
+	if err != nil && errors.Is(err, mox.ErrConfig) {
+		xcheckuserf(ctx, err, "saving account keep retired periods")
+	}
+	xcheckf(ctx, err, "saving account keep retired periods")
 }

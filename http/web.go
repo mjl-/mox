@@ -35,6 +35,7 @@ import (
 	"github.com/mjl-/mox/ratelimit"
 	"github.com/mjl-/mox/webaccount"
 	"github.com/mjl-/mox/webadmin"
+	"github.com/mjl-/mox/webapisrv"
 	"github.com/mjl-/mox/webmail"
 )
 
@@ -577,6 +578,30 @@ func Listen() {
 		if maxMsgSize == 0 {
 			maxMsgSize = config.DefaultMaxMsgSize
 		}
+
+		if l.WebAPIHTTP.Enabled {
+			port := config.Port(l.WebAPIHTTP.Port, 80)
+			path := "/webapi/"
+			if l.WebAPIHTTP.Path != "" {
+				path = l.WebAPIHTTP.Path
+			}
+			srv := ensureServe(false, port, "webapi-http at "+path)
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTP.Forwarded)))
+			srv.Handle("webapi", nil, path, handler)
+			redirectToTrailingSlash(srv, "webapi", path)
+		}
+		if l.WebAPIHTTPS.Enabled {
+			port := config.Port(l.WebAPIHTTPS.Port, 443)
+			path := "/webapi/"
+			if l.WebAPIHTTPS.Path != "" {
+				path = l.WebAPIHTTPS.Path
+			}
+			srv := ensureServe(true, port, "webapi-https at "+path)
+			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTPS.Forwarded)))
+			srv.Handle("webapi", nil, path, handler)
+			redirectToTrailingSlash(srv, "webapi", path)
+		}
+
 		if l.WebmailHTTP.Enabled {
 			port := config.Port(l.WebmailHTTP.Port, 80)
 			path := "/webmail/"

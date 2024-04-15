@@ -114,9 +114,9 @@ type Recipient struct {
 	// deliveries.
 	RemoteMTA NameIP
 
-	// DiagnosticCode should either be empty, or start with "smtp; " followed by the
-	// literal full SMTP response lines, space separated.
-	DiagnosticCode string
+	// DiagnosticCodeSMTP are the full SMTP response lines, space separated. The marshaled
+	// form starts with "smtp; ", this value does not.
+	DiagnosticCodeSMTP string
 
 	LastAttemptDate time.Time
 	FinalLogID      string
@@ -286,9 +286,9 @@ func (m *Message) Compose(log mlog.Log, smtputf8 bool) ([]byte, error) {
 			status("Remote-MTA", s)
 		}
 		// Presence of Diagnostic-Code indicates the code is from Remote-MTA. ../rfc/3464:1053
-		if r.DiagnosticCode != "" {
+		if r.DiagnosticCodeSMTP != "" {
 			// ../rfc/3461:1342 ../rfc/6533:589
-			status("Diagnostic-Code", r.DiagnosticCode)
+			status("Diagnostic-Code", "smtp; "+r.DiagnosticCodeSMTP)
 		}
 		if !r.LastAttemptDate.IsZero() {
 			status("Last-Attempt-Date", r.LastAttemptDate.Format(message.RFC5322Z)) // ../rfc/3464:1076

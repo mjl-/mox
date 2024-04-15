@@ -97,8 +97,8 @@ type Envelope struct {
 	To        []Address
 	CC        []Address
 	BCC       []Address
-	InReplyTo string
-	MessageID string
+	InReplyTo string // From In-Reply-To header, includes <>.
+	MessageID string // From Message-Id header, includes <>.
 }
 
 // Address as used in From and To headers.

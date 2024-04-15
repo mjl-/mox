@@ -90,8 +90,8 @@ domains with HTTP/HTTPS, including with automatic TLS with ACME, is easily
 configured through both configuration files and admin web interface, and can act
 as a reverse proxy (and static file server for that matter), so you can forward
 traffic to your existing backend applications. Look for "WebHandlers:" in the
-output of "mox config describe-domains" and see the output of "mox example
-webhandlers".
+output of "mox config describe-domains" and see the output of
+"mox config example webhandlers".
 `
 	var existingWebserver bool
 	var hostname string
@@ -563,7 +563,8 @@ WARNING: Could not verify outgoing smtp connections can be made, outgoing
 delivery may not be working. Many providers block outgoing smtp connections by
 default, requiring an explicit request or a cooldown period before allowing
 outgoing smtp connections. To send through a smarthost, configure a "Transport"
-in mox.conf and use it in "Routes" in domains.conf. See "mox example transport".
+in mox.conf and use it in "Routes" in domains.conf. See
+"mox config example transport".
 
 `)
 		}
@@ -774,6 +775,7 @@ and check the admin page for the needed DNS records.`)
 	internal.AccountHTTP.Enabled = true
 	internal.AdminHTTP.Enabled = true
 	internal.WebmailHTTP.Enabled = true
+	internal.WebAPIHTTP.Enabled = true
 	internal.MetricsHTTP.Enabled = true
 	if existingWebserver {
 		internal.AccountHTTP.Port = 1080
@@ -782,6 +784,8 @@ and check the admin page for the needed DNS records.`)
 		internal.AdminHTTP.Forwarded = true
 		internal.WebmailHTTP.Port = 1080
 		internal.WebmailHTTP.Forwarded = true
+		internal.WebAPIHTTP.Port = 1080
+		internal.WebAPIHTTP.Forwarded = true
 		internal.AutoconfigHTTPS.Enabled = true
 		internal.AutoconfigHTTPS.Port = 81
 		internal.AutoconfigHTTPS.NonTLS = true

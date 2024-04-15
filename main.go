@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto"
@@ -23,9 +24,11 @@ import (
 	"log"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strconv"
@@ -57,6 +60,7 @@ import (
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/publicsuffix"
+	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/spf"
@@ -65,6 +69,7 @@ import (
 	"github.com/mjl-/mox/tlsrptdb"
 	"github.com/mjl-/mox/updates"
 	"github.com/mjl-/mox/webadmin"
+	"github.com/mjl-/mox/webapi"
 )
 
 var (
@@ -111,6 +116,18 @@ var commands = []struct {
 	{"queue fail", cmdQueueFail},
 	{"queue drop", cmdQueueDrop},
 	{"queue dump", cmdQueueDump},
+	{"queue retired list", cmdQueueRetiredList},
+	{"queue retired print", cmdQueueRetiredPrint},
+	{"queue suppress list", cmdQueueSuppressList},
+	{"queue suppress add", cmdQueueSuppressAdd},
+	{"queue suppress remove", cmdQueueSuppressRemove},
+	{"queue suppress lookup", cmdQueueSuppressLookup},
+	{"queue webhook list", cmdQueueHookList},
+	{"queue webhook schedule", cmdQueueHookSchedule},
+	{"queue webhook cancel", cmdQueueHookCancel},
+	{"queue webhook print", cmdQueueHookPrint},
+	{"queue webhook retired list", cmdQueueHookRetiredList},
+	{"queue webhook retired print", cmdQueueHookRetiredPrint},
 	{"import maildir", cmdImportMaildir},
 	{"import mbox", cmdImportMbox},
 	{"export maildir", cmdExportMaildir},
@@ -134,7 +151,7 @@ var commands = []struct {
 	{"config describe-sendmail", cmdConfigDescribeSendmail},
 	{"config printservice", cmdConfigPrintservice},
 	{"config ensureacmehostprivatekeys", cmdConfigEnsureACMEHostprivatekeys},
-	{"example", cmdExample},
+	{"config example", cmdConfigExample},
 
 	{"checkupdate", cmdCheckupdate},
 	{"cid", cmdCid},
@@ -166,7 +183,9 @@ var commands = []struct {
 	{"tlsrpt lookup", cmdTLSRPTLookup},
 	{"tlsrpt parsereportmsg", cmdTLSRPTParsereportmsg},
 	{"version", cmdVersion},
+	{"webapi", cmdWebapi},
 
+	{"example", cmdExample},
 	{"bumpuidvalidity", cmdBumpUIDValidity},
 	{"reassignuids", cmdReassignUIDs},
 	{"fixuidmeta", cmdFixUIDMeta},
@@ -196,6 +215,7 @@ var commands = []struct {
 	{"ximport mbox", cmdXImportMbox},
 	{"openaccounts", cmdOpenaccounts},
 	{"readmessages", cmdReadmessages},
+	{"queuefillretired", cmdQueueFillRetired},
 }
 
 var cmds []cmd
@@ -2384,6 +2404,7 @@ The report is printed in formatted JSON.
 		// todo future: only print the highlights?
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "\t")
+		enc.SetEscapeHTML(false)
 		err = enc.Encode(reportJSON)
 		xcheckf(err, "write report")
 	}
@@ -2659,6 +2680,97 @@ func cmdVersion(c *cmd) {
 	}
 	fmt.Println(moxvar.Version)
 	fmt.Printf("%s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+}
+
+func cmdWebapi(c *cmd) {
+	c.params = "[method [baseurl-with-credentials]"
+	c.help = "Lists available methods, prints request/response parameters for method, or calls a method with a request read from standard input."
+	args := c.Parse()
+	if len(args) > 2 {
+		c.Usage()
+	}
+
+	t := reflect.TypeOf((*webapi.Methods)(nil)).Elem()
+	methods := map[string]reflect.Type{}
+	var ml []string
+	for i := 0; i < t.NumMethod(); i++ {
+		mt := t.Method(i)
+		methods[mt.Name] = mt.Type
+		ml = append(ml, mt.Name)
+	}
+
+	if len(args) == 0 {
+		fmt.Println(strings.Join(ml, "\n"))
+		return
+	}
+
+	mt, ok := methods[args[0]]
+	if !ok {
+		log.Fatalf("unknown method %q", args[0])
+	}
+	resultNotJSON := mt.Out(0).Kind() == reflect.Interface
+
+	if len(args) == 1 {
+		fmt.Println("# Example request")
+		fmt.Println()
+		printJSON("\t", mox.FillExample(nil, reflect.New(mt.In(1))).Interface())
+		fmt.Println()
+		if resultNotJSON {
+			fmt.Println("Output is non-JSON data.")
+			return
+		}
+		fmt.Println("# Example response")
+		fmt.Println()
+		printJSON("\t", mox.FillExample(nil, reflect.New(mt.Out(0))).Interface())
+		return
+	}
+
+	var response any
+	if !resultNotJSON {
+		response = reflect.New(mt.Out(0))
+	}
+
+	fmt.Fprintln(os.Stderr, "reading request from stdin...")
+	request, err := io.ReadAll(os.Stdin)
+	xcheckf(err, "read message")
+
+	dec := json.NewDecoder(bytes.NewReader(request))
+	dec.DisallowUnknownFields()
+	err = dec.Decode(reflect.New(mt.In(1)).Interface())
+	xcheckf(err, "parsing request")
+
+	resp, err := http.PostForm(args[1]+args[0], url.Values{"request": []string{string(request)}})
+	xcheckf(err, "http post")
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusBadRequest {
+		buf, err := io.ReadAll(&moxio.LimitReader{R: resp.Body, Limit: 10 * 1024})
+		xcheckf(err, "reading response for 400 bad request error")
+		err = json.Unmarshal(buf, &response)
+		if err == nil {
+			printJSON("", response)
+		} else {
+			fmt.Fprintf(os.Stderr, "(not json)\n")
+			os.Stderr.Write(buf)
+		}
+		os.Exit(1)
+	} else if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "http response %s\n", resp.Status)
+		_, err := io.Copy(os.Stderr, resp.Body)
+		xcheckf(err, "copy body")
+	} else {
+		err := json.NewDecoder(resp.Body).Decode(&resp)
+		xcheckf(err, "unmarshal response")
+		printJSON("", response)
+	}
+}
+
+func printJSON(indent string, v any) {
+	fmt.Printf("%s", indent)
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent(indent, "\t")
+	enc.SetEscapeHTML(false)
+	err := enc.Encode(v)
+	xcheckf(err, "encode json")
 }
 
 // todo: should make it possible to run this command against a running mox. it should disconnect existing clients for accounts with a bumped uidvalidity, so they will reconnect and refetch the data.
@@ -3020,6 +3132,8 @@ func cmdMessageParse(c *cmd) {
 	c.params = "message.eml"
 	c.help = "Parse message, print JSON representation."
 
+	var smtputf8 bool
+	c.flag.BoolVar(&smtputf8, "smtputf8", false, "check if message needs smtputf8")
 	args := c.Parse()
 	if len(args) != 1 {
 		c.Usage()
@@ -3035,8 +3149,40 @@ func cmdMessageParse(c *cmd) {
 	xcheckf(err, "parsing nested parts")
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "\t")
+	enc.SetEscapeHTML(false)
 	err = enc.Encode(part)
 	xcheckf(err, "write")
+
+	hasNonASCII := func(r io.Reader) bool {
+		br := bufio.NewReader(r)
+		for {
+			b, err := br.ReadByte()
+			if err == io.EOF {
+				break
+			}
+			xcheckf(err, "read header")
+			if b > 0x7f {
+				return true
+			}
+		}
+		return false
+	}
+
+	var walk func(p *message.Part) bool
+	walk = func(p *message.Part) bool {
+		if hasNonASCII(p.HeaderReader()) {
+			return true
+		}
+		for _, pp := range p.Parts {
+			if walk(&pp) {
+				return true
+			}
+		}
+		return false
+	}
+	if smtputf8 {
+		fmt.Println("message needs smtputf8:", walk(&part))
+	}
 }
 
 func cmdOpenaccounts(c *cmd) {
@@ -3239,4 +3385,135 @@ Opens database files directly, not going through a running mox instance.
 		xcheckf(err, "close account %s", accName)
 		log.Printf("account %s, total time %s", accName, time.Since(t0))
 	}
+}
+
+func cmdQueueFillRetired(c *cmd) {
+	c.unlisted = true
+	c.help = `Fill retired messag and webhooks queue with testdata.
+
+For testing the pagination. Operates directly on queue database.
+`
+	var n int
+	c.flag.IntVar(&n, "n", 10000, "retired messages and retired webhooks to insert")
+	args := c.Parse()
+	if len(args) != 0 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	err := queue.Init()
+	xcheckf(err, "init queue")
+	err = queue.DB.Write(context.Background(), func(tx *bstore.Tx) error {
+		now := time.Now()
+
+		// Cause autoincrement ID for queue.Msg to be forwarded, and use the reserved ID
+		// space for inserting retired messages.
+		fm := queue.Msg{}
+		err = tx.Insert(&fm)
+		xcheckf(err, "temporarily insert message to get autoincrement sequence")
+		err = tx.Delete(&fm)
+		xcheckf(err, "removing temporary message for resetting autoincrement sequence")
+		fm.ID += int64(n)
+		err = tx.Insert(&fm)
+		xcheckf(err, "temporarily insert message to forward autoincrement sequence")
+		err = tx.Delete(&fm)
+		xcheckf(err, "removing temporary message after forwarding autoincrement sequence")
+		fm.ID -= int64(n)
+
+		// And likewise for webhooks.
+		fh := queue.Hook{Account: "x", URL: "x", NextAttempt: time.Now()}
+		err = tx.Insert(&fh)
+		xcheckf(err, "temporarily insert webhook to get autoincrement sequence")
+		err = tx.Delete(&fh)
+		xcheckf(err, "removing temporary webhook for resetting autoincrement sequence")
+		fh.ID += int64(n)
+		err = tx.Insert(&fh)
+		xcheckf(err, "temporarily insert webhook to forward autoincrement sequence")
+		err = tx.Delete(&fh)
+		xcheckf(err, "removing temporary webhook after forwarding autoincrement sequence")
+		fh.ID -= int64(n)
+
+		for i := 0; i < n; i++ {
+			t0 := now.Add(-time.Duration(i) * time.Second)
+			last := now.Add(-time.Duration(i/10) * time.Second)
+			mr := queue.MsgRetired{
+				ID:                 fm.ID + int64(i),
+				Queued:             t0,
+				SenderAccount:      "test",
+				SenderLocalpart:    "mox",
+				SenderDomainStr:    "localhost",
+				FromID:             fmt.Sprintf("%016d", i),
+				RecipientLocalpart: "mox",
+				RecipientDomain:    dns.IPDomain{Domain: dns.Domain{ASCII: "localhost"}},
+				RecipientDomainStr: "localhost",
+				Attempts:           i % 6,
+				LastAttempt:        &last,
+				Results: []queue.MsgResult{
+					{
+						Start:    last,
+						Duration: time.Millisecond,
+						Success:  i%10 != 0,
+						Code:     250,
+					},
+				},
+				Has8bit:          i%2 == 0,
+				SMTPUTF8:         i%8 == 0,
+				Size:             int64(i * 100),
+				MessageID:        fmt.Sprintf("<msg%d@localhost>", i),
+				Subject:          fmt.Sprintf("test message %d", i),
+				Extra:            map[string]string{"i": fmt.Sprintf("%d", i)},
+				LastActivity:     last,
+				RecipientAddress: "mox@localhost",
+				Success:          i%10 != 0,
+				KeepUntil:        now.Add(48 * time.Hour),
+			}
+			err := tx.Insert(&mr)
+			xcheckf(err, "inserting retired message")
+		}
+
+		for i := 0; i < n; i++ {
+			t0 := now.Add(-time.Duration(i) * time.Second)
+			last := now.Add(-time.Duration(i/10) * time.Second)
+			var event string
+			if i%10 != 0 {
+				event = "delivered"
+			}
+			hr := queue.HookRetired{
+				ID:            fh.ID + int64(i),
+				QueueMsgID:    fm.ID + int64(i),
+				FromID:        fmt.Sprintf("%016d", i),
+				MessageID:     fmt.Sprintf("<msg%d@localhost>", i),
+				Subject:       fmt.Sprintf("test message %d", i),
+				Extra:         map[string]string{"i": fmt.Sprintf("%d", i)},
+				Account:       "test",
+				URL:           "http://localhost/hook",
+				IsIncoming:    i%10 == 0,
+				OutgoingEvent: event,
+				Payload:       "{}",
+
+				Submitted: t0,
+				Attempts:  i % 6,
+				Results: []queue.HookResult{
+					{
+						Start:    t0,
+						Duration: time.Millisecond,
+						URL:      "http://localhost/hook",
+						Success:  i%10 != 0,
+						Code:     200,
+						Response: "ok",
+					},
+				},
+
+				Success:      i%10 != 0,
+				LastActivity: last,
+				KeepUntil:    now.Add(48 * time.Hour),
+			}
+			err := tx.Insert(&hr)
+			xcheckf(err, "inserting retired hook")
+		}
+
+		return nil
+	})
+	xcheckf(err, "add to queue")
+	log.Printf("added %d retired messages and %d retired webhooks", n, n)
 }

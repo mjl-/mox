@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -27,6 +28,7 @@ import (
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
+	"github.com/mjl-/mox/webapi"
 )
 
 // ctl represents a connection to the ctl unix domain socket of a running mox instance.
@@ -294,12 +296,11 @@ func servectl(ctx context.Context, log mlog.Log, conn net.Conn, shutdown func())
 	}
 }
 
-func xparseFilters(ctl *ctl, s string) (f queue.Filter) {
+func xparseJSON(ctl *ctl, s string, v any) {
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.DisallowUnknownFields()
-	err := dec.Decode(&f)
-	ctl.xcheck(err, "parsing filters")
-	return f
+	err := dec.Decode(v)
+	ctl.xcheck(err, "parsing from ctl as json")
 }
 
 func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
@@ -447,14 +448,17 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 
 	case "queuelist":
 		/* protocol:
-		> "queue"
-		> queuefilters as json
+		> "queuelist"
+		> filters as json
+		> sort as json
 		< "ok"
 		< stream
 		*/
-		fs := ctl.xread()
-		f := xparseFilters(ctl, fs)
-		qmsgs, err := queue.List(ctx, f)
+		var f queue.Filter
+		xparseJSON(ctl, ctl.xread(), &f)
+		var s queue.Sort
+		xparseJSON(ctl, ctl.xread(), &s)
+		qmsgs, err := queue.List(ctx, f, s)
 		ctl.xcheck(err, "listing queue")
 		ctl.xwriteok()
 
@@ -465,7 +469,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			if qm.LastAttempt != nil {
 				lastAttempt = time.Since(*qm.LastAttempt).Round(time.Second).String()
 			}
-			fmt.Fprintf(xw, "%5d %s from:%s to:%s next %s last %s error %q\n", qm.ID, qm.Queued.Format(time.RFC3339), qm.Sender().LogString(), qm.Recipient().LogString(), -time.Since(qm.NextAttempt).Round(time.Second), lastAttempt, qm.LastError)
+			fmt.Fprintf(xw, "%5d %s from:%s to:%s next %s last %s error %q\n", qm.ID, qm.Queued.Format(time.RFC3339), qm.Sender().LogString(), qm.Recipient().LogString(), -time.Since(qm.NextAttempt).Round(time.Second), lastAttempt, qm.LastResult().Error)
 		}
 		if len(qmsgs) == 0 {
 			fmt.Fprint(xw, "(none)\n")
@@ -481,8 +485,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		fs := ctl.xread()
-		f := xparseFilters(ctl, fs)
+		var f queue.Filter
+		xparseJSON(ctl, ctl.xread(), &f)
 		hold := ctl.xread() == "true"
 		count, err := queue.HoldSet(ctx, f, hold)
 		ctl.xcheck(err, "setting on hold status for messages")
@@ -499,8 +503,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		fs := ctl.xread()
-		f := xparseFilters(ctl, fs)
+		var f queue.Filter
+		xparseJSON(ctl, ctl.xread(), &f)
 		relnow := ctl.xread()
 		d, err := time.ParseDuration(ctl.xread())
 		ctl.xcheck(err, "parsing duration for next delivery attempt")
@@ -523,8 +527,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		fs := ctl.xread()
-		f := xparseFilters(ctl, fs)
+		var f queue.Filter
+		xparseJSON(ctl, ctl.xread(), &f)
 		transport := ctl.xread()
 		count, err := queue.TransportSet(ctx, f, transport)
 		ctl.xcheck(err, "adding to next delivery attempts in queue")
@@ -540,8 +544,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		fs := ctl.xread()
-		f := xparseFilters(ctl, fs)
+		var f queue.Filter
+		xparseJSON(ctl, ctl.xread(), &f)
 		reqtls := ctl.xread()
 		var req *bool
 		switch reqtls {
@@ -568,8 +572,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		fs := ctl.xread()
-		f := xparseFilters(ctl, fs)
+		var f queue.Filter
+		xparseJSON(ctl, ctl.xread(), &f)
 		count, err := queue.Fail(ctx, log, f)
 		ctl.xcheck(err, "marking messages from queue as failed")
 		ctl.xwriteok()
@@ -583,8 +587,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		fs := ctl.xread()
-		f := xparseFilters(ctl, fs)
+		var f queue.Filter
+		xparseJSON(ctl, ctl.xread(), &f)
 		count, err := queue.Drop(ctx, log, f)
 		ctl.xcheck(err, "dropping messages from queue")
 		ctl.xwriteok()
@@ -611,6 +615,325 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		}()
 		ctl.xwriteok()
 		ctl.xstreamfrom(mr)
+
+	case "queueretiredlist":
+		/* protocol:
+		> "queueretiredlist"
+		> filters as json
+		> sort as json
+		< "ok"
+		< stream
+		*/
+		var f queue.RetiredFilter
+		xparseJSON(ctl, ctl.xread(), &f)
+		var s queue.RetiredSort
+		xparseJSON(ctl, ctl.xread(), &s)
+		qmsgs, err := queue.RetiredList(ctx, f, s)
+		ctl.xcheck(err, "listing retired queue")
+		ctl.xwriteok()
+
+		xw := ctl.writer()
+		fmt.Fprintln(xw, "retired messages:")
+		for _, qm := range qmsgs {
+			var lastAttempt string
+			if qm.LastAttempt != nil {
+				lastAttempt = time.Since(*qm.LastAttempt).Round(time.Second).String()
+			}
+			result := "failure"
+			if qm.Success {
+				result = "success"
+			}
+			sender, err := qm.Sender()
+			xcheckf(err, "parsing sender")
+			fmt.Fprintf(xw, "%5d %s %s from:%s to:%s last %s error %q\n", qm.ID, qm.Queued.Format(time.RFC3339), result, sender.LogString(), qm.Recipient().LogString(), lastAttempt, qm.LastResult().Error)
+		}
+		if len(qmsgs) == 0 {
+			fmt.Fprint(xw, "(none)\n")
+		}
+		xw.xclose()
+
+	case "queueretiredprint":
+		/* protocol:
+		> "queueretiredprint"
+		> id
+		< "ok"
+		< stream
+		*/
+		idstr := ctl.xread()
+		id, err := strconv.ParseInt(idstr, 10, 64)
+		if err != nil {
+			ctl.xcheck(err, "parsing id")
+		}
+		l, err := queue.RetiredList(ctx, queue.RetiredFilter{IDs: []int64{id}}, queue.RetiredSort{})
+		ctl.xcheck(err, "getting retired messages")
+		if len(l) == 0 {
+			ctl.xcheck(errors.New("not found"), "getting retired message")
+		}
+		m := l[0]
+		ctl.xwriteok()
+		xw := ctl.writer()
+		enc := json.NewEncoder(xw)
+		enc.SetIndent("", "\t")
+		err = enc.Encode(m)
+		ctl.xcheck(err, "encode retired message")
+		xw.xclose()
+
+	case "queuehooklist":
+		/* protocol:
+		> "queuehooklist"
+		> filters as json
+		> sort as json
+		< "ok"
+		< stream
+		*/
+		var f queue.HookFilter
+		xparseJSON(ctl, ctl.xread(), &f)
+		var s queue.HookSort
+		xparseJSON(ctl, ctl.xread(), &s)
+		hooks, err := queue.HookList(ctx, f, s)
+		ctl.xcheck(err, "listing webhooks")
+		ctl.xwriteok()
+
+		xw := ctl.writer()
+		fmt.Fprintln(xw, "webhooks:")
+		for _, h := range hooks {
+			var lastAttempt string
+			if len(h.Results) > 0 {
+				lastAttempt = time.Since(h.LastResult().Start).Round(time.Second).String()
+			}
+			fmt.Fprintf(xw, "%5d %s account:%s next %s last %s error %q url %s\n", h.ID, h.Submitted.Format(time.RFC3339), h.Account, time.Until(h.NextAttempt).Round(time.Second), lastAttempt, h.LastResult().Error, h.URL)
+		}
+		if len(hooks) == 0 {
+			fmt.Fprint(xw, "(none)\n")
+		}
+		xw.xclose()
+
+	case "queuehookschedule":
+		/* protocol:
+		> "queuehookschedule"
+		> hookfilters as json
+		> relative to now
+		> duration
+		< "ok" or error
+		< count
+		*/
+
+		var f queue.HookFilter
+		xparseJSON(ctl, ctl.xread(), &f)
+		relnow := ctl.xread()
+		d, err := time.ParseDuration(ctl.xread())
+		ctl.xcheck(err, "parsing duration for next delivery attempt")
+		var count int
+		if relnow == "" {
+			count, err = queue.HookNextAttemptAdd(ctx, f, d)
+		} else {
+			count, err = queue.HookNextAttemptSet(ctx, f, time.Now().Add(d))
+		}
+		ctl.xcheck(err, "setting next delivery attempts in queue")
+		ctl.xwriteok()
+		ctl.xwrite(fmt.Sprintf("%d", count))
+
+	case "queuehookcancel":
+		/* protocol:
+		> "queuehookcancel"
+		> hookfilters as json
+		< "ok" or error
+		< count
+		*/
+
+		var f queue.HookFilter
+		xparseJSON(ctl, ctl.xread(), &f)
+		count, err := queue.HookCancel(ctx, log, f)
+		ctl.xcheck(err, "canceling webhooks in queue")
+		ctl.xwriteok()
+		ctl.xwrite(fmt.Sprintf("%d", count))
+
+	case "queuehookprint":
+		/* protocol:
+		> "queuehookprint"
+		> id
+		< "ok"
+		< stream
+		*/
+		idstr := ctl.xread()
+		id, err := strconv.ParseInt(idstr, 10, 64)
+		if err != nil {
+			ctl.xcheck(err, "parsing id")
+		}
+		l, err := queue.HookList(ctx, queue.HookFilter{IDs: []int64{id}}, queue.HookSort{})
+		ctl.xcheck(err, "getting webhooks")
+		if len(l) == 0 {
+			ctl.xcheck(errors.New("not found"), "getting webhook")
+		}
+		h := l[0]
+		ctl.xwriteok()
+		xw := ctl.writer()
+		enc := json.NewEncoder(xw)
+		enc.SetIndent("", "\t")
+		err = enc.Encode(h)
+		ctl.xcheck(err, "encode webhook")
+		xw.xclose()
+
+	case "queuehookretiredlist":
+		/* protocol:
+		> "queuehookretiredlist"
+		> filters as json
+		> sort as json
+		< "ok"
+		< stream
+		*/
+		var f queue.HookRetiredFilter
+		xparseJSON(ctl, ctl.xread(), &f)
+		var s queue.HookRetiredSort
+		xparseJSON(ctl, ctl.xread(), &s)
+		l, err := queue.HookRetiredList(ctx, f, s)
+		ctl.xcheck(err, "listing retired webhooks")
+		ctl.xwriteok()
+
+		xw := ctl.writer()
+		fmt.Fprintln(xw, "retired webhooks:")
+		for _, h := range l {
+			var lastAttempt string
+			if len(h.Results) > 0 {
+				lastAttempt = time.Since(h.LastResult().Start).Round(time.Second).String()
+			}
+			result := "success"
+			if !h.Success {
+				result = "failure"
+			}
+			fmt.Fprintf(xw, "%5d %s %s account:%s last %s error %q url %s\n", h.ID, h.Submitted.Format(time.RFC3339), result, h.Account, lastAttempt, h.LastResult().Error, h.URL)
+		}
+		if len(l) == 0 {
+			fmt.Fprint(xw, "(none)\n")
+		}
+		xw.xclose()
+
+	case "queuehookretiredprint":
+		/* protocol:
+		> "queuehookretiredprint"
+		> id
+		< "ok"
+		< stream
+		*/
+		idstr := ctl.xread()
+		id, err := strconv.ParseInt(idstr, 10, 64)
+		if err != nil {
+			ctl.xcheck(err, "parsing id")
+		}
+		l, err := queue.HookRetiredList(ctx, queue.HookRetiredFilter{IDs: []int64{id}}, queue.HookRetiredSort{})
+		ctl.xcheck(err, "getting retired webhooks")
+		if len(l) == 0 {
+			ctl.xcheck(errors.New("not found"), "getting retired webhook")
+		}
+		h := l[0]
+		ctl.xwriteok()
+		xw := ctl.writer()
+		enc := json.NewEncoder(xw)
+		enc.SetIndent("", "\t")
+		err = enc.Encode(h)
+		ctl.xcheck(err, "encode retired webhook")
+		xw.xclose()
+
+	case "queuesuppresslist":
+		/* protocol:
+		> "queuesuppresslist"
+		> account (or empty)
+		< "ok" or error
+		< stream
+		*/
+
+		account := ctl.xread()
+		l, err := queue.SuppressionList(ctx, account)
+		ctl.xcheck(err, "listing suppressions")
+		ctl.xwriteok()
+		xw := ctl.writer()
+		fmt.Fprintln(xw, "suppressions (account, address, manual, time added, base adddress, reason):")
+		for _, sup := range l {
+			manual := "No"
+			if sup.Manual {
+				manual = "Yes"
+			}
+			fmt.Fprintf(xw, "%q\t%q\t%s\t%s\t%q\t%q\n", sup.Account, sup.OriginalAddress, manual, sup.Created.Round(time.Second), sup.BaseAddress, sup.Reason)
+		}
+		if len(l) == 0 {
+			fmt.Fprintln(xw, "(none)")
+		}
+		xw.xclose()
+
+	case "queuesuppressadd":
+		/* protocol:
+		> "queuesuppressadd"
+		> account
+		> address
+		< "ok" or error
+		*/
+
+		account := ctl.xread()
+		address := ctl.xread()
+		_, ok := mox.Conf.Account(account)
+		if !ok {
+			ctl.xcheck(errors.New("unknown account"), "looking up account")
+		}
+		addr, err := smtp.ParseAddress(address)
+		ctl.xcheck(err, "parsing address")
+		sup := webapi.Suppression{
+			Account: account,
+			Manual:  true,
+			Reason:  "added through mox cli",
+		}
+		err = queue.SuppressionAdd(ctx, addr.Path(), &sup)
+		ctl.xcheck(err, "adding suppression")
+		ctl.xwriteok()
+
+	case "queuesuppressremove":
+		/* protocol:
+		> "queuesuppressremove"
+		> account
+		> address
+		< "ok" or error
+		*/
+
+		account := ctl.xread()
+		address := ctl.xread()
+		addr, err := smtp.ParseAddress(address)
+		ctl.xcheck(err, "parsing address")
+		err = queue.SuppressionRemove(ctx, account, addr.Path())
+		ctl.xcheck(err, "removing suppression")
+		ctl.xwriteok()
+
+	case "queuesuppresslookup":
+		/* protocol:
+		> "queuesuppresslookup"
+		> account or empty
+		> address
+		< "ok" or error
+		< stream
+		*/
+
+		account := ctl.xread()
+		address := ctl.xread()
+		if account != "" {
+			_, ok := mox.Conf.Account(account)
+			if !ok {
+				ctl.xcheck(errors.New("unknown account"), "looking up account")
+			}
+		}
+		addr, err := smtp.ParseAddress(address)
+		ctl.xcheck(err, "parsing address")
+		sup, err := queue.SuppressionLookup(ctx, account, addr.Path())
+		ctl.xcheck(err, "looking up suppression")
+		ctl.xwriteok()
+		xw := ctl.writer()
+		if sup == nil {
+			fmt.Fprintln(xw, "not present")
+		} else {
+			manual := "no"
+			if sup.Manual {
+				manual = "yes"
+			}
+			fmt.Fprintf(xw, "present\nadded: %s\nmanual: %s\nbase address: %s\nreason: %q\n", sup.Created.Round(time.Second), manual, sup.BaseAddress, sup.Reason)
+		}
+		xw.xclose()
 
 	case "importmaildir", "importmbox":
 		mbox := cmd == "importmbox"

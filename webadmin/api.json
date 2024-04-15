@@ -741,6 +741,12 @@
 					"Typewords": [
 						"Filter"
 					]
+				},
+				{
+					"Name": "sort",
+					"Typewords": [
+						"Sort"
+					]
 				}
 			],
 			"Returns": [
@@ -912,6 +918,172 @@
 					"Name": "transport",
 					"Typewords": [
 						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "affected",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "RetiredList",
+			"Docs": "RetiredList returns messages retired from the queue (delivery could\nhave succeeded or failed).",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"RetiredFilter"
+					]
+				},
+				{
+					"Name": "sort",
+					"Typewords": [
+						"RetiredSort"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"MsgRetired"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookQueueSize",
+			"Docs": "HookQueueSize returns the number of webhooks still to be delivered.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookList",
+			"Docs": "HookList lists webhooks still to be delivered.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"HookFilter"
+					]
+				},
+				{
+					"Name": "sort",
+					"Typewords": [
+						"HookSort"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"Hook"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookNextAttemptSet",
+			"Docs": "HookNextAttemptSet sets a new time for next delivery attempt of matching\nhooks from the queue.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"HookFilter"
+					]
+				},
+				{
+					"Name": "minutes",
+					"Typewords": [
+						"int32"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "affected",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookNextAttemptAdd",
+			"Docs": "HookNextAttemptAdd adds a duration to the time of next delivery attempt of\nmatching hooks from the queue.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"HookFilter"
+					]
+				},
+				{
+					"Name": "minutes",
+					"Typewords": [
+						"int32"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "affected",
+					"Typewords": [
+						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookRetiredList",
+			"Docs": "HookRetiredList lists retired webhooks.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"HookRetiredFilter"
+					]
+				},
+				{
+					"Name": "sort",
+					"Typewords": [
+						"HookRetiredSort"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"HookRetired"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookCancel",
+			"Docs": "HookCancel prevents further delivery attempts of matching webhooks.",
+			"Params": [
+				{
+					"Name": "filter",
+					"Typewords": [
+						"HookFilter"
 					]
 				}
 			],
@@ -2627,6 +2799,44 @@
 			"Docs": "",
 			"Fields": [
 				{
+					"Name": "OutgoingWebhook",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"OutgoingWebhook"
+					]
+				},
+				{
+					"Name": "IncomingWebhook",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"IncomingWebhook"
+					]
+				},
+				{
+					"Name": "FromIDLoginAddresses",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "KeepRetiredMessagePeriod",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "KeepRetiredWebhookPeriod",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
 					"Name": "Domain",
 					"Docs": "",
 					"Typewords": [
@@ -2732,6 +2942,54 @@
 					"Docs": "Parsed form of Domain.",
 					"Typewords": [
 						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "OutgoingWebhook",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "URL",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Authorization",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Events",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "IncomingWebhook",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "URL",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Authorization",
+					"Docs": "",
+					"Typewords": [
+						"string"
 					]
 				}
 			]
@@ -3969,6 +4227,13 @@
 			"Docs": "Filter filters messages to list or operate on. Used by admin web interface\nand cli.\n\nOnly non-empty/non-zero values are applied to the filter. Leaving all fields\nempty/zero matches all messages.",
 			"Fields": [
 				{
+					"Name": "Max",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
 					"Name": "IDs",
 					"Docs": "",
 					"Typewords": [
@@ -4025,6 +4290,40 @@
 					"Typewords": [
 						"nullable",
 						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Sort",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Field",
+					"Docs": "\"Queued\" or \"NextAttempt\"/\"\".",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LastID",
+					"Docs": "If \u003e 0, we return objects beyond this, less/greater depending on Asc.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Last",
+					"Docs": "Value of Field for last object. Must be set iff LastID is set.",
+					"Typewords": [
+						"any"
+					]
+				},
+				{
+					"Name": "Asc",
+					"Docs": "Ascending, or descending.",
+					"Typewords": [
+						"bool"
 					]
 				}
 			]
@@ -4090,6 +4389,404 @@
 					]
 				},
 				{
+					"Name": "FromID",
+					"Docs": "For transactional messages, used to match later DSNs.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RecipientLocalpart",
+					"Docs": "Typically a remote user and domain.",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "RecipientDomain",
+					"Docs": "",
+					"Typewords": [
+						"IPDomain"
+					]
+				},
+				{
+					"Name": "RecipientDomainStr",
+					"Docs": "For filtering, unicode domain. Can also contain ip enclosed in [].",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Attempts",
+					"Docs": "Next attempt is based on last attempt and exponential back off based on attempts.",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "MaxAttempts",
+					"Docs": "Max number of attempts before giving up. If 0, then the default of 8 attempts is used instead.",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "DialedIPs",
+					"Docs": "For each host, the IPs that were dialed. Used for IP selection for later attempts.",
+					"Typewords": [
+						"{}",
+						"[]",
+						"IP"
+					]
+				},
+				{
+					"Name": "NextAttempt",
+					"Docs": "For scheduling.",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "LastAttempt",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Results",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"MsgResult"
+					]
+				},
+				{
+					"Name": "Has8bit",
+					"Docs": "Whether message contains bytes with high bit set, determines whether 8BITMIME SMTP extension is needed.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "SMTPUTF8",
+					"Docs": "Whether message requires use of SMTPUTF8.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IsDMARCReport",
+					"Docs": "Delivery failures for DMARC reports are handled differently.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IsTLSReport",
+					"Docs": "Delivery failures for TLS reports are handled differently.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Size",
+					"Docs": "Full size of message, combined MsgPrefix with contents of message file.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MessageID",
+					"Docs": "Message-ID header, including \u003c\u003e. Used when composing a DSN, in its References header.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MsgPrefix",
+					"Docs": "Data to send before the contents from the file, typically with headers like DKIM-Signature.",
+					"Typewords": [
+						"[]",
+						"uint8"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "For context about delivery.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "DSNUTF8",
+					"Docs": "If set, this message is a DSN and this is a version using utf-8, for the case the remote MTA supports smtputf8. In this case, Size and MsgPrefix are not relevant.",
+					"Typewords": [
+						"[]",
+						"uint8"
+					]
+				},
+				{
+					"Name": "Transport",
+					"Docs": "If non-empty, the transport to use for this message. Can be set through cli or admin interface. If empty (the default for a submitted message), regular routing rules apply.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RequireTLS",
+					"Docs": "RequireTLS influences TLS verification during delivery.  If nil, the recipient domain policy is followed (MTA-STS and/or DANE), falling back to optional opportunistic non-verified STARTTLS.  If RequireTLS is true (through SMTP REQUIRETLS extension or webmail submit), MTA-STS or DANE is required, as well as REQUIRETLS support by the next hop server.  If RequireTLS is false (through messag header \"TLS-Required: No\"), the recipient domain's policy is ignored if it does not lead to a successful TLS connection, i.e. falling back to SMTP delivery with unverified STARTTLS or plain text.",
+					"Typewords": [
+						"nullable",
+						"bool"
+					]
+				},
+				{
+					"Name": "FutureReleaseRequest",
+					"Docs": "For DSNs, where the original FUTURERELEASE value must be included as per-message field. This field should be of the form \"for;\" plus interval, or \"until;\" plus utc date-time.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Extra",
+					"Docs": "Extra information, for transactional email.",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "IPDomain",
+			"Docs": "IPDomain is an ip address, a domain, or empty.",
+			"Fields": [
+				{
+					"Name": "IP",
+					"Docs": "",
+					"Typewords": [
+						"IP"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MsgResult",
+			"Docs": "MsgResult is the result (or work in progress) of a delivery attempt.",
+			"Fields": [
+				{
+					"Name": "Start",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Duration",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Success",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Code",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "Secode",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Error",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "RetiredFilter",
+			"Docs": "RetiredFilter filters messages to list or operate on. Used by admin web interface\nand cli.\n\nOnly non-empty/non-zero values are applied to the filter. Leaving all fields\nempty/zero matches all messages.",
+			"Fields": [
+				{
+					"Name": "Max",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "IDs",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "From",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Submitted",
+					"Docs": "Whether submitted before/after a time relative to now. \"\u003e$duration\" or \"\u003c$duration\", also with \"now\" for duration.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LastActivity",
+					"Docs": "\"\u003e$duration\" or \"\u003c$duration\", also with \"now\" for duration.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Transport",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"string"
+					]
+				},
+				{
+					"Name": "Success",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "RetiredSort",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Field",
+					"Docs": "\"Queued\" or \"LastActivity\"/\"\".",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LastID",
+					"Docs": "If \u003e 0, we return objects beyond this, less/greater depending on Asc.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Last",
+					"Docs": "Value of Field for last object. Must be set iff LastID is set.",
+					"Typewords": [
+						"any"
+					]
+				},
+				{
+					"Name": "Asc",
+					"Docs": "Ascending, or descending.",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MsgRetired",
+			"Docs": "MsgRetired is a message for which delivery completed, either successful,\nfailed/canceled. Retired messages are only stored if so configured, and will be\ncleaned up after the configured period.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "Same ID as it was as Msg.ID.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "BaseID",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Queued",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "SenderAccount",
+					"Docs": "Failures are delivered back to this local account. Also used for routing.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "SenderLocalpart",
+					"Docs": "Should be a local user and domain.",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "SenderDomainStr",
+					"Docs": "For filtering, unicode.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "FromID",
+					"Docs": "Used to match DSNs.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "RecipientLocalpart",
 					"Docs": "Typically a remote user and domain.",
 					"Typewords": [
@@ -4134,13 +4831,6 @@
 					]
 				},
 				{
-					"Name": "NextAttempt",
-					"Docs": "For scheduling.",
-					"Typewords": [
-						"timestamp"
-					]
-				},
-				{
 					"Name": "LastAttempt",
 					"Docs": "",
 					"Typewords": [
@@ -4149,10 +4839,11 @@
 					]
 				},
 				{
-					"Name": "LastError",
+					"Name": "Results",
 					"Docs": "",
 					"Typewords": [
-						"string"
+						"[]",
+						"MsgResult"
 					]
 				},
 				{
@@ -4198,31 +4889,22 @@
 					]
 				},
 				{
-					"Name": "MsgPrefix",
-					"Docs": "",
+					"Name": "Subject",
+					"Docs": "For context about delivery.",
 					"Typewords": [
-						"[]",
-						"uint8"
-					]
-				},
-				{
-					"Name": "DSNUTF8",
-					"Docs": "If set, this message is a DSN and this is a version using utf-8, for the case the remote MTA supports smtputf8. In this case, Size and MsgPrefix are not relevant.",
-					"Typewords": [
-						"[]",
-						"uint8"
+						"string"
 					]
 				},
 				{
 					"Name": "Transport",
-					"Docs": "If non-empty, the transport to use for this message. Can be set through cli or admin interface. If empty (the default for a submitted message), regular routing rules apply.",
+					"Docs": "",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
 					"Name": "RequireTLS",
-					"Docs": "RequireTLS influences TLS verification during delivery.  If nil, the recipient domain policy is followed (MTA-STS and/or DANE), falling back to optional opportunistic non-verified STARTTLS.  If RequireTLS is true (through SMTP REQUIRETLS extension or webmail submit), MTA-STS or DANE is required, as well as REQUIRETLS support by the next hop server.  If RequireTLS is false (through messag header \"TLS-Required: No\"), the recipient domain's policy is ignored if it does not lead to a successful TLS connection, i.e. falling back to SMTP delivery with unverified STARTTLS or plain text.",
+					"Docs": "",
 					"Typewords": [
 						"nullable",
 						"bool"
@@ -4230,7 +4912,92 @@
 				},
 				{
 					"Name": "FutureReleaseRequest",
-					"Docs": "For DSNs, where the original FUTURERELEASE value must be included as per-message field. This field should be of the form \"for;\" plus interval, or \"until;\" plus utc date-time.",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Extra",
+					"Docs": "Extra information, for transactional email.",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				},
+				{
+					"Name": "LastActivity",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "RecipientAddress",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Success",
+					"Docs": "Whether delivery to next hop succeeded.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "KeepUntil",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookFilter",
+			"Docs": "HookFilter filters messages to list or operate on. Used by admin web interface\nand cli.\n\nOnly non-empty/non-zero values are applied to the filter. Leaving all fields\nempty/zero matches all hooks.",
+			"Fields": [
+				{
+					"Name": "Max",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "IDs",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Submitted",
+					"Docs": "Whether submitted before/after a time relative to now. \"\u003e$duration\" or \"\u003c$duration\", also with \"now\" for duration.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "NextAttempt",
+					"Docs": "\"\u003e$duration\" or \"\u003c$duration\", also with \"now\" for duration.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Event",
+					"Docs": "Including \"incoming\".",
 					"Typewords": [
 						"string"
 					]
@@ -4238,21 +5005,434 @@
 			]
 		},
 		{
-			"Name": "IPDomain",
-			"Docs": "IPDomain is an ip address, a domain, or empty.",
+			"Name": "HookSort",
+			"Docs": "",
 			"Fields": [
 				{
-					"Name": "IP",
-					"Docs": "",
+					"Name": "Field",
+					"Docs": "\"Queued\" or \"NextAttempt\"/\"\".",
 					"Typewords": [
-						"IP"
+						"string"
 					]
 				},
 				{
-					"Name": "Domain",
+					"Name": "LastID",
+					"Docs": "If \u003e 0, we return objects beyond this, less/greater depending on Asc.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Last",
+					"Docs": "Value of Field for last object. Must be set iff LastID is set.",
+					"Typewords": [
+						"any"
+					]
+				},
+				{
+					"Name": "Asc",
+					"Docs": "Ascending, or descending.",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Hook",
+			"Docs": "Hook is a webhook call about a delivery. We'll try delivering with backoff until we succeed or fail.",
+			"Fields": [
+				{
+					"Name": "ID",
 					"Docs": "",
 					"Typewords": [
-						"Domain"
+						"int64"
+					]
+				},
+				{
+					"Name": "QueueMsgID",
+					"Docs": "Original queue Msg/MsgRetired ID. Zero for hooks for incoming messages.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "FromID",
+					"Docs": "As generated by us and returned in webapi call. Can be empty, for incoming messages to our base address.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MessageID",
+					"Docs": "Of outgoing or incoming messages. Includes \u003c\u003e.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "Subject of original outgoing message, or of incoming message.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Extra",
+					"Docs": "From submitted message.",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "URL",
+					"Docs": "Taken from config when webhook is scheduled.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Authorization",
+					"Docs": "Optional value for authorization header to include in HTTP request.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "IsIncoming",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "OutgoingEvent",
+					"Docs": "Empty string if not outgoing.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Payload",
+					"Docs": "JSON data to be submitted.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Submitted",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Attempts",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "NextAttempt",
+					"Docs": "Index for fast scheduling.",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Results",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"HookResult"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookResult",
+			"Docs": "HookResult is the result of a single attempt to deliver a webhook.",
+			"Fields": [
+				{
+					"Name": "Start",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Duration",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "URL",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Success",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Code",
+					"Docs": "eg 200, 404, 500. 2xx implies success.",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "Error",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Response",
+					"Docs": "Max 512 bytes of HTTP response body.",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookRetiredFilter",
+			"Docs": "HookRetiredFilter filters messages to list or operate on. Used by admin web interface\nand cli.\n\nOnly non-empty/non-zero values are applied to the filter. Leaving all fields\nempty/zero matches all hooks.",
+			"Fields": [
+				{
+					"Name": "Max",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "IDs",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Submitted",
+					"Docs": "Whether submitted before/after a time relative to now. \"\u003e$duration\" or \"\u003c$duration\", also with \"now\" for duration.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LastActivity",
+					"Docs": "\"\u003e$duration\" or \"\u003c$duration\", also with \"now\" for duration.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Event",
+					"Docs": "Including \"incoming\".",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookRetiredSort",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Field",
+					"Docs": "\"Queued\" or \"LastActivity\"/\"\".",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LastID",
+					"Docs": "If \u003e 0, we return objects beyond this, less/greater depending on Asc.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Last",
+					"Docs": "Value of Field for last object. Must be set iff LastID is set.",
+					"Typewords": [
+						"any"
+					]
+				},
+				{
+					"Name": "Asc",
+					"Docs": "Ascending, or descending.",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "HookRetired",
+			"Docs": "HookRetired is a Hook that was delivered/failed/canceled and kept according\nto the configuration.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "Same as original Hook.ID.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "QueueMsgID",
+					"Docs": "Original queue Msg or MsgRetired ID. Zero for hooks for incoming messages.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "FromID",
+					"Docs": "As generated by us and returned in webapi call. Can be empty, for incoming messages to our base address.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MessageID",
+					"Docs": "Of outgoing or incoming messages. Includes \u003c\u003e.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "Subject of original outgoing message, or of incoming message.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Extra",
+					"Docs": "From submitted message.",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "URL",
+					"Docs": "Taken from config at start of each attempt.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Authorization",
+					"Docs": "Whether request had authorization without keeping it around.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "IsIncoming",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "OutgoingEvent",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Payload",
+					"Docs": "JSON data submitted.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Submitted",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "SupersededByID",
+					"Docs": "If not 0, a Hook.ID that superseded this one and Done will be true.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "Attempts",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "Results",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"HookResult"
+					]
+				},
+				{
+					"Name": "Success",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "LastActivity",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "KeepUntil",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
 					]
 				}
 			]

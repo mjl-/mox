@@ -267,6 +267,11 @@ export interface AutodiscoverSRV {
 }
 
 export interface Account {
+	OutgoingWebhook?: OutgoingWebhook | null
+	IncomingWebhook?: IncomingWebhook | null
+	FromIDLoginAddresses?: string[] | null
+	KeepRetiredMessagePeriod: number
+	KeepRetiredWebhookPeriod: number
 	Domain: string
 	Description: string
 	FullName: string
@@ -282,6 +287,17 @@ export interface Account {
 	NoFirstTimeSenderDelay: boolean
 	Routes?: Route[] | null
 	DNSDomain: Domain  // Parsed form of Domain.
+}
+
+export interface OutgoingWebhook {
+	URL: string
+	Authorization: string
+	Events?: string[] | null
+}
+
+export interface IncomingWebhook {
+	URL: string
+	Authorization: string
 }
 
 export interface Destination {
@@ -550,6 +566,7 @@ export interface HoldRule {
 // Only non-empty/non-zero values are applied to the filter. Leaving all fields
 // empty/zero matches all messages.
 export interface Filter {
+	Max: number
 	IDs?: number[] | null
 	Account: string
 	From: string
@@ -558,6 +575,13 @@ export interface Filter {
 	Submitted: string  // Whether submitted before/after a time relative to now. ">$duration" or "<$duration", also with "now" for duration.
 	NextAttempt: string  // ">$duration" or "<$duration", also with "now" for duration.
 	Transport?: string | null
+}
+
+export interface Sort {
+	Field: string  // "Queued" or "NextAttempt"/"".
+	LastID: number  // If > 0, we return objects beyond this, less/greater depending on Asc.
+	Last: any  // Value of Field for last object. Must be set iff LastID is set.
+	Asc: boolean  // Ascending, or descending.
 }
 
 // Msg is a message in the queue.
@@ -573,32 +597,202 @@ export interface Msg {
 	SenderLocalpart: Localpart  // Should be a local user and domain.
 	SenderDomain: IPDomain
 	SenderDomainStr: string  // For filtering, unicode.
+	FromID: string  // For transactional messages, used to match later DSNs.
 	RecipientLocalpart: Localpart  // Typically a remote user and domain.
 	RecipientDomain: IPDomain
-	RecipientDomainStr: string  // For filtering, unicode.
+	RecipientDomainStr: string  // For filtering, unicode domain. Can also contain ip enclosed in [].
 	Attempts: number  // Next attempt is based on last attempt and exponential back off based on attempts.
 	MaxAttempts: number  // Max number of attempts before giving up. If 0, then the default of 8 attempts is used instead.
 	DialedIPs?: { [key: string]: IP[] | null }  // For each host, the IPs that were dialed. Used for IP selection for later attempts.
 	NextAttempt: Date  // For scheduling.
 	LastAttempt?: Date | null
-	LastError: string
+	Results?: MsgResult[] | null
 	Has8bit: boolean  // Whether message contains bytes with high bit set, determines whether 8BITMIME SMTP extension is needed.
 	SMTPUTF8: boolean  // Whether message requires use of SMTPUTF8.
 	IsDMARCReport: boolean  // Delivery failures for DMARC reports are handled differently.
 	IsTLSReport: boolean  // Delivery failures for TLS reports are handled differently.
 	Size: number  // Full size of message, combined MsgPrefix with contents of message file.
-	MessageID: string  // Used when composing a DSN, in its References header.
-	MsgPrefix?: string | null
+	MessageID: string  // Message-ID header, including <>. Used when composing a DSN, in its References header.
+	MsgPrefix?: string | null  // Data to send before the contents from the file, typically with headers like DKIM-Signature.
+	Subject: string  // For context about delivery.
 	DSNUTF8?: string | null  // If set, this message is a DSN and this is a version using utf-8, for the case the remote MTA supports smtputf8. In this case, Size and MsgPrefix are not relevant.
 	Transport: string  // If non-empty, the transport to use for this message. Can be set through cli or admin interface. If empty (the default for a submitted message), regular routing rules apply.
 	RequireTLS?: boolean | null  // RequireTLS influences TLS verification during delivery.  If nil, the recipient domain policy is followed (MTA-STS and/or DANE), falling back to optional opportunistic non-verified STARTTLS.  If RequireTLS is true (through SMTP REQUIRETLS extension or webmail submit), MTA-STS or DANE is required, as well as REQUIRETLS support by the next hop server.  If RequireTLS is false (through messag header "TLS-Required: No"), the recipient domain's policy is ignored if it does not lead to a successful TLS connection, i.e. falling back to SMTP delivery with unverified STARTTLS or plain text.
 	FutureReleaseRequest: string  // For DSNs, where the original FUTURERELEASE value must be included as per-message field. This field should be of the form "for;" plus interval, or "until;" plus utc date-time.
+	Extra?: { [key: string]: string }  // Extra information, for transactional email.
 }
 
 // IPDomain is an ip address, a domain, or empty.
 export interface IPDomain {
 	IP: IP
 	Domain: Domain
+}
+
+// MsgResult is the result (or work in progress) of a delivery attempt.
+export interface MsgResult {
+	Start: Date
+	Duration: number
+	Success: boolean
+	Code: number
+	Secode: string
+	Error: string
+}
+
+// RetiredFilter filters messages to list or operate on. Used by admin web interface
+// and cli.
+// 
+// Only non-empty/non-zero values are applied to the filter. Leaving all fields
+// empty/zero matches all messages.
+export interface RetiredFilter {
+	Max: number
+	IDs?: number[] | null
+	Account: string
+	From: string
+	To: string
+	Submitted: string  // Whether submitted before/after a time relative to now. ">$duration" or "<$duration", also with "now" for duration.
+	LastActivity: string  // ">$duration" or "<$duration", also with "now" for duration.
+	Transport?: string | null
+	Success?: boolean | null
+}
+
+export interface RetiredSort {
+	Field: string  // "Queued" or "LastActivity"/"".
+	LastID: number  // If > 0, we return objects beyond this, less/greater depending on Asc.
+	Last: any  // Value of Field for last object. Must be set iff LastID is set.
+	Asc: boolean  // Ascending, or descending.
+}
+
+// MsgRetired is a message for which delivery completed, either successful,
+// failed/canceled. Retired messages are only stored if so configured, and will be
+// cleaned up after the configured period.
+export interface MsgRetired {
+	ID: number  // Same ID as it was as Msg.ID.
+	BaseID: number
+	Queued: Date
+	SenderAccount: string  // Failures are delivered back to this local account. Also used for routing.
+	SenderLocalpart: Localpart  // Should be a local user and domain.
+	SenderDomainStr: string  // For filtering, unicode.
+	FromID: string  // Used to match DSNs.
+	RecipientLocalpart: Localpart  // Typically a remote user and domain.
+	RecipientDomain: IPDomain
+	RecipientDomainStr: string  // For filtering, unicode.
+	Attempts: number  // Next attempt is based on last attempt and exponential back off based on attempts.
+	MaxAttempts: number  // Max number of attempts before giving up. If 0, then the default of 8 attempts is used instead.
+	DialedIPs?: { [key: string]: IP[] | null }  // For each host, the IPs that were dialed. Used for IP selection for later attempts.
+	LastAttempt?: Date | null
+	Results?: MsgResult[] | null
+	Has8bit: boolean  // Whether message contains bytes with high bit set, determines whether 8BITMIME SMTP extension is needed.
+	SMTPUTF8: boolean  // Whether message requires use of SMTPUTF8.
+	IsDMARCReport: boolean  // Delivery failures for DMARC reports are handled differently.
+	IsTLSReport: boolean  // Delivery failures for TLS reports are handled differently.
+	Size: number  // Full size of message, combined MsgPrefix with contents of message file.
+	MessageID: string  // Used when composing a DSN, in its References header.
+	Subject: string  // For context about delivery.
+	Transport: string
+	RequireTLS?: boolean | null
+	FutureReleaseRequest: string
+	Extra?: { [key: string]: string }  // Extra information, for transactional email.
+	LastActivity: Date
+	RecipientAddress: string
+	Success: boolean  // Whether delivery to next hop succeeded.
+	KeepUntil: Date
+}
+
+// HookFilter filters messages to list or operate on. Used by admin web interface
+// and cli.
+// 
+// Only non-empty/non-zero values are applied to the filter. Leaving all fields
+// empty/zero matches all hooks.
+export interface HookFilter {
+	Max: number
+	IDs?: number[] | null
+	Account: string
+	Submitted: string  // Whether submitted before/after a time relative to now. ">$duration" or "<$duration", also with "now" for duration.
+	NextAttempt: string  // ">$duration" or "<$duration", also with "now" for duration.
+	Event: string  // Including "incoming".
+}
+
+export interface HookSort {
+	Field: string  // "Queued" or "NextAttempt"/"".
+	LastID: number  // If > 0, we return objects beyond this, less/greater depending on Asc.
+	Last: any  // Value of Field for last object. Must be set iff LastID is set.
+	Asc: boolean  // Ascending, or descending.
+}
+
+// Hook is a webhook call about a delivery. We'll try delivering with backoff until we succeed or fail.
+export interface Hook {
+	ID: number
+	QueueMsgID: number  // Original queue Msg/MsgRetired ID. Zero for hooks for incoming messages.
+	FromID: string  // As generated by us and returned in webapi call. Can be empty, for incoming messages to our base address.
+	MessageID: string  // Of outgoing or incoming messages. Includes <>.
+	Subject: string  // Subject of original outgoing message, or of incoming message.
+	Extra?: { [key: string]: string }  // From submitted message.
+	Account: string
+	URL: string  // Taken from config when webhook is scheduled.
+	Authorization: string  // Optional value for authorization header to include in HTTP request.
+	IsIncoming: boolean
+	OutgoingEvent: string  // Empty string if not outgoing.
+	Payload: string  // JSON data to be submitted.
+	Submitted: Date
+	Attempts: number
+	NextAttempt: Date  // Index for fast scheduling.
+	Results?: HookResult[] | null
+}
+
+// HookResult is the result of a single attempt to deliver a webhook.
+export interface HookResult {
+	Start: Date
+	Duration: number
+	URL: string
+	Success: boolean
+	Code: number  // eg 200, 404, 500. 2xx implies success.
+	Error: string
+	Response: string  // Max 512 bytes of HTTP response body.
+}
+
+// HookRetiredFilter filters messages to list or operate on. Used by admin web interface
+// and cli.
+// 
+// Only non-empty/non-zero values are applied to the filter. Leaving all fields
+// empty/zero matches all hooks.
+export interface HookRetiredFilter {
+	Max: number
+	IDs?: number[] | null
+	Account: string
+	Submitted: string  // Whether submitted before/after a time relative to now. ">$duration" or "<$duration", also with "now" for duration.
+	LastActivity: string  // ">$duration" or "<$duration", also with "now" for duration.
+	Event: string  // Including "incoming".
+}
+
+export interface HookRetiredSort {
+	Field: string  // "Queued" or "LastActivity"/"".
+	LastID: number  // If > 0, we return objects beyond this, less/greater depending on Asc.
+	Last: any  // Value of Field for last object. Must be set iff LastID is set.
+	Asc: boolean  // Ascending, or descending.
+}
+
+// HookRetired is a Hook that was delivered/failed/canceled and kept according
+// to the configuration.
+export interface HookRetired {
+	ID: number  // Same as original Hook.ID.
+	QueueMsgID: number  // Original queue Msg or MsgRetired ID. Zero for hooks for incoming messages.
+	FromID: string  // As generated by us and returned in webapi call. Can be empty, for incoming messages to our base address.
+	MessageID: string  // Of outgoing or incoming messages. Includes <>.
+	Subject: string  // Subject of original outgoing message, or of incoming message.
+	Extra?: { [key: string]: string }  // From submitted message.
+	Account: string
+	URL: string  // Taken from config at start of each attempt.
+	Authorization: boolean  // Whether request had authorization without keeping it around.
+	IsIncoming: boolean
+	OutgoingEvent: string
+	Payload: string  // JSON data submitted.
+	Submitted: Date
+	SupersededByID: number  // If not 0, a Hook.ID that superseded this one and Done will be true.
+	Attempts: number
+	Results?: HookResult[] | null
+	Success: boolean
+	LastActivity: Date
+	KeepUntil: Date
 }
 
 // WebserverConfig is the combination of WebDomainRedirects and WebHandlers
@@ -883,7 +1077,7 @@ export type Localpart = string
 // be an IPv4 address.
 export type IP = string
 
-export const structTypes: {[typename: string]: boolean} = {"Account":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"DANECheckResult":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"JunkFilter":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
+export const structTypes: {[typename: string]: boolean} = {"Account":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"DANECheckResult":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"Hook":true,"HookFilter":true,"HookResult":true,"HookRetired":true,"HookRetiredFilter":true,"HookRetiredSort":true,"HookSort":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"IncomingWebhook":true,"JunkFilter":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"MsgResult":true,"MsgRetired":true,"OutgoingWebhook":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"RetiredFilter":true,"RetiredSort":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Sort":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
 export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"Alignment":true,"CSRFToken":true,"DKIMResult":true,"DMARCPolicy":true,"DMARCResult":true,"Disposition":true,"IP":true,"Localpart":true,"Mode":true,"PolicyOverride":true,"PolicyType":true,"RUA":true,"ResultType":true,"SPFDomainScope":true,"SPFResult":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
@@ -918,7 +1112,9 @@ export const types: TypenameMap = {
 	"AutoconfCheckResult": {"Name":"AutoconfCheckResult","Docs":"","Fields":[{"Name":"ClientSettingsDomainIPs","Docs":"","Typewords":["[]","string"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]},{"Name":"Warnings","Docs":"","Typewords":["[]","string"]},{"Name":"Instructions","Docs":"","Typewords":["[]","string"]}]},
 	"AutodiscoverCheckResult": {"Name":"AutodiscoverCheckResult","Docs":"","Fields":[{"Name":"Records","Docs":"","Typewords":["[]","AutodiscoverSRV"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]},{"Name":"Warnings","Docs":"","Typewords":["[]","string"]},{"Name":"Instructions","Docs":"","Typewords":["[]","string"]}]},
 	"AutodiscoverSRV": {"Name":"AutodiscoverSRV","Docs":"","Fields":[{"Name":"Target","Docs":"","Typewords":["string"]},{"Name":"Port","Docs":"","Typewords":["uint16"]},{"Name":"Priority","Docs":"","Typewords":["uint16"]},{"Name":"Weight","Docs":"","Typewords":["uint16"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]}]},
-	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]}]},
+	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"OutgoingWebhook","Docs":"","Typewords":["nullable","OutgoingWebhook"]},{"Name":"IncomingWebhook","Docs":"","Typewords":["nullable","IncomingWebhook"]},{"Name":"FromIDLoginAddresses","Docs":"","Typewords":["[]","string"]},{"Name":"KeepRetiredMessagePeriod","Docs":"","Typewords":["int64"]},{"Name":"KeepRetiredWebhookPeriod","Docs":"","Typewords":["int64"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]}]},
+	"OutgoingWebhook": {"Name":"OutgoingWebhook","Docs":"","Fields":[{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["string"]},{"Name":"Events","Docs":"","Typewords":["[]","string"]}]},
+	"IncomingWebhook": {"Name":"IncomingWebhook","Docs":"","Fields":[{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["string"]}]},
 	"Destination": {"Name":"Destination","Docs":"","Fields":[{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Rulesets","Docs":"","Typewords":["[]","Ruleset"]},{"Name":"FullName","Docs":"","Typewords":["string"]}]},
 	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"SubjectPass": {"Name":"SubjectPass","Docs":"","Fields":[{"Name":"Period","Docs":"","Typewords":["int64"]}]},
@@ -951,9 +1147,21 @@ export const types: TypenameMap = {
 	"ClientConfigs": {"Name":"ClientConfigs","Docs":"","Fields":[{"Name":"Entries","Docs":"","Typewords":["[]","ClientConfigsEntry"]}]},
 	"ClientConfigsEntry": {"Name":"ClientConfigsEntry","Docs":"","Fields":[{"Name":"Protocol","Docs":"","Typewords":["string"]},{"Name":"Host","Docs":"","Typewords":["Domain"]},{"Name":"Port","Docs":"","Typewords":["int32"]},{"Name":"Listener","Docs":"","Typewords":["string"]},{"Name":"Note","Docs":"","Typewords":["string"]}]},
 	"HoldRule": {"Name":"HoldRule","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"SenderDomain","Docs":"","Typewords":["Domain"]},{"Name":"RecipientDomain","Docs":"","Typewords":["Domain"]},{"Name":"SenderDomainStr","Docs":"","Typewords":["string"]},{"Name":"RecipientDomainStr","Docs":"","Typewords":["string"]}]},
-	"Filter": {"Name":"Filter","Docs":"","Fields":[{"Name":"IDs","Docs":"","Typewords":["[]","int64"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["string"]},{"Name":"Hold","Docs":"","Typewords":["nullable","bool"]},{"Name":"Submitted","Docs":"","Typewords":["string"]},{"Name":"NextAttempt","Docs":"","Typewords":["string"]},{"Name":"Transport","Docs":"","Typewords":["nullable","string"]}]},
-	"Msg": {"Name":"Msg","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"BaseID","Docs":"","Typewords":["int64"]},{"Name":"Queued","Docs":"","Typewords":["timestamp"]},{"Name":"Hold","Docs":"","Typewords":["bool"]},{"Name":"SenderAccount","Docs":"","Typewords":["string"]},{"Name":"SenderLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"SenderDomain","Docs":"","Typewords":["IPDomain"]},{"Name":"SenderDomainStr","Docs":"","Typewords":["string"]},{"Name":"RecipientLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"RecipientDomain","Docs":"","Typewords":["IPDomain"]},{"Name":"RecipientDomainStr","Docs":"","Typewords":["string"]},{"Name":"Attempts","Docs":"","Typewords":["int32"]},{"Name":"MaxAttempts","Docs":"","Typewords":["int32"]},{"Name":"DialedIPs","Docs":"","Typewords":["{}","[]","IP"]},{"Name":"NextAttempt","Docs":"","Typewords":["timestamp"]},{"Name":"LastAttempt","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"LastError","Docs":"","Typewords":["string"]},{"Name":"Has8bit","Docs":"","Typewords":["bool"]},{"Name":"SMTPUTF8","Docs":"","Typewords":["bool"]},{"Name":"IsDMARCReport","Docs":"","Typewords":["bool"]},{"Name":"IsTLSReport","Docs":"","Typewords":["bool"]},{"Name":"Size","Docs":"","Typewords":["int64"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"MsgPrefix","Docs":"","Typewords":["nullable","string"]},{"Name":"DSNUTF8","Docs":"","Typewords":["nullable","string"]},{"Name":"Transport","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureReleaseRequest","Docs":"","Typewords":["string"]}]},
+	"Filter": {"Name":"Filter","Docs":"","Fields":[{"Name":"Max","Docs":"","Typewords":["int32"]},{"Name":"IDs","Docs":"","Typewords":["[]","int64"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["string"]},{"Name":"Hold","Docs":"","Typewords":["nullable","bool"]},{"Name":"Submitted","Docs":"","Typewords":["string"]},{"Name":"NextAttempt","Docs":"","Typewords":["string"]},{"Name":"Transport","Docs":"","Typewords":["nullable","string"]}]},
+	"Sort": {"Name":"Sort","Docs":"","Fields":[{"Name":"Field","Docs":"","Typewords":["string"]},{"Name":"LastID","Docs":"","Typewords":["int64"]},{"Name":"Last","Docs":"","Typewords":["any"]},{"Name":"Asc","Docs":"","Typewords":["bool"]}]},
+	"Msg": {"Name":"Msg","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"BaseID","Docs":"","Typewords":["int64"]},{"Name":"Queued","Docs":"","Typewords":["timestamp"]},{"Name":"Hold","Docs":"","Typewords":["bool"]},{"Name":"SenderAccount","Docs":"","Typewords":["string"]},{"Name":"SenderLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"SenderDomain","Docs":"","Typewords":["IPDomain"]},{"Name":"SenderDomainStr","Docs":"","Typewords":["string"]},{"Name":"FromID","Docs":"","Typewords":["string"]},{"Name":"RecipientLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"RecipientDomain","Docs":"","Typewords":["IPDomain"]},{"Name":"RecipientDomainStr","Docs":"","Typewords":["string"]},{"Name":"Attempts","Docs":"","Typewords":["int32"]},{"Name":"MaxAttempts","Docs":"","Typewords":["int32"]},{"Name":"DialedIPs","Docs":"","Typewords":["{}","[]","IP"]},{"Name":"NextAttempt","Docs":"","Typewords":["timestamp"]},{"Name":"LastAttempt","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"Results","Docs":"","Typewords":["[]","MsgResult"]},{"Name":"Has8bit","Docs":"","Typewords":["bool"]},{"Name":"SMTPUTF8","Docs":"","Typewords":["bool"]},{"Name":"IsDMARCReport","Docs":"","Typewords":["bool"]},{"Name":"IsTLSReport","Docs":"","Typewords":["bool"]},{"Name":"Size","Docs":"","Typewords":["int64"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"MsgPrefix","Docs":"","Typewords":["nullable","string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"DSNUTF8","Docs":"","Typewords":["nullable","string"]},{"Name":"Transport","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureReleaseRequest","Docs":"","Typewords":["string"]},{"Name":"Extra","Docs":"","Typewords":["{}","string"]}]},
 	"IPDomain": {"Name":"IPDomain","Docs":"","Fields":[{"Name":"IP","Docs":"","Typewords":["IP"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
+	"MsgResult": {"Name":"MsgResult","Docs":"","Fields":[{"Name":"Start","Docs":"","Typewords":["timestamp"]},{"Name":"Duration","Docs":"","Typewords":["int64"]},{"Name":"Success","Docs":"","Typewords":["bool"]},{"Name":"Code","Docs":"","Typewords":["int32"]},{"Name":"Secode","Docs":"","Typewords":["string"]},{"Name":"Error","Docs":"","Typewords":["string"]}]},
+	"RetiredFilter": {"Name":"RetiredFilter","Docs":"","Fields":[{"Name":"Max","Docs":"","Typewords":["int32"]},{"Name":"IDs","Docs":"","Typewords":["[]","int64"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["string"]},{"Name":"Submitted","Docs":"","Typewords":["string"]},{"Name":"LastActivity","Docs":"","Typewords":["string"]},{"Name":"Transport","Docs":"","Typewords":["nullable","string"]},{"Name":"Success","Docs":"","Typewords":["nullable","bool"]}]},
+	"RetiredSort": {"Name":"RetiredSort","Docs":"","Fields":[{"Name":"Field","Docs":"","Typewords":["string"]},{"Name":"LastID","Docs":"","Typewords":["int64"]},{"Name":"Last","Docs":"","Typewords":["any"]},{"Name":"Asc","Docs":"","Typewords":["bool"]}]},
+	"MsgRetired": {"Name":"MsgRetired","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"BaseID","Docs":"","Typewords":["int64"]},{"Name":"Queued","Docs":"","Typewords":["timestamp"]},{"Name":"SenderAccount","Docs":"","Typewords":["string"]},{"Name":"SenderLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"SenderDomainStr","Docs":"","Typewords":["string"]},{"Name":"FromID","Docs":"","Typewords":["string"]},{"Name":"RecipientLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"RecipientDomain","Docs":"","Typewords":["IPDomain"]},{"Name":"RecipientDomainStr","Docs":"","Typewords":["string"]},{"Name":"Attempts","Docs":"","Typewords":["int32"]},{"Name":"MaxAttempts","Docs":"","Typewords":["int32"]},{"Name":"DialedIPs","Docs":"","Typewords":["{}","[]","IP"]},{"Name":"LastAttempt","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"Results","Docs":"","Typewords":["[]","MsgResult"]},{"Name":"Has8bit","Docs":"","Typewords":["bool"]},{"Name":"SMTPUTF8","Docs":"","Typewords":["bool"]},{"Name":"IsDMARCReport","Docs":"","Typewords":["bool"]},{"Name":"IsTLSReport","Docs":"","Typewords":["bool"]},{"Name":"Size","Docs":"","Typewords":["int64"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"Transport","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureReleaseRequest","Docs":"","Typewords":["string"]},{"Name":"Extra","Docs":"","Typewords":["{}","string"]},{"Name":"LastActivity","Docs":"","Typewords":["timestamp"]},{"Name":"RecipientAddress","Docs":"","Typewords":["string"]},{"Name":"Success","Docs":"","Typewords":["bool"]},{"Name":"KeepUntil","Docs":"","Typewords":["timestamp"]}]},
+	"HookFilter": {"Name":"HookFilter","Docs":"","Fields":[{"Name":"Max","Docs":"","Typewords":["int32"]},{"Name":"IDs","Docs":"","Typewords":["[]","int64"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"Submitted","Docs":"","Typewords":["string"]},{"Name":"NextAttempt","Docs":"","Typewords":["string"]},{"Name":"Event","Docs":"","Typewords":["string"]}]},
+	"HookSort": {"Name":"HookSort","Docs":"","Fields":[{"Name":"Field","Docs":"","Typewords":["string"]},{"Name":"LastID","Docs":"","Typewords":["int64"]},{"Name":"Last","Docs":"","Typewords":["any"]},{"Name":"Asc","Docs":"","Typewords":["bool"]}]},
+	"Hook": {"Name":"Hook","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"QueueMsgID","Docs":"","Typewords":["int64"]},{"Name":"FromID","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"Extra","Docs":"","Typewords":["{}","string"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["string"]},{"Name":"IsIncoming","Docs":"","Typewords":["bool"]},{"Name":"OutgoingEvent","Docs":"","Typewords":["string"]},{"Name":"Payload","Docs":"","Typewords":["string"]},{"Name":"Submitted","Docs":"","Typewords":["timestamp"]},{"Name":"Attempts","Docs":"","Typewords":["int32"]},{"Name":"NextAttempt","Docs":"","Typewords":["timestamp"]},{"Name":"Results","Docs":"","Typewords":["[]","HookResult"]}]},
+	"HookResult": {"Name":"HookResult","Docs":"","Fields":[{"Name":"Start","Docs":"","Typewords":["timestamp"]},{"Name":"Duration","Docs":"","Typewords":["int64"]},{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Success","Docs":"","Typewords":["bool"]},{"Name":"Code","Docs":"","Typewords":["int32"]},{"Name":"Error","Docs":"","Typewords":["string"]},{"Name":"Response","Docs":"","Typewords":["string"]}]},
+	"HookRetiredFilter": {"Name":"HookRetiredFilter","Docs":"","Fields":[{"Name":"Max","Docs":"","Typewords":["int32"]},{"Name":"IDs","Docs":"","Typewords":["[]","int64"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"Submitted","Docs":"","Typewords":["string"]},{"Name":"LastActivity","Docs":"","Typewords":["string"]},{"Name":"Event","Docs":"","Typewords":["string"]}]},
+	"HookRetiredSort": {"Name":"HookRetiredSort","Docs":"","Fields":[{"Name":"Field","Docs":"","Typewords":["string"]},{"Name":"LastID","Docs":"","Typewords":["int64"]},{"Name":"Last","Docs":"","Typewords":["any"]},{"Name":"Asc","Docs":"","Typewords":["bool"]}]},
+	"HookRetired": {"Name":"HookRetired","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"QueueMsgID","Docs":"","Typewords":["int64"]},{"Name":"FromID","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"Extra","Docs":"","Typewords":["{}","string"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["bool"]},{"Name":"IsIncoming","Docs":"","Typewords":["bool"]},{"Name":"OutgoingEvent","Docs":"","Typewords":["string"]},{"Name":"Payload","Docs":"","Typewords":["string"]},{"Name":"Submitted","Docs":"","Typewords":["timestamp"]},{"Name":"SupersededByID","Docs":"","Typewords":["int64"]},{"Name":"Attempts","Docs":"","Typewords":["int32"]},{"Name":"Results","Docs":"","Typewords":["[]","HookResult"]},{"Name":"Success","Docs":"","Typewords":["bool"]},{"Name":"LastActivity","Docs":"","Typewords":["timestamp"]},{"Name":"KeepUntil","Docs":"","Typewords":["timestamp"]}]},
 	"WebserverConfig": {"Name":"WebserverConfig","Docs":"","Fields":[{"Name":"WebDNSDomainRedirects","Docs":"","Typewords":["[]","[]","Domain"]},{"Name":"WebDomainRedirects","Docs":"","Typewords":["[]","[]","string"]},{"Name":"WebHandlers","Docs":"","Typewords":["[]","WebHandler"]}]},
 	"WebHandler": {"Name":"WebHandler","Docs":"","Fields":[{"Name":"LogName","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"PathRegexp","Docs":"","Typewords":["string"]},{"Name":"DontRedirectPlainHTTP","Docs":"","Typewords":["bool"]},{"Name":"Compress","Docs":"","Typewords":["bool"]},{"Name":"WebStatic","Docs":"","Typewords":["nullable","WebStatic"]},{"Name":"WebRedirect","Docs":"","Typewords":["nullable","WebRedirect"]},{"Name":"WebForward","Docs":"","Typewords":["nullable","WebForward"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"WebStatic": {"Name":"WebStatic","Docs":"","Fields":[{"Name":"StripPrefix","Docs":"","Typewords":["string"]},{"Name":"Root","Docs":"","Typewords":["string"]},{"Name":"ListFiles","Docs":"","Typewords":["bool"]},{"Name":"ContinueNotFound","Docs":"","Typewords":["bool"]},{"Name":"ResponseHeaders","Docs":"","Typewords":["{}","string"]}]},
@@ -1020,6 +1228,8 @@ export const parser = {
 	AutodiscoverCheckResult: (v: any) => parse("AutodiscoverCheckResult", v) as AutodiscoverCheckResult,
 	AutodiscoverSRV: (v: any) => parse("AutodiscoverSRV", v) as AutodiscoverSRV,
 	Account: (v: any) => parse("Account", v) as Account,
+	OutgoingWebhook: (v: any) => parse("OutgoingWebhook", v) as OutgoingWebhook,
+	IncomingWebhook: (v: any) => parse("IncomingWebhook", v) as IncomingWebhook,
 	Destination: (v: any) => parse("Destination", v) as Destination,
 	Ruleset: (v: any) => parse("Ruleset", v) as Ruleset,
 	SubjectPass: (v: any) => parse("SubjectPass", v) as SubjectPass,
@@ -1053,8 +1263,20 @@ export const parser = {
 	ClientConfigsEntry: (v: any) => parse("ClientConfigsEntry", v) as ClientConfigsEntry,
 	HoldRule: (v: any) => parse("HoldRule", v) as HoldRule,
 	Filter: (v: any) => parse("Filter", v) as Filter,
+	Sort: (v: any) => parse("Sort", v) as Sort,
 	Msg: (v: any) => parse("Msg", v) as Msg,
 	IPDomain: (v: any) => parse("IPDomain", v) as IPDomain,
+	MsgResult: (v: any) => parse("MsgResult", v) as MsgResult,
+	RetiredFilter: (v: any) => parse("RetiredFilter", v) as RetiredFilter,
+	RetiredSort: (v: any) => parse("RetiredSort", v) as RetiredSort,
+	MsgRetired: (v: any) => parse("MsgRetired", v) as MsgRetired,
+	HookFilter: (v: any) => parse("HookFilter", v) as HookFilter,
+	HookSort: (v: any) => parse("HookSort", v) as HookSort,
+	Hook: (v: any) => parse("Hook", v) as Hook,
+	HookResult: (v: any) => parse("HookResult", v) as HookResult,
+	HookRetiredFilter: (v: any) => parse("HookRetiredFilter", v) as HookRetiredFilter,
+	HookRetiredSort: (v: any) => parse("HookRetiredSort", v) as HookRetiredSort,
+	HookRetired: (v: any) => parse("HookRetired", v) as HookRetired,
 	WebserverConfig: (v: any) => parse("WebserverConfig", v) as WebserverConfig,
 	WebHandler: (v: any) => parse("WebHandler", v) as WebHandler,
 	WebStatic: (v: any) => parse("WebStatic", v) as WebStatic,
@@ -1457,11 +1679,11 @@ export class Client {
 	}
 
 	// QueueList returns the messages currently in the outgoing queue.
-	async QueueList(filter: Filter): Promise<Msg[] | null> {
+	async QueueList(filter: Filter, sort: Sort): Promise<Msg[] | null> {
 		const fn: string = "QueueList"
-		const paramTypes: string[][] = [["Filter"]]
+		const paramTypes: string[][] = [["Filter"],["Sort"]]
 		const returnTypes: string[][] = [["[]","Msg"]]
-		const params: any[] = [filter]
+		const params: any[] = [filter, sort]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Msg[] | null
 	}
 
@@ -1529,6 +1751,72 @@ export class Client {
 		const paramTypes: string[][] = [["Filter"],["string"]]
 		const returnTypes: string[][] = [["int32"]]
 		const params: any[] = [filter, transport]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// RetiredList returns messages retired from the queue (delivery could
+	// have succeeded or failed).
+	async RetiredList(filter: RetiredFilter, sort: RetiredSort): Promise<MsgRetired[] | null> {
+		const fn: string = "RetiredList"
+		const paramTypes: string[][] = [["RetiredFilter"],["RetiredSort"]]
+		const returnTypes: string[][] = [["[]","MsgRetired"]]
+		const params: any[] = [filter, sort]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as MsgRetired[] | null
+	}
+
+	// HookQueueSize returns the number of webhooks still to be delivered.
+	async HookQueueSize(): Promise<number> {
+		const fn: string = "HookQueueSize"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// HookList lists webhooks still to be delivered.
+	async HookList(filter: HookFilter, sort: HookSort): Promise<Hook[] | null> {
+		const fn: string = "HookList"
+		const paramTypes: string[][] = [["HookFilter"],["HookSort"]]
+		const returnTypes: string[][] = [["[]","Hook"]]
+		const params: any[] = [filter, sort]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Hook[] | null
+	}
+
+	// HookNextAttemptSet sets a new time for next delivery attempt of matching
+	// hooks from the queue.
+	async HookNextAttemptSet(filter: HookFilter, minutes: number): Promise<number> {
+		const fn: string = "HookNextAttemptSet"
+		const paramTypes: string[][] = [["HookFilter"],["int32"]]
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = [filter, minutes]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// HookNextAttemptAdd adds a duration to the time of next delivery attempt of
+	// matching hooks from the queue.
+	async HookNextAttemptAdd(filter: HookFilter, minutes: number): Promise<number> {
+		const fn: string = "HookNextAttemptAdd"
+		const paramTypes: string[][] = [["HookFilter"],["int32"]]
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = [filter, minutes]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// HookRetiredList lists retired webhooks.
+	async HookRetiredList(filter: HookRetiredFilter, sort: HookRetiredSort): Promise<HookRetired[] | null> {
+		const fn: string = "HookRetiredList"
+		const paramTypes: string[][] = [["HookRetiredFilter"],["HookRetiredSort"]]
+		const returnTypes: string[][] = [["[]","HookRetired"]]
+		const params: any[] = [filter, sort]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as HookRetired[] | null
+	}
+
+	// HookCancel prevents further delivery attempts of matching webhooks.
+	async HookCancel(filter: HookFilter): Promise<number> {
+		const fn: string = "HookCancel"
+		const paramTypes: string[][] = [["HookFilter"]]
+		const returnTypes: string[][] = [["int32"]]
+		const params: any[] = [filter]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
 	}
 

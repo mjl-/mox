@@ -899,6 +899,7 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 }
 
 // AddressRemove removes an email address and reloads the configuration.
+// Address can be a catchall address for the domain of the form "@<domain>".
 func AddressRemove(ctx context.Context, address string) (rerr error) {
 	log := pkglog.WithContext(ctx)
 	defer func() {
@@ -934,6 +935,52 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	if !dropped {
 		return fmt.Errorf("address not removed, likely a postmaster/reporting address")
 	}
+
+	// Also remove matching address from FromIDLoginAddresses, composing a new slice.
+	var fromIDLoginAddresses []string
+	var dom dns.Domain
+	var pa smtp.Address // For non-catchall addresses (most).
+	var err error
+	if strings.HasPrefix(address, "@") {
+		dom, err = dns.ParseDomain(address[1:])
+		if err != nil {
+			return fmt.Errorf("parsing domain for catchall address: %v", err)
+		}
+	} else {
+		pa, err = smtp.ParseAddress(address)
+		if err != nil {
+			return fmt.Errorf("parsing address: %v", err)
+		}
+		dom = pa.Domain
+	}
+	for i, fa := range a.ParsedFromIDLoginAddresses {
+		if fa.Domain != dom {
+			// Keep for different domain.
+			fromIDLoginAddresses = append(fromIDLoginAddresses, a.FromIDLoginAddresses[i])
+			continue
+		}
+		if strings.HasPrefix(address, "@") {
+			continue
+		}
+		dc, ok := Conf.Dynamic.Domains[dom.Name()]
+		if !ok {
+			return fmt.Errorf("unknown domain in fromid login address %q", fa.Pack(true))
+		}
+		flp, err := CanonicalLocalpart(fa.Localpart, dc)
+		if err != nil {
+			return fmt.Errorf("getting canonical localpart for fromid login address %q: %v", fa.Localpart, err)
+		}
+		alp, err := CanonicalLocalpart(pa.Localpart, dc)
+		if err != nil {
+			return fmt.Errorf("getting canonical part for address: %v", err)
+		}
+		if alp != flp {
+			// Keep for different localpart.
+			fromIDLoginAddresses = append(fromIDLoginAddresses, a.FromIDLoginAddresses[i])
+		}
+	}
+	na.FromIDLoginAddresses = fromIDLoginAddresses
+
 	nc := Conf.Dynamic
 	nc.Accounts = map[string]config.Account{}
 	for name, a := range Conf.Dynamic.Accounts {
@@ -948,12 +995,16 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	return nil
 }
 
-// AccountFullNameSave updates the full name for an account and reloads the configuration.
-func AccountFullNameSave(ctx context.Context, account, fullName string) (rerr error) {
+// AccountSave updates the configuration of an account. Function xmodify is called
+// with a shallow copy of the current configuration of the account. It must not
+// change referencing fields (e.g. existing slice/map/pointer), they may still be
+// in use, and the change may be rolled back. Referencing values must be copied and
+// replaced by the modify. The function may raise a panic for error handling.
+func AccountSave(ctx context.Context, account string, xmodify func(acc *config.Account)) (rerr error) {
 	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("saving account full name", rerr, slog.String("account", account))
+			log.Errorx("saving account fields", rerr, slog.String("account", account))
 		}
 	}()
 
@@ -966,6 +1017,8 @@ func AccountFullNameSave(ctx context.Context, account, fullName string) (rerr er
 		return fmt.Errorf("account not present")
 	}
 
+	xmodify(&acc)
+
 	// Compose new config without modifying existing data structures. If we fail, we
 	// leave no trace.
 	nc := c
@@ -973,100 +1026,12 @@ func AccountFullNameSave(ctx context.Context, account, fullName string) (rerr er
 	for name, a := range c.Accounts {
 		nc.Accounts[name] = a
 	}
-
-	acc.FullName = fullName
 	nc.Accounts[account] = acc
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
-	log.Info("account full name saved", slog.String("account", account))
-	return nil
-}
-
-// DestinationSave updates a destination for an account and reloads the configuration.
-func DestinationSave(ctx context.Context, account, destName string, newDest config.Destination) (rerr error) {
-	log := pkglog.WithContext(ctx)
-	defer func() {
-		if rerr != nil {
-			log.Errorx("saving destination", rerr,
-				slog.String("account", account),
-				slog.String("destname", destName),
-				slog.Any("destination", newDest))
-		}
-	}()
-
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
-
-	c := Conf.Dynamic
-	acc, ok := c.Accounts[account]
-	if !ok {
-		return fmt.Errorf("account not present")
-	}
-
-	if _, ok := acc.Destinations[destName]; !ok {
-		return fmt.Errorf("destination not present")
-	}
-
-	// Compose new config without modifying existing data structures. If we fail, we
-	// leave no trace.
-	nc := c
-	nc.Accounts = map[string]config.Account{}
-	for name, a := range c.Accounts {
-		nc.Accounts[name] = a
-	}
-	nd := map[string]config.Destination{}
-	for dn, d := range acc.Destinations {
-		nd[dn] = d
-	}
-	nd[destName] = newDest
-	nacc := nc.Accounts[account]
-	nacc.Destinations = nd
-	nc.Accounts[account] = nacc
-
-	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
-	}
-	log.Info("destination saved", slog.String("account", account), slog.String("destname", destName))
-	return nil
-}
-
-// AccountAdminSettingsSave saves new account settings for an account only an admin can change.
-func AccountAdminSettingsSave(ctx context.Context, account string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, quotaMessageSize int64, firstTimeSenderDelay bool) (rerr error) {
-	log := pkglog.WithContext(ctx)
-	defer func() {
-		if rerr != nil {
-			log.Errorx("saving admin account settings", rerr, slog.String("account", account))
-		}
-	}()
-
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
-
-	c := Conf.Dynamic
-	acc, ok := c.Accounts[account]
-	if !ok {
-		return fmt.Errorf("account not present")
-	}
-
-	// Compose new config without modifying existing data structures. If we fail, we
-	// leave no trace.
-	nc := c
-	nc.Accounts = map[string]config.Account{}
-	for name, a := range c.Accounts {
-		nc.Accounts[name] = a
-	}
-	acc.MaxOutgoingMessagesPerDay = maxOutgoingMessagesPerDay
-	acc.MaxFirstTimeRecipientsPerDay = maxFirstTimeRecipientsPerDay
-	acc.QuotaMessageSize = quotaMessageSize
-	acc.NoFirstTimeSenderDelay = !firstTimeSenderDelay
-	nc.Accounts[account] = acc
-
-	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
-	}
-	log.Info("admin account settings saved", slog.String("account", account))
+	log.Info("account fields saved", slog.String("account", account))
 	return nil
 }
 

@@ -68,6 +68,48 @@ const login = async (reason: string) => {
 	})
 }
 
+// Popup shows kids in a centered div with white background on top of a
+// transparent overlay on top of the window. Clicking the overlay or hitting
+// Escape closes the popup. Scrollbars are automatically added to the div with
+// kids. Returns a function that removes the popup.
+const popup = (...kids: ElemArg[]) => {
+	const origFocus = document.activeElement
+	const close = () => {
+		if (!root.parentNode) {
+			return
+		}
+		root.remove()
+		if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
+			origFocus.focus()
+		}
+	}
+	let content: HTMLElement
+	const root = dom.div(
+		style({position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0, 0, 0, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '1'}),
+		function keydown(e: KeyboardEvent) {
+			if (e.key === 'Escape') {
+				e.stopPropagation()
+				close()
+			}
+		},
+		function click(e: MouseEvent) {
+			e.stopPropagation()
+			close()
+		},
+		content=dom.div(
+			attr.tabindex('0'),
+			style({backgroundColor: 'white', borderRadius: '.25em', padding: '1em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto'}),
+			function click(e: MouseEvent) {
+				e.stopPropagation()
+			},
+			kids,
+		)
+	)
+	document.body.appendChild(root)
+	content.focus()
+	return close
+}
+
 const localStorageGet = (k: string): string | null => {
 	try {
 		return window.localStorage.getItem(k)
@@ -284,9 +326,10 @@ const formatSize = (n: number) => {
 }
 
 const index = async () => {
-	const [domains, queueSize, checkUpdatesEnabled, accounts] = await Promise.all([
+	const [domains, queueSize, hooksQueueSize, checkUpdatesEnabled, accounts] = await Promise.all([
 		client.Domains(),
 		client.QueueSize(),
+		client.HookQueueSize(),
 		client.CheckUpdatesEnabled(),
 		client.Accounts(),
 	])
@@ -306,6 +349,7 @@ const index = async () => {
 		dom.p(
 			dom.a('Accounts', attr.href('#accounts')), dom.br(),
 			dom.a('Queue', attr.href('#queue')), ' ('+queueSize+')', dom.br(),
+			dom.a('Webhook queue', attr.href('#webhookqueue')), ' ('+hooksQueueSize+')', dom.br(),
 		),
 		dom.h2('Domains'),
 		(domains || []).length === 0 ? box(red, 'No domains') :
@@ -587,6 +631,8 @@ const account = async (name: string) => {
 		client.Account(name),
 		client.Domains(),
 	])
+
+	// todo: show suppression list, and buttons to add/remove entries.
 
 	let form: HTMLFormElement
 	let fieldset: HTMLFieldSetElement
@@ -1224,7 +1270,7 @@ const dmarcEvaluations = async () => {
 		dom.br(),
 		dom.br(),
 		dom.h2('Suppressed reporting addresses'),
-		dom.p('In practice, sending a DMARC report to a reporting address can cause DSN to be sent back. Such addresses can be added to a supression list for a period, to reduce noise in the postmaster mailbox.'),
+		dom.p('In practice, sending a DMARC report to a reporting address can cause DSN to be sent back. Such addresses can be added to a suppression list for a period, to reduce noise in the postmaster mailbox.'),
 		dom.form(
 			async function submit(e: SubmitEvent) {
 				e.stopPropagation()
@@ -2139,17 +2185,21 @@ const dnsbl = async () => {
 }
 
 const queueList = async () => {
-	let [holdRules, msgs, transports] = await Promise.all([
+	let filter: api.Filter = {Max: parseInt(localStorageGet('adminpaginationsize') || '') || 100, IDs: [], Account: '', From: '', To: '', Hold: null, Submitted: '', NextAttempt: '', Transport: null}
+	let sort: api.Sort = {Field: "NextAttempt", LastID: 0, Last: null, Asc: true}
+	let [holdRules, msgs0, transports] = await Promise.all([
 		client.QueueHoldRuleList(),
-		client.QueueList({IDs: [], Account: '', From: '', To: '', Hold: null, Submitted: '', NextAttempt: '', Transport: null}),
+		client.QueueList(filter, sort),
 		client.Transports(),
 	])
+	let msgs: api.Msg[] = msgs0 || []
 
-	// todo: sorting by address/timestamps/attempts.
+	// todo: more sorting
 	// todo: after making changes, don't reload entire page. probably best to fetch messages by id and rerender. also report on which messages weren't affected (e.g. no longer in queue).
 	// todo: display which transport will be used for a message according to routing rules (in case none is explicitly configured).
 	// todo: live updates with SSE connections
 	// todo: keep updating times/age.
+	// todo: reuse this code in webaccount to show users their own message queue, and give (more limited) options to fail/reschedule deliveries.
 
 	const nowSecs = new Date().getTime()/1000
 
@@ -2158,6 +2208,7 @@ const queueList = async () => {
 	let holdRuleRecipientDomain: HTMLInputElement
 	let holdRuleSubmit: HTMLButtonElement
 
+	let sortElem: HTMLSelectElement
 	let filterForm: HTMLFormElement
 	let filterAccount: HTMLInputElement
 	let filterFrom: HTMLInputElement
@@ -2178,6 +2229,7 @@ const queueList = async () => {
 	// syntax when calling this as parameter in api client calls below.
 	const gatherIDs = () => {
 		const f: api.Filter = {
+			Max: 0,
 			IDs: Array.from(toggles.entries()).filter(t => t[1].checked).map(t => t[0]),
 			Account: '',
 			From: '',
@@ -2194,17 +2246,50 @@ const queueList = async () => {
 		return f
 	}
 
-	const tbody = dom.tbody()
+	const popupDetails = (m: api.Msg) => {
+		const nowSecs = new Date().getTime()/1000
+		popup(
+			dom.h1('Details'),
+			dom.table(
+				dom.tr(dom.td('Message subject'), dom.td(m.Subject)),
+			),
+			dom.br(),
+			dom.h2('Results'),
+			dom.table(
+				dom.thead(
+					dom.tr(
+						dom.th('Start'), dom.th('Duration'), dom.th('Success'), dom.th('Code'), dom.th('Secode'), dom.th('Error'),
+					),
+				),
+				dom.tbody(
+					(m.Results || []).length === 0 ? dom.tr(dom.td(attr.colspan('6'), 'No results.')) : [],
+					(m.Results || []).map(r =>
+						dom.tr(
+							dom.td(age(r.Start, false, nowSecs)),
+							dom.td(Math.round(r.Duration/1000000)+'ms'),
+							dom.td(r.Success ? '✓' : ''),
+							dom.td(''+ (r.Code || '')),
+							dom.td(r.Secode),
+							dom.td(r.Error),
+						)
+					),
+				),
+			),
+		)
+	}
+
+	let tbody = dom.tbody()
 
 	const render = () => {
 		toggles = new Map<number, HTMLInputElement>()
-		for (const m of (msgs || [])) {
-			toggles.set(m.ID, dom.input(attr.type('checkbox'), attr.checked(''), ))
+		for (const m of msgs) {
+			toggles.set(m.ID, dom.input(attr.type('checkbox'), msgs.length === 1 ? attr.checked('') : [], ))
 		}
 
-		dom._kids(tbody,
-			(msgs || []).length === 0 ? dom.tr(dom.td(attr.colspan('14'), 'No messages.')) : [],
-			(msgs || []).map(m => {
+		const ntbody = dom.tbody(
+			dom._class('loadend'),
+			msgs.length === 0 ? dom.tr(dom.td(attr.colspan('15'), 'No messages.')) : [],
+			msgs.map(m => {
 				return dom.tr(
 					dom.td(toggles.get(m.ID)!),
 					dom.td(''+m.ID + (m.BaseID > 0 ? '/'+m.BaseID : '')),
@@ -2217,12 +2302,19 @@ const queueList = async () => {
 					dom.td(m.Hold ? 'Hold' : ''),
 					dom.td(age(new Date(m.NextAttempt), true, nowSecs)),
 					dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'),
-					dom.td(m.LastError || '-'),
-					dom.td(m.RequireTLS === true ? 'Yes' : (m.RequireTLS === false ? 'No' : 'Default')),
+					dom.td(m.Results && m.Results.length > 0 ? m.Results[m.Results.length-1].Error : []),
 					dom.td(m.Transport || '(default)'),
+					dom.td(m.RequireTLS === true ? 'Yes' : (m.RequireTLS === false ? 'No' : '')),
+					dom.td(
+						dom.clickbutton('Details', function click() {
+							popupDetails(m)
+						}),
+					),
 				)
 			}),
 		)
+		tbody.replaceWith(ntbody)
+		tbody = ntbody
 	}
 	render()
 
@@ -2244,6 +2336,7 @@ const queueList = async () => {
 			'Queue',
 		),
 
+		dom.p(dom.a(attr.href('#queue/retired'), 'Retired messages')),
 		dom.h2('Hold rules', attr.title('Messages submitted to the queue that match a hold rule are automatically marked as "on hold", preventing delivery until explicitly taken off hold again.')),
 		dom.form(
 			attr.id('holdRuleForm'),
@@ -2326,7 +2419,8 @@ const queueList = async () => {
 				e.preventDefault()
 				e.stopPropagation()
 
-				const filter: api.Filter = {
+				filter = {
+					Max: filter.Max,
 					IDs: [],
 					Account: filterAccount.value,
 					From: filterFrom.value,
@@ -2336,17 +2430,86 @@ const queueList = async () => {
 					NextAttempt: filterNextAttempt.value,
 					Transport: !filterTransport.value ? null : (filterTransport.value === '(default)' ? '' : filterTransport.value),
 				}
-				dom._kids(tbody)
-				msgs = await check({disabled: false}, client.QueueList(filter))
+				sort = {
+					Field: sortElem.value.startsWith('nextattempt') ? 'NextAttempt' : 'Queued',
+					LastID: 0,
+					Last: null,
+					Asc: sortElem.value.endsWith('asc'),
+				}
+				tbody.classList.add('loadstart')
+				msgs = await check({disabled: false}, client.QueueList(filter, sort)) || []
 				render()
 			},
 		),
 
 		dom.h2('Messages'),
 		dom.table(dom._class('hover'),
+			style({width: '100%'}),
 			dom.thead(
 				dom.tr(
-					dom.th(),
+					dom.td(attr.colspan('2'), 'Filter'),
+					dom.td(filterSubmitted=dom.input(attr.form('queuefilter'), style({width: '7em'}), attr.title('Example: "<-1h" for filtering messages submitted more than 1 hour ago.'))),
+					dom.td(filterAccount=dom.input(attr.form('queuefilter'))),
+					dom.td(filterFrom=dom.input(attr.form('queuefilter')), attr.title('Example: "@sender.example" to filter by domain of sender.')),
+					dom.td(filterTo=dom.input(attr.form('queuefilter')), attr.title('Example: "@recipient.example" to filter by domain of recipient.')),
+					dom.td(), // todo: add filter by size?
+					dom.td(), // todo: add filter by attempts?
+					dom.td(
+						filterHold=dom.select(
+							attr.form('queuefilter'),
+							function change() {
+								filterForm.requestSubmit()
+							},
+							dom.option('', attr.value('')),
+							dom.option('Yes'),
+							dom.option('No'),
+						),
+					),
+					dom.td(filterNextAttempt=dom.input(attr.form('queuefilter'), style({width: '7em'}), attr.title('Example: ">1h" for filtering messages to be delivered in more than 1 hour, or "<now" for messages to be delivered as soon as possible.'))),
+					dom.td(),
+					dom.td(),
+					dom.td(
+						filterTransport=dom.select(
+							Object.keys(transports || {}).length === 0 ? style({display: 'none'}) : [],
+							attr.form('queuefilter'),
+							function change() {
+								filterForm.requestSubmit()
+							},
+							dom.option(''),
+							dom.option('(default)'),
+							Object.keys(transports || {}).sort().map(t => dom.option(t))
+						),
+					),
+					dom.td(
+						attr.colspan('2'),
+						style({textAlign: 'right'}), // Less content shifting while rendering.
+						'Sort ',
+						sortElem=dom.select(
+							attr.form('queuefilter'),
+							function change() {
+								filterForm.requestSubmit()
+							},
+							dom.option('Next attempt ↑', attr.value('nextattempt-asc')),
+							dom.option('Next attempt ↓', attr.value('nextattempt-desc')),
+							dom.option('Submitted ↑', attr.value('submitted-asc')),
+							dom.option('Submitted ↓', attr.value('submitted-desc')),
+						), ' ',
+						dom.submitbutton('Apply', attr.form('queuefilter')), ' ',
+						dom.clickbutton('Reset', attr.form('queuefilter'), function click() {
+							filterForm.reset()
+							filterForm.requestSubmit()
+						}),
+					),
+				),
+				dom.tr(
+					dom.td(
+						dom.input(attr.type('checkbox'), msgs.length === 1 ? attr.checked('') : [], attr.form('queuefilter'), function change(e: MouseEvent) {
+							const elem = e.target! as HTMLInputElement
+							for (const [_, toggle] of toggles) {
+								toggle.checked = elem.checked
+							}
+						}),
+					),
 					dom.th('ID'),
 					dom.th('Submitted'),
 					dom.th('Account'),
@@ -2358,185 +2521,949 @@ const queueList = async () => {
 					dom.th('Next attempt'),
 					dom.th('Last attempt'),
 					dom.th('Last error'),
-					dom.th('Require TLS'),
 					dom.th('Transport'),
-					dom.th(),
+					dom.th('Require TLS'),
+					dom.th('Actions'),
 				),
+			),
+			tbody,
+			dom.tfoot(
 				dom.tr(
 					dom.td(
-						dom.input(attr.type('checkbox'), attr.checked(''), attr.form('queuefilter'), function change(e: MouseEvent) {
-							const elem = e.target! as HTMLInputElement
-							for (const [_, toggle] of toggles) {
-								toggle.checked = elem.checked
+						attr.colspan('15'),
+						// todo: consider implementing infinite scroll, autoloading more pages. means the operations on selected messages should be moved from below to above the table. and probably only show them when at least one message is selected to prevent clutter.
+						dom.clickbutton('Load more', attr.title('Try to load more entries. You can still try to load more entries when at the end of the list, new entries may have been appended since the previous call.'), async function click(e: MouseEvent) {
+							if (msgs.length === 0) {
+								sort.LastID = 0
+								sort.Last = null
+							} else {
+								const lm = msgs[msgs.length-1]
+								sort.LastID = lm.ID
+								if (sort.Field === "Queued") {
+									sort.Last = lm.Queued
+								} else {
+									sort.Last = lm.NextAttempt
+								}
 							}
+							tbody.classList.add('loadstart')
+							const l = await check(e.target! as HTMLButtonElement, client.QueueList(filter, sort)) || []
+							msgs.push(...l)
+							render()
 						}),
 					),
-					dom.td(),
-					dom.td(filterSubmitted=dom.input(attr.form('queuefilter'), style({width: '7em'}), attr.title('Example: "<1h" for filtering messages submitted more than 1 minute ago.'))),
+				),
+			),
+		),
+		dom.br(),
+		dom.br(),
+		dom.div(
+			dom._class('unclutter'),
+			dom.h2('Change selected messages'),
+			dom.div(
+				style({display: 'flex', gap: '2em'}),
+				dom.div(
+					dom.div('Hold'),
+					dom.div(
+						dom.clickbutton('On', async function click(e: MouseEvent) {
+							const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueHoldSet(gatherIDs(), true))())
+							window.alert(''+n+' message(s) updated')
+							window.location.reload() // todo: reload less
+						}), ' ',
+						dom.clickbutton('Off', async function click(e: MouseEvent) {
+							const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueHoldSet(gatherIDs(), false))())
+							window.alert(''+n+' message(s) updated')
+							window.location.reload() // todo: reload less
+						}),
+					),
+				),
+				dom.div(
+					dom.div('Schedule next delivery attempt'),
+					buttonNextAttemptSet('Now', 0), ' ',
+					dom.clickbutton('More...', function click(e: MouseEvent) {
+						(e.target! as HTMLButtonElement).replaceWith(
+							dom.div(
+								dom.br(),
+								dom.div('Scheduled time plus'),
+								dom.div(
+									buttonNextAttemptAdd('1m', 1), ' ',
+									buttonNextAttemptAdd('5m', 5), ' ',
+									buttonNextAttemptAdd('30m', 30), ' ',
+									buttonNextAttemptAdd('1h', 60), ' ',
+									buttonNextAttemptAdd('2h', 2*60), ' ',
+									buttonNextAttemptAdd('4h', 4*60), ' ',
+									buttonNextAttemptAdd('8h', 8*60), ' ',
+									buttonNextAttemptAdd('16h', 16*60), ' ',
+								),
+								dom.br(),
+								dom.div('Now plus'),
+								dom.div(
+									buttonNextAttemptSet('1m', 1), ' ',
+									buttonNextAttemptSet('5m', 5), ' ',
+									buttonNextAttemptSet('30m', 30), ' ',
+									buttonNextAttemptSet('1h', 60), ' ',
+									buttonNextAttemptSet('2h', 2*60), ' ',
+									buttonNextAttemptSet('4h', 4*60), ' ',
+									buttonNextAttemptSet('8h', 8*60), ' ',
+									buttonNextAttemptSet('16h', 16*60), ' ',
+								)
+							)
+						)
+					}),
+				),
+				dom.div(
+					dom.form(
+						dom.label('Require TLS'),
+						requiretlsFieldset=dom.fieldset(
+							requiretls=dom.select(
+								attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'),
+								dom.option('Default', attr.value('')),
+								dom.option('With RequireTLS', attr.value('yes')),
+								dom.option('Fallback to insecure', attr.value('no')),
+							),
+							' ',
+							dom.submitbutton('Change'),
+						),
+						async function submit(e: SubmitEvent) {
+							e.preventDefault()
+							e.stopPropagation()
+							const n = await check(requiretlsFieldset, (async () => await client.QueueRequireTLSSet(gatherIDs(), requiretls.value === '' ? null : requiretls.value === 'yes'))())
+							window.alert(''+n+' message(s) updated')
+							window.location.reload() // todo: only refresh the list
+						}
+					),
+				),
+				dom.div(
+					dom.form(
+						dom.label('Transport'),
+						dom.fieldset(
+							transport=dom.select(
+								attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'),
+								dom.option('(default)', attr.value('')),
+								Object.keys(transports || []).sort().map(t => dom.option(t)),
+							),
+							' ',
+							dom.submitbutton('Change'),
+						),
+						async function submit(e: SubmitEvent) {
+							e.preventDefault()
+							e.stopPropagation()
+							const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueTransportSet(gatherIDs(), transport.value))())
+							window.alert(''+n+' message(s) updated')
+							window.location.reload() // todo: only refresh the list
+						}
+					),
+				),
+				dom.div(
+					dom.div('Delivery'),
+					dom.clickbutton('Fail delivery', attr.title('Cause delivery to fail, sending a DSN to the sender.'), async function click(e: MouseEvent) {
+						e.preventDefault()
+						if (!window.confirm('Are you sure you want to fail delivery for the selected message(s)? Notifications of delivery failure will be sent (DSNs).')) {
+							return
+						}
+						const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueFail(gatherIDs()))())
+						window.alert(''+n+' message(s) updated')
+						window.location.reload() // todo: only refresh the list
+					}),
+				),
+				dom.div(
+					dom.div('Messages'),
+					dom.clickbutton('Remove', attr.title('Completely remove messages from queue, not sending a DSN.'), async function click(e: MouseEvent) {
+						e.preventDefault()
+						if (!window.confirm('Are you sure you want to fail delivery for the selected message(s)? It will be removed completely, no DSN about failure to deliver will be sent.')) {
+							return
+						}
+						const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueDrop(gatherIDs()))())
+						window.alert(''+n+' message(s) updated')
+						window.location.reload() // todo: only refresh the list
+					}),
+				),
+			),
+		),
+	)
+}
+
+const retiredList = async () => {
+	let filter: api.RetiredFilter = {Max: parseInt(localStorageGet('adminpaginationsize') || '') || 100, IDs: [], Account: '', From: '', To: '', Submitted: '', LastActivity: '', Transport: null}
+	let sort: api.RetiredSort = {Field: "LastActivity", LastID: 0, Last: null, Asc: false}
+	const [retired0, transports0] = await Promise.all([
+		client.RetiredList(filter, sort),
+		client.Transports(),
+	])
+	let retired: api.MsgRetired[] = retired0 || []
+	let transports: { [key: string]: api.Transport } = transports0 || {}
+
+	const nowSecs = new Date().getTime()/1000
+
+	let sortElem: HTMLSelectElement
+	let filterForm: HTMLFormElement
+	let filterAccount: HTMLInputElement
+	let filterFrom: HTMLInputElement
+	let filterTo: HTMLInputElement
+	let filterSubmitted: HTMLInputElement
+	let filterLastActivity: HTMLInputElement
+	let filterTransport: HTMLSelectElement
+	let filterSuccess: HTMLSelectElement
+
+	const popupDetails = (m: api.MsgRetired) => {
+		const nowSecs = new Date().getTime()/1000
+		popup(
+			dom.h1('Details'),
+			dom.table(
+				dom.tr(dom.td('Message subject'), dom.td(m.Subject)),
+			),
+			dom.br(),
+			dom.h2('Results'),
+			dom.table(
+				dom.thead(
+					dom.tr(
+						dom.th('Start'), dom.th('Duration'), dom.th('Success'), dom.th('Code'), dom.th('Secode'), dom.th('Error'),
+					),
+				),
+				dom.tbody(
+					(m.Results || []).length === 0 ? dom.tr(dom.td(attr.colspan('6'), 'No results.')) : [],
+					(m.Results || []).map(r =>
+						dom.tr(
+							dom.td(age(r.Start, false, nowSecs)),
+							dom.td(Math.round(r.Duration/1000000)+'ms'),
+							dom.td(r.Success ? '✓' : ''),
+							dom.td(''+ (r.Code || '')),
+							dom.td(r.Secode),
+							dom.td(r.Error),
+						)
+					),
+				),
+			),
+		)
+	}
+
+	let tbody = dom.tbody()
+
+	const render = () => {
+		const ntbody = dom.tbody(
+			dom._class('loadend'),
+			retired.length === 0 ? dom.tr(dom.td(attr.colspan('14'), 'No retired messages.')) : [],
+			retired.map(m =>
+				dom.tr(
+					dom.td(''+m.ID + (m.BaseID > 0 ? '/'+m.BaseID : '')),
+					dom.td(m.Success ? '✓' : ''),
+					dom.td(age(new Date(m.LastActivity), false, nowSecs)),
+					dom.td(age(new Date(m.Queued), false, nowSecs)),
+					dom.td(m.SenderAccount || '-'),
+					dom.td(m.SenderLocalpart+"@"+m.SenderDomainStr), // todo: escaping of localpart
+					dom.td(m.RecipientLocalpart+"@"+m.RecipientDomainStr), // todo: escaping of localpart
+					dom.td(formatSize(m.Size)),
+					dom.td(''+m.Attempts),
+					dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'),
+					dom.td(m.Results && m.Results.length > 0 ? m.Results[m.Results.length-1].Error : []),
+					dom.td(m.Transport || ''),
+					dom.td(m.RequireTLS === true ? 'Yes' : (m.RequireTLS === false ? 'No' : '')),
+					dom.td(
+						dom.clickbutton('Details', function click() {
+							popupDetails(m)
+						}),
+					),
+				)
+			),
+		)
+		tbody.replaceWith(ntbody)
+		tbody = ntbody
+	}
+	render()
+
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			crumblink('Queue', '#queue'),
+			'Retired messages',
+		),
+
+		// Filtering.
+		filterForm=dom.form(
+			attr.id('queuefilter'), // Referenced by input elements in table row.
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				filter = {
+					Max: filter.Max,
+					IDs: [],
+					Account: filterAccount.value,
+					From: filterFrom.value,
+					To: filterTo.value,
+					Submitted: filterSubmitted.value,
+					LastActivity: filterLastActivity.value,
+					Transport: !filterTransport.value ? null : (filterTransport.value === '(default)' ? '' : filterTransport.value),
+					Success: filterSuccess.value === '' ? null : (filterSuccess.value === 'Yes' ? true : false),
+				}
+				sort = {
+					Field: sortElem.value.startsWith('lastactivity') ? 'LastActivity' : 'Queued',
+					LastID: 0,
+					Last: null,
+					Asc: sortElem.value.endsWith('asc'),
+				}
+				tbody.classList.add('loadstart')
+				retired = await check({disabled: false}, client.RetiredList(filter, sort)) || []
+				render()
+			},
+		),
+
+		dom.h2('Retired messages'),
+		dom.p('Meta information about queued messages may be kept after successful and/or failed delivery, configurable per account.'),
+		dom.table(dom._class('hover'),
+			style({width: '100%'}),
+			dom.thead(
+				dom.tr(
+					dom.td('Filter'),
+					dom.td(
+						filterSuccess=dom.select(
+							attr.form('queuefilter'),
+							function change() {
+								filterForm.requestSubmit()
+							},
+							dom.option(''),
+							dom.option('Yes'),
+							dom.option('No'),
+						),
+					),
+					dom.td(filterLastActivity=dom.input(attr.form('queuefilter'), style({width: '7em'}), attr.title('Example: ">-1h" for filtering messages with last activity less than 1 hour ago.'))),
+					dom.td(filterSubmitted=dom.input(attr.form('queuefilter'), style({width: '7em'}), attr.title('Example: "<-1h" for filtering messages submitted more than 1 hour ago.'))),
 					dom.td(filterAccount=dom.input(attr.form('queuefilter'))),
 					dom.td(filterFrom=dom.input(attr.form('queuefilter')), attr.title('Example: "@sender.example" to filter by domain of sender.')),
 					dom.td(filterTo=dom.input(attr.form('queuefilter')), attr.title('Example: "@recipient.example" to filter by domain of recipient.')),
 					dom.td(), // todo: add filter by size?
 					dom.td(), // todo: add filter by attempts?
-					dom.td(
-						filterHold=dom.select(
-							attr.form('queuefilter'),
-							dom.option('', attr.value('')),
-							dom.option('Yes'),
-							dom.option('No'),
-							function change() {
-								filterForm.requestSubmit()
-							},
-						),
-					),
-					dom.td(filterNextAttempt=dom.input(attr.form('queuefilter'), style({width: '7em'}), attr.title('Example: ">1h" for filtering messages to be delivered in more than 1 hour, or "<now" for messages to be delivered as soon as possible.'))),
-					dom.td(),
 					dom.td(),
 					dom.td(),
 					dom.td(
 						filterTransport=dom.select(
-							Object.keys(transports || []).length === 0 ? style({display: 'none'}) : [],
+							Object.keys(transports).length === 0 ? style({display: 'none'}) : [],
 							attr.form('queuefilter'),
 							function change() {
 								filterForm.requestSubmit()
 							},
 							dom.option(''),
 							dom.option('(default)'),
-							Object.keys(transports || []).sort().map(t => dom.option(t))
+							Object.keys(transports).sort().map(t => dom.option(t))
 						),
 					),
 					dom.td(
-						dom.submitbutton('Filter', attr.form('queuefilter')), ' ',
+						attr.colspan('2'),
+						style({textAlign: 'right'}), // Less content shifting while rendering.
+						'Sort ',
+						sortElem=dom.select(
+							attr.form('queuefilter'),
+							function change() {
+								filterForm.requestSubmit()
+							},
+							dom.option('Last activity ↓', attr.value('lastactivity-desc')),
+							dom.option('Last activity ↑', attr.value('lastactivity-asc')),
+							dom.option('Submitted ↓', attr.value('submitted-desc')),
+							dom.option('Submitted ↑', attr.value('submitted-asc')),
+						), ' ',
+						dom.submitbutton('Apply', attr.form('queuefilter')), ' ',
 						dom.clickbutton('Reset', attr.form('queuefilter'), function click() {
 							filterForm.reset()
 							filterForm.requestSubmit()
 						}),
 					),
 				),
+				dom.tr(
+					dom.th('ID'),
+					dom.th('Success'),
+					dom.th('Last activity'),
+					dom.th('Submitted'),
+					dom.th('Account'),
+					dom.th('From'),
+					dom.th('To'),
+					dom.th('Size'),
+					dom.th('Attempts'),
+					dom.th('Last attempt'),
+					dom.th('Last error'),
+					dom.th('Require TLS'),
+					dom.th('Transport'),
+					dom.th('Actions'),
+				),
 			),
 			tbody,
-		),
-		dom.br(),
-		dom.br(),
-		dom.h2('Change selected messages'),
-		dom.div(
-			style({display: 'flex', gap: '2em'}),
-			dom.div(
-				dom.div('Hold'),
-				dom.div(
-					dom.clickbutton('On', async function click(e: MouseEvent) {
-						const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueHoldSet(gatherIDs(), true))())
-						window.alert(''+n+' message(s) updated')
-						window.location.reload() // todo: reload less
-					}), ' ',
-					dom.clickbutton('Off', async function click(e: MouseEvent) {
-						const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueHoldSet(gatherIDs(), false))())
-						window.alert(''+n+' message(s) updated')
-						window.location.reload() // todo: reload less
-					}),
+			dom.tfoot(
+				dom.tr(
+					dom.td(
+						attr.colspan('14'),
+						dom.clickbutton('Load more', attr.title('Try to load more entries. You can still try to load more entries when at the end of the list, new entries may have been appended since the previous call.'), async function click(e: MouseEvent) {
+							if (retired.length === 0) {
+								sort.LastID = 0
+								sort.Last = null
+							} else {
+								const lm = retired[retired.length-1]
+								sort.LastID = lm.ID
+								if (sort.Field === "Queued") {
+									sort.Last = lm.Queued
+								} else {
+									sort.Last = lm.LastActivity
+								}
+							}
+							tbody.classList.add('loadstart')
+							const l = await check(e.target! as HTMLButtonElement, client.RetiredList(filter, sort)) || []
+							retired.push(...l)
+							render()
+						}),
+					),
 				),
 			),
+		),
+	)
+}
+
+const formatExtra = (extra: { [key: string]: string; } | undefined) => {
+	if (!extra) {
+		return ''
+	}
+	return Object.entries(extra).sort((a, b) => a[0] < b[0] ? -1 : 1).map(t => t[0]+': '+t[1]).join('; ')
+}
+
+const hooksList = async () => {
+	let filter: api.HookFilter = {Max: parseInt(localStorageGet('adminpaginationsize') || '') || 100, IDs: [], Account: '', Submitted: '', NextAttempt: '', Event: ''}
+	let sort: api.HookSort = {Field: "NextAttempt", LastID: 0, Last: null, Asc: true}
+	let hooks: api.Hook[] = await client.HookList(filter, sort) || []
+
+	const nowSecs = new Date().getTime()/1000
+
+	let sortElem: HTMLSelectElement
+	let filterForm: HTMLFormElement
+	let filterSubmitted: HTMLInputElement
+	let filterAccount: HTMLInputElement
+	let filterEvent: HTMLSelectElement
+	let filterNextAttempt: HTMLInputElement
+
+	// Hook ID to checkbox.
+	let toggles = new Map<number, HTMLInputElement>()
+
+	// We operate on what the user has selected, not what the filters would currently
+	// evaluate to. This function can throw an error, which is why we have awkward
+	// syntax when calling this as parameter in api client calls below.
+	const gatherIDs = () => {
+		const f: api.HookFilter = {
+			Max: 0,
+			IDs: Array.from(toggles.entries()).filter(t => t[1].checked).map(t => t[0]),
+			Account: '',
+			Event: '',
+			Submitted: '',
+			NextAttempt: '',
+		}
+		// Don't want to accidentally operate on all messages.
+		if ((f.IDs || []).length === 0) {
+			throw new Error('No hooks selected.')
+		}
+		return f
+	}
+
+	const popupDetails = (h: api.Hook) => {
+		const nowSecs = new Date().getTime()/1000
+		popup(
+			dom.h1('Details'),
 			dom.div(
-				dom.div('Schedule next delivery attempt'),
-				buttonNextAttemptSet('Now', 0), ' ',
-				dom.clickbutton('More...', function click(e: MouseEvent) {
-					(e.target! as HTMLButtonElement).replaceWith(
-						dom.div(
-							dom.br(),
-							dom.div('Scheduled time plus'),
-							dom.div(
-								buttonNextAttemptAdd('1m', 1), ' ',
-								buttonNextAttemptAdd('5m', 5), ' ',
-								buttonNextAttemptAdd('30m', 30), ' ',
-								buttonNextAttemptAdd('1h', 60), ' ',
-								buttonNextAttemptAdd('2h', 2*60), ' ',
-								buttonNextAttemptAdd('4h', 4*60), ' ',
-								buttonNextAttemptAdd('8h', 8*60), ' ',
-								buttonNextAttemptAdd('16h', 16*60), ' ',
+				dom._class('twocols'),
+				dom.div(
+					dom.table(
+						dom.tr(dom.td('Message subject'), dom.td(h.Subject)),
+					),
+					dom.br(),
+					dom.h2('Results'),
+					dom.table(
+						dom.thead(
+							dom.tr(
+								dom.th('Start'), dom.th('Duration'), dom.th('Success'), dom.th('Code'), dom.th('Error'), dom.th('URL'), dom.th('Response'),
 							),
-							dom.br(),
-							dom.div('Now plus'),
+						),
+						dom.tbody(
+							(h.Results || []).length === 0 ? dom.tr(dom.td(attr.colspan('7'), 'No results.')) : [],
+							(h.Results || []).map(r =>
+								dom.tr(
+									dom.td(age(r.Start, false, nowSecs)),
+									dom.td(Math.round(r.Duration/1000000)+'ms'),
+									dom.td(r.Success ? '✓' : ''),
+									dom.td(''+ (r.Code || '')),
+									dom.td(r.Error),
+									dom.td(r.URL),
+									dom.td(r.Response),
+								)
+							),
+						),
+					),
+					dom.br(),
+				),
+				dom.div(
+					dom.h2('Webhook JSON body'),
+					dom.pre(dom._class('literal'), JSON.stringify(JSON.parse(h.Payload), undefined, '\t')),
+				),
+			),
+		)
+	}
+
+	let tbody = dom.tbody()
+
+	const render = () => {
+		toggles = new Map<number, HTMLInputElement>()
+		for (const h of (hooks || [])) {
+			toggles.set(h.ID, dom.input(attr.type('checkbox'), (hooks || []).length === 1 ? attr.checked('') : [], ))
+		}
+
+		const ntbody = dom.tbody(
+			dom._class('loadend'),
+			hooks.length === 0 ? dom.tr(dom.td(attr.colspan('15'), 'No webhooks.')) : [],
+			hooks.map(h =>
+				dom.tr(
+					dom.td(toggles.get(h.ID)!),
+					dom.td(''+h.ID),
+					dom.td(age(new Date(h.Submitted), false, nowSecs)),
+					dom.td(''+(h.QueueMsgID || '')), // todo future: make it easy to open the corresponding (retired) message from queue (if still around).
+					dom.td(''+h.FromID),
+					dom.td(''+h.MessageID),
+					dom.td(h.Account || '-'),
+					dom.td(h.IsIncoming ? "incoming" : h.OutgoingEvent),
+					dom.td(formatExtra(h.Extra)),
+					dom.td(''+h.Attempts),
+					dom.td(age(h.NextAttempt, true, nowSecs)),
+					dom.td(h.Results && h.Results.length > 0 ? age(h.Results[h.Results.length-1].Start, false, nowSecs) : []),
+					dom.td(h.Results && h.Results.length > 0 ? h.Results[h.Results.length-1].Error : []),
+					dom.td(h.URL),
+					dom.td(
+						dom.clickbutton('Details', function click() {
+							popupDetails(h)
+						}),
+					),
+				)
+			),
+		)
+		tbody.replaceWith(ntbody)
+		tbody = ntbody
+	}
+	render()
+
+	const buttonNextAttemptSet = (text: string, minutes: number) => dom.clickbutton(text, async function click(e: MouseEvent) {
+		// note: awkward client call because gatherIDs() can throw an exception.
+		const n = await check(e.target! as HTMLButtonElement, (async () => client.HookNextAttemptSet(gatherIDs(), minutes))())
+		window.alert(''+n+' hook(s) updated')
+		window.location.reload() // todo: reload less
+	})
+	const buttonNextAttemptAdd = (text: string, minutes: number) => dom.clickbutton(text, async function click(e: MouseEvent) {
+		const n = await check(e.target! as HTMLButtonElement, (async () => client.HookNextAttemptAdd(gatherIDs(), minutes))())
+		window.alert(''+n+' hook(s) updated')
+		window.location.reload() // todo: reload less
+	})
+
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			'Webhook queue',
+		),
+
+		dom.p(dom.a(attr.href('#webhookqueue/retired'), 'Retired webhooks')),
+		dom.h2('Webhooks'),
+		dom.table(dom._class('hover'),
+			style({width: '100%'}),
+			dom.thead(
+				dom.tr(
+					dom.td(attr.colspan('2'), 'Filter'),
+					dom.td(filterSubmitted=dom.input(attr.form('hooksfilter'), style({width: '7em'}), attr.title('Example: "<-1h" for filtering webhooks submitted more than 1 hour ago.'))),
+					dom.td(),
+					dom.td(),
+					dom.td(),
+					dom.td(filterAccount=dom.input(attr.form('hooksfilter'), style({width: '8em'}))),
+					dom.td(
+						filterEvent=dom.select(
+							attr.form('hooksfilter'),
+							function change() {
+								filterForm.requestSubmit()
+							},
+							dom.option(''),
+							// note: outgoing hook events are in ../webhook/webhook.go, ../mox-/config.go ../webadmin/admin.ts and ../webapi/gendoc.sh. keep in sync.
+							['incoming', 'delivered', 'suppressed', 'delayed', 'failed', 'relayed', 'expanded', 'canceled', 'unrecognized'].map(s => dom.option(s)),
+						),
+					),
+					dom.td(),
+					dom.td(),
+					dom.td(filterNextAttempt=dom.input(attr.form('hooksfilter'), style({width: '7em'}), attr.title('Example: ">1h" for filtering webhooks to be delivered in more than 1 hour, or "<now" for webhooks to be delivered as soon as possible.'))),
+					dom.td(),
+					dom.td(),
+					dom.td(
+						attr.colspan('2'),
+						style({textAlign: 'right'}), // Less content shifting while rendering.
+						'Sort ',
+						sortElem=dom.select(
+							attr.form('hooksfilter'), 
+							function change() {
+								filterForm.requestSubmit()
+							},
+							dom.option('Next attempt ↑', attr.value('nextattempt-asc')),
+							dom.option('Next attempt ↓', attr.value('nextattempt-desc')),
+							dom.option('Submitted ↑', attr.value('submitted-asc')),
+							dom.option('Submitted ↓', attr.value('submitted-desc')),
+						), ' ',
+						dom.submitbutton('Apply', attr.form('hooksfilter')), ' ',
+						dom.clickbutton('Reset', attr.form('hooksfilter'), function click() {
+							filterForm.reset()
+							filterForm.requestSubmit()
+						}),
+					),
+				),
+				dom.tr(
+					dom.td(
+						dom.input(attr.type('checkbox'), (hooks || []).length === 1 ? attr.checked('') : [], attr.form('hooksfilter'), function change(e: MouseEvent) {
+							const elem = e.target! as HTMLInputElement
+							for (const [_, toggle] of toggles) {
+								toggle.checked = elem.checked
+							}
+						}),
+					),
+					dom.th('ID'),
+					dom.th('Submitted'),
+					dom.th('Queue Msg ID', attr.title('ID of queued message this event is about.')),
+					dom.th('FromID'),
+					dom.th('MessageID'),
+					dom.th('Account'),
+					dom.th('Event'),
+					dom.th('Extra'),
+					dom.th('Attempts'),
+					dom.th('Next'),
+					dom.th('Last'),
+					dom.th('Error'),
+					dom.th('URL'),
+					dom.th('Actions'),
+				),
+			),
+			tbody,
+			dom.tfoot(
+				dom.tr(
+					dom.td(
+						attr.colspan('15'),
+						dom.clickbutton('Load more', attr.title('Try to load more entries. You can still try to load more entries when at the end of the list, new entries may have been appended since the previous call.'), async function click(e: MouseEvent) {
+							if (hooks.length === 0) {
+								sort.LastID = 0
+								sort.Last = null
+							} else {
+								const last = hooks[hooks.length-1]
+								sort.LastID = last.ID
+								if (sort.Field === "Submitted") {
+									sort.Last = last.Submitted
+								} else {
+									sort.Last = last.NextAttempt
+								}
+							}
+				
+							tbody.classList.add('loadstart')
+							const l = await check(e.target! as HTMLButtonElement, client.HookList(filter, sort)) || []
+							hooks.push(...l)
+							render()
+						}),
+					),
+				),
+			),
+		),
+
+		// Filtering.
+		filterForm=dom.form(
+			attr.id('hooksfilter'), // Referenced by input elements in table row.
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				filter = {
+					Max: filter.Max,
+					IDs: [],
+					Account: filterAccount.value,
+					Event: filterEvent.value,
+					Submitted: filterSubmitted.value,
+					NextAttempt: filterNextAttempt.value,
+				}
+				sort = {
+					Field: sortElem.value.startsWith('nextattempt') ? 'NextAttempt' : 'Submitted',
+					LastID: 0,
+					Last: null,
+					Asc: sortElem.value.endsWith('asc'),
+				}
+				tbody.classList.add('loadstart')
+				hooks = await check({disabled: false}, client.HookList(filter, sort)) || []
+				render()
+			},
+		),
+
+		dom.br(),
+		dom.br(),
+		dom.div(
+			dom._class('unclutter'),
+			dom.h2('Change selected webhooks'),
+			dom.div(
+				style({display: 'flex', gap: '2em'}),
+				dom.div(
+					dom.div('Schedule next delivery attempt'),
+					buttonNextAttemptSet('Now', 0), ' ',
+					dom.clickbutton('More...', function click(e: MouseEvent) {
+						(e.target! as HTMLButtonElement).replaceWith(
 							dom.div(
-								buttonNextAttemptSet('1m', 1), ' ',
-								buttonNextAttemptSet('5m', 5), ' ',
-								buttonNextAttemptSet('30m', 30), ' ',
-								buttonNextAttemptSet('1h', 60), ' ',
-								buttonNextAttemptSet('2h', 2*60), ' ',
-								buttonNextAttemptSet('4h', 4*60), ' ',
-								buttonNextAttemptSet('8h', 8*60), ' ',
-								buttonNextAttemptSet('16h', 16*60), ' ',
+								dom.br(),
+								dom.div('Scheduled time plus'),
+								dom.div(
+									buttonNextAttemptAdd('1m', 1), ' ',
+									buttonNextAttemptAdd('5m', 5), ' ',
+									buttonNextAttemptAdd('30m', 30), ' ',
+									buttonNextAttemptAdd('1h', 60), ' ',
+									buttonNextAttemptAdd('2h', 2*60), ' ',
+									buttonNextAttemptAdd('4h', 4*60), ' ',
+									buttonNextAttemptAdd('8h', 8*60), ' ',
+									buttonNextAttemptAdd('16h', 16*60), ' ',
+								),
+								dom.br(),
+								dom.div('Now plus'),
+								dom.div(
+									buttonNextAttemptSet('1m', 1), ' ',
+									buttonNextAttemptSet('5m', 5), ' ',
+									buttonNextAttemptSet('30m', 30), ' ',
+									buttonNextAttemptSet('1h', 60), ' ',
+									buttonNextAttemptSet('2h', 2*60), ' ',
+									buttonNextAttemptSet('4h', 4*60), ' ',
+									buttonNextAttemptSet('8h', 8*60), ' ',
+									buttonNextAttemptSet('16h', 16*60), ' ',
+								)
 							)
 						)
-					)
-				}),
-			),
-			dom.div(
-				dom.form(
-					dom.label('Require TLS'),
-					requiretlsFieldset=dom.fieldset(
-						requiretls=dom.select(
-							attr.title('How to use TLS for message delivery over SMTP:\n\nDefault: Delivery attempts follow the policies published by the recipient domain: Verification with MTA-STS and/or DANE, or optional opportunistic unverified STARTTLS if the domain does not specify a policy.\n\nWith RequireTLS: For sensitive messages, you may want to require verified TLS. The recipient destination domain SMTP server must support the REQUIRETLS SMTP extension for delivery to succeed. It is automatically chosen when the destination domain mail servers of all recipients are known to support it.\n\nFallback to insecure: If delivery fails due to MTA-STS and/or DANE policies specified by the recipient domain, and the content is not sensitive, you may choose to ignore the recipient domain TLS policies so delivery can succeed.'),
-							dom.option('Default', attr.value('')),
-							dom.option('With RequireTLS', attr.value('yes')),
-							dom.option('Fallback to insecure', attr.value('no')),
-						),
-						' ',
-						dom.submitbutton('Change'),
-					),
-					async function submit(e: SubmitEvent) {
+					}),
+				),
+				dom.div(
+					dom.div('Delivery'),
+					dom.clickbutton('Cancel', attr.title('Retires webhooks, preventing further delivery attempts.'), async function click(e: MouseEvent) {
 						e.preventDefault()
-						e.stopPropagation()
-						const n = await check(requiretlsFieldset, (async () => await client.QueueRequireTLSSet(gatherIDs(), requiretls.value === '' ? null : requiretls.value === 'yes'))())
-						window.alert(''+n+' message(s) updated')
+						if (!window.confirm('Are you sure you want to cancel these webhooks?')) {
+							return
+						}
+						const n = await check(e.target! as HTMLButtonElement, (async () => await client.HookCancel(gatherIDs()))())
+						window.alert(''+n+' webhook(s) updated')
 						window.location.reload() // todo: only refresh the list
-					}
+					}),
+				),
+			)
+		)
+	)
+}
+
+const hooksRetiredList = async () => {
+	let filter: api.HookRetiredFilter = {Max: parseInt(localStorageGet('adminpaginationsize') || '') || 100, IDs: [], Account: '', Submitted: '', LastActivity: '', Event: ''}
+	let sort: api.HookRetiredSort = {Field: "LastActivity", LastID: 0, Last: null, Asc: false}
+	let hooks = await client.HookRetiredList(filter, sort) || []
+
+	const nowSecs = new Date().getTime()/1000
+
+	let sortElem: HTMLSelectElement
+	let filterForm: HTMLFormElement
+	let filterSubmitted: HTMLInputElement
+	let filterAccount: HTMLInputElement
+	let filterEvent: HTMLSelectElement
+	let filterLastActivity: HTMLInputElement
+
+	const popupDetails = (h: api.HookRetired) => {
+		const nowSecs = new Date().getTime()/1000
+		popup(
+			dom.h1('Details'),
+			dom.div(
+				dom._class('twocols'),
+				dom.div(
+					dom.table(
+						dom.tr(dom.td('Message subject'), dom.td(h.Subject)),
+						h.SupersededByID != 0 ? dom.tr(dom.td('Superseded by webhook ID'), dom.td(''+h.SupersededByID)) : [],
+					),
+					dom.br(),
+					dom.h2('Results'),
+					dom.table(
+						dom.thead(
+							dom.tr(
+								dom.th('Start'), dom.th('Duration'), dom.th('Success'), dom.th('Code'), dom.th('Error'), dom.th('URL'), dom.th('Response'),
+							),
+						),
+						dom.tbody(
+							(h.Results || []).length === 0 ? dom.tr(dom.td(attr.colspan('7'), 'No results.')) : [],
+							(h.Results || []).map(r =>
+								dom.tr(
+									dom.td(age(r.Start, false, nowSecs)),
+									dom.td(Math.round(r.Duration/1000000)+'ms'),
+									dom.td(r.Success ? '✓' : ''),
+									dom.td(''+ (r.Code || '')),
+									dom.td(r.Error),
+									dom.td(r.URL),
+									dom.td(r.Response),
+								)
+							),
+						),
+					),
+					dom.br(),
+				),
+				dom.div(
+					dom.h2('Webhook JSON body'),
+					dom.pre(dom._class('literal'), JSON.stringify(JSON.parse(h.Payload), undefined, '\t')),
 				),
 			),
-			dom.div(
-				dom.form(
-					dom.label('Transport'),
-					dom.fieldset(
-						transport=dom.select(
-							attr.title('Transport to use for delivery attempts. The default is direct delivery, connecting to the MX hosts of the domain.'),
-							dom.option('(default)', attr.value('')),
-							Object.keys(transports || []).sort().map(t => dom.option(t)),
-						),
-						' ',
-						dom.submitbutton('Change'),
+		)
+	}
+
+	let tbody = dom.tbody()
+
+	// todo future: add selection + button to reschedule old retired webhooks.
+
+	const render = () => {
+		const ntbody = dom.tbody(
+			dom._class('loadend'),
+			hooks.length === 0 ? dom.tr(dom.td(attr.colspan('14'), 'No retired webhooks.')) : [],
+			hooks.map(h =>
+				dom.tr(
+					dom.td(''+h.ID),
+					dom.td(h.Success ? '✓' : ''),
+					dom.td(age(h.LastActivity, false, nowSecs)),
+					dom.td(age(new Date(h.Submitted), false, nowSecs)),
+					dom.td(''+(h.QueueMsgID || '')),
+					dom.td(''+h.FromID),
+					dom.td(''+h.MessageID),
+					dom.td(h.Account || '-'),
+					dom.td(h.IsIncoming ? "incoming" : h.OutgoingEvent),
+					dom.td(formatExtra(h.Extra)),
+					dom.td(''+h.Attempts),
+					dom.td(h.Results && h.Results.length > 0 ? h.Results[h.Results.length-1].Error : []),
+					dom.td(h.URL),
+					dom.td(
+						dom.clickbutton('Details', function click() {
+							popupDetails(h)
+						}),
 					),
-					async function submit(e: SubmitEvent) {
-						e.preventDefault()
-						e.stopPropagation()
-						const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueTransportSet(gatherIDs(), transport.value))())
-						window.alert(''+n+' message(s) updated')
-						window.location.reload() // todo: only refresh the list
-					}
+				)
+			),
+		)
+		tbody.replaceWith(ntbody)
+		tbody = ntbody
+	}
+	render()
+
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			crumblink('Webhook queue', '#webhookqueue'),
+			'Retired webhooks',
+		),
+
+		dom.h2('Retired webhooks'),
+		dom.table(dom._class('hover'),
+			style({width: '100%'}),
+			dom.thead(
+				dom.tr(
+					dom.td('Filter'),
+					dom.td(),
+					dom.td(filterLastActivity=dom.input(attr.form('hooksfilter'), style({width: '7em'}), attr.title('Example: ">-1h" for filtering last activity for webhooks more than 1 hour ago.'))),
+					dom.td(filterSubmitted=dom.input(attr.form('hooksfilter'), style({width: '7em'}), attr.title('Example: "<-1h" for filtering webhooks submitted more than 1 hour ago.'))),
+					dom.td(),
+					dom.td(),
+					dom.td(),
+					dom.td(filterAccount=dom.input(attr.form('hooksfilter'), style({width: '8em'}))),
+					dom.td(
+						filterEvent=dom.select(
+							attr.form('hooksfilter'),
+							function change() {
+								filterForm.requestSubmit()
+							},
+							dom.option(''),
+							// note: outgoing hook events are in ../webhook/webhook.go, ../mox-/config.go ../webadmin/admin.ts and ../webapi/gendoc.sh. keep in sync.
+							['incoming', 'delivered', 'suppressed', 'delayed', 'failed', 'relayed', 'expanded', 'canceled', 'unrecognized'].map(s => dom.option(s)),
+						),
+					),
+					dom.td(),
+					dom.td(),
+					dom.td(),
+					dom.td(
+						attr.colspan('2'),
+						style({textAlign: 'right'}), // Less content shifting while rendering.
+						'Sort ',
+						sortElem=dom.select(
+							attr.form('hooksfilter'),
+							function change() {
+								filterForm.requestSubmit()
+							},
+							dom.option('Last activity ↓', attr.value('nextattempt-desc')),
+							dom.option('Last activity ↑', attr.value('nextattempt-asc')),
+							dom.option('Submitted ↓', attr.value('submitted-desc')),
+							dom.option('Submitted ↑', attr.value('submitted-asc')),
+						), ' ',
+						dom.submitbutton('Apply', attr.form('hooksfilter')), ' ',
+						dom.clickbutton('Reset', attr.form('hooksfilter'), function click() {
+							filterForm.reset()
+							filterForm.requestSubmit()
+						}),
+					),
+				),
+				dom.tr(
+					dom.th('ID'),
+					dom.th('Success'),
+					dom.th('Last'),
+					dom.th('Submitted'),
+					dom.th('Queue Msg ID', attr.title('ID of queued message this event is about.')),
+					dom.th('FromID'),
+					dom.th('MessageID'),
+					dom.th('Account'),
+					dom.th('Event'),
+					dom.th('Extra'),
+					dom.th('Attempts'),
+					dom.th('Error'),
+					dom.th('URL'),
+					dom.th('Actions'),
 				),
 			),
-			dom.div(
-				dom.div('Delivery'),
-				dom.clickbutton('Fail delivery', attr.title('Cause delivery to fail, sending a DSN to the sender.'), async function click(e: MouseEvent) {
-					e.preventDefault()
-					if (!window.confirm('Are you sure you want to remove this message? Notifications of delivery failure will be sent (DSNs).')) {
-						return
-					}
-					const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueFail(gatherIDs()))())
-					window.alert(''+n+' message(s) updated')
-					window.location.reload() // todo: only refresh the list
-				}),
+			tbody,
+			dom.tfoot(
+				dom.tr(
+					dom.td(
+						attr.colspan('14'),
+						dom.clickbutton('Load more', attr.title('Try to load more entries. You can still try to load more entries when at the end of the list, new entries may have been appended since the previous call.'), async function click(e: MouseEvent) {
+							if (hooks.length === 0) {
+								sort.LastID = 0
+								sort.Last = null
+							} else {
+								const last = hooks[hooks.length-1]
+								sort.LastID = last.ID
+								if (sort.Field === "Submitted") {
+									sort.Last = last.Submitted
+								} else {
+									sort.Last = last.LastActivity
+								}
+							}
+							tbody.classList.add('loadstart')
+							const l = await check(e.target! as HTMLButtonElement, client.HookRetiredList(filter, sort)) || []
+							hooks.push(...l)
+							render()
+						}),
+					),
+				),
 			),
-			dom.div(
-				dom.div('Messages'),
-				dom.clickbutton('Remove', attr.title('Completely remove messages from queue, not sending a DSN.'), async function click(e: MouseEvent) {
-					e.preventDefault()
-					if (!window.confirm('Are you sure you want to remove this message? It will be removed completely, no DSN about failure to deliver will be sent.')) {
-						return
-					}
-					const n = await check(e.target! as HTMLButtonElement, (async () => await client.QueueDrop(gatherIDs()))())
-					window.alert(''+n+' message(s) updated')
-					window.location.reload() // todo: only refresh the list
-				}),
-			),
+		),
+		// Filtering.
+		filterForm=dom.form(
+			attr.id('hooksfilter'), // Referenced by input elements in table row.
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				filter = {
+					Max: filter.Max,
+					IDs: [],
+					Account: filterAccount.value,
+					Event: filterEvent.value,
+					Submitted: filterSubmitted.value,
+					LastActivity: filterLastActivity.value,
+				}
+				sort = {
+					Field: sortElem.value.startsWith('lastactivity') ? 'LastActivity' : 'Submitted',
+					LastID: 0,
+					Last: null,
+					Asc: sortElem.value.endsWith('asc'),
+				}
+				tbody.classList.add('loadstart')
+				hooks = await check({disabled: false}, client.HookRetiredList(filter, sort)) || []
+				render()
+			},
 		),
 	)
 }
@@ -3218,6 +4145,12 @@ const init = async () => {
 				await domainDNSRecords(t[1])
 			} else if (h === 'queue') {
 				await queueList()
+			} else if (h === 'queue/retired') {
+				await retiredList()
+			} else if (h === 'webhookqueue') {
+				await hooksList()
+			} else if (h === 'webhookqueue/retired') {
+				await hooksRetiredList()
 			} else if (h === 'tlsrpt') {
 				await tlsrptIndex()
 			} else if (h === 'tlsrpt/reports') {

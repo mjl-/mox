@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -21,8 +22,8 @@ import (
 	"net/textproto"
 	"os"
 	"runtime/debug"
+	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -150,7 +151,7 @@ var (
 			"reason",
 		},
 	)
-	// Similar between ../webmail/webmail.go:/metricSubmission and ../smtpserver/server.go:/metricSubmission
+	// Similar between ../webmail/webmail.go:/metricSubmission and ../smtpserver/server.go:/metricSubmission and ../webapisrv/server.go:/metricSubmission
 	metricSubmission = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "mox_smtpserver_submission_total",
@@ -1944,7 +1945,7 @@ func hasTLSRequiredNo(h textproto.MIMEHeader) bool {
 
 // submit is used for mail from authenticated users that we will try to deliver.
 func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, dataFile *os.File, part *message.Part) {
-	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/webmail.go:/MessageSubmit\(
+	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/api.go:/MessageSubmit\( and ../webapisrv/server.go:/Send\(
 
 	var msgPrefix []byte
 
@@ -2017,6 +2018,26 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	})
 	xcheckf(err, "read-only transaction")
 
+	// We gather any X-Mox-Extra-* headers into the "extra" data during queueing, which
+	// will make it into any webhook we deliver.
+	// todo: remove the X-Mox-Extra-* headers from the message. we don't currently rewrite the message...
+	// todo: should we not canonicalize keys?
+	var extra map[string]string
+	for k, vl := range header {
+		if !strings.HasPrefix(k, "X-Mox-Extra-") {
+			continue
+		}
+		if extra == nil {
+			extra = map[string]string{}
+		}
+		xk := k[len("X-Mox-Extra-"):]
+		// We don't allow duplicate keys.
+		if _, ok := extra[xk]; ok || len(vl) > 1 {
+			xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeMsg6Other0, "duplicate x-mox-extra- key %q", xk)
+		}
+		extra[xk] = vl[len(vl)-1]
+	}
+
 	// todo future: in a pedantic mode, we can parse the headers, and return an error if rcpt is only in To or Cc header, and not in the non-empty Bcc header. indicates a client that doesn't blind those bcc's.
 
 	// Add DKIM signatures.
@@ -2054,13 +2075,23 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	msgPrefix = append(msgPrefix, []byte(authResults.Header())...)
 
 	// We always deliver through the queue. It would be more efficient to deliver
-	// directly, but we don't want to circumvent all the anti-spam measures. Accounts
-	// on a single mox instance should be allowed to block each other.
+	// directly for local accounts, but we don't want to circumvent all the anti-spam
+	// measures. Accounts on a single mox instance should be allowed to block each
+	// other.
+
+	accConf, _ := c.account.Conf()
+	loginAddr, err := smtp.ParseAddress(c.username)
+	xcheckf(err, "parsing login address")
+	useFromID := slices.Contains(accConf.ParsedFromIDLoginAddresses, loginAddr)
+	var localpartBase string
+	if useFromID {
+		localpartBase = strings.SplitN(string(c.mailFrom.Localpart), confDom.LocalpartCatchallSeparator, 2)[0]
+	}
 	now := time.Now()
 	qml := make([]queue.Msg, len(c.recipients))
 	for i, rcptAcc := range c.recipients {
 		if Localserve {
-			code, timeout := localserveNeedsError(rcptAcc.rcptTo.Localpart)
+			code, timeout := mox.LocalserveNeedsError(rcptAcc.rcptTo.Localpart)
 			if timeout {
 				c.log.Info("timing out submission due to special localpart")
 				mox.Sleep(mox.Context, time.Hour)
@@ -2069,6 +2100,13 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 				c.log.Info("failure due to special localpart", slog.Int("code", code))
 				xsmtpServerErrorf(codes{code, smtp.SeOther00}, "failure with code %d due to special localpart", code)
 			}
+		}
+
+		fp := *c.mailFrom
+		var fromID string
+		if useFromID {
+			fromID = xrandomID(16)
+			fp.Localpart = smtp.Localpart(localpartBase + confDom.LocalpartCatchallSeparator + fromID)
 		}
 
 		// For multiple recipients, we don't make each message prefix unique, leaving out
@@ -2080,11 +2118,13 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		}
 		xmsgPrefix := append([]byte(recvHdrFor(rcptTo)), msgPrefix...)
 		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-		qm := queue.MakeMsg(*c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.msgsmtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS, now)
+		qm := queue.MakeMsg(fp, rcptAcc.rcptTo, msgWriter.Has8bit, c.msgsmtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS, now, header.Get("Subject"))
 		if !c.futureRelease.IsZero() {
 			qm.NextAttempt = c.futureRelease
 			qm.FutureReleaseRequest = c.futureReleaseRequest
 		}
+		qm.FromID = fromID
+		qm.Extra = extra
 		qml[i] = qm
 	}
 
@@ -2124,6 +2164,20 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	c.writecodeline(smtp.C250Completed, smtp.SeMailbox2Other0, "it is done", nil)
 }
 
+func xrandomID(n int) string {
+	return base64.RawURLEncoding.EncodeToString(xrandom(n))
+}
+
+func xrandom(n int) []byte {
+	buf := make([]byte, n)
+	x, err := cryptorand.Read(buf)
+	xcheckf(err, "read random")
+	if x != n {
+		xcheckf(errors.New("short random read"), "read random")
+	}
+	return buf
+}
+
 func ipmasked(ip net.IP) (string, string, string) {
 	if ip.To4() != nil {
 		m1 := ip.String()
@@ -2137,31 +2191,8 @@ func ipmasked(ip net.IP) (string, string, string) {
 	return m1, m2, m3
 }
 
-func localserveNeedsError(lp smtp.Localpart) (code int, timeout bool) {
-	s := string(lp)
-	if strings.HasSuffix(s, "temperror") {
-		return smtp.C451LocalErr, false
-	} else if strings.HasSuffix(s, "permerror") {
-		return smtp.C550MailboxUnavail, false
-	} else if strings.HasSuffix(s, "timeout") {
-		return 0, true
-	}
-	if len(s) < 3 {
-		return 0, false
-	}
-	s = s[len(s)-3:]
-	v, err := strconv.ParseInt(s, 10, 32)
-	if err != nil {
-		return 0, false
-	}
-	if v < 400 || v > 600 {
-		return 0, false
-	}
-	return int(v), false
-}
-
 func (c *conn) xlocalserveError(lp smtp.Localpart) {
-	code, timeout := localserveNeedsError(lp)
+	code, timeout := mox.LocalserveNeedsError(lp)
 	if timeout {
 		c.log.Info("timing out due to special localpart")
 		mox.Sleep(mox.Context, time.Hour)
@@ -2178,7 +2209,16 @@ func (c *conn) xlocalserveError(lp smtp.Localpart) {
 func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, iprevStatus iprev.Status, iprevAuthentic bool, dataFile *os.File) {
 	// todo: in decision making process, if we run into (some) temporary errors, attempt to continue. if we decide to accept, all good. if we decide to reject, we'll make it a temporary reject.
 
-	msgFrom, envelope, headers, err := message.From(c.log.Logger, false, dataFile, nil)
+	var msgFrom smtp.Address
+	var envelope *message.Envelope
+	var headers textproto.MIMEHeader
+	var isDSN bool
+	part, err := message.Parse(c.log.Logger, false, dataFile)
+	if err == nil {
+		// todo: is it enough to check only the the content-type header? in other places we look at the content-types of the parts before considering a message a dsn. should we change other places to this simpler check?
+		isDSN = part.MediaType == "MULTIPART" && part.MediaSubType == "REPORT" && strings.EqualFold(part.ContentTypeParams["report-type"], "delivery-status")
+		msgFrom, envelope, headers, err = message.From(c.log.Logger, false, dataFile, &part)
+	}
 	if err != nil {
 		c.log.Infox("parsing message for From address", err)
 	}
@@ -2676,6 +2716,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			MailFromValidation: mailFromValidation,
 			MsgFromValidation:  msgFromValidation,
 			DKIMDomains:        verifiedDKIMDomains,
+			DSN:                isDSN,
 			Size:               msgWriter.Size,
 		}
 		if c.tls {
@@ -2960,8 +3001,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 		}
 
-		if Localserve {
-			code, timeout := localserveNeedsError(rcptAcc.rcptTo.Localpart)
+		if Localserve && !strings.HasPrefix(string(rcptAcc.rcptTo.Localpart), "queue") {
+			code, timeout := mox.LocalserveNeedsError(rcptAcc.rcptTo.Localpart)
 			if timeout {
 				log.Info("timing out due to special localpart")
 				mox.Sleep(mox.Context, time.Hour)
@@ -2972,6 +3013,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				addError(rcptAcc, code, smtp.SeOther00, false, fmt.Sprintf("failure with code %d due to special localpart", code))
 			}
 		}
+		var delivered bool
 		acc.WithWLock(func() {
 			if err := acc.DeliverMailbox(log, a.mailbox, &m, dataFile); err != nil {
 				log.Errorx("delivering", err)
@@ -2983,6 +3025,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				}
 				return
 			}
+			delivered = true
 			metricDelivery.WithLabelValues("delivered", a.reason).Inc()
 			log.Info("incoming message delivered", slog.String("reason", a.reason), slog.Any("msgfrom", msgFrom))
 
@@ -2993,6 +3036,18 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				}
 			}
 		})
+
+		// Pass delivered messages to queue for DSN processing and/or hooks.
+		if delivered {
+			mr := store.FileMsgReader(m.MsgPrefix, dataFile)
+			part, err := m.LoadPart(mr)
+			if err != nil {
+				log.Errorx("loading parsed part for evaluating webhook", err)
+			} else {
+				err = queue.Incoming(context.Background(), log, acc, messageID, m, part, a.mailbox)
+				log.Check(err, "queueing webhook for incoming delivery")
+			}
+		}
 
 		err = acc.Close()
 		log.Check(err, "closing account after delivering")

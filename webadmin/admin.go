@@ -1952,7 +1952,12 @@ func (Admin) SetPassword(ctx context.Context, accountName, password string) {
 
 // AccountSettingsSave set new settings for an account that only an admin can set.
 func (Admin) AccountSettingsSave(ctx context.Context, accountName string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, maxMsgSize int64, firstTimeSenderDelay bool) {
-	err := mox.AccountAdminSettingsSave(ctx, accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize, firstTimeSenderDelay)
+	err := mox.AccountSave(ctx, accountName, func(acc *config.Account) {
+		acc.MaxOutgoingMessagesPerDay = maxOutgoingMessagesPerDay
+		acc.MaxFirstTimeRecipientsPerDay = maxFirstTimeRecipientsPerDay
+		acc.QuotaMessageSize = maxMsgSize
+		acc.NoFirstTimeSenderDelay = !firstTimeSenderDelay
+	})
 	xcheckf(ctx, err, "saving account settings")
 }
 
@@ -2005,8 +2010,8 @@ func (Admin) QueueHoldRuleRemove(ctx context.Context, holdRuleID int64) {
 }
 
 // QueueList returns the messages currently in the outgoing queue.
-func (Admin) QueueList(ctx context.Context, filter queue.Filter) []queue.Msg {
-	l, err := queue.List(ctx, filter)
+func (Admin) QueueList(ctx context.Context, filter queue.Filter, sort queue.Sort) []queue.Msg {
+	l, err := queue.List(ctx, filter, sort)
 	xcheckf(ctx, err, "listing messages in queue")
 	return l
 }
@@ -2063,6 +2068,59 @@ func (Admin) QueueRequireTLSSet(ctx context.Context, filter queue.Filter, requir
 func (Admin) QueueTransportSet(ctx context.Context, filter queue.Filter, transport string) (affected int) {
 	n, err := queue.TransportSet(ctx, filter, transport)
 	xcheckf(ctx, err, "changing transport for messages in queue")
+	return n
+}
+
+// RetiredList returns messages retired from the queue (delivery could
+// have succeeded or failed).
+func (Admin) RetiredList(ctx context.Context, filter queue.RetiredFilter, sort queue.RetiredSort) []queue.MsgRetired {
+	l, err := queue.RetiredList(ctx, filter, sort)
+	xcheckf(ctx, err, "listing retired messages")
+	return l
+}
+
+// HookQueueSize returns the number of webhooks still to be delivered.
+func (Admin) HookQueueSize(ctx context.Context) int {
+	n, err := queue.HookQueueSize(ctx)
+	xcheckf(ctx, err, "get hook queue size")
+	return n
+}
+
+// HookList lists webhooks still to be delivered.
+func (Admin) HookList(ctx context.Context, filter queue.HookFilter, sort queue.HookSort) []queue.Hook {
+	l, err := queue.HookList(ctx, filter, sort)
+	xcheckf(ctx, err, "listing hook queue")
+	return l
+}
+
+// HookNextAttemptSet sets a new time for next delivery attempt of matching
+// hooks from the queue.
+func (Admin) HookNextAttemptSet(ctx context.Context, filter queue.HookFilter, minutes int) (affected int) {
+	n, err := queue.HookNextAttemptSet(ctx, filter, time.Now().Add(time.Duration(minutes)*time.Minute))
+	xcheckf(ctx, err, "setting new next delivery attempt time for matching webhooks in queue")
+	return n
+}
+
+// HookNextAttemptAdd adds a duration to the time of next delivery attempt of
+// matching hooks from the queue.
+func (Admin) HookNextAttemptAdd(ctx context.Context, filter queue.HookFilter, minutes int) (affected int) {
+	n, err := queue.HookNextAttemptAdd(ctx, filter, time.Duration(minutes)*time.Minute)
+	xcheckf(ctx, err, "adding duration to next delivery attempt for matching webhooks in queue")
+	return n
+}
+
+// HookRetiredList lists retired webhooks.
+func (Admin) HookRetiredList(ctx context.Context, filter queue.HookRetiredFilter, sort queue.HookRetiredSort) []queue.HookRetired {
+	l, err := queue.HookRetiredList(ctx, filter, sort)
+	xcheckf(ctx, err, "listing retired hooks")
+	return l
+}
+
+// HookCancel prevents further delivery attempts of matching webhooks.
+func (Admin) HookCancel(ctx context.Context, filter queue.HookFilter) (affected int) {
+	log := pkglog.WithContext(ctx)
+	n, err := queue.HookCancel(ctx, log, filter)
+	xcheckf(ctx, err, "cancel hooks in queue")
 	return n
 }
 

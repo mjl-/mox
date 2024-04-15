@@ -220,6 +220,7 @@ const [dom, style, attr, prop] = (function () {
 		autocomplete: (s) => _attr('autocomplete', s),
 		list: (s) => _attr('list', s),
 		form: (s) => _attr('form', s),
+		size: (s) => _attr('size', s),
 	};
 	const style = (x) => { return { _styles: x }; };
 	const prop = (x) => { return { _props: x }; };
@@ -336,7 +337,7 @@ var api;
 		SPFResult["SPFTemperror"] = "temperror";
 		SPFResult["SPFPermerror"] = "permerror";
 	})(SPFResult = api.SPFResult || (api.SPFResult = {}));
-	api.structTypes = { "Account": true, "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "AutomaticJunkFlags": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "DANECheckResult": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Destination": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "JunkFilter": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "Reverse": true, "Route": true, "Row": true, "Ruleset": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "SubjectPass": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportDirect": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
+	api.structTypes = { "Account": true, "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "AutomaticJunkFlags": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "DANECheckResult": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Destination": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "Hook": true, "HookFilter": true, "HookResult": true, "HookRetired": true, "HookRetiredFilter": true, "HookRetiredSort": true, "HookSort": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "IncomingWebhook": true, "JunkFilter": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "MsgResult": true, "MsgRetired": true, "OutgoingWebhook": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "RetiredFilter": true, "RetiredSort": true, "Reverse": true, "Route": true, "Row": true, "Ruleset": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Sort": true, "SubjectPass": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportDirect": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
 	api.stringsTypes = { "Align": true, "Alignment": true, "CSRFToken": true, "DKIMResult": true, "DMARCPolicy": true, "DMARCResult": true, "Disposition": true, "IP": true, "Localpart": true, "Mode": true, "PolicyOverride": true, "PolicyType": true, "RUA": true, "ResultType": true, "SPFDomainScope": true, "SPFResult": true };
 	api.intsTypes = {};
 	api.types = {
@@ -371,7 +372,9 @@ var api;
 		"AutoconfCheckResult": { "Name": "AutoconfCheckResult", "Docs": "", "Fields": [{ "Name": "ClientSettingsDomainIPs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"AutodiscoverCheckResult": { "Name": "AutodiscoverCheckResult", "Docs": "", "Fields": [{ "Name": "Records", "Docs": "", "Typewords": ["[]", "AutodiscoverSRV"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"AutodiscoverSRV": { "Name": "AutodiscoverSRV", "Docs": "", "Fields": [{ "Name": "Target", "Docs": "", "Typewords": ["string"] }, { "Name": "Port", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Priority", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Weight", "Docs": "", "Typewords": ["uint16"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }] },
-		"Account": { "Name": "Account", "Docs": "", "Fields": [{ "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }, { "Name": "Destinations", "Docs": "", "Typewords": ["{}", "Destination"] }, { "Name": "SubjectPass", "Docs": "", "Typewords": ["SubjectPass"] }, { "Name": "QuotaMessageSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "KeepRejects", "Docs": "", "Typewords": ["bool"] }, { "Name": "AutomaticJunkFlags", "Docs": "", "Typewords": ["AutomaticJunkFlags"] }, { "Name": "JunkFilter", "Docs": "", "Typewords": ["nullable", "JunkFilter"] }, { "Name": "MaxOutgoingMessagesPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxFirstTimeRecipientsPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "NoFirstTimeSenderDelay", "Docs": "", "Typewords": ["bool"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
+		"Account": { "Name": "Account", "Docs": "", "Fields": [{ "Name": "OutgoingWebhook", "Docs": "", "Typewords": ["nullable", "OutgoingWebhook"] }, { "Name": "IncomingWebhook", "Docs": "", "Typewords": ["nullable", "IncomingWebhook"] }, { "Name": "FromIDLoginAddresses", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "KeepRetiredMessagePeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "KeepRetiredWebhookPeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }, { "Name": "Destinations", "Docs": "", "Typewords": ["{}", "Destination"] }, { "Name": "SubjectPass", "Docs": "", "Typewords": ["SubjectPass"] }, { "Name": "QuotaMessageSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "KeepRejects", "Docs": "", "Typewords": ["bool"] }, { "Name": "AutomaticJunkFlags", "Docs": "", "Typewords": ["AutomaticJunkFlags"] }, { "Name": "JunkFilter", "Docs": "", "Typewords": ["nullable", "JunkFilter"] }, { "Name": "MaxOutgoingMessagesPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxFirstTimeRecipientsPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "NoFirstTimeSenderDelay", "Docs": "", "Typewords": ["bool"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
+		"OutgoingWebhook": { "Name": "OutgoingWebhook", "Docs": "", "Fields": [{ "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Authorization", "Docs": "", "Typewords": ["string"] }, { "Name": "Events", "Docs": "", "Typewords": ["[]", "string"] }] },
+		"IncomingWebhook": { "Name": "IncomingWebhook", "Docs": "", "Fields": [{ "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Authorization", "Docs": "", "Typewords": ["string"] }] },
 		"Destination": { "Name": "Destination", "Docs": "", "Fields": [{ "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Rulesets", "Docs": "", "Typewords": ["[]", "Ruleset"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }] },
 		"Ruleset": { "Name": "Ruleset", "Docs": "", "Fields": [{ "Name": "SMTPMailFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "HeadersRegexp", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListAllowDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "AcceptRejectsToMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "ListAllowDNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"SubjectPass": { "Name": "SubjectPass", "Docs": "", "Fields": [{ "Name": "Period", "Docs": "", "Typewords": ["int64"] }] },
@@ -404,9 +407,21 @@ var api;
 		"ClientConfigs": { "Name": "ClientConfigs", "Docs": "", "Fields": [{ "Name": "Entries", "Docs": "", "Typewords": ["[]", "ClientConfigsEntry"] }] },
 		"ClientConfigsEntry": { "Name": "ClientConfigsEntry", "Docs": "", "Fields": [{ "Name": "Protocol", "Docs": "", "Typewords": ["string"] }, { "Name": "Host", "Docs": "", "Typewords": ["Domain"] }, { "Name": "Port", "Docs": "", "Typewords": ["int32"] }, { "Name": "Listener", "Docs": "", "Typewords": ["string"] }, { "Name": "Note", "Docs": "", "Typewords": ["string"] }] },
 		"HoldRule": { "Name": "HoldRule", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "SenderDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "SenderDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "RecipientDomainStr", "Docs": "", "Typewords": ["string"] }] },
-		"Filter": { "Name": "Filter", "Docs": "", "Fields": [{ "Name": "IDs", "Docs": "", "Typewords": ["[]", "int64"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["string"] }, { "Name": "Hold", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "Submitted", "Docs": "", "Typewords": ["string"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["nullable", "string"] }] },
-		"Msg": { "Name": "Msg", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "BaseID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Queued", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Hold", "Docs": "", "Typewords": ["bool"] }, { "Name": "SenderAccount", "Docs": "", "Typewords": ["string"] }, { "Name": "SenderLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "SenderDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "SenderDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "RecipientLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "RecipientDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "Attempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxAttempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "DialedIPs", "Docs": "", "Typewords": ["{}", "[]", "IP"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "LastAttempt", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "LastError", "Docs": "", "Typewords": ["string"] }, { "Name": "Has8bit", "Docs": "", "Typewords": ["bool"] }, { "Name": "SMTPUTF8", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsDMARCReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsTLSReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgPrefix", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "DSNUTF8", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureReleaseRequest", "Docs": "", "Typewords": ["string"] }] },
+		"Filter": { "Name": "Filter", "Docs": "", "Fields": [{ "Name": "Max", "Docs": "", "Typewords": ["int32"] }, { "Name": "IDs", "Docs": "", "Typewords": ["[]", "int64"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["string"] }, { "Name": "Hold", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "Submitted", "Docs": "", "Typewords": ["string"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["nullable", "string"] }] },
+		"Sort": { "Name": "Sort", "Docs": "", "Fields": [{ "Name": "Field", "Docs": "", "Typewords": ["string"] }, { "Name": "LastID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Last", "Docs": "", "Typewords": ["any"] }, { "Name": "Asc", "Docs": "", "Typewords": ["bool"] }] },
+		"Msg": { "Name": "Msg", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "BaseID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Queued", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Hold", "Docs": "", "Typewords": ["bool"] }, { "Name": "SenderAccount", "Docs": "", "Typewords": ["string"] }, { "Name": "SenderLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "SenderDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "SenderDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "FromID", "Docs": "", "Typewords": ["string"] }, { "Name": "RecipientLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "RecipientDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "Attempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxAttempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "DialedIPs", "Docs": "", "Typewords": ["{}", "[]", "IP"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "LastAttempt", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "Results", "Docs": "", "Typewords": ["[]", "MsgResult"] }, { "Name": "Has8bit", "Docs": "", "Typewords": ["bool"] }, { "Name": "SMTPUTF8", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsDMARCReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsTLSReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgPrefix", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "DSNUTF8", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureReleaseRequest", "Docs": "", "Typewords": ["string"] }, { "Name": "Extra", "Docs": "", "Typewords": ["{}", "string"] }] },
 		"IPDomain": { "Name": "IPDomain", "Docs": "", "Fields": [{ "Name": "IP", "Docs": "", "Typewords": ["IP"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
+		"MsgResult": { "Name": "MsgResult", "Docs": "", "Fields": [{ "Name": "Start", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Duration", "Docs": "", "Typewords": ["int64"] }, { "Name": "Success", "Docs": "", "Typewords": ["bool"] }, { "Name": "Code", "Docs": "", "Typewords": ["int32"] }, { "Name": "Secode", "Docs": "", "Typewords": ["string"] }, { "Name": "Error", "Docs": "", "Typewords": ["string"] }] },
+		"RetiredFilter": { "Name": "RetiredFilter", "Docs": "", "Fields": [{ "Name": "Max", "Docs": "", "Typewords": ["int32"] }, { "Name": "IDs", "Docs": "", "Typewords": ["[]", "int64"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["string"] }, { "Name": "Submitted", "Docs": "", "Typewords": ["string"] }, { "Name": "LastActivity", "Docs": "", "Typewords": ["string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Success", "Docs": "", "Typewords": ["nullable", "bool"] }] },
+		"RetiredSort": { "Name": "RetiredSort", "Docs": "", "Fields": [{ "Name": "Field", "Docs": "", "Typewords": ["string"] }, { "Name": "LastID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Last", "Docs": "", "Typewords": ["any"] }, { "Name": "Asc", "Docs": "", "Typewords": ["bool"] }] },
+		"MsgRetired": { "Name": "MsgRetired", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "BaseID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Queued", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "SenderAccount", "Docs": "", "Typewords": ["string"] }, { "Name": "SenderLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "SenderDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "FromID", "Docs": "", "Typewords": ["string"] }, { "Name": "RecipientLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["IPDomain"] }, { "Name": "RecipientDomainStr", "Docs": "", "Typewords": ["string"] }, { "Name": "Attempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxAttempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "DialedIPs", "Docs": "", "Typewords": ["{}", "[]", "IP"] }, { "Name": "LastAttempt", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "Results", "Docs": "", "Typewords": ["[]", "MsgResult"] }, { "Name": "Has8bit", "Docs": "", "Typewords": ["bool"] }, { "Name": "SMTPUTF8", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsDMARCReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsTLSReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "Transport", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureReleaseRequest", "Docs": "", "Typewords": ["string"] }, { "Name": "Extra", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "LastActivity", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "RecipientAddress", "Docs": "", "Typewords": ["string"] }, { "Name": "Success", "Docs": "", "Typewords": ["bool"] }, { "Name": "KeepUntil", "Docs": "", "Typewords": ["timestamp"] }] },
+		"HookFilter": { "Name": "HookFilter", "Docs": "", "Fields": [{ "Name": "Max", "Docs": "", "Typewords": ["int32"] }, { "Name": "IDs", "Docs": "", "Typewords": ["[]", "int64"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "Submitted", "Docs": "", "Typewords": ["string"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["string"] }, { "Name": "Event", "Docs": "", "Typewords": ["string"] }] },
+		"HookSort": { "Name": "HookSort", "Docs": "", "Fields": [{ "Name": "Field", "Docs": "", "Typewords": ["string"] }, { "Name": "LastID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Last", "Docs": "", "Typewords": ["any"] }, { "Name": "Asc", "Docs": "", "Typewords": ["bool"] }] },
+		"Hook": { "Name": "Hook", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "QueueMsgID", "Docs": "", "Typewords": ["int64"] }, { "Name": "FromID", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "Extra", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Authorization", "Docs": "", "Typewords": ["string"] }, { "Name": "IsIncoming", "Docs": "", "Typewords": ["bool"] }, { "Name": "OutgoingEvent", "Docs": "", "Typewords": ["string"] }, { "Name": "Payload", "Docs": "", "Typewords": ["string"] }, { "Name": "Submitted", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Attempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "NextAttempt", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Results", "Docs": "", "Typewords": ["[]", "HookResult"] }] },
+		"HookResult": { "Name": "HookResult", "Docs": "", "Fields": [{ "Name": "Start", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Duration", "Docs": "", "Typewords": ["int64"] }, { "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Success", "Docs": "", "Typewords": ["bool"] }, { "Name": "Code", "Docs": "", "Typewords": ["int32"] }, { "Name": "Error", "Docs": "", "Typewords": ["string"] }, { "Name": "Response", "Docs": "", "Typewords": ["string"] }] },
+		"HookRetiredFilter": { "Name": "HookRetiredFilter", "Docs": "", "Fields": [{ "Name": "Max", "Docs": "", "Typewords": ["int32"] }, { "Name": "IDs", "Docs": "", "Typewords": ["[]", "int64"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "Submitted", "Docs": "", "Typewords": ["string"] }, { "Name": "LastActivity", "Docs": "", "Typewords": ["string"] }, { "Name": "Event", "Docs": "", "Typewords": ["string"] }] },
+		"HookRetiredSort": { "Name": "HookRetiredSort", "Docs": "", "Fields": [{ "Name": "Field", "Docs": "", "Typewords": ["string"] }, { "Name": "LastID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Last", "Docs": "", "Typewords": ["any"] }, { "Name": "Asc", "Docs": "", "Typewords": ["bool"] }] },
+		"HookRetired": { "Name": "HookRetired", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "QueueMsgID", "Docs": "", "Typewords": ["int64"] }, { "Name": "FromID", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "Extra", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Authorization", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsIncoming", "Docs": "", "Typewords": ["bool"] }, { "Name": "OutgoingEvent", "Docs": "", "Typewords": ["string"] }, { "Name": "Payload", "Docs": "", "Typewords": ["string"] }, { "Name": "Submitted", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "SupersededByID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Attempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "Results", "Docs": "", "Typewords": ["[]", "HookResult"] }, { "Name": "Success", "Docs": "", "Typewords": ["bool"] }, { "Name": "LastActivity", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "KeepUntil", "Docs": "", "Typewords": ["timestamp"] }] },
 		"WebserverConfig": { "Name": "WebserverConfig", "Docs": "", "Fields": [{ "Name": "WebDNSDomainRedirects", "Docs": "", "Typewords": ["[]", "[]", "Domain"] }, { "Name": "WebDomainRedirects", "Docs": "", "Typewords": ["[]", "[]", "string"] }, { "Name": "WebHandlers", "Docs": "", "Typewords": ["[]", "WebHandler"] }] },
 		"WebHandler": { "Name": "WebHandler", "Docs": "", "Fields": [{ "Name": "LogName", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "PathRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "DontRedirectPlainHTTP", "Docs": "", "Typewords": ["bool"] }, { "Name": "Compress", "Docs": "", "Typewords": ["bool"] }, { "Name": "WebStatic", "Docs": "", "Typewords": ["nullable", "WebStatic"] }, { "Name": "WebRedirect", "Docs": "", "Typewords": ["nullable", "WebRedirect"] }, { "Name": "WebForward", "Docs": "", "Typewords": ["nullable", "WebForward"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"WebStatic": { "Name": "WebStatic", "Docs": "", "Fields": [{ "Name": "StripPrefix", "Docs": "", "Typewords": ["string"] }, { "Name": "Root", "Docs": "", "Typewords": ["string"] }, { "Name": "ListFiles", "Docs": "", "Typewords": ["bool"] }, { "Name": "ContinueNotFound", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseHeaders", "Docs": "", "Typewords": ["{}", "string"] }] },
@@ -472,6 +487,8 @@ var api;
 		AutodiscoverCheckResult: (v) => api.parse("AutodiscoverCheckResult", v),
 		AutodiscoverSRV: (v) => api.parse("AutodiscoverSRV", v),
 		Account: (v) => api.parse("Account", v),
+		OutgoingWebhook: (v) => api.parse("OutgoingWebhook", v),
+		IncomingWebhook: (v) => api.parse("IncomingWebhook", v),
 		Destination: (v) => api.parse("Destination", v),
 		Ruleset: (v) => api.parse("Ruleset", v),
 		SubjectPass: (v) => api.parse("SubjectPass", v),
@@ -505,8 +522,20 @@ var api;
 		ClientConfigsEntry: (v) => api.parse("ClientConfigsEntry", v),
 		HoldRule: (v) => api.parse("HoldRule", v),
 		Filter: (v) => api.parse("Filter", v),
+		Sort: (v) => api.parse("Sort", v),
 		Msg: (v) => api.parse("Msg", v),
 		IPDomain: (v) => api.parse("IPDomain", v),
+		MsgResult: (v) => api.parse("MsgResult", v),
+		RetiredFilter: (v) => api.parse("RetiredFilter", v),
+		RetiredSort: (v) => api.parse("RetiredSort", v),
+		MsgRetired: (v) => api.parse("MsgRetired", v),
+		HookFilter: (v) => api.parse("HookFilter", v),
+		HookSort: (v) => api.parse("HookSort", v),
+		Hook: (v) => api.parse("Hook", v),
+		HookResult: (v) => api.parse("HookResult", v),
+		HookRetiredFilter: (v) => api.parse("HookRetiredFilter", v),
+		HookRetiredSort: (v) => api.parse("HookRetiredSort", v),
+		HookRetired: (v) => api.parse("HookRetired", v),
 		WebserverConfig: (v) => api.parse("WebserverConfig", v),
 		WebHandler: (v) => api.parse("WebHandler", v),
 		WebStatic: (v) => api.parse("WebStatic", v),
@@ -868,11 +897,11 @@ var api;
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// QueueList returns the messages currently in the outgoing queue.
-		async QueueList(filter) {
+		async QueueList(filter, sort) {
 			const fn = "QueueList";
-			const paramTypes = [["Filter"]];
+			const paramTypes = [["Filter"], ["Sort"]];
 			const returnTypes = [["[]", "Msg"]];
-			const params = [filter];
+			const params = [filter, sort];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// QueueNextAttemptSet sets a new time for next delivery attempt of matching
@@ -933,6 +962,65 @@ var api;
 			const paramTypes = [["Filter"], ["string"]];
 			const returnTypes = [["int32"]];
 			const params = [filter, transport];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// RetiredList returns messages retired from the queue (delivery could
+		// have succeeded or failed).
+		async RetiredList(filter, sort) {
+			const fn = "RetiredList";
+			const paramTypes = [["RetiredFilter"], ["RetiredSort"]];
+			const returnTypes = [["[]", "MsgRetired"]];
+			const params = [filter, sort];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// HookQueueSize returns the number of webhooks still to be delivered.
+		async HookQueueSize() {
+			const fn = "HookQueueSize";
+			const paramTypes = [];
+			const returnTypes = [["int32"]];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// HookList lists webhooks still to be delivered.
+		async HookList(filter, sort) {
+			const fn = "HookList";
+			const paramTypes = [["HookFilter"], ["HookSort"]];
+			const returnTypes = [["[]", "Hook"]];
+			const params = [filter, sort];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// HookNextAttemptSet sets a new time for next delivery attempt of matching
+		// hooks from the queue.
+		async HookNextAttemptSet(filter, minutes) {
+			const fn = "HookNextAttemptSet";
+			const paramTypes = [["HookFilter"], ["int32"]];
+			const returnTypes = [["int32"]];
+			const params = [filter, minutes];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// HookNextAttemptAdd adds a duration to the time of next delivery attempt of
+		// matching hooks from the queue.
+		async HookNextAttemptAdd(filter, minutes) {
+			const fn = "HookNextAttemptAdd";
+			const paramTypes = [["HookFilter"], ["int32"]];
+			const returnTypes = [["int32"]];
+			const params = [filter, minutes];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// HookRetiredList lists retired webhooks.
+		async HookRetiredList(filter, sort) {
+			const fn = "HookRetiredList";
+			const paramTypes = [["HookRetiredFilter"], ["HookRetiredSort"]];
+			const returnTypes = [["[]", "HookRetired"]];
+			const params = [filter, sort];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// HookCancel prevents further delivery attempts of matching webhooks.
+		async HookCancel(filter) {
+			const fn = "HookCancel";
+			const paramTypes = [["HookFilter"]];
+			const returnTypes = [["int32"]];
+			const params = [filter];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// LogLevels returns the current log levels.
@@ -1516,6 +1604,37 @@ const login = async (reason) => {
 		password.focus();
 	});
 };
+// Popup shows kids in a centered div with white background on top of a
+// transparent overlay on top of the window. Clicking the overlay or hitting
+// Escape closes the popup. Scrollbars are automatically added to the div with
+// kids. Returns a function that removes the popup.
+const popup = (...kids) => {
+	const origFocus = document.activeElement;
+	const close = () => {
+		if (!root.parentNode) {
+			return;
+		}
+		root.remove();
+		if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
+			origFocus.focus();
+		}
+	};
+	let content;
+	const root = dom.div(style({ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0, 0, 0, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '1' }), function keydown(e) {
+		if (e.key === 'Escape') {
+			e.stopPropagation();
+			close();
+		}
+	}, function click(e) {
+		e.stopPropagation();
+		close();
+	}, content = dom.div(attr.tabindex('0'), style({ backgroundColor: 'white', borderRadius: '.25em', padding: '1em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto' }), function click(e) {
+		e.stopPropagation();
+	}, kids));
+	document.body.appendChild(root);
+	content.focus();
+	return close;
+};
 const localStorageGet = (k) => {
 	try {
 		return window.localStorage.getItem(k);
@@ -1709,9 +1828,10 @@ const formatSize = (n) => {
 	return n + ' bytes';
 };
 const index = async () => {
-	const [domains, queueSize, checkUpdatesEnabled, accounts] = await Promise.all([
+	const [domains, queueSize, hooksQueueSize, checkUpdatesEnabled, accounts] = await Promise.all([
 		client.Domains(),
 		client.QueueSize(),
+		client.HookQueueSize(),
 		client.CheckUpdatesEnabled(),
 		client.Accounts(),
 	]);
@@ -1722,7 +1842,7 @@ const index = async () => {
 	let recvIDFieldset;
 	let recvID;
 	let cidElem;
-	dom._kids(page, crumbs('Mox Admin'), checkUpdatesEnabled ? [] : dom.p(box(yellow, 'Warning: Checking for updates has not been enabled in mox.conf (CheckUpdates: true).', dom.br(), 'Make sure you stay up to date through another mechanism!', dom.br(), 'You have a responsibility to keep the internet-connected software you run up to date and secure!', dom.br(), 'See ', link('https://updates.xmox.nl/changelog'))), dom.p(dom.a('Accounts', attr.href('#accounts')), dom.br(), dom.a('Queue', attr.href('#queue')), ' (' + queueSize + ')', dom.br()), dom.h2('Domains'), (domains || []).length === 0 ? box(red, 'No domains') :
+	dom._kids(page, crumbs('Mox Admin'), checkUpdatesEnabled ? [] : dom.p(box(yellow, 'Warning: Checking for updates has not been enabled in mox.conf (CheckUpdates: true).', dom.br(), 'Make sure you stay up to date through another mechanism!', dom.br(), 'You have a responsibility to keep the internet-connected software you run up to date and secure!', dom.br(), 'See ', link('https://updates.xmox.nl/changelog'))), dom.p(dom.a('Accounts', attr.href('#accounts')), dom.br(), dom.a('Queue', attr.href('#queue')), ' (' + queueSize + ')', dom.br(), dom.a('Webhook queue', attr.href('#webhookqueue')), ' (' + hooksQueueSize + ')', dom.br()), dom.h2('Domains'), (domains || []).length === 0 ? box(red, 'No domains') :
 		dom.ul((domains || []).map(d => dom.li(dom.a(attr.href('#domains/' + domainName(d)), domainString(d))))), dom.br(), dom.h2('Add domain'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
@@ -1830,6 +1950,7 @@ const account = async (name) => {
 		client.Account(name),
 		client.Domains(),
 	]);
+	// todo: show suppression list, and buttons to add/remove entries.
 	let form;
 	let fieldset;
 	let localpart;
@@ -2096,7 +2217,7 @@ const dmarcEvaluations = async () => {
 	let until;
 	let comment;
 	const nextmonth = new Date(new Date().getTime() + 31 * 24 * 3600 * 1000);
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('DMARC', '#dmarc'), 'Evaluations'), dom.p('Incoming messages are checked against the DMARC policy of the domain in the message From header. If the policy requests reporting on the resulting evaluations, they are stored in the database. Each interval of 1 to 24 hours, the evaluations may be sent to a reporting address specified in the domain\'s DMARC policy. Not all evaluations are a reason to send a report, but if a report is sent all evaluations are included.'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('Domain', attr.title('Domain in the message From header. Keep in mind these can be forged, so this does not necessarily mean someone from this domain authentically tried delivering email.')), dom.th('Dispositions', attr.title('Unique dispositions occurring in report.')), dom.th('Evaluations', attr.title('Total number of message delivery attempts, including retries.')), dom.th('Send report', attr.title('Whether the current evaluations will cause a report to be sent.')))), dom.tbody(Object.entries(evalStats).sort((a, b) => a[0] < b[0] ? -1 : 1).map(t => dom.tr(dom.td(dom.a(attr.href('#dmarc/evaluations/' + domainName(t[1].Domain)), domainString(t[1].Domain))), dom.td((t[1].Dispositions || []).join(' ')), dom.td(style({ textAlign: 'right' }), '' + t[1].Count), dom.td(style({ textAlign: 'right' }), t[1].SendReport ? '✓' : ''))), isEmpty(evalStats) ? dom.tr(dom.td(attr.colspan('3'), 'No evaluations.')) : [])), dom.br(), dom.br(), dom.h2('Suppressed reporting addresses'), dom.p('In practice, sending a DMARC report to a reporting address can cause DSN to be sent back. Such addresses can be added to a supression list for a period, to reduce noise in the postmaster mailbox.'), dom.form(async function submit(e) {
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('DMARC', '#dmarc'), 'Evaluations'), dom.p('Incoming messages are checked against the DMARC policy of the domain in the message From header. If the policy requests reporting on the resulting evaluations, they are stored in the database. Each interval of 1 to 24 hours, the evaluations may be sent to a reporting address specified in the domain\'s DMARC policy. Not all evaluations are a reason to send a report, but if a report is sent all evaluations are included.'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('Domain', attr.title('Domain in the message From header. Keep in mind these can be forged, so this does not necessarily mean someone from this domain authentically tried delivering email.')), dom.th('Dispositions', attr.title('Unique dispositions occurring in report.')), dom.th('Evaluations', attr.title('Total number of message delivery attempts, including retries.')), dom.th('Send report', attr.title('Whether the current evaluations will cause a report to be sent.')))), dom.tbody(Object.entries(evalStats).sort((a, b) => a[0] < b[0] ? -1 : 1).map(t => dom.tr(dom.td(dom.a(attr.href('#dmarc/evaluations/' + domainName(t[1].Domain)), domainString(t[1].Domain))), dom.td((t[1].Dispositions || []).join(' ')), dom.td(style({ textAlign: 'right' }), '' + t[1].Count), dom.td(style({ textAlign: 'right' }), t[1].SendReport ? '✓' : ''))), isEmpty(evalStats) ? dom.tr(dom.td(attr.colspan('3'), 'No evaluations.')) : [])), dom.br(), dom.br(), dom.h2('Suppressed reporting addresses'), dom.p('In practice, sending a DMARC report to a reporting address can cause DSN to be sent back. Such addresses can be added to a suppression list for a period, to reduce noise in the postmaster mailbox.'), dom.form(async function submit(e) {
 		e.stopPropagation();
 		e.preventDefault();
 		await check(fieldset, client.DMARCSuppressAdd(reportingAddress.value, new Date(until.value), comment.value));
@@ -2538,21 +2659,26 @@ const dnsbl = async () => {
 	}, fieldset = dom.fieldset(dom.div('One per line'), dom.div(style({ marginBottom: '.5ex' }), monitorTextarea = dom.textarea(style({ width: '20rem' }), attr.rows('' + Math.max(5, 1 + (monitorZones || []).length)), new String((monitorZones || []).map(zone => domainName(zone)).join('\n'))), dom.div('Examples: sbl.spamhaus.org or bl.spamcop.net')), dom.div(dom.submitbutton('Save')))));
 };
 const queueList = async () => {
-	let [holdRules, msgs, transports] = await Promise.all([
+	let filter = { Max: parseInt(localStorageGet('adminpaginationsize') || '') || 100, IDs: [], Account: '', From: '', To: '', Hold: null, Submitted: '', NextAttempt: '', Transport: null };
+	let sort = { Field: "NextAttempt", LastID: 0, Last: null, Asc: true };
+	let [holdRules, msgs0, transports] = await Promise.all([
 		client.QueueHoldRuleList(),
-		client.QueueList({ IDs: [], Account: '', From: '', To: '', Hold: null, Submitted: '', NextAttempt: '', Transport: null }),
+		client.QueueList(filter, sort),
 		client.Transports(),
 	]);
-	// todo: sorting by address/timestamps/attempts.
+	let msgs = msgs0 || [];
+	// todo: more sorting
 	// todo: after making changes, don't reload entire page. probably best to fetch messages by id and rerender. also report on which messages weren't affected (e.g. no longer in queue).
 	// todo: display which transport will be used for a message according to routing rules (in case none is explicitly configured).
 	// todo: live updates with SSE connections
 	// todo: keep updating times/age.
+	// todo: reuse this code in webaccount to show users their own message queue, and give (more limited) options to fail/reschedule deliveries.
 	const nowSecs = new Date().getTime() / 1000;
 	let holdRuleAccount;
 	let holdRuleSenderDomain;
 	let holdRuleRecipientDomain;
 	let holdRuleSubmit;
+	let sortElem;
 	let filterForm;
 	let filterAccount;
 	let filterFrom;
@@ -2571,6 +2697,7 @@ const queueList = async () => {
 	// syntax when calling this as parameter in api client calls below.
 	const gatherIDs = () => {
 		const f = {
+			Max: 0,
 			IDs: Array.from(toggles.entries()).filter(t => t[1].checked).map(t => t[0]),
 			Account: '',
 			From: '',
@@ -2586,17 +2713,25 @@ const queueList = async () => {
 		}
 		return f;
 	};
-	const tbody = dom.tbody();
+	const popupDetails = (m) => {
+		const nowSecs = new Date().getTime() / 1000;
+		popup(dom.h1('Details'), dom.table(dom.tr(dom.td('Message subject'), dom.td(m.Subject))), dom.br(), dom.h2('Results'), dom.table(dom.thead(dom.tr(dom.th('Start'), dom.th('Duration'), dom.th('Success'), dom.th('Code'), dom.th('Secode'), dom.th('Error'))), dom.tbody((m.Results || []).length === 0 ? dom.tr(dom.td(attr.colspan('6'), 'No results.')) : [], (m.Results || []).map(r => dom.tr(dom.td(age(r.Start, false, nowSecs)), dom.td(Math.round(r.Duration / 1000000) + 'ms'), dom.td(r.Success ? '✓' : ''), dom.td('' + (r.Code || '')), dom.td(r.Secode), dom.td(r.Error))))));
+	};
+	let tbody = dom.tbody();
 	const render = () => {
 		toggles = new Map();
-		for (const m of (msgs || [])) {
-			toggles.set(m.ID, dom.input(attr.type('checkbox'), attr.checked('')));
+		for (const m of msgs) {
+			toggles.set(m.ID, dom.input(attr.type('checkbox'), msgs.length === 1 ? attr.checked('') : []));
 		}
-		dom._kids(tbody, (msgs || []).length === 0 ? dom.tr(dom.td(attr.colspan('14'), 'No messages.')) : [], (msgs || []).map(m => {
+		const ntbody = dom.tbody(dom._class('loadend'), msgs.length === 0 ? dom.tr(dom.td(attr.colspan('15'), 'No messages.')) : [], msgs.map(m => {
 			return dom.tr(dom.td(toggles.get(m.ID)), dom.td('' + m.ID + (m.BaseID > 0 ? '/' + m.BaseID : '')), dom.td(age(new Date(m.Queued), false, nowSecs)), dom.td(m.SenderAccount || '-'), dom.td(m.SenderLocalpart + "@" + ipdomainString(m.SenderDomain)), // todo: escaping of localpart
 			dom.td(m.RecipientLocalpart + "@" + ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
-			dom.td(formatSize(m.Size)), dom.td('' + m.Attempts), dom.td(m.Hold ? 'Hold' : ''), dom.td(age(new Date(m.NextAttempt), true, nowSecs)), dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'), dom.td(m.LastError || '-'), dom.td(m.RequireTLS === true ? 'Yes' : (m.RequireTLS === false ? 'No' : 'Default')), dom.td(m.Transport || '(default)'));
+			dom.td(formatSize(m.Size)), dom.td('' + m.Attempts), dom.td(m.Hold ? 'Hold' : ''), dom.td(age(new Date(m.NextAttempt), true, nowSecs)), dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'), dom.td(m.Results && m.Results.length > 0 ? m.Results[m.Results.length - 1].Error : []), dom.td(m.Transport || '(default)'), dom.td(m.RequireTLS === true ? 'Yes' : (m.RequireTLS === false ? 'No' : '')), dom.td(dom.clickbutton('Details', function click() {
+				popupDetails(m);
+			})));
 		}));
+		tbody.replaceWith(ntbody);
+		tbody = ntbody;
 	};
 	render();
 	const buttonNextAttemptSet = (text, minutes) => dom.clickbutton(text, async function click(e) {
@@ -2610,7 +2745,7 @@ const queueList = async () => {
 		window.alert('' + n + ' message(s) updated');
 		window.location.reload(); // todo: reload less
 	});
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Queue'), dom.h2('Hold rules', attr.title('Messages submitted to the queue that match a hold rule are automatically marked as "on hold", preventing delivery until explicitly taken off hold again.')), dom.form(attr.id('holdRuleForm'), async function submit(e) {
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Queue'), dom.p(dom.a(attr.href('#queue/retired'), 'Retired messages')), dom.h2('Hold rules', attr.title('Messages submitted to the queue that match a hold rule are automatically marked as "on hold", preventing delivery until explicitly taken off hold again.')), dom.form(attr.id('holdRuleForm'), async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		const pr = {
@@ -2654,7 +2789,8 @@ const queueList = async () => {
 	async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		const filter = {
+		filter = {
+			Max: filter.Max,
 			IDs: [],
 			Account: filterAccount.value,
 			From: filterFrom.value,
@@ -2664,24 +2800,54 @@ const queueList = async () => {
 			NextAttempt: filterNextAttempt.value,
 			Transport: !filterTransport.value ? null : (filterTransport.value === '(default)' ? '' : filterTransport.value),
 		};
-		dom._kids(tbody);
-		msgs = await check({ disabled: false }, client.QueueList(filter));
+		sort = {
+			Field: sortElem.value.startsWith('nextattempt') ? 'NextAttempt' : 'Queued',
+			LastID: 0,
+			Last: null,
+			Asc: sortElem.value.endsWith('asc'),
+		};
+		tbody.classList.add('loadstart');
+		msgs = await check({ disabled: false }, client.QueueList(filter, sort)) || [];
 		render();
-	}), dom.h2('Messages'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th(), dom.th('ID'), dom.th('Submitted'), dom.th('Account'), dom.th('From'), dom.th('To'), dom.th('Size'), dom.th('Attempts'), dom.th('Hold'), dom.th('Next attempt'), dom.th('Last attempt'), dom.th('Last error'), dom.th('Require TLS'), dom.th('Transport'), dom.th()), dom.tr(dom.td(dom.input(attr.type('checkbox'), attr.checked(''), attr.form('queuefilter'), function change(e) {
+	}), dom.h2('Messages'), dom.table(dom._class('hover'), style({ width: '100%' }), dom.thead(dom.tr(dom.td(attr.colspan('2'), 'Filter'), dom.td(filterSubmitted = dom.input(attr.form('queuefilter'), style({ width: '7em' }), attr.title('Example: "<-1h" for filtering messages submitted more than 1 hour ago.'))), dom.td(filterAccount = dom.input(attr.form('queuefilter'))), dom.td(filterFrom = dom.input(attr.form('queuefilter')), attr.title('Example: "@sender.example" to filter by domain of sender.')), dom.td(filterTo = dom.input(attr.form('queuefilter')), attr.title('Example: "@recipient.example" to filter by domain of recipient.')), dom.td(), // todo: add filter by size?
+	dom.td(), // todo: add filter by attempts?
+	dom.td(filterHold = dom.select(attr.form('queuefilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option('', attr.value('')), dom.option('Yes'), dom.option('No'))), dom.td(filterNextAttempt = dom.input(attr.form('queuefilter'), style({ width: '7em' }), attr.title('Example: ">1h" for filtering messages to be delivered in more than 1 hour, or "<now" for messages to be delivered as soon as possible.'))), dom.td(), dom.td(), dom.td(filterTransport = dom.select(Object.keys(transports || {}).length === 0 ? style({ display: 'none' }) : [], attr.form('queuefilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option(''), dom.option('(default)'), Object.keys(transports || {}).sort().map(t => dom.option(t)))), dom.td(attr.colspan('2'), style({ textAlign: 'right' }), // Less content shifting while rendering.
+	'Sort ', sortElem = dom.select(attr.form('queuefilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option('Next attempt ↑', attr.value('nextattempt-asc')), dom.option('Next attempt ↓', attr.value('nextattempt-desc')), dom.option('Submitted ↑', attr.value('submitted-asc')), dom.option('Submitted ↓', attr.value('submitted-desc'))), ' ', dom.submitbutton('Apply', attr.form('queuefilter')), ' ', dom.clickbutton('Reset', attr.form('queuefilter'), function click() {
+		filterForm.reset();
+		filterForm.requestSubmit();
+	}))), dom.tr(dom.td(dom.input(attr.type('checkbox'), msgs.length === 1 ? attr.checked('') : [], attr.form('queuefilter'), function change(e) {
 		const elem = e.target;
 		for (const [_, toggle] of toggles) {
 			toggle.checked = elem.checked;
 		}
-	})), dom.td(), dom.td(filterSubmitted = dom.input(attr.form('queuefilter'), style({ width: '7em' }), attr.title('Example: "<1h" for filtering messages submitted more than 1 minute ago.'))), dom.td(filterAccount = dom.input(attr.form('queuefilter'))), dom.td(filterFrom = dom.input(attr.form('queuefilter')), attr.title('Example: "@sender.example" to filter by domain of sender.')), dom.td(filterTo = dom.input(attr.form('queuefilter')), attr.title('Example: "@recipient.example" to filter by domain of recipient.')), dom.td(), // todo: add filter by size?
-	dom.td(), // todo: add filter by attempts?
-	dom.td(filterHold = dom.select(attr.form('queuefilter'), dom.option('', attr.value('')), dom.option('Yes'), dom.option('No'), function change() {
-		filterForm.requestSubmit();
-	})), dom.td(filterNextAttempt = dom.input(attr.form('queuefilter'), style({ width: '7em' }), attr.title('Example: ">1h" for filtering messages to be delivered in more than 1 hour, or "<now" for messages to be delivered as soon as possible.'))), dom.td(), dom.td(), dom.td(), dom.td(filterTransport = dom.select(Object.keys(transports || []).length === 0 ? style({ display: 'none' }) : [], attr.form('queuefilter'), function change() {
-		filterForm.requestSubmit();
-	}, dom.option(''), dom.option('(default)'), Object.keys(transports || []).sort().map(t => dom.option(t)))), dom.td(dom.submitbutton('Filter', attr.form('queuefilter')), ' ', dom.clickbutton('Reset', attr.form('queuefilter'), function click() {
-		filterForm.reset();
-		filterForm.requestSubmit();
-	})))), tbody), dom.br(), dom.br(), dom.h2('Change selected messages'), dom.div(style({ display: 'flex', gap: '2em' }), dom.div(dom.div('Hold'), dom.div(dom.clickbutton('On', async function click(e) {
+	})), dom.th('ID'), dom.th('Submitted'), dom.th('Account'), dom.th('From'), dom.th('To'), dom.th('Size'), dom.th('Attempts'), dom.th('Hold'), dom.th('Next attempt'), dom.th('Last attempt'), dom.th('Last error'), dom.th('Transport'), dom.th('Require TLS'), dom.th('Actions'))), tbody, dom.tfoot(dom.tr(dom.td(attr.colspan('15'), 
+	// todo: consider implementing infinite scroll, autoloading more pages. means the operations on selected messages should be moved from below to above the table. and probably only show them when at least one message is selected to prevent clutter.
+	dom.clickbutton('Load more', attr.title('Try to load more entries. You can still try to load more entries when at the end of the list, new entries may have been appended since the previous call.'), async function click(e) {
+		if (msgs.length === 0) {
+			sort.LastID = 0;
+			sort.Last = null;
+		}
+		else {
+			const lm = msgs[msgs.length - 1];
+			sort.LastID = lm.ID;
+			if (sort.Field === "Queued") {
+				sort.Last = lm.Queued;
+			}
+			else {
+				sort.Last = lm.NextAttempt;
+			}
+		}
+		tbody.classList.add('loadstart');
+		const l = await check(e.target, client.QueueList(filter, sort)) || [];
+		msgs.push(...l);
+		render();
+	}))))), dom.br(), dom.br(), dom.div(dom._class('unclutter'), dom.h2('Change selected messages'), dom.div(style({ display: 'flex', gap: '2em' }), dom.div(dom.div('Hold'), dom.div(dom.clickbutton('On', async function click(e) {
 		const n = await check(e.target, (async () => await client.QueueHoldSet(gatherIDs(), true))());
 		window.alert('' + n + ' message(s) updated');
 		window.location.reload(); // todo: reload less
@@ -2705,7 +2871,7 @@ const queueList = async () => {
 		window.location.reload(); // todo: only refresh the list
 	})), dom.div(dom.div('Delivery'), dom.clickbutton('Fail delivery', attr.title('Cause delivery to fail, sending a DSN to the sender.'), async function click(e) {
 		e.preventDefault();
-		if (!window.confirm('Are you sure you want to remove this message? Notifications of delivery failure will be sent (DSNs).')) {
+		if (!window.confirm('Are you sure you want to fail delivery for the selected message(s)? Notifications of delivery failure will be sent (DSNs).')) {
 			return;
 		}
 		const n = await check(e.target, (async () => await client.QueueFail(gatherIDs()))());
@@ -2713,13 +2879,320 @@ const queueList = async () => {
 		window.location.reload(); // todo: only refresh the list
 	})), dom.div(dom.div('Messages'), dom.clickbutton('Remove', attr.title('Completely remove messages from queue, not sending a DSN.'), async function click(e) {
 		e.preventDefault();
-		if (!window.confirm('Are you sure you want to remove this message? It will be removed completely, no DSN about failure to deliver will be sent.')) {
+		if (!window.confirm('Are you sure you want to fail delivery for the selected message(s)? It will be removed completely, no DSN about failure to deliver will be sent.')) {
 			return;
 		}
 		const n = await check(e.target, (async () => await client.QueueDrop(gatherIDs()))());
 		window.alert('' + n + ' message(s) updated');
 		window.location.reload(); // todo: only refresh the list
-	}))));
+	})))));
+};
+const retiredList = async () => {
+	let filter = { Max: parseInt(localStorageGet('adminpaginationsize') || '') || 100, IDs: [], Account: '', From: '', To: '', Submitted: '', LastActivity: '', Transport: null };
+	let sort = { Field: "LastActivity", LastID: 0, Last: null, Asc: false };
+	const [retired0, transports0] = await Promise.all([
+		client.RetiredList(filter, sort),
+		client.Transports(),
+	]);
+	let retired = retired0 || [];
+	let transports = transports0 || {};
+	const nowSecs = new Date().getTime() / 1000;
+	let sortElem;
+	let filterForm;
+	let filterAccount;
+	let filterFrom;
+	let filterTo;
+	let filterSubmitted;
+	let filterLastActivity;
+	let filterTransport;
+	let filterSuccess;
+	const popupDetails = (m) => {
+		const nowSecs = new Date().getTime() / 1000;
+		popup(dom.h1('Details'), dom.table(dom.tr(dom.td('Message subject'), dom.td(m.Subject))), dom.br(), dom.h2('Results'), dom.table(dom.thead(dom.tr(dom.th('Start'), dom.th('Duration'), dom.th('Success'), dom.th('Code'), dom.th('Secode'), dom.th('Error'))), dom.tbody((m.Results || []).length === 0 ? dom.tr(dom.td(attr.colspan('6'), 'No results.')) : [], (m.Results || []).map(r => dom.tr(dom.td(age(r.Start, false, nowSecs)), dom.td(Math.round(r.Duration / 1000000) + 'ms'), dom.td(r.Success ? '✓' : ''), dom.td('' + (r.Code || '')), dom.td(r.Secode), dom.td(r.Error))))));
+	};
+	let tbody = dom.tbody();
+	const render = () => {
+		const ntbody = dom.tbody(dom._class('loadend'), retired.length === 0 ? dom.tr(dom.td(attr.colspan('14'), 'No retired messages.')) : [], retired.map(m => dom.tr(dom.td('' + m.ID + (m.BaseID > 0 ? '/' + m.BaseID : '')), dom.td(m.Success ? '✓' : ''), dom.td(age(new Date(m.LastActivity), false, nowSecs)), dom.td(age(new Date(m.Queued), false, nowSecs)), dom.td(m.SenderAccount || '-'), dom.td(m.SenderLocalpart + "@" + m.SenderDomainStr), // todo: escaping of localpart
+		dom.td(m.RecipientLocalpart + "@" + m.RecipientDomainStr), // todo: escaping of localpart
+		dom.td(formatSize(m.Size)), dom.td('' + m.Attempts), dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'), dom.td(m.Results && m.Results.length > 0 ? m.Results[m.Results.length - 1].Error : []), dom.td(m.Transport || ''), dom.td(m.RequireTLS === true ? 'Yes' : (m.RequireTLS === false ? 'No' : '')), dom.td(dom.clickbutton('Details', function click() {
+			popupDetails(m);
+		})))));
+		tbody.replaceWith(ntbody);
+		tbody = ntbody;
+	};
+	render();
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Queue', '#queue'), 'Retired messages'), 
+	// Filtering.
+	filterForm = dom.form(attr.id('queuefilter'), // Referenced by input elements in table row.
+	async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		filter = {
+			Max: filter.Max,
+			IDs: [],
+			Account: filterAccount.value,
+			From: filterFrom.value,
+			To: filterTo.value,
+			Submitted: filterSubmitted.value,
+			LastActivity: filterLastActivity.value,
+			Transport: !filterTransport.value ? null : (filterTransport.value === '(default)' ? '' : filterTransport.value),
+			Success: filterSuccess.value === '' ? null : (filterSuccess.value === 'Yes' ? true : false),
+		};
+		sort = {
+			Field: sortElem.value.startsWith('lastactivity') ? 'LastActivity' : 'Queued',
+			LastID: 0,
+			Last: null,
+			Asc: sortElem.value.endsWith('asc'),
+		};
+		tbody.classList.add('loadstart');
+		retired = await check({ disabled: false }, client.RetiredList(filter, sort)) || [];
+		render();
+	}), dom.h2('Retired messages'), dom.p('Meta information about queued messages may be kept after successful and/or failed delivery, configurable per account.'), dom.table(dom._class('hover'), style({ width: '100%' }), dom.thead(dom.tr(dom.td('Filter'), dom.td(filterSuccess = dom.select(attr.form('queuefilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option(''), dom.option('Yes'), dom.option('No'))), dom.td(filterLastActivity = dom.input(attr.form('queuefilter'), style({ width: '7em' }), attr.title('Example: ">-1h" for filtering messages with last activity less than 1 hour ago.'))), dom.td(filterSubmitted = dom.input(attr.form('queuefilter'), style({ width: '7em' }), attr.title('Example: "<-1h" for filtering messages submitted more than 1 hour ago.'))), dom.td(filterAccount = dom.input(attr.form('queuefilter'))), dom.td(filterFrom = dom.input(attr.form('queuefilter')), attr.title('Example: "@sender.example" to filter by domain of sender.')), dom.td(filterTo = dom.input(attr.form('queuefilter')), attr.title('Example: "@recipient.example" to filter by domain of recipient.')), dom.td(), // todo: add filter by size?
+	dom.td(), // todo: add filter by attempts?
+	dom.td(), dom.td(), dom.td(filterTransport = dom.select(Object.keys(transports).length === 0 ? style({ display: 'none' }) : [], attr.form('queuefilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option(''), dom.option('(default)'), Object.keys(transports).sort().map(t => dom.option(t)))), dom.td(attr.colspan('2'), style({ textAlign: 'right' }), // Less content shifting while rendering.
+	'Sort ', sortElem = dom.select(attr.form('queuefilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option('Last activity ↓', attr.value('lastactivity-desc')), dom.option('Last activity ↑', attr.value('lastactivity-asc')), dom.option('Submitted ↓', attr.value('submitted-desc')), dom.option('Submitted ↑', attr.value('submitted-asc'))), ' ', dom.submitbutton('Apply', attr.form('queuefilter')), ' ', dom.clickbutton('Reset', attr.form('queuefilter'), function click() {
+		filterForm.reset();
+		filterForm.requestSubmit();
+	}))), dom.tr(dom.th('ID'), dom.th('Success'), dom.th('Last activity'), dom.th('Submitted'), dom.th('Account'), dom.th('From'), dom.th('To'), dom.th('Size'), dom.th('Attempts'), dom.th('Last attempt'), dom.th('Last error'), dom.th('Require TLS'), dom.th('Transport'), dom.th('Actions'))), tbody, dom.tfoot(dom.tr(dom.td(attr.colspan('14'), dom.clickbutton('Load more', attr.title('Try to load more entries. You can still try to load more entries when at the end of the list, new entries may have been appended since the previous call.'), async function click(e) {
+		if (retired.length === 0) {
+			sort.LastID = 0;
+			sort.Last = null;
+		}
+		else {
+			const lm = retired[retired.length - 1];
+			sort.LastID = lm.ID;
+			if (sort.Field === "Queued") {
+				sort.Last = lm.Queued;
+			}
+			else {
+				sort.Last = lm.LastActivity;
+			}
+		}
+		tbody.classList.add('loadstart');
+		const l = await check(e.target, client.RetiredList(filter, sort)) || [];
+		retired.push(...l);
+		render();
+	}))))));
+};
+const formatExtra = (extra) => {
+	if (!extra) {
+		return '';
+	}
+	return Object.entries(extra).sort((a, b) => a[0] < b[0] ? -1 : 1).map(t => t[0] + ': ' + t[1]).join('; ');
+};
+const hooksList = async () => {
+	let filter = { Max: parseInt(localStorageGet('adminpaginationsize') || '') || 100, IDs: [], Account: '', Submitted: '', NextAttempt: '', Event: '' };
+	let sort = { Field: "NextAttempt", LastID: 0, Last: null, Asc: true };
+	let hooks = await client.HookList(filter, sort) || [];
+	const nowSecs = new Date().getTime() / 1000;
+	let sortElem;
+	let filterForm;
+	let filterSubmitted;
+	let filterAccount;
+	let filterEvent;
+	let filterNextAttempt;
+	// Hook ID to checkbox.
+	let toggles = new Map();
+	// We operate on what the user has selected, not what the filters would currently
+	// evaluate to. This function can throw an error, which is why we have awkward
+	// syntax when calling this as parameter in api client calls below.
+	const gatherIDs = () => {
+		const f = {
+			Max: 0,
+			IDs: Array.from(toggles.entries()).filter(t => t[1].checked).map(t => t[0]),
+			Account: '',
+			Event: '',
+			Submitted: '',
+			NextAttempt: '',
+		};
+		// Don't want to accidentally operate on all messages.
+		if ((f.IDs || []).length === 0) {
+			throw new Error('No hooks selected.');
+		}
+		return f;
+	};
+	const popupDetails = (h) => {
+		const nowSecs = new Date().getTime() / 1000;
+		popup(dom.h1('Details'), dom.div(dom._class('twocols'), dom.div(dom.table(dom.tr(dom.td('Message subject'), dom.td(h.Subject))), dom.br(), dom.h2('Results'), dom.table(dom.thead(dom.tr(dom.th('Start'), dom.th('Duration'), dom.th('Success'), dom.th('Code'), dom.th('Error'), dom.th('URL'), dom.th('Response'))), dom.tbody((h.Results || []).length === 0 ? dom.tr(dom.td(attr.colspan('7'), 'No results.')) : [], (h.Results || []).map(r => dom.tr(dom.td(age(r.Start, false, nowSecs)), dom.td(Math.round(r.Duration / 1000000) + 'ms'), dom.td(r.Success ? '✓' : ''), dom.td('' + (r.Code || '')), dom.td(r.Error), dom.td(r.URL), dom.td(r.Response))))), dom.br()), dom.div(dom.h2('Webhook JSON body'), dom.pre(dom._class('literal'), JSON.stringify(JSON.parse(h.Payload), undefined, '\t')))));
+	};
+	let tbody = dom.tbody();
+	const render = () => {
+		toggles = new Map();
+		for (const h of (hooks || [])) {
+			toggles.set(h.ID, dom.input(attr.type('checkbox'), (hooks || []).length === 1 ? attr.checked('') : []));
+		}
+		const ntbody = dom.tbody(dom._class('loadend'), hooks.length === 0 ? dom.tr(dom.td(attr.colspan('15'), 'No webhooks.')) : [], hooks.map(h => dom.tr(dom.td(toggles.get(h.ID)), dom.td('' + h.ID), dom.td(age(new Date(h.Submitted), false, nowSecs)), dom.td('' + (h.QueueMsgID || '')), // todo future: make it easy to open the corresponding (retired) message from queue (if still around).
+		dom.td('' + h.FromID), dom.td('' + h.MessageID), dom.td(h.Account || '-'), dom.td(h.IsIncoming ? "incoming" : h.OutgoingEvent), dom.td(formatExtra(h.Extra)), dom.td('' + h.Attempts), dom.td(age(h.NextAttempt, true, nowSecs)), dom.td(h.Results && h.Results.length > 0 ? age(h.Results[h.Results.length - 1].Start, false, nowSecs) : []), dom.td(h.Results && h.Results.length > 0 ? h.Results[h.Results.length - 1].Error : []), dom.td(h.URL), dom.td(dom.clickbutton('Details', function click() {
+			popupDetails(h);
+		})))));
+		tbody.replaceWith(ntbody);
+		tbody = ntbody;
+	};
+	render();
+	const buttonNextAttemptSet = (text, minutes) => dom.clickbutton(text, async function click(e) {
+		// note: awkward client call because gatherIDs() can throw an exception.
+		const n = await check(e.target, (async () => client.HookNextAttemptSet(gatherIDs(), minutes))());
+		window.alert('' + n + ' hook(s) updated');
+		window.location.reload(); // todo: reload less
+	});
+	const buttonNextAttemptAdd = (text, minutes) => dom.clickbutton(text, async function click(e) {
+		const n = await check(e.target, (async () => client.HookNextAttemptAdd(gatherIDs(), minutes))());
+		window.alert('' + n + ' hook(s) updated');
+		window.location.reload(); // todo: reload less
+	});
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Webhook queue'), dom.p(dom.a(attr.href('#webhookqueue/retired'), 'Retired webhooks')), dom.h2('Webhooks'), dom.table(dom._class('hover'), style({ width: '100%' }), dom.thead(dom.tr(dom.td(attr.colspan('2'), 'Filter'), dom.td(filterSubmitted = dom.input(attr.form('hooksfilter'), style({ width: '7em' }), attr.title('Example: "<-1h" for filtering webhooks submitted more than 1 hour ago.'))), dom.td(), dom.td(), dom.td(), dom.td(filterAccount = dom.input(attr.form('hooksfilter'), style({ width: '8em' }))), dom.td(filterEvent = dom.select(attr.form('hooksfilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option(''), 
+	// note: outgoing hook events are in ../webhook/webhook.go, ../mox-/config.go ../webadmin/admin.ts and ../webapi/gendoc.sh. keep in sync.
+	['incoming', 'delivered', 'suppressed', 'delayed', 'failed', 'relayed', 'expanded', 'canceled', 'unrecognized'].map(s => dom.option(s)))), dom.td(), dom.td(), dom.td(filterNextAttempt = dom.input(attr.form('hooksfilter'), style({ width: '7em' }), attr.title('Example: ">1h" for filtering webhooks to be delivered in more than 1 hour, or "<now" for webhooks to be delivered as soon as possible.'))), dom.td(), dom.td(), dom.td(attr.colspan('2'), style({ textAlign: 'right' }), // Less content shifting while rendering.
+	'Sort ', sortElem = dom.select(attr.form('hooksfilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option('Next attempt ↑', attr.value('nextattempt-asc')), dom.option('Next attempt ↓', attr.value('nextattempt-desc')), dom.option('Submitted ↑', attr.value('submitted-asc')), dom.option('Submitted ↓', attr.value('submitted-desc'))), ' ', dom.submitbutton('Apply', attr.form('hooksfilter')), ' ', dom.clickbutton('Reset', attr.form('hooksfilter'), function click() {
+		filterForm.reset();
+		filterForm.requestSubmit();
+	}))), dom.tr(dom.td(dom.input(attr.type('checkbox'), (hooks || []).length === 1 ? attr.checked('') : [], attr.form('hooksfilter'), function change(e) {
+		const elem = e.target;
+		for (const [_, toggle] of toggles) {
+			toggle.checked = elem.checked;
+		}
+	})), dom.th('ID'), dom.th('Submitted'), dom.th('Queue Msg ID', attr.title('ID of queued message this event is about.')), dom.th('FromID'), dom.th('MessageID'), dom.th('Account'), dom.th('Event'), dom.th('Extra'), dom.th('Attempts'), dom.th('Next'), dom.th('Last'), dom.th('Error'), dom.th('URL'), dom.th('Actions'))), tbody, dom.tfoot(dom.tr(dom.td(attr.colspan('15'), dom.clickbutton('Load more', attr.title('Try to load more entries. You can still try to load more entries when at the end of the list, new entries may have been appended since the previous call.'), async function click(e) {
+		if (hooks.length === 0) {
+			sort.LastID = 0;
+			sort.Last = null;
+		}
+		else {
+			const last = hooks[hooks.length - 1];
+			sort.LastID = last.ID;
+			if (sort.Field === "Submitted") {
+				sort.Last = last.Submitted;
+			}
+			else {
+				sort.Last = last.NextAttempt;
+			}
+		}
+		tbody.classList.add('loadstart');
+		const l = await check(e.target, client.HookList(filter, sort)) || [];
+		hooks.push(...l);
+		render();
+	}))))), 
+	// Filtering.
+	filterForm = dom.form(attr.id('hooksfilter'), // Referenced by input elements in table row.
+	async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		filter = {
+			Max: filter.Max,
+			IDs: [],
+			Account: filterAccount.value,
+			Event: filterEvent.value,
+			Submitted: filterSubmitted.value,
+			NextAttempt: filterNextAttempt.value,
+		};
+		sort = {
+			Field: sortElem.value.startsWith('nextattempt') ? 'NextAttempt' : 'Submitted',
+			LastID: 0,
+			Last: null,
+			Asc: sortElem.value.endsWith('asc'),
+		};
+		tbody.classList.add('loadstart');
+		hooks = await check({ disabled: false }, client.HookList(filter, sort)) || [];
+		render();
+	}), dom.br(), dom.br(), dom.div(dom._class('unclutter'), dom.h2('Change selected webhooks'), dom.div(style({ display: 'flex', gap: '2em' }), dom.div(dom.div('Schedule next delivery attempt'), buttonNextAttemptSet('Now', 0), ' ', dom.clickbutton('More...', function click(e) {
+		e.target.replaceWith(dom.div(dom.br(), dom.div('Scheduled time plus'), dom.div(buttonNextAttemptAdd('1m', 1), ' ', buttonNextAttemptAdd('5m', 5), ' ', buttonNextAttemptAdd('30m', 30), ' ', buttonNextAttemptAdd('1h', 60), ' ', buttonNextAttemptAdd('2h', 2 * 60), ' ', buttonNextAttemptAdd('4h', 4 * 60), ' ', buttonNextAttemptAdd('8h', 8 * 60), ' ', buttonNextAttemptAdd('16h', 16 * 60), ' '), dom.br(), dom.div('Now plus'), dom.div(buttonNextAttemptSet('1m', 1), ' ', buttonNextAttemptSet('5m', 5), ' ', buttonNextAttemptSet('30m', 30), ' ', buttonNextAttemptSet('1h', 60), ' ', buttonNextAttemptSet('2h', 2 * 60), ' ', buttonNextAttemptSet('4h', 4 * 60), ' ', buttonNextAttemptSet('8h', 8 * 60), ' ', buttonNextAttemptSet('16h', 16 * 60), ' ')));
+	})), dom.div(dom.div('Delivery'), dom.clickbutton('Cancel', attr.title('Retires webhooks, preventing further delivery attempts.'), async function click(e) {
+		e.preventDefault();
+		if (!window.confirm('Are you sure you want to cancel these webhooks?')) {
+			return;
+		}
+		const n = await check(e.target, (async () => await client.HookCancel(gatherIDs()))());
+		window.alert('' + n + ' webhook(s) updated');
+		window.location.reload(); // todo: only refresh the list
+	})))));
+};
+const hooksRetiredList = async () => {
+	let filter = { Max: parseInt(localStorageGet('adminpaginationsize') || '') || 100, IDs: [], Account: '', Submitted: '', LastActivity: '', Event: '' };
+	let sort = { Field: "LastActivity", LastID: 0, Last: null, Asc: false };
+	let hooks = await client.HookRetiredList(filter, sort) || [];
+	const nowSecs = new Date().getTime() / 1000;
+	let sortElem;
+	let filterForm;
+	let filterSubmitted;
+	let filterAccount;
+	let filterEvent;
+	let filterLastActivity;
+	const popupDetails = (h) => {
+		const nowSecs = new Date().getTime() / 1000;
+		popup(dom.h1('Details'), dom.div(dom._class('twocols'), dom.div(dom.table(dom.tr(dom.td('Message subject'), dom.td(h.Subject)), h.SupersededByID != 0 ? dom.tr(dom.td('Superseded by webhook ID'), dom.td('' + h.SupersededByID)) : []), dom.br(), dom.h2('Results'), dom.table(dom.thead(dom.tr(dom.th('Start'), dom.th('Duration'), dom.th('Success'), dom.th('Code'), dom.th('Error'), dom.th('URL'), dom.th('Response'))), dom.tbody((h.Results || []).length === 0 ? dom.tr(dom.td(attr.colspan('7'), 'No results.')) : [], (h.Results || []).map(r => dom.tr(dom.td(age(r.Start, false, nowSecs)), dom.td(Math.round(r.Duration / 1000000) + 'ms'), dom.td(r.Success ? '✓' : ''), dom.td('' + (r.Code || '')), dom.td(r.Error), dom.td(r.URL), dom.td(r.Response))))), dom.br()), dom.div(dom.h2('Webhook JSON body'), dom.pre(dom._class('literal'), JSON.stringify(JSON.parse(h.Payload), undefined, '\t')))));
+	};
+	let tbody = dom.tbody();
+	// todo future: add selection + button to reschedule old retired webhooks.
+	const render = () => {
+		const ntbody = dom.tbody(dom._class('loadend'), hooks.length === 0 ? dom.tr(dom.td(attr.colspan('14'), 'No retired webhooks.')) : [], hooks.map(h => dom.tr(dom.td('' + h.ID), dom.td(h.Success ? '✓' : ''), dom.td(age(h.LastActivity, false, nowSecs)), dom.td(age(new Date(h.Submitted), false, nowSecs)), dom.td('' + (h.QueueMsgID || '')), dom.td('' + h.FromID), dom.td('' + h.MessageID), dom.td(h.Account || '-'), dom.td(h.IsIncoming ? "incoming" : h.OutgoingEvent), dom.td(formatExtra(h.Extra)), dom.td('' + h.Attempts), dom.td(h.Results && h.Results.length > 0 ? h.Results[h.Results.length - 1].Error : []), dom.td(h.URL), dom.td(dom.clickbutton('Details', function click() {
+			popupDetails(h);
+		})))));
+		tbody.replaceWith(ntbody);
+		tbody = ntbody;
+	};
+	render();
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Webhook queue', '#webhookqueue'), 'Retired webhooks'), dom.h2('Retired webhooks'), dom.table(dom._class('hover'), style({ width: '100%' }), dom.thead(dom.tr(dom.td('Filter'), dom.td(), dom.td(filterLastActivity = dom.input(attr.form('hooksfilter'), style({ width: '7em' }), attr.title('Example: ">-1h" for filtering last activity for webhooks more than 1 hour ago.'))), dom.td(filterSubmitted = dom.input(attr.form('hooksfilter'), style({ width: '7em' }), attr.title('Example: "<-1h" for filtering webhooks submitted more than 1 hour ago.'))), dom.td(), dom.td(), dom.td(), dom.td(filterAccount = dom.input(attr.form('hooksfilter'), style({ width: '8em' }))), dom.td(filterEvent = dom.select(attr.form('hooksfilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option(''), 
+	// note: outgoing hook events are in ../webhook/webhook.go, ../mox-/config.go ../webadmin/admin.ts and ../webapi/gendoc.sh. keep in sync.
+	['incoming', 'delivered', 'suppressed', 'delayed', 'failed', 'relayed', 'expanded', 'canceled', 'unrecognized'].map(s => dom.option(s)))), dom.td(), dom.td(), dom.td(), dom.td(attr.colspan('2'), style({ textAlign: 'right' }), // Less content shifting while rendering.
+	'Sort ', sortElem = dom.select(attr.form('hooksfilter'), function change() {
+		filterForm.requestSubmit();
+	}, dom.option('Last activity ↓', attr.value('nextattempt-desc')), dom.option('Last activity ↑', attr.value('nextattempt-asc')), dom.option('Submitted ↓', attr.value('submitted-desc')), dom.option('Submitted ↑', attr.value('submitted-asc'))), ' ', dom.submitbutton('Apply', attr.form('hooksfilter')), ' ', dom.clickbutton('Reset', attr.form('hooksfilter'), function click() {
+		filterForm.reset();
+		filterForm.requestSubmit();
+	}))), dom.tr(dom.th('ID'), dom.th('Success'), dom.th('Last'), dom.th('Submitted'), dom.th('Queue Msg ID', attr.title('ID of queued message this event is about.')), dom.th('FromID'), dom.th('MessageID'), dom.th('Account'), dom.th('Event'), dom.th('Extra'), dom.th('Attempts'), dom.th('Error'), dom.th('URL'), dom.th('Actions'))), tbody, dom.tfoot(dom.tr(dom.td(attr.colspan('14'), dom.clickbutton('Load more', attr.title('Try to load more entries. You can still try to load more entries when at the end of the list, new entries may have been appended since the previous call.'), async function click(e) {
+		if (hooks.length === 0) {
+			sort.LastID = 0;
+			sort.Last = null;
+		}
+		else {
+			const last = hooks[hooks.length - 1];
+			sort.LastID = last.ID;
+			if (sort.Field === "Submitted") {
+				sort.Last = last.Submitted;
+			}
+			else {
+				sort.Last = last.LastActivity;
+			}
+		}
+		tbody.classList.add('loadstart');
+		const l = await check(e.target, client.HookRetiredList(filter, sort)) || [];
+		hooks.push(...l);
+		render();
+	}))))), 
+	// Filtering.
+	filterForm = dom.form(attr.id('hooksfilter'), // Referenced by input elements in table row.
+	async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		filter = {
+			Max: filter.Max,
+			IDs: [],
+			Account: filterAccount.value,
+			Event: filterEvent.value,
+			Submitted: filterSubmitted.value,
+			LastActivity: filterLastActivity.value,
+		};
+		sort = {
+			Field: sortElem.value.startsWith('lastactivity') ? 'LastActivity' : 'Submitted',
+			LastID: 0,
+			Last: null,
+			Asc: sortElem.value.endsWith('asc'),
+		};
+		tbody.classList.add('loadstart');
+		hooks = await check({ disabled: false }, client.HookRetiredList(filter, sort)) || [];
+		render();
+	}));
 };
 const webserver = async () => {
 	let conf = await client.WebserverConfig();
@@ -3071,6 +3544,15 @@ const init = async () => {
 			}
 			else if (h === 'queue') {
 				await queueList();
+			}
+			else if (h === 'queue/retired') {
+				await retiredList();
+			}
+			else if (h === 'webhookqueue') {
+				await hooksList();
+			}
+			else if (h === 'webhookqueue/retired') {
+				await hooksRetiredList();
 			}
 			else if (h === 'tlsrpt') {
 				await tlsrptIndex();

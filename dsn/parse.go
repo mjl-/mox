@@ -249,7 +249,7 @@ func parseRecipientHeader(mr *textproto.Reader, utf8 bool) (Recipient, error) {
 			} else if len(t) != 2 {
 				err = fmt.Errorf("missing semicolon to separate diagnostic-type from code")
 			} else {
-				r.DiagnosticCode = strings.TrimSpace(t[1])
+				r.DiagnosticCodeSMTP = strings.TrimSpace(t[1])
 			}
 		case "Last-Attempt-Date":
 			r.LastAttemptDate, err = parseDateTime(v)

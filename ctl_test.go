@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/mtastsdb"
 	"github.com/mjl-/mox/queue"
+	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/tlsrptdb"
 )
@@ -43,6 +45,9 @@ func TestCtl(t *testing.T) {
 	}
 	defer store.Switchboard()()
 
+	err := queue.Init()
+	tcheck(t, err, "queue init")
+
 	testctl := func(fn func(clientctl *ctl)) {
 		t.Helper()
 
@@ -64,9 +69,6 @@ func TestCtl(t *testing.T) {
 	testctl(func(ctl *ctl) {
 		ctlcmdSetaccountpassword(ctl, "mjl", "test4321")
 	})
-
-	err := queue.Init()
-	tcheck(t, err, "queue init")
 
 	testctl(func(ctl *ctl) {
 		ctlcmdQueueHoldrulesList(ctl)
@@ -90,6 +92,22 @@ func TestCtl(t *testing.T) {
 		ctlcmdQueueHoldrulesRemove(ctl, 1)
 	})
 
+	// Queue a message to list/change/dump.
+	msg := "Subject: subject\r\n\r\nbody\r\n"
+	msgFile, err := store.CreateMessageTemp(pkglog, "queuedump-test")
+	tcheck(t, err, "temp file")
+	_, err = msgFile.Write([]byte(msg))
+	tcheck(t, err, "write message")
+	_, err = msgFile.Seek(0, 0)
+	tcheck(t, err, "rewind message")
+	defer os.Remove(msgFile.Name())
+	defer msgFile.Close()
+	addr, err := smtp.ParseAddress("mjl@mox.example")
+	tcheck(t, err, "parse address")
+	qml := []queue.Msg{queue.MakeMsg(addr.Path(), addr.Path(), false, false, int64(len(msg)), "<random@localhost>", nil, nil, time.Now(), "subject")}
+	queue.Add(ctxbg, pkglog, "mjl", msgFile, qml...)
+	qmid := qml[0].ID
+
 	// Has entries now.
 	testctl(func(ctl *ctl) {
 		ctlcmdQueueHoldrulesList(ctl)
@@ -97,12 +115,15 @@ func TestCtl(t *testing.T) {
 
 	// "queuelist"
 	testctl(func(ctl *ctl) {
-		ctlcmdQueueList(ctl, queue.Filter{})
+		ctlcmdQueueList(ctl, queue.Filter{}, queue.Sort{})
 	})
 
 	// "queueholdset"
 	testctl(func(ctl *ctl) {
 		ctlcmdQueueHoldSet(ctl, queue.Filter{}, true)
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldSet(ctl, queue.Filter{}, false)
 	})
 
 	// "queueschedule"
@@ -120,6 +141,11 @@ func TestCtl(t *testing.T) {
 		ctlcmdQueueRequireTLS(ctl, queue.Filter{}, nil)
 	})
 
+	// "queuedump"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueDump(ctl, fmt.Sprintf("%d", qmid))
+	})
+
 	// "queuefail"
 	testctl(func(ctl *ctl) {
 		ctlcmdQueueFail(ctl, queue.Filter{})
@@ -130,7 +156,92 @@ func TestCtl(t *testing.T) {
 		ctlcmdQueueDrop(ctl, queue.Filter{})
 	})
 
-	// no "queuedump", we don't have a message to dump, and the commands exits without a message.
+	// "queueholdruleslist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesList(ctl)
+	})
+
+	// "queueholdrulesadd"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(ctl, "mjl", "", "")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(ctl, "mjl", "localhost", "")
+	})
+
+	// "queueholdrulesremove"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesRemove(ctl, 2)
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesList(ctl)
+	})
+
+	// "queuesuppresslist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressList(ctl, "mjl")
+	})
+
+	// "queuesuppressadd"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressAdd(ctl, "mjl", "base@localhost")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressAdd(ctl, "mjl", "other@localhost")
+	})
+
+	// "queuesuppresslookup"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressLookup(ctl, "mjl", "base@localhost")
+	})
+
+	// "queuesuppressremove"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressRemove(ctl, "mjl", "base@localhost")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressList(ctl, "mjl")
+	})
+
+	// "queueretiredlist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueRetiredList(ctl, queue.RetiredFilter{}, queue.RetiredSort{})
+	})
+
+	// "queueretiredprint"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueRetiredPrint(ctl, "1")
+	})
+
+	// "queuehooklist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookList(ctl, queue.HookFilter{}, queue.HookSort{})
+	})
+
+	// "queuehookschedule"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookSchedule(ctl, queue.HookFilter{}, true, time.Minute)
+	})
+
+	// "queuehookprint"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookPrint(ctl, "1")
+	})
+
+	// "queuehookcancel"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookCancel(ctl, queue.HookFilter{})
+	})
+
+	// "queuehookretiredlist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookRetiredList(ctl, queue.HookRetiredFilter{}, queue.HookRetiredSort{})
+	})
+
+	// "queuehookretiredprint"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookRetiredPrint(ctl, "1")
+	})
 
 	// "importmbox"
 	testctl(func(ctl *ctl) {

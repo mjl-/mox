@@ -13,6 +13,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/mjl-/bstore"
+
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dsn"
@@ -22,6 +24,7 @@ import (
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
+	"github.com/mjl-/mox/webhook"
 )
 
 // todo: reuse connection? do fewer concurrently (other than with direct delivery).
@@ -91,7 +94,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			Secode:    smtp.SePol7MissingReqTLS30,
 			Err:       fmt.Errorf("transport %s: message requires verified tls but transport does not verify tls", transportName),
 		}
-		fail(ctx, qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
+		failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
 		return
 	}
 
@@ -126,7 +129,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		}
 		qlog.Errorx("dialing for submission", err, slog.String("remote", addr))
 		submiterr = fmt.Errorf("transport %s: dialing %s for submission: %w", transportName, addr, err)
-		fail(ctx, qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
+		failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
 		return
 	}
 	dialcancel()
@@ -183,7 +186,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			submiterr = smtperr
 		}
 		qlog.Errorx("establishing smtp session for submission", submiterr, slog.String("remote", addr))
-		fail(ctx, qlog, msgs, m0.DialedIPs, backoff, remoteMTA, submiterr)
+		failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, remoteMTA, submiterr)
 		return
 	}
 	defer func() {
@@ -208,7 +211,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		if err != nil {
 			qlog.Errorx("opening message for delivery", err, slog.String("remote", addr), slog.String("path", p))
 			submiterr = fmt.Errorf("transport %s: opening message file for submission: %w", transportName, err)
-			fail(ctx, qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
+			failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
 			return
 		}
 		msgr = store.FileMsgReader(m0.MsgPrefix, f)
@@ -229,7 +232,7 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		qlog.Infox("smtp transaction for delivery failed", submiterr)
 	}
 	failed = 0 // Reset, we are looking at the SMTP results below.
-	var delIDs []int64
+	var delMsgs []Msg
 	for i, m := range msgs {
 		qmlog := qlog.With(
 			slog.Int64("msgid", m.ID),
@@ -251,17 +254,24 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 				err = smtperr
 			}
 			qmlog.Errorx("submitting message", err, slog.String("remote", addr))
-			fail(ctx, qmlog, []*Msg{m}, m0.DialedIPs, backoff, remoteMTA, err)
+			failMsgsDB(qmlog, []*Msg{m}, m0.DialedIPs, backoff, remoteMTA, err)
 			failed++
 		} else {
-			delIDs = append(delIDs, m.ID)
+			m.markResult(0, "", "", true)
+			delMsgs = append(delMsgs, *m)
 			qmlog.Info("delivered from queue with transport")
 			delivered++
 		}
 	}
-	if len(delIDs) > 0 {
-		if err := queueDelete(context.Background(), delIDs...); err != nil {
-			qlog.Errorx("deleting message from queue after delivery", err)
+	if len(delMsgs) > 0 {
+		err := DB.Write(context.Background(), func(tx *bstore.Tx) error {
+			return retireMsgs(qlog, tx, webhook.EventDelivered, 0, "", nil, delMsgs...)
+		})
+		if err != nil {
+			qlog.Errorx("remove queue message from database after delivery", err)
+		} else if err := removeMsgsFS(qlog, delMsgs...); err != nil {
+			qlog.Errorx("remove queue message from file system after delivery", err)
 		}
+		kick()
 	}
 }

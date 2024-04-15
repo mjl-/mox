@@ -13,8 +13,8 @@ var (
 			Help: "Authentication attempts and results.",
 		},
 		[]string{
-			"kind",    // submission, imap, webmail, webaccount, webadmin (formerly httpaccount, httpadmin)
-			"variant", // login, plain, scram-sha-256, scram-sha-1, cram-md5, weblogin, websessionuse. formerly: httpbasic.
+			"kind",    // submission, imap, webmail, webapi, webaccount, webadmin (formerly httpaccount, httpadmin)
+			"variant", // login, plain, scram-sha-256, scram-sha-1, cram-md5, weblogin, websessionuse, httpbasic.
 			// todo: we currently only use badcreds, but known baduser can be helpful
 			"result", // ok, baduser, badpassword, badcreds, error, aborted
 		},

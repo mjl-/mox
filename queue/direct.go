@@ -30,6 +30,7 @@ import (
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/tlsrpt"
+	"github.com/mjl-/mox/webhook"
 )
 
 // Increased each time an outgoing connection is made for direct delivery. Used by
@@ -155,7 +156,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		if permanent {
 			err = smtpclient.Error{Permanent: true, Err: err}
 		}
-		fail(ctx, qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, err)
+		failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, err)
 		return
 	}
 
@@ -175,7 +176,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			} else {
 				qlog.Infox("mtasts lookup temporary error, aborting delivery attempt", err, slog.Any("domain", origNextHop))
 				recipientDomainResult.Summary.TotalFailureSessionCount++
-				fail(ctx, qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, err)
+				failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, err)
 				return
 			}
 		}
@@ -298,19 +299,39 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			continue
 		}
 
-		delIDs := make([]int64, len(result.delivered))
+		delMsgs := make([]Msg, len(result.delivered))
 		for i, mr := range result.delivered {
 			mqlog := nqlog.With(slog.Int64("msgid", mr.msg.ID), slog.Any("recipient", mr.msg.Recipient()))
 			mqlog.Info("delivered from queue")
-			delIDs[i] = mr.msg.ID
+			mr.msg.markResult(0, "", "", true)
+			delMsgs[i] = *mr.msg
 		}
-		if len(delIDs) > 0 {
-			if err := queueDelete(context.Background(), delIDs...); err != nil {
-				nqlog.Errorx("deleting messages from queue after delivery", err)
+		if len(delMsgs) > 0 {
+			err := DB.Write(context.Background(), func(tx *bstore.Tx) error {
+				return retireMsgs(nqlog, tx, webhook.EventDelivered, 0, "", nil, delMsgs...)
+			})
+			if err != nil {
+				nqlog.Errorx("deleting messages from queue database after delivery", err)
+			} else if err := removeMsgsFS(nqlog, delMsgs...); err != nil {
+				nqlog.Errorx("removing queued messages from file system after delivery", err)
 			}
+			kick()
 		}
-		for _, mr := range result.failed {
-			fail(ctx, nqlog, []*Msg{mr.msg}, m0.DialedIPs, backoff, remoteMTA, smtpclient.Error(mr.resp))
+		if len(result.failed) > 0 {
+			err := DB.Write(context.Background(), func(tx *bstore.Tx) error {
+				for _, mr := range result.failed {
+					failMsgsTx(nqlog, tx, []*Msg{mr.msg}, m0.DialedIPs, backoff, remoteMTA, smtpclient.Error(mr.resp))
+				}
+				return nil
+			})
+			if err != nil {
+				for _, mr := range result.failed {
+					nqlog.Errorx("error processing delivery failure for messages", err,
+						slog.Int64("msgid", mr.msg.ID),
+						slog.Any("recipient", mr.msg.Recipient()))
+				}
+			}
+			kick()
 		}
 		return
 	}
@@ -335,11 +356,11 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 			Secode:    smtp.SePol7MissingReqTLS30,
 			Err:       fmt.Errorf("destination servers do not support requiretls"),
 		}
-		fail(ctx, qlog, msgs, m0.DialedIPs, backoff, remoteMTA, err)
+		failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, remoteMTA, err)
 		return
 	}
 
-	fail(ctx, qlog, msgs, m0.DialedIPs, backoff, remoteMTA, lastErr)
+	failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, remoteMTA, lastErr)
 	return
 }
 

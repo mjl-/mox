@@ -16,3 +16,5 @@ spf
 subjectpass
 tlsrpt
 updates
+webapi
+webhook

@@ -842,7 +842,7 @@ Period: %s - %s UTC
 			continue
 		}
 
-		qm := queue.MakeMsg(from.Path(), rcpt.address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil, time.Now())
+		qm := queue.MakeMsg(from.Path(), rcpt.address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil, time.Now(), subject)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsDMARCReport.
 		qm.MaxAttempts = 5
@@ -911,7 +911,7 @@ func composeAggregateReport(ctx context.Context, log mlog.Log, mf *os.File, from
 	xc.Line()
 
 	// Textual part, just mentioning this is a DMARC report.
-	textBody, ct, cte := xc.TextPart(text)
+	textBody, ct, cte := xc.TextPart("plain", text)
 	textHdr := textproto.MIMEHeader{}
 	textHdr.Set("Content-Type", ct)
 	textHdr.Set("Content-Transfer-Encoding", cte)
@@ -997,7 +997,7 @@ Submitting-URI: %s
 			continue
 		}
 
-		qm := queue.MakeMsg(fromAddr.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil, time.Now())
+		qm := queue.MakeMsg(fromAddr.Path(), rcpt.Address.Path(), has8bit, smtputf8, msgSize, messageID, []byte(msgPrefix), nil, time.Now(), subject)
 		// Don't try as long as regular deliveries, and stop before we would send the
 		// delayed DSN. Though we also won't send that due to IsDMARCReport.
 		qm.MaxAttempts = 5
@@ -1045,7 +1045,7 @@ func composeErrorReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr
 	xc.Header("User-Agent", "mox/"+moxvar.Version)
 	xc.Header("MIME-Version", "1.0")
 
-	textBody, ct, cte := xc.TextPart(text)
+	textBody, ct, cte := xc.TextPart("plain", text)
 	xc.Header("Content-Type", ct)
 	xc.Header("Content-Transfer-Encoding", cte)
 	xc.Line()

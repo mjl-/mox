@@ -3,6 +3,11 @@
 namespace api {
 
 export interface Account {
+	OutgoingWebhook?: OutgoingWebhook | null
+	IncomingWebhook?: IncomingWebhook | null
+	FromIDLoginAddresses?: string[] | null
+	KeepRetiredMessagePeriod: number
+	KeepRetiredWebhookPeriod: number
 	Domain: string
 	Description: string
 	FullName: string
@@ -18,6 +23,17 @@ export interface Account {
 	NoFirstTimeSenderDelay: boolean
 	Routes?: Route[] | null
 	DNSDomain: Domain  // Parsed form of Domain.
+}
+
+export interface OutgoingWebhook {
+	URL: string
+	Authorization: string
+	Events?: string[] | null
+}
+
+export interface IncomingWebhook {
+	URL: string
+	Authorization: string
 }
 
 export interface Destination {
@@ -78,18 +94,120 @@ export interface Route {
 	ToDomainASCII?: string[] | null
 }
 
+// Suppression is an address to which messages will not be delivered. Attempts to
+// deliver or queue will result in an immediate permanent failure to deliver.
+export interface Suppression {
+	ID: number
+	Created: Date
+	Account: string  // Suppression applies to this account only.
+	BaseAddress: string  // Unicode. Address with fictional simplified localpart: lowercase, dots removed (gmail), first token before any "-" or "+" (typical catchall separator).
+	OriginalAddress: string  // Unicode. Address that caused this suppression.
+	Manual: boolean
+	Reason: string
+}
+
 // ImportProgress is returned after uploading a file to import.
 export interface ImportProgress {
 	Token: string  // For fetching progress, or cancelling an import.
 }
 
+// Outgoing is the payload sent to webhook URLs for events about outgoing deliveries.
+export interface Outgoing {
+	Version: number  // Format of hook, currently 0.
+	Event: OutgoingEvent  // Type of outgoing delivery event.
+	DSN: boolean  // If this event was triggered by a delivery status notification message (DSN).
+	Suppressing: boolean  // If true, this failure caused the address to be added to the suppression list.
+	QueueMsgID: number  // ID of message in queue.
+	FromID: string  // As used in MAIL FROM, can be empty, for incoming messages.
+	MessageID: string  // From Message-Id header, as set by submitter or us, with enclosing <>.
+	Subject: string  // Of original message.
+	WebhookQueued: Date  // When webhook was first queued for delivery.
+	SMTPCode: number  // Optional, for errors only, e.g. 451, 550. See package smtp for definitions.
+	SMTPEnhancedCode: string  // Optional, for errors only, e.g. 5.1.1.
+	Error: string  // Error message while delivering, or from DSN from remote, if any.
+	Extra?: { [key: string]: string }  // Extra fields set for message during submit, through webapi call or through X-Mox-Extra-* headers during SMTP submission.
+}
+
+// Incoming is the data sent to a webhook for incoming deliveries over SMTP.
+export interface Incoming {
+	Version: number  // Format of hook, currently 0.
+	From?: NameAddress[] | null  // Message "From" header, typically has one address.
+	To?: NameAddress[] | null
+	CC?: NameAddress[] | null
+	BCC?: NameAddress[] | null  // Often empty, even if you were a BCC recipient.
+	ReplyTo?: NameAddress[] | null  // Optional Reply-To header, typically absent or with one address.
+	Subject: string
+	MessageID: string  // Of Message-Id header, typically of the form "<random@hostname>", includes <>.
+	InReplyTo: string  // Optional, the message-id this message is a reply to. Includes <>.
+	References?: string[] | null  // Optional, zero or more message-ids this message is a reply/forward/related to. The last entry is the most recent/immediate message this is a reply to. Earlier entries are the parents in a thread. Values include <>.
+	Date?: Date | null  // Time in "Date" message header, can be different from time received.
+	Text: string  // Contents of text/plain and/or text/html part (if any), with "\n" line-endings, converted from "\r\n". Values are truncated to 1MB (1024*1024 bytes). Use webapi MessagePartGet to retrieve the full part data.
+	HTML: string
+	Structure: Structure  // Parsed form of MIME message.
+	Meta: IncomingMeta  // Details about message in storage, and SMTP transaction details.
+}
+
+export interface NameAddress {
+	Name: string  // Optional, human-readable "display name" of the addressee.
+	Address: string  // Required, email address.
+}
+
+export interface Structure {
+	ContentType: string  // Lower case, e.g. text/plain.
+	ContentTypeParams?: { [key: string]: string }  // Lower case keys, original case values, e.g. {"charset": "UTF-8"}.
+	ContentID: string  // Can be empty. Otherwise, should be a value wrapped in <>'s. For use in HTML, referenced as URI `cid:...`.
+	DecodedSize: number  // Size of content after decoding content-transfer-encoding. For text and HTML parts, this can be larger than the data returned since this size includes \r\n line endings.
+	Parts?: Structure[] | null  // Subparts of a multipart message, possibly recursive.
+}
+
+export interface IncomingMeta {
+	MsgID: number  // ID of message in storage, and to use in webapi calls like MessageGet.
+	MailFrom: string  // Address used during SMTP "MAIL FROM" command.
+	MailFromValidated: boolean  // Whether SMTP MAIL FROM address was SPF-validated.
+	MsgFromValidated: boolean  // Whether address in message "From"-header was DMARC(-like) validated.
+	RcptTo: string  // SMTP RCPT TO address used in SMTP.
+	DKIMVerifiedDomains?: string[] | null  // Verified domains from DKIM-signature in message. Can be different domain than used in addresses.
+	RemoteIP: string  // Where the message was delivered from.
+	Received: Date  // When message was received, may be different from the Date header.
+	MailboxName: string  // Mailbox where message was delivered to, based on configured rules. Defaults to "Inbox".
+	Automated: boolean  // Whether this message was automated and should not receive automated replies. E.g. out of office or mailing list messages.
+}
+
 export type CSRFToken = string
 
-export const structTypes: {[typename: string]: boolean} = {"Account":true,"AutomaticJunkFlags":true,"Destination":true,"Domain":true,"ImportProgress":true,"JunkFilter":true,"Route":true,"Ruleset":true,"SubjectPass":true}
-export const stringsTypes: {[typename: string]: boolean} = {"CSRFToken":true}
+// OutgoingEvent is an activity for an outgoing delivery. Either generated by the
+// queue, or through an incoming DSN (delivery status notification) message.
+export enum OutgoingEvent {
+	// Message was accepted by a next-hop server. This does not necessarily mean the
+	// message has been delivered in the mailbox of the user.
+	EventDelivered = "delivered",
+	// Outbound delivery was suppressed because the recipient address is on the
+	// suppression list of the account, or a simplified/base variant of the address is.
+	EventSuppressed = "suppressed",
+	EventDelayed = "delayed",  // A delivery attempt failed but delivery will be retried again later.
+	// Delivery of the message failed and will not be tried again. Also see the
+	// "Suppressing" field of [Outgoing].
+	EventFailed = "failed",
+	// Message was relayed into a system that does not generate DSNs. Should only
+	// happen when explicitly requested.
+	EventRelayed = "relayed",
+	// Message was accepted and is being delivered to multiple recipients (e.g. the
+	// address was an alias/list), which may generate more DSNs.
+	EventExpanded = "expanded",
+	EventCanceled = "canceled",  // Message was removed from the queue, e.g. canceled by admin/user.
+	// An incoming message was received that was either a DSN with an unknown event
+	// type ("action"), or an incoming non-DSN-message was received for the unique
+	// per-outgoing-message address used for sending.
+	EventUnrecognized = "unrecognized",
+}
+
+export const structTypes: {[typename: string]: boolean} = {"Account":true,"AutomaticJunkFlags":true,"Destination":true,"Domain":true,"ImportProgress":true,"Incoming":true,"IncomingMeta":true,"IncomingWebhook":true,"JunkFilter":true,"NameAddress":true,"Outgoing":true,"OutgoingWebhook":true,"Route":true,"Ruleset":true,"Structure":true,"SubjectPass":true,"Suppression":true}
+export const stringsTypes: {[typename: string]: boolean} = {"CSRFToken":true,"OutgoingEvent":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
-	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]}]},
+	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"OutgoingWebhook","Docs":"","Typewords":["nullable","OutgoingWebhook"]},{"Name":"IncomingWebhook","Docs":"","Typewords":["nullable","IncomingWebhook"]},{"Name":"FromIDLoginAddresses","Docs":"","Typewords":["[]","string"]},{"Name":"KeepRetiredMessagePeriod","Docs":"","Typewords":["int64"]},{"Name":"KeepRetiredWebhookPeriod","Docs":"","Typewords":["int64"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]}]},
+	"OutgoingWebhook": {"Name":"OutgoingWebhook","Docs":"","Fields":[{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["string"]},{"Name":"Events","Docs":"","Typewords":["[]","string"]}]},
+	"IncomingWebhook": {"Name":"IncomingWebhook","Docs":"","Fields":[{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["string"]}]},
 	"Destination": {"Name":"Destination","Docs":"","Fields":[{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Rulesets","Docs":"","Typewords":["[]","Ruleset"]},{"Name":"FullName","Docs":"","Typewords":["string"]}]},
 	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
@@ -97,12 +215,21 @@ export const types: TypenameMap = {
 	"AutomaticJunkFlags": {"Name":"AutomaticJunkFlags","Docs":"","Fields":[{"Name":"Enabled","Docs":"","Typewords":["bool"]},{"Name":"JunkMailboxRegexp","Docs":"","Typewords":["string"]},{"Name":"NeutralMailboxRegexp","Docs":"","Typewords":["string"]},{"Name":"NotJunkMailboxRegexp","Docs":"","Typewords":["string"]}]},
 	"JunkFilter": {"Name":"JunkFilter","Docs":"","Fields":[{"Name":"Threshold","Docs":"","Typewords":["float64"]},{"Name":"Onegrams","Docs":"","Typewords":["bool"]},{"Name":"Twograms","Docs":"","Typewords":["bool"]},{"Name":"Threegrams","Docs":"","Typewords":["bool"]},{"Name":"MaxPower","Docs":"","Typewords":["float64"]},{"Name":"TopWords","Docs":"","Typewords":["int32"]},{"Name":"IgnoreWords","Docs":"","Typewords":["float64"]},{"Name":"RareWords","Docs":"","Typewords":["int32"]}]},
 	"Route": {"Name":"Route","Docs":"","Fields":[{"Name":"FromDomain","Docs":"","Typewords":["[]","string"]},{"Name":"ToDomain","Docs":"","Typewords":["[]","string"]},{"Name":"MinimumAttempts","Docs":"","Typewords":["int32"]},{"Name":"Transport","Docs":"","Typewords":["string"]},{"Name":"FromDomainASCII","Docs":"","Typewords":["[]","string"]},{"Name":"ToDomainASCII","Docs":"","Typewords":["[]","string"]}]},
+	"Suppression": {"Name":"Suppression","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Created","Docs":"","Typewords":["timestamp"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"BaseAddress","Docs":"","Typewords":["string"]},{"Name":"OriginalAddress","Docs":"","Typewords":["string"]},{"Name":"Manual","Docs":"","Typewords":["bool"]},{"Name":"Reason","Docs":"","Typewords":["string"]}]},
 	"ImportProgress": {"Name":"ImportProgress","Docs":"","Fields":[{"Name":"Token","Docs":"","Typewords":["string"]}]},
+	"Outgoing": {"Name":"Outgoing","Docs":"","Fields":[{"Name":"Version","Docs":"","Typewords":["int32"]},{"Name":"Event","Docs":"","Typewords":["OutgoingEvent"]},{"Name":"DSN","Docs":"","Typewords":["bool"]},{"Name":"Suppressing","Docs":"","Typewords":["bool"]},{"Name":"QueueMsgID","Docs":"","Typewords":["int64"]},{"Name":"FromID","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"WebhookQueued","Docs":"","Typewords":["timestamp"]},{"Name":"SMTPCode","Docs":"","Typewords":["int32"]},{"Name":"SMTPEnhancedCode","Docs":"","Typewords":["string"]},{"Name":"Error","Docs":"","Typewords":["string"]},{"Name":"Extra","Docs":"","Typewords":["{}","string"]}]},
+	"Incoming": {"Name":"Incoming","Docs":"","Fields":[{"Name":"Version","Docs":"","Typewords":["int32"]},{"Name":"From","Docs":"","Typewords":["[]","NameAddress"]},{"Name":"To","Docs":"","Typewords":["[]","NameAddress"]},{"Name":"CC","Docs":"","Typewords":["[]","NameAddress"]},{"Name":"BCC","Docs":"","Typewords":["[]","NameAddress"]},{"Name":"ReplyTo","Docs":"","Typewords":["[]","NameAddress"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"InReplyTo","Docs":"","Typewords":["string"]},{"Name":"References","Docs":"","Typewords":["[]","string"]},{"Name":"Date","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"Text","Docs":"","Typewords":["string"]},{"Name":"HTML","Docs":"","Typewords":["string"]},{"Name":"Structure","Docs":"","Typewords":["Structure"]},{"Name":"Meta","Docs":"","Typewords":["IncomingMeta"]}]},
+	"NameAddress": {"Name":"NameAddress","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"Address","Docs":"","Typewords":["string"]}]},
+	"Structure": {"Name":"Structure","Docs":"","Fields":[{"Name":"ContentType","Docs":"","Typewords":["string"]},{"Name":"ContentTypeParams","Docs":"","Typewords":["{}","string"]},{"Name":"ContentID","Docs":"","Typewords":["string"]},{"Name":"DecodedSize","Docs":"","Typewords":["int64"]},{"Name":"Parts","Docs":"","Typewords":["[]","Structure"]}]},
+	"IncomingMeta": {"Name":"IncomingMeta","Docs":"","Fields":[{"Name":"MsgID","Docs":"","Typewords":["int64"]},{"Name":"MailFrom","Docs":"","Typewords":["string"]},{"Name":"MailFromValidated","Docs":"","Typewords":["bool"]},{"Name":"MsgFromValidated","Docs":"","Typewords":["bool"]},{"Name":"RcptTo","Docs":"","Typewords":["string"]},{"Name":"DKIMVerifiedDomains","Docs":"","Typewords":["[]","string"]},{"Name":"RemoteIP","Docs":"","Typewords":["string"]},{"Name":"Received","Docs":"","Typewords":["timestamp"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Automated","Docs":"","Typewords":["bool"]}]},
 	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
+	"OutgoingEvent": {"Name":"OutgoingEvent","Docs":"","Values":[{"Name":"EventDelivered","Value":"delivered","Docs":""},{"Name":"EventSuppressed","Value":"suppressed","Docs":""},{"Name":"EventDelayed","Value":"delayed","Docs":""},{"Name":"EventFailed","Value":"failed","Docs":""},{"Name":"EventRelayed","Value":"relayed","Docs":""},{"Name":"EventExpanded","Value":"expanded","Docs":""},{"Name":"EventCanceled","Value":"canceled","Docs":""},{"Name":"EventUnrecognized","Value":"unrecognized","Docs":""}]},
 }
 
 export const parser = {
 	Account: (v: any) => parse("Account", v) as Account,
+	OutgoingWebhook: (v: any) => parse("OutgoingWebhook", v) as OutgoingWebhook,
+	IncomingWebhook: (v: any) => parse("IncomingWebhook", v) as IncomingWebhook,
 	Destination: (v: any) => parse("Destination", v) as Destination,
 	Ruleset: (v: any) => parse("Ruleset", v) as Ruleset,
 	Domain: (v: any) => parse("Domain", v) as Domain,
@@ -110,8 +237,15 @@ export const parser = {
 	AutomaticJunkFlags: (v: any) => parse("AutomaticJunkFlags", v) as AutomaticJunkFlags,
 	JunkFilter: (v: any) => parse("JunkFilter", v) as JunkFilter,
 	Route: (v: any) => parse("Route", v) as Route,
+	Suppression: (v: any) => parse("Suppression", v) as Suppression,
 	ImportProgress: (v: any) => parse("ImportProgress", v) as ImportProgress,
+	Outgoing: (v: any) => parse("Outgoing", v) as Outgoing,
+	Incoming: (v: any) => parse("Incoming", v) as Incoming,
+	NameAddress: (v: any) => parse("NameAddress", v) as NameAddress,
+	Structure: (v: any) => parse("Structure", v) as Structure,
+	IncomingMeta: (v: any) => parse("IncomingMeta", v) as IncomingMeta,
 	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
+	OutgoingEvent: (v: any) => parse("OutgoingEvent", v) as OutgoingEvent,
 }
 
 // Account exports web API functions for the account web interface. All its
@@ -187,14 +321,16 @@ export class Client {
 	// Account returns information about the account.
 	// StorageUsed is the sum of the sizes of all messages, in bytes.
 	// StorageLimit is the maximum storage that can be used, or 0 if there is no limit.
-	async Account(): Promise<[Account, number, number]> {
+	async Account(): Promise<[Account, number, number, Suppression[] | null]> {
 		const fn: string = "Account"
 		const paramTypes: string[][] = []
-		const returnTypes: string[][] = [["Account"],["int64"],["int64"]]
+		const returnTypes: string[][] = [["Account"],["int64"],["int64"],["[]","Suppression"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [Account, number, number]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [Account, number, number, Suppression[] | null]
 	}
 
+	// AccountSaveFullName saves the full name (used as display name in email messages)
+	// for the account.
 	async AccountSaveFullName(fullName: string): Promise<void> {
 		const fn: string = "AccountSaveFullName"
 		const paramTypes: string[][] = [["string"]]
@@ -231,6 +367,97 @@ export class Client {
 		const returnTypes: string[][] = [["ImportProgress"]]
 		const params: any[] = []
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as ImportProgress
+	}
+
+	// SuppressionList lists the addresses on the suppression list of this account.
+	async SuppressionList(): Promise<Suppression[] | null> {
+		const fn: string = "SuppressionList"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["[]","Suppression"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Suppression[] | null
+	}
+
+	// SuppressionAdd adds an email address to the suppression list.
+	async SuppressionAdd(address: string, manual: boolean, reason: string): Promise<Suppression> {
+		const fn: string = "SuppressionAdd"
+		const paramTypes: string[][] = [["string"],["bool"],["string"]]
+		const returnTypes: string[][] = [["Suppression"]]
+		const params: any[] = [address, manual, reason]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Suppression
+	}
+
+	// SuppressionRemove removes the email address from the suppression list.
+	async SuppressionRemove(address: string): Promise<void> {
+		const fn: string = "SuppressionRemove"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [address]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// OutgoingWebhookSave saves a new webhook url for outgoing deliveries. If url
+	// is empty, the webhook is disabled. If authorization is non-empty it is used for
+	// the Authorization header in HTTP requests. Events specifies the outgoing events
+	// to be delivered, or all if empty/nil.
+	async OutgoingWebhookSave(url: string, authorization: string, events: string[] | null): Promise<void> {
+		const fn: string = "OutgoingWebhookSave"
+		const paramTypes: string[][] = [["string"],["string"],["[]","string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [url, authorization, events]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// OutgoingWebhookTest makes a test webhook call to urlStr, with optional
+	// authorization. If the HTTP request is made this call will succeed also for
+	// non-2xx HTTP status codes.
+	async OutgoingWebhookTest(urlStr: string, authorization: string, data: Outgoing): Promise<[number, string, string]> {
+		const fn: string = "OutgoingWebhookTest"
+		const paramTypes: string[][] = [["string"],["string"],["Outgoing"]]
+		const returnTypes: string[][] = [["int32"],["string"],["string"]]
+		const params: any[] = [urlStr, authorization, data]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [number, string, string]
+	}
+
+	// IncomingWebhookSave saves a new webhook url for incoming deliveries. If url is
+	// empty, the webhook is disabled. If authorization is not empty, it is used in
+	// the Authorization header in requests.
+	async IncomingWebhookSave(url: string, authorization: string): Promise<void> {
+		const fn: string = "IncomingWebhookSave"
+		const paramTypes: string[][] = [["string"],["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [url, authorization]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// IncomingWebhookTest makes a test webhook HTTP delivery request to urlStr,
+	// with optional authorization header. If the HTTP call is made, this function
+	// returns non-error regardless of HTTP status code.
+	async IncomingWebhookTest(urlStr: string, authorization: string, data: Incoming): Promise<[number, string, string]> {
+		const fn: string = "IncomingWebhookTest"
+		const paramTypes: string[][] = [["string"],["string"],["Incoming"]]
+		const returnTypes: string[][] = [["int32"],["string"],["string"]]
+		const params: any[] = [urlStr, authorization, data]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [number, string, string]
+	}
+
+	// FromIDLoginAddressesSave saves new login addresses to enable unique SMTP
+	// MAIL FROM addresses ("fromid") for deliveries from the queue.
+	async FromIDLoginAddressesSave(loginAddresses: string[] | null): Promise<void> {
+		const fn: string = "FromIDLoginAddressesSave"
+		const paramTypes: string[][] = [["[]","string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [loginAddresses]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// KeepRetiredPeriodsSave save periods to save retired messages and webhooks.
+	async KeepRetiredPeriodsSave(keepRetiredMessagePeriod: number, keepRetiredWebhookPeriod: number): Promise<void> {
+		const fn: string = "KeepRetiredPeriodsSave"
+		const paramTypes: string[][] = [["int64"],["int64"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [keepRetiredMessagePeriod, keepRetiredWebhookPeriod]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 }
 

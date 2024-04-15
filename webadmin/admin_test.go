@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"strings"
 	"testing"
@@ -25,6 +26,7 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/webauth"
 )
@@ -61,6 +63,13 @@ func tcheck(t *testing.T, err error, msg string) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("%s: %s", msg, err)
+	}
+}
+
+func tcompare(t *testing.T, got, expect any) {
+	t.Helper()
+	if !reflect.DeepEqual(got, expect) {
+		t.Fatalf("got:\n%#v\nexpected:\n%#v", got, expect)
 	}
 }
 
@@ -200,6 +209,30 @@ func TestAdminAuth(t *testing.T) {
 
 	api.Logout(ctx)
 	tneedErrorCode(t, "server:error", func() { api.Logout(ctx) })
+
+	err = queue.Init()
+	tcheck(t, err, "queue init")
+
+	mrl := api.RetiredList(ctxbg, queue.RetiredFilter{}, queue.RetiredSort{})
+	tcompare(t, len(mrl), 0)
+
+	n := api.HookQueueSize(ctxbg)
+	tcompare(t, n, 0)
+
+	hl := api.HookList(ctxbg, queue.HookFilter{}, queue.HookSort{})
+	tcompare(t, len(hl), 0)
+
+	n = api.HookNextAttemptSet(ctxbg, queue.HookFilter{}, 0)
+	tcompare(t, n, 0)
+
+	n = api.HookNextAttemptAdd(ctxbg, queue.HookFilter{}, 0)
+	tcompare(t, n, 0)
+
+	hrl := api.HookRetiredList(ctxbg, queue.HookRetiredFilter{}, queue.HookRetiredSort{})
+	tcompare(t, len(hrl), 0)
+
+	n = api.HookCancel(ctxbg, queue.HookFilter{})
+	tcompare(t, n, 0)
 }
 
 func TestCheckDomain(t *testing.T) {

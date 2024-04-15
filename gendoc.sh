@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
 
+# ./doc.go
 (
 cat <<EOF
 /*
@@ -38,6 +39,7 @@ EOF
 )>doc.go
 gofmt -w doc.go
 
+# ./config/doc.go
 (
 cat <<EOF
 /*
@@ -92,15 +94,15 @@ cat <<EOF
 # Examples
 
 Mox includes configuration files to illustrate common setups. You can see these
-examples with "mox example", and print a specific example with "mox example
-<name>". Below are all examples included in mox.
+examples with "mox config example", and print a specific example with "mox
+config example <name>". Below are all examples included in mox.
 
 EOF
 
-for ex in $(./mox example); do
+for ex in $(./mox config example); do
 	echo '# Example '$ex
 	echo
-	./mox example $ex | sed 's/^/\t/'
+	./mox config example $ex | sed 's/^/\t/'
 	echo
 done
 
@@ -112,3 +114,7 @@ package config
 EOF
 )>config/doc.go
 gofmt -w config/doc.go
+
+# ./webapi/doc.go
+./webapi/gendoc.sh >webapi/doc.go
+gofmt -w webapi/doc.go

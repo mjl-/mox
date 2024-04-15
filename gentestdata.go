@@ -233,7 +233,7 @@ Accounts:
 	const qmsg = "From: <test0@mox.example>\r\nTo: <other@remote.example>\r\nSubject: test\r\n\r\nthe message...\r\n"
 	_, err = fmt.Fprint(mf, qmsg)
 	xcheckf(err, "writing message")
-	qm := queue.MakeMsg(mailfrom, rcptto, false, false, int64(len(qmsg)), "<test@localhost>", prefix, nil, time.Now())
+	qm := queue.MakeMsg(mailfrom, rcptto, false, false, int64(len(qmsg)), "<test@localhost>", prefix, nil, time.Now(), "test")
 	err = queue.Add(ctxbg, c.log, "test0", mf, qm)
 	xcheckf(err, "enqueue message")
 

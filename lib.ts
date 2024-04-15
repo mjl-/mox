@@ -216,6 +216,7 @@ const attr = {
 	autocomplete: (s: string) => _attr('autocomplete', s),
 	list: (s: string) => _attr('list', s),
 	form: (s: string) => _attr('form', s),
+	size: (s: string) => _attr('size', s),
 }
 const style = (x: {[k: string]: string | number}) => { return {_styles: x}}
 const prop = (x: {[k: string]: any}) => { return {_props: x}}

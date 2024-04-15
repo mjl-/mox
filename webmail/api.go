@@ -17,7 +17,7 @@ import (
 	"net/textproto"
 	"os"
 	"runtime/debug"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -45,6 +45,7 @@ import (
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/webauth"
+	"github.com/mjl-/mox/webops"
 )
 
 //go:embed api.json
@@ -266,6 +267,20 @@ func xmessageID(ctx context.Context, tx *bstore.Tx, messageID int64) store.Messa
 	return m
 }
 
+func xrandomID(ctx context.Context, n int) string {
+	return base64.RawURLEncoding.EncodeToString(xrandom(ctx, n))
+}
+
+func xrandom(ctx context.Context, n int) []byte {
+	buf := make([]byte, n)
+	x, err := cryptorand.Read(buf)
+	xcheckf(ctx, err, "read random")
+	if x != n {
+		xcheckf(ctx, errors.New("short random read"), "read random")
+	}
+	return buf
+}
+
 // MessageSubmit sends a message by submitting it the outgoing email queue. The
 // message is sent to all addresses listed in the To, Cc and Bcc addresses, without
 // Bcc message header.
@@ -273,9 +288,9 @@ func xmessageID(ctx context.Context, tx *bstore.Tx, messageID int64) store.Messa
 // If a Sent mailbox is configured, messages are added to it after submitting
 // to the delivery queue.
 func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
-	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/webmail.go:/MessageSubmit\(
+	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/api.go:/MessageSubmit\( and ../webapisrv/server.go:/Send\(
 
-	// todo: consider making this an HTTP POST, so we can upload as regular form, which is probably more efficient for encoding for the client and we can stream the data in.
+	// todo: consider making this an HTTP POST, so we can upload as regular form, which is probably more efficient for encoding for the client and we can stream the data in. also not unlike the webapi Submit method.
 
 	// Prevent any accidental control characters, or attempts at getting bare \r or \n
 	// into messages.
@@ -358,10 +373,10 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		msglimit, rcptlimit, err := acc.SendLimitReached(tx, rcpts)
 		if msglimit >= 0 {
 			metricSubmission.WithLabelValues("messagelimiterror").Inc()
-			xcheckuserf(ctx, errors.New("send message limit reached"), "checking outgoing rate limit")
+			xcheckuserf(ctx, errors.New("message limit reached"), "checking outgoing rate")
 		} else if rcptlimit >= 0 {
 			metricSubmission.WithLabelValues("recipientlimiterror").Inc()
-			xcheckuserf(ctx, errors.New("send message limit reached"), "checking outgoing rate limit")
+			xcheckuserf(ctx, errors.New("recipient limit reached"), "checking outgoing rate")
 		}
 		xcheckf(ctx, err, "checking send limit")
 	})
@@ -455,15 +470,19 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			if rp.Envelope == nil {
 				return
 			}
-			xc.Header("In-Reply-To", rp.Envelope.MessageID)
-			ref := h.Get("References")
-			if ref == "" {
-				ref = h.Get("In-Reply-To")
+
+			if rp.Envelope.MessageID != "" {
+				xc.Header("In-Reply-To", rp.Envelope.MessageID)
 			}
-			if ref != "" {
-				xc.Header("References", ref+"\r\n\t"+rp.Envelope.MessageID)
-			} else {
-				xc.Header("References", rp.Envelope.MessageID)
+			refs := h.Values("References")
+			if len(refs) == 0 && rp.Envelope.InReplyTo != "" {
+				refs = []string{rp.Envelope.InReplyTo}
+			}
+			if rp.Envelope.MessageID != "" {
+				refs = append(refs, rp.Envelope.MessageID)
+			}
+			if len(refs) > 0 {
+				xc.Header("References", strings.Join(refs, "\r\n\t"))
 			}
 		})
 	}
@@ -480,7 +499,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		xc.Header("Content-Type", fmt.Sprintf(`multipart/mixed; boundary="%s"`, mp.Boundary()))
 		xc.Line()
 
-		textBody, ct, cte := xc.TextPart(m.TextBody)
+		textBody, ct, cte := xc.TextPart("plain", m.TextBody)
 		textHdr := textproto.MIMEHeader{}
 		textHdr.Set("Content-Type", ct)
 		textHdr.Set("Content-Transfer-Encoding", cte)
@@ -601,7 +620,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		err = mp.Close()
 		xcheckf(ctx, err, "writing mime multipart")
 	} else {
-		textBody, ct, cte := xc.TextPart(m.TextBody)
+		textBody, ct, cte := xc.TextPart("plain", m.TextBody)
 		xc.Header("Content-Type", ct)
 		xc.Header("Content-Transfer-Encoding", cte)
 		xc.Line()
@@ -625,13 +644,25 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		msgPrefix = dkimHeaders
 	}
 
-	fromPath := smtp.Path{
-		Localpart: fromAddr.Address.Localpart,
-		IPDomain:  dns.IPDomain{Domain: fromAddr.Address.Domain},
+	accConf, _ := acc.Conf()
+	loginAddr, err := smtp.ParseAddress(reqInfo.LoginAddress)
+	xcheckf(ctx, err, "parsing login address")
+	useFromID := slices.Contains(accConf.ParsedFromIDLoginAddresses, loginAddr)
+	fromPath := fromAddr.Address.Path()
+	var localpartBase string
+	if useFromID {
+		localpartBase = strings.SplitN(string(fromPath.Localpart), confDom.LocalpartCatchallSeparator, 2)[0]
 	}
 	qml := make([]queue.Msg, len(recipients))
 	now := time.Now()
 	for i, rcpt := range recipients {
+		fp := fromPath
+		var fromID string
+		if useFromID {
+			fromID = xrandomID(ctx, 16)
+			fp.Localpart = smtp.Localpart(localpartBase + confDom.LocalpartCatchallSeparator + fromID)
+		}
+
 		// Don't use per-recipient unique message prefix when multiple recipients are
 		// present, or the queue cannot deliver it in a single smtp transaction.
 		var recvRcpt string
@@ -644,7 +675,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			Localpart: rcpt.Localpart,
 			IPDomain:  dns.IPDomain{Domain: rcpt.Domain},
 		}
-		qm := queue.MakeMsg(fromPath, toPath, xc.Has8bit, xc.SMTPUTF8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS, now)
+		qm := queue.MakeMsg(fp, toPath, xc.Has8bit, xc.SMTPUTF8, msgSize, messageID, []byte(rcptMsgPrefix), m.RequireTLS, now, m.Subject)
 		if m.FutureRelease != nil {
 			ival := time.Until(*m.FutureRelease)
 			if ival < 0 {
@@ -656,6 +687,8 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			qm.FutureReleaseRequest = "until;" + m.FutureRelease.Format(time.RFC3339)
 			// todo: possibly add a header to the message stored in the Sent mailbox to indicate it was scheduled for later delivery.
 		}
+		qm.FromID = fromID
+		// no qm.Extra from webmail
 		qml[i] = qm
 	}
 	err = queue.Add(ctx, log, reqInfo.AccountName, dataFile, qml...)
@@ -764,124 +797,13 @@ func (Webmail) MessageMove(ctx context.Context, messageIDs []int64, mailboxID in
 		log.Check(err, "closing account")
 	}()
 
-	acc.WithRLock(func() {
-		retrain := make([]store.Message, 0, len(messageIDs))
-		removeChanges := map[int64]store.ChangeRemoveUIDs{}
-		// n adds, 1 remove, 2 mailboxcounts, optimistic and at least for a single message.
-		changes := make([]store.Change, 0, len(messageIDs)+3)
+	xops.MessageMove(ctx, log, acc, messageIDs, "", mailboxID)
+}
 
-		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
-			var mbSrc store.Mailbox
-			var modseq store.ModSeq
-
-			mbDst := xmailboxID(ctx, tx, mailboxID)
-
-			if len(messageIDs) == 0 {
-				return
-			}
-
-			keywords := map[string]struct{}{}
-
-			for _, mid := range messageIDs {
-				m := xmessageID(ctx, tx, mid)
-
-				// We may have loaded this mailbox in the previous iteration of this loop.
-				if m.MailboxID != mbSrc.ID {
-					if mbSrc.ID != 0 {
-						err = tx.Update(&mbSrc)
-						xcheckf(ctx, err, "updating source mailbox counts")
-						changes = append(changes, mbSrc.ChangeCounts())
-					}
-					mbSrc = xmailboxID(ctx, tx, m.MailboxID)
-				}
-
-				if mbSrc.ID == mailboxID {
-					// Client should filter out messages that are already in mailbox.
-					xcheckuserf(ctx, errors.New("already in destination mailbox"), "moving message")
-				}
-
-				if modseq == 0 {
-					modseq, err = acc.NextModSeq(tx)
-					xcheckf(ctx, err, "assigning next modseq")
-				}
-
-				ch := removeChanges[m.MailboxID]
-				ch.UIDs = append(ch.UIDs, m.UID)
-				ch.ModSeq = modseq
-				ch.MailboxID = m.MailboxID
-				removeChanges[m.MailboxID] = ch
-
-				// Copy of message record that we'll insert when UID is freed up.
-				om := m
-				om.PrepareExpunge()
-				om.ID = 0 // Assign new ID.
-				om.ModSeq = modseq
-
-				mbSrc.Sub(m.MailboxCounts())
-
-				if mbDst.Trash {
-					m.Seen = true
-				}
-				conf, _ := acc.Conf()
-				m.MailboxID = mbDst.ID
-				if m.IsReject && m.MailboxDestinedID != 0 {
-					// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
-					// is used for reputation calculation during future deliveries.
-					m.MailboxOrigID = m.MailboxDestinedID
-					m.IsReject = false
-					m.Seen = false
-				}
-				m.UID = mbDst.UIDNext
-				m.ModSeq = modseq
-				mbDst.UIDNext++
-				m.JunkFlagsForMailbox(mbDst, conf)
-				err = tx.Update(&m)
-				xcheckf(ctx, err, "updating moved message in database")
-
-				// Now that UID is unused, we can insert the old record again.
-				err = tx.Insert(&om)
-				xcheckf(ctx, err, "inserting record for expunge after moving message")
-
-				mbDst.Add(m.MailboxCounts())
-
-				changes = append(changes, m.ChangeAddUID())
-				retrain = append(retrain, m)
-
-				for _, kw := range m.Keywords {
-					keywords[kw] = struct{}{}
-				}
-			}
-
-			err = tx.Update(&mbSrc)
-			xcheckf(ctx, err, "updating source mailbox counts")
-
-			changes = append(changes, mbSrc.ChangeCounts(), mbDst.ChangeCounts())
-
-			// Ensure destination mailbox has keywords of the moved messages.
-			var mbKwChanged bool
-			mbDst.Keywords, mbKwChanged = store.MergeKeywords(mbDst.Keywords, maps.Keys(keywords))
-			if mbKwChanged {
-				changes = append(changes, mbDst.ChangeKeywords())
-			}
-
-			err = tx.Update(&mbDst)
-			xcheckf(ctx, err, "updating mailbox with uidnext")
-
-			err = acc.RetrainMessages(ctx, log, tx, retrain, false)
-			xcheckf(ctx, err, "retraining messages after move")
-		})
-
-		// Ensure UIDs of the removed message are in increasing order. It is quite common
-		// for all messages to be from a single source mailbox, meaning this is just one
-		// change, for which we preallocated space.
-		for _, ch := range removeChanges {
-			sort.Slice(ch.UIDs, func(i, j int) bool {
-				return ch.UIDs[i] < ch.UIDs[j]
-			})
-			changes = append(changes, ch)
-		}
-		store.BroadcastChanges(acc, changes)
-	})
+var xops = webops.XOps{
+	DBWrite:    xdbwrite,
+	Checkf:     xcheckf,
+	Checkuserf: xcheckuserf,
 }
 
 // MessageDelete permanently deletes messages, without moving them to the Trash mailbox.
@@ -899,86 +821,7 @@ func (Webmail) MessageDelete(ctx context.Context, messageIDs []int64) {
 		return
 	}
 
-	acc.WithWLock(func() {
-		removeChanges := map[int64]store.ChangeRemoveUIDs{}
-		changes := make([]store.Change, 0, len(messageIDs)+1) // n remove, 1 mailbox counts
-
-		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
-			var modseq store.ModSeq
-			var mb store.Mailbox
-			remove := make([]store.Message, 0, len(messageIDs))
-
-			var totalSize int64
-			for _, mid := range messageIDs {
-				m := xmessageID(ctx, tx, mid)
-				totalSize += m.Size
-
-				if m.MailboxID != mb.ID {
-					if mb.ID != 0 {
-						err := tx.Update(&mb)
-						xcheckf(ctx, err, "updating mailbox counts")
-						changes = append(changes, mb.ChangeCounts())
-					}
-					mb = xmailboxID(ctx, tx, m.MailboxID)
-				}
-
-				qmr := bstore.QueryTx[store.Recipient](tx)
-				qmr.FilterEqual("MessageID", m.ID)
-				_, err = qmr.Delete()
-				xcheckf(ctx, err, "removing message recipients")
-
-				mb.Sub(m.MailboxCounts())
-
-				if modseq == 0 {
-					modseq, err = acc.NextModSeq(tx)
-					xcheckf(ctx, err, "assigning next modseq")
-				}
-				m.Expunged = true
-				m.ModSeq = modseq
-				err = tx.Update(&m)
-				xcheckf(ctx, err, "marking message as expunged")
-
-				ch := removeChanges[m.MailboxID]
-				ch.UIDs = append(ch.UIDs, m.UID)
-				ch.MailboxID = m.MailboxID
-				ch.ModSeq = modseq
-				removeChanges[m.MailboxID] = ch
-				remove = append(remove, m)
-			}
-
-			if mb.ID != 0 {
-				err := tx.Update(&mb)
-				xcheckf(ctx, err, "updating count in mailbox")
-				changes = append(changes, mb.ChangeCounts())
-			}
-
-			err = acc.AddMessageSize(log, tx, -totalSize)
-			xcheckf(ctx, err, "updating disk usage")
-
-			// Mark removed messages as not needing training, then retrain them, so if they
-			// were trained, they get untrained.
-			for i := range remove {
-				remove[i].Junk = false
-				remove[i].Notjunk = false
-			}
-			err = acc.RetrainMessages(ctx, log, tx, remove, true)
-			xcheckf(ctx, err, "untraining deleted messages")
-		})
-
-		for _, ch := range removeChanges {
-			sort.Slice(ch.UIDs, func(i, j int) bool {
-				return ch.UIDs[i] < ch.UIDs[j]
-			})
-			changes = append(changes, ch)
-		}
-		store.BroadcastChanges(acc, changes)
-	})
-
-	for _, mID := range messageIDs {
-		p := acc.MessagePath(mID)
-		err := os.Remove(p)
-		log.Check(err, "removing message file for expunge")
-	}
+	xops.MessageDelete(ctx, log, acc, messageIDs)
 }
 
 // FlagsAdd adds flags, either system flags like \Seen or custom keywords. The
@@ -993,76 +836,7 @@ func (Webmail) FlagsAdd(ctx context.Context, messageIDs []int64, flaglist []stri
 		log.Check(err, "closing account")
 	}()
 
-	flags, keywords, err := store.ParseFlagsKeywords(flaglist)
-	xcheckuserf(ctx, err, "parsing flags")
-
-	acc.WithRLock(func() {
-		var changes []store.Change
-
-		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
-			var modseq store.ModSeq
-			var retrain []store.Message
-			var mb, origmb store.Mailbox
-
-			for _, mid := range messageIDs {
-				m := xmessageID(ctx, tx, mid)
-
-				if mb.ID != m.MailboxID {
-					if mb.ID != 0 {
-						err := tx.Update(&mb)
-						xcheckf(ctx, err, "updating mailbox")
-						if mb.MailboxCounts != origmb.MailboxCounts {
-							changes = append(changes, mb.ChangeCounts())
-						}
-						if mb.KeywordsChanged(origmb) {
-							changes = append(changes, mb.ChangeKeywords())
-						}
-					}
-					mb = xmailboxID(ctx, tx, m.MailboxID)
-					origmb = mb
-				}
-				mb.Keywords, _ = store.MergeKeywords(mb.Keywords, keywords)
-
-				mb.Sub(m.MailboxCounts())
-				oflags := m.Flags
-				m.Flags = m.Flags.Set(flags, flags)
-				var kwChanged bool
-				m.Keywords, kwChanged = store.MergeKeywords(m.Keywords, keywords)
-				mb.Add(m.MailboxCounts())
-
-				if m.Flags == oflags && !kwChanged {
-					continue
-				}
-
-				if modseq == 0 {
-					modseq, err = acc.NextModSeq(tx)
-					xcheckf(ctx, err, "assigning next modseq")
-				}
-				m.ModSeq = modseq
-				err = tx.Update(&m)
-				xcheckf(ctx, err, "updating message")
-
-				changes = append(changes, m.ChangeFlags(oflags))
-				retrain = append(retrain, m)
-			}
-
-			if mb.ID != 0 {
-				err := tx.Update(&mb)
-				xcheckf(ctx, err, "updating mailbox")
-				if mb.MailboxCounts != origmb.MailboxCounts {
-					changes = append(changes, mb.ChangeCounts())
-				}
-				if mb.KeywordsChanged(origmb) {
-					changes = append(changes, mb.ChangeKeywords())
-				}
-			}
-
-			err = acc.RetrainMessages(ctx, log, tx, retrain, false)
-			xcheckf(ctx, err, "retraining messages")
-		})
-
-		store.BroadcastChanges(acc, changes)
-	})
+	xops.MessageFlagsAdd(ctx, log, acc, messageIDs, flaglist)
 }
 
 // FlagsClear clears flags, either system flags like \Seen or custom keywords.
@@ -1076,71 +850,7 @@ func (Webmail) FlagsClear(ctx context.Context, messageIDs []int64, flaglist []st
 		log.Check(err, "closing account")
 	}()
 
-	flags, keywords, err := store.ParseFlagsKeywords(flaglist)
-	xcheckuserf(ctx, err, "parsing flags")
-
-	acc.WithRLock(func() {
-		var retrain []store.Message
-		var changes []store.Change
-
-		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
-			var modseq store.ModSeq
-			var mb, origmb store.Mailbox
-
-			for _, mid := range messageIDs {
-				m := xmessageID(ctx, tx, mid)
-
-				if mb.ID != m.MailboxID {
-					if mb.ID != 0 {
-						err := tx.Update(&mb)
-						xcheckf(ctx, err, "updating counts for mailbox")
-						if mb.MailboxCounts != origmb.MailboxCounts {
-							changes = append(changes, mb.ChangeCounts())
-						}
-						// note: cannot remove keywords from mailbox by removing keywords from message.
-					}
-					mb = xmailboxID(ctx, tx, m.MailboxID)
-					origmb = mb
-				}
-
-				oflags := m.Flags
-				mb.Sub(m.MailboxCounts())
-				m.Flags = m.Flags.Set(flags, store.Flags{})
-				var changed bool
-				m.Keywords, changed = store.RemoveKeywords(m.Keywords, keywords)
-				mb.Add(m.MailboxCounts())
-
-				if m.Flags == oflags && !changed {
-					continue
-				}
-
-				if modseq == 0 {
-					modseq, err = acc.NextModSeq(tx)
-					xcheckf(ctx, err, "assigning next modseq")
-				}
-				m.ModSeq = modseq
-				err = tx.Update(&m)
-				xcheckf(ctx, err, "updating message")
-
-				changes = append(changes, m.ChangeFlags(oflags))
-				retrain = append(retrain, m)
-			}
-
-			if mb.ID != 0 {
-				err := tx.Update(&mb)
-				xcheckf(ctx, err, "updating keywords in mailbox")
-				if mb.MailboxCounts != origmb.MailboxCounts {
-					changes = append(changes, mb.ChangeCounts())
-				}
-				// note: cannot remove keywords from mailbox by removing keywords from message.
-			}
-
-			err = acc.RetrainMessages(ctx, log, tx, retrain, false)
-			xcheckf(ctx, err, "retraining messages")
-		})
-
-		store.BroadcastChanges(acc, changes)
-	})
+	xops.MessageFlagsClear(ctx, log, acc, messageIDs, flaglist)
 }
 
 // MailboxCreate creates a new mailbox.

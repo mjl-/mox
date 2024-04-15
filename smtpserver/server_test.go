@@ -143,6 +143,7 @@ func (ts *testserver) close() {
 }
 
 func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
+	ts.t.Helper()
 	ts.runRaw(func(conn net.Conn) {
 		ts.t.Helper()
 
@@ -1443,7 +1444,7 @@ test email
 			}
 			tcheck(t, err, "deliver")
 
-			msgs, err := queue.List(ctxbg, queue.Filter{})
+			msgs, err := queue.List(ctxbg, queue.Filter{}, queue.Sort{})
 			tcheck(t, err, "listing queue")
 			n++
 			tcompare(t, len(msgs), n)
@@ -1592,7 +1593,7 @@ test email
 			}
 			tcheck(t, err, "deliver")
 
-			msgs, err := queue.List(ctxbg, queue.Filter{})
+			msgs, err := queue.List(ctxbg, queue.Filter{}, queue.Sort{})
 			tcheck(t, err, "listing queue")
 			tcompare(t, len(msgs), 1)
 			tcompare(t, msgs[0].RequireTLS, expRequireTLS)
@@ -1808,8 +1809,8 @@ QW4gYXR0YWNoZWQgdGV4dCBmaWxlLg==
 				return
 			}
 
-			msgs, _ := queue.List(ctxbg, queue.Filter{})
-			queuedMsg := msgs[len(msgs)-1]
+			msgs, _ := queue.List(ctxbg, queue.Filter{}, queue.Sort{Field: "Queued", Asc: false})
+			queuedMsg := msgs[0]
 			if queuedMsg.SMTPUTF8 != expectedSmtputf8 {
 				t.Fatalf("[%s / %s / %s / %s] got SMTPUTF8 %t, expected %t", mailFrom, rcptTo, headerValue, filename, queuedMsg.SMTPUTF8, expectedSmtputf8)
 			}
@@ -1827,4 +1828,80 @@ QW4gYXR0YWNoZWQgdGV4dCBmaWxlLg==
 	test(`mjl@mox.example`, `remote@example.org`, "header-ascii", "utf8-🫠️.txt", true, true, nil)
 	test(`Ω@mox.example`, `🙂@example.org`, "header-utf8-😍", "utf8-🫠️.txt", true, true, nil)
 	test(`mjl@mox.example`, `remote@xn--vg8h.example.org`, "header-ascii", "ascii.txt", true, false, nil)
+}
+
+// TestExtra checks whether submission of messages with "X-Mox-Extra-<key>: value"
+// headers cause those those key/value pairs to be added to the Extra field in the
+// queue.
+func TestExtra(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
+	defer ts.close()
+
+	ts.user = "mjl@mox.example"
+	ts.pass = password0
+	ts.submission = true
+
+	extraMsg := strings.ReplaceAll(`From: <mjl@mox.example>
+To: <remote@example.org>
+Subject: test
+X-Mox-Extra-Test: testvalue
+X-Mox-Extra-a: 123
+X-Mox-Extra-☺: ☹
+X-Mox-Extra-x-cANONICAL-z: ok
+Message-Id: <test@mox.example>
+
+test email
+`, "\n", "\r\n")
+
+	ts.run(func(err error, client *smtpclient.Client) {
+		t.Helper()
+		tcheck(t, err, "init client")
+		mailFrom := "mjl@mox.example"
+		rcptTo := "mjl@mox.example"
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
+		tcheck(t, err, "deliver")
+	})
+	msgs, err := queue.List(ctxbg, queue.Filter{}, queue.Sort{})
+	tcheck(t, err, "queue list")
+	tcompare(t, len(msgs), 1)
+	tcompare(t, msgs[0].Extra, map[string]string{
+		"Test":          "testvalue",
+		"A":             "123",
+		"☺":             "☹",
+		"X-Canonical-Z": "ok",
+	})
+	// note: these headers currently stay in the message.
+}
+
+// TestExtraDup checks for an error for duplicate x-mox-extra-* keys.
+func TestExtraDup(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
+	defer ts.close()
+
+	ts.user = "mjl@mox.example"
+	ts.pass = password0
+	ts.submission = true
+
+	extraMsg := strings.ReplaceAll(`From: <mjl@mox.example>
+To: <remote@example.org>
+Subject: test
+X-Mox-Extra-Test: testvalue
+X-Mox-Extra-Test: testvalue
+Message-Id: <test@mox.example>
+
+test email
+`, "\n", "\r\n")
+
+	ts.run(func(err error, client *smtpclient.Client) {
+		t.Helper()
+		tcheck(t, err, "init client")
+		mailFrom := "mjl@mox.example"
+		rcptTo := "mjl@mox.example"
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
+		var cerr smtpclient.Error
+		expErr := smtpclient.Error{Code: smtp.C554TransactionFailed, Secode: smtp.SeMsg6Other0}
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode {
+			t.Fatalf("got err %#v, expected %#v", err, expErr)
+		}
+	})
 }

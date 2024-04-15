@@ -182,6 +182,8 @@ type Listener struct {
 	AdminHTTPS   WebService `sconf:"optional" sconf-doc:"Admin web interface listener like AdminHTTP, but for HTTPS. Requires a TLS config."`
 	WebmailHTTP  WebService `sconf:"optional" sconf-doc:"Webmail client, for reading email. Default path is /webmail/."`
 	WebmailHTTPS WebService `sconf:"optional" sconf-doc:"Webmail client, like WebmailHTTP, but for HTTPS. Requires a TLS config."`
+	WebAPIHTTP   WebService `sconf:"optional" sconf-doc:"Like WebAPIHTTP, but with plain HTTP, without TLS."`
+	WebAPIHTTPS  WebService `sconf:"optional" sconf-doc:"WebAPI, a simple HTTP/JSON-based API for email, with HTTPS (requires a TLS config). Default path is /webapi/."`
 	MetricsHTTP  struct {
 		Enabled bool
 		Port    int `sconf:"optional" sconf-doc:"Default 8010."`
@@ -210,7 +212,7 @@ type Listener struct {
 	} `sconf:"optional" sconf-doc:"All configured WebHandlers will serve on an enabled listener. Either ACME must be configured, or for each WebHandler domain a TLS certificate must be configured."`
 }
 
-// WebService is an internal web interface: webmail, account, admin.
+// WebService is an internal web interface: webmail, webaccount, webadmin, webapi.
 type WebService struct {
 	Enabled   bool
 	Port      int    `sconf:"optional" sconf-doc:"Default 80 for HTTP and 443 for HTTPS."`
@@ -356,6 +358,19 @@ type Route struct {
 
 // todo: move RejectsMailbox to store.Mailbox.SpecialUse, possibly with "X" prefix?
 
+// note: outgoing hook events are in ../queue/hooks.go, ../mox-/config.go, ../queue.go and ../webapi/gendoc.sh. keep in sync.
+
+type OutgoingWebhook struct {
+	URL           string   `sconf-doc:"URL to POST webhooks."`
+	Authorization string   `sconf:"optional" sconf-doc:"If not empty, value of Authorization header to add to HTTP requests."`
+	Events        []string `sconf:"optional" sconf-doc:"Events to send outgoing delivery notifications for. If absent, all events are sent. Valid values: delivered, suppressed, delayed, failed, relayed, expanded, canceled, unrecognized."`
+}
+
+type IncomingWebhook struct {
+	URL           string `sconf-doc:"URL to POST webhooks to for incoming deliveries over SMTP."`
+	Authorization string `sconf:"optional" sconf-doc:"If not empty, value of Authorization header to add to HTTP requests."`
+}
+
 type SubjectPass struct {
 	Period time.Duration `sconf-doc:"How long unique values are accepted after generating, e.g. 12h."` // todo: have a reasonable default for this?
 }
@@ -368,6 +383,12 @@ type AutomaticJunkFlags struct {
 }
 
 type Account struct {
+	OutgoingWebhook          *OutgoingWebhook `sconf:"optional" sconf-doc:"Webhooks for events about outgoing deliveries."`
+	IncomingWebhook          *IncomingWebhook `sconf:"optional" sconf-doc:"Webhooks for events about incoming deliveries over SMTP."`
+	FromIDLoginAddresses     []string         `sconf:"optional" sconf-doc:"Login addresses that cause outgoing email to be sent with SMTP MAIL FROM addresses with a unique id after the localpart catchall separator (which must be enabled when addresses are specified here). Any delivery status notifications (DSN, e.g. for bounces), can be related to the original message and recipient with unique id's. You can login to an account with any valid email address, including variants with the localpart catchall separator. You can use this mechanism to both send outgoing messages both with and without unique fromid for a given address."`
+	KeepRetiredMessagePeriod time.Duration    `sconf:"optional" sconf-doc:"Period to keep messages retired from the queue (delivered or failed) around. Keeping retired messages is useful for maintaining the suppression list for transactional email, for matching incoming DSNs to sent messages, and for debugging. The time at which to clean up (remove) is calculated at retire time. E.g. 168h (1 week)."`
+	KeepRetiredWebhookPeriod time.Duration    `sconf:"optional" sconf-doc:"Period to keep webhooks retired from the queue (delivered or failed) around. Useful for debugging. The time at which to clean up (remove) is calculated at retire time. E.g. 168h (1 week)."`
+
 	Domain                       string                 `sconf-doc:"Default domain for account. Deprecated behaviour: If a destination is not a full address but only a localpart, this domain is added to form a full address."`
 	Description                  string                 `sconf:"optional" sconf-doc:"Free form description, e.g. full name or alternative contact info."`
 	FullName                     string                 `sconf:"optional" sconf-doc:"Full name, to use in message From header when composing messages in webmail. Can be overridden per destination."`
@@ -383,10 +404,11 @@ type Account struct {
 	NoFirstTimeSenderDelay       bool                   `sconf:"optional" sconf-doc:"Do not apply a delay to SMTP connections before accepting an incoming message from a first-time sender. Can be useful for accounts that sends automated responses and want instant replies."`
 	Routes                       []Route                `sconf:"optional" sconf-doc:"Routes for delivering outgoing messages through the queue. Each delivery attempt evaluates these account routes, domain routes and finally global routes. The transport of the first matching route is used in the delivery attempt. If no routes match, which is the default with no configured routes, messages are delivered directly from the queue."`
 
-	DNSDomain      dns.Domain     `sconf:"-"` // Parsed form of Domain.
-	JunkMailbox    *regexp.Regexp `sconf:"-" json:"-"`
-	NeutralMailbox *regexp.Regexp `sconf:"-" json:"-"`
-	NotJunkMailbox *regexp.Regexp `sconf:"-" json:"-"`
+	DNSDomain                  dns.Domain     `sconf:"-"` // Parsed form of Domain.
+	JunkMailbox                *regexp.Regexp `sconf:"-" json:"-"`
+	NeutralMailbox             *regexp.Regexp `sconf:"-" json:"-"`
+	NotJunkMailbox             *regexp.Regexp `sconf:"-" json:"-"`
+	ParsedFromIDLoginAddresses []smtp.Address `sconf:"-" json:"-"`
 }
 
 type JunkFilter struct {

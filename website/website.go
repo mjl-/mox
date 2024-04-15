@@ -481,6 +481,7 @@ h2 { background: linear-gradient(90deg, #6dd5fd 0%, #77e8e3 100%); display: inli
 					External links:
 					<ul style="list-style: none">
 						<li><a href="https://github.com/mjl-/mox">Sources at github</a></li>
+						<li><a href="https://pkg.go.dev/github.com/mjl-/mox/webapi/">Webapi &amp; webhooks</a></li>
 					</ul>
 				</div>
 			</nav>

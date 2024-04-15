@@ -33,6 +33,8 @@ See Quickstart below to get started.
   support is limited).
 - Webserver with serving static files and forwarding requests (reverse
   proxy), so port 443 can also be used to serve websites.
+- Simple HTTP/JSON API for sending transaction email and receiving delivery
+  events and incoming messages (webapi and webhooks).
 - Prometheus metrics and structured logging for operational insight.
 - "mox localserve" subcommand for running mox locally for email-related
   testing/developing, including pedantic mode.
@@ -133,12 +135,13 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
+- Aliases, for delivering to multiple local accounts.
 - Webmail improvements
-- HTTP-based API for sending messages and receiving delivery feedback
 - Calendaring with CalDAV/iCal
 - More IMAP extensions (PREVIEW, WITHIN, IMPORTANT, COMPRESS=DEFLATE,
   CREATE-SPECIAL-USE, SAVEDATE, UNAUTHENTICATE, REPLACE, QUOTA, NOTIFY,
   MULTIAPPEND, OBJECTID, MULTISEARCH, THREAD, SORT)
+- SMTP DSN extension
 - ARC, with forwarded email from trusted source
 - Forwarding (to an external address)
 - Add special IMAP mailbox ("Queue?") that contains queued but
@@ -446,6 +449,23 @@ domains. Keep in mind some 3rd party submission servers may mishandle your
 messages, for example by replacing your Message-Id header and thereby
 invalidating your DKIM-signatures, or rejecting messages with more than one
 DKIM-signature.
+
+## Can I use mox to send transactional email?
+
+Yes. While you can use SMTP submission to send messages you've composed
+yourself, and monitor a mailbox for DSNs, a more convenient option is to use
+the mox HTTP/JSON-based webapi and webhooks.
+
+The mox webapi can be used to send outgoing messages that mox composes. The web
+api can also be used to deal with messages stored in an account, like changing
+message flags, retrieving messages in parsed form or individual parts of
+multipart messages, or moving messages to another mailbox or deleting messages
+altogether.
+
+Mox webhooks can be used to receive updates about incoming and outgoing
+deliveries. Mox can automatically manage per account suppression lists.
+
+See https://www.xmox.nl/features/#hdr-webapi-and-webhooks for details.
 
 ## Can I use existing TLS certificates/keys?
 

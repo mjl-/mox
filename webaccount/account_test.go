@@ -16,18 +16,22 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
 
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/webauth"
+	"github.com/mjl-/mox/webhook"
 )
 
 var ctxbg = context.Background()
@@ -71,6 +75,13 @@ func tneedErrorCode(t *testing.T, code string, fn func()) {
 	}()
 
 	fn()
+}
+
+func tcompare(t *testing.T, got, expect any) {
+	t.Helper()
+	if !reflect.DeepEqual(got, expect) {
+		t.Fatalf("got:\n%#v\nexpected:\n%#v", got, expect)
+	}
 }
 
 func TestAccount(t *testing.T) {
@@ -216,7 +227,9 @@ func TestAccount(t *testing.T) {
 
 	api.SetPassword(ctx, "test1234")
 
-	account, _, _ := api.Account(ctx)
+	err = queue.Init() // For DB.
+	tcheck(t, err, "queue init")
+	account, _, _, _ := api.Account(ctx)
 	api.DestinationSave(ctx, "mjl☺@mox.example", account.Destinations["mjl☺@mox.example"], account.Destinations["mjl☺@mox.example"]) // todo: save modified value and compare it afterwards
 
 	api.AccountSaveFullName(ctx, account.FullName+" changed") // todo: check if value was changed
@@ -370,6 +383,59 @@ func TestAccount(t *testing.T) {
 	testExport("/export/mail-export-maildir.zip", true, 6)
 	testExport("/export/mail-export-mbox.tgz", false, 2)
 	testExport("/export/mail-export-mbox.zip", true, 2)
+
+	sl := api.SuppressionList(ctx)
+	tcompare(t, len(sl), 0)
+
+	api.SuppressionAdd(ctx, "mjl@mox.example", true, "testing")
+	tneedErrorCode(t, "user:error", func() { api.SuppressionAdd(ctx, "mjl@mox.example", true, "testing") }) // Duplicate.
+	tneedErrorCode(t, "user:error", func() { api.SuppressionAdd(ctx, "bogus", true, "testing") })           // Bad address.
+
+	sl = api.SuppressionList(ctx)
+	tcompare(t, len(sl), 1)
+
+	api.SuppressionRemove(ctx, "mjl@mox.example")
+	tneedErrorCode(t, "user:error", func() { api.SuppressionRemove(ctx, "mjl@mox.example") }) // Absent.
+	tneedErrorCode(t, "user:error", func() { api.SuppressionRemove(ctx, "bogus") })           // Not an address.
+
+	var hooks int
+	hookServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "ok")
+		hooks++
+	}))
+	defer hookServer.Close()
+
+	api.OutgoingWebhookSave(ctx, "http://localhost:1234", "Basic base64", []string{"delivered"})
+	api.OutgoingWebhookSave(ctx, "http://localhost:1234", "Basic base64", []string{})
+	tneedErrorCode(t, "user:error", func() {
+		api.OutgoingWebhookSave(ctx, "http://localhost:1234/outgoing", "Basic base64", []string{"bogus"})
+	})
+	tneedErrorCode(t, "user:error", func() { api.OutgoingWebhookSave(ctx, "invalid", "Basic base64", nil) })
+	api.OutgoingWebhookSave(ctx, "", "", nil) // Restore.
+
+	code, response, errmsg := api.OutgoingWebhookTest(ctx, hookServer.URL, "", webhook.Outgoing{})
+	tcompare(t, code, 200)
+	tcompare(t, response, "ok\n")
+	tcompare(t, errmsg, "")
+	tneedErrorCode(t, "user:error", func() { api.OutgoingWebhookTest(ctx, "bogus", "", webhook.Outgoing{}) })
+
+	api.IncomingWebhookSave(ctx, "http://localhost:1234", "Basic base64")
+	tneedErrorCode(t, "user:error", func() { api.IncomingWebhookSave(ctx, "invalid", "Basic base64") })
+	api.IncomingWebhookSave(ctx, "", "") // Restore.
+
+	code, response, errmsg = api.IncomingWebhookTest(ctx, hookServer.URL, "", webhook.Incoming{})
+	tcompare(t, code, 200)
+	tcompare(t, response, "ok\n")
+	tcompare(t, errmsg, "")
+	tneedErrorCode(t, "user:error", func() { api.IncomingWebhookTest(ctx, "bogus", "", webhook.Incoming{}) })
+
+	api.FromIDLoginAddressesSave(ctx, []string{"mjl☺@mox.example"})
+	api.FromIDLoginAddressesSave(ctx, []string{"mjl☺@mox.example", "mjl☺+fromid@mox.example"})
+	api.FromIDLoginAddressesSave(ctx, []string{})
+	tneedErrorCode(t, "user:error", func() { api.FromIDLoginAddressesSave(ctx, []string{"bogus@other.example"}) })
+
+	api.KeepRetiredPeriodsSave(ctx, time.Minute, time.Minute)
+	api.KeepRetiredPeriodsSave(ctx, 0, 0) // Restore.
 
 	api.Logout(ctx)
 	tneedErrorCode(t, "server:error", func() { api.Logout(ctx) })

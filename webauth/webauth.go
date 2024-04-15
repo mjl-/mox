@@ -129,7 +129,7 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 		return "", "", "", false
 	}
 
-	ip := remoteIP(log, isForwarded, r)
+	ip := RemoteIP(log, isForwarded, r)
 	if ip == nil {
 		respondAuthError("user:noAuth", "cannot find ip for rate limit check (missing x-forwarded-for header?)")
 		return "", "", "", false
@@ -181,7 +181,7 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 	return accountName, sessionToken, loginAddress, true
 }
 
-func remoteIP(log mlog.Log, isForwarded bool, r *http.Request) net.IP {
+func RemoteIP(log mlog.Log, isForwarded bool, r *http.Request) net.IP {
 	if isForwarded {
 		s := r.Header.Get("X-Forwarded-For")
 		ipstr := strings.TrimSpace(strings.Split(s, ",")[0])
@@ -230,7 +230,7 @@ func Login(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind, coo
 		return "", &sherpa.Error{Code: "user:error", Message: "missing login token"}
 	}
 
-	ip := remoteIP(log, isForwarded, r)
+	ip := RemoteIP(log, isForwarded, r)
 	if ip == nil {
 		return "", fmt.Errorf("cannot find ip for rate limit check (missing x-forwarded-for header?)")
 	}

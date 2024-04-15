@@ -14,6 +14,7 @@ h2 { font-size: 1.1rem; }
 h3, h4 { font-size: 1rem; }
 ul { padding-left: 1rem; }
 .literal { background-color: #eee; padding: .5em 1em; border: 1px solid #eee; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 15px; tab-size: 4; }
+table { border-spacing: 0; }
 table td, table th { padding: .2em .5em; }
 table > tbody > tr:nth-child(odd) { background-color: #f8f8f8; }
 table.slim td, table.slim th { padding: 0; }
@@ -23,8 +24,8 @@ p { margin-bottom: 1em; max-width: 50em; }
 fieldset { border: 0; }
 .scriptswitch { text-decoration: underline #dca053 2px; }
 thead { position: sticky; top: 0; background-color: white; box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1); }
-#page { opacity: 1; animation: fadein 0.15s ease-in; }
-#page.loading { opacity: 0.1; animation: fadeout 1s ease-out; }
+#page, .loadend { opacity: 1; animation: fadein 0.15s ease-in; }
+#page.loading, .loadstart { opacity: 0.1; animation: fadeout 1s ease-out; }
 @keyframes fadein { 0% { opacity: 0 } 100% { opacity: 1 } }
 @keyframes fadeout { 0% { opacity: 1 } 100% { opacity: 0.1 } }
 .autosize { display: inline-grid; max-width: 90vw; }
