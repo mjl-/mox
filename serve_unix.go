@@ -335,10 +335,16 @@ Only implemented on unix systems, not Windows.
 				return next
 			}
 			m.Size = int64(n)
-			if err := a.DeliverMailbox(log, mox.Conf.Static.Postmaster.Mailbox, &m, f); err != nil {
-				log.Errorx("changelog delivery", err)
+
+			var derr error
+			a.WithWLock(func() {
+				derr = a.DeliverMailbox(log, mox.Conf.Static.Postmaster.Mailbox, &m, f)
+			})
+			if derr != nil {
+				log.Errorx("changelog delivery", derr)
 				return next
 			}
+
 			log.Info("delivered changelog",
 				slog.Any("current", current),
 				slog.Any("lastknown", lastknown),
