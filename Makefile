@@ -21,6 +21,9 @@ build1:
 install: build0 frontend
 	CGO_ENABLED=0 go install
 
+race: build0
+	go build -race
+
 test:
 	CGO_ENABLED=0 go test -shuffle=on -coverprofile cover.out ./...
 	go tool cover -html=cover.out -o cover.html

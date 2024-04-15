@@ -772,8 +772,9 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 	}
 
 	server := &http.Server{
-		Handler:           handler,
-		TLSConfig:         tlsConfig,
+		Handler: handler,
+		// Clone because our multiple Server.Serve calls modify config concurrently leading to data race.
+		TLSConfig:         tlsConfig.Clone(),
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       65 * time.Second, // Chrome closes connections after 60 seconds, firefox after 115 seconds.
 		ErrorLog:          golog.New(mlog.LogWriter(pkglog.With(slog.String("pkg", "net/http")), slog.LevelInfo, protocol+" error"), "", 0),
