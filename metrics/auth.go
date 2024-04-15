@@ -1,3 +1,4 @@
+// Package metrics has (prometheus) metrics shared between components of mox, e.g. for authentication.
 package metrics
 
 import (
