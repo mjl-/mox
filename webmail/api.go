@@ -378,6 +378,9 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		// todo: may want to warn user that they should consider sending with a ascii-only localpart, in case receiver doesn't support smtputf8.
 		smtputf8 = true
 	}
+	if !smtputf8 && replyTo != nil && replyTo.Address.Localpart.IsInternational() {
+		smtputf8 = true
+	}
 
 	// Create file to compose message into.
 	dataFile, err := store.CreateMessageTemp(log, "webmail-submit")
