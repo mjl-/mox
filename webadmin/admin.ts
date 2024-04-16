@@ -553,10 +553,14 @@ const inlineBox = (color: string, ...l: ElemArg[]) =>
 	)
 
 const accounts = async () => {
-	const accounts = await client.Accounts()
+	const [accounts, domains] = await Promise.all([
+		client.Accounts(),
+		client.Domains(),
+	])
 
 	let fieldset: HTMLFieldSetElement
-	let email: HTMLInputElement
+	let localpart: HTMLInputElement
+	let domain: HTMLSelectElement
 	let account: HTMLInputElement
 	let accountModified = false
 
@@ -576,22 +580,27 @@ const accounts = async () => {
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
 				e.stopPropagation()
-				await check(fieldset, client.AccountAdd(account.value, email.value))
+				await check(fieldset, client.AccountAdd(account.value, localpart.value+'@'+domain.value))
 				window.location.hash = '#accounts/'+account.value
 			},
 			fieldset=dom.fieldset(
+				dom.p('Start with the initial email address for the account. The localpart is the account name too by default, but the account name can be changed.'),
 				dom.label(
 					style({display: 'inline-block'}),
-					dom.span('Email address', attr.title('The initial email address for the new account. More addresses can be added after the account has been created.')),
+					dom.span('Localpart', attr.title('The part before the "@" of an email address. More addresses, also at different domains, can be added after the account has been created.')),
 					dom.br(),
-					// Cannot use type=email, it doesn't actually check for valid email addresses,
-					// rejecting any non-ascii localpart, accepting some invalid addresses, and
-					// rejecting other valid addresses. https://github.com/whatwg/html/issues/4562
-					email=dom.input(attr.required(''), function keyup() {
+					localpart=dom.input(attr.required(''), function keyup() {
 						if (!accountModified) {
-							account.value = email.value.split('@')[0]
+							account.value = localpart.value
 						}
 					}),
+				),
+				'@',
+				dom.label(
+					style({display: 'inline-block'}),
+					dom.span('Domain', attr.title('The domain of the email address, after the "@".')),
+					dom.br(),
+					domain=dom.select(attr.required(''), (domains || []).map(d => dom.option(domainName(d)))),
 				),
 				' ',
 				dom.label(

@@ -1904,26 +1904,26 @@ const inlineBox = (color, ...l) => dom.span(style({
 	borderRadius: '3px',
 }), l);
 const accounts = async () => {
-	const accounts = await client.Accounts();
+	const [accounts, domains] = await Promise.all([
+		client.Accounts(),
+		client.Domains(),
+	]);
 	let fieldset;
-	let email;
+	let localpart;
+	let domain;
 	let account;
 	let accountModified = false;
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Accounts'), dom.h2('Accounts'), (accounts || []).length === 0 ? dom.p('No accounts') :
 		dom.ul((accounts || []).map(s => dom.li(dom.a(s, attr.href('#accounts/' + s))))), dom.br(), dom.h2('Add account'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		await check(fieldset, client.AccountAdd(account.value, email.value));
+		await check(fieldset, client.AccountAdd(account.value, localpart.value + '@' + domain.value));
 		window.location.hash = '#accounts/' + account.value;
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Email address', attr.title('The initial email address for the new account. More addresses can be added after the account has been created.')), dom.br(), 
-	// Cannot use type=email, it doesn't actually check for valid email addresses,
-	// rejecting any non-ascii localpart, accepting some invalid addresses, and
-	// rejecting other valid addresses. https://github.com/whatwg/html/issues/4562
-	email = dom.input(attr.required(''), function keyup() {
+	}, fieldset = dom.fieldset(dom.p('Start with the initial email address for the account. The localpart is the account name too by default, but the account name can be changed.'), dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The part before the "@" of an email address. More addresses, also at different domains, can be added after the account has been created.')), dom.br(), localpart = dom.input(attr.required(''), function keyup() {
 		if (!accountModified) {
-			account.value = email.value.split('@')[0];
+			account.value = localpart.value;
 		}
-	})), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account name', attr.title('An account has a password, and email address(es) (possibly at different domains). Its messages and the message index database are are stored in the file system in a directory with the name of the account. An account name is not an email address. Use a name like a unix user name, or the localpart (the part before the "@") of the initial address.')), dom.br(), account = dom.input(attr.required(''), function change() {
+	})), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain', attr.title('The domain of the email address, after the "@".')), dom.br(), domain = dom.select(attr.required(''), (domains || []).map(d => dom.option(domainName(d))))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account name', attr.title('An account has a password, and email address(es) (possibly at different domains). Its messages and the message index database are are stored in the file system in a directory with the name of the account. An account name is not an email address. Use a name like a unix user name, or the localpart (the part before the "@") of the initial address.')), dom.br(), account = dom.input(attr.required(''), function change() {
 		accountModified = true;
 	})), ' ', dom.submitbutton('Add account', attr.title('The account will be added and the config reloaded.')))));
 };
