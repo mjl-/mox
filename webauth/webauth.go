@@ -227,7 +227,11 @@ func LoginPrep(ctx context.Context, log mlog.Log, kind, cookiePath string, isFor
 func Login(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind, cookiePath string, isForwarded bool, w http.ResponseWriter, r *http.Request, loginToken, username, password string) (store.CSRFToken, error) {
 	loginCookie, _ := r.Cookie(kind + "login")
 	if loginCookie == nil || loginCookie.Value != loginToken {
-		return "", &sherpa.Error{Code: "user:error", Message: "missing login token"}
+		msg := "missing login token cookie"
+		if isForwarded && loginCookie == nil {
+			msg += " (hint: reverse proxy must keep path, for login cookie)"
+		}
+		return "", &sherpa.Error{Code: "user:error", Message: msg}
 	}
 
 	ip := RemoteIP(log, isForwarded, r)
