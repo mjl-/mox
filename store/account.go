@@ -1405,7 +1405,7 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 		}
 	}
 
-	// todo: perhaps we should match the recipients based on smtp submission and a matching message-id? we now miss the addresses in bcc's. for webmail, we could insert the recipients directly.
+	// todo: perhaps we should match the recipients based on smtp submission and a matching message-id? we now miss the addresses in bcc's if the mail client doesn't save a message that includes the bcc header in the sent mailbox.
 	if mb.Sent && part != nil && part.Envelope != nil {
 		e := part.Envelope
 		sent := e.Date

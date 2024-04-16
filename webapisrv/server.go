@@ -615,7 +615,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 	from, fromPath := froms[0], fromPaths[0]
 	to, toPaths := xparseAddresses(m.To)
 	cc, ccPaths := xparseAddresses(m.CC)
-	_, bccPaths := xparseAddresses(m.BCC)
+	bcc, bccPaths := xparseAddresses(m.BCC)
 
 	recipients := append(append(toPaths, ccPaths...), bccPaths...)
 	addresses := append(append(m.To, m.CC...), m.BCC...)
@@ -714,6 +714,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 	}
 	xc.HeaderAddrs("To", to)
 	xc.HeaderAddrs("Cc", cc)
+	// We prepend Bcc headers to the message when adding to the Sent mailbox.
 	if m.Subject != "" {
 		xcheckcontrol(m.Subject)
 		xc.Subject(m.Subject)
@@ -1036,6 +1037,17 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 
 				modseq, err := acc.NextModSeq(tx)
 				xcheckf(err, "next modseq")
+
+				// If there were bcc headers, prepend those to the stored message only, before the
+				// DKIM signature. The DKIM-signature oversigns the bcc header, so this stored message
+				// won't validate with DKIM anymore, which is fine.
+				if len(bcc) > 0 {
+					var sb strings.Builder
+					xbcc := message.NewComposer(&sb, 100*1024, smtputf8)
+					xbcc.HeaderAddrs("Bcc", bcc)
+					xbcc.Flush()
+					msgPrefix = sb.String() + msgPrefix
+				}
 
 				sentm := store.Message{
 					CreateSeq:     modseq,

@@ -101,7 +101,7 @@
 		},
 		{
 			"Name": "MessageSubmit",
-			"Docs": "MessageSubmit sends a message by submitting it the outgoing email queue. The\nmessage is sent to all addresses listed in the To, Cc and Bcc addresses, without\nBcc message header.\n\nIf a Sent mailbox is configured, messages are added to it after submitting\nto the delivery queue.",
+			"Docs": "MessageSubmit sends a message by submitting it the outgoing email queue. The\nmessage is sent to all addresses listed in the To, Cc and Bcc addresses, without\nBcc message header.\n\nIf a Sent mailbox is configured, messages are added to it after submitting\nto the delivery queue. If Bcc addresses were present, a header is prepended\nto the message stored in the Sent mailbox.",
 			"Params": [
 				{
 					"Name": "m",

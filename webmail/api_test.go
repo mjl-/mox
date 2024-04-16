@@ -424,7 +424,7 @@ func TestAPI(t *testing.T) {
 	tcompare(t, len(l), 0)
 	tcompare(t, full, true)
 	l, full = api.CompleteRecipient(ctx, "cc2")
-	tcompare(t, l, []string{"mjl cc2 <mjl+cc2@mox.example>"})
+	tcompare(t, l, []string{"mjl cc2 <mjl+cc2@mox.example>", "mjl bcc2 <mjl+bcc2@mox.example>"})
 	tcompare(t, full, true)
 
 	// RecipientSecurity

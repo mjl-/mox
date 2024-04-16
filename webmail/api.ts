@@ -715,7 +715,8 @@ export class Client {
 	// Bcc message header.
 	// 
 	// If a Sent mailbox is configured, messages are added to it after submitting
-	// to the delivery queue.
+	// to the delivery queue. If Bcc addresses were present, a header is prepended
+	// to the message stored in the Sent mailbox.
 	async MessageSubmit(m: SubmitMessage): Promise<void> {
 		const fn: string = "MessageSubmit"
 		const paramTypes: string[][] = [["SubmitMessage"]]

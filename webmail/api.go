@@ -286,7 +286,8 @@ func xrandom(ctx context.Context, n int) []byte {
 // Bcc message header.
 //
 // If a Sent mailbox is configured, messages are added to it after submitting
-// to the delivery queue.
+// to the delivery queue. If Bcc addresses were present, a header is prepended
+// to the message stored in the Sent mailbox.
 func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/api.go:/MessageSubmit\( and ../webapisrv/server.go:/Send\(
 
@@ -343,9 +344,11 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		recipients = append(recipients, addr.Address)
 	}
 
+	var bccAddrs []message.NameAddress
 	for _, s := range m.Bcc {
 		addr, err := parseAddress(s)
 		xcheckuserf(ctx, err, "parsing Bcc address")
+		bccAddrs = append(bccAddrs, addr)
 		recipients = append(recipients, addr.Address)
 	}
 
@@ -446,6 +449,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	}
 	xc.HeaderAddrs("To", toAddrs)
 	xc.HeaderAddrs("Cc", ccAddrs)
+	// We prepend Bcc headers to the message when adding to the Sent mailbox.
 	if m.Subject != "" {
 		xc.Subject(m.Subject)
 	}
@@ -748,6 +752,17 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			if modseq == 0 {
 				modseq, err = acc.NextModSeq(tx)
 				xcheckf(ctx, err, "next modseq")
+			}
+
+			// If there were bcc headers, prepend those to the stored message only, before the
+			// DKIM signature. The DKIM-signature oversigns the bcc header, so this stored
+			// message won't validate with DKIM anymore, which is fine.
+			if len(bccAddrs) > 0 {
+				var sb strings.Builder
+				xbcc := message.NewComposer(&sb, 100*1024, smtputf8)
+				xbcc.HeaderAddrs("Bcc", bccAddrs)
+				xbcc.Flush()
+				msgPrefix = sb.String() + msgPrefix
 			}
 
 			sentm := store.Message{

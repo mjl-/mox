@@ -382,7 +382,6 @@ func TestServer(t *testing.T) {
 	msgRes, err := client.MessageGet(ctxbg, webapi.MessageGetRequest{MsgID: 1})
 	tcheckf(t, err, "remove suppressed address")
 	sentMsg := sendReq.Message
-	sentMsg.BCC = []webapi.NameAddress{} // todo: the Sent message should contain the BCC. for webmail too.
 	sentMsg.Date = msgRes.Message.Date
 	sentMsg.HTML += "\n"
 	tcompare(t, msgRes.Message, sentMsg)

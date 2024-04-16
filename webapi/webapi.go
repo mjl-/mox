@@ -64,7 +64,8 @@ type Message struct {
 	To []NameAddress
 	CC []NameAddress
 	// For submissions, BCC addressees receive the message but are not added to the
-	// message headers. For incoming messages, this is typically empty.
+	// headers of the outgoing message. Only the message saved the to the Sent mailbox
+	// gets the Bcc header prepended. For incoming messages, this is typically empty.
 	BCC []NameAddress
 
 	// Optional Reply-To header, where the recipient is asked to send replies to.
