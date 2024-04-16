@@ -369,23 +369,31 @@ func parseListPostAddress(s string) *MessageAddress {
 		List-Post: <mailto:moderator@host.com> (Postings are Moderated)
 		List-Post: <mailto:moderator@host.com?subject=list%20posting>
 		List-Post: NO (posting not allowed on this list)
+		List-Post: <https://groups.google.com/group/golang-dev/post>, <mailto:golang-dev@googlegroups.com>
 	*/
 	s = strings.TrimSpace(s)
-	if !strings.HasPrefix(s, "<mailto:") {
-		return nil
+	for s != "" {
+		if !strings.HasPrefix(s, "<") {
+			return nil
+		}
+		addr, ns, found := strings.Cut(s[1:], ">")
+		if !found {
+			return nil
+		}
+		if strings.HasPrefix(addr, "mailto:") {
+			u, err := url.Parse(addr)
+			if err != nil {
+				return nil
+			}
+			addr, err := smtp.ParseAddress(u.Opaque)
+			if err != nil {
+				return nil
+			}
+			return &MessageAddress{User: addr.Localpart.String(), Domain: addr.Domain}
+		}
+		s = strings.TrimSpace(ns)
+		s = strings.TrimPrefix(s, ",")
+		s = strings.TrimSpace(s)
 	}
-	s = s[1:]
-	s, _, found := strings.Cut(s, ">")
-	if !found {
-		return nil
-	}
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil
-	}
-	addr, err := smtp.ParseAddress(u.Opaque)
-	if err != nil {
-		return nil
-	}
-	return &MessageAddress{User: addr.Localpart.String(), Domain: addr.Domain}
+	return nil
 }

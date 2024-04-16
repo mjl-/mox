@@ -45,5 +45,6 @@ func TestParseListPostAddress(t *testing.T) {
 	check("<mailto:moderator@host.com> (Postings are Moderated)", &MessageAddress{User: "moderator", Domain: dns.Domain{ASCII: "host.com"}})
 	check("<mailto:moderator@host.com?subject=list%20posting>", &MessageAddress{User: "moderator", Domain: dns.Domain{ASCII: "host.com"}})
 	check("NO (posting not allowed on this list)", nil)
+	check("<https://groups.google.com/group/golang-dev/post>, <mailto:golang-dev@googlegroups.com>", &MessageAddress{User: "golang-dev", Domain: dns.Domain{ASCII: "googlegroups.com"}})
 	check("", nil)
 }
