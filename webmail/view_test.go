@@ -39,6 +39,7 @@ func TestView(t *testing.T) {
 	defer func() {
 		err := acc.Close()
 		pkglog.Check(err, "closing account")
+		acc.CheckClosed()
 	}()
 
 	api := Webmail{maxMessageSize: 1024 * 1024, cookiePath: "/"}

@@ -24,6 +24,7 @@ func TestThreadingUpgrade(t *testing.T) {
 	defer func() {
 		err = acc.Close()
 		tcheck(t, err, "closing account")
+		acc.CheckClosed()
 	}()
 	defer Switchboard()()
 
@@ -116,6 +117,7 @@ func TestThreadingUpgrade(t *testing.T) {
 	dbpath := acc.DBPath
 	err = acc.Close()
 	tcheck(t, err, "close account")
+	acc.CheckClosed()
 
 	// Now clear the threading upgrade, and the threading fields and close the account.
 	// We open the database file directly, so we don't trigger the consistency checker.

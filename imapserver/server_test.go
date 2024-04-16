@@ -310,6 +310,7 @@ func (tc *testconn) close() {
 	}
 	err := tc.account.Close()
 	tc.check(err, "close account")
+	// no account.CheckClosed(), the tests open accounts multiple times.
 	tc.account = nil
 	tc.client.Close()
 	tc.serverConn.Close()

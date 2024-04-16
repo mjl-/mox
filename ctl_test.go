@@ -327,7 +327,10 @@ func TestCtl(t *testing.T) {
 	testctl(func(ctl *ctl) {
 		acc, err := store.OpenAccount(ctl.log, "mjl")
 		tcheck(t, err, "open account")
-		defer acc.Close()
+		defer func() {
+			acc.Close()
+			acc.CheckClosed()
+		}()
 
 		content := []byte("Subject: hi\r\n\r\nbody\r\n")
 

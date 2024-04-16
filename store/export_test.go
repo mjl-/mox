@@ -24,7 +24,10 @@ func TestExport(t *testing.T) {
 	mox.MustLoadConfig(true, false)
 	acc, err := OpenAccount(pkglog, "mjl")
 	tcheck(t, err, "open account")
-	defer acc.Close()
+	defer func() {
+		acc.Close()
+		acc.CheckClosed()
+	}()
 	defer Switchboard()()
 
 	log := mlog.New("export", nil)

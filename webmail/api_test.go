@@ -66,6 +66,7 @@ func TestAPI(t *testing.T) {
 	defer func() {
 		err := acc.Close()
 		pkglog.Check(err, "closing account")
+		acc.CheckClosed()
 	}()
 
 	var zerom store.Message

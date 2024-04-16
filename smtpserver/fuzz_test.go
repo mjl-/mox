@@ -41,7 +41,10 @@ func FuzzServer(f *testing.F) {
 	if err != nil {
 		f.Fatalf("open account: %v", err)
 	}
-	defer acc.Close()
+	defer func() {
+		acc.Close()
+		acc.CheckClosed()
+	}()
 	err = acc.SetPassword(log, "testtest")
 	if err != nil {
 		f.Fatalf("set password: %v", err)

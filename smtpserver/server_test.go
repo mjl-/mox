@@ -139,6 +139,7 @@ func (ts *testserver) close() {
 	ts.switchStop()
 	err := ts.acc.Close()
 	tcheck(ts.t, err, "closing account")
+	ts.acc.CheckClosed()
 	ts.acc = nil
 }
 
@@ -1367,7 +1368,10 @@ func TestCatchall(t *testing.T) {
 
 	acc, err := store.OpenAccount(pkglog, "catchall")
 	tcheck(t, err, "open account")
-	defer acc.Close()
+	defer func() {
+		acc.Close()
+		acc.CheckClosed()
+	}()
 	n, err = bstore.QueryDB[store.Message](ctxbg, acc.DB).Count()
 	tcheck(t, err, "checking delivered messages to catchall account")
 	tcompare(t, n, 1)

@@ -38,6 +38,7 @@ func TestMailbox(t *testing.T) {
 	defer func() {
 		err = acc.Close()
 		tcheck(t, err, "closing account")
+		acc.CheckClosed()
 	}()
 	defer Switchboard()()
 
