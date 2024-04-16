@@ -492,9 +492,9 @@ func (s Sort) apply(q *bstore.Query[Msg]) error {
 		q.FilterNotEqual("ID", s.LastID)
 		var fieldEqual func(m Msg) bool
 		if s.Field == "NextAttempt" {
-			fieldEqual = func(m Msg) bool { return m.NextAttempt == last }
+			fieldEqual = func(m Msg) bool { return m.NextAttempt.Equal(last) }
 		} else {
-			fieldEqual = func(m Msg) bool { return m.Queued == last }
+			fieldEqual = func(m Msg) bool { return m.Queued.Equal(last) }
 		}
 		if s.Asc {
 			q.FilterGreaterEqual(s.Field, last)
@@ -1015,9 +1015,9 @@ func (s RetiredSort) apply(q *bstore.Query[MsgRetired]) error {
 		q.FilterNotEqual("ID", s.LastID)
 		var fieldEqual func(m MsgRetired) bool
 		if s.Field == "LastActivity" {
-			fieldEqual = func(m MsgRetired) bool { return m.LastActivity == last }
+			fieldEqual = func(m MsgRetired) bool { return m.LastActivity.Equal(last) }
 		} else {
-			fieldEqual = func(m MsgRetired) bool { return m.Queued == last }
+			fieldEqual = func(m MsgRetired) bool { return m.Queued.Equal(last) }
 		}
 		if s.Asc {
 			q.FilterGreaterEqual(s.Field, last)

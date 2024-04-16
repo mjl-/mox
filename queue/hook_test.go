@@ -82,6 +82,7 @@ func TestHookIncoming(t *testing.T) {
 		dec := json.NewDecoder(strings.NewReader(h.Payload))
 		err = dec.Decode(&in)
 		tcheck(t, err, "decode incoming webhook")
+		in.Meta.Received = in.Meta.Received.Local() // For TZ UTC.
 
 		expIncoming := webhook.Incoming{
 			From:       []webhook.NameAddress{{Address: "mjl@mox.example"}},

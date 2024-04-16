@@ -313,9 +313,9 @@ func (s HookSort) apply(q *bstore.Query[Hook]) error {
 		q.FilterNotEqual("ID", s.LastID)
 		var fieldEqual func(h Hook) bool
 		if s.Field == "NextAttempt" {
-			fieldEqual = func(h Hook) bool { return h.NextAttempt == last }
+			fieldEqual = func(h Hook) bool { return h.NextAttempt.Equal(last) }
 		} else {
-			fieldEqual = func(h Hook) bool { return h.Submitted == last }
+			fieldEqual = func(h Hook) bool { return h.Submitted.Equal(last) }
 		}
 		if s.Asc {
 			q.FilterGreaterEqual(s.Field, last)
@@ -454,9 +454,9 @@ func (s HookRetiredSort) apply(q *bstore.Query[HookRetired]) error {
 		q.FilterNotEqual("ID", s.LastID)
 		var fieldEqual func(hr HookRetired) bool
 		if s.Field == "LastActivity" {
-			fieldEqual = func(hr HookRetired) bool { return hr.LastActivity == last }
+			fieldEqual = func(hr HookRetired) bool { return hr.LastActivity.Equal(last) }
 		} else {
-			fieldEqual = func(hr HookRetired) bool { return hr.Submitted == last }
+			fieldEqual = func(hr HookRetired) bool { return hr.Submitted.Equal(last) }
 		}
 		if s.Asc {
 			q.FilterGreaterEqual(s.Field, last)
