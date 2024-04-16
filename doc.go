@@ -770,7 +770,7 @@ with:
 - "timeout": no response (for an hour)
 
 If the localpart begins with "mailfrom" or "rcptto", the error is returned
-during those commands instead of during "data". If the localpart beings with
+during those commands instead of during "data". If the localpart begins with
 "queue", the submission is accepted but delivery from the queue will fail.
 
 	usage: mox localserve

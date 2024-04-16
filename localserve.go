@@ -59,7 +59,7 @@ with:
 - "timeout": no response (for an hour)
 
 If the localpart begins with "mailfrom" or "rcptto", the error is returned
-during those commands instead of during "data". If the localpart beings with
+during those commands instead of during "data". If the localpart begins with
 "queue", the submission is accepted but delivery from the queue will fail.
 `
 	golog.SetFlags(0)
@@ -166,7 +166,7 @@ during those commands instead of during "data". If the localpart beings with
 	golog.Printf(`- "timeout": no response (for an hour).`)
 	golog.Print("")
 	golog.Print(`if the localpart begins with "mailfrom" or "rcptto", the error is returned`)
-	golog.Print(`during those commands instead of during "data".  if the localpart beings with`)
+	golog.Print(`during those commands instead of during "data".  if the localpart begins with`)
 	golog.Print(`"queue", the submission is accepted but delivery from the queue will fail.`)
 	golog.Print("")
 	golog.Print(" smtp://localhost:1025                           - receive email")

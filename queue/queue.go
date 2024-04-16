@@ -1549,6 +1549,7 @@ func deliver(log mlog.Log, resolver dns.Resolver, m0 Msg) {
 				EHLOValidation:     store.ValidationPass,
 				MailFromValidation: store.ValidationPass,
 				MsgFromValidation:  store.ValidationDMARC,
+				DKIMDomains:        []string{"localhost"},
 				ReceivedRequireTLS: qm.RequireTLS != nil && *qm.RequireTLS,
 				Size:               qm.Size,
 				MsgPrefix:          qm.MsgPrefix,
