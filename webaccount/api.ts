@@ -451,12 +451,31 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
-	// KeepRetiredPeriodsSave save periods to save retired messages and webhooks.
+	// KeepRetiredPeriodsSave saves periods to save retired messages and webhooks.
 	async KeepRetiredPeriodsSave(keepRetiredMessagePeriod: number, keepRetiredWebhookPeriod: number): Promise<void> {
 		const fn: string = "KeepRetiredPeriodsSave"
 		const paramTypes: string[][] = [["int64"],["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [keepRetiredMessagePeriod, keepRetiredWebhookPeriod]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// AutomaticJunkFlagsSave saves settings for automatically marking messages as
+	// junk/nonjunk when moved to mailboxes matching certain regular expressions.
+	async AutomaticJunkFlagsSave(enabled: boolean, junkRegexp: string, neutralRegexp: string, notJunkRegexp: string): Promise<void> {
+		const fn: string = "AutomaticJunkFlagsSave"
+		const paramTypes: string[][] = [["bool"],["string"],["string"],["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [enabled, junkRegexp, neutralRegexp, notJunkRegexp]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// RejectsSave saves the RejectsMailbox and KeepRejects settings.
+	async RejectsSave(mailbox: string, keep: boolean): Promise<void> {
+		const fn: string = "RejectsSave"
+		const paramTypes: string[][] = [["string"],["bool"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [mailbox, keep]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 }

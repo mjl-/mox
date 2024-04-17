@@ -370,7 +370,7 @@
 		},
 		{
 			"Name": "KeepRetiredPeriodsSave",
-			"Docs": "KeepRetiredPeriodsSave save periods to save retired messages and webhooks.",
+			"Docs": "KeepRetiredPeriodsSave saves periods to save retired messages and webhooks.",
 			"Params": [
 				{
 					"Name": "keepRetiredMessagePeriod",
@@ -382,6 +382,56 @@
 					"Name": "keepRetiredWebhookPeriod",
 					"Typewords": [
 						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "AutomaticJunkFlagsSave",
+			"Docs": "AutomaticJunkFlagsSave saves settings for automatically marking messages as\njunk/nonjunk when moved to mailboxes matching certain regular expressions.",
+			"Params": [
+				{
+					"Name": "enabled",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "junkRegexp",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "neutralRegexp",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "notJunkRegexp",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "RejectsSave",
+			"Docs": "RejectsSave saves the RejectsMailbox and KeepRejects settings.",
+			"Params": [
+				{
+					"Name": "mailbox",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "keep",
+					"Typewords": [
+						"bool"
 					]
 				}
 			],

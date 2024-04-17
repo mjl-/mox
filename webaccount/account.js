@@ -481,12 +481,29 @@ var api;
 			const params = [loginAddresses];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
-		// KeepRetiredPeriodsSave save periods to save retired messages and webhooks.
+		// KeepRetiredPeriodsSave saves periods to save retired messages and webhooks.
 		async KeepRetiredPeriodsSave(keepRetiredMessagePeriod, keepRetiredWebhookPeriod) {
 			const fn = "KeepRetiredPeriodsSave";
 			const paramTypes = [["int64"], ["int64"]];
 			const returnTypes = [];
 			const params = [keepRetiredMessagePeriod, keepRetiredWebhookPeriod];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// AutomaticJunkFlagsSave saves settings for automatically marking messages as
+		// junk/nonjunk when moved to mailboxes matching certain regular expressions.
+		async AutomaticJunkFlagsSave(enabled, junkRegexp, neutralRegexp, notJunkRegexp) {
+			const fn = "AutomaticJunkFlagsSave";
+			const paramTypes = [["bool"], ["string"], ["string"], ["string"]];
+			const returnTypes = [];
+			const params = [enabled, junkRegexp, neutralRegexp, notJunkRegexp];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// RejectsSave saves the RejectsMailbox and KeepRejects settings.
+		async RejectsSave(mailbox, keep) {
+			const fn = "RejectsSave";
+			const paramTypes = [["string"], ["bool"]];
+			const returnTypes = [];
+			const params = [mailbox, keep];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 	}
@@ -1063,6 +1080,14 @@ const index = async () => {
 	let password1;
 	let password2;
 	let passwordHint;
+	let autoJunkFlagsFieldset;
+	let autoJunkFlagsEnabled;
+	let junkMailboxRegexp;
+	let neutralMailboxRegexp;
+	let notJunkMailboxRegexp;
+	let rejectsFieldset;
+	let rejectsMailbox;
+	let keepRejects;
 	let outgoingWebhookFieldset;
 	let outgoingWebhookURL;
 	let outgoingWebhookAuthorization;
@@ -1381,7 +1406,15 @@ const index = async () => {
 		' (',
 		'' + Math.floor(100 * storageUsed / storageLimit),
 		'%).',
-	] : [', no explicit limit is configured.']), dom.h2('Webhooks'), dom.h3('Outgoing', attr.title('Webhooks for outgoing messages are called for each attempt to deliver a message in the outgoing queue, e.g. when the queue has delivered a message to the next hop, when a single attempt failed with a temporary error, when delivery permanently failed, or when DSN (delivery status notification) messages were received about a previously sent message.')), dom.form(async function submit(e) {
+	] : [', no explicit limit is configured.']), dom.h2('Automatic junk flags', attr.title('For the junk filter to work properly, it needs to be trained: Messages need to be marked as junk or nonjunk. Not all email clients help you set those flags. Automatic junk flags set the junk or nonjunk flags when messages are moved/copied to mailboxes matching configured regular expressions.')), dom.form(async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		await check(autoJunkFlagsFieldset, client.AutomaticJunkFlagsSave(autoJunkFlagsEnabled.checked, junkMailboxRegexp.value, neutralMailboxRegexp.value, notJunkMailboxRegexp.value));
+	}, autoJunkFlagsFieldset = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.label('Enabled', attr.title("If enabled, junk/nonjunk flags will be set automatically if they match a regular expression below. When two of the three mailbox regular expressions are set, the remaining one will match all unmatched messages. Messages are matched in order 'junk', 'neutral', 'not junk', and the search stops on the first match. Mailboxes are lowercased before matching."), dom.div(autoJunkFlagsEnabled = dom.input(attr.type('checkbox'), acc.AutomaticJunkFlags.Enabled ? attr.checked('') : []))), dom.label('Junk mailbox regexp', dom.div(junkMailboxRegexp = dom.input(attr.value(acc.AutomaticJunkFlags.JunkMailboxRegexp)))), dom.label('Neutral mailbox regexp', dom.div(neutralMailboxRegexp = dom.input(attr.value(acc.AutomaticJunkFlags.NeutralMailboxRegexp)))), dom.label('Not Junk mailbox regexp', dom.div(notJunkMailboxRegexp = dom.input(attr.value(acc.AutomaticJunkFlags.NotJunkMailboxRegexp)))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save')))))), dom.br(), dom.h2('Rejects'), dom.form(async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		await check(rejectsFieldset, client.RejectsSave(rejectsMailbox.value, keepRejects.checked));
+	}, rejectsFieldset = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.label('Mailbox', attr.title("Mail that looks like spam will be rejected, but a copy can be stored temporarily in a mailbox, e.g. Rejects. If mail isn't coming in when you expect, you can look there. The mail still isn't accepted, so the remote mail server may retry (hopefully, if legitimate), or give up (hopefully, if indeed a spammer). Messages are automatically removed from this mailbox, so do not set it to a mailbox that has messages you want to keep."), dom.div(rejectsMailbox = dom.input(attr.value(acc.RejectsMailbox)))), dom.label("No cleanup", attr.title("Don't automatically delete mail in the RejectsMailbox listed above. This can be useful, e.g. for future spam training. It can also cause storage to fill up."), dom.div(keepRejects = dom.input(attr.type('checkbox'), acc.KeepRejects ? attr.checked('') : []))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save')))))), dom.br(), dom.h2('Webhooks'), dom.h3('Outgoing', attr.title('Webhooks for outgoing messages are called for each attempt to deliver a message in the outgoing queue, e.g. when the queue has delivered a message to the next hop, when a single attempt failed with a temporary error, when delivery permanently failed, or when DSN (delivery status notification) messages were received about a previously sent message.')), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		await check(outgoingWebhookFieldset, client.OutgoingWebhookSave(outgoingWebhookURL.value, outgoingWebhookAuthorization.value, [...outgoingWebhookEvents.selectedOptions].map(o => o.value)));

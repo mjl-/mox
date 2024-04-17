@@ -649,7 +649,7 @@ func (Account) FromIDLoginAddressesSave(ctx context.Context, loginAddresses []st
 	xcheckf(ctx, err, "saving account fromid login addresses")
 }
 
-// KeepRetiredPeriodsSave save periods to save retired messages and webhooks.
+// KeepRetiredPeriodsSave saves periods to save retired messages and webhooks.
 func (Account) KeepRetiredPeriodsSave(ctx context.Context, keepRetiredMessagePeriod, keepRetiredWebhookPeriod time.Duration) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
@@ -660,4 +660,35 @@ func (Account) KeepRetiredPeriodsSave(ctx context.Context, keepRetiredMessagePer
 		xcheckuserf(ctx, err, "saving account keep retired periods")
 	}
 	xcheckf(ctx, err, "saving account keep retired periods")
+}
+
+// AutomaticJunkFlagsSave saves settings for automatically marking messages as
+// junk/nonjunk when moved to mailboxes matching certain regular expressions.
+func (Account) AutomaticJunkFlagsSave(ctx context.Context, enabled bool, junkRegexp, neutralRegexp, notJunkRegexp string) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		acc.AutomaticJunkFlags = config.AutomaticJunkFlags{
+			Enabled:              enabled,
+			JunkMailboxRegexp:    junkRegexp,
+			NeutralMailboxRegexp: neutralRegexp,
+			NotJunkMailboxRegexp: notJunkRegexp,
+		}
+	})
+	if err != nil && errors.Is(err, mox.ErrConfig) {
+		xcheckuserf(ctx, err, "saving account automatic junk flags")
+	}
+	xcheckf(ctx, err, "saving account automatic junk flags")
+}
+
+// RejectsSave saves the RejectsMailbox and KeepRejects settings.
+func (Account) RejectsSave(ctx context.Context, mailbox string, keep bool) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		acc.RejectsMailbox = mailbox
+		acc.KeepRejects = keep
+	})
+	if err != nil && errors.Is(err, mox.ErrConfig) {
+		xcheckuserf(ctx, err, "saving account rejects settings")
+	}
+	xcheckf(ctx, err, "saving account rejects settings")
 }

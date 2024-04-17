@@ -438,6 +438,13 @@ func TestAccount(t *testing.T) {
 	api.KeepRetiredPeriodsSave(ctx, time.Minute, time.Minute)
 	api.KeepRetiredPeriodsSave(ctx, 0, 0) // Restore.
 
+	api.AutomaticJunkFlagsSave(ctx, true, "^(junk|spam)", "^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects)", "")
+	api.AutomaticJunkFlagsSave(ctx, false, "", "", "")
+
+	api.RejectsSave(ctx, "Rejects", true)
+	api.RejectsSave(ctx, "Rejects", false)
+	api.RejectsSave(ctx, "", false) // Restore.
+
 	api.Logout(ctx)
 	tneedErrorCode(t, "server:error", func() { api.Logout(ctx) })
 }

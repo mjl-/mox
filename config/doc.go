@@ -1046,7 +1046,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			RejectsMailbox:
 
 			# Don't automatically delete mail in the RejectsMailbox listed above. This can be
-			# useful, e.g. for future spam training. (optional)
+			# useful, e.g. for future spam training. It can also cause storage to fill up.
+			# (optional)
 			KeepRejects: false
 
 			# Automatically set $Junk and $NotJunk flags based on mailbox messages are
@@ -1055,11 +1056,11 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# all move messages to a different mailbox, so this helps them. (optional)
 			AutomaticJunkFlags:
 
-				# If enabled, flags will be set automatically if they match a regular expression
-				# below. When two of the three mailbox regular expressions are set, the remaining
-				# one will match all unmatched messages. Messages are matched in the order
-				# specified and the search stops on the first match. Mailboxes are lowercased
-				# before matching.
+				# If enabled, junk/nonjunk flags will be set automatically if they match some of
+				# the regular expressions. When two of the three mailbox regular expressions are
+				# set, the remaining one will match all unmatched messages. Messages are matched
+				# in the order 'junk', 'neutral', 'not junk', and the search stops on the first
+				# match. Mailboxes are lowercased before matching.
 				Enabled: false
 
 				# Example: ^(junk|spam). (optional)
