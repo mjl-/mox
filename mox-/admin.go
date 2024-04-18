@@ -430,28 +430,68 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 	return nil
 }
 
-func WebserverConfigSet(ctx context.Context, domainRedirects map[string]string, webhandlers []config.WebHandler) (rerr error) {
+// DomainSave calls xmodify with a shallow copy of the domain config. xmodify
+// can modify the config, but must clone all referencing data it changes.
+// xmodify may employ panic-based error handling. After xmodify returns, the
+// modified config is verified, saved and takes effect.
+func DomainSave(ctx context.Context, domainName string, xmodify func(config *config.Domain)) (rerr error) {
 	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("saving webserver config", rerr)
+			log.Errorx("saving domain config", rerr)
 		}
 	}()
 
 	Conf.dynamicMutex.Lock()
 	defer Conf.dynamicMutex.Unlock()
 
-	// Compose new config without modifying existing data structures. If we fail, we
-	// leave no trace.
-	nc := Conf.Dynamic
-	nc.WebDomainRedirects = domainRedirects
-	nc.WebHandlers = webhandlers
-
-	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+	nc := Conf.Dynamic                // Shallow copy.
+	dom, ok := nc.Domains[domainName] // dom is a shallow copy.
+	if !ok {
+		return fmt.Errorf("domain not present")
 	}
 
-	log.Info("webserver config saved")
+	xmodify(&dom)
+
+	// Compose new config without modifying existing data structures. If we fail, we
+	// leave no trace.
+	nc.Domains = map[string]config.Domain{}
+	for name, d := range Conf.Dynamic.Domains {
+		nc.Domains[name] = d
+	}
+	nc.Domains[domainName] = dom
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %w", err)
+	}
+
+	log.Info("domain saved")
+	return nil
+}
+
+// ConfigSave calls xmodify with a shallow copy of the dynamic config. xmodify
+// can modify the config, but must clone all referencing data it changes.
+// xmodify may employ panic-based error handling. After xmodify returns, the
+// modified config is verified, saved and takes effect.
+func ConfigSave(ctx context.Context, xmodify func(config *config.Dynamic)) (rerr error) {
+	log := pkglog.WithContext(ctx)
+	defer func() {
+		if rerr != nil {
+			log.Errorx("saving config", rerr)
+		}
+	}()
+
+	Conf.dynamicMutex.Lock()
+	defer Conf.dynamicMutex.Unlock()
+
+	nc := Conf.Dynamic // Shallow copy.
+	xmodify(&nc)
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %w", err)
+	}
+
+	log.Info("config saved")
 	return nil
 }
 
@@ -774,7 +814,7 @@ func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 	nc.Accounts[account] = MakeAccountConfig(addr)
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("account added", slog.String("account", account), slog.Any("address", addr))
 	return nil
@@ -808,7 +848,7 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 	}
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("account removed", slog.String("account", account))
 	return nil
@@ -892,7 +932,7 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 	nc.Accounts[account] = a
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("address added", slog.String("address", address), slog.String("account", account))
 	return nil
@@ -989,7 +1029,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	nc.Accounts[ad.Account] = na
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("address removed", slog.String("address", address), slog.String("account", ad.Account))
 	return nil
@@ -1032,35 +1072,6 @@ func AccountSave(ctx context.Context, account string, xmodify func(acc *config.A
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("account fields saved", slog.String("account", account))
-	return nil
-}
-
-func MonitorDNSBLsSave(ctx context.Context, zones []dns.Domain) (rerr error) {
-	log := pkglog.WithContext(ctx)
-	defer func() {
-		if rerr != nil {
-			log.Errorx("saving monitor dnsbl zones", rerr)
-		}
-	}()
-
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
-
-	c := Conf.Dynamic
-
-	// Compose new config without modifying existing data structures. If we fail, we
-	// leave no trace.
-	nc := c
-	nc.MonitorDNSBLs = make([]string, len(zones))
-	nc.MonitorDNSBLZones = nil
-	for i, z := range zones {
-		nc.MonitorDNSBLs[i] = z.Name()
-	}
-
-	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
-	}
-	log.Info("monitor dnsbl zones saved")
 	return nil
 }
 

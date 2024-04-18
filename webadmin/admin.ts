@@ -421,10 +421,26 @@ const index = async () => {
 		// todo: routing, globally, per domain and per account
 		dom.br(),
 		dom.h2('Configuration'),
+		dom.div(dom.a('Routes', attr.href('#routes'))),
 		dom.div(dom.a('Webserver', attr.href('#webserver'))),
 		dom.div(dom.a('Files', attr.href('#config'))),
 		dom.div(dom.a('Log levels', attr.href('#loglevels'))),
 		footer,
+	)
+}
+
+const globalRoutes = async () => {
+	const [transports, config] = await Promise.all([
+		client.Transports(),
+		client.Config(),
+	])
+
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			'Routes',
+		),
+		RoutesEditor('global', transports, config.Routes || [], async (routes: api.Route[]) => await client.RoutesSave(routes)),
 	)
 }
 
@@ -635,10 +651,112 @@ const formatQuotaSize = (v: number) => {
 	return ''+v
 }
 
+const RoutesEditor = (kind: string, transports: { [key: string]: api.Transport }, routes: api.Route[], save: (routes: api.Route[]) => Promise<void>) => {
+	const transportNames = Object.keys(transports || {})
+	transportNames.sort()
+
+	const hdr = dom.h2('Routes', attr.title('Messages submitted to the queue for outgoing delivery are delivered directly to the MX records of the recipient domain by default. However, other "transports" can be configured, such as SMTP submission/relay or connecting through a SOCKS proxy. Routes with matching rules and a transport can be configured for accounts, domains and globally. Routes are evaluated in that order, the first match is applied.'))
+
+	let routesElem: HTMLElement
+	const render = () => {
+		if (transportNames.length === 0) {
+			return [hdr, dom.p('No transports configured.', attr.title('To configure routes, first configure transports via the mox.conf config file.'))]
+		}
+
+		let routesFieldset: HTMLFieldSetElement
+		interface RouteRow {
+			root: HTMLElement
+			gather: () => api.Route
+		}
+		let routeRows: RouteRow[] = []
+
+		let elem: HTMLElement = dom.form(
+			async function submit(e: SubmitEvent) {
+				e.stopPropagation()
+				e.preventDefault()
+				await check(routesFieldset, save(routeRows.map(rr => rr.gather())))
+			},
+			routesFieldset=dom.fieldset(
+				dom.table(
+					dom.thead(
+						dom.tr(
+							dom.th('From domain'),
+							dom.th('To domain'),
+							dom.th('Minimum attempts'),
+							dom.th('Transport'),
+							dom.th(
+								dom.clickbutton('Add', function click() {
+									routes = routeRows.map(rr => rr.gather())
+									routes.push({FromDomain: [], ToDomain: [], MinimumAttempts: 0, Transport: transportNames[0]})
+									render()
+								}),
+							),
+						),
+					),
+					dom.tbody(
+						(routes || []).length === 0 ? dom.tr(dom.td(attr.colspan('5'), 'No routes.')) : [],
+						routeRows=(routes || []).map((r, index) => {
+							let fromDomain = dom.input(attr.value((r.FromDomain || []).join(',')))
+							let toDomain = dom.input(attr.value((r.ToDomain || []).join(',')))
+							let minimumAttempts = dom.input(attr.value(''+r.MinimumAttempts))
+							let transport = dom.select(attr.required(''), transportNames.map(s => dom.option(s, s === r.Transport ? attr.selected('') : [])))
+
+							const tr = dom.tr(
+								dom.td(fromDomain),
+								dom.td(toDomain),
+								dom.td(minimumAttempts),
+								dom.td(transport),
+								dom.td(
+									dom.clickbutton('Remove', function click() {
+										routeRows.splice(index, 1)
+										routes = routeRows.map(rr => rr.gather())
+										render()
+									}),
+								),
+							)
+							return {
+								root: tr,
+								gather: (): api.Route => {
+									return {
+										FromDomain: fromDomain.value ? fromDomain.value.split(',') : [],
+										ToDomain: toDomain.value ? toDomain.value.split(',') : [],
+										MinimumAttempts: parseInt(minimumAttempts.value) || 0,
+										Transport: transport.value,
+									}
+								},
+							}
+						}),
+					),
+				),
+				dom.div(dom.submitbutton('Save')),
+			),
+		)
+		if (!routesElem && (routes || []).length === 0) {
+			// Keep it short.
+			elem = dom.div(
+				'No '+kind+' routes configured. ',
+				dom.clickbutton('Add', function click() {
+					routes = routeRows.map(rr => rr.gather())
+					routes.push({FromDomain: [], ToDomain: [], MinimumAttempts: 0, Transport: transportNames[0]})
+					render()
+				}),
+			)
+		}
+		elem = dom.div(hdr, elem)
+		if (routesElem) {
+			routesElem.replaceWith(elem)
+		}
+		routesElem = elem
+		return elem
+	}
+	return render()
+}
+
 const account = async (name: string) => {
-	const [[config, diskUsage], domains] = await Promise.all([
+	const [[config, diskUsage], domains, transports] = await Promise.all([
 		client.Account(name),
 		client.Domains(),
+		client.Transports(),
 	])
 
 	// todo: show suppression list, and buttons to add/remove entries.
@@ -839,6 +957,9 @@ const account = async (name: string) => {
 			},
 		),
 		dom.br(),
+		RoutesEditor('account-specific', transports, config.Routes || [], async (routes: api.Route[]) => await client.AccountRoutesSave(name, routes)),
+		dom.br(),
+
 		dom.h2('Danger'),
 		dom.clickbutton('Remove account', async function click(e: MouseEvent) {
 			e.preventDefault()
@@ -854,13 +975,15 @@ const account = async (name: string) => {
 const domain = async (d: string) => {
 	const end = new Date()
 	const start = new Date(new Date().getTime() - 30*24*3600*1000)
-	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfigs, accounts] = await Promise.all([
+	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfigs, accounts, domainConfig, transports] = await Promise.all([
 		client.DMARCSummaries(start, end, d),
 		client.TLSRPTSummaries(start, end, d),
 		client.DomainLocalparts(d),
-		client.Domain(d),
+		client.ParseDomain(d),
 		client.ClientConfigsDomain(d),
 		client.Accounts(),
+		client.DomainConfig(d),
+		client.Transports(),
 	])
 
 	let form: HTMLFormElement
@@ -961,6 +1084,8 @@ const domain = async (d: string) => {
 			),
 		),
 		dom.br(),
+		RoutesEditor('domain-specific', transports, domainConfig.Routes || [], async (routes: api.Route[]) => await client.DomainRoutesSave(d, routes)),
+		dom.br(),
 		dom.h2('External checks'),
 		dom.ul(
 			dom.li(link('https://internet.nl/mail/'+dnsdomain.ASCII+'/', 'Check configuration at internet.nl')),
@@ -981,7 +1106,7 @@ const domain = async (d: string) => {
 const domainDNSRecords = async (d: string) => {
 	const [records, dnsdomain] = await Promise.all([
 		client.DomainRecords(d),
-		client.Domain(d),
+		client.ParseDomain(d),
 	])
 
 	dom._kids(page,
@@ -999,7 +1124,7 @@ const domainDNSRecords = async (d: string) => {
 const domainDNSCheck = async (d: string) => {
 	const [checks, dnsdomain] = await Promise.all([
 		client.CheckDomain(d),
-		client.Domain(d),
+		client.ParseDomain(d),
 	])
 
 	interface Result {
@@ -4184,6 +4309,8 @@ const init = async () => {
 				await mtasts()
 			} else if (h === 'dnsbl') {
 				await dnsbl()
+			} else if (h === 'routes') {
+				await globalRoutes()
 			} else if (h === 'webserver') {
 				await webserver()
 			} else {

@@ -209,9 +209,17 @@ func TestAdminAuth(t *testing.T) {
 
 	api.Logout(ctx)
 	tneedErrorCode(t, "server:error", func() { api.Logout(ctx) })
+}
 
-	err = queue.Init()
+func TestAdmin(t *testing.T) {
+	os.RemoveAll("../testdata/webadmin/data")
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webadmin/mox.conf")
+	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
+	mox.MustLoadConfig(true, false)
+	err := queue.Init()
 	tcheck(t, err, "queue init")
+
+	api := Admin{}
 
 	mrl := api.RetiredList(ctxbg, queue.RetiredFilter{}, queue.RetiredSort{})
 	tcompare(t, len(mrl), 0)
@@ -233,6 +241,22 @@ func TestAdminAuth(t *testing.T) {
 
 	n = api.HookCancel(ctxbg, queue.HookFilter{})
 	tcompare(t, n, 0)
+
+	api.Config(ctxbg)
+	api.DomainConfig(ctxbg, "mox.example")
+	tneedErrorCode(t, "user:error", func() { api.DomainConfig(ctxbg, "bogus.example") })
+
+	api.AccountRoutesSave(ctxbg, "mjl", []config.Route{{Transport: "direct"}})
+	tneedErrorCode(t, "user:error", func() { api.AccountRoutesSave(ctxbg, "mjl", []config.Route{{Transport: "bogus"}}) })
+	api.AccountRoutesSave(ctxbg, "mjl", nil)
+
+	api.DomainRoutesSave(ctxbg, "mox.example", []config.Route{{Transport: "direct"}})
+	tneedErrorCode(t, "user:error", func() { api.DomainRoutesSave(ctxbg, "mox.example", []config.Route{{Transport: "bogus"}}) })
+	api.DomainRoutesSave(ctxbg, "mox.example", nil)
+
+	api.RoutesSave(ctxbg, []config.Route{{Transport: "direct"}})
+	tneedErrorCode(t, "user:error", func() { api.RoutesSave(ctxbg, []config.Route{{Transport: "bogus"}}) })
+	api.RoutesSave(ctxbg, nil)
 }
 
 func TestCheckDomain(t *testing.T) {

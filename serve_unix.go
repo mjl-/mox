@@ -86,7 +86,8 @@ func monitorDNSBL(log mlog.Log) {
 
 		// Gather zones.
 		zones := append([]dns.Domain{}, publicListener.SMTP.DNSBLZones...)
-		for _, zone := range mox.Conf.MonitorDNSBLs() {
+		conf := mox.Conf.DynamicConfig()
+		for _, zone := range conf.MonitorDNSBLZones {
 			if !slices.Contains(zones, zone) {
 				zones = append(zones, zone)
 			}

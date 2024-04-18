@@ -194,6 +194,11 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 	if err == nil {
 		return
 	}
+	// If caller tried saving a config that is invalid, cause a user error.
+	if errors.Is(err, mox.ErrConfig) {
+		xcheckuserf(ctx, err, format, args...)
+	}
+
 	msg := fmt.Sprintf(format, args...)
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
 	pkglog.WithContext(ctx).Errorx(msg, err)
@@ -1518,6 +1523,17 @@ func (Admin) ParseDomain(ctx context.Context, domain string) dns.Domain {
 	return d
 }
 
+// DomainConfig returns the configuration for a domain.
+func (Admin) DomainConfig(ctx context.Context, domain string) config.Domain {
+	d, err := dns.ParseDomain(domain)
+	xcheckuserf(ctx, err, "parse domain")
+	conf, ok := mox.Conf.Domain(d)
+	if !ok {
+		xcheckuserf(ctx, errors.New("no such domain"), "looking up domain")
+	}
+	return conf
+}
+
 // DomainLocalparts returns the encoded localparts and accounts configured in domain.
 func (Admin) DomainLocalparts(ctx context.Context, domain string) (localpartAccounts map[string]string) {
 	d, err := dns.ParseDomain(domain)
@@ -1797,7 +1813,8 @@ func dnsblsStatus(ctx context.Context, log mlog.Log, resolver dns.Resolver) (res
 	// todo: check health before using dnsbl?
 	using = mox.Conf.Static.Listeners["public"].SMTP.DNSBLZones
 	zones := append([]dns.Domain{}, using...)
-	for _, zone := range mox.Conf.MonitorDNSBLs() {
+	conf := mox.Conf.DynamicConfig()
+	for _, zone := range conf.MonitorDNSBLZones {
 		if !slices.Contains(zones, zone) {
 			zones = append(zones, zone)
 			monitoring = append(monitoring, zone)
@@ -1844,7 +1861,14 @@ func (Admin) MonitorDNSBLsSave(ctx context.Context, text string) {
 		}
 		zones = append(zones, d)
 	}
-	err := mox.MonitorDNSBLsSave(ctx, zones)
+
+	err := mox.ConfigSave(ctx, func(conf *config.Dynamic) {
+		conf.MonitorDNSBLs = make([]string, len(zones))
+		conf.MonitorDNSBLZones = nil
+		for i, z := range zones {
+			conf.MonitorDNSBLs[i] = z.Name()
+		}
+	})
 	xcheckf(ctx, err, "saving monitoring dnsbl zones")
 }
 
@@ -2172,7 +2196,10 @@ func (Admin) WebserverConfig(ctx context.Context) (conf WebserverConfig) {
 }
 
 func webserverConfig() WebserverConfig {
-	r, l := mox.Conf.WebServer()
+	conf := mox.Conf.DynamicConfig()
+	r := conf.WebDNSDomainRedirects
+	l := conf.WebHandlers
+
 	x := make([][2]dns.Domain, 0, len(r))
 	xs := make([][2]string, 0, len(r))
 	for k, v := range r {
@@ -2218,7 +2245,10 @@ func (Admin) WebserverConfigSave(ctx context.Context, oldConf, newConf Webserver
 		domainRedirects[x[0]] = x[1]
 	}
 
-	err := mox.WebserverConfigSet(ctx, domainRedirects, newConf.WebHandlers)
+	err := mox.ConfigSave(ctx, func(conf *config.Dynamic) {
+		conf.WebDomainRedirects = domainRedirects
+		conf.WebHandlers = newConf.WebHandlers
+	})
 	xcheckf(ctx, err, "saving webserver config")
 
 	savedConf = webserverConfig()
@@ -2383,4 +2413,33 @@ func (Admin) LookupCid(ctx context.Context, recvID string) (cid string) {
 	v, err := mox.ReceivedToCid(recvID)
 	xcheckf(ctx, err, "received id to cid")
 	return fmt.Sprintf("%x", v)
+}
+
+// Config returns the dynamic config.
+func (Admin) Config(ctx context.Context) config.Dynamic {
+	return mox.Conf.DynamicConfig()
+}
+
+// AccountRoutesSave saves routes for an account.
+func (Admin) AccountRoutesSave(ctx context.Context, accountName string, routes []config.Route) {
+	err := mox.AccountSave(ctx, accountName, func(acc *config.Account) {
+		acc.Routes = routes
+	})
+	xcheckf(ctx, err, "saving account routes")
+}
+
+// DomainRoutesSave saves routes for a domain.
+func (Admin) DomainRoutesSave(ctx context.Context, domainName string, routes []config.Route) {
+	err := mox.DomainSave(ctx, domainName, func(domain *config.Domain) {
+		domain.Routes = routes
+	})
+	xcheckf(ctx, err, "saving domain routes")
+}
+
+// RoutesSave saves global routes.
+func (Admin) RoutesSave(ctx context.Context, routes []config.Route) {
+	err := mox.ConfigSave(ctx, func(config *config.Dynamic) {
+		config.Routes = routes
+	})
+	xcheckf(ctx, err, "saving global routes")
 }

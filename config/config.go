@@ -320,18 +320,20 @@ type TLSRPT struct {
 	DNSDomain       dns.Domain     `sconf:"-"` // Effective domain, always set based on Domain field or Domain where this is configured.
 }
 
+type Canonicalization struct {
+	HeaderRelaxed bool `sconf-doc:"If set, some modifications to the headers (mostly whitespace) are allowed."`
+	BodyRelaxed   bool `sconf-doc:"If set, some whitespace modifications to the message body are allowed."`
+}
+
 type Selector struct {
-	Hash             string `sconf:"optional" sconf-doc:"sha256 (default) or (older, not recommended) sha1"`
-	HashEffective    string `sconf:"-"`
-	Canonicalization struct {
-		HeaderRelaxed bool `sconf-doc:"If set, some modifications to the headers (mostly whitespace) are allowed."`
-		BodyRelaxed   bool `sconf-doc:"If set, some whitespace modifications to the message body are allowed."`
-	} `sconf:"optional"`
-	Headers          []string `sconf:"optional" sconf-doc:"Headers to sign with DKIM. If empty, a reasonable default set of headers is selected."`
-	HeadersEffective []string `sconf:"-"` // Used when signing. Based on Headers from config, or the reasonable default.
-	DontSealHeaders  bool     `sconf:"optional" sconf-doc:"If set, don't prevent duplicate headers from being added. Not recommended."`
-	Expiration       string   `sconf:"optional" sconf-doc:"Period a signature is valid after signing, as duration, e.g. 72h. The period should be enough for delivery at the final destination, potentially with several hops/relays. In the order of days at least."`
-	PrivateKeyFile   string   `sconf-doc:"Either an RSA or ed25519 private key file in PKCS8 PEM form."`
+	Hash             string           `sconf:"optional" sconf-doc:"sha256 (default) or (older, not recommended) sha1"`
+	HashEffective    string           `sconf:"-"`
+	Canonicalization Canonicalization `sconf:"optional"`
+	Headers          []string         `sconf:"optional" sconf-doc:"Headers to sign with DKIM. If empty, a reasonable default set of headers is selected."`
+	HeadersEffective []string         `sconf:"-"` // Used when signing. Based on Headers from config, or the reasonable default.
+	DontSealHeaders  bool             `sconf:"optional" sconf-doc:"If set, don't prevent duplicate headers from being added. Not recommended."`
+	Expiration       string           `sconf:"optional" sconf-doc:"Period a signature is valid after signing, as duration, e.g. 72h. The period should be enough for delivery at the final destination, potentially with several hops/relays. In the order of days at least."`
+	PrivateKeyFile   string           `sconf-doc:"Either an RSA or ed25519 private key file in PKCS8 PEM form."`
 
 	ExpirationSeconds int           `sconf:"-" json:"-"` // Parsed from Expiration.
 	Key               crypto.Signer `sconf:"-" json:"-"` // As parsed with x509.ParsePKCS8PrivateKey.

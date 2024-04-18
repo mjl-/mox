@@ -122,6 +122,26 @@
 			]
 		},
 		{
+			"Name": "DomainConfig",
+			"Docs": "DomainConfig returns the configuration for a domain.",
+			"Params": [
+				{
+					"Name": "domain",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"ConfigDomain"
+					]
+				}
+			]
+		},
+		{
 			"Name": "DomainLocalparts",
 			"Docs": "DomainLocalparts returns the encoded localparts and accounts configured in domain.",
 			"Params": [
@@ -1528,6 +1548,73 @@
 					]
 				}
 			]
+		},
+		{
+			"Name": "Config",
+			"Docs": "Config returns the dynamic config.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"Dynamic"
+					]
+				}
+			]
+		},
+		{
+			"Name": "AccountRoutesSave",
+			"Docs": "AccountRoutesSave saves routes for an account.",
+			"Params": [
+				{
+					"Name": "accountName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "routes",
+					"Typewords": [
+						"[]",
+						"Route"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DomainRoutesSave",
+			"Docs": "DomainRoutesSave saves routes for a domain.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "routes",
+					"Typewords": [
+						"[]",
+						"Route"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "RoutesSave",
+			"Docs": "RoutesSave saves global routes.",
+			"Params": [
+				{
+					"Name": "routes",
+					"Typewords": [
+						"[]",
+						"Route"
+					]
+				}
+			],
+			"Returns": []
 		}
 	],
 	"Sections": [],
@@ -2795,6 +2882,368 @@
 			]
 		},
 		{
+			"Name": "ConfigDomain",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Description",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ClientSettingsDomain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LocalpartCatchallSeparator",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LocalpartCaseSensitive",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "DKIM",
+					"Docs": "",
+					"Typewords": [
+						"DKIM"
+					]
+				},
+				{
+					"Name": "DMARC",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"DMARC"
+					]
+				},
+				{
+					"Name": "MTASTS",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"MTASTS"
+					]
+				},
+				{
+					"Name": "TLSRPT",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"TLSRPT"
+					]
+				},
+				{
+					"Name": "Routes",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Route"
+					]
+				}
+			]
+		},
+		{
+			"Name": "DKIM",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Selectors",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"Selector"
+					]
+				},
+				{
+					"Name": "Sign",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Selector",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Hash",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "HashEffective",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Canonicalization",
+					"Docs": "",
+					"Typewords": [
+						"Canonicalization"
+					]
+				},
+				{
+					"Name": "Headers",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "HeadersEffective",
+					"Docs": "Used when signing. Based on Headers from config, or the reasonable default.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "DontSealHeaders",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "Expiration",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "PrivateKeyFile",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Canonicalization",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "HeaderRelaxed",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "BodyRelaxed",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "DMARC",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Localpart",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Mailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ParsedLocalpart",
+					"Docs": "",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "DNSDomain",
+					"Docs": "Effective domain, always set based on Domain field or Domain where this is configured.",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MTASTS",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "PolicyID",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Mode",
+					"Docs": "",
+					"Typewords": [
+						"Mode"
+					]
+				},
+				{
+					"Name": "MaxAge",
+					"Docs": "",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "MX",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "TLSRPT",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Localpart",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Mailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ParsedLocalpart",
+					"Docs": "",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "DNSDomain",
+					"Docs": "Effective domain, always set based on Domain field or Domain where this is configured.",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Route",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "FromDomain",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "ToDomain",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "MinimumAttempts",
+					"Docs": "",
+					"Typewords": [
+						"int32"
+					]
+				},
+				{
+					"Name": "Transport",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "FromDomainASCII",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "ToDomainASCII",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
 			"Name": "Account",
 			"Docs": "",
 			"Fields": [
@@ -3197,58 +3646,6 @@
 					"Docs": "",
 					"Typewords": [
 						"int32"
-					]
-				}
-			]
-		},
-		{
-			"Name": "Route",
-			"Docs": "",
-			"Fields": [
-				{
-					"Name": "FromDomain",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"string"
-					]
-				},
-				{
-					"Name": "ToDomain",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"string"
-					]
-				},
-				{
-					"Name": "MinimumAttempts",
-					"Docs": "",
-					"Typewords": [
-						"int32"
-					]
-				},
-				{
-					"Name": "Transport",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "FromDomainASCII",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"string"
-					]
-				},
-				{
-					"Name": "ToDomainASCII",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"string"
 					]
 				}
 			]
@@ -6153,6 +6550,68 @@
 					]
 				}
 			]
+		},
+		{
+			"Name": "Dynamic",
+			"Docs": "Dynamic is the parsed form of domains.conf, and is automatically reloaded when changed.",
+			"Fields": [
+				{
+					"Name": "Domains",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"ConfigDomain"
+					]
+				},
+				{
+					"Name": "Accounts",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"Account"
+					]
+				},
+				{
+					"Name": "WebDomainRedirects",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				},
+				{
+					"Name": "WebHandlers",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"WebHandler"
+					]
+				},
+				{
+					"Name": "Routes",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Route"
+					]
+				},
+				{
+					"Name": "MonitorDNSBLs",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "MonitorDNSBLZones",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Domain"
+					]
+				}
+			]
 		}
 	],
 	"Ints": [],
@@ -6229,6 +6688,11 @@
 					"Docs": "In case MTA-STS is not or no longer implemented."
 				}
 			]
+		},
+		{
+			"Name": "Localpart",
+			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.\nLocalparts are in Unicode NFC.",
+			"Values": null
 		},
 		{
 			"Name": "PolicyType",
@@ -6533,11 +6997,6 @@
 					"Docs": ""
 				}
 			]
-		},
-		{
-			"Name": "Localpart",
-			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.\nLocalparts are in Unicode NFC.",
-			"Values": null
 		},
 		{
 			"Name": "IP",

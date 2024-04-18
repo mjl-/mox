@@ -17,8 +17,8 @@ MIT-licensed, see LICENSE.
 - major cleanup required. too much parsing is done that can probably be handled by the go/* packages.
 - check that all cases of embedding work (seems like we will include duplicates: when a struct has fields that override an embedded struct, we generate duplicate fields).
 - check that all cross-package referencing (ast.SelectorExpr) works
-- better cli syntax for replacements, and always replace based on fully qualified names. currently you need to specify both the fully qualified and unqualified type paths.
-- see if order of items in output depends on a map somewhere, i've seen diffs for generated jsons where a type was only moved, not modified.
+- better cli syntax for replacements and renames, and always replace based on fully qualified names. currently you need to specify both the fully qualified and unqualified type paths.
+- see if order of items in output depends on a map somewhere, i've seen diffs for generated jsons where a type was only moved, not modified. perhaps the type was discovered earlier/later because of other type changes. we may want to sort sections,methods,types in the output.
 - better error messages and error handling, stricter parsing
 - support type aliases
 - support plain iota enums? currently only simple literals are supported for enums.

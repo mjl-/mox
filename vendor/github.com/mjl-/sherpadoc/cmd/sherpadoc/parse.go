@@ -181,15 +181,21 @@ func parseSection(t *doc.Type, pp *parsedPackage) *section {
 }
 
 // Ensure type "t" (used in a field or argument) defined in package pp is parsed
-// and added to the section.
-func ensureNamedType(t *doc.Type, sec *section, pp *parsedPackage) {
-	typePath := pp.Path + "." + t.Name
+// and added to the section. The returned string is the name as used in the
+// sherpadoc, it may have been renamed.
+func ensureNamedType(t *doc.Type, sec *section, pp *parsedPackage) (name string) {
+	if s, ok := renames[renameSrc{pp.Pkg.Name, t.Name}]; ok {
+		name = s
+	} else {
+		name = t.Name
+	}
+	typePath := pp.Path + "." + name
 	if _, have := sec.Typeset[typePath]; have {
 		return
 	}
 
 	tt := &namedType{
-		Name: t.Name,
+		Name: name,
 		Text: strings.TrimSpace(t.Doc),
 	}
 	// add it early, so self-referencing types can't cause a loop
@@ -360,6 +366,7 @@ func ensureNamedType(t *doc.Type, sec *section, pp *parsedPackage) {
 	default:
 		logFatalLinef(pp, t.Decl.TokPos, "unsupported field/param/return type %T", ts.Type)
 	}
+	return
 }
 
 func hasOmitEmpty(tag *ast.BasicLit) bool {
@@ -407,8 +414,8 @@ func gatherFieldType(typeName string, f *field, e ast.Expr, fieldTag *ast.BasicL
 	case *ast.Ident:
 		tt := pp.lookupType(t.Name)
 		if tt != nil {
-			ensureNamedType(tt, sec, pp)
-			return []string{t.Name}
+			name := ensureNamedType(tt, sec, pp)
+			return []string{name}
 		}
 		commaString := isCommaString(fieldTag)
 		name := t.Name
@@ -465,8 +472,8 @@ func parseArgType(e ast.Expr, sec *section, pp *parsedPackage) typewords {
 	case *ast.Ident:
 		tt := pp.lookupType(t.Name)
 		if tt != nil {
-			ensureNamedType(tt, sec, pp)
-			return []string{t.Name}
+			name := ensureNamedType(tt, sec, pp)
+			return []string{name}
 		}
 		name := t.Name
 		switch name {
@@ -560,8 +567,7 @@ func parseSelector(t *ast.SelectorExpr, srcTypeName string, sec *section, pp *pa
 	if tt == nil {
 		logFatalLinef(pp, t.Pos(), "could not find type %q in package %q", typeName, importPath)
 	}
-	ensureNamedType(tt, sec, opp)
-	return typeName
+	return ensureNamedType(tt, sec, opp)
 }
 
 type replacement struct {

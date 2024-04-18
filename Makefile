@@ -7,7 +7,7 @@ build0:
 	CGO_ENABLED=0 go build
 	CGO_ENABLED=0 go vet ./...
 	./gendoc.sh
-	(cd webadmin && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Admin) >webadmin/api.json
+	(cd webadmin && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none -rename 'config Domain ConfigDomain' Admin) >webadmin/api.json
 	(cd webaccount && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Account) >webaccount/api.json
 	(cd webmail && CGO_ENABLED=0 go run ../vendor/github.com/mjl-/sherpadoc/cmd/sherpadoc/*.go -adjust-function-names none Webmail) >webmail/api.json
 	./gents.sh webadmin/api.json webadmin/api.ts

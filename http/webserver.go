@@ -47,7 +47,9 @@ func recvid(r *http.Request) string {
 // If no handler matched, false is returned.
 // WebHandle sets w.Name to that of the matching handler.
 func WebHandle(w *loggingWriter, r *http.Request, host dns.Domain) (handled bool) {
-	redirects, handlers := mox.Conf.WebServer()
+	conf := mox.Conf.DynamicConfig()
+	redirects := conf.WebDNSDomainRedirects
+	handlers := conf.WebHandlers
 
 	for from, to := range redirects {
 		if host != from {

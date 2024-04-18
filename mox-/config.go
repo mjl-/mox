@@ -163,6 +163,14 @@ func (c *Config) loadDynamic() []error {
 	return nil
 }
 
+// DynamicConfig returns a shallow copy of the dynamic config. Must not be modified.
+func (c *Config) DynamicConfig() (config config.Dynamic) {
+	c.withDynamicLock(func() {
+		config = c.Dynamic // Shallow copy.
+	})
+	return
+}
+
 func (c *Config) Domains() (l []string) {
 	c.withDynamicLock(func() {
 		for name := range c.Dynamic.Domains {
@@ -224,14 +232,6 @@ func (c *Config) AccountDestination(addr string) (accDests AccountDestination, o
 	return
 }
 
-func (c *Config) WebServer() (r map[dns.Domain]dns.Domain, l []config.WebHandler) {
-	c.withDynamicLock(func() {
-		r = c.Dynamic.WebDNSDomainRedirects
-		l = c.Dynamic.WebHandlers
-	})
-	return r, l
-}
-
 func (c *Config) Routes(accountName string, domain dns.Domain) (accountRoutes, domainRoutes, globalRoutes []config.Route) {
 	c.withDynamicLock(func() {
 		acc := c.Dynamic.Accounts[accountName]
@@ -241,13 +241,6 @@ func (c *Config) Routes(accountName string, domain dns.Domain) (accountRoutes, d
 		domainRoutes = dom.Routes
 
 		globalRoutes = c.Dynamic.Routes
-	})
-	return
-}
-
-func (c *Config) MonitorDNSBLs() (zones []dns.Domain) {
-	c.withDynamicLock(func() {
-		zones = c.Dynamic.MonitorDNSBLZones
 	})
 	return
 }

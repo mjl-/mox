@@ -337,7 +337,7 @@ var api;
 		SPFResult["SPFTemperror"] = "temperror";
 		SPFResult["SPFPermerror"] = "permerror";
 	})(SPFResult = api.SPFResult || (api.SPFResult = {}));
-	api.structTypes = { "Account": true, "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "AutomaticJunkFlags": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "DANECheckResult": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Destination": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "Hook": true, "HookFilter": true, "HookResult": true, "HookRetired": true, "HookRetiredFilter": true, "HookRetiredSort": true, "HookSort": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "IncomingWebhook": true, "JunkFilter": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "MsgResult": true, "MsgRetired": true, "OutgoingWebhook": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "RetiredFilter": true, "RetiredSort": true, "Reverse": true, "Route": true, "Row": true, "Ruleset": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Sort": true, "SubjectPass": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportDirect": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
+	api.structTypes = { "Account": true, "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "AutomaticJunkFlags": true, "Canonicalization": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "ConfigDomain": true, "DANECheckResult": true, "DKIM": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARC": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Destination": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Dynamic": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "Hook": true, "HookFilter": true, "HookResult": true, "HookRetired": true, "HookRetiredFilter": true, "HookRetiredSort": true, "HookSort": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "IncomingWebhook": true, "JunkFilter": true, "MTASTS": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "MsgResult": true, "MsgRetired": true, "OutgoingWebhook": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "RetiredFilter": true, "RetiredSort": true, "Reverse": true, "Route": true, "Row": true, "Ruleset": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Selector": true, "Sort": true, "SubjectPass": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSRPT": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportDirect": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
 	api.stringsTypes = { "Align": true, "Alignment": true, "CSRFToken": true, "DKIMResult": true, "DMARCPolicy": true, "DMARCResult": true, "Disposition": true, "IP": true, "Localpart": true, "Mode": true, "PolicyOverride": true, "PolicyType": true, "RUA": true, "ResultType": true, "SPFDomainScope": true, "SPFResult": true };
 	api.intsTypes = {};
 	api.types = {
@@ -372,6 +372,14 @@ var api;
 		"AutoconfCheckResult": { "Name": "AutoconfCheckResult", "Docs": "", "Fields": [{ "Name": "ClientSettingsDomainIPs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"AutodiscoverCheckResult": { "Name": "AutodiscoverCheckResult", "Docs": "", "Fields": [{ "Name": "Records", "Docs": "", "Typewords": ["[]", "AutodiscoverSRV"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"AutodiscoverSRV": { "Name": "AutodiscoverSRV", "Docs": "", "Fields": [{ "Name": "Target", "Docs": "", "Typewords": ["string"] }, { "Name": "Port", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Priority", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Weight", "Docs": "", "Typewords": ["uint16"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }] },
+		"ConfigDomain": { "Name": "ConfigDomain", "Docs": "", "Fields": [{ "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "ClientSettingsDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }, { "Name": "DKIM", "Docs": "", "Typewords": ["DKIM"] }, { "Name": "DMARC", "Docs": "", "Typewords": ["nullable", "DMARC"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["nullable", "MTASTS"] }, { "Name": "TLSRPT", "Docs": "", "Typewords": ["nullable", "TLSRPT"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }] },
+		"DKIM": { "Name": "DKIM", "Docs": "", "Fields": [{ "Name": "Selectors", "Docs": "", "Typewords": ["{}", "Selector"] }, { "Name": "Sign", "Docs": "", "Typewords": ["[]", "string"] }] },
+		"Selector": { "Name": "Selector", "Docs": "", "Fields": [{ "Name": "Hash", "Docs": "", "Typewords": ["string"] }, { "Name": "HashEffective", "Docs": "", "Typewords": ["string"] }, { "Name": "Canonicalization", "Docs": "", "Typewords": ["Canonicalization"] }, { "Name": "Headers", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HeadersEffective", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "DontSealHeaders", "Docs": "", "Typewords": ["bool"] }, { "Name": "Expiration", "Docs": "", "Typewords": ["string"] }, { "Name": "PrivateKeyFile", "Docs": "", "Typewords": ["string"] }] },
+		"Canonicalization": { "Name": "Canonicalization", "Docs": "", "Fields": [{ "Name": "HeaderRelaxed", "Docs": "", "Typewords": ["bool"] }, { "Name": "BodyRelaxed", "Docs": "", "Typewords": ["bool"] }] },
+		"DMARC": { "Name": "DMARC", "Docs": "", "Fields": [{ "Name": "Localpart", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "ParsedLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
+		"MTASTS": { "Name": "MTASTS", "Docs": "", "Fields": [{ "Name": "PolicyID", "Docs": "", "Typewords": ["string"] }, { "Name": "Mode", "Docs": "", "Typewords": ["Mode"] }, { "Name": "MaxAge", "Docs": "", "Typewords": ["int64"] }, { "Name": "MX", "Docs": "", "Typewords": ["[]", "string"] }] },
+		"TLSRPT": { "Name": "TLSRPT", "Docs": "", "Fields": [{ "Name": "Localpart", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "ParsedLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
+		"Route": { "Name": "Route", "Docs": "", "Fields": [{ "Name": "FromDomain", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ToDomain", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "MinimumAttempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "Transport", "Docs": "", "Typewords": ["string"] }, { "Name": "FromDomainASCII", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ToDomainASCII", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"Account": { "Name": "Account", "Docs": "", "Fields": [{ "Name": "OutgoingWebhook", "Docs": "", "Typewords": ["nullable", "OutgoingWebhook"] }, { "Name": "IncomingWebhook", "Docs": "", "Typewords": ["nullable", "IncomingWebhook"] }, { "Name": "FromIDLoginAddresses", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "KeepRetiredMessagePeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "KeepRetiredWebhookPeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }, { "Name": "Destinations", "Docs": "", "Typewords": ["{}", "Destination"] }, { "Name": "SubjectPass", "Docs": "", "Typewords": ["SubjectPass"] }, { "Name": "QuotaMessageSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "KeepRejects", "Docs": "", "Typewords": ["bool"] }, { "Name": "AutomaticJunkFlags", "Docs": "", "Typewords": ["AutomaticJunkFlags"] }, { "Name": "JunkFilter", "Docs": "", "Typewords": ["nullable", "JunkFilter"] }, { "Name": "MaxOutgoingMessagesPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxFirstTimeRecipientsPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "NoFirstTimeSenderDelay", "Docs": "", "Typewords": ["bool"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"OutgoingWebhook": { "Name": "OutgoingWebhook", "Docs": "", "Fields": [{ "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Authorization", "Docs": "", "Typewords": ["string"] }, { "Name": "Events", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"IncomingWebhook": { "Name": "IncomingWebhook", "Docs": "", "Fields": [{ "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Authorization", "Docs": "", "Typewords": ["string"] }] },
@@ -380,7 +388,6 @@ var api;
 		"SubjectPass": { "Name": "SubjectPass", "Docs": "", "Fields": [{ "Name": "Period", "Docs": "", "Typewords": ["int64"] }] },
 		"AutomaticJunkFlags": { "Name": "AutomaticJunkFlags", "Docs": "", "Fields": [{ "Name": "Enabled", "Docs": "", "Typewords": ["bool"] }, { "Name": "JunkMailboxRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "NeutralMailboxRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "NotJunkMailboxRegexp", "Docs": "", "Typewords": ["string"] }] },
 		"JunkFilter": { "Name": "JunkFilter", "Docs": "", "Fields": [{ "Name": "Threshold", "Docs": "", "Typewords": ["float64"] }, { "Name": "Onegrams", "Docs": "", "Typewords": ["bool"] }, { "Name": "Twograms", "Docs": "", "Typewords": ["bool"] }, { "Name": "Threegrams", "Docs": "", "Typewords": ["bool"] }, { "Name": "MaxPower", "Docs": "", "Typewords": ["float64"] }, { "Name": "TopWords", "Docs": "", "Typewords": ["int32"] }, { "Name": "IgnoreWords", "Docs": "", "Typewords": ["float64"] }, { "Name": "RareWords", "Docs": "", "Typewords": ["int32"] }] },
-		"Route": { "Name": "Route", "Docs": "", "Fields": [{ "Name": "FromDomain", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ToDomain", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "MinimumAttempts", "Docs": "", "Typewords": ["int32"] }, { "Name": "Transport", "Docs": "", "Typewords": ["string"] }, { "Name": "FromDomainASCII", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ToDomainASCII", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"PolicyRecord": { "Name": "PolicyRecord", "Docs": "", "Fields": [{ "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Inserted", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "ValidEnd", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "LastUpdate", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "LastUse", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Backoff", "Docs": "", "Typewords": ["bool"] }, { "Name": "RecordID", "Docs": "", "Typewords": ["string"] }, { "Name": "Version", "Docs": "", "Typewords": ["string"] }, { "Name": "Mode", "Docs": "", "Typewords": ["Mode"] }, { "Name": "MX", "Docs": "", "Typewords": ["[]", "STSMX"] }, { "Name": "MaxAgeSeconds", "Docs": "", "Typewords": ["int32"] }, { "Name": "Extensions", "Docs": "", "Typewords": ["[]", "Pair"] }, { "Name": "PolicyText", "Docs": "", "Typewords": ["string"] }] },
 		"TLSReportRecord": { "Name": "TLSReportRecord", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "FromDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "MailFrom", "Docs": "", "Typewords": ["string"] }, { "Name": "HostReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "Report", "Docs": "", "Typewords": ["Report"] }] },
 		"Report": { "Name": "Report", "Docs": "", "Fields": [{ "Name": "OrganizationName", "Docs": "", "Typewords": ["string"] }, { "Name": "DateRange", "Docs": "", "Typewords": ["TLSRPTDateRange"] }, { "Name": "ContactInfo", "Docs": "", "Typewords": ["string"] }, { "Name": "ReportID", "Docs": "", "Typewords": ["string"] }, { "Name": "Policies", "Docs": "", "Typewords": ["[]", "Result"] }] },
@@ -437,11 +444,13 @@ var api;
 		"SuppressAddress": { "Name": "SuppressAddress", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Inserted", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "ReportingAddress", "Docs": "", "Typewords": ["string"] }, { "Name": "Until", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }] },
 		"TLSResult": { "Name": "TLSResult", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "PolicyDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "DayUTC", "Docs": "", "Typewords": ["string"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "Created", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Updated", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "IsHost", "Docs": "", "Typewords": ["bool"] }, { "Name": "SendReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "SentToRecipientDomain", "Docs": "", "Typewords": ["bool"] }, { "Name": "RecipientDomainReportingAddresses", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "SentToPolicyDomain", "Docs": "", "Typewords": ["bool"] }, { "Name": "Results", "Docs": "", "Typewords": ["[]", "Result"] }] },
 		"TLSRPTSuppressAddress": { "Name": "TLSRPTSuppressAddress", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Inserted", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "ReportingAddress", "Docs": "", "Typewords": ["string"] }, { "Name": "Until", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }] },
+		"Dynamic": { "Name": "Dynamic", "Docs": "", "Fields": [{ "Name": "Domains", "Docs": "", "Typewords": ["{}", "ConfigDomain"] }, { "Name": "Accounts", "Docs": "", "Typewords": ["{}", "Account"] }, { "Name": "WebDomainRedirects", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "WebHandlers", "Docs": "", "Typewords": ["[]", "WebHandler"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "MonitorDNSBLs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "MonitorDNSBLZones", "Docs": "", "Typewords": ["[]", "Domain"] }] },
 		"CSRFToken": { "Name": "CSRFToken", "Docs": "", "Values": null },
 		"DMARCPolicy": { "Name": "DMARCPolicy", "Docs": "", "Values": [{ "Name": "PolicyEmpty", "Value": "", "Docs": "" }, { "Name": "PolicyNone", "Value": "none", "Docs": "" }, { "Name": "PolicyQuarantine", "Value": "quarantine", "Docs": "" }, { "Name": "PolicyReject", "Value": "reject", "Docs": "" }] },
 		"Align": { "Name": "Align", "Docs": "", "Values": [{ "Name": "AlignStrict", "Value": "s", "Docs": "" }, { "Name": "AlignRelaxed", "Value": "r", "Docs": "" }] },
 		"RUA": { "Name": "RUA", "Docs": "", "Values": null },
 		"Mode": { "Name": "Mode", "Docs": "", "Values": [{ "Name": "ModeEnforce", "Value": "enforce", "Docs": "" }, { "Name": "ModeTesting", "Value": "testing", "Docs": "" }, { "Name": "ModeNone", "Value": "none", "Docs": "" }] },
+		"Localpart": { "Name": "Localpart", "Docs": "", "Values": null },
 		"PolicyType": { "Name": "PolicyType", "Docs": "", "Values": [{ "Name": "TLSA", "Value": "tlsa", "Docs": "" }, { "Name": "STS", "Value": "sts", "Docs": "" }, { "Name": "NoPolicyFound", "Value": "no-policy-found", "Docs": "" }] },
 		"ResultType": { "Name": "ResultType", "Docs": "", "Values": [{ "Name": "ResultSTARTTLSNotSupported", "Value": "starttls-not-supported", "Docs": "" }, { "Name": "ResultCertificateHostMismatch", "Value": "certificate-host-mismatch", "Docs": "" }, { "Name": "ResultCertificateExpired", "Value": "certificate-expired", "Docs": "" }, { "Name": "ResultTLSAInvalid", "Value": "tlsa-invalid", "Docs": "" }, { "Name": "ResultDNSSECInvalid", "Value": "dnssec-invalid", "Docs": "" }, { "Name": "ResultDANERequired", "Value": "dane-required", "Docs": "" }, { "Name": "ResultCertificateNotTrusted", "Value": "certificate-not-trusted", "Docs": "" }, { "Name": "ResultSTSPolicyInvalid", "Value": "sts-policy-invalid", "Docs": "" }, { "Name": "ResultSTSWebPKIInvalid", "Value": "sts-webpki-invalid", "Docs": "" }, { "Name": "ResultValidationFailure", "Value": "validation-failure", "Docs": "" }, { "Name": "ResultSTSPolicyFetch", "Value": "sts-policy-fetch-error", "Docs": "" }] },
 		"Alignment": { "Name": "Alignment", "Docs": "", "Values": [{ "Name": "AlignmentAbsent", "Value": "", "Docs": "" }, { "Name": "AlignmentRelaxed", "Value": "r", "Docs": "" }, { "Name": "AlignmentStrict", "Value": "s", "Docs": "" }] },
@@ -451,7 +460,6 @@ var api;
 		"DKIMResult": { "Name": "DKIMResult", "Docs": "", "Values": [{ "Name": "DKIMAbsent", "Value": "", "Docs": "" }, { "Name": "DKIMNone", "Value": "none", "Docs": "" }, { "Name": "DKIMPass", "Value": "pass", "Docs": "" }, { "Name": "DKIMFail", "Value": "fail", "Docs": "" }, { "Name": "DKIMPolicy", "Value": "policy", "Docs": "" }, { "Name": "DKIMNeutral", "Value": "neutral", "Docs": "" }, { "Name": "DKIMTemperror", "Value": "temperror", "Docs": "" }, { "Name": "DKIMPermerror", "Value": "permerror", "Docs": "" }] },
 		"SPFDomainScope": { "Name": "SPFDomainScope", "Docs": "", "Values": [{ "Name": "SPFDomainScopeAbsent", "Value": "", "Docs": "" }, { "Name": "SPFDomainScopeHelo", "Value": "helo", "Docs": "" }, { "Name": "SPFDomainScopeMailFrom", "Value": "mfrom", "Docs": "" }] },
 		"SPFResult": { "Name": "SPFResult", "Docs": "", "Values": [{ "Name": "SPFAbsent", "Value": "", "Docs": "" }, { "Name": "SPFNone", "Value": "none", "Docs": "" }, { "Name": "SPFNeutral", "Value": "neutral", "Docs": "" }, { "Name": "SPFPass", "Value": "pass", "Docs": "" }, { "Name": "SPFFail", "Value": "fail", "Docs": "" }, { "Name": "SPFSoftfail", "Value": "softfail", "Docs": "" }, { "Name": "SPFTemperror", "Value": "temperror", "Docs": "" }, { "Name": "SPFPermerror", "Value": "permerror", "Docs": "" }] },
-		"Localpart": { "Name": "Localpart", "Docs": "", "Values": null },
 		"IP": { "Name": "IP", "Docs": "", "Values": [] },
 	};
 	api.parser = {
@@ -486,6 +494,14 @@ var api;
 		AutoconfCheckResult: (v) => api.parse("AutoconfCheckResult", v),
 		AutodiscoverCheckResult: (v) => api.parse("AutodiscoverCheckResult", v),
 		AutodiscoverSRV: (v) => api.parse("AutodiscoverSRV", v),
+		ConfigDomain: (v) => api.parse("ConfigDomain", v),
+		DKIM: (v) => api.parse("DKIM", v),
+		Selector: (v) => api.parse("Selector", v),
+		Canonicalization: (v) => api.parse("Canonicalization", v),
+		DMARC: (v) => api.parse("DMARC", v),
+		MTASTS: (v) => api.parse("MTASTS", v),
+		TLSRPT: (v) => api.parse("TLSRPT", v),
+		Route: (v) => api.parse("Route", v),
 		Account: (v) => api.parse("Account", v),
 		OutgoingWebhook: (v) => api.parse("OutgoingWebhook", v),
 		IncomingWebhook: (v) => api.parse("IncomingWebhook", v),
@@ -494,7 +510,6 @@ var api;
 		SubjectPass: (v) => api.parse("SubjectPass", v),
 		AutomaticJunkFlags: (v) => api.parse("AutomaticJunkFlags", v),
 		JunkFilter: (v) => api.parse("JunkFilter", v),
-		Route: (v) => api.parse("Route", v),
 		PolicyRecord: (v) => api.parse("PolicyRecord", v),
 		TLSReportRecord: (v) => api.parse("TLSReportRecord", v),
 		Report: (v) => api.parse("Report", v),
@@ -551,11 +566,13 @@ var api;
 		SuppressAddress: (v) => api.parse("SuppressAddress", v),
 		TLSResult: (v) => api.parse("TLSResult", v),
 		TLSRPTSuppressAddress: (v) => api.parse("TLSRPTSuppressAddress", v),
+		Dynamic: (v) => api.parse("Dynamic", v),
 		CSRFToken: (v) => api.parse("CSRFToken", v),
 		DMARCPolicy: (v) => api.parse("DMARCPolicy", v),
 		Align: (v) => api.parse("Align", v),
 		RUA: (v) => api.parse("RUA", v),
 		Mode: (v) => api.parse("Mode", v),
+		Localpart: (v) => api.parse("Localpart", v),
 		PolicyType: (v) => api.parse("PolicyType", v),
 		ResultType: (v) => api.parse("ResultType", v),
 		Alignment: (v) => api.parse("Alignment", v),
@@ -565,7 +582,6 @@ var api;
 		DKIMResult: (v) => api.parse("DKIMResult", v),
 		SPFDomainScope: (v) => api.parse("SPFDomainScope", v),
 		SPFResult: (v) => api.parse("SPFResult", v),
-		Localpart: (v) => api.parse("Localpart", v),
 		IP: (v) => api.parse("IP", v),
 	};
 	// Admin exports web API functions for the admin web interface. All its methods are
@@ -649,6 +665,14 @@ var api;
 			const fn = "ParseDomain";
 			const paramTypes = [["string"]];
 			const returnTypes = [["Domain"]];
+			const params = [domain];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainConfig returns the configuration for a domain.
+		async DomainConfig(domain) {
+			const fn = "DomainConfig";
+			const paramTypes = [["string"]];
+			const returnTypes = [["ConfigDomain"]];
 			const params = [domain];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
@@ -1212,6 +1236,38 @@ var api;
 			const paramTypes = [["string"]];
 			const returnTypes = [["string"]];
 			const params = [recvID];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// Config returns the dynamic config.
+		async Config() {
+			const fn = "Config";
+			const paramTypes = [];
+			const returnTypes = [["Dynamic"]];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// AccountRoutesSave saves routes for an account.
+		async AccountRoutesSave(accountName, routes) {
+			const fn = "AccountRoutesSave";
+			const paramTypes = [["string"], ["[]", "Route"]];
+			const returnTypes = [];
+			const params = [accountName, routes];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainRoutesSave saves routes for a domain.
+		async DomainRoutesSave(domainName, routes) {
+			const fn = "DomainRoutesSave";
+			const paramTypes = [["string"], ["[]", "Route"]];
+			const returnTypes = [];
+			const params = [domainName, routes];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// RoutesSave saves global routes.
+		async RoutesSave(routes) {
+			const fn = "RoutesSave";
+			const paramTypes = [["[]", "Route"]];
+			const returnTypes = [];
+			const params = [routes];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 	}
@@ -1855,7 +1911,14 @@ const index = async () => {
 		await check(recvIDFieldset, client.LookupCid(recvID.value));
 	}, recvIDFieldset = dom.fieldset(dom.label('Received ID', attr.title('The ID in the Received header that was added during incoming delivery.')), ' ', recvID = dom.input(attr.required('')), ' ', dom.submitbutton('Lookup cid', attr.title('Logging about an incoming message includes an attribute "cid", a counter identifying the transaction related to delivery of the message. The ID in the received header is an encrypted cid, which this form decrypts, after which you can look it up in the logging.')), ' ', cidElem = dom.span()))), 
 	// todo: routing, globally, per domain and per account
-	dom.br(), dom.h2('Configuration'), dom.div(dom.a('Webserver', attr.href('#webserver'))), dom.div(dom.a('Files', attr.href('#config'))), dom.div(dom.a('Log levels', attr.href('#loglevels'))), footer);
+	dom.br(), dom.h2('Configuration'), dom.div(dom.a('Routes', attr.href('#routes'))), dom.div(dom.a('Webserver', attr.href('#webserver'))), dom.div(dom.a('Files', attr.href('#config'))), dom.div(dom.a('Log levels', attr.href('#loglevels'))), footer);
+};
+const globalRoutes = async () => {
+	const [transports, config] = await Promise.all([
+		client.Transports(),
+		client.Config(),
+	]);
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Routes'), RoutesEditor('global', transports, config.Routes || [], async (routes) => await client.RoutesSave(routes)));
 };
 const config = async () => {
 	const [staticPath, dynamicPath, staticText, dynamicText] = await client.ConfigFiles();
@@ -1945,10 +2008,69 @@ const formatQuotaSize = (v) => {
 	}
 	return '' + v;
 };
+const RoutesEditor = (kind, transports, routes, save) => {
+	const transportNames = Object.keys(transports || {});
+	transportNames.sort();
+	const hdr = dom.h2('Routes', attr.title('Messages submitted to the queue for outgoing delivery are delivered directly to the MX records of the recipient domain by default. However, other "transports" can be configured, such as SMTP submission/relay or connecting through a SOCKS proxy. Routes with matching rules and a transport can be configured for accounts, domains and globally. Routes are evaluated in that order, the first match is applied.'));
+	let routesElem;
+	const render = () => {
+		if (transportNames.length === 0) {
+			return [hdr, dom.p('No transports configured.', attr.title('To configure routes, first configure transports via the mox.conf config file.'))];
+		}
+		let routesFieldset;
+		let routeRows = [];
+		let elem = dom.form(async function submit(e) {
+			e.stopPropagation();
+			e.preventDefault();
+			await check(routesFieldset, save(routeRows.map(rr => rr.gather())));
+		}, routesFieldset = dom.fieldset(dom.table(dom.thead(dom.tr(dom.th('From domain'), dom.th('To domain'), dom.th('Minimum attempts'), dom.th('Transport'), dom.th(dom.clickbutton('Add', function click() {
+			routes = routeRows.map(rr => rr.gather());
+			routes.push({ FromDomain: [], ToDomain: [], MinimumAttempts: 0, Transport: transportNames[0] });
+			render();
+		})))), dom.tbody((routes || []).length === 0 ? dom.tr(dom.td(attr.colspan('5'), 'No routes.')) : [], routeRows = (routes || []).map((r, index) => {
+			let fromDomain = dom.input(attr.value((r.FromDomain || []).join(',')));
+			let toDomain = dom.input(attr.value((r.ToDomain || []).join(',')));
+			let minimumAttempts = dom.input(attr.value('' + r.MinimumAttempts));
+			let transport = dom.select(attr.required(''), transportNames.map(s => dom.option(s, s === r.Transport ? attr.selected('') : [])));
+			const tr = dom.tr(dom.td(fromDomain), dom.td(toDomain), dom.td(minimumAttempts), dom.td(transport), dom.td(dom.clickbutton('Remove', function click() {
+				routeRows.splice(index, 1);
+				routes = routeRows.map(rr => rr.gather());
+				render();
+			})));
+			return {
+				root: tr,
+				gather: () => {
+					return {
+						FromDomain: fromDomain.value ? fromDomain.value.split(',') : [],
+						ToDomain: toDomain.value ? toDomain.value.split(',') : [],
+						MinimumAttempts: parseInt(minimumAttempts.value) || 0,
+						Transport: transport.value,
+					};
+				},
+			};
+		}))), dom.div(dom.submitbutton('Save'))));
+		if (!routesElem && (routes || []).length === 0) {
+			// Keep it short.
+			elem = dom.div('No ' + kind + ' routes configured. ', dom.clickbutton('Add', function click() {
+				routes = routeRows.map(rr => rr.gather());
+				routes.push({ FromDomain: [], ToDomain: [], MinimumAttempts: 0, Transport: transportNames[0] });
+				render();
+			}));
+		}
+		elem = dom.div(hdr, elem);
+		if (routesElem) {
+			routesElem.replaceWith(elem);
+		}
+		routesElem = elem;
+		return elem;
+	};
+	return render();
+};
 const account = async (name) => {
-	const [[config, diskUsage], domains] = await Promise.all([
+	const [[config, diskUsage], domains, transports] = await Promise.all([
 		client.Account(name),
 		client.Domains(),
+		client.Transports(),
 	]);
 	// todo: show suppression list, and buttons to add/remove entries.
 	let form;
@@ -2044,7 +2166,7 @@ const account = async (name) => {
 		await check(fieldsetPassword, client.SetPassword(name, password.value));
 		window.alert('Password has been changed.');
 		formPassword.reset();
-	}), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove account', async function click(e) {
+	}), dom.br(), RoutesEditor('account-specific', transports, config.Routes || [], async (routes) => await client.AccountRoutesSave(name, routes)), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove account', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this account?')) {
 			return;
@@ -2056,13 +2178,15 @@ const account = async (name) => {
 const domain = async (d) => {
 	const end = new Date();
 	const start = new Date(new Date().getTime() - 30 * 24 * 3600 * 1000);
-	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfigs, accounts] = await Promise.all([
+	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfigs, accounts, domainConfig, transports] = await Promise.all([
 		client.DMARCSummaries(start, end, d),
 		client.TLSRPTSummaries(start, end, d),
 		client.DomainLocalparts(d),
-		client.Domain(d),
+		client.ParseDomain(d),
 		client.ClientConfigsDomain(d),
 		client.Accounts(),
+		client.DomainConfig(d),
+		client.Transports(),
 	]);
 	let form;
 	let fieldset;
@@ -2081,7 +2205,7 @@ const domain = async (d) => {
 		await check(fieldset, client.AddressAdd(localpart.value + '@' + d, account.value));
 		form.reset();
 		window.location.reload(); // todo: only reload the addresses
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an address. An empty localpart is the catchall destination/address for the domain.')), dom.br(), localpart = dom.input()), '@', domainName(dnsdomain), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account', attr.title('Account to assign the address to.')), dom.br(), account = dom.select(attr.required(''), (accounts || []).map(a => dom.option(a)))), ' ', dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')))), dom.br(), dom.h2('External checks'), dom.ul(dom.li(link('https://internet.nl/mail/' + dnsdomain.ASCII + '/', 'Check configuration at internet.nl'))), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove domain', async function click(e) {
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an address. An empty localpart is the catchall destination/address for the domain.')), dom.br(), localpart = dom.input()), '@', domainName(dnsdomain), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account', attr.title('Account to assign the address to.')), dom.br(), account = dom.select(attr.required(''), (accounts || []).map(a => dom.option(a)))), ' ', dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')))), dom.br(), RoutesEditor('domain-specific', transports, domainConfig.Routes || [], async (routes) => await client.DomainRoutesSave(d, routes)), dom.br(), dom.h2('External checks'), dom.ul(dom.li(link('https://internet.nl/mail/' + dnsdomain.ASCII + '/', 'Check configuration at internet.nl'))), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove domain', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this domain?')) {
 			return;
@@ -2093,14 +2217,14 @@ const domain = async (d) => {
 const domainDNSRecords = async (d) => {
 	const [records, dnsdomain] = await Promise.all([
 		client.DomainRecords(d),
-		client.Domain(d),
+		client.ParseDomain(d),
 	]);
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), 'DNS Records'), dom.h1('Required DNS records'), dom.pre('pre', dom._class('literal'), (records || []).join('\n')), dom.br());
 };
 const domainDNSCheck = async (d) => {
 	const [checks, dnsdomain] = await Promise.all([
 		client.CheckDomain(d),
-		client.Domain(d),
+		client.ParseDomain(d),
 	]);
 	const resultSection = (title, r, details) => {
 		let success = [];
@@ -3589,6 +3713,9 @@ const init = async () => {
 			}
 			else if (h === 'dnsbl') {
 				await dnsbl();
+			}
+			else if (h === 'routes') {
+				await globalRoutes();
 			}
 			else if (h === 'webserver') {
 				await webserver();
