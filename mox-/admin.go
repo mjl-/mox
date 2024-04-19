@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -29,10 +30,13 @@ import (
 	"github.com/mjl-/mox/dmarc"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/junk"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/tlsrpt"
 )
+
+var ErrRequest = errors.New("bad request")
 
 // TXTStrings returns a TXT record value as one or more quoted strings, each max
 // 100 characters. In case of multiple strings, a multi-line record is returned.
@@ -151,6 +155,31 @@ func MakeAccountConfig(addr smtp.Address) config.Account {
 	return account
 }
 
+func writeFile(log mlog.Log, path string, data []byte) error {
+	os.MkdirAll(filepath.Dir(path), 0770)
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0660)
+	if err != nil {
+		return fmt.Errorf("creating file %s: %s", path, err)
+	}
+	defer func() {
+		if f != nil {
+			err := f.Close()
+			log.Check(err, "closing file after error")
+			err = os.Remove(path)
+			log.Check(err, "removing file after error", slog.String("path", path))
+		}
+	}()
+	if _, err := f.Write(data); err != nil {
+		return fmt.Errorf("writing file %s: %s", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close file: %v", err)
+	}
+	f = nil
+	return nil
+}
+
 // MakeDomainConfig makes a new config for a domain, creating DKIM keys, using
 // accountName for DMARC and TLS reports.
 func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountName string, withMTASTS bool) (config.Domain, []string, error) {
@@ -168,31 +197,6 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 		}
 	}()
 
-	writeFile := func(path string, data []byte) error {
-		os.MkdirAll(filepath.Dir(path), 0770)
-
-		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0660)
-		if err != nil {
-			return fmt.Errorf("creating file %s: %s", path, err)
-		}
-		defer func() {
-			if f != nil {
-				err := f.Close()
-				log.Check(err, "closing file after error")
-				err = os.Remove(path)
-				log.Check(err, "removing file after error", slog.String("path", path))
-			}
-		}()
-		if _, err := f.Write(data); err != nil {
-			return fmt.Errorf("writing file %s: %s", path, err)
-		}
-		if err := f.Close(); err != nil {
-			return fmt.Errorf("close file: %v", err)
-		}
-		f = nil
-		return nil
-	}
-
 	confDKIM := config.DKIM{
 		Selectors: map[string]config.Selector{},
 	}
@@ -201,7 +205,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 		record := fmt.Sprintf("%s._domainkey.%s", name, domain.ASCII)
 		keyPath := filepath.Join("dkim", fmt.Sprintf("%s.%s.%s.privatekey.pkcs8.pem", record, timestamp, kind))
 		p := configDirPath(ConfigDynamicPath, keyPath)
-		if err := writeFile(p, privKey); err != nil {
+		if err := writeFile(log, p, privKey); err != nil {
 			return err
 		}
 		paths = append(paths, p)
@@ -282,6 +286,164 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 	return confDomain, rpaths, nil
 }
 
+// DKIMAdd adds a DKIM selector for a domain, generating a key and writing it to disk.
+func DKIMAdd(ctx context.Context, domain, selector dns.Domain, algorithm, hash string, headerRelaxed, bodyRelaxed, seal bool, headers []string, lifetime time.Duration) (rerr error) {
+	log := pkglog.WithContext(ctx)
+	defer func() {
+		if rerr != nil {
+			log.Errorx("adding dkim key", rerr,
+				slog.Any("domain", domain),
+				slog.Any("selector", selector))
+		}
+	}()
+
+	switch hash {
+	case "sha256", "sha1":
+	default:
+		return fmt.Errorf("%w: unknown hash algorithm %q", ErrRequest, hash)
+	}
+
+	var privKey []byte
+	var err error
+	var kind string
+	switch algorithm {
+	case "rsa":
+		privKey, err = MakeDKIMRSAKey(selector, domain)
+		kind = "rsa2048"
+	case "ed25519":
+		privKey, err = MakeDKIMEd25519Key(selector, domain)
+		kind = "ed25519"
+	default:
+		err = fmt.Errorf("unknown algorithm")
+	}
+	if err != nil {
+		return fmt.Errorf("%w: making dkim key: %v", ErrRequest, err)
+	}
+
+	// Only take lock now, we don't want to hold it while generating a key.
+	Conf.dynamicMutex.Lock()
+	defer Conf.dynamicMutex.Unlock()
+
+	c := Conf.Dynamic
+	d, ok := c.Domains[domain.Name()]
+	if !ok {
+		return fmt.Errorf("%w: domain does not exist", ErrRequest)
+	}
+
+	if _, ok := d.DKIM.Selectors[selector.Name()]; ok {
+		return fmt.Errorf("%w: selector already exists for domain", ErrRequest)
+	}
+
+	record := fmt.Sprintf("%s._domainkey.%s", selector.ASCII, domain.ASCII)
+	timestamp := time.Now().Format("20060102T150405")
+	keyPath := filepath.Join("dkim", fmt.Sprintf("%s.%s.%s.privatekey.pkcs8.pem", record, timestamp, kind))
+	p := configDirPath(ConfigDynamicPath, keyPath)
+	if err := writeFile(log, p, privKey); err != nil {
+		return fmt.Errorf("writing key file: %v", err)
+	}
+	removePath := p
+	defer func() {
+		if removePath != "" {
+			err := os.Remove(removePath)
+			log.Check(err, "removing path for dkim key", slog.String("path", removePath))
+		}
+	}()
+
+	nsel := config.Selector{
+		Hash: hash,
+		Canonicalization: config.Canonicalization{
+			HeaderRelaxed: headerRelaxed,
+			BodyRelaxed:   bodyRelaxed,
+		},
+		Headers:         headers,
+		DontSealHeaders: !seal,
+		Expiration:      lifetime.String(),
+		PrivateKeyFile:  keyPath,
+	}
+
+	// All good, time to update the config.
+	nd := d
+	nd.DKIM.Selectors = map[string]config.Selector{}
+	for name, osel := range d.DKIM.Selectors {
+		nd.DKIM.Selectors[name] = osel
+	}
+	nd.DKIM.Selectors[selector.Name()] = nsel
+	nc := c
+	nc.Domains = map[string]config.Domain{}
+	for name, dom := range c.Domains {
+		nc.Domains[name] = dom
+	}
+	nc.Domains[domain.Name()] = nd
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %w", err)
+	}
+
+	log.Info("dkim key added", slog.Any("domain", domain), slog.Any("selector", selector))
+	removePath = "" // Prevent cleanup of key file.
+	return nil
+}
+
+// DKIMRemove removes the selector from the domain, moving the key file out of the way.
+func DKIMRemove(ctx context.Context, domain, selector dns.Domain) (rerr error) {
+	log := pkglog.WithContext(ctx)
+	defer func() {
+		if rerr != nil {
+			log.Errorx("removing dkim key", rerr,
+				slog.Any("domain", domain),
+				slog.Any("selector", selector))
+		}
+	}()
+
+	Conf.dynamicMutex.Lock()
+	defer Conf.dynamicMutex.Unlock()
+
+	c := Conf.Dynamic
+	d, ok := c.Domains[domain.Name()]
+	if !ok {
+		return fmt.Errorf("%w: domain does not exist", ErrRequest)
+	}
+
+	sel, ok := d.DKIM.Selectors[selector.Name()]
+	if !ok {
+		return fmt.Errorf("%w: selector does not exist for domain", ErrRequest)
+	}
+
+	nsels := map[string]config.Selector{}
+	for name, sel := range d.DKIM.Selectors {
+		if name != selector.Name() {
+			nsels[name] = sel
+		}
+	}
+	nsign := make([]string, 0, len(d.DKIM.Sign))
+	for _, name := range d.DKIM.Sign {
+		if name != selector.Name() {
+			nsign = append(nsign, name)
+		}
+	}
+
+	nd := d
+	nd.DKIM = config.DKIM{Selectors: nsels, Sign: nsign}
+	nc := c
+	nc.Domains = map[string]config.Domain{}
+	for name, dom := range c.Domains {
+		nc.Domains[name] = dom
+	}
+	nc.Domains[domain.Name()] = nd
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %w", err)
+	}
+
+	// Move away a DKIM private key to a subdirectory "old". But only if
+	// not in use by other domains.
+	usedKeyPaths := gatherUsedKeysPaths(nc)
+	moveAwayKeys(log, map[string]config.Selector{selector.Name(): sel}, usedKeyPaths)
+
+	log.Info("dkim key removed", slog.Any("domain", domain), slog.Any("selector", selector))
+	return nil
+}
+
 // DomainAdd adds the domain to the domains config, rewriting domains.conf and
 // marking it loaded.
 //
@@ -304,7 +466,7 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 
 	c := Conf.Dynamic
 	if _, ok := c.Domains[domain.Name()]; ok {
-		return fmt.Errorf("domain already present")
+		return fmt.Errorf("%w: domain already present", ErrRequest)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -336,11 +498,11 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 	}()
 
 	if _, ok := c.Accounts[accountName]; ok && localpart != "" {
-		return fmt.Errorf("account already exists (leave localpart empty when using an existing account)")
+		return fmt.Errorf("%w: account already exists (leave localpart empty when using an existing account)", ErrRequest)
 	} else if !ok && localpart == "" {
-		return fmt.Errorf("account does not yet exist (specify a localpart)")
+		return fmt.Errorf("%w: account does not yet exist (specify a localpart)", ErrRequest)
 	} else if accountName == "" {
-		return fmt.Errorf("account name is empty")
+		return fmt.Errorf("%w: account name is empty", ErrRequest)
 	} else if !ok {
 		nc.Accounts[accountName] = MakeAccountConfig(smtp.Address{Localpart: localpart, Domain: domain})
 	} else if accountName != Conf.Static.Postmaster.Account {
@@ -358,7 +520,7 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 	nc.Domains[domain.Name()] = confDomain
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("domain added", slog.Any("domain", domain))
 	cleanupFiles = nil // All good, don't cleanup.
@@ -382,7 +544,7 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 	c := Conf.Dynamic
 	domConf, ok := c.Domains[domain.Name()]
 	if !ok {
-		return fmt.Errorf("domain does not exist")
+		return fmt.Errorf("%w: domain does not exist", ErrRequest)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -397,18 +559,30 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 	}
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 
 	// Move away any DKIM private keys to a subdirectory "old". But only if
 	// they are not in use by other domains.
+	usedKeyPaths := gatherUsedKeysPaths(nc)
+	moveAwayKeys(log, domConf.DKIM.Selectors, usedKeyPaths)
+
+	log.Info("domain removed", slog.Any("domain", domain))
+	return nil
+}
+
+func gatherUsedKeysPaths(nc config.Dynamic) map[string]bool {
 	usedKeyPaths := map[string]bool{}
 	for _, dc := range nc.Domains {
 		for _, sel := range dc.DKIM.Selectors {
 			usedKeyPaths[filepath.Clean(sel.PrivateKeyFile)] = true
 		}
 	}
-	for _, sel := range domConf.DKIM.Selectors {
+	return usedKeyPaths
+}
+
+func moveAwayKeys(log mlog.Log, sels map[string]config.Selector, usedKeyPaths map[string]bool) {
+	for _, sel := range sels {
 		if sel.PrivateKeyFile == "" || usedKeyPaths[filepath.Clean(sel.PrivateKeyFile)] {
 			continue
 		}
@@ -425,9 +599,6 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 			log.Errorx("renaming dkim private key file for removed domain", err, slog.String("src", src), slog.String("dst", dst))
 		}
 	}
-
-	log.Info("domain removed", slog.Any("domain", domain))
-	return nil
 }
 
 // DomainSave calls xmodify with a shallow copy of the domain config. xmodify
@@ -448,7 +619,7 @@ func DomainSave(ctx context.Context, domainName string, xmodify func(config *con
 	nc := Conf.Dynamic                // Shallow copy.
 	dom, ok := nc.Domains[domainName] // dom is a shallow copy.
 	if !ok {
-		return fmt.Errorf("domain not present")
+		return fmt.Errorf("%w: domain not present", ErrRequest)
 	}
 
 	xmodify(&dom)
@@ -789,7 +960,7 @@ func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 
 	addr, err := smtp.ParseAddress(address)
 	if err != nil {
-		return fmt.Errorf("parsing email address: %v", err)
+		return fmt.Errorf("%w: parsing email address: %v", ErrRequest, err)
 	}
 
 	Conf.dynamicMutex.Lock()
@@ -797,11 +968,11 @@ func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 
 	c := Conf.Dynamic
 	if _, ok := c.Accounts[account]; ok {
-		return fmt.Errorf("account already present")
+		return fmt.Errorf("%w: account already present", ErrRequest)
 	}
 
 	if err := checkAddressAvailable(addr); err != nil {
-		return fmt.Errorf("address not available: %v", err)
+		return fmt.Errorf("%w: address not available: %v", ErrRequest, err)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -834,7 +1005,7 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 
 	c := Conf.Dynamic
 	if _, ok := c.Accounts[account]; !ok {
-		return fmt.Errorf("account does not exist")
+		return fmt.Errorf("%w: account does not exist", ErrRequest)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -888,30 +1059,30 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 	c := Conf.Dynamic
 	a, ok := c.Accounts[account]
 	if !ok {
-		return fmt.Errorf("account does not exist")
+		return fmt.Errorf("%w: account does not exist", ErrRequest)
 	}
 
 	var destAddr string
 	if strings.HasPrefix(address, "@") {
 		d, err := dns.ParseDomain(address[1:])
 		if err != nil {
-			return fmt.Errorf("parsing domain: %v", err)
+			return fmt.Errorf("%w: parsing domain: %v", ErrRequest, err)
 		}
 		dname := d.Name()
 		destAddr = "@" + dname
 		if _, ok := Conf.Dynamic.Domains[dname]; !ok {
-			return fmt.Errorf("domain does not exist")
+			return fmt.Errorf("%w: domain does not exist", ErrRequest)
 		} else if _, ok := Conf.accountDestinations[destAddr]; ok {
-			return fmt.Errorf("catchall address already configured for domain")
+			return fmt.Errorf("%w: catchall address already configured for domain", ErrRequest)
 		}
 	} else {
 		addr, err := smtp.ParseAddress(address)
 		if err != nil {
-			return fmt.Errorf("parsing email address: %v", err)
+			return fmt.Errorf("%w: parsing email address: %v", ErrRequest, err)
 		}
 
 		if err := checkAddressAvailable(addr); err != nil {
-			return fmt.Errorf("address not available: %v", err)
+			return fmt.Errorf("%w: address not available: %v", ErrRequest, err)
 		}
 		destAddr = addr.String()
 	}
@@ -953,7 +1124,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 
 	ad, ok := Conf.accountDestinations[address]
 	if !ok {
-		return fmt.Errorf("address does not exists")
+		return fmt.Errorf("%w: address does not exists", ErrRequest)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -973,7 +1144,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		}
 	}
 	if !dropped {
-		return fmt.Errorf("address not removed, likely a postmaster/reporting address")
+		return fmt.Errorf("%w: address not removed, likely a postmaster/reporting address", ErrRequest)
 	}
 
 	// Also remove matching address from FromIDLoginAddresses, composing a new slice.
@@ -984,12 +1155,12 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	if strings.HasPrefix(address, "@") {
 		dom, err = dns.ParseDomain(address[1:])
 		if err != nil {
-			return fmt.Errorf("parsing domain for catchall address: %v", err)
+			return fmt.Errorf("%w: parsing domain for catchall address: %v", ErrRequest, err)
 		}
 	} else {
 		pa, err = smtp.ParseAddress(address)
 		if err != nil {
-			return fmt.Errorf("parsing address: %v", err)
+			return fmt.Errorf("%w: parsing address: %v", ErrRequest, err)
 		}
 		dom = pa.Domain
 	}
@@ -1004,15 +1175,15 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		}
 		dc, ok := Conf.Dynamic.Domains[dom.Name()]
 		if !ok {
-			return fmt.Errorf("unknown domain in fromid login address %q", fa.Pack(true))
+			return fmt.Errorf("%w: unknown domain in fromid login address %q", ErrRequest, fa.Pack(true))
 		}
 		flp, err := CanonicalLocalpart(fa.Localpart, dc)
 		if err != nil {
-			return fmt.Errorf("getting canonical localpart for fromid login address %q: %v", fa.Localpart, err)
+			return fmt.Errorf("%w: getting canonical localpart for fromid login address %q: %v", ErrRequest, fa.Localpart, err)
 		}
 		alp, err := CanonicalLocalpart(pa.Localpart, dc)
 		if err != nil {
-			return fmt.Errorf("getting canonical part for address: %v", err)
+			return fmt.Errorf("%w: getting canonical part for address: %v", ErrRequest, err)
 		}
 		if alp != flp {
 			// Keep for different localpart.
@@ -1054,7 +1225,7 @@ func AccountSave(ctx context.Context, account string, xmodify func(acc *config.A
 	c := Conf.Dynamic
 	acc, ok := c.Accounts[account]
 	if !ok {
-		return fmt.Errorf("account not present")
+		return fmt.Errorf("%w: account not present", ErrRequest)
 	}
 
 	xmodify(&acc)
@@ -1101,7 +1272,7 @@ func ClientConfigDomain(d dns.Domain) (rconfig ClientConfig, rerr error) {
 
 	domConf, ok := Conf.Domain(d)
 	if !ok {
-		return ClientConfig{}, fmt.Errorf("unknown domain")
+		return ClientConfig{}, fmt.Errorf("%w: unknown domain", ErrRequest)
 	}
 
 	gather := func(l config.Listener) (done bool) {
@@ -1159,7 +1330,7 @@ func ClientConfigDomain(d dns.Domain) (rconfig ClientConfig, rerr error) {
 			return
 		}
 	}
-	return ClientConfig{}, fmt.Errorf("no listeners found for imap and/or submission")
+	return ClientConfig{}, fmt.Errorf("%w: no listeners found for imap and/or submission", ErrRequest)
 }
 
 // ClientConfigs holds the client configuration for IMAP/Submission for a
@@ -1181,7 +1352,7 @@ type ClientConfigsEntry struct {
 func ClientConfigsDomain(d dns.Domain) (ClientConfigs, error) {
 	domConf, ok := Conf.Domain(d)
 	if !ok {
-		return ClientConfigs{}, fmt.Errorf("unknown domain")
+		return ClientConfigs{}, fmt.Errorf("%w: unknown domain", ErrRequest)
 	}
 
 	c := ClientConfigs{}

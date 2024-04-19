@@ -107,7 +107,7 @@ fmt:
 	go fmt ./...
 	gofmt -w -s *.go */*.go
 
-jswatch:
+tswatch:
 	bash -c 'while true; do inotifywait -q -e close_write *.ts webadmin/*.ts webaccount/*.ts webmail/*.ts; make frontend; done'
 
 install-js:

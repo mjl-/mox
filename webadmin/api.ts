@@ -292,6 +292,7 @@ export interface Selector {
 	DontSealHeaders: boolean
 	Expiration: string
 	PrivateKeyFile: string
+	Algorithm: string  // "ed25519", "rsa-*", based on private key.
 }
 
 export interface Canonicalization {
@@ -1183,7 +1184,7 @@ export const types: TypenameMap = {
 	"AutodiscoverSRV": {"Name":"AutodiscoverSRV","Docs":"","Fields":[{"Name":"Target","Docs":"","Typewords":["string"]},{"Name":"Port","Docs":"","Typewords":["uint16"]},{"Name":"Priority","Docs":"","Typewords":["uint16"]},{"Name":"Weight","Docs":"","Typewords":["uint16"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]}]},
 	"ConfigDomain": {"Name":"ConfigDomain","Docs":"","Fields":[{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"ClientSettingsDomain","Docs":"","Typewords":["string"]},{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]},{"Name":"DKIM","Docs":"","Typewords":["DKIM"]},{"Name":"DMARC","Docs":"","Typewords":["nullable","DMARC"]},{"Name":"MTASTS","Docs":"","Typewords":["nullable","MTASTS"]},{"Name":"TLSRPT","Docs":"","Typewords":["nullable","TLSRPT"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]}]},
 	"DKIM": {"Name":"DKIM","Docs":"","Fields":[{"Name":"Selectors","Docs":"","Typewords":["{}","Selector"]},{"Name":"Sign","Docs":"","Typewords":["[]","string"]}]},
-	"Selector": {"Name":"Selector","Docs":"","Fields":[{"Name":"Hash","Docs":"","Typewords":["string"]},{"Name":"HashEffective","Docs":"","Typewords":["string"]},{"Name":"Canonicalization","Docs":"","Typewords":["Canonicalization"]},{"Name":"Headers","Docs":"","Typewords":["[]","string"]},{"Name":"HeadersEffective","Docs":"","Typewords":["[]","string"]},{"Name":"DontSealHeaders","Docs":"","Typewords":["bool"]},{"Name":"Expiration","Docs":"","Typewords":["string"]},{"Name":"PrivateKeyFile","Docs":"","Typewords":["string"]}]},
+	"Selector": {"Name":"Selector","Docs":"","Fields":[{"Name":"Hash","Docs":"","Typewords":["string"]},{"Name":"HashEffective","Docs":"","Typewords":["string"]},{"Name":"Canonicalization","Docs":"","Typewords":["Canonicalization"]},{"Name":"Headers","Docs":"","Typewords":["[]","string"]},{"Name":"HeadersEffective","Docs":"","Typewords":["[]","string"]},{"Name":"DontSealHeaders","Docs":"","Typewords":["bool"]},{"Name":"Expiration","Docs":"","Typewords":["string"]},{"Name":"PrivateKeyFile","Docs":"","Typewords":["string"]},{"Name":"Algorithm","Docs":"","Typewords":["string"]}]},
 	"Canonicalization": {"Name":"Canonicalization","Docs":"","Fields":[{"Name":"HeaderRelaxed","Docs":"","Typewords":["bool"]},{"Name":"BodyRelaxed","Docs":"","Typewords":["bool"]}]},
 	"DMARC": {"Name":"DMARC","Docs":"","Fields":[{"Name":"Localpart","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"ParsedLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"MTASTS": {"Name":"MTASTS","Docs":"","Fields":[{"Name":"PolicyID","Docs":"","Typewords":["string"]},{"Name":"Mode","Docs":"","Typewords":["Mode"]},{"Name":"MaxAge","Docs":"","Typewords":["int64"]},{"Name":"MX","Docs":"","Typewords":["[]","string"]}]},
@@ -2161,6 +2162,96 @@ export class Client {
 		const paramTypes: string[][] = [["[]","Route"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [routes]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainDescriptionSave saves the description for a domain.
+	async DomainDescriptionSave(domainName: string, descr: string): Promise<void> {
+		const fn: string = "DomainDescriptionSave"
+		const paramTypes: string[][] = [["string"],["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, descr]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainClientSettingsDomainSave saves the client settings domain for a domain.
+	async DomainClientSettingsDomainSave(domainName: string, clientSettingsDomain: string): Promise<void> {
+		const fn: string = "DomainClientSettingsDomainSave"
+		const paramTypes: string[][] = [["string"],["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, clientSettingsDomain]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainLocalpartConfigSave saves the localpart catchall and case-sensitive
+	// settings for a domain.
+	async DomainLocalpartConfigSave(domainName: string, localpartCatchallSeparator: string, localpartCaseSensitive: boolean): Promise<void> {
+		const fn: string = "DomainLocalpartConfigSave"
+		const paramTypes: string[][] = [["string"],["string"],["bool"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, localpartCatchallSeparator, localpartCaseSensitive]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainDMARCAddressSave saves the DMARC reporting address/processing
+	// configuration for a domain. If localpart is empty, processing reports is
+	// disabled.
+	async DomainDMARCAddressSave(domainName: string, localpart: string, domain: string, account: string, mailbox: string): Promise<void> {
+		const fn: string = "DomainDMARCAddressSave"
+		const paramTypes: string[][] = [["string"],["string"],["string"],["string"],["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, localpart, domain, account, mailbox]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainTLSRPTAddressSave saves the TLS reporting address/processing
+	// configuration for a domain. If localpart is empty, processing reports is
+	// disabled.
+	async DomainTLSRPTAddressSave(domainName: string, localpart: string, domain: string, account: string, mailbox: string): Promise<void> {
+		const fn: string = "DomainTLSRPTAddressSave"
+		const paramTypes: string[][] = [["string"],["string"],["string"],["string"],["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, localpart, domain, account, mailbox]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainMTASTSSave saves the MTASTS policy for a domain. If policyID is empty,
+	// no MTASTS policy is served.
+	async DomainMTASTSSave(domainName: string, policyID: string, mode: Mode, maxAge: number, mx: string[] | null): Promise<void> {
+		const fn: string = "DomainMTASTSSave"
+		const paramTypes: string[][] = [["string"],["string"],["Mode"],["int64"],["[]","string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, policyID, mode, maxAge, mx]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainDKIMAdd adds a DKIM selector for a domain, generating a new private
+	// key. The selector is not enabled for signing.
+	async DomainDKIMAdd(domainName: string, selector: string, algorithm: string, hash: string, headerRelaxed: boolean, bodyRelaxed: boolean, seal: boolean, headers: string[] | null, lifetime: number): Promise<void> {
+		const fn: string = "DomainDKIMAdd"
+		const paramTypes: string[][] = [["string"],["string"],["string"],["string"],["bool"],["bool"],["bool"],["[]","string"],["int64"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, selector, algorithm, hash, headerRelaxed, bodyRelaxed, seal, headers, lifetime]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainDKIMRemove removes a DKIM selector for a domain.
+	async DomainDKIMRemove(domainName: string, selector: string): Promise<void> {
+		const fn: string = "DomainDKIMRemove"
+		const paramTypes: string[][] = [["string"],["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, selector]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainDKIMSave saves the settings of selectors, and which to enable for
+	// signing, for a domain. All currently configured selectors must be present,
+	// selectors cannot be added/removed with this function.
+	async DomainDKIMSave(domainName: string, selectors: { [key: string]: Selector }, sign: string[] | null): Promise<void> {
+		const fn: string = "DomainDKIMSave"
+		const paramTypes: string[][] = [["string"],["{}","Selector"],["[]","string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, selectors, sign]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 }

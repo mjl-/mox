@@ -374,7 +374,7 @@ var api;
 		"AutodiscoverSRV": { "Name": "AutodiscoverSRV", "Docs": "", "Fields": [{ "Name": "Target", "Docs": "", "Typewords": ["string"] }, { "Name": "Port", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Priority", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Weight", "Docs": "", "Typewords": ["uint16"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"ConfigDomain": { "Name": "ConfigDomain", "Docs": "", "Fields": [{ "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "ClientSettingsDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }, { "Name": "DKIM", "Docs": "", "Typewords": ["DKIM"] }, { "Name": "DMARC", "Docs": "", "Typewords": ["nullable", "DMARC"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["nullable", "MTASTS"] }, { "Name": "TLSRPT", "Docs": "", "Typewords": ["nullable", "TLSRPT"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }] },
 		"DKIM": { "Name": "DKIM", "Docs": "", "Fields": [{ "Name": "Selectors", "Docs": "", "Typewords": ["{}", "Selector"] }, { "Name": "Sign", "Docs": "", "Typewords": ["[]", "string"] }] },
-		"Selector": { "Name": "Selector", "Docs": "", "Fields": [{ "Name": "Hash", "Docs": "", "Typewords": ["string"] }, { "Name": "HashEffective", "Docs": "", "Typewords": ["string"] }, { "Name": "Canonicalization", "Docs": "", "Typewords": ["Canonicalization"] }, { "Name": "Headers", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HeadersEffective", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "DontSealHeaders", "Docs": "", "Typewords": ["bool"] }, { "Name": "Expiration", "Docs": "", "Typewords": ["string"] }, { "Name": "PrivateKeyFile", "Docs": "", "Typewords": ["string"] }] },
+		"Selector": { "Name": "Selector", "Docs": "", "Fields": [{ "Name": "Hash", "Docs": "", "Typewords": ["string"] }, { "Name": "HashEffective", "Docs": "", "Typewords": ["string"] }, { "Name": "Canonicalization", "Docs": "", "Typewords": ["Canonicalization"] }, { "Name": "Headers", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HeadersEffective", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "DontSealHeaders", "Docs": "", "Typewords": ["bool"] }, { "Name": "Expiration", "Docs": "", "Typewords": ["string"] }, { "Name": "PrivateKeyFile", "Docs": "", "Typewords": ["string"] }, { "Name": "Algorithm", "Docs": "", "Typewords": ["string"] }] },
 		"Canonicalization": { "Name": "Canonicalization", "Docs": "", "Fields": [{ "Name": "HeaderRelaxed", "Docs": "", "Typewords": ["bool"] }, { "Name": "BodyRelaxed", "Docs": "", "Typewords": ["bool"] }] },
 		"DMARC": { "Name": "DMARC", "Docs": "", "Fields": [{ "Name": "Localpart", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "ParsedLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"MTASTS": { "Name": "MTASTS", "Docs": "", "Fields": [{ "Name": "PolicyID", "Docs": "", "Typewords": ["string"] }, { "Name": "Mode", "Docs": "", "Typewords": ["Mode"] }, { "Name": "MaxAge", "Docs": "", "Typewords": ["int64"] }, { "Name": "MX", "Docs": "", "Typewords": ["[]", "string"] }] },
@@ -1268,6 +1268,87 @@ var api;
 			const paramTypes = [["[]", "Route"]];
 			const returnTypes = [];
 			const params = [routes];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainDescriptionSave saves the description for a domain.
+		async DomainDescriptionSave(domainName, descr) {
+			const fn = "DomainDescriptionSave";
+			const paramTypes = [["string"], ["string"]];
+			const returnTypes = [];
+			const params = [domainName, descr];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainClientSettingsDomainSave saves the client settings domain for a domain.
+		async DomainClientSettingsDomainSave(domainName, clientSettingsDomain) {
+			const fn = "DomainClientSettingsDomainSave";
+			const paramTypes = [["string"], ["string"]];
+			const returnTypes = [];
+			const params = [domainName, clientSettingsDomain];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainLocalpartConfigSave saves the localpart catchall and case-sensitive
+		// settings for a domain.
+		async DomainLocalpartConfigSave(domainName, localpartCatchallSeparator, localpartCaseSensitive) {
+			const fn = "DomainLocalpartConfigSave";
+			const paramTypes = [["string"], ["string"], ["bool"]];
+			const returnTypes = [];
+			const params = [domainName, localpartCatchallSeparator, localpartCaseSensitive];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainDMARCAddressSave saves the DMARC reporting address/processing
+		// configuration for a domain. If localpart is empty, processing reports is
+		// disabled.
+		async DomainDMARCAddressSave(domainName, localpart, domain, account, mailbox) {
+			const fn = "DomainDMARCAddressSave";
+			const paramTypes = [["string"], ["string"], ["string"], ["string"], ["string"]];
+			const returnTypes = [];
+			const params = [domainName, localpart, domain, account, mailbox];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainTLSRPTAddressSave saves the TLS reporting address/processing
+		// configuration for a domain. If localpart is empty, processing reports is
+		// disabled.
+		async DomainTLSRPTAddressSave(domainName, localpart, domain, account, mailbox) {
+			const fn = "DomainTLSRPTAddressSave";
+			const paramTypes = [["string"], ["string"], ["string"], ["string"], ["string"]];
+			const returnTypes = [];
+			const params = [domainName, localpart, domain, account, mailbox];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainMTASTSSave saves the MTASTS policy for a domain. If policyID is empty,
+		// no MTASTS policy is served.
+		async DomainMTASTSSave(domainName, policyID, mode, maxAge, mx) {
+			const fn = "DomainMTASTSSave";
+			const paramTypes = [["string"], ["string"], ["Mode"], ["int64"], ["[]", "string"]];
+			const returnTypes = [];
+			const params = [domainName, policyID, mode, maxAge, mx];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainDKIMAdd adds a DKIM selector for a domain, generating a new private
+		// key. The selector is not enabled for signing.
+		async DomainDKIMAdd(domainName, selector, algorithm, hash, headerRelaxed, bodyRelaxed, seal, headers, lifetime) {
+			const fn = "DomainDKIMAdd";
+			const paramTypes = [["string"], ["string"], ["string"], ["string"], ["bool"], ["bool"], ["bool"], ["[]", "string"], ["int64"]];
+			const returnTypes = [];
+			const params = [domainName, selector, algorithm, hash, headerRelaxed, bodyRelaxed, seal, headers, lifetime];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainDKIMRemove removes a DKIM selector for a domain.
+		async DomainDKIMRemove(domainName, selector) {
+			const fn = "DomainDKIMRemove";
+			const paramTypes = [["string"], ["string"]];
+			const returnTypes = [];
+			const params = [domainName, selector];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainDKIMSave saves the settings of selectors, and which to enable for
+		// signing, for a domain. All currently configured selectors must be present,
+		// selectors cannot be added/removed with this function.
+		async DomainDKIMSave(domainName, selectors, sign) {
+			const fn = "DomainDKIMSave";
+			const paramTypes = [["string"], ["{}", "Selector"], ["[]", "string"]];
+			const returnTypes = [];
+			const params = [domainName, selectors, sign];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 	}
@@ -2175,6 +2256,59 @@ const account = async (name) => {
 		window.location.hash = '#accounts';
 	}));
 };
+const second = 1000 * 1000 * 1000;
+const minute = 60 * second;
+const hour = 60 * minute;
+const day = 24 * hour;
+const week = 7 * day;
+const parseDuration = (s) => {
+	if (!s) {
+		return 0;
+	}
+	const xparseint = () => {
+		const v = parseInt(s.substring(0, s.length - 1));
+		if (isNaN(v) || Math.round(v) !== v) {
+			throw new Error('bad number in duration');
+		}
+		return v;
+	};
+	if (s.endsWith('w')) {
+		return xparseint() * week;
+	}
+	if (s.endsWith('d')) {
+		return xparseint() * day;
+	}
+	if (s.endsWith('h')) {
+		return xparseint() * hour;
+	}
+	if (s.endsWith('m')) {
+		return xparseint() * minute;
+	}
+	if (s.endsWith('s')) {
+		return xparseint() * second;
+	}
+	throw new Error('bad duration ' + s);
+};
+const formatDuration = (v, goDuration) => {
+	if (v === 0) {
+		return '';
+	}
+	const is = (period) => v > 0 && Math.round(v / period) === v / period;
+	const format = (period, s) => '' + (v / period) + s;
+	if (!goDuration && is(week)) {
+		return format(week, 'w');
+	}
+	if (!goDuration && is(day)) {
+		return format(day, 'd');
+	}
+	if (is(hour)) {
+		return format(hour, 'h');
+	}
+	if (is(minute)) {
+		return format(minute, 'm');
+	}
+	return format(second, 's');
+};
 const domain = async (d) => {
 	const end = new Date();
 	const start = new Date(new Date().getTime() - 30 * 24 * 3600 * 1000);
@@ -2188,10 +2322,72 @@ const domain = async (d) => {
 		client.DomainConfig(d),
 		client.Transports(),
 	]);
-	let form;
-	let fieldset;
-	let localpart;
-	let account;
+	let addrForm;
+	let addrFieldset;
+	let addrLocalpart;
+	let addrAccount;
+	let descrFieldset;
+	let descrText;
+	let clientSettingsDomainFieldset;
+	let clientSettingsDomain;
+	let localpartFieldset;
+	let localpartCatchallSeparator;
+	let localpartCaseSensitive;
+	let dmarcFieldset;
+	let dmarcLocalpart;
+	let dmarcDomain;
+	let dmarcAccount;
+	let dmarcMailbox;
+	let tlsrptFieldset;
+	let tlsrptLocalpart;
+	let tlsrptDomain;
+	let tlsrptAccount;
+	let tlsrptMailbox;
+	let mtastsFieldset;
+	let mtastsPolicyID;
+	let mtastsMode;
+	let mtastsMaxAge;
+	let mtastsMX;
+	const popupDKIMHeaders = (sel, span) => {
+		const l = sel.HeadersEffective || [];
+		let headers;
+		const close = popup(dom.h1('Headers to sign with DKIM'), dom.p('Headers signed with DKIM cannot be modified in transit, or the signature would fail to verify. Headers that could influence how messages are interpreted are best DKIM-signed.'), dom.form(function submit(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			sel.HeadersEffective = headers.value.split('\n').map(s => s.trim()).filter(s => s);
+			dom._kids(span, (sel.HeadersEffective || []).join('; '));
+			close();
+		}, dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Headers', dom.div(headers = dom.textarea(new String(l.join('\n')), attr.rows('' + Math.max(2, 1 + l.length))))), dom.div(dom.submitbutton('OK')), dom.br(), dom.p("Changes are not yet saved after closing the popup. Don't forget to save.")));
+	};
+	const popupDKIMAdd = () => {
+		let fieldset;
+		let selector;
+		let algorithm;
+		let hash;
+		let canonHeader;
+		let canonBody;
+		let seal;
+		let headers;
+		let lifetime;
+		const defaultSelector = () => {
+			const d = new Date();
+			let s = '' + d.getFullYear();
+			let mon = '' + (1 + d.getMonth());
+			s += mon.length === 1 ? '0' + mon : mon;
+			s += 'a';
+			return s;
+		};
+		popup(style({ minWidth: '30em' }), dom.h1('Add DKIM key/selector'), dom.form(async function submit(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if (!window.confirm('Are you sure? A key will be generated by the server, the selector configured but disabled. The page will reload, so unsaved changes to other DKIM selectors will be lost. After adding the key, first add the selector to DNS, then enable it for signing outgoing messages.')) {
+				return;
+			}
+			await check(fieldset, (async () => client.DomainDKIMAdd(d, selector.value, algorithm.value, hash.value, canonHeader.value === 'relaxed', canonBody.value === 'relaxed', seal.checked, headers.value.split('\n').map(s => s.trim()).filter(s => s), parseDuration(lifetime.value)))());
+			window.alert("Selector added. Page will be reloaded. Don't forget to add the selector to DNS, see suggested DNS records, and don't forget to enable the selector afterwards.");
+			window.location.reload(); // todo: reload only dkim section
+		}, fieldset = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.div(dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Selector', attr.title('Used in the DKIM-Signature header, and used to form a DNS record under ._domainkey.<domain>.'), dom.div(selector = dom.input(attr.required(''), attr.value(defaultSelector())))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Algorithm', attr.title('For signing messages. RSA is common at the time of writing, not all mail servers recognize ed25519 signature.'), dom.div(algorithm = dom.select(dom.option('rsa'), dom.option('ed25519')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Hash', attr.title("Used in signing messages. Don't use sha1 unless you understand the consequences."), dom.div(hash = dom.select(dom.option('sha256')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Canonicalization - header', attr.title('Canonicalization processes the message headers before signing. Relaxed allows more whitespace changes, making it more likely for DKIM signatures to validate after transit through servers that make whitespace modifications. Simple is more strict.'), dom.div(canonHeader = dom.select(dom.option('relaxed'), dom.option('simple')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Canonicalization - body', attr.title('Like canonicalization for headers, but for the bodies.'), dom.div(canonBody = dom.select(dom.option('relaxed'), dom.option('simple')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Signature lifetime', attr.title('How long a signature remains valid. Should be as long as a message may take to be delivered. The signature must be valid at the time a message is being delivered to the final destination.'), dom.div(lifetime = dom.input(attr.value('3d'), attr.required('')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Seal headers', attr.title("DKIM-signatures cover headers. If headers are not sealed, additional message headers can be added with the same key without invalidating the signature. This may confuse software about which headers are trustworthy. Sealing is the safer option."), dom.div(seal = dom.input(attr.type('checkbox'), attr.checked(''))))), dom.div(dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Headers (optional)', attr.title('Headers to sign. If left empty, a set of standard headers are signed. The (standard set of) headers are most easily edited after creating the selector/key.'), dom.div(headers = dom.textarea(attr.rows('15')))))), dom.div(dom.submitbutton('Add')))));
+	};
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Domain ' + domainString(dnsdomain)), dom.ul(dom.li(dom.a('Required DNS records', attr.href('#domains/' + d + '/dnsrecords'))), dom.li(dom.a('Check current actual DNS records and domain configuration', attr.href('#domains/' + d + '/dnscheck')))), dom.br(), dom.h2('Client configuration'), dom.p('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password. ', dom.span('Explicitly configure', attr.title('To prevent authentication mechanism downgrade attempts that may result in clients sending plain text passwords to a MitM.')), ' the first supported authentication mechanism: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5.'), dom.table(dom.thead(dom.tr(dom.th('Protocol'), dom.th('Host'), dom.th('Port'), dom.th('Listener'), dom.th('Note'))), dom.tbody((clientConfigs.Entries || []).map(e => dom.tr(dom.td(e.Protocol), dom.td(domainString(e.Host)), dom.td('' + e.Port), dom.td('' + e.Listener), dom.td('' + e.Note))))), dom.br(), dom.h2('DMARC aggregate reports summary'), renderDMARCSummaries(dmarcSummaries || []), dom.br(), dom.h2('TLS reports summary'), renderTLSRPTSummaries(tlsrptSummaries || []), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th('Action'))), dom.tbody(Object.entries(localpartAccounts).map(t => dom.tr(dom.td(t[0] || '(catchall)'), dom.td(dom.a(t[1], attr.href('#accounts/' + t[1]))), dom.td(dom.clickbutton('Remove', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this address?')) {
@@ -2199,13 +2395,174 @@ const domain = async (d) => {
 		}
 		await check(e.target, client.AddressRemove(t[0] + '@' + d));
 		window.location.reload(); // todo: only reload the localparts
-	})))))), dom.br(), dom.h2('Add address'), form = dom.form(async function submit(e) {
+	})))))), dom.br(), dom.h2('Add address'), addrForm = dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		await check(fieldset, client.AddressAdd(localpart.value + '@' + d, account.value));
-		form.reset();
+		await check(addrFieldset, client.AddressAdd(addrLocalpart.value + '@' + d, addrAccount.value));
+		addrForm.reset();
 		window.location.reload(); // todo: only reload the addresses
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an address. An empty localpart is the catchall destination/address for the domain.')), dom.br(), localpart = dom.input()), '@', domainName(dnsdomain), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account', attr.title('Account to assign the address to.')), dom.br(), account = dom.select(attr.required(''), (accounts || []).map(a => dom.option(a)))), ' ', dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')))), dom.br(), RoutesEditor('domain-specific', transports, domainConfig.Routes || [], async (routes) => await client.DomainRoutesSave(d, routes)), dom.br(), dom.h2('External checks'), dom.ul(dom.li(link('https://internet.nl/mail/' + dnsdomain.ASCII + '/', 'Check configuration at internet.nl'))), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove domain', async function click(e) {
+	}, addrFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an address. An empty localpart is the catchall destination/address for the domain.')), dom.br(), addrLocalpart = dom.input()), '@', domainName(dnsdomain), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account', attr.title('Account to assign the address to.')), dom.br(), addrAccount = dom.select(attr.required(''), (accounts || []).map(a => dom.option(a)))), ' ', dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')))), dom.br(), RoutesEditor('domain-specific', transports, domainConfig.Routes || [], async (routes) => await client.DomainRoutesSave(d, routes)), dom.br(), dom.h2('Settings'), dom.form(async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		await check(descrFieldset, client.DomainDescriptionSave(d, descrText.value));
+	}, descrFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Free-form description of domain.'), dom.div('Description'), descrText = dom.input(attr.value(domainConfig.Description), style({ width: '30em' }))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		await check(clientSettingsDomainFieldset, client.DomainClientSettingsDomainSave(d, clientSettingsDomain.value));
+	}, clientSettingsDomainFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Hostname for client settings instead of the mail server hostname. E.g. mail.<domain>. For future migration to another mail operator without requiring all clients to update their settings, it is convenient to have client settings that reference a subdomain of the hosted domain instead of the hostname of the server where the mail is currently hosted. If empty, the hostname of the mail server is used for client configurations. Unicode name.'), dom.div('Client settings domain'), clientSettingsDomain = dom.input(attr.value(domainConfig.ClientSettingsDomain), style({ width: '30em' }))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		await check(localpartFieldset, client.DomainLocalpartConfigSave(d, localpartCatchallSeparator.value, localpartCaseSensitive.checked));
+	}, localpartFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('If set, upper/lower case is relevant for email delivery.'), dom.div('Localpart case sensitive'), localpartCaseSensitive = dom.input(attr.type('checkbox'), domainConfig.LocalpartCaseSensitive ? attr.checked('') : [])), dom.label(attr.title('If not empty, only the string before the separator is used to for email delivery decisions. For example, if set to \"+\", you+anything@example.com will be delivered to you@example.com.'), dom.div('Localpart catchall separator'), localpartCatchallSeparator = dom.input(attr.value(domainConfig.LocalpartCatchallSeparator))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.br(), dom.h2('DMARC reporting address'), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		if (!dmarcLocalpart.value) {
+			dmarcDomain.value = '';
+			dmarcAccount.value = '';
+			dmarcMailbox.value = '';
+		}
+		const needChange = (dmarcLocalpart.value === '') !== (domainConfig.DMARC === null) || domainConfig.DMARC && (domainConfig.DMARC.Localpart !== dmarcLocalpart.value || domainConfig.DMARC?.Domain !== dmarcDomain.value);
+		await check(dmarcFieldset, client.DomainDMARCAddressSave(d, dmarcLocalpart.value, dmarcDomain.value, dmarcAccount.value, dmarcMailbox.value));
+		if (needChange) {
+			window.alert('Do not forget to update the DNS records with the updated reporting address (rua).');
+			if (dmarcLocalpart.value) {
+				domainConfig.DMARC = { Localpart: dmarcLocalpart.value, Domain: dmarcDomain.value, Account: dmarcAccount.value, Mailbox: dmarcMailbox.value, ParsedLocalpart: '', DNSDomain: { ASCII: '', Unicode: '' } };
+			}
+			else {
+				domainConfig.DMARC = null;
+			}
+		}
+	}, dmarcFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Address-part before the @ that accepts DMARC reports. Must be non-internationalized. Recommended value: dmarc-reports.'), dom.div('Localpart'), dmarcLocalpart = dom.input(attr.value(domainConfig.DMARC?.Localpart || ''))), dom.label(attr.title("Alternative domain for reporting address, for incoming reports. Typically empty, causing this domain to be used. Can be used to receive reports for domains that aren't fully hosted on this server. Configure such a domain as a hosted domain without making all the DNS changes, and configure this field with a domain that is fully hosted on this server, so the localpart and the domain of this field form a reporting address. Then only update the DMARC DNS record for the hosted domain, ensuring the reporting address is specified in its \"rua\" field as shown in the DNS settings for this domain. Unicode name."), dom.div('Alternative domain (optional)'), dmarcDomain = dom.input(attr.value(domainConfig.DMARC?.Domain || ''))), dom.label(attr.title('Account to deliver to.'), dom.div('Account'), dmarcAccount = dom.select(dom.option(''), (accounts || []).map(s => dom.option(s, s === domainConfig.DMARC?.Account ? attr.selected('') : [])))), dom.label(attr.title('Mailbox to deliver to, e.g. DMARC.'), dom.div('Mailbox'), dmarcMailbox = dom.input(attr.value(domainConfig.DMARC?.Mailbox || ''))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.br(), dom.h2('TLS reporting address'), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		if (!tlsrptLocalpart.value) {
+			tlsrptDomain.value = '';
+			tlsrptAccount.value = '';
+			tlsrptMailbox.value = '';
+		}
+		const needChange = (tlsrptLocalpart.value === '') !== (domainConfig.TLSRPT === null) || domainConfig.TLSRPT && (domainConfig.TLSRPT.Localpart !== tlsrptLocalpart.value || domainConfig.TLSRPT?.Domain !== tlsrptDomain.value);
+		await check(tlsrptFieldset, client.DomainTLSRPTAddressSave(d, tlsrptLocalpart.value, tlsrptDomain.value, tlsrptAccount.value, tlsrptMailbox.value));
+		if (needChange) {
+			window.alert('Do not forget to update the DNS records with the updated reporting address (rua).');
+			if (tlsrptLocalpart.value) {
+				domainConfig.TLSRPT = { Localpart: tlsrptLocalpart.value, Domain: tlsrptDomain.value, Account: tlsrptAccount.value, Mailbox: tlsrptMailbox.value, ParsedLocalpart: '', DNSDomain: { ASCII: '', Unicode: '' } };
+			}
+			else {
+				domainConfig.TLSRPT = null;
+			}
+		}
+	}, tlsrptFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Address-part before the @ that accepts TLSRPT reports. Must be non-internationalized. Recommended value: tlsrpt-reports.'), dom.div('Localpart'), tlsrptLocalpart = dom.input(attr.value(domainConfig.TLSRPT?.Localpart || ''))), dom.label(attr.title("Alternative domain for reporting address, for incoming reports. Typically empty, causing the domain wherein this config exists to be used. Can be used to receive reports for domains that aren't fully hosted on this server. Configure such a domain as a hosted domain without making all the DNS changes, and configure this field with a domain that is fully hosted on this server, so the localpart and the domain of this field form a reporting address. Then only update the TLSRPT DNS record for the not fully hosted domain, ensuring the reporting address is specified in its \"rua\" field as shown in the suggested DNS settings. Unicode name."), dom.div('Alternative domain (optional)'), tlsrptDomain = dom.input(attr.value(domainConfig.TLSRPT?.Domain || ''))), dom.label(attr.title('Account to deliver to.'), dom.div('Account'), tlsrptAccount = dom.select(dom.option(''), (accounts || []).map(s => dom.option(s, s === domainConfig.TLSRPT?.Account ? attr.selected('') : [])))), dom.label(attr.title('Mailbox to deliver to, e.g. TLSRPT.'), dom.div('Mailbox'), tlsrptMailbox = dom.input(attr.value(domainConfig.TLSRPT?.Mailbox || ''))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.br(), dom.h2('MTA-STS policy', attr.title("MTA-STS is a mechanism that allows publishing a policy with requirements for WebPKI-verified SMTP STARTTLS connections for email delivered to a domain. Existence of a policy is announced in a DNS TXT record (often unprotected/unverified, MTA-STS's weak spot). If a policy exists, it is fetched with a WebPKI-verified HTTPS request. The policy can indicate that WebPKI-verified SMTP STARTTLS is required, and which MX hosts (optionally with a wildcard pattern) are allowd. MX hosts to deliver to are still taken from DNS (again, not necessarily protected/verified), but messages will only be delivered to domains matching the MX hosts from the published policy. Mail servers look up the MTA-STS policy when first delivering to a domain, then keep a cached copy, periodically checking the DNS record if a new policy is available, and fetching and caching it if so. To update a policy, first serve a new policy with an updated policy ID, then update the DNS record (not the other way around). To remove an enforced policy, publish an updated policy with mode \"none\" for a long enough period so all cached policies have been refreshed (taking DNS TTL and policy max age into account), then remove the policy from DNS, wait for TTL to expire, and stop serving the policy.")), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		let mx = [];
+		let mode = api.Mode.ModeNone;
+		let maxAge = 0;
+		if (!mtastsPolicyID.value) {
+			mtastsMode.value = '';
+			mtastsMaxAge.value = '';
+			mtastsMX.value = '';
+			if (domainConfig.MTASTS?.PolicyID && !window.confirm('Are you sure you want to remove the MTA-STS policy? Only remove policies after having served a policy with mode "none" for a long enough period, so all previously served and remotely cached policies have expired past the then-configured DNS TTL plus policy max-age period, and seen the policy with mode "none".')) {
+				return;
+			}
+		}
+		else {
+			if (!mtastsMode.value) {
+				throw new Error('mode is required for an active policy');
+			}
+			mode = mtastsMode.value;
+			maxAge = parseDuration(mtastsMaxAge.value);
+			mx = mtastsMX.value ? mtastsMX.value.split('\n') : [];
+			if (domainConfig.MTASTS?.PolicyID === mtastsPolicyID.value && !window.confirm('Are you sure you want to save the policy without updating the policy ID? Remote servers may hold on to the old cached policies. Policy IDs should be changed when the policy is changed. Remember to first update the policy here, then publish the new policy ID in DNS.')) {
+				return;
+			}
+		}
+		await check(mtastsFieldset, client.DomainMTASTSSave(d, mtastsPolicyID.value, mode, maxAge, mx));
+		if (domainConfig.MTASTS?.PolicyID === mtastsPolicyID.value) {
+			return;
+		}
+		if (domainConfig.MTASTS?.PolicyID && !mtastsPolicyID.value) {
+			window.alert("Don't forget to remove the MTA-STS DNS record.");
+			domainConfig.MTASTS = null;
+		}
+		else if (mtastsPolicyID.value) {
+			if (mtastsPolicyID.value !== domainConfig.MTASTS?.PolicyID) {
+				window.alert("Don't forget to update the MTA-STS DNS record with the new policy ID, see suggested DNS records.");
+			}
+			domainConfig.MTASTS = {
+				PolicyID: mtastsPolicyID.value,
+				Mode: mode,
+				MaxAge: maxAge,
+				MX: mx,
+			};
+		}
+	}, mtastsFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Policies are versioned. The version must be specified in the DNS record. If you change a policy, first change it here to update the served policy, then update the DNS record with the updated policy ID.'), dom.div('Policy ID ', dom.a('generate', attr.href(''), attr.title('Generate new policy ID based on current time.'), function click(e) {
+		e.preventDefault();
+		// 20060102T150405
+		mtastsPolicyID.value = new Date().toISOString().replace(/-/g, '').replace(/:/g, '').split('.')[0];
+	})), mtastsPolicyID = dom.input(attr.value(domainConfig.MTASTS?.PolicyID || ''))), dom.label(attr.title("If set to \"enforce\", a remote SMTP server will not deliver email to us if it cannot make a WebPKI-verified SMTP STARTTLS connection. In mode \"testing\", deliveries can be done without verified TLS, but errors will be reported through TLS reporting. In mode \"none\", verified TLS is not required, used for phasing out an MTA-STS policy."), dom.div('Mode'), mtastsMode = dom.select(dom.option(''), Object.values(api.Mode).map(s => dom.option(s, domainConfig.MTASTS?.Mode === s ? attr.selected('') : [])))), dom.label(attr.title('How long a remote mail server is allowed to cache a policy. Typically 1 or several weeks. Units: s for seconds, m for minutes, h for hours, d for day, w for weeks.'), dom.div('Max age'), mtastsMaxAge = dom.input(attr.value(domainConfig.MTASTS?.MaxAge ? formatDuration(domainConfig.MTASTS?.MaxAge || 0) : ''))), dom.label(attr.title('List of server names allowed for SMTP. If empty, the configured hostname is set. Host names can contain a wildcard (*) as a leading label (matching a single label, e.g. *.example matches host.example, not sub.host.example).'), dom.div('MX hosts/patterns (optional)'), mtastsMX = dom.textarea(new String((domainConfig.MTASTS?.MX || []).join('\n')), attr.rows('' + Math.max(2, 1 + (domainConfig.MTASTS?.MX || []).length)))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.br(), dom.h2('DKIM', attr.title('With DKIM signing, a domain is taking responsibility for (content of) emails it sends, letting receiving mail servers build up a (hopefully positive) reputation of the domain, which can help with mail delivery.')), (() => {
+		let fieldset;
+		let rows = [];
+		return dom.form(async function submit(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if (!window.confirm("Are you sure you want to save changes to DKIM selectors?")) {
+				return;
+			}
+			const selectors = {};
+			const sign = [];
+			for (const row of rows) {
+				const [selName, enabled, sel] = row.gather();
+				sel.Expiration = formatDuration(parseDuration(sel.Expiration), true);
+				selectors[selName] = sel;
+				if (enabled) {
+					sign.push(selName);
+				}
+			}
+			await check(fieldset, client.DomainDKIMSave(d, selectors, sign));
+			window.alert("Don't forget to update DNS records if needed. See suggested DNS records.");
+		}, fieldset = dom.fieldset(dom.table(dom.thead(dom.tr(dom.th('Selector', attr.title('Used in the DKIM-Signature header, and used to form a DNS record under ._domainkey.<domain>.')), dom.th('Enabled', attr.title('Whether a DKIM-Signature is added to messages for this message. Multiple selectors can be enabled. Having backup keys published in DNS can be useful for quickly rotating a key.')), dom.th('Algorithm', attr.title('For signing messages. RSA is common at the time of writing, not all mail servers recognize ed25519 signature.')), dom.th('Hash', attr.title("Used in signing messages. Don't use sha1 unless you understand the consequences.")), dom.th('Canonicalization header/body', attr.colspan('2'), attr.title('Canonicalization processes the message headers and bodies before signing. Relaxed allows more whitespace changes, making it more likely for DKIM signatures to validate after transit through servers that make whitespace modifications. Simple is more strict.')), dom.th('Seal headers', attr.title("DKIM-signatures cover headers. If headers are not sealed, additional message headers can be added with the same key without invalidating the signature. This may confuse software about which headers are trustworthy. Sealing is the safer option.")), dom.th('Headers', attr.title('Headers to sign.')), dom.th('Signature lifetime', attr.title('How long a signature remains valid. Should be as long as a message may take to be delivered. The signature must be valid at the time a message is being delivered to the final destination.')), dom.th('Action'))), dom.tbody(Object.keys(domainConfig.DKIM.Selectors || []).length === 0 ? dom.tr(dom.td(attr.colspan('9'), 'No DKIM keys/selectors.')) : [], rows = Object.entries(domainConfig.DKIM.Selectors || []).sort().map(([selName, sel]) => {
+			let enabled;
+			let hash;
+			let canonHeader;
+			let canonBody;
+			let seal;
+			let headersElem;
+			let lifetime;
+			const tr = dom.tr(dom.td(selName), dom.td(enabled = dom.input(attr.type('checkbox'), (domainConfig.DKIM.Sign || []).includes(selName) ? attr.checked('') : [])), dom.td(sel.Algorithm), dom.td(hash = dom.select(dom.option('sha256', sel.HashEffective === 'sha256' ? attr.selected('') : []), dom.option('sha1', sel.HashEffective === 'sha1' ? attr.selected('') : []))), dom.td(canonHeader = dom.select(dom.option('relaxed'), dom.option('simple', sel.Canonicalization.HeaderRelaxed ? [] : attr.selected('')))), dom.td(canonBody = dom.select(dom.option('relaxed'), dom.option('simple', sel.Canonicalization.BodyRelaxed ? [] : attr.selected('')))), dom.td(seal = dom.input(attr.type('checkbox'), sel.DontSealHeaders ? [] : attr.checked(''))), dom.td(headersElem = dom.span((sel.HeadersEffective || []).join('; ')), ' ', dom.a(attr.href(''), 'Edit', function click(e) {
+				e.preventDefault();
+				popupDKIMHeaders(sel, headersElem);
+			})), dom.td(lifetime = dom.input(attr.value(sel.Expiration))), dom.td(dom.clickbutton('Remove', async function click(e) {
+				if (!window.confirm('Are you sure you want to remove this selector? It is removed immediately, after which the page is reloaded, losing unsaved changes.')) {
+					return;
+				}
+				await check(e.target, client.DomainDKIMRemove(d, selName));
+				window.alert("Don't forget to remove the corresponding DNS records (if it exists). If the DKIM key was active, it is best to wait for all messages in transit have been delivered (which can take days if messages are held up in remote queues), or those messages will not pass DKIM validiation.");
+				window.location.reload(); // todo: reload less
+			})));
+			return {
+				root: tr,
+				gather: () => {
+					const nsel = {
+						Hash: hash.value,
+						HashEffective: hash.value,
+						Canonicalization: {
+							HeaderRelaxed: canonHeader.value === 'relaxed',
+							BodyRelaxed: canonBody.value === 'relaxed',
+						},
+						Headers: sel.HeadersEffective,
+						HeadersEffective: sel.HeadersEffective,
+						DontSealHeaders: !seal.checked,
+						Expiration: lifetime.value,
+						PrivateKeyFile: '',
+						Algorithm: '',
+					};
+					return [selName, enabled.checked, nsel];
+				},
+			};
+		})), dom.tfoot(dom.tr(dom.td(attr.colspan('9'), dom.submitbutton('Save'), ' ', dom.clickbutton('Add key/selector', function click() {
+			popupDKIMAdd();
+		})))))));
+	})(), dom.br(), dom.h2('External checks'), dom.ul(dom.li(link('https://internet.nl/mail/' + dnsdomain.ASCII + '/', 'Check configuration at internet.nl'))), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove domain', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this domain?')) {
 			return;

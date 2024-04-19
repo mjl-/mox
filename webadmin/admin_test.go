@@ -26,6 +26,7 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/webauth"
@@ -213,6 +214,7 @@ func TestAdminAuth(t *testing.T) {
 
 func TestAdmin(t *testing.T) {
 	os.RemoveAll("../testdata/webadmin/data")
+	defer os.RemoveAll("../testdata/webadmin/dkim")
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webadmin/mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
@@ -257,6 +259,68 @@ func TestAdmin(t *testing.T) {
 	api.RoutesSave(ctxbg, []config.Route{{Transport: "direct"}})
 	tneedErrorCode(t, "user:error", func() { api.RoutesSave(ctxbg, []config.Route{{Transport: "bogus"}}) })
 	api.RoutesSave(ctxbg, nil)
+
+	api.DomainDescriptionSave(ctxbg, "mox.example", "description")
+	tneedErrorCode(t, "server:error", func() { api.DomainDescriptionSave(ctxbg, "mox.example", "newline not ok\n") }) // todo: user error
+	tneedErrorCode(t, "user:error", func() { api.DomainDescriptionSave(ctxbg, "bogus.example", "unknown domain") })
+	api.DomainDescriptionSave(ctxbg, "mox.example", "") // Restore.
+
+	api.DomainClientSettingsDomainSave(ctxbg, "mox.example", "mail.mox.example")
+	tneedErrorCode(t, "user:error", func() { api.DomainClientSettingsDomainSave(ctxbg, "mox.example", "bogus domain") })
+	tneedErrorCode(t, "user:error", func() { api.DomainClientSettingsDomainSave(ctxbg, "bogus.example", "unknown.example") })
+	api.DomainClientSettingsDomainSave(ctxbg, "mox.example", "") // Restore.
+
+	api.DomainLocalpartConfigSave(ctxbg, "mox.example", "-", true)
+	tneedErrorCode(t, "user:error", func() { api.DomainLocalpartConfigSave(ctxbg, "bogus.example", "", false) })
+	api.DomainLocalpartConfigSave(ctxbg, "mox.example", "", false) // Restore.
+
+	api.DomainDMARCAddressSave(ctxbg, "mox.example", "dmarc-reports", "", "mjl", "DMARC")
+	tneedErrorCode(t, "user:error", func() { api.DomainDMARCAddressSave(ctxbg, "bogus.example", "dmarc-reports", "", "mjl", "DMARC") })
+	tneedErrorCode(t, "user:error", func() { api.DomainDMARCAddressSave(ctxbg, "mox.example", "dmarc-reports", "", "bogus", "DMARC") })
+	api.DomainDMARCAddressSave(ctxbg, "mox.example", "", "", "", "") // Restore.
+
+	api.DomainTLSRPTAddressSave(ctxbg, "mox.example", "tls-reports", "", "mjl", "TLSRPT")
+	tneedErrorCode(t, "user:error", func() { api.DomainTLSRPTAddressSave(ctxbg, "bogus.example", "tls-reports", "", "mjl", "TLSRPT") })
+	tneedErrorCode(t, "user:error", func() { api.DomainTLSRPTAddressSave(ctxbg, "mox.example", "tls-reports", "", "bogus", "TLSRPT") })
+	api.DomainTLSRPTAddressSave(ctxbg, "mox.example", "", "", "", "") // Restore.
+
+	// todo: cannot enable mta-sts because we have no listener, which would require a tls cert for the domain.
+	// api.DomainMTASTSSave(ctxbg, "mox.example", "id0", mtasts.ModeEnforce, time.Hour, []string{"mail.mox.example"})
+	tneedErrorCode(t, "user:error", func() {
+		api.DomainMTASTSSave(ctxbg, "bogus.example", "id0", mtasts.ModeEnforce, time.Hour, []string{"mail.mox.example"})
+	})
+	tneedErrorCode(t, "user:error", func() {
+		api.DomainMTASTSSave(ctxbg, "mox.example", "invalid id", mtasts.ModeEnforce, time.Hour, []string{"mail.mox.example"})
+	})
+	tneedErrorCode(t, "user:error", func() {
+		api.DomainMTASTSSave(ctxbg, "mox.example", "id0", mtasts.Mode("bogus"), time.Hour, []string{"mail.mox.example"})
+	})
+	tneedErrorCode(t, "user:error", func() {
+		api.DomainMTASTSSave(ctxbg, "mox.example", "id0", mtasts.ModeEnforce, time.Hour, []string{"*.*.mail.mox.example"})
+	})
+	api.DomainMTASTSSave(ctxbg, "mox.example", "", mtasts.ModeNone, 0, nil) // Restore.
+
+	api.DomainDKIMAdd(ctxbg, "mox.example", "testsel", "ed25519", "sha256", true, true, true, nil, 24*time.Hour)
+	tneedErrorCode(t, "user:error", func() {
+		api.DomainDKIMAdd(ctxbg, "mox.example", "testsel", "ed25519", "sha256", true, true, true, nil, 24*time.Hour)
+	}) // Duplicate selector.
+	tneedErrorCode(t, "user:error", func() {
+		api.DomainDKIMAdd(ctxbg, "bogus.example", "testsel", "ed25519", "sha256", true, true, true, nil, 24*time.Hour)
+	})
+	conf := api.DomainConfig(ctxbg, "mox.example")
+	api.DomainDKIMSave(ctxbg, "mox.example", conf.DKIM.Selectors, conf.DKIM.Sign)
+	api.DomainDKIMSave(ctxbg, "mox.example", conf.DKIM.Selectors, []string{"testsel"})
+	tneedErrorCode(t, "user:error", func() { api.DomainDKIMSave(ctxbg, "mox.example", conf.DKIM.Selectors, []string{"bogus"}) })
+	tneedErrorCode(t, "user:error", func() { api.DomainDKIMSave(ctxbg, "mox.example", nil, []string{}) }) // Cannot remove selectors with save.
+	tneedErrorCode(t, "user:error", func() { api.DomainDKIMSave(ctxbg, "bogus.example", nil, []string{}) })
+	moreSel := map[string]config.Selector{
+		"testsel":  conf.DKIM.Selectors["testsel"],
+		"testsel2": conf.DKIM.Selectors["testsel2"],
+	}
+	tneedErrorCode(t, "user:error", func() { api.DomainDKIMSave(ctxbg, "mox.example", moreSel, []string{}) }) // Cannot add selectors with save.
+	api.DomainDKIMRemove(ctxbg, "mox.example", "testsel")
+	tneedErrorCode(t, "user:error", func() { api.DomainDKIMRemove(ctxbg, "mox.example", "testsel") }) // Already removed.
+	tneedErrorCode(t, "user:error", func() { api.DomainDKIMRemove(ctxbg, "bogus.example", "testsel") })
 }
 
 func TestCheckDomain(t *testing.T) {

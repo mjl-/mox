@@ -194,8 +194,8 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 	if err == nil {
 		return
 	}
-	// If caller tried saving a config that is invalid, cause a user error.
-	if errors.Is(err, mox.ErrConfig) {
+	// If caller tried saving a config that is invalid, or because of a bad request, cause a user error.
+	if errors.Is(err, mox.ErrConfig) || errors.Is(err, mox.ErrRequest) {
 		xcheckuserf(ctx, err, format, args...)
 	}
 
@@ -2442,4 +2442,155 @@ func (Admin) RoutesSave(ctx context.Context, routes []config.Route) {
 		config.Routes = routes
 	})
 	xcheckf(ctx, err, "saving global routes")
+}
+
+// DomainDescriptionSave saves the description for a domain.
+func (Admin) DomainDescriptionSave(ctx context.Context, domainName, descr string) {
+	err := mox.DomainSave(ctx, domainName, func(domain *config.Domain) {
+		domain.Description = descr
+	})
+	xcheckf(ctx, err, "saving domain description")
+}
+
+// DomainClientSettingsDomainSave saves the client settings domain for a domain.
+func (Admin) DomainClientSettingsDomainSave(ctx context.Context, domainName, clientSettingsDomain string) {
+	err := mox.DomainSave(ctx, domainName, func(domain *config.Domain) {
+		domain.ClientSettingsDomain = clientSettingsDomain
+	})
+	xcheckf(ctx, err, "saving client settings domain")
+}
+
+// DomainLocalpartConfigSave saves the localpart catchall and case-sensitive
+// settings for a domain.
+func (Admin) DomainLocalpartConfigSave(ctx context.Context, domainName, localpartCatchallSeparator string, localpartCaseSensitive bool) {
+	err := mox.DomainSave(ctx, domainName, func(domain *config.Domain) {
+		domain.LocalpartCatchallSeparator = localpartCatchallSeparator
+		domain.LocalpartCaseSensitive = localpartCaseSensitive
+	})
+	xcheckf(ctx, err, "saving localpart settings for domain")
+}
+
+// DomainDMARCAddressSave saves the DMARC reporting address/processing
+// configuration for a domain. If localpart is empty, processing reports is
+// disabled.
+func (Admin) DomainDMARCAddressSave(ctx context.Context, domainName, localpart, domain, account, mailbox string) {
+	err := mox.DomainSave(ctx, domainName, func(d *config.Domain) {
+		if localpart == "" {
+			d.DMARC = nil
+		} else {
+			d.DMARC = &config.DMARC{
+				Localpart: localpart,
+				Domain:    domain,
+				Account:   account,
+				Mailbox:   mailbox,
+			}
+		}
+	})
+	xcheckf(ctx, err, "saving dmarc reporting address/settings for domain")
+}
+
+// DomainTLSRPTAddressSave saves the TLS reporting address/processing
+// configuration for a domain. If localpart is empty, processing reports is
+// disabled.
+func (Admin) DomainTLSRPTAddressSave(ctx context.Context, domainName, localpart, domain, account, mailbox string) {
+	err := mox.DomainSave(ctx, domainName, func(d *config.Domain) {
+		if localpart == "" {
+			d.TLSRPT = nil
+		} else {
+			d.TLSRPT = &config.TLSRPT{
+				Localpart: localpart,
+				Domain:    domain,
+				Account:   account,
+				Mailbox:   mailbox,
+			}
+		}
+	})
+	xcheckf(ctx, err, "saving tls reporting address/settings for domain")
+}
+
+// DomainMTASTSSave saves the MTASTS policy for a domain. If policyID is empty,
+// no MTASTS policy is served.
+func (Admin) DomainMTASTSSave(ctx context.Context, domainName, policyID string, mode mtasts.Mode, maxAge time.Duration, mx []string) {
+	err := mox.DomainSave(ctx, domainName, func(d *config.Domain) {
+		if policyID == "" {
+			d.MTASTS = nil
+		} else {
+			d.MTASTS = &config.MTASTS{
+				PolicyID: policyID,
+				Mode:     mode,
+				MaxAge:   maxAge,
+				MX:       mx,
+			}
+		}
+	})
+	xcheckf(ctx, err, "saving mtasts policy for domain")
+}
+
+// DomainDKIMAdd adds a DKIM selector for a domain, generating a new private
+// key. The selector is not enabled for signing.
+func (Admin) DomainDKIMAdd(ctx context.Context, domainName, selector, algorithm, hash string, headerRelaxed, bodyRelaxed, seal bool, headers []string, lifetime time.Duration) {
+	d, err := dns.ParseDomain(domainName)
+	xcheckuserf(ctx, err, "parsing domain")
+	s, err := dns.ParseDomain(selector)
+	xcheckuserf(ctx, err, "parsing selector")
+	err = mox.DKIMAdd(ctx, d, s, algorithm, hash, headerRelaxed, bodyRelaxed, seal, headers, lifetime)
+	xcheckf(ctx, err, "adding dkim key")
+}
+
+// DomainDKIMRemove removes a DKIM selector for a domain.
+func (Admin) DomainDKIMRemove(ctx context.Context, domainName, selector string) {
+	d, err := dns.ParseDomain(domainName)
+	xcheckuserf(ctx, err, "parsing domain")
+	s, err := dns.ParseDomain(selector)
+	xcheckuserf(ctx, err, "parsing selector")
+	err = mox.DKIMRemove(ctx, d, s)
+	xcheckf(ctx, err, "removing dkim key")
+}
+
+// DomainDKIMSave saves the settings of selectors, and which to enable for
+// signing, for a domain. All currently configured selectors must be present,
+// selectors cannot be added/removed with this function.
+func (Admin) DomainDKIMSave(ctx context.Context, domainName string, selectors map[string]config.Selector, sign []string) {
+	for _, s := range sign {
+		if _, ok := selectors[s]; !ok {
+			xcheckuserf(ctx, fmt.Errorf("cannot sign unknown selector %q", s), "checking selectors")
+		}
+	}
+
+	err := mox.DomainSave(ctx, domainName, func(d *config.Domain) {
+		if len(selectors) != len(d.DKIM.Selectors) {
+			xcheckuserf(ctx, fmt.Errorf("cannot add/remove dkim selectors with this function"), "checking selectors")
+		}
+		for s := range selectors {
+			if _, ok := d.DKIM.Selectors[s]; !ok {
+				xcheckuserf(ctx, fmt.Errorf("unknown selector %q", s), "checking selectors")
+			}
+		}
+		// At least the selectors are the same.
+
+		// Build up new selectors.
+		sels := map[string]config.Selector{}
+		for name, nsel := range selectors {
+			osel := d.DKIM.Selectors[name]
+			xsel := config.Selector{
+				Hash:             nsel.Hash,
+				Canonicalization: nsel.Canonicalization,
+				DontSealHeaders:  nsel.DontSealHeaders,
+				Expiration:       nsel.Expiration,
+
+				PrivateKeyFile: osel.PrivateKeyFile,
+			}
+			if !slices.Equal(osel.HeadersEffective, nsel.Headers) {
+				xsel.Headers = nsel.Headers
+			}
+			sels[name] = xsel
+		}
+
+		// Enable the new selector settings.
+		d.DKIM = config.DKIM{
+			Selectors: sels,
+			Sign:      sign,
+		}
+	})
+	xcheckf(ctx, err, "saving dkim selector for domain")
 }

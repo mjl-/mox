@@ -752,7 +752,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				Selectors:
 					x:
 
-						# sha256 (default) or (older, not recommended) sha1 (optional)
+						# sha256 (default) or (older, not recommended) sha1. (optional)
 						Hash:
 
 						# (optional)
@@ -800,8 +800,15 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# non-internationalized. Recommended value: dmarc-reports.
 				Localpart:
 
-				# Alternative domain for report recipient address. Can be used to receive reports
-				# for other domains. Unicode name. (optional)
+				# Alternative domain for reporting address, for incoming reports. Typically empty,
+				# causing the domain wherein this config exists to be used. Can be used to receive
+				# reports for domains that aren't fully hosted on this server. Configure such a
+				# domain as a hosted domain without making all the DNS changes, and configure this
+				# field with a domain that is fully hosted on this server, so the localpart and
+				# the domain of this field form a reporting address. Then only update the DMARC
+				# DNS record for the not fully hosted domain, ensuring the reporting address is
+				# specified in its "rua" field as shown in the suggested DNS settings. Unicode
+				# name. (optional)
 				Domain:
 
 				# Account to deliver to.
@@ -810,17 +817,35 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# Mailbox to deliver to, e.g. DMARC.
 				Mailbox:
 
-			# With MTA-STS a domain publishes, in DNS, presence of a policy for
-			# using/requiring TLS for SMTP connections. The policy is served over HTTPS.
-			# (optional)
+			# MTA-STS is a mechanism that allows publishing a policy with requirements for
+			# WebPKI-verified SMTP STARTTLS connections for email delivered to a domain.
+			# Existence of a policy is announced in a DNS TXT record (often
+			# unprotected/unverified, MTA-STS's weak spot). If a policy exists, it is fetched
+			# with a WebPKI-verified HTTPS request. The policy can indicate that
+			# WebPKI-verified SMTP STARTTLS is required, and which MX hosts (optionally with a
+			# wildcard pattern) are allowd. MX hosts to deliver to are still taken from DNS
+			# (again, not necessarily protected/verified), but messages will only be delivered
+			# to domains matching the MX hosts from the published policy. Mail servers look up
+			# the MTA-STS policy when first delivering to a domain, then keep a cached copy,
+			# periodically checking the DNS record if a new policy is available, and fetching
+			# and caching it if so. To update a policy, first serve a new policy with an
+			# updated policy ID, then update the DNS record (not the other way around). To
+			# remove an enforced policy, publish an updated policy with mode "none" for a long
+			# enough period so all cached policies have been refreshed (taking DNS TTL and
+			# policy max age into account), then remove the policy from DNS, wait for TTL to
+			# expire, and stop serving the policy. (optional)
 			MTASTS:
 
 				# Policies are versioned. The version must be specified in the DNS record. If you
-				# change a policy, first change it in mox, then update the DNS record.
+				# change a policy, first change it here to update the served policy, then update
+				# the DNS record with the updated policy ID.
 				PolicyID:
 
-				# testing, enforce or none. If set to enforce, a remote SMTP server will not
-				# deliver email to us if it cannot make a TLS connection.
+				# If set to "enforce", a remote SMTP server will not deliver email to us if it
+				# cannot make a WebPKI-verified SMTP STARTTLS connection. In mode "testing",
+				# deliveries can be done without verified TLS, but errors will be reported through
+				# TLS reporting. In mode "none", verified TLS is not required, used for phasing
+				# out an MTA-STS policy.
 				Mode:
 
 				# How long a remote mail server is allowed to cache a policy. Typically 1 or
@@ -843,8 +868,15 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# tls-reports.
 				Localpart:
 
-				# Alternative domain for report recipient address. Can be used to receive reports
-				# for other domains. Unicode name. (optional)
+				# Alternative domain for reporting address, for incoming reports. Typically empty,
+				# causing the domain wherein this config exists to be used. Can be used to receive
+				# reports for domains that aren't fully hosted on this server. Configure such a
+				# domain as a hosted domain without making all the DNS changes, and configure this
+				# field with a domain that is fully hosted on this server, so the localpart and
+				# the domain of this field form a reporting address. Then only update the TLSRPT
+				# DNS record for the not fully hosted domain, ensuring the reporting address is
+				# specified in its "rua" field as shown in the suggested DNS settings. Unicode
+				# name. (optional)
 				Domain:
 
 				# Account to deliver to.

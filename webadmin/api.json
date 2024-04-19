@@ -1615,6 +1615,289 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "DomainDescriptionSave",
+			"Docs": "DomainDescriptionSave saves the description for a domain.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "descr",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DomainClientSettingsDomainSave",
+			"Docs": "DomainClientSettingsDomainSave saves the client settings domain for a domain.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "clientSettingsDomain",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DomainLocalpartConfigSave",
+			"Docs": "DomainLocalpartConfigSave saves the localpart catchall and case-sensitive\nsettings for a domain.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "localpartCatchallSeparator",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "localpartCaseSensitive",
+					"Typewords": [
+						"bool"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DomainDMARCAddressSave",
+			"Docs": "DomainDMARCAddressSave saves the DMARC reporting address/processing\nconfiguration for a domain. If localpart is empty, processing reports is\ndisabled.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "localpart",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "domain",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "account",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "mailbox",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DomainTLSRPTAddressSave",
+			"Docs": "DomainTLSRPTAddressSave saves the TLS reporting address/processing\nconfiguration for a domain. If localpart is empty, processing reports is\ndisabled.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "localpart",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "domain",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "account",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "mailbox",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DomainMTASTSSave",
+			"Docs": "DomainMTASTSSave saves the MTASTS policy for a domain. If policyID is empty,\nno MTASTS policy is served.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "policyID",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "mode",
+					"Typewords": [
+						"Mode"
+					]
+				},
+				{
+					"Name": "maxAge",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "mx",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DomainDKIMAdd",
+			"Docs": "DomainDKIMAdd adds a DKIM selector for a domain, generating a new private\nkey. The selector is not enabled for signing.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "selector",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "algorithm",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "hash",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "headerRelaxed",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "bodyRelaxed",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "seal",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "headers",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "lifetime",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DomainDKIMRemove",
+			"Docs": "DomainDKIMRemove removes a DKIM selector for a domain.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "selector",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DomainDKIMSave",
+			"Docs": "DomainDKIMSave saves the settings of selectors, and which to enable for\nsigning, for a domain. All currently configured selectors must be present,\nselectors cannot be added/removed with this function.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "selectors",
+					"Typewords": [
+						"{}",
+						"Selector"
+					]
+				},
+				{
+					"Name": "sign",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
 		}
 	],
 	"Sections": [],
@@ -3034,6 +3317,13 @@
 				{
 					"Name": "PrivateKeyFile",
 					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Algorithm",
+					"Docs": "\"ed25519\", \"rsa-*\", based on private key.",
 					"Typewords": [
 						"string"
 					]

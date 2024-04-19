@@ -1176,11 +1176,13 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 					addErrorf("rsa keys should be >= 1024 bits")
 				}
 				sel.Key = k
+				sel.Algorithm = fmt.Sprintf("rsa-%d", k.N.BitLen())
 			case ed25519.PrivateKey:
 				if sel.HashEffective != "sha256" {
 					addErrorf("hash algorithm %q is not supported with ed25519, only sha256 is", sel.HashEffective)
 				}
 				sel.Key = k
+				sel.Algorithm = "ed25519"
 			default:
 				addErrorf("private key type %T not yet supported, at selector %s in domain %s", key, name, d)
 			}
