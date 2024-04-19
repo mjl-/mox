@@ -201,7 +201,7 @@ Accounts:
 	mtastsPolicy := mtasts.Policy{
 		Version: "STSv1",
 		Mode:    mtasts.ModeTesting,
-		MX: []mtasts.STSMX{
+		MX: []mtasts.MX{
 			{Domain: dns.Domain{ASCII: "mx1.example.com"}},
 			{Domain: dns.Domain{ASCII: "mx2.example.com"}},
 			{Domain: dns.Domain{ASCII: "backup-example.com"}, Wildcard: true},

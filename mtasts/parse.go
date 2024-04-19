@@ -279,7 +279,7 @@ func (p *parser) take(s string) bool {
 }
 
 // ../rfc/8461:469
-func (p *parser) xmx() (mx STSMX) {
+func (p *parser) xmx() (mx MX) {
 	if p.prefix("*.") {
 		mx.Wildcard = true
 		p.o += 2

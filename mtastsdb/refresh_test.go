@@ -64,7 +64,7 @@ func TestRefresh(t *testing.T) {
 		policy := mtasts.Policy{
 			Version:       "STSv1",
 			Mode:          mode,
-			MX:            []mtasts.STSMX{{Wildcard: false, Domain: mxd}},
+			MX:            []mtasts.MX{{Wildcard: false, Domain: mxd}},
 			MaxAgeSeconds: maxAge,
 			Extensions:    nil,
 		}

@@ -10,12 +10,12 @@ import (
 )
 
 var (
-	ReportDBTypes = []any{TLSReportRecord{}}
+	ReportDBTypes = []any{Record{}}
 	ReportDB      *bstore.DB
 	mutex         sync.Mutex
 
 	// Accessed directly by tlsrptsend.
-	ResultDBTypes = []any{TLSResult{}, TLSRPTSuppressAddress{}}
+	ResultDBTypes = []any{TLSResult{}, SuppressAddress{}}
 	ResultDB      *bstore.DB
 )
 

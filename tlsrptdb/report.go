@@ -44,12 +44,10 @@ var (
 	}
 )
 
-// TLSReportRecord is a TLS report as a database record, including information
+// Record is a TLS report as a database record, including information
 // about the sender.
-//
-// todo: should be named just Record, but it would cause a sherpa type name conflict.
-type TLSReportRecord struct {
-	ID         int64  `bstore:"typename Record"`
+type Record struct {
+	ID         int64
 	Domain     string `bstore:"index"` // Policy domain to which the TLS report applies. Unicode.
 	FromDomain string
 	MailFrom   string
@@ -119,7 +117,7 @@ func AddReport(ctx context.Context, log mlog.Log, verifiedFromDomain dns.Domain,
 				metricSession.WithLabelValues(result).Add(float64(f.FailedSessionCount))
 			}
 
-			record := TLSReportRecord{0, d.Name(), verifiedFromDomain.Name(), mailFrom, d == mox.Conf.Static.HostnameDomain, *r}
+			record := Record{0, d.Name(), verifiedFromDomain.Name(), mailFrom, d == mox.Conf.Static.HostnameDomain, *r}
 			if err := tx.Insert(&record); err != nil {
 				return fmt.Errorf("inserting report for domain: %w", err)
 			}
@@ -133,22 +131,22 @@ func AddReport(ctx context.Context, log mlog.Log, verifiedFromDomain dns.Domain,
 }
 
 // Records returns all TLS reports in the database.
-func Records(ctx context.Context) ([]TLSReportRecord, error) {
+func Records(ctx context.Context) ([]Record, error) {
 	db, err := reportDB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return bstore.QueryDB[TLSReportRecord](ctx, db).List()
+	return bstore.QueryDB[Record](ctx, db).List()
 }
 
 // RecordID returns the report for the ID.
-func RecordID(ctx context.Context, id int64) (TLSReportRecord, error) {
+func RecordID(ctx context.Context, id int64) (Record, error) {
 	db, err := reportDB(ctx)
 	if err != nil {
-		return TLSReportRecord{}, err
+		return Record{}, err
 	}
 
-	e := TLSReportRecord{ID: id}
+	e := Record{ID: id}
 	err = db.Get(ctx, &e)
 	return e, err
 }
@@ -156,18 +154,18 @@ func RecordID(ctx context.Context, id int64) (TLSReportRecord, error) {
 // RecordsPeriodPolicyDomain returns the reports overlapping start and end, for the
 // given policy domain. If policy domain is empty, records for all domains are
 // returned.
-func RecordsPeriodDomain(ctx context.Context, start, end time.Time, policyDomain dns.Domain) ([]TLSReportRecord, error) {
+func RecordsPeriodDomain(ctx context.Context, start, end time.Time, policyDomain dns.Domain) ([]Record, error) {
 	db, err := reportDB(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	q := bstore.QueryDB[TLSReportRecord](ctx, db)
+	q := bstore.QueryDB[Record](ctx, db)
 	var zerodom dns.Domain
 	if policyDomain != zerodom {
-		q.FilterNonzero(TLSReportRecord{Domain: policyDomain.Name()})
+		q.FilterNonzero(Record{Domain: policyDomain.Name()})
 	}
-	q.FilterFn(func(r TLSReportRecord) bool {
+	q.FilterFn(func(r Record) bool {
 		dr := r.Report.DateRange
 		return !dr.Start.Before(start) && dr.Start.Before(end) || dr.End.After(start) && !dr.End.After(end)
 	})

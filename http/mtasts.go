@@ -43,9 +43,9 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var mxs []mtasts.STSMX
+	var mxs []mtasts.MX
 	for _, s := range sts.MX {
-		var mx mtasts.STSMX
+		var mx mtasts.MX
 		if strings.HasPrefix(s, "*.") {
 			mx.Wildcard = true
 			s = s[2:]
@@ -60,7 +60,7 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 		mxs = append(mxs, mx)
 	}
 	if len(mxs) == 0 {
-		mxs = []mtasts.STSMX{{Domain: mox.Conf.Static.HostnameDomain}}
+		mxs = []mtasts.MX{{Domain: mox.Conf.Static.HostnameDomain}}
 	}
 
 	policy := mtasts.Policy{

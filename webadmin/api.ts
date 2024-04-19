@@ -221,8 +221,7 @@ export interface Policy {
 	Extensions?: Pair[] | null
 }
 
-// STSMX is an allowlisted MX host name/pattern.
-// todo: find a way to name this just STSMX without getting duplicate names for "MX" in the sherpa api.
+// MX is an allowlisted MX host name/pattern.
 export interface STSMX {
 	Wildcard: boolean  // "*." wildcard, e.g. if a subdomain matches. A wildcard must match exactly one label. *.example.com matches mail.example.com, but not example.com, and not foor.bar.example.com.
 	Domain: Domain
@@ -425,10 +424,8 @@ export interface PolicyRecord {
 	PolicyText: string  // Text that make up the policy, as retrieved. We didn't store this in the past. If empty, policy can be reconstructed from Policy field. Needed by TLSRPT.
 }
 
-// TLSReportRecord is a TLS report as a database record, including information
+// Record is a TLS report as a database record, including information
 // about the sender.
-// 
-// todo: should be named just Record, but it would cause a sherpa type name conflict.
 export interface TLSReportRecord {
 	ID: number
 	Domain: string  // Policy domain to which the TLS report applies. Unicode.
@@ -995,7 +992,7 @@ export interface TLSResult {
 	Results?: Result[] | null  // Results is updated for each TLS attempt.
 }
 
-// TLSRPTSuppressAddress is a reporting address for which outgoing TLS reports
+// SuppressAddress is a reporting address for which outgoing TLS reports
 // will be suppressed for a period.
 export interface TLSRPTSuppressAddress {
 	ID: number

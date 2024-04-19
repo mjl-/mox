@@ -5,18 +5,16 @@ import (
 	"strings"
 )
 
-// todo: DMARCPolicy should be named just Policy, but this is causing conflicting types in sherpadoc output. should somehow get the dmarc-prefix only in the sherpadoc.
-
 // Policy as used in DMARC DNS record for "p=" or "sp=".
-type DMARCPolicy string
+type Policy string
 
 // ../rfc/7489:1157
 
 const (
-	PolicyEmpty      DMARCPolicy = "" // Only for the optional Record.SubdomainPolicy.
-	PolicyNone       DMARCPolicy = "none"
-	PolicyQuarantine DMARCPolicy = "quarantine"
-	PolicyReject     DMARCPolicy = "reject"
+	PolicyEmpty      Policy = "" // Only for the optional Record.SubdomainPolicy.
+	PolicyNone       Policy = "none"
+	PolicyQuarantine Policy = "quarantine"
+	PolicyReject     Policy = "reject"
 )
 
 // URI is a destination address for reporting.
@@ -55,17 +53,17 @@ const (
 //
 //	v=DMARC1; p=reject; rua=mailto:postmaster@mox.example
 type Record struct {
-	Version                    string      // "v=DMARC1", fixed.
-	Policy                     DMARCPolicy // Required, for "p=".
-	SubdomainPolicy            DMARCPolicy // Like policy but for subdomains. Optional, for "sp=".
-	AggregateReportAddresses   []URI       // Optional, for "rua=". Destination addresses for aggregate reports.
-	FailureReportAddresses     []URI       // Optional, for "ruf=". Destination addresses for failure reports.
-	ADKIM                      Align       // Alignment: "r" (default) for relaxed or "s" for simple. For "adkim=".
-	ASPF                       Align       // Alignment: "r" (default) for relaxed or "s" for simple. For "aspf=".
-	AggregateReportingInterval int         // In seconds, default 86400. For "ri="
-	FailureReportingOptions    []string    // "0" (default), "1", "d", "s". For "fo=".
-	ReportingFormat            []string    // "afrf" (default). For "rf=".
-	Percentage                 int         // Between 0 and 100, default 100. For "pct=". Policy applies randomly to this percentage of messages.
+	Version                    string   // "v=DMARC1", fixed.
+	Policy                     Policy   // Required, for "p=".
+	SubdomainPolicy            Policy   // Like policy but for subdomains. Optional, for "sp=".
+	AggregateReportAddresses   []URI    // Optional, for "rua=". Destination addresses for aggregate reports.
+	FailureReportAddresses     []URI    // Optional, for "ruf=". Destination addresses for failure reports.
+	ADKIM                      Align    // Alignment: "r" (default) for relaxed or "s" for simple. For "adkim=".
+	ASPF                       Align    // Alignment: "r" (default) for relaxed or "s" for simple. For "aspf=".
+	AggregateReportingInterval int      // In seconds, default 86400. For "ri="
+	FailureReportingOptions    []string // "0" (default), "1", "d", "s". For "fo=".
+	ReportingFormat            []string // "afrf" (default). For "rf=".
+	Percentage                 int      // Between 0 and 100, default 100. For "pct=". Policy applies randomly to this percentage of messages.
 }
 
 // DefaultRecord holds the defaults for a DMARC record.

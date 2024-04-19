@@ -92,9 +92,9 @@ func parseRecord(s string, checkRequired bool) (record *Record, isdmarc bool, re
 				// ../rfc/7489:1105
 				p.xerrorf("p= (policy) must be first tag")
 			}
-			r.Policy = DMARCPolicy(p.xtakelist("none", "quarantine", "reject"))
+			r.Policy = Policy(p.xtakelist("none", "quarantine", "reject"))
 		case "sp":
-			r.SubdomainPolicy = DMARCPolicy(p.xkeyword())
+			r.SubdomainPolicy = Policy(p.xkeyword())
 			// note: we check if the value is valid before returning.
 		case "rua":
 			r.AggregateReportAddresses = append(r.AggregateReportAddresses, p.xuri())

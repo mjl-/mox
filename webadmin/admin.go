@@ -1603,7 +1603,7 @@ func (Admin) MTASTSPolicies(ctx context.Context) (records []mtastsdb.PolicyRecor
 // TLSReports returns TLS reports overlapping with period start/end, for the given
 // policy domain (or all domains if empty). The reports are sorted first by period
 // end (most recent first), then by policy domain.
-func (Admin) TLSReports(ctx context.Context, start, end time.Time, policyDomain string) (reports []tlsrptdb.TLSReportRecord) {
+func (Admin) TLSReports(ctx context.Context, start, end time.Time, policyDomain string) (reports []tlsrptdb.Record) {
 	var polDom dns.Domain
 	if policyDomain != "" {
 		var err error
@@ -1625,7 +1625,7 @@ func (Admin) TLSReports(ctx context.Context, start, end time.Time, policyDomain 
 }
 
 // TLSReportID returns a single TLS report.
-func (Admin) TLSReportID(ctx context.Context, domain string, reportID int64) tlsrptdb.TLSReportRecord {
+func (Admin) TLSReportID(ctx context.Context, domain string, reportID int64) tlsrptdb.Record {
 	record, err := tlsrptdb.RecordID(ctx, reportID)
 	if err == nil && record.Domain != domain {
 		err = bstore.ErrAbsent
@@ -2384,13 +2384,13 @@ func (Admin) TLSRPTSuppressAdd(ctx context.Context, reportingAddress string, unt
 	addr, err := smtp.ParseAddress(reportingAddress)
 	xcheckuserf(ctx, err, "parsing reporting address")
 
-	ba := tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: addr.String(), Until: until, Comment: comment}
+	ba := tlsrptdb.SuppressAddress{ReportingAddress: addr.String(), Until: until, Comment: comment}
 	err = tlsrptdb.SuppressAdd(ctx, &ba)
 	xcheckf(ctx, err, "adding address to suppresslist")
 }
 
 // TLSRPTSuppressList returns all reporting addresses on the suppress list.
-func (Admin) TLSRPTSuppressList(ctx context.Context) []tlsrptdb.TLSRPTSuppressAddress {
+func (Admin) TLSRPTSuppressList(ctx context.Context) []tlsrptdb.SuppressAddress {
 	l, err := tlsrptdb.SuppressList(ctx)
 	xcheckf(ctx, err, "listing reporting addresses in suppresslist")
 	return l

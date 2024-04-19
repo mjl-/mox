@@ -488,9 +488,9 @@ func TestSendReports(t *testing.T) {
 	// Suppressed addresses don't get a report.
 	resolver.TXT["_smtp._tls.mailhost.xn--74h.example."] = []string{"v=TLSRPTv1; rua=mailto:tls-reports1@mailhost.xn--74h.example,mailto:tls-reports2@mailhost.xn--74h.example; rua=mailto:tls-reports3@mailhost.xn--74h.example"}
 	db.Insert(ctxbg,
-		&tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: "tls-reports@xn--74h.example", Until: time.Now().Add(-time.Minute)},                  // Expired, so ignored.
-		&tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: "tls-reports1@mailhost.xn--74h.example", Until: time.Now().Add(time.Minute)},         // Still valid.
-		&tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: "tls-reports3@mailhost.xn--74h.example", Until: time.Now().Add(31 * 24 * time.Hour)}, // Still valid.
+		&tlsrptdb.SuppressAddress{ReportingAddress: "tls-reports@xn--74h.example", Until: time.Now().Add(-time.Minute)},                  // Expired, so ignored.
+		&tlsrptdb.SuppressAddress{ReportingAddress: "tls-reports1@mailhost.xn--74h.example", Until: time.Now().Add(time.Minute)},         // Still valid.
+		&tlsrptdb.SuppressAddress{ReportingAddress: "tls-reports3@mailhost.xn--74h.example", Until: time.Now().Add(31 * 24 * time.Hour)}, // Still valid.
 	)
 	test(tlsResults, map[string][]tlsrpt.Report{
 		"tls-reports@xn--74h.example":           {report1},

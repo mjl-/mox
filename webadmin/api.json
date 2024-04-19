@@ -2947,7 +2947,7 @@
 		},
 		{
 			"Name": "STSMX",
-			"Docs": "STSMX is an allowlisted MX host name/pattern.\ntodo: find a way to name this just STSMX without getting duplicate names for \"MX\" in the sherpa api.",
+			"Docs": "MX is an allowlisted MX host name/pattern.",
 			"Fields": [
 				{
 					"Name": "Wildcard",
@@ -4041,7 +4041,7 @@
 		},
 		{
 			"Name": "TLSReportRecord",
-			"Docs": "TLSReportRecord is a TLS report as a database record, including information\nabout the sender.\n\ntodo: should be named just Record, but it would cause a sherpa type name conflict.",
+			"Docs": "Record is a TLS report as a database record, including information\nabout the sender.",
 			"Fields": [
 				{
 					"Name": "ID",
@@ -6802,7 +6802,7 @@
 		},
 		{
 			"Name": "TLSRPTSuppressAddress",
-			"Docs": "TLSRPTSuppressAddress is a reporting address for which outgoing TLS reports\nwill be suppressed for a period.",
+			"Docs": "SuppressAddress is a reporting address for which outgoing TLS reports\nwill be suppressed for a period.",
 			"Fields": [
 				{
 					"Name": "ID",

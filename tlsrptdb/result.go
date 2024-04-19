@@ -60,12 +60,10 @@ type TLSResult struct {
 	Results []tlsrpt.Result
 }
 
-// todo: TLSRPTSuppressAddress should be named just SuppressAddress, but would clash with dmarcdb.SuppressAddress in sherpa api.
-
-// TLSRPTSuppressAddress is a reporting address for which outgoing TLS reports
+// SuppressAddress is a reporting address for which outgoing TLS reports
 // will be suppressed for a period.
-type TLSRPTSuppressAddress struct {
-	ID               int64
+type SuppressAddress struct {
+	ID               int64     `bstore:"typename TLSRPTSuppressAddress"`
 	Inserted         time.Time `bstore:"default now"`
 	ReportingAddress string    `bstore:"unique"`
 	Until            time.Time `bstore:"nonzero"`
@@ -205,7 +203,7 @@ func RemoveResultsRecipientDomain(ctx context.Context, recipientDomain dns.Domai
 }
 
 // SuppressAdd adds an address to the suppress list.
-func SuppressAdd(ctx context.Context, ba *TLSRPTSuppressAddress) error {
+func SuppressAdd(ctx context.Context, ba *SuppressAddress) error {
 	db, err := resultDB(ctx)
 	if err != nil {
 		return err
@@ -215,13 +213,13 @@ func SuppressAdd(ctx context.Context, ba *TLSRPTSuppressAddress) error {
 }
 
 // SuppressList returns all reporting addresses on the suppress list.
-func SuppressList(ctx context.Context) ([]TLSRPTSuppressAddress, error) {
+func SuppressList(ctx context.Context) ([]SuppressAddress, error) {
 	db, err := resultDB(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return bstore.QueryDB[TLSRPTSuppressAddress](ctx, db).SortDesc("ID").List()
+	return bstore.QueryDB[SuppressAddress](ctx, db).SortDesc("ID").List()
 }
 
 // SuppressRemove removes a reporting address record from the suppress list.
@@ -231,7 +229,7 @@ func SuppressRemove(ctx context.Context, id int64) error {
 		return err
 	}
 
-	return db.Delete(ctx, &TLSRPTSuppressAddress{ID: id})
+	return db.Delete(ctx, &SuppressAddress{ID: id})
 }
 
 // SuppressUpdate updates the until field of a reporting address record.
@@ -241,7 +239,7 @@ func SuppressUpdate(ctx context.Context, id int64, until time.Time) error {
 		return err
 	}
 
-	ba := TLSRPTSuppressAddress{ID: id}
+	ba := SuppressAddress{ID: id}
 	err = db.Get(ctx, &ba)
 	if err != nil {
 		return err

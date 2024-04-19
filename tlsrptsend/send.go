@@ -577,8 +577,8 @@ Period: %s - %s UTC
 	var queued bool
 	for _, rcpt := range recipients {
 		// If recipient is on suppression list, we won't queue the reporting message.
-		q := bstore.QueryDB[tlsrptdb.TLSRPTSuppressAddress](ctx, db)
-		q.FilterNonzero(tlsrptdb.TLSRPTSuppressAddress{ReportingAddress: rcpt.Address.Path().String()})
+		q := bstore.QueryDB[tlsrptdb.SuppressAddress](ctx, db)
+		q.FilterNonzero(tlsrptdb.SuppressAddress{ReportingAddress: rcpt.Address.Path().String()})
 		q.FilterGreater("Until", time.Now())
 		exists, err := q.Exists()
 		if err != nil {

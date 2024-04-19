@@ -75,9 +75,8 @@ const (
 	ModeNone    Mode = "none"    // In case MTA-STS is not or no longer implemented.
 )
 
-// STSMX is an allowlisted MX host name/pattern.
-// todo: find a way to name this just STSMX without getting duplicate names for "MX" in the sherpa api.
-type STSMX struct {
+// MX is an allowlisted MX host name/pattern.
+type MX struct {
 	// "*." wildcard, e.g. if a subdomain matches. A wildcard must match exactly one
 	// label. *.example.com matches mail.example.com, but not example.com, and not
 	// foor.bar.example.com.
@@ -88,7 +87,7 @@ type STSMX struct {
 
 // LogString returns a loggable string representing the host, with both unicode
 // and ascii version for IDNA domains.
-func (s STSMX) LogString() string {
+func (s MX) LogString() string {
 	pre := ""
 	if s.Wildcard {
 		pre = "*."
@@ -103,7 +102,7 @@ func (s STSMX) LogString() string {
 type Policy struct {
 	Version       string // "STSv1"
 	Mode          Mode
-	MX            []STSMX
+	MX            []MX
 	MaxAgeSeconds int // How long this policy can be cached. Suggested values are in weeks or more.
 	Extensions    []Pair
 }
