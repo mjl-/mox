@@ -1196,7 +1196,7 @@ const cmdHelp = async () => {
 						['ctrl C', 'add Cc'],
 						['ctrl B', 'add Bcc'],
 						['ctrl Y', 'add Reply-To'],
-						['ctrl -', 'remove current address'],
+						['ctrl Backspace', 'remove current address if empty'],
 						['ctrl +', 'add address of same type'],
 					].map(t => dom.tr(dom.td(t[0]), dom.td(t[1]))),
 
@@ -1474,7 +1474,7 @@ const compose = (opts: ComposeOptions) => {
 		'ctrl C': cmdAddCc,
 		'ctrl B': cmdAddBcc,
 		'ctrl Y': cmdReplyTo,
-		// ctrl - and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
+		// ctrl Backspace and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
 	}
 
 	const newAddrView = (addr: string, isRecipient: boolean, views: AddrView[], btn: HTMLButtonElement, cell: HTMLElement, row: HTMLElement, single?: boolean) => {
@@ -1589,7 +1589,7 @@ const compose = (opts: ComposeOptions) => {
 					newAddressComplete(),
 					accountSettings?.ShowAddressSecurity ? attr.title(recipientSecurityTitle) : [],
 					function keydown(e: KeyboardEvent) {
-						if (e.key === '-' && e.ctrlKey) {
+						if (e.key === 'Backspace' && e.ctrlKey && inputElem.value === '') {
 							remove()
 						} else if (e.key === '=' && e.ctrlKey) {
 							newAddrView('', isRecipient, views, btn, cell, row, single)

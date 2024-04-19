@@ -2183,7 +2183,7 @@ const cmdHelp = async () => {
 		['ctrl C', 'add Cc'],
 		['ctrl B', 'add Bcc'],
 		['ctrl Y', 'add Reply-To'],
-		['ctrl -', 'remove current address'],
+		['ctrl Backspace', 'remove current address if empty'],
 		['ctrl +', 'add address of same type'],
 	].map(t => dom.tr(dom.td(t[0]), dom.td(t[1]))), dom.tr(dom.td(attr.colspan('2'), dom.h2('Message', style({ margin: '1ex 0 0 0' })))), [
 		['r', 'reply or list reply'],
@@ -2374,7 +2374,7 @@ const compose = (opts) => {
 		'ctrl C': cmdAddCc,
 		'ctrl B': cmdAddBcc,
 		'ctrl Y': cmdReplyTo,
-		// ctrl - and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
+		// ctrl Backspace and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
 	};
 	const newAddrView = (addr, isRecipient, views, btn, cell, row, single) => {
 		if (single && views.length !== 0) {
@@ -2472,7 +2472,7 @@ const compose = (opts) => {
 		};
 		const recipientSecurityTitle = 'Description of security mechanisms recipient domains may implement:\n1. STARTTLS: Opportunistic (unverified) TLS with STARTTLS, successfully negotiated during the most recent delivery attempt.\n2. MTA-STS: For PKIX/WebPKI-verified TLS.\n3. DNSSEC: MX DNS records are DNSSEC-signed.\n4. DANE: First delivery destination host implements DANE for verified TLS.\n5. RequireTLS: SMTP extension for verified TLS delivery into recipient mailbox, support detected during the most recent delivery attempt.\n\nChecks STARTTLS, DANE and RequireTLS cover the most recently used delivery path, not necessarily all possible delivery paths.\n\nThe bars below the input field indicate implementation status by the recipient domain:\n- Red, not implemented/unsupported\n- Green, implemented/supported\n- Gray, error while determining\n- Absent/white, unknown or skipped (e.g. no previous delivery attempt, or DANE check skipped due to DNSSEC-lookup error)';
 		const root = dom.span(autosizeElem = dom.span(dom._class('autosize'), inputElem = dom.input(focusPlaceholder('Jane <jane@example.org>'), style({ width: 'auto' }), attr.value(addr), newAddressComplete(), accountSettings?.ShowAddressSecurity ? attr.title(recipientSecurityTitle) : [], function keydown(e) {
-			if (e.key === '-' && e.ctrlKey) {
+			if (e.key === 'Backspace' && e.ctrlKey && inputElem.value === '') {
 				remove();
 			}
 			else if (e.key === '=' && e.ctrlKey) {
