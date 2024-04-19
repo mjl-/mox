@@ -170,18 +170,18 @@ func serveContentFallback(log mlog.Log, w http.ResponseWriter, r *http.Request, 
 
 // Handler returns a handler for the webmail endpoints, customized for the max
 // message size coming from the listener and cookiePath.
-func Handler(maxMessageSize int64, cookiePath string, isForwarded bool) func(w http.ResponseWriter, r *http.Request) {
+func Handler(maxMessageSize int64, cookiePath string, isForwarded bool, accountPath string) func(w http.ResponseWriter, r *http.Request) {
 	sh, err := makeSherpaHandler(maxMessageSize, cookiePath, isForwarded)
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, "500 - internal server error - cannot handle requests", http.StatusInternalServerError)
 			return
 		}
-		handle(sh, isForwarded, w, r)
+		handle(sh, isForwarded, accountPath, w, r)
 	}
 }
 
-func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r *http.Request) {
+func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := pkglog.WithContext(ctx).With(slog.String("userauth", ""))
 
@@ -189,7 +189,7 @@ func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r 
 	// messages, and all events afterwards. Authenticated through a token in the query
 	// string, which it got from a Token API call.
 	if r.URL.Path == "/events" {
-		serveEvents(ctx, log, w, r)
+		serveEvents(ctx, log, accountPath, w, r)
 		return
 	}
 

@@ -609,7 +609,14 @@ func Listen() {
 				path = l.WebmailHTTP.Path
 			}
 			srv := ensureServe(false, port, "webmail-http at "+path)
-			handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTP.Forwarded)))
+			var accountPath string
+			if l.AccountHTTP.Enabled {
+				accountPath = "/"
+				if l.AccountHTTP.Path != "" {
+					accountPath = l.AccountHTTP.Path
+				}
+			}
+			handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTP.Forwarded, accountPath)))
 			srv.Handle("webmail", nil, path, handler)
 			redirectToTrailingSlash(srv, "webmail", path)
 		}
@@ -620,7 +627,14 @@ func Listen() {
 				path = l.WebmailHTTPS.Path
 			}
 			srv := ensureServe(true, port, "webmail-https at "+path)
-			handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTPS.Forwarded)))
+			var accountPath string
+			if l.AccountHTTPS.Enabled {
+				accountPath = "/"
+				if l.AccountHTTPS.Path != "" {
+					accountPath = l.AccountHTTPS.Path
+				}
+			}
+			handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTPS.Forwarded, accountPath)))
 			srv.Handle("webmail", nil, path, handler)
 			redirectToTrailingSlash(srv, "webmail", path)
 		}

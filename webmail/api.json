@@ -1493,6 +1493,13 @@
 					]
 				},
 				{
+					"Name": "AccountPath",
+					"Docs": "If nonempty, the path on same host to webaccount interface.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "Version",
 					"Docs": "",
 					"Typewords": [

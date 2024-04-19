@@ -216,6 +216,7 @@ type EventStart struct {
 	Mailboxes            []store.Mailbox
 	RejectsMailbox       string
 	Settings             store.Settings
+	AccountPath          string // If nonempty, the path on same host to webaccount interface.
 	Version              string
 }
 
@@ -488,7 +489,7 @@ type ioErr struct {
 
 // serveEvents serves an SSE connection. Authentication is done through a query
 // string parameter "token", a one-time-use token returned by the Token API call.
-func serveEvents(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *http.Request) {
+func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
 		return
@@ -733,7 +734,7 @@ func serveEvents(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *ht
 	}
 
 	// Write first event, allowing client to fill its UI with mailboxes.
-	start := EventStart{sse.ID, loginAddress, addresses, domainAddressConfigs, mailbox.Name, mbl, accConf.RejectsMailbox, settings, moxvar.Version}
+	start := EventStart{sse.ID, loginAddress, addresses, domainAddressConfigs, mailbox.Name, mbl, accConf.RejectsMailbox, settings, accountPath, moxvar.Version}
 	writer.xsendEvent(ctx, log, "start", start)
 
 	// The goroutine doing the querying will send messages on these channels, which

@@ -5681,6 +5681,7 @@ type listMailboxes = () => api.Mailbox[]
 const init = async () => {
 	let connectionElem: HTMLElement // SSE connection status/error. Empty when connected.
 	let layoutElem: HTMLSelectElement // Select dropdown for layout.
+	let accountElem: HTMLElement
 	let loginAddressElem: HTMLElement
 
 	let msglistscrollElem: HTMLElement
@@ -6257,6 +6258,8 @@ const init = async () => {
 					' ',
 					dom.clickbutton('Settings', attr.title('Change settings for composing messages.'), clickCmd(cmdSettings, shortcuts)),
 					' ',
+					accountElem=dom.span(),
+					' ',
 					loginAddressElem=dom.span(),
 					' ',
 					dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e: MouseEvent) {
@@ -6751,8 +6754,9 @@ const init = async () => {
 			connecting = false
 			sseID = start.SSEID
 			loginAddress = start.LoginAddress
-			dom._kids(loginAddressElem, formatEmail(loginAddress))
+			dom._kids(accountElem, start.AccountPath ? dom.a(attr.href(start.AccountPath), 'Account') : [])
 			const loginAddr = formatEmail(loginAddress)
+			dom._kids(loginAddressElem, loginAddr)
 			accountAddresses = start.Addresses || []
 			accountAddresses.sort((a, b) => {
 				if (formatEmail(a) === loginAddr) {

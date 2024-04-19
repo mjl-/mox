@@ -104,7 +104,7 @@ func TestView(t *testing.T) {
 	// We start an actual HTTP server to easily get a body we can do blocking reads on.
 	// With a httptest.ResponseRecorder, it's a bit more work to parse SSE events as
 	// they come in.
-	server := httptest.NewServer(http.HandlerFunc(Handler(1024*1024, "/webmail/", false)))
+	server := httptest.NewServer(http.HandlerFunc(Handler(1024*1024, "/webmail/", false, "")))
 	defer server.Close()
 
 	serverURL, err := url.Parse(server.URL)

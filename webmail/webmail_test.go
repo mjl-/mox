@@ -377,7 +377,7 @@ func TestWebmail(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		rr.Body = &bytes.Buffer{}
-		handle(apiHandler, false, rr, req)
+		handle(apiHandler, false, "", rr, req)
 		if rr.Code != expStatusCode {
 			t.Fatalf("got status %d, expected %d (%s)", rr.Code, expStatusCode, readBody(rr.Body))
 		}
