@@ -1190,6 +1190,13 @@
 						"nullable",
 						"timestamp"
 					]
+				},
+				{
+					"Name": "ArchiveThread",
+					"Docs": "If set, thread is archived after sending message.",
+					"Typewords": [
+						"bool"
+					]
 				}
 			]
 		},

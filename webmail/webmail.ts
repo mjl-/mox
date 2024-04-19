@@ -1191,6 +1191,7 @@ const cmdHelp = async () => {
 					dom.tr(dom.td(attr.colspan('2'), dom.h2('Compose', style({margin: '0'})))),
 					[
 						['ctrl Enter', 'send message'],
+						['ctrl shift Enter', 'send message and archive thread'],
 						['ctrl w', 'cancel message'],
 						['ctrl O', 'add To'],
 						['ctrl C', 'add Cc'],
@@ -1359,7 +1360,7 @@ interface ComposeView {
 
 let composeView: ComposeView | null = null
 
-const compose = (opts: ComposeOptions) => {
+const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	log('compose', opts)
 
 	if (composeView) {
@@ -1401,7 +1402,7 @@ const compose = (opts: ComposeOptions) => {
 		composeView = null
 	}
 
-	const submit = async () => {
+	const submit = async (archive: boolean) => {
 		const files = await new Promise<api.File[]>((resolve, reject) => {
 			const l: api.File[] = []
 			if (attachments.files && attachments.files.length === 0) {
@@ -1445,13 +1446,17 @@ const compose = (opts: ComposeOptions) => {
 			ResponseMessageID: opts.responseMessageID || 0,
 			RequireTLS: requiretls.value === '' ? null : requiretls.value === 'yes',
 			FutureRelease: scheduleTime.value ? new Date(scheduleTime.value) : null,
+			ArchiveThread: archive,
 		}
 		await client.MessageSubmit(message)
 		cmdCancel()
 	}
 
 	const cmdSend = async () => {
-		await withStatus('Sending email', submit(), fieldset)
+		await withStatus('Sending email', submit(false), fieldset)
+	}
+	const cmdSendArchive = async () => {
+		await withStatus('Sending email and archive', submit(true), fieldset)
 	}
 
 	const cmdAddTo = async () => { newAddrView('', true, toViews, toBtn, toCell, toRow) }
@@ -1469,6 +1474,7 @@ const compose = (opts: ComposeOptions) => {
 
 	const shortcuts: {[key: string]: command} = {
 		'ctrl Enter': cmdSend,
+		'ctrl shift Enter': cmdSendArchive,
 		'ctrl w': cmdCancel,
 		'ctrl O': cmdAddTo,
 		'ctrl C': cmdAddCc,
@@ -1896,6 +1902,8 @@ const compose = (opts: ComposeOptions) => {
 				dom.div(
 					style({margin: '3ex 0 1ex 0', display: 'block'}),
 					dom.submitbutton('Send'),
+					' ',
+					opts.responseMessageID && listMailboxes().find(mb => mb.Archive) ? dom.clickbutton('Send and archive thread', clickCmd(cmdSendArchive, shortcuts)) : [],
 				),
 			),
 			async function submit(e: SubmitEvent) {
@@ -2583,7 +2591,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			isList: m.IsMailingList,
 			editOffset: editOffset,
 		}
-		compose(opts)
+		compose(opts, listMailboxes)
 	}
 
 	const reply = async (all: boolean) => {
@@ -6123,7 +6131,7 @@ const init = async () => {
 		if (sig) {
 			body += '\n\n' + sig
 		}
-		compose({body: body, editOffset: 0})
+		compose({body: body, editOffset: 0}, listMailboxes)
 	}
 	const cmdOpenInbox = async () => {
 		const mb = mailboxlistView.findMailboxByName('Inbox')
@@ -6339,6 +6347,11 @@ const init = async () => {
 		if (e.metaKey) {
 			l.push('meta')
 		}
+		// Assume regular keys generate a 1 character e.key, and others are special for
+		// which we may want to treat shift specially too.
+		if (e.key.length > 1 && e.shiftKey) {
+			l.push('shift')
+		}
 		l.push(e.key)
 		const k = l.join(' ')
 
@@ -6523,7 +6536,7 @@ const init = async () => {
 					if (opts.subject && opts.subject.includes('=?')) {
 						opts.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(opts.subject))
 					}
-					compose(opts)
+					compose(opts, listMailboxes)
 				})()
 			} catch (err) {
 				window.alert('Error parsing compose mailto URL: '+errmsg(err))
@@ -6782,7 +6795,7 @@ const init = async () => {
 					if (openComposeOptions.subject && openComposeOptions.subject.includes('=?')) {
 						openComposeOptions.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(openComposeOptions.subject))
 					}
-					compose(openComposeOptions)
+					compose(openComposeOptions, listMailboxes)
 					openComposeOptions = undefined
 				})()
 			}

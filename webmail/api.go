@@ -207,6 +207,7 @@ type SubmitMessage struct {
 	UserAgent          string     // User-Agent header added if not empty.
 	RequireTLS         *bool      // For "Require TLS" extension during delivery.
 	FutureRelease      *time.Time // If set, time (in the future) when message should be delivered from queue.
+	ArchiveThread      bool       // If set, thread is archived after sending message.
 }
 
 // ForwardAttachments references attachments by a list of message.Part paths.
@@ -739,6 +740,28 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 					err = acc.RetrainMessages(ctx, log, tx, []store.Message{rm}, false)
 					xcheckf(ctx, err, "retraining messages after reply/forward")
+				}
+
+				// Move messages from this thread still in this mailbox to the designated Archive
+				// mailbox.
+				if m.ArchiveThread {
+					mbArchive, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Archive", true).Get()
+					if err == bstore.ErrAbsent {
+						xcheckuserf(ctx, errors.New("not configured"), "looking up designated archive mailbox")
+					}
+					xcheckf(ctx, err, "looking up designated archive mailbox")
+
+					var msgIDs []int64
+					q := bstore.QueryTx[store.Message](tx)
+					q.FilterNonzero(store.Message{ThreadID: rm.ThreadID, MailboxID: rm.MailboxID})
+					q.FilterEqual("Expunged", false)
+					err = q.IDs(&msgIDs)
+					xcheckf(ctx, err, "listing messages in thread to archive")
+					if len(msgIDs) > 0 {
+						var nchanges []store.Change
+						modseq, nchanges = xops.MessageMoveMailbox(ctx, log, acc, tx, msgIDs, mbArchive, modseq)
+						changes = append(changes, nchanges...)
+					}
 				}
 			}
 

@@ -296,7 +296,7 @@ var api;
 		"Address": { "Name": "Address", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Host", "Docs": "", "Typewords": ["string"] }] },
 		"MessageAddress": { "Name": "MessageAddress", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
 		"Domain": { "Name": "Domain", "Docs": "", "Fields": [{ "Name": "ASCII", "Docs": "", "Typewords": ["string"] }, { "Name": "Unicode", "Docs": "", "Typewords": ["string"] }] },
-		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureRelease", "Docs": "", "Typewords": ["nullable", "timestamp"] }] },
+		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureRelease", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "ArchiveThread", "Docs": "", "Typewords": ["bool"] }] },
 		"File": { "Name": "File", "Docs": "", "Fields": [{ "Name": "Filename", "Docs": "", "Typewords": ["string"] }, { "Name": "DataURI", "Docs": "", "Typewords": ["string"] }] },
 		"ForwardAttachments": { "Name": "ForwardAttachments", "Docs": "", "Fields": [{ "Name": "MessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Paths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }] },
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
@@ -2178,6 +2178,7 @@ const cmdHelp = async () => {
 		['→', 'expand thread'],
 	].map(t => dom.tr(dom.td(t[0]), dom.td(t[1]))))), dom.div(style({ width: '40em' }), dom.table(dom.tr(dom.td(attr.colspan('2'), dom.h2('Compose', style({ margin: '0' })))), [
 		['ctrl Enter', 'send message'],
+		['ctrl shift Enter', 'send message and archive thread'],
 		['ctrl w', 'cancel message'],
 		['ctrl O', 'add To'],
 		['ctrl C', 'add Cc'],
@@ -2283,7 +2284,7 @@ const cmdTooltip = async () => {
 	}));
 };
 let composeView = null;
-const compose = (opts) => {
+const compose = (opts, listMailboxes) => {
 	log('compose', opts);
 	if (composeView) {
 		// todo: should allow multiple
@@ -2307,7 +2308,7 @@ const compose = (opts) => {
 		composeElem.remove();
 		composeView = null;
 	};
-	const submit = async () => {
+	const submit = async (archive) => {
 		const files = await new Promise((resolve, reject) => {
 			const l = [];
 			if (attachments.files && attachments.files.length === 0) {
@@ -2348,12 +2349,16 @@ const compose = (opts) => {
 			ResponseMessageID: opts.responseMessageID || 0,
 			RequireTLS: requiretls.value === '' ? null : requiretls.value === 'yes',
 			FutureRelease: scheduleTime.value ? new Date(scheduleTime.value) : null,
+			ArchiveThread: archive,
 		};
 		await client.MessageSubmit(message);
 		cmdCancel();
 	};
 	const cmdSend = async () => {
-		await withStatus('Sending email', submit(), fieldset);
+		await withStatus('Sending email', submit(false), fieldset);
+	};
+	const cmdSendArchive = async () => {
+		await withStatus('Sending email and archive', submit(true), fieldset);
 	};
 	const cmdAddTo = async () => { newAddrView('', true, toViews, toBtn, toCell, toRow); };
 	const cmdAddCc = async () => { newAddrView('', true, ccViews, ccBtn, ccCell, ccRow); };
@@ -2369,6 +2374,7 @@ const compose = (opts) => {
 	};
 	const shortcuts = {
 		'ctrl Enter': cmdSend,
+		'ctrl shift Enter': cmdSendArchive,
 		'ctrl w': cmdCancel,
 		'ctrl O': cmdAddTo,
 		'ctrl C': cmdAddCc,
@@ -2659,7 +2665,7 @@ const compose = (opts) => {
 		scheduleTime.value = '';
 	}), dom.div(style({ marginTop: '1ex' }), scheduleTime = dom.input(attr.type('datetime-local'), function change() {
 		scheduleTimeChanged();
-	}), ' in local timezone ' + (Intl.DateTimeFormat().resolvedOptions().timeZone || '') + ', ', scheduleWeekday = dom.span()))), dom.div(style({ margin: '3ex 0 1ex 0', display: 'block' }), dom.submitbutton('Send'))), async function submit(e) {
+	}), ' in local timezone ' + (Intl.DateTimeFormat().resolvedOptions().timeZone || '') + ', ', scheduleWeekday = dom.span()))), dom.div(style({ margin: '3ex 0 1ex 0', display: 'block' }), dom.submitbutton('Send'), ' ', opts.responseMessageID && listMailboxes().find(mb => mb.Archive) ? dom.clickbutton('Send and archive thread', clickCmd(cmdSendArchive, shortcuts)) : [])), async function submit(e) {
 		e.preventDefault();
 		shortcutCmd(cmdSend, shortcuts);
 	}));
@@ -3174,7 +3180,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			isList: m.IsMailingList,
 			editOffset: editOffset,
 		};
-		compose(opts);
+		compose(opts, listMailboxes);
 	};
 	const reply = async (all) => {
 		const contains = (l, a) => !!l.find(e => equalAddress(e, a));
@@ -5925,7 +5931,7 @@ const init = async () => {
 		if (sig) {
 			body += '\n\n' + sig;
 		}
-		compose({ body: body, editOffset: 0 });
+		compose({ body: body, editOffset: 0 }, listMailboxes);
 	};
 	const cmdOpenInbox = async () => {
 		const mb = mailboxlistView.findMailboxByName('Inbox');
@@ -6053,6 +6059,11 @@ const init = async () => {
 		}
 		if (e.metaKey) {
 			l.push('meta');
+		}
+		// Assume regular keys generate a 1 character e.key, and others are special for
+		// which we may want to treat shift specially too.
+		if (e.key.length > 1 && e.shiftKey) {
+			l.push('shift');
 		}
 		l.push(e.key);
 		const k = l.join(' ');
@@ -6199,7 +6210,7 @@ const init = async () => {
 					if (opts.subject && opts.subject.includes('=?')) {
 						opts.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(opts.subject));
 					}
-					compose(opts);
+					compose(opts, listMailboxes);
 				})();
 			}
 			catch (err) {
@@ -6433,7 +6444,7 @@ const init = async () => {
 					if (openComposeOptions.subject && openComposeOptions.subject.includes('=?')) {
 						openComposeOptions.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(openComposeOptions.subject));
 					}
-					compose(openComposeOptions);
+					compose(openComposeOptions, listMailboxes);
 					openComposeOptions = undefined;
 				})();
 			}
