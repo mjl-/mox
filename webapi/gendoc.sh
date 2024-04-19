@@ -66,9 +66,10 @@ per account.
 
 A webhook is delivered by an HTTP POST with headers "X-Mox-Webhook-ID" (unique
 ID of webhook) and "X-Mox-Webhook-Attempt" (number of delivery attempts,
-starting at 1), and a JSON body with the webhook data.  Webhook delivery
-failures are retried at a schedule similar to message deliveries, until
-permanent failure.
+starting at 1), and a JSON body with the webhook data.  Failing webhook
+deliveries are retried with backoff, each time doubling the interval between
+attempts, at 1m, 2m, 4m, 7.5m, 15m and unwards, until the last attempt after a
+16h wait period.
 
 See [webhook.Outgoing] for the fields in a webhook for outgoing deliveries, and
 in particular [webhook.OutgoingEvent] for the types of events.
