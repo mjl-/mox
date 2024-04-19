@@ -407,7 +407,7 @@ dt { font-weight: bold; margin-bottom: .5ex; }
 dd { max-width: 50em; padding-left: 2em; margin-bottom: 1em; }
 table { margin-bottom: 2ex; }
 
-video { display: block; max-width: 100%; box-shadow: 0 0 20px 0 #ddd; margin: 0 auto; }
+video { display: block; max-width: 100%; box-shadow: 0 0 20px 0 #ddd; margin: 2ex auto; }
 .img1 { width: 1050px; max-width: 100%; box-shadow: 0 0 20px 0 #bbb; }
 .img2 { width: 1500px; max-width: 100%; box-shadow: 0 0 20px 0 #bbb; }
 

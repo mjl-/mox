@@ -48,13 +48,18 @@ or see [all releases](https://github.com/mjl-/mox/releases).
 ## Quickstart demo
 
 Mox is real easy to set up. Get a machine, download the mox binary, run the
-quickstart, add the printed DNS records, and you're good to go. See the demo
-below, or continue reading at [Install](install/).
+quickstart, add the printed DNS records, and you've got a working modern mail
+server. See the demo below, or continue reading at [Install](install/).
 
 <video controls preload="none" poster="files/video/quickstart-20240111.jpg">
 	<source type="video/mp4" src="files/video/quickstart-20240111.mp4" />
 	<source type="video/webm" src="files/video/quickstart-20240111.webm" />
 </video>
+
+Not ready for a full setup yet? Try mox in less than a minute:
+[download](https://beta.gobuilds.org/github.com/mjl-/mox) and run "mox
+localserve". It serves a local-only SMTP/IMAP/Webmail/etc for testing and
+development. No setup required.
 
 ## Background
 
