@@ -124,6 +124,8 @@ try {
 	}
 } catch (err) {}
 
+let accountSettings: api.Settings
+
 const defaultSettings = {
 	showShortcuts: true, // Whether to briefly show shortcuts in bottom left when a button is clicked that has a keyboard shortcut.
 	mailboxesWidth: 240,
@@ -916,6 +918,19 @@ const withStatus = async <T>(action: string, promise: Promise<T>, disablable?: D
 	}
 }
 
+const withDisabled = async <T>(elem: {disabled: boolean}, p: Promise<T>): Promise<T> => {
+	try {
+		elem.disabled = true
+		return await p
+	} catch (err) {
+		console.log({err})
+		window.alert('Error: ' + errmsg(err))
+		throw err
+	} finally {
+		elem.disabled = false
+	}
+}
+
 // Popover shows kids in a div on top of a mostly transparent overlay on top of
 // the document. If transparent is set, the div the kids are in will not get a
 // white background. If focus is set, it will be called after adding the
@@ -1043,6 +1058,69 @@ const popup = (...kids: ElemArg[]) => {
 	document.body.appendChild(root)
 	content.focus()
 	return close
+}
+
+// Show settings screen.
+const cmdSettings = async () => {
+	let fieldset: HTMLFieldSetElement
+	let signature: HTMLTextAreaElement
+	let quoting: HTMLSelectElement
+	let showAddressSecurity: HTMLInputElement
+
+	if (!accountSettings) {
+		window.alert('No account settings fetched yet.')
+	}
+
+	const remove = popup(
+		style({padding: '1em 1em 2em 1em', minWidth: '30em'}),
+		dom.h1('Settings'),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+				const accSet: api.Settings = {
+					ID: accountSettings.ID,
+					Signature: signature.value,
+					Quoting: quoting.value as api.Quoting,
+					ShowAddressSecurity: showAddressSecurity.checked,
+				}
+				await withDisabled(fieldset, client.SettingsSave(accSet))
+				accountSettings = accSet
+				remove()
+			},
+			fieldset=dom.fieldset(
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					dom.div('Signature'),
+					signature=dom.textarea(
+						new String(accountSettings.Signature),
+						style({width: '100%'}),
+						attr.rows(''+Math.max(3, 1+accountSettings.Signature.split('\n').length)),
+					),
+				),
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					dom.div('Reply above/below original'),
+					attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'),
+					quoting=dom.select(
+						dom.option(attr.value(''), 'Auto'),
+						dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []),
+						dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []),
+					),
+				),
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					showAddressSecurity=dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []),
+					' Show address security indications',
+					attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.'),
+				),
+				dom.br(),
+				dom.div(
+					dom.submitbutton('Save'),
+				),
+			),
+		),
+	)
 }
 
 // Show help popup, with shortcuts and basic explanation.
@@ -1271,6 +1349,7 @@ type ComposeOptions = {
 	responseMessageID?: number
 	// Whether message is to a list, due to List-Id header.
 	isList?: boolean
+	editOffset?: number // For cursor, default at start.
 }
 
 interface ComposeView {
@@ -1410,6 +1489,9 @@ const compose = (opts: ComposeOptions) => {
 		let autosizeElem: HTMLElement, inputElem: HTMLInputElement, securityBar: HTMLElement
 
 		const fetchRecipientSecurity = () => {
+			if (!accountSettings?.ShowAddressSecurity) {
+				return
+			}
 			if (inputElem.value === rcptSecAddr) {
 				return
 			}
@@ -1505,7 +1587,7 @@ const compose = (opts: ComposeOptions) => {
 					style({width: 'auto'}),
 					attr.value(addr),
 					newAddressComplete(),
-					attr.title(recipientSecurityTitle),
+					accountSettings?.ShowAddressSecurity ? attr.title(recipientSecurityTitle) : [],
 					function keydown(e: KeyboardEvent) {
 						if (e.key === '-' && e.ctrlKey) {
 							remove()
@@ -1721,7 +1803,7 @@ const compose = (opts: ComposeOptions) => {
 					// Explicit string object so it doesn't get the highlight-unicode-block-changes
 					// treatment, which would cause characters to disappear.
 					new String(opts.body || ''),
-					opts.body && !opts.isForward && !opts.body.startsWith('\n\n') ? prop({selectionStart: opts.body.length, selectionEnd: opts.body.length}) : [],
+					prop({selectionStart: opts.editOffset || 0, selectionEnd: opts.editOffset || 0}),
 					function keyup(e: KeyboardEvent) {
 						if (e.key === 'Enter') {
 							checkAttachments()
@@ -2464,12 +2546,16 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			body = pm.Texts[0]
 		}
 		body = body.replace(/\r/g, '').replace(/\n\n\n\n*/g, '\n\n').trim()
+		let editOffset = 0
 		if (forward) {
 			body = '\n\n---- Forwarded Message ----\n\n'+body
 		} else {
 			body = body.split('\n').map(line => '> ' + line).join('\n')
-			if (haveSel) {
+			let sig = accountSettings?.Signature || ''
+			if (!accountSettings?.Quoting && haveSel || accountSettings?.Quoting === api.Quoting.Bottom) {
 				body += '\n\n'
+				editOffset = body.length
+				body += '\n\n' + sig
 			} else {
 				let onWroteLine = ''
 				if (mi.Envelope.Date && mi.Envelope.From && mi.Envelope.From.length === 1) {
@@ -2478,7 +2564,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 					const datetime = mi.Envelope.Date.toLocaleDateString(undefined, {weekday: "short", year: "numeric", month: "short", day: "numeric"}) + ' at ' + mi.Envelope.Date.toLocaleTimeString()
 					onWroteLine = 'On ' + datetime + ', ' + name + ' wrote:\n'
 				}
-				body = '\n\n' + onWroteLine + body
+				body = '\n\n' + sig + '\n' + onWroteLine + body
 			}
 		}
 		const subjectPrefix = forward ? 'Fwd:' : 'Re:'
@@ -2495,6 +2581,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			attachmentsMessageItem: forward ? mi : undefined,
 			responseMessageID: m.ID,
 			isList: m.IsMailingList,
+			editOffset: editOffset,
 		}
 		compose(opts)
 	}
@@ -6029,7 +6116,14 @@ const init = async () => {
 		searchView.updateForm()
 	}
 
-	const cmdCompose = async () => { compose({}) }
+	const cmdCompose = async () => {
+		let body = ''
+		let sig = accountSettings?.Signature || ''
+		if (sig) {
+			body += '\n\n' + sig
+		}
+		compose({body: body, editOffset: 0})
+	}
 	const cmdOpenInbox = async () => {
 		const mb = mailboxlistView.findMailboxByName('Inbox')
 		if (mb) {
@@ -6053,6 +6147,7 @@ const init = async () => {
 		'ctrl ?': cmdTooltip,
 		c: cmdCompose,
 		'ctrl m': cmdFocusMsg,
+		'ctrl !': cmdSettings,
 	}
 
 	const webmailroot = dom.div(
@@ -6159,6 +6254,8 @@ const init = async () => {
 					dom.clickbutton('Tooltip', attr.title('Show tooltips, based on the title attributes (underdotted text) for the focused element and all user interface elements below it. Use the keyboard shortcut "ctrl ?" instead of clicking on the tooltip button, which changes focus to the tooltip button.'), clickCmd(cmdTooltip, shortcuts)),
 					' ',
 					dom.clickbutton('Help', attr.title('Show popup with basic usage information and a keyboard shortcuts.'), clickCmd(cmdHelp, shortcuts)),
+					' ',
+					dom.clickbutton('Settings', attr.title('Change settings for composing messages.'), clickCmd(cmdSettings, shortcuts)),
 					' ',
 					loginAddressElem=dom.span(),
 					' ',
@@ -6650,6 +6747,7 @@ const init = async () => {
 			const start = checkParse(() => api.parser.EventStart(data))
 			log('event start', start)
 
+			accountSettings = start.Settings
 			connecting = false
 			sseID = start.SSEID
 			loginAddress = start.LoginAddress

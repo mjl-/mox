@@ -215,6 +215,7 @@ type EventStart struct {
 	MailboxName          string
 	Mailboxes            []store.Mailbox
 	RejectsMailbox       string
+	Settings             store.Settings
 	Version              string
 }
 
@@ -664,6 +665,7 @@ func serveEvents(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *ht
 	}()
 
 	var mbl []store.Mailbox
+	settings := store.Settings{ID: 1}
 
 	// We only take the rlock when getting the tx.
 	acc.WithRLock(func() {
@@ -673,6 +675,9 @@ func serveEvents(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *ht
 
 		mbl, err = bstore.QueryTx[store.Mailbox](qtx).List()
 		xcheckf(ctx, err, "list mailboxes")
+
+		err = qtx.Get(&settings)
+		xcheckf(ctx, err, "get settings")
 	})
 
 	// Find the designated mailbox if a mailbox name is set, or there are no filters at all.
@@ -728,7 +733,7 @@ func serveEvents(ctx context.Context, log mlog.Log, w http.ResponseWriter, r *ht
 	}
 
 	// Write first event, allowing client to fill its UI with mailboxes.
-	start := EventStart{sse.ID, loginAddress, addresses, domainAddressConfigs, mailbox.Name, mbl, accConf.RejectsMailbox, moxvar.Version}
+	start := EventStart{sse.ID, loginAddress, addresses, domainAddressConfigs, mailbox.Name, mbl, accConf.RejectsMailbox, settings, moxvar.Version}
 	writer.xsendEvent(ctx, log, "start", start)
 
 	// The goroutine doing the querying will send messages on these channels, which

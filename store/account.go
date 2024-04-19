@@ -719,8 +719,44 @@ type LoginSession struct {
 	csrfToken    CSRFToken
 }
 
+// Quoting is a setting for how to quote in replies/forwards.
+type Quoting string
+
+const (
+	Default Quoting = "" // Bottom-quote if text is selected, top-quote otherwise.
+	Bottom  Quoting = "bottom"
+	Top     Quoting = "top"
+)
+
+// Settings are webmail client settings.
+type Settings struct {
+	ID uint8 // Singleton ID 1.
+
+	Signature string
+	Quoting   Quoting
+
+	// Whether to show the bars underneath the address input fields indicating
+	// starttls/dnssec/dane/mtasts/requiretls support by address.
+	ShowAddressSecurity bool
+}
+
 // Types stored in DB.
-var DBTypes = []any{NextUIDValidity{}, Message{}, Recipient{}, Mailbox{}, Subscription{}, Outgoing{}, Password{}, Subjectpass{}, SyncState{}, Upgrade{}, RecipientDomainTLS{}, DiskUsage{}, LoginSession{}}
+var DBTypes = []any{
+	NextUIDValidity{},
+	Message{},
+	Recipient{},
+	Mailbox{},
+	Subscription{},
+	Outgoing{},
+	Password{},
+	Subjectpass{},
+	SyncState{},
+	Upgrade{},
+	RecipientDomainTLS{},
+	DiskUsage{},
+	LoginSession{},
+	Settings{},
+}
 
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.
 type Account struct {
@@ -850,9 +886,15 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		return acc, nil
 	}
 
-	// Ensure mailbox counts and total message size are set.
+	// Ensure singletons are present. Mailbox counts and total message size, Settings.
 	var mentioned bool
 	err = db.Write(context.TODO(), func(tx *bstore.Tx) error {
+		if tx.Get(&Settings{ID: 1}) == bstore.ErrAbsent {
+			if err := tx.Insert(&Settings{ID: 1, ShowAddressSecurity: true}); err != nil {
+				return err
+			}
+		}
+
 		err := bstore.QueryTx[Mailbox](tx).FilterEqual("HaveCounts", false).ForEach(func(mb Mailbox) error {
 			if !mentioned {
 				mentioned = true
@@ -886,7 +928,7 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		return tx.Insert(&du)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("calculating counts for mailbox: %v", err)
+		return nil, fmt.Errorf("calculating counts for mailbox or inserting settings: %v", err)
 	}
 
 	// Start adding threading if needed.
@@ -972,6 +1014,9 @@ func initAccount(db *bstore.DB) error {
 			return err
 		}
 		if err := tx.Insert(&DiskUsage{ID: 1}); err != nil {
+			return err
+		}
+		if err := tx.Insert(&Settings{ID: 1}); err != nil {
 			return err
 		}
 

@@ -1536,6 +1536,24 @@ func (Webmail) DecodeMIMEWords(ctx context.Context, text string) string {
 	return s
 }
 
+// SettingsSave saves settings, e.g. for composing.
+func (Webmail) SettingsSave(ctx context.Context, settings store.Settings) {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc, err := store.OpenAccount(log, reqInfo.AccountName)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		if acc != nil {
+			err := acc.Close()
+			log.Check(err, "closing account")
+		}
+	}()
+
+	settings.ID = 1
+	err = acc.DB.Update(ctx, &settings)
+	xcheckf(ctx, err, "save settings")
+}
+
 func slicesAny[T any](l []T) []any {
 	r := make([]any, len(l))
 	for i, v := range l {

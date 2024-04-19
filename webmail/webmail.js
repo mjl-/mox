@@ -274,8 +274,15 @@ var api;
 		// lookups.
 		SecurityResult["SecurityResultUnknown"] = "unknown";
 	})(SecurityResult = api.SecurityResult || (api.SecurityResult = {}));
-	api.structTypes = { "Address": true, "Attachment": true, "ChangeMailboxAdd": true, "ChangeMailboxCounts": true, "ChangeMailboxKeywords": true, "ChangeMailboxRemove": true, "ChangeMailboxRename": true, "ChangeMailboxSpecialUse": true, "ChangeMsgAdd": true, "ChangeMsgFlags": true, "ChangeMsgRemove": true, "ChangeMsgThread": true, "Domain": true, "DomainAddressConfig": true, "Envelope": true, "EventStart": true, "EventViewChanges": true, "EventViewErr": true, "EventViewMsgs": true, "EventViewReset": true, "File": true, "Filter": true, "Flags": true, "ForwardAttachments": true, "Mailbox": true, "Message": true, "MessageAddress": true, "MessageEnvelope": true, "MessageItem": true, "NotFilter": true, "Page": true, "ParsedMessage": true, "Part": true, "Query": true, "RecipientSecurity": true, "Request": true, "SpecialUse": true, "SubmitMessage": true };
-	api.stringsTypes = { "AttachmentType": true, "CSRFToken": true, "Localpart": true, "SecurityResult": true, "ThreadMode": true };
+	// Quoting is a setting for how to quote in replies/forwards.
+	let Quoting;
+	(function (Quoting) {
+		Quoting["Default"] = "";
+		Quoting["Bottom"] = "bottom";
+		Quoting["Top"] = "top";
+	})(Quoting = api.Quoting || (api.Quoting = {}));
+	api.structTypes = { "Address": true, "Attachment": true, "ChangeMailboxAdd": true, "ChangeMailboxCounts": true, "ChangeMailboxKeywords": true, "ChangeMailboxRemove": true, "ChangeMailboxRename": true, "ChangeMailboxSpecialUse": true, "ChangeMsgAdd": true, "ChangeMsgFlags": true, "ChangeMsgRemove": true, "ChangeMsgThread": true, "Domain": true, "DomainAddressConfig": true, "Envelope": true, "EventStart": true, "EventViewChanges": true, "EventViewErr": true, "EventViewMsgs": true, "EventViewReset": true, "File": true, "Filter": true, "Flags": true, "ForwardAttachments": true, "Mailbox": true, "Message": true, "MessageAddress": true, "MessageEnvelope": true, "MessageItem": true, "NotFilter": true, "Page": true, "ParsedMessage": true, "Part": true, "Query": true, "RecipientSecurity": true, "Request": true, "Settings": true, "SpecialUse": true, "SubmitMessage": true };
+	api.stringsTypes = { "AttachmentType": true, "CSRFToken": true, "Localpart": true, "Quoting": true, "SecurityResult": true, "ThreadMode": true };
 	api.intsTypes = { "ModSeq": true, "UID": true, "Validation": true };
 	api.types = {
 		"Request": { "Name": "Request", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Cancel", "Docs": "", "Typewords": ["bool"] }, { "Name": "Query", "Docs": "", "Typewords": ["Query"] }, { "Name": "Page", "Docs": "", "Typewords": ["Page"] }] },
@@ -294,7 +301,8 @@ var api;
 		"ForwardAttachments": { "Name": "ForwardAttachments", "Docs": "", "Fields": [{ "Name": "MessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Paths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }] },
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
 		"RecipientSecurity": { "Name": "RecipientSecurity", "Docs": "", "Fields": [{ "Name": "STARTTLS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["SecurityResult"] }] },
-		"EventStart": { "Name": "EventStart", "Docs": "", "Fields": [{ "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["MessageAddress"] }, { "Name": "Addresses", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "DomainAddressConfigs", "Docs": "", "Typewords": ["{}", "DomainAddressConfig"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailboxes", "Docs": "", "Typewords": ["[]", "Mailbox"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Version", "Docs": "", "Typewords": ["string"] }] },
+		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }] },
+		"EventStart": { "Name": "EventStart", "Docs": "", "Fields": [{ "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["MessageAddress"] }, { "Name": "Addresses", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "DomainAddressConfigs", "Docs": "", "Typewords": ["{}", "DomainAddressConfig"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailboxes", "Docs": "", "Typewords": ["[]", "Mailbox"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Settings", "Docs": "", "Typewords": ["Settings"] }, { "Name": "Version", "Docs": "", "Typewords": ["string"] }] },
 		"DomainAddressConfig": { "Name": "DomainAddressConfig", "Docs": "", "Fields": [{ "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }] },
 		"EventViewErr": { "Name": "EventViewErr", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "RequestID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Err", "Docs": "", "Typewords": ["string"] }] },
 		"EventViewReset": { "Name": "EventViewReset", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "RequestID", "Docs": "", "Typewords": ["int64"] }] },
@@ -323,6 +331,7 @@ var api;
 		"ThreadMode": { "Name": "ThreadMode", "Docs": "", "Values": [{ "Name": "ThreadOff", "Value": "off", "Docs": "" }, { "Name": "ThreadOn", "Value": "on", "Docs": "" }, { "Name": "ThreadUnread", "Value": "unread", "Docs": "" }] },
 		"AttachmentType": { "Name": "AttachmentType", "Docs": "", "Values": [{ "Name": "AttachmentIndifferent", "Value": "", "Docs": "" }, { "Name": "AttachmentNone", "Value": "none", "Docs": "" }, { "Name": "AttachmentAny", "Value": "any", "Docs": "" }, { "Name": "AttachmentImage", "Value": "image", "Docs": "" }, { "Name": "AttachmentPDF", "Value": "pdf", "Docs": "" }, { "Name": "AttachmentArchive", "Value": "archive", "Docs": "" }, { "Name": "AttachmentSpreadsheet", "Value": "spreadsheet", "Docs": "" }, { "Name": "AttachmentDocument", "Value": "document", "Docs": "" }, { "Name": "AttachmentPresentation", "Value": "presentation", "Docs": "" }] },
 		"SecurityResult": { "Name": "SecurityResult", "Docs": "", "Values": [{ "Name": "SecurityResultError", "Value": "error", "Docs": "" }, { "Name": "SecurityResultNo", "Value": "no", "Docs": "" }, { "Name": "SecurityResultYes", "Value": "yes", "Docs": "" }, { "Name": "SecurityResultUnknown", "Value": "unknown", "Docs": "" }] },
+		"Quoting": { "Name": "Quoting", "Docs": "", "Values": [{ "Name": "Default", "Value": "", "Docs": "" }, { "Name": "Bottom", "Value": "bottom", "Docs": "" }, { "Name": "Top", "Value": "top", "Docs": "" }] },
 		"Localpart": { "Name": "Localpart", "Docs": "", "Values": null },
 	};
 	api.parser = {
@@ -342,6 +351,7 @@ var api;
 		ForwardAttachments: (v) => api.parse("ForwardAttachments", v),
 		Mailbox: (v) => api.parse("Mailbox", v),
 		RecipientSecurity: (v) => api.parse("RecipientSecurity", v),
+		Settings: (v) => api.parse("Settings", v),
 		EventStart: (v) => api.parse("EventStart", v),
 		DomainAddressConfig: (v) => api.parse("DomainAddressConfig", v),
 		EventViewErr: (v) => api.parse("EventViewErr", v),
@@ -371,6 +381,7 @@ var api;
 		ThreadMode: (v) => api.parse("ThreadMode", v),
 		AttachmentType: (v) => api.parse("AttachmentType", v),
 		SecurityResult: (v) => api.parse("SecurityResult", v),
+		Quoting: (v) => api.parse("Quoting", v),
 		Localpart: (v) => api.parse("Localpart", v),
 	};
 	let defaultOptions = { slicesNullable: true, mapsNullable: true, nullableOptional: true };
@@ -586,6 +597,14 @@ var api;
 			const paramTypes = [["string"]];
 			const returnTypes = [["string"]];
 			const params = [text];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// SettingsSave saves settings, e.g. for composing.
+		async SettingsSave(settings) {
+			const fn = "SettingsSave";
+			const paramTypes = [["Settings"]];
+			const returnTypes = [];
+			const params = [settings];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// SSETypes exists to ensure the generated API contains the types, for use in SSE events.
@@ -1257,6 +1276,7 @@ try {
 	}
 }
 catch (err) { }
+let accountSettings;
 const defaultSettings = {
 	showShortcuts: true,
 	mailboxesWidth: 240,
@@ -1981,6 +2001,20 @@ const withStatus = async (action, promise, disablable, noAlert) => {
 		}
 	}
 };
+const withDisabled = async (elem, p) => {
+	try {
+		elem.disabled = true;
+		return await p;
+	}
+	catch (err) {
+		console.log({ err });
+		window.alert('Error: ' + errmsg(err));
+		throw err;
+	}
+	finally {
+		elem.disabled = false;
+	}
+};
 // Popover shows kids in a div on top of a mostly transparent overlay on top of
 // the document. If transparent is set, the div the kids are in will not get a
 // white background. If focus is set, it will be called after adding the
@@ -2081,6 +2115,29 @@ const popup = (...kids) => {
 	document.body.appendChild(root);
 	content.focus();
 	return close;
+};
+// Show settings screen.
+const cmdSettings = async () => {
+	let fieldset;
+	let signature;
+	let quoting;
+	let showAddressSecurity;
+	if (!accountSettings) {
+		window.alert('No account settings fetched yet.');
+	}
+	const remove = popup(style({ padding: '1em 1em 2em 1em', minWidth: '30em' }), dom.h1('Settings'), dom.form(async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		const accSet = {
+			ID: accountSettings.ID,
+			Signature: signature.value,
+			Quoting: quoting.value,
+			ShowAddressSecurity: showAddressSecurity.checked,
+		};
+		await withDisabled(fieldset, client.SettingsSave(accSet));
+		accountSettings = accSet;
+		remove();
+	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.br(), dom.div(dom.submitbutton('Save')))));
 };
 // Show help popup, with shortcuts and basic explanation.
 const cmdHelp = async () => {
@@ -2328,6 +2385,9 @@ const compose = (opts) => {
 		let rcptSecAborter = {};
 		let autosizeElem, inputElem, securityBar;
 		const fetchRecipientSecurity = () => {
+			if (!accountSettings?.ShowAddressSecurity) {
+				return;
+			}
 			if (inputElem.value === rcptSecAddr) {
 				return;
 			}
@@ -2411,7 +2471,7 @@ const compose = (opts) => {
 			});
 		};
 		const recipientSecurityTitle = 'Description of security mechanisms recipient domains may implement:\n1. STARTTLS: Opportunistic (unverified) TLS with STARTTLS, successfully negotiated during the most recent delivery attempt.\n2. MTA-STS: For PKIX/WebPKI-verified TLS.\n3. DNSSEC: MX DNS records are DNSSEC-signed.\n4. DANE: First delivery destination host implements DANE for verified TLS.\n5. RequireTLS: SMTP extension for verified TLS delivery into recipient mailbox, support detected during the most recent delivery attempt.\n\nChecks STARTTLS, DANE and RequireTLS cover the most recently used delivery path, not necessarily all possible delivery paths.\n\nThe bars below the input field indicate implementation status by the recipient domain:\n- Red, not implemented/unsupported\n- Green, implemented/supported\n- Gray, error while determining\n- Absent/white, unknown or skipped (e.g. no previous delivery attempt, or DANE check skipped due to DNSSEC-lookup error)';
-		const root = dom.span(autosizeElem = dom.span(dom._class('autosize'), inputElem = dom.input(focusPlaceholder('Jane <jane@example.org>'), style({ width: 'auto' }), attr.value(addr), newAddressComplete(), attr.title(recipientSecurityTitle), function keydown(e) {
+		const root = dom.span(autosizeElem = dom.span(dom._class('autosize'), inputElem = dom.input(focusPlaceholder('Jane <jane@example.org>'), style({ width: 'auto' }), attr.value(addr), newAddressComplete(), accountSettings?.ShowAddressSecurity ? attr.title(recipientSecurityTitle) : [], function keydown(e) {
 			if (e.key === '-' && e.ctrlKey) {
 				remove();
 			}
@@ -2547,7 +2607,7 @@ const compose = (opts) => {
 	}))))), body = dom.textarea(dom._class('mono'), attr.rows('15'), style({ width: '100%' }), 
 	// Explicit string object so it doesn't get the highlight-unicode-block-changes
 	// treatment, which would cause characters to disappear.
-	new String(opts.body || ''), opts.body && !opts.isForward && !opts.body.startsWith('\n\n') ? prop({ selectionStart: opts.body.length, selectionEnd: opts.body.length }) : [], function keyup(e) {
+	new String(opts.body || ''), prop({ selectionStart: opts.editOffset || 0, selectionEnd: opts.editOffset || 0 }), function keyup(e) {
 		if (e.key === 'Enter') {
 			checkAttachments();
 		}
@@ -3075,13 +3135,17 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			body = pm.Texts[0];
 		}
 		body = body.replace(/\r/g, '').replace(/\n\n\n\n*/g, '\n\n').trim();
+		let editOffset = 0;
 		if (forward) {
 			body = '\n\n---- Forwarded Message ----\n\n' + body;
 		}
 		else {
 			body = body.split('\n').map(line => '> ' + line).join('\n');
-			if (haveSel) {
+			let sig = accountSettings?.Signature || '';
+			if (!accountSettings?.Quoting && haveSel || accountSettings?.Quoting === api.Quoting.Bottom) {
 				body += '\n\n';
+				editOffset = body.length;
+				body += '\n\n' + sig;
 			}
 			else {
 				let onWroteLine = '';
@@ -3091,7 +3155,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 					const datetime = mi.Envelope.Date.toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" }) + ' at ' + mi.Envelope.Date.toLocaleTimeString();
 					onWroteLine = 'On ' + datetime + ', ' + name + ' wrote:\n';
 				}
-				body = '\n\n' + onWroteLine + body;
+				body = '\n\n' + sig + '\n' + onWroteLine + body;
 			}
 		}
 		const subjectPrefix = forward ? 'Fwd:' : 'Re:';
@@ -3108,6 +3172,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			attachmentsMessageItem: forward ? mi : undefined,
 			responseMessageID: m.ID,
 			isList: m.IsMailingList,
+			editOffset: editOffset,
 		};
 		compose(opts);
 	};
@@ -5853,7 +5918,14 @@ const init = async () => {
 		ensureSearchView();
 		searchView.updateForm();
 	};
-	const cmdCompose = async () => { compose({}); };
+	const cmdCompose = async () => {
+		let body = '';
+		let sig = accountSettings?.Signature || '';
+		if (sig) {
+			body += '\n\n' + sig;
+		}
+		compose({ body: body, editOffset: 0 });
+	};
 	const cmdOpenInbox = async () => {
 		const mb = mailboxlistView.findMailboxByName('Inbox');
 		if (mb) {
@@ -5876,6 +5948,7 @@ const init = async () => {
 		'ctrl ?': cmdTooltip,
 		c: cmdCompose,
 		'ctrl m': cmdFocusMsg,
+		'ctrl !': cmdSettings,
 	};
 	const webmailroot = dom.div(style({ display: 'flex', flexDirection: 'column', alignContent: 'stretch', height: '100dvh' }), dom.div(dom._class('topbar'), style({ display: 'flex' }), attr.role('region'), attr.arialabel('Top bar'), topcomposeboxElem = dom.div(dom._class('pad'), style({ width: settings.mailboxesWidth + 'px', textAlign: 'center' }), dom.clickbutton('Compose', attr.title('Compose new email message.'), function click() {
 		shortcutCmd(cmdCompose, shortcuts);
@@ -5932,7 +6005,7 @@ const init = async () => {
 		else {
 			selectLayout(layoutElem.value);
 		}
-	}), ' ', dom.clickbutton('Tooltip', attr.title('Show tooltips, based on the title attributes (underdotted text) for the focused element and all user interface elements below it. Use the keyboard shortcut "ctrl ?" instead of clicking on the tooltip button, which changes focus to the tooltip button.'), clickCmd(cmdTooltip, shortcuts)), ' ', dom.clickbutton('Help', attr.title('Show popup with basic usage information and a keyboard shortcuts.'), clickCmd(cmdHelp, shortcuts)), ' ', loginAddressElem = dom.span(), ' ', dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e) {
+	}), ' ', dom.clickbutton('Tooltip', attr.title('Show tooltips, based on the title attributes (underdotted text) for the focused element and all user interface elements below it. Use the keyboard shortcut "ctrl ?" instead of clicking on the tooltip button, which changes focus to the tooltip button.'), clickCmd(cmdTooltip, shortcuts)), ' ', dom.clickbutton('Help', attr.title('Show popup with basic usage information and a keyboard shortcuts.'), clickCmd(cmdHelp, shortcuts)), ' ', dom.clickbutton('Settings', attr.title('Change settings for composing messages.'), clickCmd(cmdSettings, shortcuts)), ' ', loginAddressElem = dom.span(), ' ', dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e) {
 		await withStatus('Logging out', client.Logout(), e.target);
 		localStorageRemove('webmailcsrftoken');
 		if (eventSource) {
@@ -6329,6 +6402,7 @@ const init = async () => {
 			lastServerVersion = data.Version;
 			const start = checkParse(() => api.parser.EventStart(data));
 			log('event start', start);
+			accountSettings = start.Settings;
 			connecting = false;
 			sseID = start.SSEID;
 			loginAddress = start.LoginAddress;

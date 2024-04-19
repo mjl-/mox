@@ -367,6 +367,19 @@
 			]
 		},
 		{
+			"Name": "SettingsSave",
+			"Docs": "SettingsSave saves settings, e.g. for composing.",
+			"Params": [
+				{
+					"Name": "settings",
+					"Typewords": [
+						"Settings"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "SSETypes",
 			"Docs": "SSETypes exists to ensure the generated API contains the types, for use in SSE events.",
 			"Params": [],
@@ -1383,6 +1396,40 @@
 			]
 		},
 		{
+			"Name": "Settings",
+			"Docs": "Settings are webmail client settings.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "Singleton ID 1.",
+					"Typewords": [
+						"uint8"
+					]
+				},
+				{
+					"Name": "Signature",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Quoting",
+					"Docs": "",
+					"Typewords": [
+						"Quoting"
+					]
+				},
+				{
+					"Name": "ShowAddressSecurity",
+					"Docs": "Whether to show the bars underneath the address input fields indicating starttls/dnssec/dane/mtasts/requiretls support by address.",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
 			"Name": "EventStart",
 			"Docs": "EventStart is the first message sent on an SSE connection, giving the client\nbasic data to populate its UI. After this event, messages will follow quickly in\nan EventViewMsgs event.",
 			"Fields": [
@@ -1436,6 +1483,13 @@
 					"Docs": "",
 					"Typewords": [
 						"string"
+					]
+				},
+				{
+					"Name": "Settings",
+					"Docs": "",
+					"Typewords": [
+						"Settings"
 					]
 				},
 				{
@@ -2812,6 +2866,27 @@
 					"Name": "SecurityResultUnknown",
 					"Value": "unknown",
 					"Docs": "Unknown whether supported. Finding out may only be (reasonably) possible when\ntrying (e.g. SMTP STARTTLS). Once tried, the result may be cached for future\nlookups."
+				}
+			]
+		},
+		{
+			"Name": "Quoting",
+			"Docs": "Quoting is a setting for how to quote in replies/forwards.",
+			"Values": [
+				{
+					"Name": "Default",
+					"Value": "",
+					"Docs": "Bottom-quote if text is selected, top-quote otherwise."
+				},
+				{
+					"Name": "Bottom",
+					"Value": "bottom",
+					"Docs": ""
+				},
+				{
+					"Name": "Top",
+					"Value": "top",
+					"Docs": ""
 				}
 			]
 		},
