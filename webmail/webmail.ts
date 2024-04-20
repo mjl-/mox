@@ -144,6 +144,10 @@ const defaultSettings = {
 	showHeaders: [] as string[], // Additional message headers to show.
 	threading: api.ThreadMode.ThreadOn,
 	checkConsistency: location.hostname === 'localhost', // Enable UI update consistency checks, default only for local development.
+	composeWidth: 0,
+	composeViewportWidth: 0,
+	composeHeight: 0,
+	composeViewportHeight: 0,
 }
 const parseSettings = (): typeof defaultSettings => {
 	try {
@@ -198,6 +202,10 @@ const parseSettings = (): typeof defaultSettings => {
 			showHeaders: getStringArray('showHeaders'),
 			threading: getString('threading', api.ThreadMode.ThreadOff, api.ThreadMode.ThreadOn, api.ThreadMode.ThreadUnread) as api.ThreadMode,
 			checkConsistency: getBool('checkConsistency'),
+			composeWidth: getInt('composeWidth'),
+			composeViewportWidth: getInt('composeViewportWidth'),
+			composeHeight: getInt('composeHeight'),
+			composeViewportHeight: getInt('composeViewportHeight'),
 		}
 	} catch (err) {
 		console.log('getting settings from localstorage', err)
@@ -1732,6 +1740,11 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		dom._kids(scheduleWeekday, weekdays[new Date(scheduleTime.value).getDay()])
 	}
 
+	let resizeLast: {x: number, y: number} | null = null
+	let resizeTimer: number = 0
+	const initWidth = window.innerWidth === settings.composeViewportWidth ? settings.composeWidth : 0
+	const initHeight = window.innerHeight === settings.composeViewportHeight ? settings.composeHeight : 0
+
 	const composeElem = dom.div(
 		style({
 			position: 'fixed',
@@ -1745,9 +1758,46 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 			minWidth: '40em',
 			maxWidth: '95vw',
 			borderRadius: '.25em',
+			display: 'flex',
+			flexDirection: 'column',
 		}),
+		initWidth ? style({width: initWidth+'px'}) : [],
+		initHeight ? style({height: initHeight+'px'}) : [],
+		dom.div(
+			style({position: 'absolute', marginTop: '-1em', marginLeft: '-1em', width: '1em', height: '1em', cursor: 'nw-resize'}),
+			function mousedown(e: MouseEvent) {
+				resizeLast = null
+				startDrag(e, (e: MouseEvent) => {
+					if (resizeLast) {
+						const bounds = composeElem.getBoundingClientRect()
+						const width = Math.round(bounds.width + resizeLast.x - e.clientX)
+						const height = Math.round(bounds.height + resizeLast.y - e.clientY)
+						composeElem.style.width = width+'px'
+						composeElem.style.height = height+'px'
+						body.removeAttribute('rows')
+						if (resizeTimer) {
+							window.clearTimeout(resizeTimer)
+						}
+						resizeTimer = window.setTimeout(() => {
+							settingsPut({...settings, composeWidth: width, composeHeight: height, composeViewportWidth: window.innerWidth, composeViewportHeight: window.innerHeight})
+						}, 1000)
+					}
+					resizeLast = {x: e.clientX, y: e.clientY}
+				})
+			},
+		),
 		dom.form(
+			style({
+				flexGrow: '1',
+				display: 'flex',
+				flexDirection: 'column',
+			}),
 			fieldset=dom.fieldset(
+				style({
+					flexGrow: '1',
+					display: 'flex',
+					flexDirection: 'column',
+				}),
 				dom.table(
 					style({width: '100%'}),
 					dom.tr(
@@ -1805,7 +1855,13 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 						),
 					),
 				),
-				body=dom.textarea(dom._class('mono'), attr.rows('15'), style({width: '100%'}),
+				body=dom.textarea(
+					dom._class('mono'),
+					style({
+						flexGrow: '1',
+						width: '100%',
+					}),
+					initHeight === 0 ? attr.rows('15') : [], // Drives default size, removed on compose window resize.
 					// Explicit string object so it doesn't get the highlight-unicode-block-changes
 					// treatment, which would cause characters to disappear.
 					new String(opts.body || ''),

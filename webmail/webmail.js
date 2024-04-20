@@ -1294,7 +1294,11 @@ const defaultSettings = {
 	showAllHeaders: false,
 	showHeaders: [],
 	threading: api.ThreadMode.ThreadOn,
-	checkConsistency: location.hostname === 'localhost', // Enable UI update consistency checks, default only for local development.
+	checkConsistency: location.hostname === 'localhost',
+	composeWidth: 0,
+	composeViewportWidth: 0,
+	composeHeight: 0,
+	composeViewportHeight: 0,
 };
 const parseSettings = () => {
 	try {
@@ -1348,6 +1352,10 @@ const parseSettings = () => {
 			showHeaders: getStringArray('showHeaders'),
 			threading: getString('threading', api.ThreadMode.ThreadOff, api.ThreadMode.ThreadOn, api.ThreadMode.ThreadUnread),
 			checkConsistency: getBool('checkConsistency'),
+			composeWidth: getInt('composeWidth'),
+			composeViewportWidth: getInt('composeViewportWidth'),
+			composeHeight: getInt('composeHeight'),
+			composeViewportHeight: getInt('composeViewportHeight'),
 		};
 	}
 	catch (err) {
@@ -2595,6 +2603,10 @@ const compose = (opts, listMailboxes) => {
 		console.log('datetime change', scheduleTime.value);
 		dom._kids(scheduleWeekday, weekdays[new Date(scheduleTime.value).getDay()]);
 	};
+	let resizeLast = null;
+	let resizeTimer = 0;
+	const initWidth = window.innerWidth === settings.composeViewportWidth ? settings.composeWidth : 0;
+	const initHeight = window.innerHeight === settings.composeViewportHeight ? settings.composeHeight : 0;
 	const composeElem = dom.div(style({
 		position: 'fixed',
 		bottom: '1ex',
@@ -2607,10 +2619,42 @@ const compose = (opts, listMailboxes) => {
 		minWidth: '40em',
 		maxWidth: '95vw',
 		borderRadius: '.25em',
-	}), dom.form(fieldset = dom.fieldset(dom.table(style({ width: '100%' }), dom.tr(dom.td(style({ textAlign: 'right', color: '#555' }), dom.span('From:')), dom.td(dom.clickbutton('Cancel', style({ float: 'right', marginLeft: '1em', marginTop: '.15em' }), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)), from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)))), toRow = dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555' })), toCell = dom.td(style({ lineHeight: '1.5' }))), replyToRow = dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555' })), replyToCell = dom.td(style({ lineHeight: '1.5' }))), ccRow = dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555' })), ccCell = dom.td(style({ lineHeight: '1.5' }))), bccRow = dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555' })), bccCell = dom.td(style({ lineHeight: '1.5' }))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555' })), dom.td(subjectAutosize = dom.span(dom._class('autosize'), style({ width: '100%' }), // Without 100% width, the span takes minimal width for input, we want the full table cell.
+		display: 'flex',
+		flexDirection: 'column',
+	}), initWidth ? style({ width: initWidth + 'px' }) : [], initHeight ? style({ height: initHeight + 'px' }) : [], dom.div(style({ position: 'absolute', marginTop: '-1em', marginLeft: '-1em', width: '1em', height: '1em', cursor: 'nw-resize' }), function mousedown(e) {
+		resizeLast = null;
+		startDrag(e, (e) => {
+			if (resizeLast) {
+				const bounds = composeElem.getBoundingClientRect();
+				const width = Math.round(bounds.width + resizeLast.x - e.clientX);
+				const height = Math.round(bounds.height + resizeLast.y - e.clientY);
+				composeElem.style.width = width + 'px';
+				composeElem.style.height = height + 'px';
+				body.removeAttribute('rows');
+				if (resizeTimer) {
+					window.clearTimeout(resizeTimer);
+				}
+				resizeTimer = window.setTimeout(() => {
+					settingsPut({ ...settings, composeWidth: width, composeHeight: height, composeViewportWidth: window.innerWidth, composeViewportHeight: window.innerHeight });
+				}, 1000);
+			}
+			resizeLast = { x: e.clientX, y: e.clientY };
+		});
+	}), dom.form(style({
+		flexGrow: '1',
+		display: 'flex',
+		flexDirection: 'column',
+	}), fieldset = dom.fieldset(style({
+		flexGrow: '1',
+		display: 'flex',
+		flexDirection: 'column',
+	}), dom.table(style({ width: '100%' }), dom.tr(dom.td(style({ textAlign: 'right', color: '#555' }), dom.span('From:')), dom.td(dom.clickbutton('Cancel', style({ float: 'right', marginLeft: '1em', marginTop: '.15em' }), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)), from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)))), toRow = dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555' })), toCell = dom.td(style({ lineHeight: '1.5' }))), replyToRow = dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555' })), replyToCell = dom.td(style({ lineHeight: '1.5' }))), ccRow = dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555' })), ccCell = dom.td(style({ lineHeight: '1.5' }))), bccRow = dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555' })), bccCell = dom.td(style({ lineHeight: '1.5' }))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555' })), dom.td(subjectAutosize = dom.span(dom._class('autosize'), style({ width: '100%' }), // Without 100% width, the span takes minimal width for input, we want the full table cell.
 	subject = dom.input(style({ width: '100%' }), attr.value(opts.subject || ''), attr.required(''), focusPlaceholder('subject...'), function input() {
 		subjectAutosize.dataset.value = subject.value;
-	}))))), body = dom.textarea(dom._class('mono'), attr.rows('15'), style({ width: '100%' }), 
+	}))))), body = dom.textarea(dom._class('mono'), style({
+		flexGrow: '1',
+		width: '100%',
+	}), initHeight === 0 ? attr.rows('15') : [], // Drives default size, removed on compose window resize.
 	// Explicit string object so it doesn't get the highlight-unicode-block-changes
 	// treatment, which would cause characters to disappear.
 	new String(opts.body || ''), prop({ selectionStart: opts.editOffset || 0, selectionEnd: opts.editOffset || 0 }), function keyup(e) {
