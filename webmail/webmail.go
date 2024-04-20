@@ -377,7 +377,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 	// allowed. Used to display a message including header. The header is rendered with
 	// javascript, the content is rendered in a separate iframe with a CSP that doesn't
 	// have allowSelfScript.
-	headers := func(sameOrigin, allowExternal, allowSelfScript bool) {
+	headers := func(sameOrigin, allowExternal, allowSelfScript, allowSelfImg bool) {
 		// allow-popups is needed to make opening links in new tabs work.
 		sb := "sandbox allow-popups allow-popups-to-escape-sandbox; "
 		if sameOrigin && allowSelfScript {
@@ -394,6 +394,8 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		var csp string
 		if allowExternal {
 			csp = sb + "frame-ancestors 'self'; default-src 'none'; img-src data: http: https: 'unsafe-inline'; style-src 'unsafe-inline' data: http: https:; font-src data: http: https: 'unsafe-inline'; media-src 'unsafe-inline' data: http: https:" + script
+		} else if allowSelfImg {
+			csp = sb + "frame-ancestors 'self'; default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'" + script
 		} else {
 			csp = sb + "frame-ancestors 'self'; default-src 'none'; img-src data:; style-src 'unsafe-inline'" + script
 		}
@@ -416,7 +418,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		mi, err := messageItem(log, m, &state)
 		xcheckf(ctx, err, "parsing message")
 
-		headers(false, false, false)
+		headers(false, false, false, false)
 		h.Set("Content-Type", "application/zip")
 		h.Set("Cache-Control", "no-store, max-age=0")
 		var subjectSlug string
@@ -536,7 +538,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		// browsers or users would think of executing. We do set the charset if available
 		// on the outer part. If present, we assume it may be relevant for other parts. If
 		// not, there is not much we could do better...
-		headers(false, false, false)
+		headers(false, false, false, false)
 		ct := "text/plain"
 		params := map[string]string{}
 		if charset := p.ContentTypeParams["charset"]; charset != "" {
@@ -571,7 +573,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		sameorigin := true
 		loadExternal := t[1] == "msghtmlexternal"
 		allowSelfScript := true
-		headers(sameorigin, loadExternal, allowSelfScript)
+		headers(sameorigin, loadExternal, allowSelfScript, false)
 		h.Set("Content-Type", "text/html; charset=utf-8")
 		h.Set("Cache-Control", "no-store, max-age=0")
 
@@ -604,7 +606,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		mijson, err := json.Marshal(mi)
 		xcheckf(ctx, err, "marshal messageitem")
 
-		headers(false, false, false)
+		headers(false, false, false, false)
 		h.Set("Content-Type", "application/javascript; charset=utf-8")
 		h.Set("Cache-Control", "no-store, max-age=0")
 
@@ -636,7 +638,8 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		// Needed for inner document height for outer iframe height in separate message view.
 		sameorigin := true
 		allowSelfScript := true
-		headers(sameorigin, false, allowSelfScript)
+		allowSelfImg := true
+		headers(sameorigin, false, allowSelfScript, allowSelfImg)
 		h.Set("Content-Type", "text/html; charset=utf-8")
 		h.Set("Cache-Control", "no-store, max-age=0")
 
@@ -662,7 +665,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 			// inner height so we load it as different origin, which should be safer.
 			sameorigin := r.URL.Query().Get("sameorigin") == "true"
 			allowExternal := strings.HasSuffix(t[1], "external")
-			headers(sameorigin, allowExternal, false)
+			headers(sameorigin, allowExternal, false, false)
 
 			h.Set("Content-Type", "text/html; charset=utf-8")
 			h.Set("Cache-Control", "no-store, max-age=0")
@@ -724,7 +727,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 			ap = ap.Parts[int(index)]
 		}
 
-		headers(false, false, false)
+		headers(false, false, false, false)
 		var ct string
 		if t[1] == "viewtext" {
 			ct = "text/plain"

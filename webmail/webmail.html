@@ -27,9 +27,12 @@ button.keyword { cursor: pointer; }
 .btngroup button:first-child, .btngroup .button:first-child { border-radius: .15em 0 0 .15em; }
 .btngroup button:last-child, .btngroup .button:last-child { border-radius: 0 .15em .15em 0; border-right-width: 1px; }
 iframe { border: 0; }
-.pad { padding: .5em; }
 .invert { filter: invert(100%); }
 .scriptswitch { text-decoration: underline #dca053 2px; }
+.textmulti > *:nth-child(even) { background-color: #f4f4f4; }
+.textmulti > * { padding: 2ex .5em; margin: -.5em; /* compensate pad */ }
+.textmulti > *:first-child { padding: .5em; }
+.pad { padding: .5em; }
 
 .msgitem { display: flex; user-select: none; }
 .msgitemcell { padding: 2px 4px; }

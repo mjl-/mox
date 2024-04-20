@@ -1009,6 +1009,17 @@ const join = (l, efn) => {
 	}
 	return r;
 };
+// From https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Image_types
+const imageTypes = [
+	'image/avif',
+	'image/webp',
+	'image/gif',
+	'image/png',
+	'image/jpeg',
+	'image/apng',
+	'image/svg+xml',
+];
+const isImage = (a) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase());
 // addLinks turns a line of text into alternating strings and links. Links that
 // would end with interpunction followed by whitespace are returned with that
 // interpunction moved to the next string instead.
@@ -1186,7 +1197,11 @@ const loadMsgheaderView = (msgheaderelem, mi, moreHeaders, refineKeyword, allAdd
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 const init = async () => {
 	const pm = api.parser.ParsedMessage(parsedMessage);
-	dom._kids(document.body, dom.div(dom._class('pad', 'mono'), style({ whiteSpace: 'pre-wrap' }), join((pm.Texts || []).map(t => renderText(t)), () => dom.hr(style({ margin: '2ex 0' })))));
+	const mi = api.parser.MessageItem(messageItem);
+	dom._kids(document.body, dom.div(dom._class('pad', 'mono', 'textmulti'), style({ whiteSpace: 'pre-wrap' }), (pm.Texts || []).map(t => renderText(t.replace(/\r\n/g, '\n'))), (mi.Attachments || []).filter(f => isImage(f)).map(f => {
+		const pathStr = [0].concat(f.Path || []).join('.');
+		return dom.div(dom.div(style({ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100% - 50px)' }), dom.img(attr.src('view/' + pathStr), attr.title(f.Filename), style({ backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)' }))));
+	})));
 };
 init()
 	.catch((err) => {

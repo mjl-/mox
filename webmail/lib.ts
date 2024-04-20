@@ -22,6 +22,18 @@ const join = (l: any, efn: () => any): any[] => {
 	return r
 }
 
+// From https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Image_types
+const imageTypes = [
+	'image/avif',
+	'image/webp',
+	'image/gif',
+	'image/png',
+	'image/jpeg',
+	'image/apng',
+	'image/svg+xml',
+]
+const isImage = (a: api.Attachment) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase())
+
 // addLinks turns a line of text into alternating strings and links. Links that
 // would end with interpunction followed by whitespace are returned with that
 // interpunction moved to the next string instead.

@@ -530,6 +530,11 @@ func TestWebmail(t *testing.T) {
 		"Content-Security-Policy",
 		"frame-ancestors 'self'; default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'self'; frame-src 'self'; connect-src 'self'",
 	}
+	// Text and img-src 'self', for viewing image files inline.
+	cspTextImg := [2]string{
+		"Content-Security-Policy",
+		"frame-ancestors 'self'; default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'self'; frame-src 'self'; connect-src 'self'",
+	}
 	// HTML as viewed in the regular viewer, not in a new tab.
 	cspHTML := [2]string{
 		"Content-Security-Policy",
@@ -560,7 +565,7 @@ func TestWebmail(t *testing.T) {
 		"Content-Security-Policy",
 		"frame-ancestors 'self'; default-src 'none'; img-src data: http: https: 'unsafe-inline'; style-src 'unsafe-inline' data: http: https:; font-src data: http: https: 'unsafe-inline'; media-src 'unsafe-inline' data: http: https:; script-src 'unsafe-inline' 'self'; frame-src 'self'; connect-src 'self'",
 	}
-	testHTTPAuthREST("GET", pathInboxAltRel+"/text", http.StatusOK, httpHeaders{ctHTML, cspText}, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/text", http.StatusOK, httpHeaders{ctHTML, cspTextImg}, nil)
 	testHTTPAuthREST("GET", pathInboxAltRel+"/html", http.StatusOK, httpHeaders{ctHTML, cspHTML}, nil)
 	testHTTPAuthREST("GET", pathInboxAltRel+"/htmlexternal", http.StatusOK, httpHeaders{ctHTML, cspHTMLExternal}, nil)
 	testHTTPAuthREST("GET", pathInboxAltRel+"/msgtext", http.StatusOK, httpHeaders{ctHTML, cspText}, nil)

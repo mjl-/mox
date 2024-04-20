@@ -3065,18 +3065,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		msgattachmentElem.parentNode!.insertBefore(msgheaderdetailsElem, msgattachmentElem)
 	}
 
-	// From https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Image_types
-	const imageTypes = [
-		'image/avif',
-		'image/webp',
-		'image/gif',
-		'image/png',
-		'image/jpeg',
-		'image/apng',
-		'image/svg+xml',
-	]
 	const isText = (a: api.Attachment) => ['text', 'message'].includes(a.Part.MediaType.toLowerCase())
-	const isImage = (a: api.Attachment) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase())
 	const isPDF = (a: api.Attachment) => (a.Part.MediaType+'/'+a.Part.MediaSubType).toLowerCase() === 'application/pdf'
 	const isViewable = (a: api.Attachment) => isText(a) || isImage(a) || isPDF(a)
 	const attachments: api.Attachment[] = (mi.Attachments || [])
@@ -3215,14 +3204,15 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		attachmentView = {key: keyHandler(attachShortcuts)}
 	}
 
-	const renderAttachments = (all: boolean) => {
+	var filesAll = false
+	const renderAttachments = () => {
 		const l = mi.Attachments || []
 		dom._kids(msgattachmentElem,
 			(l && l.length === 0) ? [] : dom.div(
 				style({borderTop: '1px solid #ccc'}),
 				dom.div(dom._class('pad'),
 					'Attachments: ',
-					l.slice(0, all ? l.length : 4).map(a => {
+					l.slice(0, filesAll ? l.length : 4).map(a => {
 						const name = a.Filename || '(unnamed)'
 						const viewable = isViewable(a)
 						const size = formatSize(a.Part.DecodedSize)
@@ -3234,19 +3224,20 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 						})
 						const dlbtn = dom.a(dom._class('button'), attr.download(''), attr.href(dlurl), dl, viewable ? style({padding: '0px 0.25em'}) : ' '+name, attr.title('Download this file. Size: '+size), style({lineHeight: '1.5'}))
 						if (viewable) {
-							return [dom.span(dom._class('btngroup'), viewbtn, dlbtn), ' ']
+							return [dom.span(dom._class('btngroup'), urlType === 'text' && isImage(a) ? style({opacity: '.6'}) : [], viewbtn, dlbtn), ' ']
 						}
 						return [dom.span(dom._class('btngroup'), dlbtn, viewbtn), ' ']
 					}),
-					all || l.length < 6 ? [] : dom.clickbutton('More...', function click() {
-						renderAttachments(true)
+					filesAll || l.length < 6 ? [] : dom.clickbutton('More...', function click() {
+						filesAll = true
+						renderAttachments()
 					}), ' ',
 					dom.a('Download all as zip', attr.download(''), style({color: 'inherit'}), attr.href('msg/'+m.ID+'/attachments.zip')),
 				),
 			)
 		)
 	}
-	renderAttachments(false)
+	renderAttachments()
 
 	const root = dom.div(style({position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column'}))
 	dom._kids(root, msgmetaElem, msgcontentElem)
@@ -3256,13 +3247,27 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		// text to use when writing a reply. We still set url so the text content can be
 		// opened in a separate tab, even though it will look differently.
 		urlType = 'text'
-		const elem = dom.div(dom._class('mono'),
+		const elem = dom.div(dom._class('mono', 'textmulti'),
 			style({whiteSpace: 'pre-wrap'}),
-			join((pm.Texts || []).map(t => renderText(t.replace(/\r\n/g, '\n'))), () => dom.hr(style({margin: '2ex 0'}))),
+			(pm.Texts || []).map(t => renderText(t.replace(/\r\n/g, '\n'))),
+			(mi.Attachments || []).filter(f => isImage(f)).map(f => {
+				const pathStr = [0].concat(f.Path || []).join('.')
+				return dom.div(
+					dom.div(
+						style({flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100% - 50px)'}),
+						dom.img(
+							attr.src('msg/'+m.ID+'/view/'+pathStr),
+							attr.title(f.Filename),
+							style({backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)'})
+						),
+					)
+				)
+			}),
 		)
 		dom._kids(msgcontentElem)
 		dom._kids(msgscrollElem, elem)
 		dom._kids(msgcontentElem, msgscrollElem)
+		renderAttachments() // Rerender opaciy on inline images.
 	}
 	const loadHTML = (): void => {
 		urlType = 'html'
@@ -3274,6 +3279,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				style({border: '0', position: 'absolute', width: '100%', height: '100%', backgroundColor: 'white'}),
 			)
 		)
+		renderAttachments() // Rerender opaciy on inline images.
 	}
 	const loadHTMLexternal = (): void => {
 		urlType = 'htmlexternal'
@@ -3285,6 +3291,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				style({border: '0', position: 'absolute', width: '100%', height: '100%', backgroundColor: 'white'}),
 			)
 		)
+		renderAttachments() // Rerender opaciy on inline images.
 	}
 
 	const loadMoreHeaders = (pm: api.ParsedMessage) => {

@@ -1009,6 +1009,17 @@ const join = (l, efn) => {
 	}
 	return r;
 };
+// From https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Image_types
+const imageTypes = [
+	'image/avif',
+	'image/webp',
+	'image/gif',
+	'image/png',
+	'image/jpeg',
+	'image/apng',
+	'image/svg+xml',
+];
+const isImage = (a) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase());
 // addLinks turns a line of text into alternating strings and links. Links that
 // would end with interpunction followed by whitespace are returned with that
 // interpunction moved to the next string instead.
@@ -3565,18 +3576,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		msgheaderdetailsElem = dom.table(style({ marginBottom: '1ex', width: '100%' }), Object.entries(pm.Headers || {}).sort().map(t => (t[1] || []).map(v => dom.tr(dom.td(t[0] + ':', style({ textAlign: 'right', color: '#555' })), dom.td(v)))));
 		msgattachmentElem.parentNode.insertBefore(msgheaderdetailsElem, msgattachmentElem);
 	};
-	// From https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Image_types
-	const imageTypes = [
-		'image/avif',
-		'image/webp',
-		'image/gif',
-		'image/png',
-		'image/jpeg',
-		'image/apng',
-		'image/svg+xml',
-	];
 	const isText = (a) => ['text', 'message'].includes(a.Part.MediaType.toLowerCase());
-	const isImage = (a) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase());
 	const isPDF = (a) => (a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase() === 'application/pdf';
 	const isViewable = (a) => isText(a) || isImage(a) || isPDF(a);
 	const attachments = (mi.Attachments || []);
@@ -3643,9 +3643,10 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		popupRoot.focus();
 		attachmentView = { key: keyHandler(attachShortcuts) };
 	};
-	const renderAttachments = (all) => {
+	var filesAll = false;
+	const renderAttachments = () => {
 		const l = mi.Attachments || [];
-		dom._kids(msgattachmentElem, (l && l.length === 0) ? [] : dom.div(style({ borderTop: '1px solid #ccc' }), dom.div(dom._class('pad'), 'Attachments: ', l.slice(0, all ? l.length : 4).map(a => {
+		dom._kids(msgattachmentElem, (l && l.length === 0) ? [] : dom.div(style({ borderTop: '1px solid #ccc' }), dom.div(dom._class('pad'), 'Attachments: ', l.slice(0, filesAll ? l.length : 4).map(a => {
 			const name = a.Filename || '(unnamed)';
 			const viewable = isViewable(a);
 			const size = formatSize(a.Part.DecodedSize);
@@ -3657,14 +3658,15 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			});
 			const dlbtn = dom.a(dom._class('button'), attr.download(''), attr.href(dlurl), dl, viewable ? style({ padding: '0px 0.25em' }) : ' ' + name, attr.title('Download this file. Size: ' + size), style({ lineHeight: '1.5' }));
 			if (viewable) {
-				return [dom.span(dom._class('btngroup'), viewbtn, dlbtn), ' '];
+				return [dom.span(dom._class('btngroup'), urlType === 'text' && isImage(a) ? style({ opacity: '.6' }) : [], viewbtn, dlbtn), ' '];
 			}
 			return [dom.span(dom._class('btngroup'), dlbtn, viewbtn), ' '];
-		}), all || l.length < 6 ? [] : dom.clickbutton('More...', function click() {
-			renderAttachments(true);
+		}), filesAll || l.length < 6 ? [] : dom.clickbutton('More...', function click() {
+			filesAll = true;
+			renderAttachments();
 		}), ' ', dom.a('Download all as zip', attr.download(''), style({ color: 'inherit' }), attr.href('msg/' + m.ID + '/attachments.zip')))));
 	};
-	renderAttachments(false);
+	renderAttachments();
 	const root = dom.div(style({ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column' }));
 	dom._kids(root, msgmetaElem, msgcontentElem);
 	const loadText = (pm) => {
@@ -3672,18 +3674,24 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		// text to use when writing a reply. We still set url so the text content can be
 		// opened in a separate tab, even though it will look differently.
 		urlType = 'text';
-		const elem = dom.div(dom._class('mono'), style({ whiteSpace: 'pre-wrap' }), join((pm.Texts || []).map(t => renderText(t.replace(/\r\n/g, '\n'))), () => dom.hr(style({ margin: '2ex 0' }))));
+		const elem = dom.div(dom._class('mono', 'textmulti'), style({ whiteSpace: 'pre-wrap' }), (pm.Texts || []).map(t => renderText(t.replace(/\r\n/g, '\n'))), (mi.Attachments || []).filter(f => isImage(f)).map(f => {
+			const pathStr = [0].concat(f.Path || []).join('.');
+			return dom.div(dom.div(style({ flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100% - 50px)' }), dom.img(attr.src('msg/' + m.ID + '/view/' + pathStr), attr.title(f.Filename), style({ backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)' }))));
+		}));
 		dom._kids(msgcontentElem);
 		dom._kids(msgscrollElem, elem);
 		dom._kids(msgcontentElem, msgscrollElem);
+		renderAttachments(); // Rerender opaciy on inline images.
 	};
 	const loadHTML = () => {
 		urlType = 'html';
 		dom._kids(msgcontentElem, dom.iframe(attr.tabindex('0'), attr.title('HTML version of message with images inlined, without external resources loaded.'), attr.src('msg/' + m.ID + '/' + urlType), style({ border: '0', position: 'absolute', width: '100%', height: '100%', backgroundColor: 'white' })));
+		renderAttachments(); // Rerender opaciy on inline images.
 	};
 	const loadHTMLexternal = () => {
 		urlType = 'htmlexternal';
 		dom._kids(msgcontentElem, dom.iframe(attr.tabindex('0'), attr.title('HTML version of message with images inlined and with external resources loaded.'), attr.src('msg/' + m.ID + '/' + urlType), style({ border: '0', position: 'absolute', width: '100%', height: '100%', backgroundColor: 'white' })));
+		renderAttachments(); // Rerender opaciy on inline images.
 	};
 	const loadMoreHeaders = (pm) => {
 		if (settings.showHeaders.length === 0) {
