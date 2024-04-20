@@ -3643,22 +3643,28 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		popupRoot.focus();
 		attachmentView = { key: keyHandler(attachShortcuts) };
 	};
-	dom._kids(msgattachmentElem, (mi.Attachments && mi.Attachments.length === 0) ? [] : dom.div(style({ borderTop: '1px solid #ccc' }), dom.div(dom._class('pad'), 'Attachments: ', (mi.Attachments || []).map(a => {
-		const name = a.Filename || '(unnamed)';
-		const viewable = isViewable(a);
-		const size = formatSize(a.Part.DecodedSize);
-		const eye = '👁';
-		const dl = '⤓'; // \u2913, actually ⭳ \u2b73 would be better, but in fewer fonts (at least macos)
-		const dlurl = 'msg/' + m.ID + '/download/' + [0].concat(a.Path || []).join('.');
-		const viewbtn = dom.clickbutton(eye, viewable ? ' ' + name : style({ padding: '0px 0.25em' }), attr.title('View this file. Size: ' + size), style({ lineHeight: '1.5' }), function click() {
-			view(a);
-		});
-		const dlbtn = dom.a(dom._class('button'), attr.download(''), attr.href(dlurl), dl, viewable ? style({ padding: '0px 0.25em' }) : ' ' + name, attr.title('Download this file. Size: ' + size), style({ lineHeight: '1.5' }));
-		if (viewable) {
-			return [dom.span(dom._class('btngroup'), viewbtn, dlbtn), ' '];
-		}
-		return [dom.span(dom._class('btngroup'), dlbtn, viewbtn), ' '];
-	}), dom.a('Download all as zip', attr.download(''), style({ color: 'inherit' }), attr.href('msg/' + m.ID + '/attachments.zip')))));
+	const renderAttachments = (all) => {
+		const l = mi.Attachments || [];
+		dom._kids(msgattachmentElem, (l && l.length === 0) ? [] : dom.div(style({ borderTop: '1px solid #ccc' }), dom.div(dom._class('pad'), 'Attachments: ', l.slice(0, all ? l.length : 4).map(a => {
+			const name = a.Filename || '(unnamed)';
+			const viewable = isViewable(a);
+			const size = formatSize(a.Part.DecodedSize);
+			const eye = '👁';
+			const dl = '⤓'; // \u2913, actually ⭳ \u2b73 would be better, but in fewer fonts (at least macos)
+			const dlurl = 'msg/' + m.ID + '/download/' + [0].concat(a.Path || []).join('.');
+			const viewbtn = dom.clickbutton(eye, viewable ? ' ' + name : style({ padding: '0px 0.25em' }), attr.title('View this file. Size: ' + size), style({ lineHeight: '1.5' }), function click() {
+				view(a);
+			});
+			const dlbtn = dom.a(dom._class('button'), attr.download(''), attr.href(dlurl), dl, viewable ? style({ padding: '0px 0.25em' }) : ' ' + name, attr.title('Download this file. Size: ' + size), style({ lineHeight: '1.5' }));
+			if (viewable) {
+				return [dom.span(dom._class('btngroup'), viewbtn, dlbtn), ' '];
+			}
+			return [dom.span(dom._class('btngroup'), dlbtn, viewbtn), ' '];
+		}), all || l.length < 6 ? [] : dom.clickbutton('More...', function click() {
+			renderAttachments(true);
+		}), ' ', dom.a('Download all as zip', attr.download(''), style({ color: 'inherit' }), attr.href('msg/' + m.ID + '/attachments.zip')))));
+	};
+	renderAttachments(false);
 	const root = dom.div(style({ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column' }));
 	dom._kids(root, msgmetaElem, msgcontentElem);
 	const loadText = (pm) => {
