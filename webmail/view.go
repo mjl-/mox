@@ -180,9 +180,10 @@ type MessageItem struct {
 // for rendering the (contents of the) message. Information from MessageItem is
 // not duplicated.
 type ParsedMessage struct {
-	ID      int64
-	Part    message.Part
-	Headers map[string][]string
+	ID       int64
+	Part     message.Part
+	Headers  map[string][]string
+	ViewMode store.ViewMode
 
 	// Text parts, can be empty.
 	Texts []string
@@ -1535,6 +1536,12 @@ func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bs
 			}
 		} else {
 			have++
+		}
+		if pm != nil && len(pm.envelope.From) == 1 {
+			pm.ViewMode, err = fromAddrViewMode(tx, pm.envelope.From[0])
+			if err != nil {
+				return fmt.Errorf("gathering view mode for id %d: %v", m.ID, err)
+			}
 		}
 		mrc <- msgResp{mil: mil, pm: pm}
 		return nil

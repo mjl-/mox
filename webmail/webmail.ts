@@ -2883,6 +2883,13 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 	}
 
+	const fromAddressSettingsSave = async (mode: api.ViewMode) => {
+		const froms = mi.Envelope.From || []
+		if (froms.length === 1) {
+			await withStatus('Saving view mode settings for address', client.FromAddressSettingsSave({FromAddress: froms[0].User + "@" + (froms[0].Domain.Unicode || froms[0].Domain.ASCII), ViewMode: mode}))
+		}
+	}
+
 	const cmdShowText = async () => {
 		if (!textbtn) {
 			return
@@ -2890,6 +2897,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		loadText(await parsedMessagePromise)
 		settingsPut({...settings, showHTML: false})
 		activeBtn(textbtn)
+		await fromAddressSettingsSave(api.ViewMode.ModeText)
 	}
 	const cmdShowHTML = async () => {
 		if (!htmlbtn || !htmlextbtn) {
@@ -2897,6 +2905,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 		loadHTML()
 		activeBtn(htmlbtn)
+		await fromAddressSettingsSave(api.ViewMode.ModeHTML)
 	}
 	const cmdShowHTMLExternal = async () => {
 		if (!htmlbtn || !htmlextbtn) {
@@ -2904,6 +2913,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 		loadHTMLexternal()
 		activeBtn(htmlextbtn)
+		await fromAddressSettingsSave(api.ViewMode.ModeHTMLExt)
 	}
 	const cmdShowHTMLCycle = async () => {
 		if (urlType === 'html') {
@@ -3367,24 +3377,26 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			loadText(pm)
 			dom._kids(msgmodeElem)
 		} else {
-			const text = haveText && !settings.showHTML
+			const text = haveText && (pm.ViewMode == api.ViewMode.ModeText || pm.ViewMode == api.ViewMode.ModeDefault && !settings.showHTML)
 			dom._kids(msgmodeElem,
 				dom.div(dom._class('pad'),
 					style({borderTop: '1px solid #ccc'}),
 					!haveText ? dom.span('HTML-only message', attr.title(htmlNote), style({backgroundColor: '#ffca91', padding: '0 .15em', marginRight: '.25em'})) : [],
 					dom.span(dom._class('btngroup'),
 						haveText ? textbtn=dom.clickbutton(text ? dom._class('active') : [], 'Text', clickCmd(cmdShowText, shortcuts)) : [],
-						htmlbtn=dom.clickbutton(text ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
+						htmlbtn=dom.clickbutton(text || pm.ViewMode != api.ViewMode.ModeHTML ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
 							// Shortcuts has a function that cycles through html and htmlexternal.
 							showShortcut('T')
 							await cmdShowHTML()
 						}),
-						htmlextbtn=dom.clickbutton('HTML with external resources', attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)),
+						htmlextbtn=dom.clickbutton(text || pm.ViewMode != api.ViewMode.ModeHTMLExt ? [] : dom._class('active'), 'HTML with external resources', attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)),
 					),
 				)
 			)
 			if (text) {
 				loadText(pm)
+			} else if (pm.ViewMode == api.ViewMode.ModeHTMLExt) {
+				loadHTMLexternal()
 			} else {
 				loadHTML()
 			}

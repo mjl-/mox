@@ -740,6 +740,23 @@ type Settings struct {
 	ShowAddressSecurity bool
 }
 
+// ViewMode how a message should be viewed: its text parts, html parts, or html
+// with loading external resources.
+type ViewMode string
+
+const (
+	ModeDefault ViewMode = ""
+	ModeText    ViewMode = "text"
+	ModeHTML    ViewMode = "html"
+	ModeHTMLExt ViewMode = "htmlext" // HTML with external resources.
+)
+
+// FromAddressSettings are webmail client settings per "From" address.
+type FromAddressSettings struct {
+	FromAddress string // Unicode.
+	ViewMode    ViewMode
+}
+
 // Types stored in DB.
 var DBTypes = []any{
 	NextUIDValidity{},
@@ -756,6 +773,7 @@ var DBTypes = []any{
 	DiskUsage{},
 	LoginSession{},
 	Settings{},
+	FromAddressSettings{},
 }
 
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.

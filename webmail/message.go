@@ -209,7 +209,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 		return r
 	}
 
-	if msgitem {
+	if full || msgitem {
 		env := MessageEnvelope{}
 		if state.part.Envelope != nil {
 			e := *state.part.Envelope

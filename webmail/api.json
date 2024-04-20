@@ -100,6 +100,19 @@
 			]
 		},
 		{
+			"Name": "FromAddressSettingsSave",
+			"Docs": "FromAddressSettingsSave saves per-\"From\"-address settings.",
+			"Params": [
+				{
+					"Name": "fas",
+					"Typewords": [
+						"FromAddressSettings"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "MessageFindMessageID",
 			"Docs": "MessageFindMessageID looks up a message by Message-Id header, and returns the ID\nof the message in storage. Used when opening a previously saved draft message\nfor editing again.\nIf no message is find, zero is returned, not an error.",
 			"Params": [
@@ -834,6 +847,13 @@
 					]
 				},
 				{
+					"Name": "ViewMode",
+					"Docs": "",
+					"Typewords": [
+						"ViewMode"
+					]
+				},
+				{
 					"Name": "Texts",
 					"Docs": "Text parts, can be empty.",
 					"Typewords": [
@@ -1125,6 +1145,26 @@
 					"Docs": "Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.",
 					"Typewords": [
 						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "FromAddressSettings",
+			"Docs": "FromAddressSettings are webmail client settings per \"From\" address.",
+			"Fields": [
+				{
+					"Name": "FromAddress",
+					"Docs": "Unicode.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ViewMode",
+					"Docs": "",
+					"Typewords": [
+						"ViewMode"
 					]
 				}
 			]
@@ -2979,6 +3019,32 @@
 					"Name": "AttachmentPresentation",
 					"Value": "presentation",
 					"Docs": "odp, pptx, ..."
+				}
+			]
+		},
+		{
+			"Name": "ViewMode",
+			"Docs": "ViewMode how a message should be viewed: its text parts, html parts, or html\nwith loading external resources.",
+			"Values": [
+				{
+					"Name": "ModeDefault",
+					"Value": "",
+					"Docs": ""
+				},
+				{
+					"Name": "ModeText",
+					"Value": "text",
+					"Docs": ""
+				},
+				{
+					"Name": "ModeHTML",
+					"Value": "html",
+					"Docs": ""
+				},
+				{
+					"Name": "ModeHTMLExt",
+					"Value": "htmlext",
+					"Docs": "HTML with external resources."
 				}
 			]
 		},

@@ -219,13 +219,18 @@ func TestAPI(t *testing.T) {
 	// ParsedMessage
 	// todo: verify contents
 	api.ParsedMessage(ctx, inboxMinimal.ID)
-	api.ParsedMessage(ctx, inboxText.ID)
 	api.ParsedMessage(ctx, inboxHTML.ID)
 	api.ParsedMessage(ctx, inboxAlt.ID)
 	api.ParsedMessage(ctx, inboxAltRel.ID)
 	api.ParsedMessage(ctx, testbox1Alt.ID)
 	tneedError(t, func() { api.ParsedMessage(ctx, 0) })
 	tneedError(t, func() { api.ParsedMessage(ctx, testmsgs[len(testmsgs)-1].ID+1) })
+	pm := api.ParsedMessage(ctx, inboxText.ID)
+	tcompare(t, pm.ViewMode, store.ModeDefault)
+
+	api.FromAddressSettingsSave(ctx, store.FromAddressSettings{FromAddress: "mjl@mox.example", ViewMode: store.ModeHTMLExt})
+	pm = api.ParsedMessage(ctx, inboxText.ID)
+	tcompare(t, pm.ViewMode, store.ModeHTMLExt)
 
 	// MailboxDelete
 	api.MailboxDelete(ctx, testbox1.ID)

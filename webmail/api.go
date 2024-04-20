@@ -174,7 +174,56 @@ func (Webmail) ParsedMessage(ctx context.Context, msgID int64) (pm ParsedMessage
 	defer state.clear()
 	pm, err = parsedMessage(log, m, &state, true, false)
 	xcheckf(ctx, err, "parsing message")
+
+	if len(pm.envelope.From) == 1 {
+		xdbread(ctx, acc, func(tx *bstore.Tx) {
+			pm.ViewMode, err = fromAddrViewMode(tx, pm.envelope.From[0])
+			xcheckf(ctx, err, "looking up view mode for from address")
+		})
+	}
+
 	return
+}
+
+// fromAddrViewMode returns the view mode for a from address.
+func fromAddrViewMode(tx *bstore.Tx, from MessageAddress) (store.ViewMode, error) {
+	lp, err := smtp.ParseLocalpart(from.User)
+	if err != nil {
+		return store.ModeDefault, nil
+	}
+	fromAddr := smtp.Address{Localpart: lp, Domain: from.Domain}.Pack(true)
+	fas := store.FromAddressSettings{FromAddress: fromAddr}
+	err = tx.Get(&fas)
+	if err == bstore.ErrAbsent {
+		return store.ModeDefault, nil
+	}
+	return fas.ViewMode, err
+}
+
+// FromAddressSettingsSave saves per-"From"-address settings.
+func (Webmail) FromAddressSettingsSave(ctx context.Context, fas store.FromAddressSettings) {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc, err := store.OpenAccount(log, reqInfo.AccountName)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+
+	if fas.FromAddress == "" {
+		xcheckuserf(ctx, errors.New("empty from address"), "checking address")
+	}
+
+	xdbwrite(ctx, acc, func(tx *bstore.Tx) {
+		if tx.Get(&store.FromAddressSettings{FromAddress: fas.FromAddress}) == nil {
+			err := tx.Update(&fas)
+			xcheckf(ctx, err, "updating settings for from address")
+		} else {
+			err := tx.Insert(&fas)
+			xcheckf(ctx, err, "inserting settings for from address")
+		}
+	})
 }
 
 // MessageFindMessageID looks up a message by Message-Id header, and returns the ID

@@ -64,6 +64,7 @@ export interface ParsedMessage {
 	ID: number
 	Part: Part
 	Headers?: { [key: string]: string[] | null }
+	ViewMode: ViewMode
 	Texts?: string[] | null  // Text parts, can be empty.
 	HasHTML: boolean  // Whether there is an HTML part. The webclient renders HTML message parts through an iframe and a separate request with strict CSP headers to prevent script execution and loading of external resources, which isn't possible when loading in iframe with inline HTML because not all browsers support the iframe csp attribute.
 	ListReplyAddress?: MessageAddress | null  // From List-Post.
@@ -125,6 +126,12 @@ export interface MessageAddress {
 export interface Domain {
 	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.
 	Unicode: string  // Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.
+}
+
+// FromAddressSettings are webmail client settings per "From" address.
+export interface FromAddressSettings {
+	FromAddress: string  // Unicode.
+	ViewMode: ViewMode
 }
 
 // ComposeMessage is a message to be composed, for saving draft messages.
@@ -527,6 +534,15 @@ export enum AttachmentType {
 	AttachmentPresentation = "presentation",  // odp, pptx, ...
 }
 
+// ViewMode how a message should be viewed: its text parts, html parts, or html
+// with loading external resources.
+export enum ViewMode {
+	ModeDefault = "",
+	ModeText = "text",
+	ModeHTML = "html",
+	ModeHTMLExt = "htmlext",  // HTML with external resources.
+}
+
 // SecurityResult indicates whether a security feature is supported.
 export enum SecurityResult {
 	SecurityResultError = "error",
@@ -551,8 +567,8 @@ export enum Quoting {
 // Localparts are in Unicode NFC.
 export type Localpart = string
 
-export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"ComposeMessage":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"Settings":true,"SpecialUse":true,"SubmitMessage":true}
-export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"CSRFToken":true,"Localpart":true,"Quoting":true,"SecurityResult":true,"ThreadMode":true}
+export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"ComposeMessage":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"FromAddressSettings":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"Settings":true,"SpecialUse":true,"SubmitMessage":true}
+export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"CSRFToken":true,"Localpart":true,"Quoting":true,"SecurityResult":true,"ThreadMode":true,"ViewMode":true}
 export const intsTypes: {[typename: string]: boolean} = {"ModSeq":true,"UID":true,"Validation":true}
 export const types: TypenameMap = {
 	"Request": {"Name":"Request","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"Cancel","Docs":"","Typewords":["bool"]},{"Name":"Query","Docs":"","Typewords":["Query"]},{"Name":"Page","Docs":"","Typewords":["Page"]}]},
@@ -560,12 +576,13 @@ export const types: TypenameMap = {
 	"Filter": {"Name":"Filter","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxChildrenIncluded","Docs":"","Typewords":["bool"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Words","Docs":"","Typewords":["[]","string"]},{"Name":"From","Docs":"","Typewords":["[]","string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Oldest","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"Newest","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"Subject","Docs":"","Typewords":["[]","string"]},{"Name":"Attachments","Docs":"","Typewords":["AttachmentType"]},{"Name":"Labels","Docs":"","Typewords":["[]","string"]},{"Name":"Headers","Docs":"","Typewords":["[]","[]","string"]},{"Name":"SizeMin","Docs":"","Typewords":["int64"]},{"Name":"SizeMax","Docs":"","Typewords":["int64"]}]},
 	"NotFilter": {"Name":"NotFilter","Docs":"","Fields":[{"Name":"Words","Docs":"","Typewords":["[]","string"]},{"Name":"From","Docs":"","Typewords":["[]","string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Subject","Docs":"","Typewords":["[]","string"]},{"Name":"Attachments","Docs":"","Typewords":["AttachmentType"]},{"Name":"Labels","Docs":"","Typewords":["[]","string"]}]},
 	"Page": {"Name":"Page","Docs":"","Fields":[{"Name":"AnchorMessageID","Docs":"","Typewords":["int64"]},{"Name":"Count","Docs":"","Typewords":["int32"]},{"Name":"DestMessageID","Docs":"","Typewords":["int64"]}]},
-	"ParsedMessage": {"Name":"ParsedMessage","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Part","Docs":"","Typewords":["Part"]},{"Name":"Headers","Docs":"","Typewords":["{}","[]","string"]},{"Name":"Texts","Docs":"","Typewords":["[]","string"]},{"Name":"HasHTML","Docs":"","Typewords":["bool"]},{"Name":"ListReplyAddress","Docs":"","Typewords":["nullable","MessageAddress"]}]},
+	"ParsedMessage": {"Name":"ParsedMessage","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Part","Docs":"","Typewords":["Part"]},{"Name":"Headers","Docs":"","Typewords":["{}","[]","string"]},{"Name":"ViewMode","Docs":"","Typewords":["ViewMode"]},{"Name":"Texts","Docs":"","Typewords":["[]","string"]},{"Name":"HasHTML","Docs":"","Typewords":["bool"]},{"Name":"ListReplyAddress","Docs":"","Typewords":["nullable","MessageAddress"]}]},
 	"Part": {"Name":"Part","Docs":"","Fields":[{"Name":"BoundaryOffset","Docs":"","Typewords":["int64"]},{"Name":"HeaderOffset","Docs":"","Typewords":["int64"]},{"Name":"BodyOffset","Docs":"","Typewords":["int64"]},{"Name":"EndOffset","Docs":"","Typewords":["int64"]},{"Name":"RawLineCount","Docs":"","Typewords":["int64"]},{"Name":"DecodedSize","Docs":"","Typewords":["int64"]},{"Name":"MediaType","Docs":"","Typewords":["string"]},{"Name":"MediaSubType","Docs":"","Typewords":["string"]},{"Name":"ContentTypeParams","Docs":"","Typewords":["{}","string"]},{"Name":"ContentID","Docs":"","Typewords":["string"]},{"Name":"ContentDescription","Docs":"","Typewords":["string"]},{"Name":"ContentTransferEncoding","Docs":"","Typewords":["string"]},{"Name":"Envelope","Docs":"","Typewords":["nullable","Envelope"]},{"Name":"Parts","Docs":"","Typewords":["[]","Part"]},{"Name":"Message","Docs":"","Typewords":["nullable","Part"]}]},
 	"Envelope": {"Name":"Envelope","Docs":"","Fields":[{"Name":"Date","Docs":"","Typewords":["timestamp"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["[]","Address"]},{"Name":"Sender","Docs":"","Typewords":["[]","Address"]},{"Name":"ReplyTo","Docs":"","Typewords":["[]","Address"]},{"Name":"To","Docs":"","Typewords":["[]","Address"]},{"Name":"CC","Docs":"","Typewords":["[]","Address"]},{"Name":"BCC","Docs":"","Typewords":["[]","Address"]},{"Name":"InReplyTo","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]}]},
 	"Address": {"Name":"Address","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Host","Docs":"","Typewords":["string"]}]},
 	"MessageAddress": {"Name":"MessageAddress","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
 	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
+	"FromAddressSettings": {"Name":"FromAddressSettings","Docs":"","Fields":[{"Name":"FromAddress","Docs":"","Typewords":["string"]},{"Name":"ViewMode","Docs":"","Typewords":["ViewMode"]}]},
 	"ComposeMessage": {"Name":"ComposeMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
 	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureRelease","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"ArchiveThread","Docs":"","Typewords":["bool"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
 	"File": {"Name":"File","Docs":"","Fields":[{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"DataURI","Docs":"","Typewords":["string"]}]},
@@ -601,6 +618,7 @@ export const types: TypenameMap = {
 	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"ThreadMode": {"Name":"ThreadMode","Docs":"","Values":[{"Name":"ThreadOff","Value":"off","Docs":""},{"Name":"ThreadOn","Value":"on","Docs":""},{"Name":"ThreadUnread","Value":"unread","Docs":""}]},
 	"AttachmentType": {"Name":"AttachmentType","Docs":"","Values":[{"Name":"AttachmentIndifferent","Value":"","Docs":""},{"Name":"AttachmentNone","Value":"none","Docs":""},{"Name":"AttachmentAny","Value":"any","Docs":""},{"Name":"AttachmentImage","Value":"image","Docs":""},{"Name":"AttachmentPDF","Value":"pdf","Docs":""},{"Name":"AttachmentArchive","Value":"archive","Docs":""},{"Name":"AttachmentSpreadsheet","Value":"spreadsheet","Docs":""},{"Name":"AttachmentDocument","Value":"document","Docs":""},{"Name":"AttachmentPresentation","Value":"presentation","Docs":""}]},
+	"ViewMode": {"Name":"ViewMode","Docs":"","Values":[{"Name":"ModeDefault","Value":"","Docs":""},{"Name":"ModeText","Value":"text","Docs":""},{"Name":"ModeHTML","Value":"html","Docs":""},{"Name":"ModeHTMLExt","Value":"htmlext","Docs":""}]},
 	"SecurityResult": {"Name":"SecurityResult","Docs":"","Values":[{"Name":"SecurityResultError","Value":"error","Docs":""},{"Name":"SecurityResultNo","Value":"no","Docs":""},{"Name":"SecurityResultYes","Value":"yes","Docs":""},{"Name":"SecurityResultUnknown","Value":"unknown","Docs":""}]},
 	"Quoting": {"Name":"Quoting","Docs":"","Values":[{"Name":"Default","Value":"","Docs":""},{"Name":"Bottom","Value":"bottom","Docs":""},{"Name":"Top","Value":"top","Docs":""}]},
 	"Localpart": {"Name":"Localpart","Docs":"","Values":null},
@@ -618,6 +636,7 @@ export const parser = {
 	Address: (v: any) => parse("Address", v) as Address,
 	MessageAddress: (v: any) => parse("MessageAddress", v) as MessageAddress,
 	Domain: (v: any) => parse("Domain", v) as Domain,
+	FromAddressSettings: (v: any) => parse("FromAddressSettings", v) as FromAddressSettings,
 	ComposeMessage: (v: any) => parse("ComposeMessage", v) as ComposeMessage,
 	SubmitMessage: (v: any) => parse("SubmitMessage", v) as SubmitMessage,
 	File: (v: any) => parse("File", v) as File,
@@ -653,6 +672,7 @@ export const parser = {
 	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 	ThreadMode: (v: any) => parse("ThreadMode", v) as ThreadMode,
 	AttachmentType: (v: any) => parse("AttachmentType", v) as AttachmentType,
+	ViewMode: (v: any) => parse("ViewMode", v) as ViewMode,
 	SecurityResult: (v: any) => parse("SecurityResult", v) as SecurityResult,
 	Quoting: (v: any) => parse("Quoting", v) as Quoting,
 	Localpart: (v: any) => parse("Localpart", v) as Localpart,
@@ -746,6 +766,15 @@ export class Client {
 		const returnTypes: string[][] = [["ParsedMessage"]]
 		const params: any[] = [msgID]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as ParsedMessage
+	}
+
+	// FromAddressSettingsSave saves per-"From"-address settings.
+	async FromAddressSettingsSave(fas: FromAddressSettings): Promise<void> {
+		const fn: string = "FromAddressSettingsSave"
+		const paramTypes: string[][] = [["FromAddressSettings"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [fas]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MessageFindMessageID looks up a message by Message-Id header, and returns the ID
