@@ -1214,6 +1214,7 @@ const cmdHelp = async () => {
 						['r', 'reply or list reply'],
 						['R', 'reply all'],
 						['f', 'forward message'],
+						['e', 'edit draft'],
 						['v', 'view attachments'],
 						['t', 'view text version'],
 						['T', 'view HTML version'],
@@ -1359,11 +1360,13 @@ type ComposeOptions = {
 	// Whether message is to a list, due to List-Id header.
 	isList?: boolean
 	editOffset?: number // For cursor, default at start.
+	draftMessageID?: number // For composing for existing draft message, to be removed when message is sent.
 }
 
 interface ComposeView {
 	root: HTMLElement
 	key: (k: string, e: KeyboardEvent) => Promise<void>
+	unsavedChanges: () => boolean
 }
 
 let composeView: ComposeView | null = null
@@ -1405,12 +1408,125 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	let toViews: AddrView[] = [], replytoViews: AddrView[] = [], ccViews: AddrView[] = [], bccViews: AddrView[] = []
 	let forwardAttachmentViews: ForwardAttachmentView[] = []
 
+	// todo future: upload attachments with draft messages. would mean we let users remove them again too.
+
+	// We automatically save drafts 1m after a change. When closing window, we ask to
+	// save unsaved change to draft.
+	let draftMessageID = opts.draftMessageID || 0
+	let draftSaveTimer = 0
+	let draftSavePromise = Promise.resolve(0)
+	let draftLastText = opts.body
+
+	const draftCancelSave = () => {
+		if (draftSaveTimer) {
+			window.clearTimeout(draftSaveTimer)
+			draftSaveTimer = 0
+		}
+	}
+
+	const draftScheduleSave = () => {
+		if (draftSaveTimer || body.value === draftLastText) {
+			return
+		}
+		draftSaveTimer = window.setTimeout(async () => {
+			draftSaveTimer = 0
+			await withStatus('Saving draft', draftSave())
+			draftScheduleSave()
+		}, 60*1000)
+	}
+
+	const draftSave = async () => {
+		draftCancelSave()
+		let replyTo = ''
+		if (replytoViews && replytoViews.length === 1 && replytoViews[0].input.value) {
+			replyTo = replytoViews[0].input.value
+		}
+		const cm: api.ComposeMessage = {
+			From: customFrom ? customFrom.value : from.value,
+			To: toViews.map(v => v.input.value).filter(s => s),
+			Cc: ccViews.map(v => v.input.value).filter(s => s),
+			Bcc: bccViews.map(v => v.input.value).filter(s => s),
+			ReplyTo: replyTo,
+			Subject: subject.value,
+			TextBody: body.value,
+			ResponseMessageID: opts.responseMessageID || 0,
+			DraftMessageID: draftMessageID,
+		}
+		const mbdrafts = listMailboxes().find(mb => mb.Draft)
+		if (!mbdrafts) {
+			throw new Error('no designated drafts mailbox')
+		}
+		draftSavePromise = client.MessageCompose(cm, mbdrafts.ID)
+		draftMessageID = await draftSavePromise
+		draftLastText = cm.TextBody
+	}
+
+	// todo future: on visibilitychange with visibilityState "hidden", use navigator.sendBeacon to save latest modified draft message?
+
+	// When window is closed, ask user to cancel due to unsaved changes.
+	const unsavedChanges = () => opts.body !== body.value && (!draftMessageID || draftLastText !== body.value)
+
+	// In Firefox, ctrl-w doesn't seem interceptable when focus is on a button. It is
+	// when focus is on a textarea or not any specific UI element. So this isn't always
+	// triggered. But we still have the beforeunload handler that checks for
+	// unsavedChanges to protect the user in such cases.
 	const cmdCancel = async () => {
+		draftCancelSave()
+		await draftSavePromise
+		if (unsavedChanges()) {
+			const action = await new Promise<string>((resolve) => {
+				const remove = popup(
+					dom.p('Message has unsaved changes.'),
+					dom.br(),
+					dom.div(
+						dom.clickbutton('Save draft', function click() {
+							resolve('save')
+							remove()
+						}), ' ',
+						dom.clickbutton('Remove draft', function click() {
+							resolve('remove')
+							remove()
+						}), ' ',
+						dom.clickbutton('Cancel', function click() {
+							resolve('cancel')
+							remove()
+						}),
+					)
+				)
+			})
+			if (action === 'save') {
+				await withStatus('Saving draft', draftSave())
+			} else if (action === 'remove') {
+				if (draftMessageID) {
+					await withStatus('Removing draft', client.MessageDelete([draftMessageID]))
+				}
+			} else {
+				return
+			}
+		}
 		composeElem.remove()
 		composeView = null
 	}
 
+	const cmdClose = async () => {
+		draftCancelSave()
+		await draftSavePromise
+		if (unsavedChanges()) {
+			await withStatus('Saving draft', draftSave())
+		}
+		composeElem.remove()
+		composeView = null
+	}
+	const cmdSave = async () => {
+		draftCancelSave()
+		await draftSavePromise
+		await withStatus('Saving draft', draftSave())
+	}
+
 	const submit = async (archive: boolean) => {
+		draftCancelSave()
+		await draftSavePromise
+
 		const files = await new Promise<api.File[]>((resolve, reject) => {
 			const l: api.File[] = []
 			if (attachments.files && attachments.files.length === 0) {
@@ -1455,9 +1571,11 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 			RequireTLS: requiretls.value === '' ? null : requiretls.value === 'yes',
 			FutureRelease: scheduleTime.value ? new Date(scheduleTime.value) : null,
 			ArchiveThread: archive,
+			DraftMessageID: draftMessageID,
 		}
 		await client.MessageSubmit(message)
-		cmdCancel()
+		composeElem.remove()
+		composeView = null
 	}
 
 	const cmdSend = async () => {
@@ -1488,6 +1606,8 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		'ctrl C': cmdAddCc,
 		'ctrl B': cmdAddBcc,
 		'ctrl Y': cmdReplyTo,
+		'ctrl s': cmdSave,
+		'ctrl S': cmdClose,
 		// ctrl Backspace and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
 	}
 
@@ -1806,18 +1926,29 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 							dom.span('From:'),
 						),
 						dom.td(
-							dom.clickbutton('Cancel', style({float: 'right', marginLeft: '1em', marginTop: '.15em'}), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)),
-							from=dom.select(
-								attr.required(''),
-								style({width: 'auto'}),
-								fromOptions,
+							dom.div(
+								style({display: 'flex', gap: '1em'}),
+								dom.div(
+									from=dom.select(
+										attr.required(''),
+										style({width: 'auto'}),
+										fromOptions,
+									),
+									' ',
+									toBtn=dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ',
+									ccBtn=dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ',
+									bccBtn=dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ',
+									replyToBtn=dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ',
+									customFromBtn=dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)),
+								),
+								dom.div(
+									listMailboxes().find(mb => mb.Draft) ? [
+										dom.clickbutton('Save', attr.title('Save draft message.'), clickCmd(cmdSave, shortcuts)), ' ',
+										dom.clickbutton('Close', attr.title('Close window, saving draft message if body has changed or a draft was saved earlier.'), clickCmd(cmdClose, shortcuts)), ' ',
+									] : [],
+									dom.clickbutton('Cancel', attr.title('Close window, discarding (draft) message.'), clickCmd(cmdCancel, shortcuts)),
+								),
 							),
-							' ',
-							toBtn=dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ',
-							ccBtn=dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ',
-							bccBtn=dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ',
-							replyToBtn=dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ',
-							customFromBtn=dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)),
 						),
 					),
 					toRow=dom.tr(
@@ -1870,6 +2001,9 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 						if (e.key === 'Enter') {
 							checkAttachments()
 						}
+					},
+					!listMailboxes().find(mb => mb.Draft) ? [] : function input() {
+						draftScheduleSave()
 					},
 				),
 				!(opts.attachmentsMessageItem && opts.attachmentsMessageItem.Attachments && opts.attachmentsMessageItem.Attachments.length > 0) ? [] : dom.div(
@@ -1997,6 +2131,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	composeView = {
 		root: composeElem,
 		key: keyHandler(shortcuts),
+		unsavedChanges: unsavedChanges,
 	}
 	return composeView
 }
@@ -2706,6 +2841,32 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			view(attachments[0])
 		}
 	}
+	const cmdComposeDraft = async () => {
+		// Compose based on message. Most information is available, we just need to find
+		// the ID of the stored message this is a reply/forward to, based in In-Reply-To
+		// header.
+		const env = mi.Envelope
+		let refMsgID = 0
+		if (env.InReplyTo) {
+			refMsgID = await withStatus('Looking up referenced message', client.MessageFindMessageID(env.InReplyTo))
+		}
+
+		const pm = await parsedMessagePromise
+		const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i)
+		const opts: ComposeOptions = {
+			from: (env.From || []),
+			to: (env.To || []).map(a => formatAddress(a)),
+			cc: (env.CC || []).map(a => formatAddress(a)),
+			bcc: (env.BCC || []).map(a => formatAddress(a)),
+			replyto: env.ReplyTo && env.ReplyTo.length > 0 ? formatAddress(env.ReplyTo[0]) : '',
+			subject: env.Subject,
+			isForward: isForward,
+			body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
+			responseMessageID: refMsgID,
+			draftMessageID: m.ID,
+		}
+		compose(opts, listMailboxes)
+	}
 
 	const cmdToggleHeaders = async () => {
 		settingsPut({...settings, showAllHeaders: !settings.showAllHeaders})
@@ -2775,6 +2936,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	const cmdEnd = async () => { msgscrollElem.scrollTo({top: msgscrollElem.scrollHeight}) }
 
 	const shortcuts: {[key: string]: command} = {
+		e: cmdComposeDraft,
 		I: cmdShowInternals,
 		o: cmdOpenNewTab,
 		O: cmdOpenRaw,
@@ -2838,6 +3000,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	const loadButtons = (pm: api.ParsedMessage | null) => {
 		dom._kids(msgbuttonElem,
 			dom.div(dom._class('pad'),
+				!listMailboxes().find(mb => mb.Draft) ? [] : dom.clickbutton('Edit', attr.title('Continue editing this draft message.'), clickCmd(cmdComposeDraft, shortcuts)), ' ',
 				(!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ',
 				(pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ',
 				(mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
@@ -6390,7 +6553,6 @@ const init = async () => {
 
 		// Prevent many regular key presses from being processed, some possibly unintended.
 		if ((e.target instanceof window.HTMLInputElement || e.target instanceof window.HTMLTextAreaElement || e.target instanceof window.HTMLSelectElement) && !e.ctrlKey && !e.altKey && !e.metaKey) {
-			// log('skipping key without modifiers on input/textarea')
 			return
 		}
 		let l = []
@@ -6622,12 +6784,16 @@ const init = async () => {
 
 	// Don't show disconnection just before user navigates away.
 	let leaving = false
-	window.addEventListener('beforeunload', () => {
-		leaving = true
-		if (eventSource) {
-			eventSource.close()
-			eventSource = null
-			sseID = 0
+	window.addEventListener('beforeunload', (e: BeforeUnloadEvent) => {
+		if (composeView && composeView.unsavedChanges()) {
+			e.preventDefault()
+		} else {
+			leaving = true
+			if (eventSource) {
+				eventSource.close()
+				eventSource = null
+				sseID = 0
+			}
 		}
 	})
 

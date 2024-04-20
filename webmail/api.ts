@@ -127,6 +127,19 @@ export interface Domain {
 	Unicode: string  // Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.
 }
 
+// ComposeMessage is a message to be composed, for saving draft messages.
+export interface ComposeMessage {
+	From: string
+	To?: string[] | null
+	Cc?: string[] | null
+	Bcc?: string[] | null
+	ReplyTo: string  // If non-empty, Reply-To header to add to message.
+	Subject: string
+	TextBody: string
+	ResponseMessageID: number  // If set, this was a reply or forward, based on IsForward.
+	DraftMessageID: number  // If set, previous draft message that will be removed after composing new message.
+}
+
 // SubmitMessage is an email message to be sent to one or more recipients.
 // Addresses are formatted as just email address, or with a name like "name
 // <user@host>".
@@ -135,17 +148,18 @@ export interface SubmitMessage {
 	To?: string[] | null
 	Cc?: string[] | null
 	Bcc?: string[] | null
+	ReplyTo: string  // If non-empty, Reply-To header to add to message.
 	Subject: string
 	TextBody: string
 	Attachments?: File[] | null
 	ForwardAttachments: ForwardAttachments
 	IsForward: boolean
 	ResponseMessageID: number  // If set, this was a reply or forward, based on IsForward.
-	ReplyTo: string  // If non-empty, Reply-To header to add to message.
 	UserAgent: string  // User-Agent header added if not empty.
 	RequireTLS?: boolean | null  // For "Require TLS" extension during delivery.
 	FutureRelease?: Date | null  // If set, time (in the future) when message should be delivered from queue.
 	ArchiveThread: boolean  // If set, thread is archived after sending message.
+	DraftMessageID: number  // If set, draft message that will be removed after sending.
 }
 
 // File is a new attachment (not from an existing message that is being
@@ -537,7 +551,7 @@ export enum Quoting {
 // Localparts are in Unicode NFC.
 export type Localpart = string
 
-export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"Settings":true,"SpecialUse":true,"SubmitMessage":true}
+export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"ComposeMessage":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"Settings":true,"SpecialUse":true,"SubmitMessage":true}
 export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"CSRFToken":true,"Localpart":true,"Quoting":true,"SecurityResult":true,"ThreadMode":true}
 export const intsTypes: {[typename: string]: boolean} = {"ModSeq":true,"UID":true,"Validation":true}
 export const types: TypenameMap = {
@@ -552,7 +566,8 @@ export const types: TypenameMap = {
 	"Address": {"Name":"Address","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Host","Docs":"","Typewords":["string"]}]},
 	"MessageAddress": {"Name":"MessageAddress","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
 	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
-	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureRelease","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"ArchiveThread","Docs":"","Typewords":["bool"]}]},
+	"ComposeMessage": {"Name":"ComposeMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
+	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureRelease","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"ArchiveThread","Docs":"","Typewords":["bool"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
 	"File": {"Name":"File","Docs":"","Fields":[{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"DataURI","Docs":"","Typewords":["string"]}]},
 	"ForwardAttachments": {"Name":"ForwardAttachments","Docs":"","Fields":[{"Name":"MessageID","Docs":"","Typewords":["int64"]},{"Name":"Paths","Docs":"","Typewords":["[]","[]","int32"]}]},
 	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
@@ -603,6 +618,7 @@ export const parser = {
 	Address: (v: any) => parse("Address", v) as Address,
 	MessageAddress: (v: any) => parse("MessageAddress", v) as MessageAddress,
 	Domain: (v: any) => parse("Domain", v) as Domain,
+	ComposeMessage: (v: any) => parse("ComposeMessage", v) as ComposeMessage,
 	SubmitMessage: (v: any) => parse("SubmitMessage", v) as SubmitMessage,
 	File: (v: any) => parse("File", v) as File,
 	ForwardAttachments: (v: any) => parse("ForwardAttachments", v) as ForwardAttachments,
@@ -730,6 +746,28 @@ export class Client {
 		const returnTypes: string[][] = [["ParsedMessage"]]
 		const params: any[] = [msgID]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as ParsedMessage
+	}
+
+	// MessageFindMessageID looks up a message by Message-Id header, and returns the ID
+	// of the message in storage. Used when opening a previously saved draft message
+	// for editing again.
+	// If no message is find, zero is returned, not an error.
+	async MessageFindMessageID(messageID: string): Promise<number> {
+		const fn: string = "MessageFindMessageID"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = [["int64"]]
+		const params: any[] = [messageID]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// MessageCompose composes a message and saves it to the mailbox. Used for
+	// saving draft messages.
+	async MessageCompose(m: ComposeMessage, mailboxID: number): Promise<number> {
+		const fn: string = "MessageCompose"
+		const paramTypes: string[][] = [["ComposeMessage"],["int64"]]
+		const returnTypes: string[][] = [["int64"]]
+		const params: any[] = [m, mailboxID]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
 	}
 
 	// MessageSubmit sends a message by submitting it the outgoing email queue. The

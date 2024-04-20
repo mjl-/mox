@@ -177,6 +177,268 @@ func (Webmail) ParsedMessage(ctx context.Context, msgID int64) (pm ParsedMessage
 	return
 }
 
+// MessageFindMessageID looks up a message by Message-Id header, and returns the ID
+// of the message in storage. Used when opening a previously saved draft message
+// for editing again.
+// If no message is find, zero is returned, not an error.
+func (Webmail) MessageFindMessageID(ctx context.Context, messageID string) (id int64) {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc, err := store.OpenAccount(log, reqInfo.AccountName)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+
+	messageID, _, _ = message.MessageIDCanonical(messageID)
+	if messageID == "" {
+		xcheckuserf(ctx, errors.New("empty message-id"), "parsing message-id")
+	}
+
+	xdbread(ctx, acc, func(tx *bstore.Tx) {
+		m, err := bstore.QueryTx[store.Message](tx).FilterNonzero(store.Message{MessageID: messageID}).Get()
+		if err == bstore.ErrAbsent {
+			return
+		}
+		xcheckf(ctx, err, "looking up message by message-id")
+		id = m.ID
+	})
+	return
+}
+
+// ComposeMessage is a message to be composed, for saving draft messages.
+type ComposeMessage struct {
+	From              string
+	To                []string
+	Cc                []string
+	Bcc               []string
+	ReplyTo           string // If non-empty, Reply-To header to add to message.
+	Subject           string
+	TextBody          string
+	ResponseMessageID int64 // If set, this was a reply or forward, based on IsForward.
+	DraftMessageID    int64 // If set, previous draft message that will be removed after composing new message.
+}
+
+// MessageCompose composes a message and saves it to the mailbox. Used for
+// saving draft messages.
+func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID int64) (id int64) {
+	// Prevent any accidental control characters, or attempts at getting bare \r or \n
+	// into messages.
+	for _, l := range [][]string{m.To, m.Cc, m.Bcc, {m.From, m.Subject, m.ReplyTo}} {
+		for _, s := range l {
+			for _, c := range s {
+				if c < 0x20 {
+					xcheckuserf(ctx, errors.New("control characters not allowed"), "checking header values")
+				}
+			}
+		}
+	}
+
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	log := pkglog.WithContext(ctx).With(slog.String("account", reqInfo.AccountName))
+	acc, err := store.OpenAccount(log, reqInfo.AccountName)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+
+	log.Debug("message compose")
+
+	fromAddr, err := parseAddress(m.From)
+	xcheckuserf(ctx, err, "parsing From address")
+
+	var replyTo *message.NameAddress
+	if m.ReplyTo != "" {
+		addr, err := parseAddress(m.ReplyTo)
+		xcheckuserf(ctx, err, "parsing Reply-To address")
+		replyTo = &addr
+	}
+
+	var recipients []smtp.Address
+
+	var toAddrs []message.NameAddress
+	for _, s := range m.To {
+		addr, err := parseAddress(s)
+		xcheckuserf(ctx, err, "parsing To address")
+		toAddrs = append(toAddrs, addr)
+		recipients = append(recipients, addr.Address)
+	}
+
+	var ccAddrs []message.NameAddress
+	for _, s := range m.Cc {
+		addr, err := parseAddress(s)
+		xcheckuserf(ctx, err, "parsing Cc address")
+		ccAddrs = append(ccAddrs, addr)
+		recipients = append(recipients, addr.Address)
+	}
+
+	var bccAddrs []message.NameAddress
+	for _, s := range m.Bcc {
+		addr, err := parseAddress(s)
+		xcheckuserf(ctx, err, "parsing Bcc address")
+		bccAddrs = append(bccAddrs, addr)
+		recipients = append(recipients, addr.Address)
+	}
+
+	// We only use smtputf8 if we have to, with a utf-8 localpart. For IDNA, we use ASCII domains.
+	smtputf8 := false
+	for _, a := range recipients {
+		if a.Localpart.IsInternational() {
+			smtputf8 = true
+			break
+		}
+	}
+	if !smtputf8 && fromAddr.Address.Localpart.IsInternational() {
+		// todo: may want to warn user that they should consider sending with a ascii-only localpart, in case receiver doesn't support smtputf8.
+		smtputf8 = true
+	}
+	if !smtputf8 && replyTo != nil && replyTo.Address.Localpart.IsInternational() {
+		smtputf8 = true
+	}
+
+	// Create file to compose message into.
+	dataFile, err := store.CreateMessageTemp(log, "webmail-compose")
+	xcheckf(ctx, err, "creating temporary file for compose message")
+	defer store.CloseRemoveTempFile(log, dataFile, "compose message")
+
+	// If writing to the message file fails, we abort immediately.
+	xc := message.NewComposer(dataFile, w.maxMessageSize, smtputf8)
+	defer func() {
+		x := recover()
+		if x == nil {
+			return
+		}
+		if err, ok := x.(error); ok && errors.Is(err, message.ErrMessageSize) {
+			xcheckuserf(ctx, err, "making message")
+		} else if ok && errors.Is(err, message.ErrCompose) {
+			xcheckf(ctx, err, "making message")
+		}
+		panic(x)
+	}()
+
+	// Outer message headers.
+	xc.HeaderAddrs("From", []message.NameAddress{fromAddr})
+	if replyTo != nil {
+		xc.HeaderAddrs("Reply-To", []message.NameAddress{*replyTo})
+	}
+	xc.HeaderAddrs("To", toAddrs)
+	xc.HeaderAddrs("Cc", ccAddrs)
+	xc.HeaderAddrs("Bcc", bccAddrs)
+	if m.Subject != "" {
+		xc.Subject(m.Subject)
+	}
+
+	// Add In-Reply-To and References headers.
+	if m.ResponseMessageID > 0 {
+		xdbread(ctx, acc, func(tx *bstore.Tx) {
+			rm := xmessageID(ctx, tx, m.ResponseMessageID)
+			msgr := acc.MessageReader(rm)
+			defer func() {
+				err := msgr.Close()
+				log.Check(err, "closing message reader")
+			}()
+			rp, err := rm.LoadPart(msgr)
+			xcheckf(ctx, err, "load parsed message")
+			h, err := rp.Header()
+			xcheckf(ctx, err, "parsing header")
+
+			if rp.Envelope == nil {
+				return
+			}
+
+			if rp.Envelope.MessageID != "" {
+				xc.Header("In-Reply-To", rp.Envelope.MessageID)
+			}
+			refs := h.Values("References")
+			if len(refs) == 0 && rp.Envelope.InReplyTo != "" {
+				refs = []string{rp.Envelope.InReplyTo}
+			}
+			if rp.Envelope.MessageID != "" {
+				refs = append(refs, rp.Envelope.MessageID)
+			}
+			if len(refs) > 0 {
+				xc.Header("References", strings.Join(refs, "\r\n\t"))
+			}
+		})
+	}
+	xc.Header("MIME-Version", "1.0")
+	textBody, ct, cte := xc.TextPart("plain", m.TextBody)
+	xc.Header("Content-Type", ct)
+	xc.Header("Content-Transfer-Encoding", cte)
+	xc.Line()
+	xc.Write([]byte(textBody))
+	xc.Flush()
+
+	var nm store.Message
+
+	// Remove previous draft message, append message to destination mailbox.
+	acc.WithRLock(func() {
+		var changes []store.Change
+
+		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
+			var modseq store.ModSeq // Only set if needed.
+
+			if m.DraftMessageID > 0 {
+				var nchanges []store.Change
+				modseq, nchanges = xops.MessageDeleteTx(ctx, log, tx, acc, []int64{m.DraftMessageID}, modseq)
+				changes = append(changes, nchanges...)
+				// On-disk file is removed after lock.
+			}
+
+			// Find mailbox to write to.
+			mb := store.Mailbox{ID: mailboxID}
+			err := tx.Get(&mb)
+			if err == bstore.ErrAbsent {
+				xcheckuserf(ctx, err, "looking up mailbox")
+			}
+			xcheckf(ctx, err, "looking up mailbox")
+
+			if modseq == 0 {
+				modseq, err = acc.NextModSeq(tx)
+				xcheckf(ctx, err, "next modseq")
+			}
+
+			nm = store.Message{
+				CreateSeq:     modseq,
+				ModSeq:        modseq,
+				MailboxID:     mb.ID,
+				MailboxOrigID: mb.ID,
+				Flags:         store.Flags{Notjunk: true},
+				Size:          xc.Size,
+			}
+
+			if ok, maxSize, err := acc.CanAddMessageSize(tx, nm.Size); err != nil {
+				xcheckf(ctx, err, "checking quota")
+			} else if !ok {
+				xcheckuserf(ctx, fmt.Errorf("account over maximum total message size %d", maxSize), "checking quota")
+			}
+
+			// Update mailbox before delivery, which changes uidnext.
+			mb.Add(nm.MailboxCounts())
+			err = tx.Update(&mb)
+			xcheckf(ctx, err, "updating sent mailbox for counts")
+
+			err = acc.DeliverMessage(log, tx, &nm, dataFile, true, false, false, true)
+			xcheckf(ctx, err, "storing message in mailbox")
+
+			changes = append(changes, nm.ChangeAddUID(), mb.ChangeCounts())
+		})
+
+		store.BroadcastChanges(acc, changes)
+	})
+
+	// Remove on-disk file for removed draft message.
+	if m.DraftMessageID > 0 {
+		p := acc.MessagePath(m.DraftMessageID)
+		err := os.Remove(p)
+		log.Check(err, "removing draft message file")
+	}
+
+	return nm.ID
+}
+
 // Attachment is a MIME part is an existing message that is not intended as
 // viewable text or HTML part.
 type Attachment struct {
@@ -197,17 +459,18 @@ type SubmitMessage struct {
 	To                 []string
 	Cc                 []string
 	Bcc                []string
+	ReplyTo            string // If non-empty, Reply-To header to add to message.
 	Subject            string
 	TextBody           string
 	Attachments        []File
 	ForwardAttachments ForwardAttachments
 	IsForward          bool
 	ResponseMessageID  int64      // If set, this was a reply or forward, based on IsForward.
-	ReplyTo            string     // If non-empty, Reply-To header to add to message.
 	UserAgent          string     // User-Agent header added if not empty.
 	RequireTLS         *bool      // For "Require TLS" extension during delivery.
 	FutureRelease      *time.Time // If set, time (in the future) when message should be delivered from queue.
 	ArchiveThread      bool       // If set, thread is archived after sending message.
+	DraftMessageID     int64      // If set, draft message that will be removed after sending.
 }
 
 // ForwardAttachments references attachments by a list of message.Part paths.
@@ -705,7 +968,8 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 	var modseq store.ModSeq // Only set if needed.
 
-	// Append message to Sent mailbox and mark original messages as answered/forwarded.
+	// Append message to Sent mailbox, mark original messages as answered/forwarded,
+	// remove any draft message.
 	acc.WithRLock(func() {
 		var changes []store.Change
 
@@ -719,6 +983,13 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			}
 		}()
 		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
+			if m.DraftMessageID > 0 {
+				var nchanges []store.Change
+				modseq, nchanges = xops.MessageDeleteTx(ctx, log, tx, acc, []int64{m.DraftMessageID}, modseq)
+				changes = append(changes, nchanges...)
+				// On-disk file is removed after lock.
+			}
+
 			if m.ResponseMessageID > 0 {
 				rm := xmessageID(ctx, tx, m.ResponseMessageID)
 				oflags := rm.Flags
@@ -759,7 +1030,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					xcheckf(ctx, err, "listing messages in thread to archive")
 					if len(msgIDs) > 0 {
 						var nchanges []store.Change
-						modseq, nchanges = xops.MessageMoveMailbox(ctx, log, acc, tx, msgIDs, mbArchive, modseq)
+						modseq, nchanges = xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, modseq)
 						changes = append(changes, nchanges...)
 					}
 				}
@@ -821,6 +1092,13 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 		store.BroadcastChanges(acc, changes)
 	})
+
+	// Remove on-disk file for removed draft message.
+	if m.DraftMessageID > 0 {
+		p := acc.MessagePath(m.DraftMessageID)
+		err := os.Remove(p)
+		log.Check(err, "removing draft message file")
+	}
 }
 
 // MessageMove moves messages to another mailbox. If the message is already in

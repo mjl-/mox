@@ -57,77 +57,12 @@ func (x XOps) messageID(ctx context.Context, tx *bstore.Tx, messageID int64) sto
 
 func (x XOps) MessageDelete(ctx context.Context, log mlog.Log, acc *store.Account, messageIDs []int64) {
 	acc.WithWLock(func() {
-		removeChanges := map[int64]store.ChangeRemoveUIDs{}
-		changes := make([]store.Change, 0, len(messageIDs)+1) // n remove, 1 mailbox counts
+		var changes []store.Change
 
 		x.DBWrite(ctx, acc, func(tx *bstore.Tx) {
-			var modseq store.ModSeq
-			var mb store.Mailbox
-			remove := make([]store.Message, 0, len(messageIDs))
-
-			var totalSize int64
-			for _, mid := range messageIDs {
-				m := x.messageID(ctx, tx, mid)
-				totalSize += m.Size
-
-				if m.MailboxID != mb.ID {
-					if mb.ID != 0 {
-						err := tx.Update(&mb)
-						x.Checkf(ctx, err, "updating mailbox counts")
-						changes = append(changes, mb.ChangeCounts())
-					}
-					mb = x.mailboxID(ctx, tx, m.MailboxID)
-				}
-
-				qmr := bstore.QueryTx[store.Recipient](tx)
-				qmr.FilterEqual("MessageID", m.ID)
-				_, err := qmr.Delete()
-				x.Checkf(ctx, err, "removing message recipients")
-
-				mb.Sub(m.MailboxCounts())
-
-				if modseq == 0 {
-					modseq, err = acc.NextModSeq(tx)
-					x.Checkf(ctx, err, "assigning next modseq")
-				}
-				m.Expunged = true
-				m.ModSeq = modseq
-				err = tx.Update(&m)
-				x.Checkf(ctx, err, "marking message as expunged")
-
-				ch := removeChanges[m.MailboxID]
-				ch.UIDs = append(ch.UIDs, m.UID)
-				ch.MailboxID = m.MailboxID
-				ch.ModSeq = modseq
-				removeChanges[m.MailboxID] = ch
-				remove = append(remove, m)
-			}
-
-			if mb.ID != 0 {
-				err := tx.Update(&mb)
-				x.Checkf(ctx, err, "updating count in mailbox")
-				changes = append(changes, mb.ChangeCounts())
-			}
-
-			err := acc.AddMessageSize(log, tx, -totalSize)
-			x.Checkf(ctx, err, "updating disk usage")
-
-			// Mark removed messages as not needing training, then retrain them, so if they
-			// were trained, they get untrained.
-			for i := range remove {
-				remove[i].Junk = false
-				remove[i].Notjunk = false
-			}
-			err = acc.RetrainMessages(ctx, log, tx, remove, true)
-			x.Checkf(ctx, err, "untraining deleted messages")
+			_, changes = x.MessageDeleteTx(ctx, log, tx, acc, messageIDs, 0)
 		})
 
-		for _, ch := range removeChanges {
-			sort.Slice(ch.UIDs, func(i, j int) bool {
-				return ch.UIDs[i] < ch.UIDs[j]
-			})
-			changes = append(changes, ch)
-		}
 		store.BroadcastChanges(acc, changes)
 	})
 
@@ -136,6 +71,79 @@ func (x XOps) MessageDelete(ctx context.Context, log mlog.Log, acc *store.Accoun
 		err := os.Remove(p)
 		log.Check(err, "removing message file for expunge")
 	}
+}
+
+func (x XOps) MessageDeleteTx(ctx context.Context, log mlog.Log, tx *bstore.Tx, acc *store.Account, messageIDs []int64, modseq store.ModSeq) (store.ModSeq, []store.Change) {
+	removeChanges := map[int64]store.ChangeRemoveUIDs{}
+	changes := make([]store.Change, 0, len(messageIDs)+1) // n remove, 1 mailbox counts
+
+	var mb store.Mailbox
+	remove := make([]store.Message, 0, len(messageIDs))
+
+	var totalSize int64
+	for _, mid := range messageIDs {
+		m := x.messageID(ctx, tx, mid)
+		totalSize += m.Size
+
+		if m.MailboxID != mb.ID {
+			if mb.ID != 0 {
+				err := tx.Update(&mb)
+				x.Checkf(ctx, err, "updating mailbox counts")
+				changes = append(changes, mb.ChangeCounts())
+			}
+			mb = x.mailboxID(ctx, tx, m.MailboxID)
+		}
+
+		qmr := bstore.QueryTx[store.Recipient](tx)
+		qmr.FilterEqual("MessageID", m.ID)
+		_, err := qmr.Delete()
+		x.Checkf(ctx, err, "removing message recipients")
+
+		mb.Sub(m.MailboxCounts())
+
+		if modseq == 0 {
+			modseq, err = acc.NextModSeq(tx)
+			x.Checkf(ctx, err, "assigning next modseq")
+		}
+		m.Expunged = true
+		m.ModSeq = modseq
+		err = tx.Update(&m)
+		x.Checkf(ctx, err, "marking message as expunged")
+
+		ch := removeChanges[m.MailboxID]
+		ch.UIDs = append(ch.UIDs, m.UID)
+		ch.MailboxID = m.MailboxID
+		ch.ModSeq = modseq
+		removeChanges[m.MailboxID] = ch
+		remove = append(remove, m)
+	}
+
+	if mb.ID != 0 {
+		err := tx.Update(&mb)
+		x.Checkf(ctx, err, "updating count in mailbox")
+		changes = append(changes, mb.ChangeCounts())
+	}
+
+	err := acc.AddMessageSize(log, tx, -totalSize)
+	x.Checkf(ctx, err, "updating disk usage")
+
+	// Mark removed messages as not needing training, then retrain them, so if they
+	// were trained, they get untrained.
+	for i := range remove {
+		remove[i].Junk = false
+		remove[i].Notjunk = false
+	}
+	err = acc.RetrainMessages(ctx, log, tx, remove, true)
+	x.Checkf(ctx, err, "untraining deleted messages")
+
+	for _, ch := range removeChanges {
+		sort.Slice(ch.UIDs, func(i, j int) bool {
+			return ch.UIDs[i] < ch.UIDs[j]
+		})
+		changes = append(changes, ch)
+	}
+
+	return modseq, changes
 }
 
 func (x XOps) MessageFlagsAdd(ctx context.Context, log mlog.Log, acc *store.Account, messageIDs []int64, flaglist []string) {
@@ -301,14 +309,14 @@ func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account,
 				return
 			}
 
-			_, changes = x.MessageMoveMailbox(ctx, log, acc, tx, messageIDs, mbDst, 0)
+			_, changes = x.MessageMoveTx(ctx, log, acc, tx, messageIDs, mbDst, 0)
 		})
 
 		store.BroadcastChanges(acc, changes)
 	})
 }
 
-func (x XOps) MessageMoveMailbox(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, messageIDs []int64, mbDst store.Mailbox, modseq store.ModSeq) (store.ModSeq, []store.Change) {
+func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, messageIDs []int64, mbDst store.Mailbox, modseq store.ModSeq) (store.ModSeq, []store.Change) {
 	retrain := make([]store.Message, 0, len(messageIDs))
 	removeChanges := map[int64]store.ChangeRemoveUIDs{}
 	// n adds, 1 remove, 2 mailboxcounts, optimistic and at least for a single message.

@@ -281,7 +281,7 @@ var api;
 		Quoting["Bottom"] = "bottom";
 		Quoting["Top"] = "top";
 	})(Quoting = api.Quoting || (api.Quoting = {}));
-	api.structTypes = { "Address": true, "Attachment": true, "ChangeMailboxAdd": true, "ChangeMailboxCounts": true, "ChangeMailboxKeywords": true, "ChangeMailboxRemove": true, "ChangeMailboxRename": true, "ChangeMailboxSpecialUse": true, "ChangeMsgAdd": true, "ChangeMsgFlags": true, "ChangeMsgRemove": true, "ChangeMsgThread": true, "Domain": true, "DomainAddressConfig": true, "Envelope": true, "EventStart": true, "EventViewChanges": true, "EventViewErr": true, "EventViewMsgs": true, "EventViewReset": true, "File": true, "Filter": true, "Flags": true, "ForwardAttachments": true, "Mailbox": true, "Message": true, "MessageAddress": true, "MessageEnvelope": true, "MessageItem": true, "NotFilter": true, "Page": true, "ParsedMessage": true, "Part": true, "Query": true, "RecipientSecurity": true, "Request": true, "Settings": true, "SpecialUse": true, "SubmitMessage": true };
+	api.structTypes = { "Address": true, "Attachment": true, "ChangeMailboxAdd": true, "ChangeMailboxCounts": true, "ChangeMailboxKeywords": true, "ChangeMailboxRemove": true, "ChangeMailboxRename": true, "ChangeMailboxSpecialUse": true, "ChangeMsgAdd": true, "ChangeMsgFlags": true, "ChangeMsgRemove": true, "ChangeMsgThread": true, "ComposeMessage": true, "Domain": true, "DomainAddressConfig": true, "Envelope": true, "EventStart": true, "EventViewChanges": true, "EventViewErr": true, "EventViewMsgs": true, "EventViewReset": true, "File": true, "Filter": true, "Flags": true, "ForwardAttachments": true, "Mailbox": true, "Message": true, "MessageAddress": true, "MessageEnvelope": true, "MessageItem": true, "NotFilter": true, "Page": true, "ParsedMessage": true, "Part": true, "Query": true, "RecipientSecurity": true, "Request": true, "Settings": true, "SpecialUse": true, "SubmitMessage": true };
 	api.stringsTypes = { "AttachmentType": true, "CSRFToken": true, "Localpart": true, "Quoting": true, "SecurityResult": true, "ThreadMode": true };
 	api.intsTypes = { "ModSeq": true, "UID": true, "Validation": true };
 	api.types = {
@@ -296,7 +296,8 @@ var api;
 		"Address": { "Name": "Address", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Host", "Docs": "", "Typewords": ["string"] }] },
 		"MessageAddress": { "Name": "MessageAddress", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "User", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
 		"Domain": { "Name": "Domain", "Docs": "", "Fields": [{ "Name": "ASCII", "Docs": "", "Typewords": ["string"] }, { "Name": "Unicode", "Docs": "", "Typewords": ["string"] }] },
-		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureRelease", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "ArchiveThread", "Docs": "", "Typewords": ["bool"] }] },
+		"ComposeMessage": { "Name": "ComposeMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "DraftMessageID", "Docs": "", "Typewords": ["int64"] }] },
+		"SubmitMessage": { "Name": "SubmitMessage", "Docs": "", "Fields": [{ "Name": "From", "Docs": "", "Typewords": ["string"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Cc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Bcc", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "TextBody", "Docs": "", "Typewords": ["string"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "File"] }, { "Name": "ForwardAttachments", "Docs": "", "Typewords": ["ForwardAttachments"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ResponseMessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "FutureRelease", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "ArchiveThread", "Docs": "", "Typewords": ["bool"] }, { "Name": "DraftMessageID", "Docs": "", "Typewords": ["int64"] }] },
 		"File": { "Name": "File", "Docs": "", "Fields": [{ "Name": "Filename", "Docs": "", "Typewords": ["string"] }, { "Name": "DataURI", "Docs": "", "Typewords": ["string"] }] },
 		"ForwardAttachments": { "Name": "ForwardAttachments", "Docs": "", "Fields": [{ "Name": "MessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Paths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }] },
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
@@ -346,6 +347,7 @@ var api;
 		Address: (v) => api.parse("Address", v),
 		MessageAddress: (v) => api.parse("MessageAddress", v),
 		Domain: (v) => api.parse("Domain", v),
+		ComposeMessage: (v) => api.parse("ComposeMessage", v),
 		SubmitMessage: (v) => api.parse("SubmitMessage", v),
 		File: (v) => api.parse("File", v),
 		ForwardAttachments: (v) => api.parse("ForwardAttachments", v),
@@ -461,6 +463,26 @@ var api;
 			const paramTypes = [["int64"]];
 			const returnTypes = [["ParsedMessage"]];
 			const params = [msgID];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// MessageFindMessageID looks up a message by Message-Id header, and returns the ID
+		// of the message in storage. Used when opening a previously saved draft message
+		// for editing again.
+		// If no message is find, zero is returned, not an error.
+		async MessageFindMessageID(messageID) {
+			const fn = "MessageFindMessageID";
+			const paramTypes = [["string"]];
+			const returnTypes = [["int64"]];
+			const params = [messageID];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// MessageCompose composes a message and saves it to the mailbox. Used for
+		// saving draft messages.
+		async MessageCompose(m, mailboxID) {
+			const fn = "MessageCompose";
+			const paramTypes = [["ComposeMessage"], ["int64"]];
+			const returnTypes = [["int64"]];
+			const params = [m, mailboxID];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// MessageSubmit sends a message by submitting it the outgoing email queue. The
@@ -2198,6 +2220,7 @@ const cmdHelp = async () => {
 		['r', 'reply or list reply'],
 		['R', 'reply all'],
 		['f', 'forward message'],
+		['e', 'edit draft'],
 		['v', 'view attachments'],
 		['t', 'view text version'],
 		['T', 'view HTML version'],
@@ -2312,11 +2335,109 @@ const compose = (opts, listMailboxes) => {
 	let toRow, replyToRow, ccRow, bccRow; // We show/hide rows as needed.
 	let toViews = [], replytoViews = [], ccViews = [], bccViews = [];
 	let forwardAttachmentViews = [];
+	// todo future: upload attachments with draft messages. would mean we let users remove them again too.
+	// We automatically save drafts 1m after a change. When closing window, we ask to
+	// save unsaved change to draft.
+	let draftMessageID = opts.draftMessageID || 0;
+	let draftSaveTimer = 0;
+	let draftSavePromise = Promise.resolve(0);
+	let draftLastText = opts.body;
+	const draftCancelSave = () => {
+		if (draftSaveTimer) {
+			window.clearTimeout(draftSaveTimer);
+			draftSaveTimer = 0;
+		}
+	};
+	const draftScheduleSave = () => {
+		if (draftSaveTimer || body.value === draftLastText) {
+			return;
+		}
+		draftSaveTimer = window.setTimeout(async () => {
+			draftSaveTimer = 0;
+			await withStatus('Saving draft', draftSave());
+			draftScheduleSave();
+		}, 60 * 1000);
+	};
+	const draftSave = async () => {
+		draftCancelSave();
+		let replyTo = '';
+		if (replytoViews && replytoViews.length === 1 && replytoViews[0].input.value) {
+			replyTo = replytoViews[0].input.value;
+		}
+		const cm = {
+			From: customFrom ? customFrom.value : from.value,
+			To: toViews.map(v => v.input.value).filter(s => s),
+			Cc: ccViews.map(v => v.input.value).filter(s => s),
+			Bcc: bccViews.map(v => v.input.value).filter(s => s),
+			ReplyTo: replyTo,
+			Subject: subject.value,
+			TextBody: body.value,
+			ResponseMessageID: opts.responseMessageID || 0,
+			DraftMessageID: draftMessageID,
+		};
+		const mbdrafts = listMailboxes().find(mb => mb.Draft);
+		if (!mbdrafts) {
+			throw new Error('no designated drafts mailbox');
+		}
+		draftSavePromise = client.MessageCompose(cm, mbdrafts.ID);
+		draftMessageID = await draftSavePromise;
+		draftLastText = cm.TextBody;
+	};
+	// todo future: on visibilitychange with visibilityState "hidden", use navigator.sendBeacon to save latest modified draft message?
+	// When window is closed, ask user to cancel due to unsaved changes.
+	const unsavedChanges = () => opts.body !== body.value && (!draftMessageID || draftLastText !== body.value);
+	// In Firefox, ctrl-w doesn't seem interceptable when focus is on a button. It is
+	// when focus is on a textarea or not any specific UI element. So this isn't always
+	// triggered. But we still have the beforeunload handler that checks for
+	// unsavedChanges to protect the user in such cases.
 	const cmdCancel = async () => {
+		draftCancelSave();
+		await draftSavePromise;
+		if (unsavedChanges()) {
+			const action = await new Promise((resolve) => {
+				const remove = popup(dom.p('Message has unsaved changes.'), dom.br(), dom.div(dom.clickbutton('Save draft', function click() {
+					resolve('save');
+					remove();
+				}), ' ', dom.clickbutton('Remove draft', function click() {
+					resolve('remove');
+					remove();
+				}), ' ', dom.clickbutton('Cancel', function click() {
+					resolve('cancel');
+					remove();
+				})));
+			});
+			if (action === 'save') {
+				await withStatus('Saving draft', draftSave());
+			}
+			else if (action === 'remove') {
+				if (draftMessageID) {
+					await withStatus('Removing draft', client.MessageDelete([draftMessageID]));
+				}
+			}
+			else {
+				return;
+			}
+		}
 		composeElem.remove();
 		composeView = null;
 	};
+	const cmdClose = async () => {
+		draftCancelSave();
+		await draftSavePromise;
+		if (unsavedChanges()) {
+			await withStatus('Saving draft', draftSave());
+		}
+		composeElem.remove();
+		composeView = null;
+	};
+	const cmdSave = async () => {
+		draftCancelSave();
+		await draftSavePromise;
+		await withStatus('Saving draft', draftSave());
+	};
 	const submit = async (archive) => {
+		draftCancelSave();
+		await draftSavePromise;
 		const files = await new Promise((resolve, reject) => {
 			const l = [];
 			if (attachments.files && attachments.files.length === 0) {
@@ -2358,9 +2479,11 @@ const compose = (opts, listMailboxes) => {
 			RequireTLS: requiretls.value === '' ? null : requiretls.value === 'yes',
 			FutureRelease: scheduleTime.value ? new Date(scheduleTime.value) : null,
 			ArchiveThread: archive,
+			DraftMessageID: draftMessageID,
 		};
 		await client.MessageSubmit(message);
-		cmdCancel();
+		composeElem.remove();
+		composeView = null;
 	};
 	const cmdSend = async () => {
 		await withStatus('Sending email', submit(false), fieldset);
@@ -2388,6 +2511,8 @@ const compose = (opts, listMailboxes) => {
 		'ctrl C': cmdAddCc,
 		'ctrl B': cmdAddBcc,
 		'ctrl Y': cmdReplyTo,
+		'ctrl s': cmdSave,
+		'ctrl S': cmdClose,
 		// ctrl Backspace and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
 	};
 	const newAddrView = (addr, isRecipient, views, btn, cell, row, single) => {
@@ -2648,7 +2773,10 @@ const compose = (opts, listMailboxes) => {
 		flexGrow: '1',
 		display: 'flex',
 		flexDirection: 'column',
-	}), dom.table(style({ width: '100%' }), dom.tr(dom.td(style({ textAlign: 'right', color: '#555' }), dom.span('From:')), dom.td(dom.clickbutton('Cancel', style({ float: 'right', marginLeft: '1em', marginTop: '.15em' }), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)), from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)))), toRow = dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555' })), toCell = dom.td(style({ lineHeight: '1.5' }))), replyToRow = dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555' })), replyToCell = dom.td(style({ lineHeight: '1.5' }))), ccRow = dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555' })), ccCell = dom.td(style({ lineHeight: '1.5' }))), bccRow = dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555' })), bccCell = dom.td(style({ lineHeight: '1.5' }))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555' })), dom.td(subjectAutosize = dom.span(dom._class('autosize'), style({ width: '100%' }), // Without 100% width, the span takes minimal width for input, we want the full table cell.
+	}), dom.table(style({ width: '100%' }), dom.tr(dom.td(style({ textAlign: 'right', color: '#555' }), dom.span('From:')), dom.td(dom.div(style({ display: 'flex', gap: '1em' }), dom.div(from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts))), dom.div(listMailboxes().find(mb => mb.Draft) ? [
+		dom.clickbutton('Save', attr.title('Save draft message.'), clickCmd(cmdSave, shortcuts)), ' ',
+		dom.clickbutton('Close', attr.title('Close window, saving draft message if body has changed or a draft was saved earlier.'), clickCmd(cmdClose, shortcuts)), ' ',
+	] : [], dom.clickbutton('Cancel', attr.title('Close window, discarding (draft) message.'), clickCmd(cmdCancel, shortcuts)))))), toRow = dom.tr(dom.td('To:', style({ textAlign: 'right', color: '#555' })), toCell = dom.td(style({ lineHeight: '1.5' }))), replyToRow = dom.tr(dom.td('Reply-To:', style({ textAlign: 'right', color: '#555' })), replyToCell = dom.td(style({ lineHeight: '1.5' }))), ccRow = dom.tr(dom.td('Cc:', style({ textAlign: 'right', color: '#555' })), ccCell = dom.td(style({ lineHeight: '1.5' }))), bccRow = dom.tr(dom.td('Bcc:', style({ textAlign: 'right', color: '#555' })), bccCell = dom.td(style({ lineHeight: '1.5' }))), dom.tr(dom.td('Subject:', style({ textAlign: 'right', color: '#555' })), dom.td(subjectAutosize = dom.span(dom._class('autosize'), style({ width: '100%' }), // Without 100% width, the span takes minimal width for input, we want the full table cell.
 	subject = dom.input(style({ width: '100%' }), attr.value(opts.subject || ''), attr.required(''), focusPlaceholder('subject...'), function input() {
 		subjectAutosize.dataset.value = subject.value;
 	}))))), body = dom.textarea(dom._class('mono'), style({
@@ -2661,6 +2789,8 @@ const compose = (opts, listMailboxes) => {
 		if (e.key === 'Enter') {
 			checkAttachments();
 		}
+	}, !listMailboxes().find(mb => mb.Draft) ? [] : function input() {
+		draftScheduleSave();
 	}), !(opts.attachmentsMessageItem && opts.attachmentsMessageItem.Attachments && opts.attachmentsMessageItem.Attachments.length > 0) ? [] : dom.div(style({ margin: '.5em 0' }), 'Forward attachments: ', forwardAttachmentViews = (opts.attachmentsMessageItem?.Attachments || []).map(a => {
 		const filename = a.Filename || '(unnamed)';
 		const size = formatSize(a.Part.DecodedSize);
@@ -2739,6 +2869,7 @@ const compose = (opts, listMailboxes) => {
 	composeView = {
 		root: composeElem,
 		key: keyHandler(shortcuts),
+		unsavedChanges: unsavedChanges,
 	};
 	return composeView;
 };
@@ -3283,6 +3414,31 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			view(attachments[0]);
 		}
 	};
+	const cmdComposeDraft = async () => {
+		// Compose based on message. Most information is available, we just need to find
+		// the ID of the stored message this is a reply/forward to, based in In-Reply-To
+		// header.
+		const env = mi.Envelope;
+		let refMsgID = 0;
+		if (env.InReplyTo) {
+			refMsgID = await withStatus('Looking up referenced message', client.MessageFindMessageID(env.InReplyTo));
+		}
+		const pm = await parsedMessagePromise;
+		const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i);
+		const opts = {
+			from: (env.From || []),
+			to: (env.To || []).map(a => formatAddress(a)),
+			cc: (env.CC || []).map(a => formatAddress(a)),
+			bcc: (env.BCC || []).map(a => formatAddress(a)),
+			replyto: env.ReplyTo && env.ReplyTo.length > 0 ? formatAddress(env.ReplyTo[0]) : '',
+			subject: env.Subject,
+			isForward: isForward,
+			body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
+			responseMessageID: refMsgID,
+			draftMessageID: m.ID,
+		};
+		compose(opts, listMailboxes);
+	};
 	const cmdToggleHeaders = async () => {
 		settingsPut({ ...settings, showAllHeaders: !settings.showAllHeaders });
 		const pm = await parsedMessagePromise;
@@ -3336,6 +3492,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 	const cmdHome = async () => { msgscrollElem.scrollTo({ top: 0 }); };
 	const cmdEnd = async () => { msgscrollElem.scrollTo({ top: msgscrollElem.scrollHeight }); };
 	const shortcuts = {
+		e: cmdComposeDraft,
 		I: cmdShowInternals,
 		o: cmdOpenNewTab,
 		O: cmdOpenRaw,
@@ -3374,7 +3531,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 	const trashMailboxID = listMailboxes().find(mb => mb.Trash)?.ID;
 	// Initially called with potentially null pm, once loaded called again with pm set.
 	const loadButtons = (pm) => {
-		dom._kids(msgbuttonElem, dom.div(dom._class('pad'), (!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ', (pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ', (mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
+		dom._kids(msgbuttonElem, dom.div(dom._class('pad'), !listMailboxes().find(mb => mb.Draft) ? [] : dom.clickbutton('Edit', attr.title('Continue editing this draft message.'), clickCmd(cmdComposeDraft, shortcuts)), ' ', (!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ', (pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ', (mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
 			dom.clickbutton('Reply all', attr.title('Compose a reply to all participants of this message.'), clickCmd(cmdReplyAll, shortcuts)), ' ', dom.clickbutton('Forward', attr.title('Compose a forwarding message, optionally including attachments.'), clickCmd(cmdForward, shortcuts)), ' ', dom.clickbutton('Archive', attr.title('Move to the Archive mailbox.'), clickCmd(msglistView.cmdArchive, shortcuts)), ' ', m.MailboxID === trashMailboxID ?
 			dom.clickbutton('Delete', attr.title('Permanently delete message.'), clickCmd(msglistView.cmdDelete, shortcuts)) :
 			dom.clickbutton('Trash', attr.title('Move to the Trash mailbox.'), clickCmd(msglistView.cmdTrash, shortcuts)), ' ', dom.clickbutton('Junk', attr.title('Move to Junk mailbox, marking as junk and causing this message to be used in spam classification of new incoming messages.'), clickCmd(msglistView.cmdJunk, shortcuts)), ' ', dom.clickbutton('Move to...', function click(e) {
@@ -6091,7 +6248,6 @@ const init = async () => {
 		}
 		// Prevent many regular key presses from being processed, some possibly unintended.
 		if ((e.target instanceof window.HTMLInputElement || e.target instanceof window.HTMLTextAreaElement || e.target instanceof window.HTMLSelectElement) && !e.ctrlKey && !e.altKey && !e.metaKey) {
-			// log('skipping key without modifiers on input/textarea')
 			return;
 		}
 		let l = [];
@@ -6281,12 +6437,17 @@ const init = async () => {
 	let noreconnectTimer = 0; // Timer ID for resetting noreconnect.
 	// Don't show disconnection just before user navigates away.
 	let leaving = false;
-	window.addEventListener('beforeunload', () => {
-		leaving = true;
-		if (eventSource) {
-			eventSource.close();
-			eventSource = null;
-			sseID = 0;
+	window.addEventListener('beforeunload', (e) => {
+		if (composeView && composeView.unsavedChanges()) {
+			e.preventDefault();
+		}
+		else {
+			leaving = true;
+			if (eventSource) {
+				eventSource.close();
+				eventSource = null;
+				sseID = 0;
+			}
 		}
 	});
 	// On chromium, we may get restored when user hits the back button ("bfcache"). We

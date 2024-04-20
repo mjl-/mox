@@ -175,14 +175,14 @@ func TestAPI(t *testing.T) {
 	tneedError(t, func() { api.FlagsClear(ctx, []int64{inboxText.ID}, []string{`\unknownsystem`}) })
 
 	// MailboxSetSpecialUse
-	var inbox, archive, sent, testbox1 store.Mailbox
+	var inbox, archive, sent, drafts, testbox1 store.Mailbox
 	err = acc.DB.Read(ctx, func(tx *bstore.Tx) error {
 		get := func(k string, v any) store.Mailbox {
 			mb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual(k, v).Get()
 			tcheck(t, err, "get special-use mailbox")
 			return mb
 		}
-		get("Draft", true)
+		drafts = get("Draft", true)
 		sent = get("Sent", true)
 		archive = get("Archive", true)
 		get("Trash", true)
@@ -273,19 +273,46 @@ func TestAPI(t *testing.T) {
 	tdeliver(t, acc, testbox1Alt)
 	tdeliver(t, acc, inboxAltRel)
 
+	// MessageCompose
+	draftID := api.MessageCompose(ctx, ComposeMessage{
+		From:     "mjl@mox.example",
+		To:       []string{"mjl+to@mox.example", "mjl to2 <mjl+to2@mox.example>"},
+		Cc:       []string{"mjl+cc@mox.example", "mjl cc2 <mjl+cc2@mox.example>"},
+		Bcc:      []string{"mjl+bcc@mox.example", "mjl bcc2 <mjl+bcc2@mox.example>"},
+		Subject:  "test email",
+		TextBody: "this is the content\n\ncheers,\nmox",
+		ReplyTo:  "mjl replyto <mjl+replyto@mox.example>",
+	}, drafts.ID)
+	// Replace draft.
+	draftID = api.MessageCompose(ctx, ComposeMessage{
+		From:           "mjl@mox.example",
+		To:             []string{"mjl+to@mox.example", "mjl to2 <mjl+to2@mox.example>"},
+		Cc:             []string{"mjl+cc@mox.example", "mjl cc2 <mjl+cc2@mox.example>"},
+		Bcc:            []string{"mjl+bcc@mox.example", "mjl bcc2 <mjl+bcc2@mox.example>"},
+		Subject:        "test email",
+		TextBody:       "this is the content\n\ncheers,\nmox",
+		ReplyTo:        "mjl replyto <mjl+replyto@mox.example>",
+		DraftMessageID: draftID,
+	}, drafts.ID)
+
+	// MessageFindMessageID
+	msgID := api.MessageFindMessageID(ctx, "<absent@localhost>")
+	tcompare(t, msgID, int64(0))
+
 	// MessageSubmit
 	queue.Localserve = true // Deliver directly to us instead attempting actual delivery.
 	err = queue.Init()
 	tcheck(t, err, "queue init")
 	api.MessageSubmit(ctx, SubmitMessage{
-		From:      "mjl@mox.example",
-		To:        []string{"mjl+to@mox.example", "mjl to2 <mjl+to2@mox.example>"},
-		Cc:        []string{"mjl+cc@mox.example", "mjl cc2 <mjl+cc2@mox.example>"},
-		Bcc:       []string{"mjl+bcc@mox.example", "mjl bcc2 <mjl+bcc2@mox.example>"},
-		Subject:   "test email",
-		TextBody:  "this is the content\n\ncheers,\nmox",
-		ReplyTo:   "mjl replyto <mjl+replyto@mox.example>",
-		UserAgent: "moxwebmail/dev",
+		From:           "mjl@mox.example",
+		To:             []string{"mjl+to@mox.example", "mjl to2 <mjl+to2@mox.example>"},
+		Cc:             []string{"mjl+cc@mox.example", "mjl cc2 <mjl+cc2@mox.example>"},
+		Bcc:            []string{"mjl+bcc@mox.example", "mjl bcc2 <mjl+bcc2@mox.example>"},
+		Subject:        "test email",
+		TextBody:       "this is the content\n\ncheers,\nmox",
+		ReplyTo:        "mjl replyto <mjl+replyto@mox.example>",
+		UserAgent:      "moxwebmail/dev",
+		DraftMessageID: draftID,
 	})
 	// todo: check delivery of 6 messages to inbox, 1 to sent
 

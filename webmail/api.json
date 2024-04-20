@@ -100,6 +100,52 @@
 			]
 		},
 		{
+			"Name": "MessageFindMessageID",
+			"Docs": "MessageFindMessageID looks up a message by Message-Id header, and returns the ID\nof the message in storage. Used when opening a previously saved draft message\nfor editing again.\nIf no message is find, zero is returned, not an error.",
+			"Params": [
+				{
+					"Name": "messageID",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "id",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MessageCompose",
+			"Docs": "MessageCompose composes a message and saves it to the mailbox. Used for\nsaving draft messages.",
+			"Params": [
+				{
+					"Name": "m",
+					"Typewords": [
+						"ComposeMessage"
+					]
+				},
+				{
+					"Name": "mailboxID",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "id",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
 			"Name": "MessageSubmit",
 			"Docs": "MessageSubmit sends a message by submitting it the outgoing email queue. The\nmessage is sent to all addresses listed in the To, Cc and Bcc addresses, without\nBcc message header.\n\nIf a Sent mailbox is configured, messages are added to it after submitting\nto the delivery queue. If Bcc addresses were present, a header is prepended\nto the message stored in the Sent mailbox.",
 			"Params": [
@@ -1084,6 +1130,78 @@
 			]
 		},
 		{
+			"Name": "ComposeMessage",
+			"Docs": "ComposeMessage is a message to be composed, for saving draft messages.",
+			"Fields": [
+				{
+					"Name": "From",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Cc",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Bcc",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "ReplyTo",
+					"Docs": "If non-empty, Reply-To header to add to message.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "TextBody",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ResponseMessageID",
+					"Docs": "If set, this was a reply or forward, based on IsForward.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "DraftMessageID",
+					"Docs": "If set, previous draft message that will be removed after composing new message.",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
 			"Name": "SubmitMessage",
 			"Docs": "SubmitMessage is an email message to be sent to one or more recipients.\nAddresses are formatted as just email address, or with a name like \"name\n\u003cuser@host\u003e\".",
 			"Fields": [
@@ -1115,6 +1233,13 @@
 					"Docs": "",
 					"Typewords": [
 						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "ReplyTo",
+					"Docs": "If non-empty, Reply-To header to add to message.",
+					"Typewords": [
 						"string"
 					]
 				},
@@ -1162,13 +1287,6 @@
 					]
 				},
 				{
-					"Name": "ReplyTo",
-					"Docs": "If non-empty, Reply-To header to add to message.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
 					"Name": "UserAgent",
 					"Docs": "User-Agent header added if not empty.",
 					"Typewords": [
@@ -1196,6 +1314,13 @@
 					"Docs": "If set, thread is archived after sending message.",
 					"Typewords": [
 						"bool"
+					]
+				},
+				{
+					"Name": "DraftMessageID",
+					"Docs": "If set, draft message that will be removed after sending.",
+					"Typewords": [
+						"int64"
 					]
 				}
 			]
