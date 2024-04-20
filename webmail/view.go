@@ -1510,21 +1510,21 @@ func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bs
 			unread := map[int64]bool{} // Propagated to thread root.
 			if query.Threading == ThreadUnread {
 				for _, mi := range mil {
-					m := mi.Message
-					if m.Seen {
+					mm := mi.Message
+					if mm.Seen {
 						continue
 					}
-					unread[m.ID] = true
-					for _, id := range m.ThreadParentIDs {
+					unread[mm.ID] = true
+					for _, id := range mm.ThreadParentIDs {
 						unread[id] = true
 					}
 				}
 			}
 			for _, mi := range mil {
-				m := mi.Message
+				mm := mi.Message
 				threadRoot := true
-				rootID := m.ID
-				for _, id := range m.ThreadParentIDs {
+				rootID := mm.ID
+				for _, id := range mm.ThreadParentIDs {
 					if _, ok := collapsed[id]; ok {
 						threadRoot = false
 						rootID = id
