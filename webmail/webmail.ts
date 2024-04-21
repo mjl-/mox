@@ -63,16 +63,14 @@ Enable consistency checking in UI updates:
 	settingsPut({...settings, checkConsistency: true})
 
 - todo: in msglistView, show names of people we have sent to, and address otherwise. or at don't show names for first-time senders.
-- todo: implement settings stored in the server, such as mailboxCollapsed, keyboard shortcuts. also new settings for displaying email as html by default for configured sender address or domain. name to use for "From", optional default Reply-To and Bcc addresses, signatures (per address), configured labels/keywords with human-readable name, colors and toggling with shortcut keys 1-9.
+- todo: implement settings stored in the server, such as mailboxCollapsed, keyboard shortcuts. name to use for "From", optional default Reply-To and Bcc addresses, signatures (per address), configured labels/keywords with human-readable name, colors and toggling with shortcut keys 1-9.
 - todo: automated tests? perhaps some unit tests, then ui scenario's.
 - todo: compose, wrap lines
 - todo: composing of html messages. possibly based on contenteditable. would be good if we can include original html, but quoted. must make sure to not include dangerous scripts/resources, or sandbox it.
 - todo: make alt up/down keys work on html iframe too. requires loading it from sameorigin, to get access to its inner document.
 - todo: reconnect with last known modseq and don't clear the message list, only update it
-- todo: resize and move of compose window
 - todo: find and use svg icons for flags in the msgitemView. junk (fire), forwarded, replied, attachment (paperclip), flagged (flag), phishing (?). also for special-use mailboxes (junk, trash, archive, draft, sent). should be basic and slim.
 - todo: for embedded messages (message/rfc822 or message/global), allow viewing it as message, perhaps in a popup?
-- todo: for content-disposition: inline, show images alongside text?
 - todo: only show orange underline where it could be a problem? in addresses and anchor texts. we may be lighting up a christmas tree now, desensitizing users.
 - todo: saved searches that are displayed below list of mailboxes, for quick access to preset view
 - todo: when search on free-form text is active, highlight the searched text in the message view.
@@ -83,8 +81,7 @@ Enable consistency checking in UI updates:
 - todo: more search criteria? Date header field (instead of time received), text vs html (only, either or both), attachment filenames and sizes
 - todo: integrate more of the account page into webmail? importing/exporting messages, configuring delivery rules (possibly with sieve).
 - todo: configurable keyboard shortcuts? we use strings like "ctrl p" which we already generate and match on, add a mapping from command name to cmd* functions, and have a map of keys to command names. the commands for up/down with shift/ctrl modifiers may need special attention.
-- todo: nicer address input fields like other mail clients do. with tab to autocomplete and turn input into a box and delete removing of the entire address.
-- todo: consider composing messages with bcc headers that are kept as message Bcc headers, optionally with checkbox.
+- todo: consider composing messages with bcc headers that are sent as message Bcc headers to the bcc-addressees, optionally with checkbox.
 - todo: improve accessibility
 - todo: threading mode where we don't show messages in Trash/Sent in thread?
 - todo: msglistView: preload next message?
