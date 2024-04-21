@@ -153,7 +153,11 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 
 			# Use 0.0.0.0 to listen on all IPv4 and/or :: to listen on all IPv6 addresses, but
 			# it is better to explicitly specify the IPs you want to use for email, as mox
-			# will make sure outgoing connections will only be made from one of those IPs.
+			# will make sure outgoing connections will only be made from one of those IPs. If
+			# both outgoing IPv4 and IPv6 connectivity is possible, and only one family has
+			# explicitly configured addresses, both address families are still used for
+			# outgoing connections. Use the "direct" transport to limit address families for
+			# outgoing connections.
 			IPs:
 				-
 
