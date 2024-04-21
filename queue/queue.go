@@ -1557,7 +1557,7 @@ func deliver(log mlog.Log, resolver dns.Resolver, m0 Msg) {
 			var err error
 			var mb store.Mailbox
 			acc.WithWLock(func() {
-				dest := conf.Destinations[qm.Sender().String()]
+				dest := conf.Destinations[qm.Recipient().String()]
 				err = acc.DeliverDestination(log, dest, &dm, msgFile)
 				if err != nil {
 					err = fmt.Errorf("delivering message: %v", err)
