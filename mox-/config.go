@@ -1335,6 +1335,14 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 					}
 					c.Accounts[accName].Destinations[addrName].Rulesets[i].SMTPMailFromRegexpCompiled = r
 				}
+				if rs.MsgFromRegexp != "" {
+					n++
+					r, err := regexp.Compile(rs.MsgFromRegexp)
+					if err != nil {
+						addErrorf("invalid MsgFrom regular expression: %v", err)
+					}
+					c.Accounts[accName].Destinations[addrName].Rulesets[i].MsgFromRegexpCompiled = r
+				}
 				if rs.VerifiedDomain != "" {
 					n++
 					d, err := dns.ParseDomain(rs.VerifiedDomain)

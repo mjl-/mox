@@ -16,8 +16,10 @@ import (
 	"net/mail"
 	"net/textproto"
 	"os"
+	"regexp"
 	"runtime/debug"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -31,10 +33,12 @@ import (
 	"github.com/mjl-/sherpadoc"
 	"github.com/mjl-/sherpaprom"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
@@ -1904,12 +1908,272 @@ func (Webmail) SettingsSave(ctx context.Context, settings store.Settings) {
 	xcheckf(ctx, err, "save settings")
 }
 
+func (Webmail) RulesetSuggestMove(ctx context.Context, msgID, mbSrcID, mbDstID int64) (listID string, msgFrom string, isRemove bool, rcptTo string, ruleset *config.Ruleset) {
+	withAccount(ctx, func(log mlog.Log, acc *store.Account) {
+		xdbread(ctx, acc, func(tx *bstore.Tx) {
+			m := xmessageID(ctx, tx, msgID)
+			mbSrc := xmailboxID(ctx, tx, mbSrcID)
+			mbDst := xmailboxID(ctx, tx, mbDstID)
+
+			if m.RcptToLocalpart == "" && m.RcptToDomain == "" {
+				return
+			}
+			rcptTo = m.RcptToLocalpart.String() + "@" + m.RcptToDomain
+
+			conf, _ := acc.Conf()
+			dest := conf.Destinations[rcptTo] // May not be present.
+			defaultMailbox := "Inbox"
+			if dest.Mailbox != "" {
+				defaultMailbox = dest.Mailbox
+			}
+
+			// Only suggest rules for messages moved into/out of the default mailbox (Inbox).
+			if mbSrc.Name != defaultMailbox && mbDst.Name != defaultMailbox {
+				return
+			}
+
+			// Check if we have a previous answer "No" answer for moving from/to mailbox.
+			exists, err := bstore.QueryTx[store.RulesetNoMailbox](tx).FilterNonzero(store.RulesetNoMailbox{MailboxID: mbSrcID}).FilterEqual("ToMailbox", false).Exists()
+			xcheckf(ctx, err, "looking up previous response for source mailbox")
+			if exists {
+				return
+			}
+			exists, err = bstore.QueryTx[store.RulesetNoMailbox](tx).FilterNonzero(store.RulesetNoMailbox{MailboxID: mbDstID}).FilterEqual("ToMailbox", true).Exists()
+			xcheckf(ctx, err, "looking up previous response for destination mailbox")
+			if exists {
+				return
+			}
+
+			// Parse message for List-Id header.
+			state := msgState{acc: acc}
+			defer state.clear()
+			pm, err := parsedMessage(log, m, &state, true, false)
+			xcheckf(ctx, err, "parsing message")
+
+			// The suggested ruleset. Once all is checked, we'll return it.
+			var nrs *config.Ruleset
+
+			// If List-Id header is present, we'll treat it as a (mailing) list message.
+			if l, ok := pm.Headers["List-Id"]; ok {
+				if len(l) != 1 {
+					log.Debug("not exactly one list-id header", slog.Any("listid", l))
+					return
+				}
+				var listIDDom dns.Domain
+				listID, listIDDom = parseListID(l[0])
+				if listID == "" {
+					log.Debug("invalid list-id header", slog.String("listid", l[0]))
+					return
+				}
+
+				// Check if we have a previous "No" answer for this list-id.
+				no := store.RulesetNoListID{
+					RcptToAddress: rcptTo,
+					ListID:        listID,
+					ToInbox:       mbDst.Name == "Inbox",
+				}
+				exists, err = bstore.QueryTx[store.RulesetNoListID](tx).FilterNonzero(no).Exists()
+				xcheckf(ctx, err, "looking up previous response for list-id")
+				if exists {
+					return
+				}
+
+				// Find the "ListAllowDomain" to use. We only match and move messages with verified
+				// SPF/DKIM. Otherwise spammers could add a list-id headers for mailing lists you
+				// are subscribed to, and take advantage of any reduced junk filtering.
+				listIDDomStr := listIDDom.Name()
+
+				doms := m.DKIMDomains
+				if m.MailFromValidated {
+					doms = append(doms, m.MailFromDomain)
+				}
+				// Sort, we prefer the shortest name, e.g. DKIM signature on whole domain instead
+				// of SPF verification of one host.
+				sort.Slice(doms, func(i, j int) bool {
+					return len(doms[i]) < len(doms[j])
+				})
+				var listAllowDom string
+				for _, dom := range doms {
+					if dom == listIDDomStr || strings.HasSuffix(listIDDomStr, "."+dom) {
+						listAllowDom = dom
+						break
+					}
+				}
+				if listAllowDom == "" {
+					return
+				}
+
+				listIDRegExp := regexp.QuoteMeta(fmt.Sprintf("<%s>", listID)) + "$"
+				nrs = &config.Ruleset{
+					HeadersRegexp:   map[string]string{"^list-id$": listIDRegExp},
+					ListAllowDomain: listAllowDom,
+					Mailbox:         mbDst.Name,
+				}
+			} else {
+				// Otherwise, try to make a rule based on message "From" address.
+				if m.MsgFromLocalpart == "" && m.MsgFromDomain == "" {
+					return
+				}
+				msgFrom = m.MsgFromLocalpart.String() + "@" + m.MsgFromDomain
+
+				no := store.RulesetNoMsgFrom{
+					RcptToAddress:  rcptTo,
+					MsgFromAddress: msgFrom,
+					ToInbox:        mbDst.Name == "Inbox",
+				}
+				exists, err = bstore.QueryTx[store.RulesetNoMsgFrom](tx).FilterNonzero(no).Exists()
+				xcheckf(ctx, err, "looking up previous response for message from address")
+				if exists {
+					return
+				}
+
+				nrs = &config.Ruleset{
+					MsgFromRegexp: "^" + regexp.QuoteMeta(msgFrom) + "$",
+					Mailbox:       mbDst.Name,
+				}
+			}
+
+			// Only suggest adding/removing rule if it isn't/is present.
+			var have bool
+			for _, rs := range dest.Rulesets {
+				xrs := config.Ruleset{
+					MsgFromRegexp:   rs.MsgFromRegexp,
+					HeadersRegexp:   rs.HeadersRegexp,
+					ListAllowDomain: rs.ListAllowDomain,
+					Mailbox:         nrs.Mailbox,
+				}
+				if xrs.Equal(*nrs) {
+					have = true
+					break
+				}
+			}
+			isRemove = mbDst.Name == defaultMailbox
+			if isRemove {
+				nrs.Mailbox = mbSrc.Name
+			}
+			if isRemove && !have || !isRemove && have {
+				return
+			}
+
+			// We'll be returning a suggested ruleset.
+			nrs.Comment = "by webmail on " + time.Now().Format("2006-01-02")
+			ruleset = nrs
+		})
+	})
+	return
+}
+
+// Parse the list-id value (the value between <>) from a list-id header.
+// Returns an empty string if it couldn't be parsed.
+func parseListID(s string) (listID string, dom dns.Domain) {
+	// ../rfc/2919:198
+	s = strings.TrimRight(s, " \t")
+	if !strings.HasSuffix(s, ">") {
+		return "", dns.Domain{}
+	}
+	s = s[:len(s)-1]
+	t := strings.Split(s, "<")
+	if len(t) == 1 {
+		return "", dns.Domain{}
+	}
+	s = t[len(t)-1]
+	dom, err := dns.ParseDomain(s)
+	if err != nil {
+		return "", dom
+	}
+	return s, dom
+}
+
+func (Webmail) RulesetAdd(ctx context.Context, rcptTo string, ruleset config.Ruleset) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		dest, ok := acc.Destinations[rcptTo]
+		if !ok {
+			// todo: we could find the catchall address and add the rule, or add the address explicitly.
+			xcheckuserf(ctx, errors.New("destination address not found in account (hint: if this is a catchall address, configure the address explicitly to configure rulesets)"), "looking up address")
+		}
+
+		nd := map[string]config.Destination{}
+		for addr, d := range acc.Destinations {
+			nd[addr] = d
+		}
+		dest.Rulesets = append(slices.Clone(dest.Rulesets), ruleset)
+		nd[rcptTo] = dest
+		acc.Destinations = nd
+	})
+	xcheckf(ctx, err, "saving account with new ruleset")
+}
+
+func (Webmail) RulesetRemove(ctx context.Context, rcptTo string, ruleset config.Ruleset) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		dest, ok := acc.Destinations[rcptTo]
+		if !ok {
+			xcheckuserf(ctx, errors.New("destination address not found in account"), "looking up address")
+		}
+
+		nd := map[string]config.Destination{}
+		for addr, d := range acc.Destinations {
+			nd[addr] = d
+		}
+		var l []config.Ruleset
+		skipped := 0
+		for _, rs := range dest.Rulesets {
+			if rs.Equal(ruleset) {
+				skipped++
+			} else {
+				l = append(l, rs)
+			}
+		}
+		if skipped != 1 {
+			xcheckuserf(ctx, fmt.Errorf("affected %d configured rulesets, expected 1", skipped), "changing rulesets")
+		}
+		dest.Rulesets = l
+		nd[rcptTo] = dest
+		acc.Destinations = nd
+	})
+	xcheckf(ctx, err, "saving account with new ruleset")
+}
+
+func (Webmail) RulesetMessageNever(ctx context.Context, rcptTo, listID, msgFrom string, toInbox bool) {
+	withAccount(ctx, func(log mlog.Log, acc *store.Account) {
+		var err error
+		if listID != "" {
+			err = acc.DB.Insert(ctx, &store.RulesetNoListID{RcptToAddress: rcptTo, ListID: listID, ToInbox: toInbox})
+		} else {
+			err = acc.DB.Insert(ctx, &store.RulesetNoMsgFrom{RcptToAddress: rcptTo, MsgFromAddress: msgFrom, ToInbox: toInbox})
+		}
+		xcheckf(ctx, err, "storing user response")
+	})
+}
+
+func (Webmail) RulesetMailboxNever(ctx context.Context, mailboxID int64, toMailbox bool) {
+	withAccount(ctx, func(log mlog.Log, acc *store.Account) {
+		err := acc.DB.Insert(ctx, &store.RulesetNoMailbox{MailboxID: mailboxID, ToMailbox: toMailbox})
+		xcheckf(ctx, err, "storing user response")
+	})
+}
+
 func slicesAny[T any](l []T) []any {
 	r := make([]any, len(l))
 	for i, v := range l {
 		r[i] = v
 	}
 	return r
+}
+
+func withAccount(ctx context.Context, fn func(log mlog.Log, acc *store.Account)) {
+	log := pkglog.WithContext(ctx)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc, err := store.OpenAccount(log, reqInfo.AccountName)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+	fn(log, acc)
 }
 
 // SSETypes exists to ensure the generated API contains the types, for use in SSE events.

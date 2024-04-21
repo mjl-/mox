@@ -757,6 +757,37 @@ type FromAddressSettings struct {
 	ViewMode    ViewMode
 }
 
+// RulesetNoListID records a user "no" response to the question of
+// creating/removing a ruleset after moving a message with list-id header from/to
+// the inbox.
+type RulesetNoListID struct {
+	ID            int64
+	RcptToAddress string `bstore:"nonzero"`
+	ListID        string `bstore:"nonzero"`
+	ToInbox       bool   // Otherwise from Inbox to other mailbox.
+}
+
+// RulesetNoMsgFrom records a user "no" response to the question of
+// creating/moveing a ruleset after moving a mesage with message "from" address
+// from/to the inbox.
+type RulesetNoMsgFrom struct {
+	ID             int64
+	RcptToAddress  string `bstore:"nonzero"`
+	MsgFromAddress string `bstore:"nonzero"` // Unicode.
+	ToInbox        bool   // Otherwise from Inbox to other mailbox.
+}
+
+// RulesetNoMailbox represents a "never from/to this mailbox" response to the
+// question of adding/removing a ruleset after moving a message.
+type RulesetNoMailbox struct {
+	ID int64
+
+	// The mailbox from/to which the move has happened.
+	// Not a references, if mailbox is deleted, an entry becomes ineffective.
+	MailboxID int64 `bstore:"nonzero"`
+	ToMailbox bool  // Whether MailboxID is the destination of the move (instead of source).
+}
+
 // Types stored in DB.
 var DBTypes = []any{
 	NextUIDValidity{},
@@ -774,6 +805,9 @@ var DBTypes = []any{
 	LoginSession{},
 	Settings{},
 	FromAddressSettings{},
+	RulesetNoListID{},
+	RulesetNoMsgFrom{},
+	RulesetNoMailbox{},
 }
 
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.
@@ -1758,7 +1792,7 @@ func (a *Account) SubscriptionEnsure(tx *bstore.Tx, name string) ([]Change, erro
 	return []Change{ChangeAddSubscription{name, []string{`\NonExistent`}}}, nil
 }
 
-// MessageRuleset returns the first ruleset (if any) that message the message
+// MessageRuleset returns the first ruleset (if any) that matches the message
 // represented by msgPrefix and msgFile, with smtp and validation fields from m.
 func MessageRuleset(log mlog.Log, dest config.Destination, m *Message, msgPrefix []byte, msgFile *os.File) *config.Ruleset {
 	if len(dest.Rulesets) == 0 {
@@ -1783,6 +1817,11 @@ ruleset:
 	for _, rs := range dest.Rulesets {
 		if rs.SMTPMailFromRegexpCompiled != nil {
 			if !rs.SMTPMailFromRegexpCompiled.MatchString(m.MailFrom) {
+				continue ruleset
+			}
+		}
+		if rs.MsgFromRegexpCompiled != nil {
+			if m.MsgFromLocalpart == "" && m.MsgFromDomain == "" || !rs.MsgFromRegexpCompiled.MatchString(m.MsgFromLocalpart.String()+"@"+m.MsgFromDomain) {
 				continue ruleset
 			}
 		}

@@ -53,6 +53,7 @@ func TestAPI(t *testing.T) {
 	os.RemoveAll("../testdata/webmail/data")
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webmail/mox.conf")
+	mox.ConfigDynamicPath = filepath.FromSlash("../testdata/webmail/domains.conf")
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
 
@@ -469,4 +470,65 @@ func TestAPI(t *testing.T) {
 	rs, err = recipientSecurity(ctx, resolver, "mjl@a.mox.example")
 	tcompare(t, err, nil)
 	tcompare(t, rs, RecipientSecurity{SecurityResultYes, SecurityResultNo, SecurityResultNo, SecurityResultNo, SecurityResultNo})
+
+	// Suggesting/adding/removing rulesets.
+
+	testSuggest := func(msgID int64, expListID string, expMsgFrom string) {
+		listID, msgFrom, isRemove, rcptTo, ruleset := api.RulesetSuggestMove(ctx, msgID, inbox.ID, testbox1.ID)
+		tcompare(t, listID, expListID)
+		tcompare(t, msgFrom, expMsgFrom)
+		tcompare(t, isRemove, false)
+		tcompare(t, rcptTo, "mox@other.example")
+		tcompare(t, ruleset == nil, false)
+
+		// Moving in opposite direction doesn't get a suggestion without the rule present.
+		_, _, _, _, rs0 := api.RulesetSuggestMove(ctx, msgID, testbox1.ID, inbox.ID)
+		tcompare(t, rs0 == nil, true)
+
+		api.RulesetAdd(ctx, rcptTo, *ruleset)
+
+		// Ruleset that exists won't get a suggestion again.
+		_, _, _, _, ruleset = api.RulesetSuggestMove(ctx, msgID, inbox.ID, testbox1.ID)
+		tcompare(t, ruleset == nil, true)
+
+		// Moving in oppositive direction, with rule present, gets the suggestion to remove.
+		_, _, _, _, ruleset = api.RulesetSuggestMove(ctx, msgID, testbox1.ID, inbox.ID)
+		tcompare(t, ruleset == nil, false)
+
+		api.RulesetRemove(ctx, rcptTo, *ruleset)
+
+		// If ListID/MsgFrom is marked as never, we won't get a suggestion.
+		api.RulesetMessageNever(ctx, rcptTo, expListID, expMsgFrom, false)
+		_, _, _, _, ruleset = api.RulesetSuggestMove(ctx, msgID, inbox.ID, testbox1.ID)
+		tcompare(t, ruleset == nil, true)
+
+		var n int
+		if expListID != "" {
+			n, err = bstore.QueryDB[store.RulesetNoListID](ctx, acc.DB).Delete()
+		} else {
+			n, err = bstore.QueryDB[store.RulesetNoMsgFrom](ctx, acc.DB).Delete()
+		}
+		tcheck(t, err, "remove never-answer for listid/msgfrom")
+		tcompare(t, n, 1)
+		_, _, _, _, ruleset = api.RulesetSuggestMove(ctx, msgID, inbox.ID, testbox1.ID)
+		tcompare(t, ruleset == nil, false)
+
+		// If Mailbox is marked as never, we won't get a suggestion.
+		api.RulesetMailboxNever(ctx, testbox1.ID, true)
+		_, _, _, _, ruleset = api.RulesetSuggestMove(ctx, msgID, inbox.ID, testbox1.ID)
+		tcompare(t, ruleset == nil, true)
+
+		n, err = bstore.QueryDB[store.RulesetNoMailbox](ctx, acc.DB).Delete()
+		tcheck(t, err, "remove never-answer for mailbox")
+		tcompare(t, n, 1)
+
+	}
+
+	// For MsgFrom.
+	tdeliver(t, acc, inboxText)
+	testSuggest(inboxText.ID, "", "mjl@mox.example")
+
+	// For List-Id.
+	tdeliver(t, acc, inboxHTML)
+	testSuggest(inboxHTML.ID, "list.mox.example", "")
 }

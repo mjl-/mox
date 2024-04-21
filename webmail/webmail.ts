@@ -81,7 +81,7 @@ Enable consistency checking in UI updates:
 - todo: buttons/mechanism to operate on all messages in a mailbox/search query, without having to list and select all messages. e.g. clearing flags/labels.
 - todo: can we detect if browser supports proper CSP? if not, refuse to load html messages?
 - todo: more search criteria? Date header field (instead of time received), text vs html (only, either or both), attachment filenames and sizes
-- todo: integrate more of the account page into webmail? importing/exporting messages, configuring delivery rules (possibly with sieve). for messages moved out of inbox to non-special-use mailbox, show button that helps make an automatic rule to move such messages again (e.g. based on message From address, message From domain or List-ID header).
+- todo: integrate more of the account page into webmail? importing/exporting messages, configuring delivery rules (possibly with sieve).
 - todo: configurable keyboard shortcuts? we use strings like "ctrl p" which we already generate and match on, add a mapping from command name to cmd* functions, and have a map of keys to command names. the commands for up/down with shift/ctrl modifiers may need special attention.
 - todo: nicer address input fields like other mail clients do. with tab to autocomplete and turn input into a box and delete removing of the entire address.
 - todo: consider composing messages with bcc headers that are kept as message Bcc headers, optionally with checkbox.
@@ -2208,8 +2208,12 @@ const movePopover = (e: MouseEvent, mailboxes: api.Mailbox[], msgs: api.Message[
 						mb.Name,
 						mb.ID === msgsMailboxID ? attr.disabled('') : [],
 						async function click() {
-							const msgIDs = msgs.filter(m => m.MailboxID !== mb.ID).map(m => m.ID)
+							const moveMsgs = msgs.filter(m => m.MailboxID !== mb.ID)
+							const msgIDs = moveMsgs.map(m => m.ID)
 							await withStatus('Moving to mailbox', client.MessageMove(msgIDs, mb.ID))
+							if (moveMsgs.length === 1) {
+								await moveAskRuleset(moveMsgs[0].ID, moveMsgs[0].MailboxID, mb, mailboxes)
+							}
 							remove()
 						}
 					),
@@ -2218,6 +2222,95 @@ const movePopover = (e: MouseEvent, mailboxes: api.Mailbox[], msgs: api.Message[
 		)
 	)
 }
+
+// We've moved a single message. If the source or destination mailbox is not a
+// "special-use" mailbox (other than inbox), and there isn't a rule yet or there is
+// one we may want to delete, and we haven't asked about adding/removing this
+// ruleset before, ask the user to add/remove a ruleset for moving. If the message
+// has a list-id header, we ask to create a ruleset treating it as a mailing list
+// message matching on future list-id header and spf/dkim verified domain,
+// otherwise we make a rule based on message "from" address.
+const moveAskRuleset = async (msgID: number, mbSrcID: number, mbDst: api.Mailbox, mailboxes: api.Mailbox[]) => {
+	const mbSrc = mailboxes.find(mb => mb.ID === mbSrcID)
+	if (!mbSrc || isSpecialUse(mbDst) || isSpecialUse(mbSrc)) {
+		return
+	}
+
+	const [listID, msgFrom, isRemove, rcptTo, ruleset] = await withStatus('Checking rulesets', client.RulesetSuggestMove(msgID, mbSrc.ID, mbDst.ID))
+	if (!ruleset) {
+		return
+	}
+
+	const what = listID ? ['list with id "', listID, '"'] : ['address "', msgFrom, '"']
+
+	if (isRemove) {
+		const remove = popup(
+			dom.h1('Remove rule?'),
+			dom.p(
+				style({maxWidth: '30em'}),
+				'Would you like to remove the server-side rule that automatically delivers messages from ', what, ' to mailbox "', mbDst.Name, '"?',
+			),
+			dom.br(),
+			dom.div(
+				dom.clickbutton('Yes, remove rule', async function click() {
+					await withStatus('Remove ruleset', client.RulesetRemove(rcptTo, ruleset))
+					remove()
+				}), ' ',
+				dom.clickbutton('Not now', async function click() {
+					remove()
+				}),
+			),
+			dom.br(),
+			dom.div(
+			style({marginBottom: '1ex'}),
+				dom.clickbutton("No, and don't ask again for ", what, async function click() {
+					await withStatus('Store ruleset response', client.RulesetMessageNever(rcptTo, listID, msgFrom, true))
+					remove()
+				}),
+			),
+			dom.div(
+				dom.clickbutton("No, and don't ask again when moving messages out of \"", mbSrc.Name, '"', async function click() {
+					await withStatus('Store ruleset response', client.RulesetMailboxNever(mbSrc.ID, false))
+					remove()
+				}),
+			),
+		)
+		return
+	}
+	const remove = popup(
+		dom.h1('Add rule?'),
+		dom.p(
+			style({maxWidth: '30em'}),
+			'Would you like to create a server-side ruleset that automatically delivers future messages from ', what, ' to mailbox "', mbDst.Name, '"?',
+		),
+		dom.br(),
+		dom.div(
+			dom.clickbutton('Yes, add rule', async function click() {
+				await withStatus('Add ruleset', client.RulesetAdd(rcptTo, ruleset))
+				remove()
+			}), ' ',
+			dom.clickbutton('Not now', async function click() {
+				remove()
+			}),
+		),
+		dom.br(),
+		dom.div(
+			style({marginBottom: '1ex'}),
+			dom.clickbutton("No, and don't ask again for ", what, async function click() {
+				await withStatus('Store ruleset response', client.RulesetMessageNever(rcptTo, listID, msgFrom, false))
+				remove()
+			}),
+		),
+		dom.div(
+			dom.clickbutton("No, and don't ask again when moving messages to \"", mbDst.Name, '"', async function click() {
+				await withStatus('Store ruleset response', client.RulesetMailboxNever(mbDst.ID, true))
+				remove()
+			}),
+		),
+	)
+}
+
+const isSpecialUse = (mb: api.Mailbox) => mb.Archive || mb.Draft || mb.Junk || mb.Sent || mb.Trash
 
 // MsgitemView is a message-line in the list of messages. Selecting it loads and displays the message, a MsgView.
 interface MsgitemView {
@@ -5047,6 +5140,11 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 				.filter(mbMsgID => mailboxMsgIDs.length === 1 || !sentMailboxID || mbMsgID[0] !== sentMailboxID || !otherMailbox(sentMailboxID))
 				.map(mbMsgID => mbMsgID[1])
 			await withStatus('Moving to '+xmb.Name, client.MessageMove(msgIDs, xmb.ID))
+			if (msgIDs.length === 1) {
+				const msgID = msgIDs[0]
+				const mbSrcID = mailboxMsgIDs.find(mbMsgID => mbMsgID[1] === msgID)![0]
+				await moveAskRuleset(msgID, mbSrcID, xmb, mailboxlistView.mailboxes())
+			}
 		},
 		dom.div(dom._class('mailbox'),
 			style({display: 'flex', justifyContent: 'space-between'}),

@@ -998,6 +998,10 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 							# address (not the message From-header). E.g. '^user@example\.org$'. (optional)
 							SMTPMailFromRegexp:
 
+							# Matches if this regular expression matches (a substring of) the single address
+							# in the message From header. (optional)
+							MsgFromRegexp:
+
 							# Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain.
 							# (optional)
 							VerifiedDomain:
@@ -1047,6 +1051,9 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 
 							# Mailbox to deliver to if this ruleset matches.
 							Mailbox:
+
+							# Free-form comments. (optional)
+							Comment:
 
 					# Full name to use in message From header when composing messages coming from this
 					# address with webmail. (optional)

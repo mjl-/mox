@@ -439,6 +439,151 @@
 			"Returns": []
 		},
 		{
+			"Name": "RulesetSuggestMove",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "msgID",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "mbSrcID",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "mbDstID",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "listID",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "msgFrom",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "isRemove",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "rcptTo",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ruleset",
+					"Typewords": [
+						"nullable",
+						"Ruleset"
+					]
+				}
+			]
+		},
+		{
+			"Name": "RulesetAdd",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "rcptTo",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ruleset",
+					"Typewords": [
+						"Ruleset"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "RulesetRemove",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "rcptTo",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ruleset",
+					"Typewords": [
+						"Ruleset"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "RulesetMessageNever",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "rcptTo",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "listID",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "msgFrom",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "toInbox",
+					"Typewords": [
+						"bool"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "RulesetMailboxNever",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "mailboxID",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "toMailbox",
+					"Typewords": [
+						"bool"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "SSETypes",
 			"Docs": "SSETypes exists to ensure the generated API contains the types, for use in SSE events.",
 			"Params": [],
@@ -1597,6 +1742,90 @@
 					"Docs": "Whether to show the bars underneath the address input fields indicating starttls/dnssec/dane/mtasts/requiretls support by address.",
 					"Typewords": [
 						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Ruleset",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "SMTPMailFromRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MsgFromRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "VerifiedDomain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "HeadersRegexp",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				},
+				{
+					"Name": "IsForward",
+					"Docs": "todo: once we implement ARC, we can use dkim domains that we cannot verify but that the arc-verified forwarding mail server was able to verify.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ListAllowDomain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "AcceptRejectsToMailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Mailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Comment",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "VerifiedDNSDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "ListAllowDNSDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
 					]
 				}
 			]

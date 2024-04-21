@@ -1323,12 +1323,14 @@ const destination = async (name: string) => {
 		root: HTMLElement
 
 		smtpMailFromRegexp: HTMLInputElement
+		msgFromRegexp: HTMLInputElement
 		verifiedDomain: HTMLInputElement
 		headers: Header[]
 		isForward: HTMLInputElement // Checkbox
 		listAllowDomain: HTMLInputElement
 		acceptRejectsToMailbox: HTMLInputElement
 		mailbox: HTMLInputElement
+		comment: HTMLInputElement
 	}
 
 	let rulesetsTbody = dom.tbody()
@@ -1370,20 +1372,24 @@ const destination = async (name: string) => {
 		}
 
 		let smtpMailFromRegexp: HTMLInputElement
+		let msgFromRegexp: HTMLInputElement
 		let verifiedDomain: HTMLInputElement
 		let isForward: HTMLInputElement // Checkbox
 		let listAllowDomain: HTMLInputElement
 		let acceptRejectsToMailbox: HTMLInputElement
 		let mailbox: HTMLInputElement
+		let comment: HTMLInputElement
 
 		const root = dom.tr(
 			dom.td(smtpMailFromRegexp=dom.input(attr.value(rs.SMTPMailFromRegexp || ''))),
+			dom.td(msgFromRegexp=dom.input(attr.value(rs.MsgFromRegexp || ''))),
 			dom.td(verifiedDomain=dom.input(attr.value(rs.VerifiedDomain || ''))),
 			headersCell,
 			dom.td(dom.label(isForward=dom.input(attr.type('checkbox'), rs.IsForward ? attr.checked('') : [] ))),
 			dom.td(listAllowDomain=dom.input(attr.value(rs.ListAllowDomain || ''))),
 			dom.td(acceptRejectsToMailbox=dom.input(attr.value(rs.AcceptRejectsToMailbox || ''))),
 			dom.td(mailbox=dom.input(attr.value(rs.Mailbox || ''))),
+			dom.td(comment=dom.input(attr.value(rs.Comment || ''))),
 			dom.td(
 				dom.clickbutton('Remove ruleset', function click() {
 					row.root.remove()
@@ -1394,12 +1400,14 @@ const destination = async (name: string) => {
 		row = {
 			root: root,
 			smtpMailFromRegexp: smtpMailFromRegexp,
+			msgFromRegexp: msgFromRegexp,
 			verifiedDomain: verifiedDomain,
 			headers: [],
 			isForward: isForward,
 			listAllowDomain: listAllowDomain,
 			acceptRejectsToMailbox: acceptRejectsToMailbox,
 			mailbox: mailbox,
+			comment: comment,
 		}
 		rulesetsRows.push(row)
 
@@ -1454,29 +1462,33 @@ const destination = async (name: string) => {
 			dom.thead(
 				dom.tr(
 					dom.th('SMTP "MAIL FROM" regexp', attr.title('Matches if this regular expression matches (a substring of) the SMTP MAIL FROM address (not the message From-header). E.g. user@example.org.')),
+					dom.th('Message "From" address regexp', attr.title('Matches if this regular expression matches (a substring of) the single address in the message From header.')),
 					dom.th('Verified domain', attr.title('Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain.')),
 					dom.th('Headers regexp', attr.title('Matches if these header field/value regular expressions all match (substrings of) the message headers. Header fields and valuees are converted to lower case before matching. Whitespace is trimmed from the value before matching. A header field can occur multiple times in a message, only one instance has to match. For mailing lists, you could match on ^list-id$ with the value typically the mailing list address in angled brackets with @ replaced with a dot, e.g. <name\\.lists\\.example\\.org>.')),
 					dom.th('Is Forward', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. Can only be used together with SMTPMailFromRegexp and VerifiedDomain. SMTPMailFromRegexp must be set to the address used to deliver the forwarded message, e.g. '^user(|\\+.*)@forward\\.example$'. Changes to junk analysis: 1. Messages are not rejected for failing a DMARC policy, because a legitimate forwarded message without valid/intact/aligned DKIM signature would be rejected because any verified SPF domain will be 'unaligned', of the forwarding mail server. 2. The sending mail server IP address, and sending EHLO and MAIL FROM domains and matching DKIM domain aren't used in future reputation-based spam classifications (but other verified DKIM domains are) because the forwarding server is not a useful spam signal for future messages.")),
 					dom.th('List allow domain', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation.")),
 					dom.th('Allow rejects to mailbox', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. If a message is classified as spam, it isn't rejected during the SMTP transaction (the normal behaviour), but accepted during the SMTP transaction and delivered to the specified mailbox. The specified mailbox is not automatically cleaned up like the account global Rejects mailbox, unless set to that Rejects mailbox.")),
 					dom.th('Mailbox', attr.title('Mailbox to deliver to if this ruleset matches.')),
+					dom.th('Comment', attr.title('Free-form comments.')),
 					dom.th('Action'),
 				)
 			),
 			rulesetsTbody,
 			dom.tfoot(
 				dom.tr(
-					dom.td(attr.colspan('7')),
+					dom.td(attr.colspan('9')),
 					dom.td(
 						dom.clickbutton('Add ruleset', function click() {
 							addRulesetsRow({
 								SMTPMailFromRegexp: '',
+								MsgFromRegexp: '',
 								VerifiedDomain: '',
 								HeadersRegexp: {},
 								IsForward: false,
 								ListAllowDomain: '',
 								AcceptRejectsToMailbox: '',
 								Mailbox: '',
+								Comment: '',
 								VerifiedDNSDomain: {ASCII: '', Unicode: ''},
 								ListAllowDNSDomain: {ASCII: '', Unicode: ''},
 							})
@@ -1493,12 +1505,14 @@ const destination = async (name: string) => {
 				Rulesets: rulesetsRows.map(row => {
 					return {
 						SMTPMailFromRegexp: row.smtpMailFromRegexp.value,
+						MsgFromRegexp: row.msgFromRegexp.value,
 						VerifiedDomain: row.verifiedDomain.value,
 						HeadersRegexp: Object.fromEntries(row.headers.map(h => [h.key.value, h.value.value])),
 						IsForward: row.isForward.checked,
 						ListAllowDomain: row.listAllowDomain.value,
 						AcceptRejectsToMailbox: row.acceptRejectsToMailbox.value,
 						Mailbox: row.mailbox.value,
+						Comment: row.comment.value,
 						VerifiedDNSDomain: {ASCII: '', Unicode: ''},
 						ListAllowDNSDomain: {ASCII: '', Unicode: ''},
 					}

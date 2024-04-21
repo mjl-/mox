@@ -290,7 +290,7 @@ var api;
 		Quoting["Bottom"] = "bottom";
 		Quoting["Top"] = "top";
 	})(Quoting = api.Quoting || (api.Quoting = {}));
-	api.structTypes = { "Address": true, "Attachment": true, "ChangeMailboxAdd": true, "ChangeMailboxCounts": true, "ChangeMailboxKeywords": true, "ChangeMailboxRemove": true, "ChangeMailboxRename": true, "ChangeMailboxSpecialUse": true, "ChangeMsgAdd": true, "ChangeMsgFlags": true, "ChangeMsgRemove": true, "ChangeMsgThread": true, "ComposeMessage": true, "Domain": true, "DomainAddressConfig": true, "Envelope": true, "EventStart": true, "EventViewChanges": true, "EventViewErr": true, "EventViewMsgs": true, "EventViewReset": true, "File": true, "Filter": true, "Flags": true, "ForwardAttachments": true, "FromAddressSettings": true, "Mailbox": true, "Message": true, "MessageAddress": true, "MessageEnvelope": true, "MessageItem": true, "NotFilter": true, "Page": true, "ParsedMessage": true, "Part": true, "Query": true, "RecipientSecurity": true, "Request": true, "Settings": true, "SpecialUse": true, "SubmitMessage": true };
+	api.structTypes = { "Address": true, "Attachment": true, "ChangeMailboxAdd": true, "ChangeMailboxCounts": true, "ChangeMailboxKeywords": true, "ChangeMailboxRemove": true, "ChangeMailboxRename": true, "ChangeMailboxSpecialUse": true, "ChangeMsgAdd": true, "ChangeMsgFlags": true, "ChangeMsgRemove": true, "ChangeMsgThread": true, "ComposeMessage": true, "Domain": true, "DomainAddressConfig": true, "Envelope": true, "EventStart": true, "EventViewChanges": true, "EventViewErr": true, "EventViewMsgs": true, "EventViewReset": true, "File": true, "Filter": true, "Flags": true, "ForwardAttachments": true, "FromAddressSettings": true, "Mailbox": true, "Message": true, "MessageAddress": true, "MessageEnvelope": true, "MessageItem": true, "NotFilter": true, "Page": true, "ParsedMessage": true, "Part": true, "Query": true, "RecipientSecurity": true, "Request": true, "Ruleset": true, "Settings": true, "SpecialUse": true, "SubmitMessage": true };
 	api.stringsTypes = { "AttachmentType": true, "CSRFToken": true, "Localpart": true, "Quoting": true, "SecurityResult": true, "ThreadMode": true, "ViewMode": true };
 	api.intsTypes = { "ModSeq": true, "UID": true, "Validation": true };
 	api.types = {
@@ -313,6 +313,7 @@ var api;
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
 		"RecipientSecurity": { "Name": "RecipientSecurity", "Docs": "", "Fields": [{ "Name": "STARTTLS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["SecurityResult"] }] },
 		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }] },
+		"Ruleset": { "Name": "Ruleset", "Docs": "", "Fields": [{ "Name": "SMTPMailFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "HeadersRegexp", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListAllowDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "AcceptRejectsToMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "ListAllowDNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"EventStart": { "Name": "EventStart", "Docs": "", "Fields": [{ "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["MessageAddress"] }, { "Name": "Addresses", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "DomainAddressConfigs", "Docs": "", "Typewords": ["{}", "DomainAddressConfig"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailboxes", "Docs": "", "Typewords": ["[]", "Mailbox"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Settings", "Docs": "", "Typewords": ["Settings"] }, { "Name": "AccountPath", "Docs": "", "Typewords": ["string"] }, { "Name": "Version", "Docs": "", "Typewords": ["string"] }] },
 		"DomainAddressConfig": { "Name": "DomainAddressConfig", "Docs": "", "Fields": [{ "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }] },
 		"EventViewErr": { "Name": "EventViewErr", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "RequestID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Err", "Docs": "", "Typewords": ["string"] }] },
@@ -366,6 +367,7 @@ var api;
 		Mailbox: (v) => api.parse("Mailbox", v),
 		RecipientSecurity: (v) => api.parse("RecipientSecurity", v),
 		Settings: (v) => api.parse("Settings", v),
+		Ruleset: (v) => api.parse("Ruleset", v),
 		EventStart: (v) => api.parse("EventStart", v),
 		DomainAddressConfig: (v) => api.parse("DomainAddressConfig", v),
 		EventViewErr: (v) => api.parse("EventViewErr", v),
@@ -648,6 +650,41 @@ var api;
 			const paramTypes = [["Settings"]];
 			const returnTypes = [];
 			const params = [settings];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async RulesetSuggestMove(msgID, mbSrcID, mbDstID) {
+			const fn = "RulesetSuggestMove";
+			const paramTypes = [["int64"], ["int64"], ["int64"]];
+			const returnTypes = [["string"], ["string"], ["bool"], ["string"], ["nullable", "Ruleset"]];
+			const params = [msgID, mbSrcID, mbDstID];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async RulesetAdd(rcptTo, ruleset) {
+			const fn = "RulesetAdd";
+			const paramTypes = [["string"], ["Ruleset"]];
+			const returnTypes = [];
+			const params = [rcptTo, ruleset];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async RulesetRemove(rcptTo, ruleset) {
+			const fn = "RulesetRemove";
+			const paramTypes = [["string"], ["Ruleset"]];
+			const returnTypes = [];
+			const params = [rcptTo, ruleset];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async RulesetMessageNever(rcptTo, listID, msgFrom, toInbox) {
+			const fn = "RulesetMessageNever";
+			const paramTypes = [["string"], ["string"], ["string"], ["bool"]];
+			const returnTypes = [];
+			const params = [rcptTo, listID, msgFrom, toInbox];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async RulesetMailboxNever(mailboxID, toMailbox) {
+			const fn = "RulesetMailboxNever";
+			const paramTypes = [["int64"], ["bool"]];
+			const returnTypes = [];
+			const params = [mailboxID, toMailbox];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// SSETypes exists to ensure the generated API contains the types, for use in SSE events.
@@ -1297,7 +1334,7 @@ Enable consistency checking in UI updates:
 - todo: buttons/mechanism to operate on all messages in a mailbox/search query, without having to list and select all messages. e.g. clearing flags/labels.
 - todo: can we detect if browser supports proper CSP? if not, refuse to load html messages?
 - todo: more search criteria? Date header field (instead of time received), text vs html (only, either or both), attachment filenames and sizes
-- todo: integrate more of the account page into webmail? importing/exporting messages, configuring delivery rules (possibly with sieve). for messages moved out of inbox to non-special-use mailbox, show button that helps make an automatic rule to move such messages again (e.g. based on message From address, message From domain or List-ID header).
+- todo: integrate more of the account page into webmail? importing/exporting messages, configuring delivery rules (possibly with sieve).
 - todo: configurable keyboard shortcuts? we use strings like "ctrl p" which we already generate and match on, add a mapping from command name to cmd* functions, and have a map of keys to command names. the commands for up/down with shift/ctrl modifiers may need special attention.
 - todo: nicer address input fields like other mail clients do. with tab to autocomplete and turn input into a box and delete removing of the entire address.
 - todo: consider composing messages with bcc headers that are kept as message Bcc headers, optionally with checkbox.
@@ -2937,11 +2974,61 @@ const movePopover = (e, mailboxes, msgs) => {
 	}
 	let msgsMailboxID = (msgs[0].MailboxID && msgs.filter(m => m.MailboxID === msgs[0].MailboxID).length === msgs.length) ? msgs[0].MailboxID : 0;
 	const remove = popover(e.target, {}, dom.div(style({ display: 'flex', flexDirection: 'column', gap: '.25em' }), mailboxes.map(mb => dom.div(dom.clickbutton(mb.Name, mb.ID === msgsMailboxID ? attr.disabled('') : [], async function click() {
-		const msgIDs = msgs.filter(m => m.MailboxID !== mb.ID).map(m => m.ID);
+		const moveMsgs = msgs.filter(m => m.MailboxID !== mb.ID);
+		const msgIDs = moveMsgs.map(m => m.ID);
 		await withStatus('Moving to mailbox', client.MessageMove(msgIDs, mb.ID));
+		if (moveMsgs.length === 1) {
+			await moveAskRuleset(moveMsgs[0].ID, moveMsgs[0].MailboxID, mb, mailboxes);
+		}
 		remove();
 	})))));
 };
+// We've moved a single message. If the source or destination mailbox is not a
+// "special-use" mailbox (other than inbox), and there isn't a rule yet or there is
+// one we may want to delete, and we haven't asked about adding/removing this
+// ruleset before, ask the user to add/remove a ruleset for moving. If the message
+// has a list-id header, we ask to create a ruleset treating it as a mailing list
+// message matching on future list-id header and spf/dkim verified domain,
+// otherwise we make a rule based on message "from" address.
+const moveAskRuleset = async (msgID, mbSrcID, mbDst, mailboxes) => {
+	const mbSrc = mailboxes.find(mb => mb.ID === mbSrcID);
+	if (!mbSrc || isSpecialUse(mbDst) || isSpecialUse(mbSrc)) {
+		return;
+	}
+	const [listID, msgFrom, isRemove, rcptTo, ruleset] = await withStatus('Checking rulesets', client.RulesetSuggestMove(msgID, mbSrc.ID, mbDst.ID));
+	if (!ruleset) {
+		return;
+	}
+	const what = listID ? ['list with id "', listID, '"'] : ['address "', msgFrom, '"'];
+	if (isRemove) {
+		const remove = popup(dom.h1('Remove rule?'), dom.p(style({ maxWidth: '30em' }), 'Would you like to remove the server-side rule that automatically delivers messages from ', what, ' to mailbox "', mbDst.Name, '"?'), dom.br(), dom.div(dom.clickbutton('Yes, remove rule', async function click() {
+			await withStatus('Remove ruleset', client.RulesetRemove(rcptTo, ruleset));
+			remove();
+		}), ' ', dom.clickbutton('Not now', async function click() {
+			remove();
+		})), dom.br(), dom.div(style({ marginBottom: '1ex' }), dom.clickbutton("No, and don't ask again for ", what, async function click() {
+			await withStatus('Store ruleset response', client.RulesetMessageNever(rcptTo, listID, msgFrom, true));
+			remove();
+		})), dom.div(dom.clickbutton("No, and don't ask again when moving messages out of \"", mbSrc.Name, '"', async function click() {
+			await withStatus('Store ruleset response', client.RulesetMailboxNever(mbSrc.ID, false));
+			remove();
+		})));
+		return;
+	}
+	const remove = popup(dom.h1('Add rule?'), dom.p(style({ maxWidth: '30em' }), 'Would you like to create a server-side ruleset that automatically delivers future messages from ', what, ' to mailbox "', mbDst.Name, '"?'), dom.br(), dom.div(dom.clickbutton('Yes, add rule', async function click() {
+		await withStatus('Add ruleset', client.RulesetAdd(rcptTo, ruleset));
+		remove();
+	}), ' ', dom.clickbutton('Not now', async function click() {
+		remove();
+	})), dom.br(), dom.div(style({ marginBottom: '1ex' }), dom.clickbutton("No, and don't ask again for ", what, async function click() {
+		await withStatus('Store ruleset response', client.RulesetMessageNever(rcptTo, listID, msgFrom, false));
+		remove();
+	})), dom.div(dom.clickbutton("No, and don't ask again when moving messages to \"", mbDst.Name, '"', async function click() {
+		await withStatus('Store ruleset response', client.RulesetMailboxNever(mbDst.ID, true));
+		remove();
+	})));
+};
+const isSpecialUse = (mb) => mb.Archive || mb.Draft || mb.Junk || mb.Sent || mb.Trash;
 // Make new MsgitemView, to be added to the list.
 const newMsgitemView = (mi, msglistView, otherMailbox, listMailboxes, receivedTime, initialCollapsed) => {
 	// note: mi may be replaced.
@@ -5237,6 +5324,11 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 			.filter(mbMsgID => mailboxMsgIDs.length === 1 || !sentMailboxID || mbMsgID[0] !== sentMailboxID || !otherMailbox(sentMailboxID))
 			.map(mbMsgID => mbMsgID[1]);
 		await withStatus('Moving to ' + xmb.Name, client.MessageMove(msgIDs, xmb.ID));
+		if (msgIDs.length === 1) {
+			const msgID = msgIDs[0];
+			const mbSrcID = mailboxMsgIDs.find(mbMsgID => mbMsgID[1] === msgID)[0];
+			await moveAskRuleset(msgID, mbSrcID, xmb, mailboxlistView.mailboxes());
+		}
 	}, dom.div(dom._class('mailbox'), style({ display: 'flex', justifyContent: 'space-between' }), name = dom.div(style({ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })), dom.div(style({ whiteSpace: 'nowrap' }), actionBtn = dom.clickbutton(dom._class('mailboxhoveronly'), '...', attr.tabindex('-1'), // Without, tab breaks because this disappears when mailbox loses focus.
 	attr.arialabel('Mailbox actions'), attr.title('Actions on mailbox, like deleting, emptying, renaming.'), function click(e) {
 		e.stopPropagation();

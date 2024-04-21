@@ -188,6 +188,7 @@ var (
 		From:    "mjl <mjl@mox.example>",
 		To:      "mox <mox@other.example>",
 		Subject: "html message",
+		Headers: [][2]string{{"List-Id", "test <list.mox.example>"}},
 		Part:    Part{Type: "text/html", Content: `<html>the body <img src="cid:img1@mox.example" /></html>`},
 	}
 	msgAlt = Message{
@@ -265,7 +266,16 @@ func tdeliver(t *testing.T, acc *store.Account, tm *testmsg) {
 	defer msgFile.Close()
 	size, err := msgFile.Write(tm.msg.Marshal(t))
 	tcheck(t, err, "write message temp")
-	m := store.Message{Flags: tm.Flags, Keywords: tm.Keywords, Size: int64(size)}
+	m := store.Message{
+		Flags:            tm.Flags,
+		RcptToLocalpart:  "mox",
+		RcptToDomain:     "other.example",
+		MsgFromLocalpart: "mjl",
+		MsgFromDomain:    "mox.example",
+		DKIMDomains:      []string{"mox.example"},
+		Keywords:         tm.Keywords,
+		Size:             int64(size),
+	}
 	err = acc.DeliverMailbox(pkglog, tm.Mailbox, &m, msgFile)
 	tcheck(t, err, "deliver test message")
 	err = msgFile.Close()

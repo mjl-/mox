@@ -680,6 +680,13 @@
 					]
 				},
 				{
+					"Name": "MsgFromRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "VerifiedDomain",
 					"Docs": "",
 					"Typewords": [
@@ -717,6 +724,13 @@
 				},
 				{
 					"Name": "Mailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Comment",
 					"Docs": "",
 					"Typewords": [
 						"string"

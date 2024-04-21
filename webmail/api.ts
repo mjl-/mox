@@ -220,6 +220,20 @@ export interface Settings {
 	ShowAddressSecurity: boolean  // Whether to show the bars underneath the address input fields indicating starttls/dnssec/dane/mtasts/requiretls support by address.
 }
 
+export interface Ruleset {
+	SMTPMailFromRegexp: string
+	MsgFromRegexp: string
+	VerifiedDomain: string
+	HeadersRegexp?: { [key: string]: string }
+	IsForward: boolean  // todo: once we implement ARC, we can use dkim domains that we cannot verify but that the arc-verified forwarding mail server was able to verify.
+	ListAllowDomain: string
+	AcceptRejectsToMailbox: string
+	Mailbox: string
+	Comment: string
+	VerifiedDNSDomain: Domain
+	ListAllowDNSDomain: Domain
+}
+
 // EventStart is the first message sent on an SSE connection, giving the client
 // basic data to populate its UI. After this event, messages will follow quickly in
 // an EventViewMsgs event.
@@ -567,7 +581,7 @@ export enum Quoting {
 // Localparts are in Unicode NFC.
 export type Localpart = string
 
-export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"ComposeMessage":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"FromAddressSettings":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"Settings":true,"SpecialUse":true,"SubmitMessage":true}
+export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"ComposeMessage":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"FromAddressSettings":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"Ruleset":true,"Settings":true,"SpecialUse":true,"SubmitMessage":true}
 export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"CSRFToken":true,"Localpart":true,"Quoting":true,"SecurityResult":true,"ThreadMode":true,"ViewMode":true}
 export const intsTypes: {[typename: string]: boolean} = {"ModSeq":true,"UID":true,"Validation":true}
 export const types: TypenameMap = {
@@ -590,6 +604,7 @@ export const types: TypenameMap = {
 	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
 	"RecipientSecurity": {"Name":"RecipientSecurity","Docs":"","Fields":[{"Name":"STARTTLS","Docs":"","Typewords":["SecurityResult"]},{"Name":"MTASTS","Docs":"","Typewords":["SecurityResult"]},{"Name":"DNSSEC","Docs":"","Typewords":["SecurityResult"]},{"Name":"DANE","Docs":"","Typewords":["SecurityResult"]},{"Name":"RequireTLS","Docs":"","Typewords":["SecurityResult"]}]},
 	"Settings": {"Name":"Settings","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["uint8"]},{"Name":"Signature","Docs":"","Typewords":["string"]},{"Name":"Quoting","Docs":"","Typewords":["Quoting"]},{"Name":"ShowAddressSecurity","Docs":"","Typewords":["bool"]}]},
+	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"MsgFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Comment","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"EventStart": {"Name":"EventStart","Docs":"","Fields":[{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"LoginAddress","Docs":"","Typewords":["MessageAddress"]},{"Name":"Addresses","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"DomainAddressConfigs","Docs":"","Typewords":["{}","DomainAddressConfig"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Mailboxes","Docs":"","Typewords":["[]","Mailbox"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"Settings","Docs":"","Typewords":["Settings"]},{"Name":"AccountPath","Docs":"","Typewords":["string"]},{"Name":"Version","Docs":"","Typewords":["string"]}]},
 	"DomainAddressConfig": {"Name":"DomainAddressConfig","Docs":"","Fields":[{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]}]},
 	"EventViewErr": {"Name":"EventViewErr","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]},{"Name":"Err","Docs":"","Typewords":["string"]}]},
@@ -644,6 +659,7 @@ export const parser = {
 	Mailbox: (v: any) => parse("Mailbox", v) as Mailbox,
 	RecipientSecurity: (v: any) => parse("RecipientSecurity", v) as RecipientSecurity,
 	Settings: (v: any) => parse("Settings", v) as Settings,
+	Ruleset: (v: any) => parse("Ruleset", v) as Ruleset,
 	EventStart: (v: any) => parse("EventStart", v) as EventStart,
 	DomainAddressConfig: (v: any) => parse("DomainAddressConfig", v) as DomainAddressConfig,
 	EventViewErr: (v: any) => parse("EventViewErr", v) as EventViewErr,
@@ -956,6 +972,46 @@ export class Client {
 		const paramTypes: string[][] = [["Settings"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [settings]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async RulesetSuggestMove(msgID: number, mbSrcID: number, mbDstID: number): Promise<[string, string, boolean, string, Ruleset | null]> {
+		const fn: string = "RulesetSuggestMove"
+		const paramTypes: string[][] = [["int64"],["int64"],["int64"]]
+		const returnTypes: string[][] = [["string"],["string"],["bool"],["string"],["nullable","Ruleset"]]
+		const params: any[] = [msgID, mbSrcID, mbDstID]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, string, boolean, string, Ruleset | null]
+	}
+
+	async RulesetAdd(rcptTo: string, ruleset: Ruleset): Promise<void> {
+		const fn: string = "RulesetAdd"
+		const paramTypes: string[][] = [["string"],["Ruleset"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [rcptTo, ruleset]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async RulesetRemove(rcptTo: string, ruleset: Ruleset): Promise<void> {
+		const fn: string = "RulesetRemove"
+		const paramTypes: string[][] = [["string"],["Ruleset"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [rcptTo, ruleset]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async RulesetMessageNever(rcptTo: string, listID: string, msgFrom: string, toInbox: boolean): Promise<void> {
+		const fn: string = "RulesetMessageNever"
+		const paramTypes: string[][] = [["string"],["string"],["string"],["bool"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [rcptTo, listID, msgFrom, toInbox]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async RulesetMailboxNever(mailboxID: number, toMailbox: boolean): Promise<void> {
+		const fn: string = "RulesetMailboxNever"
+		const paramTypes: string[][] = [["int64"],["bool"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [mailboxID, toMailbox]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
