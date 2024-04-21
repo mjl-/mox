@@ -169,23 +169,19 @@ func (Webmail) ParsedMessage(ctx context.Context, msgID int64) (pm ParsedMessage
 		log.Check(err, "closing account")
 	}()
 
-	var m store.Message
 	xdbread(ctx, acc, func(tx *bstore.Tx) {
-		m = xmessageID(ctx, tx, msgID)
-	})
+		m := xmessageID(ctx, tx, msgID)
 
-	state := msgState{acc: acc}
-	defer state.clear()
-	pm, err = parsedMessage(log, m, &state, true, false)
-	xcheckf(ctx, err, "parsing message")
+		state := msgState{acc: acc}
+		defer state.clear()
+		pm, err = parsedMessage(log, m, &state, true, false)
+		xcheckf(ctx, err, "parsing message")
 
-	if len(pm.envelope.From) == 1 {
-		xdbread(ctx, acc, func(tx *bstore.Tx) {
+		if len(pm.envelope.From) == 1 {
 			pm.ViewMode, err = fromAddrViewMode(tx, pm.envelope.From[0])
 			xcheckf(ctx, err, "looking up view mode for from address")
-		})
-	}
-
+		}
+	})
 	return
 }
 
