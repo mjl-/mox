@@ -51,8 +51,9 @@ type ctxKey string
 var requestInfoCtxKey ctxKey = "requestInfo"
 
 type requestInfo struct {
+	Log          mlog.Log
 	LoginAddress string
-	AccountName  string
+	Account      *store.Account // Nil only for methods Login and LoginPrep.
 	SessionToken store.SessionToken
 	Response     http.ResponseWriter
 	Request      *http.Request // For Proto and TLS connection state during message submit.
@@ -266,7 +267,22 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 	}
 
 	if isAPI {
-		reqInfo := requestInfo{loginAddress, accName, sessionToken, w, r}
+		var acc *store.Account
+		if accName != "" {
+			log = log.With(slog.String("account", accName))
+			var err error
+			acc, err = store.OpenAccount(log, accName)
+			if err != nil {
+				log.Errorx("open account", err)
+				http.Error(w, "500 - internal server error - error opening account", http.StatusInternalServerError)
+				return
+			}
+			defer func() {
+				err := acc.Close()
+				log.Check(err, "closing account")
+			}()
+		}
+		reqInfo := requestInfo{log, loginAddress, acc, sessionToken, w, r}
 		ctx = context.WithValue(ctx, requestInfoCtxKey, reqInfo)
 		apiHandler.ServeHTTP(w, r.WithContext(ctx))
 		return

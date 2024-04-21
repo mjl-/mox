@@ -94,8 +94,8 @@ func init() {
 // LoginPrep returns a login token, and also sets it as cookie. Both must be
 // present in the call to Login.
 func (w Webmail) LoginPrep(ctx context.Context) string {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	log := reqInfo.Log
 
 	var data [8]byte
 	_, err := cryptorand.Read(data[:])
@@ -110,8 +110,8 @@ func (w Webmail) LoginPrep(ctx context.Context) string {
 // Login returns a session token for the credentials, or fails with error code
 // "user:badLogin". Call LoginPrep to get a loginToken.
 func (w Webmail) Login(ctx context.Context, loginToken, username, password string) store.CSRFToken {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	log := reqInfo.Log
 
 	csrfToken, err := webauth.Login(ctx, log, webauth.Accounts, "webmail", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, loginToken, username, password)
 	if _, ok := err.(*sherpa.Error); ok {
@@ -123,10 +123,10 @@ func (w Webmail) Login(ctx context.Context, loginToken, username, password strin
 
 // Logout invalidates the session token.
 func (w Webmail) Logout(ctx context.Context) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	log := reqInfo.Log
 
-	err := webauth.Logout(ctx, log, webauth.Accounts, "webmail", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, reqInfo.AccountName, reqInfo.SessionToken)
+	err := webauth.Logout(ctx, log, webauth.Accounts, "webmail", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, reqInfo.Account.Name, reqInfo.SessionToken)
 	xcheckf(ctx, err, "logout")
 }
 
@@ -135,7 +135,7 @@ func (w Webmail) Logout(ctx context.Context) {
 // with at most 10 unused tokens (the most recently created) per account.
 func (Webmail) Token(ctx context.Context) string {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	return sseTokens.xgenerate(ctx, reqInfo.AccountName, reqInfo.LoginAddress, reqInfo.SessionToken)
+	return sseTokens.xgenerate(ctx, reqInfo.Account.Name, reqInfo.LoginAddress, reqInfo.SessionToken)
 }
 
 // Requests sends a new request for an open SSE connection. Any currently active
@@ -150,7 +150,7 @@ func (Webmail) Request(ctx context.Context, req Request) {
 		xcheckuserf(ctx, errors.New("Page.Count must be >= 1"), "checking request")
 	}
 
-	sse, ok := sseGet(req.SSEID, reqInfo.AccountName)
+	sse, ok := sseGet(req.SSEID, reqInfo.Account.Name)
 	if !ok {
 		xcheckuserf(ctx, errors.New("unknown sseid"), "looking up connection")
 	}
@@ -160,20 +160,16 @@ func (Webmail) Request(ctx context.Context, req Request) {
 // ParsedMessage returns enough to render the textual body of a message. It is
 // assumed the client already has other fields through MessageItem.
 func (Webmail) ParsedMessage(ctx context.Context, msgID int64) (pm ParsedMessage) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	log := reqInfo.Log
+	acc := reqInfo.Account
 
 	xdbread(ctx, acc, func(tx *bstore.Tx) {
 		m := xmessageID(ctx, tx, msgID)
 
 		state := msgState{acc: acc}
 		defer state.clear()
+		var err error
 		pm, err = parsedMessage(log, m, &state, true, false)
 		xcheckf(ctx, err, "parsing message")
 
@@ -202,14 +198,8 @@ func fromAddrViewMode(tx *bstore.Tx, from MessageAddress) (store.ViewMode, error
 
 // FromAddressSettingsSave saves per-"From"-address settings.
 func (Webmail) FromAddressSettingsSave(ctx context.Context, fas store.FromAddressSettings) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
 
 	if fas.FromAddress == "" {
 		xcheckuserf(ctx, errors.New("empty from address"), "checking address")
@@ -231,14 +221,8 @@ func (Webmail) FromAddressSettingsSave(ctx context.Context, fas store.FromAddres
 // for editing again.
 // If no message is find, zero is returned, not an error.
 func (Webmail) MessageFindMessageID(ctx context.Context, messageID string) (id int64) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
 
 	messageID, _, _ = message.MessageIDCanonical(messageID)
 	if messageID == "" {
@@ -272,6 +256,12 @@ type ComposeMessage struct {
 // MessageCompose composes a message and saves it to the mailbox. Used for
 // saving draft messages.
 func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID int64) (id int64) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc := reqInfo.Account
+	log := reqInfo.Log
+
+	log.Debug("message compose")
+
 	// Prevent any accidental control characters, or attempts at getting bare \r or \n
 	// into messages.
 	for _, l := range [][]string{m.To, m.Cc, m.Bcc, {m.From, m.Subject, m.ReplyTo}} {
@@ -283,17 +273,6 @@ func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID
 			}
 		}
 	}
-
-	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	log := pkglog.WithContext(ctx).With(slog.String("account", reqInfo.AccountName))
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
-
-	log.Debug("message compose")
 
 	fromAddr, err := parseAddress(m.From)
 	xcheckuserf(ctx, err, "parsing From address")
@@ -602,6 +581,12 @@ func xrandom(ctx context.Context, n int) []byte {
 // to the delivery queue. If Bcc addresses were present, a header is prepended
 // to the message stored in the Sent mailbox.
 func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc := reqInfo.Account
+	log := reqInfo.Log
+
+	log.Debug("message submit")
+
 	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/api.go:/MessageSubmit\( and ../webapisrv/server.go:/Send\(
 
 	// todo: consider making this an HTTP POST, so we can upload as regular form, which is probably more efficient for encoding for the client and we can stream the data in. also not unlike the webapi Submit method.
@@ -617,17 +602,6 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			}
 		}
 	}
-
-	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	log := pkglog.WithContext(ctx).With(slog.String("account", reqInfo.AccountName))
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
-
-	log.Debug("message submit")
 
 	fromAddr, err := parseAddress(m.From)
 	xcheckuserf(ctx, err, "parsing From address")
@@ -667,7 +641,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 	// Check if from address is allowed for account.
 	fromAccName, _, _, err := mox.FindAccount(fromAddr.Address.Localpart, fromAddr.Address.Domain, false)
-	if err == nil && fromAccName != reqInfo.AccountName {
+	if err == nil && fromAccName != reqInfo.Account.Name {
 		err = mox.ErrAccountNotFound
 	}
 	if err != nil && (errors.Is(err, mox.ErrAccountNotFound) || errors.Is(err, mox.ErrDomainNotFound)) {
@@ -1008,7 +982,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		// no qm.Extra from webmail
 		qml[i] = qm
 	}
-	err = queue.Add(ctx, log, reqInfo.AccountName, dataFile, qml...)
+	err = queue.Add(ctx, log, reqInfo.Account.Name, dataFile, qml...)
 	if err != nil {
 		metricSubmission.WithLabelValues("queueerror").Inc()
 	}
@@ -1153,14 +1127,9 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 // MessageMove moves messages to another mailbox. If the message is already in
 // the mailbox an error is returned.
 func (Webmail) MessageMove(ctx context.Context, messageIDs []int64, mailboxID int64) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
+	log := reqInfo.Log
 
 	xops.MessageMove(ctx, log, acc, messageIDs, "", mailboxID)
 }
@@ -1173,14 +1142,9 @@ var xops = webops.XOps{
 
 // MessageDelete permanently deletes messages, without moving them to the Trash mailbox.
 func (Webmail) MessageDelete(ctx context.Context, messageIDs []int64) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
+	log := reqInfo.Log
 
 	if len(messageIDs) == 0 {
 		return
@@ -1192,43 +1156,28 @@ func (Webmail) MessageDelete(ctx context.Context, messageIDs []int64) {
 // FlagsAdd adds flags, either system flags like \Seen or custom keywords. The
 // flags should be lower-case, but will be converted and verified.
 func (Webmail) FlagsAdd(ctx context.Context, messageIDs []int64, flaglist []string) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
+	log := reqInfo.Log
 
 	xops.MessageFlagsAdd(ctx, log, acc, messageIDs, flaglist)
 }
 
 // FlagsClear clears flags, either system flags like \Seen or custom keywords.
 func (Webmail) FlagsClear(ctx context.Context, messageIDs []int64, flaglist []string) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
+	log := reqInfo.Log
 
 	xops.MessageFlagsClear(ctx, log, acc, messageIDs, flaglist)
 }
 
 // MailboxCreate creates a new mailbox.
 func (Webmail) MailboxCreate(ctx context.Context, name string) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
 
+	var err error
 	name, _, err = store.CheckMailboxName(name, false)
 	xcheckuserf(ctx, err, "checking mailbox name")
 
@@ -1250,14 +1199,9 @@ func (Webmail) MailboxCreate(ctx context.Context, name string) {
 
 // MailboxDelete deletes a mailbox and all its messages.
 func (Webmail) MailboxDelete(ctx context.Context, mailboxID int64) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
+	log := reqInfo.Log
 
 	// Messages to remove after having broadcasted the removal of messages.
 	var removeMessageIDs []int64
@@ -1294,14 +1238,9 @@ func (Webmail) MailboxDelete(ctx context.Context, mailboxID int64) {
 // MailboxEmpty empties a mailbox, removing all messages from the mailbox, but not
 // its child mailboxes.
 func (Webmail) MailboxEmpty(ctx context.Context, mailboxID int64) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
+	log := reqInfo.Log
 
 	var expunged []store.Message
 
@@ -1372,17 +1311,12 @@ func (Webmail) MailboxEmpty(ctx context.Context, mailboxID int64) {
 // MailboxRename renames a mailbox, possibly moving it to a new parent. The mailbox
 // ID and its messages are unchanged.
 func (Webmail) MailboxRename(ctx context.Context, mailboxID int64, newName string) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
 
 	// Renaming Inbox is special for IMAP. For IMAP we have to implement it per the
 	// standard. We can just say no.
+	var err error
 	newName, _, err = store.CheckMailboxName(newName, false)
 	xcheckuserf(ctx, err, "checking new mailbox name")
 
@@ -1408,14 +1342,8 @@ func (Webmail) MailboxRename(ctx context.Context, mailboxID int64, newName strin
 // matches, most recently used first, and whether this is the full list and further
 // requests for longer prefixes aren't necessary.
 func (Webmail) CompleteRecipient(ctx context.Context, search string) ([]string, bool) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
 
 	search = strings.ToLower(search)
 
@@ -1511,14 +1439,8 @@ func addressString(a message.Address, smtputf8 bool) string {
 
 // MailboxSetSpecialUse sets the special use flags of a mailbox.
 func (Webmail) MailboxSetSpecialUse(ctx context.Context, mb store.Mailbox) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
 
 	acc.WithWLock(func() {
 		var changes []store.Change
@@ -1551,7 +1473,7 @@ func (Webmail) MailboxSetSpecialUse(ctx context.Context, mb store.Mailbox) {
 			clearPrevious(mb.Trash, "Trash")
 
 			xmb.SpecialUse = mb.SpecialUse
-			err = tx.Update(&xmb)
+			err := tx.Update(&xmb)
 			xcheckf(ctx, err, "updating special-use flags for mailbox")
 			changes = append(changes, xmb.ChangeSpecialUse())
 		})
@@ -1564,14 +1486,8 @@ func (Webmail) MailboxSetSpecialUse(ctx context.Context, mb store.Mailbox) {
 // children. The messageIDs are typically thread roots. But not all roots
 // (without parent) of a thread need to have the same collapsed state.
 func (Webmail) ThreadCollapse(ctx context.Context, messageIDs []int64, collapse bool) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
 
 	if len(messageIDs) == 0 {
 		xcheckuserf(ctx, errors.New("no messages"), "setting collapse")
@@ -1610,7 +1526,7 @@ func (Webmail) ThreadCollapse(ctx context.Context, messageIDs []int64, collapse 
 			})
 			q.Gather(&updated)
 			q.SortAsc("ID") // Consistent order for testing.
-			_, err = q.UpdateFields(map[string]any{"ThreadCollapsed": collapse})
+			_, err := q.UpdateFields(map[string]any{"ThreadCollapsed": collapse})
 			xcheckf(ctx, err, "updating collapse in database")
 
 			for _, m := range updated {
@@ -1624,14 +1540,8 @@ func (Webmail) ThreadCollapse(ctx context.Context, messageIDs []int64, collapse 
 // ThreadMute saves the ThreadMute field for the messages and their children.
 // If messages are muted, they are also marked collapsed.
 func (Webmail) ThreadMute(ctx context.Context, messageIDs []int64, mute bool) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
+	acc := reqInfo.Account
 
 	if len(messageIDs) == 0 {
 		xcheckuserf(ctx, errors.New("no messages"), "setting mute")
@@ -1674,7 +1584,7 @@ func (Webmail) ThreadMute(ctx context.Context, messageIDs []int64, mute bool) {
 			if mute {
 				fields["ThreadCollapsed"] = true
 			}
-			_, err = q.UpdateFields(fields)
+			_, err := q.UpdateFields(fields)
 			xcheckf(ctx, err, "updating mute in database")
 
 			for _, m := range updated {
@@ -1724,8 +1634,11 @@ type RecipientSecurity struct {
 // RecipientSecurity looks up security properties of the address in the
 // single-address message addressee (as it appears in a To/Cc/Bcc/etc header).
 func (Webmail) RecipientSecurity(ctx context.Context, messageAddressee string) (RecipientSecurity, error) {
-	resolver := dns.StrictResolver{Pkg: "webmail", Log: pkglog.WithContext(ctx).Logger}
-	return recipientSecurity(ctx, resolver, messageAddressee)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	log := reqInfo.Log
+
+	resolver := dns.StrictResolver{Pkg: "webmail", Log: log.Logger}
+	return recipientSecurity(ctx, log, resolver, messageAddressee)
 }
 
 // logPanic can be called with a defer from a goroutine to prevent the entire program from being shutdown in case of a panic.
@@ -1741,9 +1654,7 @@ func logPanic(ctx context.Context) {
 }
 
 // separate function for testing with mocked resolver.
-func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddressee string) (RecipientSecurity, error) {
-	log := pkglog.WithContext(ctx)
-
+func recipientSecurity(ctx context.Context, log mlog.Log, resolver dns.Resolver, messageAddressee string) (RecipientSecurity, error) {
 	rs := RecipientSecurity{
 		SecurityResultUnknown,
 		SecurityResultUnknown,
@@ -1833,14 +1744,7 @@ func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddres
 
 	// STARTTLS and RequireTLS
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		if acc != nil {
-			err := acc.Close()
-			log.Check(err, "closing account")
-		}
-	}()
+	acc := reqInfo.Account
 
 	err = acc.DB.Read(ctx, func(tx *bstore.Tx) error {
 		q := bstore.QueryTx[store.RecipientDomainTLS](tx)
@@ -1868,12 +1772,6 @@ func recipientSecurity(ctx context.Context, resolver dns.Resolver, messageAddres
 	})
 	xcheckf(ctx, err, "lookup recipient domain")
 
-	// Close account as soon as possible, not after waiting for MTA-STS/DNSSEC/DANE
-	// checks to complete, which can take a while.
-	err = acc.Close()
-	log.Check(err, "closing account")
-	acc = nil
-
 	wg.Wait()
 
 	return rs, nil
@@ -1888,173 +1786,167 @@ func (Webmail) DecodeMIMEWords(ctx context.Context, text string) string {
 
 // SettingsSave saves settings, e.g. for composing.
 func (Webmail) SettingsSave(ctx context.Context, settings store.Settings) {
-	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		if acc != nil {
-			err := acc.Close()
-			log.Check(err, "closing account")
-		}
-	}()
+	acc := reqInfo.Account
 
 	settings.ID = 1
-	err = acc.DB.Update(ctx, &settings)
+	err := acc.DB.Update(ctx, &settings)
 	xcheckf(ctx, err, "save settings")
 }
 
 func (Webmail) RulesetSuggestMove(ctx context.Context, msgID, mbSrcID, mbDstID int64) (listID string, msgFrom string, isRemove bool, rcptTo string, ruleset *config.Ruleset) {
-	withAccount(ctx, func(log mlog.Log, acc *store.Account) {
-		xdbread(ctx, acc, func(tx *bstore.Tx) {
-			m := xmessageID(ctx, tx, msgID)
-			mbSrc := xmailboxID(ctx, tx, mbSrcID)
-			mbDst := xmailboxID(ctx, tx, mbDstID)
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc := reqInfo.Account
+	log := reqInfo.Log
 
-			if m.RcptToLocalpart == "" && m.RcptToDomain == "" {
+	xdbread(ctx, acc, func(tx *bstore.Tx) {
+		m := xmessageID(ctx, tx, msgID)
+		mbSrc := xmailboxID(ctx, tx, mbSrcID)
+		mbDst := xmailboxID(ctx, tx, mbDstID)
+
+		if m.RcptToLocalpart == "" && m.RcptToDomain == "" {
+			return
+		}
+		rcptTo = m.RcptToLocalpart.String() + "@" + m.RcptToDomain
+
+		conf, _ := acc.Conf()
+		dest := conf.Destinations[rcptTo] // May not be present.
+		defaultMailbox := "Inbox"
+		if dest.Mailbox != "" {
+			defaultMailbox = dest.Mailbox
+		}
+
+		// Only suggest rules for messages moved into/out of the default mailbox (Inbox).
+		if mbSrc.Name != defaultMailbox && mbDst.Name != defaultMailbox {
+			return
+		}
+
+		// Check if we have a previous answer "No" answer for moving from/to mailbox.
+		exists, err := bstore.QueryTx[store.RulesetNoMailbox](tx).FilterNonzero(store.RulesetNoMailbox{MailboxID: mbSrcID}).FilterEqual("ToMailbox", false).Exists()
+		xcheckf(ctx, err, "looking up previous response for source mailbox")
+		if exists {
+			return
+		}
+		exists, err = bstore.QueryTx[store.RulesetNoMailbox](tx).FilterNonzero(store.RulesetNoMailbox{MailboxID: mbDstID}).FilterEqual("ToMailbox", true).Exists()
+		xcheckf(ctx, err, "looking up previous response for destination mailbox")
+		if exists {
+			return
+		}
+
+		// Parse message for List-Id header.
+		state := msgState{acc: acc}
+		defer state.clear()
+		pm, err := parsedMessage(log, m, &state, true, false)
+		xcheckf(ctx, err, "parsing message")
+
+		// The suggested ruleset. Once all is checked, we'll return it.
+		var nrs *config.Ruleset
+
+		// If List-Id header is present, we'll treat it as a (mailing) list message.
+		if l, ok := pm.Headers["List-Id"]; ok {
+			if len(l) != 1 {
+				log.Debug("not exactly one list-id header", slog.Any("listid", l))
 				return
 			}
-			rcptTo = m.RcptToLocalpart.String() + "@" + m.RcptToDomain
-
-			conf, _ := acc.Conf()
-			dest := conf.Destinations[rcptTo] // May not be present.
-			defaultMailbox := "Inbox"
-			if dest.Mailbox != "" {
-				defaultMailbox = dest.Mailbox
-			}
-
-			// Only suggest rules for messages moved into/out of the default mailbox (Inbox).
-			if mbSrc.Name != defaultMailbox && mbDst.Name != defaultMailbox {
+			var listIDDom dns.Domain
+			listID, listIDDom = parseListID(l[0])
+			if listID == "" {
+				log.Debug("invalid list-id header", slog.String("listid", l[0]))
 				return
 			}
 
-			// Check if we have a previous answer "No" answer for moving from/to mailbox.
-			exists, err := bstore.QueryTx[store.RulesetNoMailbox](tx).FilterNonzero(store.RulesetNoMailbox{MailboxID: mbSrcID}).FilterEqual("ToMailbox", false).Exists()
-			xcheckf(ctx, err, "looking up previous response for source mailbox")
+			// Check if we have a previous "No" answer for this list-id.
+			no := store.RulesetNoListID{
+				RcptToAddress: rcptTo,
+				ListID:        listID,
+				ToInbox:       mbDst.Name == "Inbox",
+			}
+			exists, err = bstore.QueryTx[store.RulesetNoListID](tx).FilterNonzero(no).Exists()
+			xcheckf(ctx, err, "looking up previous response for list-id")
 			if exists {
 				return
 			}
-			exists, err = bstore.QueryTx[store.RulesetNoMailbox](tx).FilterNonzero(store.RulesetNoMailbox{MailboxID: mbDstID}).FilterEqual("ToMailbox", true).Exists()
-			xcheckf(ctx, err, "looking up previous response for destination mailbox")
-			if exists {
-				return
+
+			// Find the "ListAllowDomain" to use. We only match and move messages with verified
+			// SPF/DKIM. Otherwise spammers could add a list-id headers for mailing lists you
+			// are subscribed to, and take advantage of any reduced junk filtering.
+			listIDDomStr := listIDDom.Name()
+
+			doms := m.DKIMDomains
+			if m.MailFromValidated {
+				doms = append(doms, m.MailFromDomain)
 			}
-
-			// Parse message for List-Id header.
-			state := msgState{acc: acc}
-			defer state.clear()
-			pm, err := parsedMessage(log, m, &state, true, false)
-			xcheckf(ctx, err, "parsing message")
-
-			// The suggested ruleset. Once all is checked, we'll return it.
-			var nrs *config.Ruleset
-
-			// If List-Id header is present, we'll treat it as a (mailing) list message.
-			if l, ok := pm.Headers["List-Id"]; ok {
-				if len(l) != 1 {
-					log.Debug("not exactly one list-id header", slog.Any("listid", l))
-					return
-				}
-				var listIDDom dns.Domain
-				listID, listIDDom = parseListID(l[0])
-				if listID == "" {
-					log.Debug("invalid list-id header", slog.String("listid", l[0]))
-					return
-				}
-
-				// Check if we have a previous "No" answer for this list-id.
-				no := store.RulesetNoListID{
-					RcptToAddress: rcptTo,
-					ListID:        listID,
-					ToInbox:       mbDst.Name == "Inbox",
-				}
-				exists, err = bstore.QueryTx[store.RulesetNoListID](tx).FilterNonzero(no).Exists()
-				xcheckf(ctx, err, "looking up previous response for list-id")
-				if exists {
-					return
-				}
-
-				// Find the "ListAllowDomain" to use. We only match and move messages with verified
-				// SPF/DKIM. Otherwise spammers could add a list-id headers for mailing lists you
-				// are subscribed to, and take advantage of any reduced junk filtering.
-				listIDDomStr := listIDDom.Name()
-
-				doms := m.DKIMDomains
-				if m.MailFromValidated {
-					doms = append(doms, m.MailFromDomain)
-				}
-				// Sort, we prefer the shortest name, e.g. DKIM signature on whole domain instead
-				// of SPF verification of one host.
-				sort.Slice(doms, func(i, j int) bool {
-					return len(doms[i]) < len(doms[j])
-				})
-				var listAllowDom string
-				for _, dom := range doms {
-					if dom == listIDDomStr || strings.HasSuffix(listIDDomStr, "."+dom) {
-						listAllowDom = dom
-						break
-					}
-				}
-				if listAllowDom == "" {
-					return
-				}
-
-				listIDRegExp := regexp.QuoteMeta(fmt.Sprintf("<%s>", listID)) + "$"
-				nrs = &config.Ruleset{
-					HeadersRegexp:   map[string]string{"^list-id$": listIDRegExp},
-					ListAllowDomain: listAllowDom,
-					Mailbox:         mbDst.Name,
-				}
-			} else {
-				// Otherwise, try to make a rule based on message "From" address.
-				if m.MsgFromLocalpart == "" && m.MsgFromDomain == "" {
-					return
-				}
-				msgFrom = m.MsgFromLocalpart.String() + "@" + m.MsgFromDomain
-
-				no := store.RulesetNoMsgFrom{
-					RcptToAddress:  rcptTo,
-					MsgFromAddress: msgFrom,
-					ToInbox:        mbDst.Name == "Inbox",
-				}
-				exists, err = bstore.QueryTx[store.RulesetNoMsgFrom](tx).FilterNonzero(no).Exists()
-				xcheckf(ctx, err, "looking up previous response for message from address")
-				if exists {
-					return
-				}
-
-				nrs = &config.Ruleset{
-					MsgFromRegexp: "^" + regexp.QuoteMeta(msgFrom) + "$",
-					Mailbox:       mbDst.Name,
-				}
-			}
-
-			// Only suggest adding/removing rule if it isn't/is present.
-			var have bool
-			for _, rs := range dest.Rulesets {
-				xrs := config.Ruleset{
-					MsgFromRegexp:   rs.MsgFromRegexp,
-					HeadersRegexp:   rs.HeadersRegexp,
-					ListAllowDomain: rs.ListAllowDomain,
-					Mailbox:         nrs.Mailbox,
-				}
-				if xrs.Equal(*nrs) {
-					have = true
+			// Sort, we prefer the shortest name, e.g. DKIM signature on whole domain instead
+			// of SPF verification of one host.
+			sort.Slice(doms, func(i, j int) bool {
+				return len(doms[i]) < len(doms[j])
+			})
+			var listAllowDom string
+			for _, dom := range doms {
+				if dom == listIDDomStr || strings.HasSuffix(listIDDomStr, "."+dom) {
+					listAllowDom = dom
 					break
 				}
 			}
-			isRemove = mbDst.Name == defaultMailbox
-			if isRemove {
-				nrs.Mailbox = mbSrc.Name
-			}
-			if isRemove && !have || !isRemove && have {
+			if listAllowDom == "" {
 				return
 			}
 
-			// We'll be returning a suggested ruleset.
-			nrs.Comment = "by webmail on " + time.Now().Format("2006-01-02")
-			ruleset = nrs
-		})
+			listIDRegExp := regexp.QuoteMeta(fmt.Sprintf("<%s>", listID)) + "$"
+			nrs = &config.Ruleset{
+				HeadersRegexp:   map[string]string{"^list-id$": listIDRegExp},
+				ListAllowDomain: listAllowDom,
+				Mailbox:         mbDst.Name,
+			}
+		} else {
+			// Otherwise, try to make a rule based on message "From" address.
+			if m.MsgFromLocalpart == "" && m.MsgFromDomain == "" {
+				return
+			}
+			msgFrom = m.MsgFromLocalpart.String() + "@" + m.MsgFromDomain
+
+			no := store.RulesetNoMsgFrom{
+				RcptToAddress:  rcptTo,
+				MsgFromAddress: msgFrom,
+				ToInbox:        mbDst.Name == "Inbox",
+			}
+			exists, err = bstore.QueryTx[store.RulesetNoMsgFrom](tx).FilterNonzero(no).Exists()
+			xcheckf(ctx, err, "looking up previous response for message from address")
+			if exists {
+				return
+			}
+
+			nrs = &config.Ruleset{
+				MsgFromRegexp: "^" + regexp.QuoteMeta(msgFrom) + "$",
+				Mailbox:       mbDst.Name,
+			}
+		}
+
+		// Only suggest adding/removing rule if it isn't/is present.
+		var have bool
+		for _, rs := range dest.Rulesets {
+			xrs := config.Ruleset{
+				MsgFromRegexp:   rs.MsgFromRegexp,
+				HeadersRegexp:   rs.HeadersRegexp,
+				ListAllowDomain: rs.ListAllowDomain,
+				Mailbox:         nrs.Mailbox,
+			}
+			if xrs.Equal(*nrs) {
+				have = true
+				break
+			}
+		}
+		isRemove = mbDst.Name == defaultMailbox
+		if isRemove {
+			nrs.Mailbox = mbSrc.Name
+		}
+		if isRemove && !have || !isRemove && have {
+			return
+		}
+
+		// We'll be returning a suggested ruleset.
+		nrs.Comment = "by webmail on " + time.Now().Format("2006-01-02")
+		ruleset = nrs
 	})
 	return
 }
@@ -2083,7 +1975,7 @@ func parseListID(s string) (listID string, dom dns.Domain) {
 func (Webmail) RulesetAdd(ctx context.Context, rcptTo string, ruleset config.Ruleset) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := mox.AccountSave(ctx, reqInfo.Account.Name, func(acc *config.Account) {
 		dest, ok := acc.Destinations[rcptTo]
 		if !ok {
 			// todo: we could find the catchall address and add the rule, or add the address explicitly.
@@ -2104,7 +1996,7 @@ func (Webmail) RulesetAdd(ctx context.Context, rcptTo string, ruleset config.Rul
 func (Webmail) RulesetRemove(ctx context.Context, rcptTo string, ruleset config.Ruleset) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := mox.AccountSave(ctx, reqInfo.Account.Name, func(acc *config.Account) {
 		dest, ok := acc.Destinations[rcptTo]
 		if !ok {
 			xcheckuserf(ctx, errors.New("destination address not found in account"), "looking up address")
@@ -2134,22 +2026,24 @@ func (Webmail) RulesetRemove(ctx context.Context, rcptTo string, ruleset config.
 }
 
 func (Webmail) RulesetMessageNever(ctx context.Context, rcptTo, listID, msgFrom string, toInbox bool) {
-	withAccount(ctx, func(log mlog.Log, acc *store.Account) {
-		var err error
-		if listID != "" {
-			err = acc.DB.Insert(ctx, &store.RulesetNoListID{RcptToAddress: rcptTo, ListID: listID, ToInbox: toInbox})
-		} else {
-			err = acc.DB.Insert(ctx, &store.RulesetNoMsgFrom{RcptToAddress: rcptTo, MsgFromAddress: msgFrom, ToInbox: toInbox})
-		}
-		xcheckf(ctx, err, "storing user response")
-	})
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc := reqInfo.Account
+
+	var err error
+	if listID != "" {
+		err = acc.DB.Insert(ctx, &store.RulesetNoListID{RcptToAddress: rcptTo, ListID: listID, ToInbox: toInbox})
+	} else {
+		err = acc.DB.Insert(ctx, &store.RulesetNoMsgFrom{RcptToAddress: rcptTo, MsgFromAddress: msgFrom, ToInbox: toInbox})
+	}
+	xcheckf(ctx, err, "storing user response")
 }
 
 func (Webmail) RulesetMailboxNever(ctx context.Context, mailboxID int64, toMailbox bool) {
-	withAccount(ctx, func(log mlog.Log, acc *store.Account) {
-		err := acc.DB.Insert(ctx, &store.RulesetNoMailbox{MailboxID: mailboxID, ToMailbox: toMailbox})
-		xcheckf(ctx, err, "storing user response")
-	})
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc := reqInfo.Account
+
+	err := acc.DB.Insert(ctx, &store.RulesetNoMailbox{MailboxID: mailboxID, ToMailbox: toMailbox})
+	xcheckf(ctx, err, "storing user response")
 }
 
 func slicesAny[T any](l []T) []any {
@@ -2158,18 +2052,6 @@ func slicesAny[T any](l []T) []any {
 		r[i] = v
 	}
 	return r
-}
-
-func withAccount(ctx context.Context, fn func(log mlog.Log, acc *store.Account)) {
-	log := pkglog.WithContext(ctx)
-	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
-	xcheckf(ctx, err, "open account")
-	defer func() {
-		err := acc.Close()
-		log.Check(err, "closing account")
-	}()
-	fn(log, acc)
 }
 
 // SSETypes exists to ensure the generated API contains the types, for use in SSE events.

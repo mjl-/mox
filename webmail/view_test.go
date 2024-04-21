@@ -45,7 +45,7 @@ func TestView(t *testing.T) {
 	api := Webmail{maxMessageSize: 1024 * 1024, cookiePath: "/"}
 
 	respRec := httptest.NewRecorder()
-	reqInfo := requestInfo{"mjl@mox.example", "mjl", "", respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
+	reqInfo := requestInfo{log, "mjl@mox.example", acc, "", respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
 	ctx := context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	// Prepare loginToken.
@@ -70,7 +70,7 @@ func TestView(t *testing.T) {
 	}
 	sessionToken := store.SessionToken(sct[0])
 
-	reqInfo = requestInfo{"mjl@mox.example", "mjl", sessionToken, respRec, &http.Request{}}
+	reqInfo = requestInfo{log, "mjl@mox.example", acc, sessionToken, respRec, &http.Request{}}
 	ctx = context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	api.MailboxCreate(ctx, "Lists/Go/Nuts")

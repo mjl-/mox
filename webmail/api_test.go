@@ -90,7 +90,7 @@ func TestAPI(t *testing.T) {
 	api := Webmail{maxMessageSize: 1024 * 1024, cookiePath: "/webmail/"}
 
 	// Test login, and rate limiter.
-	loginReqInfo := requestInfo{"mjl@mox.example", "mjl", "", httptest.NewRecorder(), &http.Request{RemoteAddr: "1.1.1.1:1234"}}
+	loginReqInfo := requestInfo{log, "mjl@mox.example", nil, "", httptest.NewRecorder(), &http.Request{RemoteAddr: "1.1.1.1:1234"}}
 	loginctx := context.WithValue(ctxbg, requestInfoCtxKey, loginReqInfo)
 
 	// Missing login token.
@@ -138,7 +138,7 @@ func TestAPI(t *testing.T) {
 	testLogin("bad@bad.example", pw0, "user:error")
 
 	// Context with different IP, for clear rate limit history.
-	reqInfo := requestInfo{"mjl@mox.example", "mjl", "", nil, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
+	reqInfo := requestInfo{log, "mjl@mox.example", acc, "", nil, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
 	ctx := context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	// FlagsAdd
@@ -462,12 +462,12 @@ func TestAPI(t *testing.T) {
 
 	// RecipientSecurity
 	resolver := dns.MockResolver{}
-	rs, err := recipientSecurity(ctx, resolver, "mjl@a.mox.example")
+	rs, err := recipientSecurity(ctx, log, resolver, "mjl@a.mox.example")
 	tcompare(t, err, nil)
 	tcompare(t, rs, RecipientSecurity{SecurityResultUnknown, SecurityResultNo, SecurityResultNo, SecurityResultNo, SecurityResultUnknown})
 	err = acc.DB.Insert(ctx, &store.RecipientDomainTLS{Domain: "a.mox.example", STARTTLS: true, RequireTLS: false})
 	tcheck(t, err, "insert recipient domain tls info")
-	rs, err = recipientSecurity(ctx, resolver, "mjl@a.mox.example")
+	rs, err = recipientSecurity(ctx, log, resolver, "mjl@a.mox.example")
 	tcompare(t, err, nil)
 	tcompare(t, rs, RecipientSecurity{SecurityResultYes, SecurityResultNo, SecurityResultNo, SecurityResultNo, SecurityResultNo})
 

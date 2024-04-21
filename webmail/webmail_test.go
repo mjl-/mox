@@ -23,6 +23,7 @@ import (
 	"github.com/mjl-/sherpa"
 
 	"github.com/mjl-/mox/message"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/store"
@@ -304,6 +305,7 @@ func TestWebmail(t *testing.T) {
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
 
+	log := mlog.New("webmail", nil)
 	acc, err := store.OpenAccount(pkglog, "mjl")
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(pkglog, "test1234")
@@ -319,7 +321,7 @@ func TestWebmail(t *testing.T) {
 	tcheck(t, err, "sherpa handler")
 
 	respRec := httptest.NewRecorder()
-	reqInfo := requestInfo{"", "", "", respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
+	reqInfo := requestInfo{log, "", nil, "", respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
 	ctx := context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	// Prepare loginToken.
@@ -339,7 +341,7 @@ func TestWebmail(t *testing.T) {
 		t.Fatalf("missing session cookie")
 	}
 
-	reqInfo = requestInfo{"mjl@mox.example", "mjl", "", respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
+	reqInfo = requestInfo{log, "mjl@mox.example", acc, "", respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
 	ctx = context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	tneedError(t, func() { api.MailboxCreate(ctx, "Inbox") })   // Cannot create inbox.
@@ -611,7 +613,7 @@ func TestWebmail(t *testing.T) {
 	// Normally the generic /api/ auth check returns a user error. We bypass it and
 	// check for the server error.
 	sessionToken := store.SessionToken(strings.SplitN(sessionCookie.Value, " ", 2)[0])
-	reqInfo = requestInfo{"mjl@mox.example", "mjl", sessionToken, httptest.NewRecorder(), &http.Request{RemoteAddr: "127.0.0.1:1234"}}
+	reqInfo = requestInfo{log, "mjl@mox.example", acc, sessionToken, httptest.NewRecorder(), &http.Request{RemoteAddr: "127.0.0.1:1234"}}
 	ctx = context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 	api.Logout(ctx)
 	tneedErrorCode(t, "server:error", func() { api.Logout(ctx) })
