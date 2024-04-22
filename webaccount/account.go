@@ -3,10 +3,7 @@
 package webaccount
 
 import (
-	"archive/tar"
-	"archive/zip"
 	"bytes"
-	"compress/gzip"
 	"context"
 	cryptorand "crypto/rand"
 	"encoding/base64"
@@ -39,6 +36,7 @@ import (
 	"github.com/mjl-/mox/webapi"
 	"github.com/mjl-/mox/webauth"
 	"github.com/mjl-/mox/webhook"
+	"github.com/mjl-/mox/webops"
 )
 
 var pkglog = mlog.New("webaccount", nil)
@@ -218,7 +216,7 @@ func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r 
 	// All other URLs, except the login endpoint require some authentication.
 	if r.URL.Path != "/api/LoginPrep" && r.URL.Path != "/api/Login" {
 		var ok bool
-		isExport := strings.HasPrefix(r.URL.Path, "/export/")
+		isExport := r.URL.Path == "/export"
 		requireCSRF := isAPI || r.URL.Path == "/import" || isExport
 		accName, sessionToken, loginAddress, ok = webauth.Check(ctx, log, webauth.Accounts, "webaccount", isForwarded, w, r, isAPI, requireCSRF, isExport)
 		if !ok {
@@ -235,47 +233,8 @@ func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r 
 	}
 
 	switch r.URL.Path {
-	case "/export/mail-export-maildir.tgz", "/export/mail-export-maildir.zip", "/export/mail-export-mbox.tgz", "/export/mail-export-mbox.zip":
-		if r.Method != "POST" {
-			http.Error(w, "405 - method not allowed - use post", http.StatusMethodNotAllowed)
-			return
-		}
-
-		maildir := strings.Contains(r.URL.Path, "maildir")
-		tgz := strings.Contains(r.URL.Path, ".tgz")
-
-		acc, err := store.OpenAccount(log, accName)
-		if err != nil {
-			log.Errorx("open account for export", err)
-			http.Error(w, "500 - internal server error", http.StatusInternalServerError)
-			return
-		}
-		defer func() {
-			err := acc.Close()
-			log.Check(err, "closing account")
-		}()
-
-		var archiver store.Archiver
-		if tgz {
-			// Don't tempt browsers to "helpfully" decompress.
-			w.Header().Set("Content-Type", "application/octet-stream")
-
-			gzw := gzip.NewWriter(w)
-			defer func() {
-				_ = gzw.Close()
-			}()
-			archiver = store.TarArchiver{Writer: tar.NewWriter(gzw)}
-		} else {
-			w.Header().Set("Content-Type", "application/zip")
-			archiver = store.ZipArchiver{Writer: zip.NewWriter(w)}
-		}
-		defer func() {
-			err := archiver.Close()
-			log.Check(err, "exporting mail close")
-		}()
-		if err := store.ExportMessages(r.Context(), log, acc.DB, acc.Dir, archiver, maildir, ""); err != nil {
-			log.Errorx("exporting mail", err)
-		}
+	case "/export":
+		webops.Export(log, accName, w, r)
 
 	case "/import":
 		if r.Method != "POST" {

@@ -39,6 +39,7 @@ import (
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/webauth"
+	"github.com/mjl-/mox/webops"
 )
 
 var pkglog = mlog.New("webmail", nil)
@@ -259,7 +260,9 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 	// All other URLs, except the login endpoint require some authentication.
 	if r.URL.Path != "/api/LoginPrep" && r.URL.Path != "/api/Login" {
 		var ok bool
-		accName, sessionToken, loginAddress, ok = webauth.Check(ctx, log, webauth.Accounts, "webmail", isForwarded, w, r, isAPI, isAPI, false)
+		isExport := r.URL.Path == "/export"
+		requireCSRF := isAPI || isExport
+		accName, sessionToken, loginAddress, ok = webauth.Check(ctx, log, webauth.Accounts, "webmail", isForwarded, w, r, isAPI, requireCSRF, isExport)
 		if !ok {
 			// Response has been written already.
 			return
@@ -289,9 +292,15 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 	}
 
 	// We are now expecting the following URLs:
+	// .../export
 	// .../msg/<msgid>/{attachments.zip,parsedmessage.js,raw}
 	// .../msg/<msgid>/{,msg}{text,html,htmlexternal}
 	// .../msg/<msgid>/{view,viewtext,download}/<partid>
+
+	if r.URL.Path == "/export" {
+		webops.Export(log, accName, w, r)
+		return
+	}
 
 	if !strings.HasPrefix(r.URL.Path, "/msg/") {
 		http.NotFound(w, r)

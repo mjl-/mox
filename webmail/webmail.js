@@ -1332,7 +1332,7 @@ Enable consistency checking in UI updates:
 - todo: buttons/mechanism to operate on all messages in a mailbox/search query, without having to list and select all messages. e.g. clearing flags/labels.
 - todo: can we detect if browser supports proper CSP? if not, refuse to load html messages?
 - todo: more search criteria? Date header field (instead of time received), text vs html (only, either or both), attachment filenames and sizes
-- todo: integrate more of the account page into webmail? importing/exporting messages, configuring delivery rules (possibly with sieve).
+- todo: import messages into specific mailbox?
 - todo: configurable keyboard shortcuts? we use strings like "ctrl p" which we already generate and match on, add a mapping from command name to cmd* functions, and have a map of keys to command names. the commands for up/down with shift/ctrl modifiers may need special attention.
 - todo: consider composing messages with bcc headers that are sent as message Bcc headers to the bcc-addressees, optionally with checkbox.
 - todo: improve accessibility
@@ -5194,6 +5194,12 @@ const newMsglistView = (msgElem, listMailboxes, setLocationHash, otherMailbox, p
 	};
 	return mlv;
 };
+const popoverExport = (reference, mailboxName) => {
+	const removeExport = popover(reference, {}, dom.h1('Export ', mailboxName || 'all mailboxes'), dom.form(function submit() {
+		// If we would remove the popup immediately, the form would be deleted too and never submitted.
+		window.setTimeout(() => removeExport(), 100);
+	}, attr.target('_blank'), attr.method('POST'), attr.action('export'), dom.input(attr.type('hidden'), attr.name('csrf'), attr.value(localStorageGet('webmailcsrftoken') || '')), dom.input(attr.type('hidden'), attr.name('mailbox'), attr.value(mailboxName)), dom.div(style({ display: 'flex', flexDirection: 'column', gap: '.5ex' }), dom.div(dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('maildir'), attr.checked('')), ' Maildir'), ' ', dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('mbox')), ' Mbox')), dom.div(dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('tar')), ' Tar'), ' ', dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('tgz'), attr.checked('')), ' Tgz'), ' ', dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('zip')), ' Zip'), ' ', dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('none')), ' None')), dom.div(dom.label(dom.input(attr.type('checkbox'), attr.checked(''), attr.name('recursive'), attr.value('on')), ' Recursive')), dom.div(style({ marginTop: '1ex' }), dom.submitbutton('Export')))));
+};
 const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 	const plusbox = '⊞';
 	const minusbox = '⊟';
@@ -5260,6 +5266,9 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 				await withStatus('Marking mailbox as special use', client.MailboxSetSpecialUse(mb));
 			};
 			popover(actionBtn, { transparent: true }, dom.div(style({ display: 'flex', flexDirection: 'column', gap: '.5ex' }), dom.div(dom.clickbutton('Archive', async function click() { await setUse((mb) => { mb.Archive = true; }); })), dom.div(dom.clickbutton('Draft', async function click() { await setUse((mb) => { mb.Draft = true; }); })), dom.div(dom.clickbutton('Junk', async function click() { await setUse((mb) => { mb.Junk = true; }); })), dom.div(dom.clickbutton('Sent', async function click() { await setUse((mb) => { mb.Sent = true; }); })), dom.div(dom.clickbutton('Trash', async function click() { await setUse((mb) => { mb.Trash = true; }); }))));
+		})), dom.div(dom.clickbutton('Export', function click() {
+			popoverExport(actionBtn, mbv.mailbox.Name);
+			remove();
 		}))));
 	};
 	// Keep track of dragenter/dragleave ourselves, we don't get a neat 1 enter and 1
@@ -5483,13 +5492,23 @@ const newMailboxlistView = (msglistView, requestNewView, updatePageTitle, setLoc
 	};
 	const root = dom.div();
 	const mailboxesElem = dom.div();
-	dom._kids(root, dom.div(attr.role('region'), attr.arialabel('Mailboxes'), dom.div(dom.h1('Mailboxes', style({ display: 'inline', fontSize: 'inherit' })), ' ', dom.clickbutton('+', attr.arialabel('Create new mailbox.'), attr.title('Create new mailbox.'), style({ padding: '0 .25em' }), function click(e) {
-		let fieldset, name;
-		const remove = popover(e.target, {}, dom.form(async function submit(e) {
-			e.preventDefault();
-			await withStatus('Creating mailbox', client.MailboxCreate(name.value), fieldset);
+	dom._kids(root, dom.div(attr.role('region'), attr.arialabel('Mailboxes'), dom.div(dom.h1('Mailboxes', style({ display: 'inline', fontSize: 'inherit' })), ' ', dom.clickbutton('...', attr.arialabel('Mailboxes actions'), attr.title('Actions on mailboxes like creating a new mailbox or exporting all email.'), function click(e) {
+		e.stopPropagation();
+		const remove = popover(e.target, { transparent: true }, dom.div(style({ display: 'flex', flexDirection: 'column', gap: '.5ex' }), dom.div(dom.clickbutton('Create mailbox', attr.arialabel('Create new mailbox.'), attr.title('Create new mailbox.'), style({ padding: '0 .25em' }), function click(e) {
+			let fieldset;
+			let name;
+			const ref = e.target;
+			const removeCreate = popover(ref, {}, dom.form(async function submit(e) {
+				e.preventDefault();
+				await withStatus('Creating mailbox', client.MailboxCreate(name.value), fieldset);
+				removeCreate();
+			}, fieldset = dom.fieldset(dom.label('Name ', name = dom.input(attr.required('yes'), focusPlaceholder('Lists/Go/Nuts'))), ' ', dom.submitbutton('Create'))));
 			remove();
-		}, fieldset = dom.fieldset(dom.label('Name ', name = dom.input(attr.required('yes'), focusPlaceholder('Lists/Go/Nuts'))), ' ', dom.submitbutton('Create'))));
+		})), dom.div(dom.clickbutton('Export', function click(e) {
+			const ref = e.target;
+			popoverExport(ref, '');
+			remove();
+		}))));
 	})), mailboxesElem));
 	const loadMailboxes = (mailboxes, mbnameOpt) => {
 		mailboxViews = mailboxes.map(mb => newMailboxView(mb, mblv, otherMailbox));

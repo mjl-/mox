@@ -214,12 +214,9 @@ func TestAccount(t *testing.T) {
 
 	testHTTP("POST", "/import", httpHeaders{}, http.StatusForbidden, nil, nil)
 	testHTTP("POST", "/import", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
-	testHTTP("GET", "/export/mail-export-maildir.tgz", httpHeaders{}, http.StatusForbidden, nil, nil)
-	testHTTP("GET", "/export/mail-export-maildir.tgz", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
-	testHTTP("GET", "/export/mail-export-maildir.tgz", httpHeaders{hdrSessionOK}, http.StatusForbidden, nil, nil)
-	testHTTP("GET", "/export/mail-export-maildir.zip", httpHeaders{}, http.StatusForbidden, nil, nil)
-	testHTTP("GET", "/export/mail-export-mbox.tgz", httpHeaders{}, http.StatusForbidden, nil, nil)
-	testHTTP("GET", "/export/mail-export-mbox.zip", httpHeaders{}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", "/export", httpHeaders{}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", "/export", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", "/export", httpHeaders{hdrSessionOK}, http.StatusForbidden, nil, nil)
 
 	// SetPassword needs the token.
 	sessionToken := store.SessionToken(strings.SplitN(sessionCookie.Value, " ", 2)[0])
@@ -336,11 +333,17 @@ func TestAccount(t *testing.T) {
 		return nil
 	})
 
-	testExport := func(httppath string, iszip bool, expectFiles int) {
+	testExport := func(format, archive string, expectFiles int) {
 		t.Helper()
 
-		fields := url.Values{"csrf": []string{string(csrfToken)}}
-		r := httptest.NewRequest("POST", httppath, strings.NewReader(fields.Encode()))
+		fields := url.Values{
+			"csrf":      []string{string(csrfToken)},
+			"format":    []string{format},
+			"archive":   []string{archive},
+			"mailbox":   []string{""},
+			"recursive": []string{"on"},
+		}
+		r := httptest.NewRequest("POST", "/export", strings.NewReader(fields.Encode()))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		r.Header.Add("Cookie", cookieOK.String())
 		w := httptest.NewRecorder()
@@ -349,7 +352,7 @@ func TestAccount(t *testing.T) {
 			t.Fatalf("export, got status code %d, expected 200: %s", w.Code, w.Body.Bytes())
 		}
 		var count int
-		if iszip {
+		if archive == "zip" {
 			buf := w.Body.Bytes()
 			zr, err := zip.NewReader(bytes.NewReader(buf), int64(len(buf)))
 			tcheck(t, err, "reading zip")
@@ -359,9 +362,13 @@ func TestAccount(t *testing.T) {
 				}
 			}
 		} else {
-			gzr, err := gzip.NewReader(w.Body)
-			tcheck(t, err, "gzip reader")
-			tr := tar.NewReader(gzr)
+			var src io.Reader = w.Body
+			if archive == "tgz" {
+				gzr, err := gzip.NewReader(src)
+				tcheck(t, err, "gzip reader")
+				src = gzr
+			}
+			tr := tar.NewReader(src)
 			for {
 				h, err := tr.Next()
 				if err == io.EOF {
@@ -380,10 +387,10 @@ func TestAccount(t *testing.T) {
 		}
 	}
 
-	testExport("/export/mail-export-maildir.tgz", false, 6) // 2 mailboxes, each with 2 messages and a dovecot-keyword file
-	testExport("/export/mail-export-maildir.zip", true, 6)
-	testExport("/export/mail-export-mbox.tgz", false, 2)
-	testExport("/export/mail-export-mbox.zip", true, 2)
+	testExport("maildir", "tgz", 6) // 2 mailboxes, each with 2 messages and a dovecot-keyword file
+	testExport("maildir", "zip", 6)
+	testExport("mbox", "tar", 2+6) // 2 imported plus 6 default mailboxes (Inbox, Draft, etc)
+	testExport("mbox", "zip", 2+6)
 
 	sl := api.SuppressionList(ctx)
 	tcompare(t, len(sl), 0)

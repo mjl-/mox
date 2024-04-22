@@ -477,14 +477,6 @@ const index = async () => {
 		})
 	}
 
-	const exportForm = (filename: string) => {
-		return dom.form(
-			attr.target('_blank'), attr.method('POST'), attr.action('export/'+filename),
-			dom.input(attr.type('hidden'), attr.name('csrf'), attr.value(localStorageGet('webaccountcsrftoken') || '')),
-			dom.submitbutton('Export'),
-		)
-	}
-
 	const authorizationPopup = (dest: HTMLInputElement) => {
 		let username: HTMLInputElement
 		let password: HTMLInputElement
@@ -1148,23 +1140,24 @@ const index = async () => {
 		dom.br(),
 
 		dom.h2('Export'),
-		dom.p('Export all messages in all mailboxes. In maildir or mbox format, as .zip or .tgz file.'),
-		dom.table(dom._class('slim'),
-			dom.tr(
-				dom.td('Maildirs in .tgz'),
-				dom.td(exportForm('mail-export-maildir.tgz')),
-			),
-			dom.tr(
-				dom.td('Maildirs in .zip'),
-				dom.td(exportForm('mail-export-maildir.zip')),
-			),
-			dom.tr(
-				dom.td('Mbox files in .tgz'),
-				dom.td(exportForm('mail-export-mbox.tgz')),
-			),
-			dom.tr(
-				dom.td('Mbox files in .zip'),
-				dom.td(exportForm('mail-export-mbox.zip')),
+		dom.p('Export all messages in all mailboxes.'),
+		dom.form(
+			attr.target('_blank'), attr.method('POST'), attr.action('export'),
+			dom.input(attr.type('hidden'), attr.name('csrf'), attr.value(localStorageGet('webaccountcsrftoken') || '')),
+			dom.input(attr.type('hidden'), attr.name('mailbox'), attr.value('')),
+			dom.input(attr.type('hidden'), attr.name('recursive'), attr.value('on')),
+
+			dom.div(style({display: 'flex', flexDirection: 'column', gap: '.5ex'}),
+				dom.div(
+					dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('maildir'), attr.checked('')), ' Maildir'), ' ',
+					dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('mbox')), ' Mbox'),
+				),
+				dom.div(
+					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('tar')), ' Tar'), ' ',
+					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('tgz'), attr.checked('')), ' Tgz'), ' ',
+					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('zip')), ' Zip'), ' ',
+				),
+				dom.div(style({marginTop: '1ex'}), dom.submitbutton('Export')),
 			),
 		),
 		dom.br(),

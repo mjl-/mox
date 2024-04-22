@@ -51,8 +51,8 @@ any parameters. Followed by the help and usage information for each command.
 	mox queue webhook retired print id
 	mox import maildir accountname mailboxname maildir
 	mox import mbox accountname mailboxname mbox
-	mox export maildir dst-dir account-path [mailbox]
-	mox export mbox dst-dir account-path [mailbox]
+	mox export maildir [-single] dst-dir account-path [mailbox]
+	mox export mbox [-single] dst-dir account-path [mailbox]
 	mox localserve
 	mox help [command ...]
 	mox backup dest-dir
@@ -724,9 +724,11 @@ Export one or all mailboxes from an account in maildir format.
 Export bypasses a running mox instance. It opens the account mailbox/message
 database file directly. This may block if a running mox instance also has the
 database open, e.g. for IMAP connections. To export from a running instance, use
-the accounts web page.
+the accounts web page or webmail.
 
-	usage: mox export maildir dst-dir account-path [mailbox]
+	usage: mox export maildir [-single] dst-dir account-path [mailbox]
+	  -single
+	    	export single mailbox, without any children. disabled if mailbox isn't specified.
 
 # mox export mbox
 
@@ -737,13 +739,15 @@ Using mbox is not recommended. Maildir is a better format.
 Export bypasses a running mox instance. It opens the account mailbox/message
 database file directly. This may block if a running mox instance also has the
 database open, e.g. for IMAP connections. To export from a running instance, use
-the accounts web page.
+the accounts web page or webmail.
 
 For mbox export, "mboxrd" is used where message lines starting with the magic
 "From " string are escaped by prepending a >. All ">*From " are escaped,
 otherwise reconstructing the original could lose a ">".
 
-	usage: mox export mbox dst-dir account-path [mailbox]
+	usage: mox export mbox [-single] dst-dir account-path [mailbox]
+	  -single
+	    	export single mailbox, without any children. disabled if mailbox isn't specified.
 
 # mox localserve
 

@@ -1,8 +1,10 @@
 package webmail
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -461,6 +464,74 @@ func TestWebmail(t *testing.T) {
 
 	// Unknown.
 	testHTTP("GET", "/other", httpHeaders{}, http.StatusForbidden, nil, nil)
+
+	// Export.
+	testHTTP("GET", "/export", httpHeaders{}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", "/export", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", "/export", httpHeaders{hdrSessionOK}, http.StatusForbidden, nil, nil)
+
+	testExport := func(format, archive, mailbox string, recursive bool, expectFiles int) {
+		t.Helper()
+
+		fields := url.Values{
+			"csrf":    []string{string(csrfToken)},
+			"format":  []string{format},
+			"archive": []string{archive},
+			"mailbox": []string{mailbox},
+		}
+		if recursive {
+			fields.Add("recursive", "on")
+		}
+		r := httptest.NewRequest("POST", "/export", strings.NewReader(fields.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Add("Cookie", cookieOK.String())
+		w := httptest.NewRecorder()
+		handle(apiHandler, false, "", w, r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("export, got status code %d, expected 200: %s", w.Code, w.Body.Bytes())
+		}
+		var count int
+		if archive == "zip" {
+			buf := w.Body.Bytes()
+			zr, err := zip.NewReader(bytes.NewReader(buf), int64(len(buf)))
+			tcheck(t, err, "reading zip")
+			for _, f := range zr.File {
+				if !strings.HasSuffix(f.Name, "/") {
+					count++
+				}
+			}
+		} else {
+			var src io.Reader = w.Body
+			if archive == "tgz" {
+				gzr, err := gzip.NewReader(src)
+				tcheck(t, err, "gzip reader")
+				src = gzr
+			}
+			tr := tar.NewReader(src)
+			for {
+				h, err := tr.Next()
+				if err == io.EOF {
+					break
+				}
+				tcheck(t, err, "next file in tar")
+				if !strings.HasSuffix(h.Name, "/") {
+					count++
+				}
+				_, err = io.Copy(io.Discard, tr)
+				tcheck(t, err, "reading from tar")
+			}
+		}
+		if count != expectFiles {
+			t.Fatalf("export, has %d files, expected %d", count, expectFiles)
+		}
+	}
+
+	testExport("maildir", "tgz", "", true, 8+1) // 8 messages, 1 flags file
+	testExport("maildir", "zip", "", true, 8+1)
+	testExport("mbox", "tar", "", true, 6+5) // 6 default mailboxes, 5 created
+	testExport("mbox", "zip", "", true, 6+5)
+	testExport("mbox", "zip", "Lists", true, 3)
+	testExport("mbox", "zip", "Lists", false, 1)
 
 	// HTTP message, generic
 	testHTTP("GET", fmt.Sprintf("/msg/%v/attachments.zip", inboxMinimal.ID), nil, http.StatusForbidden, nil, nil)

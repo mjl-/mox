@@ -12,20 +12,22 @@ import (
 )
 
 func cmdExportMaildir(c *cmd) {
-	c.params = "dst-dir account-path [mailbox]"
+	c.params = "[-single] dst-dir account-path [mailbox]"
 	c.help = `Export one or all mailboxes from an account in maildir format.
 
 Export bypasses a running mox instance. It opens the account mailbox/message
 database file directly. This may block if a running mox instance also has the
 database open, e.g. for IMAP connections. To export from a running instance, use
-the accounts web page.
+the accounts web page or webmail.
 `
+	var single bool
+	c.flag.BoolVar(&single, "single", false, "export single mailbox, without any children. disabled if mailbox isn't specified.")
 	args := c.Parse()
-	xcmdExport(false, args, c)
+	xcmdExport(false, single, args, c)
 }
 
 func cmdExportMbox(c *cmd) {
-	c.params = "dst-dir account-path [mailbox]"
+	c.params = "[-single] dst-dir account-path [mailbox]"
 	c.help = `Export messages from one or all mailboxes in an account in mbox format.
 
 Using mbox is not recommended. Maildir is a better format.
@@ -33,17 +35,19 @@ Using mbox is not recommended. Maildir is a better format.
 Export bypasses a running mox instance. It opens the account mailbox/message
 database file directly. This may block if a running mox instance also has the
 database open, e.g. for IMAP connections. To export from a running instance, use
-the accounts web page.
+the accounts web page or webmail.
 
 For mbox export, "mboxrd" is used where message lines starting with the magic
 "From " string are escaped by prepending a >. All ">*From " are escaped,
 otherwise reconstructing the original could lose a ">".
 `
+	var single bool
+	c.flag.BoolVar(&single, "single", false, "export single mailbox, without any children. disabled if mailbox isn't specified.")
 	args := c.Parse()
-	xcmdExport(true, args, c)
+	xcmdExport(true, single, args, c)
 }
 
-func xcmdExport(mbox bool, args []string, c *cmd) {
+func xcmdExport(mbox, single bool, args []string, c *cmd) {
 	if len(args) != 2 && len(args) != 3 {
 		c.Usage()
 	}
@@ -53,6 +57,8 @@ func xcmdExport(mbox bool, args []string, c *cmd) {
 	var mailbox string
 	if len(args) == 3 {
 		mailbox = args[2]
+	} else {
+		single = false
 	}
 
 	dbpath := filepath.Join(accountDir, "index.db")
@@ -65,7 +71,7 @@ func xcmdExport(mbox bool, args []string, c *cmd) {
 	}()
 
 	a := store.DirArchiver{Dir: dst}
-	err = store.ExportMessages(context.Background(), c.log, db, accountDir, a, !mbox, mailbox)
+	err = store.ExportMessages(context.Background(), c.log, db, accountDir, a, !mbox, mailbox, !single)
 	xcheckf(err, "exporting messages")
 	err = a.Close()
 	xcheckf(err, "closing archiver")
