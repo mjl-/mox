@@ -33,7 +33,6 @@ func TestExport(t *testing.T) {
 	}()
 	defer Switchboard()()
 
-
 	msgFile, err := CreateMessageTemp(pkglog, "mox-test-export")
 	tcheck(t, err, "create temp")
 	defer os.Remove(msgFile.Name()) // To be sure.

@@ -136,7 +136,6 @@ https://nlnet.nl/project/Mox/.
 ## Roadmap
 
 - Aliases, for delivering to multiple local accounts.
-- Webmail improvements
 - Calendaring with CalDAV/iCal
 - More IMAP extensions (PREVIEW, WITHIN, IMPORTANT, COMPRESS=DEFLATE,
   CREATE-SPECIAL-USE, SAVEDATE, UNAUTHENTICATE, REPLACE, QUOTA, NOTIFY,
