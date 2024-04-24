@@ -110,9 +110,11 @@ fmt:
 tswatch:
 	bash -c 'while true; do inotifywait -q -e close_write *.ts webadmin/*.ts webaccount/*.ts webmail/*.ts; make frontend; done'
 
-install-js:
+node_modules/.bin/tsc:
 	-mkdir -p node_modules/.bin
 	npm ci
+
+install-js: node_modules/.bin/tsc
 
 install-js0:
 	-mkdir -p node_modules/.bin
@@ -133,7 +135,7 @@ webadmin/admin.js: lib.ts webadmin/api.ts webadmin/admin.ts
 webaccount/account.js: lib.ts webaccount/api.ts webaccount/account.ts
 	./tsc.sh $@ $^
 
-frontend: webadmin/admin.js webaccount/account.js webmail/webmail.js webmail/msg.js webmail/text.js
+frontend: node_modules/.bin/tsc webadmin/admin.js webaccount/account.js webmail/webmail.js webmail/msg.js webmail/text.js
 
 install-apidiff:
 	go install golang.org/x/exp/cmd/apidiff@v0.0.0-20231206192017-f3f8817b8deb

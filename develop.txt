@@ -3,10 +3,9 @@ This file has notes useful for mox developers.
 # Building & testing
 
 For a full build, you'll need a recent Go compiler/toolchain and nodejs/npm for
-the frontend. First install frontend dependencies (typescript) with "make
-install-js". Then run "make build" to do a full build. Run "make test" to run
-the test suite. With docker installed, you can run "make test-integration" to
-start up a few mox instances, a dns server, a postfix instance, and send email
+the frontend. Run "make build" to do a full build. Run "make test" to run the
+test suite. With docker installed, you can run "make test-integration" to start
+up a few mox instances, a dns server, a postfix instance, and send email
 between them.
 
 The mox localserve command is a convenient way to test locally. Most of the
