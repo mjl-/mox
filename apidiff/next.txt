@@ -3,6 +3,7 @@ Below are the incompatible changes between v0.0.10 and next, per package.
 # dane
 
 # dmarc
+- DMARCPolicy: removed
 
 # dmarcrpt
 
@@ -18,6 +19,7 @@ Below are the incompatible changes between v0.0.10 and next, per package.
 - NewComposer: changed from func(io.Writer, int64) *Composer to func(io.Writer, int64, bool) *Composer
 
 # mtasts
+- STSMX: removed
 
 # publicsuffix
 
