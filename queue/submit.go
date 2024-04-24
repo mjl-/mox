@@ -231,7 +231,14 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 	if submiterr != nil {
 		qlog.Infox("smtp transaction for delivery failed", submiterr)
 	}
-	failed = 0 // Reset, we are looking at the SMTP results below.
+	failed, delivered = processDeliveries(qlog, m0, msgs, addr, transport.Host, backoff, rcptErrs, submiterr)
+}
+
+// Process failures and successful deliveries, retiring/removing messages from
+// queue, queueing webhooks.
+//
+// Also used by deliverLocalserve.
+func processDeliveries(qlog mlog.Log, m0 *Msg, msgs []*Msg, remoteAddr string, remoteHost string, backoff time.Duration, rcptErrs []smtpclient.Response, submiterr error) (failed, delivered int) {
 	var delMsgs []Msg
 	for i, m := range msgs {
 		qmlog := qlog.With(
@@ -246,14 +253,14 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		}
 		if err != nil {
 			smtperr, ok := err.(smtpclient.Error)
-			err = fmt.Errorf("transport %s: submitting message to %s: %w", transportName, addr, err)
+			err = fmt.Errorf("delivering message to %s: %w", remoteAddr, err)
 			var remoteMTA dsn.NameIP
 			if ok {
-				remoteMTA.Name = transport.Host
+				remoteMTA.Name = remoteHost
 				smtperr.Err = err
 				err = smtperr
 			}
-			qmlog.Errorx("submitting message", err, slog.String("remote", addr))
+			qmlog.Errorx("submitting message", err, slog.String("remote", remoteAddr))
 			failMsgsDB(qmlog, []*Msg{m}, m0.DialedIPs, backoff, remoteMTA, err)
 			failed++
 		} else {
@@ -274,4 +281,5 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		}
 		kick()
 	}
+	return
 }

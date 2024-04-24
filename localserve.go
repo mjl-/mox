@@ -26,6 +26,8 @@ import (
 	"github.com/mjl-/sconf"
 
 	"github.com/mjl-/mox/config"
+	"github.com/mjl-/mox/dkim"
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/junk"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -49,9 +51,12 @@ automatically initialized with configuration files, an account with email
 address mox@localhost and password moxmoxmox, and a newly generated self-signed
 TLS certificate.
 
-All incoming email to any address is accepted (if checks pass) and delivered to
-the account that is submitting the message, unless the recipient localpart ends
-with:
+Incoming messages are delivered as normal, falling back to accepting and
+delivering to the mox account for unknown addresses.
+Submitted messages are added to the queue, which delivers by ignoring the
+destination servers, always connecting to itself instead.
+
+Recipient addresses with the following localpart suffixes are handled specially:
 
 - "temperror": fail with a temporary error code
 - "permerror": fail with a permanent error code
@@ -59,8 +64,7 @@ with:
 - "timeout": no response (for an hour)
 
 If the localpart begins with "mailfrom" or "rcptto", the error is returned
-during those commands instead of during "data". If the localpart begins with
-"queue", the submission is accepted but delivery from the queue will fail.
+during those commands instead of during "data".
 `
 	golog.SetFlags(0)
 
@@ -144,6 +148,8 @@ during those commands instead of during "data". If the localpart begins with
 	smtpserver.Localserve = true
 	// Tell queue it shouldn't be queuing/delivering.
 	queue.Localserve = true
+	// Tell DKIM not to fail signatures for TLD localhost.
+	dkim.Localserve = true
 
 	const mtastsdbRefresher = false
 	const sendDMARCReports = false
@@ -393,6 +399,7 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 		Destinations: map[string]config.Destination{
 			"mox@localhost": {},
 		},
+		NoFirstTimeSenderDelay: true,
 	}
 	acc.AutomaticJunkFlags.Enabled = true
 	acc.AutomaticJunkFlags.JunkMailboxRegexp = "^(junk|spam)"
@@ -408,10 +415,25 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 		},
 	}
 
+	dkimKeyBuf, err := mox.MakeDKIMEd25519Key(dns.Domain{ASCII: "localserve"}, dns.Domain{ASCII: "localhost"})
+	xcheck(err, "making dkim key")
+	dkimKeyPath := "dkim.localserve.privatekey.pkcs8.pem"
+	err = os.WriteFile(filepath.Join(dir, dkimKeyPath), dkimKeyBuf, 0660)
+	xcheck(err, "writing dkim key file")
+
 	dynamic := config.Dynamic{
 		Domains: map[string]config.Domain{
 			"localhost": {
 				LocalpartCatchallSeparator: "+",
+				DKIM: config.DKIM{
+					Sign: []string{"localserve"},
+					Selectors: map[string]config.Selector{
+						"localserve": {
+							Expiration:     "72h",
+							PrivateKeyFile: dkimKeyPath,
+						},
+					},
+				},
 			},
 		},
 		Accounts: map[string]config.Account{

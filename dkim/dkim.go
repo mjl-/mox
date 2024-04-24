@@ -33,6 +33,9 @@ import (
 	"github.com/mjl-/mox/stub"
 )
 
+// If set, signatures for top-level domain "localhost" are accepted.
+var Localserve bool
+
 var (
 	MetricSign   stub.CounterVec   = stub.CounterVecIgnore{}
 	MetricVerify stub.HistogramVec = stub.HistogramVecIgnore{}
@@ -442,7 +445,7 @@ func checkSignatureParams(ctx context.Context, log mlog.Log, sig *Sig) (hash cry
 	if subdom.Unicode != "" {
 		subdom.Unicode = "x." + subdom.Unicode
 	}
-	if orgDom := publicsuffix.Lookup(ctx, log.Logger, subdom); subdom.ASCII == orgDom.ASCII {
+	if orgDom := publicsuffix.Lookup(ctx, log.Logger, subdom); subdom.ASCII == orgDom.ASCII && !(Localserve && sig.Domain.ASCII == "localhost") {
 		return 0, false, false, fmt.Errorf("%w: %s", ErrTLD, sig.Domain)
 	}
 

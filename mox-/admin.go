@@ -99,7 +99,7 @@ func dkimKeyNote(kind string, selector, domain dns.Domain) string {
 	return s
 }
 
-// MakeDKIMEd25519Key returns a PEM buffer containing an rsa key for use with
+// MakeDKIMRSAKey returns a PEM buffer containing an rsa key for use with
 // DKIM.
 // selector and domain can be empty. If not, they are used in the note.
 func MakeDKIMRSAKey(selector, domain dns.Domain) ([]byte, error) {

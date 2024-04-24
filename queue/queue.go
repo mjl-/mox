@@ -28,12 +28,10 @@ import (
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dsn"
-	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
@@ -1484,117 +1482,7 @@ func deliver(log mlog.Log, resolver dns.Resolver, m0 Msg) {
 	}
 
 	if Localserve {
-		// We are not actually going to deliver. We'll deliver to the sender account.
-		// Unless recipients match certain special patterns, in which case we can pretend
-		// to cause delivery failures. Useful for testing.
-
-		acc, err := store.OpenAccount(log, m0.SenderAccount)
-		if err != nil {
-			log.Errorx("opening sender account for immediate delivery with localserve, skipping", err)
-			return
-		}
-		defer func() {
-			err := acc.Close()
-			log.Check(err, "closing account")
-		}()
-		conf, _ := acc.Conf()
-
-		p := m0.MessagePath()
-		msgFile, err := os.Open(p)
-		if err != nil {
-			xerr := fmt.Errorf("open message for delivery: %v", err)
-			failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, xerr)
-			return
-		}
-		defer func() {
-			err := msgFile.Close()
-			qlog.Check(err, "closing message after delivery attempt")
-		}()
-
-		// Parse the message for a From-address, but continue on error.
-		fromAddr, _, _, fromErr := message.From(qlog.Logger, false, store.FileMsgReader(m0.MsgPrefix, msgFile), nil)
-		log.Check(fromErr, "parsing message From header")
-
-		for _, qm := range msgs {
-			code, timeout := mox.LocalserveNeedsError(qm.RecipientLocalpart)
-			if timeout || code != 0 {
-				err := errors.New("simulated error due to localserve mode and special recipient localpart")
-				if timeout {
-					err = fmt.Errorf("%s: timeout", err)
-				} else {
-					err = smtpclient.Error{Permanent: code/100 == 5, Code: code, Err: err}
-				}
-				failMsgsDB(qlog, []*Msg{qm}, m0.DialedIPs, backoff, remoteMTA, err)
-				continue
-			}
-
-			msgFromOrgDomain := publicsuffix.Lookup(ctx, qlog.Logger, fromAddr.Domain)
-
-			dm := store.Message{
-				RemoteIP:           "::1",
-				RemoteIPMasked1:    "::",
-				RemoteIPMasked2:    "::",
-				RemoteIPMasked3:    "::",
-				MailFrom:           qm.Sender().XString(true),
-				MailFromLocalpart:  qm.SenderLocalpart,
-				MailFromDomain:     qm.SenderDomainStr,
-				RcptToLocalpart:    qm.RecipientLocalpart,
-				RcptToDomain:       qm.RecipientDomainStr,
-				MsgFromLocalpart:   fromAddr.Localpart,
-				MsgFromDomain:      fromAddr.Domain.Name(),
-				MsgFromOrgDomain:   msgFromOrgDomain.Name(),
-				EHLOValidated:      true,
-				MailFromValidated:  true,
-				MsgFromValidated:   true,
-				EHLOValidation:     store.ValidationPass,
-				MailFromValidation: store.ValidationPass,
-				MsgFromValidation:  store.ValidationDMARC,
-				DKIMDomains:        []string{"localhost"},
-				ReceivedRequireTLS: qm.RequireTLS != nil && *qm.RequireTLS,
-				Size:               qm.Size,
-				MsgPrefix:          qm.MsgPrefix,
-			}
-			var err error
-			var mb store.Mailbox
-			acc.WithWLock(func() {
-				dest := conf.Destinations[qm.Recipient().String()]
-				err = acc.DeliverDestination(log, dest, &dm, msgFile)
-				if err != nil {
-					err = fmt.Errorf("delivering message: %v", err)
-					return // Returned again outside WithWLock.
-				}
-
-				mb = store.Mailbox{ID: dm.MailboxID}
-				if err = acc.DB.Get(context.Background(), &mb); err != nil {
-					err = fmt.Errorf("getting mailbox for message after delivery: %v", err)
-				}
-			})
-			if err != nil {
-				log.Errorx("delivering from queue to original sender account failed, skipping", err)
-				continue
-			}
-			log.Debug("delivered from queue to original sender account")
-			qm.markResult(0, "", "", true)
-			err = DB.Write(context.Background(), func(tx *bstore.Tx) error {
-				return retireMsgs(qlog, tx, webhook.EventDelivered, smtp.C250Completed, "", nil, *qm)
-			})
-			if err != nil {
-				log.Errorx("removing queue message from database after local delivery to sender account", err)
-			} else if err := removeMsgsFS(qlog, *qm); err != nil {
-				log.Errorx("removing queue messages from file system after local delivery to sender account", err)
-			}
-			kick()
-
-			// Process incoming message for incoming webhook.
-			mr := store.FileMsgReader(dm.MsgPrefix, msgFile)
-			part, err := dm.LoadPart(mr)
-			if err != nil {
-				log.Errorx("loading parsed part for evaluating webhook", err)
-			} else {
-				err = Incoming(context.Background(), log, acc, m0.MessageID, dm, part, mb.Name)
-				log.Check(err, "queueing webhook for incoming delivery")
-			}
-		}
+		deliverLocalserve(ctx, qlog, msgs, backoff)
 		return
 	}
 

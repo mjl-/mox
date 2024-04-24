@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/md5"
 	cryptorand "crypto/rand"
 	"crypto/rsa"
@@ -1617,18 +1618,11 @@ func (c *conn) cmdRcpt(p *parser) {
 		}
 	}
 
-	if Localserve {
-		if strings.HasPrefix(string(fpath.Localpart), "rcptto") {
-			c.xlocalserveError(fpath.Localpart)
-		}
+	if Localserve && strings.HasPrefix(string(fpath.Localpart), "rcptto") {
+		c.xlocalserveError(fpath.Localpart)
+	}
 
-		// If account or destination doesn't exist, it will be handled during delivery. For
-		// submissions, which is the common case, we'll deliver to the logged in user,
-		// which is typically the mox user.
-		acc, _ := mox.Conf.Account("mox")
-		dest := acc.Destinations["mox@localhost"]
-		c.recipients = append(c.recipients, rcptAccount{fpath, true, "mox", dest, "mox@localhost"})
-	} else if len(fpath.IPDomain.IP) > 0 {
+	if len(fpath.IPDomain.IP) > 0 {
 		if !c.submission {
 			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "not accepting email for ip")
 		}
@@ -1636,6 +1630,14 @@ func (c *conn) cmdRcpt(p *parser) {
 	} else if accountName, canonical, addr, err := mox.FindAccount(fpath.Localpart, fpath.IPDomain.Domain, true); err == nil {
 		// note: a bare postmaster, without domain, is handled by FindAccount. ../rfc/5321:735
 		c.recipients = append(c.recipients, rcptAccount{fpath, true, accountName, addr, canonical})
+	} else if Localserve {
+		// If the address isn't known, and we are in localserve, deliver to the mox user.
+		// If account or destination doesn't exist, it will be handled during delivery. For
+		// submissions, which is the common case, we'll deliver to the logged in user,
+		// which is typically the mox user.
+		acc, _ := mox.Conf.Account("mox")
+		dest := acc.Destinations["mox@localhost"]
+		c.recipients = append(c.recipients, rcptAccount{fpath, true, "mox", dest, "mox@localhost"})
 	} else if errors.Is(err, mox.ErrDomainNotFound) {
 		if !c.submission {
 			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "not accepting email for domain")
@@ -1999,7 +2001,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		msgPrefix = append(msgPrefix, "Date: "+time.Now().Format(message.RFC5322Z)+"\r\n"...)
 	}
 
-	// Check outoging message rate limit.
+	// Check outgoing message rate limit.
 	err = c.account.DB.Read(ctx, func(tx *bstore.Tx) error {
 		rcpts := make([]smtp.Path, len(c.recipients))
 		for i, r := range c.recipients {
@@ -2286,7 +2288,34 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		dkimctx, dkimcancel := context.WithTimeout(ctx, time.Minute)
 		defer dkimcancel()
 		// todo future: we could let user configure which dkim headers they require
-		dkimResults, dkimErr = dkim.Verify(dkimctx, c.log.Logger, c.resolver, c.msgsmtputf8, dkim.DefaultPolicy, dataFile, ignoreTestMode)
+
+		// For localserve, fake dkim selector DNS records for hosted domains to give
+		// dkim-signatures a chance to pass for deliveries from queue.
+		resolver := c.resolver
+		if Localserve {
+			// Lookup based on message From address is an approximation.
+			if dc, ok := mox.Conf.Domain(msgFrom.Domain); ok && len(dc.DKIM.Selectors) > 0 {
+				txts := map[string][]string{}
+				for name, sel := range dc.DKIM.Selectors {
+					dkimr := dkim.Record{
+						Version:   "DKIM1",
+						Hashes:    []string{sel.HashEffective},
+						PublicKey: sel.Key.Public(),
+					}
+					if _, ok := sel.Key.(ed25519.PrivateKey); ok {
+						dkimr.Key = "ed25519"
+					} else if _, ok := sel.Key.(*rsa.PrivateKey); !ok {
+						err := fmt.Errorf("unrecognized private key for DKIM selector %q: %T", name, sel.Key)
+						xcheckf(err, "making dkim record")
+					}
+					txt, err := dkimr.Record()
+					xcheckf(err, "making DKIM DNS TXT record")
+					txts[name+"._domainkey."+msgFrom.Domain.ASCII+"."] = []string{txt}
+				}
+				resolver = dns.MockResolver{TXT: txts}
+			}
+		}
+		dkimResults, dkimErr = dkim.Verify(dkimctx, c.log.Logger, resolver, c.msgsmtputf8, dkim.DefaultPolicy, dataFile, ignoreTestMode)
 		dkimcancel()
 	}()
 
@@ -2318,7 +2347,17 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		defer wg.Done()
 		spfctx, spfcancel := context.WithTimeout(ctx, time.Minute)
 		defer spfcancel()
-		receivedSPF, spfDomain, spfExpl, spfAuthentic, spfErr = spf.Verify(spfctx, c.log.Logger, c.resolver, spfArgs)
+		resolver := c.resolver
+		// For localserve, give hosted domains a chance to pass for deliveries from queue.
+		if Localserve && c.remoteIP.IsLoopback() {
+			// Lookup based on message From address is an approximation.
+			if _, ok := mox.Conf.Domain(msgFrom.Domain); ok {
+				resolver = dns.MockResolver{
+					TXT: map[string][]string{msgFrom.Domain.ASCII + ".": {"v=spf1 ip4:127.0.0.1/8 ip6:::1 ~all"}},
+				}
+			}
+		}
+		receivedSPF, spfDomain, spfExpl, spfAuthentic, spfErr = spf.Verify(spfctx, c.log.Logger, resolver, spfArgs)
 		spfcancel()
 		if spfErr != nil {
 			c.log.Infox("spf verify", spfErr)
@@ -3001,7 +3040,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			}
 		}
 
-		if Localserve && !strings.HasPrefix(string(rcptAcc.rcptTo.Localpart), "queue") {
+		if Localserve {
 			code, timeout := mox.LocalserveNeedsError(rcptAcc.rcptTo.Localpart)
 			if timeout {
 				log.Info("timing out due to special localpart")
