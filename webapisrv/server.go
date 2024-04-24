@@ -431,7 +431,7 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	acc, err = store.OpenEmailAuth(log, email, password)
 	if err != nil {
 		mox.LimiterFailedAuth.Add(remoteIP, t0, 1)
-		if errors.Is(err, mox.ErrDomainNotFound) || errors.Is(err, mox.ErrAccountNotFound) || errors.Is(err, store.ErrUnknownCredentials) {
+		if errors.Is(err, mox.ErrDomainNotFound) || errors.Is(err, mox.ErrAddressNotFound) || errors.Is(err, store.ErrUnknownCredentials) {
 			log.Debug("bad http basic authentication credentials")
 			metricResults.WithLabelValues(fn, "badauth").Inc()
 			authResult = "badcreds"
@@ -621,15 +621,10 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 	addresses := append(append(m.To, m.CC...), m.BCC...)
 
 	// Check if from address is allowed for account.
-	fromAccName, _, _, err := mox.FindAccount(from.Address.Localpart, from.Address.Domain, false)
-	if err == nil && fromAccName != acc.Name {
-		err = mox.ErrAccountNotFound
-	}
-	if err != nil && (errors.Is(err, mox.ErrAccountNotFound) || errors.Is(err, mox.ErrDomainNotFound)) {
+	if !mox.AllowMsgFrom(acc.Name, from.Address) {
 		metricSubmission.WithLabelValues("badfrom").Inc()
 		return resp, webapi.Error{Code: "badFrom", Message: "from-address not configured for account"}
 	}
-	xcheckf(err, "checking if from address is allowed")
 
 	if len(recipients) == 0 {
 		return resp, webapi.Error{Code: "noRecipients", Message: "no recipients"}

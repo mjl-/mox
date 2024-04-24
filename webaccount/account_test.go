@@ -26,6 +26,8 @@ import (
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
 
+	"github.com/mjl-/mox/config"
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/queue"
@@ -227,7 +229,20 @@ func TestAccount(t *testing.T) {
 
 	err = queue.Init() // For DB.
 	tcheck(t, err, "queue init")
+
 	account, _, _, _ := api.Account(ctx)
+
+	// Check we don't see the alias member list.
+	tcompare(t, len(account.Aliases), 1)
+	tcompare(t, account.Aliases[0], config.AddressAlias{
+		SubscriptionAddress: "mjl☺@mox.example",
+		Alias: config.Alias{
+			LocalpartStr: "support",
+			Domain:       dns.Domain{ASCII: "mox.example"},
+			AllowMsgFrom: true,
+		},
+	})
+
 	api.DestinationSave(ctx, "mjl☺@mox.example", account.Destinations["mjl☺@mox.example"], account.Destinations["mjl☺@mox.example"]) // todo: save modified value and compare it afterwards
 
 	api.AccountSaveFullName(ctx, account.FullName+" changed") // todo: check if value was changed

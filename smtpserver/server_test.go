@@ -116,11 +116,13 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)
+
 	var err error
 	ts.acc, err = store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
 	err = ts.acc.SetPassword(log, password0)
 	tcheck(t, err, "set password")
+
 	ts.switchStop = store.Switchboard()
 	err = queue.Init()
 	tcheck(t, err, "queue init")
@@ -141,6 +143,23 @@ func (ts *testserver) close() {
 	tcheck(ts.t, err, "closing account")
 	ts.acc.CheckClosed()
 	ts.acc = nil
+}
+
+func (ts *testserver) checkCount(mailboxName string, expect int) {
+	t := ts.t
+	t.Helper()
+	q := bstore.QueryDB[store.Mailbox](ctxbg, ts.acc.DB)
+	q.FilterNonzero(store.Mailbox{Name: mailboxName})
+	mb, err := q.Get()
+	tcheck(t, err, "get mailbox")
+	qm := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
+	qm.FilterNonzero(store.Message{MailboxID: mb.ID})
+	qm.FilterEqual("Expunged", false)
+	n, err := qm.Count()
+	tcheck(t, err, "count messages in mailbox")
+	if n != expect {
+		t.Fatalf("messages in mailbox, found %d, expected %d", n, expect)
+	}
 }
 
 func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
@@ -192,6 +211,14 @@ func (ts *testserver) runRaw(fn func(clientConn net.Conn)) {
 	}()
 
 	fn(clientConn)
+}
+
+func (ts *testserver) smtperr(err error, expErr *smtpclient.Error) {
+	ts.t.Helper()
+	var cerr smtpclient.Error
+	if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
+		ts.t.Fatalf("got err %#v (%q), expected %#v", err, err, expErr)
+	}
 }
 
 // Just a cert that appears valid. SMTP client will not verify anything about it
@@ -508,22 +535,6 @@ func TestSpam(t *testing.T) {
 		tinsertmsg(t, ts.acc, "Inbox", &nm, deliverMessage)
 	}
 
-	checkCount := func(mailboxName string, expect int) {
-		t.Helper()
-		q := bstore.QueryDB[store.Mailbox](ctxbg, ts.acc.DB)
-		q.FilterNonzero(store.Mailbox{Name: mailboxName})
-		mb, err := q.Get()
-		tcheck(t, err, "get rejects mailbox")
-		qm := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
-		qm.FilterNonzero(store.Message{MailboxID: mb.ID})
-		qm.FilterEqual("Expunged", false)
-		n, err := qm.Count()
-		tcheck(t, err, "count messages in rejects mailbox")
-		if n != expect {
-			t.Fatalf("messages in rejects mailbox, found %d, expected %d", n, expect)
-		}
-	}
-
 	// Delivery from sender with bad reputation should fail.
 	ts.run(func(err error, client *smtpclient.Client) {
 		mailFrom := "remote@example.org"
@@ -536,7 +547,7 @@ func TestSpam(t *testing.T) {
 			t.Fatalf("delivery by bad sender, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 		}
 
-		checkCount("Rejects", 1)
+		ts.checkCount("Rejects", 1)
 		checkEvaluationCount(t, 0) // No positive interactions yet.
 	})
 
@@ -550,9 +561,9 @@ func TestSpam(t *testing.T) {
 		}
 		tcheck(t, err, "deliver")
 
-		checkCount("mjl2junk", 1)  // In ruleset rejects mailbox.
-		checkCount("Rejects", 1)   // Same as before.
-		checkEvaluationCount(t, 0) // This is not an actual accept.
+		ts.checkCount("mjl2junk", 1) // In ruleset rejects mailbox.
+		ts.checkCount("Rejects", 1)  // Same as before.
+		checkEvaluationCount(t, 0)   // This is not an actual accept.
 	})
 
 	// Mark the messages as having good reputation.
@@ -571,8 +582,8 @@ func TestSpam(t *testing.T) {
 		tcheck(t, err, "deliver")
 
 		// Message should now be removed from Rejects mailboxes.
-		checkCount("Rejects", 0)
-		checkCount("mjl2junk", 1)
+		ts.checkCount("Rejects", 0)
+		ts.checkCount("mjl2junk", 1)
 		checkEvaluationCount(t, 1)
 	})
 

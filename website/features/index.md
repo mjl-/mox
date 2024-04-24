@@ -479,10 +479,10 @@ behaviour.
 
 ## Admin web interface
 
-The admin web interface helps admins set up accounts, configure addresses, and
-set up new domains (with instructions to create DNS records, and with a check
-to see if they are correct). Changes made through the admin web interface
-updates the [domains.conf config file](../config/#hdr-domains-conf).
+The admin web interface helps admins set up accounts, configure addresses,
+aliases/lists, and set up new domains (with instructions to create DNS records,
+and with a check to see if they are correct). Changes made through the admin web
+interface updates the [domains.conf config file](../config/#hdr-domains-conf).
 
 Received DMARC and TLS reports can be viewed, and cached MTA-STS policies
 listed.

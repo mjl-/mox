@@ -321,6 +321,44 @@ func TestAdmin(t *testing.T) {
 	api.DomainDKIMRemove(ctxbg, "mox.example", "testsel")
 	tneedErrorCode(t, "user:error", func() { api.DomainDKIMRemove(ctxbg, "mox.example", "testsel") }) // Already removed.
 	tneedErrorCode(t, "user:error", func() { api.DomainDKIMRemove(ctxbg, "bogus.example", "testsel") })
+
+	// Aliases
+	alias := config.Alias{Addresses: []string{"mjl@mox.example"}}
+	api.AliasAdd(ctxbg, "support", "mox.example", alias)
+	tneedErrorCode(t, "user:error", func() { api.AliasAdd(ctxbg, "support", "mox.example", alias) })           // Already present.
+	tneedErrorCode(t, "user:error", func() { api.AliasAdd(ctxbg, "Support", "mox.example", alias) })           // Duplicate, canonical.
+	tneedErrorCode(t, "user:error", func() { api.AliasAdd(ctxbg, "support", "bogus.example", alias) })         // Unknown domain.
+	tneedErrorCode(t, "user:error", func() { api.AliasAdd(ctxbg, "support2", "mox.example", config.Alias{}) }) // No addresses.
+
+	api.AliasUpdate(ctxbg, "support", "mox.example", true, true, true)
+	tneedErrorCode(t, "user:error", func() { api.AliasUpdate(ctxbg, "bogus", "mox.example", true, true, true) })     // Unknown alias localpart.
+	tneedErrorCode(t, "user:error", func() { api.AliasUpdate(ctxbg, "support", "bogus.example", true, true, true) }) // Unknown alias domain.
+
+	tneedErrorCode(t, "user:error", func() {
+		api.AliasAddressesAdd(ctxbg, "support", "mox.example", []string{"mjl2@mox.example", "mjl2@mox.example"})
+	}) // Cannot add twice.
+	api.AliasAddressesAdd(ctxbg, "support", "mox.example", []string{"mjl2@mox.example"})
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesAdd(ctxbg, "support", "mox.example", []string{"mjl2@mox.example"}) })    // Already present.
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesAdd(ctxbg, "support", "mox.example", []string{"bogus@mox.example"}) })   // Unknown dest localpart.
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesAdd(ctxbg, "support", "mox.example", []string{"bogus@bogus.example"}) }) // Unknown dest domain.
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesAdd(ctxbg, "support2", "mox.example", []string{"mjl@mox.example"}) })    // Unknown alias localpart.
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesAdd(ctxbg, "support", "bogus.example", []string{"mjl@mox.example"}) })   // Unknown alias localpart.
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesAdd(ctxbg, "support", "mox.example", []string{"support@mox.example"}) }) // Alias cannot be destination.
+
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesRemove(ctxbg, "support", "mox.example", []string{}) })                      // Need at least 1 address.
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesRemove(ctxbg, "support", "mox.example", []string{"bogus@mox.example"}) })   // Not a member.
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesRemove(ctxbg, "support", "mox.example", []string{"bogus@bogus.example"}) }) // Not member, unknown domain.
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesRemove(ctxbg, "support2", "mox.example", []string{"mjl@mox.example"}) })    // Unknown alias localpart.
+	tneedErrorCode(t, "user:error", func() { api.AliasAddressesRemove(ctxbg, "support", "bogus.example", []string{"mjl@mox.example"}) })   // Unknown alias domain.
+	tneedErrorCode(t, "user:error", func() {
+		api.AliasAddressesRemove(ctxbg, "support", "mox.example", []string{"mjl@mox.example", "mjl2@mox.example"})
+	}) // Cannot leave zero addresses.
+	api.AliasAddressesRemove(ctxbg, "support", "mox.example", []string{"mjl@mox.example"})
+
+	api.AliasRemove(ctxbg, "support", "mox.example")                                               // Restore.
+	tneedErrorCode(t, "user:error", func() { api.AliasRemove(ctxbg, "support", "mox.example") })   // No longer exists.
+	tneedErrorCode(t, "user:error", func() { api.AliasRemove(ctxbg, "support", "bogus.example") }) // Unknown alias domain.
+
 }
 
 func TestCheckDomain(t *testing.T) {

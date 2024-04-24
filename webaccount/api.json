@@ -589,6 +589,14 @@
 					"Typewords": [
 						"Domain"
 					]
+				},
+				{
+					"Name": "Aliases",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"AddressAlias"
+					]
 				}
 			]
 		},
@@ -929,6 +937,138 @@
 					"Typewords": [
 						"[]",
 						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "AddressAlias",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "SubscriptionAddress",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Alias",
+					"Docs": "Without members.",
+					"Typewords": [
+						"Alias"
+					]
+				},
+				{
+					"Name": "MemberAddresses",
+					"Docs": "Only if allowed to see.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Alias",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Addresses",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "PostPublic",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ListMembers",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "AllowMsgFrom",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "LocalpartStr",
+					"Docs": "In encoded form.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "ParsedAddresses",
+					"Docs": "Matches addresses.",
+					"Typewords": [
+						"[]",
+						"AliasAddress"
+					]
+				}
+			]
+		},
+		{
+			"Name": "AliasAddress",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Address",
+					"Docs": "Parsed address.",
+					"Typewords": [
+						"Address"
+					]
+				},
+				{
+					"Name": "AccountName",
+					"Docs": "Looked up.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Destination",
+					"Docs": "Belonging to address.",
+					"Typewords": [
+						"Destination"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Address",
+			"Docs": "Address is a parsed email address.",
+			"Fields": [
+				{
+					"Name": "Localpart",
+					"Docs": "",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "todo: shouldn't we accept an ip address here too? and merge this type into smtp.Path.",
+					"Typewords": [
+						"Domain"
 					]
 				}
 			]
@@ -1363,6 +1503,11 @@
 		{
 			"Name": "CSRFToken",
 			"Docs": "",
+			"Values": null
+		},
+		{
+			"Name": "Localpart",
+			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.\nLocalparts are in Unicode NFC.",
 			"Values": null
 		},
 		{

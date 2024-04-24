@@ -913,6 +913,31 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 					MinimumAttempts: 0
 					Transport:
 
+			# Aliases that cause messages to be delivered to one or more locally configured
+			# addresses. Keys are localparts (encoded, as they appear in email addresses).
+			# (optional)
+			Aliases:
+				x:
+
+					# Expanded addresses to deliver to. These must currently be of addresses of local
+					# accounts. To prevent duplicate messages, a member address that is also an
+					# explicit recipient in the SMTP transaction will only have the message delivered
+					# once. If the address in the message From header is a member, that member also
+					# won't receive the message.
+					Addresses:
+						-
+
+					# If true, anyone can send messages to the list. Otherwise only members, based on
+					# message From address, which is assumed to be DMARC-like-verified. (optional)
+					PostPublic: false
+
+					# If true, members can see addresses of members. (optional)
+					ListMembers: false
+
+					# If true, members are allowed to send messages with this alias address in the
+					# message From header. (optional)
+					AllowMsgFrom: false
+
 	# Accounts represent mox users, each with a password and email address(es) to
 	# which email can be delivered (possibly at different domains). Each account has
 	# its own on-disk directory holding its messages and index database. An account

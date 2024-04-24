@@ -68,6 +68,13 @@ any parameters. Followed by the help and usage information for each command.
 	mox config address rm address
 	mox config domain add domain account [localpart]
 	mox config domain rm domain
+	mox config alias list domain
+	mox config alias print alias
+	mox config alias add alias@domain rcpt1@domain ...
+	mox config alias update alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]
+	mox config alias rm alias@domain
+	mox config alias addaddr alias@domain rcpt1@domain ...
+	mox config alias rmaddr alias@domain rcpt1@domain ...
 	mox config describe-sendmail >/etc/moxsubmit.conf
 	mox config printservice >mox.service
 	mox config ensureacmehostprivatekeys
@@ -967,6 +974,54 @@ This is a dangerous operation. Incoming email delivery for this domain will be
 rejected.
 
 	usage: mox config domain rm domain
+
+# mox config alias list
+
+List aliases for domain.
+
+	usage: mox config alias list domain
+
+# mox config alias print
+
+Print settings and members of alias.
+
+	usage: mox config alias print alias
+
+# mox config alias add
+
+Add new alias with one or more addresses.
+
+	usage: mox config alias add alias@domain rcpt1@domain ...
+
+# mox config alias update
+
+Update alias configuration.
+
+	usage: mox config alias update alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]
+	  -allowmsgfrom string
+	    	whether alias address can be used in message from header
+	  -listmembers string
+	    	whether list members can list members
+	  -postpublic string
+	    	whether anyone or only list members can post
+
+# mox config alias rm
+
+Remove alias.
+
+	usage: mox config alias rm alias@domain
+
+# mox config alias addaddr
+
+Add addresses to alias.
+
+	usage: mox config alias addaddr alias@domain rcpt1@domain ...
+
+# mox config alias rmaddr
+
+Remove addresses from alias.
+
+	usage: mox config alias rmaddr alias@domain rcpt1@domain ...
 
 # mox config describe-sendmail
 

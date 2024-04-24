@@ -273,23 +273,45 @@ type TransportDirect struct {
 }
 
 type Domain struct {
-	Description                string  `sconf:"optional" sconf-doc:"Free-form description of domain."`
-	ClientSettingsDomain       string  `sconf:"optional" sconf-doc:"Hostname for client settings instead of the mail server hostname. E.g. mail.<domain>. For future migration to another mail operator without requiring all clients to update their settings, it is convenient to have client settings that reference a subdomain of the hosted domain instead of the hostname of the server where the mail is currently hosted. If empty, the hostname of the mail server is used for client configurations. Unicode name."`
-	LocalpartCatchallSeparator string  `sconf:"optional" sconf-doc:"If not empty, only the string before the separator is used to for email delivery decisions. For example, if set to \"+\", you+anything@example.com will be delivered to you@example.com."`
-	LocalpartCaseSensitive     bool    `sconf:"optional" sconf-doc:"If set, upper/lower case is relevant for email delivery."`
-	DKIM                       DKIM    `sconf:"optional" sconf-doc:"With DKIM signing, a domain is taking responsibility for (content of) emails it sends, letting receiving mail servers build up a (hopefully positive) reputation of the domain, which can help with mail delivery."`
-	DMARC                      *DMARC  `sconf:"optional" sconf-doc:"With DMARC, a domain publishes, in DNS, a policy on how other mail servers should handle incoming messages with the From-header matching this domain and/or subdomain (depending on the configured alignment). Receiving mail servers use this to build up a reputation of this domain, which can help with mail delivery. A domain can also publish an email address to which reports about DMARC verification results can be sent by verifying mail servers, useful for monitoring. Incoming DMARC reports are automatically parsed, validated, added to metrics and stored in the reporting database for later display in the admin web pages."`
-	MTASTS                     *MTASTS `sconf:"optional" sconf-doc:"MTA-STS is a mechanism that allows publishing a policy with requirements for WebPKI-verified SMTP STARTTLS connections for email delivered to a domain. Existence of a policy is announced in a DNS TXT record (often unprotected/unverified, MTA-STS's weak spot). If a policy exists, it is fetched with a WebPKI-verified HTTPS request. The policy can indicate that WebPKI-verified SMTP STARTTLS is required, and which MX hosts (optionally with a wildcard pattern) are allowd. MX hosts to deliver to are still taken from DNS (again, not necessarily protected/verified), but messages will only be delivered to domains matching the MX hosts from the published policy. Mail servers look up the MTA-STS policy when first delivering to a domain, then keep a cached copy, periodically checking the DNS record if a new policy is available, and fetching and caching it if so. To update a policy, first serve a new policy with an updated policy ID, then update the DNS record (not the other way around). To remove an enforced policy, publish an updated policy with mode \"none\" for a long enough period so all cached policies have been refreshed (taking DNS TTL and policy max age into account), then remove the policy from DNS, wait for TTL to expire, and stop serving the policy."`
-	TLSRPT                     *TLSRPT `sconf:"optional" sconf-doc:"With TLSRPT a domain specifies in DNS where reports about encountered SMTP TLS behaviour should be sent. Useful for monitoring. Incoming TLS reports are automatically parsed, validated, added to metrics and stored in the reporting database for later display in the admin web pages."`
-	Routes                     []Route `sconf:"optional" sconf-doc:"Routes for delivering outgoing messages through the queue. Each delivery attempt evaluates account routes, these domain routes and finally global routes. The transport of the first matching route is used in the delivery attempt. If no routes match, which is the default with no configured routes, messages are delivered directly from the queue."`
+	Description                string           `sconf:"optional" sconf-doc:"Free-form description of domain."`
+	ClientSettingsDomain       string           `sconf:"optional" sconf-doc:"Hostname for client settings instead of the mail server hostname. E.g. mail.<domain>. For future migration to another mail operator without requiring all clients to update their settings, it is convenient to have client settings that reference a subdomain of the hosted domain instead of the hostname of the server where the mail is currently hosted. If empty, the hostname of the mail server is used for client configurations. Unicode name."`
+	LocalpartCatchallSeparator string           `sconf:"optional" sconf-doc:"If not empty, only the string before the separator is used to for email delivery decisions. For example, if set to \"+\", you+anything@example.com will be delivered to you@example.com."`
+	LocalpartCaseSensitive     bool             `sconf:"optional" sconf-doc:"If set, upper/lower case is relevant for email delivery."`
+	DKIM                       DKIM             `sconf:"optional" sconf-doc:"With DKIM signing, a domain is taking responsibility for (content of) emails it sends, letting receiving mail servers build up a (hopefully positive) reputation of the domain, which can help with mail delivery."`
+	DMARC                      *DMARC           `sconf:"optional" sconf-doc:"With DMARC, a domain publishes, in DNS, a policy on how other mail servers should handle incoming messages with the From-header matching this domain and/or subdomain (depending on the configured alignment). Receiving mail servers use this to build up a reputation of this domain, which can help with mail delivery. A domain can also publish an email address to which reports about DMARC verification results can be sent by verifying mail servers, useful for monitoring. Incoming DMARC reports are automatically parsed, validated, added to metrics and stored in the reporting database for later display in the admin web pages."`
+	MTASTS                     *MTASTS          `sconf:"optional" sconf-doc:"MTA-STS is a mechanism that allows publishing a policy with requirements for WebPKI-verified SMTP STARTTLS connections for email delivered to a domain. Existence of a policy is announced in a DNS TXT record (often unprotected/unverified, MTA-STS's weak spot). If a policy exists, it is fetched with a WebPKI-verified HTTPS request. The policy can indicate that WebPKI-verified SMTP STARTTLS is required, and which MX hosts (optionally with a wildcard pattern) are allowd. MX hosts to deliver to are still taken from DNS (again, not necessarily protected/verified), but messages will only be delivered to domains matching the MX hosts from the published policy. Mail servers look up the MTA-STS policy when first delivering to a domain, then keep a cached copy, periodically checking the DNS record if a new policy is available, and fetching and caching it if so. To update a policy, first serve a new policy with an updated policy ID, then update the DNS record (not the other way around). To remove an enforced policy, publish an updated policy with mode \"none\" for a long enough period so all cached policies have been refreshed (taking DNS TTL and policy max age into account), then remove the policy from DNS, wait for TTL to expire, and stop serving the policy."`
+	TLSRPT                     *TLSRPT          `sconf:"optional" sconf-doc:"With TLSRPT a domain specifies in DNS where reports about encountered SMTP TLS behaviour should be sent. Useful for monitoring. Incoming TLS reports are automatically parsed, validated, added to metrics and stored in the reporting database for later display in the admin web pages."`
+	Routes                     []Route          `sconf:"optional" sconf-doc:"Routes for delivering outgoing messages through the queue. Each delivery attempt evaluates account routes, these domain routes and finally global routes. The transport of the first matching route is used in the delivery attempt. If no routes match, which is the default with no configured routes, messages are delivered directly from the queue."`
+	Aliases                    map[string]Alias `sconf:"optional" sconf-doc:"Aliases that cause messages to be delivered to one or more locally configured addresses. Keys are localparts (encoded, as they appear in email addresses)."`
 
-	Domain                  dns.Domain `sconf:"-" json:"-"`
+	Domain                  dns.Domain `sconf:"-"`
 	ClientSettingsDNSDomain dns.Domain `sconf:"-" json:"-"`
 
 	// Set when DMARC and TLSRPT (when set) has an address with different domain (we're
 	// hosting the reporting), and there are no destination addresses configured for
 	// the domain. Disables some functionality related to hosting a domain.
 	ReportsOnly bool `sconf:"-" json:"-"`
+}
+
+// todo: allow external addresses as members of aliases. we would add messages for them to the queue for outgoing delivery. we should require an admin addresses to which delivery failures will be delivered (locally, and to use in smtp mail from, so dsns go there). also take care to evaluate smtputf8 (if external address requires utf8 and incoming transaction didn't).
+// todo: as alternative to PostPublic, allow specifying a list of addresses (dmarc-like verified) that are (the only addresses) allowed to post to the list. if msgfrom is an external address, require a valid dkim signature to prevent dmarc-policy-related issues when delivering to remote members.
+// todo: add option to require messages sent to an alias have that alias as From or Reply-To address?
+
+type Alias struct {
+	Addresses    []string `sconf-doc:"Expanded addresses to deliver to. These must currently be of addresses of local accounts. To prevent duplicate messages, a member address that is also an explicit recipient in the SMTP transaction will only have the message delivered once. If the address in the message From header is a member, that member also won't receive the message."`
+	PostPublic   bool     `sconf:"optional" sconf-doc:"If true, anyone can send messages to the list. Otherwise only members, based on message From address, which is assumed to be DMARC-like-verified."`
+	ListMembers  bool     `sconf:"optional" sconf-doc:"If true, members can see addresses of members."`
+	AllowMsgFrom bool     `sconf:"optional" sconf-doc:"If true, members are allowed to send messages with this alias address in the message From header."`
+
+	LocalpartStr    string         `sconf:"-"` // In encoded form.
+	Domain          dns.Domain     `sconf:"-"`
+	ParsedAddresses []AliasAddress `sconf:"-"` // Matches addresses.
+}
+
+type AliasAddress struct {
+	Address     smtp.Address // Parsed address.
+	AccountName string       // Looked up.
+	Destination Destination  // Belonging to address.
 }
 
 type DMARC struct {
@@ -412,6 +434,13 @@ type Account struct {
 	NeutralMailbox             *regexp.Regexp `sconf:"-" json:"-"`
 	NotJunkMailbox             *regexp.Regexp `sconf:"-" json:"-"`
 	ParsedFromIDLoginAddresses []smtp.Address `sconf:"-" json:"-"`
+	Aliases                    []AddressAlias `sconf:"-"`
+}
+
+type AddressAlias struct {
+	SubscriptionAddress string
+	Alias               Alias    // Without members.
+	MemberAddresses     []string // Only if allowed to see.
 }
 
 type JunkFilter struct {

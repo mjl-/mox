@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -605,7 +606,7 @@ func moveAwayKeys(log mlog.Log, sels map[string]config.Selector, usedKeyPaths ma
 // can modify the config, but must clone all referencing data it changes.
 // xmodify may employ panic-based error handling. After xmodify returns, the
 // modified config is verified, saved and takes effect.
-func DomainSave(ctx context.Context, domainName string, xmodify func(config *config.Domain)) (rerr error) {
+func DomainSave(ctx context.Context, domainName string, xmodify func(config *config.Domain) error) (rerr error) {
 	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
@@ -622,7 +623,9 @@ func DomainSave(ctx context.Context, domainName string, xmodify func(config *con
 		return fmt.Errorf("%w: domain not present", ErrRequest)
 	}
 
-	xmodify(&dom)
+	if err := xmodify(&dom); err != nil {
+		return err
+	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
 	// leave no trace.
@@ -1031,14 +1034,17 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 //
 // Must be called with config lock held.
 func checkAddressAvailable(addr smtp.Address) error {
-	if dc, ok := Conf.Dynamic.Domains[addr.Domain.Name()]; !ok {
+	dc, ok := Conf.Dynamic.Domains[addr.Domain.Name()]
+	if !ok {
 		return fmt.Errorf("domain does not exist")
-	} else if lp, err := CanonicalLocalpart(addr.Localpart, dc); err != nil {
-		return fmt.Errorf("canonicalizing localpart: %v", err)
-	} else if _, ok := Conf.accountDestinations[smtp.NewAddress(lp, addr.Domain).String()]; ok {
+	}
+	lp := CanonicalLocalpart(addr.Localpart, dc)
+	if _, ok := Conf.accountDestinations[smtp.NewAddress(lp, addr.Domain).String()]; ok {
 		return fmt.Errorf("canonicalized address %s already configured", smtp.NewAddress(lp, addr.Domain))
 	} else if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(addr.Localpart), dc.LocalpartCatchallSeparator) {
 		return fmt.Errorf("localpart cannot include domain catchall separator %s", dc.LocalpartCatchallSeparator)
+	} else if _, ok := dc.Aliases[lp.String()]; ok {
+		return fmt.Errorf("address in use as alias")
 	}
 	return nil
 }
@@ -1177,14 +1183,8 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		if !ok {
 			return fmt.Errorf("%w: unknown domain in fromid login address %q", ErrRequest, fa.Pack(true))
 		}
-		flp, err := CanonicalLocalpart(fa.Localpart, dc)
-		if err != nil {
-			return fmt.Errorf("%w: getting canonical localpart for fromid login address %q: %v", ErrRequest, fa.Localpart, err)
-		}
-		alp, err := CanonicalLocalpart(pa.Localpart, dc)
-		if err != nil {
-			return fmt.Errorf("%w: getting canonical part for address: %v", ErrRequest, err)
-		}
+		flp := CanonicalLocalpart(fa.Localpart, dc)
+		alp := CanonicalLocalpart(pa.Localpart, dc)
 		if alp != flp {
 			// Keep for different localpart.
 			fromIDLoginAddresses = append(fromIDLoginAddresses, a.FromIDLoginAddresses[i])
@@ -1204,6 +1204,88 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	}
 	log.Info("address removed", slog.String("address", address), slog.String("account", ad.Account))
 	return nil
+}
+
+func AliasAdd(ctx context.Context, addr smtp.Address, alias config.Alias) error {
+	return DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		if _, ok := d.Aliases[addr.Localpart.String()]; ok {
+			return fmt.Errorf("%w: alias already present", ErrRequest)
+		}
+		if d.Aliases == nil {
+			d.Aliases = map[string]config.Alias{}
+		}
+		d.Aliases = maps.Clone(d.Aliases)
+		d.Aliases[addr.Localpart.String()] = alias
+		return nil
+	})
+}
+
+func AliasUpdate(ctx context.Context, addr smtp.Address, alias config.Alias) error {
+	return DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		a, ok := d.Aliases[addr.Localpart.String()]
+		if !ok {
+			return fmt.Errorf("%w: alias does not exist", ErrRequest)
+		}
+		a.PostPublic = alias.PostPublic
+		a.ListMembers = alias.ListMembers
+		a.AllowMsgFrom = alias.AllowMsgFrom
+		d.Aliases = maps.Clone(d.Aliases)
+		d.Aliases[addr.Localpart.String()] = a
+		return nil
+	})
+}
+
+func AliasRemove(ctx context.Context, addr smtp.Address) error {
+	return DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		_, ok := d.Aliases[addr.Localpart.String()]
+		if !ok {
+			return fmt.Errorf("%w: alias does not exist", ErrRequest)
+		}
+		d.Aliases = maps.Clone(d.Aliases)
+		delete(d.Aliases, addr.Localpart.String())
+		return nil
+	})
+}
+
+func AliasAddressesAdd(ctx context.Context, addr smtp.Address, addresses []string) error {
+	if len(addresses) == 0 {
+		return fmt.Errorf("%w: at least one address required", ErrRequest)
+	}
+	return DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		alias, ok := d.Aliases[addr.Localpart.String()]
+		if !ok {
+			return fmt.Errorf("%w: no such alias", ErrRequest)
+		}
+		alias.Addresses = append(slices.Clone(alias.Addresses), addresses...)
+		alias.ParsedAddresses = nil
+		d.Aliases = maps.Clone(d.Aliases)
+		d.Aliases[addr.Localpart.String()] = alias
+		return nil
+	})
+}
+
+func AliasAddressesRemove(ctx context.Context, addr smtp.Address, addresses []string) error {
+	if len(addresses) == 0 {
+		return fmt.Errorf("%w: need at least one address", ErrRequest)
+	}
+	return DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		alias, ok := d.Aliases[addr.Localpart.String()]
+		if !ok {
+			return fmt.Errorf("%w: no such alias", ErrRequest)
+		}
+		alias.Addresses = slices.DeleteFunc(slices.Clone(alias.Addresses), func(addr string) bool {
+			n := len(addresses)
+			addresses = slices.DeleteFunc(addresses, func(a string) bool { return a == addr })
+			return n > len(addresses)
+		})
+		if len(addresses) > 0 {
+			return fmt.Errorf("%w: address not found: %s", ErrRequest, strings.Join(addresses, ", "))
+		}
+		alias.ParsedAddresses = nil
+		d.Aliases = maps.Clone(d.Aliases)
+		d.Aliases[addr.Localpart.String()] = alias
+		return nil
+	})
 }
 
 // AccountSave updates the configuration of an account. Function xmodify is called

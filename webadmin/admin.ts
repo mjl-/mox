@@ -875,6 +875,37 @@ const account = async (name: string) => {
 			),
 		),
 		dom.br(),
+
+		dom.h2('Aliases/lists'),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('Alias address'),
+					dom.th('Subscription address'),
+					dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')),
+					dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')),
+					dom.th('Members visible', attr.title('If enabled, members can see the addresses of other members.')),
+				),
+			),
+			(config.Aliases || []).length === 0 ? dom.tr(dom.td(attr.colspan('6'), 'None')) : [],
+			(config.Aliases || []).sort((a, b) => a.Alias.LocalpartStr < b.Alias.LocalpartStr ? -1 : (domainName(a.Alias.Domain) < domainName(b.Alias.Domain) ? -1 : 1)).map(a =>
+				dom.tr(
+					dom.td(dom.a(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain), attr.href('#domains/'+domainName(a.Alias.Domain)+'/alias/'+encodeURIComponent(a.Alias.LocalpartStr)))),
+					dom.td(a.SubscriptionAddress),
+					dom.td(a.Alias.PostPublic ? 'Anyone' : 'Members only'),
+					dom.td(a.Alias.AllowMsgFrom ? 'Yes' : 'No'),
+					dom.td(a.Alias.ListMembers ? 'Yes' : 'No'),
+					dom.td(
+						dom.clickbutton('Remove', async function click(e: MouseEvent) {
+							await check(e.target! as HTMLButtonElement, client.AliasAddressesRemove(a.Alias.LocalpartStr, domainName(a.Alias.Domain), [a.SubscriptionAddress]))
+							window.location.reload() // todo: reload less
+						}),
+					),
+				),
+			),
+		),
+		dom.br(),
+
 		dom.h2('Settings'),
 		dom.form(
 			fieldsetSettings=dom.fieldset(
@@ -1009,7 +1040,7 @@ const formatDuration = (v: number, goDuration?: boolean) => {
 const domain = async (d: string) => {
 	const end = new Date()
 	const start = new Date(new Date().getTime() - 30*24*3600*1000)
-	const [dmarcSummaries, tlsrptSummaries, localpartAccounts, dnsdomain, clientConfigs, accounts, domainConfig, transports] = await Promise.all([
+	const [dmarcSummaries, tlsrptSummaries, [localpartAccounts, localpartAliases], dnsdomain, clientConfigs, accounts, domainConfig, transports] = await Promise.all([
 		client.DMARCSummaries(start, end, d),
 		client.TLSRPTSummaries(start, end, d),
 		client.DomainLocalparts(d),
@@ -1024,6 +1055,10 @@ const domain = async (d: string) => {
 	let addrFieldset: HTMLFieldSetElement
 	let addrLocalpart: HTMLInputElement
 	let addrAccount: HTMLSelectElement
+
+	let aliasFieldset: HTMLFieldSetElement
+	let aliasLocalpart: HTMLInputElement
+	let aliasAddresses: HTMLTextAreaElement
 
 	let descrFieldset: HTMLFieldSetElement
 	let descrText: HTMLInputElement
@@ -1247,7 +1282,6 @@ const domain = async (d: string) => {
 			),
 		),
 		dom.br(),
-
 		dom.h2('Add address'),
 		addrForm=dom.form(
 			async function submit(e: SubmitEvent) {
@@ -1274,6 +1308,64 @@ const domain = async (d: string) => {
 				),
 				' ',
 				dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')),
+			),
+		),
+		dom.br(),
+
+		dom.h2('Aliases/lists'),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('Address'),
+					dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')),
+					dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')),
+					dom.th('Members visible', attr.title('If enabled, members can see the addresses of other members.')),
+				),
+			),
+			Object.values(localpartAliases).length === 0 ? dom.tr(dom.td(attr.colspan('4'), 'None')) : [],
+			Object.values(localpartAliases).sort((a, b) => a.LocalpartStr < b.LocalpartStr ? -1 : 1).map(a => {
+				return dom.tr(
+					dom.td(dom.a(a.LocalpartStr, attr.href('#domains/'+d+'/alias/'+encodeURIComponent(a.LocalpartStr)))),
+					dom.td(a.PostPublic ? 'Anyone' : 'Members only'),
+					dom.td(a.AllowMsgFrom ? 'Yes' : 'No'),
+					dom.td(a.ListMembers ? 'Yes' : 'No'),
+				)
+			}),
+		),
+		dom.br(),
+		dom.h2('Add alias'),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+				const alias: api.Alias = {
+					Addresses: aliasAddresses.value.split('\n').map(s => s.trim()).filter(s => !!s),
+					PostPublic: false,
+					ListMembers: false,
+					AllowMsgFrom: false,
+					// Ignored:
+					LocalpartStr: '',
+					Domain: dnsdomain,
+				}
+				await check(aliasFieldset, client.AliasAdd(aliasLocalpart.value, d, alias))
+				window.location.hash = '#domains/'+d+'/alias/'+aliasLocalpart.value
+			},
+			aliasFieldset=dom.fieldset(
+				style({display: 'flex', alignItems: 'flex-start', gap: '1em'}),
+				dom.label(
+					dom.div('Localpart', attr.title('The localpart is the part before the "@"-sign of an address.')),
+					aliasLocalpart=dom.input(attr.required('')),
+					'@', domainName(dnsdomain),
+					' ',
+				),
+				dom.label(
+					dom.div('Addresses', attr.title('One members address per line, full address of form localpart@domain. At least one address required.')),
+					aliasAddresses=dom.textarea(attr.required(''), attr.rows('1'), function focus() { aliasAddresses.setAttribute('rows', '5') }),
+				),
+				dom.div(
+					dom.div('\u00a0'),
+					dom.submitbutton('Add alias', attr.title('Alias will be added and the config reloaded.')),
+				),
 			),
 		),
 		dom.br(),
@@ -1677,6 +1769,122 @@ const domain = async (d: string) => {
 			await check(e.target! as HTMLButtonElement, client.DomainRemove(d))
 			window.location.hash = '#'
 		}),
+	)
+}
+
+const domainAlias = async (d: string, aliasLocalpart: string) => {
+	const domain = await client.DomainConfig(d)
+	const alias = (domain.Aliases || {})[aliasLocalpart]
+	if (!alias) {
+		throw new Error('alias not found')
+	}
+
+	let aliasFieldset: HTMLFieldSetElement
+	let postPublic: HTMLInputElement
+	let listMembers: HTMLInputElement
+	let allowMsgFrom: HTMLInputElement
+
+	let addFieldset: HTMLFieldSetElement
+	let addAddress: HTMLTextAreaElement
+
+	let delFieldset: HTMLFieldSetElement
+
+	dom._kids(page,
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			crumblink('Domain ' + domainString(domain.Domain), '#domains/'+d),
+			'Alias '+aliasLocalpart+'@'+domainName(domain.Domain),
+		),
+
+		dom.h2('Alias'),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+				check(aliasFieldset, client.AliasUpdate(aliasLocalpart, d, postPublic.checked, listMembers.checked, allowMsgFrom.checked))
+			},
+			aliasFieldset=dom.fieldset(
+				style({display: 'flex', flexDirection: 'column', gap: '.5ex'}),
+				dom.label(
+					postPublic=dom.input(attr.type('checkbox'), alias.PostPublic ? attr.checked('') : []),
+					' Public, anyone can post instead of only members',
+				),
+				dom.label(
+					listMembers=dom.input(attr.type('checkbox'), alias.ListMembers ? attr.checked('') : []),
+					' Members can list other members',
+				),
+				dom.label(
+					allowMsgFrom=dom.input(attr.type('checkbox'), alias.AllowMsgFrom ? attr.checked('') : []),
+					' Allow messages to use the alias address in the message From header',
+				),
+				dom.div(style({marginTop: '1ex'}), dom.submitbutton('Save')),
+			),
+		),
+		dom.br(),
+
+		dom.h2('Members'),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('Address'),
+					dom.th('Account'),
+					dom.th(),
+				),
+			),
+			dom.tbody(
+				(alias.Addresses || []).map((address, index) => {
+					const pa = (alias.ParsedAddresses || [])[index]
+					return dom.tr(
+						dom.td(address),
+						dom.td(dom.a(pa.AccountName, attr.href('#accounts/'+pa.AccountName))),
+						dom.td(
+							dom.clickbutton('Remove', async function click(e: MouseEvent) {
+								await check(e.target! as HTMLButtonElement, client.AliasAddressesRemove(aliasLocalpart, d, [address]))
+								window.location.reload() // todo: reload less
+							}),
+						),
+					)
+				}),
+			),
+			dom.tfoot(
+				dom.tr(
+					dom.td(
+						attr.colspan('3'),
+						dom.form(
+							async function submit(e: SubmitEvent) {
+								e.preventDefault()
+								e.stopPropagation()
+								await check(addFieldset, client.AliasAddressesAdd(aliasLocalpart, d, addAddress.value.split('\n').map(s => s.trim()).filter(s => s)))
+								window.location.reload() // todo: reload less
+							},
+							addFieldset=dom.fieldset(
+								addAddress=dom.textarea(attr.required(''), attr.rows('1'), attr.placeholder('localpart@domain'), function focus() { addAddress.setAttribute('rows', '5') }), ' ',
+								dom.submitbutton('Add', style({verticalAlign: 'top'})),
+							),
+						),
+					),
+				),
+			),
+		),
+		dom.br(),
+
+		dom.h2('Danger'),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				if (!confirm('Are you sure you want to remove this alias?')) {
+					return
+				}
+
+				await check(delFieldset, client.AliasRemove(aliasLocalpart, d))
+				window.location.hash = '#domains/'+d
+			},
+			delFieldset=dom.fieldset(
+				dom.div(dom.submitbutton('Remove alias')),
+			),
+		),
 	)
 }
 
@@ -4846,6 +5054,8 @@ const init = async () => {
 				await account(t[1])
 			} else if (t[0] === 'domains' && t.length === 2) {
 				await domain(t[1])
+			} else if (t[0] === 'domains' && t.length === 4 && t[2] === 'alias') {
+				await domainAlias(t[1], t[3])
 			} else if (t[0] === 'domains' && t.length === 3 && t[2] === 'dmarc') {
 				await domainDMARC(t[1])
 			} else if (t[0] === 'domains' && t.length === 4 && t[2] === 'dmarc' && parseInt(t[3])) {

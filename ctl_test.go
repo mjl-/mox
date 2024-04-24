@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dmarcdb"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
@@ -290,6 +291,41 @@ func TestCtl(t *testing.T) {
 	// "domainrm"
 	testctl(func(ctl *ctl) {
 		ctlcmdConfigDomainRemove(ctl, dns.Domain{ASCII: "mox2.example"})
+	})
+
+	// "aliasadd"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasAdd(ctl, "support@mox.example", config.Alias{Addresses: []string{"mjl@mox.example"}})
+	})
+
+	// "aliaslist"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasList(ctl, "mox.example")
+	})
+
+	// "aliasprint"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasPrint(ctl, "support@mox.example")
+	})
+
+	// "aliasupdate"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasUpdate(ctl, "support@mox.example", "true", "true", "true")
+	})
+
+	// "aliasaddaddr"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasAddaddr(ctl, "support@mox.example", []string{"mjl2@mox.example"})
+	})
+
+	// "aliasrmaddr"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasRmaddr(ctl, "support@mox.example", []string{"mjl2@mox.example"})
+	})
+
+	// "aliasrm"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasRemove(ctl, "support@mox.example")
 	})
 
 	// "loglevels"

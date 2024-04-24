@@ -159,6 +159,13 @@
 						"{}",
 						"string"
 					]
+				},
+				{
+					"Name": "localpartAliases",
+					"Typewords": [
+						"{}",
+						"Alias"
+					]
 				}
 			]
 		},
@@ -1898,6 +1905,139 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "AliasAdd",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "aliaslp",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "alias",
+					"Typewords": [
+						"Alias"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "AliasUpdate",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "aliaslp",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "postPublic",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "listMembers",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "allowMsgFrom",
+					"Typewords": [
+						"bool"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "AliasRemove",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "aliaslp",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "AliasAddressesAdd",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "aliaslp",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "addresses",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "AliasAddressesRemove",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "aliaslp",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "addresses",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				}
+			],
+			"Returns": []
 		}
 	],
 	"Sections": [],
@@ -3234,6 +3374,21 @@
 						"[]",
 						"Route"
 					]
+				},
+				{
+					"Name": "Aliases",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"Alias"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
 				}
 			]
 		},
@@ -3534,6 +3689,222 @@
 			]
 		},
 		{
+			"Name": "Alias",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Addresses",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "PostPublic",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ListMembers",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "AllowMsgFrom",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "LocalpartStr",
+					"Docs": "In encoded form.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "ParsedAddresses",
+					"Docs": "Matches addresses.",
+					"Typewords": [
+						"[]",
+						"AliasAddress"
+					]
+				}
+			]
+		},
+		{
+			"Name": "AliasAddress",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Address",
+					"Docs": "Parsed address.",
+					"Typewords": [
+						"Address"
+					]
+				},
+				{
+					"Name": "AccountName",
+					"Docs": "Looked up.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Destination",
+					"Docs": "Belonging to address.",
+					"Typewords": [
+						"Destination"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Address",
+			"Docs": "Address is a parsed email address.",
+			"Fields": [
+				{
+					"Name": "Localpart",
+					"Docs": "",
+					"Typewords": [
+						"Localpart"
+					]
+				},
+				{
+					"Name": "Domain",
+					"Docs": "todo: shouldn't we accept an ip address here too? and merge this type into smtp.Path.",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Destination",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "Mailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Rulesets",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"Ruleset"
+					]
+				},
+				{
+					"Name": "FullName",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Ruleset",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "SMTPMailFromRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MsgFromRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "VerifiedDomain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "HeadersRegexp",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				},
+				{
+					"Name": "IsForward",
+					"Docs": "todo: once we implement ARC, we can use dkim domains that we cannot verify but that the arc-verified forwarding mail server was able to verify.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ListAllowDomain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "AcceptRejectsToMailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Mailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Comment",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "VerifiedDNSDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "ListAllowDNSDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
 			"Name": "Account",
 			"Docs": "",
 			"Fields": [
@@ -3682,6 +4053,14 @@
 					"Typewords": [
 						"Domain"
 					]
+				},
+				{
+					"Name": "Aliases",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"AddressAlias"
+					]
 				}
 			]
 		},
@@ -3729,118 +4108,6 @@
 					"Docs": "",
 					"Typewords": [
 						"string"
-					]
-				}
-			]
-		},
-		{
-			"Name": "Destination",
-			"Docs": "",
-			"Fields": [
-				{
-					"Name": "Mailbox",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "Rulesets",
-					"Docs": "",
-					"Typewords": [
-						"[]",
-						"Ruleset"
-					]
-				},
-				{
-					"Name": "FullName",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				}
-			]
-		},
-		{
-			"Name": "Ruleset",
-			"Docs": "",
-			"Fields": [
-				{
-					"Name": "SMTPMailFromRegexp",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "MsgFromRegexp",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "VerifiedDomain",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "HeadersRegexp",
-					"Docs": "",
-					"Typewords": [
-						"{}",
-						"string"
-					]
-				},
-				{
-					"Name": "IsForward",
-					"Docs": "todo: once we implement ARC, we can use dkim domains that we cannot verify but that the arc-verified forwarding mail server was able to verify.",
-					"Typewords": [
-						"bool"
-					]
-				},
-				{
-					"Name": "ListAllowDomain",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "AcceptRejectsToMailbox",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "Mailbox",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "Comment",
-					"Docs": "",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
-					"Name": "VerifiedDNSDomain",
-					"Docs": "",
-					"Typewords": [
-						"Domain"
-					]
-				},
-				{
-					"Name": "ListAllowDNSDomain",
-					"Docs": "",
-					"Typewords": [
-						"Domain"
 					]
 				}
 			]
@@ -3950,6 +4217,34 @@
 					"Docs": "",
 					"Typewords": [
 						"int32"
+					]
+				}
+			]
+		},
+		{
+			"Name": "AddressAlias",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "SubscriptionAddress",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Alias",
+					"Docs": "Without members.",
+					"Typewords": [
+						"Alias"
+					]
+				},
+				{
+					"Name": "MemberAddresses",
+					"Docs": "Only if allowed to see.",
+					"Typewords": [
+						"[]",
+						"string"
 					]
 				}
 			]

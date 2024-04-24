@@ -640,15 +640,10 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	}
 
 	// Check if from address is allowed for account.
-	fromAccName, _, _, err := mox.FindAccount(fromAddr.Address.Localpart, fromAddr.Address.Domain, false)
-	if err == nil && fromAccName != reqInfo.Account.Name {
-		err = mox.ErrAccountNotFound
-	}
-	if err != nil && (errors.Is(err, mox.ErrAccountNotFound) || errors.Is(err, mox.ErrDomainNotFound)) {
+	if !mox.AllowMsgFrom(reqInfo.Account.Name, fromAddr.Address) {
 		metricSubmission.WithLabelValues("badfrom").Inc()
 		xcheckuserf(ctx, errors.New("address not found"), `looking up "from" address for account`)
 	}
-	xcheckf(ctx, err, "checking if from address is allowed")
 
 	if len(recipients) == 0 {
 		xcheckuserf(ctx, errors.New("no recipients"), "composing message")

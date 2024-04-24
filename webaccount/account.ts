@@ -765,6 +765,40 @@ const index = async () => {
 		),
 		dom.br(),
 
+		dom.h2('Aliases/lists'),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('Alias address', attr.title('Messages sent to this address will be delivered to all members of the alias/list.')),
+					dom.th('Subscription address', attr.title('Address subscribed to the alias/list.')),
+					dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')),
+					dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')),
+					dom.th(),
+				),
+			),
+			(acc.Aliases || []).length === 0 ? dom.tr(dom.td(attr.colspan('5'), 'None')) : [],
+			(acc.Aliases || []).sort((a, b) => a.Alias.LocalpartStr < b.Alias.LocalpartStr ? -1 : (domainName(a.Alias.Domain) < domainName(b.Alias.Domain) ? -1 : 1)).map(a =>
+				dom.tr(
+					dom.td(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain)),
+					dom.td(a.SubscriptionAddress),
+					dom.td(a.Alias.PostPublic ? 'Anyone' : 'Members only'),
+					dom.td(a.Alias.AllowMsgFrom ? 'Yes' : 'No'),
+					dom.td(
+						(a.MemberAddresses || []).length === 0 ? [] :
+							dom.clickbutton('Show members', function click() {
+								popup(
+									dom.h1('Members of alias ', a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain)),
+									dom.ul(
+										(a.MemberAddresses || []).map(addr => dom.li(addr)),
+									),
+								)
+							}),
+					),
+				),
+			),
+		),
+		dom.br(),
+
 		dom.h2('Change password'),
 		passwordForm=dom.form(
 			passwordFieldset=dom.fieldset(

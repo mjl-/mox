@@ -11,6 +11,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"
 	"github.com/mjl-/mox/dmarcrpt"
@@ -28,22 +29,26 @@ import (
 )
 
 type delivery struct {
-	tls         bool
-	m           *store.Message
-	dataFile    *os.File
-	rcptAcc     rcptAccount
-	acc         *store.Account
-	msgTo       []message.Address
-	msgCc       []message.Address
-	msgFrom     smtp.Address
-	dnsBLs      []dns.Domain
-	dmarcUse    bool
-	dmarcResult dmarc.Result
-	dkimResults []dkim.Result
-	iprevStatus iprev.Status
+	tls              bool
+	m                *store.Message
+	dataFile         *os.File
+	smtpRcptTo       smtp.Path // As used in SMTP, possibly address of alias.
+	deliverTo        smtp.Path // To deliver to, either smtpRcptTo or an alias member address.
+	destination      config.Destination
+	canonicalAddress string
+	acc              *store.Account
+	msgTo            []message.Address
+	msgCc            []message.Address
+	msgFrom          smtp.Address
+	dnsBLs           []dns.Domain
+	dmarcUse         bool
+	dmarcResult      dmarc.Result
+	dkimResults      []dkim.Result
+	iprevStatus      iprev.Status
 }
 
 type analysis struct {
+	d                   delivery
 	accept              bool
 	mailbox             string
 	code                int
@@ -75,7 +80,8 @@ const (
 	reasonDNSBlocklisted    = "dns-blocklisted"
 	reasonSubjectpass       = "subjectpass"
 	reasonSubjectpassError  = "subjectpass-error"
-	reasonIPrev             = "iprev" // No or mild junk reputation signals, and bad iprev.
+	reasonIPrev             = "iprev"     // No or mild junk reputation signals, and bad iprev.
+	reasonHighRate          = "high-rate" // Too many messages, not added to rejects.
 )
 
 func isListDomain(d delivery, ld dns.Domain) bool {
@@ -93,14 +99,97 @@ func isListDomain(d delivery, ld dns.Domain) bool {
 func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d delivery) analysis {
 	var headers string
 
-	mailbox := d.rcptAcc.destination.Mailbox
+	// We don't want to let a single IP or network deliver too many messages to an
+	// account. They may fill up the mailbox, either with messages that have to be
+	// purged, or by filling the disk. We check both cases for IP's and networks.
+	var rateError bool // Whether returned error represents a rate error.
+	err := d.acc.DB.Read(ctx, func(tx *bstore.Tx) (retErr error) {
+		now := time.Now()
+		defer func() {
+			log.Debugx("checking message and size delivery rates", retErr, slog.Duration("duration", time.Since(now)))
+		}()
+
+		checkCount := func(msg store.Message, window time.Duration, limit int) {
+			if retErr != nil {
+				return
+			}
+			q := bstore.QueryTx[store.Message](tx)
+			q.FilterNonzero(msg)
+			q.FilterGreater("Received", now.Add(-window))
+			q.FilterEqual("Expunged", false)
+			n, err := q.Count()
+			if err != nil {
+				retErr = err
+				return
+			}
+			if n >= limit {
+				rateError = true
+				retErr = fmt.Errorf("more than %d messages in past %s from your ip/network", limit, window)
+			}
+		}
+
+		checkSize := func(msg store.Message, window time.Duration, limit int64) {
+			if retErr != nil {
+				return
+			}
+			q := bstore.QueryTx[store.Message](tx)
+			q.FilterNonzero(msg)
+			q.FilterGreater("Received", now.Add(-window))
+			q.FilterEqual("Expunged", false)
+			size := d.m.Size
+			err := q.ForEach(func(v store.Message) error {
+				size += v.Size
+				return nil
+			})
+			if err != nil {
+				retErr = err
+				return
+			}
+			if size > limit {
+				rateError = true
+				retErr = fmt.Errorf("more than %d bytes in past %s from your ip/network", limit, window)
+			}
+		}
+
+		// todo future: make these configurable
+		// todo: should we have a limit for forwarded messages? they are stored with empty RemoteIPMasked*
+
+		const day = 24 * time.Hour
+		checkCount(store.Message{RemoteIPMasked1: d.m.RemoteIPMasked1}, time.Minute, limitIPMasked1MessagesPerMinute)
+		checkCount(store.Message{RemoteIPMasked1: d.m.RemoteIPMasked1}, day, 20*500)
+		checkCount(store.Message{RemoteIPMasked2: d.m.RemoteIPMasked2}, time.Minute, 1500)
+		checkCount(store.Message{RemoteIPMasked2: d.m.RemoteIPMasked2}, day, 20*1500)
+		checkCount(store.Message{RemoteIPMasked3: d.m.RemoteIPMasked3}, time.Minute, 4500)
+		checkCount(store.Message{RemoteIPMasked3: d.m.RemoteIPMasked3}, day, 20*4500)
+
+		const MB = 1024 * 1024
+		checkSize(store.Message{RemoteIPMasked1: d.m.RemoteIPMasked1}, time.Minute, limitIPMasked1SizePerMinute)
+		checkSize(store.Message{RemoteIPMasked1: d.m.RemoteIPMasked1}, day, 3*1000*MB)
+		checkSize(store.Message{RemoteIPMasked2: d.m.RemoteIPMasked2}, time.Minute, 3000*MB)
+		checkSize(store.Message{RemoteIPMasked2: d.m.RemoteIPMasked2}, day, 3*3000*MB)
+		checkSize(store.Message{RemoteIPMasked3: d.m.RemoteIPMasked3}, time.Minute, 9000*MB)
+		checkSize(store.Message{RemoteIPMasked3: d.m.RemoteIPMasked3}, day, 3*9000*MB)
+
+		return retErr
+	})
+	if err != nil && !rateError {
+		log.Errorx("checking delivery rates", err)
+		metricDelivery.WithLabelValues("checkrates", "").Inc()
+		return analysis{d, false, "", smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, "", headers}
+	} else if err != nil {
+		log.Debugx("refusing due to high delivery rate", err)
+		metricDelivery.WithLabelValues("highrate", "").Inc()
+		return analysis{d, false, "", smtp.C452StorageFull, smtp.SeMailbox2Full2, true, err.Error(), err, nil, nil, reasonHighRate, "", headers}
+	}
+
+	mailbox := d.destination.Mailbox
 	if mailbox == "" {
 		mailbox = "Inbox"
 	}
 
 	// If destination mailbox has a mailing list domain (for SPF/DKIM) configured,
 	// check it for a pass.
-	rs := store.MessageRuleset(log, d.rcptAcc.destination, d.m, d.m.MsgPrefix, d.dataFile)
+	rs := store.MessageRuleset(log, d.destination, d.m, d.m.MsgPrefix, d.dataFile)
 	if rs != nil {
 		mailbox = rs.Mailbox
 	}
@@ -108,7 +197,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		// todo: on temporary failures, reject temporarily?
 		if isListDomain(d, rs.ListAllowDNSDomain) {
 			d.m.IsMailingList = true
-			return analysis{accept: true, mailbox: mailbox, reason: reasonListAllow, dmarcOverrideReason: string(dmarcrpt.PolicyOverrideMailingList), headers: headers}
+			return analysis{d: d, accept: true, mailbox: mailbox, reason: reasonListAllow, dmarcOverrideReason: string(dmarcrpt.PolicyOverrideMailingList), headers: headers}
 		}
 	}
 
@@ -177,7 +266,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 				})
 			})
 			if mberr != nil {
-				return analysis{false, mailbox, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, dmarcOverrideReason, headers}
+				return analysis{d, false, mailbox, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing", err, nil, nil, reasonReputationError, dmarcOverrideReason, headers}
 			}
 			d.m.MailboxID = 0 // We plan to reject, no need to set intended MailboxID.
 		}
@@ -191,7 +280,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			d.m.Seen = true
 			log.Info("accepting reject to configured mailbox due to ruleset")
 		}
-		return analysis{accept, mailbox, code, secode, err == nil, errmsg, err, nil, nil, reason, dmarcOverrideReason, headers}
+		return analysis{d, accept, mailbox, code, secode, err == nil, errmsg, err, nil, nil, reason, dmarcOverrideReason, headers}
 	}
 
 	if d.dmarcUse && d.dmarcResult.Reject {
@@ -202,7 +291,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	// If destination is the DMARC reporting mailbox, do additional checks and keep
 	// track of the report. We'll check reputation, defaulting to accept.
 	var dmarcReport *dmarcrpt.Feedback
-	if d.rcptAcc.destination.DMARCReports {
+	if d.destination.DMARCReports {
 		// Messages with DMARC aggregate reports must have a DMARC pass. ../rfc/7489:1866
 		if d.dmarcResult.Status != dmarc.StatusPass {
 			log.Info("received dmarc aggregate report without dmarc pass, not processing as dmarc report")
@@ -227,7 +316,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	// Similar to DMARC reporting, we check for the required DKIM. We'll check
 	// reputation, defaulting to accept.
 	var tlsReport *tlsrpt.Report
-	if d.rcptAcc.destination.HostTLSReports || d.rcptAcc.destination.DomainTLSReports {
+	if d.destination.HostTLSReports || d.destination.DomainTLSReports {
 		matchesDomain := func(sigDomain dns.Domain) bool {
 			// RFC seems to require exact DKIM domain match with submitt and message From, we
 			// also allow msgFrom to be subdomain. ../rfc/8460:322
@@ -286,7 +375,6 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	var conclusive bool
 	var method reputationMethod
 	var reason string
-	var err error
 	d.acc.WithRLock(func() {
 		err = d.acc.DB.Read(ctx, func(tx *bstore.Tx) error {
 			if err := assignMailbox(tx); err != nil {
@@ -308,12 +396,12 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		slog.String("method", string(method)))
 	if conclusive {
 		if !*isjunk {
-			return analysis{accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reason, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
+			return analysis{d: d, accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reason, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
 		}
 		return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, string(method))
 	} else if dmarcReport != nil || tlsReport != nil {
 		log.Info("accepting message with dmarc aggregate report or tls report without reputation")
-		return analysis{accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reasonReporting, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
+		return analysis{d: d, accept: true, mailbox: mailbox, dmarcReport: dmarcReport, tlsReport: tlsReport, reason: reasonReporting, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
 	}
 	// If there was no previous message from sender or its domain, and we have an SPF
 	// (soft)fail, reject the message.
@@ -340,7 +428,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	var subjectpassKey string
 	conf, _ := d.acc.Conf()
 	if conf.SubjectPass.Period > 0 {
-		subjectpassKey, err = d.acc.Subjectpass(d.rcptAcc.canonicalAddress)
+		subjectpassKey, err = d.acc.Subjectpass(d.canonicalAddress)
 		if err != nil {
 			log.Errorx("get key for verifying subject token", err)
 			return reject(smtp.C451LocalErr, smtp.SeSys3Other0, "error processing", err, reasonSubjectpassError)
@@ -349,7 +437,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		pass := err == nil
 		log.Infox("pass by subject token", err, slog.Bool("pass", pass))
 		if pass {
-			return analysis{accept: true, mailbox: mailbox, reason: reasonSubjectpass, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
+			return analysis{d: d, accept: true, mailbox: mailbox, reason: reasonSubjectpass, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
 		}
 	}
 
@@ -380,7 +468,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 
 		rcptToMatch := func(l []message.Address) bool {
 			// todo: we use Go's net/mail to parse message header addresses. it does not allow empty quoted strings (contrary to spec), leaving To empty. so we don't verify To address for that unusual case for now. ../rfc/5322:961 ../rfc/5322:743
-			if d.rcptAcc.rcptTo.Localpart == "" {
+			if d.smtpRcptTo.Localpart == "" {
 				return true
 			}
 			for _, a := range l {
@@ -389,7 +477,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 					continue
 				}
 				lp, err := smtp.ParseLocalpart(a.User)
-				if err == nil && dom == d.rcptAcc.rcptTo.IPDomain.Domain && lp == d.rcptAcc.rcptTo.Localpart {
+				if err == nil && dom == d.smtpRcptTo.IPDomain.Domain && lp == d.smtpRcptTo.Localpart {
 					return true
 				}
 			}
@@ -413,6 +501,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			// providers (e.g. gmail) does not DKIM-sign Bcc headers, so junk messages can be
 			// sent with matching Bcc headers. We don't get here for known senders.
 			threshold = 0.25
+			log.Print("msgto/cc", slog.Any("msgto", d.msgTo), slog.Any("msgcc", d.msgCc))
 			log.Info("setting junk threshold due to smtp rcpt to and message to/cc address mismatch", slog.Float64("threshold", threshold))
 			reason = reasonJunkContentStrict
 		}
@@ -463,7 +552,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 	}
 
 	if accept {
-		return analysis{accept: true, mailbox: mailbox, reason: reasonNoBadSignals, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
+		return analysis{d: d, accept: true, mailbox: mailbox, reason: reasonNoBadSignals, dmarcOverrideReason: dmarcOverrideReason, headers: headers}
 	}
 
 	if subjectpassKey != "" && d.dmarcResult.Status == dmarc.StatusPass && method == methodNone && (dnsblocklisted || junkSubjectpass) {

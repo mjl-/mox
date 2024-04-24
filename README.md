@@ -24,10 +24,10 @@ See Quickstart below to get started.
 - Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
 - DANE and MTA-STS for inbound and outbound delivery over SMTP with STARTTLS,
   including REQUIRETLS and with incoming/outgoing TLSRPT reporting.
-- Web admin interface that helps you set up your domains and accounts
-  (instructions to create DNS records, configure
-  SPF/DKIM/DMARC/TLSRPT/MTA-STS), for status information, managing
-  accounts/domains, and modifying the configuration file.
+- Web admin interface that helps you set up your domains, accounts and list
+  aliases (instructions to create DNS records, configure
+  SPF/DKIM/DMARC/TLSRPT/MTA-STS), for status information, and modifying the
+  configuration file.
 - Account autodiscovery (with SRV records, Microsoft-style, Thunderbird-style,
   and Apple device management profiles) for easy account setup (though client
   support is limited).
@@ -135,7 +135,6 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- Aliases, for delivering to multiple local accounts.
 - Calendaring with CalDAV/iCal
 - More IMAP extensions (PREVIEW, WITHIN, IMPORTANT, COMPRESS=DEFLATE,
   CREATE-SPECIAL-USE, SAVEDATE, UNAUTHENTICATE, REPLACE, QUOTA, NOTIFY,
@@ -145,6 +144,7 @@ https://nlnet.nl/project/Mox/.
 - Forwarding (to an external address)
 - Add special IMAP mailbox ("Queue?") that contains queued but
   undelivered messages, updated with IMAP flags/keywords/tags and message headers.
+- External addresses in aliases/lists.
 - Sieve for filtering (for now see Rulesets in the account config)
 - Autoresponder (out of office/vacation)
 - OAUTH2 support, for single sign on

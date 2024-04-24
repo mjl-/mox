@@ -80,6 +80,8 @@ type Config struct {
 	// case-insensitive, stripped of catchall separator) to account and address.
 	// Domains are IDNA names in utf8.
 	accountDestinations map[string]AccountDestination
+	// Like accountDestinations, but for aliases.
+	aliases map[string]config.Alias
 }
 
 type AccountDestination struct {
@@ -152,13 +154,14 @@ func (c *Config) withDynamicLock(fn func()) {
 
 // must be called with dynamic lock held.
 func (c *Config) loadDynamic() []error {
-	d, mtime, accDests, err := ParseDynamicConfig(context.Background(), pkglog, ConfigDynamicPath, c.Static)
+	d, mtime, accDests, aliases, err := ParseDynamicConfig(context.Background(), pkglog, ConfigDynamicPath, c.Static)
 	if err != nil {
 		return err
 	}
 	c.Dynamic = d
 	c.dynamicMtime = mtime
 	c.accountDestinations = accDests
+	c.aliases = aliases
 	c.allowACMEHosts(pkglog, true)
 	return nil
 }
@@ -193,10 +196,12 @@ func (c *Config) Accounts() (l []string) {
 }
 
 // DomainLocalparts returns a mapping of encoded localparts to account names for a
-// domain. An empty localpart is a catchall destination for a domain.
-func (c *Config) DomainLocalparts(d dns.Domain) map[string]string {
+// domain, and encoded localparts to aliases. An empty localpart is a catchall
+// destination for a domain.
+func (c *Config) DomainLocalparts(d dns.Domain) (map[string]string, map[string]config.Alias) {
 	suffix := "@" + d.Name()
 	m := map[string]string{}
+	aliases := map[string]config.Alias{}
 	c.withDynamicLock(func() {
 		for addr, ad := range c.accountDestinations {
 			if strings.HasSuffix(addr, suffix) {
@@ -207,8 +212,13 @@ func (c *Config) DomainLocalparts(d dns.Domain) map[string]string {
 				}
 			}
 		}
+		for addr, a := range c.aliases {
+			if strings.HasSuffix(addr, suffix) {
+				aliases[a.LocalpartStr] = a
+			}
+		}
 	})
-	return m
+	return m, aliases
 }
 
 func (c *Config) Domain(d dns.Domain) (dom config.Domain, ok bool) {
@@ -225,9 +235,16 @@ func (c *Config) Account(name string) (acc config.Account, ok bool) {
 	return
 }
 
-func (c *Config) AccountDestination(addr string) (accDests AccountDestination, ok bool) {
+func (c *Config) AccountDestination(addr string) (accDest AccountDestination, alias *config.Alias, ok bool) {
 	c.withDynamicLock(func() {
-		accDests, ok = c.accountDestinations[addr]
+		accDest, ok = c.accountDestinations[addr]
+		if !ok {
+			var a config.Alias
+			a, ok = c.aliases[addr]
+			if ok {
+				alias = &a
+			}
+		}
 	})
 	return
 }
@@ -314,7 +331,7 @@ func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 // must be called with lock held.
 // Returns ErrConfig if the configuration is not valid.
 func writeDynamic(ctx context.Context, log mlog.Log, c config.Dynamic) error {
-	accDests, errs := prepareDynamicConfig(ctx, log, ConfigDynamicPath, Conf.Static, &c)
+	accDests, aliases, errs := prepareDynamicConfig(ctx, log, ConfigDynamicPath, Conf.Static, &c)
 	if len(errs) > 0 {
 		return fmt.Errorf("%w: %v", ErrConfig, errs[0])
 	}
@@ -362,6 +379,7 @@ func writeDynamic(ctx context.Context, log mlog.Log, c config.Dynamic) error {
 	Conf.DynamicLastCheck = time.Now()
 	Conf.Dynamic = c
 	Conf.accountDestinations = accDests
+	Conf.aliases = aliases
 
 	Conf.allowACMEHosts(log, true)
 
@@ -401,7 +419,7 @@ func LoadConfig(ctx context.Context, log mlog.Log, doLoadTLSKeyCerts, checkACMEH
 // SetConfig sets a new config. Not to be used during normal operation.
 func SetConfig(c *Config) {
 	// Cannot just assign *c to Conf, it would copy the mutex.
-	Conf = Config{c.Static, sync.Mutex{}, c.Log, sync.Mutex{}, c.Dynamic, c.dynamicMtime, c.DynamicLastCheck, c.accountDestinations}
+	Conf = Config{c.Static, sync.Mutex{}, c.Log, sync.Mutex{}, c.Dynamic, c.dynamicMtime, c.DynamicLastCheck, c.accountDestinations, c.aliases}
 
 	// If we have non-standard CA roots, use them for all HTTPS requests.
 	if Conf.Static.TLS.CertPool != nil {
@@ -452,7 +470,7 @@ func ParseConfig(ctx context.Context, log mlog.Log, p string, checkOnly, doLoadT
 	}
 
 	pp := filepath.Join(filepath.Dir(p), "domains.conf")
-	c.Dynamic, c.dynamicMtime, c.accountDestinations, errs = ParseDynamicConfig(ctx, log, pp, c.Static)
+	c.Dynamic, c.dynamicMtime, c.accountDestinations, c.aliases, errs = ParseDynamicConfig(ctx, log, pp, c.Static)
 
 	if !checkOnly {
 		c.allowACMEHosts(log, checkACMEHosts)
@@ -992,7 +1010,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 }
 
 // PrepareDynamicConfig parses the dynamic config file given a static file.
-func ParseDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string, static config.Static) (c config.Dynamic, mtime time.Time, accDests map[string]AccountDestination, errs []error) {
+func ParseDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string, static config.Static) (c config.Dynamic, mtime time.Time, accDests map[string]AccountDestination, aliases map[string]config.Alias, errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
@@ -1012,11 +1030,11 @@ func ParseDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string, s
 		return
 	}
 
-	accDests, errs = prepareDynamicConfig(ctx, log, dynamicPath, static, &c)
-	return c, fi.ModTime(), accDests, errs
+	accDests, aliases, errs = prepareDynamicConfig(ctx, log, dynamicPath, static, &c)
+	return c, fi.ModTime(), accDests, aliases, errs
 }
 
-func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string, static config.Static, c *config.Dynamic) (accDests map[string]AccountDestination, errs []error) {
+func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string, static config.Static, c *config.Dynamic) (accDests map[string]AccountDestination, aliases map[string]config.Alias, errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
@@ -1037,6 +1055,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 	checkMailboxNormf(static.Postmaster.Mailbox, "postmaster mailbox")
 
 	accDests = map[string]AccountDestination{}
+	aliases = map[string]config.Alias{}
 
 	// Validate host TLSRPT account/address.
 	if static.HostTLSRPT.Account != "" {
@@ -1287,6 +1306,9 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			acc.ParsedFromIDLoginAddresses[i] = a
 		}
 
+		// Clear any previously derived state.
+		acc.Aliases = nil
+
 		c.Accounts[accName] = acc
 
 		if acc.OutgoingWebhook != nil {
@@ -1445,9 +1467,8 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			origLP := address.Localpart
 			dc := c.Domains[address.Domain.Name()]
 			domainHasAddress[address.Domain.Name()] = true
-			if lp, err := CanonicalLocalpart(address.Localpart, dc); err != nil {
-				addErrorf("canonicalizing localpart %s: %v", address.Localpart, err)
-			} else if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(address.Localpart), dc.LocalpartCatchallSeparator) {
+			lp := CanonicalLocalpart(address.Localpart, dc)
+			if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(address.Localpart), dc.LocalpartCatchallSeparator) {
 				addErrorf("localpart of address %s includes domain catchall separator %s", address, dc.LocalpartCatchallSeparator)
 			} else {
 				address.Localpart = lp
@@ -1481,12 +1502,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				continue
 			}
 			dc := c.Domains[a.Domain.Name()]
-			lp, err := CanonicalLocalpart(a.Localpart, dc)
-			if err != nil {
-				addErrorf("canonicalizing localpart for fromid login address %q in account %q: %v", acc.FromIDLoginAddresses[i], accName, err)
-				continue
-			}
-			a.Localpart = lp
+			a.Localpart = CanonicalLocalpart(a.Localpart, dc)
 			if _, ok := accDests[a.Pack(true)]; !ok {
 				addErrorf("fromid login address %q for account %q does not match its destination addresses", acc.FromIDLoginAddresses[i], accName)
 			}
@@ -1585,6 +1601,86 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 	for d, domain := range c.Domains {
 		domain.ReportsOnly = !domainHasAddress[domain.Domain.Name()]
 		c.Domains[d] = domain
+	}
+
+	// Aliases, per domain. Also add references to accounts.
+	for d, domain := range c.Domains {
+		for lpstr, a := range domain.Aliases {
+			var err error
+			a.LocalpartStr = lpstr
+			var clp smtp.Localpart
+			lp, err := smtp.ParseLocalpart(lpstr)
+			if err != nil {
+				addErrorf("domain %q: parsing localpart %q for alias: %v", d, lpstr, err)
+				continue
+			} else if domain.LocalpartCatchallSeparator != "" && strings.Contains(string(lp), domain.LocalpartCatchallSeparator) {
+				addErrorf("domain %q: alias %q contains localpart catchall separator", d, a.LocalpartStr)
+				continue
+			} else {
+				clp = CanonicalLocalpart(lp, domain)
+			}
+
+			addr := smtp.NewAddress(clp, domain.Domain).Pack(true)
+			if _, ok := aliases[addr]; ok {
+				addErrorf("domain %q: duplicate alias address %q", d, addr)
+				continue
+			}
+			if _, ok := accDests[addr]; ok {
+				addErrorf("domain %q: alias %q already present as regular address", d, addr)
+				continue
+			}
+			if len(a.Addresses) == 0 {
+				// Not currently possible, Addresses isn't optional.
+				addErrorf("domain %q: alias %q needs at least one destination address", d, addr)
+				continue
+			}
+			a.ParsedAddresses = make([]config.AliasAddress, 0, len(a.Addresses))
+			seen := map[string]bool{}
+			for _, destAddr := range a.Addresses {
+				da, err := smtp.ParseAddress(destAddr)
+				if err != nil {
+					addErrorf("domain %q: parsing destination address %q in alias %q: %v", d, destAddr, addr, err)
+					continue
+				}
+				dastr := da.Pack(true)
+				accDest, ok := accDests[dastr]
+				if !ok {
+					addErrorf("domain %q: alias %q references non-existent address %q", d, addr, destAddr)
+					continue
+				}
+				if seen[dastr] {
+					addErrorf("domain %q: alias %q has duplicate address %q", d, addr, destAddr)
+					continue
+				}
+				seen[dastr] = true
+				aa := config.AliasAddress{Address: da, AccountName: accDest.Account, Destination: accDest.Destination}
+				a.ParsedAddresses = append(a.ParsedAddresses, aa)
+			}
+			a.Domain = domain.Domain
+			c.Domains[d].Aliases[lpstr] = a
+			aliases[addr] = a
+
+			for _, aa := range a.ParsedAddresses {
+				acc := c.Accounts[aa.AccountName]
+				var addrs []string
+				if a.ListMembers {
+					addrs = make([]string, len(a.ParsedAddresses))
+					for i := range a.ParsedAddresses {
+						addrs[i] = a.ParsedAddresses[i].Address.Pack(true)
+					}
+				}
+				// Keep the non-sensitive fields.
+				accAlias := config.Alias{
+					PostPublic:   a.PostPublic,
+					ListMembers:  a.ListMembers,
+					AllowMsgFrom: a.AllowMsgFrom,
+					LocalpartStr: a.LocalpartStr,
+					Domain:       a.Domain,
+				}
+				acc.Aliases = append(acc.Aliases, config.AddressAlias{SubscriptionAddress: aa.Address.Pack(true), Alias: accAlias, MemberAddresses: addrs})
+				c.Accounts[aa.AccountName] = acc
+			}
+		}
 	}
 
 	// Check webserver configs.

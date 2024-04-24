@@ -2252,8 +2252,8 @@ func OpenEmail(log mlog.Log, email string) (*Account, config.Destination, error)
 	if err != nil {
 		return nil, config.Destination{}, fmt.Errorf("%w: %v", ErrUnknownCredentials, err)
 	}
-	accountName, _, dest, err := mox.FindAccount(addr.Localpart, addr.Domain, false)
-	if err != nil && (errors.Is(err, mox.ErrAccountNotFound) || errors.Is(err, mox.ErrDomainNotFound)) {
+	accountName, _, _, dest, err := mox.LookupAddress(addr.Localpart, addr.Domain, false, false)
+	if err != nil && (errors.Is(err, mox.ErrAddressNotFound) || errors.Is(err, mox.ErrDomainNotFound)) {
 		return nil, config.Destination{}, ErrUnknownCredentials
 	} else if err != nil {
 		return nil, config.Destination{}, fmt.Errorf("looking up address: %v", err)

@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
@@ -1015,6 +1017,165 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		address := ctl.xread()
 		err := mox.AddressRemove(ctx, address)
 		ctl.xcheck(err, "removing address")
+		ctl.xwriteok()
+
+	case "aliaslist":
+		/* protocol:
+		> "aliaslist"
+		> domain
+		< "ok" or error
+		< stream
+		*/
+		domain := ctl.xread()
+		d, err := dns.ParseDomain(domain)
+		ctl.xcheck(err, "parsing domain")
+		dc, ok := mox.Conf.Domain(d)
+		if !ok {
+			ctl.xcheck(errors.New("no such domain"), "listing aliases")
+		}
+		ctl.xwriteok()
+		w := ctl.writer()
+		for _, a := range dc.Aliases {
+			lp, err := smtp.ParseLocalpart(a.LocalpartStr)
+			ctl.xcheck(err, "parsing alias localpart")
+			fmt.Fprintln(w, smtp.NewAddress(lp, a.Domain).Pack(true))
+		}
+		w.xclose()
+
+	case "aliasprint":
+		/* protocol:
+		> "aliasprint"
+		> address
+		< "ok" or error
+		< stream
+		*/
+		address := ctl.xread()
+		_, alias, ok := mox.Conf.AccountDestination(address)
+		if !ok {
+			ctl.xcheck(errors.New("no such address"), "looking up alias")
+		} else if alias == nil {
+			ctl.xcheck(errors.New("address not an alias"), "looking up alias")
+		}
+		ctl.xwriteok()
+		w := ctl.writer()
+		fmt.Fprintf(w, "# postpublic %v\n", alias.PostPublic)
+		fmt.Fprintf(w, "# listmembers %v\n", alias.ListMembers)
+		fmt.Fprintf(w, "# allowmsgfrom %v\n", alias.AllowMsgFrom)
+		fmt.Fprintln(w, "# members:")
+		for _, a := range alias.Addresses {
+			fmt.Fprintln(w, a)
+		}
+		w.xclose()
+
+	case "aliasadd":
+		/* protocol:
+		> "aliasadd"
+		> address
+		> json alias
+		< "ok" or error
+		*/
+		address := ctl.xread()
+		line := ctl.xread()
+		addr, err := smtp.ParseAddress(address)
+		ctl.xcheck(err, "parsing address")
+		var alias config.Alias
+		xparseJSON(ctl, line, &alias)
+		err = mox.AliasAdd(ctx, addr, alias)
+		ctl.xcheck(err, "adding alias")
+		ctl.xwriteok()
+
+	case "aliasupdate":
+		/* protocol:
+		> "aliasupdate"
+		> alias
+		> "true" or "false" for postpublic
+		> "true" or "false" for listmembers
+		> "true" or "false" for allowmsgfrom
+		< "ok" or error
+		*/
+		address := ctl.xread()
+		postpublic := ctl.xread()
+		listmembers := ctl.xread()
+		allowmsgfrom := ctl.xread()
+		addr, err := smtp.ParseAddress(address)
+		ctl.xcheck(err, "parsing address")
+		err = mox.DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+			a, ok := d.Aliases[addr.Localpart.String()]
+			if !ok {
+				return fmt.Errorf("alias does not exist")
+			}
+
+			switch postpublic {
+			case "false":
+				a.PostPublic = false
+			case "true":
+				a.PostPublic = true
+			}
+			switch listmembers {
+			case "false":
+				a.ListMembers = false
+			case "true":
+				a.ListMembers = true
+			}
+			switch allowmsgfrom {
+			case "false":
+				a.AllowMsgFrom = false
+			case "true":
+				a.AllowMsgFrom = true
+			}
+
+			d.Aliases = maps.Clone(d.Aliases)
+			d.Aliases[addr.Localpart.String()] = a
+			return nil
+		})
+		ctl.xcheck(err, "saving alias")
+		ctl.xwriteok()
+
+	case "aliasrm":
+		/* protocol:
+		> "aliasrm"
+		> alias
+		< "ok" or error
+		*/
+		address := ctl.xread()
+		addr, err := smtp.ParseAddress(address)
+		ctl.xcheck(err, "parsing address")
+		err = mox.AliasRemove(ctx, addr)
+		ctl.xcheck(err, "removing alias")
+		ctl.xwriteok()
+
+	case "aliasaddaddr":
+		/* protocol:
+		> "aliasaddaddr"
+		> alias
+		> addresses as json
+		< "ok" or error
+		*/
+		address := ctl.xread()
+		line := ctl.xread()
+		addr, err := smtp.ParseAddress(address)
+		ctl.xcheck(err, "parsing address")
+		var addresses []string
+		xparseJSON(ctl, line, &addresses)
+		err = mox.AliasAddressesAdd(ctx, addr, addresses)
+		ctl.xcheck(err, "adding addresses to alias")
+		ctl.xwriteok()
+
+	case "aliasrmaddr":
+		/* protocol:
+		> "aliasrmaddr"
+		> alias
+		> addresses as json
+		< "ok" or error
+		*/
+		address := ctl.xread()
+		line := ctl.xread()
+		addr, err := smtp.ParseAddress(address)
+		ctl.xcheck(err, "parsing address")
+		var addresses []string
+		xparseJSON(ctl, line, &addresses)
+		err = mox.AliasAddressesRemove(ctx, addr, addresses)
+		ctl.xcheck(err, "removing addresses to alias")
 		ctl.xwriteok()
 
 	case "loglevels":

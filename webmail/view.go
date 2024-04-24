@@ -618,7 +618,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 	accConf, _ := acc.Conf()
 	loginAddr, err := smtp.ParseAddress(address)
 	xcheckf(ctx, err, "parsing login address")
-	_, _, dest, err := mox.FindAccount(loginAddr.Localpart, loginAddr.Domain, false)
+	_, _, _, dest, err := mox.LookupAddress(loginAddr.Localpart, loginAddr.Domain, false, false)
 	xcheckf(ctx, err, "looking up destination for login address")
 	loginName := accConf.FullName
 	if dest.FullName != "" {
@@ -642,6 +642,18 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 			ma = MessageAddress{Name: name, User: addr.Localpart.String(), Domain: addr.Domain}
 		}
 		addresses = append(addresses, ma)
+	}
+	// User is allowed to send using alias address as message From address. Webmail
+	// will choose it when replying to a message sent to that address.
+	aliasAddrs := map[MessageAddress]bool{}
+	for _, a := range accConf.Aliases {
+		if a.Alias.AllowMsgFrom {
+			ma := MessageAddress{User: a.Alias.LocalpartStr, Domain: a.Alias.Domain}
+			if !aliasAddrs[ma] {
+				addresses = append(addresses, ma)
+			}
+			aliasAddrs[ma] = true
+		}
 	}
 
 	// We implicitly start a query. We use the reqctx for the transaction, because the

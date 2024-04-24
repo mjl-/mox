@@ -148,6 +148,14 @@ var commands = []struct {
 	{"config address rm", cmdConfigAddressRemove},
 	{"config domain add", cmdConfigDomainAdd},
 	{"config domain rm", cmdConfigDomainRemove},
+	{"config alias list", cmdConfigAliasList},
+	{"config alias print", cmdConfigAliasPrint},
+	{"config alias add", cmdConfigAliasAdd},
+	{"config alias update", cmdConfigAliasUpdate},
+	{"config alias rm", cmdConfigAliasRemove},
+	{"config alias addaddr", cmdConfigAliasAddaddr},
+	{"config alias rmaddr", cmdConfigAliasRemoveaddr},
+
 	{"config describe-sendmail", cmdConfigDescribeSendmail},
 	{"config printservice", cmdConfigPrintservice},
 	{"config ensureacmehostprivatekeys", cmdConfigEnsureACMEHostprivatekeys},
@@ -709,6 +717,147 @@ func ctlcmdConfigDomainRemove(ctl *ctl, d dns.Domain) {
 	ctl.xwrite(d.Name())
 	ctl.xreadok()
 	fmt.Printf("domain removed, remember to remove dns records for %s\n", d)
+}
+
+func cmdConfigAliasList(c *cmd) {
+	c.params = "domain"
+	c.help = `List aliases for domain.`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasList(xctl(), args[0])
+}
+
+func ctlcmdConfigAliasList(ctl *ctl, address string) {
+	ctl.xwrite("aliaslist")
+	ctl.xwrite(address)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
+func cmdConfigAliasPrint(c *cmd) {
+	c.params = "alias"
+	c.help = `Print settings and members of alias.`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasPrint(xctl(), args[0])
+}
+
+func ctlcmdConfigAliasPrint(ctl *ctl, address string) {
+	ctl.xwrite("aliasprint")
+	ctl.xwrite(address)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
+func cmdConfigAliasAdd(c *cmd) {
+	c.params = "alias@domain rcpt1@domain ..."
+	c.help = `Add new alias with one or more addresses.`
+	args := c.Parse()
+	if len(args) < 2 {
+		c.Usage()
+	}
+
+	alias := config.Alias{Addresses: args[1:]}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasAdd(xctl(), args[0], alias)
+}
+
+func ctlcmdConfigAliasAdd(ctl *ctl, address string, alias config.Alias) {
+	ctl.xwrite("aliasadd")
+	ctl.xwrite(address)
+	xctlwriteJSON(ctl, alias)
+	ctl.xreadok()
+}
+
+func cmdConfigAliasUpdate(c *cmd) {
+	c.params = "alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]"
+	c.help = `Update alias configuration.`
+	var postpublic, listmembers, allowmsgfrom string
+	c.flag.StringVar(&postpublic, "postpublic", "", "whether anyone or only list members can post")
+	c.flag.StringVar(&listmembers, "listmembers", "", "whether list members can list members")
+	c.flag.StringVar(&allowmsgfrom, "allowmsgfrom", "", "whether alias address can be used in message from header")
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	alias := args[0]
+	mustLoadConfig()
+	ctlcmdConfigAliasUpdate(xctl(), alias, postpublic, listmembers, allowmsgfrom)
+}
+
+func ctlcmdConfigAliasUpdate(ctl *ctl, alias, postpublic, listmembers, allowmsgfrom string) {
+	ctl.xwrite("aliasupdate")
+	ctl.xwrite(alias)
+	ctl.xwrite(postpublic)
+	ctl.xwrite(listmembers)
+	ctl.xwrite(allowmsgfrom)
+	ctl.xreadok()
+}
+
+func cmdConfigAliasRemove(c *cmd) {
+	c.params = "alias@domain"
+	c.help = "Remove alias."
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasRemove(xctl(), args[0])
+}
+
+func ctlcmdConfigAliasRemove(ctl *ctl, alias string) {
+	ctl.xwrite("aliasrm")
+	ctl.xwrite(alias)
+	ctl.xreadok()
+}
+
+func cmdConfigAliasAddaddr(c *cmd) {
+	c.params = "alias@domain rcpt1@domain ..."
+	c.help = `Add addresses to alias.`
+	args := c.Parse()
+	if len(args) < 2 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasAddaddr(xctl(), args[0], args[1:])
+}
+
+func ctlcmdConfigAliasAddaddr(ctl *ctl, alias string, addresses []string) {
+	ctl.xwrite("aliasaddaddr")
+	ctl.xwrite(alias)
+	xctlwriteJSON(ctl, addresses)
+	ctl.xreadok()
+}
+
+func cmdConfigAliasRemoveaddr(c *cmd) {
+	c.params = "alias@domain rcpt1@domain ..."
+	c.help = `Remove addresses from alias.`
+	args := c.Parse()
+	if len(args) < 2 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasRmaddr(xctl(), args[0], args[1:])
+}
+
+func ctlcmdConfigAliasRmaddr(ctl *ctl, alias string, addresses []string) {
+	ctl.xwrite("aliasrmaddr")
+	ctl.xwrite(alias)
+	xctlwriteJSON(ctl, addresses)
+	ctl.xreadok()
 }
 
 func cmdConfigAccountAdd(c *cmd) {
