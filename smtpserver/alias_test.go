@@ -36,7 +36,7 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		}
-		ts.smtperr(err, nil)
+		ts.smtpErr(err, nil)
 	})
 
 	msg = strings.ReplaceAll(`From: <private@mox.example>
@@ -53,7 +53,7 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		}
-		ts.smtperr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7DeliveryUnauth1})
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7DeliveryUnauth1})
 	})
 }
 
@@ -88,7 +88,7 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, true, false)
 		}
-		ts.smtperr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7DeliveryUnauth1})
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7DeliveryUnauth1})
 	})
 }
 
@@ -118,7 +118,7 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		}
-		ts.smtperr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7ExpnProhibited2})
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7ExpnProhibited2})
 	})
 
 	msg = strings.ReplaceAll(`From: <private@mox.example>
@@ -134,7 +134,7 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		}
-		ts.smtperr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7ExpnProhibited2})
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7ExpnProhibited2})
 	})
 
 	msg = strings.ReplaceAll(`From: <other@example.org>
@@ -151,7 +151,7 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		}
-		ts.smtperr(err, nil)
+		ts.smtpErr(err, nil)
 
 		ts.checkCount("Inbox", 2) // Receiving for both mjl@ and móx@.
 	})
@@ -188,7 +188,7 @@ test email
 			_, err = client.DeliverMultiple(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, true, false)
 			// assuming there wasn't a per-recipient error
 		}
-		ts.smtperr(err, nil)
+		ts.smtpErr(err, nil)
 
 		ts.checkCount("Inbox", 0) // Not receiving for mjl@ due to msgfrom, and not móx@ due to rcpt to.
 	})
@@ -200,7 +200,7 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		}
-		ts.smtperr(err, nil)
+		ts.smtpErr(err, nil)
 
 		ts.checkCount("Inbox", 1) // Only receiving for móx@mox.example, not mjl@.
 	})
@@ -219,7 +219,7 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		}
-		ts.smtperr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7ExpnProhibited2})
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7ExpnProhibited2})
 	})
 
 	msg = strings.ReplaceAll(`From: <public@mox.example>
@@ -236,7 +236,7 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		}
-		ts.smtperr(err, nil)
+		ts.smtpErr(err, nil)
 	})
 }
 
@@ -269,7 +269,7 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		}
-		ts.smtperr(err, nil)
+		ts.smtpErr(err, nil)
 
 		ts.checkCount("Inbox", 1) // Only receiving for móx@mox.example, not mjl@.
 	})
@@ -287,6 +287,6 @@ test email
 		if err == nil {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		}
-		ts.smtperr(err, &smtpclient.Error{Code: smtp.C451LocalErr, Secode: smtp.SeSys3Other0})
+		ts.smtpErr(err, &smtpclient.Error{Code: smtp.C451LocalErr, Secode: smtp.SeSys3Other0})
 	})
 }

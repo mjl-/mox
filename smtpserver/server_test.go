@@ -213,11 +213,12 @@ func (ts *testserver) runRaw(fn func(clientConn net.Conn)) {
 	fn(clientConn)
 }
 
-func (ts *testserver) smtperr(err error, expErr *smtpclient.Error) {
-	ts.t.Helper()
+func (ts *testserver) smtpErr(err error, expErr *smtpclient.Error) {
+	t := ts.t
+	t.Helper()
 	var cerr smtpclient.Error
-	if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
-		ts.t.Fatalf("got err %#v (%q), expected %#v", err, err, expErr)
+	if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Permanent != expErr.Permanent || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
+		t.Fatalf("got err:\n%#v (%q)\nexpected:\n%#v", err, err, expErr)
 	}
 }
 
@@ -290,8 +291,8 @@ func TestSubmission(t *testing.T) {
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false, false)
 			}
 			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v (%q), expected %#v", err, err, expErr)
+			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
+				t.Fatalf("got err:\n%#v (%q)\nexpected:\n%#v", err, err, expErr)
 			}
 			checkEvaluationCount(t, 0)
 		})
@@ -317,8 +318,8 @@ func TestSubmission(t *testing.T) {
 		},
 	}
 	for _, fn := range authfns {
-		testAuth(fn, "mjl@mox.example", "test", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8})           // Bad (short) password.
-		testAuth(fn, "mjl@mox.example", password0+"test", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8}) // Bad password.
+		testAuth(fn, "mjl@mox.example", "test", &smtpclient.Error{Code: smtp.C535AuthBadCreds, Secode: smtp.SePol7AuthBadCreds8})           // Bad (short) password.
+		testAuth(fn, "mjl@mox.example", password0+"test", &smtpclient.Error{Code: smtp.C535AuthBadCreds, Secode: smtp.SePol7AuthBadCreds8}) // Bad password.
 		testAuth(fn, "mjl@mox.example", password0, nil)
 		testAuth(fn, "mjl@mox.example", password1, nil)
 		testAuth(fn, "móx@mox.example", password0, nil)
@@ -1293,10 +1294,7 @@ func TestLimitOutgoing(t *testing.T) {
 			if err == nil {
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false, false)
 			}
-			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
-			}
+			ts.smtpErr(err, expErr)
 		})
 	}
 
@@ -1330,10 +1328,7 @@ func TestQuota(t *testing.T) {
 			if err == nil {
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
 			}
-			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
-			}
+			ts.smtpErr(err, expErr)
 		})
 	}
 
@@ -1361,10 +1356,7 @@ func TestCatchall(t *testing.T) {
 			if err == nil {
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false, false)
 			}
-			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
-			}
+			ts.smtpErr(err, expErr)
 		})
 	}
 
@@ -1502,17 +1494,14 @@ func TestPostmaster(t *testing.T) {
 			if err == nil {
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
 			}
-			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
-			}
+			ts.smtpErr(err, expErr)
 		})
 	}
 
 	testDeliver("postmaster", nil)                  // Plain postmaster address without domain.
 	testDeliver("postmaster@host.mox.example", nil) // Postmaster address with configured mail server hostname.
 	testDeliver("postmaster@mox.example", nil)      // Postmaster address without explicitly configured destination.
-	testDeliver("postmaster@unknown.example", &smtpclient.Error{Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
+	testDeliver("postmaster@unknown.example", &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
 }
 
 // Test to address with empty localpart.
@@ -1538,10 +1527,7 @@ func TestEmptylocalpart(t *testing.T) {
 			if err == nil {
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 			}
-			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
-			}
+			ts.smtpErr(err, expErr)
 		})
 	}
 
@@ -1816,10 +1802,7 @@ QW4gYXR0YWNoZWQgdGV4dCBmaWxlLg==
 `, mailFrom, rcptTo, headerValue, filename), "\n", "\r\n")
 
 			err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, clientSmtputf8, false)
-			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
-			}
+			ts.smtpErr(err, expErr)
 			if err != nil {
 				return
 			}
@@ -1908,15 +1891,10 @@ test email
 `, "\n", "\r\n")
 
 	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
 		tcheck(t, err, "init client")
 		mailFrom := "mjl@mox.example"
 		rcptTo := "mjl@mox.example"
 		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
-		var cerr smtpclient.Error
-		expErr := smtpclient.Error{Code: smtp.C554TransactionFailed, Secode: smtp.SeMsg6Other0}
-		if err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode {
-			t.Fatalf("got err %#v, expected %#v", err, expErr)
-		}
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C554TransactionFailed, Secode: smtp.SeMsg6Other0})
 	})
 }
