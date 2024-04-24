@@ -140,6 +140,9 @@ const check = async <T>(elem: {disabled: boolean}, p: Promise<T>): Promise<T> =>
 	}
 }
 
+// When white-space is relevant, e.g. for email addresses (e.g. "  "@example.org).
+const prewrap = (...l: string[]) => dom.span(style({whiteSpace: 'pre-wrap'}), l)
+
 const green = '#1dea20'
 const yellow = '#ffe400'
 const red = '#ff7443'
@@ -158,7 +161,7 @@ const crumbs = (...l: ({text: string, path: string} | string)[]) => {
 	document.title = l.map(e => crumbtext(e)).join(' - ')
 
 	const crumblink = (e: {text: string, path: string} | string) =>
-		typeof e === 'string' ? e : dom.a(e.text, attr.href(e.path))
+		typeof e === 'string' ? prewrap(e) : dom.a(e.text, attr.href(e.path))
 	return [
 		dom.div(
 			style({float: 'right'}),
@@ -249,7 +252,7 @@ const formatIP = (s: string) => {
 	const buf = window.atob(s)
 	const bytes = Uint8Array.from(buf, (m) => m.codePointAt(0) || 0)
 	if (bytes.length === 4 || isIPv4MappedIPv6(bytes)) {
-		// Format last 4 bytes as IPv4 address..
+		// Format last 4 bytes as IPv4 address.
 		return [bytes.at(-4), bytes.at(-3), bytes.at(-2), bytes.at(-1)].join('.')
 	}
 	return formatIPv6(bytes)
@@ -822,7 +825,7 @@ const account = async (name: string) => {
 						const d = t[t.length-1]
 						const lp = t.slice(0, t.length-1).join('@')
 						v = [
-							lp, '@',
+							prewrap(lp), '@',
 							dom.a(d, attr.href('#domains/'+d)),
 						]
 						if (lp === '') {
@@ -851,7 +854,7 @@ const account = async (name: string) => {
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
 				e.stopPropagation()
-				let address = localpart.value + '@' + domain.value
+				const address = localpart.value + '@' + domain.value
 				await check(fieldset, client.AddressAdd(address, name))
 				form.reset()
 				window.location.reload() // todo: only reload the destinations
@@ -890,8 +893,8 @@ const account = async (name: string) => {
 			(config.Aliases || []).length === 0 ? dom.tr(dom.td(attr.colspan('6'), 'None')) : [],
 			(config.Aliases || []).sort((a, b) => a.Alias.LocalpartStr < b.Alias.LocalpartStr ? -1 : (domainName(a.Alias.Domain) < domainName(b.Alias.Domain) ? -1 : 1)).map(a =>
 				dom.tr(
-					dom.td(dom.a(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain), attr.href('#domains/'+domainName(a.Alias.Domain)+'/alias/'+encodeURIComponent(a.Alias.LocalpartStr)))),
-					dom.td(a.SubscriptionAddress),
+					dom.td(dom.a(prewrap(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain)), attr.href('#domains/'+domainName(a.Alias.Domain)+'/alias/'+encodeURIComponent(a.Alias.LocalpartStr)))),
+					dom.td(prewrap(a.SubscriptionAddress)),
 					dom.td(a.Alias.PostPublic ? 'Anyone' : 'Members only'),
 					dom.td(a.Alias.AllowMsgFrom ? 'Yes' : 'No'),
 					dom.td(a.Alias.ListMembers ? 'Yes' : 'No'),
@@ -1265,7 +1268,7 @@ const domain = async (d: string) => {
 			dom.tbody(
 				Object.entries(localpartAccounts).map(t =>
 					dom.tr(
-						dom.td(t[0] || '(catchall)'),
+						dom.td(prewrap(t[0]) || '(catchall)'),
 						dom.td(dom.a(t[1], attr.href('#accounts/'+t[1]))),
 						dom.td(
 							dom.clickbutton('Remove', async function click(e: MouseEvent) {
@@ -1325,7 +1328,7 @@ const domain = async (d: string) => {
 			Object.values(localpartAliases).length === 0 ? dom.tr(dom.td(attr.colspan('4'), 'None')) : [],
 			Object.values(localpartAliases).sort((a, b) => a.LocalpartStr < b.LocalpartStr ? -1 : 1).map(a => {
 				return dom.tr(
-					dom.td(dom.a(a.LocalpartStr, attr.href('#domains/'+d+'/alias/'+encodeURIComponent(a.LocalpartStr)))),
+					dom.td(dom.a(prewrap(a.LocalpartStr), attr.href('#domains/'+d+'/alias/'+encodeURIComponent(a.LocalpartStr)))),
 					dom.td(a.PostPublic ? 'Anyone' : 'Members only'),
 					dom.td(a.AllowMsgFrom ? 'Yes' : 'No'),
 					dom.td(a.ListMembers ? 'Yes' : 'No'),
@@ -1348,7 +1351,7 @@ const domain = async (d: string) => {
 					Domain: dnsdomain,
 				}
 				await check(aliasFieldset, client.AliasAdd(aliasLocalpart.value, d, alias))
-				window.location.hash = '#domains/'+d+'/alias/'+aliasLocalpart.value
+				window.location.hash = '#domains/'+d+'/alias/'+encodeURIComponent(aliasLocalpart.value)
 			},
 			aliasFieldset=dom.fieldset(
 				style({display: 'flex', alignItems: 'flex-start', gap: '1em'}),
@@ -1793,7 +1796,7 @@ const domainAlias = async (d: string, aliasLocalpart: string) => {
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('Domain ' + domainString(domain.Domain), '#domains/'+d),
-			'Alias '+aliasLocalpart+'@'+domainName(domain.Domain),
+			'Alias ' + aliasLocalpart + '@' + domainName(domain.Domain),
 		),
 
 		dom.h2('Alias'),
@@ -1835,7 +1838,7 @@ const domainAlias = async (d: string, aliasLocalpart: string) => {
 				(alias.Addresses || []).map((address, index) => {
 					const pa = (alias.ParsedAddresses || [])[index]
 					return dom.tr(
-						dom.td(address),
+						dom.td(prewrap(address)),
 						dom.td(dom.a(pa.AccountName, attr.href('#accounts/'+pa.AccountName))),
 						dom.td(
 							dom.clickbutton('Remove', async function click(e: MouseEvent) {
@@ -2236,7 +2239,7 @@ const dmarcEvaluations = async () => {
 				(suppressAddresses || []).length === 0 ? dom.tr(dom.td(attr.colspan('4'), 'No suppressed reporting addresses.')) : [],
 				(suppressAddresses || []).map(ba =>
 					dom.tr(
-						dom.td(ba.ReportingAddress),
+						dom.td(prewrap(ba.ReportingAddress)),
 						dom.td(ba.Until.toISOString()),
 						dom.td(ba.Comment),
 						dom.td(
@@ -2725,7 +2728,7 @@ const tlsrptResults = async () => {
 				(suppressAddresses || []).length === 0 ? dom.tr(dom.td(attr.colspan('4'), 'No suppressed reporting addresses.')) : [],
 				(suppressAddresses || []).map(ba =>
 					dom.tr(
-						dom.td(ba.ReportingAddress),
+						dom.td(prewrap(ba.ReportingAddress)),
 						dom.td(ba.Until.toISOString()),
 						dom.td(ba.Comment),
 						dom.td(
@@ -3214,8 +3217,8 @@ const queueList = async () => {
 					dom.td(''+m.ID + (m.BaseID > 0 ? '/'+m.BaseID : '')),
 					dom.td(age(new Date(m.Queued), false, nowSecs)),
 					dom.td(m.SenderAccount || '-'),
-					dom.td(m.SenderLocalpart+"@"+ipdomainString(m.SenderDomain)), // todo: escaping of localpart
-					dom.td(m.RecipientLocalpart+"@"+ipdomainString(m.RecipientDomain)), // todo: escaping of localpart
+					dom.td(prewrap(m.SenderLocalpart, "@", ipdomainString(m.SenderDomain))), // todo: escaping of localpart
+					dom.td(prewrap(m.RecipientLocalpart, "@", ipdomainString(m.RecipientDomain))), // todo: escaping of localpart
 					dom.td(formatSize(m.Size)),
 					dom.td(''+m.Attempts),
 					dom.td(m.Hold ? 'Hold' : ''),
@@ -3668,8 +3671,8 @@ const retiredList = async () => {
 					dom.td(age(new Date(m.LastActivity), false, nowSecs)),
 					dom.td(age(new Date(m.Queued), false, nowSecs)),
 					dom.td(m.SenderAccount || '-'),
-					dom.td(m.SenderLocalpart+"@"+m.SenderDomainStr), // todo: escaping of localpart
-					dom.td(m.RecipientLocalpart+"@"+m.RecipientDomainStr), // todo: escaping of localpart
+					dom.td(prewrap(m.SenderLocalpart, "@", m.SenderDomainStr)), // todo: escaping of localpart
+					dom.td(prewrap(m.RecipientLocalpart, "@", m.RecipientDomainStr)), // todo: escaping of localpart
 					dom.td(formatSize(m.Size)),
 					dom.td(''+m.Attempts),
 					dom.td(m.LastAttempt ? age(new Date(m.LastAttempt), false, nowSecs) : '-'),

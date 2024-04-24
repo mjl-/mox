@@ -154,6 +154,9 @@ const check = async <T>(elem: {disabled: boolean}, p: Promise<T>): Promise<T> =>
 	}
 }
 
+// When white-space is relevant, e.g. for email addresses (e.g. "  "@example.org).
+const prewrap = (...l: string[]) => dom.span(style({whiteSpace: 'pre-wrap'}), l)
+
 const client = new api.Client().withOptions({csrfHeader: 'x-mox-csrf', login: login}).withAuthToken(localStorageGet('webaccountcsrftoken') || '')
 
 const link = (href: string, anchorOpt: string) => dom.a(attr.href(href), attr.rel('noopener noreferrer'), anchorOpt || href)
@@ -169,7 +172,7 @@ const crumbs = (...l: ({text: string, path: string} | string)[]) => {
 	document.title = l.map(e => crumbtext(e)).join(' - ')
 
 	const crumblink = (e: {text: string, path: string} | string) =>
-		typeof e === 'string' ? e : dom.a(e.text, attr.href(e.path))
+		typeof e === 'string' ? prewrap(e) : dom.a(e.text, attr.href(e.path))
 	return [
 		dom.div(
 			style({float: 'right'}),
@@ -758,7 +761,7 @@ const index = async () => {
 			Object.entries(acc.Destinations || {}).length === 0 ? dom.li('(None, login disabled)') : [],
 			Object.entries(acc.Destinations || {}).sort().map(t =>
 				dom.li(
-					dom.a(t[0], attr.href('#destinations/'+t[0])),
+					dom.a(prewrap(t[0]), attr.href('#destinations/'+encodeURIComponent(t[0]))),
 					t[0].startsWith('@') ? ' (catchall)' : [],
 				),
 			),
@@ -779,17 +782,17 @@ const index = async () => {
 			(acc.Aliases || []).length === 0 ? dom.tr(dom.td(attr.colspan('5'), 'None')) : [],
 			(acc.Aliases || []).sort((a, b) => a.Alias.LocalpartStr < b.Alias.LocalpartStr ? -1 : (domainName(a.Alias.Domain) < domainName(b.Alias.Domain) ? -1 : 1)).map(a =>
 				dom.tr(
-					dom.td(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain)),
-					dom.td(a.SubscriptionAddress),
+					dom.td(prewrap(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain))),
+					dom.td(prewrap(a.SubscriptionAddress)),
 					dom.td(a.Alias.PostPublic ? 'Anyone' : 'Members only'),
 					dom.td(a.Alias.AllowMsgFrom ? 'Yes' : 'No'),
 					dom.td(
 						(a.MemberAddresses || []).length === 0 ? [] :
 							dom.clickbutton('Show members', function click() {
 								popup(
-									dom.h1('Members of alias ', a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain)),
+									dom.h1('Members of alias ', prewrap(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain))),
 									dom.ul(
-										(a.MemberAddresses || []).map(addr => dom.li(addr)),
+										(a.MemberAddresses || []).map(addr => dom.li(prewrap(addr))),
 									),
 								)
 							}),
@@ -1148,7 +1151,7 @@ const index = async () => {
 				(suppressions || []).length === 0 ? dom.tr(dom.td(attr.colspan('5'), '(None)')) : [],
 				(suppressions || []).map(s =>
 					dom.tr(
-						dom.td(s.OriginalAddress, attr.title(s.BaseAddress)),
+						dom.td(prewrap(s.OriginalAddress), attr.title(s.BaseAddress)),
 						dom.td(s.Manual ? '✓' : ''),
 						dom.td(s.Reason),
 						dom.td(age(s.Created)),
