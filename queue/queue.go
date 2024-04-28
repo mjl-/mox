@@ -1366,26 +1366,24 @@ func deliver(log mlog.Log, resolver dns.Resolver, m0 Msg) {
 	var remoteMTA dsn.NameIP // Zero value, will not be included in DSN. ../rfc/3464:1027
 
 	// Check if recipient is on suppression list. If so, fail delivery.
-	if m0.SenderAccount != "" {
-		path := smtp.Path{Localpart: m0.RecipientLocalpart, IPDomain: m0.RecipientDomain}
-		baseAddr := baseAddress(path).XString(true)
-		qsup := bstore.QueryTx[webapi.Suppression](xtx)
-		qsup.FilterNonzero(webapi.Suppression{Account: m0.SenderAccount, BaseAddress: baseAddr})
-		exists, err := qsup.Exists()
-		if err != nil || exists {
-			if err != nil {
-				qlog.Errorx("checking whether recipient address is in suppression list", err)
-			} else {
-				err := fmt.Errorf("not delivering to recipient address %s: %w", path.XString(true), errSuppressed)
-				err = smtpclient.Error{Permanent: true, Err: err}
-				failMsgsTx(qlog, xtx, []*Msg{&m0}, m0.DialedIPs, backoff, remoteMTA, err)
-			}
-			err = xtx.Commit()
-			qlog.Check(err, "commit processing failure to deliver messages")
-			xtx = nil
-			kick()
-			return
+	path := smtp.Path{Localpart: m0.RecipientLocalpart, IPDomain: m0.RecipientDomain}
+	baseAddr := baseAddress(path).XString(true)
+	qsup := bstore.QueryTx[webapi.Suppression](xtx)
+	qsup.FilterNonzero(webapi.Suppression{Account: m0.SenderAccount, BaseAddress: baseAddr})
+	exists, err := qsup.Exists()
+	if err != nil || exists {
+		if err != nil {
+			qlog.Errorx("checking whether recipient address is in suppression list", err)
+		} else {
+			err := fmt.Errorf("not delivering to recipient address %s: %w", path.XString(true), errSuppressed)
+			err = smtpclient.Error{Permanent: true, Err: err}
+			failMsgsTx(qlog, xtx, []*Msg{&m0}, m0.DialedIPs, backoff, remoteMTA, err)
 		}
+		err = xtx.Commit()
+		qlog.Check(err, "commit processing failure to deliver messages")
+		xtx = nil
+		kick()
+		return
 	}
 
 	resolveTransport := func(mm Msg) (string, config.Transport, bool) {

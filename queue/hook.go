@@ -204,11 +204,9 @@ func cleanupHookRetiredSingle(log mlog.Log) {
 
 func hookRetiredKeep(account string) time.Duration {
 	keep := 24 * 7 * time.Hour
-	if account != "" {
-		accConf, ok := mox.Conf.Account(account)
-		if ok {
-			keep = accConf.KeepRetiredWebhookPeriod
-		}
+	accConf, ok := mox.Conf.Account(account)
+	if ok {
+		keep = accConf.KeepRetiredWebhookPeriod
 	}
 	return keep
 }

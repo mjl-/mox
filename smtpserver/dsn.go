@@ -56,7 +56,7 @@ func queueDSN(ctx context.Context, log mlog.Log, c *conn, rcptTo smtp.Path, m ds
 	}
 	qm := queue.MakeMsg(smtp.Path{}, rcptTo, has8bit, smtputf8, int64(len(buf)), m.MessageID, nil, reqTLS, time.Now(), m.Subject)
 	qm.DSNUTF8 = bufUTF8
-	if err := queue.Add(ctx, c.log, "", f, qm); err != nil {
+	if err := queue.Add(ctx, c.log, mox.Conf.Static.Postmaster.Account, f, qm); err != nil {
 		return err
 	}
 	return nil
