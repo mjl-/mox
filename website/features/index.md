@@ -315,8 +315,8 @@ composing email messages (internet message format, IMF), SMTP for submission,
 and IMAP for handling incoming messages including delivery status notifications
 (DSNs).
 
-Outgoing webhooks notify about events for outgoing deliveries (such as
-"delivered", "delayed", "failed", "suppressed").
+Outgoing webhooks notify about events for outgoing deliveries, such as
+"delivered", "delayed", "failed", "suppressed".
 
 Incoming webhooks notify about incoming deliveries.
 

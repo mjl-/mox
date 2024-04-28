@@ -1898,3 +1898,48 @@ test email
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C554TransactionFailed, Secode: smtp.SeMsg6Other0})
 	})
 }
+
+// FromID can be specified during submission, but must be unique, with single recipient.
+func TestUniqueFromID(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtpfromid/mox.conf"), dns.MockResolver{})
+	defer ts.close()
+
+	ts.user = "mjl+fromid@mox.example"
+	ts.pass = password0
+	ts.submission = true
+
+	extraMsg := strings.ReplaceAll(`From: <mjl@mox.example>
+To: <remote@example.org>
+Subject: test
+
+test email
+`, "\n", "\r\n")
+
+	// Specify our own unique id when queueing.
+	ts.run(func(err error, client *smtpclient.Client) {
+		tcheck(t, err, "init client")
+		mailFrom := "mjl+unique@mox.example"
+		rcptTo := "mjl@mox.example"
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
+		ts.smtpErr(err, nil)
+	})
+
+	// But we can only use it once.
+	ts.run(func(err error, client *smtpclient.Client) {
+		tcheck(t, err, "init client")
+		mailFrom := "mjl+unique@mox.example"
+		rcptTo := "mjl@mox.example"
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C554TransactionFailed, Secode: smtp.SeAddr1SenderSyntax7})
+	})
+
+	// We cannot use our own fromid with multiple recipients.
+	ts.run(func(err error, client *smtpclient.Client) {
+		tcheck(t, err, "init client")
+		mailFrom := "mjl+unique2@mox.example"
+		rcptTo := []string{"mjl@mox.example", "mjl@mox.example"}
+		_, err = client.DeliverMultiple(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C554TransactionFailed, Secode: smtp.SeProto5TooManyRcpts3})
+	})
+
+}

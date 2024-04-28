@@ -975,8 +975,10 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# (DSN, e.g. for bounces), can be related to the original message and recipient
 			# with unique id's. You can login to an account with any valid email address,
 			# including variants with the localpart catchall separator. You can use this
-			# mechanism to both send outgoing messages both with and without unique fromid for
-			# a given address. (optional)
+			# mechanism to both send outgoing messages with and without unique fromid for a
+			# given email address. With the webapi and webmail, a unique id will be generated.
+			# For submission, the id from the SMTP MAIL FROM command is used if present, and a
+			# unique id is generated otherwise. (optional)
 			FromIDLoginAddresses:
 				-
 

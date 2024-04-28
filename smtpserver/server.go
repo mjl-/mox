@@ -2097,8 +2097,20 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	xcheckf(err, "parsing login address")
 	useFromID := slices.Contains(accConf.ParsedFromIDLoginAddresses, loginAddr)
 	var localpartBase string
+	var fromID string
+	var genFromID bool
 	if useFromID {
-		localpartBase = strings.SplitN(string(c.mailFrom.Localpart), confDom.LocalpartCatchallSeparator, 2)[0]
+		// With submission, user can bring their own fromid.
+		t := strings.SplitN(string(c.mailFrom.Localpart), confDom.LocalpartCatchallSeparator, 2)
+		localpartBase = t[0]
+		if len(t) == 2 {
+			fromID = t[1]
+			if fromID != "" && len(c.recipients) > 1 {
+				xsmtpServerErrorf(codes{smtp.C554TransactionFailed, smtp.SeProto5TooManyRcpts3}, "cannot send to multiple recipients with chosen fromid")
+			}
+		} else {
+			genFromID = true
+		}
 	}
 	now := time.Now()
 	qml := make([]queue.Msg, len(c.recipients))
@@ -2116,9 +2128,10 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		}
 
 		fp := *c.mailFrom
-		var fromID string
 		if useFromID {
-			fromID = xrandomID(16)
+			if genFromID {
+				fromID = xrandomID(16)
+			}
 			fp.Localpart = smtp.Localpart(localpartBase + confDom.LocalpartCatchallSeparator + fromID)
 		}
 
@@ -2142,7 +2155,11 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	}
 
 	// todo: it would be good to have a limit on messages (count and total size) a user has in the queue. also/especially with futurerelease. ../rfc/4865:387
-	if err := queue.Add(ctx, c.log, c.account.Name, dataFile, qml...); err != nil {
+	if err := queue.Add(ctx, c.log, c.account.Name, dataFile, qml...); err != nil && errors.Is(err, queue.ErrFromID) && !genFromID {
+		// todo: should we return this error during the "rcpt to" command?
+		// secode is not an exact match, but seems closest.
+		xsmtpServerErrorf(errCodes(smtp.C554TransactionFailed, smtp.SeAddr1SenderSyntax7, err), "bad fromid in smtp mail from address: %s", err)
+	} else if err != nil {
 		// Aborting the transaction is not great. But continuing and generating DSNs will
 		// probably result in errors as well...
 		metricSubmission.WithLabelValues("queueerror").Inc()

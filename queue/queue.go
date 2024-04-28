@@ -41,6 +41,10 @@ import (
 	"github.com/mjl-/mox/webhook"
 )
 
+// ErrFromID indicate a fromid was present when adding a message to the queue, but
+// it wasn't unique.
+var ErrFromID = errors.New("fromid not unique")
+
 var (
 	metricConnection = promauto.NewCounterVec(
 		prometheus.CounterOpts{
@@ -662,6 +666,22 @@ func Add(ctx context.Context, log mlog.Log, senderAccount string, msgFile *os.Fi
 	// message inserted.
 	var baseID int64
 	for i := range qml {
+		// FromIDs must be unique if present. We don't have a unique index because values
+		// can be the empty string. We check in both Msg and MsgRetired, both are relevant
+		// for uniquely identifying a message sent in the past.
+		if fromID := qml[i].FromID; fromID != "" {
+			if exists, err := bstore.QueryTx[Msg](tx).FilterNonzero(Msg{FromID: fromID}).Exists(); err != nil {
+				return fmt.Errorf("looking up fromid: %v", err)
+			} else if exists {
+				return fmt.Errorf("%w: fromid %q already present in message queue", ErrFromID, fromID)
+			}
+			if exists, err := bstore.QueryTx[MsgRetired](tx).FilterNonzero(MsgRetired{FromID: fromID}).Exists(); err != nil {
+				return fmt.Errorf("looking up fromid: %v", err)
+			} else if exists {
+				return fmt.Errorf("%w: fromid %q already present in retired message queue", ErrFromID, fromID)
+			}
+		}
+
 		qml[i].SenderAccount = senderAccount
 		qml[i].BaseID = baseID
 		for _, hr := range holdRules {

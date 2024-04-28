@@ -27,10 +27,12 @@ An HTTP POST to /webapi/v0/<method> calls a method.The form can be either
 "application/x-www-form-urlencoded" or "multipart/form-data".  Form field
 "request" must contain the request parameters, encoded as JSON.
 
-HTTP basic authentication is required for calling methods, with an email
-address as user name. Use a login address configured for "unique SMTP MAIL
-FROM" addresses, and configure a period to "keep retired messages delivered
-from the queue" for automatic suppression list management.
+HTTP basic authentication is required for calling methods, with an email address
+as user name. Use a login address configured for "unique SMTP MAIL FROM"
+addresses ("FromIDLoginAddresses" in the account configuration), and configure
+an interval to "keep retired messages delivered from the queue". This allows
+incoming DSNs to be matched to the original outgoing messages, and enables
+automatic suppression list management.
 
 HTTP response status 200 OK indicates a successful method call, status 400
 indicates an error.  The response body of an error is a JSON object with a
