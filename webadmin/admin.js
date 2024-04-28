@@ -2253,7 +2253,9 @@ const account = async (name) => {
 		}
 		return dom.tr(dom.td(v), dom.td(dom.clickbutton('Remove', async function click(e) {
 			e.preventDefault();
-			if (!window.confirm('Are you sure you want to remove this address?')) {
+			const aliases = (config.Aliases || []).filter(aa => aa.SubscriptionAddress === k).map(aa => aa.Alias.LocalpartStr + "@" + domainName(aa.Alias.Domain));
+			const aliasmsg = aliases.length > 0 ? ' Address will be removed from alias(es): ' + aliases.join(', ') : '';
+			if (!window.confirm('Are you sure you want to remove this address?' + aliasmsg)) {
 				return;
 			}
 			await check(e.target, client.AddressRemove(k));
@@ -2441,7 +2443,7 @@ const domain = async (d) => {
 	};
 	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Domain ' + domainString(dnsdomain)), dom.ul(dom.li(dom.a('Required DNS records', attr.href('#domains/' + d + '/dnsrecords'))), dom.li(dom.a('Check current actual DNS records and domain configuration', attr.href('#domains/' + d + '/dnscheck')))), dom.br(), dom.h2('Client configuration'), dom.p('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password. ', dom.span('Explicitly configure', attr.title('To prevent authentication mechanism downgrade attempts that may result in clients sending plain text passwords to a MitM.')), ' the first supported authentication mechanism: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5.'), dom.table(dom.thead(dom.tr(dom.th('Protocol'), dom.th('Host'), dom.th('Port'), dom.th('Listener'), dom.th('Note'))), dom.tbody((clientConfigs.Entries || []).map(e => dom.tr(dom.td(e.Protocol), dom.td(domainString(e.Host)), dom.td('' + e.Port), dom.td('' + e.Listener), dom.td('' + e.Note))))), dom.br(), dom.h2('DMARC aggregate reports summary'), renderDMARCSummaries(dmarcSummaries || []), dom.br(), dom.h2('TLS reports summary'), renderTLSRPTSummaries(tlsrptSummaries || []), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th('Action'))), dom.tbody(Object.entries(localpartAccounts).map(t => dom.tr(dom.td(prewrap(t[0]) || '(catchall)'), dom.td(dom.a(t[1], attr.href('#accounts/' + t[1]))), dom.td(dom.clickbutton('Remove', async function click(e) {
 		e.preventDefault();
-		if (!window.confirm('Are you sure you want to remove this address?')) {
+		if (!window.confirm('Are you sure you want to remove this address? If it is a member of an alias, it will be removed from the alias.')) {
 			return;
 		}
 		await check(e.target, client.AddressRemove(t[0] + '@' + d));

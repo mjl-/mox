@@ -837,7 +837,9 @@ const account = async (name: string) => {
 						dom.td(
 							dom.clickbutton('Remove', async function click(e: MouseEvent) {
 								e.preventDefault()
-								if (!window.confirm('Are you sure you want to remove this address?')) {
+								const aliases = (config.Aliases || []).filter(aa => aa.SubscriptionAddress === k).map(aa => aa.Alias.LocalpartStr+"@"+domainName(aa.Alias.Domain))
+								const aliasmsg = aliases.length > 0 ? ' Address will be removed from alias(es): '+aliases.join(', ') : ''
+								if (!window.confirm('Are you sure you want to remove this address?'+aliasmsg)) {
 									return
 								}
 								await check(e.target! as HTMLButtonElement, client.AddressRemove(k))
@@ -1273,7 +1275,7 @@ const domain = async (d: string) => {
 						dom.td(
 							dom.clickbutton('Remove', async function click(e: MouseEvent) {
 								e.preventDefault()
-								if (!window.confirm('Are you sure you want to remove this address?')) {
+								if (!window.confirm('Are you sure you want to remove this address? If it is a member of an alias, it will be removed from the alias.')) {
 									return
 								}
 								await check(e.target! as HTMLButtonElement, client.AddressRemove(t[0] + '@' + d))

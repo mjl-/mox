@@ -1117,6 +1117,9 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 
 // AddressRemove removes an email address and reloads the configuration.
 // Address can be a catchall address for the domain of the form "@<domain>".
+//
+// If the address is member of an alias, remove it from from the alias, unless it
+// is the last member.
 func AddressRemove(ctx context.Context, address string) (rerr error) {
 	log := pkglog.WithContext(ctx)
 	defer func() {
@@ -1192,12 +1195,42 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	}
 	na.FromIDLoginAddresses = fromIDLoginAddresses
 
+	// And remove as member from aliases configured in domains.
+	domains := maps.Clone(Conf.Dynamic.Domains)
+	for _, aa := range na.Aliases {
+		if aa.SubscriptionAddress != address {
+			continue
+		}
+
+		aliasAddr := fmt.Sprintf("%s@%s", aa.Alias.LocalpartStr, aa.Alias.Domain.Name())
+
+		dom, ok := Conf.Dynamic.Domains[aa.Alias.Domain.Name()]
+		if !ok {
+			return fmt.Errorf("cannot find domain for alias %s", aliasAddr)
+		}
+		a, ok := dom.Aliases[aa.Alias.LocalpartStr]
+		if !ok {
+			return fmt.Errorf("cannot find alias %s", aliasAddr)
+		}
+		a.Addresses = slices.Clone(a.Addresses)
+		a.Addresses = slices.DeleteFunc(a.Addresses, func(v string) bool { return v == address })
+		if len(a.Addresses) == 0 {
+			return fmt.Errorf("address is last member of alias %s, add new members or remove alias first", aliasAddr)
+		}
+		a.ParsedAddresses = nil // Filled when parsing config.
+		dom.Aliases = maps.Clone(dom.Aliases)
+		dom.Aliases[aa.Alias.LocalpartStr] = a
+		domains[aa.Alias.Domain.Name()] = dom
+	}
+	na.Aliases = nil // Filled when parsing config.
+
 	nc := Conf.Dynamic
 	nc.Accounts = map[string]config.Account{}
 	for name, a := range Conf.Dynamic.Accounts {
 		nc.Accounts[name] = a
 	}
 	nc.Accounts[ad.Account] = na
+	nc.Domains = domains
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
