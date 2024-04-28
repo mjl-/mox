@@ -1016,6 +1016,9 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		defer func() {
 			err := closeAccount(acc)
 			log.Check(err, "closing use of account after upgrading account storage for threads", slog.String("account", a.Name))
+
+			// Mark that upgrade has finished, possibly error is indicated in threadsErr.
+			close(acc.threadsCompleted)
 		}()
 
 		defer func() {
@@ -1026,9 +1029,6 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 				metrics.PanicInc(metrics.Upgradethreads)
 				acc.threadsErr = fmt.Errorf("panic during upgradeThreads: %v", x)
 			}
-
-			// Mark that upgrade has finished, possibly error is indicated in threadsErr.
-			close(acc.threadsCompleted)
 		}()
 
 		err := upgradeThreads(mox.Shutdown, log, acc, &up)
