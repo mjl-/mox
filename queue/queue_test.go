@@ -1183,7 +1183,7 @@ func TestQueueStart(t *testing.T) {
 	_, cleanup := setup(t)
 	defer cleanup()
 
-	done := make(chan struct{}, 4)
+	done := make(chan struct{})
 	defer func() {
 		mox.ShutdownCancel()
 		// Wait for message and hooks deliverers and cleaners.
@@ -1269,7 +1269,6 @@ func TestQueueStart(t *testing.T) {
 		t.Fatalf("kick changed %d messages, expected 1", n)
 	}
 	checkDialed(true)
-	time.Sleep(100 * time.Millisecond) // Racy... we won't get notified when work is done...
 
 	// Submit another, should be delivered immediately without HoldRule.
 	path = smtp.Path{Localpart: "mjl", IPDomain: dns.IPDomain{Domain: dns.Domain{ASCII: "mox.example"}}}
@@ -1280,8 +1279,6 @@ func TestQueueStart(t *testing.T) {
 	err = Add(ctxbg, pkglog, "mjl", mf, qm)
 	tcheck(t, err, "add message to queue for delivery")
 	checkDialed(true) // Immediate.
-
-	time.Sleep(100 * time.Millisecond) // Racy... give time to finish.
 }
 
 func TestListFilterSort(t *testing.T) {

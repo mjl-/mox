@@ -78,7 +78,7 @@ func start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec boo
 		return fmt.Errorf("tlsrpt init: %s", err)
 	}
 
-	done := make(chan struct{}, 4) // Goroutines for messages and webhooks, and cleaners.
+	done := make(chan struct{}) // Goroutines for messages and webhooks, and cleaners.
 	if err := queue.Start(dns.StrictResolver{Pkg: "queue"}, done); err != nil {
 		return fmt.Errorf("queue start: %s", err)
 	}

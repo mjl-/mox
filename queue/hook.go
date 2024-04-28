@@ -1006,6 +1006,10 @@ func startHookQueue(done chan struct{}) {
 	for {
 		select {
 		case <-mox.Shutdown.Done():
+			for len(busyHookURLs) > 0 {
+				url := <-hookDeliveryResults
+				delete(busyHookURLs, url)
+			}
 			done <- struct{}{}
 			return
 		case <-hookqueue:

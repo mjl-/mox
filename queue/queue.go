@@ -1154,6 +1154,10 @@ func startQueue(resolver dns.Resolver, done chan struct{}) {
 	for {
 		select {
 		case <-mox.Shutdown.Done():
+			for len(busyDomains) > 0 {
+				domain := <-deliveryResults
+				delete(busyDomains, domain)
+			}
 			done <- struct{}{}
 			return
 		case <-msgqueue:
