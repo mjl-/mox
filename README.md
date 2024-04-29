@@ -145,22 +145,22 @@ https://nlnet.nl/project/Mox/.
 - Add special IMAP mailbox ("Queue?") that contains queued but
   undelivered messages, updated with IMAP flags/keywords/tags and message headers.
 - External addresses in aliases/lists.
-- Sieve for filtering (for now see Rulesets in the account config)
 - Autoresponder (out of office/vacation)
 - OAUTH2 support, for single sign on
+- IMAP extensions for "online"/non-syncing/webmail clients (SORT (including
+  DISPLAYFROM, DISPLAYTO), THREAD, PARTIAL, CONTEXT=SEARCH CONTEXT=SORT ESORT,
+  FILTERS)
+- Improve support for mobile clients with extensions: IMAP URLAUTH, SMTP
+  CHUNKING and BINARYMIME, IMAP CATENATE
+- Mailing list manager
 - Privilege separation, isolating parts of the application to more restricted
   sandbox (e.g. new unauthenticated connections)
 - Using mox as backup MX
 - JMAP
+- Sieve for filtering (for now see Rulesets in the account config)
 - Milter support, for integration with external tools
-- IMAP extensions for "online"/non-syncing/webmail clients (SORT (including
-  DISPLAYFROM, DISPLAYTO), THREAD, PARTIAL, CONTEXT=SEARCH CONTEXT=SORT ESORT,
-  FILTERS)
 - IMAP Sieve extension, to run Sieve scripts after message changes (not only
   new deliveries)
-- Improve support for mobile clients with extensions: IMAP URLAUTH, SMTP
-  CHUNKING and BINARYMIME, IMAP CATENATE
-- Mailing list manager
 
 There are many smaller improvements to make as well, search for "todo" in the code.
 

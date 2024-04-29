@@ -285,7 +285,7 @@ for i in 0 12; do
 done
 ```
 
-With the following "tobmox.sh" script:
+With the following "tombox.sh" script:
 
 ```
 #!/bin/sh
@@ -305,7 +305,7 @@ done
 - Check if dependencies need updates.
 - Check code if there are deprecated features that can be removed.
 - Generate apidiff and check if breaking changes can be prevented. Update moxtools.
-- Update features & roadmap in README.md
+- Update features & roadmap in README.md and website.
 - Write release notes, copy from previous.
 - Build and run tests with previous major Go release.
 - Run tests, including with race detector, also with TZ= for UTC-behaviour.
