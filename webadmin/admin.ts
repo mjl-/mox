@@ -411,7 +411,8 @@ const index = async () => {
 					e.preventDefault()
 					e.stopPropagation()
 					dom._kids(cidElem)
-					await check(recvIDFieldset, client.LookupCid(recvID.value))
+					const cid = await check(recvIDFieldset, client.LookupCid(recvID.value))
+					dom._kids(cidElem, cid)
 				},
 				recvIDFieldset=dom.fieldset(
 					dom.label('Received ID', attr.title('The ID in the Received header that was added during incoming delivery.')), ' ',

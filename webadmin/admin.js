@@ -2034,7 +2034,8 @@ const index = async () => {
 		e.preventDefault();
 		e.stopPropagation();
 		dom._kids(cidElem);
-		await check(recvIDFieldset, client.LookupCid(recvID.value));
+		const cid = await check(recvIDFieldset, client.LookupCid(recvID.value));
+		dom._kids(cidElem, cid);
 	}, recvIDFieldset = dom.fieldset(dom.label('Received ID', attr.title('The ID in the Received header that was added during incoming delivery.')), ' ', recvID = dom.input(attr.required('')), ' ', dom.submitbutton('Lookup cid', attr.title('Logging about an incoming message includes an attribute "cid", a counter identifying the transaction related to delivery of the message. The ID in the received header is an encrypted cid, which this form decrypts, after which you can look it up in the logging.')), ' ', cidElem = dom.span()))), 
 	// todo: routing, globally, per domain and per account
 	dom.br(), dom.h2('Configuration'), dom.div(dom.a('Routes', attr.href('#routes'))), dom.div(dom.a('Webserver', attr.href('#webserver'))), dom.div(dom.a('Files', attr.href('#config'))), dom.div(dom.a('Log levels', attr.href('#loglevels'))), footer);
