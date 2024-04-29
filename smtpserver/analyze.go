@@ -501,7 +501,6 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			// providers (e.g. gmail) does not DKIM-sign Bcc headers, so junk messages can be
 			// sent with matching Bcc headers. We don't get here for known senders.
 			threshold = 0.25
-			log.Print("msgto/cc", slog.Any("msgto", d.msgTo), slog.Any("msgcc", d.msgCc))
 			log.Info("setting junk threshold due to smtp rcpt to and message to/cc address mismatch", slog.Float64("threshold", threshold))
 			reason = reasonJunkContentStrict
 		}
