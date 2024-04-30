@@ -79,6 +79,11 @@ table.search td { padding: .25em; }
 .scrollparent { position: relative; }
 .yscroll { overflow-y: scroll; position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
 .yscrollauto { overflow-y: auto; position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+
+@media (prefers-color-scheme: dark) {
+	:root { filter: invert(0.9) hue-rotate(180deg); }
+	img, embed, video, iframe { filter: hue-rotate(180deg) invert(1.1111111); }
+}
 		</style>
 	</head>
 	<body>
