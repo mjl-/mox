@@ -59,6 +59,13 @@ func (w *HeaderWriter) AddWrap(buf []byte) {
 	}
 }
 
+// Newline starts a new line.
+func (w *HeaderWriter) Newline() {
+	w.b.WriteString("\r\n\t")
+	w.lineLen = 1
+	w.nonfirst = true
+}
+
 // String returns the header in string form, ending with \r\n.
 func (w *HeaderWriter) String() string {
 	return w.b.String() + "\r\n"

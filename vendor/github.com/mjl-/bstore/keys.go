@@ -132,7 +132,8 @@ func parsePK(rv reflect.Value, bk []byte) error {
 // parseKey parses the PK (last element) of an index key.
 // If all is set, also gathers the values before and returns them in the second
 // parameter.
-func (idx *index) parseKey(buf []byte, all bool) ([]byte, [][]byte, error) {
+// If witnull is set, string values will get their ending \0 included.
+func (idx *index) parseKey(buf []byte, all bool, withnull bool) ([]byte, [][]byte, error) {
 	var err error
 	var keys [][]byte
 	take := func(n int) {
@@ -160,7 +161,11 @@ fields:
 			for i, b := range buf {
 				if b == 0 {
 					if all {
-						keys = append(keys, buf[:i])
+						o := i
+						if withnull {
+							o++
+						}
+						keys = append(keys, buf[:o])
 					}
 					buf = buf[i+1:]
 					continue fields

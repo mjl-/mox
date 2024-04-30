@@ -64,6 +64,7 @@ export interface ParsedMessage {
 	ID: number
 	Part: Part
 	Headers?: { [key: string]: string[] | null }
+	ViewMode: ViewMode
 	Texts?: string[] | null  // Text parts, can be empty.
 	HasHTML: boolean  // Whether there is an HTML part. The webclient renders HTML message parts through an iframe and a separate request with strict CSP headers to prevent script execution and loading of external resources, which isn't possible when loading in iframe with inline HTML because not all browsers support the iframe csp attribute.
 	ListReplyAddress?: MessageAddress | null  // From List-Post.
@@ -99,14 +100,14 @@ export interface Envelope {
 	To?: Address[] | null
 	CC?: Address[] | null
 	BCC?: Address[] | null
-	InReplyTo: string
-	MessageID: string
+	InReplyTo: string  // From In-Reply-To header, includes <>.
+	MessageID: string  // From Message-Id header, includes <>.
 }
 
 // Address as used in From and To headers.
 export interface Address {
 	Name: string  // Free-form name for display in mail applications.
-	User: string  // Localpart.
+	User: string  // Localpart, encoded as string. Must be parsed before using as Localpart.
 	Host: string  // Domain in ASCII.
 }
 
@@ -120,10 +121,30 @@ export interface MessageAddress {
 
 // Domain is a domain name, with one or more labels, with at least an ASCII
 // representation, and for IDNA non-ASCII domains a unicode representation.
-// The ASCII string must be used for DNS lookups.
+// The ASCII string must be used for DNS lookups. The strings do not have a
+// trailing dot. When using with StrictResolver, add the trailing dot.
 export interface Domain {
-	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case.
-	Unicode: string  // Name as U-labels. Empty if this is an ASCII-only domain.
+	ASCII: string  // A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.
+	Unicode: string  // Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.
+}
+
+// FromAddressSettings are webmail client settings per "From" address.
+export interface FromAddressSettings {
+	FromAddress: string  // Unicode.
+	ViewMode: ViewMode
+}
+
+// ComposeMessage is a message to be composed, for saving draft messages.
+export interface ComposeMessage {
+	From: string
+	To?: string[] | null
+	Cc?: string[] | null
+	Bcc?: string[] | null
+	ReplyTo: string  // If non-empty, Reply-To header to add to message.
+	Subject: string
+	TextBody: string
+	ResponseMessageID: number  // If set, this was a reply or forward, based on IsForward.
+	DraftMessageID: number  // If set, previous draft message that will be removed after composing new message.
 }
 
 // SubmitMessage is an email message to be sent to one or more recipients.
@@ -134,15 +155,18 @@ export interface SubmitMessage {
 	To?: string[] | null
 	Cc?: string[] | null
 	Bcc?: string[] | null
+	ReplyTo: string  // If non-empty, Reply-To header to add to message.
 	Subject: string
 	TextBody: string
 	Attachments?: File[] | null
 	ForwardAttachments: ForwardAttachments
 	IsForward: boolean
 	ResponseMessageID: number  // If set, this was a reply or forward, based on IsForward.
-	ReplyTo: string  // If non-empty, Reply-To header to add to message.
 	UserAgent: string  // User-Agent header added if not empty.
 	RequireTLS?: boolean | null  // For "Require TLS" extension during delivery.
+	FutureRelease?: Date | null  // If set, time (in the future) when message should be delivered from queue.
+	ArchiveThread: boolean  // If set, thread is archived after sending message.
+	DraftMessageID: number  // If set, draft message that will be removed after sending.
 }
 
 // File is a new attachment (not from an existing message that is being
@@ -188,6 +212,28 @@ export interface RecipientSecurity {
 	RequireTLS: SecurityResult  // Whether recipient domain is known to implement the REQUIRETLS SMTP extension. Will be "unknown" if no delivery to the domain has been attempted yet.
 }
 
+// Settings are webmail client settings.
+export interface Settings {
+	ID: number  // Singleton ID 1.
+	Signature: string
+	Quoting: Quoting
+	ShowAddressSecurity: boolean  // Whether to show the bars underneath the address input fields indicating starttls/dnssec/dane/mtasts/requiretls support by address.
+}
+
+export interface Ruleset {
+	SMTPMailFromRegexp: string
+	MsgFromRegexp: string
+	VerifiedDomain: string
+	HeadersRegexp?: { [key: string]: string }
+	IsForward: boolean  // todo: once we implement ARC, we can use dkim domains that we cannot verify but that the arc-verified forwarding mail server was able to verify.
+	ListAllowDomain: string
+	AcceptRejectsToMailbox: string
+	Mailbox: string
+	Comment: string
+	VerifiedDNSDomain: Domain
+	ListAllowDNSDomain: Domain
+}
+
 // EventStart is the first message sent on an SSE connection, giving the client
 // basic data to populate its UI. After this event, messages will follow quickly in
 // an EventViewMsgs event.
@@ -198,6 +244,10 @@ export interface EventStart {
 	DomainAddressConfigs?: { [key: string]: DomainAddressConfig }  // ASCII domain to address config.
 	MailboxName: string
 	Mailboxes?: Mailbox[] | null
+	RejectsMailbox: string
+	Settings: Settings
+	AccountPath: string  // If nonempty, the path on same host to webaccount interface.
+	Version: string
 }
 
 // DomainAddressConfig has the address (localpart) configuration for a domain, so
@@ -297,6 +347,11 @@ export interface Message {
 	ThreadMissingLink: boolean  // ThreadMissingLink is true if there is no match with a direct parent. E.g. first ID in ThreadParentIDs is not the direct ancestor (an intermediate message may have been deleted), or subject-based matching was done.
 	ThreadMuted: boolean  // If set, newly delivered child messages are automatically marked as read. This field is copied to new child messages. Changes are propagated to the webmail client.
 	ThreadCollapsed: boolean  // If set, this (sub)thread is collapsed in the webmail client, for threading mode "on" (mode "unread" ignores it). This field is copied to new child message. Changes are propagated to the webmail client.
+	IsMailingList: boolean  // If received message was known to match a mailing list rule (with modified junk filtering).
+	DSN: boolean  // If this message is a DSN, generated by us or received. For DSNs, we don't look at the subject when matching threads.
+	ReceivedTLSVersion: number  // 0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.
+	ReceivedTLSCipherSuite: number
+	ReceivedRequireTLS: boolean  // Whether RequireTLS was known to be used for incoming delivery.
 	Seen: boolean
 	Answered: boolean
 	Flagged: boolean
@@ -333,7 +388,7 @@ export interface MessageEnvelope {
 // viewable text or HTML part.
 export interface Attachment {
 	Path?: number[] | null  // Indices into top-level message.Part.Parts.
-	Filename: string  // File name based on "name" attribute of "Content-Type", or the "filename" attribute of "Content-Disposition". todo: decode non-ascii character sets
+	Filename: string  // File name based on "name" attribute of "Content-Type", or the "filename" attribute of "Content-Disposition".
 	Part: Part
 }
 
@@ -472,6 +527,8 @@ export enum Validation {
 	ValidationNone = 10,  // E.g. No records.
 }
 
+export type CSRFToken = string
+
 export enum ThreadMode {
 	ThreadOff = "off",
 	ThreadOn = "on",
@@ -491,6 +548,15 @@ export enum AttachmentType {
 	AttachmentPresentation = "presentation",  // odp, pptx, ...
 }
 
+// ViewMode how a message should be viewed: its text parts, html parts, or html
+// with loading external resources.
+export enum ViewMode {
+	ModeDefault = "",
+	ModeText = "text",
+	ModeHTML = "html",
+	ModeHTMLExt = "htmlext",  // HTML with external resources.
+}
+
 // SecurityResult indicates whether a security feature is supported.
 export enum SecurityResult {
 	SecurityResultError = "error",
@@ -502,13 +568,21 @@ export enum SecurityResult {
 	SecurityResultUnknown = "unknown",
 }
 
+// Quoting is a setting for how to quote in replies/forwards.
+export enum Quoting {
+	Default = "",  // Bottom-quote if text is selected, top-quote otherwise.
+	Bottom = "bottom",
+	Top = "top",
+}
+
 // Localpart is a decoded local part of an email address, before the "@".
 // For quoted strings, values do not hold the double quote or escaping backslashes.
 // An empty string can be a valid localpart.
+// Localparts are in Unicode NFC.
 export type Localpart = string
 
-export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"SpecialUse":true,"SubmitMessage":true}
-export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"Localpart":true,"SecurityResult":true,"ThreadMode":true}
+export const structTypes: {[typename: string]: boolean} = {"Address":true,"Attachment":true,"ChangeMailboxAdd":true,"ChangeMailboxCounts":true,"ChangeMailboxKeywords":true,"ChangeMailboxRemove":true,"ChangeMailboxRename":true,"ChangeMailboxSpecialUse":true,"ChangeMsgAdd":true,"ChangeMsgFlags":true,"ChangeMsgRemove":true,"ChangeMsgThread":true,"ComposeMessage":true,"Domain":true,"DomainAddressConfig":true,"Envelope":true,"EventStart":true,"EventViewChanges":true,"EventViewErr":true,"EventViewMsgs":true,"EventViewReset":true,"File":true,"Filter":true,"Flags":true,"ForwardAttachments":true,"FromAddressSettings":true,"Mailbox":true,"Message":true,"MessageAddress":true,"MessageEnvelope":true,"MessageItem":true,"NotFilter":true,"Page":true,"ParsedMessage":true,"Part":true,"Query":true,"RecipientSecurity":true,"Request":true,"Ruleset":true,"Settings":true,"SpecialUse":true,"SubmitMessage":true}
+export const stringsTypes: {[typename: string]: boolean} = {"AttachmentType":true,"CSRFToken":true,"Localpart":true,"Quoting":true,"SecurityResult":true,"ThreadMode":true,"ViewMode":true}
 export const intsTypes: {[typename: string]: boolean} = {"ModSeq":true,"UID":true,"Validation":true}
 export const types: TypenameMap = {
 	"Request": {"Name":"Request","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"Cancel","Docs":"","Typewords":["bool"]},{"Name":"Query","Docs":"","Typewords":["Query"]},{"Name":"Page","Docs":"","Typewords":["Page"]}]},
@@ -516,24 +590,28 @@ export const types: TypenameMap = {
 	"Filter": {"Name":"Filter","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxChildrenIncluded","Docs":"","Typewords":["bool"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Words","Docs":"","Typewords":["[]","string"]},{"Name":"From","Docs":"","Typewords":["[]","string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Oldest","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"Newest","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"Subject","Docs":"","Typewords":["[]","string"]},{"Name":"Attachments","Docs":"","Typewords":["AttachmentType"]},{"Name":"Labels","Docs":"","Typewords":["[]","string"]},{"Name":"Headers","Docs":"","Typewords":["[]","[]","string"]},{"Name":"SizeMin","Docs":"","Typewords":["int64"]},{"Name":"SizeMax","Docs":"","Typewords":["int64"]}]},
 	"NotFilter": {"Name":"NotFilter","Docs":"","Fields":[{"Name":"Words","Docs":"","Typewords":["[]","string"]},{"Name":"From","Docs":"","Typewords":["[]","string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Subject","Docs":"","Typewords":["[]","string"]},{"Name":"Attachments","Docs":"","Typewords":["AttachmentType"]},{"Name":"Labels","Docs":"","Typewords":["[]","string"]}]},
 	"Page": {"Name":"Page","Docs":"","Fields":[{"Name":"AnchorMessageID","Docs":"","Typewords":["int64"]},{"Name":"Count","Docs":"","Typewords":["int32"]},{"Name":"DestMessageID","Docs":"","Typewords":["int64"]}]},
-	"ParsedMessage": {"Name":"ParsedMessage","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Part","Docs":"","Typewords":["Part"]},{"Name":"Headers","Docs":"","Typewords":["{}","[]","string"]},{"Name":"Texts","Docs":"","Typewords":["[]","string"]},{"Name":"HasHTML","Docs":"","Typewords":["bool"]},{"Name":"ListReplyAddress","Docs":"","Typewords":["nullable","MessageAddress"]}]},
+	"ParsedMessage": {"Name":"ParsedMessage","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Part","Docs":"","Typewords":["Part"]},{"Name":"Headers","Docs":"","Typewords":["{}","[]","string"]},{"Name":"ViewMode","Docs":"","Typewords":["ViewMode"]},{"Name":"Texts","Docs":"","Typewords":["[]","string"]},{"Name":"HasHTML","Docs":"","Typewords":["bool"]},{"Name":"ListReplyAddress","Docs":"","Typewords":["nullable","MessageAddress"]}]},
 	"Part": {"Name":"Part","Docs":"","Fields":[{"Name":"BoundaryOffset","Docs":"","Typewords":["int64"]},{"Name":"HeaderOffset","Docs":"","Typewords":["int64"]},{"Name":"BodyOffset","Docs":"","Typewords":["int64"]},{"Name":"EndOffset","Docs":"","Typewords":["int64"]},{"Name":"RawLineCount","Docs":"","Typewords":["int64"]},{"Name":"DecodedSize","Docs":"","Typewords":["int64"]},{"Name":"MediaType","Docs":"","Typewords":["string"]},{"Name":"MediaSubType","Docs":"","Typewords":["string"]},{"Name":"ContentTypeParams","Docs":"","Typewords":["{}","string"]},{"Name":"ContentID","Docs":"","Typewords":["string"]},{"Name":"ContentDescription","Docs":"","Typewords":["string"]},{"Name":"ContentTransferEncoding","Docs":"","Typewords":["string"]},{"Name":"Envelope","Docs":"","Typewords":["nullable","Envelope"]},{"Name":"Parts","Docs":"","Typewords":["[]","Part"]},{"Name":"Message","Docs":"","Typewords":["nullable","Part"]}]},
 	"Envelope": {"Name":"Envelope","Docs":"","Fields":[{"Name":"Date","Docs":"","Typewords":["timestamp"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["[]","Address"]},{"Name":"Sender","Docs":"","Typewords":["[]","Address"]},{"Name":"ReplyTo","Docs":"","Typewords":["[]","Address"]},{"Name":"To","Docs":"","Typewords":["[]","Address"]},{"Name":"CC","Docs":"","Typewords":["[]","Address"]},{"Name":"BCC","Docs":"","Typewords":["[]","Address"]},{"Name":"InReplyTo","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]}]},
 	"Address": {"Name":"Address","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Host","Docs":"","Typewords":["string"]}]},
 	"MessageAddress": {"Name":"MessageAddress","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"User","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
 	"Domain": {"Name":"Domain","Docs":"","Fields":[{"Name":"ASCII","Docs":"","Typewords":["string"]},{"Name":"Unicode","Docs":"","Typewords":["string"]}]},
-	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]}]},
+	"FromAddressSettings": {"Name":"FromAddressSettings","Docs":"","Fields":[{"Name":"FromAddress","Docs":"","Typewords":["string"]},{"Name":"ViewMode","Docs":"","Typewords":["ViewMode"]}]},
+	"ComposeMessage": {"Name":"ComposeMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
+	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureRelease","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"ArchiveThread","Docs":"","Typewords":["bool"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
 	"File": {"Name":"File","Docs":"","Fields":[{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"DataURI","Docs":"","Typewords":["string"]}]},
 	"ForwardAttachments": {"Name":"ForwardAttachments","Docs":"","Fields":[{"Name":"MessageID","Docs":"","Typewords":["int64"]},{"Name":"Paths","Docs":"","Typewords":["[]","[]","int32"]}]},
 	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
 	"RecipientSecurity": {"Name":"RecipientSecurity","Docs":"","Fields":[{"Name":"STARTTLS","Docs":"","Typewords":["SecurityResult"]},{"Name":"MTASTS","Docs":"","Typewords":["SecurityResult"]},{"Name":"DNSSEC","Docs":"","Typewords":["SecurityResult"]},{"Name":"DANE","Docs":"","Typewords":["SecurityResult"]},{"Name":"RequireTLS","Docs":"","Typewords":["SecurityResult"]}]},
-	"EventStart": {"Name":"EventStart","Docs":"","Fields":[{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"LoginAddress","Docs":"","Typewords":["MessageAddress"]},{"Name":"Addresses","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"DomainAddressConfigs","Docs":"","Typewords":["{}","DomainAddressConfig"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Mailboxes","Docs":"","Typewords":["[]","Mailbox"]}]},
+	"Settings": {"Name":"Settings","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["uint8"]},{"Name":"Signature","Docs":"","Typewords":["string"]},{"Name":"Quoting","Docs":"","Typewords":["Quoting"]},{"Name":"ShowAddressSecurity","Docs":"","Typewords":["bool"]}]},
+	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"MsgFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Comment","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
+	"EventStart": {"Name":"EventStart","Docs":"","Fields":[{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"LoginAddress","Docs":"","Typewords":["MessageAddress"]},{"Name":"Addresses","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"DomainAddressConfigs","Docs":"","Typewords":["{}","DomainAddressConfig"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Mailboxes","Docs":"","Typewords":["[]","Mailbox"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"Settings","Docs":"","Typewords":["Settings"]},{"Name":"AccountPath","Docs":"","Typewords":["string"]},{"Name":"Version","Docs":"","Typewords":["string"]}]},
 	"DomainAddressConfig": {"Name":"DomainAddressConfig","Docs":"","Fields":[{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]}]},
 	"EventViewErr": {"Name":"EventViewErr","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]},{"Name":"Err","Docs":"","Typewords":["string"]}]},
 	"EventViewReset": {"Name":"EventViewReset","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]}]},
 	"EventViewMsgs": {"Name":"EventViewMsgs","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]},{"Name":"MessageItems","Docs":"","Typewords":["[]","[]","MessageItem"]},{"Name":"ParsedMessage","Docs":"","Typewords":["nullable","ParsedMessage"]},{"Name":"ViewEnd","Docs":"","Typewords":["bool"]}]},
 	"MessageItem": {"Name":"MessageItem","Docs":"","Fields":[{"Name":"Message","Docs":"","Typewords":["Message"]},{"Name":"Envelope","Docs":"","Typewords":["MessageEnvelope"]},{"Name":"Attachments","Docs":"","Typewords":["[]","Attachment"]},{"Name":"IsSigned","Docs":"","Typewords":["bool"]},{"Name":"IsEncrypted","Docs":"","Typewords":["bool"]},{"Name":"FirstLine","Docs":"","Typewords":["string"]},{"Name":"MatchQuery","Docs":"","Typewords":["bool"]}]},
-	"Message": {"Name":"Message","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"CreateSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Expunged","Docs":"","Typewords":["bool"]},{"Name":"IsReject","Docs":"","Typewords":["bool"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"MailboxOrigID","Docs":"","Typewords":["int64"]},{"Name":"MailboxDestinedID","Docs":"","Typewords":["int64"]},{"Name":"Received","Docs":"","Typewords":["timestamp"]},{"Name":"RemoteIP","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked1","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked2","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked3","Docs":"","Typewords":["string"]},{"Name":"EHLODomain","Docs":"","Typewords":["string"]},{"Name":"MailFrom","Docs":"","Typewords":["string"]},{"Name":"MailFromLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"MailFromDomain","Docs":"","Typewords":["string"]},{"Name":"RcptToLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"RcptToDomain","Docs":"","Typewords":["string"]},{"Name":"MsgFromLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"MsgFromDomain","Docs":"","Typewords":["string"]},{"Name":"MsgFromOrgDomain","Docs":"","Typewords":["string"]},{"Name":"EHLOValidated","Docs":"","Typewords":["bool"]},{"Name":"MailFromValidated","Docs":"","Typewords":["bool"]},{"Name":"MsgFromValidated","Docs":"","Typewords":["bool"]},{"Name":"EHLOValidation","Docs":"","Typewords":["Validation"]},{"Name":"MailFromValidation","Docs":"","Typewords":["Validation"]},{"Name":"MsgFromValidation","Docs":"","Typewords":["Validation"]},{"Name":"DKIMDomains","Docs":"","Typewords":["[]","string"]},{"Name":"OrigEHLODomain","Docs":"","Typewords":["string"]},{"Name":"OrigDKIMDomains","Docs":"","Typewords":["[]","string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"SubjectBase","Docs":"","Typewords":["string"]},{"Name":"MessageHash","Docs":"","Typewords":["nullable","string"]},{"Name":"ThreadID","Docs":"","Typewords":["int64"]},{"Name":"ThreadParentIDs","Docs":"","Typewords":["[]","int64"]},{"Name":"ThreadMissingLink","Docs":"","Typewords":["bool"]},{"Name":"ThreadMuted","Docs":"","Typewords":["bool"]},{"Name":"ThreadCollapsed","Docs":"","Typewords":["bool"]},{"Name":"Seen","Docs":"","Typewords":["bool"]},{"Name":"Answered","Docs":"","Typewords":["bool"]},{"Name":"Flagged","Docs":"","Typewords":["bool"]},{"Name":"Forwarded","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Notjunk","Docs":"","Typewords":["bool"]},{"Name":"Deleted","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Phishing","Docs":"","Typewords":["bool"]},{"Name":"MDNSent","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"Size","Docs":"","Typewords":["int64"]},{"Name":"TrainedJunk","Docs":"","Typewords":["nullable","bool"]},{"Name":"MsgPrefix","Docs":"","Typewords":["nullable","string"]},{"Name":"ParsedBuf","Docs":"","Typewords":["nullable","string"]}]},
+	"Message": {"Name":"Message","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"CreateSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Expunged","Docs":"","Typewords":["bool"]},{"Name":"IsReject","Docs":"","Typewords":["bool"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"MailboxOrigID","Docs":"","Typewords":["int64"]},{"Name":"MailboxDestinedID","Docs":"","Typewords":["int64"]},{"Name":"Received","Docs":"","Typewords":["timestamp"]},{"Name":"RemoteIP","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked1","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked2","Docs":"","Typewords":["string"]},{"Name":"RemoteIPMasked3","Docs":"","Typewords":["string"]},{"Name":"EHLODomain","Docs":"","Typewords":["string"]},{"Name":"MailFrom","Docs":"","Typewords":["string"]},{"Name":"MailFromLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"MailFromDomain","Docs":"","Typewords":["string"]},{"Name":"RcptToLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"RcptToDomain","Docs":"","Typewords":["string"]},{"Name":"MsgFromLocalpart","Docs":"","Typewords":["Localpart"]},{"Name":"MsgFromDomain","Docs":"","Typewords":["string"]},{"Name":"MsgFromOrgDomain","Docs":"","Typewords":["string"]},{"Name":"EHLOValidated","Docs":"","Typewords":["bool"]},{"Name":"MailFromValidated","Docs":"","Typewords":["bool"]},{"Name":"MsgFromValidated","Docs":"","Typewords":["bool"]},{"Name":"EHLOValidation","Docs":"","Typewords":["Validation"]},{"Name":"MailFromValidation","Docs":"","Typewords":["Validation"]},{"Name":"MsgFromValidation","Docs":"","Typewords":["Validation"]},{"Name":"DKIMDomains","Docs":"","Typewords":["[]","string"]},{"Name":"OrigEHLODomain","Docs":"","Typewords":["string"]},{"Name":"OrigDKIMDomains","Docs":"","Typewords":["[]","string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"SubjectBase","Docs":"","Typewords":["string"]},{"Name":"MessageHash","Docs":"","Typewords":["nullable","string"]},{"Name":"ThreadID","Docs":"","Typewords":["int64"]},{"Name":"ThreadParentIDs","Docs":"","Typewords":["[]","int64"]},{"Name":"ThreadMissingLink","Docs":"","Typewords":["bool"]},{"Name":"ThreadMuted","Docs":"","Typewords":["bool"]},{"Name":"ThreadCollapsed","Docs":"","Typewords":["bool"]},{"Name":"IsMailingList","Docs":"","Typewords":["bool"]},{"Name":"DSN","Docs":"","Typewords":["bool"]},{"Name":"ReceivedTLSVersion","Docs":"","Typewords":["uint16"]},{"Name":"ReceivedTLSCipherSuite","Docs":"","Typewords":["uint16"]},{"Name":"ReceivedRequireTLS","Docs":"","Typewords":["bool"]},{"Name":"Seen","Docs":"","Typewords":["bool"]},{"Name":"Answered","Docs":"","Typewords":["bool"]},{"Name":"Flagged","Docs":"","Typewords":["bool"]},{"Name":"Forwarded","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Notjunk","Docs":"","Typewords":["bool"]},{"Name":"Deleted","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Phishing","Docs":"","Typewords":["bool"]},{"Name":"MDNSent","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"Size","Docs":"","Typewords":["int64"]},{"Name":"TrainedJunk","Docs":"","Typewords":["nullable","bool"]},{"Name":"MsgPrefix","Docs":"","Typewords":["nullable","string"]},{"Name":"ParsedBuf","Docs":"","Typewords":["nullable","string"]}]},
 	"MessageEnvelope": {"Name":"MessageEnvelope","Docs":"","Fields":[{"Name":"Date","Docs":"","Typewords":["timestamp"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"From","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"Sender","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"ReplyTo","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"To","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"CC","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"BCC","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"InReplyTo","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]}]},
 	"Attachment": {"Name":"Attachment","Docs":"","Fields":[{"Name":"Path","Docs":"","Typewords":["[]","int32"]},{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"Part","Docs":"","Typewords":["Part"]}]},
 	"EventViewChanges": {"Name":"EventViewChanges","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"Changes","Docs":"","Typewords":["[]","[]","any"]}]},
@@ -552,9 +630,12 @@ export const types: TypenameMap = {
 	"UID": {"Name":"UID","Docs":"","Values":null},
 	"ModSeq": {"Name":"ModSeq","Docs":"","Values":null},
 	"Validation": {"Name":"Validation","Docs":"","Values":[{"Name":"ValidationUnknown","Value":0,"Docs":""},{"Name":"ValidationStrict","Value":1,"Docs":""},{"Name":"ValidationDMARC","Value":2,"Docs":""},{"Name":"ValidationRelaxed","Value":3,"Docs":""},{"Name":"ValidationPass","Value":4,"Docs":""},{"Name":"ValidationNeutral","Value":5,"Docs":""},{"Name":"ValidationTemperror","Value":6,"Docs":""},{"Name":"ValidationPermerror","Value":7,"Docs":""},{"Name":"ValidationFail","Value":8,"Docs":""},{"Name":"ValidationSoftfail","Value":9,"Docs":""},{"Name":"ValidationNone","Value":10,"Docs":""}]},
+	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"ThreadMode": {"Name":"ThreadMode","Docs":"","Values":[{"Name":"ThreadOff","Value":"off","Docs":""},{"Name":"ThreadOn","Value":"on","Docs":""},{"Name":"ThreadUnread","Value":"unread","Docs":""}]},
 	"AttachmentType": {"Name":"AttachmentType","Docs":"","Values":[{"Name":"AttachmentIndifferent","Value":"","Docs":""},{"Name":"AttachmentNone","Value":"none","Docs":""},{"Name":"AttachmentAny","Value":"any","Docs":""},{"Name":"AttachmentImage","Value":"image","Docs":""},{"Name":"AttachmentPDF","Value":"pdf","Docs":""},{"Name":"AttachmentArchive","Value":"archive","Docs":""},{"Name":"AttachmentSpreadsheet","Value":"spreadsheet","Docs":""},{"Name":"AttachmentDocument","Value":"document","Docs":""},{"Name":"AttachmentPresentation","Value":"presentation","Docs":""}]},
+	"ViewMode": {"Name":"ViewMode","Docs":"","Values":[{"Name":"ModeDefault","Value":"","Docs":""},{"Name":"ModeText","Value":"text","Docs":""},{"Name":"ModeHTML","Value":"html","Docs":""},{"Name":"ModeHTMLExt","Value":"htmlext","Docs":""}]},
 	"SecurityResult": {"Name":"SecurityResult","Docs":"","Values":[{"Name":"SecurityResultError","Value":"error","Docs":""},{"Name":"SecurityResultNo","Value":"no","Docs":""},{"Name":"SecurityResultYes","Value":"yes","Docs":""},{"Name":"SecurityResultUnknown","Value":"unknown","Docs":""}]},
+	"Quoting": {"Name":"Quoting","Docs":"","Values":[{"Name":"Default","Value":"","Docs":""},{"Name":"Bottom","Value":"bottom","Docs":""},{"Name":"Top","Value":"top","Docs":""}]},
 	"Localpart": {"Name":"Localpart","Docs":"","Values":null},
 }
 
@@ -570,11 +651,15 @@ export const parser = {
 	Address: (v: any) => parse("Address", v) as Address,
 	MessageAddress: (v: any) => parse("MessageAddress", v) as MessageAddress,
 	Domain: (v: any) => parse("Domain", v) as Domain,
+	FromAddressSettings: (v: any) => parse("FromAddressSettings", v) as FromAddressSettings,
+	ComposeMessage: (v: any) => parse("ComposeMessage", v) as ComposeMessage,
 	SubmitMessage: (v: any) => parse("SubmitMessage", v) as SubmitMessage,
 	File: (v: any) => parse("File", v) as File,
 	ForwardAttachments: (v: any) => parse("ForwardAttachments", v) as ForwardAttachments,
 	Mailbox: (v: any) => parse("Mailbox", v) as Mailbox,
 	RecipientSecurity: (v: any) => parse("RecipientSecurity", v) as RecipientSecurity,
+	Settings: (v: any) => parse("Settings", v) as Settings,
+	Ruleset: (v: any) => parse("Ruleset", v) as Ruleset,
 	EventStart: (v: any) => parse("EventStart", v) as EventStart,
 	DomainAddressConfig: (v: any) => parse("DomainAddressConfig", v) as DomainAddressConfig,
 	EventViewErr: (v: any) => parse("EventViewErr", v) as EventViewErr,
@@ -600,23 +685,69 @@ export const parser = {
 	UID: (v: any) => parse("UID", v) as UID,
 	ModSeq: (v: any) => parse("ModSeq", v) as ModSeq,
 	Validation: (v: any) => parse("Validation", v) as Validation,
+	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 	ThreadMode: (v: any) => parse("ThreadMode", v) as ThreadMode,
 	AttachmentType: (v: any) => parse("AttachmentType", v) as AttachmentType,
+	ViewMode: (v: any) => parse("ViewMode", v) as ViewMode,
 	SecurityResult: (v: any) => parse("SecurityResult", v) as SecurityResult,
+	Quoting: (v: any) => parse("Quoting", v) as Quoting,
 	Localpart: (v: any) => parse("Localpart", v) as Localpart,
 }
 
 let defaultOptions: ClientOptions = {slicesNullable: true, mapsNullable: true, nullableOptional: true}
 
 export class Client {
-	constructor(private baseURL=defaultBaseURL, public options?: ClientOptions) {
-		if (!options) {
-			this.options = defaultOptions
-		}
+	private baseURL: string
+	public authState: AuthState
+	public options: ClientOptions
+
+	constructor() {
+		this.authState = {}
+		this.options = {...defaultOptions}
+		this.baseURL = this.options.baseURL || defaultBaseURL
+	}
+
+	withAuthToken(token: string): Client {
+		const c = new Client()
+		c.authState.token = token
+		c.options = this.options
+		return c
 	}
 
 	withOptions(options: ClientOptions): Client {
-		return new Client(this.baseURL, { ...this.options, ...options })
+		const c = new Client()
+		c.authState = this.authState
+		c.options = { ...this.options, ...options }
+		return c
+	}
+
+	// LoginPrep returns a login token, and also sets it as cookie. Both must be
+	// present in the call to Login.
+	async LoginPrep(): Promise<string> {
+		const fn: string = "LoginPrep"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["string"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string
+	}
+
+	// Login returns a session token for the credentials, or fails with error code
+	// "user:badLogin". Call LoginPrep to get a loginToken.
+	async Login(loginToken: string, username: string, password: string): Promise<CSRFToken> {
+		const fn: string = "Login"
+		const paramTypes: string[][] = [["string"],["string"],["string"]]
+		const returnTypes: string[][] = [["CSRFToken"]]
+		const params: any[] = [loginToken, username, password]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as CSRFToken
+	}
+
+	// Logout invalidates the session token.
+	async Logout(): Promise<void> {
+		const fn: string = "Logout"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = []
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// Token returns a token to use for an SSE connection. A token can only be used for
@@ -627,7 +758,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["string"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as string
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string
 	}
 
 	// Requests sends a new request for an open SSE connection. Any currently active
@@ -640,7 +771,7 @@ export class Client {
 		const paramTypes: string[][] = [["Request"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [req]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// ParsedMessage returns enough to render the textual body of a message. It is
@@ -650,7 +781,38 @@ export class Client {
 		const paramTypes: string[][] = [["int64"]]
 		const returnTypes: string[][] = [["ParsedMessage"]]
 		const params: any[] = [msgID]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as ParsedMessage
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as ParsedMessage
+	}
+
+	// FromAddressSettingsSave saves per-"From"-address settings.
+	async FromAddressSettingsSave(fas: FromAddressSettings): Promise<void> {
+		const fn: string = "FromAddressSettingsSave"
+		const paramTypes: string[][] = [["FromAddressSettings"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [fas]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// MessageFindMessageID looks up a message by Message-Id header, and returns the ID
+	// of the message in storage. Used when opening a previously saved draft message
+	// for editing again.
+	// If no message is find, zero is returned, not an error.
+	async MessageFindMessageID(messageID: string): Promise<number> {
+		const fn: string = "MessageFindMessageID"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = [["int64"]]
+		const params: any[] = [messageID]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
+	}
+
+	// MessageCompose composes a message and saves it to the mailbox. Used for
+	// saving draft messages.
+	async MessageCompose(m: ComposeMessage, mailboxID: number): Promise<number> {
+		const fn: string = "MessageCompose"
+		const paramTypes: string[][] = [["ComposeMessage"],["int64"]]
+		const returnTypes: string[][] = [["int64"]]
+		const params: any[] = [m, mailboxID]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as number
 	}
 
 	// MessageSubmit sends a message by submitting it the outgoing email queue. The
@@ -658,13 +820,14 @@ export class Client {
 	// Bcc message header.
 	// 
 	// If a Sent mailbox is configured, messages are added to it after submitting
-	// to the delivery queue.
+	// to the delivery queue. If Bcc addresses were present, a header is prepended
+	// to the message stored in the Sent mailbox.
 	async MessageSubmit(m: SubmitMessage): Promise<void> {
 		const fn: string = "MessageSubmit"
 		const paramTypes: string[][] = [["SubmitMessage"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [m]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MessageMove moves messages to another mailbox. If the message is already in
@@ -674,7 +837,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"],["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, mailboxID]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MessageDelete permanently deletes messages, without moving them to the Trash mailbox.
@@ -683,7 +846,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// FlagsAdd adds flags, either system flags like \Seen or custom keywords. The
@@ -693,7 +856,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"],["[]","string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, flaglist]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// FlagsClear clears flags, either system flags like \Seen or custom keywords.
@@ -702,7 +865,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"],["[]","string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, flaglist]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MailboxCreate creates a new mailbox.
@@ -711,7 +874,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [name]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MailboxDelete deletes a mailbox and all its messages.
@@ -720,7 +883,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [mailboxID]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MailboxEmpty empties a mailbox, removing all messages from the mailbox, but not
@@ -730,7 +893,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [mailboxID]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// MailboxRename renames a mailbox, possibly moving it to a new parent. The mailbox
@@ -740,7 +903,7 @@ export class Client {
 		const paramTypes: string[][] = [["int64"],["string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [mailboxID, newName]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// CompleteRecipient returns autocomplete matches for a recipient, returning the
@@ -751,7 +914,7 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["[]","string"],["bool"]]
 		const params: any[] = [search]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as [string[] | null, boolean]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string[] | null, boolean]
 	}
 
 	// MailboxSetSpecialUse sets the special use flags of a mailbox.
@@ -760,7 +923,7 @@ export class Client {
 		const paramTypes: string[][] = [["Mailbox"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [mb]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// ThreadCollapse saves the ThreadCollapse field for the messages and its
@@ -771,7 +934,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"],["bool"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, collapse]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// ThreadMute saves the ThreadMute field for the messages and their children.
@@ -781,7 +944,7 @@ export class Client {
 		const paramTypes: string[][] = [["[]","int64"],["bool"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [messageIDs, mute]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// RecipientSecurity looks up security properties of the address in the
@@ -791,7 +954,65 @@ export class Client {
 		const paramTypes: string[][] = [["string"]]
 		const returnTypes: string[][] = [["RecipientSecurity"]]
 		const params: any[] = [messageAddressee]
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as RecipientSecurity
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as RecipientSecurity
+	}
+
+	// DecodeMIMEWords decodes Q/B-encoded words for a mime headers into UTF-8 text.
+	async DecodeMIMEWords(text: string): Promise<string> {
+		const fn: string = "DecodeMIMEWords"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = [["string"]]
+		const params: any[] = [text]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string
+	}
+
+	// SettingsSave saves settings, e.g. for composing.
+	async SettingsSave(settings: Settings): Promise<void> {
+		const fn: string = "SettingsSave"
+		const paramTypes: string[][] = [["Settings"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [settings]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async RulesetSuggestMove(msgID: number, mbSrcID: number, mbDstID: number): Promise<[string, string, boolean, string, Ruleset | null]> {
+		const fn: string = "RulesetSuggestMove"
+		const paramTypes: string[][] = [["int64"],["int64"],["int64"]]
+		const returnTypes: string[][] = [["string"],["string"],["bool"],["string"],["nullable","Ruleset"]]
+		const params: any[] = [msgID, mbSrcID, mbDstID]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, string, boolean, string, Ruleset | null]
+	}
+
+	async RulesetAdd(rcptTo: string, ruleset: Ruleset): Promise<void> {
+		const fn: string = "RulesetAdd"
+		const paramTypes: string[][] = [["string"],["Ruleset"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [rcptTo, ruleset]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async RulesetRemove(rcptTo: string, ruleset: Ruleset): Promise<void> {
+		const fn: string = "RulesetRemove"
+		const paramTypes: string[][] = [["string"],["Ruleset"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [rcptTo, ruleset]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async RulesetMessageNever(rcptTo: string, listID: string, msgFrom: string, toInbox: boolean): Promise<void> {
+		const fn: string = "RulesetMessageNever"
+		const paramTypes: string[][] = [["string"],["string"],["string"],["bool"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [rcptTo, listID, msgFrom, toInbox]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async RulesetMailboxNever(mailboxID: number, toMailbox: boolean): Promise<void> {
+		const fn: string = "RulesetMailboxNever"
+		const paramTypes: string[][] = [["int64"],["bool"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [mailboxID, toMailbox]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
 	// SSETypes exists to ensure the generated API contains the types, for use in SSE events.
@@ -800,7 +1021,7 @@ export class Client {
 		const paramTypes: string[][] = []
 		const returnTypes: string[][] = [["EventStart"],["EventViewErr"],["EventViewReset"],["EventViewMsgs"],["EventViewChanges"],["ChangeMsgAdd"],["ChangeMsgRemove"],["ChangeMsgFlags"],["ChangeMsgThread"],["ChangeMailboxRemove"],["ChangeMailboxAdd"],["ChangeMailboxRename"],["ChangeMailboxCounts"],["ChangeMailboxSpecialUse"],["ChangeMailboxKeywords"],["Flags"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as [EventStart, EventViewErr, EventViewReset, EventViewMsgs, EventViewChanges, ChangeMsgAdd, ChangeMsgRemove, ChangeMsgFlags, ChangeMsgThread, ChangeMailboxRemove, ChangeMailboxAdd, ChangeMailboxRename, ChangeMailboxCounts, ChangeMailboxSpecialUse, ChangeMailboxKeywords, Flags]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [EventStart, EventViewErr, EventViewReset, EventViewMsgs, EventViewChanges, ChangeMsgAdd, ChangeMsgRemove, ChangeMsgFlags, ChangeMsgThread, ChangeMailboxRemove, ChangeMailboxAdd, ChangeMailboxRename, ChangeMailboxCounts, ChangeMailboxSpecialUse, ChangeMailboxKeywords, Flags]
 	}
 }
 
@@ -912,7 +1133,7 @@ class verifier {
 
 		const ensure = (ok: boolean, expect: string): any => {
 			if (!ok) {
-				error('got ' + JSON.stringify(v) +  ', expected ' + expect)
+				error('got ' + JSON.stringify(v) + ', expected ' + expect)
 			}
 			return v
 		}
@@ -1030,7 +1251,7 @@ class verifier {
 					return v
 				}
 			}
-			error('unknkown value ' + v + ' for named strings ' + t.Name)
+			error('unknown value ' + v + ' for named strings ' + t.Name)
 		} else if (intsTypes[nt.Name]) {
 			const t = nt as Ints
 			if (typeof v !== 'number' || !Number.isInteger(v)) {
@@ -1044,7 +1265,7 @@ class verifier {
 					return v
 				}
 			}
-			error('unknkown value ' + v + ' for named ints ' + t.Name)
+			error('unknown value ' + v + ' for named ints ' + t.Name)
 		} else {
 			throw new Error('unexpected named type ' + nt)
 		}
@@ -1053,6 +1274,7 @@ class verifier {
 
 
 export interface ClientOptions {
+	baseURL?: string
 	aborter?: {abort?: () => void}
 	timeoutMsec?: number
 	skipParamCheck?: boolean
@@ -1060,9 +1282,16 @@ export interface ClientOptions {
 	slicesNullable?: boolean
 	mapsNullable?: boolean
 	nullableOptional?: boolean
+	csrfHeader?: string
+	login?: (reason: string) => Promise<string>
 }
 
-const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: string[][], returnTypes: string[][], name: string, params: any[]): Promise<any> => {
+export interface AuthState {
+	token?: string // For csrf request header.
+	loginPromise?: Promise<void> // To let multiple API calls wait for a single login attempt, not each opening a login popup.
+}
+
+const _sherpaCall = async (baseURL: string, authState: AuthState, options: ClientOptions, paramTypes: string[][], returnTypes: string[][], name: string, params: any[]): Promise<any> => {
 	if (!options.skipParamCheck) {
 		if (params.length !== paramTypes.length) {
 			return Promise.reject({ message: 'wrong number of parameters in sherpa call, saw ' + params.length + ' != expected ' + paramTypes.length })
@@ -1103,14 +1332,36 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 		await simulate(json)
 	}
 
-	// Immediately create promise, so options.aborter is changed before returning.
-	const promise = new Promise((resolve, reject) => {
-		let resolve1 = (v: { code: string, message: string }) => {
+	const fn = (resolve: (v: any) => void, reject: (v: any) => void) => {
+		let resolve1 = (v: any) => {
 			resolve(v)
 			resolve1 = () => { }
 			reject1 = () => { }
 		}
 		let reject1 = (v: { code: string, message: string }) => {
+			if ((v.code === 'user:noAuth' || v.code === 'user:badAuth')  && options.login) {
+				const login = options.login
+				if (!authState.loginPromise) {
+					authState.loginPromise = new Promise((aresolve, areject) => {
+						login(v.code === 'user:badAuth' ? (v.message || '') : '')
+						.then((token) => {
+							authState.token = token
+							authState.loginPromise = undefined
+							aresolve()
+						}, (err: any) => {
+							authState.loginPromise = undefined
+							areject(err)
+						})
+					})
+				}
+				authState.loginPromise
+				.then(() => {
+					fn(resolve, reject)
+				}, (err: any) => {
+					reject(err)
+				})
+				return
+			}
 			reject(v)
 			resolve1 = () => { }
 			reject1 = () => { }
@@ -1125,6 +1376,9 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 			}
 		}
 		req.open('POST', url, true)
+		if (options.csrfHeader && authState.token) {
+			req.setRequestHeader(options.csrfHeader, authState.token)
+		}
 		if (options.timeoutMsec) {
 			req.timeout = options.timeoutMsec
 		}
@@ -1193,8 +1447,8 @@ const _sherpaCall = async (baseURL: string, options: ClientOptions, paramTypes: 
 		} catch (err) {
 			reject1({ code: 'sherpa:badData', message: 'cannot marshal to JSON' })
 		}
-	})
-	return await promise
+	}
+	return await new Promise(fn)
 }
 
 }

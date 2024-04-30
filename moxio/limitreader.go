@@ -1,5 +1,7 @@
 package moxio
 
+// similar between ../moxio/limitreader.go and ../webapi/limitreader.go
+
 import (
 	"errors"
 	"io"

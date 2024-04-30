@@ -7,7 +7,7 @@ apk add unbound
 (rm -r /tmp/mox 2>/dev/null || exit 0) # clean slate
 mkdir /tmp/mox
 cd /tmp/mox
-mox quickstart moxtest2@mox2.example "$MOX_UID" > output.txt
+mox quickstart -skipdial moxtest2@mox2.example "$MOX_UID" > output.txt
 
 cp config/mox.conf config/mox.conf.orig
 sed -i -e 's,ACME: .*$,KeyCerts:\n\t\t\t\t-\n\t\t\t\t\tCertFile: /integration/tls/moxmail2.pem\n\t\t\t\t\tKeyFile: /integration/tls/moxmail2-key.pem\n\t\t\t\t-\n\t\t\t\t\tCertFile: /integration/tls/mox2-autoconfig.pem\n\t\t\t\t\tKeyFile: /integration/tls/mox2-autoconfig-key.pem\n\t\t\t\t-\n\t\t\t\t\tCertFile: /integration/tls/mox2-mtasts.pem\n\t\t\t\t\tKeyFile: /integration/tls/mox2-mtasts-key.pem\n,' -e 's/SMTP:$/SMTP:\n\t\t\tFirstTimeSenderDelay: 1s/' config/mox.conf
@@ -23,7 +23,8 @@ TLS:
 EOF
 
 # A fresh file was set up by moxacmepebble.
-sed -n '/^;/,/CAA /p' output.txt >>/integration/example-integration.zone
+sed -n '/^;/,/will be suggested/p' output.txt >>/integration/example-integration.zone
+
 unbound-control -s 172.28.1.30 reload # reload unbound with zone file changes
 
 mox -checkconsistency serve &

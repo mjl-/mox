@@ -31,6 +31,7 @@ import (
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dnsbl"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
@@ -40,17 +41,25 @@ import (
 var moxService string
 
 func pwgen() string {
-	rand := mox.NewRand()
 	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_;:,<.>/"
 	s := ""
+	buf := make([]byte, 1)
 	for i := 0; i < 12; i++ {
-		s += string(chars[rand.Intn(len(chars))])
+		for {
+			cryptorand.Read(buf)
+			i := int(buf[0])
+			if i+len(chars) > 255 {
+				continue // Prevent bias.
+			}
+			s += string(chars[i%len(chars)])
+			break
+		}
 	}
 	return s
 }
 
 func cmdQuickstart(c *cmd) {
-	c.params = "[-existing-webserver] [-hostname host] user@domain [user | uid]"
+	c.params = "[-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]"
 	c.help = `Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
 
 Quickstart writes configuration files, prints initial admin and account
@@ -81,13 +90,15 @@ domains with HTTP/HTTPS, including with automatic TLS with ACME, is easily
 configured through both configuration files and admin web interface, and can act
 as a reverse proxy (and static file server for that matter), so you can forward
 traffic to your existing backend applications. Look for "WebHandlers:" in the
-output of "mox config describe-domains" and see the output of "mox example
-webhandlers".
+output of "mox config describe-domains" and see the output of
+"mox config example webhandlers".
 `
 	var existingWebserver bool
 	var hostname string
+	var skipDial bool
 	c.flag.BoolVar(&existingWebserver, "existing-webserver", false, "use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.")
 	c.flag.StringVar(&hostname, "hostname", "", "hostname mox will run on, by default the hostname of the machine quickstart runs on; if specified, the IPs for the hostname are configured for the public listener")
+	c.flag.BoolVar(&skipDial, "skipdial", false, "skip check for outgoing smtp (port 25) connectivity")
 	args := c.Parse()
 	if len(args) != 1 && len(args) != 2 {
 		c.Usage()
@@ -153,8 +164,9 @@ logging in with IMAP.
 	resolveCtx, resolveCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer resolveCancel()
 
+	// Some DNSSEC-verifying resolvers return unauthentic data for ".", so we check "com".
 	fmt.Printf("Checking if DNS resolvers are DNSSEC-verifying...")
-	_, resolverDNSSECResult, err := resolver.LookupNS(resolveCtx, ".")
+	_, resolverDNSSECResult, err := resolver.LookupNS(resolveCtx, "com.")
 	if err != nil {
 		fmt.Println("")
 		fatalf("checking dnssec support in resolver: %v", err)
@@ -165,12 +177,14 @@ WARNING: It looks like the DNS resolvers configured on your system do not
 verify DNSSEC, or aren't trusted (by having loopback IPs or through "options
 trust-ad" in /etc/resolv.conf).  Without DNSSEC, outbound delivery with SMTP
 used unprotected MX records, and SMTP STARTTLS connections cannot verify the TLS
-certificate with DANE (based on a public key in DNS), and will fallback to
+certificate with DANE (based on a public key in DNS), and will fall back to
 either MTA-STS for verification, or use "opportunistic TLS" with no certificate
 verification.
 
 Recommended action: Install unbound, a DNSSEC-verifying recursive DNS resolver,
-and enable support for "extended dns errors" (EDE):
+ensure it has DNSSEC root keys (see unbound-anchor), and enable support for
+"extended dns errors" (EDE, available since unbound v1.16.0). Test with
+"dig com. ns" and look for "ad" (authentic data) in response "flags".
 
 cat <<EOF >/etc/unbound/unbound.conf.d/ede.conf
 server:
@@ -517,6 +531,45 @@ messages over SMTP.
 		}
 	}
 
+	// Check outgoing SMTP connectivity.
+	if !skipDial {
+		fmt.Printf("Checking if outgoing smtp connections can be made by connecting to gmail.com mx on port 25...")
+		mxctx, mxcancel := context.WithTimeout(context.Background(), 5*time.Second)
+		mx, _, err := resolver.LookupMX(mxctx, "gmail.com.")
+		mxcancel()
+		if err == nil && len(mx) == 0 {
+			err = errors.New("no mx records")
+		}
+		var ok bool
+		if err != nil {
+			fmt.Printf("\n\nERROR: looking up gmail.com mx record: %s\n", err)
+		} else {
+			dialctx, dialcancel := context.WithTimeout(context.Background(), 10*time.Second)
+			d := net.Dialer{}
+			addr := net.JoinHostPort(mx[0].Host, "25")
+			conn, err := d.DialContext(dialctx, "tcp", addr)
+			dialcancel()
+			if err != nil {
+				fmt.Printf("\n\nERROR: connecting to %s: %s\n", addr, err)
+			} else {
+				conn.Close()
+				fmt.Printf(" OK\n")
+				ok = true
+			}
+		}
+		if !ok {
+			fmt.Printf(`
+WARNING: Could not verify outgoing smtp connections can be made, outgoing
+delivery may not be working. Many providers block outgoing smtp connections by
+default, requiring an explicit request or a cooldown period before allowing
+outgoing smtp connections. To send through a smarthost, configure a "Transport"
+in mox.conf and use it in "Routes" in domains.conf. See
+"mox config example transport".
+
+`)
+		}
+	}
+
 	zones := []dns.Domain{
 		{ASCII: "sbl.spamhaus.org"},
 		{ASCII: "bl.spamcop.net"},
@@ -526,8 +579,8 @@ messages over SMTP.
 		var listed bool
 		for _, zone := range zones {
 			for _, ip := range hostIPs {
-				dnsblctx, dnsblcancel := context.WithTimeout(resolveCtx, 5*time.Second)
-				status, expl, err := dnsbl.Lookup(dnsblctx, resolver, zone, net.ParseIP(ip))
+				dnsblctx, dnsblcancel := context.WithTimeout(context.Background(), 5*time.Second)
+				status, expl, err := dnsbl.Lookup(dnsblctx, c.log.Logger, resolver, zone, net.ParseIP(ip))
 				dnsblcancel()
 				if status == dnsbl.StatusPass {
 					continue
@@ -598,14 +651,26 @@ many authentication failures).
 		Hostname:          dnshostname.Name(),
 		AdminPasswordFile: "adminpasswd",
 	}
+
+	// todo: let user specify an alternative fallback address?
+	// Don't attempt to use a non-ascii localpart with Let's Encrypt, it won't work.
+	// Messages to postmaster will get to the account too.
+	var contactEmail string
+	if addr.Localpart.IsInternational() {
+		contactEmail = smtp.Address{Localpart: "postmaster", Domain: addr.Domain}.Pack(false)
+	} else {
+		contactEmail = addr.Pack(false)
+	}
 	if !existingWebserver {
 		sc.ACME = map[string]config.ACME{
 			"letsencrypt": {
-				DirectoryURL: "https://acme-v02.api.letsencrypt.org/directory",
-				ContactEmail: args[0], // todo: let user specify an alternative fallback address?
+				DirectoryURL:     "https://acme-v02.api.letsencrypt.org/directory",
+				ContactEmail:     contactEmail,
+				IssuerDomainName: "letsencrypt.org",
 			},
 		}
 	}
+
 	dataDir := "data" // ../data is relative to config/
 	os.MkdirAll(dataDir, 0770)
 	adminpw := pwgen()
@@ -698,18 +763,29 @@ and check the admin page for the needed DNS records.`)
 		public.SMTP.DNSBLs = append(public.SMTP.DNSBLs, zone.Name())
 	}
 
+	// Monitor DNSBLs by default, without using them for incoming deliveries.
+	for _, zone := range zones {
+		dc.MonitorDNSBLs = append(dc.MonitorDNSBLs, zone.Name())
+	}
+
 	internal := config.Listener{
 		IPs:      privateListenerIPs,
 		Hostname: "localhost",
 	}
 	internal.AccountHTTP.Enabled = true
 	internal.AdminHTTP.Enabled = true
-	internal.MetricsHTTP.Enabled = true
 	internal.WebmailHTTP.Enabled = true
+	internal.WebAPIHTTP.Enabled = true
+	internal.MetricsHTTP.Enabled = true
 	if existingWebserver {
 		internal.AccountHTTP.Port = 1080
+		internal.AccountHTTP.Forwarded = true
 		internal.AdminHTTP.Port = 1080
+		internal.AdminHTTP.Forwarded = true
 		internal.WebmailHTTP.Port = 1080
+		internal.WebmailHTTP.Forwarded = true
+		internal.WebAPIHTTP.Port = 1080
+		internal.WebAPIHTTP.Forwarded = true
 		internal.AutoconfigHTTPS.Enabled = true
 		internal.AutoconfigHTTPS.Port = 81
 		internal.AutoconfigHTTPS.NonTLS = true
@@ -726,6 +802,9 @@ and check the admin page for the needed DNS records.`)
 	}
 	sc.Postmaster.Account = accountName
 	sc.Postmaster.Mailbox = "Postmaster"
+	sc.HostTLSRPT.Account = accountName
+	sc.HostTLSRPT.Localpart = "tls-reports"
+	sc.HostTLSRPT.Mailbox = "TLSRPT"
 
 	mox.ConfigStaticPath = filepath.FromSlash("config/mox.conf")
 	mox.ConfigDynamicPath = filepath.FromSlash("config/domains.conf")
@@ -802,7 +881,7 @@ and check the admin page for the needed DNS records.`)
 
 	// Verify config.
 	loadTLSKeyCerts := !existingWebserver
-	mc, errs := mox.ParseConfig(context.Background(), filepath.FromSlash("config/mox.conf"), true, loadTLSKeyCerts, false)
+	mc, errs := mox.ParseConfig(context.Background(), c.log, filepath.FromSlash("config/mox.conf"), true, loadTLSKeyCerts, false)
 	if len(errs) > 0 {
 		if len(errs) > 1 {
 			log.Printf("checking generated config, multiple errors:")
@@ -823,16 +902,24 @@ and check the admin page for the needed DNS records.`)
 		fatalf("cannot find domain in new config")
 	}
 
-	acc, _, err := store.OpenEmail(args[0])
+	acc, _, err := store.OpenEmail(c.log, args[0])
 	if err != nil {
 		fatalf("open account: %s", err)
 	}
 	cleanupPaths = append(cleanupPaths, dataDir, filepath.Join(dataDir, "accounts"), filepath.Join(dataDir, "accounts", accountName), filepath.Join(dataDir, "accounts", accountName, "index.db"))
 
 	password := pwgen()
-	if err := acc.SetPassword(password); err != nil {
+
+	// Kludge to cause no logging to be printed about setting a new password.
+	loglevel := mox.Conf.Log[""]
+	mox.Conf.Log[""] = mlog.LevelWarn
+	mlog.SetConfig(mox.Conf.Log)
+	if err := acc.SetPassword(c.log, password); err != nil {
 		fatalf("setting password: %s", err)
 	}
+	mox.Conf.Log[""] = loglevel
+	mlog.SetConfig(mox.Conf.Log)
+
 	if err := acc.Close(); err != nil {
 		fatalf("closing account: %s", err)
 	}
@@ -847,8 +934,9 @@ autoconfig/autodiscover does not work, use these settings:
 Configuration files have been written to config/mox.conf and
 config/domains.conf.
 
-Create the DNS records below. The admin interface can show these same records, and
-has a page to check they have been configured correctly.
+Create the DNS records below, by adding them to your zone file or through the
+web interface of your DNS operator. The admin interface can show these same
+records, and has a page to check they have been configured correctly.
 
 You must configure your existing webserver to forward requests for:
 
@@ -867,14 +955,17 @@ The paths are relative to config/ directory that holds mox.conf! To test if your
 config is valid, run:
 
 	./mox config test
+
+The DNS records to add:
 `, domain.ASCII, domain.ASCII, dnshostname.ASCII)
 	} else {
 		fmt.Printf(`
 Configuration files have been written to config/mox.conf and
-config/domains.conf. You should review them. Then create the DNS records below.
-You can also skip creating the DNS records and start mox immediately. The admin
-interface can show these same records, and has a page to check they have been
-configured correctly.
+config/domains.conf. You should review them. Then create the DNS records below,
+by adding them to your zone file or through the web interface of your DNS
+operator. You can also skip creating the DNS records and start mox immediately.
+The admin interface can show these same records, and has a page to check they
+have been configured correctly. The DNS records to add:
 `)
 	}
 
@@ -882,7 +973,7 @@ configured correctly.
 	// priming dns caches with negative/absent records, causing our "quick setup" to
 	// appear to fail or take longer than "quick".
 
-	records, err := mox.DomainRecords(confDomain, domain, domainDNSSECResult.Authentic)
+	records, err := mox.DomainRecords(confDomain, domain, domainDNSSECResult.Authentic, "letsencrypt.org", "")
 	if err != nil {
 		fatalf("making required DNS records")
 	}

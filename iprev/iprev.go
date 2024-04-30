@@ -6,33 +6,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/stub"
 )
 
-var xlog = mlog.New("iprev")
+var xlog = mlog.New("iprev", nil)
 
 var (
-	metricIPRev = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_iprev_lookup_total",
-			Help:    "Number of iprev lookups.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20, 30},
-		},
-		[]string{"status"},
-	)
+	MetricIPRev stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
 // Lookup errors.
 var (
 	ErrNoRecord = errors.New("iprev: no reverse dns record")
-	ErrDNS      = errors.New("iprev: dns lookup")
+	ErrDNS      = errors.New("iprev: dns lookup") // Temporary error.
 )
 
 // ../rfc/8601:1082
@@ -60,8 +52,11 @@ func Lookup(ctx context.Context, resolver dns.Resolver, ip net.IP) (rstatus Stat
 	log := xlog.WithContext(ctx)
 	start := time.Now()
 	defer func() {
-		metricIPRev.WithLabelValues(string(rstatus)).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("iprev lookup result", rerr, mlog.Field("ip", ip), mlog.Field("status", rstatus), mlog.Field("duration", time.Since(start)))
+		MetricIPRev.ObserveLabels(float64(time.Since(start))/float64(time.Second), string(rstatus))
+		log.Debugx("iprev lookup result", rerr,
+			slog.Any("ip", ip),
+			slog.Any("status", rstatus),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	revNames, result, revErr := dns.WithPackage(resolver, "iprev").LookupAddr(ctx, ip.String())

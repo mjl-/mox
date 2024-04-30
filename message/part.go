@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"mime/quotedprintable"
 	"net/mail"
@@ -24,10 +25,11 @@ import (
 	"golang.org/x/text/encoding/ianaindex"
 
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 )
+
+// Pedantic enables stricter parsing.
+var Pedantic bool
 
 var (
 	ErrBadContentType = errors.New("bad content-type")
@@ -95,14 +97,14 @@ type Envelope struct {
 	To        []Address
 	CC        []Address
 	BCC       []Address
-	InReplyTo string
-	MessageID string
+	InReplyTo string // From In-Reply-To header, includes <>.
+	MessageID string // From Message-Id header, includes <>.
 }
 
 // Address as used in From and To headers.
 type Address struct {
 	Name string // Free-form name for display in mail applications.
-	User string // Localpart.
+	User string // Localpart, encoded as string. Must be parsed before using as Localpart.
 	Host string // Domain in ASCII.
 }
 
@@ -111,7 +113,8 @@ type Address struct {
 //
 // If strict is set, fewer attempts are made to continue parsing when errors are
 // encountered, such as with invalid content-type headers or bare carriage returns.
-func Parse(log *mlog.Log, strict bool, r io.ReaderAt) (Part, error) {
+func Parse(elog *slog.Logger, strict bool, r io.ReaderAt) (Part, error) {
+	log := mlog.New("message", elog)
 	return newPart(log, strict, r, 0, nil)
 }
 
@@ -122,10 +125,11 @@ func Parse(log *mlog.Log, strict bool, r io.ReaderAt) (Part, error) {
 //
 // If strict is set, fewer attempts are made to continue parsing when errors are
 // encountered, such as with invalid content-type headers or bare carriage returns.
-func EnsurePart(log *mlog.Log, strict bool, r io.ReaderAt, size int64) (Part, error) {
-	p, err := Parse(log, strict, r)
+func EnsurePart(elog *slog.Logger, strict bool, r io.ReaderAt, size int64) (Part, error) {
+	log := mlog.New("message", elog)
+	p, err := Parse(log.Logger, strict, r)
 	if err == nil {
-		err = p.Walk(log, nil)
+		err = p.Walk(log.Logger, nil)
 	}
 	if err != nil {
 		np, err2 := fallbackPart(p, r, size)
@@ -185,7 +189,9 @@ func (p *Part) SetMessageReaderAt() error {
 }
 
 // Walk through message, decoding along the way, and collecting mime part offsets and sizes, and line counts.
-func (p *Part) Walk(log *mlog.Log, parent *Part) error {
+func (p *Part) Walk(elog *slog.Logger, parent *Part) error {
+	log := mlog.New("message", elog)
+
 	if len(p.bound) == 0 {
 		if p.MediaType == "MESSAGE" && (p.MediaSubType == "RFC822" || p.MediaSubType == "GLOBAL") {
 			// todo: don't read whole submessage in memory...
@@ -194,15 +200,15 @@ func (p *Part) Walk(log *mlog.Log, parent *Part) error {
 				return err
 			}
 			br := bytes.NewReader(buf)
-			mp, err := Parse(log, p.strict, br)
+			mp, err := Parse(log.Logger, p.strict, br)
 			if err != nil {
 				return fmt.Errorf("parsing embedded message: %w", err)
 			}
-			if err := mp.Walk(log, nil); err != nil {
+			if err := mp.Walk(log.Logger, nil); err != nil {
 				// If this is a DSN and we are not in pedantic mode, accept unexpected end of
 				// message. This is quite common because MTA's sometimes just truncate the original
 				// message in a place that makes the message invalid.
-				if errors.Is(err, errUnexpectedEOF) && !moxvar.Pedantic && parent != nil && len(parent.Parts) >= 3 && p == &parent.Parts[2] && parent.MediaType == "MULTIPART" && parent.MediaSubType == "REPORT" {
+				if errors.Is(err, errUnexpectedEOF) && !Pedantic && parent != nil && len(parent.Parts) >= 3 && p == &parent.Parts[2] && parent.MediaType == "MULTIPART" && parent.MediaSubType == "REPORT" {
 					mp, err = fallbackPart(mp, br, int64(len(buf)))
 					if err != nil {
 						return fmt.Errorf("parsing invalid embedded message: %w", err)
@@ -220,14 +226,14 @@ func (p *Part) Walk(log *mlog.Log, parent *Part) error {
 	}
 
 	for {
-		pp, err := p.ParseNextPart(log)
+		pp, err := p.ParseNextPart(log.Logger)
 		if err == io.EOF {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		if err := pp.Walk(log, p); err != nil {
+		if err := pp.Walk(log.Logger, p); err != nil {
 			return err
 		}
 	}
@@ -241,7 +247,7 @@ func (p *Part) String() string {
 // newPart parses a new part, which can be the top-level message.
 // offset is the bound offset for parts, and the start of message for top-level messages. parent indicates if this is a top-level message or sub-part.
 // If an error occurs, p's exported values can still be relevant. EnsurePart uses these values.
-func newPart(log *mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
+func newPart(log mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Part) (p Part, rerr error) {
 	if r == nil {
 		panic("nil reader")
 	}
@@ -300,7 +306,7 @@ func newPart(log *mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Pa
 	ct := p.header.Get("Content-Type")
 	mt, params, err := mime.ParseMediaType(ct)
 	if err != nil && ct != "" {
-		if moxvar.Pedantic || strict {
+		if Pedantic || strict {
 			return p, fmt.Errorf("%w: %s: %q", ErrBadContentType, err, ct)
 		}
 
@@ -325,14 +331,17 @@ func newPart(log *mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Pa
 			p.MediaType = "APPLICATION"
 			p.MediaSubType = "OCTET-STREAM"
 		}
-		log.Debugx("malformed content-type, attempting to recover and continuing", err, mlog.Field("contenttype", p.header.Get("Content-Type")), mlog.Field("mediatype", p.MediaType), mlog.Field("mediasubtype", p.MediaSubType))
+		log.Debugx("malformed content-type, attempting to recover and continuing", err,
+			slog.String("contenttype", p.header.Get("Content-Type")),
+			slog.String("mediatype", p.MediaType),
+			slog.String("mediasubtype", p.MediaSubType))
 	} else if mt != "" {
 		t := strings.SplitN(strings.ToUpper(mt), "/", 2)
 		if len(t) != 2 {
-			if moxvar.Pedantic || strict {
+			if Pedantic || strict {
 				return p, fmt.Errorf("bad content-type: %q (content-type %q)", mt, ct)
 			}
-			log.Debug("malformed media-type, ignoring and continuing", mlog.Field("type", mt))
+			log.Debug("malformed media-type, ignoring and continuing", slog.String("type", mt))
 			p.MediaType = "APPLICATION"
 			p.MediaSubType = "OCTET-STREAM"
 		} else {
@@ -444,7 +453,7 @@ var wordDecoder = mime.WordDecoder{
 	},
 }
 
-func parseEnvelope(log *mlog.Log, h mail.Header) (*Envelope, error) {
+func parseEnvelope(log mlog.Log, h mail.Header) (*Envelope, error) {
 	date, _ := h.Date()
 
 	// We currently marshal this field to JSON. But JSON cannot represent all
@@ -478,7 +487,7 @@ func parseEnvelope(log *mlog.Log, h mail.Header) (*Envelope, error) {
 	return env, nil
 }
 
-func parseAddressList(log *mlog.Log, h mail.Header, k string) []Address {
+func parseAddressList(log mlog.Log, h mail.Header, k string) []Address {
 	// todo: possibly work around ios mail generating incorrect q-encoded "phrases" with unencoded double quotes? ../rfc/2047:382
 	l, err := h.AddressList(k)
 	if err != nil {
@@ -490,8 +499,7 @@ func parseAddressList(log *mlog.Log, h mail.Header, k string) []Address {
 		var user, host string
 		addr, err := smtp.ParseAddress(a.Address)
 		if err != nil {
-			// todo: pass a ctx to this function so we can log with cid.
-			log.Infox("parsing address (continuing)", err, mlog.Field("address", a.Address))
+			log.Infox("parsing address (continuing)", err, slog.Any("address", a.Address))
 		} else {
 			user = addr.Localpart.String()
 			host = addr.Domain.ASCII
@@ -504,7 +512,9 @@ func parseAddressList(log *mlog.Log, h mail.Header, k string) []Address {
 // ParseNextPart parses the next (sub)part of this multipart message.
 // ParseNextPart returns io.EOF and a nil part when there are no more parts.
 // Only used for initial parsing of message. Once parsed, use p.Parts.
-func (p *Part) ParseNextPart(log *mlog.Log) (*Part, error) {
+func (p *Part) ParseNextPart(elog *slog.Logger) (*Part, error) {
+	log := mlog.New("message", elog)
+
 	if len(p.bound) == 0 {
 		return nil, errNotMultipart
 	}
@@ -565,17 +575,26 @@ func (p *Part) ParseNextPart(log *mlog.Log) (*Part, error) {
 	return &p.Parts[len(p.Parts)-1], nil
 }
 
+// IsDSN returns whether the MIME structure of the part is a DSN.
+func (p *Part) IsDSN() bool {
+	return p.MediaType == "MULTIPART" &&
+		p.MediaSubType == "REPORT" &&
+		len(p.Parts) >= 2 &&
+		p.Parts[1].MediaType == "MESSAGE" &&
+		(p.Parts[1].MediaSubType == "DELIVERY-STATUS" || p.Parts[1].MediaSubType == "GLOBAL-DELIVERY-STATUS")
+}
+
 // Reader returns a reader for the decoded body content.
 func (p *Part) Reader() io.Reader {
 	return p.bodyReader(p.RawReader())
 }
 
-// ReaderUTF8OrBinary returns a reader for the decode body content, transformed to
+// ReaderUTF8OrBinary returns a reader for the decoded body content, transformed to
 // utf-8 for known mime/iana encodings (only if they aren't us-ascii or utf-8
 // already). For unknown or missing character sets/encodings, the original reader
 // is returned.
 func (p *Part) ReaderUTF8OrBinary() io.Reader {
-	return moxio.DecodeReader(p.ContentTypeParams["charset"], p.Reader())
+	return DecodeReader(p.ContentTypeParams["charset"], p.Reader())
 }
 
 func (p *Part) bodyReader(r io.Reader) io.Reader {
@@ -680,7 +699,7 @@ func (r *crlfReader) Read(buf []byte) (int, error) {
 			if b == '\n' && !r.prevcr {
 				err = errBareLF
 				break
-			} else if b != '\n' && r.prevcr && (r.strict || moxvar.Pedantic) {
+			} else if b != '\n' && r.prevcr && (r.strict || Pedantic) {
 				err = errBareCR
 				break
 			}
@@ -710,7 +729,7 @@ type bufAt struct {
 const maxLineLength = 8 * 1024
 
 func (b *bufAt) maxLineLength() int {
-	if b.strict || moxvar.Pedantic {
+	if b.strict || Pedantic {
 		return 1000
 	}
 	return maxLineLength
@@ -768,7 +787,7 @@ func (b *bufAt) line(consume, requirecrlf bool) (buf []byte, crlf bool, err erro
 		}
 		i++
 		if i >= b.nbuf || b.buf[i] != '\n' {
-			if b.strict || moxvar.Pedantic {
+			if b.strict || Pedantic {
 				return nil, false, errBareCR
 			}
 			continue
@@ -824,7 +843,7 @@ func (r *offsetReader) Read(buf []byte) (int, error) {
 	if n > 0 {
 		r.offset += int64(n)
 		max := maxLineLength
-		if r.strict || moxvar.Pedantic {
+		if r.strict || Pedantic {
 			max = 1000
 		}
 
@@ -835,7 +854,7 @@ func (r *offsetReader) Read(buf []byte) (int, error) {
 			if err == nil || err == io.EOF {
 				if c == '\n' && !r.prevcr {
 					err = errBareLF
-				} else if c != '\n' && r.prevcr && (r.strict || moxvar.Pedantic) {
+				} else if c != '\n' && r.prevcr && (r.strict || Pedantic) {
 					err = errBareCR
 				}
 			}

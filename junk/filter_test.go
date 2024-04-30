@@ -32,7 +32,7 @@ func tlistdir(t *testing.T, name string) []string {
 }
 
 func TestFilter(t *testing.T) {
-	log := mlog.New("junk")
+	log := mlog.New("junk", nil)
 	params := Params{
 		Onegrams:    true,
 		Twograms:    true,

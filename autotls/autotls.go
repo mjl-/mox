@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -28,9 +29,10 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/acme"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"golang.org/x/crypto/acme"
 
 	"github.com/mjl-/autocert"
 
@@ -38,8 +40,6 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxvar"
 )
-
-var xlog = mlog.New("autotls")
 
 var (
 	metricCertput = promauto.NewCounter(
@@ -69,12 +69,15 @@ type Manager struct {
 // contactEmail must be a valid email address to which notifications about ACME can
 // be sent. directoryURL is the ACME starting point.
 //
+// eabKeyID and eabKey are for external account binding when making a new account,
+// which some ACME providers require.
+//
 // getPrivateKey is called to get the private key for the host and key type. It
 // can be used to deliver a specific (e.g. always the same) private key for a
 // host, or a newly generated key.
 //
 // When shutdown is closed, no new TLS connections can be created.
-func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(host string, keyType autocert.KeyType) (crypto.Signer, error), shutdown <-chan struct{}) (*Manager, error) {
+func Load(name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eabKey []byte, getPrivateKey func(host string, keyType autocert.KeyType) (crypto.Signer, error), shutdown <-chan struct{}) (*Manager, error) {
 	if directoryURL == "" {
 		return nil, fmt.Errorf("empty ACME directory URL")
 	}
@@ -146,9 +149,22 @@ func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(h
 		GetPrivateKey: getPrivateKey,
 		// HostPolicy set below.
 	}
+	// If external account binding key is provided, use it for registering a new account.
+	// todo: ideally the key and its id are provided temporarily by the admin when registering a new account. but we don't do that interactive setup yet. in the future, an interactive setup/quickstart would ask for the key once to register a new acme account.
+	if eabKeyID != "" {
+		m.ExternalAccountBinding = &acme.ExternalAccountBinding{
+			KID: eabKeyID,
+			Key: eabKey,
+		}
+	}
 
 	loggingGetCertificate := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		log := xlog.WithContext(hello.Context())
+		log := mlog.New("autotls", nil).WithContext(hello.Context())
+
+		// We handle missing invalid hostnames/ip's by returning a nil certificate and nil
+		// error, which crypto/tls turns into a TLS alert "unrecognized name", which can be
+		// interpreted by clients as a hint that they are using the wrong hostname, or a
+		// certificate is missing.
 
 		// Handle missing SNI to prevent logging an error below.
 		// At startup, during config initialization, we already adjust the tls config to
@@ -156,17 +172,16 @@ func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(h
 		// common for SMTP STARTTLS connections, which often do not care about the
 		// verification of the certificate.
 		if hello.ServerName == "" {
-			log.Debug("tls request without sni servername, rejecting", mlog.Field("localaddr", hello.Conn.LocalAddr()), mlog.Field("supportedprotos", hello.SupportedProtos))
-			return nil, fmt.Errorf("sni server name required")
+			log.Debug("tls request without sni servername, rejecting", slog.Any("localaddr", hello.Conn.LocalAddr()), slog.Any("supportedprotos", hello.SupportedProtos))
+			return nil, nil
 		}
 
 		cert, err := m.GetCertificate(hello)
-		if err != nil {
-			if errors.Is(err, errHostNotAllowed) {
-				log.Debugx("requesting certificate", err, mlog.Field("host", hello.ServerName))
-			} else {
-				log.Errorx("requesting certificate", err, mlog.Field("host", hello.ServerName))
-			}
+		if err != nil && errors.Is(err, errHostNotAllowed) {
+			log.Debugx("requesting certificate", err, slog.String("host", hello.ServerName))
+			return nil, nil
+		} else if err != nil {
+			log.Errorx("requesting certificate", err, slog.String("host", hello.ServerName))
 		}
 		return cert, err
 	}
@@ -189,12 +204,46 @@ func Load(name, acmeDir, contactEmail, directoryURL string, getPrivateKey func(h
 	return a, nil
 }
 
+// CertAvailable checks whether a non-expired ECDSA certificate is available in the
+// cache for host. No other checks than expiration are done.
+func (m *Manager) CertAvailable(ctx context.Context, log mlog.Log, host dns.Domain) (bool, error) {
+	ck := host.ASCII // Would be "+rsa" for rsa keys.
+	data, err := m.Manager.Cache.Get(ctx, ck)
+	if err != nil && errors.Is(err, autocert.ErrCacheMiss) {
+		return false, nil
+	} else if err != nil {
+		return false, fmt.Errorf("attempt to get certificate from cache: %v", err)
+	}
+
+	// The cached keycert is of the form: private key, leaf certificate, intermediate certificates...
+	privb, rem := pem.Decode(data)
+	if privb == nil {
+		return false, fmt.Errorf("missing private key in cached keycert file")
+	}
+	pubb, _ := pem.Decode(rem)
+	if pubb == nil {
+		return false, fmt.Errorf("missing certificate in cached keycert file")
+	} else if pubb.Type != "CERTIFICATE" {
+		return false, fmt.Errorf("second pem block is %q, expected CERTIFICATE", pubb.Type)
+	}
+	cert, err := x509.ParseCertificate(pubb.Bytes)
+	if err != nil {
+		return false, fmt.Errorf("parsing certificate from cached keycert file: %v", err)
+	}
+	// We assume the certificate has a matching hostname, and is properly CA-signed. We
+	// only check the expiration time.
+	if time.Until(cert.NotBefore) > 0 || time.Since(cert.NotAfter) > 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
 // SetAllowedHostnames sets a new list of allowed hostnames for automatic TLS.
 // After setting the host names, a goroutine is start to check that new host names
 // are fully served by publicIPs (only if non-empty and there is no unspecified
 // address in the list). If no, log an error with a warning that ACME validation
 // may fail.
-func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.Domain]struct{}, publicIPs []string, checkHosts bool) {
+func (m *Manager) SetAllowedHostnames(log mlog.Log, resolver dns.Resolver, hostnames map[dns.Domain]struct{}, publicIPs []string, checkHosts bool) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -207,7 +256,7 @@ func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.D
 		return l[i].Name() < l[j].Name()
 	})
 
-	xlog.Debug("autotls setting allowed hostnames", mlog.Field("hostnames", l), mlog.Field("publicips", publicIPs))
+	log.Debug("autotls setting allowed hostnames", slog.Any("hostnames", l), slog.Any("publicips", publicIPs))
 	var added []dns.Domain
 	for h := range hostnames {
 		if _, ok := m.hosts[h]; !ok {
@@ -231,16 +280,20 @@ func (m *Manager) SetAllowedHostnames(resolver dns.Resolver, hostnames map[dns.D
 				publicIPstrs[ip] = struct{}{}
 			}
 
-			xlog.Debug("checking ips of hosts configured for acme tls cert validation")
+			log.Debug("checking ips of hosts configured for acme tls cert validation")
 			for _, h := range added {
 				ips, _, err := resolver.LookupIP(ctx, "ip", h.ASCII+".")
 				if err != nil {
-					xlog.Errorx("warning: acme tls cert validation for host may fail due to dns lookup error", err, mlog.Field("host", h))
+					log.Errorx("warning: acme tls cert validation for host may fail due to dns lookup error", err, slog.Any("host", h))
 					continue
 				}
 				for _, ip := range ips {
 					if _, ok := publicIPstrs[ip.String()]; !ok {
-						xlog.Error("warning: acme tls cert validation for host is likely to fail because not all its ips are being listened on", mlog.Field("hostname", h), mlog.Field("listenedips", publicIPs), mlog.Field("hostips", ips), mlog.Field("missingip", ip))
+						log.Error("warning: acme tls cert validation for host is likely to fail because not all its ips are being listened on",
+							slog.Any("hostname", h),
+							slog.Any("listenedips", publicIPs),
+							slog.Any("hostips", ips),
+							slog.Any("missingip", ip))
 					}
 				}
 			}
@@ -266,9 +319,9 @@ var errHostNotAllowed = errors.New("autotls: host not in allowlist")
 // present. Only hosts added with SetAllowedHostnames are allowed. During shutdown,
 // no new connections are allowed.
 func (m *Manager) HostPolicy(ctx context.Context, host string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := mlog.New("autotls", nil).WithContext(ctx)
 	defer func() {
-		log.WithContext(ctx).Debugx("autotls hostpolicy result", rerr, mlog.Field("host", host))
+		log.Debugx("autotls hostpolicy result", rerr, slog.String("host", host))
 	}()
 
 	// Don't request new TLS certs when we are shutting down.
@@ -300,46 +353,46 @@ func (m *Manager) HostPolicy(ctx context.Context, host string) (rerr error) {
 type dirCache autocert.DirCache
 
 func (d dirCache) Delete(ctx context.Context, name string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := mlog.New("autotls", nil).WithContext(ctx)
 	defer func() {
-		log.Debugx("dircache delete result", rerr, mlog.Field("name", name))
+		log.Debugx("dircache delete result", rerr, slog.String("name", name))
 	}()
 	err := autocert.DirCache(d).Delete(ctx, name)
 	if err != nil {
-		log.Errorx("deleting cert from dir cache", err, mlog.Field("name", name))
+		log.Errorx("deleting cert from dir cache", err, slog.String("name", name))
 	} else if !strings.HasSuffix(name, "+token") {
-		log.Info("autotls cert delete", mlog.Field("name", name))
+		log.Info("autotls cert delete", slog.String("name", name))
 	}
 	return err
 }
 
 func (d dirCache) Get(ctx context.Context, name string) (rbuf []byte, rerr error) {
-	log := xlog.WithContext(ctx)
+	log := mlog.New("autotls", nil).WithContext(ctx)
 	defer func() {
-		log.Debugx("dircache get result", rerr, mlog.Field("name", name))
+		log.Debugx("dircache get result", rerr, slog.String("name", name))
 	}()
 	buf, err := autocert.DirCache(d).Get(ctx, name)
 	if err != nil && errors.Is(err, autocert.ErrCacheMiss) {
-		log.Infox("getting cert from dir cache", err, mlog.Field("name", name))
+		log.Infox("getting cert from dir cache", err, slog.String("name", name))
 	} else if err != nil {
-		log.Errorx("getting cert from dir cache", err, mlog.Field("name", name))
+		log.Errorx("getting cert from dir cache", err, slog.String("name", name))
 	} else if !strings.HasSuffix(name, "+token") {
-		log.Debug("autotls cert get", mlog.Field("name", name))
+		log.Debug("autotls cert get", slog.String("name", name))
 	}
 	return buf, err
 }
 
 func (d dirCache) Put(ctx context.Context, name string, data []byte) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := mlog.New("autotls", nil).WithContext(ctx)
 	defer func() {
-		log.Debugx("dircache put result", rerr, mlog.Field("name", name))
+		log.Debugx("dircache put result", rerr, slog.String("name", name))
 	}()
 	metricCertput.Inc()
 	err := autocert.DirCache(d).Put(ctx, name, data)
 	if err != nil {
-		log.Errorx("storing cert in dir cache", err, mlog.Field("name", name))
+		log.Errorx("storing cert in dir cache", err, slog.String("name", name))
 	} else if !strings.HasSuffix(name, "+token") {
-		log.Info("autotls cert store", mlog.Field("name", name))
+		log.Info("autotls cert store", slog.String("name", name))
 	}
 	return err
 }

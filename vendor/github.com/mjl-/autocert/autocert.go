@@ -101,6 +101,17 @@ const (
 	KeyECDSAP256 KeyType = 1
 )
 
+// String returns the key type in string form, useful for logging.
+func (t KeyType) String() string {
+	switch t {
+	case KeyRSA2048:
+		return "rsa-2048"
+	case KeyECDSAP256:
+		return "ecdsa-p256"
+	}
+	return fmt.Sprintf("%d", t)
+}
+
 // Manager is a stateful certificate manager built on top of acme.Client.
 // It obtains and refreshes certificates automatically using "tls-alpn-01"
 // or "http-01" challenge types, as well as providing them to a TLS server

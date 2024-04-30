@@ -10,37 +10,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/stub"
 )
 
 // The net package always returns DNS names in absolute, lower-case form. We make
 // sure we make names absolute when looking up. For verifying, we do not want to
 // verify names relative to our local search domain.
 
-var xlog = mlog.New("spf")
-
 var (
-	metricSPFVerify = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_spf_verify_duration_seconds",
-			Help:    "SPF verify, including lookup, duration and result.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20},
-		},
-		[]string{
-			"status",
-		},
-	)
+	MetricVerify stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
 // cross-link rfc and errata
@@ -128,12 +116,16 @@ var timeNow = time.Now
 
 // Lookup looks up and parses an SPF TXT record for domain.
 //
-// authentic indicates if the DNS results were DNSSEC-verified.
-func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rstatus Status, rtxt string, rrecord *Record, authentic bool, rerr error) {
-	log := xlog.WithContext(ctx)
+// Authentic indicates if the DNS results were DNSSEC-verified.
+func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, domain dns.Domain) (rstatus Status, rtxt string, rrecord *Record, authentic bool, rerr error) {
+	log := mlog.New("spf", elog)
 	start := time.Now()
 	defer func() {
-		log.Debugx("spf lookup result", rerr, mlog.Field("domain", domain), mlog.Field("status", rstatus), mlog.Field("record", rrecord), mlog.Field("duration", time.Since(start)))
+		log.Debugx("spf lookup result", rerr,
+			slog.Any("domain", domain),
+			slog.Any("status", rstatus),
+			slog.Any("record", rrecord),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	// ../rfc/7208:586
@@ -193,13 +185,18 @@ func Lookup(ctx context.Context, resolver dns.Resolver, domain dns.Domain) (rsta
 // Verify takes the maximum number of 10 DNS requests into account, and the maximum
 // of 2 lookups resulting in no records ("void lookups").
 //
-// authentic indicates if the DNS results were DNSSEC-verified.
-func Verify(ctx context.Context, resolver dns.Resolver, args Args) (received Received, domain dns.Domain, explanation string, authentic bool, rerr error) {
-	log := xlog.WithContext(ctx)
+// Authentic indicates if the DNS results were DNSSEC-verified.
+func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, args Args) (received Received, domain dns.Domain, explanation string, authentic bool, rerr error) {
+	log := mlog.New("spf", elog)
 	start := time.Now()
 	defer func() {
-		metricSPFVerify.WithLabelValues(string(received.Result)).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("spf verify result", rerr, mlog.Field("domain", args.domain), mlog.Field("ip", args.RemoteIP), mlog.Field("status", received.Result), mlog.Field("explanation", explanation), mlog.Field("duration", time.Since(start)))
+		MetricVerify.ObserveLabels(float64(time.Since(start))/float64(time.Second), string(received.Result))
+		log.Debugx("spf verify result", rerr,
+			slog.Any("domain", args.domain),
+			slog.Any("ip", args.RemoteIP),
+			slog.Any("status", received.Result),
+			slog.String("explanation", explanation),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	isHello, ok := prepare(&args)
@@ -215,7 +212,7 @@ func Verify(ctx context.Context, resolver dns.Resolver, args Args) (received Rec
 		return received, dns.Domain{}, "", false, nil
 	}
 
-	status, mechanism, expl, authentic, err := checkHost(ctx, resolver, args)
+	status, mechanism, expl, authentic, err := checkHost(ctx, log, resolver, args)
 	comment := fmt.Sprintf("domain %s", args.domain.ASCII)
 	if isHello {
 		comment += ", from ehlo because mailfrom is empty"
@@ -272,36 +269,41 @@ func prepare(args *Args) (isHello bool, ok bool) {
 }
 
 // lookup spf record, then evaluate args against it.
-func checkHost(ctx context.Context, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rauthentic bool, rerr error) {
-	status, _, record, rauthentic, err := Lookup(ctx, resolver, args.domain)
+func checkHost(ctx context.Context, log mlog.Log, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rauthentic bool, rerr error) {
+	status, _, record, rauthentic, err := Lookup(ctx, log.Logger, resolver, args.domain)
 	if err != nil {
 		return status, "", "", rauthentic, err
 	}
 
 	var evalAuthentic bool
-	rstatus, mechanism, rexplanation, evalAuthentic, rerr = evaluate(ctx, record, resolver, args)
+	rstatus, mechanism, rexplanation, evalAuthentic, rerr = evaluate(ctx, log, record, resolver, args)
 	rauthentic = rauthentic && evalAuthentic
 	return
 }
 
 // Evaluate evaluates the IP and names from args against the SPF DNS record for the domain.
-func Evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rauthentic bool, rerr error) {
+func Evaluate(ctx context.Context, elog *slog.Logger, record *Record, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rauthentic bool, rerr error) {
+	log := mlog.New("spf", elog)
 	_, ok := prepare(&args)
 	if !ok {
 		return StatusNone, "default", "", false, fmt.Errorf("no domain name to validate")
 	}
-	return evaluate(ctx, record, resolver, args)
+	return evaluate(ctx, log, record, resolver, args)
 }
 
 // evaluate RemoteIP against domain from args, given record.
-func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rauthentic bool, rerr error) {
-	log := xlog.WithContext(ctx)
+func evaluate(ctx context.Context, log mlog.Log, record *Record, resolver dns.Resolver, args Args) (rstatus Status, mechanism, rexplanation string, rauthentic bool, rerr error) {
 	start := time.Now()
 	defer func() {
-		log.Debugx("spf evaluate result", rerr, mlog.Field("dnsrequests", *args.dnsRequests), mlog.Field("voidlookups", *args.voidLookups), mlog.Field("domain", args.domain), mlog.Field("status", rstatus), mlog.Field("mechanism", mechanism), mlog.Field("explanation", rexplanation), mlog.Field("duration", time.Since(start)))
+		log.Debugx("spf evaluate result", rerr,
+			slog.Int("dnsrequests", *args.dnsRequests),
+			slog.Int("voidlookups", *args.voidLookups),
+			slog.Any("domain", args.domain),
+			slog.Any("status", rstatus),
+			slog.String("mechanism", mechanism),
+			slog.String("explanation", rexplanation),
+			slog.Duration("duration", time.Since(start)))
 	}()
-
-	resolver = dns.WithPackage(resolver, "spf")
 
 	if args.dnsRequests == nil {
 		args.dnsRequests = new(int)
@@ -388,7 +390,7 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 			nargs := args
 			nargs.domain = dns.Domain{ASCII: strings.TrimSuffix(name, ".")}
 			nargs.explanation = &record.Explanation // ../rfc/7208:1548
-			status, _, _, authentic, err := checkHost(ctx, resolver, nargs)
+			status, _, _, authentic, err := checkHost(ctx, log, resolver, nargs)
 			rauthentic = rauthentic && authentic
 			// ../rfc/7208:1202
 			switch status {
@@ -477,7 +479,7 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 			for _, rname := range rnames {
 				rd, err := dns.ParseDomain(strings.TrimSuffix(rname, "."))
 				if err != nil {
-					log.Errorx("bad address in ptr record", err, mlog.Field("address", rname))
+					log.Errorx("bad address in ptr record", err, slog.String("address", rname))
 					continue
 				}
 				// ../rfc/7208-eid4751 ../rfc/7208:1323
@@ -565,7 +567,7 @@ func evaluate(ctx context.Context, record *Record, resolver dns.Resolver, args A
 		nargs := args
 		nargs.domain = dns.Domain{ASCII: strings.TrimSuffix(name, ".")}
 		nargs.explanation = nil // ../rfc/7208:1548
-		status, mechanism, expl, authentic, err := checkHost(ctx, resolver, nargs)
+		status, mechanism, expl, authentic, err := checkHost(ctx, log, resolver, nargs)
 		rauthentic = rauthentic && authentic
 		if status == StatusNone {
 			return StatusPermerror, mechanism, "", rauthentic, err
@@ -866,7 +868,7 @@ func expandIP(ip net.IP) string {
 }
 
 // validateDNS checks if a DNS name is valid. Must not end in dot. This does not
-// check valid host names, e.g. _ is allows in DNS but not in a host name.
+// check valid host names, e.g. _ is allowed in DNS but not in a host name.
 func validateDNS(s string) error {
 	// ../rfc/7208:800
 	// note: we are not checking for max 253 bytes length, because one of the callers may be chopping off labels to "correct" the name.

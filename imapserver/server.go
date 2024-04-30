@@ -13,11 +13,8 @@ LIST-EXTENDED, SPECIAL-USE, MOVE, UTF8=ONLY.
 
 We take a liberty with UTF8=ONLY. We are supposed to wait for ENABLE of
 UTF8=ACCEPT or IMAP4rev2 before we respond with quoted strings that contain
-non-ASCII UTF-8. But we will unconditionally accept UTF-8 at the moment. See
+non-ASCII UTF-8. Until that's enabled, we do use UTF-7 for mailbox names. See
 ../rfc/6855:251
-
-We always respond with utf8 mailbox names. We do parse utf7 (only in IMAP4rev1,
-not in IMAP4rev2). ../rfc/3501:964
 
 - We never execute multiple commands at the same time for a connection. We expect a client to open multiple connections instead. ../rfc/9051:1110
 - Do not write output on a connection with an account lock held. Writing can block, a slow client could block account operations.
@@ -31,7 +28,7 @@ not in IMAP4rev2). ../rfc/3501:964
 - todo: do not return binary data for a fetch body. at least not for imap4rev1. we should be encoding it as base64?
 - todo: on expunge we currently remove the message even if other sessions still have a reference to the uid. if they try to query the uid, they'll get an error. we could be nicer and only actually remove the message when the last reference has gone. we could add a new flag to store.Message marking the message as expunged, not give new session access to such messages, and make store remove them at startup, and clean them when the last session referencing the session goes. however, it will get much more complicated. renaming messages would need special handling. and should we do the same for removed mailboxes?
 - todo: try to recover from syntax errors when the last command line ends with a }, i.e. a literal. we currently abort the entire connection. we may want to read some amount of literal data and continue with a next command.
-- todo future: more extensions: STATUS=SIZE, OBJECTID, MULTISEARCH, REPLACE, NOTIFY, CATENATE, MULTIAPPEND, SORT, THREAD, CREATE-SPECIAL-USE.
+- todo future: more extensions: OBJECTID, MULTISEARCH, REPLACE, NOTIFY, CATENATE, MULTIAPPEND, SORT, THREAD, CREATE-SPECIAL-USE.
 */
 
 import (
@@ -47,6 +44,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"log/slog"
 	"math"
 	"net"
 	"os"
@@ -54,12 +52,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -77,10 +76,6 @@ import (
 	"github.com/mjl-/mox/scram"
 	"github.com/mjl-/mox/store"
 )
-
-// Most logging should be done through conn.log* functions.
-// Only use imaplog in contexts without connection.
-var xlog = mlog.New("imapserver")
 
 var (
 	metricIMAPConnection = promauto.NewCounterVec(
@@ -152,13 +147,20 @@ var authFailDelay = time.Second  // After authentication failure.
 // SPECIAL-USE: ../rfc/6154
 // LIST-STATUS: ../rfc/5819
 // ID: ../rfc/2971
-// AUTH=SCRAM-SHA-256: ../rfc/7677 ../rfc/5802
-// AUTH=SCRAM-SHA-1: ../rfc/5802
+// AUTH=SCRAM-SHA-256-PLUS and AUTH=SCRAM-SHA-256: ../rfc/7677 ../rfc/5802
+// AUTH=SCRAM-SHA-1-PLUS and AUTH=SCRAM-SHA-1: ../rfc/5802
 // AUTH=CRAM-MD5: ../rfc/2195
 // APPENDLIMIT, we support the max possible size, 1<<63 - 1: ../rfc/7889:129
 // CONDSTORE: ../rfc/7162:411
 // QRESYNC: ../rfc/7162:1323
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ONLY LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC"
+// STATUS=SIZE: ../rfc/8438 ../rfc/9051:8024
+// QUOTA QUOTA=RES-STORAGE: ../rfc/9208:111
+//
+// We always announce support for SCRAM PLUS-variants, also on connections without
+// TLS. The client should not be selecting PLUS variants on non-TLS connections,
+// instead opting to do the bare SCRAM variant without indicating the server claims
+// to support the PLUS variant (skipping the server downgrade detection check).
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE"
 
 type conn struct {
 	cid               int64
@@ -180,7 +182,7 @@ type conn struct {
 	cmdMetric         string // Currently executing, for metrics.
 	cmdStart          time.Time
 	ncmds             int // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
-	log               *mlog.Log
+	log               mlog.Log
 	enabled           map[capability]bool // All upper-case.
 
 	// Set by SEARCH with SAVE. Can be used by commands accepting a sequence-set with
@@ -238,7 +240,7 @@ func stateCommands(cmds ...string) map[string]struct{} {
 var (
 	commandsStateAny              = stateCommands("capability", "noop", "logout", "id")
 	commandsStateNotAuthenticated = stateCommands("starttls", "authenticate", "login")
-	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub")
+	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota")
 	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move")
 )
 
@@ -255,20 +257,22 @@ var commands = map[string]func(c *conn, tag, cmd string, p *parser){
 	"login":        (*conn).cmdLogin,
 
 	// Authenticated and selected.
-	"enable":      (*conn).cmdEnable,
-	"select":      (*conn).cmdSelect,
-	"examine":     (*conn).cmdExamine,
-	"create":      (*conn).cmdCreate,
-	"delete":      (*conn).cmdDelete,
-	"rename":      (*conn).cmdRename,
-	"subscribe":   (*conn).cmdSubscribe,
-	"unsubscribe": (*conn).cmdUnsubscribe,
-	"list":        (*conn).cmdList,
-	"lsub":        (*conn).cmdLsub,
-	"namespace":   (*conn).cmdNamespace,
-	"status":      (*conn).cmdStatus,
-	"append":      (*conn).cmdAppend,
-	"idle":        (*conn).cmdIdle,
+	"enable":       (*conn).cmdEnable,
+	"select":       (*conn).cmdSelect,
+	"examine":      (*conn).cmdExamine,
+	"create":       (*conn).cmdCreate,
+	"delete":       (*conn).cmdDelete,
+	"rename":       (*conn).cmdRename,
+	"subscribe":    (*conn).cmdSubscribe,
+	"unsubscribe":  (*conn).cmdUnsubscribe,
+	"list":         (*conn).cmdList,
+	"lsub":         (*conn).cmdLsub,
+	"namespace":    (*conn).cmdNamespace,
+	"status":       (*conn).cmdStatus,
+	"append":       (*conn).cmdAppend,
+	"idle":         (*conn).cmdIdle,
+	"getquotaroot": (*conn).cmdGetquotaroot,
+	"getquota":     (*conn).cmdGetquota,
 
 	// Selected.
 	"check":       (*conn).cmdCheck,
@@ -288,8 +292,8 @@ var commands = map[string]func(c *conn, tag, cmd string, p *parser){
 	"uid move":    (*conn).cmdUIDMove,
 }
 
-var errIO = errors.New("fatal io error")             // For read/write errors and errors that should close the connection.
-var errProtocol = errors.New("fatal protocol error") // For protocol errors for which a stack trace should be printed.
+var errIO = errors.New("io error")             // For read/write errors and errors that should close the connection.
+var errProtocol = errors.New("protocol error") // For protocol errors for which a stack trace should be printed.
 
 var sanityChecks bool
 
@@ -338,14 +342,18 @@ func Listen() {
 var servers []func()
 
 func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config, xtls, noRequireSTARTTLS bool) {
+	log := mlog.New("imapserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
-		xlog.Print("listening for imap", mlog.Field("listener", listenerName), mlog.Field("addr", addr), mlog.Field("protocol", protocol))
+		log.Print("listening for imap",
+			slog.String("listener", listenerName),
+			slog.String("addr", addr),
+			slog.String("protocol", protocol))
 	}
 	network := mox.Network(ip)
 	ln, err := mox.Listen(network, addr)
 	if err != nil {
-		xlog.Fatalx("imap: listen for imap", err, mlog.Field("protocol", protocol), mlog.Field("listener", listenerName))
+		log.Fatalx("imap: listen for imap", err, slog.String("protocol", protocol), slog.String("listener", listenerName))
 	}
 	if xtls {
 		ln = tls.NewListener(ln, tlsConfig)
@@ -355,7 +363,7 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
-				xlog.Infox("imap: accept", err, mlog.Field("protocol", protocol), mlog.Field("listener", listenerName))
+				log.Infox("imap: accept", err, slog.String("protocol", protocol), slog.String("listener", listenerName))
 				continue
 			}
 
@@ -378,6 +386,13 @@ func Serve() {
 // returns whether this connection accepts utf-8 in strings.
 func (c *conn) utf8strings() bool {
 	return c.enabled[capIMAP4rev2] || c.enabled[capUTF8Accept]
+}
+
+func (c *conn) encodeMailbox(s string) string {
+	if c.utf8strings() {
+		return s
+	}
+	return utf7encode(s)
 }
 
 func (c *conn) xdbwrite(fn func(tx *bstore.Tx)) {
@@ -441,7 +456,7 @@ func (c *conn) Write(buf []byte) (int, error) {
 	return n, nil
 }
 
-func (c *conn) xtrace(level mlog.Level) func() {
+func (c *conn) xtrace(level slog.Level) func() {
 	c.xflush()
 	c.tr.SetTrace(level)
 	c.tw.SetTrace(level)
@@ -469,7 +484,7 @@ func (c *conn) readline0() (string, error) {
 	err := c.conn.SetReadDeadline(time.Now().Add(d))
 	c.log.Check(err, "setting read deadline")
 
-	line, err := bufpool.Readline(c.br)
+	line, err := bufpool.Readline(c.log, c.br)
 	if err != nil && errors.Is(err, moxio.ErrLineTooLong) {
 		return "", fmt.Errorf("%s (%w)", err, errProtocol)
 	} else if err != nil {
@@ -629,15 +644,18 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		cmd:               "(greeting)",
 		cmdStart:          time.Now(),
 	}
-	c.log = xlog.MoreFields(func() []mlog.Pair {
+	var logmutex sync.Mutex
+	c.log = mlog.New("imapserver", nil).WithFunc(func() []slog.Attr {
+		logmutex.Lock()
+		defer logmutex.Unlock()
 		now := time.Now()
-		l := []mlog.Pair{
-			mlog.Field("cid", c.cid),
-			mlog.Field("delta", now.Sub(c.lastlog)),
+		l := []slog.Attr{
+			slog.Int64("cid", c.cid),
+			slog.Duration("delta", now.Sub(c.lastlog)),
 		}
 		c.lastlog = now
 		if c.username != "" {
-			l = append(l, mlog.Field("username", c.username))
+			l = append(l, slog.String("username", c.username))
 		}
 		return l
 	})
@@ -662,7 +680,11 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		}
 	}
 
-	c.log.Info("new connection", mlog.Field("remote", c.conn.RemoteAddr()), mlog.Field("local", c.conn.LocalAddr()), mlog.Field("tls", xtls), mlog.Field("listener", listenerName))
+	c.log.Info("new connection",
+		slog.Any("remote", c.conn.RemoteAddr()),
+		slog.Any("local", c.conn.LocalAddr()),
+		slog.Bool("tls", xtls),
+		slog.String("listener", listenerName))
 
 	defer func() {
 		c.conn.Close()
@@ -681,7 +703,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		} else if err, ok := x.(error); ok && isClosed(err) {
 			c.log.Infox("connection closed", err)
 		} else {
-			c.log.Error("unhandled panic", mlog.Field("err", x))
+			c.log.Error("unhandled panic", slog.Any("err", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Imapserver)
 		}
@@ -703,13 +725,13 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	// If remote IP/network resulted in too many authentication failures, refuse to serve.
 	if !mox.LimiterFailedAuth.CanAdd(c.remoteIP, time.Now(), 1) {
 		metrics.AuthenticationRatelimitedInc("imap")
-		c.log.Debug("refusing connection due to many auth failures", mlog.Field("remoteip", c.remoteIP))
+		c.log.Debug("refusing connection due to many auth failures", slog.Any("remoteip", c.remoteIP))
 		c.writelinef("* BYE too many auth failures")
 		return
 	}
 
 	if !limiterConnections.Add(c.remoteIP, time.Now(), 1) {
-		c.log.Debug("refusing connection due to many open connections", mlog.Field("remoteip", c.remoteIP))
+		c.log.Debug("refusing connection due to many open connections", slog.Any("remoteip", c.remoteIP))
 		c.writelinef("* BYE too many open connections from your ip or network")
 		return
 	}
@@ -744,9 +766,9 @@ func (c *conn) command() {
 			metricIMAPCommands.WithLabelValues(c.cmdMetric, result).Observe(float64(time.Since(c.cmdStart)) / float64(time.Second))
 		}()
 
-		logFields := []mlog.Pair{
-			mlog.Field("cmd", c.cmd),
-			mlog.Field("duration", time.Since(c.cmdStart)),
+		logFields := []slog.Attr{
+			slog.String("cmd", c.cmd),
+			slog.Duration("duration", time.Since(c.cmdStart)),
 		}
 		c.cmd = ""
 
@@ -761,7 +783,7 @@ func (c *conn) command() {
 		}
 		err, ok := x.(error)
 		if !ok {
-			c.log.Error("imap command panic", append([]mlog.Pair{mlog.Field("panic", x)}, logFields...)...)
+			c.log.Error("imap command panic", append([]slog.Attr{slog.Any("panic", x)}, logFields...)...)
 			result = "panic"
 			panic(x)
 		}
@@ -786,7 +808,7 @@ func (c *conn) command() {
 				panic(errIO)
 			}
 			c.log.Debugx("imap command syntax error", sxerr.err, logFields...)
-			c.log.Info("imap syntax error", mlog.Field("lastline", c.lastLine))
+			c.log.Info("imap syntax error", slog.String("lastline", c.lastLine))
 			fatal := strings.HasSuffix(c.lastLine, "+}")
 			if fatal {
 				err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
@@ -865,7 +887,7 @@ func (c *conn) broadcast(changes []store.Change) {
 	if len(changes) == 0 {
 		return
 	}
-	c.log.Debug("broadcast changes", mlog.Field("changes", changes))
+	c.log.Debug("broadcast changes", slog.Any("changes", changes))
 	c.comm.Broadcast(changes)
 }
 
@@ -1141,7 +1163,7 @@ func xcheckmailboxname(name string, allowInbox bool) string {
 	if isinbox {
 		xuserErrorf("special mailboxname Inbox not allowed")
 	} else if err != nil {
-		xusercodeErrorf("CANNOT", err.Error())
+		xusercodeErrorf("CANNOT", "%s", err)
 	}
 	return name
 }
@@ -1184,7 +1206,7 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 	err := c.conn.SetWriteDeadline(time.Now().Add(5 * time.Minute))
 	c.log.Check(err, "setting write deadline")
 
-	c.log.Debug("applying changes", mlog.Field("changes", changes))
+	c.log.Debug("applying changes", slog.Any("changes", changes))
 
 	// Only keep changes for the selected mailbox, and changes that are always relevant.
 	var n []store.Change
@@ -1297,14 +1319,19 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 			// unrecognized \NonExistent and interpret this as a newly created mailbox, while
 			// the goal was to remove it...
 			if c.enabled[capIMAP4rev2] {
-				c.bwritelinef(`* LIST (\NonExistent) "/" %s`, astring(ch.Name).pack(c))
+				c.bwritelinef(`* LIST (\NonExistent) "/" %s`, astring(c.encodeMailbox(ch.Name)).pack(c))
 			}
 		case store.ChangeAddMailbox:
-			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.Flags, " "), astring(ch.Mailbox.Name).pack(c))
+			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.Flags, " "), astring(c.encodeMailbox(ch.Mailbox.Name)).pack(c))
 		case store.ChangeRenameMailbox:
-			c.bwritelinef(`* LIST (%s) "/" %s ("OLDNAME" (%s))`, strings.Join(ch.Flags, " "), astring(ch.NewName).pack(c), string0(ch.OldName).pack(c))
+			// OLDNAME only with IMAP4rev2 or NOTIFY ../rfc/9051:2726 ../rfc/5465:628
+			var oldname string
+			if c.enabled[capIMAP4rev2] {
+				oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, string0(c.encodeMailbox(ch.OldName)).pack(c))
+			}
+			c.bwritelinef(`* LIST (%s) "/" %s%s`, strings.Join(ch.Flags, " "), astring(c.encodeMailbox(ch.NewName)).pack(c), oldname)
 		case store.ChangeAddSubscription:
-			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.Flags...), " "), astring(ch.Name).pack(c))
+			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.Flags...), " "), astring(c.encodeMailbox(ch.Name)).pack(c))
 		default:
 			panic(fmt.Sprintf("internal error, missing case for %#v", change))
 		}
@@ -1404,7 +1431,7 @@ func (c *conn) cmdID(tag, cmd string, p *parser) {
 	p.xempty()
 
 	// We just log the client id.
-	c.log.Info("client id", mlog.Field("params", params))
+	c.log.Info("client id", slog.Any("params", params))
 
 	// Response syntax: ../rfc/2971:243
 	// We send our name and version. ../rfc/2971:193
@@ -1435,7 +1462,8 @@ func (c *conn) cmdStarttls(tag, cmd string, p *parser) {
 		xcheckf(err, "reading buffered data for tls handshake")
 		conn = &prefixConn{buf, conn}
 	}
-	c.ok(tag, cmd)
+	// We add the cid to facilitate debugging in case of TLS connection failure.
+	c.ok(tag, cmd+" ("+mox.ReceivedID(c.cid)+")")
 
 	cidctx := context.WithValue(mox.Context, mlog.CidKey, c.cid)
 	ctx, cancel := context.WithTimeout(cidctx, time.Minute)
@@ -1446,8 +1474,8 @@ func (c *conn) cmdStarttls(tag, cmd string, p *parser) {
 		panic(fmt.Errorf("starttls handshake: %s (%w)", err, errIO))
 	}
 	cancel()
-	tlsversion, ciphersuite := mox.TLSInfo(tlsConn)
-	c.log.Debug("tls server handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite))
+	tlsversion, ciphersuite := moxio.TLSInfo(tlsConn)
+	c.log.Debug("tls server handshake done", slog.String("tls", tlsversion), slog.String("ciphersuite", ciphersuite))
 
 	c.conn = tlsConn
 	c.tr = moxio.NewTraceReader(c.log, "C: ", c.conn)
@@ -1470,8 +1498,17 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	if c.authFailed > 3 && authFailDelay > 0 {
 		mox.Sleep(mox.Context, time.Duration(c.authFailed-3)*authFailDelay)
 	}
+
+	// If authentication fails due to missing derived secrets, we don't hold it against
+	// the connection. There is no way to indicate server support for an authentication
+	// mechanism, but that a mechanism won't work for an account.
+	var missingDerivedSecrets bool
+
 	c.authFailed++ // Compensated on success.
 	defer func() {
+		if missingDerivedSecrets {
+			c.authFailed--
+		}
 		// On the 3rd failed authentication, start responding slowly. Successful auth will
 		// cause fast responses again.
 		if c.authFailed >= 3 {
@@ -1483,10 +1520,9 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	authResult := "error"
 	defer func() {
 		metrics.AuthenticationInc("imap", authVariant, authResult)
-		switch authResult {
-		case "ok":
+		if authResult == "ok" {
 			mox.LimiterFailedAuth.Reset(c.remoteIP, time.Now())
-		default:
+		} else if !missingDerivedSecrets {
 			mox.LimiterFailedAuth.Add(c.remoteIP, time.Now(), 1)
 		}
 	}()
@@ -1559,11 +1595,11 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xusercodeErrorf("AUTHORIZATIONFAILED", "cannot assume role")
 		}
 
-		acc, err := store.OpenEmailAuth(authc, password)
+		acc, err := store.OpenEmailAuth(c.log, authc, password)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
 				authResult = "badcreds"
-				c.log.Info("authentication failed", mlog.Field("username", authc))
+				c.log.Info("authentication failed", slog.String("username", authc))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			}
 			xusercodeErrorf("", "error")
@@ -1587,11 +1623,11 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xsyntaxErrorf("malformed cram-md5 response")
 		}
 		addr := t[0]
-		c.log.Debug("cram-md5 auth", mlog.Field("address", addr))
-		acc, _, err := store.OpenEmail(addr)
+		c.log.Debug("cram-md5 auth", slog.String("address", addr))
+		acc, _, err := store.OpenEmail(c.log, addr)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
-				c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+				c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			}
 			xserverErrorf("looking up address: %v", err)
@@ -1607,7 +1643,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
 				if err == bstore.ErrAbsent {
-					c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+					c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 					xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 				}
 				if err != nil {
@@ -1621,8 +1657,9 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xcheckf(err, "tx read")
 		})
 		if ipadhash == nil || opadhash == nil {
-			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", mlog.Field("username", addr))
-			c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", slog.String("username", addr))
+			c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
+			missingDerivedSecrets = true
 			xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 		}
 
@@ -1631,7 +1668,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		opadhash.Write(ipadhash.Sum(nil))
 		digest := fmt.Sprintf("%x", opadhash.Sum(nil))
 		if digest != t[1] {
-			c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+			c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 			xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 		}
 
@@ -1639,27 +1676,39 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		acc = nil // Cancel cleanup.
 		c.username = addr
 
-	case "SCRAM-SHA-1", "SCRAM-SHA-256":
+	case "SCRAM-SHA-256-PLUS", "SCRAM-SHA-256", "SCRAM-SHA-1-PLUS", "SCRAM-SHA-1":
 		// todo: improve handling of errors during scram. e.g. invalid parameters. should we abort the imap command, or continue until the end and respond with a scram-level error?
 		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
 
-		authVariant = strings.ToLower(authType)
-		var h func() hash.Hash
-		if authVariant == "scram-sha-1" {
-			h = sha1.New
-		} else {
-			h = sha256.New
-		}
-
 		// No plaintext credentials, we can log these normally.
 
+		authVariant = strings.ToLower(authType)
+		var h func() hash.Hash
+		switch authVariant {
+		case "scram-sha-1", "scram-sha-1-plus":
+			h = sha1.New
+		case "scram-sha-256", "scram-sha-256-plus":
+			h = sha256.New
+		default:
+			xserverErrorf("missing case for scram variant")
+		}
+
+		var cs *tls.ConnectionState
+		requireChannelBinding := strings.HasSuffix(authVariant, "-plus")
+		if requireChannelBinding && !c.tls {
+			xuserErrorf("cannot use plus variant with tls channel binding without tls")
+		}
+		if c.tls {
+			xcs := c.conn.(*tls.Conn).ConnectionState()
+			cs = &xcs
+		}
 		c0 := xreadInitial()
-		ss, err := scram.NewServer(h, c0)
+		ss, err := scram.NewServer(h, c0, cs, requireChannelBinding)
 		if err != nil {
 			xsyntaxErrorf("starting scram: %s", err)
 		}
-		c.log.Debug("scram auth", mlog.Field("authentication", ss.Authentication))
-		acc, _, err := store.OpenEmail(ss.Authentication)
+		c.log.Debug("scram auth", slog.String("authentication", ss.Authentication))
+		acc, _, err := store.OpenEmail(c.log, ss.Authentication)
 		if err != nil {
 			// todo: we could continue scram with a generated salt, deterministically generated
 			// from the username. that way we don't have to store anything but attackers cannot
@@ -1679,17 +1728,25 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		acc.WithRLock(func() {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
-				if authVariant == "scram-sha-1" {
-					xscram = password.SCRAMSHA1
-				} else {
-					xscram = password.SCRAMSHA256
-				}
-				if err == bstore.ErrAbsent || err == nil && (len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0) {
-					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", mlog.Field("address", ss.Authentication))
-					xuserErrorf("scram not possible")
+				if err == bstore.ErrAbsent {
+					c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
+					xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 				}
 				xcheckf(err, "fetching credentials")
-				return err
+				switch authVariant {
+				case "scram-sha-1", "scram-sha-1-plus":
+					xscram = password.SCRAMSHA1
+				case "scram-sha-256", "scram-sha-256-plus":
+					xscram = password.SCRAMSHA256
+				default:
+					xserverErrorf("missing case for scram credentials")
+				}
+				if len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0 {
+					missingDerivedSecrets = true
+					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", slog.String("address", ss.Authentication))
+					xuserErrorf("scram not possible")
+				}
+				return nil
 			})
 			xcheckf(err, "read tx")
 		})
@@ -1705,7 +1762,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			c.readline(false) // Should be "*" for cancellation.
 			if errors.Is(err, scram.ErrInvalidProof) {
 				authResult = "badcreds"
-				c.log.Info("failed authentication attempt", mlog.Field("username", ss.Authentication), mlog.Field("remote", c.remoteIP))
+				c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			}
 			xuserErrorf("server final: %w", err)
@@ -1769,13 +1826,13 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 		}
 	}()
 
-	acc, err := store.OpenEmailAuth(userid, password)
+	acc, err := store.OpenEmailAuth(c.log, userid, password)
 	if err != nil {
 		authResult = "badcreds"
 		var code string
 		if errors.Is(err, store.ErrUnknownCredentials) {
 			code = "AUTHENTICATIONFAILED"
-			c.log.Info("failed authentication attempt", mlog.Field("username", userid), mlog.Field("remote", c.remoteIP))
+			c.log.Info("failed authentication attempt", slog.String("username", userid), slog.Any("remote", c.remoteIP))
 		}
 		xusercodeErrorf(code, "login failed")
 	}
@@ -2006,7 +2063,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 	}
 	c.bwritelinef(`* OK [UIDVALIDITY %d] x`, mb.UIDValidity)
 	c.bwritelinef(`* OK [UIDNEXT %d] x`, mb.UIDNext)
-	c.bwritelinef(`* LIST () "/" %s`, astring(mb.Name).pack(c))
+	c.bwritelinef(`* LIST () "/" %s`, astring(c.encodeMailbox(mb.Name)).pack(c))
 	if c.enabled[capCondstore] {
 		// ../rfc/7162:417
 		// ../rfc/7162-eid5055 ../rfc/7162:484 ../rfc/7162:1167
@@ -2201,11 +2258,12 @@ func (c *conn) cmdCreate(tag, cmd string, p *parser) {
 	})
 
 	for _, n := range created {
-		var more string
-		if n == name && name != origName && !(name == "Inbox" || strings.HasPrefix(name, "Inbox/")) {
-			more = fmt.Sprintf(` ("OLDNAME" (%s))`, string0(origName).pack(c))
+		var oldname string
+		// OLDNAME only with IMAP4rev2 or NOTIFY ../rfc/9051:2726 ../rfc/5465:628
+		if c.enabled[capIMAP4rev2] && n == name && name != origName && !(name == "Inbox" || strings.HasPrefix(name, "Inbox/")) {
+			oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, string0(c.encodeMailbox(origName)).pack(c))
 		}
-		c.bwritelinef(`* LIST (\Subscribed) "/" %s%s`, astring(n).pack(c), more)
+		c.bwritelinef(`* LIST (\Subscribed) "/" %s%s`, astring(c.encodeMailbox(n)).pack(c), oldname)
 	}
 	c.ok(tag, cmd)
 }
@@ -2250,7 +2308,7 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 	for _, mID := range removeMessageIDs {
 		p := c.account.MessagePath(mID)
 		err := os.Remove(p)
-		c.log.Check(err, "removing message file for mailbox delete", mlog.Field("path", p))
+		c.log.Check(err, "removing message file for mailbox delete", slog.String("path", p))
 	}
 
 	c.ok(tag, cmd)
@@ -2490,7 +2548,7 @@ func (c *conn) cmdLsub(tag, cmd string, p *parser) {
 				continue
 			}
 			have[name] = true
-			line := fmt.Sprintf(`* LSUB () "/" %s`, astring(name).pack(c))
+			line := fmt.Sprintf(`* LSUB () "/" %s`, astring(c.encodeMailbox(name)).pack(c))
 			lines = append(lines, line)
 
 		}
@@ -2505,7 +2563,7 @@ func (c *conn) cmdLsub(tag, cmd string, p *parser) {
 			if have[mb.Name] || !subscribedKids[mb.Name] || !re.MatchString(mb.Name) {
 				return nil
 			}
-			line := fmt.Sprintf(`* LSUB (\NoSelect) "/" %s`, astring(mb.Name).pack(c))
+			line := fmt.Sprintf(`* LSUB (\NoSelect) "/" %s`, astring(c.encodeMailbox(mb.Name)).pack(c))
 			lines = append(lines, line)
 			return nil
 		})
@@ -2573,7 +2631,7 @@ func (c *conn) cmdStatus(tag, cmd string, p *parser) {
 	c.ok(tag, cmd)
 }
 
-// Response syntax: ../rfc/9051:6681 ../rfc/9051:7070 ../rfc/9051:7059 ../rfc/3501:4834
+// Response syntax: ../rfc/9051:6681 ../rfc/9051:7070 ../rfc/9051:7059 ../rfc/3501:4834 ../rfc/9208:712
 func (c *conn) xstatusLine(tx *bstore.Tx, mb store.Mailbox, attrs []string) string {
 	status := []string{}
 	for _, a := range attrs {
@@ -2599,11 +2657,20 @@ func (c *conn) xstatusLine(tx *bstore.Tx, mb store.Mailbox, attrs []string) stri
 		case "HIGHESTMODSEQ":
 			// ../rfc/7162:366
 			status = append(status, A, fmt.Sprintf("%d", c.xhighestModSeq(tx, mb.ID).Client()))
+		case "DELETED-STORAGE":
+			// ../rfc/9208:394
+			// How much storage space could be reclaimed by expunging messages with the
+			// \Deleted flag. We could keep track of this number and return it efficiently.
+			// Calculating it each time can be slow, and we don't know if clients request it.
+			// Clients are not likely to set the deleted flag without immediately expunging
+			// nowadays. Let's wait for something to need it to go through the trouble, and
+			// always return 0 for now.
+			status = append(status, A, "0")
 		default:
 			xsyntaxErrorf("unknown attribute %q", a)
 		}
 	}
-	return fmt.Sprintf("* STATUS %s (%s)", astring(mb.Name).pack(c), strings.Join(status, " "))
+	return fmt.Sprintf("* STATUS %s (%s)", astring(c.encodeMailbox(mb.Name)).pack(c), strings.Join(status, " "))
 }
 
 func flaglist(fl store.Flags, keywords []string) listspace {
@@ -2673,7 +2740,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 	}
 
 	// Read the message into a temporary file.
-	msgFile, err := store.CreateMessageTemp("imap-append")
+	msgFile, err := store.CreateMessageTemp(c.log, "imap-append")
 	xcheckf(err, "creating temp file for message")
 	defer func() {
 		p := msgFile.Name()
@@ -2731,7 +2798,14 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				Received:      tm,
 				Flags:         storeFlags,
 				Keywords:      keywords,
-				Size:          size,
+				Size:          mw.Size,
+			}
+
+			ok, maxSize, err := c.account.CanAddMessageSize(tx, m.Size)
+			xcheckf(err, "checking quota")
+			if !ok {
+				// ../rfc/9051:5155 ../rfc/9208:472
+				xusercodeErrorf("OVERQUOTA", "account over maximum total message size %d", maxSize)
 			}
 
 			mb.Add(m.MailboxCounts())
@@ -2740,7 +2814,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			err = tx.Update(&mb)
 			xcheckf(err, "updating mailbox counts")
 
-			err := c.account.DeliverMessage(c.log, tx, &m, msgFile, true, false, false)
+			err = c.account.DeliverMessage(c.log, tx, &m, msgFile, true, false, false, true)
 			xcheckf(err, "delivering message")
 		})
 
@@ -2807,6 +2881,87 @@ wait:
 		panic(fmt.Errorf("%w: in IDLE, expected DONE", errIO))
 	}
 
+	c.ok(tag, cmd)
+}
+
+// Return the quota root for a mailbox name and any current quota's.
+//
+// State: Authenticated and selected.
+func (c *conn) cmdGetquotaroot(tag, cmd string, p *parser) {
+	// Command: ../rfc/9208:278 ../rfc/2087:141
+
+	// Request syntax: ../rfc/9208:660 ../rfc/2087:233
+	p.xspace()
+	name := p.xmailbox()
+	p.xempty()
+
+	// This mailbox does not have to exist. Caller just wants to know which limits
+	// would apply. We only have one limit, so we don't use the name otherwise.
+	// ../rfc/9208:295
+	name = xcheckmailboxname(name, true)
+
+	// Get current usage for account.
+	var quota, size int64 // Account only has a quota if > 0.
+	c.account.WithRLock(func() {
+		quota = c.account.QuotaMessageSize()
+		if quota >= 0 {
+			c.xdbread(func(tx *bstore.Tx) {
+				du := store.DiskUsage{ID: 1}
+				err := tx.Get(&du)
+				xcheckf(err, "gather used quota")
+				size = du.MessageSize
+			})
+		}
+	})
+
+	// We only have one per account quota, we name it "" like the examples in the RFC.
+	// Response syntax: ../rfc/9208:668 ../rfc/2087:242
+	c.bwritelinef(`* QUOTAROOT %s ""`, astring(name).pack(c))
+
+	// We only write the quota response if there is a limit. The syntax doesn't allow
+	// an empty list, so we cannot send the current disk usage if there is no limit.
+	if quota > 0 {
+		// Response syntax: ../rfc/9208:666 ../rfc/2087:239
+		c.bwritelinef(`* QUOTA "" (STORAGE %d %d)`, (size+1024-1)/1024, (quota+1024-1)/1024)
+	}
+	c.ok(tag, cmd)
+}
+
+// Return the quota for a quota root.
+//
+// State: Authenticated and selected.
+func (c *conn) cmdGetquota(tag, cmd string, p *parser) {
+	// Command: ../rfc/9208:245 ../rfc/2087:123
+
+	// Request syntax: ../rfc/9208:658 ../rfc/2087:231
+	p.xspace()
+	root := p.xastring()
+	p.xempty()
+
+	// We only have a per-account root called "".
+	if root != "" {
+		xuserErrorf("unknown quota root")
+	}
+
+	var quota, size int64
+	c.account.WithRLock(func() {
+		quota = c.account.QuotaMessageSize()
+		if quota > 0 {
+			c.xdbread(func(tx *bstore.Tx) {
+				du := store.DiskUsage{ID: 1}
+				err := tx.Get(&du)
+				xcheckf(err, "gather used quota")
+				size = du.MessageSize
+			})
+		}
+	})
+
+	// We only write the quota response if there is a limit. The syntax doesn't allow
+	// an empty list, so we cannot send the current disk usage if there is no limit.
+	if quota > 0 {
+		// Response syntax: ../rfc/9208:666 ../rfc/2087:239
+		c.bwritelinef(`* QUOTA "" (STORAGE %d %d)`, (size+1024-1)/1024, (quota+1024-1)/1024)
+	}
 	c.ok(tag, cmd)
 }
 
@@ -2907,10 +3062,12 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 
 			removeIDs := make([]int64, len(remove))
 			anyIDs := make([]any, len(remove))
+			var totalSize int64
 			for i, m := range remove {
 				removeIDs[i] = m.ID
 				anyIDs[i] = m.ID
 				mb.Sub(m.MailboxCounts())
+				totalSize += m.Size
 				// Update "remove", because RetrainMessage below will save the message.
 				remove[i].Expunged = true
 				remove[i].ModSeq = modseq
@@ -2930,6 +3087,9 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 
 			err = tx.Update(&mb)
 			xcheckf(err, "updating mailbox counts")
+
+			err = c.account.AddMessageSize(c.log, tx, -totalSize)
+			xcheckf(err, "updating disk usage")
 
 			// Mark expunged messages as not needing training, then retrain them, so if they
 			// were trained, they get untrained.
@@ -3192,6 +3352,20 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				xserverErrorf("uid and message mismatch")
 			}
 
+			// See if quota allows copy.
+			var totalSize int64
+			for _, m := range xmsgs {
+				totalSize += m.Size
+			}
+			if ok, maxSize, err := c.account.CanAddMessageSize(tx, totalSize); err != nil {
+				xcheckf(err, "checking quota")
+			} else if !ok {
+				// ../rfc/9051:5155 ../rfc/9208:472
+				xusercodeErrorf("OVERQUOTA", "account over maximum total message size %d", maxSize)
+			}
+			err = c.account.AddMessageSize(c.log, tx, totalSize)
+			xcheckf(err, "updating disk usage")
+
 			msgs := map[store.UID]store.Message{}
 			for _, m := range xmsgs {
 				msgs[m.UID] = m
@@ -3272,7 +3446,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			}
 
 			for dir := range syncDirs {
-				err := moxio.SyncDir(dir)
+				err := moxio.SyncDir(c.log, dir)
 				xcheckf(err, "sync directory")
 			}
 

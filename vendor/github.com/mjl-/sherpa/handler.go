@@ -34,9 +34,22 @@ type JSON struct {
 
 // HandlerOpts are options for creating a new handler.
 type HandlerOpts struct {
-	Collector           Collector // Holds functions for collecting metrics about function calls and other incoming HTTP requests. May be nil.
-	LaxParameterParsing bool      // If enabled, incoming sherpa function calls will ignore unrecognized fields in struct parameters, instead of failing.
-	AdjustFunctionNames string    // If empty, only the first character of function names are lower cased. For "lowerWord", the first string of capitals is lowercased, for "none", the function name is left as is.
+	// Holds functions for collecting metrics about function calls and other incoming
+	// HTTP requests. May be nil.
+	Collector Collector
+
+	// If enabled, incoming sherpa function calls will ignore unrecognized fields in
+	// struct parameters, instead of failing.
+	LaxParameterParsing bool
+
+	// If empty, only the first character of function names are lower cased. For
+	// "lowerWord", the first string of capitals is lowercased, for "none", the
+	// function name is left as is.
+	AdjustFunctionNames string
+
+	// Don't send any CORS headers, and respond to OPTIONS requests with 405 "bad
+	// method".
+	NoCORS bool
 }
 
 // Raw signals a raw JSON response.
@@ -463,13 +476,16 @@ func validCallback(cb string) bool {
 //   - sherpa.js, a small stand-alone client JavaScript library that makes it trivial to start using this API from a browser.
 //   - functionName, for function invocations on this API.
 //
-// HTTP response will have CORS-headers set, and support the OPTIONS HTTP method.
+// HTTP response will have CORS-headers set, and support the OPTIONS HTTP method,
+// unless the NoCORS option was set.
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	hdr := w.Header()
-	hdr.Set("Access-Control-Allow-Origin", "*")
-	hdr.Set("Access-Control-Allow-Methods", "GET, POST")
-	hdr.Set("Access-Control-Allow-Headers", "Content-Type")
+	if !h.opts.NoCORS {
+		hdr.Set("Access-Control-Allow-Origin", "*")
+		hdr.Set("Access-Control-Allow-Methods", "GET, POST")
+		hdr.Set("Access-Control-Allow-Headers", "Content-Type")
+	}
 
 	collector := h.opts.Collector
 
@@ -489,10 +505,10 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case r.URL.Path == "sherpa.json":
-		switch r.Method {
-		case "OPTIONS":
+		switch {
+		case !h.opts.NoCORS && r.Method == "OPTIONS":
 			w.WriteHeader(204)
-		case "GET":
+		case r.Method == "GET":
 			collector.JSON()
 			hdr.Set("Content-Type", "application/json; charset=utf-8")
 			hdr.Set("Cache-Control", "no-cache")
@@ -531,11 +547,11 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		name := r.URL.Path
 		fn, ok := h.functions[name]
-		switch r.Method {
-		case "OPTIONS":
+		switch {
+		case !h.opts.NoCORS && r.Method == "OPTIONS":
 			w.WriteHeader(204)
 
-		case "POST":
+		case r.Method == "POST":
 			hdr.Set("Cache-Control", "no-store")
 
 			if !ok {
@@ -593,7 +609,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				respondJSON(w, 200, v)
 			}
 
-		case "GET":
+		case r.Method == "GET":
 			hdr.Set("Cache-Control", "no-store")
 
 			jsonp := false

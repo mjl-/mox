@@ -3,12 +3,11 @@
 package mox
 
 import (
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
-
-	"github.com/mjl-/mox/mlog"
 )
 
 // Fork and exec as unprivileged user.
@@ -19,7 +18,7 @@ import (
 func ForkExecUnprivileged() {
 	prog, err := os.Executable()
 	if err != nil {
-		xlog.Fatalx("finding executable for exec", err)
+		pkglog.Fatalx("finding executable for exec", err)
 	}
 
 	files := []*os.File{os.Stdin, os.Stdout, os.Stderr}
@@ -49,7 +48,7 @@ func ForkExecUnprivileged() {
 		},
 	})
 	if err != nil {
-		xlog.Fatalx("fork and exec", err)
+		pkglog.Fatalx("fork and exec", err)
 	}
 	CleanupPassedFiles()
 
@@ -66,9 +65,9 @@ func ForkExecUnprivileged() {
 
 	st, err := p.Wait()
 	if err != nil {
-		xlog.Fatalx("wait", err)
+		pkglog.Fatalx("wait", err)
 	}
 	code := st.ExitCode()
-	xlog.Print("stopping after child exit", mlog.Field("exitcode", code))
+	pkglog.Print("stopping after child exit", slog.Int("exitcode", code))
 	os.Exit(code)
 }

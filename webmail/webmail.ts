@@ -52,7 +52,7 @@ To simulate slow API calls and SSE events:
 
 Show additional headers of messages:
 
-	settingsPut({...settings, showHeaders: ['User-Agent', 'X-Mailer', 'Message-Id', 'List-Id', 'List-Post', 'X-Mox-Reason', 'TLS-Required']})
+	settingsPut({...settings, showHeaders: ['Delivered-To', 'User-Agent', 'X-Mailer', 'Message-Id', 'List-Id', 'List-Post', 'X-Mox-Reason', 'TLS-Required']})
 
 Enable logging and reload afterwards:
 
@@ -62,18 +62,15 @@ Enable consistency checking in UI updates:
 
 	settingsPut({...settings, checkConsistency: true})
 
-- todo: in msglistView, show names of people we have sent to, and address otherwise.
-- todo: implement settings stored in the server, such as mailboxCollapsed, keyboard shortcuts. also new settings for displaying email as html by default for configured sender address or domain. name to use for "From", optional default Reply-To and Bcc addresses, signatures (per address), configured labels/keywords with human-readable name, colors and toggling with shortcut keys 1-9.
-- todo: in msglist, if our address is in the from header, list addresses in the to/cc/bcc, it's likely a sent folder
+- todo: in msglistView, show names of people we have sent to, and address otherwise. or at don't show names for first-time senders.
+- todo: implement settings stored in the server, such as mailboxCollapsed, keyboard shortcuts. name to use for "From", optional default Reply-To and Bcc addresses, signatures (per address), configured labels/keywords with human-readable name, colors and toggling with shortcut keys 1-9.
 - todo: automated tests? perhaps some unit tests, then ui scenario's.
 - todo: compose, wrap lines
 - todo: composing of html messages. possibly based on contenteditable. would be good if we can include original html, but quoted. must make sure to not include dangerous scripts/resources, or sandbox it.
 - todo: make alt up/down keys work on html iframe too. requires loading it from sameorigin, to get access to its inner document.
 - todo: reconnect with last known modseq and don't clear the message list, only update it
-- todo: resize and move of compose window
 - todo: find and use svg icons for flags in the msgitemView. junk (fire), forwarded, replied, attachment (paperclip), flagged (flag), phishing (?). also for special-use mailboxes (junk, trash, archive, draft, sent). should be basic and slim.
 - todo: for embedded messages (message/rfc822 or message/global), allow viewing it as message, perhaps in a popup?
-- todo: for content-disposition: inline, show images alongside text?
 - todo: only show orange underline where it could be a problem? in addresses and anchor texts. we may be lighting up a christmas tree now, desensitizing users.
 - todo: saved searches that are displayed below list of mailboxes, for quick access to preset view
 - todo: when search on free-form text is active, highlight the searched text in the message view.
@@ -82,10 +79,9 @@ Enable consistency checking in UI updates:
 - todo: buttons/mechanism to operate on all messages in a mailbox/search query, without having to list and select all messages. e.g. clearing flags/labels.
 - todo: can we detect if browser supports proper CSP? if not, refuse to load html messages?
 - todo: more search criteria? Date header field (instead of time received), text vs html (only, either or both), attachment filenames and sizes
-- todo: integrate more of the account page into webmail? importing/exporting messages, configuring delivery rules (possibly with sieve). for messages moved out of inbox to non-special-use mailbox, show button that helps make an automatic rule to move such messages again (e.g. based on message From address, message From domain or List-ID header).
+- todo: import messages into specific mailbox?
 - todo: configurable keyboard shortcuts? we use strings like "ctrl p" which we already generate and match on, add a mapping from command name to cmd* functions, and have a map of keys to command names. the commands for up/down with shift/ctrl modifiers may need special attention.
-- todo: nicer address input fields like other mail clients do. with tab to autocomplete and turn input into a box and delete removing of the entire address.
-- todo: consider composing messages with bcc headers that are kept as message Bcc headers, optionally with checkbox.
+- todo: consider composing messages with bcc headers that are sent as message Bcc headers to the bcc-addressees, optionally with checkbox.
 - todo: improve accessibility
 - todo: threading mode where we don't show messages in Trash/Sent in thread?
 - todo: msglistView: preload next message?
@@ -107,11 +103,15 @@ const zindexes = {
 	popover: '5',
 	attachments: '5',
 	shortcut: '6',
+	login: '7',
 }
 
 // From HTML.
 declare let page: HTMLElement
 declare let moxversion: string
+declare let moxgoversion: string
+declare let moxgoos: string
+declare let moxgoarch: string
 
 // All logging goes through log() instead of console.log, except "should not happen" logging.
 let log: (...args: any[]) => void = () => {}
@@ -120,6 +120,8 @@ try {
 		log = console.log
 	}
 } catch (err) {}
+
+let accountSettings: api.Settings
 
 const defaultSettings = {
 	showShortcuts: true, // Whether to briefly show shortcuts in bottom left when a button is clicked that has a keyboard shortcut.
@@ -139,6 +141,10 @@ const defaultSettings = {
 	showHeaders: [] as string[], // Additional message headers to show.
 	threading: api.ThreadMode.ThreadOn,
 	checkConsistency: location.hostname === 'localhost', // Enable UI update consistency checks, default only for local development.
+	composeWidth: 0,
+	composeViewportWidth: 0,
+	composeHeight: 0,
+	composeViewportHeight: 0,
 }
 const parseSettings = (): typeof defaultSettings => {
 	try {
@@ -193,6 +199,10 @@ const parseSettings = (): typeof defaultSettings => {
 			showHeaders: getStringArray('showHeaders'),
 			threading: getString('threading', api.ThreadMode.ThreadOff, api.ThreadMode.ThreadOn, api.ThreadMode.ThreadUnread) as api.ThreadMode,
 			checkConsistency: getBool('checkConsistency'),
+			composeWidth: getInt('composeWidth'),
+			composeViewportWidth: getInt('composeViewportWidth'),
+			composeHeight: getInt('composeHeight'),
+			composeViewportHeight: getInt('composeViewportHeight'),
 		}
 	} catch (err) {
 		console.log('getting settings from localstorage', err)
@@ -224,7 +234,103 @@ let loginAddress: api.MessageAddress | null = null
 // the account has an address for.
 let domainAddressConfigs: {[domainASCII: string]: api.DomainAddressConfig} = {}
 
-const client = new api.Client()
+// Mailbox containing rejects.
+let rejectsMailbox: string = ''
+
+// Last known server version. For asking to reload.
+let lastServerVersion: string = ''
+
+const login = async (reason: string) => {
+	return new Promise<string>((resolve: (v: string) => void, _) => {
+		const origFocus = document.activeElement
+		let reasonElem: HTMLElement
+		let fieldset: HTMLFieldSetElement
+		let autosize: HTMLElement
+		let username: HTMLInputElement
+		let password: HTMLInputElement
+		const root = dom.div(
+			style({position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zindexes.login, animation: 'fadein .15s ease-in'}),
+			dom.div(
+				reasonElem=reason ? dom.div(style({marginBottom: '2ex', textAlign: 'center'}), reason) : dom.div(),
+				dom.div(
+					style({backgroundColor: 'white', borderRadius: '.25em', padding: '1em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto', marginBottom: '20vh'}),
+					dom.form(
+						async function submit(e: SubmitEvent) {
+							e.preventDefault()
+							e.stopPropagation()
+
+							reasonElem.remove()
+
+							try {
+								fieldset.disabled = true
+								const loginToken = await client.LoginPrep()
+								const token = await client.Login(loginToken, username.value, password.value)
+								try {
+									window.localStorage.setItem('webmailcsrftoken', token)
+								} catch (err) {
+									console.log('saving csrf token in localStorage', err)
+								}
+								root.remove()
+								if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
+									origFocus.focus()
+								}
+								resolve(token)
+							} catch (err) {
+								console.log('login error', err)
+								window.alert('Error: ' + errmsg(err))
+							} finally {
+								fieldset.disabled = false
+							}
+						},
+						fieldset=dom.fieldset(
+							dom.h1('Mail'),
+							dom.label(
+								style({display: 'block', marginBottom: '2ex'}),
+								dom.div('Email address', style({marginBottom: '.5ex'})),
+								autosize=dom.span(dom._class('autosize'),
+									username=dom.input(
+										attr.required(''),
+										attr.placeholder('jane@example.org'),
+										function change() { autosize.dataset.value = username.value },
+										function input() { autosize.dataset.value = username.value },
+									),
+								),
+							),
+							dom.label(
+								style({display: 'block', marginBottom: '2ex'}),
+								dom.div('Password', style({marginBottom: '.5ex'})),
+								password=dom.input(attr.type('password'), attr.required('')),
+							),
+							dom.div(
+								style({textAlign: 'center'}),
+								dom.submitbutton('Login'),
+							),
+						),
+					)
+				)
+			)
+		)
+		document.body.appendChild(root)
+		username.focus()
+	})
+}
+
+const localStorageGet = (k: string): string | null => {
+	try {
+		return window.localStorage.getItem(k)
+	} catch (err) {
+		return null
+	}
+}
+
+const localStorageRemove = (k: string) => {
+	try {
+		return window.localStorage.removeItem(k)
+	} catch (err) {
+	}
+}
+
+const client = new api.Client().withOptions({csrfHeader: 'x-mox-csrf', login: login}).withAuthToken(localStorageGet('webmailcsrftoken') || '')
 
 // Link returns a clickable link with rel="noopener noreferrer".
 const link = (href: string, anchorOpt?: string): HTMLElement => dom.a(attr.href(href), attr.rel('noopener noreferrer'), attr.target('_blank'), anchorOpt || href)
@@ -571,6 +677,8 @@ const newAddressComplete = (): any => {
 	let completeSearch: string
 	let completeFull: boolean
 
+	let aborter: {abort?: () => void} = {}
+
 	return async function keydown(e: KeyboardEvent) {
 		const target = e.target as HTMLInputElement
 		if (!datalist) {
@@ -597,12 +705,18 @@ const newAddressComplete = (): any => {
 		} else if (search === completeSearch) {
 			return
 		}
+		if (aborter.abort) {
+			aborter.abort()
+		}
+		aborter = {}
 		try {
-			[completeMatches, completeFull] = await withStatus('Autocompleting addresses', client.CompleteRecipient(search))
+			[completeMatches, completeFull] = await withStatus('Autocompleting addresses', client.withOptions({aborter: aborter}).CompleteRecipient(search))
 			completeSearch = search
 			dom._kids(datalist, (completeMatches || []).map(s => dom.option(s)))
 		} catch (err) {
 			log('autocomplete error', errmsg(err))
+		} finally {
+			aborter = {}
 		}
 	}
 }
@@ -709,10 +823,15 @@ const focusPlaceholder = (s: string): any[] => {
 	]
 }
 
-// Parse a location hash into search terms (if any), selected message id (if
-// any) and filters.
-// Optional message id at the end, with ",<num>".
-// Otherwise mailbox or 'search '-prefix search string: #Inbox or #Inbox,1 or "#search mb:Inbox" or "#search mb:Inbox,1"
+// Parse a location hash, with either mailbox or search terms, and optional
+// selected message id. The special "#compose " hash, used for handling
+// "mailto:"-links, must be handled before calling this function.
+//
+// Examples:
+// #Inbox
+// #Inbox,1
+// #search mb:Inbox
+// #search mb:Inbox,1
 const parseLocationHash = (mailboxlistView: MailboxlistView): [string | undefined, number, api.Filter, api.NotFilter] => {
 	let hash = decodeURIComponent((window.location.hash || '#').substring(1))
 	const m = hash.match(/,([0-9]+)$/)
@@ -792,7 +911,7 @@ const withStatus = async <T>(action: string, promise: Promise<T>, disablable?: D
 		if (disablable) {
 			disablable.disabled = false
 		}
-		if (origFocus && document.activeElement !== origFocus && origFocus instanceof HTMLElement) {
+		if (disablable && origFocus && document.activeElement !== origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
 			origFocus.focus()
 		}
 		if (id) {
@@ -801,6 +920,19 @@ const withStatus = async <T>(action: string, promise: Promise<T>, disablable?: D
 		if (elem) {
 			elem.remove()
 		}
+	}
+}
+
+const withDisabled = async <T>(elem: {disabled: boolean}, p: Promise<T>): Promise<T> => {
+	try {
+		elem.disabled = true
+		return await p
+	} catch (err) {
+		console.log({err})
+		window.alert('Error: ' + errmsg(err))
+		throw err
+	} finally {
+		elem.disabled = false
 	}
 }
 
@@ -933,6 +1065,69 @@ const popup = (...kids: ElemArg[]) => {
 	return close
 }
 
+// Show settings screen.
+const cmdSettings = async () => {
+	let fieldset: HTMLFieldSetElement
+	let signature: HTMLTextAreaElement
+	let quoting: HTMLSelectElement
+	let showAddressSecurity: HTMLInputElement
+
+	if (!accountSettings) {
+		window.alert('No account settings fetched yet.')
+	}
+
+	const remove = popup(
+		style({padding: '1em 1em 2em 1em', minWidth: '30em'}),
+		dom.h1('Settings'),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+				const accSet: api.Settings = {
+					ID: accountSettings.ID,
+					Signature: signature.value,
+					Quoting: quoting.value as api.Quoting,
+					ShowAddressSecurity: showAddressSecurity.checked,
+				}
+				await withDisabled(fieldset, client.SettingsSave(accSet))
+				accountSettings = accSet
+				remove()
+			},
+			fieldset=dom.fieldset(
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					dom.div('Signature'),
+					signature=dom.textarea(
+						new String(accountSettings.Signature),
+						style({width: '100%'}),
+						attr.rows(''+Math.max(3, 1+accountSettings.Signature.split('\n').length)),
+					),
+				),
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					dom.div('Reply above/below original'),
+					attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'),
+					quoting=dom.select(
+						dom.option(attr.value(''), 'Auto'),
+						dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []),
+						dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []),
+					),
+				),
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					showAddressSecurity=dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []),
+					' Show address security indications',
+					attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.'),
+				),
+				dom.br(),
+				dom.div(
+					dom.submitbutton('Save'),
+				),
+			),
+		),
+	)
+}
+
 // Show help popup, with shortcuts and basic explanation.
 const cmdHelp = async () => {
 	const remove = popup(
@@ -1001,12 +1196,13 @@ const cmdHelp = async () => {
 					dom.tr(dom.td(attr.colspan('2'), dom.h2('Compose', style({margin: '0'})))),
 					[
 						['ctrl Enter', 'send message'],
+						['ctrl shift Enter', 'send message and archive thread'],
 						['ctrl w', 'cancel message'],
 						['ctrl O', 'add To'],
 						['ctrl C', 'add Cc'],
 						['ctrl B', 'add Bcc'],
 						['ctrl Y', 'add Reply-To'],
-						['ctrl -', 'remove current address'],
+						['ctrl Backspace', 'remove current address if empty'],
 						['ctrl +', 'add address of same type'],
 					].map(t => dom.tr(dom.td(t[0]), dom.td(t[1]))),
 
@@ -1015,6 +1211,7 @@ const cmdHelp = async () => {
 						['r', 'reply or list reply'],
 						['R', 'reply all'],
 						['f', 'forward message'],
+						['e', 'edit draft'],
 						['v', 'view attachments'],
 						['t', 'view text version'],
 						['T', 'view HTML version'],
@@ -1058,7 +1255,37 @@ const cmdHelp = async () => {
 							cmdHelp()
 						})
 					),
-				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version '+moxversion+'. Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new'), '.'),
+				dom.div(
+					style({marginTop: '2ex'}),
+					'To start composing a message when opening a "mailto:" link, register this application with your browser/system. ',
+					dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
+						if (!window.navigator.registerProtocolHandler) {
+							window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.')
+							return
+						}
+						try {
+							window.navigator.registerProtocolHandler('mailto', '#compose %s')
+						} catch (err) {
+							window.alert('Error registering "mailto:" protocol handler: '+errmsg(err))
+						}
+					}),
+					' ',
+					dom.clickbutton('Unregister', attr.title('Not all browsers implement unregistering via JavaScript.'), function click() {
+						// Not supported on firefox at the time of writing, and the signature is not in the types.
+						if (!(window.navigator as any).unregisterProtocolHandler) {
+							window.alert('Unregistering a protocol handler ("mailto:") via JavaScript is not supported by your browser. See your browser settings to unregister.')
+							return
+						}
+						try {
+							(window.navigator as any).unregisterProtocolHandler('mailto', '#compose %s')
+						} catch (err) {
+							window.alert('Error unregistering "mailto:" protocol handler: '+errmsg(err))
+							return
+						}
+						window.alert('"mailto:" protocol handler unregistered.')
+					}),
+				),
+				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version ', moxversion, ', built with ', moxgoversion, '. Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new'), '.'),
 			),
 		),
 	)
@@ -1127,16 +1354,21 @@ type ComposeOptions = {
 	// Message is marked as replied/answered or forwarded after submitting, and
 	// In-Reply-To and References headers are added pointing to this message.
 	responseMessageID?: number
+	// Whether message is to a list, due to List-Id header.
+	isList?: boolean
+	editOffset?: number // For cursor, default at start.
+	draftMessageID?: number // For composing for existing draft message, to be removed when message is sent.
 }
 
 interface ComposeView {
 	root: HTMLElement
 	key: (k: string, e: KeyboardEvent) => Promise<void>
+	unsavedChanges: () => boolean
 }
 
 let composeView: ComposeView | null = null
 
-const compose = (opts: ComposeOptions) => {
+const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	log('compose', opts)
 
 	if (composeView) {
@@ -1173,12 +1405,125 @@ const compose = (opts: ComposeOptions) => {
 	let toViews: AddrView[] = [], replytoViews: AddrView[] = [], ccViews: AddrView[] = [], bccViews: AddrView[] = []
 	let forwardAttachmentViews: ForwardAttachmentView[] = []
 
+	// todo future: upload attachments with draft messages. would mean we let users remove them again too.
+
+	// We automatically save drafts 1m after a change. When closing window, we ask to
+	// save unsaved change to draft.
+	let draftMessageID = opts.draftMessageID || 0
+	let draftSaveTimer = 0
+	let draftSavePromise = Promise.resolve(0)
+	let draftLastText = opts.body
+
+	const draftCancelSave = () => {
+		if (draftSaveTimer) {
+			window.clearTimeout(draftSaveTimer)
+			draftSaveTimer = 0
+		}
+	}
+
+	const draftScheduleSave = () => {
+		if (draftSaveTimer || body.value === draftLastText) {
+			return
+		}
+		draftSaveTimer = window.setTimeout(async () => {
+			draftSaveTimer = 0
+			await withStatus('Saving draft', draftSave())
+			draftScheduleSave()
+		}, 60*1000)
+	}
+
+	const draftSave = async () => {
+		draftCancelSave()
+		let replyTo = ''
+		if (replytoViews && replytoViews.length === 1 && replytoViews[0].input.value) {
+			replyTo = replytoViews[0].input.value
+		}
+		const cm: api.ComposeMessage = {
+			From: customFrom ? customFrom.value : from.value,
+			To: toViews.map(v => v.input.value).filter(s => s),
+			Cc: ccViews.map(v => v.input.value).filter(s => s),
+			Bcc: bccViews.map(v => v.input.value).filter(s => s),
+			ReplyTo: replyTo,
+			Subject: subject.value,
+			TextBody: body.value,
+			ResponseMessageID: opts.responseMessageID || 0,
+			DraftMessageID: draftMessageID,
+		}
+		const mbdrafts = listMailboxes().find(mb => mb.Draft)
+		if (!mbdrafts) {
+			throw new Error('no designated drafts mailbox')
+		}
+		draftSavePromise = client.MessageCompose(cm, mbdrafts.ID)
+		draftMessageID = await draftSavePromise
+		draftLastText = cm.TextBody
+	}
+
+	// todo future: on visibilitychange with visibilityState "hidden", use navigator.sendBeacon to save latest modified draft message?
+
+	// When window is closed, ask user to cancel due to unsaved changes.
+	const unsavedChanges = () => opts.body !== body.value && (!draftMessageID || draftLastText !== body.value)
+
+	// In Firefox, ctrl-w doesn't seem interceptable when focus is on a button. It is
+	// when focus is on a textarea or not any specific UI element. So this isn't always
+	// triggered. But we still have the beforeunload handler that checks for
+	// unsavedChanges to protect the user in such cases.
 	const cmdCancel = async () => {
+		draftCancelSave()
+		await draftSavePromise
+		if (unsavedChanges()) {
+			const action = await new Promise<string>((resolve) => {
+				const remove = popup(
+					dom.p('Message has unsaved changes.'),
+					dom.br(),
+					dom.div(
+						dom.clickbutton('Save draft', function click() {
+							resolve('save')
+							remove()
+						}), ' ',
+						dom.clickbutton('Remove draft', function click() {
+							resolve('remove')
+							remove()
+						}), ' ',
+						dom.clickbutton('Cancel', function click() {
+							resolve('cancel')
+							remove()
+						}),
+					)
+				)
+			})
+			if (action === 'save') {
+				await withStatus('Saving draft', draftSave())
+			} else if (action === 'remove') {
+				if (draftMessageID) {
+					await withStatus('Removing draft', client.MessageDelete([draftMessageID]))
+				}
+			} else {
+				return
+			}
+		}
 		composeElem.remove()
 		composeView = null
 	}
 
-	const submit = async () => {
+	const cmdClose = async () => {
+		draftCancelSave()
+		await draftSavePromise
+		if (unsavedChanges()) {
+			await withStatus('Saving draft', draftSave())
+		}
+		composeElem.remove()
+		composeView = null
+	}
+	const cmdSave = async () => {
+		draftCancelSave()
+		await draftSavePromise
+		await withStatus('Saving draft', draftSave())
+	}
+
+	const submit = async (archive: boolean) => {
+		draftCancelSave()
+		await draftSavePromise
+
 		const files = await new Promise<api.File[]>((resolve, reject) => {
 			const l: api.File[] = []
 			if (attachments.files && attachments.files.length === 0) {
@@ -1221,13 +1566,20 @@ const compose = (opts: ComposeOptions) => {
 			IsForward: opts.isForward || false,
 			ResponseMessageID: opts.responseMessageID || 0,
 			RequireTLS: requiretls.value === '' ? null : requiretls.value === 'yes',
+			FutureRelease: scheduleTime.value ? new Date(scheduleTime.value) : null,
+			ArchiveThread: archive,
+			DraftMessageID: draftMessageID,
 		}
 		await client.MessageSubmit(message)
-		cmdCancel()
+		composeElem.remove()
+		composeView = null
 	}
 
 	const cmdSend = async () => {
-		await withStatus('Sending email', submit(), fieldset)
+		await withStatus('Sending email', submit(false), fieldset)
+	}
+	const cmdSendArchive = async () => {
+		await withStatus('Sending email and archive', submit(true), fieldset)
 	}
 
 	const cmdAddTo = async () => { newAddrView('', true, toViews, toBtn, toCell, toRow) }
@@ -1245,12 +1597,15 @@ const compose = (opts: ComposeOptions) => {
 
 	const shortcuts: {[key: string]: command} = {
 		'ctrl Enter': cmdSend,
+		'ctrl shift Enter': cmdSendArchive,
 		'ctrl w': cmdCancel,
 		'ctrl O': cmdAddTo,
 		'ctrl C': cmdAddCc,
 		'ctrl B': cmdAddBcc,
 		'ctrl Y': cmdReplyTo,
-		// ctrl - and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
+		'ctrl s': cmdSave,
+		'ctrl S': cmdClose,
+		// ctrl Backspace and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
 	}
 
 	const newAddrView = (addr: string, isRecipient: boolean, views: AddrView[], btn: HTMLButtonElement, cell: HTMLElement, row: HTMLElement, single?: boolean) => {
@@ -1265,6 +1620,9 @@ const compose = (opts: ComposeOptions) => {
 		let autosizeElem: HTMLElement, inputElem: HTMLInputElement, securityBar: HTMLElement
 
 		const fetchRecipientSecurity = () => {
+			if (!accountSettings?.ShowAddressSecurity) {
+				return
+			}
 			if (inputElem.value === rcptSecAddr) {
 				return
 			}
@@ -1281,13 +1639,13 @@ const compose = (opts: ComposeOptions) => {
 
 			const color = (v: api.SecurityResult) => {
 				if (v === api.SecurityResult.SecurityResultYes) {
-					return '#50c40f'
+					return underlineGreen
 				} else if (v === api.SecurityResult.SecurityResultNo) {
-					return '#e15d1c'
+					return underlineRed
 				} else if (v === api.SecurityResult.SecurityResultUnknown) {
 					return 'white'
 				}
-				return '#aaa'
+				return underlineGrey
 			}
 			const setBar = (c0: string, c1: string, c2: string, c3: string, c4: string) => {
 				const stops = [
@@ -1323,11 +1681,12 @@ const compose = (opts: ComposeOptions) => {
 				aborter.abort = undefined
 				v.recipientSecurity = rs
 				if (isRecipient) {
-					// If all recipients implement REQUIRETLS, we can enable it.
-					let reqtls = true
+					// If we are not replying to a message from a mailing list, and all recipients
+					// implement REQUIRETLS, we enable it.
+					let reqtls = opts.isList !== true
 					const walk = (l: AddrView[]) => {
 						for (const v of l) {
-							if (v.recipientSecurity?.RequireTLS !== api.SecurityResult.SecurityResultYes) {
+							if (v.recipientSecurity?.RequireTLS !== api.SecurityResult.SecurityResultYes || v.recipientSecurity?.MTASTS !== api.SecurityResult.SecurityResultYes && v.recipientSecurity?.DANE !== api.SecurityResult.SecurityResultYes) {
 								reqtls = false
 								break
 							}
@@ -1359,9 +1718,9 @@ const compose = (opts: ComposeOptions) => {
 					style({width: 'auto'}),
 					attr.value(addr),
 					newAddressComplete(),
-					attr.title(recipientSecurityTitle),
+					accountSettings?.ShowAddressSecurity ? attr.title(recipientSecurityTitle) : [],
 					function keydown(e: KeyboardEvent) {
-						if (e.key === '-' && e.ctrlKey) {
+						if (e.key === 'Backspace' && e.ctrlKey && inputElem.value === '') {
 							remove()
 						} else if (e.key === '=' && e.ctrlKey) {
 							newAddrView('', isRecipient, views, btn, cell, row, single)
@@ -1376,6 +1735,7 @@ const compose = (opts: ComposeOptions) => {
 						autosizeElem.dataset.value = inputElem.value
 					},
 					function change() {
+						autosizeElem.dataset.value = inputElem.value
 						fetchRecipientSecurity()
 					},
 				),
@@ -1469,7 +1829,7 @@ const compose = (opts: ComposeOptions) => {
 	let haveFrom = false
 	const fromOptions = accountAddresses.map(a => {
 		const selected = opts.from && opts.from.length === 1 && equalAddress(a, opts.from[0]) || loginAddress && equalAddress(a, loginAddress) && (!opts.from || envelopeIdentity(opts.from))
-		const o = dom.option(formatAddressFull(a), selected ? attr.selected('') : [])
+		const o = dom.option(formatAddress(a), selected ? attr.selected('') : [])
 		if (selected) {
 			haveFrom = true
 		}
@@ -1479,10 +1839,28 @@ const compose = (opts: ComposeOptions) => {
 		const a = addressSelf(opts.from[0])
 		if (a) {
 			const fromAddr: api.MessageAddress = {Name: a.Name, User: opts.from[0].User, Domain: a.Domain}
-			const o = dom.option(formatAddressFull(fromAddr), attr.selected(''))
+			const o = dom.option(formatAddress(fromAddr), attr.selected(''))
 			fromOptions.unshift(o)
 		}
 	}
+
+	let scheduleLink: HTMLElement
+	let scheduleElem: HTMLElement
+	let scheduleTime: HTMLInputElement
+	let scheduleWeekday: HTMLElement
+	const pad0 = (v: number) => v >= 10 ? ''+v : '0'+v
+	const localdate = (d: Date) => [d.getFullYear(), pad0(d.getMonth()+1), pad0(d.getDate())].join('-')
+	const localdatetime = (d: Date) => localdate(d) + 'T' + pad0(d.getHours()) + ':' + pad0(d.getMinutes()) + ':00'
+	const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+	const scheduleTimeChanged = () => {
+		console.log('datetime change', scheduleTime.value)
+		dom._kids(scheduleWeekday, weekdays[new Date(scheduleTime.value).getDay()])
+	}
+
+	let resizeLast: {x: number, y: number} | null = null
+	let resizeTimer: number = 0
+	const initWidth = window.innerWidth === settings.composeViewportWidth ? settings.composeWidth : 0
+	const initHeight = window.innerHeight === settings.composeViewportHeight ? settings.composeHeight : 0
 
 	const composeElem = dom.div(
 		style({
@@ -1497,9 +1875,46 @@ const compose = (opts: ComposeOptions) => {
 			minWidth: '40em',
 			maxWidth: '95vw',
 			borderRadius: '.25em',
+			display: 'flex',
+			flexDirection: 'column',
 		}),
+		initWidth ? style({width: initWidth+'px'}) : [],
+		initHeight ? style({height: initHeight+'px'}) : [],
+		dom.div(
+			style({position: 'absolute', marginTop: '-1em', marginLeft: '-1em', width: '1em', height: '1em', cursor: 'nw-resize'}),
+			function mousedown(e: MouseEvent) {
+				resizeLast = null
+				startDrag(e, (e: MouseEvent) => {
+					if (resizeLast) {
+						const bounds = composeElem.getBoundingClientRect()
+						const width = Math.round(bounds.width + resizeLast.x - e.clientX)
+						const height = Math.round(bounds.height + resizeLast.y - e.clientY)
+						composeElem.style.width = width+'px'
+						composeElem.style.height = height+'px'
+						body.removeAttribute('rows')
+						if (resizeTimer) {
+							window.clearTimeout(resizeTimer)
+						}
+						resizeTimer = window.setTimeout(() => {
+							settingsPut({...settings, composeWidth: width, composeHeight: height, composeViewportWidth: window.innerWidth, composeViewportHeight: window.innerHeight})
+						}, 1000)
+					}
+					resizeLast = {x: e.clientX, y: e.clientY}
+				})
+			},
+		),
 		dom.form(
+			style({
+				flexGrow: '1',
+				display: 'flex',
+				flexDirection: 'column',
+			}),
 			fieldset=dom.fieldset(
+				style({
+					flexGrow: '1',
+					display: 'flex',
+					flexDirection: 'column',
+				}),
 				dom.table(
 					style({width: '100%'}),
 					dom.tr(
@@ -1508,18 +1923,29 @@ const compose = (opts: ComposeOptions) => {
 							dom.span('From:'),
 						),
 						dom.td(
-							dom.clickbutton('Cancel', style({float: 'right', marginLeft: '1em', marginTop: '.15em'}), attr.title('Close window, discarding message.'), clickCmd(cmdCancel, shortcuts)),
-							from=dom.select(
-								attr.required(''),
-								style({width: 'auto'}),
-								fromOptions,
+							dom.div(
+								style({display: 'flex', gap: '1em'}),
+								dom.div(
+									from=dom.select(
+										attr.required(''),
+										style({width: 'auto'}),
+										fromOptions,
+									),
+									' ',
+									toBtn=dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ',
+									ccBtn=dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ',
+									bccBtn=dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ',
+									replyToBtn=dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ',
+									customFromBtn=dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)),
+								),
+								dom.div(
+									listMailboxes().find(mb => mb.Draft) ? [
+										dom.clickbutton('Save', attr.title('Save draft message.'), clickCmd(cmdSave, shortcuts)), ' ',
+										dom.clickbutton('Close', attr.title('Close window, saving draft message if body has changed or a draft was saved earlier.'), clickCmd(cmdClose, shortcuts)), ' ',
+									] : [],
+									dom.clickbutton('Cancel', attr.title('Close window, discarding (draft) message.'), clickCmd(cmdCancel, shortcuts)),
+								),
 							),
-							' ',
-							toBtn=dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ',
-							ccBtn=dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ',
-							bccBtn=dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ',
-							replyToBtn=dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ',
-							customFromBtn=dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts)),
 						),
 					),
 					toRow=dom.tr(
@@ -1557,15 +1983,24 @@ const compose = (opts: ComposeOptions) => {
 						),
 					),
 				),
-				body=dom.textarea(dom._class('mono'), attr.rows('15'), style({width: '100%'}),
+				body=dom.textarea(
+					dom._class('mono'),
+					style({
+						flexGrow: '1',
+						width: '100%',
+					}),
+					initHeight === 0 ? attr.rows('15') : [], // Drives default size, removed on compose window resize.
 					// Explicit string object so it doesn't get the highlight-unicode-block-changes
 					// treatment, which would cause characters to disappear.
 					new String(opts.body || ''),
-					opts.body && !opts.isForward && !opts.body.startsWith('\n\n') ? prop({selectionStart: opts.body.length, selectionEnd: opts.body.length}) : [],
+					prop({selectionStart: opts.editOffset || 0, selectionEnd: opts.editOffset || 0}),
 					function keyup(e: KeyboardEvent) {
 						if (e.key === 'Enter') {
 							checkAttachments()
 						}
+					},
+					!listMailboxes().find(mb => mb.Draft) ? [] : function input() {
+						draftScheduleSave()
 					},
 				),
 				!(opts.attachmentsMessageItem && opts.attachmentsMessageItem.Attachments && opts.attachmentsMessageItem.Attachments.length > 0) ? [] : dom.div(
@@ -1600,8 +2035,62 @@ const compose = (opts: ComposeOptions) => {
 					),
 				),
 				dom.div(
+					scheduleLink=dom.a(attr.href(''), 'Schedule', function click(e: MouseEvent) {
+						e.preventDefault()
+						scheduleTime.value = localdatetime(new Date())
+						scheduleTimeChanged()
+						scheduleLink.style.display = 'none'
+						scheduleElem.style.display = ''
+						scheduleTime.setAttribute('required', '')
+					}),
+					scheduleElem=dom.div(
+						style({display: 'none'}),
+						dom.clickbutton('Start of next day', function click(e: MouseEvent) {
+							e.preventDefault()
+							const d = new Date(scheduleTime.value)
+							const nextday = new Date(d.getTime() + 24*3600*1000)
+							scheduleTime.value = localdate(nextday) + 'T09:00:00'
+							scheduleTimeChanged()
+						}), ' ',
+						dom.clickbutton('+1 hour', function click(e: MouseEvent) {
+							e.preventDefault()
+							const d = new Date(scheduleTime.value)
+							scheduleTime.value = localdatetime(new Date(d.getTime() + 3600*1000))
+							scheduleTimeChanged()
+						}), ' ',
+						dom.clickbutton('+1 day', function click(e: MouseEvent) {
+							e.preventDefault()
+							const d = new Date(scheduleTime.value)
+							scheduleTime.value = localdatetime(new Date(d.getTime() + 24*3600*1000))
+							scheduleTimeChanged()
+						}), ' ',
+						dom.clickbutton('Now', function click(e: MouseEvent) {
+							e.preventDefault()
+							scheduleTime.value = localdatetime(new Date())
+							scheduleTimeChanged()
+						}), ' ',
+						dom.clickbutton('Cancel', function click(e: MouseEvent) {
+							e.preventDefault()
+							scheduleLink.style.display = ''
+							scheduleElem.style.display = 'none'
+							scheduleTime.removeAttribute('required')
+							scheduleTime.value = ''
+						}),
+						dom.div(
+							style({marginTop: '1ex'}),
+							scheduleTime=dom.input(attr.type('datetime-local'), function change() {
+								scheduleTimeChanged()
+							}),
+							' in local timezone ' + (Intl.DateTimeFormat().resolvedOptions().timeZone || '') + ', ',
+							scheduleWeekday=dom.span(),
+						),
+					),
+				),
+				dom.div(
 					style({margin: '3ex 0 1ex 0', display: 'block'}),
 					dom.submitbutton('Send'),
+					' ',
+					opts.responseMessageID && listMailboxes().find(mb => mb.Archive) ? dom.clickbutton('Send and archive thread', clickCmd(cmdSendArchive, shortcuts)) : [],
 				),
 			),
 			async function submit(e: SubmitEvent) {
@@ -1639,6 +2128,7 @@ const compose = (opts: ComposeOptions) => {
 	composeView = {
 		root: composeElem,
 		key: keyHandler(shortcuts),
+		unsavedChanges: unsavedChanges,
 	}
 	return composeView
 }
@@ -1715,8 +2205,12 @@ const movePopover = (e: MouseEvent, mailboxes: api.Mailbox[], msgs: api.Message[
 						mb.Name,
 						mb.ID === msgsMailboxID ? attr.disabled('') : [],
 						async function click() {
-							const msgIDs = msgs.filter(m => m.MailboxID !== mb.ID).map(m => m.ID)
+							const moveMsgs = msgs.filter(m => m.MailboxID !== mb.ID)
+							const msgIDs = moveMsgs.map(m => m.ID)
 							await withStatus('Moving to mailbox', client.MessageMove(msgIDs, mb.ID))
+							if (moveMsgs.length === 1) {
+								await moveAskRuleset(moveMsgs[0].ID, moveMsgs[0].MailboxID, mb, mailboxes)
+							}
 							remove()
 						}
 					),
@@ -1725,6 +2219,95 @@ const movePopover = (e: MouseEvent, mailboxes: api.Mailbox[], msgs: api.Message[
 		)
 	)
 }
+
+// We've moved a single message. If the source or destination mailbox is not a
+// "special-use" mailbox (other than inbox), and there isn't a rule yet or there is
+// one we may want to delete, and we haven't asked about adding/removing this
+// ruleset before, ask the user to add/remove a ruleset for moving. If the message
+// has a list-id header, we ask to create a ruleset treating it as a mailing list
+// message matching on future list-id header and spf/dkim verified domain,
+// otherwise we make a rule based on message "from" address.
+const moveAskRuleset = async (msgID: number, mbSrcID: number, mbDst: api.Mailbox, mailboxes: api.Mailbox[]) => {
+	const mbSrc = mailboxes.find(mb => mb.ID === mbSrcID)
+	if (!mbSrc || isSpecialUse(mbDst) || isSpecialUse(mbSrc)) {
+		return
+	}
+
+	const [listID, msgFrom, isRemove, rcptTo, ruleset] = await withStatus('Checking rulesets', client.RulesetSuggestMove(msgID, mbSrc.ID, mbDst.ID))
+	if (!ruleset) {
+		return
+	}
+
+	const what = listID ? ['list with id "', listID, '"'] : ['address "', msgFrom, '"']
+
+	if (isRemove) {
+		const remove = popup(
+			dom.h1('Remove rule?'),
+			dom.p(
+				style({maxWidth: '30em'}),
+				'Would you like to remove the server-side rule that automatically delivers messages from ', what, ' to mailbox "', mbDst.Name, '"?',
+			),
+			dom.br(),
+			dom.div(
+				dom.clickbutton('Yes, remove rule', async function click() {
+					await withStatus('Remove ruleset', client.RulesetRemove(rcptTo, ruleset))
+					remove()
+				}), ' ',
+				dom.clickbutton('Not now', async function click() {
+					remove()
+				}),
+			),
+			dom.br(),
+			dom.div(
+			style({marginBottom: '1ex'}),
+				dom.clickbutton("No, and don't ask again for ", what, async function click() {
+					await withStatus('Store ruleset response', client.RulesetMessageNever(rcptTo, listID, msgFrom, true))
+					remove()
+				}),
+			),
+			dom.div(
+				dom.clickbutton("No, and don't ask again when moving messages out of \"", mbSrc.Name, '"', async function click() {
+					await withStatus('Store ruleset response', client.RulesetMailboxNever(mbSrc.ID, false))
+					remove()
+				}),
+			),
+		)
+		return
+	}
+	const remove = popup(
+		dom.h1('Add rule?'),
+		dom.p(
+			style({maxWidth: '30em'}),
+			'Would you like to create a server-side ruleset that automatically delivers future messages from ', what, ' to mailbox "', mbDst.Name, '"?',
+		),
+		dom.br(),
+		dom.div(
+			dom.clickbutton('Yes, add rule', async function click() {
+				await withStatus('Add ruleset', client.RulesetAdd(rcptTo, ruleset))
+				remove()
+			}), ' ',
+			dom.clickbutton('Not now', async function click() {
+				remove()
+			}),
+		),
+		dom.br(),
+		dom.div(
+			style({marginBottom: '1ex'}),
+			dom.clickbutton("No, and don't ask again for ", what, async function click() {
+				await withStatus('Store ruleset response', client.RulesetMessageNever(rcptTo, listID, msgFrom, false))
+				remove()
+			}),
+		),
+		dom.div(
+			dom.clickbutton("No, and don't ask again when moving messages to \"", mbDst.Name, '"', async function click() {
+				await withStatus('Store ruleset response', client.RulesetMailboxNever(mbDst.ID, true))
+				remove()
+			}),
+		),
+	)
+}
+
+const isSpecialUse = (mb: api.Mailbox) => mb.Archive || mb.Draft || mb.Junk || mb.Sent || mb.Trash
 
 // MsgitemView is a message-line in the list of messages. Selecting it loads and displays the message, a MsgView.
 interface MsgitemView {
@@ -1744,7 +2327,7 @@ interface MsgitemView {
 	// Sub messages in thread. Can be further descendants, when an intermediate message
 	// is missing.
 	kids: MsgitemView[]
-	// Whether this thread root is collapsed. If so, the root is visible, all descedants
+	// Whether this thread root is collapsed. If so, the root is visible, all descendants
 	// are not. Value is only valid if this is a thread root.
 	collapsed: boolean
 
@@ -1830,6 +2413,8 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 			if (t < 60) {
 				s = '<1min'
 				nextSecs = 60-t
+				// Prevent showing '-<1min' when browser and server have relatively small time drift of max 1 minute.
+				negative = ''
 			}
 
 			dom._kids(r, negative+s)
@@ -1974,6 +2559,68 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 			}
 		}
 
+		const correspondentAddrs = (miv: MsgitemView): [api.MessageAddress[], api.MessageAddress[]] => {
+			let fromAddrs = miv.messageitem.Envelope.From || []
+			let toAddrs: api.MessageAddress[] = []
+			if (listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID)?.Sent) {
+				toAddrs = [...(miv.messageitem.Envelope.To || []), ...(miv.messageitem.Envelope.CC || []), ...(miv.messageitem.Envelope.BCC || [])]
+			}
+			return [fromAddrs, toAddrs]
+		}
+
+		// Correspondents for a message, possibly a collapsed thread root.
+		const correspondents = () => {
+			let fromAddrs: api.MessageAddress[] = []
+			let toAddrs: api.MessageAddress[] = []
+			let junk = m.Junk || !!listMailboxes().find(mb => mb.ID === m.MailboxID && (mb.Name === rejectsMailbox || mb.Junk))
+			if (msgitemView.isCollapsedThreadRoot()) {
+				// Gather both all correspondents in thread.
+				;[msgitemView, ...(msgitemView.descendants())].forEach(miv => {
+					const [fa, ta] = correspondentAddrs(miv)
+					fromAddrs = [...fromAddrs, ...fa]
+					toAddrs = [...toAddrs, ...ta]
+					junk = junk || miv.messageitem.Message.Junk
+				})
+			} else {
+				[fromAddrs, toAddrs] = correspondentAddrs(msgitemView)
+			}
+
+			const seen = new Set<string>()
+			let fa: api.MessageAddress[] = []
+			let ta: api.MessageAddress[] = []
+			for (const a of fromAddrs) {
+				const k = a.User+'@'+a.Domain.ASCII
+				if (!seen.has(k)) {
+					seen.add(k)
+					fa.push(a)
+				}
+			}
+			for (const a of toAddrs) {
+				const k = a.User+'@'+a.Domain.ASCII
+				if (!seen.has(k)) {
+					seen.add(k)
+					ta.push(a)
+				}
+			}
+			let title = fa.map(a => formatAddress(a)).join(', ')
+			if (ta.length > 0) {
+				if (title) {
+					title += ',\n'
+				}
+				title += 'addressed: '+ta.map(a => formatAddress(a)).join(', ')
+			}
+			return [
+				attr.title(title),
+				join(
+					[
+						...fa.map(a => formatAddressShort(a, junk)),
+						...ta.map(a => dom.span(style({fontStyle: 'italic'}), formatAddressShort(a, junk))),
+					],
+					() => ', '
+				),
+			]
+		}
+
 		// When rerendering, we remember active & focus states. So we don't have to make
 		// the caller also call redraw on MsglistView.
 		const active = msgitemView.root && msgitemView.root.classList.contains('active')
@@ -2036,11 +2683,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 			),
 			dom.div(dom._class('msgitemcell', 'msgitemfrom'),
 				dom.div(style({display: 'flex', justifyContent: 'space-between'}),
-					dom.div(dom._class('msgitemfromtext', 'silenttitle'),
-						// todo: for collapsed messages, show all participants in thread?
-						attr.title((mi.Envelope.From || []).map(a => formatAddressFull(a)).join(', ')),
-						join((mi.Envelope.From || []).map(a => formatAddressShort(a)), () => ', ')
-					),
+					dom.div(dom._class('msgitemfromtext', 'silenttitle'), correspondents()),
 					identityHeader,
 				),
 				// Thread messages are connected by a vertical bar. The first and last message are
@@ -2164,8 +2807,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	const mi = miv.messageitem
 	const m = mi.Message
 
-	const formatEmailAddress = (a: api.MessageAddress) => a.User + '@' + a.Domain.ASCII
-	const fromAddress = mi.Envelope.From && mi.Envelope.From.length === 1 ? formatEmailAddress(mi.Envelope.From[0]) : ''
+	const fromAddress = mi.Envelope.From && mi.Envelope.From.length === 1 ? formatEmail(mi.Envelope.From[0]) : ''
 
 	// Some operations below, including those that can be reached through shortcuts,
 	// need a parsed message. So we keep a promise around for having that parsed
@@ -2181,7 +2823,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		parsedMessageReject = reject
 	})
 
-	const react = async (to: api.MessageAddress[] | null, forward: boolean, all: boolean) => {
+	const react = async (to: api.MessageAddress[], cc: api.MessageAddress[], bcc: api.MessageAddress[], forward: boolean) => {
 		const pm = await parsedMessagePromise
 		let body = ''
 		const sel = window.getSelection()
@@ -2193,21 +2835,25 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			body = pm.Texts[0]
 		}
 		body = body.replace(/\r/g, '').replace(/\n\n\n\n*/g, '\n\n').trim()
+		let editOffset = 0
 		if (forward) {
 			body = '\n\n---- Forwarded Message ----\n\n'+body
 		} else {
 			body = body.split('\n').map(line => '> ' + line).join('\n')
-			if (haveSel) {
+			let sig = accountSettings?.Signature || ''
+			if (!accountSettings?.Quoting && haveSel || accountSettings?.Quoting === api.Quoting.Bottom) {
 				body += '\n\n'
+				editOffset = body.length
+				body += '\n\n' + sig
 			} else {
 				let onWroteLine = ''
 				if (mi.Envelope.Date && mi.Envelope.From && mi.Envelope.From.length === 1) {
 					const from = mi.Envelope.From[0]
-					const name = from.Name || formatEmailAddress(from)
+					const name = from.Name || formatEmail(from)
 					const datetime = mi.Envelope.Date.toLocaleDateString(undefined, {weekday: "short", year: "numeric", month: "short", day: "numeric"}) + ' at ' + mi.Envelope.Date.toLocaleTimeString()
 					onWroteLine = 'On ' + datetime + ', ' + name + ' wrote:\n'
 				}
-				body = '\n\n' + onWroteLine + body
+				body = '\n\n' + sig + '\n' + onWroteLine + body
 			}
 		}
 		const subjectPrefix = forward ? 'Fwd:' : 'Re:'
@@ -2215,31 +2861,56 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		subject = (RegExp('^'+subjectPrefix, 'i').test(subject) ? '' : subjectPrefix+' ') + subject
 		const opts: ComposeOptions = {
 			from: mi.Envelope.To || undefined,
-			to: (to || []).map(a => formatAddress(a)),
-			cc: [],
-			bcc: [],
+			to: to.map(a => formatAddress(a)),
+			cc: cc.map(a => formatAddress(a)),
+			bcc: bcc.map(a => formatAddress(a)),
 			subject: subject,
 			body: body,
 			isForward: forward,
 			attachmentsMessageItem: forward ? mi : undefined,
 			responseMessageID: m.ID,
+			isList: m.IsMailingList,
+			editOffset: editOffset,
 		}
-		if (all) {
-			opts.to = (to || []).concat((mi.Envelope.To || []).filter(a => !envelopeIdentity([a]))).map(a => formatAddress(a))
-			opts.cc = (mi.Envelope.CC || []).map(a => formatAddress(a))
-			opts.bcc = (mi.Envelope.BCC || []).map(a => formatAddress(a))
-		}
-		compose(opts)
+		compose(opts, listMailboxes)
 	}
 
-	const reply = async (all: boolean, toOpt?: api.MessageAddress[]) => {
-		await react(toOpt || ((mi.Envelope.ReplyTo || []).length > 0 ? mi.Envelope.ReplyTo : mi.Envelope.From) || null, false, all)
+	const reply = async (all: boolean) => {
+		const contains = (l: api.MessageAddress[], a: api.MessageAddress): boolean => !!l.find(e => equalAddress(e, a))
+
+		let to: api.MessageAddress[] = []
+		let cc: api.MessageAddress[] = []
+		let bcc: api.MessageAddress[] = []
+		if ((mi.Envelope.From || []).length === 1 && envelopeIdentity(mi.Envelope.From || [])) {
+			// Replying to our own message, copy the original cc/bcc.
+			to = mi.Envelope.To || []
+		} else {
+			if (mi.Envelope.ReplyTo && mi.Envelope.ReplyTo.length > 0) {
+				to = mi.Envelope.ReplyTo
+			} else {
+				to = mi.Envelope.From || []
+			}
+			if (all) {
+				for (const a of (mi.Envelope.To || [])) {
+					if (!contains(to, a) && !envelopeIdentity([a])) {
+						to.push(a)
+					}
+				}
+			}
+		}
+		if (all) {
+			cc = mi.Envelope.CC || []
+			bcc = mi.Envelope.BCC || []
+		}
+		cc = cc.filter((a, i) => !envelopeIdentity([a]) && !contains(to, a) && !contains(cc.slice(0, i), a))
+		bcc = bcc.filter(a => !envelopeIdentity([a]))
+		await react(to, cc, bcc, false)
 	}
-	const cmdForward = async () => { react([], true, false) }
+	const cmdForward = async () => { react([], [], [], true) }
 	const cmdReplyList = async () => {
 		const pm = await parsedMessagePromise
 		if (pm.ListReplyAddress) {
-			await reply(false, [pm.ListReplyAddress])
+			await react([pm.ListReplyAddress], [], [], false)
 		}
 	}
 	const cmdReply = async () => { await reply(false) }
@@ -2260,6 +2931,32 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			view(attachments[0])
 		}
 	}
+	const cmdComposeDraft = async () => {
+		// Compose based on message. Most information is available, we just need to find
+		// the ID of the stored message this is a reply/forward to, based in In-Reply-To
+		// header.
+		const env = mi.Envelope
+		let refMsgID = 0
+		if (env.InReplyTo) {
+			refMsgID = await withStatus('Looking up referenced message', client.MessageFindMessageID(env.InReplyTo))
+		}
+
+		const pm = await parsedMessagePromise
+		const isForward = !!env.Subject.match(/^\[?fwd?:/i) || !!env.Subject.match(/\(fwd\)[ \t]*$/i)
+		const opts: ComposeOptions = {
+			from: (env.From || []),
+			to: (env.To || []).map(a => formatAddress(a)),
+			cc: (env.CC || []).map(a => formatAddress(a)),
+			bcc: (env.BCC || []).map(a => formatAddress(a)),
+			replyto: env.ReplyTo && env.ReplyTo.length > 0 ? formatAddress(env.ReplyTo[0]) : '',
+			subject: env.Subject,
+			isForward: isForward,
+			body: pm.Texts && pm.Texts.length > 0 ? pm.Texts[0].replace(/\r/g, '') : '',
+			responseMessageID: refMsgID,
+			draftMessageID: m.ID,
+		}
+		compose(opts, listMailboxes)
+	}
 
 	const cmdToggleHeaders = async () => {
 		settingsPut({...settings, showAllHeaders: !settings.showAllHeaders})
@@ -2276,6 +2973,13 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 	}
 
+	const fromAddressSettingsSave = async (mode: api.ViewMode) => {
+		const froms = mi.Envelope.From || []
+		if (froms.length === 1) {
+			await withStatus('Saving view mode settings for address', client.FromAddressSettingsSave({FromAddress: froms[0].User + "@" + (froms[0].Domain.Unicode || froms[0].Domain.ASCII), ViewMode: mode}))
+		}
+	}
+
 	const cmdShowText = async () => {
 		if (!textbtn) {
 			return
@@ -2283,6 +2987,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		loadText(await parsedMessagePromise)
 		settingsPut({...settings, showHTML: false})
 		activeBtn(textbtn)
+		await fromAddressSettingsSave(api.ViewMode.ModeText)
 	}
 	const cmdShowHTML = async () => {
 		if (!htmlbtn || !htmlextbtn) {
@@ -2290,6 +2995,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 		loadHTML()
 		activeBtn(htmlbtn)
+		await fromAddressSettingsSave(api.ViewMode.ModeHTML)
 	}
 	const cmdShowHTMLExternal = async () => {
 		if (!htmlbtn || !htmlextbtn) {
@@ -2297,6 +3003,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 		loadHTMLexternal()
 		activeBtn(htmlextbtn)
+		await fromAddressSettingsSave(api.ViewMode.ModeHTMLExt)
 	}
 	const cmdShowHTMLCycle = async () => {
 		if (urlType === 'html') {
@@ -2329,6 +3036,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	const cmdEnd = async () => { msgscrollElem.scrollTo({top: msgscrollElem.scrollHeight}) }
 
 	const shortcuts: {[key: string]: command} = {
+		e: cmdComposeDraft,
 		I: cmdShowInternals,
 		o: cmdOpenNewTab,
 		O: cmdOpenRaw,
@@ -2364,7 +3072,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	let msgheaderdetailsElem: HTMLElement | null = null // When full headers are visible, or some headers are requested through settings.
 
 	const msgmetaElem = dom.div(
-		style({backgroundColor: '#f8f8f8', borderBottom: '1px solid #ccc', maxHeight: '90%', overflowY: 'auto'}),
+		style({backgroundColor: '#f8f8f8', borderBottom: '5px solid white', maxHeight: '90%', overflowY: 'auto'}),
 		attr.role('region'), attr.arialabel('Buttons and headers for message'),
 		msgbuttonElem=dom.div(),
 		dom.div(
@@ -2373,6 +3081,9 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			msgattachmentElem=dom.div(),
 			msgmodeElem=dom.div(),
 		),
+		// Explicit gray line with white border below that separates headers from body, to
+		// prevent HTML messages from faking UI elements.
+		dom.div(style({height: '2px', backgroundColor: '#ccc'})),
 	)
 
 	const msgscrollElem = dom.div(dom._class('pad', 'yscrollauto'),
@@ -2389,8 +3100,9 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	const loadButtons = (pm: api.ParsedMessage | null) => {
 		dom._kids(msgbuttonElem,
 			dom.div(dom._class('pad'),
+				!listMailboxes().find(mb => mb.Draft) ? [] : dom.clickbutton('Edit', attr.title('Continue editing this draft message.'), clickCmd(cmdComposeDraft, shortcuts)), ' ',
 				(!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ',
-				(pm && pm.ListReplyAddress && formatEmailAddress(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ',
+				(pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ',
 				(mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
 					dom.clickbutton('Reply all', attr.title('Compose a reply to all participants of this message.'), clickCmd(cmdReplyAll, shortcuts)), ' ',
 				dom.clickbutton('Forward', attr.title('Compose a forwarding message, optionally including attachments.'), clickCmd(cmdForward, shortcuts)), ' ',
@@ -2429,7 +3141,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	}
 	loadButtons(parsedMessageOpt || null)
 
-	loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword)
+	loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword, false)
 
 	const loadHeaderDetails = (pm: api.ParsedMessage) => {
 		if (msgheaderdetailsElem) {
@@ -2453,18 +3165,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		msgattachmentElem.parentNode!.insertBefore(msgheaderdetailsElem, msgattachmentElem)
 	}
 
-	// From https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Image_types
-	const imageTypes = [
-		'image/avif',
-		'image/webp',
-		'image/gif',
-		'image/png',
-		'image/jpeg',
-		'image/apng',
-		'image/svg+xml',
-	]
-	const isText = (a: api.Attachment) => a.Part.MediaType.toLowerCase() === 'text'
-	const isImage = (a: api.Attachment) => imageTypes.includes((a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase())
+	const isText = (a: api.Attachment) => ['text', 'message'].includes(a.Part.MediaType.toLowerCase())
 	const isPDF = (a: api.Attachment) => (a.Part.MediaType+'/'+a.Part.MediaSubType).toLowerCase() === 'application/pdf'
 	const isViewable = (a: api.Attachment) => isText(a) || isImage(a) || isPDF(a)
 	const attachments: api.Attachment[] = (mi.Attachments || [])
@@ -2603,31 +3304,40 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		attachmentView = {key: keyHandler(attachShortcuts)}
 	}
 
-	dom._kids(msgattachmentElem,
-		(mi.Attachments && mi.Attachments.length === 0) ? [] : dom.div(
-			style({borderTop: '1px solid #ccc'}),
-			dom.div(dom._class('pad'),
-				'Attachments: ',
-				(mi.Attachments || []).map(a => {
-					const name = a.Filename || '(unnamed)'
-					const viewable = isViewable(a)
-					const size = formatSize(a.Part.DecodedSize)
-					const eye = '👁'
-					const dl = '⤓' // \u2913, actually ⭳ \u2b73 would be better, but in fewer fonts (at least macos)
-					const dlurl = 'msg/'+m.ID+'/download/'+[0].concat(a.Path || []).join('.')
-					const viewbtn = dom.clickbutton(eye, viewable ? ' '+name : style({padding: '0px 0.25em'}), attr.title('View this file. Size: '+size), style({lineHeight: '1.5'}), function click() {
-						view(a)
-					})
-					const dlbtn = dom.a(dom._class('button'), attr.download(''), attr.href(dlurl), dl, viewable ? style({padding: '0px 0.25em'}) : ' '+name, attr.title('Download this file. Size: '+size), style({lineHeight: '1.5'}))
-					if (viewable) {
-						return [dom.span(dom._class('btngroup'), viewbtn, dlbtn), ' ']
-					}
-					return [dom.span(dom._class('btngroup'), dlbtn, viewbtn), ' ']
-				}),
-				dom.a('Download all as zip', attr.download(''), style({color: 'inherit'}), attr.href('msg/'+m.ID+'/attachments.zip')),
-			),
+	var filesAll = false
+	const renderAttachments = () => {
+		const l = mi.Attachments || []
+		dom._kids(msgattachmentElem,
+			(l && l.length === 0) ? [] : dom.div(
+				style({borderTop: '1px solid #ccc'}),
+				dom.div(dom._class('pad'),
+					'Attachments: ',
+					l.slice(0, filesAll ? l.length : 4).map(a => {
+						const name = a.Filename || '(unnamed)'
+						const viewable = isViewable(a)
+						const size = formatSize(a.Part.DecodedSize)
+						const eye = '👁'
+						const dl = '⤓' // \u2913, actually ⭳ \u2b73 would be better, but in fewer fonts (at least macos)
+						const dlurl = 'msg/'+m.ID+'/download/'+[0].concat(a.Path || []).join('.')
+						const viewbtn = dom.clickbutton(eye, viewable ? ' '+name : style({padding: '0px 0.25em'}), attr.title('View this file. Size: '+size), style({lineHeight: '1.5'}), function click() {
+							view(a)
+						})
+						const dlbtn = dom.a(dom._class('button'), attr.download(''), attr.href(dlurl), dl, viewable ? style({padding: '0px 0.25em'}) : ' '+name, attr.title('Download this file. Size: '+size), style({lineHeight: '1.5'}))
+						if (viewable) {
+							return [dom.span(dom._class('btngroup'), urlType === 'text' && isImage(a) ? style({opacity: '.6'}) : [], viewbtn, dlbtn), ' ']
+						}
+						return [dom.span(dom._class('btngroup'), dlbtn, viewbtn), ' ']
+					}),
+					filesAll || l.length < 6 ? [] : dom.clickbutton('More...', function click() {
+						filesAll = true
+						renderAttachments()
+					}), ' ',
+					dom.a('Download all as zip', attr.download(''), style({color: 'inherit'}), attr.href('msg/'+m.ID+'/attachments.zip')),
+				),
+			)
 		)
-	)
+	}
+	renderAttachments()
 
 	const root = dom.div(style({position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column'}))
 	dom._kids(root, msgmetaElem, msgcontentElem)
@@ -2637,13 +3347,27 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		// text to use when writing a reply. We still set url so the text content can be
 		// opened in a separate tab, even though it will look differently.
 		urlType = 'text'
-		const elem = dom.div(dom._class('mono'),
+		const elem = dom.div(dom._class('mono', 'textmulti'),
 			style({whiteSpace: 'pre-wrap'}),
-			join((pm.Texts || []).map(t => renderText(t.replace(/\r\n/g, '\n'))), () => dom.hr(style({margin: '2ex 0'}))),
+			(pm.Texts || []).map(t => renderText(t.replace(/\r\n/g, '\n'))),
+			(mi.Attachments || []).filter(f => isImage(f)).map(f => {
+				const pathStr = [0].concat(f.Path || []).join('.')
+				return dom.div(
+					dom.div(
+						style({flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100% - 50px)'}),
+						dom.img(
+							attr.src('msg/'+m.ID+'/view/'+pathStr),
+							attr.title(f.Filename),
+							style({backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)'})
+						),
+					)
+				)
+			}),
 		)
 		dom._kids(msgcontentElem)
 		dom._kids(msgscrollElem, elem)
 		dom._kids(msgcontentElem, msgscrollElem)
+		renderAttachments() // Rerender opaciy on inline images.
 	}
 	const loadHTML = (): void => {
 		urlType = 'html'
@@ -2655,6 +3379,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				style({border: '0', position: 'absolute', width: '100%', height: '100%', backgroundColor: 'white'}),
 			)
 		)
+		renderAttachments() // Rerender opaciy on inline images.
 	}
 	const loadHTMLexternal = (): void => {
 		urlType = 'htmlexternal'
@@ -2666,6 +3391,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				style({border: '0', position: 'absolute', width: '100%', height: '100%', backgroundColor: 'white'}),
 			)
 		)
+		renderAttachments() // Rerender opaciy on inline images.
 	}
 
 	const loadMoreHeaders = (pm: api.ParsedMessage) => {
@@ -2698,7 +3424,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		updateKeywords: async (modseq: number, keywords: string[]) => {
 			mi.Message.ModSeq = modseq
 			mi.Message.Keywords = keywords
-			loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword)
+			loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword, false)
 			loadMoreHeaders(await parsedMessagePromise)
 		},
 	}
@@ -2741,24 +3467,26 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			loadText(pm)
 			dom._kids(msgmodeElem)
 		} else {
-			const text = haveText && !settings.showHTML
+			const text = haveText && (pm.ViewMode == api.ViewMode.ModeText || pm.ViewMode == api.ViewMode.ModeDefault && !settings.showHTML)
 			dom._kids(msgmodeElem,
 				dom.div(dom._class('pad'),
 					style({borderTop: '1px solid #ccc'}),
 					!haveText ? dom.span('HTML-only message', attr.title(htmlNote), style({backgroundColor: '#ffca91', padding: '0 .15em', marginRight: '.25em'})) : [],
 					dom.span(dom._class('btngroup'),
 						haveText ? textbtn=dom.clickbutton(text ? dom._class('active') : [], 'Text', clickCmd(cmdShowText, shortcuts)) : [],
-						htmlbtn=dom.clickbutton(text ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
+						htmlbtn=dom.clickbutton(text || pm.ViewMode != api.ViewMode.ModeHTML ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
 							// Shortcuts has a function that cycles through html and htmlexternal.
 							showShortcut('T')
 							await cmdShowHTML()
 						}),
-						htmlextbtn=dom.clickbutton('HTML with external resources', attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)),
+						htmlextbtn=dom.clickbutton(text || pm.ViewMode != api.ViewMode.ModeHTMLExt ? [] : dom._class('active'), 'HTML with external resources', attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)),
 					),
 				)
 			)
 			if (text) {
 				loadText(pm)
+			} else if (pm.ViewMode == api.ViewMode.ModeHTMLExt) {
+				loadHTMLexternal()
 			} else {
 				loadHTML()
 			}
@@ -2775,7 +3503,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 		if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk) {
 			window.setTimeout(async () => {
-				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.ID === msglistView.activeMessageID()) {
+				const mailboxIsReject = () => !!listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID && mb.Name === rejectsMailbox)
+				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxIsReject()) {
 					await withStatus('Marking current message as not junk', client.FlagsAdd([miv.messageitem.Message.ID], ['$notjunk']))
 				}
 			}, 5*1000)
@@ -2900,7 +3629,7 @@ const newMsglistView = (msgElem: HTMLElement, listMailboxes: listMailboxes, setL
 		}
 	}
 	const cmdDelete = async () => {
-		if (!confirm('Are you sure you want to permanently delete?')) {
+		if (!window.confirm('Are you sure you want to permanently delete?')) {
 			return
 		}
 		await withStatus('Permanently deleting messages', client.MessageDelete(mlv.selected().map(miv => miv.messageitem.Message.ID)))
@@ -4231,6 +4960,36 @@ interface MailboxView {
 	setKeywords: (keywords: string[]) => void
 }
 
+const popoverExport = (reference: HTMLElement, mailboxName: string) => {
+	const removeExport=popover(reference, {},
+		dom.h1('Export ', mailboxName || 'all mailboxes'),
+		dom.form(
+			function submit() {
+				// If we would remove the popup immediately, the form would be deleted too and never submitted.
+				window.setTimeout(() => removeExport(), 100)
+			},
+			attr.target('_blank'), attr.method('POST'), attr.action('export'),
+			dom.input(attr.type('hidden'), attr.name('csrf'), attr.value(localStorageGet('webmailcsrftoken') || '')),
+			dom.input(attr.type('hidden'), attr.name('mailbox'), attr.value(mailboxName)),
+
+			dom.div(style({display: 'flex', flexDirection: 'column', gap: '.5ex'}),
+				dom.div(
+					dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('maildir'), attr.checked('')), ' Maildir'), ' ',
+					dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('mbox')), ' Mbox'),
+				),
+				dom.div(
+					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('tar')), ' Tar'), ' ',
+					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('tgz'), attr.checked('')), ' Tgz'), ' ',
+					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('zip')), ' Zip'), ' ',
+					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('none')), ' None'),
+				),
+				dom.div(dom.label(dom.input(attr.type('checkbox'), attr.checked(''), attr.name('recursive'), attr.value('on')), ' Recursive')),
+				dom.div(style({marginTop: '1ex'}), dom.submitbutton('Export')),
+			),
+		),
+	)
+}
+
 const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, otherMailbox: otherMailbox): MailboxView => {
 	const plusbox = '⊞'
 	const minusbox = '⊟'
@@ -4340,6 +5099,12 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 						)
 					}),
 				),
+				dom.div(
+					dom.clickbutton('Export', function click() {
+						popoverExport(actionBtn, mbv.mailbox.Name)
+						remove()
+					}),
+				),
 			),
 		)
 	}
@@ -4408,6 +5173,11 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 				.filter(mbMsgID => mailboxMsgIDs.length === 1 || !sentMailboxID || mbMsgID[0] !== sentMailboxID || !otherMailbox(sentMailboxID))
 				.map(mbMsgID => mbMsgID[1])
 			await withStatus('Moving to '+xmb.Name, client.MessageMove(msgIDs, xmb.ID))
+			if (msgIDs.length === 1) {
+				const msgID = msgIDs[0]
+				const mbSrcID = mailboxMsgIDs.find(mbMsgID => mbMsgID[1] === msgID)![0]
+				await moveAskRuleset(msgID, mbSrcID, xmb, mailboxlistView.mailboxes())
+			}
 		},
 		dom.div(dom._class('mailbox'),
 			style({display: 'flex', justifyContent: 'space-between'}),
@@ -4622,27 +5392,52 @@ const newMailboxlistView = (msglistView: MsglistView, requestNewView: requestNew
 			dom.div(
 				dom.h1('Mailboxes', style({display: 'inline', fontSize: 'inherit'})),
 				' ',
-				dom.clickbutton('+', attr.arialabel('Create new mailbox.'), attr.title('Create new mailbox.'), style({padding: '0 .25em'}), function click(e: MouseEvent) {
-					let fieldset: HTMLFieldSetElement, name: HTMLInputElement
 
-					const remove = popover(e.target! as HTMLElement, {},
-						dom.form(
-							async function submit(e: SubmitEvent) {
-								e.preventDefault()
-								await withStatus('Creating mailbox', client.MailboxCreate(name.value), fieldset)
-								remove()
-							},
-							fieldset=dom.fieldset(
-								dom.label(
-									'Name ',
-									name=dom.input(attr.required('yes'), focusPlaceholder('Lists/Go/Nuts')),
+				dom.clickbutton(
+					'...',
+					attr.arialabel('Mailboxes actions'),
+					attr.title('Actions on mailboxes like creating a new mailbox or exporting all email.'),
+					function click(e: MouseEvent) {
+						e.stopPropagation()
+
+						const remove = popover(e.target! as HTMLElement, {transparent: true},
+							dom.div(style({display: 'flex', flexDirection: 'column', gap: '.5ex'}),
+								dom.div(
+									dom.clickbutton('Create mailbox', attr.arialabel('Create new mailbox.'), attr.title('Create new mailbox.'), style({padding: '0 .25em'}), function click(e: MouseEvent) {
+										let fieldset: HTMLFieldSetElement
+										let name: HTMLInputElement
+										const ref = e.target! as HTMLElement
+										const removeCreate = popover(ref, {},
+											dom.form(
+												async function submit(e: SubmitEvent) {
+													e.preventDefault()
+													await withStatus('Creating mailbox', client.MailboxCreate(name.value), fieldset)
+													removeCreate()
+												},
+												fieldset=dom.fieldset(
+													dom.label(
+														'Name ',
+														name=dom.input(attr.required('yes'), focusPlaceholder('Lists/Go/Nuts')),
+													),
+													' ',
+													dom.submitbutton('Create'),
+												),
+											),
+										)
+										remove()
+									}),
 								),
-								' ',
-								dom.submitbutton('Create'),
-							),
-						),
-					)
-				}),
+								dom.div(
+									dom.clickbutton('Export', function click(e: MouseEvent) {
+										const ref = e.target! as HTMLElement
+										popoverExport(ref, '')
+										remove()
+									}),
+								),
+							)
+						)
+					},
+				),
 			),
 			mailboxesElem,
 		),
@@ -5256,6 +6051,33 @@ const newSearchView = (searchbarElem: HTMLInputElement, mailboxlistView: Mailbox
 	return searchView
 }
 
+// parse the "mailto:..." part (already decoded) of a "#compose mailto:..." url hash.
+const parseComposeMailto = (mailto: string): ComposeOptions => {
+	const u = new URL(mailto)
+
+	const addresses = (s: string) => s.split(',').filter(s => !!s)
+	const opts: ComposeOptions = {}
+	opts.to = addresses(u.pathname).map(s => decodeURIComponent(s))
+	for (const [xk, v] of new URLSearchParams(u.search)) {
+		const k = xk.toLowerCase()
+		if (k === 'to') {
+			opts.to = [...opts.to, ...addresses(v)]
+		} else if (k === 'cc') {
+			opts.cc = [...(opts.cc || []), ...addresses(v)]
+		} else if (k === 'bcc') {
+			opts.bcc = [...(opts.bcc || []), ...addresses(v)]
+		} else if (k === 'subject') {
+			// q/b-word encoding is allowed, we let the server decode when we start composoing,
+			// only if needed. ../rfc/6068:267
+			opts.subject = v
+		} else if (k === 'body') {
+			opts.body = v
+		}
+		// todo: we ignore other headers for now. we should handle in-reply-to and references at some point. but we don't allow any custom headers at the time of writing.
+	}
+	return opts
+}
+
 // Functions we pass to various views, to access functionality encompassing all views.
 type requestNewView = (clearMsgID: boolean, filterOpt?: api.Filter, notFilterOpt?: api.NotFilter) => Promise<void>
 type updatePageTitle = () => void
@@ -5268,6 +6090,8 @@ type listMailboxes = () => api.Mailbox[]
 const init = async () => {
 	let connectionElem: HTMLElement // SSE connection status/error. Empty when connected.
 	let layoutElem: HTMLSelectElement // Select dropdown for layout.
+	let accountElem: HTMLElement
+	let loginAddressElem: HTMLElement
 
 	let msglistscrollElem: HTMLElement
 	let queryactivityElem: HTMLElement // We show ... when a query is active and data is forthcoming.
@@ -5294,7 +6118,7 @@ const init = async () => {
 
 	const updatePageTitle = () => {
 		const mb = mailboxlistView && mailboxlistView.activeMailbox()
-		const addr = loginAddress ? loginAddress.User+'@'+(loginAddress.Domain.Unicode || loginAddress.Domain.ASCII) : ''
+		const addr = loginAddress ? loginAddress.User+'@'+formatDomain(loginAddress.Domain) : ''
 		if (!mb) {
 			document.title = [addr, 'Mox Webmail'].join(' - ')
 		} else {
@@ -5702,7 +6526,14 @@ const init = async () => {
 		searchView.updateForm()
 	}
 
-	const cmdCompose = async () => { compose({}) }
+	const cmdCompose = async () => {
+		let body = ''
+		let sig = accountSettings?.Signature || ''
+		if (sig) {
+			body += '\n\n' + sig
+		}
+		compose({body: body, editOffset: 0}, listMailboxes)
+	}
 	const cmdOpenInbox = async () => {
 		const mb = mailboxlistView.findMailboxByName('Inbox')
 		if (mb) {
@@ -5726,6 +6557,7 @@ const init = async () => {
 		'ctrl ?': cmdTooltip,
 		c: cmdCompose,
 		'ctrl m': cmdFocusMsg,
+		'ctrl !': cmdSettings,
 	}
 
 	const webmailroot = dom.div(
@@ -5833,7 +6665,22 @@ const init = async () => {
 					' ',
 					dom.clickbutton('Help', attr.title('Show popup with basic usage information and a keyboard shortcuts.'), clickCmd(cmdHelp, shortcuts)),
 					' ',
-					link('https://github.com/mjl-/mox', 'mox'),
+					dom.clickbutton('Settings', attr.title('Change settings for composing messages.'), clickCmd(cmdSettings, shortcuts)),
+					' ',
+					accountElem=dom.span(),
+					' ',
+					loginAddressElem=dom.span(),
+					' ',
+					dom.clickbutton('Logout', attr.title('Logout, invalidating this session.'), async function click(e: MouseEvent) {
+						await withStatus('Logging out', client.Logout(), e.target! as HTMLButtonElement)
+						localStorageRemove('webmailcsrftoken')
+						if (eventSource) {
+							eventSource.close()
+							eventSource = null
+						}
+						// Reload so all state is cleared from memory.
+						window.location.reload()
+					}),
 				),
 			),
 		),
@@ -5888,7 +6735,6 @@ const init = async () => {
 
 		// Prevent many regular key presses from being processed, some possibly unintended.
 		if ((e.target instanceof window.HTMLInputElement || e.target instanceof window.HTMLTextAreaElement || e.target instanceof window.HTMLSelectElement) && !e.ctrlKey && !e.altKey && !e.metaKey) {
-			// log('skipping key without modifiers on input/textarea')
 			return
 		}
 		let l = []
@@ -5900,6 +6746,11 @@ const init = async () => {
 		}
 		if (e.metaKey) {
 			l.push('meta')
+		}
+		// Assume regular keys generate a 1 character e.key, and others are special for
+		// which we may want to treat shift specially too.
+		if (e.key.length > 1 && e.shiftKey) {
+			l.push('shift')
 		}
 		l.push(e.key)
 		const k = l.join(' ')
@@ -6066,7 +6917,34 @@ const init = async () => {
 		checkMsglistWidth()
 	})
 
-	window.addEventListener('hashchange', async () => {
+	window.addEventListener('hashchange', async (e: HashChangeEvent) => {
+		const hash = decodeURIComponent(window.location.hash)
+		if (hash.startsWith('#compose ')) {
+			try {
+				const opts = parseComposeMailto(hash.substring('#compose '.length))
+
+				// Restore previous hash.
+				if (e.oldURL) {
+					const ou = new URL(e.oldURL)
+					window.location.hash = ou.hash
+				} else {
+					window.location.hash = ''
+				}
+
+				(async () => {
+					// Resolve Q/B-word mime encoding for subject. ../rfc/6068:267 ../rfc/2047:180
+					if (opts.subject && opts.subject.includes('=?')) {
+						opts.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(opts.subject))
+					}
+					compose(opts, listMailboxes)
+				})()
+			} catch (err) {
+				window.alert('Error parsing compose mailto URL: '+errmsg(err))
+				window.location.hash = ''
+			}
+			return
+		}
+
 		const [search, msgid, f, notf] = parseLocationHash(mailboxlistView)
 
 		requestMsgID = msgid
@@ -6088,12 +6966,16 @@ const init = async () => {
 
 	// Don't show disconnection just before user navigates away.
 	let leaving = false
-	window.addEventListener('beforeunload', () => {
-		leaving = true
-		if (eventSource) {
-			eventSource.close()
-			eventSource = null
-			sseID = 0
+	window.addEventListener('beforeunload', (e: BeforeUnloadEvent) => {
+		if (composeView && composeView.unsavedChanges()) {
+			e.preventDefault()
+		} else {
+			leaving = true
+			if (eventSource) {
+				eventSource.close()
+				eventSource = null
+				sseID = 0
+			}
 		}
 	})
 
@@ -6130,6 +7012,10 @@ const init = async () => {
 
 	const capitalizeFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
+	// Set to compose options when we were opened with a mailto URL. We open the
+	// compose window after we received the "start" message with our addresses.
+	let openComposeOptions: ComposeOptions | undefined
+
 	const connect = async (isreconnect: boolean) => {
 		connectionElem.classList.toggle('loading', true)
 		dom._kids(connectionElem)
@@ -6148,6 +7034,18 @@ const init = async () => {
 			dom._kids(statusElem, (capitalizeFirst((err as any).message || 'Error fetching connection token'))+', not automatically retrying. ')
 			showNotConnected()
 			return
+		}
+
+		const h = decodeURIComponent(window.location.hash)
+		if (h.startsWith('#compose ')) {
+			try {
+				// The compose window is opened when we get the "start" event, which gives us our
+				// configuration.
+				openComposeOptions = parseComposeMailto(h.substring('#compose '.length))
+			} catch (err) {
+				window.alert('Error parsing mailto URL: '+errmsg(err))
+			}
+			window.location.hash = ''
 		}
 
 		let [searchQuery, msgid, f, notf] = parseLocationHash(mailboxlistView)
@@ -6225,7 +7123,7 @@ const init = async () => {
 				window.clearTimeout(eventID)
 				eventID = 0
 			}
-			document.title = ['(not connected)', loginAddress ? (loginAddress.User+'@'+(loginAddress.Domain.Unicode || loginAddress.Domain.ASCII)) : '', 'Mox Webmail'].filter(s => s).join(' - ')
+			document.title = ['(not connected)', loginAddress ? (loginAddress.User+'@'+formatDomain(loginAddress.Domain)) : '', 'Mox Webmail'].filter(s => s).join(' - ')
 			dom._kids(connectionElem)
 			if (noreconnect) {
 				dom._kids(statusElem, capitalizeFirst(errmsg)+', not automatically retrying. ')
@@ -6257,19 +7155,31 @@ const init = async () => {
 		}
 
 		eventSource.addEventListener('start', (e: MessageEvent) => {
-			const start = checkParse(() => api.parser.EventStart(JSON.parse(e.data)))
+			const data = JSON.parse(e.data)
+			if (lastServerVersion && data.Version !== lastServerVersion) {
+				if (window.confirm('Server has been updated to a new version. Reload?')) {
+					window.location.reload()
+					return
+				}
+			}
+			lastServerVersion = data.Version
+
+			const start = checkParse(() => api.parser.EventStart(data))
 			log('event start', start)
 
+			accountSettings = start.Settings
 			connecting = false
 			sseID = start.SSEID
 			loginAddress = start.LoginAddress
-			const loginAddr = formatEmailASCII(loginAddress)
+			dom._kids(accountElem, start.AccountPath ? dom.a(attr.href(start.AccountPath), 'Account') : [])
+			const loginAddr = formatEmail(loginAddress)
+			dom._kids(loginAddressElem, loginAddr)
 			accountAddresses = start.Addresses || []
 			accountAddresses.sort((a, b) => {
-				if (formatEmailASCII(a) === loginAddr) {
+				if (formatEmail(a) === loginAddr) {
 					return -1
 				}
-				if (formatEmailASCII(b) === loginAddr) {
+				if (formatEmail(b) === loginAddr) {
 					return 1
 				}
 				if (a.Domain.ASCII !== b.Domain.ASCII) {
@@ -6278,8 +7188,21 @@ const init = async () => {
 				return a.User < b.User ? -1 : 1
 			})
 			domainAddressConfigs = start.DomainAddressConfigs || {}
+			rejectsMailbox = start.RejectsMailbox
 
 			clearList()
+
+			// If we were opened through a mailto: link, it's time to open the compose window.
+			if (openComposeOptions) {
+				(async () => {
+					// Resolve Q/B-word mime encoding for subject. ../rfc/6068:267 ../rfc/2047:180
+					if (openComposeOptions.subject && openComposeOptions.subject.includes('=?')) {
+						openComposeOptions.subject = await withStatus('Decoding MIME words for subject', client.DecodeMIMEWords(openComposeOptions.subject))
+					}
+					compose(openComposeOptions, listMailboxes)
+					openComposeOptions = undefined
+				})()
+			}
 
 			let mailboxName = start.MailboxName
 			let mb = (start.Mailboxes || []).find(mb => mb.Name === start.MailboxName)

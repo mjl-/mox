@@ -2,23 +2,57 @@
 Command mox is a modern, secure, full-featured, open source mail server for
 low-maintenance self-hosted email.
 
-# Commands
+Mox is started with the "serve" subcommand, but mox also has many other
+subcommands.
+
+Many of those commands talk to a running mox instance, through the ctl file in
+the data directory. Specify the configuration file (that holds the path to the
+data directory) through the -config flag or MOXCONF environment variable.
+
+Commands that don't talk to a running mox instance are often for
+testing/debugging email functionality. For example for parsing an email message,
+or looking up SPF/DKIM/DMARC records.
+
+Below is the usage information as printed by the command when started without
+any parameters. Followed by the help and usage information for each command.
+
+# Usage
 
 	mox [-config config/mox.conf] [-pedantic] ...
 	mox serve
-	mox quickstart [-existing-webserver] [-hostname host] user@domain [user | uid]
+	mox quickstart [-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]
 	mox stop
 	mox setaccountpassword account
 	mox setadminpassword
 	mox loglevels [level [pkg]]
-	mox queue list
-	mox queue kick [-id id] [-todomain domain] [-recipient address] [-transport transport]
-	mox queue drop [-id id] [-todomain domain] [-recipient address]
+	mox queue holdrules list
+	mox queue holdrules add [ruleflags]
+	mox queue holdrules remove ruleid
+	mox queue list [filtersortflags]
+	mox queue hold [filterflags]
+	mox queue unhold [filterflags]
+	mox queue schedule [filterflags] [-now] duration
+	mox queue transport [filterflags] transport
+	mox queue requiretls [filterflags] {yes | no | default}
+	mox queue fail [filterflags]
+	mox queue drop [filterflags]
 	mox queue dump id
+	mox queue retired list [filtersortflags]
+	mox queue retired print id
+	mox queue suppress list [-account account]
+	mox queue suppress add account address
+	mox queue suppress remove account address
+	mox queue suppress lookup [-account account] address
+	mox queue webhook list [filtersortflags]
+	mox queue webhook schedule [filterflags] duration
+	mox queue webhook cancel [filterflags]
+	mox queue webhook print id
+	mox queue webhook retired list [filtersortflags]
+	mox queue webhook retired print id
 	mox import maildir accountname mailboxname maildir
 	mox import mbox accountname mailboxname mbox
-	mox export maildir dst-dir account-path [mailbox]
-	mox export mbox dst-dir account-path [mailbox]
+	mox export maildir [-single] dst-dir account-path [mailbox]
+	mox export mbox [-single] dst-dir account-path [mailbox]
 	mox localserve
 	mox help [command ...]
 	mox backup dest-dir
@@ -34,10 +68,17 @@ low-maintenance self-hosted email.
 	mox config address rm address
 	mox config domain add domain account [localpart]
 	mox config domain rm domain
+	mox config alias list domain
+	mox config alias print alias
+	mox config alias add alias@domain rcpt1@domain ...
+	mox config alias update alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]
+	mox config alias rm alias@domain
+	mox config alias addaddr alias@domain rcpt1@domain ...
+	mox config alias rmaddr alias@domain rcpt1@domain ...
 	mox config describe-sendmail >/etc/moxsubmit.conf
 	mox config printservice >mox.service
 	mox config ensureacmehostprivatekeys
-	mox example [name]
+	mox config example [name]
 	mox checkupdate
 	mox cid cid
 	mox clientconfig domain
@@ -66,6 +107,8 @@ low-maintenance self-hosted email.
 	mox tlsrpt lookup domain
 	mox tlsrpt parsereportmsg message ...
 	mox version
+	mox webapi [method [baseurl-with-credentials]
+	mox example [name]
 	mox bumpuidvalidity account [mailbox]
 	mox reassignuids account [mailboxid]
 	mox fixuidmeta account
@@ -75,10 +118,6 @@ low-maintenance self-hosted email.
 	mox recalculatemailboxcounts account
 	mox message parse message.eml
 	mox reassignthreads [account]
-
-Many commands talk to a running mox instance, through the ctl file in the data
-directory. Specify the configuration file (that holds the path to the data
-directory) through the -config flag or MOXCONF environment variable.
 
 # mox serve
 
@@ -125,14 +164,16 @@ domains with HTTP/HTTPS, including with automatic TLS with ACME, is easily
 configured through both configuration files and admin web interface, and can act
 as a reverse proxy (and static file server for that matter), so you can forward
 traffic to your existing backend applications. Look for "WebHandlers:" in the
-output of "mox config describe-domains" and see the output of "mox example
-webhandlers".
+output of "mox config describe-domains" and see the output of
+"mox config example webhandlers".
 
-	usage: mox quickstart [-existing-webserver] [-hostname host] user@domain [user | uid]
+	usage: mox quickstart [-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]
 	  -existing-webserver
 	    	use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.
 	  -hostname string
 	    	hostname mox will run on, by default the hostname of the machine quickstart runs on; if specified, the IPs for the hostname are configured for the public listener
+	  -skipdial
+	    	skip check for outgoing smtp (port 25) connectivity
 
 # mox stop
 
@@ -185,37 +226,245 @@ Valid labels: error, info, debug, trace, traceauth, tracedata.
 
 	usage: mox loglevels [level [pkg]]
 
+# mox queue holdrules list
+
+List hold rules for the delivery queue.
+
+Messages submitted to the queue that match a hold rule will be marked as on hold
+and not scheduled for delivery.
+
+	usage: mox queue holdrules list
+
+# mox queue holdrules add
+
+Add hold rule for the delivery queue.
+
+Add a hold rule to mark matching newly submitted messages as on hold. Set the
+matching rules with the flags. Don't specify any flags to match all submitted
+messages.
+
+	usage: mox queue holdrules add [ruleflags]
+	  -account string
+	    	account submitting the message
+	  -recipientdom string
+	    	recipient domain
+	  -senderdom string
+	    	sender domain
+
+# mox queue holdrules remove
+
+Remove hold rule for the delivery queue.
+
+Remove a hold rule by its id.
+
+	usage: mox queue holdrules remove ruleid
+
 # mox queue list
 
-List messages in the delivery queue.
+List matching messages in the delivery queue.
 
-This prints the message with its ID, last and next delivery attempts, last
-error.
+Prints the message with its ID, last and next delivery attempts, last error.
 
-	usage: mox queue list
+	usage: mox queue list [filtersortflags]
+	  -account string
+	    	account that queued the message
+	  -asc
+	    	sort ascending instead of descending (default)
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -n int
+	    	number of messages to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -sort value
+	    	field to sort by, "nextattempt" (default) or "queued"
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
 
-# mox queue kick
+# mox queue hold
 
-Schedule matching messages in the queue for immediate delivery.
+Mark matching messages on hold.
 
-Messages deliveries are normally attempted with exponential backoff. The first
-retry after 7.5 minutes, and doubling each time. Kicking messages sets their
-next scheduled attempt to now, it can cause delivery to fail earlier than
-without rescheduling.
+Messages that are on hold are not delivered until marked as off hold again, or
+otherwise handled by the admin.
 
-With the -transport flag, future delivery attempts are done using the specified
-transport. Transports can be configured in mox.conf, e.g. to submit to a remote
-queue over SMTP.
+	usage: mox queue hold [filterflags]
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -n int
+	    	number of messages to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
 
-	usage: mox queue kick [-id id] [-todomain domain] [-recipient address] [-transport transport]
-	  -id int
-	    	id of message in queue
-	  -recipient string
-	    	recipient email address
-	  -todomain string
-	    	destination domain of messages
-	  -transport string
-	    	transport to use for the next delivery
+# mox queue unhold
+
+Mark matching messages off hold.
+
+Once off hold, messages can be delivered according to their current next
+delivery attempt. See the "queue schedule" command.
+
+	usage: mox queue unhold [filterflags]
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -n int
+	    	number of messages to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
+
+# mox queue schedule
+
+Change next delivery attempt for matching messages.
+
+The next delivery attempt is adjusted by the duration parameter. If the -now
+flag is set, the new delivery attempt is set to the duration added to the
+current time, instead of added to the current scheduled time.
+
+Schedule immediate delivery with "mox queue schedule -now 0".
+
+	usage: mox queue schedule [filterflags] [-now] duration
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -n int
+	    	number of messages to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -now
+	    	schedule for duration relative to current time instead of relative to current next delivery attempt for messages
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
+
+# mox queue transport
+
+Set transport for matching messages.
+
+By default, the routing rules determine how a message is delivered. The default
+and common case is direct delivery with SMTP. Messages can get a previously
+configured transport assigned to use for delivery, e.g. using submission to
+another mail server or with connections over a SOCKS proxy.
+
+	usage: mox queue transport [filterflags] transport
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -n int
+	    	number of messages to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
+
+# mox queue requiretls
+
+Set TLS requirements for delivery of matching messages.
+
+Value "yes" is handled as if the RequireTLS extension was specified during
+submission.
+
+Value "no" is handled as if the message has a header "TLS-Required: No". This
+header is not added by the queue. If messages without this header are relayed
+through other mail servers they will apply their own default TLS policy.
+
+Value "default" is the default behaviour, currently for unverified opportunistic
+TLS.
+
+	usage: mox queue requiretls [filterflags] {yes | no | default}
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -n int
+	    	number of messages to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
+
+# mox queue fail
+
+Fail delivery of matching messages, delivering DSNs.
+
+Failing a message is handled similar to how delivery is given up after all
+delivery attempts failed. The DSN (delivery status notification) message
+contains a line saying the message was canceled by the admin.
+
+	usage: mox queue fail [filterflags]
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -n int
+	    	number of messages to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
 
 # mox queue drop
 
@@ -224,13 +473,25 @@ Remove matching messages from the queue.
 Dangerous operation, this completely removes the message. If you want to store
 the message, use "queue dump" before removing.
 
-	usage: mox queue drop [-id id] [-todomain domain] [-recipient address]
-	  -id int
-	    	id of message in queue
-	  -recipient string
-	    	recipient email address
-	  -todomain string
-	    	destination domain of messages
+	usage: mox queue drop [filterflags]
+	  -account string
+	    	account that queued the message
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -hold value
+	    	true or false, whether to match only messages that are (not) on hold
+	  -ids value
+	    	comma-separated list of message IDs
+	  -n int
+	    	number of messages to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
 
 # mox queue dump
 
@@ -239,6 +500,180 @@ Dump a message from the queue.
 The message is printed to stdout and is in standard internet mail format.
 
 	usage: mox queue dump id
+
+# mox queue retired list
+
+List matching messages in the retired queue.
+
+Prints messages with their ID and results.
+
+	usage: mox queue retired list [filtersortflags]
+	  -account string
+	    	account that queued the message
+	  -asc
+	    	sort ascending instead of descending (default)
+	  -from string
+	    	from address of message, use "@example.com" to match all messages for a domain
+	  -ids value
+	    	comma-separated list of retired message IDs
+	  -lastactivity string
+	    	filter by time of last activity relative to now, value must start with "<" (before now) or ">" (after now)
+	  -n int
+	    	number of messages to return
+	  -result value
+	    	"success" or "failure" as result of delivery
+	  -sort value
+	    	field to sort by, "lastactivity" (default) or "queued"
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+	  -to string
+	    	recipient address of message, use "@example.com" to match all messages for a domain
+	  -transport value
+	    	transport to use for messages, empty string sets the default behaviour
+
+# mox queue retired print
+
+Print a message from the retired queue.
+
+Prints a JSON representation of the information from the retired queue.
+
+	usage: mox queue retired print id
+
+# mox queue suppress list
+
+Print addresses in suppression list.
+
+	usage: mox queue suppress list [-account account]
+	  -account string
+	    	only show suppression list for this account
+
+# mox queue suppress add
+
+Add address to suppression list for account.
+
+	usage: mox queue suppress add account address
+
+# mox queue suppress remove
+
+Remove address from suppression list for account.
+
+	usage: mox queue suppress remove account address
+
+# mox queue suppress lookup
+
+Check if address is present in suppression list, for any or specific account.
+
+	usage: mox queue suppress lookup [-account account] address
+	  -account string
+	    	only check address in specified account
+
+# mox queue webhook list
+
+List matching webhooks in the queue.
+
+Prints list of webhooks, their IDs and basic information.
+
+	usage: mox queue webhook list [filtersortflags]
+	  -account string
+	    	account that queued the message/webhook
+	  -asc
+	    	sort ascending instead of descending (default)
+	  -event value
+	    	event this webhook is about: incoming, delivered, suppressed, delayed, failed, relayed, expanded, canceled, unrecognized
+	  -ids value
+	    	comma-separated list of webhook IDs
+	  -n int
+	    	number of webhooks to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -sort value
+	    	field to sort by, "nextattempt" (default) or "queued"
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+
+# mox queue webhook schedule
+
+Change next delivery attempt for matching webhooks.
+
+The next delivery attempt is adjusted by the duration parameter. If the -now
+flag is set, the new delivery attempt is set to the duration added to the
+current time, instead of added to the current scheduled time.
+
+Schedule immediate delivery with "mox queue schedule -now 0".
+
+	usage: mox queue webhook schedule [filterflags] duration
+	  -account string
+	    	account that queued the message/webhook
+	  -event value
+	    	event this webhook is about: incoming, delivered, suppressed, delayed, failed, relayed, expanded, canceled, unrecognized
+	  -ids value
+	    	comma-separated list of webhook IDs
+	  -n int
+	    	number of webhooks to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -now
+	    	schedule for duration relative to current time instead of relative to current next delivery attempt for webhooks
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+
+# mox queue webhook cancel
+
+Fail delivery of matching webhooks.
+
+	usage: mox queue webhook cancel [filterflags]
+	  -account string
+	    	account that queued the message/webhook
+	  -event value
+	    	event this webhook is about: incoming, delivered, suppressed, delayed, failed, relayed, expanded, canceled, unrecognized
+	  -ids value
+	    	comma-separated list of webhook IDs
+	  -n int
+	    	number of webhooks to return
+	  -nextattempt string
+	    	filter by time of next delivery attempt relative to now, value must start with "<" (before now) or ">" (after now)
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+
+# mox queue webhook print
+
+Print details of a webhook from the queue.
+
+The webhook is printed to stdout as JSON.
+
+	usage: mox queue webhook print id
+
+# mox queue webhook retired list
+
+List matching webhooks in the retired queue.
+
+Prints list of retired webhooks, their IDs and basic information.
+
+	usage: mox queue webhook retired list [filtersortflags]
+	  -account string
+	    	account that queued the message/webhook
+	  -asc
+	    	sort ascending instead of descending (default)
+	  -event value
+	    	event this webhook is about: incoming, delivered, suppressed, delayed, failed, relayed, expanded, canceled, unrecognized
+	  -ids value
+	    	comma-separated list of retired webhook IDs
+	  -lastactivity string
+	    	filter by time of last activity relative to now, value must start with "<" (before now) or ">" (after now)
+	  -n int
+	    	number of webhooks to return
+	  -sort value
+	    	field to sort by, "lastactivity" (default) or "queued"
+	  -submitted string
+	    	filter by time of submission relative to now, value must start with "<" (before now) or ">" (after now)
+
+# mox queue webhook retired print
+
+Print details of a webhook from the retired queue.
+
+The retired webhook is printed to stdout as JSON.
+
+	usage: mox queue webhook retired print id
 
 # mox import maildir
 
@@ -296,9 +731,11 @@ Export one or all mailboxes from an account in maildir format.
 Export bypasses a running mox instance. It opens the account mailbox/message
 database file directly. This may block if a running mox instance also has the
 database open, e.g. for IMAP connections. To export from a running instance, use
-the accounts web page.
+the accounts web page or webmail.
 
-	usage: mox export maildir dst-dir account-path [mailbox]
+	usage: mox export maildir [-single] dst-dir account-path [mailbox]
+	  -single
+	    	export single mailbox, without any children. disabled if mailbox isn't specified.
 
 # mox export mbox
 
@@ -309,13 +746,15 @@ Using mbox is not recommended. Maildir is a better format.
 Export bypasses a running mox instance. It opens the account mailbox/message
 database file directly. This may block if a running mox instance also has the
 database open, e.g. for IMAP connections. To export from a running instance, use
-the accounts web page.
+the accounts web page or webmail.
 
 For mbox export, "mboxrd" is used where message lines starting with the magic
 "From " string are escaped by prepending a >. All ">*From " are escaped,
 otherwise reconstructing the original could lose a ">".
 
-	usage: mox export mbox dst-dir account-path [mailbox]
+	usage: mox export mbox [-single] dst-dir account-path [mailbox]
+	  -single
+	    	export single mailbox, without any children. disabled if mailbox isn't specified.
 
 # mox localserve
 
@@ -332,8 +771,12 @@ automatically initialized with configuration files, an account with email
 address mox@localhost and password moxmoxmox, and a newly generated self-signed
 TLS certificate.
 
-All incoming email to any address is accepted (if checks pass), unless the
-recipient localpart ends with:
+Incoming messages are delivered as normal, falling back to accepting and
+delivering to the mox account for unknown addresses.
+Submitted messages are added to the queue, which delivers by ignoring the
+destination servers, always connecting to itself instead.
+
+Recipient addresses with the following localpart suffixes are handled specially:
 
 - "temperror": fail with a temporary error code
 - "permerror": fail with a permanent error code
@@ -346,6 +789,8 @@ during those commands instead of during "data".
 	usage: mox localserve
 	  -dir string
 	    	configuration storage directory (default "$userconfigdir/mox-localserve")
+	  -initonly
+	    	write configuration files and exit
 	  -ip string
 	    	serve on this ip instead of default 127.0.0.1 and ::1. only used when writing configuration, at first launch.
 
@@ -530,6 +975,54 @@ rejected.
 
 	usage: mox config domain rm domain
 
+# mox config alias list
+
+List aliases for domain.
+
+	usage: mox config alias list domain
+
+# mox config alias print
+
+Print settings and members of alias.
+
+	usage: mox config alias print alias
+
+# mox config alias add
+
+Add new alias with one or more addresses.
+
+	usage: mox config alias add alias@domain rcpt1@domain ...
+
+# mox config alias update
+
+Update alias configuration.
+
+	usage: mox config alias update alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]
+	  -allowmsgfrom string
+	    	whether alias address can be used in message from header
+	  -listmembers string
+	    	whether list members can list members
+	  -postpublic string
+	    	whether anyone or only list members can post
+
+# mox config alias rm
+
+Remove alias.
+
+	usage: mox config alias rm alias@domain
+
+# mox config alias addaddr
+
+Add addresses to alias.
+
+	usage: mox config alias addaddr alias@domain rcpt1@domain ...
+
+# mox config alias rmaddr
+
+Remove addresses from alias.
+
+	usage: mox config alias rmaddr alias@domain rcpt1@domain ...
+
 # mox config describe-sendmail
 
 Describe configuration for mox when invoked as sendmail.
@@ -571,11 +1064,11 @@ for a domain and create the TLSA DNS records it suggests to enable DANE.
 
 	usage: mox config ensureacmehostprivatekeys
 
-# mox example
+# mox config example
 
-List available examples, or print a specific example.
+List available config examples, or print a specific example.
 
-	usage: mox example [name]
+	usage: mox config example [name]
 
 # mox checkupdate
 
@@ -906,6 +1399,18 @@ Prints this mox version.
 
 	usage: mox version
 
+# mox webapi
+
+Lists available methods, prints request/response parameters for method, or calls a method with a request read from standard input.
+
+	usage: mox webapi [method [baseurl-with-credentials]
+
+# mox example
+
+List available examples, or print a specific example.
+
+	usage: mox example [name]
+
 # mox bumpuidvalidity
 
 Change the IMAP UID validity of the mailbox, causing IMAP clients to refetch messages.
@@ -957,7 +1462,7 @@ refetch messages.
 
 # mox reparse
 
-# Parse all messages in the account or all accounts again
+Parse all messages in the account or all accounts again.
 
 Can be useful after upgrading mox with improved message parsing. Messages are
 parsed in batches, so other access to the mailboxes/messages are not blocked
@@ -975,12 +1480,13 @@ Ensure messages in the database have a pre-parsed MIME form in the database.
 
 # mox recalculatemailboxcounts
 
-Recalculate message counts for all mailboxes in the account.
+Recalculate message counts for all mailboxes in the account, and total message size for quota.
 
 When a message is added to/removed from a mailbox, or when message flags change,
-the total, unread, unseen and deleted messages are accounted, and the total size
-of the mailbox. In case of a bug in this accounting, the numbers could become
-incorrect. This command will find, fix and print them.
+the total, unread, unseen and deleted messages are accounted, the total size of
+the mailbox, and the total message size for the account. In case of a bug in
+this accounting, the numbers could become incorrect. This command will find, fix
+and print them.
 
 	usage: mox recalculatemailboxcounts account
 
@@ -989,6 +1495,8 @@ incorrect. This command will find, fix and print them.
 Parse message, print JSON representation.
 
 	usage: mox message parse message.eml
+	  -smtputf8
+	    	check if message needs smtputf8
 
 # mox reassignthreads
 

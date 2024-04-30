@@ -54,7 +54,6 @@ func cmdGentestdata(c *cmd) {
 		return f
 	}
 
-	log := mlog.New("gentestdata")
 	ctxbg := context.Background()
 	mox.Conf.Log[""] = mlog.LevelInfo
 	mlog.SetConfig(mox.Conf.Log)
@@ -192,9 +191,9 @@ Accounts:
 	err = dmarcdb.Init()
 	xcheckf(err, "dmarcdb init")
 	report, err := dmarcrpt.ParseReport(strings.NewReader(dmarcReport))
-	xcheckf(err, "parsing dmarc report")
+	xcheckf(err, "parsing dmarc aggregate report")
 	err = dmarcdb.AddReport(ctxbg, report, dns.Domain{ASCII: "mox.example"})
-	xcheckf(err, "adding dmarc report")
+	xcheckf(err, "adding dmarc aggregate report")
 
 	// Populate mtasts.db.
 	err = mtastsdb.Init(false)
@@ -202,22 +201,23 @@ Accounts:
 	mtastsPolicy := mtasts.Policy{
 		Version: "STSv1",
 		Mode:    mtasts.ModeTesting,
-		MX: []mtasts.STSMX{
+		MX: []mtasts.MX{
 			{Domain: dns.Domain{ASCII: "mx1.example.com"}},
 			{Domain: dns.Domain{ASCII: "mx2.example.com"}},
 			{Domain: dns.Domain{ASCII: "backup-example.com"}, Wildcard: true},
 		},
 		MaxAgeSeconds: 1296000,
 	}
-	err = mtastsdb.Upsert(ctxbg, dns.Domain{ASCII: "mox.example"}, "123", &mtastsPolicy)
+	err = mtastsdb.Upsert(ctxbg, dns.Domain{ASCII: "mox.example"}, "123", &mtastsPolicy, mtastsPolicy.String())
 	xcheckf(err, "adding mtastsdb report")
 
 	// Populate tlsrpt.db.
 	err = tlsrptdb.Init()
 	xcheckf(err, "tlsrptdb init")
-	tlsr, err := tlsrpt.Parse(strings.NewReader(tlsReport))
+	tlsreportJSON, err := tlsrpt.Parse(strings.NewReader(tlsReport))
 	xcheckf(err, "parsing tls report")
-	err = tlsrptdb.AddReport(ctxbg, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", tlsr)
+	tlsr := tlsreportJSON.Convert()
+	err = tlsrptdb.AddReport(ctxbg, c.log, dns.Domain{ASCII: "mox.example"}, "tlsrpt@mox.example", false, &tlsr)
 	xcheckf(err, "adding tls report")
 
 	// Populate queue, with a message.
@@ -233,22 +233,23 @@ Accounts:
 	const qmsg = "From: <test0@mox.example>\r\nTo: <other@remote.example>\r\nSubject: test\r\n\r\nthe message...\r\n"
 	_, err = fmt.Fprint(mf, qmsg)
 	xcheckf(err, "writing message")
-	_, err = queue.Add(ctxbg, log, "test0", mailfrom, rcptto, false, false, int64(len(qmsg)), "<test@localhost>", prefix, mf, nil, nil)
+	qm := queue.MakeMsg(mailfrom, rcptto, false, false, int64(len(qmsg)), "<test@localhost>", prefix, nil, time.Now(), "test")
+	err = queue.Add(ctxbg, c.log, "test0", mf, qm)
 	xcheckf(err, "enqueue message")
 
 	// Create three accounts.
 	// First account without messages.
-	accTest0, err := store.OpenAccount("test0")
+	accTest0, err := store.OpenAccount(c.log, "test0")
 	xcheckf(err, "open account test0")
-	err = accTest0.ThreadingWait(log)
+	err = accTest0.ThreadingWait(c.log)
 	xcheckf(err, "wait for threading to finish")
 	err = accTest0.Close()
 	xcheckf(err, "close account")
 
 	// Second account with one message.
-	accTest1, err := store.OpenAccount("test1")
+	accTest1, err := store.OpenAccount(c.log, "test1")
 	xcheckf(err, "open account test1")
-	err = accTest1.ThreadingWait(log)
+	err = accTest1.ThreadingWait(c.log)
 	xcheckf(err, "wait for threading to finish")
 	err = accTest1.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 		inbox, err := bstore.QueryTx[store.Mailbox](tx).FilterNonzero(store.Mailbox{Name: "Inbox"}).Get()
@@ -284,7 +285,7 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf, msg)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest1.DeliverMessage(log, tx, &m, mf, false, true, false)
+		err = accTest1.DeliverMessage(c.log, tx, &m, mf, false, true, false, true)
 
 		mfname := mf.Name()
 		xcheckf(err, "add message to account test1")
@@ -306,9 +307,9 @@ Accounts:
 	xcheckf(err, "close account")
 
 	// Third account with two messages and junkfilter.
-	accTest2, err := store.OpenAccount("test2")
+	accTest2, err := store.OpenAccount(c.log, "test2")
 	xcheckf(err, "open account test2")
-	err = accTest2.ThreadingWait(log)
+	err = accTest2.ThreadingWait(c.log)
 	xcheckf(err, "wait for threading to finish")
 	err = accTest2.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 		inbox, err := bstore.QueryTx[store.Mailbox](tx).FilterNonzero(store.Mailbox{Name: "Inbox"}).Get()
@@ -344,7 +345,7 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf0, msg0)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(log, tx, &m0, mf0, false, false, false)
+		err = accTest2.DeliverMessage(c.log, tx, &m0, mf0, false, false, false, true)
 		xcheckf(err, "add message to account test2")
 
 		mf0name := mf0.Name()
@@ -375,7 +376,7 @@ Accounts:
 		xcheckf(err, "creating temp file for delivery")
 		_, err = fmt.Fprint(mf1, msg1)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(log, tx, &m1, mf1, false, false, false)
+		err = accTest2.DeliverMessage(c.log, tx, &m1, mf1, false, false, false, true)
 		xcheckf(err, "add message to account test2")
 
 		mf1name := mf1.Name()

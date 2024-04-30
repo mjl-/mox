@@ -7,6 +7,7 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -30,7 +31,7 @@ func tcheck(t *testing.T, err error, errmsg string) {
 }
 
 func TestDeliver(t *testing.T) {
-	xlog := mlog.New("integration")
+	log := mlog.New("integration", nil)
 	mlog.Logfmt = true
 
 	hostname, err := os.Hostname()
@@ -128,8 +129,10 @@ Subject: test message
 This is the message.
 `, mailfrom, rcptto)
 		msg = strings.ReplaceAll(msg, "\n", "\r\n")
-		auth := []sasl.Client{sasl.NewClientPlain(mailfrom, password)}
-		c, err := smtpclient.New(mox.Context, xlog, conn, smtpclient.TLSSkip, ourHostname, dns.Domain{ASCII: desthost}, auth, nil, nil, nil)
+		auth := func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+			return sasl.NewClientPlain(mailfrom, password), nil
+		}
+		c, err := smtpclient.New(mox.Context, log.Logger, conn, smtpclient.TLSSkip, false, ourHostname, dns.Domain{ASCII: desthost}, smtpclient.Opts{Auth: auth})
 		tcheck(t, err, "smtp hello")
 		err = c.Deliver(mox.Context, mailfrom, rcptto, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		tcheck(t, err, "deliver with smtp")
@@ -142,35 +145,35 @@ This is the message.
 	tcheck(t, err, "dial submission")
 	defer conn.Close()
 
-	xlog.Print("submitting email to moxacmepebble, waiting for imap notification at moxmail2")
+	log.Print("submitting email to moxacmepebble, waiting for imap notification at moxmail2")
 	t0 := time.Now()
 	deliver(true, true, "moxmail2.mox2.example:993", "moxtest2@mox2.example", "accountpass4321", func() {
 		submit(true, "moxtest1@mox1.example", "accountpass1234", "moxacmepebble.mox1.example:465", "moxtest2@mox2.example")
 	})
-	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
+	log.Print("success", slog.Duration("duration", time.Since(t0)))
 
-	xlog.Print("submitting email to moxmail2, waiting for imap notification at moxacmepebble")
+	log.Print("submitting email to moxmail2, waiting for imap notification at moxacmepebble")
 	t0 = time.Now()
 	deliver(true, true, "moxacmepebble.mox1.example:993", "moxtest1@mox1.example", "accountpass1234", func() {
 		submit(true, "moxtest2@mox2.example", "accountpass4321", "moxmail2.mox2.example:465", "moxtest1@mox1.example")
 	})
-	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
+	log.Print("success", slog.Duration("duration", time.Since(t0)))
 
-	xlog.Print("submitting email to postfix, waiting for imap notification at moxacmepebble")
+	log.Print("submitting email to postfix, waiting for imap notification at moxacmepebble")
 	t0 = time.Now()
-	deliver(true, true, "moxacmepebble.mox1.example:993", "moxtest1@mox1.example", "accountpass1234", func() {
+	deliver(false, true, "moxacmepebble.mox1.example:993", "moxtest1@mox1.example", "accountpass1234", func() {
 		submit(true, "moxtest1@mox1.example", "accountpass1234", "moxacmepebble.mox1.example:465", "root@postfix.example")
 	})
-	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
+	log.Print("success", slog.Duration("duration", time.Since(t0)))
 
-	xlog.Print("submitting email to localserve")
+	log.Print("submitting email to localserve")
 	t0 = time.Now()
 	deliver(false, false, "localserve.mox1.example:1143", "mox@localhost", "moxmoxmox", func() {
 		submit(false, "mox@localhost", "moxmoxmox", "localserve.mox1.example:1587", "moxtest1@mox1.example")
 	})
-	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
+	log.Print("success", slog.Duration("duration", time.Since(t0)))
 
-	xlog.Print("submitting email to localserve")
+	log.Print("submitting email to localserve")
 	t0 = time.Now()
 	deliver(false, false, "localserve.mox1.example:1143", "mox@localhost", "moxmoxmox", func() {
 		cmd := exec.Command("go", "run", ".", "sendmail", "mox@localhost")
@@ -182,8 +185,8 @@ a message.
 		var out strings.Builder
 		cmd.Stdout = &out
 		err := cmd.Run()
-		xlog.Print("sendmail", mlog.Field("output", out.String()))
+		log.Print("sendmail", slog.String("output", out.String()))
 		tcheck(t, err, "sendmail")
 	})
-	xlog.Print("success", mlog.Field("duration", time.Since(t0)))
+	log.Print("success", slog.Any("duration", time.Since(t0)))
 }

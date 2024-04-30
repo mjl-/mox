@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
-
-	"golang.org/x/exp/slices"
+	"slices"
 
 	"github.com/mjl-/adns"
 )

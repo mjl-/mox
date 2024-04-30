@@ -15,20 +15,24 @@ table td, table th { padding: .15em .25em; }
 .silenttitle { text-decoration: none; }
 fieldset { border: 0; }
 .loading { opacity: 0.1; animation: fadeout 1s ease-out; }
+@keyframes fadein { 0% { opacity: 0 } 100% { opacity: 1 } }
 @keyframes fadeout { 0% { opacity: 1 } 100% { opacity: 0.1 } }
 .button { display: inline-block; }
-button, .button { border-radius: .15em; background-color: #eee; border: 1px solid #888; padding: 0 .15em; color: inherit; /* for ipad, which shows blue or white text */ }
+button, .button, select { border-radius: .15em; background-color: #eee; border: 1px solid #888; padding: 0 .15em; color: inherit; /* for ipad, which shows blue or white text */ }
 button.active, .button.active, button.active:hover, .button.active:hover { background-color: gold; }
-button:hover, .button:hover { background-color: #ddd; }
+button:hover, .button:hover, select:hover { background-color: #ddd; }
 button.keyword:hover { background-color: #ffbd21; }
 button.keyword { cursor: pointer; }
 .btngroup button, .btngroup .button { border-radius: 0; border-right-width: 0; }
 .btngroup button:first-child, .btngroup .button:first-child { border-radius: .15em 0 0 .15em; }
 .btngroup button:last-child, .btngroup .button:last-child { border-radius: 0 .15em .15em 0; border-right-width: 1px; }
 iframe { border: 0; }
-.pad { padding: .5em; }
 .invert { filter: invert(100%); }
 .scriptswitch { text-decoration: underline #dca053 2px; }
+.textmulti > *:nth-child(even) { background-color: #f4f4f4; }
+.textmulti > * { padding: 2ex .5em; margin: -.5em; /* compensate pad */ }
+.textmulti > *:first-child { padding: .5em; }
+.pad { padding: .5em; }
 
 .msgitem { display: flex; user-select: none; }
 .msgitemcell { padding: 2px 4px; }
@@ -78,7 +82,7 @@ table.search td { padding: .25em; }
 		</style>
 	</head>
 	<body>
-		<div id="page"><div style="padding: 1em">Loading...</div></div>
+		<div id="page"><div style="padding: 1em; text-align: center">Loading...</div></div>
 		<script>/* placeholder */</script>
 	</body>
 </html>

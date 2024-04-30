@@ -3,12 +3,17 @@ package queue
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
+	"slices"
 	"time"
+
+	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
@@ -19,37 +24,57 @@ import (
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
+	"github.com/mjl-/mox/webhook"
 )
 
 // todo: reuse connection? do fewer concurrently (other than with direct delivery).
 
 // deliver via another SMTP server, e.g. relaying to a smart host, possibly
 // with authentication (submission).
-func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, m Msg, backoff time.Duration, transportName string, transport *config.TransportSMTP, dialTLS bool, defaultPort int) {
+func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, msgs []*Msg, backoff time.Duration, transportName string, transport *config.TransportSMTP, dialTLS bool, defaultPort int) {
 	// todo: configurable timeouts
+
+	// For convenience, all messages share the same relevant values.
+	m0 := msgs[0]
 
 	port := transport.Port
 	if port == 0 {
 		port = defaultPort
 	}
 
-	tlsMode := smtpclient.TLSStrictStartTLS
+	tlsMode := smtpclient.TLSRequiredStartTLS
+	tlsPKIX := true
 	if dialTLS {
-		tlsMode = smtpclient.TLSStrictImmediate
+		tlsMode = smtpclient.TLSImmediate
 	} else if transport.STARTTLSInsecureSkipVerify {
-		tlsMode = smtpclient.TLSOpportunistic
+		tlsMode = smtpclient.TLSRequiredStartTLS
+		tlsPKIX = false
 	} else if transport.NoSTARTTLS {
 		tlsMode = smtpclient.TLSSkip
+		tlsPKIX = false
 	}
+
+	// Prepare values for logging/metrics. They are updated for various error
+	// conditions later on.
 	start := time.Now()
-	var deliveryResult string
-	var permanent bool
-	var secodeOpt string
-	var errmsg string
-	var success bool
+	var submiterr error // Of whole operation, nil for partial failure/success.
+	var delivered int
+	failed := len(msgs) // Reset and updated after smtp transaction.
 	defer func() {
-		metricDelivery.WithLabelValues(fmt.Sprintf("%d", m.Attempts), transportName, string(tlsMode), deliveryResult).Observe(float64(time.Since(start)) / float64(time.Second))
-		qlog.Debug("queue deliversubmit result", mlog.Field("host", transport.DNSHost), mlog.Field("port", port), mlog.Field("attempt", m.Attempts), mlog.Field("permanent", permanent), mlog.Field("secodeopt", secodeOpt), mlog.Field("errmsg", errmsg), mlog.Field("ok", success), mlog.Field("duration", time.Since(start)))
+		r := deliveryResult(submiterr, delivered, failed)
+		d := float64(time.Since(start)) / float64(time.Second)
+		metricDelivery.WithLabelValues(fmt.Sprintf("%d", m0.Attempts), transportName, string(tlsMode), r).Observe(d)
+
+		qlog.Debugx("queue deliversubmit result", submiterr,
+			slog.Any("host", transport.DNSHost),
+			slog.Int("port", port),
+			slog.Int("attempt", m0.Attempts),
+			slog.String("result", r),
+			slog.Int("delivered", delivered),
+			slog.Int("failed", failed),
+			slog.Any("tlsmode", tlsMode),
+			slog.Bool("tlspkix", tlsPKIX),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	// todo: SMTP-DANE should be used when relaying on port 25.
@@ -57,27 +82,32 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 
 	// todo: for submission, understand SRV records, and even DANE.
 
+	ctx := mox.Shutdown
+
 	// If submit was done with REQUIRETLS extension for SMTP, we must verify TLS
 	// certificates. If our submission connection is not configured that way, abort.
-	requireTLS := m.RequireTLS != nil && *m.RequireTLS
-	if requireTLS && tlsMode != smtpclient.TLSStrictStartTLS && tlsMode != smtpclient.TLSStrictImmediate {
-		errmsg = fmt.Sprintf("transport %s: message requires verified tls but transport does not verify tls", transportName)
-		fail(qlog, m, backoff, true, dsn.NameIP{}, smtp.SePol7MissingReqTLS, errmsg)
+	requireTLS := m0.RequireTLS != nil && *m0.RequireTLS
+	if requireTLS && (tlsMode != smtpclient.TLSRequiredStartTLS && tlsMode != smtpclient.TLSImmediate || !tlsPKIX) {
+		submiterr = smtpclient.Error{
+			Permanent: true,
+			Code:      smtp.C554TransactionFailed,
+			Secode:    smtp.SePol7MissingReqTLS30,
+			Err:       fmt.Errorf("transport %s: message requires verified tls but transport does not verify tls", transportName),
+		}
+		failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
 		return
 	}
 
-	dialctx, dialcancel := context.WithTimeout(context.Background(), 30*time.Second)
+	dialctx, dialcancel := context.WithTimeout(ctx, 30*time.Second)
 	defer dialcancel()
-	if m.DialedIPs == nil {
-		m.DialedIPs = map[string][]net.IP{}
+	if msgs[0].DialedIPs == nil {
+		msgs[0].DialedIPs = map[string][]net.IP{}
+		m0 = msgs[0]
 	}
-	_, _, _, ips, _, err := smtpclient.GatherIPs(dialctx, qlog, resolver, dns.IPDomain{Domain: transport.DNSHost}, m.DialedIPs)
+	_, _, _, ips, _, err := smtpclient.GatherIPs(dialctx, qlog.Logger, resolver, "ip", dns.IPDomain{Domain: transport.DNSHost}, m0.DialedIPs)
 	var conn net.Conn
 	if err == nil {
-		if m.DialedIPs == nil {
-			m.DialedIPs = map[string][]net.IP{}
-		}
-		conn, _, err = smtpclient.Dial(dialctx, qlog, dialer, dns.IPDomain{Domain: transport.DNSHost}, ips, port, m.DialedIPs)
+		conn, _, err = smtpclient.Dial(dialctx, qlog.Logger, dialer, dns.IPDomain{Domain: transport.DNSHost}, ips, port, m0.DialedIPs, mox.Conf.Static.SpecifiedSMTPListenIPs)
 	}
 	addr := net.JoinHostPort(transport.Host, fmt.Sprintf("%d", port))
 	var result string
@@ -97,48 +127,66 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 			err := conn.Close()
 			qlog.Check(err, "closing connection")
 		}
-		qlog.Errorx("dialing for submission", err, mlog.Field("remote", addr))
-		errmsg = fmt.Sprintf("transport %s: dialing %s for submission: %v", transportName, addr, err)
-		fail(qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
+		qlog.Errorx("dialing for submission", err, slog.String("remote", addr))
+		submiterr = fmt.Errorf("transport %s: dialing %s for submission: %w", transportName, addr, err)
+		failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
 		return
 	}
 	dialcancel()
 
-	var auth []sasl.Client
+	var auth func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)
 	if transport.Auth != nil {
 		a := transport.Auth
-		for _, mech := range a.EffectiveMechanisms {
-			switch mech {
-			case "PLAIN":
-				auth = append(auth, sasl.NewClientPlain(a.Username, a.Password))
-			case "CRAM-MD5":
-				auth = append(auth, sasl.NewClientCRAMMD5(a.Username, a.Password))
-			case "SCRAM-SHA-1":
-				auth = append(auth, sasl.NewClientSCRAMSHA1(a.Username, a.Password))
-			case "SCRAM-SHA-256":
-				auth = append(auth, sasl.NewClientSCRAMSHA256(a.Username, a.Password))
-			default:
-				// Should not happen.
-				qlog.Error("missing smtp authentication mechanisms implementation", mlog.Field("mechanism", mech))
-				errmsg = fmt.Sprintf("transport %s: authentication mechanisms %q not implemented", transportName, mech)
-				fail(qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
-				return
+		auth = func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+			var supportsscramsha1plus, supportsscramsha256plus bool
+			for _, mech := range a.EffectiveMechanisms {
+				if !slices.Contains(mechanisms, mech) {
+					switch mech {
+					case "SCRAM-SHA-1-PLUS":
+						supportsscramsha1plus = cs != nil
+					case "SCRAM-SHA-256-PLUS":
+						supportsscramsha256plus = cs != nil
+					}
+					continue
+				}
+				if mech == "SCRAM-SHA-256-PLUS" && cs != nil {
+					return sasl.NewClientSCRAMSHA256PLUS(a.Username, a.Password, *cs), nil
+				} else if mech == "SCRAM-SHA-256" {
+					return sasl.NewClientSCRAMSHA256(a.Username, a.Password, supportsscramsha256plus), nil
+				} else if mech == "SCRAM-SHA-1-PLUS" && cs != nil {
+					return sasl.NewClientSCRAMSHA1PLUS(a.Username, a.Password, *cs), nil
+				} else if mech == "SCRAM-SHA-1" {
+					return sasl.NewClientSCRAMSHA1(a.Username, a.Password, supportsscramsha1plus), nil
+				} else if mech == "CRAM-MD5" {
+					return sasl.NewClientCRAMMD5(a.Username, a.Password), nil
+				} else if mech == "PLAIN" {
+					return sasl.NewClientPlain(a.Username, a.Password), nil
+				}
+				return nil, fmt.Errorf("internal error: unrecognized authentication mechanism %q for transport %s", mech, transportName)
 			}
+
+			// No mutually supported algorithm.
+			return nil, nil
 		}
 	}
 	clientctx, clientcancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer clientcancel()
-	client, err := smtpclient.New(clientctx, qlog, conn, tlsMode, mox.Conf.Static.HostnameDomain, transport.DNSHost, auth, nil, nil, nil)
+	opts := smtpclient.Opts{
+		Auth:    auth,
+		RootCAs: mox.Conf.Static.TLS.CertPool,
+	}
+	client, err := smtpclient.New(clientctx, qlog.Logger, conn, tlsMode, tlsPKIX, mox.Conf.Static.HostnameDomain, transport.DNSHost, opts)
 	if err != nil {
 		smtperr, ok := err.(smtpclient.Error)
 		var remoteMTA dsn.NameIP
+		submiterr = fmt.Errorf("transport %s: establishing smtp session with %s for submission: %w", transportName, addr, err)
 		if ok {
 			remoteMTA.Name = transport.Host
+			smtperr.Err = submiterr
+			submiterr = smtperr
 		}
-		qlog.Errorx("establishing smtp session for submission", err, mlog.Field("remote", addr))
-		errmsg = fmt.Sprintf("transport %s: establishing smtp session with %s for submission: %v", transportName, addr, err)
-		secodeOpt = smtperr.Secode
-		fail(qlog, m, backoff, false, remoteMTA, secodeOpt, errmsg)
+		qlog.Errorx("establishing smtp session for submission", submiterr, slog.String("remote", addr))
+		failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, remoteMTA, submiterr)
 		return
 	}
 	defer func() {
@@ -150,23 +198,23 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 	var msgr io.ReadCloser
 	var size int64
 	var req8bit, reqsmtputf8 bool
-	if len(m.DSNUTF8) > 0 && client.SupportsSMTPUTF8() {
-		msgr = io.NopCloser(bytes.NewReader(m.DSNUTF8))
+	if len(m0.DSNUTF8) > 0 && client.SupportsSMTPUTF8() {
+		msgr = io.NopCloser(bytes.NewReader(m0.DSNUTF8))
 		reqsmtputf8 = true
-		size = int64(len(m.DSNUTF8))
+		size = int64(len(m0.DSNUTF8))
 	} else {
-		req8bit = m.Has8bit // todo: not require this, but just try to submit?
-		size = m.Size
+		req8bit = m0.Has8bit // todo: not require this, but just try to submit?
+		size = m0.Size
 
-		p := m.MessagePath()
+		p := m0.MessagePath()
 		f, err := os.Open(p)
 		if err != nil {
-			qlog.Errorx("opening message for delivery", err, mlog.Field("remote", addr), mlog.Field("path", p))
-			errmsg = fmt.Sprintf("transport %s: opening message file for submission: %v", transportName, err)
-			fail(qlog, m, backoff, false, dsn.NameIP{}, "", errmsg)
+			qlog.Errorx("opening message for delivery", err, slog.String("remote", addr), slog.String("path", p))
+			submiterr = fmt.Errorf("transport %s: opening message file for submission: %w", transportName, err)
+			failMsgsDB(qlog, msgs, m0.DialedIPs, backoff, dsn.NameIP{}, submiterr)
 			return
 		}
-		msgr = store.FileMsgReader(m.MsgPrefix, f)
+		msgr = store.FileMsgReader(m0.MsgPrefix, f)
 		defer func() {
 			err := msgr.Close()
 			qlog.Check(err, "closing message after delivery attempt")
@@ -175,42 +223,63 @@ func deliverSubmit(cid int64, qlog *mlog.Log, resolver dns.Resolver, dialer smtp
 
 	deliverctx, delivercancel := context.WithTimeout(context.Background(), time.Duration(60+size/(1024*1024))*time.Second)
 	defer delivercancel()
-	err = client.Deliver(deliverctx, m.Sender().String(), m.Recipient().String(), size, msgr, req8bit, reqsmtputf8, requireTLS)
-	if err != nil {
-		qlog.Infox("delivery failed", err)
+	rcpts := make([]string, len(msgs))
+	for i, m := range msgs {
+		rcpts[i] = m.Recipient().String()
 	}
-	var cerr smtpclient.Error
-	switch {
-	case err == nil:
-		deliveryResult = "ok"
-		success = true
-	case errors.Is(err, os.ErrDeadlineExceeded), errors.Is(err, context.DeadlineExceeded):
-		deliveryResult = "timeout"
-	case errors.Is(err, context.Canceled):
-		deliveryResult = "canceled"
-	case errors.As(err, &cerr):
-		deliveryResult = "temperror"
-		if cerr.Permanent {
-			deliveryResult = "permerror"
+	rcptErrs, submiterr := client.DeliverMultiple(deliverctx, m0.Sender().String(), rcpts, size, msgr, req8bit, reqsmtputf8, requireTLS)
+	if submiterr != nil {
+		qlog.Infox("smtp transaction for delivery failed", submiterr)
+	}
+	failed, delivered = processDeliveries(qlog, m0, msgs, addr, transport.Host, backoff, rcptErrs, submiterr)
+}
+
+// Process failures and successful deliveries, retiring/removing messages from
+// queue, queueing webhooks.
+//
+// Also used by deliverLocalserve.
+func processDeliveries(qlog mlog.Log, m0 *Msg, msgs []*Msg, remoteAddr string, remoteHost string, backoff time.Duration, rcptErrs []smtpclient.Response, submiterr error) (failed, delivered int) {
+	var delMsgs []Msg
+	for i, m := range msgs {
+		qmlog := qlog.With(
+			slog.Int64("msgid", m.ID),
+			slog.Any("recipient", m.Recipient()))
+
+		err := submiterr
+		if err == nil && len(rcptErrs) > i {
+			if rcptErrs[i].Code != smtp.C250Completed {
+				err = smtpclient.Error(rcptErrs[i])
+			}
 		}
-	default:
-		deliveryResult = "error"
-	}
-	if err != nil {
-		smtperr, ok := err.(smtpclient.Error)
-		var remoteMTA dsn.NameIP
-		if ok {
-			remoteMTA.Name = transport.Host
+		if err != nil {
+			smtperr, ok := err.(smtpclient.Error)
+			err = fmt.Errorf("delivering message to %s: %w", remoteAddr, err)
+			var remoteMTA dsn.NameIP
+			if ok {
+				remoteMTA.Name = remoteHost
+				smtperr.Err = err
+				err = smtperr
+			}
+			qmlog.Errorx("submitting message", err, slog.String("remote", remoteAddr))
+			failMsgsDB(qmlog, []*Msg{m}, m0.DialedIPs, backoff, remoteMTA, err)
+			failed++
+		} else {
+			m.markResult(0, "", "", true)
+			delMsgs = append(delMsgs, *m)
+			qmlog.Info("delivered from queue with transport")
+			delivered++
 		}
-		qlog.Errorx("submitting email", err, mlog.Field("remote", addr))
-		permanent = smtperr.Permanent
-		secodeOpt = smtperr.Secode
-		errmsg = fmt.Sprintf("transport %s: submitting email to %s: %v", transportName, addr, err)
-		fail(qlog, m, backoff, permanent, remoteMTA, secodeOpt, errmsg)
-		return
 	}
-	qlog.Info("delivered from queue with transport")
-	if err := queueDelete(context.Background(), m.ID); err != nil {
-		qlog.Errorx("deleting message from queue after delivery", err)
+	if len(delMsgs) > 0 {
+		err := DB.Write(context.Background(), func(tx *bstore.Tx) error {
+			return retireMsgs(qlog, tx, webhook.EventDelivered, 0, "", nil, delMsgs...)
+		})
+		if err != nil {
+			qlog.Errorx("remove queue message from database after delivery", err)
+		} else if err := removeMsgsFS(qlog, delMsgs...); err != nil {
+			qlog.Errorx("remove queue message from file system after delivery", err)
+		}
+		kick()
 	}
+	return
 }

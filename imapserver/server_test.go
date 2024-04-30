@@ -17,12 +17,14 @@ import (
 	"time"
 
 	"github.com/mjl-/mox/imapclient"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/store"
 )
 
 var ctxbg = context.Background()
+var pkglog = mlog.New("imapserver", nil)
 
 func init() {
 	sanityChecks = true
@@ -308,6 +310,7 @@ func (tc *testconn) close() {
 	}
 	err := tc.account.Close()
 	tc.check(err, "close account")
+	// no account.CheckClosed(), the tests open accounts multiple times.
 	tc.account = nil
 	tc.client.Close()
 	tc.serverConn.Close()
@@ -325,14 +328,17 @@ func xparseNumSet(s string) imapclient.NumSet {
 var connCounter int64
 
 func start(t *testing.T) *testconn {
-	return startArgs(t, true, false, true)
+	return startArgs(t, true, false, true, true, "mjl")
 }
 
 func startNoSwitchboard(t *testing.T) *testconn {
-	return startArgs(t, false, false, true)
+	return startArgs(t, false, false, true, false, "mjl")
 }
 
-func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn {
+const password0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
+const password1 = "tést    "                      // PRECIS normalized, with NFC.
+
+func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS, setPassword bool, accname string) *testconn {
 	limitersInit() // Reset rate limiters.
 
 	if first {
@@ -341,10 +347,10 @@ func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS bool) *testconn 
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
 	mox.MustLoadConfig(true, false)
-	acc, err := store.OpenAccount("mjl")
+	acc, err := store.OpenAccount(pkglog, accname)
 	tcheck(t, err, "open account")
-	if first {
-		err = acc.SetPassword("testtest")
+	if setPassword {
+		err = acc.SetPassword(pkglog, password0)
 		tcheck(t, err, "set password")
 	}
 	switchStop := func() {}
@@ -403,20 +409,20 @@ func TestLogin(t *testing.T) {
 	tc.transactf("bad", "login too many args")
 	tc.transactf("bad", "login") // no args
 	tc.transactf("no", "login mjl@mox.example badpass")
-	tc.transactf("no", "login mjl testtest") // must use email, not account
+	tc.transactf("no", `login mjl "%s"`, password0) // must use email, not account
 	tc.transactf("no", "login mjl@mox.example test")
 	tc.transactf("no", "login mjl@mox.example testtesttest")
 	tc.transactf("no", `login "mjl@mox.example" "testtesttest"`)
 	tc.transactf("no", "login \"m\xf8x@mox.example\" \"testtesttest\"")
-	tc.transactf("ok", "login mjl@mox.example testtest")
+	tc.transactf("ok", `login mjl@mox.example "%s"`, password0)
 	tc.close()
 
 	tc = start(t)
-	tc.transactf("ok", `login "mjl@mox.example" "testtest"`)
+	tc.transactf("ok", `login "mjl@mox.example" "%s"`, password0)
 	tc.close()
 
 	tc = start(t)
-	tc.transactf("ok", `login "\"\"@mox.example" "testtest"`)
+	tc.transactf("ok", `login "\"\"@mox.example" "%s"`, password0)
 	defer tc.close()
 
 	tc.transactf("bad", "logout badarg")
@@ -445,7 +451,7 @@ func TestState(t *testing.T) {
 	}
 
 	// Some commands not allowed when authenticated.
-	tc.transactf("ok", "login mjl@mox.example testtest")
+	tc.transactf("ok", `login mjl@mox.example "%s"`, password0)
 	for _, cmd := range append(append([]string{}, notAuthenticated...), selected...) {
 		tc.transactf("no", "%s", cmd)
 	}
@@ -470,7 +476,7 @@ func TestLiterals(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Create("tmpbox")
 
 	tc.transactf("ok", "rename {6+}\r\ntmpbox {7+}\r\nntmpbox")
@@ -493,7 +499,7 @@ func TestLiterals(t *testing.T) {
 func TestScenario(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
-	tc.transactf("ok", "login mjl@mox.example testtest")
+	tc.transactf("ok", `login mjl@mox.example "%s"`, password0)
 
 	tc.transactf("bad", " missingcommand")
 
@@ -571,7 +577,7 @@ func TestScenario(t *testing.T) {
 func TestMailbox(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 
 	invalid := []string{
 		"e\u0301", // é but as e + acute, not unicode-normalized
@@ -593,11 +599,11 @@ func TestMailbox(t *testing.T) {
 func TestMailboxDeleted(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 
 	tc2 := startNoSwitchboard(t)
 	defer tc2.close()
-	tc2.client.Login("mjl@mox.example", "testtest")
+	tc2.client.Login("mjl@mox.example", password0)
 
 	tc.client.Create("testbox")
 	tc2.client.Select("testbox")
@@ -629,7 +635,7 @@ func TestMailboxDeleted(t *testing.T) {
 func TestID(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 
 	tc.transactf("ok", "id nil")
 	tc.xuntagged(imapclient.UntaggedID{"name": "mox", "version": moxvar.Version})
@@ -643,7 +649,7 @@ func TestID(t *testing.T) {
 func TestSequence(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
 	tc.transactf("bad", "fetch * all") // ../rfc/9051:7018
@@ -671,13 +677,13 @@ func TestSequence(t *testing.T) {
 func DisabledTestReference(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
 
 	tc2 := startNoSwitchboard(t)
 	defer tc2.close()
-	tc2.client.Login("mjl@mox.example", "testtest")
+	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	tc.client.StoreFlagsSet("1", true, `\Deleted`)
@@ -685,9 +691,9 @@ func DisabledTestReference(t *testing.T) {
 
 	tc3 := startNoSwitchboard(t)
 	defer tc3.close()
-	tc3.client.Login("mjl@mox.example", "testtest")
+	tc3.client.Login("mjl@mox.example", password0)
 	tc3.transactf("ok", `list "" "inbox" return (status (messages))`)
-	tc3.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox"}, imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[string]int64{"MESSAGES": 0}})
+	tc3.xuntagged(imapclient.UntaggedList{Separator: '/', Mailbox: "Inbox"}, imapclient.UntaggedStatus{Mailbox: "Inbox", Attrs: map[imapclient.StatusAttr]int64{imapclient.StatusMessages: 0}})
 
 	tc2.transactf("ok", "fetch 1 rfc822.size")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchRFC822Size(len(exampleMsg))}})

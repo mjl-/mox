@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 )
 
 func TestList(t *testing.T) {
@@ -27,7 +28,10 @@ bücher.example.com
 
 ignored.example.com
 `
-	l, err := ParseList(strings.NewReader(data))
+
+	log := mlog.New("publicsuffix", nil)
+
+	l, err := ParseList(log.Logger, strings.NewReader(data))
 	if err != nil {
 		t.Fatalf("parsing list: %s", err)
 	}
@@ -44,7 +48,7 @@ ignored.example.com
 			t.Fatalf("idna to unicode org domain %q: %s", orgDomain, err)
 		}
 
-		r := l.Lookup(context.Background(), d)
+		r := l.Lookup(context.Background(), log.Logger, d)
 		if r != od {
 			t.Fatalf("got %q, expected %q, for domain %q", r, orgDomain, domain)
 		}
@@ -70,7 +74,7 @@ ignored.example.com
 	test("bar.foo.xn--bcher-kva.example.com", "foo.bücher.example.com")
 	test("x.ignored.example.com", "example.com")
 
-	l, err = ParseList(bytes.NewReader(publicsuffixData))
+	l, err = ParseList(log.Logger, bytes.NewReader(publicsuffixData))
 	if err != nil {
 		t.Fatalf("parsing public suffix list: %s", err)
 	}

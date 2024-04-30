@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/mjl-/mox/mlog"
 )
 
 func TestBufpool(t *testing.T) {
@@ -16,8 +18,9 @@ func TestBufpool(t *testing.T) {
 	for i := 0; i < len(a); i++ {
 		a[i] = 1
 	}
-	bp.put(a, len(a)) // Will be stored.
-	bp.put(b, 0)      // Will be discarded.
+	log := mlog.New("moxio", nil)
+	bp.put(log, a, len(a)) // Will be stored.
+	bp.put(log, b, 0)      // Will be discarded.
 	na := bp.get()
 	if fmt.Sprintf("%p", a) != fmt.Sprintf("%p", na) {
 		t.Fatalf("received unexpected new buf %p != %p", a, na)
@@ -28,22 +31,22 @@ func TestBufpool(t *testing.T) {
 		}
 	}
 
-	if _, err := bp.Readline(bufio.NewReader(strings.NewReader("this is too long"))); !errors.Is(err, ErrLineTooLong) {
+	if _, err := bp.Readline(log, bufio.NewReader(strings.NewReader("this is too long"))); !errors.Is(err, ErrLineTooLong) {
 		t.Fatalf("expected ErrLineTooLong, got error %v", err)
 	}
-	if _, err := bp.Readline(bufio.NewReader(strings.NewReader("short"))); !errors.Is(err, io.ErrUnexpectedEOF) {
+	if _, err := bp.Readline(log, bufio.NewReader(strings.NewReader("short"))); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("expected ErrLineTooLong, got error %v", err)
 	}
 
 	er := errReader{fmt.Errorf("bad")}
-	if _, err := bp.Readline(bufio.NewReader(er)); err == nil || !errors.Is(err, er.err) {
+	if _, err := bp.Readline(log, bufio.NewReader(er)); err == nil || !errors.Is(err, er.err) {
 		t.Fatalf("got unexpected error %s", err)
 	}
 
-	if line, err := bp.Readline(bufio.NewReader(strings.NewReader("ok\r\n"))); line != "ok" {
+	if line, err := bp.Readline(log, bufio.NewReader(strings.NewReader("ok\r\n"))); line != "ok" {
 		t.Fatalf(`got %q, err %v, expected line "ok"`, line, err)
 	}
-	if line, err := bp.Readline(bufio.NewReader(strings.NewReader("ok\n"))); line != "ok" {
+	if line, err := bp.Readline(log, bufio.NewReader(strings.NewReader("ok\n"))); line != "ok" {
 		t.Fatalf(`got %q, err %v, expected line "ok"`, line, err)
 	}
 }

@@ -8,8 +8,9 @@ import (
 )
 
 // ParseHeaderFields parses only the header fields in "fields" from the complete
-// header buffer "header", while using "scratch" as temporary space, prevent lots
-// of unneeded allocations when only a few headers are needed.
+// header buffer "header". It uses "scratch" as temporary space, which can be
+// reused across calls, potentially saving lots of unneeded allocations when only a
+// few headers are needed and/or many messages are parsed.
 func ParseHeaderFields(header []byte, scratch []byte, fields [][]byte) (textproto.MIMEHeader, error) {
 	// todo: should not use mail.ReadMessage, it allocates a bufio.Reader. should implement header parsing ourselves.
 

@@ -5,21 +5,17 @@ package dsn
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/textproto"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -45,12 +41,17 @@ type Message struct {
 	// Message subject header, e.g. describing mail delivery failure.
 	Subject string
 
-	// Set when message is composed.
 	MessageID string
 
 	// References header, with Message-ID of original message this DSN is about. So
 	// mail user-agents will thread the DSN with the original message.
 	References string
+
+	// For message submitted with FUTURERELEASE SMTP extension. Value is either "for;"
+	// plus original interval in seconds or "until;" plus original UTC RFC3339
+	// date-time.
+	FutureReleaseRequest string
+	// ../rfc/4865:315
 
 	// Human-readable text explaining the failure. Line endings should be
 	// bare newlines, not \r\n. They are converted to \r\n when composing.
@@ -98,9 +99,10 @@ type Recipient struct {
 	Action         Action
 
 	// Enhanced status code. First digit indicates permanent or temporary
-	// error. If the string contains more than just a status, that
-	// additional text is added as comment when composing a DSN.
+	// error.
 	Status string
+	// For additional details, included in comment.
+	StatusComment string
 
 	// Optional fields.
 	// Original intended recipient of message. Used with the DSN extensions ORCPT
@@ -112,10 +114,10 @@ type Recipient struct {
 	// deliveries.
 	RemoteMTA NameIP
 
-	// If RemoteMTA is present, DiagnosticCode is from remote. When
-	// creating a DSN, additional text in the string will be added to the
-	// DSN as comment.
-	DiagnosticCode  string
+	// DiagnosticCodeSMTP are the full SMTP response lines, space separated. The marshaled
+	// form starts with "smtp; ", this value does not.
+	DiagnosticCodeSMTP string
+
 	LastAttemptDate time.Time
 	FinalLogID      string
 
@@ -133,8 +135,8 @@ type Recipient struct {
 // supports smtputf8. This influences the message media (sub)types used for the
 // DSN.
 //
-// DKIM signatures are added if DKIM signing is configured for the "from" domain.
-func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
+// Called may want to add DKIM-Signature headers.
+func (m *Message) Compose(log mlog.Log, smtputf8 bool) ([]byte, error) {
 	// ../rfc/3462:119
 	// ../rfc/3464:377
 	// We'll make a multipart/report with 2 or 3 parts:
@@ -165,7 +167,9 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 	header("From", fmt.Sprintf("<%s>", m.From.XString(smtputf8))) // todo: would be good to have a local ascii-only name for this address.
 	header("To", fmt.Sprintf("<%s>", m.To.XString(smtputf8)))     // todo: we could just leave this out if it has utf-8 and remote does not support utf-8.
 	header("Subject", m.Subject)
-	m.MessageID = mox.MessageIDGen(smtputf8)
+	if m.MessageID == "" {
+		return nil, fmt.Errorf("missing message-id")
+	}
 	header("Message-Id", fmt.Sprintf("<%s>", m.MessageID))
 	if m.References != "" {
 		header("References", m.References)
@@ -232,6 +236,10 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 		status("Received-From-MTA", fmt.Sprintf("dns;%s (%s)", m.ReceivedFromMTA.Name, smtp.AddressLiteral(m.ReceivedFromMTA.ConnIP)))
 	}
 	status("Arrival-Date", m.ArrivalDate.Format(message.RFC5322Z)) // ../rfc/3464:758
+	if m.FutureReleaseRequest != "" {
+		// ../rfc/4865:320
+		status("Future-Release-Request", m.FutureReleaseRequest)
+	}
 
 	// Then per-recipient fields. ../rfc/3464:769
 	// todo: should also handle other address types. at least recognize "unknown". Probably just store this field. ../rfc/3464:819
@@ -264,11 +272,9 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 				st = "2.0.0"
 			}
 		}
-		var rest string
-		st, rest = codeLine(st)
 		statusLine := st
-		if rest != "" {
-			statusLine += " (" + rest + ")"
+		if r.StatusComment != "" {
+			statusLine += " (" + r.StatusComment + ")"
 		}
 		status("Status", statusLine) // ../rfc/3464:975
 		if !r.RemoteMTA.IsZero() {
@@ -280,14 +286,9 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 			status("Remote-MTA", s)
 		}
 		// Presence of Diagnostic-Code indicates the code is from Remote-MTA. ../rfc/3464:1053
-		if r.DiagnosticCode != "" {
-			diagCode, rest := codeLine(r.DiagnosticCode)
-			diagLine := diagCode
-			if rest != "" {
-				diagLine += " (" + rest + ")"
-			}
-			// ../rfc/6533:589
-			status("Diagnostic-Code", "smtp; "+diagLine)
+		if r.DiagnosticCodeSMTP != "" {
+			// ../rfc/3461:1342 ../rfc/6533:589
+			status("Diagnostic-Code", "smtp; "+r.DiagnosticCodeSMTP)
 		}
 		if !r.LastAttemptDate.IsZero() {
 			status("Last-Attempt-Date", r.LastAttemptDate.Format(message.RFC5322Z)) // ../rfc/3464:1076
@@ -364,17 +365,6 @@ func (m *Message) Compose(log *mlog.Log, smtputf8 bool) ([]byte, error) {
 	}
 
 	data := msgw.w.Bytes()
-
-	fd := m.From.IPDomain.Domain
-	confDom, _ := mox.Conf.Domain(fd)
-	if len(confDom.DKIM.Sign) > 0 {
-		if dkimHeaders, err := dkim.Sign(context.Background(), m.From.Localpart, fd, confDom.DKIM, smtputf8, bytes.NewReader(data)); err != nil {
-			log.Errorx("dsn: dkim sign for domain, returning unsigned dsn", err, mlog.Field("domain", fd))
-		} else {
-			data = append([]byte(dkimHeaders), data...)
-		}
-	}
-
 	return data, nil
 }
 
@@ -390,35 +380,4 @@ func (w *errWriter) Write(buf []byte) (int, error) {
 	n, err := w.w.Write(buf)
 	w.err = err
 	return n, err
-}
-
-// split a line into enhanced status code and rest.
-func codeLine(s string) (string, string) {
-	t := strings.SplitN(s, " ", 2)
-	l := strings.Split(t[0], ".")
-	if len(l) != 3 {
-		return "", s
-	}
-	for i, e := range l {
-		_, err := strconv.ParseInt(e, 10, 32)
-		if err != nil {
-			return "", s
-		}
-		if i == 0 && len(e) != 1 {
-			return "", s
-		}
-	}
-
-	var rest string
-	if len(t) == 2 {
-		rest = t[1]
-	}
-	return t[0], rest
-}
-
-// HasCode returns whether line starts with an enhanced SMTP status code.
-func HasCode(line string) bool {
-	// ../rfc/3464:986
-	ecode, _ := codeLine(line)
-	return ecode != ""
 }

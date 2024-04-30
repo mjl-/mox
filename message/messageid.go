@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -29,7 +28,7 @@ func MessageIDCanonical(s string) (string, bool, error) {
 	// Seen in practice: Message-ID: <valid@valid.example> (added by postmaster@some.example)
 	// Doesn't seem valid, but we allow it.
 	s, rem, have := strings.Cut(s, ">")
-	if !have || (rem != "" && (moxvar.Pedantic || !strings.HasPrefix(rem, " "))) {
+	if !have || (rem != "" && (Pedantic || !strings.HasPrefix(rem, " "))) {
 		return "", false, fmt.Errorf("%w: missing >", errBadMessageID)
 	}
 	// We canonicalize the Message-ID: lower-case, no unneeded quoting.

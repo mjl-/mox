@@ -1,4 +1,10 @@
 // Package subjectpass implements a mechanism for reject an incoming message with a challenge to include a token in a next delivery attempt.
+//
+// An SMTP server can reject a message with instructions to send another
+// message, this time including a special token. The sender will receive a DSN,
+// which will include the error message with instructions. By sending the
+// message again with the token, as instructed, the SMTP server can recognize
+// the token, verify it, and accept the message.
 package subjectpass
 
 import (
@@ -8,36 +14,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/stub"
 )
 
-var log = mlog.New("subjectpass")
-
 var (
-	metricGenerate = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "mox_subjectpass_generate_total",
-			Help: "Number of generated subjectpass challenges.",
-		},
-	)
-	metricVerify = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "mox_subjectpass_verify_total",
-			Help: "Number of subjectpass verifications.",
-		},
-		[]string{
-			"result", // ok, fail
-		},
-	)
+	MetricGenerate stub.Counter    = stub.CounterIgnore{}
+	MetricVerify   stub.CounterVec = stub.CounterVecIgnore{}
 )
 
 var (
@@ -53,10 +43,14 @@ var Explanation = "Your message resembles spam. If your email is legitimate, ple
 
 // Generate generates a token that is valid for "mailFrom", starting from "tm"
 // and signed with "key".
-// The token is of the form: (pass:<signeddata>)
-func Generate(mailFrom smtp.Address, key []byte, tm time.Time) string {
-	metricGenerate.Inc()
-	log.Debug("subjectpass generate", mlog.Field("mailfrom", mailFrom))
+//
+// The token is of the form: (pass:<signeddata>). Instructions to the sender should
+// be to include this token in the Subject header of a new message.
+func Generate(elog *slog.Logger, mailFrom smtp.Address, key []byte, tm time.Time) string {
+	log := mlog.New("subjectpass", elog)
+
+	MetricGenerate.Inc()
+	log.Debug("subjectpass generate", slog.Any("mailfrom", mailFrom))
 
 	// We discard the lower 8 bits of the time, we can do with less precision.
 	t := tm.Unix()
@@ -76,7 +70,9 @@ func Generate(mailFrom smtp.Address, key []byte, tm time.Time) string {
 
 // Verify parses "message" and checks if it includes a subjectpass token in its
 // Subject header that is still valid (within "period") and signed with "key".
-func Verify(log *mlog.Log, r io.ReaderAt, key []byte, period time.Duration) (rerr error) {
+func Verify(elog *slog.Logger, r io.ReaderAt, key []byte, period time.Duration) (rerr error) {
+	log := mlog.New("subjectpass", elog)
+
 	var token string
 
 	defer func() {
@@ -84,12 +80,12 @@ func Verify(log *mlog.Log, r io.ReaderAt, key []byte, period time.Duration) (rer
 		if rerr == nil {
 			result = "ok"
 		}
-		metricVerify.WithLabelValues(result).Inc()
+		MetricVerify.IncLabels(result)
 
-		log.Debugx("subjectpass verify result", rerr, mlog.Field("token", token), mlog.Field("period", period))
+		log.Debugx("subjectpass verify result", rerr, slog.String("token", token), slog.Duration("period", period))
 	}()
 
-	p, err := message.Parse(log, true, r)
+	p, err := message.Parse(log.Logger, true, r)
 	if err != nil {
 		return fmt.Errorf("%w: parse message: %s", ErrMessage, err)
 	}
@@ -120,7 +116,11 @@ func Verify(log *mlog.Log, r io.ReaderAt, key []byte, period time.Duration) (rer
 	if err != nil {
 		return fmt.Errorf("%w: from address with bad domain: %v", ErrFrom, err)
 	}
-	addr := smtp.Address{Localpart: smtp.Localpart(from.User), Domain: d}.Pack(true)
+	lp, err := smtp.ParseLocalpart(from.User)
+	if err != nil {
+		return fmt.Errorf("%w: from address with bad localpart: %v", ErrFrom, err)
+	}
+	addr := smtp.Address{Localpart: lp, Domain: d}.Pack(true)
 
 	buf, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {

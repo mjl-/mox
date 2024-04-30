@@ -4,21 +4,24 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"testing"
 
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
 
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/store"
 )
 
-func tneedError(t *testing.T, fn func()) {
+func tneedErrorCode(t *testing.T, code string, fn func()) {
 	t.Helper()
 	defer func() {
 		t.Helper()
@@ -29,14 +32,18 @@ func tneedError(t *testing.T, fn func()) {
 		}
 		if err, ok := x.(*sherpa.Error); !ok {
 			debug.PrintStack()
-			t.Fatalf("expected sherpa user error, saw %#v", x)
-		} else if err.Code != "user:error" {
+			t.Fatalf("expected sherpa error, saw %#v", x)
+		} else if err.Code != code {
 			debug.PrintStack()
-			t.Fatalf("expected sherpa user error, saw other sherpa error %#v", err)
+			t.Fatalf("expected sherpa error code %q, saw other sherpa error %#v", code, err)
 		}
 	}()
 
 	fn()
+}
+
+func tneedError(t *testing.T, fn func()) {
+	tneedErrorCode(t, "user:error", fn)
 }
 
 // Test API calls.
@@ -46,16 +53,21 @@ func TestAPI(t *testing.T) {
 	os.RemoveAll("../testdata/webmail/data")
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webmail/mox.conf")
+	mox.ConfigDynamicPath = filepath.FromSlash("../testdata/webmail/domains.conf")
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
 
-	acc, err := store.OpenAccount("mjl")
+	log := mlog.New("webmail", nil)
+	acc, err := store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
-	err = acc.SetPassword("test1234")
+	const pw0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
+	const pw1 = "tést    "                      // PRECIS normalized, with NFC.
+	err = acc.SetPassword(log, pw0)
 	tcheck(t, err, "set password")
 	defer func() {
 		err := acc.Close()
-		xlog.Check(err, "closing account")
+		pkglog.Check(err, "closing account")
+		acc.CheckClosed()
 	}()
 
 	var zerom store.Message
@@ -75,8 +87,58 @@ func TestAPI(t *testing.T) {
 		tdeliver(t, acc, tm)
 	}
 
-	api := Webmail{maxMessageSize: 1024 * 1024}
-	reqInfo := requestInfo{"mjl@mox.example", "mjl", &http.Request{}}
+	api := Webmail{maxMessageSize: 1024 * 1024, cookiePath: "/webmail/"}
+
+	// Test login, and rate limiter.
+	loginReqInfo := requestInfo{log, "mjl@mox.example", nil, "", httptest.NewRecorder(), &http.Request{RemoteAddr: "1.1.1.1:1234"}}
+	loginctx := context.WithValue(ctxbg, requestInfoCtxKey, loginReqInfo)
+
+	// Missing login token.
+	tneedErrorCode(t, "user:error", func() { api.Login(loginctx, "", "mjl@mox.example", pw0) })
+
+	// Login with loginToken.
+	loginCookie := &http.Cookie{Name: "webmaillogin"}
+	loginCookie.Value = api.LoginPrep(loginctx)
+	loginReqInfo.Request.Header = http.Header{"Cookie": []string{loginCookie.String()}}
+
+	testLogin := func(username, password string, expErrCodes ...string) {
+		t.Helper()
+
+		defer func() {
+			x := recover()
+			expErr := len(expErrCodes) > 0
+			if (x != nil) != expErr {
+				t.Fatalf("got %v, expected codes %v, for username %q, password %q", x, expErrCodes, username, password)
+			}
+			if x == nil {
+				return
+			} else if err, ok := x.(*sherpa.Error); !ok {
+				t.Fatalf("got %#v, expected at most *sherpa.Error", x)
+			} else if !slices.Contains(expErrCodes, err.Code) {
+				t.Fatalf("got error code %q, expected %v", err.Code, expErrCodes)
+			}
+		}()
+
+		api.Login(loginctx, loginCookie.Value, username, password)
+	}
+	testLogin("mjl@mox.example", pw0)
+	testLogin("mjl@mox.example", pw1)
+	testLogin("móx@mox.example", pw1)       // NFC username
+	testLogin("mo\u0301x@mox.example", pw1) // NFD username
+	testLogin("mjl@mox.example", pw1+" ", "user:loginFailed")
+	testLogin("nouser@mox.example", pw0, "user:loginFailed")
+	testLogin("nouser@bad.example", pw0, "user:loginFailed")
+	for i := 3; i < 10; i++ {
+		testLogin("bad@bad.example", pw0, "user:loginFailed")
+	}
+	// Ensure rate limiter is triggered, also for slow tests.
+	for i := 0; i < 10; i++ {
+		testLogin("bad@bad.example", pw0, "user:loginFailed", "user:error")
+	}
+	testLogin("bad@bad.example", pw0, "user:error")
+
+	// Context with different IP, for clear rate limit history.
+	reqInfo := requestInfo{log, "mjl@mox.example", acc, "", nil, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
 	ctx := context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	// FlagsAdd
@@ -114,14 +176,14 @@ func TestAPI(t *testing.T) {
 	tneedError(t, func() { api.FlagsClear(ctx, []int64{inboxText.ID}, []string{`\unknownsystem`}) })
 
 	// MailboxSetSpecialUse
-	var inbox, archive, sent, testbox1 store.Mailbox
+	var inbox, archive, sent, drafts, testbox1 store.Mailbox
 	err = acc.DB.Read(ctx, func(tx *bstore.Tx) error {
 		get := func(k string, v any) store.Mailbox {
 			mb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual(k, v).Get()
 			tcheck(t, err, "get special-use mailbox")
 			return mb
 		}
-		get("Draft", true)
+		drafts = get("Draft", true)
 		sent = get("Sent", true)
 		archive = get("Archive", true)
 		get("Trash", true)
@@ -158,13 +220,18 @@ func TestAPI(t *testing.T) {
 	// ParsedMessage
 	// todo: verify contents
 	api.ParsedMessage(ctx, inboxMinimal.ID)
-	api.ParsedMessage(ctx, inboxText.ID)
 	api.ParsedMessage(ctx, inboxHTML.ID)
 	api.ParsedMessage(ctx, inboxAlt.ID)
 	api.ParsedMessage(ctx, inboxAltRel.ID)
 	api.ParsedMessage(ctx, testbox1Alt.ID)
 	tneedError(t, func() { api.ParsedMessage(ctx, 0) })
 	tneedError(t, func() { api.ParsedMessage(ctx, testmsgs[len(testmsgs)-1].ID+1) })
+	pm := api.ParsedMessage(ctx, inboxText.ID)
+	tcompare(t, pm.ViewMode, store.ModeDefault)
+
+	api.FromAddressSettingsSave(ctx, store.FromAddressSettings{FromAddress: "mjl@mox.example", ViewMode: store.ModeHTMLExt})
+	pm = api.ParsedMessage(ctx, inboxText.ID)
+	tcompare(t, pm.ViewMode, store.ModeHTMLExt)
 
 	// MailboxDelete
 	api.MailboxDelete(ctx, testbox1.ID)
@@ -212,17 +279,46 @@ func TestAPI(t *testing.T) {
 	tdeliver(t, acc, testbox1Alt)
 	tdeliver(t, acc, inboxAltRel)
 
+	// MessageCompose
+	draftID := api.MessageCompose(ctx, ComposeMessage{
+		From:     "mjl@mox.example",
+		To:       []string{"mjl+to@mox.example", "mjl to2 <mjl+to2@mox.example>"},
+		Cc:       []string{"mjl+cc@mox.example", "mjl cc2 <mjl+cc2@mox.example>"},
+		Bcc:      []string{"mjl+bcc@mox.example", "mjl bcc2 <mjl+bcc2@mox.example>"},
+		Subject:  "test email",
+		TextBody: "this is the content\n\ncheers,\nmox",
+		ReplyTo:  "mjl replyto <mjl+replyto@mox.example>",
+	}, drafts.ID)
+	// Replace draft.
+	draftID = api.MessageCompose(ctx, ComposeMessage{
+		From:           "mjl@mox.example",
+		To:             []string{"mjl+to@mox.example", "mjl to2 <mjl+to2@mox.example>"},
+		Cc:             []string{"mjl+cc@mox.example", "mjl cc2 <mjl+cc2@mox.example>"},
+		Bcc:            []string{"mjl+bcc@mox.example", "mjl bcc2 <mjl+bcc2@mox.example>"},
+		Subject:        "test email",
+		TextBody:       "this is the content\n\ncheers,\nmox",
+		ReplyTo:        "mjl replyto <mjl+replyto@mox.example>",
+		DraftMessageID: draftID,
+	}, drafts.ID)
+
+	// MessageFindMessageID
+	msgID := api.MessageFindMessageID(ctx, "<absent@localhost>")
+	tcompare(t, msgID, int64(0))
+
 	// MessageSubmit
 	queue.Localserve = true // Deliver directly to us instead attempting actual delivery.
+	err = queue.Init()
+	tcheck(t, err, "queue init")
 	api.MessageSubmit(ctx, SubmitMessage{
-		From:      "mjl@mox.example",
-		To:        []string{"mjl+to@mox.example", "mjl to2 <mjl+to2@mox.example>"},
-		Cc:        []string{"mjl+cc@mox.example", "mjl cc2 <mjl+cc2@mox.example>"},
-		Bcc:       []string{"mjl+bcc@mox.example", "mjl bcc2 <mjl+bcc2@mox.example>"},
-		Subject:   "test email",
-		TextBody:  "this is the content\n\ncheers,\nmox",
-		ReplyTo:   "mjl replyto <mjl+replyto@mox.example>",
-		UserAgent: "moxwebmail/dev",
+		From:           "mjl@mox.example",
+		To:             []string{"mjl+to@mox.example", "mjl to2 <mjl+to2@mox.example>"},
+		Cc:             []string{"mjl+cc@mox.example", "mjl cc2 <mjl+cc2@mox.example>"},
+		Bcc:            []string{"mjl+bcc@mox.example", "mjl bcc2 <mjl+bcc2@mox.example>"},
+		Subject:        "test email",
+		TextBody:       "this is the content\n\ncheers,\nmox",
+		ReplyTo:        "mjl replyto <mjl+replyto@mox.example>",
+		UserAgent:      "moxwebmail/dev",
+		DraftMessageID: draftID,
 	})
 	// todo: check delivery of 6 messages to inbox, 1 to sent
 
@@ -361,17 +457,78 @@ func TestAPI(t *testing.T) {
 	tcompare(t, len(l), 0)
 	tcompare(t, full, true)
 	l, full = api.CompleteRecipient(ctx, "cc2")
-	tcompare(t, l, []string{"mjl cc2 <mjl+cc2@mox.example>"})
+	tcompare(t, l, []string{"mjl cc2 <mjl+cc2@mox.example>", "mjl bcc2 <mjl+bcc2@mox.example>"})
 	tcompare(t, full, true)
 
 	// RecipientSecurity
 	resolver := dns.MockResolver{}
-	rs, err := recipientSecurity(ctx, resolver, "mjl@a.mox.example")
+	rs, err := recipientSecurity(ctx, log, resolver, "mjl@a.mox.example")
 	tcompare(t, err, nil)
 	tcompare(t, rs, RecipientSecurity{SecurityResultUnknown, SecurityResultNo, SecurityResultNo, SecurityResultNo, SecurityResultUnknown})
 	err = acc.DB.Insert(ctx, &store.RecipientDomainTLS{Domain: "a.mox.example", STARTTLS: true, RequireTLS: false})
 	tcheck(t, err, "insert recipient domain tls info")
-	rs, err = recipientSecurity(ctx, resolver, "mjl@a.mox.example")
+	rs, err = recipientSecurity(ctx, log, resolver, "mjl@a.mox.example")
 	tcompare(t, err, nil)
 	tcompare(t, rs, RecipientSecurity{SecurityResultYes, SecurityResultNo, SecurityResultNo, SecurityResultNo, SecurityResultNo})
+
+	// Suggesting/adding/removing rulesets.
+
+	testSuggest := func(msgID int64, expListID string, expMsgFrom string) {
+		listID, msgFrom, isRemove, rcptTo, ruleset := api.RulesetSuggestMove(ctx, msgID, inbox.ID, testbox1.ID)
+		tcompare(t, listID, expListID)
+		tcompare(t, msgFrom, expMsgFrom)
+		tcompare(t, isRemove, false)
+		tcompare(t, rcptTo, "mox@other.example")
+		tcompare(t, ruleset == nil, false)
+
+		// Moving in opposite direction doesn't get a suggestion without the rule present.
+		_, _, _, _, rs0 := api.RulesetSuggestMove(ctx, msgID, testbox1.ID, inbox.ID)
+		tcompare(t, rs0 == nil, true)
+
+		api.RulesetAdd(ctx, rcptTo, *ruleset)
+
+		// Ruleset that exists won't get a suggestion again.
+		_, _, _, _, ruleset = api.RulesetSuggestMove(ctx, msgID, inbox.ID, testbox1.ID)
+		tcompare(t, ruleset == nil, true)
+
+		// Moving in oppositive direction, with rule present, gets the suggestion to remove.
+		_, _, _, _, ruleset = api.RulesetSuggestMove(ctx, msgID, testbox1.ID, inbox.ID)
+		tcompare(t, ruleset == nil, false)
+
+		api.RulesetRemove(ctx, rcptTo, *ruleset)
+
+		// If ListID/MsgFrom is marked as never, we won't get a suggestion.
+		api.RulesetMessageNever(ctx, rcptTo, expListID, expMsgFrom, false)
+		_, _, _, _, ruleset = api.RulesetSuggestMove(ctx, msgID, inbox.ID, testbox1.ID)
+		tcompare(t, ruleset == nil, true)
+
+		var n int
+		if expListID != "" {
+			n, err = bstore.QueryDB[store.RulesetNoListID](ctx, acc.DB).Delete()
+		} else {
+			n, err = bstore.QueryDB[store.RulesetNoMsgFrom](ctx, acc.DB).Delete()
+		}
+		tcheck(t, err, "remove never-answer for listid/msgfrom")
+		tcompare(t, n, 1)
+		_, _, _, _, ruleset = api.RulesetSuggestMove(ctx, msgID, inbox.ID, testbox1.ID)
+		tcompare(t, ruleset == nil, false)
+
+		// If Mailbox is marked as never, we won't get a suggestion.
+		api.RulesetMailboxNever(ctx, testbox1.ID, true)
+		_, _, _, _, ruleset = api.RulesetSuggestMove(ctx, msgID, inbox.ID, testbox1.ID)
+		tcompare(t, ruleset == nil, true)
+
+		n, err = bstore.QueryDB[store.RulesetNoMailbox](ctx, acc.DB).Delete()
+		tcheck(t, err, "remove never-answer for mailbox")
+		tcompare(t, n, 1)
+
+	}
+
+	// For MsgFrom.
+	tdeliver(t, acc, inboxText)
+	testSuggest(inboxText.ID, "", "mjl@mox.example")
+
+	// For List-Id.
+	tdeliver(t, acc, inboxHTML)
+	testSuggest(inboxHTML.ID, "list.mox.example", "")
 }

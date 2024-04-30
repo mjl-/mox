@@ -12,10 +12,9 @@ import (
 	"testing"
 
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/moxvar"
 )
 
-var xlog = mlog.New("message")
+var pkglog = mlog.New("message", nil)
 
 func tcheck(t *testing.T, err error, msg string) {
 	t.Helper()
@@ -27,7 +26,7 @@ func tcheck(t *testing.T, err error, msg string) {
 func tcompare(t *testing.T, got, exp any) {
 	t.Helper()
 	if !reflect.DeepEqual(got, exp) {
-		t.Fatalf("got %q, expected %q", got, exp)
+		t.Fatalf("got %v, expected %v", got, exp)
 	}
 }
 
@@ -40,7 +39,7 @@ func tfail(t *testing.T, err, expErr error) {
 
 func TestEmptyHeader(t *testing.T) {
 	s := "\r\nx"
-	p, err := EnsurePart(xlog, true, strings.NewReader(s), int64(len(s)))
+	p, err := EnsurePart(pkglog.Logger, true, strings.NewReader(s), int64(len(s)))
 	tcheck(t, err, "parse empty headers")
 	buf, err := io.ReadAll(p.Reader())
 	tcheck(t, err, "read")
@@ -54,20 +53,20 @@ func TestBadContentType(t *testing.T) {
 	expBody := "test"
 
 	// Pedantic is like strict.
-	moxvar.Pedantic = true
+	Pedantic = true
 	s := "content-type: text/html;;\r\n\r\ntest"
-	p, err := EnsurePart(xlog, false, strings.NewReader(s), int64(len(s)))
+	p, err := EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
 	tfail(t, err, ErrBadContentType)
 	buf, err := io.ReadAll(p.Reader())
 	tcheck(t, err, "read")
 	tcompare(t, string(buf), expBody)
 	tcompare(t, p.MediaType, "APPLICATION")
 	tcompare(t, p.MediaSubType, "OCTET-STREAM")
-	moxvar.Pedantic = false
+	Pedantic = false
 
 	// Strict
 	s = "content-type: text/html;;\r\n\r\ntest"
-	p, err = EnsurePart(xlog, true, strings.NewReader(s), int64(len(s)))
+	p, err = EnsurePart(pkglog.Logger, true, strings.NewReader(s), int64(len(s)))
 	tfail(t, err, ErrBadContentType)
 	buf, err = io.ReadAll(p.Reader())
 	tcheck(t, err, "read")
@@ -77,7 +76,7 @@ func TestBadContentType(t *testing.T) {
 
 	// Non-strict but unrecoverable content-type.
 	s = "content-type: not a content type;;\r\n\r\ntest"
-	p, err = EnsurePart(xlog, false, strings.NewReader(s), int64(len(s)))
+	p, err = EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
 	tcheck(t, err, "parsing message with bad but recoverable content-type")
 	buf, err = io.ReadAll(p.Reader())
 	tcheck(t, err, "read")
@@ -87,7 +86,7 @@ func TestBadContentType(t *testing.T) {
 
 	// We try to use only the content-type, typically better than application/octet-stream.
 	s = "content-type: text/html;;\r\n\r\ntest"
-	p, err = EnsurePart(xlog, false, strings.NewReader(s), int64(len(s)))
+	p, err = EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
 	tcheck(t, err, "parsing message with bad but recoverable content-type")
 	buf, err = io.ReadAll(p.Reader())
 	tcheck(t, err, "read")
@@ -97,7 +96,7 @@ func TestBadContentType(t *testing.T) {
 
 	// Not recovering multipart, we won't have a boundary.
 	s = "content-type: multipart/mixed;;\r\n\r\ntest"
-	p, err = EnsurePart(xlog, false, strings.NewReader(s), int64(len(s)))
+	p, err = EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
 	tcheck(t, err, "parsing message with bad but recoverable content-type")
 	buf, err = io.ReadAll(p.Reader())
 	tcheck(t, err, "read")
@@ -111,21 +110,21 @@ func TestBareCR(t *testing.T) {
 	expBody := "bare\rcr\r\n"
 
 	// Pedantic is like strict.
-	moxvar.Pedantic = true
-	p, err := EnsurePart(xlog, false, strings.NewReader(s), int64(len(s)))
+	Pedantic = true
+	p, err := EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
 	tfail(t, err, errBareCR)
 	_, err = io.ReadAll(p.Reader())
 	tfail(t, err, errBareCR)
-	moxvar.Pedantic = false
+	Pedantic = false
 
 	// Strict.
-	p, err = EnsurePart(xlog, true, strings.NewReader(s), int64(len(s)))
+	p, err = EnsurePart(pkglog.Logger, true, strings.NewReader(s), int64(len(s)))
 	tfail(t, err, errBareCR)
 	_, err = io.ReadAll(p.Reader())
 	tcheck(t, err, "read fallback part without error")
 
 	// Non-strict allows bare cr.
-	p, err = EnsurePart(xlog, false, strings.NewReader(s), int64(len(s)))
+	p, err = EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
 	tcheck(t, err, "parse")
 	buf, err := io.ReadAll(p.Reader())
 	tcheck(t, err, "read")
@@ -141,7 +140,7 @@ aGkK
 
 func TestBasic(t *testing.T) {
 	r := strings.NewReader(basicMsg)
-	p, err := Parse(xlog, true, r)
+	p, err := Parse(pkglog.Logger, true, r)
 	tcheck(t, err, "new reader")
 
 	buf, err := io.ReadAll(p.RawReader())
@@ -176,7 +175,7 @@ Hello Joe, do you think we can meet at 3:30 tomorrow?
 
 func TestBasic2(t *testing.T) {
 	r := strings.NewReader(basicMsg2)
-	p, err := Parse(xlog, true, r)
+	p, err := Parse(pkglog.Logger, true, r)
 	tcheck(t, err, "new reader")
 
 	buf, err := io.ReadAll(p.RawReader())
@@ -196,9 +195,9 @@ func TestBasic2(t *testing.T) {
 	}
 
 	r = strings.NewReader(basicMsg2)
-	p, err = Parse(xlog, true, r)
+	p, err = Parse(pkglog.Logger, true, r)
 	tcheck(t, err, "new reader")
-	err = p.Walk(xlog, nil)
+	err = p.Walk(pkglog.Logger, nil)
 	tcheck(t, err, "walk")
 	if p.RawLineCount != 2 {
 		t.Fatalf("basic message, got %d lines, expected 2", p.RawLineCount)
@@ -237,25 +236,25 @@ This is the epilogue.  It is also to be ignored.
 func TestMime(t *testing.T) {
 	// from ../rfc/2046:1148
 	r := strings.NewReader(mimeMsg)
-	p, err := Parse(xlog, true, r)
+	p, err := Parse(pkglog.Logger, true, r)
 	tcheck(t, err, "new reader")
 	if len(p.bound) == 0 {
 		t.Fatalf("got no bound, expected bound for mime message")
 	}
 
-	pp, err := p.ParseNextPart(xlog)
+	pp, err := p.ParseNextPart(pkglog.Logger)
 	tcheck(t, err, "next part")
 	buf, err := io.ReadAll(pp.Reader())
 	tcheck(t, err, "read all")
 	tcompare(t, string(buf), "This is implicitly typed plain US-ASCII text.\r\nIt does NOT end with a linebreak.")
 
-	pp, err = p.ParseNextPart(xlog)
+	pp, err = p.ParseNextPart(pkglog.Logger)
 	tcheck(t, err, "next part")
 	buf, err = io.ReadAll(pp.Reader())
 	tcheck(t, err, "read all")
 	tcompare(t, string(buf), "This is explicitly typed plain US-ASCII text.\r\nIt DOES end with a linebreak.\r\n")
 
-	_, err = p.ParseNextPart(xlog)
+	_, err = p.ParseNextPart(pkglog.Logger)
 	tcompare(t, err, io.EOF)
 
 	if len(p.Parts) != 2 {
@@ -274,29 +273,29 @@ func TestLongLine(t *testing.T) {
 	for i := range line {
 		line[i] = 'a'
 	}
-	_, err := Parse(xlog, true, bytes.NewReader(line))
+	_, err := Parse(pkglog.Logger, true, bytes.NewReader(line))
 	tfail(t, err, errLineTooLong)
 }
 
 func TestBareCrLf(t *testing.T) {
 	parse := func(strict bool, s string) error {
-		p, err := Parse(xlog, strict, strings.NewReader(s))
+		p, err := Parse(pkglog.Logger, strict, strings.NewReader(s))
 		if err != nil {
 			return err
 		}
-		return p.Walk(xlog, nil)
+		return p.Walk(pkglog.Logger, nil)
 	}
 	err := parse(false, "subject: test\ntest\r\n")
 	tfail(t, err, errBareLF)
 	err = parse(false, "\r\ntest\ntest\r\n")
 	tfail(t, err, errBareLF)
 
-	moxvar.Pedantic = true
+	Pedantic = true
 	err = parse(false, "subject: test\rtest\r\n")
 	tfail(t, err, errBareCR)
 	err = parse(false, "\r\ntest\rtest\r\n")
 	tfail(t, err, errBareCR)
-	moxvar.Pedantic = false
+	Pedantic = false
 
 	err = parse(true, "subject: test\rtest\r\n")
 	tfail(t, err, errBareCR)
@@ -316,25 +315,25 @@ func TestMissingClosingBoundary(t *testing.T) {
 
 test
 `, "\n", "\r\n")
-	msg, err := Parse(xlog, false, strings.NewReader(message))
+	msg, err := Parse(pkglog.Logger, false, strings.NewReader(message))
 	tcheck(t, err, "new reader")
 	err = walkmsg(&msg)
 	tfail(t, err, errMissingClosingBoundary)
 
-	msg, _ = Parse(xlog, false, strings.NewReader(message))
-	err = msg.Walk(xlog, nil)
+	msg, _ = Parse(pkglog.Logger, false, strings.NewReader(message))
+	err = msg.Walk(pkglog.Logger, nil)
 	tfail(t, err, errMissingClosingBoundary)
 }
 
 func TestHeaderEOF(t *testing.T) {
 	message := "header: test"
-	_, err := Parse(xlog, false, strings.NewReader(message))
+	_, err := Parse(pkglog.Logger, false, strings.NewReader(message))
 	tfail(t, err, errUnexpectedEOF)
 }
 
 func TestBodyEOF(t *testing.T) {
 	message := "header: test\r\n\r\ntest"
-	msg, err := Parse(xlog, true, strings.NewReader(message))
+	msg, err := Parse(pkglog.Logger, true, strings.NewReader(message))
 	tcheck(t, err, "new reader")
 	buf, err := io.ReadAll(msg.Reader())
 	tcheck(t, err, "read body")
@@ -365,7 +364,7 @@ test
 
 `, "\n", "\r\n")
 
-	msg, err := Parse(xlog, false, strings.NewReader(message))
+	msg, err := Parse(pkglog.Logger, false, strings.NewReader(message))
 	tcheck(t, err, "new reader")
 	enforceSequential = true
 	defer func() {
@@ -374,8 +373,8 @@ test
 	err = walkmsg(&msg)
 	tcheck(t, err, "walkmsg")
 
-	msg, _ = Parse(xlog, false, strings.NewReader(message))
-	err = msg.Walk(xlog, nil)
+	msg, _ = Parse(pkglog.Logger, false, strings.NewReader(message))
+	err = msg.Walk(pkglog.Logger, nil)
 	tcheck(t, err, "msg.Walk")
 }
 
@@ -452,7 +451,7 @@ Content-Transfer-Encoding: Quoted-printable
 --unique-boundary-1--
 `, "\n", "\r\n")
 
-	msg, err := Parse(xlog, true, strings.NewReader(nestedMessage))
+	msg, err := Parse(pkglog.Logger, true, strings.NewReader(nestedMessage))
 	tcheck(t, err, "new reader")
 	enforceSequential = true
 	defer func() {
@@ -477,8 +476,8 @@ Content-Transfer-Encoding: Quoted-printable
 		t.Fatalf("got %q, expected %q", buf, exp)
 	}
 
-	msg, _ = Parse(xlog, false, strings.NewReader(nestedMessage))
-	err = msg.Walk(xlog, nil)
+	msg, _ = Parse(pkglog.Logger, false, strings.NewReader(nestedMessage))
+	err = msg.Walk(pkglog.Logger, nil)
 	tcheck(t, err, "msg.Walk")
 
 }
@@ -518,7 +517,7 @@ func walk(path string) error {
 		return err
 	}
 	defer r.Close()
-	msg, err := Parse(xlog, false, r)
+	msg, err := Parse(pkglog.Logger, false, r)
 	if err != nil {
 		return err
 	}
@@ -538,7 +537,7 @@ func walkmsg(msg *Part) error {
 		}
 
 		if msg.MediaType == "MESSAGE" && (msg.MediaSubType == "RFC822" || msg.MediaSubType == "GLOBAL") {
-			mp, err := Parse(xlog, false, bytes.NewReader(buf))
+			mp, err := Parse(pkglog.Logger, false, bytes.NewReader(buf))
 			if err != nil {
 				return err
 			}
@@ -566,7 +565,7 @@ func walkmsg(msg *Part) error {
 	}
 
 	for {
-		pp, err := msg.ParseNextPart(xlog)
+		pp, err := msg.ParseNextPart(pkglog.Logger)
 		if err == io.EOF {
 			return nil
 		}
@@ -585,7 +584,7 @@ func TestEmbedded(t *testing.T) {
 	tcheck(t, err, "open")
 	fi, err := f.Stat()
 	tcheck(t, err, "stat")
-	_, err = EnsurePart(xlog, false, f, fi.Size())
+	_, err = EnsurePart(pkglog.Logger, false, f, fi.Size())
 	tcheck(t, err, "parse")
 }
 
@@ -594,6 +593,6 @@ func TestEmbedded2(t *testing.T) {
 	tcheck(t, err, "readfile")
 	buf = bytes.ReplaceAll(buf, []byte("\n"), []byte("\r\n"))
 
-	_, err = EnsurePart(xlog, false, bytes.NewReader(buf), int64(len(buf)))
+	_, err = EnsurePart(pkglog.Logger, false, bytes.NewReader(buf), int64(len(buf)))
 	tfail(t, err, nil)
 }

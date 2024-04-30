@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/fs"
 	golog "log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -46,7 +47,9 @@ func recvid(r *http.Request) string {
 // If no handler matched, false is returned.
 // WebHandle sets w.Name to that of the matching handler.
 func WebHandle(w *loggingWriter, r *http.Request, host dns.Domain) (handled bool) {
-	redirects, handlers := mox.Conf.WebServer()
+	conf := mox.Conf.DynamicConfig()
+	redirects := conf.WebDNSDomainRedirects
+	handlers := conf.WebHandlers
 
 	for from, to := range redirects {
 		if host != from {
@@ -149,8 +152,8 @@ table > tbody > tr:nth-child(odd) { background-color: #f8f8f8; }
 // file is returned. Otherwise, for directories with ListFiles configured, a
 // directory listing is returned.
 func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *http.Request) (handled bool) {
-	log := func() *mlog.Log {
-		return xlog.WithContext(r.Context())
+	log := func() mlog.Log {
+		return pkglog.WithContext(r.Context())
 	}
 	if r.Method != "GET" && r.Method != "HEAD" {
 		if h.ContinueNotFound {
@@ -217,7 +220,7 @@ func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *
 				var ifi os.FileInfo
 				ifi, err = index.Stat()
 				if err != nil {
-					log().Errorx("stat index.html in directory we cannot list", err, mlog.Field("url", r.URL), mlog.Field("fspath", fspath))
+					log().Errorx("stat index.html in directory we cannot list", err, slog.Any("url", r.URL), slog.String("fspath", fspath))
 					http.Error(w, "500 - internal server error"+recvid(r), http.StatusInternalServerError)
 					return true
 				}
@@ -228,7 +231,7 @@ func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *
 			http.Error(w, "403 - permission denied", http.StatusForbidden)
 			return true
 		}
-		log().Errorx("open file for static file serving", err, mlog.Field("url", r.URL), mlog.Field("fspath", fspath))
+		log().Errorx("open file for static file serving", err, slog.Any("url", r.URL), slog.String("fspath", fspath))
 		http.Error(w, "500 - internal server error"+recvid(r), http.StatusInternalServerError)
 		return true
 	}
@@ -236,7 +239,7 @@ func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *
 
 	fi, err := f.Stat()
 	if err != nil {
-		log().Errorx("stat file for static file serving", err, mlog.Field("url", r.URL), mlog.Field("fspath", fspath))
+		log().Errorx("stat file for static file serving", err, slog.Any("url", r.URL), slog.String("fspath", fspath))
 		http.Error(w, "500 - internal server error"+recvid(r), http.StatusInternalServerError)
 		return true
 	}
@@ -274,7 +277,7 @@ func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *
 			}
 		}
 		if !os.IsNotExist(err) {
-			log().Errorx("stat for static file serving", err, mlog.Field("url", r.URL), mlog.Field("fspath", fspath))
+			log().Errorx("stat for static file serving", err, slog.Any("url", r.URL), slog.String("fspath", fspath))
 			http.Error(w, "500 - internal server error"+recvid(r), http.StatusInternalServerError)
 			return true
 		}
@@ -315,7 +318,7 @@ func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *
 			if err == io.EOF {
 				break
 			} else if err != nil {
-				log().Errorx("reading directory for file listing", err, mlog.Field("url", r.URL), mlog.Field("fspath", fspath))
+				log().Errorx("reading directory for file listing", err, slog.Any("url", r.URL), slog.String("fspath", fspath))
 				http.Error(w, "500 - internal server error"+recvid(r), http.StatusInternalServerError)
 				return true
 			}
@@ -398,8 +401,8 @@ func HandleRedirect(h *config.WebRedirect, w http.ResponseWriter, r *http.Reques
 // connections by monitoring the websocket handshake and then just passing along the
 // websocket frames.
 func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request, path string) (handled bool) {
-	log := func() *mlog.Log {
-		return xlog.WithContext(r.Context())
+	log := func() mlog.Log {
+		return pkglog.WithContext(r.Context())
 	}
 
 	xr := *r
@@ -459,13 +462,13 @@ func HandleForward(h *config.WebForward, w http.ResponseWriter, r *http.Request,
 	// ReverseProxy will append any remaining path to the configured target URL.
 	proxy := httputil.NewSingleHostReverseProxy(h.TargetURL)
 	proxy.FlushInterval = time.Duration(-1) // Flush after each write.
-	proxy.ErrorLog = golog.New(mlog.ErrWriter(mlog.New("net/http/httputil").WithContext(r.Context()), mlog.LevelDebug, "reverseproxy error"), "", 0)
+	proxy.ErrorLog = golog.New(mlog.LogWriter(mlog.New("net/http/httputil", nil).WithContext(r.Context()), mlog.LevelDebug, "reverseproxy error"), "", 0)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		if errors.Is(err, context.Canceled) {
-			log().Debugx("forwarding request to backend webserver", err, mlog.Field("url", r.URL))
+			log().Debugx("forwarding request to backend webserver", err, slog.Any("url", r.URL))
 			return
 		}
-		log().Errorx("forwarding request to backend webserver", err, mlog.Field("url", r.URL))
+		log().Errorx("forwarding request to backend webserver", err, slog.Any("url", r.URL))
 		if os.IsTimeout(err) {
 			http.Error(w, "504 - gateway timeout"+recvid(r), http.StatusGatewayTimeout)
 		} else {
@@ -493,8 +496,8 @@ var errNotImplemented = errors.New("functionality not yet implemented")
 // work for little benefit. Besides, the whole point of websockets is to exchange
 // bytes without HTTP being in the way, so let's do that.
 func forwardWebsocket(h *config.WebForward, w http.ResponseWriter, r *http.Request, path string) (handled bool) {
-	log := func() *mlog.Log {
-		return xlog.WithContext(r.Context())
+	log := func() mlog.Log {
+		return pkglog.WithContext(r.Context())
 	}
 
 	lw := w.(*loggingWriter)
@@ -658,8 +661,8 @@ func forwardWebsocket(h *config.WebForward, w http.ResponseWriter, r *http.Reque
 }
 
 func websocketTransact(ctx context.Context, targetURL *url.URL, r *http.Request) (rresp *http.Response, rconn net.Conn, rerr error) {
-	log := func() *mlog.Log {
-		return xlog.WithContext(r.Context())
+	log := func() mlog.Log {
+		return pkglog.WithContext(r.Context())
 	}
 
 	// Dial the backend, possibly doing TLS. We assume the net/http DefaultTransport is

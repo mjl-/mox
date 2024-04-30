@@ -3,6 +3,57 @@
 	"Docs": "",
 	"Functions": [
 		{
+			"Name": "LoginPrep",
+			"Docs": "LoginPrep returns a login token, and also sets it as cookie. Both must be\npresent in the call to Login.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Login",
+			"Docs": "Login returns a session token for the credentials, or fails with error code\n\"user:badLogin\". Call LoginPrep to get a loginToken.",
+			"Params": [
+				{
+					"Name": "loginToken",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "username",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "password",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"CSRFToken"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Logout",
+			"Docs": "Logout invalidates the session token.",
+			"Params": [],
+			"Returns": []
+		},
+		{
 			"Name": "Token",
 			"Docs": "Token returns a token to use for an SSE connection. A token can only be used for\na single SSE connection. Tokens are stored in memory for a maximum of 1 minute,\nwith at most 10 unused tokens (the most recently created) per account.",
 			"Params": [],
@@ -49,8 +100,67 @@
 			]
 		},
 		{
+			"Name": "FromAddressSettingsSave",
+			"Docs": "FromAddressSettingsSave saves per-\"From\"-address settings.",
+			"Params": [
+				{
+					"Name": "fas",
+					"Typewords": [
+						"FromAddressSettings"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "MessageFindMessageID",
+			"Docs": "MessageFindMessageID looks up a message by Message-Id header, and returns the ID\nof the message in storage. Used when opening a previously saved draft message\nfor editing again.\nIf no message is find, zero is returned, not an error.",
+			"Params": [
+				{
+					"Name": "messageID",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "id",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
+			"Name": "MessageCompose",
+			"Docs": "MessageCompose composes a message and saves it to the mailbox. Used for\nsaving draft messages.",
+			"Params": [
+				{
+					"Name": "m",
+					"Typewords": [
+						"ComposeMessage"
+					]
+				},
+				{
+					"Name": "mailboxID",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "id",
+					"Typewords": [
+						"int64"
+					]
+				}
+			]
+		},
+		{
 			"Name": "MessageSubmit",
-			"Docs": "MessageSubmit sends a message by submitting it the outgoing email queue. The\nmessage is sent to all addresses listed in the To, Cc and Bcc addresses, without\nBcc message header.\n\nIf a Sent mailbox is configured, messages are added to it after submitting\nto the delivery queue.",
+			"Docs": "MessageSubmit sends a message by submitting it the outgoing email queue. The\nmessage is sent to all addresses listed in the To, Cc and Bcc addresses, without\nBcc message header.\n\nIf a Sent mailbox is configured, messages are added to it after submitting\nto the delivery queue. If Bcc addresses were present, a header is prepended\nto the message stored in the Sent mailbox.",
 			"Params": [
 				{
 					"Name": "m",
@@ -294,6 +404,184 @@
 					]
 				}
 			]
+		},
+		{
+			"Name": "DecodeMIMEWords",
+			"Docs": "DecodeMIMEWords decodes Q/B-encoded words for a mime headers into UTF-8 text.",
+			"Params": [
+				{
+					"Name": "text",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "SettingsSave",
+			"Docs": "SettingsSave saves settings, e.g. for composing.",
+			"Params": [
+				{
+					"Name": "settings",
+					"Typewords": [
+						"Settings"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "RulesetSuggestMove",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "msgID",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "mbSrcID",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "mbDstID",
+					"Typewords": [
+						"int64"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "listID",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "msgFrom",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "isRemove",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "rcptTo",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ruleset",
+					"Typewords": [
+						"nullable",
+						"Ruleset"
+					]
+				}
+			]
+		},
+		{
+			"Name": "RulesetAdd",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "rcptTo",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ruleset",
+					"Typewords": [
+						"Ruleset"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "RulesetRemove",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "rcptTo",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ruleset",
+					"Typewords": [
+						"Ruleset"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "RulesetMessageNever",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "rcptTo",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "listID",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "msgFrom",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "toInbox",
+					"Typewords": [
+						"bool"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "RulesetMailboxNever",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "mailboxID",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "toMailbox",
+					"Typewords": [
+						"bool"
+					]
+				}
+			],
+			"Returns": []
 		},
 		{
 			"Name": "SSETypes",
@@ -704,6 +992,13 @@
 					]
 				},
 				{
+					"Name": "ViewMode",
+					"Docs": "",
+					"Typewords": [
+						"ViewMode"
+					]
+				},
+				{
 					"Name": "Texts",
 					"Docs": "Text parts, can be empty.",
 					"Typewords": [
@@ -911,14 +1206,14 @@
 				},
 				{
 					"Name": "InReplyTo",
-					"Docs": "",
+					"Docs": "From In-Reply-To header, includes \u003c\u003e.",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
 					"Name": "MessageID",
-					"Docs": "",
+					"Docs": "From Message-Id header, includes \u003c\u003e.",
 					"Typewords": [
 						"string"
 					]
@@ -938,7 +1233,7 @@
 				},
 				{
 					"Name": "User",
-					"Docs": "Localpart.",
+					"Docs": "Localpart, encoded as string. Must be parsed before using as Localpart.",
 					"Typewords": [
 						"string"
 					]
@@ -981,20 +1276,112 @@
 		},
 		{
 			"Name": "Domain",
-			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups.",
+			"Docs": "Domain is a domain name, with one or more labels, with at least an ASCII\nrepresentation, and for IDNA non-ASCII domains a unicode representation.\nThe ASCII string must be used for DNS lookups. The strings do not have a\ntrailing dot. When using with StrictResolver, add the trailing dot.",
 			"Fields": [
 				{
 					"Name": "ASCII",
-					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case.",
+					"Docs": "A non-unicode domain, e.g. with A-labels (xn--...) or NR-LDH (non-reserved letters/digits/hyphens) labels. Always in lower case. No trailing dot.",
 					"Typewords": [
 						"string"
 					]
 				},
 				{
 					"Name": "Unicode",
-					"Docs": "Name as U-labels. Empty if this is an ASCII-only domain.",
+					"Docs": "Name as U-labels, in Unicode NFC. Empty if this is an ASCII-only domain. No trailing dot.",
 					"Typewords": [
 						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "FromAddressSettings",
+			"Docs": "FromAddressSettings are webmail client settings per \"From\" address.",
+			"Fields": [
+				{
+					"Name": "FromAddress",
+					"Docs": "Unicode.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ViewMode",
+					"Docs": "",
+					"Typewords": [
+						"ViewMode"
+					]
+				}
+			]
+		},
+		{
+			"Name": "ComposeMessage",
+			"Docs": "ComposeMessage is a message to be composed, for saving draft messages.",
+			"Fields": [
+				{
+					"Name": "From",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "To",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Cc",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "Bcc",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "ReplyTo",
+					"Docs": "If non-empty, Reply-To header to add to message.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Subject",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "TextBody",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "ResponseMessageID",
+					"Docs": "If set, this was a reply or forward, based on IsForward.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "DraftMessageID",
+					"Docs": "If set, previous draft message that will be removed after composing new message.",
+					"Typewords": [
+						"int64"
 					]
 				}
 			]
@@ -1031,6 +1418,13 @@
 					"Docs": "",
 					"Typewords": [
 						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "ReplyTo",
+					"Docs": "If non-empty, Reply-To header to add to message.",
+					"Typewords": [
 						"string"
 					]
 				},
@@ -1078,13 +1472,6 @@
 					]
 				},
 				{
-					"Name": "ReplyTo",
-					"Docs": "If non-empty, Reply-To header to add to message.",
-					"Typewords": [
-						"string"
-					]
-				},
-				{
 					"Name": "UserAgent",
 					"Docs": "User-Agent header added if not empty.",
 					"Typewords": [
@@ -1097,6 +1484,28 @@
 					"Typewords": [
 						"nullable",
 						"bool"
+					]
+				},
+				{
+					"Name": "FutureRelease",
+					"Docs": "If set, time (in the future) when message should be delivered from queue.",
+					"Typewords": [
+						"nullable",
+						"timestamp"
+					]
+				},
+				{
+					"Name": "ArchiveThread",
+					"Docs": "If set, thread is archived after sending message.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "DraftMessageID",
+					"Docs": "If set, draft message that will be removed after sending.",
+					"Typewords": [
+						"int64"
 					]
 				}
 			]
@@ -1304,6 +1713,124 @@
 			]
 		},
 		{
+			"Name": "Settings",
+			"Docs": "Settings are webmail client settings.",
+			"Fields": [
+				{
+					"Name": "ID",
+					"Docs": "Singleton ID 1.",
+					"Typewords": [
+						"uint8"
+					]
+				},
+				{
+					"Name": "Signature",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Quoting",
+					"Docs": "",
+					"Typewords": [
+						"Quoting"
+					]
+				},
+				{
+					"Name": "ShowAddressSecurity",
+					"Docs": "Whether to show the bars underneath the address input fields indicating starttls/dnssec/dane/mtasts/requiretls support by address.",
+					"Typewords": [
+						"bool"
+					]
+				}
+			]
+		},
+		{
+			"Name": "Ruleset",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "SMTPMailFromRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "MsgFromRegexp",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "VerifiedDomain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "HeadersRegexp",
+					"Docs": "",
+					"Typewords": [
+						"{}",
+						"string"
+					]
+				},
+				{
+					"Name": "IsForward",
+					"Docs": "todo: once we implement ARC, we can use dkim domains that we cannot verify but that the arc-verified forwarding mail server was able to verify.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ListAllowDomain",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "AcceptRejectsToMailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Mailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Comment",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "VerifiedDNSDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				},
+				{
+					"Name": "ListAllowDNSDomain",
+					"Docs": "",
+					"Typewords": [
+						"Domain"
+					]
+				}
+			]
+		},
+		{
 			"Name": "EventStart",
 			"Docs": "EventStart is the first message sent on an SSE connection, giving the client\nbasic data to populate its UI. After this event, messages will follow quickly in\nan EventViewMsgs event.",
 			"Fields": [
@@ -1350,6 +1877,34 @@
 					"Typewords": [
 						"[]",
 						"Mailbox"
+					]
+				},
+				{
+					"Name": "RejectsMailbox",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Settings",
+					"Docs": "",
+					"Typewords": [
+						"Settings"
+					]
+				},
+				{
+					"Name": "AccountPath",
+					"Docs": "If nonempty, the path on same host to webaccount interface.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Version",
+					"Docs": "",
+					"Typewords": [
+						"string"
 					]
 				}
 			]
@@ -1817,6 +2372,41 @@
 					]
 				},
 				{
+					"Name": "IsMailingList",
+					"Docs": "If received message was known to match a mailing list rule (with modified junk filtering).",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "DSN",
+					"Docs": "If this message is a DSN, generated by us or received. For DSNs, we don't look at the subject when matching threads.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ReceivedTLSVersion",
+					"Docs": "0 if unknown, 1 if plaintext/no TLS, otherwise TLS cipher suite.",
+					"Typewords": [
+						"uint16"
+					]
+				},
+				{
+					"Name": "ReceivedTLSCipherSuite",
+					"Docs": "",
+					"Typewords": [
+						"uint16"
+					]
+				},
+				{
+					"Name": "ReceivedRequireTLS",
+					"Docs": "Whether RequireTLS was known to be used for incoming delivery.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
 					"Name": "Seen",
 					"Docs": "",
 					"Typewords": [
@@ -2023,7 +2613,7 @@
 				},
 				{
 					"Name": "Filename",
-					"Docs": "File name based on \"name\" attribute of \"Content-Type\", or the \"filename\" attribute of \"Content-Disposition\". todo: decode non-ascii character sets",
+					"Docs": "File name based on \"name\" attribute of \"Content-Type\", or the \"filename\" attribute of \"Content-Disposition\".",
 					"Typewords": [
 						"string"
 					]
@@ -2585,6 +3175,11 @@
 	],
 	"Strings": [
 		{
+			"Name": "CSRFToken",
+			"Docs": "",
+			"Values": null
+		},
+		{
 			"Name": "ThreadMode",
 			"Docs": "",
 			"Values": [
@@ -2657,6 +3252,32 @@
 			]
 		},
 		{
+			"Name": "ViewMode",
+			"Docs": "ViewMode how a message should be viewed: its text parts, html parts, or html\nwith loading external resources.",
+			"Values": [
+				{
+					"Name": "ModeDefault",
+					"Value": "",
+					"Docs": ""
+				},
+				{
+					"Name": "ModeText",
+					"Value": "text",
+					"Docs": ""
+				},
+				{
+					"Name": "ModeHTML",
+					"Value": "html",
+					"Docs": ""
+				},
+				{
+					"Name": "ModeHTMLExt",
+					"Value": "htmlext",
+					"Docs": "HTML with external resources."
+				}
+			]
+		},
+		{
 			"Name": "SecurityResult",
 			"Docs": "SecurityResult indicates whether a security feature is supported.",
 			"Values": [
@@ -2683,8 +3304,29 @@
 			]
 		},
 		{
+			"Name": "Quoting",
+			"Docs": "Quoting is a setting for how to quote in replies/forwards.",
+			"Values": [
+				{
+					"Name": "Default",
+					"Value": "",
+					"Docs": "Bottom-quote if text is selected, top-quote otherwise."
+				},
+				{
+					"Name": "Bottom",
+					"Value": "bottom",
+					"Docs": ""
+				},
+				{
+					"Name": "Top",
+					"Value": "top",
+					"Docs": ""
+				}
+			]
+		},
+		{
 			"Name": "Localpart",
-			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.",
+			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.\nLocalparts are in Unicode NFC.",
 			"Values": null
 		}
 	],

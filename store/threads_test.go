@@ -15,23 +15,23 @@ import (
 )
 
 func TestThreadingUpgrade(t *testing.T) {
+	log := mlog.New("store", nil)
 	os.RemoveAll("../testdata/store/data")
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
-	acc, err := OpenAccount("mjl")
+	acc, err := OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
 	defer func() {
 		err = acc.Close()
 		tcheck(t, err, "closing account")
+		acc.CheckClosed()
 	}()
 	defer Switchboard()()
-
-	log := mlog.New("store")
 
 	// New account already has threading. Add some messages, check the threading.
 	deliver := func(recv time.Time, s string, expThreadID int64) Message {
 		t.Helper()
-		f, err := CreateMessageTemp("account-test")
+		f, err := CreateMessageTemp(log, "account-test")
 		tcheck(t, err, "temp file")
 		defer os.Remove(f.Name())
 		defer f.Close()
@@ -117,6 +117,7 @@ func TestThreadingUpgrade(t *testing.T) {
 	dbpath := acc.DBPath
 	err = acc.Close()
 	tcheck(t, err, "close account")
+	acc.CheckClosed()
 
 	// Now clear the threading upgrade, and the threading fields and close the account.
 	// We open the database file directly, so we don't trigger the consistency checker.
@@ -141,7 +142,7 @@ func TestThreadingUpgrade(t *testing.T) {
 	tcheck(t, err, "closing db")
 
 	// Open the account again, that should get the account upgraded. Wait for upgrade to finish.
-	acc, err = OpenAccount("mjl")
+	acc, err = OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
 	err = acc.ThreadingWait(log)
 	tcheck(t, err, "wait for threading")

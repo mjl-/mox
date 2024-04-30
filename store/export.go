@@ -8,9 +8,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ type Archiver interface {
 	Close() error
 }
 
-// TarArchiver is an Archiver that writes to a tar ifle.
+// TarArchiver is an Archiver that writes to a tar file.
 type TarArchiver struct {
 	*tar.Writer
 }
@@ -81,7 +82,7 @@ type DirArchiver struct {
 	Dir string
 }
 
-// Create create name in the file system, in dir.
+// Create creates name in the file system, in dir.
 // name must always use forwarded slashes.
 func (a DirArchiver) Create(name string, size int64, mtime time.Time) (io.WriteCloser, error) {
 	isdir := strings.HasSuffix(name, "/")
@@ -99,6 +100,28 @@ func (a DirArchiver) Close() error {
 	return nil
 }
 
+// MboxArchive fakes being an archiver to which a single mbox file can be written.
+// It returns an error when a second file is added. It returns its writer for the
+// first file to be written, leaving parameters unused.
+type MboxArchiver struct {
+	Writer io.Writer
+	have   bool
+}
+
+// Create returns the underlying writer for the first call, and an error on later calls.
+func (a *MboxArchiver) Create(name string, size int64, mtime time.Time) (io.WriteCloser, error) {
+	if a.have {
+		return nil, fmt.Errorf("cannot export multiple files with mbox")
+	}
+	a.have = true
+	return nopCloser{a.Writer}, nil
+}
+
+// Close on an mbox archiver does nothing.
+func (a *MboxArchiver) Close() error {
+	return nil
+}
+
 // ExportMessages writes messages to archiver. Either in maildir format, or otherwise in
 // mbox. If mailboxOpt is empty, all mailboxes are exported, otherwise only the
 // named mailbox.
@@ -106,7 +129,7 @@ func (a DirArchiver) Close() error {
 // Some errors are not fatal and result in skipped messages. In that happens, a
 // file "errors.txt" is added to the archive describing the errors. The goal is to
 // let users export (hopefully) most messages even in the face of errors.
-func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDir string, archiver Archiver, maildir bool, mailboxOpt string) error {
+func ExportMessages(ctx context.Context, log mlog.Log, db *bstore.DB, accountDir string, archiver Archiver, maildir bool, mailboxOpt string, recursive bool) error {
 	// todo optimize: should prepare next file to add to archive (can be an mbox with many messages) while writing a file to the archive (which typically compresses, which takes time).
 
 	// Start transaction without closure, we are going to close it early, but don't
@@ -117,88 +140,11 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 		return fmt.Errorf("transaction: %v", err)
 	}
 	defer func() {
-		if tx != nil {
-			err := tx.Rollback()
-			log.Check(err, "transaction rollback after export error")
-		}
+		err := tx.Rollback()
+		log.Check(err, "transaction rollback")
 	}()
 
 	start := time.Now()
-
-	// Set up mailbox names and ids.
-	id2name := map[int64]string{}
-	name2id := map[string]int64{}
-
-	mailboxes, err := bstore.QueryTx[Mailbox](tx).List()
-	if err != nil {
-		return fmt.Errorf("query mailboxes: %w", err)
-	}
-	for _, mb := range mailboxes {
-		id2name[mb.ID] = mb.Name
-		name2id[mb.Name] = mb.ID
-	}
-
-	var mailboxID int64
-	if mailboxOpt != "" {
-		var ok bool
-		mailboxID, ok = name2id[mailboxOpt]
-		if !ok {
-			return fmt.Errorf("mailbox not found")
-		}
-	}
-
-	var names []string
-	for _, name := range id2name {
-		if mailboxOpt != "" && name != mailboxOpt {
-			continue
-		}
-		names = append(names, name)
-	}
-	// We need to sort the names because maildirs can create subdirs. Ranging over
-	// id2name directly would randomize the directory names, we would create a sub
-	// maildir before the parent, and fail with "dir exists" when creating the parent
-	// dir.
-	sort.Slice(names, func(i, j int) bool {
-		return names[i] < names[j]
-	})
-
-	mailboxOrder := map[int64]int{}
-	for i, name := range names {
-		mbID := name2id[name]
-		mailboxOrder[mbID] = i
-	}
-
-	// Fetch all messages. This can take quite a bit of memory if the mailbox is large.
-	q := bstore.QueryTx[Message](tx)
-	if mailboxID > 0 {
-		q.FilterNonzero(Message{MailboxID: mailboxID})
-	}
-	msgs, err := q.List()
-	if err != nil {
-		return fmt.Errorf("listing messages: %v", err)
-	}
-
-	// Close transaction. We don't want to hold it for too long. We are now at risk
-	// that a message is be removed while we export, or flags changed. At least the
-	// size won't change. If we cannot open the message later on, we'll skip it and add
-	// an error message to an errors.txt file in the output archive.
-	if err := tx.Rollback(); err != nil {
-		return fmt.Errorf("closing transaction: %v", err)
-	}
-	tx = nil
-
-	// Order the messages by mailbox, received time and finally message ID.
-	sort.Slice(msgs, func(i, j int) bool {
-		iid := msgs[i].MailboxID
-		jid := msgs[j].MailboxID
-		if iid != jid {
-			return mailboxOrder[iid] < mailboxOrder[jid]
-		}
-		if !msgs[i].Received.Equal(msgs[j].Received) {
-			return msgs[i].Received.Before(msgs[j].Received)
-		}
-		return msgs[i].ID < msgs[j].ID
-	})
 
 	// We keep track of errors reading message files. We continue exporting and add an
 	// errors.txt file to the archive. In case of errors, the user can get (hopefully)
@@ -207,18 +153,61 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 	// continue with useless work.
 	var errors string
 
-	var curMailboxID int64 // Used to set curMailbox and finish a previous mbox file.
-	var curMailbox string
+	// Process mailboxes sorted by name, so submaildirs come after their parent.
+	prefix := mailboxOpt + "/"
+	var trimPrefix string
+	if mailboxOpt != "" {
+		// If exporting a specific mailbox, trim its parent path from stored file names.
+		trimPrefix = path.Dir(mailboxOpt) + "/"
+	}
+	q := bstore.QueryTx[Mailbox](tx)
+	q.FilterFn(func(mb Mailbox) bool {
+		return mailboxOpt == "" || mb.Name == mailboxOpt || recursive && strings.HasPrefix(mb.Name, prefix)
+	})
+	q.SortAsc("Name")
+	err = q.ForEach(func(mb Mailbox) error {
+		mailboxName := mb.Name
+		if trimPrefix != "" {
+			mailboxName = strings.TrimPrefix(mailboxName, trimPrefix)
+		}
+		errmsgs, err := exportMailbox(log, tx, accountDir, mb.ID, mailboxName, archiver, maildir, start)
+		if err != nil {
+			return err
+		}
+		errors += errmsgs
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("query mailboxes: %w", err)
+	}
+
+	if errors != "" {
+		w, err := archiver.Create("errors.txt", int64(len(errors)), time.Now())
+		if err != nil {
+			log.Errorx("adding errors.txt to archive", err)
+			return err
+		}
+		if _, err := w.Write([]byte(errors)); err != nil {
+			log.Errorx("writing errors.txt to archive", err)
+			xerr := w.Close()
+			log.Check(xerr, "closing errors.txt after error")
+			return err
+		}
+		if err := w.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func exportMailbox(log mlog.Log, tx *bstore.Tx, accountDir string, mailboxID int64, mailboxName string, archiver Archiver, maildir bool, start time.Time) (string, error) {
+	var errors string
 
 	var mboxtmp *os.File
 	var mboxwriter *bufio.Writer
 	defer func() {
 		if mboxtmp != nil {
-			name := mboxtmp.Name()
-			err := mboxtmp.Close()
-			log.Check(err, "closing mbox temp file")
-			err = os.Remove(name)
-			log.Check(err, "removing mbox temp file", mlog.Field("name", name))
+			CloseRemoveTempFile(log, mboxtmp, "mbox")
 		}
 	}()
 
@@ -251,7 +240,7 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 					return err
 				}
 			}
-			w, err := archiver.Create(curMailbox+"/dovecot-keywords", int64(b.Len()), start)
+			w, err := archiver.Create(mailboxName+"/dovecot-keywords", int64(b.Len()), start)
 			if err != nil {
 				return fmt.Errorf("adding dovecot-keywords: %v", err)
 			}
@@ -265,10 +254,6 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 			return w.Close()
 		}
 
-		if mboxtmp == nil {
-			return nil
-		}
-
 		if err := mboxwriter.Flush(); err != nil {
 			return fmt.Errorf("flush mbox writer: %v", err)
 		}
@@ -279,7 +264,7 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 		if _, err := mboxtmp.Seek(0, 0); err != nil {
 			return fmt.Errorf("seek to start of temporary mbox file")
 		}
-		w, err := archiver.Create(curMailbox+".mbox", fi.Size(), fi.ModTime())
+		w, err := archiver.Create(mailboxName+".mbox", fi.Size(), fi.ModTime())
 		if err != nil {
 			return fmt.Errorf("add mbox to archive: %v", err)
 		}
@@ -295,7 +280,7 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 		err = mboxtmp.Close()
 		log.Check(err, "closing temporary mbox file")
 		err = os.Remove(name)
-		log.Check(err, "removing temporary mbox file", mlog.Field("path", name))
+		log.Check(err, "removing temporary mbox file", slog.String("path", name))
 		mboxwriter = nil
 		mboxtmp = nil
 		return nil
@@ -329,7 +314,7 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 		}
 
 		if maildir {
-			p := curMailbox
+			p := mailboxName
 			if m.Flags.Seen {
 				p = filepath.Join(p, "cur")
 			} else {
@@ -381,7 +366,7 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 			for {
 				line, rerr := r.ReadBytes('\n')
 				if rerr != io.EOF && rerr != nil {
-					errors += fmt.Sprintf("reading from message for id %d: %v (message skipped)\n", m.ID, err)
+					errors += fmt.Sprintf("reading from message for id %d: %v (message skipped)\n", m.ID, rerr)
 					return nil
 				}
 				if len(line) > 0 {
@@ -389,7 +374,7 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 						line = line[:len(line)-1]
 						line[len(line)-1] = '\n'
 					}
-					if _, err = dst.Write(line); err != nil {
+					if _, err := dst.Write(line); err != nil {
 						return fmt.Errorf("writing message: %v", err)
 					}
 				}
@@ -469,7 +454,7 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 		for {
 			line, rerr := r.ReadBytes('\n')
 			if rerr != io.EOF && rerr != nil {
-				return fmt.Errorf("reading message: %v", err)
+				return fmt.Errorf("reading message: %v", rerr)
 			}
 			if len(line) > 0 {
 				if bytes.HasSuffix(line, []byte("\r\n")) {
@@ -506,59 +491,40 @@ func ExportMessages(ctx context.Context, log *mlog.Log, db *bstore.DB, accountDi
 		return nil
 	}
 
-	for _, m := range msgs {
-		if m.MailboxID != curMailboxID {
-			if err := finishMailbox(); err != nil {
-				return err
-			}
-
-			curMailbox = id2name[m.MailboxID]
-			curMailboxID = m.MailboxID
-			if maildir {
-				// Create the directories that show this is a maildir.
-				if _, err := archiver.Create(curMailbox+"/new/", 0, start); err != nil {
-					return fmt.Errorf("adding maildir new directory: %v", err)
-				}
-				if _, err := archiver.Create(curMailbox+"/cur/", 0, start); err != nil {
-					return fmt.Errorf("adding maildir cur directory: %v", err)
-				}
-				if _, err := archiver.Create(curMailbox+"/tmp/", 0, start); err != nil {
-					return fmt.Errorf("adding maildir tmp directory: %v", err)
-				}
-			} else {
-
-				mboxtmp, err = os.CreateTemp("", "mox-mail-export-mbox")
-				if err != nil {
-					return fmt.Errorf("creating temp mbox file: %v", err)
-				}
-				mboxwriter = bufio.NewWriter(mboxtmp)
-			}
+	if maildir {
+		// Create the directories that show this is a maildir.
+		if _, err := archiver.Create(mailboxName+"/new/", 0, start); err != nil {
+			return errors, fmt.Errorf("adding maildir new directory: %v", err)
 		}
-
-		if err := exportMessage(m); err != nil {
-			return err
+		if _, err := archiver.Create(mailboxName+"/cur/", 0, start); err != nil {
+			return errors, fmt.Errorf("adding maildir cur directory: %v", err)
 		}
+		if _, err := archiver.Create(mailboxName+"/tmp/", 0, start); err != nil {
+			return errors, fmt.Errorf("adding maildir tmp directory: %v", err)
+		}
+	} else {
+		var err error
+		mboxtmp, err = os.CreateTemp("", "mox-mail-export-mbox")
+		if err != nil {
+			return errors, fmt.Errorf("creating temp mbox file: %v", err)
+		}
+		mboxwriter = bufio.NewWriter(mboxtmp)
+	}
+
+	// Fetch all messages for mailbox.
+	q := bstore.QueryTx[Message](tx)
+	q.FilterNonzero(Message{MailboxID: mailboxID})
+	q.FilterEqual("Expunged", false)
+	q.SortAsc("Received", "ID")
+	err := q.ForEach(func(m Message) error {
+		return exportMessage(m)
+	})
+	if err != nil {
+		return errors, err
 	}
 	if err := finishMailbox(); err != nil {
-		return err
+		return errors, err
 	}
 
-	if errors != "" {
-		w, err := archiver.Create("errors.txt", int64(len(errors)), time.Now())
-		if err != nil {
-			log.Errorx("adding errors.txt to archive", err)
-			return err
-		}
-		if _, err := w.Write([]byte(errors)); err != nil {
-			log.Errorx("writing errors.txt to archive", err)
-			xerr := w.Close()
-			log.Check(xerr, "closing errors.txt after error")
-			return err
-		}
-		if err := w.Close(); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return errors, nil
 }

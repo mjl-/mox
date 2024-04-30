@@ -6,13 +6,13 @@ package webmail
 import (
 	"archive/zip"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"os"
@@ -21,15 +21,13 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	_ "embed"
 
+	"golang.org/x/net/html"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-
-	"golang.org/x/net/html"
 
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
@@ -39,27 +37,26 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/store"
-	"github.com/mjl-/mox/webaccount"
+	"github.com/mjl-/mox/webauth"
+	"github.com/mjl-/mox/webops"
 )
 
-func init() {
-	mox.LimitersInit()
-}
+var pkglog = mlog.New("webmail", nil)
 
-var xlog = mlog.New("webmail")
+type ctxKey string
 
 // We pass the request to the sherpa handler so the TLS info can be used for
 // the Received header in submitted messages. Most API calls need just the
 // account name.
-type ctxKey string
-
 var requestInfoCtxKey ctxKey = "requestInfo"
 
 type requestInfo struct {
+	Log          mlog.Log
 	LoginAddress string
-	AccountName  string
+	Account      *store.Account // Nil only for methods Login and LoginPrep.
+	SessionToken store.SessionToken
+	Response     http.ResponseWriter
 	Request      *http.Request // For Proto and TLS connection state during message submit.
 }
 
@@ -82,7 +79,7 @@ var webmailtextHTML []byte
 var webmailtextJS []byte
 
 var (
-	// Similar between ../webmail/webmail.go:/metricSubmission and ../smtpserver/server.go:/metricSubmission
+	// Similar between ../webmail/webmail.go:/metricSubmission and ../smtpserver/server.go:/metricSubmission and ../webapisrv/server.go:/metricSubmission
 	metricSubmission = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "mox_webmail_submission_total",
@@ -115,8 +112,12 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 	}
 	msg := fmt.Sprintf(format, args...)
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
-	xlog.WithContext(ctx).Errorx(msg, err)
-	panic(&sherpa.Error{Code: "server:error", Message: errmsg})
+	pkglog.WithContext(ctx).Errorx(msg, err)
+	code := "server:error"
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		code = "user:error"
+	}
+	panic(&sherpa.Error{Code: code, Message: errmsg})
 }
 
 func xcheckuserf(ctx context.Context, err error, format string, args ...any) {
@@ -125,7 +126,7 @@ func xcheckuserf(ctx context.Context, err error, format string, args ...any) {
 	}
 	msg := fmt.Sprintf(format, args...)
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
-	xlog.WithContext(ctx).Errorx(msg, err)
+	pkglog.WithContext(ctx).Errorx(msg, err)
 	panic(&sherpa.Error{Code: "user:error", Message: errmsg})
 }
 
@@ -145,166 +146,18 @@ func xdbread(ctx context.Context, acc *store.Account, fn func(tx *bstore.Tx)) {
 	xcheckf(ctx, err, "transaction")
 }
 
-// We merge the js into the html at first load, cache a gzipped version that is
-// generated on first need, and respond with a Last-Modified header. For quickly
-// serving a single, compressed, cacheable file.
-type merged struct {
-	sync.Mutex
-	combined                 []byte
-	combinedGzip             []byte
-	mtime                    time.Time // For Last-Modified and conditional request.
-	fallbackHTML, fallbackJS []byte    // The embedded html/js files.
-	htmlPath, jsPath         string    // Paths used during development.
-}
-
-var webmail = &merged{
-	fallbackHTML: webmailHTML,
-	fallbackJS:   webmailJS,
-	htmlPath:     filepath.FromSlash("webmail/webmail.html"),
-	jsPath:       filepath.FromSlash("webmail/webmail.js"),
-}
-
-// fallbackMtime returns a time to use for the Last-Modified header in case we
-// cannot find a file, e.g. when used in production.
-func fallbackMtime(log *mlog.Log) time.Time {
-	p, err := os.Executable()
-	log.Check(err, "finding executable for mtime")
-	if err == nil {
-		st, err := os.Stat(p)
-		log.Check(err, "stat on executable for mtime")
-		if err == nil {
-			return st.ModTime()
-		}
-	}
-	log.Info("cannot find executable for webmail mtime, using current time")
-	return time.Now()
-}
-
-func (m *merged) serve(ctx context.Context, log *mlog.Log, w http.ResponseWriter, r *http.Request) {
-	// We typically return the embedded file, but during development it's handy
-	// to load from disk.
-	fhtml, _ := os.Open(m.htmlPath)
-	if fhtml != nil {
-		defer fhtml.Close()
-	}
-	fjs, _ := os.Open(m.jsPath)
-	if fjs != nil {
-		defer fjs.Close()
-	}
-
-	html := m.fallbackHTML
-	js := m.fallbackJS
-
-	var diskmtime time.Time
-	var refreshdisk bool
-	if fhtml != nil && fjs != nil {
-		sth, err := fhtml.Stat()
-		xcheckf(ctx, err, "stat html")
-		stj, err := fjs.Stat()
-		xcheckf(ctx, err, "stat js")
-
-		maxmtime := sth.ModTime()
-		if stj.ModTime().After(maxmtime) {
-			maxmtime = stj.ModTime()
-		}
-
-		m.Lock()
-		refreshdisk = maxmtime.After(m.mtime) || m.combined == nil
-		m.Unlock()
-
-		if refreshdisk {
-			html, err = io.ReadAll(fhtml)
-			xcheckf(ctx, err, "reading html")
-			js, err = io.ReadAll(fjs)
-			xcheckf(ctx, err, "reading js")
-			diskmtime = maxmtime
-		}
-	}
-
-	gz := acceptsGzip(r)
-	var out []byte
-	var mtime time.Time
-	var origSize int64
-
-	func() {
-		m.Lock()
-		defer m.Unlock()
-
-		if refreshdisk || m.combined == nil {
-			script := []byte(`<script>/* placeholder */</script>`)
-			index := bytes.Index(html, script)
-			if index < 0 {
-				xcheckf(ctx, errors.New("script not found"), "generating combined html")
-			}
-			var b bytes.Buffer
-			b.Write(html[:index])
-			fmt.Fprintf(&b, "<script>\n// Javascript is generated from typescript, don't modify the javascript because changes will be lost.\nconst moxversion = \"%s\";\n", moxvar.Version)
-			b.Write(js)
-			b.WriteString("\t\t</script>")
-			b.Write(html[index+len(script):])
-			out = b.Bytes()
-			m.combined = out
-			if refreshdisk {
-				m.mtime = diskmtime
-			} else {
-				m.mtime = fallbackMtime(log)
-			}
-			m.combinedGzip = nil
-		} else {
-			out = m.combined
-		}
-		if gz {
-			if m.combinedGzip == nil {
-				var b bytes.Buffer
-				gzw, err := gzip.NewWriterLevel(&b, gzip.BestCompression)
-				if err == nil {
-					_, err = gzw.Write(out)
-				}
-				if err == nil {
-					err = gzw.Close()
-				}
-				xcheckf(ctx, err, "gzipping combined html")
-				m.combinedGzip = b.Bytes()
-			}
-			origSize = int64(len(out))
-			out = m.combinedGzip
-		}
-		mtime = m.mtime
-	}()
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	http.ServeContent(gzipInjector{w, gz, origSize}, r, "", mtime, bytes.NewReader(out))
-}
-
-// gzipInjector is a http.ResponseWriter that optionally injects a
-// Content-Encoding: gzip header, only in case of status 200 OK. Used with
-// http.ServeContent to serve gzipped content if the client supports it. We cannot
-// just unconditionally add the content-encoding header, because we don't know
-// enough if we will be sending data: http.ServeContent may be sending a "not
-// modified" response, and possibly others.
-type gzipInjector struct {
-	http.ResponseWriter // Keep most methods.
-	gz                  bool
-	origSize            int64
-}
-
-// WriteHeader adds a Content-Encoding: gzip header before actually writing the
-// headers and status.
-func (w gzipInjector) WriteHeader(statusCode int) {
-	if w.gz && statusCode == http.StatusOK {
-		w.ResponseWriter.Header().Set("Content-Encoding", "gzip")
-		if lw, ok := w.ResponseWriter.(interface{ SetUncompressedSize(int64) }); ok {
-			lw.SetUncompressedSize(w.origSize)
-		}
-	}
-	w.ResponseWriter.WriteHeader(statusCode)
+var webmailFile = &mox.WebappFile{
+	HTML:     webmailHTML,
+	JS:       webmailJS,
+	HTMLPath: filepath.FromSlash("webmail/webmail.html"),
+	JSPath:   filepath.FromSlash("webmail/webmail.js"),
 }
 
 // Serve content, either from a file, or return the fallback data. Caller
 // should already have set the content-type. We use this to return a file from
 // the local file system (during development), or embedded in the binary (when
 // deployed).
-func serveContentFallback(log *mlog.Log, w http.ResponseWriter, r *http.Request, path string, fallback []byte) {
+func serveContentFallback(log mlog.Log, w http.ResponseWriter, r *http.Request, path string, fallback []byte) {
 	f, err := os.Open(path)
 	if err == nil {
 		defer f.Close()
@@ -314,43 +167,32 @@ func serveContentFallback(log *mlog.Log, w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
-	http.ServeContent(w, r, "", fallbackMtime(log), bytes.NewReader(fallback))
+	http.ServeContent(w, r, "", mox.FallbackMtime(log), bytes.NewReader(fallback))
 }
 
 // Handler returns a handler for the webmail endpoints, customized for the max
-// message size coming from the listener.
-func Handler(maxMessageSize int64) func(w http.ResponseWriter, r *http.Request) {
-	sh, err := makeSherpaHandler(maxMessageSize)
+// message size coming from the listener and cookiePath.
+func Handler(maxMessageSize int64, cookiePath string, isForwarded bool, accountPath string) func(w http.ResponseWriter, r *http.Request) {
+	sh, err := makeSherpaHandler(maxMessageSize, cookiePath, isForwarded)
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, "500 - internal server error - cannot handle requests", http.StatusInternalServerError)
 			return
 		}
-		handle(sh, w, r)
+		handle(sh, isForwarded, accountPath, w, r)
 	}
 }
 
-func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
+func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	log := xlog.WithContext(ctx).Fields(mlog.Field("userauth", ""))
+	log := pkglog.WithContext(ctx).With(slog.String("userauth", ""))
 
 	// Server-sent event connection, for all initial data (list of mailboxes), list of
 	// messages, and all events afterwards. Authenticated through a token in the query
 	// string, which it got from a Token API call.
 	if r.URL.Path == "/events" {
-		serveEvents(ctx, log, w, r)
+		serveEvents(ctx, log, accountPath, w, r)
 		return
-	}
-
-	// HTTP Basic authentication for all requests.
-	loginAddress, accName := webaccount.CheckAuth(ctx, log, "webmail", w, r)
-	if accName == "" {
-		// Error response already sent.
-		return
-	}
-
-	if lw, ok := w.(interface{ AddField(f mlog.Pair) }); ok {
-		lw.AddField(mlog.Field("authaccount", accName))
 	}
 
 	defer func() {
@@ -360,7 +202,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		}
 		err, ok := x.(*sherpa.Error)
 		if !ok {
-			log.WithContext(ctx).Error("handle panic", mlog.Field("err", x))
+			log.WithContext(ctx).Error("handle panic", slog.Any("err", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Webmailhandle)
 			panic(x)
@@ -377,13 +219,14 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/":
 		switch r.Method {
+		case "GET", "HEAD":
+			h := w.Header()
+			h.Set("X-Frame-Options", "deny")
+			h.Set("Referrer-Policy", "same-origin")
+			webmailFile.Serve(ctx, log, w, r)
 		default:
 			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
-			return
-		case "GET", "HEAD":
 		}
-
-		webmail.serve(ctx, log, w, r)
 		return
 
 	case "/msg.js", "/text.js":
@@ -405,18 +248,59 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// API calls.
-	if strings.HasPrefix(r.URL.Path, "/api/") {
-		reqInfo := requestInfo{loginAddress, accName, r}
+	isAPI := strings.HasPrefix(r.URL.Path, "/api/")
+	// Only allow POST for calls, they will not work cross-domain without CORS.
+	if isAPI && r.URL.Path != "/api/" && r.Method != "POST" {
+		http.Error(w, "405 - method not allowed - use post", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var loginAddress, accName string
+	var sessionToken store.SessionToken
+	// All other URLs, except the login endpoint require some authentication.
+	if r.URL.Path != "/api/LoginPrep" && r.URL.Path != "/api/Login" {
+		var ok bool
+		isExport := r.URL.Path == "/export"
+		requireCSRF := isAPI || isExport
+		accName, sessionToken, loginAddress, ok = webauth.Check(ctx, log, webauth.Accounts, "webmail", isForwarded, w, r, isAPI, requireCSRF, isExport)
+		if !ok {
+			// Response has been written already.
+			return
+		}
+	}
+
+	if isAPI {
+		var acc *store.Account
+		if accName != "" {
+			log = log.With(slog.String("account", accName))
+			var err error
+			acc, err = store.OpenAccount(log, accName)
+			if err != nil {
+				log.Errorx("open account", err)
+				http.Error(w, "500 - internal server error - error opening account", http.StatusInternalServerError)
+				return
+			}
+			defer func() {
+				err := acc.Close()
+				log.Check(err, "closing account")
+			}()
+		}
+		reqInfo := requestInfo{log, loginAddress, acc, sessionToken, w, r}
 		ctx = context.WithValue(ctx, requestInfoCtxKey, reqInfo)
 		apiHandler.ServeHTTP(w, r.WithContext(ctx))
 		return
 	}
 
 	// We are now expecting the following URLs:
+	// .../export
 	// .../msg/<msgid>/{attachments.zip,parsedmessage.js,raw}
 	// .../msg/<msgid>/{,msg}{text,html,htmlexternal}
 	// .../msg/<msgid>/{view,viewtext,download}/<partid>
+
+	if r.URL.Path == "/export" {
+		webops.Export(log, accName, w, r)
+		return
+	}
 
 	if !strings.HasPrefix(r.URL.Path, "/msg/") {
 		http.NotFound(w, r)
@@ -462,7 +346,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 
 		var err error
 
-		acc, err = store.OpenAccount(accName)
+		acc, err = store.OpenAccount(log, accName)
 		xcheckf(ctx, err, "open account")
 
 		m = store.Message{ID: id}
@@ -518,7 +402,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 	// allowed. Used to display a message including header. The header is rendered with
 	// javascript, the content is rendered in a separate iframe with a CSP that doesn't
 	// have allowSelfScript.
-	headers := func(sameOrigin, allowExternal, allowSelfScript bool) {
+	headers := func(sameOrigin, allowExternal, allowSelfScript, allowSelfImg bool) {
 		// allow-popups is needed to make opening links in new tabs work.
 		sb := "sandbox allow-popups allow-popups-to-escape-sandbox; "
 		if sameOrigin && allowSelfScript {
@@ -535,6 +419,8 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		var csp string
 		if allowExternal {
 			csp = sb + "frame-ancestors 'self'; default-src 'none'; img-src data: http: https: 'unsafe-inline'; style-src 'unsafe-inline' data: http: https:; font-src data: http: https: 'unsafe-inline'; media-src 'unsafe-inline' data: http: https:" + script
+		} else if allowSelfImg {
+			csp = sb + "frame-ancestors 'self'; default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'" + script
 		} else {
 			csp = sb + "frame-ancestors 'self'; default-src 'none'; img-src data:; style-src 'unsafe-inline'" + script
 		}
@@ -557,9 +443,9 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		mi, err := messageItem(log, m, &state)
 		xcheckf(ctx, err, "parsing message")
 
-		headers(false, false, false)
+		headers(false, false, false, false)
 		h.Set("Content-Type", "application/zip")
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 		var subjectSlug string
 		if p.Envelope != nil {
 			s := p.Envelope.Subject
@@ -677,14 +563,14 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		// browsers or users would think of executing. We do set the charset if available
 		// on the outer part. If present, we assume it may be relevant for other parts. If
 		// not, there is not much we could do better...
-		headers(false, false, false)
+		headers(false, false, false, false)
 		ct := "text/plain"
 		params := map[string]string{}
 		if charset := p.ContentTypeParams["charset"]; charset != "" {
 			params["charset"] = charset
 		}
 		h.Set("Content-Type", mime.FormatMediaType(ct, params))
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 
 		_, err := io.Copy(w, &moxio.AtReader{R: msgr})
 		log.Check(err, "writing raw")
@@ -712,9 +598,9 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		sameorigin := true
 		loadExternal := t[1] == "msghtmlexternal"
 		allowSelfScript := true
-		headers(sameorigin, loadExternal, allowSelfScript)
+		headers(sameorigin, loadExternal, allowSelfScript, false)
 		h.Set("Content-Type", "text/html; charset=utf-8")
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 
 		path := filepath.FromSlash("webmail/msg.html")
 		fallback := webmailmsgHTML
@@ -745,9 +631,9 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		mijson, err := json.Marshal(mi)
 		xcheckf(ctx, err, "marshal messageitem")
 
-		headers(false, false, false)
+		headers(false, false, false, false)
 		h.Set("Content-Type", "application/javascript; charset=utf-8")
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 
 		_, err = fmt.Fprintf(w, "window.messageItem = %s;\nwindow.parsedMessage = %s;\n", mijson, pmjson)
 		log.Check(err, "writing parsedmessage.js")
@@ -777,9 +663,10 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 		// Needed for inner document height for outer iframe height in separate message view.
 		sameorigin := true
 		allowSelfScript := true
-		headers(sameorigin, false, allowSelfScript)
+		allowSelfImg := true
+		headers(sameorigin, false, allowSelfScript, allowSelfImg)
 		h.Set("Content-Type", "text/html; charset=utf-8")
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 
 		// We typically return the embedded file, but during development it's handy to load
 		// from disk.
@@ -803,10 +690,10 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 			// inner height so we load it as different origin, which should be safer.
 			sameorigin := r.URL.Query().Get("sameorigin") == "true"
 			allowExternal := strings.HasSuffix(t[1], "external")
-			headers(sameorigin, allowExternal, false)
+			headers(sameorigin, allowExternal, false, false)
 
 			h.Set("Content-Type", "text/html; charset=utf-8")
-			h.Set("Cache-Control", "no-cache, max-age=0")
+			h.Set("Cache-Control", "no-store, max-age=0")
 		}
 
 		// todo: skip certain html parts? e.g. with content-disposition: attachment?
@@ -865,7 +752,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 			ap = ap.Parts[int(index)]
 		}
 
-		headers(false, false, false)
+		headers(false, false, false, false)
 		var ct string
 		if t[1] == "viewtext" {
 			ct = "text/plain"
@@ -873,7 +760,7 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 			ct = strings.ToLower(ap.MediaType + "/" + ap.MediaSubType)
 		}
 		h.Set("Content-Type", ct)
-		h.Set("Cache-Control", "no-cache, max-age=0")
+		h.Set("Cache-Control", "no-store, max-age=0")
 		if t[1] == "download" {
 			name := tryDecodeParam(log, ap.ContentTypeParams["name"])
 			if name == "" {
@@ -899,22 +786,6 @@ func handle(apiHandler http.Handler, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func acceptsGzip(r *http.Request) bool {
-	s := r.Header.Get("Accept-Encoding")
-	t := strings.Split(s, ",")
-	for _, e := range t {
-		e = strings.TrimSpace(e)
-		tt := strings.Split(e, ";")
-		if len(tt) > 1 && t[1] == "q=0" {
-			continue
-		}
-		if tt[0] == "gzip" {
-			return true
-		}
-	}
-	return false
-}
-
 // inlineSanitizeHTML writes the part as HTML, with "cid:" URIs for html "src"
 // attributes inlined and with potentially dangerous tags removed (javascript). The
 // sanitizing is just a first layer of defense, CSP headers block execution of
@@ -922,7 +793,7 @@ func acceptsGzip(r *http.Request) bool {
 // HTML, setHeaders is called to write the required headers for content-type and
 // CSP. On error, setHeader is not called, no output is written and the caller
 // should write an error response.
-func inlineSanitizeHTML(log *mlog.Log, setHeaders func(), w io.Writer, p *message.Part, parents []*message.Part) error {
+func inlineSanitizeHTML(log mlog.Log, setHeaders func(), w io.Writer, p *message.Part, parents []*message.Part) error {
 	// Prepare cids if there is a chance we will use them.
 	cids := map[string]*message.Part{}
 	for _, parent := range parents {

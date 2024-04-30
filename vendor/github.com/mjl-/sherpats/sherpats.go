@@ -494,7 +494,7 @@ func Generate(in io.Reader, out io.Writer, apiNameBaseURL string, opts Options) 
 			xprintf("\t\tconst paramTypes: string[][] = %s\n", mustMarshalJSON(sherpaParamTypes))
 			xprintf("\t\tconst returnTypes: string[][] = %s\n", mustMarshalJSON(sherpaReturnTypes))
 			xprintf("\t\tconst params: any[] = [%s]\n", strings.Join(paramNames, ", "))
-			xprintf("\t\treturn await _sherpaCall(this.baseURL, { ...this.options }, paramTypes, returnTypes, fn, params) as %s\n", returnType)
+			xprintf("\t\treturn await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as %s\n", returnType)
 			xprintf("\t}\n")
 			if i < len(sec.Functions)-1 {
 				xprintf("\n")
@@ -524,14 +524,28 @@ func Generate(in io.Reader, out io.Writer, apiNameBaseURL string, opts Options) 
 	xprintf(`let defaultOptions: ClientOptions = {slicesNullable: %v, mapsNullable: %v, nullableOptional: %v}
 
 export class Client {
-	constructor(private baseURL=defaultBaseURL, public options?: ClientOptions) {
-		if (!options) {
-			this.options = defaultOptions
-		}
+	private baseURL: string
+	public authState: AuthState
+	public options: ClientOptions
+
+	constructor() {
+		this.authState = {}
+		this.options = {...defaultOptions}
+		this.baseURL = this.options.baseURL || defaultBaseURL
+	}
+
+	withAuthToken(token: string): Client {
+		const c = new Client()
+		c.authState.token = token
+		c.options = this.options
+		return c
 	}
 
 	withOptions(options: ClientOptions): Client {
-		return new Client(this.baseURL, { ...this.options, ...options })
+		const c = new Client()
+		c.authState = this.authState
+		c.options = { ...this.options, ...options }
+		return c
 	}
 
 `, opts.SlicesNullable, opts.MapsNullable, opts.NullableOptional)

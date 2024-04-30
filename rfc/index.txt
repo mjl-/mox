@@ -1,438 +1,456 @@
-This file lists RFC's by number and title. "make" fetches the RFC's and adds
-references back to the source code where they are referenced. Not all RFC's in
-this list have been implemented yet.
+This file lists RFC's that are relevant for email, along with implementation
+status. "make" fetches the RFC's and adds references back to the source code
+where they are referenced. The protocol support page on the website is
+generated from this information as well.
+
+Each tab-separated row has:
+- RFC number
+- Support/implementation status
+- RFC status (e.g. Obs for obsolete)
+- RFC title
+
+If the support status column value starts with a minus, it isn't included on
+the protocol page on the website. Valid words for implementation status:
+- Yes, support is deemed complete
+- Partial, support is partial, more work can be done
+- Roadmap, no support, but it is planned
+- No, not supported and no plans
+- ?, implementation status unknown
 
 Also see IANA assignments, https://www.iana.org/protocols
 
-# Mail, message format, MIME
-822	Standard for ARPA Internet Text Messages
-1847	Security Multiparts for MIME: Multipart/Signed and Multipart/Encrypted
-2045	Multipurpose Internet Mail Extensions (MIME) Part One: Format of Internet Message Bodies
-2046	Multipurpose Internet Mail Extensions (MIME) Part Two: Media Types
-2047	MIME (Multipurpose Internet Mail Extensions) Part Three: Message Header Extensions for Non-ASCII Text
-2049	Multipurpose Internet Mail Extensions (MIME) Part Five: Conformance Criteria and Examples
-2183	Communicating Presentation Information in Internet Messages: The Content-Disposition Header Field
-2231	MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
-3629	UTF-8, a transformation format of ISO 10646
-3676	The Text/Plain Format and DelSp Parameters
-3834	Recommendations for Automatic Responses to Electronic Mail
-5234	Augmented BNF for Syntax Specifications: ABNF
-5322	Internet Message Format
-5598	Internet Mail Architecture
-6854	Update to Internet Message Format to Allow Group Syntax in the "From:" and "Sender:" Header Fields
-7405	Case-Sensitive String Support in ABNF
-9228	Delivered-To Email Header Field
+
+# Internet Message Format
+822	Yes	Obs	Standard for ARPA Internet Text Messages
+1847	No	-	Security Multiparts for MIME: Multipart/Signed and Multipart/Encrypted
+2045	Yes	-	Multipurpose Internet Mail Extensions (MIME) Part One: Format of Internet Message Bodies
+2046	Yes	-	Multipurpose Internet Mail Extensions (MIME) Part Two: Media Types
+2047	Yes	-	MIME (Multipurpose Internet Mail Extensions) Part Three: Message Header Extensions for Non-ASCII Text
+2049	-	-	Multipurpose Internet Mail Extensions (MIME) Part Five: Conformance Criteria and Examples
+2076	-	-	Common Internet Message Headers
+2183	Yes	-	Communicating Presentation Information in Internet Messages: The Content-Disposition Header Field
+2231	Yes	-	MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
+3629	-	-	UTF-8, a transformation format of ISO 10646
+3676	No	-	The Text/Plain Format and DelSp Parameters
+5234	-	-	Augmented BNF for Syntax Specifications: ABNF
+5322	Yes	-	Internet Message Format
+5598	-	-	Internet Mail Architecture
+6854	-	-	Update to Internet Message Format to Allow Group Syntax in the "From:" and "Sender:" Header Fields
+7405	-	-	Case-Sensitive String Support in ABNF
+9078	-	-	Reaction: Indicating Summary Reaction to a Message
+9228	Yes	-	Delivered-To Email Header Field
 
 https://www.iana.org/assignments/message-headers/message-headers.xhtml
 
 # SMTP
+821	Yes	Obs	(RFC 2821) SIMPLE MAIL TRANSFER PROTOCOL
+2821	Yes	Obs	(RFC 5321) Simple Mail Transfer Protocol
+5321	Yes	-	Simple Mail Transfer Protocol
 
-821	(obsoleted by RFC 2821) SIMPLE MAIL TRANSFER PROTOCOL
-2821	(obsoleted by RFC 5321) Simple Mail Transfer Protocol
-5321	Simple Mail Transfer Protocol
-
-1870	SMTP Service Extension for Message Size Declaration
-1985	SMTP Service Extension for Remote Message Queue Starting
-2034	SMTP Service Extension for Returning Enhanced Error Codes
-2852	Deliver By SMTP Service Extension
-2920	SMTP Service Extension for Command Pipelining
-2505	Anti-Spam Recommendations for SMTP MTAs
-2852	Deliver By SMTP Service Extension
-3207	SMTP Service Extension for Secure SMTP over Transport Layer Security (STARTTLS)
-3030	SMTP Service Extensions for Transmission of Large and Binary MIME Messages
-3461	Simple Mail Transfer Protocol (SMTP) Service Extension for Delivery Status Notifications (DSNs)
-3462	(obsoleted by RFC 6522) The Multipart/Report Content Type for the Reporting of Mail System Administrative Messages
-3463	Enhanced Mail System Status Codes
-3464	An Extensible Message Format for Delivery Status Notifications
-3798	(obsoleted by RFC 8098) Message Disposition Notification
-3848	ESMTP and LMTP Transmission Types Registration
-3865	A No Soliciting Simple Mail Transfer Protocol (SMTP) Service Extension
-3885	SMTP Service Extension for Message Tracking
-3974	SMTP Operational Experience in Mixed IPv4/v6 Environments
-4409	(obsoleted by RFC 6409) Message Submission for Mail
-4468	Message Submission BURL Extension
-4865	SMTP Submission Service Extension for Future Message Release
-4954	SMTP Service Extension for Authentication
-5068	Email Submission Operations: Access and Accountability Requirements
-5248	A Registry for SMTP Enhanced Mail System Status Codes
-5335	(obsoleted by RFC 6532) Internationalized Email Headers
-5336	(obsoleted by RFC 6531) SMTP Extension for Internationalized Email Addresses
-5337	(obsoleted by RFC 6533) Internationalized Delivery Status and Disposition Notifications
-6008	Authentication-Results Registration for Differentiating among Cryptographic Results
-6152	SMTP Service Extension for 8-bit MIME Transport
-6409	Message Submission for Mail
-6522	The Multipart/Report Media Type for the Reporting of Mail System Administrative Messages
-6530	Overview and Framework for Internationalized Email
-6531	SMTP Extension for Internationalized Email
-6532	Internationalized Email Headers
-6533	Internationalized Delivery Status and Disposition Notifications
-6729	Indicating Email Handling States in Trace Fields
-6857	Post-Delivery Message Downgrading for Internationalized Email Messages
-7293	The Require-Recipient-Valid-Since Header Field and SMTP Service Extension
-7372	Email Authentication Status Codes
-7435	Opportunistic Security: Some Protection Most of the Time
-7504	SMTP 521 and 556 Reply Codes
-7505	A "Null MX" No Service Resource Record for Domains That Accept No Mail
-8098	Message Disposition Notification
-8601	Message Header Field for Indicating Message Authentication Status
-8689	SMTP Require TLS Option
+1870	Yes	-	SMTP Service Extension for Message Size Declaration
+1985	No	-	SMTP Service Extension for Remote Message Queue Starting
+2034	Yes	-	SMTP Service Extension for Returning Enhanced Error Codes
+2852	No	-	Deliver By SMTP Service Extension
+2920	Yes	-	SMTP Service Extension for Command Pipelining
+2505	-	-	Anti-Spam Recommendations for SMTP MTAs
+3207	Yes	-	SMTP Service Extension for Secure SMTP over Transport Layer Security (STARTTLS)
+3030	Roadmap	-	SMTP Service Extensions for Transmission of Large and Binary MIME Messages
+3461	Roadmap	-	Simple Mail Transfer Protocol (SMTP) Service Extension for Delivery Status Notifications (DSNs)
+3462	-	Obs	(RFC 6522) The Multipart/Report Content Type for the Reporting of Mail System Administrative Messages
+3463	Yes	-	Enhanced Mail System Status Codes
+3464	Yes	-	An Extensible Message Format for Delivery Status Notifications
+3798	?	Obs	(RFC 8098) Message Disposition Notification
+3848	-	-	ESMTP and LMTP Transmission Types Registration
+3865	No	-	A No Soliciting Simple Mail Transfer Protocol (SMTP) Service Extension
+3885	No	-	SMTP Service Extension for Message Tracking
+3974	-	-	SMTP Operational Experience in Mixed IPv4/v6 Environments
+4409	-	Obs	(RFC 6409) Message Submission for Mail
+4468	Roadmap	-	Message Submission BURL Extension
+4865	Yes	-	SMTP Submission Service Extension for Future Message Release
+4865-eid2040	-Yes	-	errata: Internet-style-date-time-UTC -> date-time from rfc 3339
+4954	Yes	-	SMTP Service Extension for Authentication
+5068	-	-	Email Submission Operations: Access and Accountability Requirements
+5248	-	-	A Registry for SMTP Enhanced Mail System Status Codes
+5335	-	Obs	(RFC 6532) Internationalized Email Headers
+5336	-	Obs	(RFC 6531) SMTP Extension for Internationalized Email Addresses
+5337	-	Obs	(RFC 6533) Internationalized Delivery Status and Disposition Notifications
+5782	Yes	-	DNS Blacklists and Whitelists
+6008	Yes	-	Authentication-Results Registration for Differentiating among Cryptographic Results
+6152	Yes	-	SMTP Service Extension for 8-bit MIME Transport
+6409	Yes	-	Message Submission for Mail
+6522	Yes	-	The Multipart/Report Media Type for the Reporting of Mail System Administrative Messages
+6530	Yes	-	Overview and Framework for Internationalized Email
+6531	Yes	-	SMTP Extension for Internationalized Email
+6532	Yes	-	Internationalized Email Headers
+6533	Yes	-	Internationalized Delivery Status and Disposition Notifications
+6647	Partial	-	Email Greylisting: An Applicability Statement for SMTP
+6710	No	-	Simple Mail Transfer Protocol Extension for Message Transfer Priorities
+6729	No	-	Indicating Email Handling States in Trace Fields
+6857	No	-	Post-Delivery Message Downgrading for Internationalized Email Messages
+7293	No	-	The Require-Recipient-Valid-Since Header Field and SMTP Service Extension
+7372	Yes	-	Email Authentication Status Codes
+7435	Yes	-	Opportunistic Security: Some Protection Most of the Time
+7504	Yes	-	SMTP 521 and 556 Reply Codes
+7505	Yes	-	A "Null MX" No Service Resource Record for Domains That Accept No Mail
+8098	?	-	Message Disposition Notification
+8601	Yes	-	Message Header Field for Indicating Message Authentication Status
+8689	Yes	-	SMTP Require TLS Option
+8904	No	-	DNS Whitelist (DNSWL) Email Authentication Method Extension
+9422	Yes	-	The LIMITS SMTP Service Extension
 
 # SPF
-4408	(obsoleted by RFC 7208) Sender Policy Framework (SPF) for Authorizing Use of Domains in E-Mail, Version 1
-6652	Sender Policy Framework (SPF) Authentication Failure Reporting Using the Abuse Reporting Format
-7208	Sender Policy Framework (SPF) for Authorizing Use of Domains in Email, Version 1
-7208-eid5436	errata: header-field FWS
-7208-eid6721	errata: corrected smtp example response
-7208-eid4751	errata (not verified): ptr mechanism
-7208-eid5227	errata (not verified): ptr lookup order
-7208-eid6595	errata (not verified): 2 void lookups vs exists
-7208-eid6216	errata (not verified): ptr in multiple requirements example from appendix A.4
+4408	Yes	Obs	(by RFC 7208) Sender Policy Framework (SPF) for Authorizing Use of Domains in E-Mail, Version 1
+6652	?	-	Sender Policy Framework (SPF) Authentication Failure Reporting Using the Abuse Reporting Format
+7208	Yes	-	Sender Policy Framework (SPF) for Authorizing Use of Domains in Email, Version 1
+7208-eid5436	-	-	errata: header-field FWS
+7208-eid6721	-	-	errata: corrected smtp example response
+7208-eid4751	-	-	errata (not verified): ptr mechanism
+7208-eid5227	-	-	errata (not verified): ptr lookup order
+7208-eid6595	-	-	errata (not verified): 2 void lookups vs exists
+7208-eid6216	-	-	errata (not verified): ptr in multiple requirements example from appendix A.4
 
 # DKIM
-6376	DomainKeys Identified Mail (DKIM) Signatures
-6376-eid4810	errata: q= qp-hdr-value
-6376-eid5070	errata: tag-spec
+6376	Yes	-	DomainKeys Identified Mail (DKIM) Signatures
+6376-eid4810	-	-	errata: q= qp-hdr-value
+6376-eid5070	-	-	errata: tag-spec
 
-4686	Analysis of Threats Motivating DomainKeys Identified Mail (DKIM)
-4871	(obsoleted by RFC 6376) DomainKeys Identified Mail (DKIM) Signatures
-5016	Requirements for a DomainKeys Identified Mail (DKIM) Signing Practices Protocol
-5585	DomainKeys Identified Mail (DKIM) Service Overview
-5672	(obsoleted by RFC 6376) DomainKeys Identified Mail (DKIM) Signatures -- Update
-5863	DomainKeys Identified Mail (DKIM) Development, Deployment, and Operations
-6377	DomainKeys Identified Mail (DKIM) and Mailing Lists
-8032	Edwards-Curve Digital Signature Algorithm (EdDSA)
-8301	Cryptographic Algorithm and Key Usage Update to DomainKeys Identified Mail (DKIM)
-8463	A New Cryptographic Signature Method for DomainKeys Identified Mail (DKIM)
+4686	-	-	Analysis of Threats Motivating DomainKeys Identified Mail (DKIM)
+4871	Yes	Obs	(RFC 6376) DomainKeys Identified Mail (DKIM) Signatures
+5016	-Yes	-	Requirements for a DomainKeys Identified Mail (DKIM) Signing Practices Protocol
+5585	-Yes	-	DomainKeys Identified Mail (DKIM) Service Overview
+5672	-Yes	Obs	(by RFC 6376) DomainKeys Identified Mail (DKIM) Signatures -- Update
+5863	-Yes	-	DomainKeys Identified Mail (DKIM) Development, Deployment, and Operations
+6377	?	-	DomainKeys Identified Mail (DKIM) and Mailing Lists
+8032	-	-	Edwards-Curve Digital Signature Algorithm (EdDSA)
+8301	Yes	-	Cryptographic Algorithm and Key Usage Update to DomainKeys Identified Mail (DKIM)
+8463	Yes	-	A New Cryptographic Signature Method for DomainKeys Identified Mail (DKIM)
 
 # DMARC
-7489	Domain-based Message Authentication, Reporting, and Conformance (DMARC)
-7489-eid5440	errata: valid dmarc records with(out) semicolon
-7489-eid6729	errata (not verified): publicsuffix list only for ICANN DOMAINS
-7960	Interoperability Issues between Domain-based Message Authentication, Reporting, and Conformance (DMARC) and Indirect Email Flows
-9091	Experimental Domain-Based Message Authentication, Reporting, and Conformance (DMARC) Extension for Public Suffix Domains
-
-# DKIM/SPF/DMARC
-8616	Email Authentication for Internationalized Mail
-
-# Greylisting
-6647	Email Greylisting: An Applicability Statement for SMTP
-
-# DNSBL/DNSWL
-5782	DNS Blacklists and Whitelists
-8904	DNS Whitelist (DNSWL) Email Authentication Method Extension
-
-# DANE
-6394	Use Cases and Requirements for DNS-Based Authentication of Named Entities (DANE)
-6698	The DNS-Based Authentication of Named Entities (DANE) Transport Layer Security (TLS) Protocol: TLSA
-7218	Adding Acronyms to Simplify Conversations about DNS-Based Authentication of Named Entities (DANE)
-7671	The DNS-Based Authentication of Named Entities (DANE) Protocol: Updates and Operational Guidance
-7672	SMTP Security via Opportunistic DNS-Based Authentication of Named Entities (DANE) Transport Layer Security (TLS)
-7673	Using DNS-Based Authentication of Named Entities (DANE) TLSA Records with SRV Records
-7929	DNS-Based Authentication of Named Entities (DANE) Bindings for OpenPGP
-8162	Using Secure DNS to Associate Certificates with Domain Names for S/MIME
-
-# TLS-RPT
-8460	SMTP TLS Reporting
-8460-eid6241	Wrong example for JSON field "mx-host".
-
-# MTA-STS
-8461	SMTP MTA Strict Transport Security (MTA-STS)
+7489	Yes	-	Domain-based Message Authentication, Reporting, and Conformance (DMARC)
+7489-eid5440	-	-	errata: valid dmarc records with(out) semicolon
+7489-eid6729	-	-	errata (not verified): publicsuffix list only for ICANN DOMAINS
+7960	Yes	-	Interoperability Issues between Domain-based Message Authentication, Reporting, and Conformance (DMARC) and Indirect Email Flows
+9091	Roadmap	-	Experimental Domain-Based Message Authentication, Reporting, and Conformance (DMARC) Extension for Public Suffix Domains
 
 # ARC
-8617	The Authenticated Received Chain (ARC) Protocol
+8617	Roadmap	-	The Authenticated Received Chain (ARC) Protocol
+
+# DANE
+6394	-Yes	-	Use Cases and Requirements for DNS-Based Authentication of Named Entities (DANE)
+6698	Yes	-	The DNS-Based Authentication of Named Entities (DANE) Transport Layer Security (TLS) Protocol: TLSA
+7218	-Yes	-	Adding Acronyms to Simplify Conversations about DNS-Based Authentication of Named Entities (DANE)
+7671	-Yes	-	The DNS-Based Authentication of Named Entities (DANE) Protocol: Updates and Operational Guidance
+7672	Yes	-	SMTP Security via Opportunistic DNS-Based Authentication of Named Entities (DANE) Transport Layer Security (TLS)
+7673	Roadmap	-	Using DNS-Based Authentication of Named Entities (DANE) TLSA Records with SRV Records
+7929	No	-	DNS-Based Authentication of Named Entities (DANE) Bindings for OpenPGP
+8162	No	-	Using Secure DNS to Associate Certificates with Domain Names for S/MIME
+
+# MTA-STS
+8461	Yes	-	SMTP MTA Strict Transport Security (MTA-STS)
+
+# TLS Reporting
+8460	Yes	-	SMTP TLS Reporting
+8460-eid6241	-	-	Wrong example for JSON field "mx-host".
 
 # ARF
-5965	An Extensible Format for Email Feedback Reports
-6650	Creation and Use of Email Feedback Reports: An Applicability Statement for the Abuse Reporting Format (ARF)
-6591	Authentication Failure Reporting Using the Abuse Reporting Format
-6692	Source Ports in Abuse Reporting Format (ARF) Reports
+5965	Roadmap	-	An Extensible Format for Email Feedback Reports
+6650	Roadmap	-	Creation and Use of Email Feedback Reports: An Applicability Statement for the Abuse Reporting Format (ARF)
+6591	?	-	Authentication Failure Reporting Using the Abuse Reporting Format
+6692	Roadmap	-	Source Ports in Abuse Reporting Format (ARF) Reports
+9477	Roadmap	-	Complaint Feedback Loop Address Header
 
 # IMAP
+1730	Yes	Obs	(RFC 2060) INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4
+2060	Yes	Obs	(RFC 3501) INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
+3501	Yes	Obs	(RFC 9051) INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
+9051	Yes	-	Internet Message Access Protocol (IMAP) - Version 4rev2
 
-1730	(obsoleted by RFC 2060) INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4
-2060	(obsoleted by RFC 3501) INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
-3501	(obsoleted by RFC 9051) INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
-9051	Internet Message Access Protocol (IMAP) - Version 4rev2
+1733	-Yes	-	DISTRIBUTED ELECTRONIC MAIL MODELS IN IMAP4
+2087	Roadmap	-	IMAP4 QUOTA extension
+2088	-	Obs	(RFC 7888) IMAP4 non-synchronizing literals
+2152	Yes	-	UTF-7 A Mail-Safe Transformation Format of Unicode
+2177	Yes	-	IMAP4 IDLE command
+2180	Yes	-	IMAP4 Multi-Accessed Mailbox Practice
+2193	No	-	IMAP4 Mailbox Referrals
+2342	Yes	-	IMAP4 Namespace
+2683	Yes	-	IMAP4 Implementation Recommendations
+2971	Yes	-	IMAP4 ID extension
+3348	Yes	Obs	(RFC 5258) The Internet Message Action Protocol (IMAP4) Child Mailbox Extension
+3502	Roadmap	-	Internet Message Access Protocol (IMAP) - MULTIAPPEND Extension
+3503	?	-	Message Disposition Notification (MDN) profile for Internet Message Access Protocol (IMAP)
+3516	Yes	-	IMAP4 Binary Content Extension
+3691	Yes	-	Internet Message Access Protocol (IMAP) UNSELECT command
+4314	Roadmap	-	IMAP4 Access Control List (ACL) Extension
+4315	Yes	-	Internet Message Access Protocol (IMAP) - UIDPLUS extension
+4466	-Yes	-	Collected Extensions to IMAP4 ABNF
+4467	Roadmap	-	Internet Message Access Protocol (IMAP) - URLAUTH Extension
+4469	Roadmap	-	Internet Message Access Protocol (IMAP) CATENATE Extension
+4549	-Yes	-	Synchronization Operations for Disconnected IMAP4 Clients
+4551	Yes	Obs	(RFC 7162) IMAP Extension for Conditional STORE Operation or Quick Flag Changes Resynchronization
+4731	Yes	-	IMAP4 Extension to SEARCH Command for Controlling What Kind of Information Is Returned
+4959	Yes	-	IMAP Extension for Simple Authentication and Security Layer (SASL) Initial Client Response
+4978	Roadmap	-	The IMAP COMPRESS Extension
+5032	Roadmap	-	WITHIN Search Extension to the IMAP Protocol
+5092	Roadmap	-	IMAP URL Scheme
+5161	Yes	-	The IMAP ENABLE Extension
+5162	Yes	Obs	(RFC 7162) IMAP4 Extensions for Quick Mailbox Resynchronization
+5182	Yes	-	IMAP Extension for Referencing the Last SEARCH Result
+5255	No	-	Internet Message Access Protocol Internationalization
+5256	Roadmap	-	Internet Message Access Protocol - SORT and THREAD Extensions
+5257	No	-	Internet Message Access Protocol - ANNOTATE Extension
+5258	Yes	-	Internet Message Access Protocol version 4 - LIST Command Extensions
+5259	No	-	Internet Message Access Protocol - CONVERT Extension
+5267	Roadmap	-	Contexts for IMAP4
+5464	Roadmap	-	The IMAP METADATA Extension
+5465	Roadmap	-	The IMAP NOTIFY Extension
+5466	Roadmap	-	IMAP4 Extension for Named Searches (Filters)
+5524	No	-	Extended URLFETCH for Binary and Converted Parts
+5530	Yes	-	IMAP Response Codes
+5738	Partial	Obs	(RFC 6855) IMAP Support for UTF-8
+5788	-Yes	-	IMAP4 Keyword Registry
+5819	Yes	-	IMAP4 Extension for Returning STATUS Information in Extended LIST
+5957	Roadmap	-	Display-Based Address Sorting for the IMAP4 SORT Extension
+6154	Yes	-	IMAP LIST Extension for Special-Use Mailboxes
+6203	No	-	IMAP4 Extension for Fuzzy Search
+6237	Roadmap	Obs	(RFC 7377) IMAP4 Multimailbox SEARCH Extension
+6851	Yes	-	Internet Message Access Protocol (IMAP) - MOVE Extension
+6855	Yes	-	IMAP Support for UTF-8
+6858	No	-	Simplified POP and IMAP Downgrading for Internationalized Email
+7162	Yes	-	IMAP Extensions: Quick Flag Changes Resynchronization (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC)
+7162-eid5055	-	-	errata: space after untagged OK
+7377	Roadmap	-	IMAP4 Multimailbox SEARCH Extension
+7888	Yes	-	IMAP4 Non-synchronizing Literals
+7889	Yes	-	The IMAP APPENDLIMIT Extension
+8437	Roadmap	-	IMAP UNAUTHENTICATE Extension for Connection Reuse
+8438	Yes	-	IMAP Extension for STATUS=SIZE
+8440	?	-	IMAP4 Extension for Returning MYRIGHTS Information in Extended LIST
+8457	Roadmap	-	IMAP "$Important" Keyword and "\Important" Special-Use Attribute
+8474	Roadmap	-	IMAP Extension for Object Identifiers
+8508	Roadmap	-	IMAP REPLACE Extension
+8514	Roadmap	-	Internet Message Access Protocol (IMAP) - SAVEDATE Extension
+8970	Roadmap	-	IMAP4 Extension: Message Preview Generation
+9208	Partial	-	IMAP QUOTA Extension
+9394	Roadmap	-	IMAP PARTIAL Extension for Paged SEARCH and FETCH
 
-1733	DISTRIBUTED ELECTRONIC MAIL MODELS IN IMAP4
-2087	IMAP4 QUOTA extension
-2088	(obsoleted by RFC 7888) IMAP4 non-synchronizing literals
-2152	UTF-7 A Mail-Safe Transformation Format of Unicode
-2177	IMAP4 IDLE command
-2180	IMAP4 Multi-Accessed Mailbox Practice
-2193	IMAP4 Mailbox Referrals
-2342	IMAP4 Namespace
-2683	IMAP4 Implementation Recommendations
-2971	IMAP4 ID extension
-3348	(obsoleted by RFC 5258) The Internet Message Action Protocol (IMAP4) Child Mailbox Extension
-3502	Internet Message Access Protocol (IMAP) - MULTIAPPEND Extension
-3503	Message Disposition Notification (MDN) profile for Internet Message Access Protocol (IMAP)
-3516	IMAP4 Binary Content Extension
-3691	Internet Message Access Protocol (IMAP) UNSELECT command
-4314	IMAP4 Access Control List (ACL) Extension
-4315	Internet Message Access Protocol (IMAP) - UIDPLUS extension
-4466	Collected Extensions to IMAP4 ABNF
-4467	Internet Message Access Protocol (IMAP) - URLAUTH Extension
-4469	Internet Message Access Protocol (IMAP) CATENATE Extension
-4549	Synchronization Operations for Disconnected IMAP4 Clients
-4551	(obsoleted by RFC 7162) IMAP Extension for Conditional STORE Operation or Quick Flag Changes Resynchronization
-4731	IMAP4 Extension to SEARCH Command for Controlling What Kind of Information Is Returned
-4959	IMAP Extension for Simple Authentication and Security Layer (SASL) Initial Client Response
-4978	The IMAP COMPRESS Extension
-5032	WITHIN Search Extension to the IMAP Protocol
-5092	IMAP URL Scheme
-5161	The IMAP ENABLE Extension
-5162	(obsoleted by RFC 7162) IMAP4 Extensions for Quick Mailbox Resynchronization
-5182	IMAP Extension for Referencing the Last SEARCH Result
-5255	Internet Message Access Protocol Internationalization
-5256	Internet Message Access Protocol - SORT and THREAD Extensions
-5257	Internet Message Access Protocol - ANNOTATE Extension
-5258	Internet Message Access Protocol version 4 - LIST Command Extensions
-5259	Internet Message Access Protocol - CONVERT Extension
-5267	Contexts for IMAP4
-5464	The IMAP METADATA Extension
-5465	The IMAP NOTIFY Extension
-5466	IMAP4 Extension for Named Searches (Filters)
-5524	Extended URLFETCH for Binary and Converted Parts
-5530	IMAP Response Codes
-5738	(obsoleted by RFC 6855) IMAP Support for UTF-8
-5788	IMAP4 Keyword Registry
-5819	IMAP4 Extension for Returning STATUS Information in Extended LIST
-5957	Display-Based Address Sorting for the IMAP4 SORT Extension
-6154	IMAP LIST Extension for Special-Use Mailboxes
-6203	IMAP4 Extension for Fuzzy Search
-6237	(obsoleted by RFC 7377) IMAP4 Multimailbox SEARCH Extension
-6851	Internet Message Access Protocol (IMAP) - MOVE Extension
-6855	IMAP Support for UTF-8
-6858	Simplified POP and IMAP Downgrading for Internationalized Email
-7162	IMAP Extensions: Quick Flag Changes Resynchronization (CONDSTORE) and Quick Mailbox Resynchronization (QRESYNC)
-7162-eid5055	errata: space after untagged OK
-7377	IMAP4 Multimailbox SEARCH Extension
-7888	IMAP4 Non-synchronizing Literals
-7889	The IMAP APPENDLIMIT Extension
-8437	IMAP UNAUTHENTICATE Extension for Connection Reuse
-8438	IMAP Extension for STATUS=SIZE
-8440	IMAP4 Extension for Returning MYRIGHTS Information in Extended LIST
-8457	IMAP "$Important" Keyword and "\Important" Special-Use Attribute
-8474	IMAP Extension for Object Identifiers
-8508	IMAP REPLACE Extension
-8514	Internet Message Access Protocol (IMAP) - SAVEDATE Extension
-8970	IMAP4 Extension: Message Preview Generation
-9208	IMAP QUOTA Extension
-9394	IMAP PARTIAL Extension for Paged SEARCH and FETCH
-
-5198 	Unicode Format for Network Interchange
+5198	-?	-	Unicode Format for Network Interchange
 
 # Lemonade profile
-4550	(obsoleted by RFC 5550) Internet Email to Support Diverse Service Environments (Lemonade) Profile
-5383	Deployment Considerations for Lemonade-Compliant Mobile Email
-5423	Internet Message Store Events
-5442	LEMONADE Architecture - Supporting Open Mobile Alliance (OMA) Mobile Email (MEM) Using Internet Mail
-5550	The Internet Email to Support Diverse Service Environments (Lemonade) Profile
-5551	Lemonade Notifications Architecture
+4550	-?	Obs	(RFC 5550) Internet Email to Support Diverse Service Environments (Lemonade) Profile
+5383	-?	-	Deployment Considerations for Lemonade-Compliant Mobile Email
+5423	-?	-	Internet Message Store Events
+5442	-?	-	LEMONADE Architecture - Supporting Open Mobile Alliance (OMA) Mobile Email (MEM) Using Internet Mail
+5550	-?	-	The Internet Email to Support Diverse Service Environments (Lemonade) Profile
+5551	-?	-	Lemonade Notifications Architecture
 
-# Mailing list
-2369	The Use of URLs as Meta-Syntax for Core Mail List Commands and their Transport through Message Header Fields
-2919	List-Id: A Structured Field and Namespace for the Identification of Mailing Lists
+# Mailing list and automated responses
+2369	?	-	The Use of URLs as Meta-Syntax for Core Mail List Commands and their Transport through Message Header Fields
+2919	?	-	List-Id: A Structured Field and Namespace for the Identification of Mailing Lists
+3834	?	-	Recommendations for Automatic Responses to Electronic Mail
+8058	?	-	Signaling One-Click Functionality for List Email Headers
 
 # Sieve
-3028	(obsoleted by RFC 5228) Sieve: A Mail Filtering Language
-5228	Sieve: An Email Filtering Language
-5804	A Protocol for Remotely Managing Sieve Scripts
+3028	Roadmap	Obs	(RFC 5228) Sieve: A Mail Filtering Language
+5228	Roadmap	-	Sieve: An Email Filtering Language
+5804	Roadmap	-	A Protocol for Remotely Managing Sieve Scripts
 
-3894	Sieve Extension: Copying Without Side Effects
-5173	Sieve Email Filtering: Body Extension
-5183	Sieve Email Filtering: Environment Extension
-5229	Sieve Email Filtering: Variables Extension
-5230	Sieve Email Filtering: Vacation Extension
-5231	Sieve Email Filtering: Relational Extension
-5232	Sieve Email Filtering: Imap4flags Extension
-5233	Sieve Email Filtering: Subaddress Extension
-5235	Sieve Email Filtering: Spamtest and Virustest Extensions
-5260	Sieve Email Filtering: Date and Index Extensions
-5293	Sieve Email Filtering: Editheader Extension
-5429	Sieve Email Filtering: Reject and Extended Reject Extensions
-5435	Sieve Email Filtering: Extension for Notifications
-5437	Sieve Notification Mechanism: Extensible Messaging and Presence Protocol (XMPP)
-5463	Sieve Email Filtering:  Ihave Extension
-5490	The Sieve Mail-Filtering Language -- Extensions for Checking Mailbox Status and Accessing Mailbox Metadata
-5703	Sieve Email Filtering: MIME Part Tests, Iteration, Extraction, Replacement, and Enclosure
-5784	Sieve Email Filtering:  Sieves and Display Directives in XML
-6131	Sieve Vacation Extension: "Seconds" Parameter
-6558	Sieve Extension for Converting Messages before Delivery
-6609	Sieve Email Filtering: Include Extension
-6785	Support for Internet Message Access Protocol (IMAP) Events in Sieve
-8579	Sieve Email Filtering: Delivering to Special-Use Mailboxes
-8580	Sieve Extension: File Carbon Copy (FCC)
-9042	Sieve Email Filtering: Delivery by MAILBOXID
+3894	No	-	Sieve Extension: Copying Without Side Effects
+5173	No	-	Sieve Email Filtering: Body Extension
+5183	Roadmap	-	Sieve Email Filtering: Environment Extension
+5229	Roadmap	-	Sieve Email Filtering: Variables Extension
+5230	Roadmap	-	Sieve Email Filtering: Vacation Extension
+5231	Roadmap	-	Sieve Email Filtering: Relational Extension
+5232	Roadmap	-	Sieve Email Filtering: Imap4flags Extension
+5233	Roadmap	-	Sieve Email Filtering: Subaddress Extension
+5235	No	-	Sieve Email Filtering: Spamtest and Virustest Extensions
+5260	No	-	Sieve Email Filtering: Date and Index Extensions
+5293	No	-	Sieve Email Filtering: Editheader Extension
+5429	Roadmap	-	Sieve Email Filtering: Reject and Extended Reject Extensions
+5435	No	-	Sieve Email Filtering: Extension for Notifications
+5437	No	-	Sieve Notification Mechanism: Extensible Messaging and Presence Protocol (XMPP)
+5463	Roadmap	-	Sieve Email Filtering:  Ihave Extension
+5490	No	-	The Sieve Mail-Filtering Language -- Extensions for Checking Mailbox Status and Accessing Mailbox Metadata
+5703	No	-	Sieve Email Filtering: MIME Part Tests, Iteration, Extraction, Replacement, and Enclosure
+5784	No	-	Sieve Email Filtering:  Sieves and Display Directives in XML
+6131	?	-	Sieve Vacation Extension: "Seconds" Parameter
+6558	No	-	Sieve Extension for Converting Messages before Delivery
+6609	No	-	Sieve Email Filtering: Include Extension
+6785	Roadmap	-	Support for Internet Message Access Protocol (IMAP) Events in Sieve
+8579	Roadmap	-	Sieve Email Filtering: Delivering to Special-Use Mailboxes
+8580	No	-	Sieve Extension: File Carbon Copy (FCC)
+9042	No	-	Sieve Email Filtering: Delivery by MAILBOXID
 
-3431	(obsoleted by RFC 5231) Relational Extension
-3598	(obsoleted by RFC 5233) Subaddress Extension
-3685	(obsoleted by RFC 5235) Spamtest and VirusTest Extensions
+3431	Roadmap	Obs	(RFC 5231) Relational Extension
+3598	Roadmap	Obs	(RFC 5233) Subaddress Extension
+3685	No	Obs	(RFC 5235) Spamtest and VirusTest Extensions
 
 Also see http://sieve.info/documents
 
 # JMAP
-8620	The JSON Meta Application Protocol (JMAP)
-8621	The JSON Meta Application Protocol (JMAP) for Mail
-8887	A JSON Meta Application Protocol (JMAP) Subprotocol for WebSocket
-9007	Handling Message Disposition Notification with the JSON Meta Application Protocol (JMAP)
-9219	S/MIME Signature Verification Extension to the JSON Meta Application Protocol (JMAP)
-9425	JSON Meta Application Protocol (JMAP) for Quotas
+8620	Roadmap	-	The JSON Meta Application Protocol (JMAP)
+8621	Roadmap	-	The JSON Meta Application Protocol (JMAP) for Mail
+8887	Roadmap	-	A JSON Meta Application Protocol (JMAP) Subprotocol for WebSocket
+9007	?	-	Handling Message Disposition Notification with the JSON Meta Application Protocol (JMAP)
+9219	No	-	S/MIME Signature Verification Extension to the JSON Meta Application Protocol (JMAP)
+9425	No	-	JSON Meta Application Protocol (JMAP) for Quotas
 
 See implementation guide, https://jmap.io/server.html
 
-# Vouch by reference
-5518	Vouch By Reference
+# CalDAV/iCal
+4791	Roadmap	-	Calendaring Extensions to WebDAV (CalDAV)
+5689	Roadmap	-	Extended MKCOL for Web Distributed Authoring and Versioning (WebDAV)
+6638	Roadmap	-	Scheduling Extensions to CalDAV
+6764	Roadmap	-	Locating Services for Calendaring Extensions to WebDAV (CalDAV) and vCard Extensions to WebDAV (CardDAV)
+7809	Roadmap	-	Calendaring Extensions to WebDAV (CalDAV): Time Zones by Reference
+7953	Roadmap	-	Calendar Availability
 
-# TLS
-6125	Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)
-7250	Using Raw Public Keys in Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
-7525	Recommendations for Secure Use of Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
-8314	Cleartext Considered Obsolete: Use of Transport Layer Security (TLS) for Email Submission and Access
-8996	Deprecating TLS 1.0 and TLS 1.1
-8997	Deprecation of TLS 1.1 for Email Submission and Access
+5545	Roadmap	-	Internet Calendaring and Scheduling Core Object Specification (iCalendar)
+5546	Roadmap	-	iCalendar Transport-Independent Interoperability Protocol (iTIP)
+6047	Roadmap	-	iCalendar Message-Based Interoperability Protocol (iMIP)
+6868	Roadmap	-	Parameter Value Encoding in iCalendar and vCard
+7529	?	-	Non-Gregorian Recurrence Rules in the Internet Calendaring and Scheduling Core Object Specification (iCalendar)
+7986	?	-	New Properties for iCalendar
+9073	?	-	Event Publishing Extensions to iCalendar
+9074	?	-	"VALARM" Extensions for iCalendar
+9253	?	-	Support for iCalendar Relationships
+6321	?	-	xCal: The XML Format for iCalendar
+7265	?	-	jCal: The JSON Format for iCalendar
 
-# SASL
+# CardDAV/vCard
+6352	Roadmap	-	CardDAV: vCard Extensions to Web Distributed Authoring and Versioning (WebDAV)
 
-2104	HMAC: Keyed-Hashing for Message Authentication
-2195	IMAP/POP AUTHorize Extension for Simple Challenge/Response
-4013	(obsoleted by RFC 7613) SASLprep: Stringprep Profile for User Names and Passwords
-4422	Simple Authentication and Security Layer (SASL)
-4505	Anonymous Simple Authentication and Security Layer (SASL) Mechanism
-4616	The PLAIN Simple Authentication and Security Layer (SASL) Mechanism
-5802	Salted Challenge Response Authentication Mechanism (SCRAM) SASL and GSS-API Mechanisms
-6331	Moving DIGEST-MD5 to Historic
-7613	(obsoleted by RFC 8265) Preparation, Enforcement, and Comparison of Internationalized Strings Representing Usernames and Passwords
-7677	SCRAM-SHA-256 and SCRAM-SHA-256-PLUS Simple Authentication and Security Layer (SASL) Mechanisms
-8265	Preparation, Enforcement, and Comparison of Internationalized Strings Representing Usernames and Passwords
-
-# IDNA
-3492	Punycode: A Bootstring encoding of Unicode for Internationalized Domain Names in Applications (IDNA)
-5890	Internationalized Domain Names for Applications (IDNA): Definitions and Document Framework
-5891	Internationalized Domain Names in Applications (IDNA): Protocol
-5892	The Unicode Code Points and Internationalized Domain Names for Applications (IDNA)
-5893	Right-to-Left Scripts for Internationalized Domain Names for Applications (IDNA)
-5894	Internationalized Domain Names for Applications (IDNA): Background, Explanation, and Rationale
-
-# ACME
-8555	Automatic Certificate Management Environment (ACME)
-8737	Automated Certificate Management Environment (ACME) TLS Application-Layer Protocol Negotiation (ALPN) Challenge Extension
-
-# DNS
-1034	DOMAIN NAMES - CONCEPTS AND FACILITIES
-1035	DOMAIN NAMES - IMPLEMENTATION AND SPECIFICATION
-1101	DNS Encoding of Network Names and Other Types
-1536	Common DNS Implementation Errors and Suggested Fixes
-2181	Clarifications to the DNS Specification
-2308	Negative Caching of DNS Queries (DNS NCACHE)
-2672	(obsoleted by RFC 6672) Non-Terminal DNS Name Redirection
-3226	DNSSEC and IPv6 A6 aware server/resolver message size requirements
-3363	Representing Internet Protocol version 6 (IPv6) Addresses in the Domain Name System (DNS)
-3596	DNS Extensions to Support IP Version 6
-3597	Handling of Unknown DNS Resource Record (RR) Types
-3833	Threat Analysis of the Domain Name System (DNS)
-4343	Domain Name System (DNS) Case Insensitivity Clarification
-4592	The Role of Wildcards in the Domain Name System
-5001	DNS Name Server Identifier (NSID) Option
-5452	Measures for Making DNS More Resilient against Forged Answers
-6604	xNAME RCODE and Status Bits Clarification
-6672	DNAME Redirection in the DNS
-6891	Extension Mechanisms for DNS (EDNS(0))
-6895	Domain Name System (DNS) IANA Considerations
-7686	The ".onion" Special-Use Domain Name
-7766	DNS Transport over TCP - Implementation Requirements
-7828	The edns-tcp-keepalive EDNS0 Option
-7873	Domain Name System (DNS) Cookies
-8020	NXDOMAIN: There Really Is Nothing Underneath
-8482	Providing Minimal-Sized Responses to DNS Queries That Have QTYPE=ANY
-8490	DNS Stateful Operations
-8499	DNS Terminology
-8767	Serving Stale Data to Improve DNS Resiliency
-8914	Extended DNS Errors
-9018	Interoperable Domain Name System (DNS) Server Cookies
-9210	DNS Transport over TCP - Operational Requirements
-
-# DNSSEC
-3225	Indicating Resolver Support of DNSSEC
-3658	Delegation Signer (DS) Resource Record (RR)
-4033	DNS Security Introduction and Requirements
-4034	Resource Records for the DNS Security Extensions
-4035	Protocol Modifications for the DNS Security Extensions
-4470	Minimally Covering NSEC Records and DNSSEC On-line Signing
-4956	DNS Security (DNSSEC) Opt-In
-5155	DNS Security (DNSSEC) Hashed Authenticated Denial of Existence
-5702	Use of SHA-2 Algorithms with RSA in DNSKEY and RRSIG Resource Records for DNSSEC
-5933	Use of GOST Signature Algorithms in DNSKEY and RRSIG Resource Records for DNSSEC
-6014	Cryptographic Algorithm Identifier Allocation for DNSSEC
-6781	DNSSEC Operational Practices, Version 2
-6840	Clarifications and Implementation Notes for DNS Security (DNSSEC)
-7901	CHAIN Query Requests in DNS
-8198	Aggressive Use of DNSSEC-Validated Cache
-8624	Algorithm Implementation Requirements and Usage Guidance for DNSSEC
-8749	Moving DNSSEC Lookaside Validation (DLV) to Historic Status
-9077	NSEC and NSEC3: TTLs and Aggressive Use
-9157	Revised IANA Considerations for DNSSEC
-9276	Guidance for NSEC3 Parameter Settings
-
-# HTTP
-
-2616	Hypertext Transfer Protocol -- HTTP/1.1
-7230	Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
-9110	HTTP Semantics
-
-# Websockets
-
-6455	The WebSocket Protocol
-
-# More
-
-3339	Date and Time on the Internet: Timestamps
-3986	Uniform Resource Identifier (URI): Generic Syntax
-5617	(Historic) DomainKeys Identified Mail (DKIM) Author Domain Signing Practices (ADSP)
-6186	(not used in practice) Use of SRV Records for Locating Email Submission/Access Services
-7817	Updated Transport Layer Security (TLS) Server Identity Check Procedure for Email-Related Protocols
+2425	Roadmap	-	A MIME Content-Type for Directory Information
+2426	?	-	vCard MIME Directory Profile
+6350	Roadmap	-	vCard Format Specification
+6351	?	-	xCard: vCard XML Representation
+6473	?	-	vCard KIND:application
+6474	?	-	vCard Format Extensions: Place of Birth, Place and Date of Death
+6715	?	-	vCard Format Extensions: Representing vCard Extensions Defined by the Open Mobile Alliance (OMA) Converged Address Book (CAB) Group
+6869	?	-	vCard KIND:device
+7095	?	-	jCard: The JSON Format for vCard
 
 # WebDAV
-4918	HTTP Extensions for Web Distributed Authoring and Versioning (WebDAV)
-3253	Versioning Extensions to WebDAV (Web Distributed Authoring and Versioning)
-3648	Web Distributed Authoring and Versioning (WebDAV) Ordered Collections Protocol
-3744	Web Distributed Authoring and Versioning (WebDAV) Access Control Protocol
-4437	Web Distributed Authoring and Versioning (WebDAV) Redirect Reference Resources
-5323	Web Distributed Authoring and Versioning (WebDAV) SEARCH
-6578	Collection Synchronization for Web Distributed Authoring and Versioning (WebDAV)
+4918	Roadmap	-	HTTP Extensions for Web Distributed Authoring and Versioning (WebDAV)
+3253	?	-	Versioning Extensions to WebDAV (Web Distributed Authoring and Versioning)
+3648	?	-	Web Distributed Authoring and Versioning (WebDAV) Ordered Collections Protocol
+3744	?	-	Web Distributed Authoring and Versioning (WebDAV) Access Control Protocol
+4437	?	-	Web Distributed Authoring and Versioning (WebDAV) Redirect Reference Resources
+5323	?	-	Web Distributed Authoring and Versioning (WebDAV) SEARCH
+6578	?	-	Collection Synchronization for Web Distributed Authoring and Versioning (WebDAV)
 
-# CalDAV
-4791	Calendaring Extensions to WebDAV (CalDAV)
-5689	Extended MKCOL for Web Distributed Authoring and Versioning (WebDAV)
-6638	Scheduling Extensions to CalDAV
-6764	Locating Services for Calendaring Extensions to WebDAV (CalDAV) and vCard Extensions to WebDAV (CardDAV)
-7809	Calendaring Extensions to WebDAV (CalDAV): Time Zones by Reference
-7953	Calendar Availability
+# SASL
+2104	-	-	HMAC: Keyed-Hashing for Message Authentication
+2195	Yes	-	IMAP/POP AUTHorize Extension for Simple Challenge/Response
+4013	Yes	Obs	(RFC 7613) SASLprep: Stringprep Profile for User Names and Passwords
+4422	Yes	-	Simple Authentication and Security Layer (SASL)
+4505	No	-	Anonymous Simple Authentication and Security Layer (SASL) Mechanism
+4616	Yes	-	The PLAIN Simple Authentication and Security Layer (SASL) Mechanism
+5802	Yes	-	Salted Challenge Response Authentication Mechanism (SCRAM) SASL and GSS-API Mechanisms
+6331	-No	-	Moving DIGEST-MD5 to Historic
+7613	Yes	Obs	(RFC 8265) Preparation, Enforcement, and Comparison of Internationalized Strings Representing Usernames and Passwords
+7677	Yes	-	SCRAM-SHA-256 and SCRAM-SHA-256-PLUS Simple Authentication and Security Layer (SASL) Mechanisms
+8265	Yes	-	Preparation, Enforcement, and Comparison of Internationalized Strings Representing Usernames and Passwords
 
-# iCal
-5545	Internet Calendaring and Scheduling Core Object Specification (iCalendar)
-5546	iCalendar Transport-Independent Interoperability Protocol (iTIP)
-6047	iCalendar Message-Based Interoperability Protocol (iMIP)
-6868	Parameter Value Encoding in iCalendar and vCard
-7529	Non-Gregorian Recurrence Rules in the Internet Calendaring and Scheduling Core Object Specification (iCalendar)
-7986	New Properties for iCalendar
-9073	Event Publishing Extensions to iCalendar
-9074	"VALARM" Extensions for iCalendar
-9253	Support for iCalendar Relationships
-6321	xCal: The XML Format for iCalendar
-7265	jCal: The JSON Format for iCalendar
+# Internationalization
+3492	Yes	-	Punycode: A Bootstring encoding of Unicode for Internationalized Domain Names in Applications (IDNA)
+5890	Yes	-	Internationalized Domain Names for Applications (IDNA): Definitions and Document Framework
+5891	Yes	-	Internationalized Domain Names in Applications (IDNA): Protocol
+5892	?	-	The Unicode Code Points and Internationalized Domain Names for Applications (IDNA)
+5893	?	-	Right-to-Left Scripts for Internationalized Domain Names for Applications (IDNA)
+5894	?	-	Internationalized Domain Names for Applications (IDNA): Background, Explanation, and Rationale
+8616	Yes	-	Email Authentication for Internationalized Mail
 
-# CardDAV
-6352	CardDAV: vCard Extensions to Web Distributed Authoring and Versioning (WebDAV)
+# TLS
+5056	Yes	-	On the Use of Channel Bindings to Secure Channels
+5705	Yes	-	Keying Material Exporters for Transport Layer Security (TLS)
+5929	Yes	-	Channel Bindings for TLS
+6125	-?	-	Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)
+7250	-No	-	Using Raw Public Keys in Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
+7525	-?	-	Recommendations for Secure Use of Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
+7627	-?	-	Transport Layer Security (TLS) Session Hash and Extended Master Secret Extension
+8314	Yes	-	Cleartext Considered Obsolete: Use of Transport Layer Security (TLS) for Email Submission and Access
+8446	Yes	-	The Transport Layer Security (TLS) Protocol Version 1.3
+8996	Yes	-	Deprecating TLS 1.0 and TLS 1.1
+8997	Yes	-	Deprecation of TLS 1.1 for Email Submission and Access
+9266	Yes	-	Channel Bindings for TLS 1.3
 
-# vCard
-2425	A MIME Content-Type for Directory Information
-2426	vCard MIME Directory Profile
-6350	vCard Format Specification
-6351	xCard: vCard XML Representation
-6473	vCard KIND:application
-6474	vCard Format Extensions: Place of Birth, Place and Date of Death
-6715	vCard Format Extensions: Representing vCard Extensions Defined by the Open Mobile Alliance (OMA) Converged Address Book (CAB) Group
-6869	vCard KIND:device
-7095	jCard: The JSON Format for vCard
+# ACME
+8555	Yes	-	Automatic Certificate Management Environment (ACME)
+8737	Yes	-	Automated Certificate Management Environment (ACME) TLS Application-Layer Protocol Negotiation (ALPN) Challenge Extension
+
+# CAA
+8659	Yes	-	DNS Certification Authority Authorization (CAA) Resource Record
+8657	Yes	-	Certification Authority Authorization (CAA) Record Extensions for Account URI and Automatic Certificate Management Environment (ACME) Method Binding
+
+# Vouch by reference
+5518	-?	-	Vouch By Reference
+
+# HTTP
+2616	Yes	Obs	(RFC 7230) Hypertext Transfer Protocol -- HTTP/1.1
+6455	Yes	-	The WebSocket Protocol
+7230	Yes	Obs	(RFC 9110) Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing
+9110	Yes	-	HTTP Semantics
+
+
+# More
+3339	-?	-	Date and Time on the Internet: Timestamps
+3986	-?	-	Uniform Resource Identifier (URI): Generic Syntax
+5617	-?	-	(Historic) DomainKeys Identified Mail (DKIM) Author Domain Signing Practices (ADSP)
+6068	-Yes	-	The 'mailto' URI Scheme
+6186	-?	-	(not used in practice) Use of SRV Records for Locating Email Submission/Access Services
+7817	-?	-	Updated Transport Layer Security (TLS) Server Identity Check Procedure for Email-Related Protocols
+
+# DNS
+1034	-?	-	DOMAIN NAMES - CONCEPTS AND FACILITIES
+1035	-?	-	DOMAIN NAMES - IMPLEMENTATION AND SPECIFICATION
+1101	-?	-	DNS Encoding of Network Names and Other Types
+1536	-?	-	Common DNS Implementation Errors and Suggested Fixes
+2181	-?	-	Clarifications to the DNS Specification
+2308	-?	-	Negative Caching of DNS Queries (DNS NCACHE)
+2672	-?	-	(obsoleted by RFC 6672) Non-Terminal DNS Name Redirection
+3226	-?	-	DNSSEC and IPv6 A6 aware server/resolver message size requirements
+3363	-?	-	Representing Internet Protocol version 6 (IPv6) Addresses in the Domain Name System (DNS)
+3596	-?	-	DNS Extensions to Support IP Version 6
+3597	-?	-	Handling of Unknown DNS Resource Record (RR) Types
+3833	-?	-	Threat Analysis of the Domain Name System (DNS)
+4343	-?	-	Domain Name System (DNS) Case Insensitivity Clarification
+4592	-?	-	The Role of Wildcards in the Domain Name System
+5001	-?	-	DNS Name Server Identifier (NSID) Option
+5452	-?	-	Measures for Making DNS More Resilient against Forged Answers
+6604	-?	-	xNAME RCODE and Status Bits Clarification
+6672	-?	-	DNAME Redirection in the DNS
+6891	-?	-	Extension Mechanisms for DNS (EDNS(0))
+6895	-?	-	Domain Name System (DNS) IANA Considerations
+7686	-?	-	The ".onion" Special-Use Domain Name
+7766	-?	-	DNS Transport over TCP - Implementation Requirements
+7828	-?	-	The edns-tcp-keepalive EDNS0 Option
+7873	-?	-	Domain Name System (DNS) Cookies
+8020	-?	-	NXDOMAIN: There Really Is Nothing Underneath
+8482	-?	-	Providing Minimal-Sized Responses to DNS Queries That Have QTYPE=ANY
+8490	-?	-	DNS Stateful Operations
+8499	-?	-	DNS Terminology
+8767	-?	-	Serving Stale Data to Improve DNS Resiliency
+8914	-?	-	Extended DNS Errors
+9018	-?	-	Interoperable Domain Name System (DNS) Server Cookies
+9210	-?	-	DNS Transport over TCP - Operational Requirements
+
+# DNSSEC
+3225	-?	-	Indicating Resolver Support of DNSSEC
+3658	-?	-	Delegation Signer (DS) Resource Record (RR)
+4033	-?	-	DNS Security Introduction and Requirements
+4034	-?	-	Resource Records for the DNS Security Extensions
+4035	-?	-	Protocol Modifications for the DNS Security Extensions
+4470	-?	-	Minimally Covering NSEC Records and DNSSEC On-line Signing
+4956	-?	-	DNS Security (DNSSEC) Opt-In
+5155	-?	-	DNS Security (DNSSEC) Hashed Authenticated Denial of Existence
+5702	-?	-	Use of SHA-2 Algorithms with RSA in DNSKEY and RRSIG Resource Records for DNSSEC
+5933	-?	-	Use of GOST Signature Algorithms in DNSKEY and RRSIG Resource Records for DNSSEC
+6014	-?	-	Cryptographic Algorithm Identifier Allocation for DNSSEC
+6781	-?	-	DNSSEC Operational Practices, Version 2
+6840	-?	-	Clarifications and Implementation Notes for DNS Security (DNSSEC)
+7901	-?	-	CHAIN Query Requests in DNS
+8198	-?	-	Aggressive Use of DNSSEC-Validated Cache
+8624	-?	-	Algorithm Implementation Requirements and Usage Guidance for DNSSEC
+8749	-?	-	Moving DNSSEC Lookaside Validation (DLV) to Historic Status
+9077	-?	-	NSEC and NSEC3: TTLs and Aggressive Use
+9157	-?	-	Revised IANA Considerations for DNSSEC
+9276	-?	-	Guidance for NSEC3 Parameter Settings

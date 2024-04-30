@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto"
@@ -21,17 +22,21 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/exp/slices"
+	"golang.org/x/text/secure/precis"
 
 	"github.com/mjl-/adns"
 
@@ -55,6 +60,7 @@ import (
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/publicsuffix"
+	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/spf"
@@ -63,6 +69,7 @@ import (
 	"github.com/mjl-/mox/tlsrptdb"
 	"github.com/mjl-/mox/updates"
 	"github.com/mjl-/mox/webadmin"
+	"github.com/mjl-/mox/webapi"
 )
 
 var (
@@ -97,10 +104,30 @@ var commands = []struct {
 	{"setaccountpassword", cmdSetaccountpassword},
 	{"setadminpassword", cmdSetadminpassword},
 	{"loglevels", cmdLoglevels},
+	{"queue holdrules list", cmdQueueHoldrulesList},
+	{"queue holdrules add", cmdQueueHoldrulesAdd},
+	{"queue holdrules remove", cmdQueueHoldrulesRemove},
 	{"queue list", cmdQueueList},
-	{"queue kick", cmdQueueKick},
+	{"queue hold", cmdQueueHold},
+	{"queue unhold", cmdQueueUnhold},
+	{"queue schedule", cmdQueueSchedule},
+	{"queue transport", cmdQueueTransport},
+	{"queue requiretls", cmdQueueRequireTLS},
+	{"queue fail", cmdQueueFail},
 	{"queue drop", cmdQueueDrop},
 	{"queue dump", cmdQueueDump},
+	{"queue retired list", cmdQueueRetiredList},
+	{"queue retired print", cmdQueueRetiredPrint},
+	{"queue suppress list", cmdQueueSuppressList},
+	{"queue suppress add", cmdQueueSuppressAdd},
+	{"queue suppress remove", cmdQueueSuppressRemove},
+	{"queue suppress lookup", cmdQueueSuppressLookup},
+	{"queue webhook list", cmdQueueHookList},
+	{"queue webhook schedule", cmdQueueHookSchedule},
+	{"queue webhook cancel", cmdQueueHookCancel},
+	{"queue webhook print", cmdQueueHookPrint},
+	{"queue webhook retired list", cmdQueueHookRetiredList},
+	{"queue webhook retired print", cmdQueueHookRetiredPrint},
 	{"import maildir", cmdImportMaildir},
 	{"import mbox", cmdImportMbox},
 	{"export maildir", cmdExportMaildir},
@@ -121,10 +148,18 @@ var commands = []struct {
 	{"config address rm", cmdConfigAddressRemove},
 	{"config domain add", cmdConfigDomainAdd},
 	{"config domain rm", cmdConfigDomainRemove},
+	{"config alias list", cmdConfigAliasList},
+	{"config alias print", cmdConfigAliasPrint},
+	{"config alias add", cmdConfigAliasAdd},
+	{"config alias update", cmdConfigAliasUpdate},
+	{"config alias rm", cmdConfigAliasRemove},
+	{"config alias addaddr", cmdConfigAliasAddaddr},
+	{"config alias rmaddr", cmdConfigAliasRemoveaddr},
+
 	{"config describe-sendmail", cmdConfigDescribeSendmail},
 	{"config printservice", cmdConfigPrintservice},
 	{"config ensureacmehostprivatekeys", cmdConfigEnsureACMEHostprivatekeys},
-	{"example", cmdExample},
+	{"config example", cmdConfigExample},
 
 	{"checkupdate", cmdCheckupdate},
 	{"cid", cmdCid},
@@ -156,7 +191,9 @@ var commands = []struct {
 	{"tlsrpt lookup", cmdTLSRPTLookup},
 	{"tlsrpt parsereportmsg", cmdTLSRPTParsereportmsg},
 	{"version", cmdVersion},
+	{"webapi", cmdWebapi},
 
+	{"example", cmdExample},
 	{"bumpuidvalidity", cmdBumpUIDValidity},
 	{"reassignuids", cmdReassignUIDs},
 	{"fixuidmeta", cmdFixUIDMeta},
@@ -186,6 +223,7 @@ var commands = []struct {
 	{"ximport mbox", cmdXImportMbox},
 	{"openaccounts", cmdOpenaccounts},
 	{"readmessages", cmdReadmessages},
+	{"queuefillretired", cmdQueueFillRetired},
 }
 
 var cmds []cmd
@@ -211,6 +249,8 @@ type cmd struct {
 	params   string // Arguments to command. Multiple lines possible.
 	help     string // Additional explanation. First line is synopsis, the rest is only printed for an explicit help/usage for that command.
 	args     []string
+
+	log mlog.Log
 }
 
 func (c *cmd) Parse() []string {
@@ -388,10 +428,10 @@ func mustLoadConfig() {
 		mox.Conf.Log[""] = level
 		mlog.SetConfig(mox.Conf.Log)
 	} else if loglevel != "" && !ok {
-		log.Fatal("unknown loglevel", mlog.Field("loglevel", loglevel))
+		log.Fatal("unknown loglevel", slog.String("loglevel", loglevel))
 	}
 	if pedantic {
-		moxvar.Pedantic = true
+		mox.SetPedantic(true)
 	}
 }
 
@@ -413,6 +453,7 @@ func main() {
 		c := &cmd{
 			flag:     flag.NewFlagSet("sendmail", flag.ExitOnError),
 			flagArgs: os.Args[1:],
+			log:      mlog.New("sendmail", nil),
 		}
 		cmdSendmail(c)
 		return
@@ -441,7 +482,7 @@ func main() {
 	defer profile(cpuprofile, memprofile)()
 
 	if pedantic {
-		moxvar.Pedantic = true
+		mox.SetPedantic(true)
 	}
 
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
@@ -464,6 +505,7 @@ next:
 		}
 		c.flag = flag.NewFlagSet("mox "+strings.Join(c.words, " "), flag.ExitOnError)
 		c.flagArgs = args[len(c.words):]
+		c.log = mlog.New(strings.Join(c.words, ""), nil)
 		c.fn(&c)
 		return
 	}
@@ -523,6 +565,13 @@ func printClientConfig(d dns.Domain) {
 	for _, e := range cc.Entries {
 		fmt.Printf("%-20s %-30s %5d %-15s %s\n", e.Protocol, e.Host, e.Port, e.Listener, e.Note)
 	}
+	fmt.Printf(`
+To prevent authentication mechanism downgrade attempts that may result in
+clients sending plain text passwords to a MitM, clients should always be
+explicitly configured with the most secure authentication mechanism supported,
+the first of: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1,
+CRAM-MD5.
+`)
 }
 
 func cmdConfigTest(c *cmd) {
@@ -538,7 +587,7 @@ are printed.
 
 	mox.FilesImmediate = true
 
-	_, errs := mox.ParseConfig(context.Background(), mox.ConfigStaticPath, true, true, false)
+	_, errs := mox.ParseConfig(context.Background(), c.log, mox.ConfigStaticPath, true, true, false)
 	if len(errs) > 1 {
 		log.Printf("multiple errors:")
 		for _, err := range errs {
@@ -628,18 +677,20 @@ must be set if and only if account does not yet exist.
 
 	d := xparseDomain(args[0], "domain")
 	mustLoadConfig()
-	var localpart string
+	var localpart smtp.Localpart
 	if len(args) == 3 {
-		localpart = args[2]
+		var err error
+		localpart, err = smtp.ParseLocalpart(args[2])
+		xcheckf(err, "parsing localpart")
 	}
 	ctlcmdConfigDomainAdd(xctl(), d, args[1], localpart)
 }
 
-func ctlcmdConfigDomainAdd(ctl *ctl, domain dns.Domain, account, localpart string) {
+func ctlcmdConfigDomainAdd(ctl *ctl, domain dns.Domain, account string, localpart smtp.Localpart) {
 	ctl.xwrite("domainadd")
 	ctl.xwrite(domain.Name())
 	ctl.xwrite(account)
-	ctl.xwrite(localpart)
+	ctl.xwrite(string(localpart))
 	ctl.xreadok()
 	fmt.Printf("domain added, remember to add dns records, see:\n\nmox config dnsrecords %s\nmox config dnscheck %s\n", domain.Name(), domain.Name())
 }
@@ -666,6 +717,147 @@ func ctlcmdConfigDomainRemove(ctl *ctl, d dns.Domain) {
 	ctl.xwrite(d.Name())
 	ctl.xreadok()
 	fmt.Printf("domain removed, remember to remove dns records for %s\n", d)
+}
+
+func cmdConfigAliasList(c *cmd) {
+	c.params = "domain"
+	c.help = `List aliases for domain.`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasList(xctl(), args[0])
+}
+
+func ctlcmdConfigAliasList(ctl *ctl, address string) {
+	ctl.xwrite("aliaslist")
+	ctl.xwrite(address)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
+func cmdConfigAliasPrint(c *cmd) {
+	c.params = "alias"
+	c.help = `Print settings and members of alias.`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasPrint(xctl(), args[0])
+}
+
+func ctlcmdConfigAliasPrint(ctl *ctl, address string) {
+	ctl.xwrite("aliasprint")
+	ctl.xwrite(address)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
+func cmdConfigAliasAdd(c *cmd) {
+	c.params = "alias@domain rcpt1@domain ..."
+	c.help = `Add new alias with one or more addresses.`
+	args := c.Parse()
+	if len(args) < 2 {
+		c.Usage()
+	}
+
+	alias := config.Alias{Addresses: args[1:]}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasAdd(xctl(), args[0], alias)
+}
+
+func ctlcmdConfigAliasAdd(ctl *ctl, address string, alias config.Alias) {
+	ctl.xwrite("aliasadd")
+	ctl.xwrite(address)
+	xctlwriteJSON(ctl, alias)
+	ctl.xreadok()
+}
+
+func cmdConfigAliasUpdate(c *cmd) {
+	c.params = "alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]"
+	c.help = `Update alias configuration.`
+	var postpublic, listmembers, allowmsgfrom string
+	c.flag.StringVar(&postpublic, "postpublic", "", "whether anyone or only list members can post")
+	c.flag.StringVar(&listmembers, "listmembers", "", "whether list members can list members")
+	c.flag.StringVar(&allowmsgfrom, "allowmsgfrom", "", "whether alias address can be used in message from header")
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	alias := args[0]
+	mustLoadConfig()
+	ctlcmdConfigAliasUpdate(xctl(), alias, postpublic, listmembers, allowmsgfrom)
+}
+
+func ctlcmdConfigAliasUpdate(ctl *ctl, alias, postpublic, listmembers, allowmsgfrom string) {
+	ctl.xwrite("aliasupdate")
+	ctl.xwrite(alias)
+	ctl.xwrite(postpublic)
+	ctl.xwrite(listmembers)
+	ctl.xwrite(allowmsgfrom)
+	ctl.xreadok()
+}
+
+func cmdConfigAliasRemove(c *cmd) {
+	c.params = "alias@domain"
+	c.help = "Remove alias."
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasRemove(xctl(), args[0])
+}
+
+func ctlcmdConfigAliasRemove(ctl *ctl, alias string) {
+	ctl.xwrite("aliasrm")
+	ctl.xwrite(alias)
+	ctl.xreadok()
+}
+
+func cmdConfigAliasAddaddr(c *cmd) {
+	c.params = "alias@domain rcpt1@domain ..."
+	c.help = `Add addresses to alias.`
+	args := c.Parse()
+	if len(args) < 2 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasAddaddr(xctl(), args[0], args[1:])
+}
+
+func ctlcmdConfigAliasAddaddr(ctl *ctl, alias string, addresses []string) {
+	ctl.xwrite("aliasaddaddr")
+	ctl.xwrite(alias)
+	xctlwriteJSON(ctl, addresses)
+	ctl.xreadok()
+}
+
+func cmdConfigAliasRemoveaddr(c *cmd) {
+	c.params = "alias@domain rcpt1@domain ..."
+	c.help = `Remove addresses from alias.`
+	args := c.Parse()
+	if len(args) < 2 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAliasRmaddr(xctl(), args[0], args[1:])
+}
+
+func ctlcmdConfigAliasRmaddr(ctl *ctl, alias string, addresses []string) {
+	ctl.xwrite("aliasrmaddr")
+	ctl.xwrite(alias)
+	xctlwriteJSON(ctl, addresses)
+	ctl.xreadok()
 }
 
 func cmdConfigAccountAdd(c *cmd) {
@@ -787,7 +979,21 @@ configured.
 		xcheckf(err, "looking up record for dnssec-status")
 	}
 
-	records, err := mox.DomainRecords(domConf, d, result.Authentic)
+	var certIssuerDomainName, acmeAccountURI string
+	public := mox.Conf.Static.Listeners["public"]
+	if public.TLS != nil && public.TLS.ACME != "" {
+		acme, ok := mox.Conf.Static.ACME[public.TLS.ACME]
+		if ok && acme.Manager.Manager.Client != nil {
+			certIssuerDomainName = acme.IssuerDomainName
+			acc, err := acme.Manager.Manager.Client.GetReg(context.Background(), "")
+			c.log.Check(err, "get public acme account")
+			if err == nil {
+				acmeAccountURI = acc.URI
+			}
+		}
+	}
+
+	records, err := mox.DomainRecords(domConf, d, result.Authentic, certIssuerDomainName, acmeAccountURI)
 	xcheckf(err, "records")
 	fmt.Print(strings.Join(records, "\n") + "\n")
 }
@@ -842,9 +1048,10 @@ func cmdConfigDNSCheck(c *cmd) {
 	printResult("SPF", result.SPF.Result)
 	printResult("DKIM", result.DKIM.Result)
 	printResult("DMARC", result.DMARC.Result)
-	printResult("TLSRPT", result.TLSRPT.Result)
+	printResult("Host TLSRPT", result.HostTLSRPT.Result)
+	printResult("Domain TLSRPT", result.DomainTLSRPT.Result)
 	printResult("MTASTS", result.MTASTS.Result)
-	printResult("SRV", result.SRVConf.Result)
+	printResult("SRV conf", result.SRVConf.Result)
 	printResult("Autoconf", result.Autoconf.Result)
 	printResult("Autodiscover", result.Autodiscover.Result)
 }
@@ -1066,129 +1273,6 @@ domain and create the TLSA DNS records it suggests to enable DANE.
 	}
 }
 
-var examples = []struct {
-	Name string
-	Get  func() string
-}{
-	{
-		"webhandlers",
-		func() string {
-			const webhandlers = `# Snippet of domains.conf to configure WebDomainRedirects and WebHandlers.
-
-# Redirect all requests for mox.example to https://www.mox.example.
-WebDomainRedirects:
-	mox.example: www.mox.example
-
-# Each request is matched against these handlers until one matches and serves it.
-WebHandlers:
-	-
-		# Redirect all plain http requests to https, leaving path, query strings, etc
-		# intact. When the request is already to https, the destination URL would have the
-		# same scheme, host and path, causing this redirect handler to not match the
-		# request (and not cause a redirect loop) and the webserver to serve the request
-		# with a later handler.
-		LogName: redirhttps
-		Domain: www.mox.example
-		PathRegexp: ^/
-		# Could leave DontRedirectPlainHTTP at false if it wasn't for this being an
-		# example for doing this redirect.
-		DontRedirectPlainHTTP: true
-		WebRedirect:
-			BaseURL: https://www.mox.example
-	-
-		# The name of the handler, used in logging and metrics.
-		LogName: staticmjl
-		# With ACME configured, each configured domain will automatically get a TLS
-		# certificate on first request.
-		Domain: www.mox.example
-		PathRegexp: ^/who/mjl/
-		WebStatic:
-			StripPrefix: /who/mjl
-			# Requested path /who/mjl/inferno/ resolves to local web/mjl/inferno.
-			# If a directory contains an index.html, it is served when a directory is requested.
-			Root: web/mjl
-			# With ListFiles true, if a directory does not contain an index.html, the contents are listed.
-			ListFiles: true
-			ResponseHeaders:
-				X-Mox: hi
-	-
-		LogName: redir
-		Domain: www.mox.example
-		PathRegexp: ^/redir/a/b/c
-		# Don't redirect from plain HTTP to HTTPS.
-		DontRedirectPlainHTTP: true
-		WebRedirect:
-			# Just change the domain and add query string set fragment. No change to scheme.
-			# Path will start with /redir/a/b/c (and whathever came after) because no
-			# OrigPathRegexp+ReplacePath is set.
-			BaseURL: //moxest.example?q=1#frag
-			# Default redirection is 308 - Permanent Redirect.
-			StatusCode: 307
-	-
-		LogName: oldnew
-		Domain: www.mox.example
-		PathRegexp: ^/old/
-		WebRedirect:
-			# Replace path, leaving rest of URL intact.
-			OrigPathRegexp: ^/old/(.*)
-			ReplacePath: /new/$1
-	-
-		LogName: app
-		Domain: www.mox.example
-		PathRegexp: ^/app/
-		WebForward:
-			# Strip the path matched by PathRegexp before forwarding the request. So original
-			# request /app/api become just /api.
-			StripPath: true
-			# URL of backend, where requests are forwarded to. The path in the URL is kept,
-			# so for incoming request URL /app/api, the outgoing request URL has path /app-v2/api.
-			# Requests are made with Go's net/http DefaultTransporter, including using
-			# HTTP_PROXY and HTTPS_PROXY environment variables.
-			URL: http://127.0.0.1:8900/app-v2/
-			# Add headers to response.
-			ResponseHeaders:
-				X-Frame-Options: deny
-				X-Content-Type-Options: nosniff
-`
-			// Parse just so we know we have the syntax right.
-			// todo: ideally we would have a complete config file and parse it fully.
-			var conf struct {
-				WebDomainRedirects map[string]string
-				WebHandlers        []config.WebHandler
-			}
-			err := sconf.Parse(strings.NewReader(webhandlers), &conf)
-			xcheckf(err, "parsing webhandlers example")
-			return webhandlers
-		},
-	},
-}
-
-func cmdExample(c *cmd) {
-	c.params = "[name]"
-	c.help = `List available examples, or print a specific example.`
-
-	args := c.Parse()
-	if len(args) > 1 {
-		c.Usage()
-	}
-
-	var match func() string
-	for _, ex := range examples {
-		if len(args) == 0 {
-			fmt.Println(ex.Name)
-		} else if args[0] == ex.Name {
-			match = ex.Get
-		}
-	}
-	if len(args) == 0 {
-		return
-	}
-	if match == nil {
-		log.Fatalln("not found")
-	}
-	fmt.Print(match())
-}
-
 func cmdLoglevels(c *cmd) {
 	c.params = "[level [pkg]]"
 	c.help = `Print the log levels, or set a new default log level, or a level for the given package.
@@ -1340,6 +1424,8 @@ The password is read from stdin. Its bcrypt hash is stored in a file named
 	}
 
 	pw := xreadpassword()
+	pw, err := precis.OpaqueString.String(pw)
+	xcheckf(err, `checking password with "precis" requirements`)
 	hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
 	xcheckf(err, "generating hash for password")
 	err = os.WriteFile(path, hash, 0660)
@@ -1425,124 +1511,6 @@ func ctlcmdDeliver(ctl *ctl, address string) {
 	}
 }
 
-func cmdQueueList(c *cmd) {
-	c.help = `List messages in the delivery queue.
-
-This prints the message with its ID, last and next delivery attempts, last
-error.
-`
-	if len(c.Parse()) != 0 {
-		c.Usage()
-	}
-	mustLoadConfig()
-	ctlcmdQueueList(xctl())
-}
-
-func ctlcmdQueueList(ctl *ctl) {
-	ctl.xwrite("queue")
-	ctl.xreadok()
-	if _, err := io.Copy(os.Stdout, ctl.reader()); err != nil {
-		log.Fatalf("%s", err)
-	}
-}
-
-func cmdQueueKick(c *cmd) {
-	c.params = "[-id id] [-todomain domain] [-recipient address] [-transport transport]"
-	c.help = `Schedule matching messages in the queue for immediate delivery.
-
-Messages deliveries are normally attempted with exponential backoff. The first
-retry after 7.5 minutes, and doubling each time. Kicking messages sets their
-next scheduled attempt to now, it can cause delivery to fail earlier than
-without rescheduling.
-
-With the -transport flag, future delivery attempts are done using the specified
-transport. Transports can be configured in mox.conf, e.g. to submit to a remote
-queue over SMTP.
-`
-	var id int64
-	var todomain, recipient, transport string
-	c.flag.Int64Var(&id, "id", 0, "id of message in queue")
-	c.flag.StringVar(&todomain, "todomain", "", "destination domain of messages")
-	c.flag.StringVar(&recipient, "recipient", "", "recipient email address")
-	c.flag.StringVar(&transport, "transport", "", "transport to use for the next delivery")
-	if len(c.Parse()) != 0 {
-		c.Usage()
-	}
-	mustLoadConfig()
-	ctlcmdQueueKick(xctl(), id, todomain, recipient, transport)
-}
-
-func ctlcmdQueueKick(ctl *ctl, id int64, todomain, recipient, transport string) {
-	ctl.xwrite("queuekick")
-	ctl.xwrite(fmt.Sprintf("%d", id))
-	ctl.xwrite(todomain)
-	ctl.xwrite(recipient)
-	ctl.xwrite(transport)
-	count := ctl.xread()
-	line := ctl.xread()
-	if line == "ok" {
-		fmt.Printf("%s messages scheduled\n", count)
-	} else {
-		log.Fatalf("scheduling messages for immediate delivery: %s", line)
-	}
-}
-
-func cmdQueueDrop(c *cmd) {
-	c.params = "[-id id] [-todomain domain] [-recipient address]"
-	c.help = `Remove matching messages from the queue.
-
-Dangerous operation, this completely removes the message. If you want to store
-the message, use "queue dump" before removing.
-`
-	var id int64
-	var todomain, recipient string
-	c.flag.Int64Var(&id, "id", 0, "id of message in queue")
-	c.flag.StringVar(&todomain, "todomain", "", "destination domain of messages")
-	c.flag.StringVar(&recipient, "recipient", "", "recipient email address")
-	if len(c.Parse()) != 0 {
-		c.Usage()
-	}
-	mustLoadConfig()
-	ctlcmdQueueDrop(xctl(), id, todomain, recipient)
-}
-
-func ctlcmdQueueDrop(ctl *ctl, id int64, todomain, recipient string) {
-	ctl.xwrite("queuedrop")
-	ctl.xwrite(fmt.Sprintf("%d", id))
-	ctl.xwrite(todomain)
-	ctl.xwrite(recipient)
-	count := ctl.xread()
-	line := ctl.xread()
-	if line == "ok" {
-		fmt.Printf("%s messages dropped\n", count)
-	} else {
-		log.Fatalf("scheduling messages for immediate delivery: %s", line)
-	}
-}
-
-func cmdQueueDump(c *cmd) {
-	c.params = "id"
-	c.help = `Dump a message from the queue.
-
-The message is printed to stdout and is in standard internet mail format.
-`
-	args := c.Parse()
-	if len(args) != 1 {
-		c.Usage()
-	}
-	mustLoadConfig()
-	ctlcmdQueueDump(xctl(), args[0])
-}
-
-func ctlcmdQueueDump(ctl *ctl, id string) {
-	ctl.xwrite("queuedump")
-	ctl.xwrite(id)
-	ctl.xreadok()
-	if _, err := io.Copy(os.Stdout, ctl.reader()); err != nil {
-		log.Fatalf("%s", err)
-	}
-}
-
 func cmdDKIMGenrsa(c *cmd) {
 	c.params = ">$selector._domainkey.$domain.rsa2048.privatekey.pkcs8.pem"
 	c.help = `Generate a new 2048 bit RSA private key for use with DKIM.
@@ -1594,8 +1562,11 @@ connection.
 		}
 	}
 
+	pkixRoots, err := x509.SystemCertPool()
+	xcheckf(err, "get system pkix certificate pool")
+
 	resolver := dns.StrictResolver{Pkg: "danedial"}
-	conn, record, err := dane.Dial(context.Background(), resolver, "tcp", args[0], allowedUsages)
+	conn, record, err := dane.Dial(context.Background(), c.log.Logger, resolver, "tcp", args[0], allowedUsages, pkixRoots)
 	xcheckf(err, "dial")
 	log.Printf("(connected, verified with %s)", record)
 
@@ -1643,8 +1614,6 @@ sharing most of its code.
 	origNextHop, err := dns.ParseDomain(args[0])
 	xcheckf(err, "parse domain")
 
-	clog := mlog.New("danedialmx")
-
 	ctxbg := context.Background()
 
 	resolver := dns.StrictResolver{}
@@ -1654,7 +1623,7 @@ sharing most of its code.
 	var hosts []dns.IPDomain
 	if len(args) == 1 {
 		var permanent bool
-		haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, permanent, err = smtpclient.GatherDestinations(ctxbg, clog, resolver, dns.IPDomain{Domain: origNextHop})
+		haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, permanent, err = smtpclient.GatherDestinations(ctxbg, c.log.Logger, resolver, dns.IPDomain{Domain: origNextHop})
 		status := "temporary"
 		if permanent {
 			status = "permanent"
@@ -1705,7 +1674,7 @@ sharing most of its code.
 
 		log.Printf("attempting to connect to %s", host)
 
-		authentic, expandedAuthentic, expandedHost, ips, _, err := smtpclient.GatherIPs(ctxbg, clog, resolver, host, dialedIPs)
+		authentic, expandedAuthentic, expandedHost, ips, _, err := smtpclient.GatherIPs(ctxbg, c.log.Logger, resolver, "ip", host, dialedIPs)
 		if err != nil {
 			log.Printf("resolving ips for %s: %v, skipping", host, err)
 			continue
@@ -1723,19 +1692,19 @@ sharing most of its code.
 		}
 		log.Printf("host %s resolved to ips %s, looking up tlsa records", host, ips)
 
-		daneRequired, daneRecords, tlsaBaseDomain, err := smtpclient.GatherTLSA(ctxbg, clog, resolver, host.Domain, expandedAuthentic, expandedHost)
+		daneRequired, daneRecords, tlsaBaseDomain, err := smtpclient.GatherTLSA(ctxbg, c.log.Logger, resolver, host.Domain, expandedAuthentic, expandedHost)
 		if err != nil {
 			log.Printf("looking up tlsa records: %s, skipping", err)
 			continue
 		}
-		tlsMode := smtpclient.TLSStrictStartTLS
+		tlsMode := smtpclient.TLSRequiredStartTLS
 		if len(daneRecords) == 0 {
 			if !daneRequired {
 				log.Printf("host %s has no tlsa records, skipping", expandedHost)
 				continue
 			}
 			log.Printf("warning: only unusable tlsa records found, continuing with required tls without certificate verification")
-			tlsMode = smtpclient.TLSUnverifiedStartTLS
+			daneRecords = nil
 		} else {
 			var l []string
 			for _, r := range daneRecords {
@@ -1744,15 +1713,15 @@ sharing most of its code.
 			log.Printf("tlsa records: %s", strings.Join(l, "; "))
 		}
 
-		tlsRemoteHostnames := smtpclient.GatherTLSANames(haveMX, expandedNextHopAuthentic, expandedAuthentic, origNextHop, expandedNextHop, host.Domain, tlsaBaseDomain)
+		tlsHostnames := smtpclient.GatherTLSANames(haveMX, expandedNextHopAuthentic, expandedAuthentic, origNextHop, expandedNextHop, host.Domain, tlsaBaseDomain)
 		var l []string
-		for _, name := range tlsRemoteHostnames {
+		for _, name := range tlsHostnames {
 			l = append(l, name.String())
 		}
 		log.Printf("gathered valid tls certificate names for potential verification with dane-ta: %s", strings.Join(l, ", "))
 
 		dialer := &net.Dialer{Timeout: 5 * time.Second}
-		conn, _, err := smtpclient.Dial(ctxbg, clog, dialer, dns.IPDomain{Domain: expandedHost}, ips, 25, dialedIPs)
+		conn, _, err := smtpclient.Dial(ctxbg, c.log.Logger, dialer, dns.IPDomain{Domain: expandedHost}, ips, 25, dialedIPs, nil)
 		if err != nil {
 			log.Printf("dial %s: %v, skipping", expandedHost, err)
 			continue
@@ -1760,7 +1729,14 @@ sharing most of its code.
 		log.Printf("connected to %s, %s, starting smtp session with ehlo and starttls with dane verification", expandedHost, conn.RemoteAddr())
 
 		var verifiedRecord adns.TLSA
-		sc, err := smtpclient.New(ctxbg, clog, conn, tlsMode, ehloDomain, tlsRemoteHostnames[0], nil, daneRecords, tlsRemoteHostnames[1:], &verifiedRecord)
+		opts := smtpclient.Opts{
+			DANERecords:        daneRecords,
+			DANEMoreHostnames:  tlsHostnames[1:],
+			DANEVerifiedRecord: &verifiedRecord,
+			RootCAs:            mox.Conf.Static.TLS.CertPool,
+		}
+		tlsPKIX := false
+		sc, err := smtpclient.New(ctxbg, c.log.Logger, conn, tlsMode, tlsPKIX, ehloDomain, tlsHostnames[0], opts)
 		if err != nil {
 			log.Printf("setting up smtp session: %v, skipping", err)
 			conn.Close()
@@ -2124,8 +2100,8 @@ The DNS should be configured as a TXT record at $selector._domainkey.$domain.
 	fmt.Print("<selector>._domainkey.<your.domain.> TXT ")
 	for record != "" {
 		s := record
-		if len(s) > 255 {
-			s, record = record[:255], record[255:]
+		if len(s) > 100 {
+			s, record = record[:100], record[100:]
 		} else {
 			record = ""
 		}
@@ -2167,7 +2143,7 @@ that was passed.
 	msgf, err := os.Open(args[0])
 	xcheckf(err, "open message")
 
-	results, err := dkim.Verify(context.Background(), dns.StrictResolver{}, false, dkim.DefaultPolicy, msgf, true)
+	results, err := dkim.Verify(context.Background(), c.log.Logger, dns.StrictResolver{}, false, dkim.DefaultPolicy, msgf, true)
 	xcheckf(err, "dkim verify")
 
 	for _, result := range results {
@@ -2206,21 +2182,20 @@ headers prepended.
 		c.Usage()
 	}
 
-	clog := mlog.New("dkimsign")
-
 	msgf, err := os.Open(args[0])
 	xcheckf(err, "open message")
 	defer msgf.Close()
 
-	p, err := message.Parse(clog, true, msgf)
+	p, err := message.Parse(c.log.Logger, true, msgf)
 	xcheckf(err, "parsing message")
 
 	if len(p.Envelope.From) != 1 {
 		log.Fatalf("found %d from headers, need exactly 1", len(p.Envelope.From))
 	}
-	localpart := smtp.Localpart(p.Envelope.From[0].User)
+	localpart, err := smtp.ParseLocalpart(p.Envelope.From[0].User)
+	xcheckf(err, "parsing localpart of address in from-header")
 	dom, err := dns.ParseDomain(p.Envelope.From[0].Host)
-	xcheckf(err, "parsing domain in from header")
+	xcheckf(err, "parsing domain of address in from-header")
 
 	mustLoadConfig()
 
@@ -2229,7 +2204,8 @@ headers prepended.
 		log.Fatalf("domain %s not configured", dom)
 	}
 
-	headers, err := dkim.Sign(context.Background(), localpart, dom, domConf.DKIM, false, msgf)
+	selectors := mox.DKIMSelectors(domConf.DKIM)
+	headers, err := dkim.Sign(context.Background(), c.log.Logger, localpart, dom, selectors, false, msgf)
 	xcheckf(err, "signing message with dkim")
 	if headers == "" {
 		log.Fatalf("no DKIM configured for domain %s", dom)
@@ -2251,7 +2227,7 @@ func cmdDKIMLookup(c *cmd) {
 	selector := xparseDomain(args[0], "selector")
 	domain := xparseDomain(args[1], "domain")
 
-	status, record, txt, authentic, err := dkim.Lookup(context.Background(), dns.StrictResolver{}, selector, domain)
+	status, record, txt, authentic, err := dkim.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, selector, domain)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
@@ -2291,7 +2267,7 @@ func cmdDMARCLookup(c *cmd) {
 	}
 
 	fromdomain := xparseDomain(args[0], "domain")
-	_, domain, _, txt, authentic, err := dmarc.Lookup(context.Background(), dns.StrictResolver{}, fromdomain)
+	_, domain, _, txt, authentic, err := dmarc.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, fromdomain)
 	xcheckf(err, "dmarc lookup domain %s", fromdomain)
 	fmt.Printf("dmarc record at domain %s: %s\n", domain, txt)
 	fmt.Printf("(%s)\n", dnssecStatus(authentic))
@@ -2351,7 +2327,7 @@ can be found in message headers.
 		if heloDomain != nil {
 			spfArgs.HelloDomain = dns.IPDomain{Domain: *heloDomain}
 		}
-		rspf, spfDomain, expl, authentic, err := spf.Verify(context.Background(), dns.StrictResolver{}, spfArgs)
+		rspf, spfDomain, expl, authentic, err := spf.Verify(context.Background(), c.log.Logger, dns.StrictResolver{}, spfArgs)
 		if err != nil {
 			log.Printf("spf verify: %v (explanation: %q, authentic %v)", err, expl, authentic)
 		} else {
@@ -2369,17 +2345,17 @@ can be found in message headers.
 
 	data, err := io.ReadAll(os.Stdin)
 	xcheckf(err, "read message")
-	dmarcFrom, _, err := message.From(mlog.New("dmarcverify"), false, bytes.NewReader(data))
+	dmarcFrom, _, _, err := message.From(c.log.Logger, false, bytes.NewReader(data), nil)
 	xcheckf(err, "extract dmarc from message")
 
 	const ignoreTestMode = false
-	dkimResults, err := dkim.Verify(context.Background(), dns.StrictResolver{}, true, func(*dkim.Sig) error { return nil }, bytes.NewReader(data), ignoreTestMode)
+	dkimResults, err := dkim.Verify(context.Background(), c.log.Logger, dns.StrictResolver{}, true, func(*dkim.Sig) error { return nil }, bytes.NewReader(data), ignoreTestMode)
 	xcheckf(err, "dkim verify")
 	for _, r := range dkimResults {
 		fmt.Printf("dkim result: %q (err %v)\n", r.Status, r.Err)
 	}
 
-	_, result := dmarc.Verify(context.Background(), dns.StrictResolver{}, dmarcFrom.Domain, dkimResults, spfStatus, spfIdentity, false)
+	_, result := dmarc.Verify(context.Background(), c.log.Logger, dns.StrictResolver{}, dmarcFrom.Domain, dkimResults, spfStatus, spfIdentity, false)
 	xcheckf(result.Err, "dmarc verify")
 	fmt.Printf("dmarc from: %s\ndmarc status: %q\ndmarc reject: %v\ncmarc record: %s\n", dmarcFrom, result.Status, result.Reject, result.Record)
 }
@@ -2400,7 +2376,7 @@ address must opt-in to receiving DMARC reports by creating a DMARC record at
 	}
 
 	dom := xparseDomain(args[0], "domain")
-	_, domain, record, txt, authentic, err := dmarc.Lookup(context.Background(), dns.StrictResolver{}, dom)
+	_, domain, record, txt, authentic, err := dmarc.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, dom)
 	xcheckf(err, "dmarc lookup domain %s", dom)
 	fmt.Printf("dmarc record at domain %s: %q\n", domain, txt)
 	fmt.Printf("(%s)\n", dnssecStatus(authentic))
@@ -2431,18 +2407,18 @@ address must opt-in to receiving DMARC reports by creating a DMARC record at
 			return
 		}
 
-		if publicsuffix.Lookup(context.Background(), dom) == publicsuffix.Lookup(context.Background(), destdom) {
+		if publicsuffix.Lookup(context.Background(), c.log.Logger, dom) == publicsuffix.Lookup(context.Background(), c.log.Logger, destdom) {
 			printResult("pass (same organizational domain)")
 			return
 		}
 
-		accepts, status, _, txt, authentic, err := dmarc.LookupExternalReportsAccepted(context.Background(), dns.StrictResolver{}, domain, destdom)
+		accepts, status, _, txts, authentic, err := dmarc.LookupExternalReportsAccepted(context.Background(), c.log.Logger, dns.StrictResolver{}, domain, destdom)
 		var txtstr string
 		txtaddr := fmt.Sprintf("%s._report._dmarc.%s", domain.ASCII, destdom.ASCII)
-		if txt == "" {
-			txtstr = fmt.Sprintf(" (no txt record %s)", txtaddr)
+		if len(txts) == 0 {
+			txtstr = fmt.Sprintf(" (no txt records %s)", txtaddr)
 		} else {
-			txtstr = fmt.Sprintf(" (txt record %s: %q)", txtaddr, txt)
+			txtstr = fmt.Sprintf(" (txt record %s: %q)", txtaddr, txts)
 		}
 		if status != dmarc.StatusNone {
 			printResult("fail: %s%s", err, txtstr)
@@ -2478,12 +2454,10 @@ understand email deliverability problems.
 		c.Usage()
 	}
 
-	clog := mlog.New("dmarcparsereportmsg")
-
 	for _, arg := range args {
 		f, err := os.Open(arg)
 		xcheckf(err, "open %q", arg)
-		feedback, err := dmarcrpt.ParseMessageReport(clog, f)
+		feedback, err := dmarcrpt.ParseMessageReport(c.log.Logger, f)
 		xcheckf(err, "parse report in %q", arg)
 		meta := feedback.ReportMetadata
 		fmt.Printf("Report: period %s-%s, organisation %q, reportID %q, %s\n", time.Unix(meta.DateRange.Begin, 0).UTC().String(), time.Unix(meta.DateRange.End, 0).UTC().String(), meta.OrgName, meta.ReportID, meta.Email)
@@ -2532,11 +2506,9 @@ func cmdDMARCDBAddReport(c *cmd) {
 
 	mustLoadConfig()
 
-	clog := mlog.New("dmarcdbaddreport")
-
 	fromdomain := xparseDomain(args[0], "domain")
 	fmt.Fprintln(os.Stderr, "reading report message from stdin")
-	report, err := dmarcrpt.ParseMessageReport(clog, os.Stdin)
+	report, err := dmarcrpt.ParseMessageReport(c.log.Logger, os.Stdin)
 	xcheckf(err, "parse message")
 	err = dmarcdb.AddReport(context.Background(), report, fromdomain)
 	xcheckf(err, "add dmarc report")
@@ -2557,7 +2529,7 @@ successfully used TLS, and how what kind of errors occurred otherwise.
 	}
 
 	d := xparseDomain(args[0], "domain")
-	_, txt, err := tlsrpt.Lookup(context.Background(), dns.StrictResolver{}, d)
+	_, txt, err := tlsrpt.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, d)
 	xcheckf(err, "tlsrpt lookup for %s", d)
 	fmt.Println(txt)
 }
@@ -2573,17 +2545,16 @@ The report is printed in formatted JSON.
 		c.Usage()
 	}
 
-	clog := mlog.New("tlsrptparsereportmsg")
-
 	for _, arg := range args {
 		f, err := os.Open(arg)
 		xcheckf(err, "open %q", arg)
-		report, err := tlsrpt.ParseMessage(clog, f)
+		reportJSON, err := tlsrpt.ParseMessage(c.log.Logger, f)
 		xcheckf(err, "parse report in %q", arg)
 		// todo future: only print the highlights?
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "\t")
-		err = enc.Encode(report)
+		enc.SetEscapeHTML(false)
+		err = enc.Encode(reportJSON)
 		xcheckf(err, "write report")
 	}
 }
@@ -2614,7 +2585,7 @@ printed.
 		LocalIP:           net.ParseIP("127.0.0.1"),
 		LocalHostname:     dns.Domain{ASCII: "localhost"},
 	}
-	r, _, explanation, authentic, err := spf.Verify(context.Background(), dns.StrictResolver{}, spfargs)
+	r, _, explanation, authentic, err := spf.Verify(context.Background(), c.log.Logger, dns.StrictResolver{}, spfargs)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
@@ -2648,7 +2619,7 @@ func cmdSPFLookup(c *cmd) {
 	}
 
 	domain := xparseDomain(args[0], "domain")
-	_, txt, _, authentic, err := spf.Lookup(context.Background(), dns.StrictResolver{}, domain)
+	_, txt, _, authentic, err := spf.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, domain)
 	xcheckf(err, "spf lookup for %s", domain)
 	fmt.Println(txt)
 	fmt.Printf("(%s)\n", dnssecStatus(authentic))
@@ -2672,7 +2643,7 @@ should be used, and how long the policy can be cached.
 
 	domain := xparseDomain(args[0], "domain")
 
-	record, policy, err := mtasts.Get(context.Background(), dns.StrictResolver{}, domain)
+	record, policy, _, err := mtasts.Get(context.Background(), c.log.Logger, dns.StrictResolver{}, domain)
 	if err != nil {
 		fmt.Printf("error: %s\n", err)
 	}
@@ -2712,6 +2683,8 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 	c.unlisted = true
 	c.params = "< message"
 	c.help = "Parse a TLS report from the message and add it to the database."
+	var hostReport bool
+	c.flag.BoolVar(&hostReport, "hostreport", false, "report for a host instead of domain")
 	args := c.Parse()
 	if len(args) != 0 {
 		c.Usage()
@@ -2719,13 +2692,11 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 
 	mustLoadConfig()
 
-	clog := mlog.New("tlsrptdbaddreport")
-
 	// First read message, to get the From-header. Then parse it as TLSRPT.
 	fmt.Fprintln(os.Stderr, "reading report message from stdin")
 	buf, err := io.ReadAll(os.Stdin)
 	xcheckf(err, "reading message")
-	part, err := message.Parse(clog, true, bytes.NewReader(buf))
+	part, err := message.Parse(c.log.Logger, true, bytes.NewReader(buf))
 	xcheckf(err, "parsing message")
 	if part.Envelope == nil || len(part.Envelope.From) != 1 {
 		log.Fatalf("message must have one From-header")
@@ -2733,11 +2704,12 @@ func cmdTLSRPTDBAddReport(c *cmd) {
 	from := part.Envelope.From[0]
 	domain := xparseDomain(from.Host, "domain")
 
-	report, err := tlsrpt.ParseMessage(clog, bytes.NewReader(buf))
+	reportJSON, err := tlsrpt.ParseMessage(c.log.Logger, bytes.NewReader(buf))
 	xcheckf(err, "parsing tls report in message")
 
 	mailfrom := from.User + "@" + from.Host // todo future: should escape and such
-	err = tlsrptdb.AddReport(context.Background(), domain, mailfrom, report)
+	report := reportJSON.Convert()
+	err = tlsrptdb.AddReport(context.Background(), c.log, domain, mailfrom, hostReport, &report)
 	xcheckf(err, "add tls report to database")
 }
 
@@ -2756,7 +2728,7 @@ URL with more information.
 	zone := xparseDomain(args[0], "zone")
 	ip := xparseIP(args[1], "ip")
 
-	status, explanation, err := dnsbl.Lookup(context.Background(), dns.StrictResolver{}, zone, ip)
+	status, explanation, err := dnsbl.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, zone, ip)
 	fmt.Printf("status: %s\n", status)
 	if status == dnsbl.StatusFail {
 		fmt.Printf("explanation: %q\n", explanation)
@@ -2779,7 +2751,7 @@ The health of a DNS blocklist can be checked by querying for 127.0.0.1 and
 	}
 
 	zone := xparseDomain(args[0], "zone")
-	err := dnsbl.CheckHealth(context.Background(), dns.StrictResolver{}, zone)
+	err := dnsbl.CheckHealth(context.Background(), c.log.Logger, dns.StrictResolver{}, zone)
 	xcheckf(err, "unhealthy")
 	fmt.Println("healthy")
 }
@@ -2804,12 +2776,12 @@ printed.
 		fmt.Printf("last known version: %s\n", lastknown)
 		fmt.Printf("current version: %s\n", current)
 	}
-	latest, _, err := updates.Lookup(context.Background(), dns.StrictResolver{}, dns.Domain{ASCII: changelogDomain})
+	latest, _, err := updates.Lookup(context.Background(), c.log.Logger, dns.StrictResolver{}, dns.Domain{ASCII: changelogDomain})
 	xcheckf(err, "lookup of latest version")
 	fmt.Printf("latest version: %s\n", latest)
 
 	if latest.After(current) {
-		changelog, err := updates.FetchChangelog(context.Background(), changelogURL, current, changelogPubKey)
+		changelog, err := updates.FetchChangelog(context.Background(), c.log.Logger, changelogURL, current, changelogPubKey)
 		xcheckf(err, "fetching changelog")
 		if len(changelog.Changes) == 0 {
 			log.Printf("no changes in changelog")
@@ -2856,6 +2828,98 @@ func cmdVersion(c *cmd) {
 		c.Usage()
 	}
 	fmt.Println(moxvar.Version)
+	fmt.Printf("%s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+}
+
+func cmdWebapi(c *cmd) {
+	c.params = "[method [baseurl-with-credentials]"
+	c.help = "Lists available methods, prints request/response parameters for method, or calls a method with a request read from standard input."
+	args := c.Parse()
+	if len(args) > 2 {
+		c.Usage()
+	}
+
+	t := reflect.TypeOf((*webapi.Methods)(nil)).Elem()
+	methods := map[string]reflect.Type{}
+	var ml []string
+	for i := 0; i < t.NumMethod(); i++ {
+		mt := t.Method(i)
+		methods[mt.Name] = mt.Type
+		ml = append(ml, mt.Name)
+	}
+
+	if len(args) == 0 {
+		fmt.Println(strings.Join(ml, "\n"))
+		return
+	}
+
+	mt, ok := methods[args[0]]
+	if !ok {
+		log.Fatalf("unknown method %q", args[0])
+	}
+	resultNotJSON := mt.Out(0).Kind() == reflect.Interface
+
+	if len(args) == 1 {
+		fmt.Println("# Example request")
+		fmt.Println()
+		printJSON("\t", mox.FillExample(nil, reflect.New(mt.In(1))).Interface())
+		fmt.Println()
+		if resultNotJSON {
+			fmt.Println("Output is non-JSON data.")
+			return
+		}
+		fmt.Println("# Example response")
+		fmt.Println()
+		printJSON("\t", mox.FillExample(nil, reflect.New(mt.Out(0))).Interface())
+		return
+	}
+
+	var response any
+	if !resultNotJSON {
+		response = reflect.New(mt.Out(0))
+	}
+
+	fmt.Fprintln(os.Stderr, "reading request from stdin...")
+	request, err := io.ReadAll(os.Stdin)
+	xcheckf(err, "read message")
+
+	dec := json.NewDecoder(bytes.NewReader(request))
+	dec.DisallowUnknownFields()
+	err = dec.Decode(reflect.New(mt.In(1)).Interface())
+	xcheckf(err, "parsing request")
+
+	resp, err := http.PostForm(args[1]+args[0], url.Values{"request": []string{string(request)}})
+	xcheckf(err, "http post")
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusBadRequest {
+		buf, err := io.ReadAll(&moxio.LimitReader{R: resp.Body, Limit: 10 * 1024})
+		xcheckf(err, "reading response for 400 bad request error")
+		err = json.Unmarshal(buf, &response)
+		if err == nil {
+			printJSON("", response)
+		} else {
+			fmt.Fprintf(os.Stderr, "(not json)\n")
+			os.Stderr.Write(buf)
+		}
+		os.Exit(1)
+	} else if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "http response %s\n", resp.Status)
+		_, err := io.Copy(os.Stderr, resp.Body)
+		xcheckf(err, "copy body")
+	} else {
+		err := json.NewDecoder(resp.Body).Decode(&resp)
+		xcheckf(err, "unmarshal response")
+		printJSON("", response)
+	}
+}
+
+func printJSON(indent string, v any) {
+	fmt.Printf("%s", indent)
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent(indent, "\t")
+	enc.SetEscapeHTML(false)
+	err := enc.Encode(v)
+	xcheckf(err, "encode json")
 }
 
 // todo: should make it possible to run this command against a running mox. it should disconnect existing clients for accounts with a bumped uidvalidity, so they will reconnect and refetch the data.
@@ -2874,7 +2938,7 @@ open, or is not running.
 	}
 
 	mustLoadConfig()
-	a, err := store.OpenAccount(args[0])
+	a, err := store.OpenAccount(c.log, args[0])
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -2932,7 +2996,7 @@ open, or is not running.
 	}
 
 	mustLoadConfig()
-	a, err := store.OpenAccount(args[0])
+	a, err := store.OpenAccount(c.log, args[0])
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -3026,7 +3090,7 @@ open, or is not running.
 	}
 
 	mustLoadConfig()
-	a, err := store.OpenAccount(args[0])
+	a, err := store.OpenAccount(c.log, args[0])
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -3110,7 +3174,7 @@ func ctlcmdFixmsgsize(ctl *ctl, account string) {
 
 func cmdReparse(c *cmd) {
 	c.params = "[account]"
-	c.help = `Parse all messages in the account or all accounts again
+	c.help = `Parse all messages in the account or all accounts again.
 
 Can be useful after upgrading mox with improved message parsing. Messages are
 parsed in batches, so other access to the mailboxes/messages are not blocked
@@ -3146,10 +3210,8 @@ func cmdEnsureParsed(c *cmd) {
 		c.Usage()
 	}
 
-	clog := mlog.New("ensureparsed")
-
 	mustLoadConfig()
-	a, err := store.OpenAccount(args[0])
+	a, err := store.OpenAccount(c.log, args[0])
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -3170,7 +3232,7 @@ func cmdEnsureParsed(c *cmd) {
 		}
 		for _, m := range l {
 			mr := a.MessageReader(m)
-			p, err := message.EnsurePart(clog, false, mr, m.Size)
+			p, err := message.EnsurePart(c.log.Logger, false, mr, m.Size)
 			if err != nil {
 				log.Printf("parsing message %d: %v (continuing)", m.ID, err)
 			}
@@ -3191,12 +3253,13 @@ func cmdEnsureParsed(c *cmd) {
 
 func cmdRecalculateMailboxCounts(c *cmd) {
 	c.params = "account"
-	c.help = `Recalculate message counts for all mailboxes in the account.
+	c.help = `Recalculate message counts for all mailboxes in the account, and total message size for quota.
 
 When a message is added to/removed from a mailbox, or when message flags change,
-the total, unread, unseen and deleted messages are accounted, and the total size
-of the mailbox. In case of a bug in this accounting, the numbers could become
-incorrect. This command will find, fix and print them.
+the total, unread, unseen and deleted messages are accounted, the total size of
+the mailbox, and the total message size for the account. In case of a bug in
+this accounting, the numbers could become incorrect. This command will find, fix
+and print them.
 `
 	args := c.Parse()
 	if len(args) != 1 {
@@ -3218,25 +3281,57 @@ func cmdMessageParse(c *cmd) {
 	c.params = "message.eml"
 	c.help = "Parse message, print JSON representation."
 
+	var smtputf8 bool
+	c.flag.BoolVar(&smtputf8, "smtputf8", false, "check if message needs smtputf8")
 	args := c.Parse()
 	if len(args) != 1 {
 		c.Usage()
 	}
 
-	clog := mlog.New("messageparse")
-
 	f, err := os.Open(args[0])
 	xcheckf(err, "open")
 	defer f.Close()
 
-	part, err := message.Parse(clog, false, f)
+	part, err := message.Parse(c.log.Logger, false, f)
 	xcheckf(err, "parsing message")
-	err = part.Walk(clog, nil)
+	err = part.Walk(c.log.Logger, nil)
 	xcheckf(err, "parsing nested parts")
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "\t")
+	enc.SetEscapeHTML(false)
 	err = enc.Encode(part)
 	xcheckf(err, "write")
+
+	hasNonASCII := func(r io.Reader) bool {
+		br := bufio.NewReader(r)
+		for {
+			b, err := br.ReadByte()
+			if err == io.EOF {
+				break
+			}
+			xcheckf(err, "read header")
+			if b > 0x7f {
+				return true
+			}
+		}
+		return false
+	}
+
+	var walk func(p *message.Part) bool
+	walk = func(p *message.Part) bool {
+		if hasNonASCII(p.HeaderReader()) {
+			return true
+		}
+		for _, pp := range p.Parts {
+			if walk(&pp) {
+				return true
+			}
+		}
+		return false
+	}
+	if smtputf8 {
+		fmt.Println("message needs smtputf8:", walk(&part))
+	}
 }
 
 func cmdOpenaccounts(c *cmd) {
@@ -3252,15 +3347,13 @@ Opens database files directly, not going through a running mox instance.
 		c.Usage()
 	}
 
-	clog := mlog.New("openaccounts")
-
 	dataDir := filepath.Clean(args[0])
 	for _, accName := range args[1:] {
 		accDir := filepath.Join(dataDir, "accounts", accName)
 		log.Printf("opening account %s...", accDir)
-		a, err := store.OpenAccountDB(accDir, accName)
+		a, err := store.OpenAccountDB(c.log, accDir, accName)
 		xcheckf(err, "open account %s", accName)
-		err = a.ThreadingWait(clog)
+		err = a.ThreadingWait(c.log)
 		xcheckf(err, "wait for threading upgrade to complete for %s", accName)
 		err = a.Close()
 		xcheckf(err, "close account %s", accName)
@@ -3353,7 +3446,7 @@ Opens database files directly, not going through a running mox instance.
 	for _, accName := range args[1:] {
 		accDir := filepath.Join(dataDir, "accounts", accName)
 		log.Printf("opening account %s...", accDir)
-		a, err := store.OpenAccountDB(accDir, accName)
+		a, err := store.OpenAccountDB(c.log, accDir, accName)
 		xcheckf(err, "open account %s", accName)
 
 		prepareMessages := func(in, out chan moxio.Work[store.Message, threadPrep]) {
@@ -3441,4 +3534,135 @@ Opens database files directly, not going through a running mox instance.
 		xcheckf(err, "close account %s", accName)
 		log.Printf("account %s, total time %s", accName, time.Since(t0))
 	}
+}
+
+func cmdQueueFillRetired(c *cmd) {
+	c.unlisted = true
+	c.help = `Fill retired messag and webhooks queue with testdata.
+
+For testing the pagination. Operates directly on queue database.
+`
+	var n int
+	c.flag.IntVar(&n, "n", 10000, "retired messages and retired webhooks to insert")
+	args := c.Parse()
+	if len(args) != 0 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	err := queue.Init()
+	xcheckf(err, "init queue")
+	err = queue.DB.Write(context.Background(), func(tx *bstore.Tx) error {
+		now := time.Now()
+
+		// Cause autoincrement ID for queue.Msg to be forwarded, and use the reserved ID
+		// space for inserting retired messages.
+		fm := queue.Msg{}
+		err = tx.Insert(&fm)
+		xcheckf(err, "temporarily insert message to get autoincrement sequence")
+		err = tx.Delete(&fm)
+		xcheckf(err, "removing temporary message for resetting autoincrement sequence")
+		fm.ID += int64(n)
+		err = tx.Insert(&fm)
+		xcheckf(err, "temporarily insert message to forward autoincrement sequence")
+		err = tx.Delete(&fm)
+		xcheckf(err, "removing temporary message after forwarding autoincrement sequence")
+		fm.ID -= int64(n)
+
+		// And likewise for webhooks.
+		fh := queue.Hook{Account: "x", URL: "x", NextAttempt: time.Now()}
+		err = tx.Insert(&fh)
+		xcheckf(err, "temporarily insert webhook to get autoincrement sequence")
+		err = tx.Delete(&fh)
+		xcheckf(err, "removing temporary webhook for resetting autoincrement sequence")
+		fh.ID += int64(n)
+		err = tx.Insert(&fh)
+		xcheckf(err, "temporarily insert webhook to forward autoincrement sequence")
+		err = tx.Delete(&fh)
+		xcheckf(err, "removing temporary webhook after forwarding autoincrement sequence")
+		fh.ID -= int64(n)
+
+		for i := 0; i < n; i++ {
+			t0 := now.Add(-time.Duration(i) * time.Second)
+			last := now.Add(-time.Duration(i/10) * time.Second)
+			mr := queue.MsgRetired{
+				ID:                 fm.ID + int64(i),
+				Queued:             t0,
+				SenderAccount:      "test",
+				SenderLocalpart:    "mox",
+				SenderDomainStr:    "localhost",
+				FromID:             fmt.Sprintf("%016d", i),
+				RecipientLocalpart: "mox",
+				RecipientDomain:    dns.IPDomain{Domain: dns.Domain{ASCII: "localhost"}},
+				RecipientDomainStr: "localhost",
+				Attempts:           i % 6,
+				LastAttempt:        &last,
+				Results: []queue.MsgResult{
+					{
+						Start:    last,
+						Duration: time.Millisecond,
+						Success:  i%10 != 0,
+						Code:     250,
+					},
+				},
+				Has8bit:          i%2 == 0,
+				SMTPUTF8:         i%8 == 0,
+				Size:             int64(i * 100),
+				MessageID:        fmt.Sprintf("<msg%d@localhost>", i),
+				Subject:          fmt.Sprintf("test message %d", i),
+				Extra:            map[string]string{"i": fmt.Sprintf("%d", i)},
+				LastActivity:     last,
+				RecipientAddress: "mox@localhost",
+				Success:          i%10 != 0,
+				KeepUntil:        now.Add(48 * time.Hour),
+			}
+			err := tx.Insert(&mr)
+			xcheckf(err, "inserting retired message")
+		}
+
+		for i := 0; i < n; i++ {
+			t0 := now.Add(-time.Duration(i) * time.Second)
+			last := now.Add(-time.Duration(i/10) * time.Second)
+			var event string
+			if i%10 != 0 {
+				event = "delivered"
+			}
+			hr := queue.HookRetired{
+				ID:            fh.ID + int64(i),
+				QueueMsgID:    fm.ID + int64(i),
+				FromID:        fmt.Sprintf("%016d", i),
+				MessageID:     fmt.Sprintf("<msg%d@localhost>", i),
+				Subject:       fmt.Sprintf("test message %d", i),
+				Extra:         map[string]string{"i": fmt.Sprintf("%d", i)},
+				Account:       "test",
+				URL:           "http://localhost/hook",
+				IsIncoming:    i%10 == 0,
+				OutgoingEvent: event,
+				Payload:       "{}",
+
+				Submitted: t0,
+				Attempts:  i % 6,
+				Results: []queue.HookResult{
+					{
+						Start:    t0,
+						Duration: time.Millisecond,
+						URL:      "http://localhost/hook",
+						Success:  i%10 != 0,
+						Code:     200,
+						Response: "ok",
+					},
+				},
+
+				Success:      i%10 != 0,
+				LastActivity: last,
+				KeepUntil:    now.Add(48 * time.Hour),
+			}
+			err := tx.Insert(&hr)
+			xcheckf(err, "inserting retired hook")
+		}
+
+		return nil
+	})
+	xcheckf(err, "add to queue")
+	log.Printf("added %d retired messages and %d retired webhooks", n, n)
 }

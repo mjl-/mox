@@ -77,7 +77,7 @@ max_age: 1296000
 		Policy{
 			Version: "STSv1",
 			Mode:    ModeTesting,
-			MX: []STSMX{
+			MX: []MX{
 				{Domain: dns.Domain{ASCII: "mx1.example.com"}},
 				{Domain: dns.Domain{ASCII: "mx2.example.com"}},
 				{Domain: dns.Domain{ASCII: "mx.backup-example.com"}},
@@ -89,7 +89,7 @@ max_age: 1296000
 		Policy{
 			Version: "STSv1",
 			Mode:    ModeEnforce,
-			MX: []STSMX{
+			MX: []MX{
 				{Wildcard: true, Domain: dns.Domain{ASCII: "example.com"}},
 			},
 			MaxAgeSeconds: 0,
@@ -99,7 +99,7 @@ max_age: 1296000
 		Policy{
 			Version: "STSv1",
 			Mode:    ModeEnforce,
-			MX: []STSMX{
+			MX: []MX{
 				{Wildcard: true, Domain: dns.Domain{ASCII: "example.com"}},
 			},
 			MaxAgeSeconds: 1,
@@ -140,7 +140,7 @@ max_age: 1296000
 	policy := Policy{
 		Version: "STSv1",
 		Mode:    ModeTesting,
-		MX: []STSMX{
+		MX: []MX{
 			{Domain: dns.Domain{ASCII: "mx1.example.com"}},
 			{Domain: dns.Domain{ASCII: "mx2.example.com"}},
 			{Domain: dns.Domain{ASCII: "mx.backup-example.com"}},

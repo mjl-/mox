@@ -17,7 +17,7 @@ func tcheckf(t *testing.T, err error, format string, args ...any) {
 }
 
 func TestLinkOrCopy(t *testing.T) {
-	log := mlog.New("linkorcopy")
+	log := mlog.New("linkorcopy", nil)
 
 	// link in same directory. file exists error. link to file in non-existent
 	// directory (exists error). link to file in system temp dir (hopefully other file

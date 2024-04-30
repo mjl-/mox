@@ -32,7 +32,7 @@ func RestorePassedFiles() {
 		if runtime.GOOS == "linux" {
 			linuxhint = " If you updated from v0.0.1, update the mox.service file to start as root (privileges are dropped): ./mox config printservice >mox.service && sudo systemctl daemon-reload && sudo systemctl restart mox."
 		}
-		xlog.Fatal("mox must be started as root, and will drop privileges after binding required sockets (missing environment variable MOX_SOCKETS)." + linuxhint)
+		pkglog.Fatal("mox must be started as root, and will drop privileges after binding required sockets (missing environment variable MOX_SOCKETS)." + linuxhint)
 	}
 
 	// 0,1,2 are stdin,stdout,stderr, 3 is the first passed fd (first listeners, then files).
@@ -59,12 +59,12 @@ func RestorePassedFiles() {
 func CleanupPassedFiles() {
 	for _, f := range passedListeners {
 		err := f.Close()
-		xlog.Check(err, "closing listener socket file descriptor")
+		pkglog.Check(err, "closing listener socket file descriptor")
 	}
 	for _, fl := range passedFiles {
 		for _, f := range fl {
 			err := f.Close()
-			xlog.Check(err, "closing path file descriptor")
+			pkglog.Check(err, "closing path file descriptor")
 		}
 	}
 }
@@ -193,7 +193,7 @@ func (c *connections) Register(nc net.Conn, protocol, listener string) {
 	// doesn't hurt to log it.
 	select {
 	case <-Shutdown.Done():
-		xlog.Error("new connection added while shutting down")
+		pkglog.Error("new connection added while shutting down")
 		debug.PrintStack()
 	default:
 	}
@@ -258,7 +258,7 @@ func (c *connections) Shutdown() {
 	defer c.Unlock()
 	for nc := range c.conns {
 		if err := nc.SetDeadline(now); err != nil {
-			xlog.Errorx("setting immediate read/write deadline for shutdown", err)
+			pkglog.Errorx("setting immediate read/write deadline for shutdown", err)
 		}
 	}
 }

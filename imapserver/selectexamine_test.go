@@ -21,7 +21,7 @@ func testSelectExamine(t *testing.T, examine bool) {
 	tc := start(t)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 
 	cmd := "select"
 	okcode := "READ-WRITE"

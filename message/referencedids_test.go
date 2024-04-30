@@ -9,7 +9,7 @@ func TestReferencedIDs(t *testing.T) {
 	check := func(msg string, expRefs []string) {
 		t.Helper()
 
-		p, err := Parse(xlog, true, strings.NewReader(msg))
+		p, err := Parse(pkglog.Logger, true, strings.NewReader(msg))
 		tcheck(t, err, "parsing message")
 
 		h, err := p.Header()

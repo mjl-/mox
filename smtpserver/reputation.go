@@ -3,6 +3,7 @@ package smtpserver
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/mjl-/bstore"
@@ -96,7 +97,7 @@ const (
 // ../rfc/6376:1915
 // ../rfc/6376:3716
 // ../rfc/7208:2167
-func reputation(tx *bstore.Tx, log *mlog.Log, m *store.Message) (rjunk *bool, rconclusive bool, rmethod reputationMethod, rerr error) {
+func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rconclusive bool, rmethod reputationMethod, rerr error) {
 	boolptr := func(v bool) *bool {
 		return &v
 	}
@@ -141,7 +142,10 @@ func reputation(tx *bstore.Tx, log *mlog.Log, m *store.Message) (rjunk *bool, rc
 	xmessageList := func(q *bstore.Query[store.Message], descr string) []store.Message {
 		t0 := time.Now()
 		l, err := q.List()
-		log.Debugx("querying messages for reputation", err, mlog.Field("msgs", len(l)), mlog.Field("descr", descr), mlog.Field("queryduration", time.Since(t0)))
+		log.Debugx("querying messages for reputation", err,
+			slog.Int("msgs", len(l)),
+			slog.String("descr", descr),
+			slog.Duration("queryduration", time.Since(t0)))
 		if err != nil {
 			panic(queryError(fmt.Sprintf("listing messages: %v", err)))
 		}

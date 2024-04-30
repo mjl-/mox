@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"mime/quotedprintable"
 	"net"
@@ -87,29 +88,41 @@ type testserver struct {
 	comm       *store.Comm
 	cid        int64
 	resolver   dns.Resolver
-	auth       []sasl.Client
+	auth       func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)
 	user, pass string
 	submission bool
 	requiretls bool
 	dnsbls     []dns.Domain
 	tlsmode    smtpclient.TLSMode
+	tlspkix    bool
 }
+
+const password0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
+const password1 = "tést    "                      // PRECIS normalized, with NFC.
 
 func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *testserver {
 	limitersInit() // Reset rate limiters.
 
 	ts := testserver{t: t, cid: 1, resolver: resolver, tlsmode: smtpclient.TLSOpportunistic}
 
+	if dmarcdb.EvalDB != nil {
+		dmarcdb.EvalDB.Close()
+		dmarcdb.EvalDB = nil
+	}
+
+	log := mlog.New("smtpserver", nil)
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = configPath
 	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)
+
 	var err error
-	ts.acc, err = store.OpenAccount("mjl")
+	ts.acc, err = store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
-	err = ts.acc.SetPassword("testtest")
+	err = ts.acc.SetPassword(log, password0)
 	tcheck(t, err, "set password")
+
 	ts.switchStop = store.Switchboard()
 	err = queue.Init()
 	tcheck(t, err, "queue init")
@@ -128,10 +141,57 @@ func (ts *testserver) close() {
 	ts.switchStop()
 	err := ts.acc.Close()
 	tcheck(ts.t, err, "closing account")
+	ts.acc.CheckClosed()
 	ts.acc = nil
 }
 
+func (ts *testserver) checkCount(mailboxName string, expect int) {
+	t := ts.t
+	t.Helper()
+	q := bstore.QueryDB[store.Mailbox](ctxbg, ts.acc.DB)
+	q.FilterNonzero(store.Mailbox{Name: mailboxName})
+	mb, err := q.Get()
+	tcheck(t, err, "get mailbox")
+	qm := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
+	qm.FilterNonzero(store.Message{MailboxID: mb.ID})
+	qm.FilterEqual("Expunged", false)
+	n, err := qm.Count()
+	tcheck(t, err, "count messages in mailbox")
+	if n != expect {
+		t.Fatalf("messages in mailbox, found %d, expected %d", n, expect)
+	}
+}
+
 func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
+	ts.t.Helper()
+	ts.runRaw(func(conn net.Conn) {
+		ts.t.Helper()
+
+		auth := ts.auth
+		if auth == nil && ts.user != "" {
+			auth = func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+				return sasl.NewClientPlain(ts.user, ts.pass), nil
+			}
+		}
+
+		ourHostname := mox.Conf.Static.HostnameDomain
+		remoteHostname := dns.Domain{ASCII: "mox.example"}
+		opts := smtpclient.Opts{
+			Auth:    auth,
+			RootCAs: mox.Conf.Static.TLS.CertPool,
+		}
+		log := pkglog.WithCid(ts.cid - 1)
+		client, err := smtpclient.New(ctxbg, log.Logger, conn, ts.tlsmode, ts.tlspkix, ourHostname, remoteHostname, opts)
+		if err != nil {
+			conn.Close()
+		} else {
+			defer client.Close()
+		}
+		fn(err, client)
+	})
+}
+
+func (ts *testserver) runRaw(fn func(clientConn net.Conn)) {
 	ts.t.Helper()
 
 	ts.cid += 2
@@ -150,22 +210,16 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 		close(serverdone)
 	}()
 
-	var auth []sasl.Client
-	if len(ts.auth) > 0 {
-		auth = ts.auth
-	} else if ts.user != "" {
-		auth = append(auth, sasl.NewClientPlain(ts.user, ts.pass))
-	}
+	fn(clientConn)
+}
 
-	ourHostname := mox.Conf.Static.HostnameDomain
-	remoteHostname := dns.Domain{ASCII: "mox.example"}
-	client, err := smtpclient.New(ctxbg, xlog.WithCid(ts.cid-1), clientConn, ts.tlsmode, ourHostname, remoteHostname, auth, nil, nil, nil)
-	if err != nil {
-		clientConn.Close()
-	} else {
-		defer client.Close()
+func (ts *testserver) smtpErr(err error, expErr *smtpclient.Error) {
+	t := ts.t
+	t.Helper()
+	var cerr smtpclient.Error
+	if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Permanent != expErr.Permanent || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
+		t.Fatalf("got err:\n%#v (%q)\nexpected:\n%#v", err, err, expErr)
 	}
-	fn(err, client)
 }
 
 // Just a cert that appears valid. SMTP client will not verify anything about it
@@ -192,6 +246,15 @@ func fakeCert(t *testing.T) tls.Certificate {
 	return c
 }
 
+// check expected dmarc evaluations for outgoing aggregate reports.
+func checkEvaluationCount(t *testing.T, n int) []dmarcdb.Evaluation {
+	t.Helper()
+	l, err := dmarcdb.Evaluations(ctxbg)
+	tcheck(t, err, "get dmarc evaluations")
+	tcompare(t, len(l), n)
+	return l
+}
+
 // Test submission from authenticated user.
 func TestSubmission(t *testing.T) {
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
@@ -211,10 +274,12 @@ func TestSubmission(t *testing.T) {
 	}
 	mox.Conf.Dynamic.Domains["mox.example"] = dom
 
-	testAuth := func(authfn func(user, pass string) sasl.Client, user, pass string, expErr *smtpclient.Error) {
+	testAuth := func(authfn func(user, pass string, cs *tls.ConnectionState) sasl.Client, user, pass string, expErr *smtpclient.Error) {
 		t.Helper()
 		if authfn != nil {
-			ts.auth = []sasl.Client{authfn(user, pass)}
+			ts.auth = func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+				return authfn(user, pass, cs), nil
+			}
 		} else {
 			ts.auth = nil
 		}
@@ -226,24 +291,41 @@ func TestSubmission(t *testing.T) {
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false, false)
 			}
 			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v (%q), expected %#v", err, err, expErr)
+			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
+				t.Fatalf("got err:\n%#v (%q)\nexpected:\n%#v", err, err, expErr)
 			}
+			checkEvaluationCount(t, 0)
 		})
 	}
 
 	ts.submission = true
 	testAuth(nil, "", "", &smtpclient.Error{Permanent: true, Code: smtp.C530SecurityRequired, Secode: smtp.SePol7Other0})
-	authfns := []func(user, pass string) sasl.Client{
-		sasl.NewClientPlain,
-		sasl.NewClientCRAMMD5,
-		sasl.NewClientSCRAMSHA1,
-		sasl.NewClientSCRAMSHA256,
+	authfns := []func(user, pass string, cs *tls.ConnectionState) sasl.Client{
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client { return sasl.NewClientPlain(user, pass) },
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client { return sasl.NewClientLogin(user, pass) },
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client { return sasl.NewClientCRAMMD5(user, pass) },
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+			return sasl.NewClientSCRAMSHA1(user, pass, false)
+		},
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+			return sasl.NewClientSCRAMSHA256(user, pass, false)
+		},
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+			return sasl.NewClientSCRAMSHA1PLUS(user, pass, *cs)
+		},
+		func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+			return sasl.NewClientSCRAMSHA256PLUS(user, pass, *cs)
+		},
 	}
 	for _, fn := range authfns {
-		testAuth(fn, "mjl@mox.example", "test", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8})         // Bad (short) password.
-		testAuth(fn, "mjl@mox.example", "testtesttest", &smtpclient.Error{Secode: smtp.SePol7AuthBadCreds8}) // Bad password.
-		testAuth(fn, "mjl@mox.example", "testtest", nil)
+		testAuth(fn, "mjl@mox.example", "test", &smtpclient.Error{Code: smtp.C535AuthBadCreds, Secode: smtp.SePol7AuthBadCreds8})           // Bad (short) password.
+		testAuth(fn, "mjl@mox.example", password0+"test", &smtpclient.Error{Code: smtp.C535AuthBadCreds, Secode: smtp.SePol7AuthBadCreds8}) // Bad password.
+		testAuth(fn, "mjl@mox.example", password0, nil)
+		testAuth(fn, "mjl@mox.example", password1, nil)
+		testAuth(fn, "móx@mox.example", password0, nil)
+		testAuth(fn, "móx@mox.example", password1, nil)
+		testAuth(fn, "mo\u0301x@mox.example", password0, nil)
+		testAuth(fn, "mo\u0301x@mox.example", password1, nil)
 	}
 }
 
@@ -308,37 +390,69 @@ func TestDelivery(t *testing.T) {
 
 	// Set up iprev to get delivery from unknown user to be accepted.
 	resolver.PTR["127.0.0.10"] = []string{"example.org."}
+
+	// Only ascii o@ is configured, not the greek and cyrillic lookalikes.
 	ts.run(func(err error, client *smtpclient.Client) {
 		mailFrom := "remote@example.org"
-		rcptTo := "mjl@mox.example"
+		rcptTo := "ο@mox.example" // omicron \u03bf, looks like the configured o@
+		msg := strings.ReplaceAll(deliverMessage, "mjl@mox.example", rcptTo)
 		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, true, false)
 		}
-		tcheck(t, err, "deliver to remote")
-
-		changes := make(chan []store.Change)
-		go func() {
-			changes <- ts.comm.Get()
-		}()
-
-		timer := time.NewTimer(time.Second)
-		defer timer.Stop()
-		select {
-		case <-changes:
-		case <-timer.C:
-			t.Fatalf("no delivery in 1s")
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
+			t.Fatalf("deliver to omicron @ instead of ascii o @, got err %v, expected smtpclient.Error with code %d", err, smtp.C550MailboxUnavail)
 		}
 	})
+
+	ts.run(func(err error, client *smtpclient.Client) {
+		recipients := []string{
+			"mjl@mox.example",
+			"o@mox.example",         // ascii o, as configured
+			"\u2126@mox.example",    // ohm sign, as configured
+			"ω@mox.example",         // lower-case omega, we match case-insensitively and this is the lowercase of ohm (!)
+			"\u03a9@mox.example",    // capital omega, also lowercased to omega.
+			"móx@mox.example",       // NFC
+			"mo\u0301x@mox.example", // not NFC, but normalized as móx@, see https://go.dev/blog/normalization
+		}
+
+		for _, rcptTo := range recipients {
+			// Ensure SMTP RCPT TO and message address headers are the same, otherwise the junk
+			// filter treats us more strictly.
+			msg := strings.ReplaceAll(deliverMessage, "mjl@mox.example", rcptTo)
+
+			mailFrom := "remote@example.org"
+			if err == nil {
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, true, false)
+			}
+			tcheck(t, err, "deliver to remote")
+
+			changes := make(chan []store.Change)
+			go func() {
+				changes <- ts.comm.Get()
+			}()
+
+			timer := time.NewTimer(time.Second)
+			defer timer.Stop()
+			select {
+			case <-changes:
+			case <-timer.C:
+				t.Fatalf("no delivery in 1s")
+			}
+		}
+	})
+
+	checkEvaluationCount(t, 0)
 }
 
 func tinsertmsg(t *testing.T, acc *store.Account, mailbox string, m *store.Message, msg string) {
-	mf, err := store.CreateMessageTemp("queue-dsn")
+	mf, err := store.CreateMessageTemp(pkglog, "queue-dsn")
 	tcheck(t, err, "temp message")
 	defer os.Remove(mf.Name())
 	defer mf.Close()
 	_, err = mf.Write([]byte(msg))
 	tcheck(t, err, "write message")
-	err = acc.DeliverMailbox(xlog, mailbox, m, mf)
+	err = acc.DeliverMailbox(pkglog, mailbox, m, mf)
 	tcheck(t, err, "deliver message")
 	err = mf.Close()
 	tcheck(t, err, "close message")
@@ -353,7 +467,7 @@ func tretrain(t *testing.T, acc *store.Account) {
 	bloomPath := filepath.Join(basePath, acc.Name, "junkfilter.bloom")
 	os.Remove(dbPath)
 	os.Remove(bloomPath)
-	jf, _, err := acc.OpenJunkFilter(ctxbg, xlog)
+	jf, _, err := acc.OpenJunkFilter(ctxbg, pkglog)
 	tcheck(t, err, "open junk filter")
 	defer jf.Close()
 
@@ -392,7 +506,7 @@ func TestSpam(t *testing.T) {
 		},
 		TXT: map[string][]string{
 			"example.org.":        {"v=spf1 ip4:127.0.0.10 -all"},
-			"_dmarc.example.org.": {"v=DMARC1;p=reject"},
+			"_dmarc.example.org.": {"v=DMARC1;p=reject; rua=mailto:dmarcrpt@example.org"},
 		},
 	}
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
@@ -422,22 +536,6 @@ func TestSpam(t *testing.T) {
 		tinsertmsg(t, ts.acc, "Inbox", &nm, deliverMessage)
 	}
 
-	checkCount := func(mailboxName string, expect int) {
-		t.Helper()
-		q := bstore.QueryDB[store.Mailbox](ctxbg, ts.acc.DB)
-		q.FilterNonzero(store.Mailbox{Name: mailboxName})
-		mb, err := q.Get()
-		tcheck(t, err, "get rejects mailbox")
-		qm := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
-		qm.FilterNonzero(store.Message{MailboxID: mb.ID})
-		qm.FilterEqual("Expunged", false)
-		n, err := qm.Count()
-		tcheck(t, err, "count messages in rejects mailbox")
-		if n != expect {
-			t.Fatalf("messages in rejects mailbox, found %d, expected %d", n, expect)
-		}
-	}
-
 	// Delivery from sender with bad reputation should fail.
 	ts.run(func(err error, client *smtpclient.Client) {
 		mailFrom := "remote@example.org"
@@ -450,7 +548,8 @@ func TestSpam(t *testing.T) {
 			t.Fatalf("delivery by bad sender, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 		}
 
-		checkCount("Rejects", 1)
+		ts.checkCount("Rejects", 1)
+		checkEvaluationCount(t, 0) // No positive interactions yet.
 	})
 
 	// Delivery from sender with bad reputation matching AcceptRejectsToMailbox should
@@ -463,8 +562,9 @@ func TestSpam(t *testing.T) {
 		}
 		tcheck(t, err, "deliver")
 
-		checkCount("mjl2junk", 1) // In ruleset rejects mailbox.
-		checkCount("Rejects", 1)  // Same as before.
+		ts.checkCount("mjl2junk", 1) // In ruleset rejects mailbox.
+		ts.checkCount("Rejects", 1)  // Same as before.
+		checkEvaluationCount(t, 0)   // This is not an actual accept.
 	})
 
 	// Mark the messages as having good reputation.
@@ -483,8 +583,9 @@ func TestSpam(t *testing.T) {
 		tcheck(t, err, "deliver")
 
 		// Message should now be removed from Rejects mailboxes.
-		checkCount("Rejects", 0)
-		checkCount("mjl2junk", 1)
+		ts.checkCount("Rejects", 0)
+		ts.checkCount("mjl2junk", 1)
+		checkEvaluationCount(t, 1)
 	})
 
 	// Undo dmarc pass, mark messages as junk, and train the filter.
@@ -506,6 +607,7 @@ func TestSpam(t *testing.T) {
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
 			t.Fatalf("attempt to deliver spamy message, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 		}
+		checkEvaluationCount(t, 1) // No new evaluation, this isn't a DMARC reject.
 	})
 }
 
@@ -525,9 +627,9 @@ func TestForward(t *testing.T) {
 				"bad.example.":            {"v=spf1 ip4:127.0.0.1 -all"},
 				"good.example.":           {"v=spf1 ip4:127.0.0.1 -all"},
 				"forward.example.":        {"v=spf1 ip4:127.0.0.10 -all"},
-				"_dmarc.bad.example.":     {"v=DMARC1;p=reject"},
-				"_dmarc.good.example.":    {"v=DMARC1;p=reject"},
-				"_dmarc.forward.example.": {"v=DMARC1;p=reject"},
+				"_dmarc.bad.example.":     {"v=DMARC1;p=reject; rua=mailto:dmarc@bad.example"},
+				"_dmarc.good.example.":    {"v=DMARC1;p=reject; rua=mailto:dmarc@good.example"},
+				"_dmarc.forward.example.": {"v=DMARC1;p=reject; rua=mailto:dmarc@forward.example"},
 			},
 			PTR: map[string][]string{
 				"127.0.0.10": {"forward.example."}, // For iprev check.
@@ -544,22 +646,24 @@ func TestForward(t *testing.T) {
 		ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
 		defer ts.close()
 
+		totalEvaluations := 0
+
 		var msgBad = strings.ReplaceAll(`From: <remote@bad.example>
-To: <mjl3@mox.example>
+To: <mjl@mox.example>
 Subject: test
 Message-Id: <bad@example.org>
 
 test email
 `, "\n", "\r\n")
 		var msgOK = strings.ReplaceAll(`From: <remote@good.example>
-To: <mjl3@mox.example>
+To: <mjl@mox.example>
 Subject: other
 Message-Id: <good@example.org>
 
 unrelated message.
 `, "\n", "\r\n")
 		var msgOK2 = strings.ReplaceAll(`From: <other@forward.example>
-To: <mjl3@mox.example>
+To: <mjl@mox.example>
 Subject: non-forward
 Message-Id: <regular@example.org>
 
@@ -580,6 +684,7 @@ happens to come from forwarding mail server.
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgBad)), strings.NewReader(msgBad), false, false, false)
 				tcheck(t, err, "deliver message")
 			}
+			totalEvaluations += 10
 
 			n, err := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).UpdateFields(map[string]any{"Junk": true, "MsgFromValidated": true})
 			tcheck(t, err, "marking messages as junk")
@@ -591,6 +696,8 @@ happens to come from forwarding mail server.
 			if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
 				t.Fatalf("delivery by bad sender, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 			}
+
+			checkEvaluationCount(t, totalEvaluations)
 		})
 
 		// Delivery from different "message From" without reputation, but from same
@@ -607,12 +714,14 @@ happens to come from forwarding mail server.
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgOK)), strings.NewReader(msgOK), false, false, false)
 			if forward {
 				tcheck(t, err, "deliver")
+				totalEvaluations += 1
 			} else {
 				var cerr smtpclient.Error
 				if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
 					t.Fatalf("delivery by bad ip, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 				}
 			}
+			checkEvaluationCount(t, totalEvaluations)
 		})
 
 		// Delivery from forwarding server that isn't a forward should get same treatment.
@@ -621,15 +730,23 @@ happens to come from forwarding mail server.
 
 			mailFrom := "other@forward.example"
 
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgOK2)), strings.NewReader(msgOK2), false, false, false)
+			// Ensure To header matches.
+			msg := msgOK2
+			if forward {
+				msg = strings.ReplaceAll(msg, "<mjl@mox.example>", "<mjl3@mox.example>")
+			}
+
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 			if forward {
 				tcheck(t, err, "deliver")
+				totalEvaluations += 1
 			} else {
 				var cerr smtpclient.Error
 				if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
 					t.Fatalf("delivery by bad ip, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 				}
 			}
+			checkEvaluationCount(t, totalEvaluations)
 		})
 	}
 
@@ -644,12 +761,30 @@ func TestDMARCSent(t *testing.T) {
 			"example.org.": {"127.0.0.1"}, // For mx check.
 		},
 		TXT: map[string][]string{
-			"example.org.":        {"v=spf1 ip4:127.0.0.10 -all"},
-			"_dmarc.example.org.": {"v=DMARC1;p=reject"},
+			"example.org.":        {"v=spf1 ip4:127.0.0.1 -all"},
+			"_dmarc.example.org.": {"v=DMARC1;p=reject;rua=mailto:dmarcrpt@example.org"},
 		},
 	}
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/junk/mox.conf"), resolver)
 	defer ts.close()
+
+	// First check that DMARC policy rejects message and results in optional evaluation.
+	ts.run(func(err error, client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@mox.example"
+		if err == nil {
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+		}
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
+			t.Fatalf("attempt to deliver spamy message, got err %v, expected smtpclient.Error with code %d", err, smtp.C550MailboxUnavail)
+		}
+		l := checkEvaluationCount(t, 1)
+		tcompare(t, l[0].Optional, true)
+	})
+
+	// Update DNS for an SPF pass, and DMARC pass.
+	resolver.TXT["example.org."] = []string{"v=spf1 ip4:127.0.0.10 -all"}
 
 	// Insert spammy messages not related to the test message.
 	m := store.Message{
@@ -676,6 +811,7 @@ func TestDMARCSent(t *testing.T) {
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
 			t.Fatalf("attempt to deliver spamy message, got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
 		}
+		checkEvaluationCount(t, 1) // No new evaluation.
 	})
 
 	// Insert a message that we sent to the address that is about to send to us.
@@ -684,7 +820,26 @@ func TestDMARCSent(t *testing.T) {
 	err := ts.acc.DB.Insert(ctxbg, &store.Recipient{MessageID: sentMsg.ID, Localpart: "remote", Domain: "example.org", OrgDomain: "example.org", Sent: time.Now()})
 	tcheck(t, err, "inserting message recipient")
 
+	// Reject a message due to DMARC again. Since we sent a message to the domain, it
+	// is no longer unknown and we should see a non-optional evaluation that will
+	// result in a DMARC report.
+	resolver.TXT["example.org."] = []string{"v=spf1 ip4:127.0.0.1 -all"}
+	ts.run(func(err error, client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@mox.example"
+		if err == nil {
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+		}
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
+			t.Fatalf("attempt to deliver spamy message, got err %v, expected smtpclient.Error with code %d", err, smtp.C550MailboxUnavail)
+		}
+		l := checkEvaluationCount(t, 2) // New evaluation.
+		tcompare(t, l[1].Optional, false)
+	})
+
 	// We should now be accepting the message because we recently sent a message.
+	resolver.TXT["example.org."] = []string{"v=spf1 ip4:127.0.0.10 -all"}
 	ts.run(func(err error, client *smtpclient.Client) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox.example"
@@ -692,6 +847,8 @@ func TestDMARCSent(t *testing.T) {
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
 		}
 		tcheck(t, err, "deliver")
+		l := checkEvaluationCount(t, 3) // New evaluation.
+		tcompare(t, l[2].Optional, false)
 	})
 }
 
@@ -773,7 +930,7 @@ func TestDMARCReport(t *testing.T) {
 		},
 		TXT: map[string][]string{
 			"example.org.":        {"v=spf1 ip4:127.0.0.10 -all"},
-			"_dmarc.example.org.": {"v=DMARC1;p=reject"},
+			"_dmarc.example.org.": {"v=DMARC1;p=reject; rua=mailto:dmarcrpt@example.org"},
 		},
 		PTR: map[string][]string{
 			"127.0.0.10": {"example.org."}, // For iprev check.
@@ -815,6 +972,11 @@ func TestDMARCReport(t *testing.T) {
 
 	run(dmarcReport, 0)
 	run(strings.ReplaceAll(dmarcReport, "xmox.nl", "mox.example"), 1)
+
+	// We always store as an evaluation, but as optional for reports.
+	evals := checkEvaluationCount(t, 2)
+	tcompare(t, evals[0].Optional, true)
+	tcompare(t, evals[1].Optional, true)
 }
 
 const dmarcReport = `<?xml version="1.0" encoding="UTF-8" ?>
@@ -895,8 +1057,7 @@ func TestTLSReport(t *testing.T) {
 		},
 		TXT: map[string][]string{
 			"testsel._domainkey.example.org.": {dkimTxt},
-			"example.org.":                    {"v=spf1 ip4:127.0.0.10 -all"},
-			"_dmarc.example.org.":             {"v=DMARC1;p=reject"},
+			"_dmarc.example.org.":             {"v=DMARC1;p=reject;rua=mailto:dmarcrpt@example.org"},
 		},
 		PTR: map[string][]string{
 			"127.0.0.10": {"example.org."}, // For iprev check.
@@ -905,20 +1066,20 @@ func TestTLSReport(t *testing.T) {
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/tlsrpt/mox.conf"), resolver)
 	defer ts.close()
 
-	run := func(tlsrpt string, n int) {
+	run := func(rcptTo, tlsrpt string, n int) {
 		t.Helper()
 		ts.run(func(err error, client *smtpclient.Client) {
 			t.Helper()
 
 			mailFrom := "remote@example.org"
-			rcptTo := "mjl@mox.example"
 
 			msgb := &bytes.Buffer{}
 			_, xerr := fmt.Fprintf(msgb, "From: %s\r\nTo: %s\r\nSubject: tlsrpt report\r\nMIME-Version: 1.0\r\nContent-Type: application/tlsrpt+json\r\n\r\n%s\r\n", mailFrom, rcptTo, tlsrpt)
 			tcheck(t, xerr, "write msg")
 			msg := msgb.String()
 
-			headers, xerr := dkim.Sign(ctxbg, "remote", dns.Domain{ASCII: "example.org"}, dkimConf, false, strings.NewReader(msg))
+			selectors := mox.DKIMSelectors(dkimConf)
+			headers, xerr := dkim.Sign(ctxbg, pkglog.Logger, "remote", dns.Domain{ASCII: "example.org"}, selectors, false, strings.NewReader(msg))
 			tcheck(t, xerr, "dkim sign")
 			msg = headers + msg
 
@@ -937,8 +1098,15 @@ func TestTLSReport(t *testing.T) {
 
 	const tlsrpt = `{"organization-name":"Example.org","date-range":{"start-datetime":"2022-01-07T00:00:00Z","end-datetime":"2022-01-07T23:59:59Z"},"contact-info":"tlsrpt@example.org","report-id":"1","policies":[{"policy":{"policy-type":"no-policy-found","policy-domain":"xmox.nl"},"summary":{"total-successful-session-count":1,"total-failure-session-count":0}}]}`
 
-	run(tlsrpt, 0)
-	run(strings.ReplaceAll(tlsrpt, "xmox.nl", "mox.example"), 1)
+	run("mjl@mox.example", tlsrpt, 0)
+	run("mjl@mox.example", strings.ReplaceAll(tlsrpt, "xmox.nl", "mox.example"), 1)
+	run("mjl@mailhost.mox.example", strings.ReplaceAll(tlsrpt, "xmox.nl", "mailhost.mox.example"), 2)
+
+	// We always store as an evaluation, but as optional for reports.
+	evals := checkEvaluationCount(t, 3)
+	tcompare(t, evals[0].Optional, true)
+	tcompare(t, evals[1].Optional, true)
+	tcompare(t, evals[2].Optional, true)
 }
 
 func TestRatelimitConnectionrate(t *testing.T) {
@@ -947,7 +1115,7 @@ func TestRatelimitConnectionrate(t *testing.T) {
 
 	// We'll be creating 300 connections, no TLS and reduce noise.
 	ts.tlsmode = smtpclient.TLSSkip
-	mlog.SetConfig(map[string]mlog.Level{"": mlog.LevelInfo})
+	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelInfo})
 
 	// We may be passing a window boundary during this tests. The limit is 300/minute.
 	// So make twice that many connections and hope the tests don't take too long.
@@ -1108,11 +1276,11 @@ func TestNonSMTP(t *testing.T) {
 
 // Test limits on outgoing messages.
 func TestLimitOutgoing(t *testing.T) {
-	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/sendlimit/mox.conf"), dns.MockResolver{})
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtpserversendlimit/mox.conf"), dns.MockResolver{})
 	defer ts.close()
 
 	ts.user = "mjl@mox.example"
-	ts.pass = "testtest"
+	ts.pass = password0
 	ts.submission = true
 
 	err := ts.acc.DB.Insert(ctxbg, &store.Outgoing{Recipient: "a@other.example", Submitted: time.Now().Add(-24*time.Hour - time.Minute)})
@@ -1126,10 +1294,7 @@ func TestLimitOutgoing(t *testing.T) {
 			if err == nil {
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false, false)
 			}
-			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
-			}
+			ts.smtpErr(err, expErr)
 		})
 	}
 
@@ -1142,6 +1307,34 @@ func TestLimitOutgoing(t *testing.T) {
 	testSubmit("b@other.example", &smtpclient.Error{Code: smtp.C451LocalErr, Secode: smtp.SePol7DeliveryUnauth1}) // Would be 5th message.
 }
 
+// Test account size limit enforcement.
+func TestQuota(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"other.example.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"other.example."},
+		},
+	}
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtpserverquota/mox.conf"), resolver)
+	defer ts.close()
+
+	testDeliver := func(rcptTo string, expErr *smtpclient.Error) {
+		t.Helper()
+		ts.run(func(err error, client *smtpclient.Client) {
+			t.Helper()
+			mailFrom := "mjl@other.example"
+			if err == nil {
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+			}
+			ts.smtpErr(err, expErr)
+		})
+	}
+
+	testDeliver("mjl@mox.example", &smtpclient.Error{Code: smtp.C452StorageFull, Secode: smtp.SeMailbox2Full2})
+}
+
 // Test with catchall destination address.
 func TestCatchall(t *testing.T) {
 	resolver := dns.MockResolver{
@@ -1152,7 +1345,7 @@ func TestCatchall(t *testing.T) {
 			"127.0.0.10": {"other.example."},
 		},
 	}
-	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/catchall/mox.conf"), resolver)
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtpservercatchall/mox.conf"), resolver)
 	defer ts.close()
 
 	testDeliver := func(rcptTo string, expErr *smtpclient.Error) {
@@ -1163,10 +1356,7 @@ func TestCatchall(t *testing.T) {
 			if err == nil {
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false, false)
 			}
-			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
-			}
+			ts.smtpErr(err, expErr)
 		})
 	}
 
@@ -1179,9 +1369,12 @@ func TestCatchall(t *testing.T) {
 	tcheck(t, err, "checking delivered messages")
 	tcompare(t, n, 3)
 
-	acc, err := store.OpenAccount("catchall")
+	acc, err := store.OpenAccount(pkglog, "catchall")
 	tcheck(t, err, "open account")
-	defer acc.Close()
+	defer func() {
+		acc.Close()
+		acc.CheckClosed()
+	}()
 	n, err = bstore.QueryDB[store.Message](ctxbg, acc.DB).Count()
 	tcheck(t, err, "checking delivered messages to catchall account")
 	tcompare(t, n, 1)
@@ -1236,7 +1429,7 @@ func TestDKIMSign(t *testing.T) {
 
 	ts.submission = true
 	ts.user = "mjl@mox.example"
-	ts.pass = "testtest"
+	ts.pass = password0
 
 	n := 0
 	testSubmit := func(mailFrom, msgFrom string) {
@@ -1258,7 +1451,7 @@ test email
 			}
 			tcheck(t, err, "deliver")
 
-			msgs, err := queue.List(ctxbg)
+			msgs, err := queue.List(ctxbg, queue.Filter{}, queue.Sort{})
 			tcheck(t, err, "listing queue")
 			n++
 			tcompare(t, len(msgs), n)
@@ -1268,7 +1461,7 @@ test email
 			f, err := queue.OpenMessage(ctxbg, msgs[0].ID)
 			tcheck(t, err, "open message in queue")
 			defer f.Close()
-			results, err := dkim.Verify(ctxbg, resolver, false, dkim.DefaultPolicy, f, false)
+			results, err := dkim.Verify(ctxbg, pkglog.Logger, resolver, false, dkim.DefaultPolicy, f, false)
 			tcheck(t, err, "verifying dkim message")
 			tcompare(t, len(results), 1)
 			tcompare(t, results[0].Status, dkim.StatusPass)
@@ -1301,17 +1494,14 @@ func TestPostmaster(t *testing.T) {
 			if err == nil {
 				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
 			}
-			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
-			}
+			ts.smtpErr(err, expErr)
 		})
 	}
 
 	testDeliver("postmaster", nil)                  // Plain postmaster address without domain.
 	testDeliver("postmaster@host.mox.example", nil) // Postmaster address with configured mail server hostname.
 	testDeliver("postmaster@mox.example", nil)      // Postmaster address without explicitly configured destination.
-	testDeliver("postmaster@unknown.example", &smtpclient.Error{Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
+	testDeliver("postmaster@unknown.example", &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
 }
 
 // Test to address with empty localpart.
@@ -1331,14 +1521,13 @@ func TestEmptylocalpart(t *testing.T) {
 		t.Helper()
 		ts.run(func(err error, client *smtpclient.Client) {
 			t.Helper()
+
 			mailFrom := `""@other.example`
+			msg := strings.ReplaceAll(deliverMessage, "To: <mjl@mox.example>", `To: <""@mox.example>`)
 			if err == nil {
-				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+				err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 			}
-			var cerr smtpclient.Error
-			if expErr == nil && err != nil || expErr != nil && (err == nil || !errors.As(err, &cerr) || cerr.Code != expErr.Code || cerr.Secode != expErr.Secode) {
-				t.Fatalf("got err %#v, expected %#v", err, expErr)
-			}
+			ts.smtpErr(err, expErr)
 		})
 	}
 
@@ -1362,7 +1551,7 @@ func TestRequireTLS(t *testing.T) {
 	ts.submission = true
 	ts.requiretls = true
 	ts.user = "mjl@mox.example"
-	ts.pass = "testtest"
+	ts.pass = password0
 
 	no := false
 	yes := true
@@ -1405,11 +1594,11 @@ test email
 			}
 			tcheck(t, err, "deliver")
 
-			msgs, err := queue.List(ctxbg)
+			msgs, err := queue.List(ctxbg, queue.Filter{}, queue.Sort{})
 			tcheck(t, err, "listing queue")
 			tcompare(t, len(msgs), 1)
 			tcompare(t, msgs[0].RequireTLS, expRequireTLS)
-			_, err = queue.Drop(ctxbg, msgs[0].ID, "", "")
+			_, err = queue.Drop(ctxbg, pkglog, queue.Filter{IDs: []int64{msgs[0].ID}})
 			tcheck(t, err, "deleting message from queue")
 		})
 	}
@@ -1438,4 +1627,319 @@ test email
 			t.Fatalf("got err %v, expected ErrRequireTLSUnsupported", err)
 		}
 	})
+}
+
+func TestSmuggle(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"example.org.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"example.org."}, // For iprev check.
+		},
+	}
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtpsmuggle/mox.conf"), resolver)
+	ts.tlsmode = smtpclient.TLSSkip
+	defer ts.close()
+
+	test := func(data string) {
+		t.Helper()
+
+		ts.runRaw(func(conn net.Conn) {
+			t.Helper()
+
+			ourHostname := mox.Conf.Static.HostnameDomain
+			remoteHostname := dns.Domain{ASCII: "mox.example"}
+			opts := smtpclient.Opts{
+				RootCAs: mox.Conf.Static.TLS.CertPool,
+			}
+			log := pkglog.WithCid(ts.cid - 1)
+			_, err := smtpclient.New(ctxbg, log.Logger, conn, ts.tlsmode, ts.tlspkix, ourHostname, remoteHostname, opts)
+			tcheck(t, err, "smtpclient")
+			defer conn.Close()
+
+			write := func(s string) {
+				_, err := conn.Write([]byte(s))
+				tcheck(t, err, "write")
+			}
+
+			readPrefixLine := func(prefix string) string {
+				t.Helper()
+				buf := make([]byte, 512)
+				n, err := conn.Read(buf)
+				tcheck(t, err, "read")
+				s := strings.TrimRight(string(buf[:n]), "\r\n")
+				if !strings.HasPrefix(s, prefix) {
+					t.Fatalf("got smtp response %q, expected line with prefix %q", s, prefix)
+				}
+				return s
+			}
+
+			write("MAIL FROM:<remote@example.org>\r\n")
+			readPrefixLine("2")
+			write("RCPT TO:<mjl@mox.example>\r\n")
+			readPrefixLine("2")
+
+			write("DATA\r\n")
+			readPrefixLine("3")
+			write("\r\n") // Empty header.
+			write(data)
+			write("\r\n.\r\n") // End of message.
+			line := readPrefixLine("5")
+			if !strings.Contains(line, "smug") {
+				t.Errorf("got 5xx error with message %q, expected error text containing smug", line)
+			}
+		})
+	}
+
+	test("\r\n.\n")
+	test("\n.\n")
+	test("\r.\r")
+	test("\n.\r\n")
+}
+
+func TestFutureRelease(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
+	ts.tlsmode = smtpclient.TLSSkip
+	ts.user = "mjl@mox.example"
+	ts.pass = password0
+	ts.submission = true
+	defer ts.close()
+
+	ts.auth = func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error) {
+		return sasl.NewClientPlain(ts.user, ts.pass), nil
+	}
+
+	test := func(mailtoMore, expResponsePrefix string) {
+		t.Helper()
+
+		ts.runRaw(func(conn net.Conn) {
+			t.Helper()
+
+			ourHostname := mox.Conf.Static.HostnameDomain
+			remoteHostname := dns.Domain{ASCII: "mox.example"}
+			opts := smtpclient.Opts{Auth: ts.auth}
+			log := pkglog.WithCid(ts.cid - 1)
+			_, err := smtpclient.New(ctxbg, log.Logger, conn, ts.tlsmode, false, ourHostname, remoteHostname, opts)
+			tcheck(t, err, "smtpclient")
+			defer conn.Close()
+
+			write := func(s string) {
+				_, err := conn.Write([]byte(s))
+				tcheck(t, err, "write")
+			}
+
+			readPrefixLine := func(prefix string) string {
+				t.Helper()
+				buf := make([]byte, 512)
+				n, err := conn.Read(buf)
+				tcheck(t, err, "read")
+				s := strings.TrimRight(string(buf[:n]), "\r\n")
+				if !strings.HasPrefix(s, prefix) {
+					t.Fatalf("got smtp response %q, expected line with prefix %q", s, prefix)
+				}
+				return s
+			}
+
+			write(fmt.Sprintf("MAIL FROM:<mjl@mox.example>%s\r\n", mailtoMore))
+			readPrefixLine(expResponsePrefix)
+			if expResponsePrefix != "2" {
+				return
+			}
+			write("RCPT TO:<mjl@mox.example>\r\n")
+			readPrefixLine("2")
+
+			write("DATA\r\n")
+			readPrefixLine("3")
+			write("From: <mjl@mox.example>\r\n\r\nbody\r\n\r\n.\r\n")
+			readPrefixLine("2")
+		})
+	}
+
+	test(" HOLDFOR=1", "2")
+	test(" HOLDUNTIL="+time.Now().Add(time.Minute).UTC().Format(time.RFC3339), "2")
+	test(" HOLDUNTIL="+time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano), "2")
+
+	test(" HOLDFOR=0", "501")                                                                                        // 0 is invalid syntax.
+	test(fmt.Sprintf(" HOLDFOR=%d", int64((queue.FutureReleaseIntervalMax+time.Minute)/time.Second)), "554")         // Too far in the future.
+	test(" HOLDUNTIL="+time.Now().Add(-time.Minute).UTC().Format(time.RFC3339), "554")                               // In the past.
+	test(" HOLDUNTIL="+time.Now().Add(queue.FutureReleaseIntervalMax+time.Minute).UTC().Format(time.RFC3339), "554") // Too far in the future.
+	test(" HOLDUNTIL=2024-02-10T17:28:00+00:00", "501")                                                              // "Z" required.
+	test(" HOLDUNTIL=24-02-10T17:28:00Z", "501")                                                                     // Invalid.
+	test(" HOLDFOR=1 HOLDFOR=1", "501")                                                                              // Duplicate.
+	test(" HOLDFOR=1 HOLDUNTIL="+time.Now().Add(time.Hour).UTC().Format(time.RFC3339), "501")                        // Duplicate.
+}
+
+// Test SMTPUTF8
+func TestSMTPUTF8(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
+	defer ts.close()
+
+	ts.user = "mjl@mox.example"
+	ts.pass = password0
+	ts.submission = true
+
+	test := func(mailFrom string, rcptTo string, headerValue string, filename string, clientSmtputf8 bool, expectedSmtputf8 bool, expErr *smtpclient.Error) {
+		t.Helper()
+
+		ts.run(func(_ error, client *smtpclient.Client) {
+			t.Helper()
+			msg := strings.ReplaceAll(fmt.Sprintf(`From: <%s>
+To: <%s>
+Subject: test
+X-Custom-Test-Header: %s
+MIME-Version: 1.0
+Content-type: multipart/mixed; boundary="simple boundary"
+
+--simple boundary
+Content-Type: text/plain; charset=UTF-8;
+Content-Disposition: attachment; filename="%s"
+Content-Transfer-Encoding: base64
+
+QW4gYXR0YWNoZWQgdGV4dCBmaWxlLg==
+
+--simple boundary--
+`, mailFrom, rcptTo, headerValue, filename), "\n", "\r\n")
+
+			err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, clientSmtputf8, false)
+			ts.smtpErr(err, expErr)
+			if err != nil {
+				return
+			}
+
+			msgs, _ := queue.List(ctxbg, queue.Filter{}, queue.Sort{Field: "Queued", Asc: false})
+			queuedMsg := msgs[0]
+			if queuedMsg.SMTPUTF8 != expectedSmtputf8 {
+				t.Fatalf("[%s / %s / %s / %s] got SMTPUTF8 %t, expected %t", mailFrom, rcptTo, headerValue, filename, queuedMsg.SMTPUTF8, expectedSmtputf8)
+			}
+		})
+	}
+
+	test(`mjl@mox.example`, `remote@example.org`, "header-ascii", "ascii.txt", false, false, nil)
+	test(`mjl@mox.example`, `remote@example.org`, "header-ascii", "ascii.txt", true, false, nil)
+	test(`mjl@mox.example`, `🙂@example.org`, "header-ascii", "ascii.txt", true, true, nil)
+	test(`mjl@mox.example`, `🙂@example.org`, "header-ascii", "ascii.txt", false, true, &smtpclient.Error{Permanent: true, Code: smtp.C553BadMailbox, Secode: smtp.SeMsg6NonASCIIAddrNotPermitted7})
+	test(`Ω@mox.example`, `remote@example.org`, "header-ascii", "ascii.txt", true, true, nil)
+	test(`Ω@mox.example`, `remote@example.org`, "header-ascii", "ascii.txt", false, true, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeMsg6NonASCIIAddrNotPermitted7})
+	test(`mjl@mox.example`, `remote@example.org`, "header-utf8-😍", "ascii.txt", true, true, nil)
+	test(`mjl@mox.example`, `remote@example.org`, "header-utf8-😍", "ascii.txt", false, true, nil)
+	test(`mjl@mox.example`, `remote@example.org`, "header-ascii", "utf8-🫠️.txt", true, true, nil)
+	test(`Ω@mox.example`, `🙂@example.org`, "header-utf8-😍", "utf8-🫠️.txt", true, true, nil)
+	test(`mjl@mox.example`, `remote@xn--vg8h.example.org`, "header-ascii", "ascii.txt", true, false, nil)
+}
+
+// TestExtra checks whether submission of messages with "X-Mox-Extra-<key>: value"
+// headers cause those those key/value pairs to be added to the Extra field in the
+// queue.
+func TestExtra(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
+	defer ts.close()
+
+	ts.user = "mjl@mox.example"
+	ts.pass = password0
+	ts.submission = true
+
+	extraMsg := strings.ReplaceAll(`From: <mjl@mox.example>
+To: <remote@example.org>
+Subject: test
+X-Mox-Extra-Test: testvalue
+X-Mox-Extra-a: 123
+X-Mox-Extra-☺: ☹
+X-Mox-Extra-x-cANONICAL-z: ok
+Message-Id: <test@mox.example>
+
+test email
+`, "\n", "\r\n")
+
+	ts.run(func(err error, client *smtpclient.Client) {
+		t.Helper()
+		tcheck(t, err, "init client")
+		mailFrom := "mjl@mox.example"
+		rcptTo := "mjl@mox.example"
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
+		tcheck(t, err, "deliver")
+	})
+	msgs, err := queue.List(ctxbg, queue.Filter{}, queue.Sort{})
+	tcheck(t, err, "queue list")
+	tcompare(t, len(msgs), 1)
+	tcompare(t, msgs[0].Extra, map[string]string{
+		"Test":          "testvalue",
+		"A":             "123",
+		"☺":             "☹",
+		"X-Canonical-Z": "ok",
+	})
+	// note: these headers currently stay in the message.
+}
+
+// TestExtraDup checks for an error for duplicate x-mox-extra-* keys.
+func TestExtraDup(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
+	defer ts.close()
+
+	ts.user = "mjl@mox.example"
+	ts.pass = password0
+	ts.submission = true
+
+	extraMsg := strings.ReplaceAll(`From: <mjl@mox.example>
+To: <remote@example.org>
+Subject: test
+X-Mox-Extra-Test: testvalue
+X-Mox-Extra-Test: testvalue
+Message-Id: <test@mox.example>
+
+test email
+`, "\n", "\r\n")
+
+	ts.run(func(err error, client *smtpclient.Client) {
+		tcheck(t, err, "init client")
+		mailFrom := "mjl@mox.example"
+		rcptTo := "mjl@mox.example"
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C554TransactionFailed, Secode: smtp.SeMsg6Other0})
+	})
+}
+
+// FromID can be specified during submission, but must be unique, with single recipient.
+func TestUniqueFromID(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtpfromid/mox.conf"), dns.MockResolver{})
+	defer ts.close()
+
+	ts.user = "mjl+fromid@mox.example"
+	ts.pass = password0
+	ts.submission = true
+
+	extraMsg := strings.ReplaceAll(`From: <mjl@mox.example>
+To: <remote@example.org>
+Subject: test
+
+test email
+`, "\n", "\r\n")
+
+	// Specify our own unique id when queueing.
+	ts.run(func(err error, client *smtpclient.Client) {
+		tcheck(t, err, "init client")
+		mailFrom := "mjl+unique@mox.example"
+		rcptTo := "mjl@mox.example"
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
+		ts.smtpErr(err, nil)
+	})
+
+	// But we can only use it once.
+	ts.run(func(err error, client *smtpclient.Client) {
+		tcheck(t, err, "init client")
+		mailFrom := "mjl+unique@mox.example"
+		rcptTo := "mjl@mox.example"
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C554TransactionFailed, Secode: smtp.SeAddr1SenderSyntax7})
+	})
+
+	// We cannot use our own fromid with multiple recipients.
+	ts.run(func(err error, client *smtpclient.Client) {
+		tcheck(t, err, "init client")
+		mailFrom := "mjl+unique2@mox.example"
+		rcptTo := []string{"mjl@mox.example", "mjl@mox.example"}
+		_, err = client.DeliverMultiple(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C554TransactionFailed, Secode: smtp.SeProto5TooManyRcpts3})
+	})
+
 }

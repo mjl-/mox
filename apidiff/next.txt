@@ -1,0 +1,45 @@
+Below are the incompatible changes between v0.0.10 and next, per package.
+
+# dane
+
+# dmarc
+- DMARCPolicy: removed
+
+# dmarcrpt
+
+# dns
+
+# dnsbl
+
+# iprev
+
+# message
+- (*Composer).TextPart: changed from func(string) ([]byte, string, string) to func(string, string) ([]byte, string, string)
+- From: changed from func(*log/slog.Logger, bool, io.ReaderAt) (github.com/mjl-/mox/smtp.Address, *Envelope, net/textproto.MIMEHeader, error) to func(*log/slog.Logger, bool, io.ReaderAt, *Part) (github.com/mjl-/mox/smtp.Address, *Envelope, net/textproto.MIMEHeader, error)
+- NewComposer: changed from func(io.Writer, int64) *Composer to func(io.Writer, int64, bool) *Composer
+
+# mtasts
+- STSMX: removed
+
+# publicsuffix
+
+# ratelimit
+
+# sasl
+
+# scram
+
+# smtp
+- SeMsg6ConversoinUnsupported3: removed
+
+# smtpclient
+- GatherIPs: changed from func(context.Context, *log/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.IPDomain, map[string][]net.IP) (bool, bool, github.com/mjl-/mox/dns.Domain, []net.IP, bool, error) to func(context.Context, *log/slog.Logger, github.com/mjl-/mox/dns.Resolver, string, github.com/mjl-/mox/dns.IPDomain, map[string][]net.IP) (bool, bool, github.com/mjl-/mox/dns.Domain, []net.IP, bool, error)
+
+# spf
+
+# subjectpass
+
+# tlsrpt
+
+# updates
+

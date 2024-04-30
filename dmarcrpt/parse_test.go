@@ -1,6 +1,7 @@
 package dmarcrpt
 
 import (
+	"encoding/xml"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,7 +11,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 )
 
-var xlog = mlog.New("dmarcrpt")
+var pkglog = mlog.New("dmarcrpt", nil)
 
 const reportExample = `<?xml version="1.0" encoding="UTF-8" ?>
 <feedback>
@@ -62,6 +63,7 @@ const reportExample = `<?xml version="1.0" encoding="UTF-8" ?>
 
 func TestParseReport(t *testing.T) {
 	var expect = &Feedback{
+		XMLName: xml.Name{Local: "feedback"},
 		ReportMetadata: ReportMetadata{
 			OrgName:          "google.com",
 			Email:            "noreply-dmarc-support@google.com",
@@ -126,7 +128,7 @@ func TestParseMessageReport(t *testing.T) {
 	dir := filepath.FromSlash("../testdata/dmarc-reports")
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatalf("listing dmarc report emails: %s", err)
+		t.Fatalf("listing dmarc aggregate report emails: %s", err)
 	}
 
 	for _, file := range files {
@@ -135,7 +137,7 @@ func TestParseMessageReport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open %q: %s", p, err)
 		}
-		_, err = ParseMessageReport(xlog, f)
+		_, err = ParseMessageReport(pkglog.Logger, f)
 		if err != nil {
 			t.Fatalf("ParseMessageReport: %q: %s", p, err)
 		}
@@ -143,7 +145,7 @@ func TestParseMessageReport(t *testing.T) {
 	}
 
 	// No report in a non-multipart message.
-	_, err = ParseMessageReport(xlog, strings.NewReader("From: <mjl@mox.example>\r\n\r\nNo report.\r\n"))
+	_, err = ParseMessageReport(pkglog.Logger, strings.NewReader("From: <mjl@mox.example>\r\n\r\nNo report.\r\n"))
 	if err != ErrNoReport {
 		t.Fatalf("message without report, got err %#v, expected ErrNoreport", err)
 	}
@@ -169,7 +171,7 @@ MIME-Version: 1.0
 
 --===============5735553800636657282==--
 `, "\n", "\r\n")
-	_, err = ParseMessageReport(xlog, strings.NewReader(multipartNoreport))
+	_, err = ParseMessageReport(pkglog.Logger, strings.NewReader(multipartNoreport))
 	if err != ErrNoReport {
 		t.Fatalf("message without report, got err %#v, expected ErrNoreport", err)
 	}

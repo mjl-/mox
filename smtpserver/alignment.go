@@ -5,6 +5,7 @@ import (
 
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/spf"
 	"github.com/mjl-/mox/store"
@@ -12,9 +13,9 @@ import (
 
 // Alignment compares the msgFromDomain with the dkim and spf results, and returns
 // a validation, one of: Strict, Relaxed, None.
-func alignment(ctx context.Context, msgFromDomain dns.Domain, dkimResults []dkim.Result, spfStatus spf.Status, spfIdentity *dns.Domain) store.Validation {
+func alignment(ctx context.Context, log mlog.Log, msgFromDomain dns.Domain, dkimResults []dkim.Result, spfStatus spf.Status, spfIdentity *dns.Domain) store.Validation {
 	var strict, relaxed bool
-	msgFromOrgDomain := publicsuffix.Lookup(ctx, msgFromDomain)
+	msgFromOrgDomain := publicsuffix.Lookup(ctx, log.Logger, msgFromDomain)
 
 	// todo: should take temperror and permerror into account.
 	for _, dr := range dkimResults {
@@ -25,12 +26,12 @@ func alignment(ctx context.Context, msgFromDomain dns.Domain, dkimResults []dkim
 			strict = true
 			break
 		} else {
-			relaxed = relaxed || msgFromOrgDomain == publicsuffix.Lookup(ctx, dr.Sig.Domain)
+			relaxed = relaxed || msgFromOrgDomain == publicsuffix.Lookup(ctx, log.Logger, dr.Sig.Domain)
 		}
 	}
 	if !strict && spfStatus == spf.StatusPass {
 		strict = msgFromDomain == *spfIdentity
-		relaxed = relaxed || msgFromOrgDomain == publicsuffix.Lookup(ctx, *spfIdentity)
+		relaxed = relaxed || msgFromOrgDomain == publicsuffix.Lookup(ctx, log.Logger, *spfIdentity)
 	}
 	if strict {
 		return store.ValidationStrict

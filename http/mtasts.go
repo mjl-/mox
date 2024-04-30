@@ -1,6 +1,7 @@
 package http
 
 import (
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -13,8 +14,8 @@ import (
 )
 
 func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
-	log := func() *mlog.Log {
-		return xlog.WithContext(r.Context())
+	log := func() mlog.Log {
+		return pkglog.WithContext(r.Context())
 	}
 
 	host := strings.ToLower(r.Host)
@@ -30,7 +31,7 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 	}
 	domain, err := dns.ParseDomain(host)
 	if err != nil {
-		log().Errorx("mtasts policy request: bad domain", err, mlog.Field("host", host))
+		log().Errorx("mtasts policy request: bad domain", err, slog.String("host", host))
 		http.NotFound(w, r)
 		return
 	}
@@ -42,16 +43,16 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var mxs []mtasts.STSMX
+	var mxs []mtasts.MX
 	for _, s := range sts.MX {
-		var mx mtasts.STSMX
+		var mx mtasts.MX
 		if strings.HasPrefix(s, "*.") {
 			mx.Wildcard = true
 			s = s[2:]
 		}
 		d, err := dns.ParseDomain(s)
 		if err != nil {
-			log().Errorx("bad domain in mtasts config", err, mlog.Field("domain", s))
+			log().Errorx("bad domain in mtasts config", err, slog.String("domain", s))
 			http.Error(w, "500 - internal server error - invalid domain in configuration", http.StatusInternalServerError)
 			return
 		}
@@ -59,7 +60,7 @@ func mtastsPolicyHandle(w http.ResponseWriter, r *http.Request) {
 		mxs = append(mxs, mx)
 	}
 	if len(mxs) == 0 {
-		mxs = []mtasts.STSMX{{Domain: mox.Conf.Static.HostnameDomain}}
+		mxs = []mtasts.MX{{Domain: mox.Conf.Static.HostnameDomain}}
 	}
 
 	policy := mtasts.Policy{

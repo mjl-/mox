@@ -12,9 +12,11 @@ import (
 	"github.com/mjl-/autocert"
 
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 )
 
 func TestAutotls(t *testing.T) {
+	log := mlog.New("autotls", nil)
 	os.RemoveAll("../testdata/autotls")
 	os.MkdirAll("../testdata/autotls", 0770)
 
@@ -23,7 +25,7 @@ func TestAutotls(t *testing.T) {
 	getPrivateKey := func(host string, keyType autocert.KeyType) (crypto.Signer, error) {
 		return nil, fmt.Errorf("not used")
 	}
-	m, err := Load("test", "../testdata/autotls", "mox@localhost", "https://localhost/", getPrivateKey, shutdown)
+	m, err := Load("test", "../testdata/autotls", "mox@localhost", "https://localhost/", "", nil, getPrivateKey, shutdown)
 	if err != nil {
 		t.Fatalf("load manager: %v", err)
 	}
@@ -34,7 +36,7 @@ func TestAutotls(t *testing.T) {
 	if err := m.HostPolicy(context.Background(), "mox.example"); err == nil || !errors.Is(err, errHostNotAllowed) {
 		t.Fatalf("hostpolicy, got err %v, expected errHostNotAllowed", err)
 	}
-	m.SetAllowedHostnames(dns.StrictResolver{}, map[dns.Domain]struct{}{{ASCII: "mox.example"}: {}}, nil, false)
+	m.SetAllowedHostnames(log, dns.MockResolver{}, map[dns.Domain]struct{}{{ASCII: "mox.example"}: {}}, nil, false)
 	l = m.Hostnames()
 	if !reflect.DeepEqual(l, []dns.Domain{{ASCII: "mox.example"}}) {
 		t.Fatalf("hostnames, got %v, expected single mox.example", l)
@@ -80,7 +82,7 @@ func TestAutotls(t *testing.T) {
 
 	key0 := m.Manager.Client.Key
 
-	m, err = Load("test", "../testdata/autotls", "mox@localhost", "https://localhost/", getPrivateKey, shutdown)
+	m, err = Load("test", "../testdata/autotls", "mox@localhost", "https://localhost/", "", nil, getPrivateKey, shutdown)
 	if err != nil {
 		t.Fatalf("load manager again: %v", err)
 	}
@@ -88,12 +90,12 @@ func TestAutotls(t *testing.T) {
 		t.Fatalf("private key changed after reload")
 	}
 	m.shutdown = make(chan struct{})
-	m.SetAllowedHostnames(dns.StrictResolver{}, map[dns.Domain]struct{}{{ASCII: "mox.example"}: {}}, nil, false)
+	m.SetAllowedHostnames(log, dns.MockResolver{}, map[dns.Domain]struct{}{{ASCII: "mox.example"}: {}}, nil, false)
 	if err := m.HostPolicy(context.Background(), "mox.example"); err != nil {
 		t.Fatalf("hostpolicy, got err %v, expected no error", err)
 	}
 
-	m2, err := Load("test2", "../testdata/autotls", "mox@localhost", "https://localhost/", nil, shutdown)
+	m2, err := Load("test2", "../testdata/autotls", "mox@localhost", "https://localhost/", "", nil, nil, shutdown)
 	if err != nil {
 		t.Fatalf("load another manager: %v", err)
 	}

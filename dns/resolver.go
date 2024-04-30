@@ -4,43 +4,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/adns"
 
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/stub"
 )
 
 // todo future: replace with a dnssec capable resolver
 // todo future: change to interface that is closer to DNS. 1. expose nxdomain vs success with zero entries: nxdomain means the name does not exist for any dns resource record type, success with zero records means the name exists for other types than the requested type; 2. add ability to not follow cname records when resolving. the net resolver automatically follows cnames for LookupHost, LookupIP, LookupIPAddr. when resolving names found in mx records, we explicitly must not follow cnames. that seems impossible at the moment. 3. when looking up a cname, actually lookup the record? "net" LookupCNAME will return the requested name with no error if there is no CNAME record. because it returns the canonical name.
 // todo future: add option to not use anything in the cache, for the admin pages where you check the latest DNS settings, ignoring old cached info.
 
-var xlog = mlog.New("dns")
-
 func init() {
 	net.DefaultResolver.StrictErrors = true
 }
 
 var (
-	metricLookup = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_dns_lookup_duration_seconds",
-			Help:    "DNS lookups.",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20, 30},
-		},
-		[]string{
-			"pkg",
-			"type",   // Lower-case Resolver method name without leading Lookup.
-			"result", // ok, nxdomain, temporary, timeout, canceled, error
-		},
-	)
+	MetricLookup stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
 // Resolver is the interface strict resolver implements.
@@ -74,6 +60,15 @@ func WithPackage(resolver Resolver, name string) Resolver {
 type StrictResolver struct {
 	Pkg      string         // Name of subsystem that is making DNS requests, for metrics.
 	Resolver *adns.Resolver // Where the actual lookups are done. If nil, adns.DefaultResolver is used for lookups.
+	Log      *slog.Logger
+}
+
+func (r StrictResolver) log() mlog.Log {
+	pkg := r.Pkg
+	if pkg == "" {
+		pkg = "dns"
+	}
+	return mlog.New(pkg, r.Log)
 }
 
 var _ Resolver = StrictResolver{}
@@ -97,7 +92,7 @@ func metricLookupObserve(pkg, typ string, err error, start time.Time) {
 	default:
 		result = "error"
 	}
-	metricLookup.WithLabelValues(pkg, typ, result).Observe(float64(time.Since(start)) / float64(time.Second))
+	MetricLookup.ObserveLabels(float64(time.Since(start))/float64(time.Second), pkg, typ, result)
 }
 
 func (r StrictResolver) WithPackage(name string) Resolver {
@@ -133,13 +128,12 @@ func (r StrictResolver) LookupPort(ctx context.Context, network, service string)
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "port", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "port"),
-			mlog.Field("network", network),
-			mlog.Field("service", service),
-			mlog.Field("resp", resp),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "port"),
+			slog.String("network", network),
+			slog.String("service", service),
+			slog.Int("resp", resp),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)
@@ -152,13 +146,12 @@ func (r StrictResolver) LookupAddr(ctx context.Context, addr string) (resp []str
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "addr", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "addr"),
-			mlog.Field("addr", addr),
-			mlog.Field("resp", resp),
-			mlog.Field("authentic", result.Authentic),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "addr"),
+			slog.String("addr", addr),
+			slog.Any("resp", resp),
+			slog.Bool("authentic", result.Authentic),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)
@@ -179,13 +172,12 @@ func (r StrictResolver) LookupCNAME(ctx context.Context, host string) (resp stri
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "cname", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "cname"),
-			mlog.Field("host", host),
-			mlog.Field("resp", resp),
-			mlog.Field("authentic", result.Authentic),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "cname"),
+			slog.String("host", host),
+			slog.String("resp", resp),
+			slog.Bool("authentic", result.Authentic),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)
@@ -209,13 +201,12 @@ func (r StrictResolver) LookupHost(ctx context.Context, host string) (resp []str
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "host", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "host"),
-			mlog.Field("host", host),
-			mlog.Field("resp", resp),
-			mlog.Field("authentic", result.Authentic),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "host"),
+			slog.String("host", host),
+			slog.Any("resp", resp),
+			slog.Bool("authentic", result.Authentic),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)
@@ -231,14 +222,13 @@ func (r StrictResolver) LookupIP(ctx context.Context, network, host string) (res
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "ip", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "ip"),
-			mlog.Field("network", network),
-			mlog.Field("host", host),
-			mlog.Field("resp", resp),
-			mlog.Field("authentic", result.Authentic),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "ip"),
+			slog.String("network", network),
+			slog.String("host", host),
+			slog.Any("resp", resp),
+			slog.Bool("authentic", result.Authentic),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)
@@ -254,13 +244,12 @@ func (r StrictResolver) LookupIPAddr(ctx context.Context, host string) (resp []n
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "ipaddr", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "ipaddr"),
-			mlog.Field("host", host),
-			mlog.Field("resp", resp),
-			mlog.Field("authentic", result.Authentic),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "ipaddr"),
+			slog.String("host", host),
+			slog.Any("resp", resp),
+			slog.Bool("authentic", result.Authentic),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)
@@ -276,13 +265,12 @@ func (r StrictResolver) LookupMX(ctx context.Context, name string) (resp []*net.
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "mx", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "mx"),
-			mlog.Field("name", name),
-			mlog.Field("resp", resp),
-			mlog.Field("authentic", result.Authentic),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "mx"),
+			slog.String("name", name),
+			slog.Any("resp", resp),
+			slog.Bool("authentic", result.Authentic),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)
@@ -298,13 +286,12 @@ func (r StrictResolver) LookupNS(ctx context.Context, name string) (resp []*net.
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "ns", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "ns"),
-			mlog.Field("name", name),
-			mlog.Field("resp", resp),
-			mlog.Field("authentic", result.Authentic),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "ns"),
+			slog.String("name", name),
+			slog.Any("resp", resp),
+			slog.Bool("authentic", result.Authentic),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)
@@ -320,16 +307,15 @@ func (r StrictResolver) LookupSRV(ctx context.Context, service, proto, name stri
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "srv", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "srv"),
-			mlog.Field("service", service),
-			mlog.Field("proto", proto),
-			mlog.Field("name", name),
-			mlog.Field("resp0", resp0),
-			mlog.Field("resp1", resp1),
-			mlog.Field("authentic", result.Authentic),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "srv"),
+			slog.String("service", service),
+			slog.String("proto", proto),
+			slog.String("name", name),
+			slog.String("resp0", resp0),
+			slog.Any("resp1", resp1),
+			slog.Bool("authentic", result.Authentic),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)
@@ -345,13 +331,12 @@ func (r StrictResolver) LookupTXT(ctx context.Context, name string) (resp []stri
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "txt", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "txt"),
-			mlog.Field("name", name),
-			mlog.Field("resp", resp),
-			mlog.Field("authentic", result.Authentic),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "txt"),
+			slog.String("name", name),
+			slog.Any("resp", resp),
+			slog.Bool("authentic", result.Authentic),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)
@@ -367,15 +352,14 @@ func (r StrictResolver) LookupTLSA(ctx context.Context, port int, protocol, host
 	start := time.Now()
 	defer func() {
 		metricLookupObserve(r.Pkg, "tlsa", err, start)
-		xlog.WithContext(ctx).Debugx("dns lookup result", err,
-			mlog.Field("pkg", r.Pkg),
-			mlog.Field("type", "tlsa"),
-			mlog.Field("port", port),
-			mlog.Field("protocol", protocol),
-			mlog.Field("host", host),
-			mlog.Field("resp", resp),
-			mlog.Field("authentic", result.Authentic),
-			mlog.Field("duration", time.Since(start)),
+		r.log().WithContext(ctx).Debugx("dns lookup result", err,
+			slog.String("type", "tlsa"),
+			slog.Int("port", port),
+			slog.String("protocol", protocol),
+			slog.String("host", host),
+			slog.Any("resp", resp),
+			slog.Bool("authentic", result.Authentic),
+			slog.Duration("duration", time.Since(start)),
 		)
 	}()
 	defer resolveErrorHint(&err)

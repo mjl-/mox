@@ -16,9 +16,10 @@ import (
 	"github.com/mjl-/mox/smtpserver"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/tlsrptdb"
+	"github.com/mjl-/mox/tlsrptsend"
 )
 
-func shutdown(log *mlog.Log) {
+func shutdown(log mlog.Log) {
 	// We indicate we are shutting down. Causes new connections and new SMTP commands
 	// to be rejected. Should stop active connections pretty quickly.
 	mox.ShutdownCancel()
@@ -52,7 +53,7 @@ func shutdown(log *mlog.Log) {
 
 // start initializes all packages, starts all listeners and the switchboard
 // goroutine, then returns.
-func start(mtastsdbRefresher, skipForkExec bool) error {
+func start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec bool) error {
 	smtpserver.Listen()
 	imapserver.Listen()
 	http.Listen()
@@ -69,10 +70,6 @@ func start(mtastsdbRefresher, skipForkExec bool) error {
 		}
 	}
 
-	if err := dmarcdb.Init(); err != nil {
-		return fmt.Errorf("dmarc init: %s", err)
-	}
-
 	if err := mtastsdb.Init(mtastsdbRefresher); err != nil {
 		return fmt.Errorf("mtasts init: %s", err)
 	}
@@ -81,9 +78,21 @@ func start(mtastsdbRefresher, skipForkExec bool) error {
 		return fmt.Errorf("tlsrpt init: %s", err)
 	}
 
-	done := make(chan struct{}, 1)
+	done := make(chan struct{}) // Goroutines for messages and webhooks, and cleaners.
 	if err := queue.Start(dns.StrictResolver{Pkg: "queue"}, done); err != nil {
 		return fmt.Errorf("queue start: %s", err)
+	}
+
+	// dmarcdb starts after queue because it may start sending reports through the queue.
+	if err := dmarcdb.Init(); err != nil {
+		return fmt.Errorf("dmarc init: %s", err)
+	}
+	if sendDMARCReports {
+		dmarcdb.Start(dns.StrictResolver{Pkg: "dmarcdb"})
+	}
+
+	if sendTLSReports {
+		tlsrptsend.Start(dns.StrictResolver{Pkg: "tlsrptsend"})
 	}
 
 	store.StartAuthCache()

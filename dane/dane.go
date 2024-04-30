@@ -36,11 +36,11 @@
 //
 // For TLS certificate verification that requires PKIX/WebPKI/trusted-anchor
 // verification (all except DANE-EE), the potential second TLSA candidate base
-// domain name is also valid. With SMTP, additionally for hosts found in MX records
-// for a "next-hop domain", the "original next-hop domain" (domain of an email
-// address to deliver to) is also a valid name, as is the "CNAME-expanded original
-// next-hop domain", bringing the potential total allowed names to four (if CNAMEs
-// are followed for the MX hosts).
+// domain name is also a valid hostname. With SMTP, additionally for hosts found in
+// MX records for a "next-hop domain", the "original next-hop domain" (domain of an
+// email address to deliver to) is also a valid name, as is the "CNAME-expanded
+// original next-hop domain", bringing the potential total allowed names to four
+// (if CNAMEs are followed for the MX hosts).
 package dane
 
 // todo: why is https://datatracker.ietf.org/doc/html/draft-barnes-dane-uks-00 not in use? sounds reasonable.
@@ -55,33 +55,21 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strings"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/mjl-/adns"
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/stub"
 )
 
 var (
-	metricVerify = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "mox_dane_verify_total",
-			Help: "Total number of DANE verification attempts, including mox_dane_verify_errors_total.",
-		},
-	)
-	metricVerifyErrors = promauto.NewCounter(
-		prometheus.CounterOpts{
-			Name: "mox_dane_verify_errors_total",
-			Help: "Total number of DANE verification failures, causing connections to fail.",
-		},
-	)
+	MetricVerify       stub.Counter = stub.CounterIgnore{}
+	MetricVerifyErrors stub.Counter = stub.CounterIgnore{}
 )
 
 var (
@@ -116,10 +104,10 @@ func (e VerifyError) Unwrap() error {
 	return e.Err
 }
 
-// Dial looks up a DNSSEC-protected DANE TLSA record for the domain name and
+// Dial looks up DNSSEC-protected DANE TLSA records for the domain name and
 // port/service in address, checks for allowed usages, makes a network connection
-// and verifies the remote certificate against the TLSA records. If
-// verification succeeds, the verified record is returned.
+// and verifies the remote certificate against the TLSA records. If verification
+// succeeds, the verified record is returned.
 //
 // Different protocols require different usages. For example, SMTP with STARTTLS
 // for delivery only allows usages DANE-TA and DANE-EE. If allowedUsages is
@@ -132,8 +120,8 @@ func (e VerifyError) Unwrap() error {
 //     indicate DNSSEC errors.
 //   - ErrInsecure
 //   - VerifyError, potentially wrapping errors from crypto/x509.
-func Dial(ctx context.Context, resolver dns.Resolver, network, address string, allowedUsages []adns.TLSAUsage) (net.Conn, adns.TLSA, error) {
-	log := mlog.New("dane").WithContext(ctx)
+func Dial(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, network, address string, allowedUsages []adns.TLSAUsage, pkixRoots *x509.CertPool) (net.Conn, adns.TLSA, error) {
+	log := mlog.New("dane", elog)
 
 	// Split host and port.
 	host, portstr, err := net.SplitHostPort(address)
@@ -272,7 +260,7 @@ func Dial(ctx context.Context, resolver dns.Resolver, network, address string, a
 	}
 
 	var verifiedRecord adns.TLSA
-	config := TLSClientConfig(log, records, baseDom, moreAllowedHosts, &verifiedRecord)
+	config := TLSClientConfig(log.Logger, records, baseDom, moreAllowedHosts, &verifiedRecord, pkixRoots)
 	tlsConn := tls.Client(conn, &config)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
 		conn.Close()
@@ -284,7 +272,7 @@ func Dial(ctx context.Context, resolver dns.Resolver, network, address string, a
 // TLSClientConfig returns a tls.Config to be used for dialing/handshaking a
 // TLS connection with DANE verification.
 //
-// Callers should only pass records that are allowed for the use of DANE. DANE
+// Callers should only pass records that are allowed for the intended use. DANE
 // with SMTP only allows DANE-EE and DANE-TA usages, not the PKIX-usages.
 //
 // The config has InsecureSkipVerify set to true, with a custom VerifyConnection
@@ -295,13 +283,14 @@ func Dial(ctx context.Context, resolver dns.Resolver, network, address string, a
 //
 // If verifiedRecord is not nil, it is set to the record that was successfully
 // verified, if any.
-func TLSClientConfig(log *mlog.Log, records []adns.TLSA, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, verifiedRecord *adns.TLSA) tls.Config {
+func TLSClientConfig(elog *slog.Logger, records []adns.TLSA, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, verifiedRecord *adns.TLSA, pkixRoots *x509.CertPool) tls.Config {
+	log := mlog.New("dane", elog)
 	return tls.Config{
 		ServerName:         allowedHost.ASCII, // For SNI.
 		InsecureSkipVerify: true,
 		VerifyConnection: func(cs tls.ConnectionState) error {
-			verified, record, err := Verify(log, records, cs, allowedHost, moreAllowedHosts)
-			log.Debugx("dane verification", err, mlog.Field("verified", verified), mlog.Field("record", record))
+			verified, record, err := Verify(log.Logger, records, cs, allowedHost, moreAllowedHosts, pkixRoots)
+			log.Debugx("dane verification", err, slog.Bool("verified", verified), slog.Any("record", record))
 			if verified {
 				if verifiedRecord != nil {
 					*verifiedRecord = record
@@ -327,27 +316,33 @@ func TLSClientConfig(log *mlog.Log, records []adns.TLSA, allowedHost dns.Domain,
 //
 // When one of the records matches, Verify returns true, along with the matching
 // record and a nil error.
-// If there is no match, then in the typical case false, a zero record value and a
-// nil error is returned.
+// If there is no match, then in the typical case Verify returns: false, a zero
+// record value and a nil error.
 // If an error is encountered while verifying a record, e.g. for x509
 // trusted-anchor verification, an error may be returned, typically one or more
 // (wrapped) errors of type VerifyError.
-func Verify(log *mlog.Log, records []adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain) (verified bool, matching adns.TLSA, rerr error) {
-	metricVerify.Inc()
+//
+// Verify is useful when DANE verification and its results has to be done
+// separately from other validation, e.g. for MTA-STS. The caller can create a
+// tls.Config with a VerifyConnection function that checks DANE and MTA-STS
+// separately.
+func Verify(elog *slog.Logger, records []adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, pkixRoots *x509.CertPool) (verified bool, matching adns.TLSA, rerr error) {
+	log := mlog.New("dane", elog)
+	MetricVerify.Inc()
 	if len(records) == 0 {
-		metricVerifyErrors.Inc()
+		MetricVerifyErrors.Inc()
 		return false, adns.TLSA{}, fmt.Errorf("verify requires at least one tlsa record")
 	}
 	var errs []error
 	for _, r := range records {
-		ok, err := verifySingle(log, r, cs, allowedHost, moreAllowedHosts)
+		ok, err := verifySingle(log, r, cs, allowedHost, moreAllowedHosts, pkixRoots)
 		if err != nil {
 			errs = append(errs, VerifyError{err, r})
 		} else if ok {
 			return true, r, nil
 		}
 	}
-	metricVerifyErrors.Inc()
+	MetricVerifyErrors.Inc()
 	return false, adns.TLSA{}, errors.Join(errs...)
 }
 
@@ -360,7 +355,7 @@ func Verify(log *mlog.Log, records []adns.TLSA, cs tls.ConnectionState, allowedH
 // errors while verifying certificates against a trust-anchor, an error can be
 // returned with one or more underlying x509 verification errors. A nil-nil error
 // is only returned when verified is false.
-func verifySingle(log *mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain) (verified bool, rerr error) {
+func verifySingle(log mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowedHost dns.Domain, moreAllowedHosts []dns.Domain, pkixRoots *x509.CertPool) (verified bool, rerr error) {
 	if len(cs.PeerCertificates) == 0 {
 		return false, fmt.Errorf("no server certificate")
 	}
@@ -397,7 +392,7 @@ func verifySingle(log *mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowed
 		opts := x509.VerifyOptions{
 			DNSName:       host.ASCII,
 			Intermediates: x509.NewCertPool(),
-			Roots:         mox.Conf.Static.TLS.CertPool,
+			Roots:         pkixRoots,
 		}
 		for _, cert := range cs.PeerCertificates[1:] {
 			opts.Intermediates.AddCert(cert)
@@ -513,7 +508,7 @@ func verifySingle(log *mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowed
 
 	default:
 		// Unknown, perhaps defined in the future. Not an error.
-		log.Debug("unrecognized tlsa usage, skipping", mlog.Field("tlsausage", tlsa.Usage))
+		log.Debug("unrecognized tlsa usage, skipping", slog.Any("tlsausage", tlsa.Usage))
 		return false, nil
 	}
 }

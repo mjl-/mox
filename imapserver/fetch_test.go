@@ -12,7 +12,7 @@ func TestFetch(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Enable("imap4rev2")
 	received, err := time.Parse(time.RFC3339, "2022-11-16T10:01:00+01:00")
 	tc.check(err, "parse time")

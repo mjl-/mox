@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/textproto"
 	"strconv"
 	"strings"
@@ -23,17 +24,19 @@ import (
 // The first return value is the machine-parsed DSN message. The second value is
 // the entire MIME multipart message. Use its Parts field to access the
 // human-readable text and optional original message/headers.
-func Parse(log *mlog.Log, r io.ReaderAt) (*Message, *message.Part, error) {
+func Parse(elog *slog.Logger, r io.ReaderAt) (*Message, *message.Part, error) {
+	log := mlog.New("dsn", elog)
+
 	// DSNs can mix and match subtypes with and without utf-8. ../rfc/6533:441
 
-	part, err := message.Parse(log, false, r)
+	part, err := message.Parse(log.Logger, false, r)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parsing message: %v", err)
 	}
 	if part.MediaType != "MULTIPART" || part.MediaSubType != "REPORT" {
 		return nil, nil, fmt.Errorf(`message has content-type %q, must have "message/report"`, strings.ToLower(part.MediaType+"/"+part.MediaSubType))
 	}
-	err = part.Walk(log, nil)
+	err = part.Walk(log.Logger, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parsing message parts: %v", err)
 	}
@@ -62,7 +65,11 @@ func Parse(log *mlog.Log, r io.ReaderAt) (*Message, *message.Part, error) {
 		if err != nil {
 			return smtp.Path{}, fmt.Errorf("parsing domain: %v", err)
 		}
-		return smtp.Path{Localpart: smtp.Localpart(a.User), IPDomain: dns.IPDomain{Domain: d}}, nil
+		lp, err := smtp.ParseLocalpart(a.User)
+		if err != nil {
+			return smtp.Path{}, fmt.Errorf("parsing localpart: %v", err)
+		}
+		return smtp.Path{Localpart: lp, IPDomain: dns.IPDomain{Domain: d}}, nil
 	}
 	if len(part.Envelope.From) == 1 {
 		m.From, err = addressPath(part.Envelope.From[0])
@@ -214,6 +221,7 @@ func parseRecipientHeader(mr *textproto.Reader, utf8 bool) (Recipient, error) {
 			for _, x := range actions {
 				if a == x {
 					ok = true
+					r.Action = a
 					break
 				}
 			}
@@ -223,6 +231,13 @@ func parseRecipientHeader(mr *textproto.Reader, utf8 bool) (Recipient, error) {
 		case "Status":
 			// todo: parse the enhanced status code?
 			r.Status = v
+			t := strings.SplitN(v, "(", 2)
+			v = strings.TrimSpace(v)
+			if len(t) == 2 && strings.HasSuffix(v, ")") {
+				r.Status = strings.TrimSpace(t[0])
+				r.StatusComment = strings.TrimSpace(strings.TrimSuffix(t[1], ")"))
+			}
+
 		case "Remote-Mta":
 			r.RemoteMTA = NameIP{Name: v}
 		case "Diagnostic-Code":
@@ -234,7 +249,7 @@ func parseRecipientHeader(mr *textproto.Reader, utf8 bool) (Recipient, error) {
 			} else if len(t) != 2 {
 				err = fmt.Errorf("missing semicolon to separate diagnostic-type from code")
 			} else {
-				r.DiagnosticCode = strings.TrimSpace(t[1])
+				r.DiagnosticCodeSMTP = strings.TrimSpace(t[1])
 			}
 		case "Last-Attempt-Date":
 			r.LastAttemptDate, err = parseDateTime(v)
@@ -307,17 +322,18 @@ func parseAddress(s string, utf8 bool) (smtp.Path, error) {
 		}
 	}
 	// todo: more proper parser
-	t = strings.SplitN(s, "@", 2)
-	if len(t) != 2 || t[0] == "" || t[1] == "" {
+	t = strings.Split(s, "@")
+	if len(t) == 1 {
 		return smtp.Path{}, fmt.Errorf("invalid email address")
 	}
-	d, err := dns.ParseDomain(t[1])
+	d, err := dns.ParseDomain(t[len(t)-1])
 	if err != nil {
 		return smtp.Path{}, fmt.Errorf("parsing domain: %v", err)
 	}
 	var lp string
 	var esc string
-	for _, c := range t[0] {
+	lead := strings.Join(t[:len(t)-1], "@")
+	for _, c := range lead {
 		if esc == "" && c == '\\' || esc == `\` && (c == 'x' || c == 'X') || esc == `\x` && c == '{' {
 			if c == 'X' {
 				c = 'x'
@@ -341,7 +357,11 @@ func parseAddress(s string, utf8 bool) (smtp.Path, error) {
 	if esc != "" {
 		return smtp.Path{}, fmt.Errorf("parsing localpart: unfinished embedded unicode char")
 	}
-	p := smtp.Path{Localpart: smtp.Localpart(lp), IPDomain: dns.IPDomain{Domain: d}}
+	localpart, err := smtp.ParseLocalpart(lp)
+	if err != nil {
+		return smtp.Path{}, fmt.Errorf("parsing localpart: %v", err)
+	}
+	p := smtp.Path{Localpart: localpart, IPDomain: dns.IPDomain{Domain: d}}
 	return p, nil
 }
 

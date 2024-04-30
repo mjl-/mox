@@ -79,7 +79,11 @@ type DNSError struct {
 	Server      string // server used
 	IsTimeout   bool   // if true, timed out; not all timeouts set this
 	IsTemporary bool   // if true, error is temporary; not all errors set this
-	IsNotFound  bool   // if true, host could not be found
+
+	// IsNotFound is set to true when the requested name does not
+	// contain any records of the requested type (data not found),
+	// or the name itself was not found (NXDOMAIN).
+	IsNotFound bool
 }
 
 // Unwrap returns the underlying error, which could be an ExtendedError.

@@ -10,8 +10,7 @@ import (
 )
 
 var (
-	testHookHostsPath = "/etc/hosts"
-	testHookLookupIP  = func(
+	testHookLookupIP = func(
 		ctx context.Context,
 		fn func(context.Context, string, string) ([]net.IPAddr, Result, error),
 		network string,

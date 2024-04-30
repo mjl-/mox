@@ -18,17 +18,45 @@ type Extension struct {
 //
 //	v=TLSRPTv1; rua=mailto:tlsrpt@mox.example;
 type Record struct {
-	Version    string     // "TLSRPTv1", for "v=".
-	RUAs       [][]string // Aggregate reporting URI, for "rua=". "rua=" can occur multiple times, each can be a list. Must be URL-encoded strings, with ",", "!" and ";" encoded.
+	Version string // "TLSRPTv1", for "v=".
+
+	// Aggregate reporting URI, for "rua=". "rua=" can occur multiple times, each can
+	// be a list.
+	RUAs [][]RUA
+	// ../rfc/8460:383
+
 	Extensions []Extension
+}
+
+// RUA is a reporting address with scheme and special characters ",", "!" and
+// ";" not encoded.
+type RUA string
+
+// String returns the RUA with special characters encoded, for inclusion in a
+// TLSRPT record.
+func (rua RUA) String() string {
+	s := string(rua)
+	s = strings.ReplaceAll(s, ",", "%2C")
+	s = strings.ReplaceAll(s, "!", "%21")
+	s = strings.ReplaceAll(s, ";", "%3B")
+	return s
+}
+
+// URI parses a RUA as URI, with either a mailto or https scheme.
+func (rua RUA) URI() (*url.URL, error) {
+	return url.Parse(string(rua))
 }
 
 // String returns a string or use as a TLSRPT DNS TXT record.
 func (r Record) String() string {
 	b := &strings.Builder{}
 	fmt.Fprint(b, "v="+r.Version)
-	for _, rua := range r.RUAs {
-		fmt.Fprint(b, "; rua="+strings.Join(rua, ","))
+	for _, ruas := range r.RUAs {
+		l := make([]string, len(ruas))
+		for i, rua := range ruas {
+			l[i] = rua.String()
+		}
+		fmt.Fprint(b, "; rua="+strings.Join(l, ","))
 	}
 	for _, p := range r.Extensions {
 		fmt.Fprint(b, "; "+p.Key+"="+p.Value)
@@ -199,8 +227,8 @@ func (p *parser) wsp() {
 }
 
 // ../rfc/8460:358
-func (p *parser) xruas() []string {
-	l := []string{p.xuri()}
+func (p *parser) xruas() []RUA {
+	l := []RUA{p.xuri()}
 	p.wsp()
 	for p.take(",") {
 		p.wsp()
@@ -211,7 +239,7 @@ func (p *parser) xruas() []string {
 }
 
 // ../rfc/8460:360
-func (p *parser) xuri() string {
+func (p *parser) xuri() RUA {
 	v := p.xtakefn1(func(b rune, i int) bool {
 		return b != ',' && b != '!' && b != ' ' && b != '\t' && b != ';'
 	})
@@ -222,5 +250,5 @@ func (p *parser) xuri() string {
 	if u.Scheme == "" {
 		p.xerrorf("missing scheme in uri")
 	}
-	return v
+	return RUA(v)
 }

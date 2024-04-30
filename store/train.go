@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -22,7 +23,7 @@ var ErrNoJunkFilter = errors.New("junkfilter: not configured")
 // If the account does not have a junk filter enabled, ErrNotConfigured is returned.
 // Do not forget to save the filter after modifying, and to always close the filter when done.
 // An empty filter is initialized on first access of the filter.
-func (a *Account) OpenJunkFilter(ctx context.Context, log *mlog.Log) (*junk.Filter, *config.JunkFilter, error) {
+func (a *Account) OpenJunkFilter(ctx context.Context, log mlog.Log) (*junk.Filter, *config.JunkFilter, error) {
 	conf, ok := mox.Conf.Account(a.Name)
 	if !ok {
 		return nil, nil, ErrAccountUnknown
@@ -46,7 +47,7 @@ func (a *Account) OpenJunkFilter(ctx context.Context, log *mlog.Log) (*junk.Filt
 
 // RetrainMessages (un)trains messages, if relevant given their flags. Updates
 // m.TrainedJunk after retraining.
-func (a *Account) RetrainMessages(ctx context.Context, log *mlog.Log, tx *bstore.Tx, msgs []Message, absentOK bool) (rerr error) {
+func (a *Account) RetrainMessages(ctx context.Context, log mlog.Log, tx *bstore.Tx, msgs []Message, absentOK bool) (rerr error) {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -86,7 +87,7 @@ func (a *Account) RetrainMessages(ctx context.Context, log *mlog.Log, tx *bstore
 
 // RetrainMessage untrains and/or trains a message, if relevant given m.TrainedJunk
 // and m.Junk/m.Notjunk. Updates m.TrainedJunk after retraining.
-func (a *Account) RetrainMessage(ctx context.Context, log *mlog.Log, tx *bstore.Tx, jf *junk.Filter, m *Message, absentOK bool) error {
+func (a *Account) RetrainMessage(ctx context.Context, log mlog.Log, tx *bstore.Tx, jf *junk.Filter, m *Message, absentOK bool) error {
 	untrain := m.TrainedJunk != nil
 	untrainJunk := untrain && *m.TrainedJunk
 	train := m.Junk || m.Notjunk && !(m.Junk && m.Notjunk)
@@ -96,7 +97,11 @@ func (a *Account) RetrainMessage(ctx context.Context, log *mlog.Log, tx *bstore.
 		return nil
 	}
 
-	log.Debug("updating junk filter", mlog.Field("untrain", untrain), mlog.Field("untrainjunk", untrainJunk), mlog.Field("train", train), mlog.Field("trainjunk", trainJunk))
+	log.Debug("updating junk filter",
+		slog.Bool("untrain", untrain),
+		slog.Bool("untrainjunk", untrainJunk),
+		slog.Bool("train", train),
+		slog.Bool("trainjunk", trainJunk))
 
 	mr := a.MessageReader(*m)
 	defer func() {
@@ -112,7 +117,7 @@ func (a *Account) RetrainMessage(ctx context.Context, log *mlog.Log, tx *bstore.
 
 	words, err := jf.ParseMessage(p)
 	if err != nil {
-		log.Errorx("parsing message for updating junk filter", err, mlog.Field("parse", ""))
+		log.Errorx("parsing message for updating junk filter", err, slog.Any("parse", ""))
 		return nil
 	}
 
@@ -138,7 +143,7 @@ func (a *Account) RetrainMessage(ctx context.Context, log *mlog.Log, tx *bstore.
 
 // TrainMessage trains the junk filter based on the current m.Junk/m.Notjunk flags,
 // disregarding m.TrainedJunk and not updating that field.
-func (a *Account) TrainMessage(ctx context.Context, log *mlog.Log, jf *junk.Filter, m Message) (bool, error) {
+func (a *Account) TrainMessage(ctx context.Context, log mlog.Log, jf *junk.Filter, m Message) (bool, error) {
 	if !m.Junk && !m.Notjunk || (m.Junk && m.Notjunk) {
 		return false, nil
 	}
@@ -157,7 +162,7 @@ func (a *Account) TrainMessage(ctx context.Context, log *mlog.Log, jf *junk.Filt
 
 	words, err := jf.ParseMessage(p)
 	if err != nil {
-		log.Errorx("parsing message for updating junk filter", err, mlog.Field("parse", ""))
+		log.Errorx("parsing message for updating junk filter", err, slog.Any("parse", ""))
 		return false, nil
 	}
 

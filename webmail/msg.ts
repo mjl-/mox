@@ -20,7 +20,7 @@ const init = () => {
 	}
 
 	const msgheaderview = dom.table(dom._class('msgheaders'), style({marginBottom: '1ex', width: '100%'}))
-	loadMsgheaderView(msgheaderview, mi, [], null)
+	loadMsgheaderView(msgheaderview, mi, [], null, true)
 
 	const l = window.location.pathname.split('/')
 	const w = l[l.length-1]

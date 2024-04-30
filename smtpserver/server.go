@@ -5,7 +5,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/md5"
+	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -15,18 +17,21 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"log/slog"
 	"math"
 	"net"
 	"net/textproto"
 	"os"
 	"runtime/debug"
+	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -37,6 +42,7 @@ import (
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"
 	"github.com/mjl-/mox/dmarcdb"
+	"github.com/mjl-/mox/dmarcrpt"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dsn"
 	"github.com/mjl-/mox/iprev"
@@ -56,13 +62,9 @@ import (
 	"github.com/mjl-/mox/tlsrptdb"
 )
 
-// Most logging should be done through conn.log* functions.
-// Only use log in contexts without connection.
-var xlog = mlog.New("smtpserver")
-
 // We use panic and recover for error handling while executing commands.
 // These errors signal the connection must be closed.
-var errIO = errors.New("fatal io error")
+var errIO = errors.New("io error")
 
 // If set, regular delivery/submit is sidestepped, email is accepted and
 // delivered to the account named mox.
@@ -73,6 +75,10 @@ var limiterConnectionRate, limiterConnections *ratelimit.Limiter
 // For delivery rate limiting. Variable because changed during tests.
 var limitIPMasked1MessagesPerMinute int = 500
 var limitIPMasked1SizePerMinute int64 = 1000 * 1024 * 1024
+
+// Maximum number of RCPT TO commands (i.e. recipients) for a single message
+// delivery. Must be at least 100. Announced in LIMIT extension.
+const rcptToLimit = 1000
 
 func init() {
 	// Also called by tests, so they don't trigger the rate limiter.
@@ -146,7 +152,7 @@ var (
 			"reason",
 		},
 	)
-	// Similar between ../webmail/webmail.go:/metricSubmission and ../smtpserver/server.go:/metricSubmission
+	// Similar between ../webmail/webmail.go:/metricSubmission and ../smtpserver/server.go:/metricSubmission and ../webapisrv/server.go:/metricSubmission
 	metricSubmission = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "mox_smtpserver_submission_total",
@@ -167,7 +173,7 @@ var (
 	)
 )
 
-var jitterRand = mox.NewRand()
+var jitterRand = mox.NewPseudoRand()
 
 func durationDefault(delay *time.Duration, def time.Duration) time.Duration {
 	if delay == nil {
@@ -232,14 +238,18 @@ func Listen() {
 var servers []func()
 
 func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig *tls.Config, submission, xtls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
+	log := mlog.New("smtpserver", nil)
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 	if os.Getuid() == 0 {
-		xlog.Print("listening for smtp", mlog.Field("listener", name), mlog.Field("address", addr), mlog.Field("protocol", protocol))
+		log.Print("listening for smtp",
+			slog.String("listener", name),
+			slog.String("address", addr),
+			slog.String("protocol", protocol))
 	}
 	network := mox.Network(ip)
 	ln, err := mox.Listen(network, addr)
 	if err != nil {
-		xlog.Fatalx("smtp: listen for smtp", err, mlog.Field("protocol", protocol), mlog.Field("listener", name))
+		log.Fatalx("smtp: listen for smtp", err, slog.String("protocol", protocol), slog.String("listener", name))
 	}
 	if xtls {
 		ln = tls.NewListener(ln, tlsConfig)
@@ -249,10 +259,12 @@ func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
-				xlog.Infox("smtp: accept", err, mlog.Field("protocol", protocol), mlog.Field("listener", name))
+				log.Infox("smtp: accept", err, slog.String("protocol", protocol), slog.String("listener", name))
 				continue
 			}
-			resolver := dns.StrictResolver{} // By leaving Pkg empty, it'll be set by each package that uses the resolver, e.g. spf/dkim/dmarc.
+
+			// Package is set on the resolver by the dkim/spf/dmarc/etc packages.
+			resolver := dns.StrictResolver{Log: log.Logger}
 			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, requireTLS, dnsBLs, firstTimeSenderDelay)
 		}
 	}
@@ -291,10 +303,10 @@ type conn struct {
 	localIP               net.IP
 	remoteIP              net.IP
 	hostname              dns.Domain
-	log                   *mlog.Log
+	log                   mlog.Log
 	maxMessageSize        int64
 	requireTLSForAuth     bool
-	requireTLSForDelivery bool
+	requireTLSForDelivery bool      // If set, delivery is only allowed with TLS (STARTTLS), except if delivery is to a TLS reporting address.
 	cmd                   string    // Current command.
 	cmdStart              time.Time // Start of current command.
 	ncmds                 int       // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
@@ -317,21 +329,35 @@ type conn struct {
 	transactionBad  int
 
 	// Message transaction.
-	mailFrom    *smtp.Path
-	requireTLS  *bool // MAIL FROM with REQUIRETLS set.
-	has8bitmime bool  // If MAIL FROM parameter BODY=8BITMIME was sent. Required for SMTPUTF8.
-	smtputf8    bool  // todo future: we should keep track of this per recipient. perhaps only a specific recipient requires smtputf8, e.g. due to a utf8 localpart. we should decide ourselves if the message needs smtputf8, e.g. due to utf8 header values.
-	recipients  []rcptAccount
+	mailFrom             *smtp.Path
+	requireTLS           *bool     // MAIL FROM with REQUIRETLS set.
+	futureRelease        time.Time // MAIL FROM with HOLDFOR or HOLDUNTIL.
+	futureReleaseRequest string    // For use in DSNs, either "for;" or "until;" plus original value. ../rfc/4865:305
+	has8bitmime          bool      // If MAIL FROM parameter BODY=8BITMIME was sent. Required for SMTPUTF8.
+	smtputf8             bool      // todo future: we should keep track of this per recipient. perhaps only a specific recipient requires smtputf8, e.g. due to a utf8 localpart.
+	msgsmtputf8          bool      // Is SMTPUTF8 required for the received message. Default to the same value as `smtputf8`, but is re-evaluated after the whole message (envelope and data) is received.
+	recipients           []recipient
 }
 
 type rcptAccount struct {
-	rcptTo smtp.Path
-	local  bool // Whether recipient is a local user.
-
-	// Only valid for local delivery.
 	accountName      string
 	destination      config.Destination
 	canonicalAddress string // Optional catchall part stripped and/or lowercased.
+}
+
+type rcptAlias struct {
+	alias            config.Alias
+	canonicalAddress string // Optional catchall part stripped and/or lowercased.
+}
+
+type recipient struct {
+	addr smtp.Path
+
+	// If account and alias are both not set, this is not for a local address. This is
+	// normal for submission, where messages are added to the queue. For incoming
+	// deliveries, this will result in an error.
+	account *rcptAccount // If set, recipient address is for this local account.
+	alias   *rcptAlias   // If set, for a local alias.
 }
 
 func isClosed(err error) bool {
@@ -357,8 +383,11 @@ func (c *conn) reset() {
 func (c *conn) rset() {
 	c.mailFrom = nil
 	c.requireTLS = nil
+	c.futureRelease = time.Time{}
+	c.futureReleaseRequest = ""
 	c.has8bitmime = false
 	c.smtputf8 = false
+	c.msgsmtputf8 = false
 	c.recipients = nil
 }
 
@@ -377,7 +406,7 @@ func (c *conn) xcheckAuth() {
 	}
 }
 
-func (c *conn) xtrace(level mlog.Level) func() {
+func (c *conn) xtrace(level slog.Level) func() {
 	c.xflush()
 	c.tr.SetTrace(level)
 	c.tw.SetTrace(level)
@@ -408,17 +437,21 @@ func (c *conn) Write(buf []byte) (int, error) {
 		chunk = 1
 	}
 
+	// We set a single deadline for Write and Read. This may be a TLS connection.
+	// SetDeadline works on the underlying connection. If we wouldn't touch the read
+	// deadline, and only set the write deadline and do a bunch of writes, the TLS
+	// library would still have to do reads on the underlying connection, and may reach
+	// a read deadline that was set for some earlier read.
+	// We have one deadline for the whole write. In case of slow writing, we'll write
+	// the last chunk in one go, so remote smtp clients don't abort the connection for
+	// being slow.
+	deadline := c.earliestDeadline(30 * time.Second)
+	if err := c.conn.SetDeadline(deadline); err != nil {
+		c.log.Errorx("setting deadline for write", err)
+	}
+
 	var n int
 	for len(buf) > 0 {
-		// We set a single deadline for Write and Read. This may be a TLS connection.
-		// SetDeadline works on the underlying connection. If we wouldn't touch the read
-		// deadline, and only set the write deadline and do a bunch of writes, the TLS
-		// library would still have to do reads on the underlying connection, and may reach
-		// a read deadline that was set for some earlier read.
-		if err := c.conn.SetDeadline(c.earliestDeadline(30 * time.Second)); err != nil {
-			c.log.Errorx("setting deadline for write", err)
-		}
-
 		nn, err := c.conn.Write(buf[:chunk])
 		if err != nil {
 			panic(fmt.Errorf("write: %s (%w)", err, errIO))
@@ -427,6 +460,12 @@ func (c *conn) Write(buf []byte) (int, error) {
 		buf = buf[chunk:]
 		if len(buf) > 0 && badClientDelay > 0 {
 			mox.Sleep(mox.Context, badClientDelay)
+
+			// Make sure we don't take too long, otherwise the remote SMTP client may close the
+			// connection.
+			if time.Until(deadline) < 2*badClientDelay {
+				chunk = len(buf)
+			}
 		}
 	}
 	return n, nil
@@ -457,7 +496,7 @@ func (c *conn) Read(buf []byte) (int, error) {
 var bufpool = moxio.NewBufpool(8, 2*1024)
 
 func (c *conn) readline() string {
-	line, err := bufpool.Readline(c.r)
+	line, err := bufpool.Readline(c.log, c.r)
 	if err != nil && errors.Is(err, moxio.ErrLineTooLong) {
 		c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Other0, "line too long, smtp max is 512, we reached 2048", nil)
 		panic(fmt.Errorf("%s (%w)", err, errIO))
@@ -475,7 +514,12 @@ func (c *conn) bwritecodeline(code int, secode string, msg string, err error) {
 		ecode = fmt.Sprintf("%d.%s", code/100, secode)
 	}
 	metricCommands.WithLabelValues(c.kind(), c.cmd, fmt.Sprintf("%d", code), ecode).Observe(float64(time.Since(c.cmdStart)) / float64(time.Second))
-	c.log.Debugx("smtp command result", err, mlog.Field("kind", c.kind()), mlog.Field("cmd", c.cmd), mlog.Field("code", fmt.Sprintf("%d", code)), mlog.Field("ecode", ecode), mlog.Field("duration", time.Since(c.cmdStart)))
+	c.log.Debugx("smtp command result", err,
+		slog.String("kind", c.kind()),
+		slog.String("cmd", c.cmd),
+		slog.Int("code", code),
+		slog.String("ecode", ecode),
+		slog.Duration("duration", time.Since(c.cmdStart)))
 
 	var sep string
 	if ecode != "" {
@@ -562,15 +606,18 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		dnsBLs:                dnsBLs,
 		firstTimeSenderDelay:  firstTimeSenderDelay,
 	}
-	c.log = xlog.MoreFields(func() []mlog.Pair {
+	var logmutex sync.Mutex
+	c.log = mlog.New("smtpserver", nil).WithFunc(func() []slog.Attr {
+		logmutex.Lock()
+		defer logmutex.Unlock()
 		now := time.Now()
-		l := []mlog.Pair{
-			mlog.Field("cid", c.cid),
-			mlog.Field("delta", now.Sub(c.lastlog)),
+		l := []slog.Attr{
+			slog.Int64("cid", c.cid),
+			slog.Duration("delta", now.Sub(c.lastlog)),
 		}
 		c.lastlog = now
 		if c.username != "" {
-			l = append(l, mlog.Field("username", c.username))
+			l = append(l, slog.String("username", c.username))
 		}
 		return l
 	})
@@ -580,7 +627,12 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 	c.w = bufio.NewWriter(c.tw)
 
 	metricConnection.WithLabelValues(c.kind()).Inc()
-	c.log.Info("new connection", mlog.Field("remote", c.conn.RemoteAddr()), mlog.Field("local", c.conn.LocalAddr()), mlog.Field("submission", submission), mlog.Field("tls", tls), mlog.Field("listener", listenerName))
+	c.log.Info("new connection",
+		slog.Any("remote", c.conn.RemoteAddr()),
+		slog.Any("local", c.conn.LocalAddr()),
+		slog.Bool("submission", submission),
+		slog.Bool("tls", tls),
+		slog.String("listener", listenerName))
 
 	defer func() {
 		c.origConn.Close() // Close actual TCP socket, regardless of TLS on top.
@@ -598,7 +650,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		} else if err, ok := x.(error); ok && isClosed(err) {
 			c.log.Infox("connection closed", err)
 		} else {
-			c.log.Error("unhandled panic", mlog.Field("err", x))
+			c.log.Error("unhandled panic", slog.Any("err", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Smtpserver)
 		}
@@ -620,13 +672,13 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 	// If remote IP/network resulted in too many authentication failures, refuse to serve.
 	if submission && !mox.LimiterFailedAuth.CanAdd(c.remoteIP, time.Now(), 1) {
 		metrics.AuthenticationRatelimitedInc("submission")
-		c.log.Debug("refusing connection due to many auth failures", mlog.Field("remoteip", c.remoteIP))
+		c.log.Debug("refusing connection due to many auth failures", slog.Any("remoteip", c.remoteIP))
 		c.writecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "too many auth failures", nil)
 		return
 	}
 
 	if !limiterConnections.Add(c.remoteIP, time.Now(), 1) {
-		c.log.Debug("refusing connection due to many open connections", mlog.Field("remoteip", c.remoteIP))
+		c.log.Debug("refusing connection due to many open connections", slog.Any("remoteip", c.remoteIP))
 		c.writecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "too many open connections from your ip or network", nil)
 		return
 	}
@@ -760,12 +812,20 @@ func (c *conn) xneedHello() {
 	}
 }
 
-// If smtp server is configured to require TLS for all mail delivery, abort command.
-func (c *conn) xneedTLSForDelivery() {
-	if c.requireTLSForDelivery && !c.tls {
+// If smtp server is configured to require TLS for all mail delivery (except to TLS
+// reporting address), abort command.
+func (c *conn) xneedTLSForDelivery(rcpt smtp.Path) {
+	// For TLS reports, we allow the message in even without TLS, because there may be
+	// TLS interopability problems. ../rfc/8460:316
+	if c.requireTLSForDelivery && !c.tls && !isTLSReportRecipient(rcpt) {
 		// ../rfc/3207:148
 		xsmtpUserErrorf(smtp.C530SecurityRequired, smtp.SePol7Other0, "STARTTLS required for mail delivery")
 	}
+}
+
+func isTLSReportRecipient(rcpt smtp.Path) bool {
+	_, _, _, dest, err := mox.LookupAddress(rcpt.Localpart, rcpt.IPDomain.Domain, false, false)
+	return err == nil && (dest.HostTLSReports || dest.DomainTLSReports)
 }
 
 func (c *conn) cmdHelo(p *parser) {
@@ -779,7 +839,7 @@ func (c *conn) cmdEhlo(p *parser) {
 // ../rfc/5321:1783
 func (c *conn) cmdHello(p *parser, ehlo bool) {
 	var remote dns.IPDomain
-	if c.submission && !moxvar.Pedantic {
+	if c.submission && !mox.Pedantic {
 		// Mail clients regularly put bogus information in the hostname/ip. For submission,
 		// the value is of no use, so there is not much point in annoying the user with
 		// errors they cannot fix themselves. Except when in pedantic mode.
@@ -834,15 +894,24 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 	if c.submission {
 		// ../rfc/4954:123
 		if c.tls || !c.requireTLSForAuth {
-			c.bwritelinef("250-AUTH SCRAM-SHA-256 SCRAM-SHA-1 CRAM-MD5 PLAIN")
+			// We always mention the SCRAM PLUS variants, even if TLS is not active: It is a
+			// hint to the client that a TLS connection can use TLS channel binding during
+			// authentication. The client should select the bare variant when TLS isn't
+			// present, and also not indicate the server supports the PLUS variant in that
+			// case, or it would trigger the mechanism downgrade detection.
+			c.bwritelinef("250-AUTH SCRAM-SHA-256-PLUS SCRAM-SHA-256 SCRAM-SHA-1-PLUS SCRAM-SHA-1 CRAM-MD5 PLAIN LOGIN")
 		} else {
 			c.bwritelinef("250-AUTH ")
 		}
+		// ../rfc/4865:127
+		t := time.Now().Add(queue.FutureReleaseIntervalMax).UTC() // ../rfc/4865:98
+		c.bwritelinef("250-FUTURERELEASE %d %s", queue.FutureReleaseIntervalMax/time.Second, t.Format(time.RFC3339))
 	}
 	c.bwritelinef("250-ENHANCEDSTATUSCODES") // ../rfc/2034:71
 	// todo future? c.writelinef("250-DSN")
-	c.bwritelinef("250-8BITMIME")              // ../rfc/6152:86
-	c.bwritecodeline(250, "", "SMTPUTF8", nil) // ../rfc/6531:201
+	c.bwritelinef("250-8BITMIME")                       // ../rfc/6152:86
+	c.bwritelinef("250-LIMITS RCPTMAX=%d", rcptToLimit) // ../rfc/9422:301
+	c.bwritecodeline(250, "", "SMTPUTF8", nil)          // ../rfc/6531:201
 	c.xflush()
 }
 
@@ -871,7 +940,8 @@ func (c *conn) cmdStarttls(p *parser) {
 		}
 	}
 
-	c.writecodeline(smtp.C220ServiceReady, smtp.SeOther00, "go!", nil)
+	// We add the cid to the output, to help debugging in case of a failing TLS connection.
+	c.writecodeline(smtp.C220ServiceReady, smtp.SeOther00, "go! ("+mox.ReceivedID(c.cid)+")", nil)
 	tlsConn := tls.Server(conn, c.tlsConfig)
 	cidctx := context.WithValue(mox.Context, mlog.CidKey, c.cid)
 	ctx, cancel := context.WithTimeout(cidctx, time.Minute)
@@ -881,8 +951,8 @@ func (c *conn) cmdStarttls(p *parser) {
 		panic(fmt.Errorf("starttls handshake: %s (%w)", err, errIO))
 	}
 	cancel()
-	tlsversion, ciphersuite := mox.TLSInfo(tlsConn)
-	c.log.Debug("tls server handshake done", mlog.Field("tls", tlsversion), mlog.Field("ciphersuite", ciphersuite))
+	tlsversion, ciphersuite := moxio.TLSInfo(tlsConn)
+	c.log.Debug("tls server handshake done", slog.String("tls", tlsversion), slog.String("ciphersuite", ciphersuite))
 	c.conn = tlsConn
 	c.tr = moxio.NewTraceReader(c.log, "RC: ", c)
 	c.tw = moxio.NewTraceWriter(c.log, "LS: ", c)
@@ -909,7 +979,10 @@ func (c *conn) cmdAuth(p *parser) {
 		xsmtpUserErrorf(smtp.C503BadCmdSeq, smtp.SeProto5BadCmdOrSeq1, "authentication not allowed during mail transaction")
 	}
 
-	// todo future: we may want to normalize usernames and passwords, see stringprep in ../rfc/4013:38 and possibly newer mechanisms (though they are opt-in and that may not have happened yet).
+	// If authentication fails due to missing derived secrets, we don't hold it against
+	// the connection. There is no way to indicate server support for an authentication
+	// mechanism, but that a mechanism won't work for an account.
+	var missingDerivedSecrets bool
 
 	// For many failed auth attempts, slow down verification attempts.
 	// Dropping the connection could also work, but more so when we have a connection rate limiter.
@@ -920,6 +993,9 @@ func (c *conn) cmdAuth(p *parser) {
 	}
 	c.authFailed++ // Compensated on success.
 	defer func() {
+		if missingDerivedSecrets {
+			c.authFailed--
+		}
 		// On the 3rd failed authentication, start responding slowly. Successful auth will
 		// cause fast responses again.
 		if c.authFailed >= 3 {
@@ -931,15 +1007,12 @@ func (c *conn) cmdAuth(p *parser) {
 	authResult := "error"
 	defer func() {
 		metrics.AuthenticationInc("submission", authVariant, authResult)
-		switch authResult {
-		case "ok":
+		if authResult == "ok" {
 			mox.LimiterFailedAuth.Reset(c.remoteIP, time.Now())
-		default:
+		} else if !missingDerivedSecrets {
 			mox.LimiterFailedAuth.Add(c.remoteIP, time.Now(), 1)
 		}
 	}()
-
-	// todo: implement "AUTH LOGIN"? it looks like PLAIN, but without the continuation. it is an obsolete sasl mechanism. an account in desktop outlook appears to go through the cloud, attempting to submit email only with unadvertised and AUTH LOGIN. it appears they don't know "plain".
 
 	// ../rfc/4954:699
 	p.xspace()
@@ -958,7 +1031,7 @@ func (c *conn) cmdAuth(p *parser) {
 			}
 		} else {
 			p.xspace()
-			if !moxvar.Pedantic {
+			if !mox.Pedantic {
 				// Windows Mail 16005.14326.21606.0 sends two spaces between "AUTH PLAIN" and the
 				// base64 data.
 				for p.space() {
@@ -1013,8 +1086,8 @@ func (c *conn) cmdAuth(p *parser) {
 		if len(plain) != 3 {
 			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5BadParams4, "auth data should have 3 nul-separated tokens, got %d", len(plain))
 		}
-		authz := string(plain[0])
-		authc := string(plain[1])
+		authz := norm.NFC.String(string(plain[0]))
+		authc := norm.NFC.String(string(plain[1]))
 		password := string(plain[2])
 
 		if authz != "" && authz != authc {
@@ -1022,11 +1095,11 @@ func (c *conn) cmdAuth(p *parser) {
 			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "cannot assume other role")
 		}
 
-		acc, err := store.OpenEmailAuth(authc, password)
+		acc, err := store.OpenEmailAuth(c.log, authc, password)
 		if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
 			// ../rfc/4954:274
 			authResult = "badcreds"
-			c.log.Info("failed authentication attempt", mlog.Field("username", authc), mlog.Field("remote", c.remoteIP))
+			c.log.Info("failed authentication attempt", slog.String("username", authc), slog.Any("remote", c.remoteIP))
 			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
 		}
 		xcheckf(err, "verifying credentials")
@@ -1038,6 +1111,52 @@ func (c *conn) cmdAuth(p *parser) {
 		c.username = authc
 		// ../rfc/4954:276
 		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
+
+	case "LOGIN":
+		// LOGIN is obsoleted in favor of PLAIN, only implemented to support legacy
+		// clients, see Internet-Draft (I-D):
+		// https://datatracker.ietf.org/doc/html/draft-murchison-sasl-login-00
+
+		authVariant = "login"
+
+		// ../rfc/4954:343
+		// ../rfc/4954:326
+		if !c.tls && c.requireTLSForAuth {
+			xsmtpUserErrorf(smtp.C538EncReqForAuth, smtp.SePol7EncReqForAuth11, "authentication requires tls")
+		}
+
+		// Read user name. The I-D says the client should ignore the server challenge, we
+		// send an empty one.
+		// I-D says maximum length must be 64 bytes. We allow more, for long user names
+		// (domains).
+		username := string(xreadInitial())
+		username = norm.NFC.String(username)
+
+		// Again, client should ignore the challenge, we send the same as the example in
+		// the I-D.
+		c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte("Password")))
+
+		// Password is in line in plain text, so hide it.
+		defer c.xtrace(mlog.LevelTraceauth)()
+		password := string(xreadContinuation())
+		c.xtrace(mlog.LevelTrace) // Restore.
+
+		acc, err := store.OpenEmailAuth(c.log, username, password)
+		if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
+			// ../rfc/4954:274
+			authResult = "badcreds"
+			c.log.Info("failed authentication attempt", slog.String("username", username), slog.Any("remote", c.remoteIP))
+			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
+		}
+		xcheckf(err, "verifying credentials")
+
+		authResult = "ok"
+		c.authFailed = 0
+		c.setSlow(false)
+		c.account = acc
+		c.username = username
+		// ../rfc/4954:276
+		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "hello ancient smtp implementation", nil)
 
 	case "CRAM-MD5":
 		authVariant = strings.ToLower(mech)
@@ -1053,12 +1172,12 @@ func (c *conn) cmdAuth(p *parser) {
 		if len(t) != 2 || len(t[1]) != 2*md5.Size {
 			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5BadParams4, "malformed cram-md5 response")
 		}
-		addr := t[0]
-		c.log.Debug("cram-md5 auth", mlog.Field("address", addr))
-		acc, _, err := store.OpenEmail(addr)
+		addr := norm.NFC.String(t[0])
+		c.log.Debug("cram-md5 auth", slog.String("address", addr))
+		acc, _, err := store.OpenEmail(c.log, addr)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
-				c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+				c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
 			}
 		}
@@ -1074,7 +1193,7 @@ func (c *conn) cmdAuth(p *parser) {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
 				if err == bstore.ErrAbsent {
-					c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+					c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 					xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
 				}
 				if err != nil {
@@ -1088,8 +1207,9 @@ func (c *conn) cmdAuth(p *parser) {
 			xcheckf(err, "tx read")
 		})
 		if ipadhash == nil || opadhash == nil {
-			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", mlog.Field("username", addr))
-			c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+			missingDerivedSecrets = true
+			c.log.Info("cram-md5 auth attempt without derived secrets set, save password again to store secrets", slog.String("username", addr))
+			c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
 		}
 
@@ -1098,7 +1218,7 @@ func (c *conn) cmdAuth(p *parser) {
 		opadhash.Write(ipadhash.Sum(nil))
 		digest := fmt.Sprintf("%x", opadhash.Sum(nil))
 		if digest != t[1] {
-			c.log.Info("failed authentication attempt", mlog.Field("username", addr), mlog.Field("remote", c.remoteIP))
+			c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
 			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
 		}
 
@@ -1111,30 +1231,44 @@ func (c *conn) cmdAuth(p *parser) {
 		// ../rfc/4954:276
 		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
 
-	case "SCRAM-SHA-1", "SCRAM-SHA-256":
+	case "SCRAM-SHA-256-PLUS", "SCRAM-SHA-256", "SCRAM-SHA-1-PLUS", "SCRAM-SHA-1":
 		// todo: improve handling of errors during scram. e.g. invalid parameters. should we abort the imap command, or continue until the end and respond with a scram-level error?
 		// todo: use single implementation between ../imapserver/server.go and ../smtpserver/server.go
 
-		authVariant = strings.ToLower(mech)
-		var h func() hash.Hash
-		if authVariant == "scram-sha-1" {
-			h = sha1.New
-		} else {
-			h = sha256.New
-		}
-
 		// Passwords cannot be retrieved or replayed from the trace.
 
+		authVariant = strings.ToLower(mech)
+		var h func() hash.Hash
+		switch authVariant {
+		case "scram-sha-1", "scram-sha-1-plus":
+			h = sha1.New
+		case "scram-sha-256", "scram-sha-256-plus":
+			h = sha256.New
+		default:
+			xsmtpServerErrorf(codes{smtp.C554TransactionFailed, smtp.SeSys3Other0}, "missing scram auth method case")
+		}
+
+		var cs *tls.ConnectionState
+		channelBindingRequired := strings.HasSuffix(authVariant, "-plus")
+		if channelBindingRequired && !c.tls {
+			// ../rfc/4954:630
+			xsmtpUserErrorf(smtp.C538EncReqForAuth, smtp.SePol7EncReqForAuth11, "scram plus mechanism requires tls connection")
+		}
+		if c.tls {
+			xcs := c.conn.(*tls.Conn).ConnectionState()
+			cs = &xcs
+		}
 		c0 := xreadInitial()
-		ss, err := scram.NewServer(h, c0)
+		ss, err := scram.NewServer(h, c0, cs, channelBindingRequired)
 		xcheckf(err, "starting scram")
-		c.log.Debug("scram auth", mlog.Field("authentication", ss.Authentication))
-		acc, _, err := store.OpenEmail(ss.Authentication)
+		authc := norm.NFC.String(ss.Authentication)
+		c.log.Debug("scram auth", slog.String("authentication", authc))
+		acc, _, err := store.OpenEmail(c.log, authc)
 		if err != nil {
 			// todo: we could continue scram with a generated salt, deterministically generated
 			// from the username. that way we don't have to store anything but attackers cannot
 			// learn if an account exists. same for absent scram saltedpassword below.
-			c.log.Info("failed authentication attempt", mlog.Field("username", ss.Authentication), mlog.Field("remote", c.remoteIP))
+			c.log.Info("failed authentication attempt", slog.String("username", authc), slog.Any("remote", c.remoteIP))
 			xsmtpUserErrorf(smtp.C454TempAuthFail, smtp.SeSys3Other0, "scram not possible")
 		}
 		defer func() {
@@ -1150,18 +1284,26 @@ func (c *conn) cmdAuth(p *parser) {
 		acc.WithRLock(func() {
 			err := acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
 				password, err := bstore.QueryTx[store.Password](tx).Get()
-				if authVariant == "scram-sha-1" {
-					xscram = password.SCRAMSHA1
-				} else {
-					xscram = password.SCRAMSHA256
-				}
-				if err == bstore.ErrAbsent || err == nil && (len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0) {
-					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", mlog.Field("address", ss.Authentication))
-					c.log.Info("failed authentication attempt", mlog.Field("username", ss.Authentication), mlog.Field("remote", c.remoteIP))
-					xsmtpUserErrorf(smtp.C454TempAuthFail, smtp.SeSys3Other0, "scram not possible")
+				if err == bstore.ErrAbsent {
+					c.log.Info("failed authentication attempt", slog.String("username", authc), slog.Any("remote", c.remoteIP))
+					xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
 				}
 				xcheckf(err, "fetching credentials")
-				return err
+				switch authVariant {
+				case "scram-sha-1", "scram-sha-1-plus":
+					xscram = password.SCRAMSHA1
+				case "scram-sha-256", "scram-sha-256-plus":
+					xscram = password.SCRAMSHA256
+				default:
+					xsmtpServerErrorf(codes{smtp.C554TransactionFailed, smtp.SeSys3Other0}, "missing scram auth credentials case")
+				}
+				if len(xscram.Salt) == 0 || xscram.Iterations == 0 || len(xscram.SaltedPassword) == 0 {
+					missingDerivedSecrets = true
+					c.log.Info("scram auth attempt without derived secrets set, save password again to store secrets", slog.String("address", authc))
+					c.log.Info("failed authentication attempt", slog.String("username", authc), slog.Any("remote", c.remoteIP))
+					xsmtpUserErrorf(smtp.C454TempAuthFail, smtp.SeSys3Other0, "scram not possible")
+				}
+				return nil
 			})
 			xcheckf(err, "read tx")
 		})
@@ -1177,7 +1319,7 @@ func (c *conn) cmdAuth(p *parser) {
 			c.readline() // Should be "*" for cancellation.
 			if errors.Is(err, scram.ErrInvalidProof) {
 				authResult = "badcreds"
-				c.log.Info("failed authentication attempt", mlog.Field("username", ss.Authentication), mlog.Field("remote", c.remoteIP))
+				c.log.Info("failed authentication attempt", slog.String("username", authc), slog.Any("remote", c.remoteIP))
 				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad credentials")
 			}
 			xcheckf(err, "server final")
@@ -1192,7 +1334,7 @@ func (c *conn) cmdAuth(p *parser) {
 		c.setSlow(false)
 		c.account = acc
 		acc = nil // Cancel cleanup.
-		c.username = ss.Authentication
+		c.username = authc
 		// ../rfc/4954:276
 		c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
 
@@ -1206,7 +1348,7 @@ func (c *conn) cmdAuth(p *parser) {
 func (c *conn) cmdMail(p *parser) {
 	// requirements for maximum line length:
 	// ../rfc/5321:3500 (base max of 512 including crlf) ../rfc/4954:134 (+500) ../rfc/1870:92 (+26) ../rfc/6152:90 (none specified) ../rfc/6531:231 (+10)
-	// todo future: enforce?
+	// todo future: enforce? doesn't really seem worth it...
 
 	if c.transactionBad > 10 && c.transactionGood == 0 {
 		// If we get many bad transactions, it's probably a spammer that is guessing user names.
@@ -1218,7 +1360,6 @@ func (c *conn) cmdMail(p *parser) {
 
 	c.xneedHello()
 	c.xcheckAuth()
-	c.xneedTLSForDelivery()
 	if c.mailFrom != nil {
 		// ../rfc/5321:2507, though ../rfc/5321:1029 contradicts, implying a MAIL would also reset, but ../rfc/5321:1160 decides.
 		xsmtpUserErrorf(smtp.C503BadCmdSeq, smtp.SeProto5BadCmdOrSeq1, "already have MAIL")
@@ -1233,10 +1374,10 @@ func (c *conn) cmdMail(p *parser) {
 		}
 	}()
 	p.xtake(" FROM:")
-	// note: no space after colon. ../rfc/5321:1093
-	// Allow illegal space for submission only, not for regular SMTP. Microsoft Outlook
-	// 365 Apps for Enterprise sends it.
-	if c.submission && !moxvar.Pedantic {
+	// note: no space allowed after colon. ../rfc/5321:1093
+	// Microsoft Outlook 365 Apps for Enterprise sends it with submission. For delivery
+	// it is mostly used by spammers, but has been seen with legitimate senders too.
+	if !mox.Pedantic {
 		p.space()
 	}
 	rawRevPath := p.xrawReversePath()
@@ -1255,7 +1396,7 @@ func (c *conn) cmdMail(p *parser) {
 		switch K {
 		case "SIZE":
 			p.xtake("=")
-			size := p.xnumber(20) // ../rfc/1870:90
+			size := p.xnumber(20, true) // ../rfc/1870:90
 			if size > c.maxMessageSize {
 				// ../rfc/1870:136 ../rfc/3463:382
 				ecode := smtp.SeSys3MsgLimitExceeded4
@@ -1294,6 +1435,7 @@ func (c *conn) cmdMail(p *parser) {
 		case "SMTPUTF8":
 			// ../rfc/6531:213
 			c.smtputf8 = true
+			c.msgsmtputf8 = true
 		case "REQUIRETLS":
 			// ../rfc/8689:155
 			if !c.tls {
@@ -1303,6 +1445,39 @@ func (c *conn) cmdMail(p *parser) {
 			}
 			v := true
 			c.requireTLS = &v
+		case "HOLDFOR", "HOLDUNTIL":
+			// Only for submission ../rfc/4865:163
+			if !c.submission {
+				xsmtpUserErrorf(smtp.C555UnrecognizedAddrParams, smtp.SeSys3NotSupported3, "unrecognized parameter %q", key)
+			}
+			if K == "HOLDFOR" && paramSeen["HOLDUNTIL"] || K == "HOLDUNTIL" && paramSeen["HOLDFOR"] {
+				// ../rfc/4865:260
+				xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5BadParams4, "cannot use both HOLDUNTIL and HOLFOR")
+			}
+			p.xtake("=")
+			// ../rfc/4865:263 ../rfc/4865:267 We are not following the advice of treating
+			// semantic errors as syntax errors
+			if K == "HOLDFOR" {
+				n := p.xnumber(9, false) // ../rfc/4865:92
+				if n > int64(queue.FutureReleaseIntervalMax/time.Second) {
+					// ../rfc/4865:250
+					xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeProto5BadParams4, "future release interval too far in the future")
+				}
+				c.futureRelease = time.Now().Add(time.Duration(n) * time.Second)
+				c.futureReleaseRequest = fmt.Sprintf("for;%d", n)
+			} else {
+				t, s := p.xdatetimeutc()
+				ival := time.Until(t)
+				if ival <= 0 {
+					// Likely a mistake by the user.
+					xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeProto5BadParams4, "requested future release time is in the past")
+				} else if ival > queue.FutureReleaseIntervalMax {
+					// ../rfc/4865:255
+					xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeProto5BadParams4, "requested future release time is too far in the future")
+				}
+				c.futureRelease = t
+				c.futureReleaseRequest = "until;" + s
+			}
 		default:
 			// ../rfc/5321:2230
 			xsmtpUserErrorf(smtp.C555UnrecognizedAddrParams, smtp.SeSys3NotSupported3, "unrecognized parameter %q", key)
@@ -1323,7 +1498,7 @@ func (c *conn) cmdMail(p *parser) {
 		if rpath.IsZero() {
 			return true
 		}
-		accName, _, _, err := mox.FindAccount(rpath.Localpart, rpath.IPDomain.Domain, false)
+		accName, _, _, _, err := mox.LookupAddress(rpath.Localpart, rpath.IPDomain.Domain, false, false)
 		return err == nil && accName == c.account.Name
 	}
 
@@ -1346,11 +1521,11 @@ func (c *conn) cmdMail(p *parser) {
 
 	if c.submission && (len(rpath.IPDomain.IP) > 0 || !rpathAllowed()) {
 		// ../rfc/6409:522
-		c.log.Info("submission with unconfigured mailfrom", mlog.Field("user", c.username), mlog.Field("mailfrom", rpath.String()))
+		c.log.Info("submission with unconfigured mailfrom", slog.String("user", c.username), slog.String("mailfrom", rpath.String()))
 		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SePol7DeliveryUnauth1, "must match authenticated user")
 	} else if !c.submission && len(rpath.IPDomain.IP) > 0 {
 		// todo future: allow if the IP is the same as this connection is coming from? does later code allow this?
-		c.log.Info("delivery from address without domain", mlog.Field("mailfrom", rpath.String()))
+		c.log.Info("delivery from address without domain", slog.String("mailfrom", rpath.String()))
 		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SePol7Other0, "domain name required")
 	}
 
@@ -1367,7 +1542,6 @@ func (c *conn) cmdMail(p *parser) {
 func (c *conn) cmdRcpt(p *parser) {
 	c.xneedHello()
 	c.xcheckAuth()
-	c.xneedTLSForDelivery()
 	if c.mailFrom == nil {
 		// ../rfc/5321:1088
 		xsmtpUserErrorf(smtp.C503BadCmdSeq, smtp.SeProto5BadCmdOrSeq1, "missing MAIL FROM")
@@ -1375,10 +1549,10 @@ func (c *conn) cmdRcpt(p *parser) {
 
 	// ../rfc/5321:1985
 	p.xtake(" TO:")
-	// note: no space after colon. ../rfc/5321:1093
-	// Allow illegal space for submission only, not for regular SMTP. Microsoft Outlook
-	// 365 Apps for Enterprise sends it.
-	if c.submission && !moxvar.Pedantic {
+	// note: no space allowed after colon. ../rfc/5321:1093
+	// Microsoft Outlook 365 Apps for Enterprise sends it with submission. For delivery
+	// it is mostly used by spammers, but has been seen with legitimate senders too.
+	if !mox.Pedantic {
 		p.space()
 	}
 	var fpath smtp.Path
@@ -1397,11 +1571,17 @@ func (c *conn) cmdRcpt(p *parser) {
 	}
 	p.xend()
 
+	// Check if TLS is enabled if required. It's not great that sender/recipient
+	// addresses may have been exposed in plaintext before we can reject delivery. The
+	// recipient could be the tls reporting addresses, which must always be able to
+	// receive in plain text.
+	c.xneedTLSForDelivery(fpath)
+
 	// todo future: for submission, should we do explicit verification that domains are fully qualified? also for mail from. ../rfc/6409:420
 
-	if len(c.recipients) >= 100 {
+	if len(c.recipients) >= rcptToLimit {
 		// ../rfc/5321:3535 ../rfc/5321:3571
-		xsmtpUserErrorf(smtp.C452StorageFull, smtp.SeProto5TooManyRcpts3, "max of 100 recipients reached")
+		xsmtpUserErrorf(smtp.C452StorageFull, smtp.SeProto5TooManyRcpts3, "max of %d recipients reached", rcptToLimit)
 	}
 
 	// We don't want to allow delivery to multiple recipients with a null reverse path.
@@ -1437,7 +1617,7 @@ func (c *conn) cmdRcpt(p *parser) {
 			cidctx := context.WithValue(mox.Context, mlog.CidKey, c.cid)
 			spfctx, spfcancel := context.WithTimeout(cidctx, time.Minute)
 			defer spfcancel()
-			receivedSPF, _, _, _, err := spf.Verify(spfctx, c.resolver, spfArgs)
+			receivedSPF, _, _, _, err := spf.Verify(spfctx, c.log.Logger, c.resolver, spfArgs)
 			spfcancel()
 			if err != nil {
 				c.log.Errorx("spf verify for multiple recipients", err)
@@ -1449,32 +1629,38 @@ func (c *conn) cmdRcpt(p *parser) {
 		}
 	}
 
-	if Localserve {
-		if strings.HasPrefix(string(fpath.Localpart), "rcptto") {
-			c.xlocalserveError(fpath.Localpart)
+	if Localserve && strings.HasPrefix(string(fpath.Localpart), "rcptto") {
+		c.xlocalserveError(fpath.Localpart)
+	}
+
+	if len(fpath.IPDomain.IP) > 0 {
+		if !c.submission {
+			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "not accepting email for ip")
+		}
+		c.recipients = append(c.recipients, recipient{fpath, nil, nil})
+	} else if accountName, alias, canonical, addr, err := mox.LookupAddress(fpath.Localpart, fpath.IPDomain.Domain, true, true); err == nil {
+		// note: a bare postmaster, without domain, is handled by LookupAddress. ../rfc/5321:735
+		if alias != nil {
+			c.recipients = append(c.recipients, recipient{fpath, nil, &rcptAlias{*alias, canonical}})
+		} else {
+			c.recipients = append(c.recipients, recipient{fpath, &rcptAccount{accountName, addr, canonical}, nil})
 		}
 
+	} else if Localserve {
+		// If the address isn't known, and we are in localserve, deliver to the mox user.
 		// If account or destination doesn't exist, it will be handled during delivery. For
 		// submissions, which is the common case, we'll deliver to the logged in user,
 		// which is typically the mox user.
 		acc, _ := mox.Conf.Account("mox")
 		dest := acc.Destinations["mox@localhost"]
-		c.recipients = append(c.recipients, rcptAccount{fpath, true, "mox", dest, "mox@localhost"})
-	} else if len(fpath.IPDomain.IP) > 0 {
-		if !c.submission {
-			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "not accepting email for ip")
-		}
-		c.recipients = append(c.recipients, rcptAccount{fpath, false, "", config.Destination{}, ""})
-	} else if accountName, canonical, addr, err := mox.FindAccount(fpath.Localpart, fpath.IPDomain.Domain, true); err == nil {
-		// note: a bare postmaster, without domain, is handled by FindAccount. ../rfc/5321:735
-		c.recipients = append(c.recipients, rcptAccount{fpath, true, accountName, addr, canonical})
+		c.recipients = append(c.recipients, recipient{fpath, &rcptAccount{"mox", dest, "mox@localhost"}, nil})
 	} else if errors.Is(err, mox.ErrDomainNotFound) {
 		if !c.submission {
 			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "not accepting email for domain")
 		}
 		// We'll be delivering this email.
-		c.recipients = append(c.recipients, rcptAccount{fpath, false, "", config.Destination{}, ""})
-	} else if errors.Is(err, mox.ErrAccountNotFound) {
+		c.recipients = append(c.recipients, recipient{fpath, nil, nil})
+	} else if errors.Is(err, mox.ErrAddressNotFound) {
 		if c.submission {
 			// For submission, we're transparent about which user exists. Should be fine for the typical small-scale deploy.
 			// ../rfc/5321:1071
@@ -1483,19 +1669,61 @@ func (c *conn) cmdRcpt(p *parser) {
 		// We pretend to accept. We don't want to let remote know the user does not exist
 		// until after DATA. Because then remote has committed to sending a message.
 		// note: not local for !c.submission is the signal this address is in error.
-		c.recipients = append(c.recipients, rcptAccount{fpath, false, "", config.Destination{}, ""})
+		c.recipients = append(c.recipients, recipient{fpath, nil, nil})
 	} else {
-		c.log.Errorx("looking up account for delivery", err, mlog.Field("rcptto", fpath))
+		c.log.Errorx("looking up account for delivery", err, slog.Any("rcptto", fpath))
 		xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "error processing")
 	}
 	c.bwritecodeline(smtp.C250Completed, smtp.SeAddr1Other0, "now on the list", nil)
+}
+
+// ../rfc/6531:497
+func (c *conn) isSMTPUTF8Required(part *message.Part) bool {
+	hasNonASCII := func(r io.Reader) bool {
+		br := bufio.NewReader(r)
+		for {
+			b, err := br.ReadByte()
+			if err == io.EOF {
+				break
+			}
+			xcheckf(err, "read header")
+			if b > unicode.MaxASCII {
+				return true
+			}
+		}
+		return false
+	}
+	var hasNonASCIIPartHeader func(p *message.Part) bool
+	hasNonASCIIPartHeader = func(p *message.Part) bool {
+		if hasNonASCII(p.HeaderReader()) {
+			return true
+		}
+		for _, pp := range p.Parts {
+			if hasNonASCIIPartHeader(&pp) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Check "MAIL FROM".
+	if hasNonASCII(strings.NewReader(string(c.mailFrom.Localpart))) {
+		return true
+	}
+	// Check all "RCPT TO".
+	for _, rcpt := range c.recipients {
+		if hasNonASCII(strings.NewReader(string(rcpt.addr.Localpart))) {
+			return true
+		}
+	}
+	// Check header in all message parts.
+	return hasNonASCIIPartHeader(part)
 }
 
 // ../rfc/5321:1992 ../rfc/5321:1098
 func (c *conn) cmdData(p *parser) {
 	c.xneedHello()
 	c.xcheckAuth()
-	c.xneedTLSForDelivery()
 	if c.mailFrom == nil {
 		// ../rfc/5321:1130
 		xsmtpUserErrorf(smtp.C503BadCmdSeq, smtp.SeProto5BadCmdOrSeq1, "missing MAIL FROM")
@@ -1527,17 +1755,11 @@ func (c *conn) cmdData(p *parser) {
 	defer c.xtrace(mlog.LevelTracedata)()
 
 	// We read the data into a temporary file. We limit the size and do basic analysis while reading.
-	dataFile, err := store.CreateMessageTemp("smtp-deliver")
+	dataFile, err := store.CreateMessageTemp(c.log, "smtp-deliver")
 	if err != nil {
 		xsmtpServerErrorf(errCodes(smtp.C451LocalErr, smtp.SeSys3Other0, err), "creating temporary file for message: %s", err)
 	}
-	defer func() {
-		name := dataFile.Name()
-		err := dataFile.Close()
-		c.log.Check(err, "removing temporary message file")
-		err = os.Remove(name)
-		c.log.Check(err, "removing temporary message file", mlog.Field("path", name))
-	}()
+	defer store.CloseRemoveTempFile(c.log, dataFile, "smtpserver delivered message")
 	msgWriter := message.NewWriter(dataFile)
 	dr := smtp.NewDataReader(c.r)
 	n, err := io.Copy(&limitWriter{maxSize: c.maxMessageSize, w: msgWriter}, dr)
@@ -1551,6 +1773,11 @@ func (c *conn) cmdData(p *parser) {
 			}
 			c.writecodeline(smtp.C451LocalErr, ecode, fmt.Sprintf("error copying data to file (%s)", mox.ReceivedID(c.cid)), err)
 			panic(fmt.Errorf("remote sent too much DATA: %w", errIO))
+		}
+
+		if errors.Is(err, smtp.ErrCRLF) {
+			c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Syntax2, fmt.Sprintf("invalid bare \\r or \\n, may be smtp smuggling (%s)", mox.ReceivedID(c.cid)), err)
+			return
 		}
 
 		// Something is failing on our side. We want to let remote know. So write an error response,
@@ -1573,22 +1800,45 @@ func (c *conn) cmdData(p *parser) {
 		}
 		// Check only for pedantic mode because ios mail will attempt to send smtputf8 with
 		// non-ascii in message from localpart without using 8bitmime.
-		if moxvar.Pedantic && msgWriter.Has8bit && !c.has8bitmime {
+		if mox.Pedantic && msgWriter.Has8bit && !c.has8bitmime {
 			// ../rfc/5321:906
 			xsmtpUserErrorf(smtp.C500BadSyntax, smtp.SeMsg6Other0, "message with non-us-ascii requires 8bitmime extension")
 		}
 	}
 
-	if Localserve && moxvar.Pedantic {
+	if Localserve && mox.Pedantic {
 		// Require that message can be parsed fully.
-		p, err := message.Parse(c.log, false, dataFile)
+		p, err := message.Parse(c.log.Logger, false, dataFile)
 		if err == nil {
-			err = p.Walk(c.log, nil)
+			err = p.Walk(c.log.Logger, nil)
 		}
 		if err != nil {
 			// ../rfc/6409:541
 			xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeMsg6Other0, "malformed message: %v", err)
 		}
+	}
+
+	// Now that we have all the whole message (envelope + data), we can check if the SMTPUTF8 extension is required.
+	var part *message.Part
+	if c.smtputf8 || c.submission || mox.Pedantic {
+		// Try to parse the message.
+		// Do nothing if something bad happen during Parse and Walk, just keep the current value for c.msgsmtputf8.
+		p, err := message.Parse(c.log.Logger, true, dataFile)
+		if err == nil {
+			// Message parsed without error. Keep the result to avoid parsing the message again.
+			part = &p
+			err = part.Walk(c.log.Logger, nil)
+			if err == nil {
+				c.msgsmtputf8 = c.isSMTPUTF8Required(part)
+			}
+		}
+		if c.smtputf8 != c.msgsmtputf8 {
+			c.log.Debug("smtputf8 flag changed", slog.Bool("smtputf8", c.smtputf8), slog.Bool("msgsmtputf8", c.msgsmtputf8))
+		}
+	}
+	if !c.smtputf8 && c.msgsmtputf8 && mox.Pedantic {
+		metricSubmission.WithLabelValues("missingsmtputf8").Inc()
+		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeMsg6Other0, "smtputf8 extension is required but was not added to the MAIL command")
 	}
 
 	// Prepare "Received" header.
@@ -1600,14 +1850,14 @@ func (c *conn) cmdData(p *parser) {
 	if c.submission {
 		// Hide internal hosts.
 		// todo future: make this a config option, where admins specify ip ranges that they don't want exposed. also see ../rfc/5321:4321
-		recvFrom = message.HeaderCommentDomain(mox.Conf.Static.HostnameDomain, c.smtputf8)
+		recvFrom = message.HeaderCommentDomain(mox.Conf.Static.HostnameDomain, c.msgsmtputf8)
 	} else {
 		if len(c.hello.IP) > 0 {
 			recvFrom = smtp.AddressLiteral(c.hello.IP)
 		} else {
 			// ASCII-only version added after the extended-domain syntax below, because the
 			// comment belongs to "BY" which comes immediately after "FROM".
-			recvFrom = c.hello.Domain.XName(c.smtputf8)
+			recvFrom = c.hello.Domain.XName(c.msgsmtputf8)
 		}
 		iprevctx, iprevcancel := context.WithTimeout(cmdctx, time.Minute)
 		var revName string
@@ -1615,9 +1865,9 @@ func (c *conn) cmdData(p *parser) {
 		iprevStatus, revName, revNames, iprevAuthentic, err = iprev.Lookup(iprevctx, c.resolver, c.remoteIP)
 		iprevcancel()
 		if err != nil {
-			c.log.Infox("reverse-forward lookup", err, mlog.Field("remoteip", c.remoteIP))
+			c.log.Infox("reverse-forward lookup", err, slog.Any("remoteip", c.remoteIP))
 		}
-		c.log.Debug("dns iprev check", mlog.Field("addr", c.remoteIP), mlog.Field("status", iprevStatus))
+		c.log.Debug("dns iprev check", slog.Any("addr", c.remoteIP), slog.Any("status", iprevStatus))
 		var name string
 		if revName != "" {
 			name = revName
@@ -1626,24 +1876,24 @@ func (c *conn) cmdData(p *parser) {
 		}
 		name = strings.TrimSuffix(name, ".")
 		recvFrom += " ("
-		if name != "" && name != c.hello.Domain.XName(c.smtputf8) {
+		if name != "" && name != c.hello.Domain.XName(c.msgsmtputf8) {
 			recvFrom += name + " "
 		}
 		recvFrom += smtp.AddressLiteral(c.remoteIP) + ")"
-		if c.smtputf8 && c.hello.Domain.Unicode != "" {
+		if c.msgsmtputf8 && c.hello.Domain.Unicode != "" {
 			recvFrom += " (" + c.hello.Domain.ASCII + ")"
 		}
 	}
-	recvBy := mox.Conf.Static.HostnameDomain.XName(c.smtputf8)
+	recvBy := mox.Conf.Static.HostnameDomain.XName(c.msgsmtputf8)
 	recvBy += " (" + smtp.AddressLiteral(c.localIP) + ")" // todo: hide ip if internal?
-	if c.smtputf8 && mox.Conf.Static.HostnameDomain.Unicode != "" {
+	if c.msgsmtputf8 && mox.Conf.Static.HostnameDomain.Unicode != "" {
 		// This syntax is part of "VIA".
 		recvBy += " (" + mox.Conf.Static.HostnameDomain.ASCII + ")"
 	}
 
 	// ../rfc/3848:34 ../rfc/6531:791
 	with := "SMTP"
-	if c.smtputf8 {
+	if c.msgsmtputf8 {
 		with = "UTF8SMTP"
 	} else if c.ehlo {
 		with = "ESMTP"
@@ -1671,10 +1921,16 @@ func (c *conn) cmdData(p *parser) {
 		recvHdr.Add(" ", "Received:", "from", recvFrom, "by", recvBy, "via", "tcp", "with", with+withComment, "id", mox.ReceivedID(c.cid)) // ../rfc/5321:3158
 		if c.tls {
 			tlsConn := c.conn.(*tls.Conn)
-			tlsComment := message.TLSReceivedComment(c.log, tlsConn.ConnectionState())
+			tlsComment := mox.TLSReceivedComment(c.log, tlsConn.ConnectionState())
 			recvHdr.Add(" ", tlsComment...)
 		}
-		recvHdr.Add(" ", "for", "<"+rcptTo+">;", time.Now().Format(message.RFC5322Z))
+		// We leave out an empty "for" clause. This is empty for messages submitted to
+		// multiple recipients, so the message stays identical and a single smtp
+		// transaction can deliver, only transferring the data once.
+		if rcptTo != "" {
+			recvHdr.Add(" ", "for", "<"+rcptTo+">;")
+		}
+		recvHdr.Add(" ", time.Now().Format(message.RFC5322Z))
 		return recvHdr.String()
 	}
 
@@ -1682,7 +1938,7 @@ func (c *conn) cmdData(p *parser) {
 	// handle it first, and leave the rest of the function for handling wild west
 	// internet traffic.
 	if c.submission {
-		c.submit(cmdctx, recvHdrFor, msgWriter, dataFile)
+		c.submit(cmdctx, recvHdrFor, msgWriter, dataFile, part)
 	} else {
 		c.deliver(cmdctx, recvHdrFor, msgWriter, iprevStatus, iprevAuthentic, dataFile)
 	}
@@ -1706,8 +1962,8 @@ func hasTLSRequiredNo(h textproto.MIMEHeader) bool {
 }
 
 // submit is used for mail from authenticated users that we will try to deliver.
-func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, dataFile *os.File) {
-	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/webmail.go:/MessageSubmit\(
+func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, dataFile *os.File, part *message.Part) {
+	// Similar between ../smtpserver/server.go:/submit\( and ../webmail/api.go:/MessageSubmit\( and ../webapisrv/server.go:/Send\(
 
 	var msgPrefix []byte
 
@@ -1715,21 +1971,17 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// for other users.
 	// We don't check the Sender field, there is no expectation of verification, ../rfc/7489:2948
 	// and with Resent headers it seems valid to have someone else as Sender. ../rfc/5322:1578
-	msgFrom, header, err := message.From(c.log, true, dataFile)
+	msgFrom, _, header, err := message.From(c.log.Logger, true, dataFile, part)
 	if err != nil {
 		metricSubmission.WithLabelValues("badmessage").Inc()
-		c.log.Infox("parsing message From address", err, mlog.Field("user", c.username))
+		c.log.Infox("parsing message From address", err, slog.String("user", c.username))
 		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeMsg6Other0, "cannot parse header or From address: %v", err)
 	}
-	accName, _, _, err := mox.FindAccount(msgFrom.Localpart, msgFrom.Domain, true)
-	if err != nil || accName != c.account.Name {
+	if !mox.AllowMsgFrom(c.account.Name, msgFrom) {
 		// ../rfc/6409:522
-		if err == nil {
-			err = mox.ErrAccountNotFound
-		}
 		metricSubmission.WithLabelValues("badfrom").Inc()
-		c.log.Infox("verifying message From address", err, mlog.Field("user", c.username), mlog.Field("msgfrom", msgFrom))
-		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SePol7DeliveryUnauth1, "must match authenticated user")
+		c.log.Infox("verifying message from address", mox.ErrAddressNotFound, slog.String("user", c.username), slog.Any("msgfrom", msgFrom))
+		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SePol7DeliveryUnauth1, "message from address must belong to authenticated user")
 	}
 
 	// TLS-Required: No header makes us not enforce recipient domain's TLS policy.
@@ -1743,16 +1995,16 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// Outgoing messages should not have a Return-Path header. The final receiving mail
 	// server will add it.
 	// ../rfc/5321:3233
-	if header.Values("Return-Path") != nil {
+	if mox.Pedantic && header.Values("Return-Path") != nil {
 		metricSubmission.WithLabelValues("badheader").Inc()
-		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeMsg6Other0, "message must not have Return-Path header")
+		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeMsg6Other0, "message should not have Return-Path header")
 	}
 
 	// Add Message-Id header if missing.
 	// ../rfc/5321:4131 ../rfc/6409:751
 	messageID := header.Get("Message-Id")
 	if messageID == "" {
-		messageID = mox.MessageIDGen(c.smtputf8)
+		messageID = mox.MessageIDGen(c.msgsmtputf8)
 		msgPrefix = append(msgPrefix, fmt.Sprintf("Message-Id: <%s>\r\n", messageID)...)
 	}
 
@@ -1761,11 +2013,11 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		msgPrefix = append(msgPrefix, "Date: "+time.Now().Format(message.RFC5322Z)+"\r\n"...)
 	}
 
-	// Check outoging message rate limit.
+	// Check outgoing message rate limit.
 	err = c.account.DB.Read(ctx, func(tx *bstore.Tx) error {
 		rcpts := make([]smtp.Path, len(c.recipients))
 		for i, r := range c.recipients {
-			rcpts[i] = r.rcptTo
+			rcpts[i] = r.addr
 		}
 		msglimit, rcptlimit, err := c.account.SendLimitReached(tx, rcpts)
 		xcheckf(err, "checking sender limit")
@@ -1780,21 +2032,40 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	})
 	xcheckf(err, "read-only transaction")
 
+	// We gather any X-Mox-Extra-* headers into the "extra" data during queueing, which
+	// will make it into any webhook we deliver.
+	// todo: remove the X-Mox-Extra-* headers from the message. we don't currently rewrite the message...
+	// todo: should we not canonicalize keys?
+	var extra map[string]string
+	for k, vl := range header {
+		if !strings.HasPrefix(k, "X-Mox-Extra-") {
+			continue
+		}
+		if extra == nil {
+			extra = map[string]string{}
+		}
+		xk := k[len("X-Mox-Extra-"):]
+		// We don't allow duplicate keys.
+		if _, ok := extra[xk]; ok || len(vl) > 1 {
+			xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeMsg6Other0, "duplicate x-mox-extra- key %q", xk)
+		}
+		extra[xk] = vl[len(vl)-1]
+	}
+
 	// todo future: in a pedantic mode, we can parse the headers, and return an error if rcpt is only in To or Cc header, and not in the non-empty Bcc header. indicates a client that doesn't blind those bcc's.
 
 	// Add DKIM signatures.
 	confDom, ok := mox.Conf.Domain(msgFrom.Domain)
 	if !ok {
-		c.log.Error("domain disappeared", mlog.Field("domain", msgFrom.Domain))
+		c.log.Error("domain disappeared", slog.Any("domain", msgFrom.Domain))
 		xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "internal error")
 	}
 
-	dkimConfig := confDom.DKIM
-	if len(dkimConfig.Sign) > 0 {
-		if canonical, err := mox.CanonicalLocalpart(msgFrom.Localpart, confDom); err != nil {
-			c.log.Errorx("determining canonical localpart for dkim signing", err, mlog.Field("localpart", msgFrom.Localpart))
-		} else if dkimHeaders, err := dkim.Sign(ctx, canonical, msgFrom.Domain, dkimConfig, c.smtputf8, store.FileMsgReader(msgPrefix, dataFile)); err != nil {
-			c.log.Errorx("dkim sign for domain", err, mlog.Field("domain", msgFrom.Domain))
+	selectors := mox.DKIMSelectors(confDom.DKIM)
+	if len(selectors) > 0 {
+		canonical := mox.CanonicalLocalpart(msgFrom.Localpart, confDom)
+		if dkimHeaders, err := dkim.Sign(ctx, c.log.Logger, canonical, msgFrom.Domain, selectors, c.msgsmtputf8, store.FileMsgReader(msgPrefix, dataFile)); err != nil {
+			c.log.Errorx("dkim sign for domain", err, slog.Any("domain", msgFrom.Domain))
 			metricServerErrors.WithLabelValues("dkimsign").Inc()
 		} else {
 			msgPrefix = append(msgPrefix, []byte(dkimHeaders)...)
@@ -1802,14 +2073,14 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	}
 
 	authResults := message.AuthResults{
-		Hostname: mox.Conf.Static.HostnameDomain.XName(c.smtputf8),
-		Comment:  mox.Conf.Static.HostnameDomain.ASCIIExtra(c.smtputf8),
+		Hostname: mox.Conf.Static.HostnameDomain.XName(c.msgsmtputf8),
+		Comment:  mox.Conf.Static.HostnameDomain.ASCIIExtra(c.msgsmtputf8),
 		Methods: []message.AuthMethod{
 			{
 				Method: "auth",
 				Result: "pass",
 				Props: []message.AuthProp{
-					message.MakeAuthProp("smtp", "mailfrom", c.mailFrom.XString(c.smtputf8), true, c.mailFrom.ASCIIExtra(c.smtputf8)),
+					message.MakeAuthProp("smtp", "mailfrom", c.mailFrom.XString(c.msgsmtputf8), true, c.mailFrom.ASCIIExtra(c.msgsmtputf8)),
 				},
 			},
 		},
@@ -1817,43 +2088,124 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	msgPrefix = append(msgPrefix, []byte(authResults.Header())...)
 
 	// We always deliver through the queue. It would be more efficient to deliver
-	// directly, but we don't want to circumvent all the anti-spam measures. Accounts
-	// on a single mox instance should be allowed to block each other.
-	for _, rcptAcc := range c.recipients {
+	// directly for local accounts, but we don't want to circumvent all the anti-spam
+	// measures. Accounts on a single mox instance should be allowed to block each
+	// other.
+
+	accConf, _ := c.account.Conf()
+	loginAddr, err := smtp.ParseAddress(c.username)
+	xcheckf(err, "parsing login address")
+	useFromID := slices.Contains(accConf.ParsedFromIDLoginAddresses, loginAddr)
+	var localpartBase string
+	var fromID string
+	var genFromID bool
+	if useFromID {
+		// With submission, user can bring their own fromid.
+		t := strings.SplitN(string(c.mailFrom.Localpart), confDom.LocalpartCatchallSeparator, 2)
+		localpartBase = t[0]
+		if len(t) == 2 {
+			fromID = t[1]
+			if fromID != "" && len(c.recipients) > 1 {
+				xsmtpServerErrorf(codes{smtp.C554TransactionFailed, smtp.SeProto5TooManyRcpts3}, "cannot send to multiple recipients with chosen fromid")
+			}
+		} else {
+			genFromID = true
+		}
+	}
+	now := time.Now()
+	qml := make([]queue.Msg, len(c.recipients))
+	for i, rcpt := range c.recipients {
 		if Localserve {
-			code, timeout := localserveNeedsError(rcptAcc.rcptTo.Localpart)
+			code, timeout := mox.LocalserveNeedsError(rcpt.addr.Localpart)
 			if timeout {
 				c.log.Info("timing out submission due to special localpart")
 				mox.Sleep(mox.Context, time.Hour)
 				xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "timing out submission due to special localpart")
 			} else if code != 0 {
-				c.log.Info("failure due to special localpart", mlog.Field("code", code))
+				c.log.Info("failure due to special localpart", slog.Int("code", code))
 				xsmtpServerErrorf(codes{code, smtp.SeOther00}, "failure with code %d due to special localpart", code)
 			}
 		}
 
-		xmsgPrefix := append([]byte(recvHdrFor(rcptAcc.rcptTo.String())), msgPrefix...)
-
-		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-		if _, err := queue.Add(ctx, c.log, c.account.Name, *c.mailFrom, rcptAcc.rcptTo, msgWriter.Has8bit, c.smtputf8, msgSize, messageID, xmsgPrefix, dataFile, nil, c.requireTLS); err != nil {
-			// Aborting the transaction is not great. But continuing and generating DSNs will
-			// probably result in errors as well...
-			metricSubmission.WithLabelValues("queueerror").Inc()
-			c.log.Errorx("queuing message", err)
-			xsmtpServerErrorf(errCodes(smtp.C451LocalErr, smtp.SeSys3Other0, err), "error delivering message: %v", err)
+		fp := *c.mailFrom
+		if useFromID {
+			if genFromID {
+				fromID = xrandomID(16)
+			}
+			fp.Localpart = smtp.Localpart(localpartBase + confDom.LocalpartCatchallSeparator + fromID)
 		}
-		metricSubmission.WithLabelValues("ok").Inc()
-		c.log.Info("message queued for delivery", mlog.Field("mailfrom", *c.mailFrom), mlog.Field("rcptto", rcptAcc.rcptTo), mlog.Field("smtputf8", c.smtputf8), mlog.Field("msgsize", msgSize))
 
-		err := c.account.DB.Insert(ctx, &store.Outgoing{Recipient: rcptAcc.rcptTo.XString(true)})
-		xcheckf(err, "adding outgoing message")
+		// For multiple recipients, we don't make each message prefix unique, leaving out
+		// the "for" clause in the Received header. This allows the queue to deliver the
+		// messages in a single smtp transaction.
+		var rcptTo string
+		if len(c.recipients) == 1 {
+			rcptTo = rcpt.addr.String()
+		}
+		xmsgPrefix := append([]byte(recvHdrFor(rcptTo)), msgPrefix...)
+		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
+		qm := queue.MakeMsg(fp, rcpt.addr, msgWriter.Has8bit, c.msgsmtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS, now, header.Get("Subject"))
+		if !c.futureRelease.IsZero() {
+			qm.NextAttempt = c.futureRelease
+			qm.FutureReleaseRequest = c.futureReleaseRequest
+		}
+		qm.FromID = fromID
+		qm.Extra = extra
+		qml[i] = qm
 	}
+
+	// todo: it would be good to have a limit on messages (count and total size) a user has in the queue. also/especially with futurerelease. ../rfc/4865:387
+	if err := queue.Add(ctx, c.log, c.account.Name, dataFile, qml...); err != nil && errors.Is(err, queue.ErrFromID) && !genFromID {
+		// todo: should we return this error during the "rcpt to" command?
+		// secode is not an exact match, but seems closest.
+		xsmtpServerErrorf(errCodes(smtp.C554TransactionFailed, smtp.SeAddr1SenderSyntax7, err), "bad fromid in smtp mail from address: %s", err)
+	} else if err != nil {
+		// Aborting the transaction is not great. But continuing and generating DSNs will
+		// probably result in errors as well...
+		metricSubmission.WithLabelValues("queueerror").Inc()
+		c.log.Errorx("queuing message", err)
+		xsmtpServerErrorf(errCodes(smtp.C451LocalErr, smtp.SeSys3Other0, err), "error delivering message: %v", err)
+	}
+	metricSubmission.WithLabelValues("ok").Inc()
+	for i, rcpt := range c.recipients {
+		c.log.Info("messages queued for delivery",
+			slog.Any("mailfrom", *c.mailFrom),
+			slog.Any("rcptto", rcpt.addr),
+			slog.Bool("smtputf8", c.smtputf8),
+			slog.Bool("msgsmtputf8", c.msgsmtputf8),
+			slog.Int64("msgsize", qml[i].Size))
+	}
+
+	err = c.account.DB.Write(ctx, func(tx *bstore.Tx) error {
+		for _, rcpt := range c.recipients {
+			outgoing := store.Outgoing{Recipient: rcpt.addr.XString(true)}
+			if err := tx.Insert(&outgoing); err != nil {
+				return fmt.Errorf("adding outgoing message: %v", err)
+			}
+		}
+		return nil
+	})
+	xcheckf(err, "adding outgoing messages")
 
 	c.transactionGood++
 	c.transactionBad-- // Compensate for early earlier pessimistic increase.
 
 	c.rset()
 	c.writecodeline(smtp.C250Completed, smtp.SeMailbox2Other0, "it is done", nil)
+}
+
+func xrandomID(n int) string {
+	return base64.RawURLEncoding.EncodeToString(xrandom(n))
+}
+
+func xrandom(n int) []byte {
+	buf := make([]byte, n)
+	x, err := cryptorand.Read(buf)
+	xcheckf(err, "read random")
+	if x != n {
+		xcheckf(errors.New("short random read"), "read random")
+	}
+	return buf
 }
 
 func ipmasked(ip net.IP) (string, string, string) {
@@ -1869,37 +2221,14 @@ func ipmasked(ip net.IP) (string, string, string) {
 	return m1, m2, m3
 }
 
-func localserveNeedsError(lp smtp.Localpart) (code int, timeout bool) {
-	s := string(lp)
-	if strings.HasSuffix(s, "temperror") {
-		return smtp.C451LocalErr, false
-	} else if strings.HasSuffix(s, "permerror") {
-		return smtp.C550MailboxUnavail, false
-	} else if strings.HasSuffix(s, "timeout") {
-		return 0, true
-	}
-	if len(s) < 3 {
-		return 0, false
-	}
-	s = s[len(s)-3:]
-	v, err := strconv.ParseInt(s, 10, 32)
-	if err != nil {
-		return 0, false
-	}
-	if v < 400 || v > 600 {
-		return 0, false
-	}
-	return int(v), false
-}
-
 func (c *conn) xlocalserveError(lp smtp.Localpart) {
-	code, timeout := localserveNeedsError(lp)
+	code, timeout := mox.LocalserveNeedsError(lp)
 	if timeout {
 		c.log.Info("timing out due to special localpart")
 		mox.Sleep(mox.Context, time.Hour)
 		xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "timing out command due to special localpart")
 	} else if code != 0 {
-		c.log.Info("failure due to special localpart", mlog.Field("code", code))
+		c.log.Info("failure due to special localpart", slog.Int("code", code))
 		metricDelivery.WithLabelValues("delivererror", "localserve").Inc()
 		xsmtpServerErrorf(codes{code, smtp.SeOther00}, "failure with code %d due to special localpart", code)
 	}
@@ -1910,7 +2239,16 @@ func (c *conn) xlocalserveError(lp smtp.Localpart) {
 func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgWriter *message.Writer, iprevStatus iprev.Status, iprevAuthentic bool, dataFile *os.File) {
 	// todo: in decision making process, if we run into (some) temporary errors, attempt to continue. if we decide to accept, all good. if we decide to reject, we'll make it a temporary reject.
 
-	msgFrom, headers, err := message.From(c.log, false, dataFile)
+	var msgFrom smtp.Address
+	var envelope *message.Envelope
+	var headers textproto.MIMEHeader
+	var isDSN bool
+	part, err := message.Parse(c.log.Logger, false, dataFile)
+	if err == nil {
+		// todo: is it enough to check only the the content-type header? in other places we look at the content-types of the parts before considering a message a dsn. should we change other places to this simpler check?
+		isDSN = part.MediaType == "MULTIPART" && part.MediaSubType == "REPORT" && strings.EqualFold(part.ContentTypeParams["report-type"], "delivery-status")
+		msgFrom, envelope, headers, err = message.From(c.log.Logger, false, dataFile, &part)
+	}
 	if err != nil {
 		c.log.Infox("parsing message for From address", err)
 	}
@@ -1932,7 +2270,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 	// We'll be building up an Authentication-Results header.
 	authResults := message.AuthResults{
-		Hostname: mox.Conf.Static.HostnameDomain.XName(c.smtputf8),
+		Hostname: mox.Conf.Static.HostnameDomain.XName(c.msgsmtputf8),
 	}
 
 	commentAuthentic := func(v bool) string {
@@ -1965,7 +2303,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		defer func() {
 			x := recover() // Should not happen, but don't take program down if it does.
 			if x != nil {
-				c.log.Error("dkim verify panic", mlog.Field("err", x))
+				c.log.Error("dkim verify panic", slog.Any("err", x))
 				debug.PrintStack()
 				metrics.PanicInc(metrics.Dkimverify)
 			}
@@ -1978,7 +2316,34 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		dkimctx, dkimcancel := context.WithTimeout(ctx, time.Minute)
 		defer dkimcancel()
 		// todo future: we could let user configure which dkim headers they require
-		dkimResults, dkimErr = dkim.Verify(dkimctx, c.resolver, c.smtputf8, dkim.DefaultPolicy, dataFile, ignoreTestMode)
+
+		// For localserve, fake dkim selector DNS records for hosted domains to give
+		// dkim-signatures a chance to pass for deliveries from queue.
+		resolver := c.resolver
+		if Localserve {
+			// Lookup based on message From address is an approximation.
+			if dc, ok := mox.Conf.Domain(msgFrom.Domain); ok && len(dc.DKIM.Selectors) > 0 {
+				txts := map[string][]string{}
+				for name, sel := range dc.DKIM.Selectors {
+					dkimr := dkim.Record{
+						Version:   "DKIM1",
+						Hashes:    []string{sel.HashEffective},
+						PublicKey: sel.Key.Public(),
+					}
+					if _, ok := sel.Key.(ed25519.PrivateKey); ok {
+						dkimr.Key = "ed25519"
+					} else if _, ok := sel.Key.(*rsa.PrivateKey); !ok {
+						err := fmt.Errorf("unrecognized private key for DKIM selector %q: %T", name, sel.Key)
+						xcheckf(err, "making dkim record")
+					}
+					txt, err := dkimr.Record()
+					xcheckf(err, "making DKIM DNS TXT record")
+					txts[name+"._domainkey."+msgFrom.Domain.ASCII+"."] = []string{txt}
+				}
+				resolver = dns.MockResolver{TXT: txts}
+			}
+		}
+		dkimResults, dkimErr = dkim.Verify(dkimctx, c.log.Logger, resolver, c.msgsmtputf8, dkim.DefaultPolicy, dataFile, ignoreTestMode)
 		dkimcancel()
 	}()
 
@@ -2002,7 +2367,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		defer func() {
 			x := recover() // Should not happen, but don't take program down if it does.
 			if x != nil {
-				c.log.Error("spf verify panic", mlog.Field("err", x))
+				c.log.Error("spf verify panic", slog.Any("err", x))
 				debug.PrintStack()
 				metrics.PanicInc(metrics.Spfverify)
 			}
@@ -2010,7 +2375,17 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		defer wg.Done()
 		spfctx, spfcancel := context.WithTimeout(ctx, time.Minute)
 		defer spfcancel()
-		receivedSPF, spfDomain, spfExpl, spfAuthentic, spfErr = spf.Verify(spfctx, c.resolver, spfArgs)
+		resolver := c.resolver
+		// For localserve, give hosted domains a chance to pass for deliveries from queue.
+		if Localserve && c.remoteIP.IsLoopback() {
+			// Lookup based on message From address is an approximation.
+			if _, ok := mox.Conf.Domain(msgFrom.Domain); ok {
+				resolver = dns.MockResolver{
+					TXT: map[string][]string{msgFrom.Domain.ASCII + ".": {"v=spf1 ip4:127.0.0.1/8 ip6:::1 ~all"}},
+				}
+			}
+		}
+		receivedSPF, spfDomain, spfExpl, spfAuthentic, spfErr = spf.Verify(spfctx, c.log.Logger, resolver, spfArgs)
 		spfcancel()
 		if spfErr != nil {
 			c.log.Infox("spf verify", spfErr)
@@ -2023,13 +2398,13 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	// Give immediate response if all recipients are unknown.
 	nunknown := 0
 	for _, r := range c.recipients {
-		if !r.local {
+		if r.account == nil && r.alias == nil {
 			nunknown++
 		}
 	}
 	if nunknown == len(c.recipients) {
 		// During RCPT TO we found that the address does not exist.
-		c.log.Info("deliver attempt to unknown user(s)", mlog.Field("recipients", c.recipients))
+		c.log.Info("deliver attempt to unknown user(s)", slog.Any("recipients", c.recipients))
 
 		// Crude attempt to slow down someone trying to guess names. Would work better
 		// with connection rate limiter.
@@ -2056,7 +2431,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		c.log.Errorx("dkim verify", dkimErr)
 		authResAddDKIM("none", "", dkimErr.Error(), nil)
 	} else if len(dkimResults) == 0 {
-		c.log.Info("no dkim-signature header", mlog.Field("mailfrom", c.mailFrom))
+		c.log.Info("no dkim-signature header", slog.Any("mailfrom", c.mailFrom))
 		authResAddDKIM("none", "", "no dkim signatures", nil)
 	}
 	for i, r := range dkimResults {
@@ -2065,7 +2440,6 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		var comment string
 		var props []message.AuthProp
 		if r.Sig != nil {
-			// todo future: also specify whether dns record was dnssec-signed.
 			if r.Record != nil && r.Record.PublicKey != nil {
 				if pubkey, ok := r.Record.PublicKey.(*rsa.PublicKey); ok {
 					comment = fmt.Sprintf("%d bit rsa, ", pubkey.N.BitLen())
@@ -2075,8 +2449,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			sig := base64.StdEncoding.EncodeToString(r.Sig.Signature)
 			sig = sig[:12] // Must be at least 8 characters and unique among the signatures.
 			props = []message.AuthProp{
-				message.MakeAuthProp("header", "d", r.Sig.Domain.XName(c.smtputf8), true, r.Sig.Domain.ASCIIExtra(c.smtputf8)),
-				message.MakeAuthProp("header", "s", r.Sig.Selector.XName(c.smtputf8), true, r.Sig.Selector.ASCIIExtra(c.smtputf8)),
+				message.MakeAuthProp("header", "d", r.Sig.Domain.XName(c.msgsmtputf8), true, r.Sig.Domain.ASCIIExtra(c.msgsmtputf8)),
+				message.MakeAuthProp("header", "s", r.Sig.Selector.XName(c.msgsmtputf8), true, r.Sig.Selector.ASCIIExtra(c.msgsmtputf8)),
 				message.MakeAuthProp("header", "a", r.Sig.Algorithm(), false, ""),
 				message.MakeAuthProp("header", "b", sig, false, ""), // ../rfc/6008:147
 			}
@@ -2097,7 +2471,13 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			errmsg = r.Err.Error()
 		}
 		authResAddDKIM(string(r.Status), comment, errmsg, props)
-		c.log.Debugx("dkim verification result", r.Err, mlog.Field("index", i), mlog.Field("mailfrom", c.mailFrom), mlog.Field("status", r.Status), mlog.Field("domain", domain), mlog.Field("selector", selector), mlog.Field("identity", identity))
+		c.log.Debugx("dkim verification result", r.Err,
+			slog.Int("index", i),
+			slog.Any("mailfrom", c.mailFrom),
+			slog.Any("status", r.Status),
+			slog.Any("domain", domain),
+			slog.Any("selector", selector),
+			slog.Any("identity", identity))
 	}
 
 	// Add SPF results to Authentication-Results header. ../rfc/7208:2141
@@ -2116,7 +2496,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	}
 	var props []message.AuthProp
 	if spfIdentity != nil {
-		props = []message.AuthProp{message.MakeAuthProp("smtp", string(receivedSPF.Identity), spfIdentity.XName(c.smtputf8), true, spfIdentity.ASCIIExtra(c.smtputf8))}
+		props = []message.AuthProp{message.MakeAuthProp("smtp", string(receivedSPF.Identity), spfIdentity.XName(c.msgsmtputf8), true, spfIdentity.ASCIIExtra(c.msgsmtputf8))}
 	}
 	var spfComment string
 	if spfAuthentic {
@@ -2132,7 +2512,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	})
 	switch receivedSPF.Result {
 	case spf.StatusPass:
-		c.log.Debug("spf pass", mlog.Field("ip", spfArgs.RemoteIP), mlog.Field("mailfromdomain", spfArgs.MailFromDomain.ASCII)) // todo: log the domain that was actually verified.
+		c.log.Debug("spf pass", slog.Any("ip", spfArgs.RemoteIP), slog.String("mailfromdomain", spfArgs.MailFromDomain.ASCII)) // todo: log the domain that was actually verified.
 	case spf.StatusFail:
 		if spfExpl != "" {
 			// Filter out potentially hostile text. ../rfc/7208:2529
@@ -2152,14 +2532,14 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		if spfExpl == "" {
 			spfExpl = fmt.Sprintf("your ip %s is not on the SPF allowlist for domain %s", spfArgs.RemoteIP, spfDomain.ASCII)
 		}
-		c.log.Info("spf fail", mlog.Field("explanation", spfExpl)) // todo future: get this to the client. how? in smtp session in case of a reject due to dmarc fail?
+		c.log.Info("spf fail", slog.String("explanation", spfExpl)) // todo future: get this to the client. how? in smtp session in case of a reject due to dmarc fail?
 	case spf.StatusTemperror:
 		c.log.Infox("spf temperror", spfErr)
 	case spf.StatusPermerror:
 		c.log.Infox("spf permerror", spfErr)
 	case spf.StatusNone, spf.StatusNeutral, spf.StatusSoftfail:
 	default:
-		c.log.Error("unknown spf status, treating as None/Neutral", mlog.Field("status", receivedSPF.Result))
+		c.log.Error("unknown spf status, treating as None/Neutral", slog.Any("status", receivedSPF.Result))
 		receivedSPF.Result = spf.StatusNone
 	}
 
@@ -2167,6 +2547,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	var dmarcUse bool
 	var dmarcResult dmarc.Result
 	const applyRandomPercentage = true
+	// dmarcMethod is added to authResults when delivering to recipients: accounts can
+	// have different policy override rules.
 	var dmarcMethod message.AuthMethod
 	var msgFromValidation = store.ValidationNone
 	if msgFrom.IsZero() {
@@ -2176,11 +2558,20 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			Result: string(dmarcResult.Status),
 		}
 	} else {
-		msgFromValidation = alignment(ctx, msgFrom.Domain, dkimResults, receivedSPF.Result, spfIdentity)
+		msgFromValidation = alignment(ctx, c.log, msgFrom.Domain, dkimResults, receivedSPF.Result, spfIdentity)
+
+		// We are doing the DMARC evaluation now. But we only store it for inclusion in an
+		// aggregate report when we actually use it. We use an evaluation for each
+		// recipient, with each a potentially different result due to mailing
+		// list/forwarding configuration. If we reject a message due to being spam, we
+		// don't want to spend any resources for the sender domain, and we don't want to
+		// give the sender any more information about us, so we won't record the
+		// evaluation.
+		// todo future: also not send for first-time senders? they could be spammers getting through our filter, don't want to give them insights either. though we currently would have no reasonable way to decide if they are still reputationless at the time we are composing/sending aggregate reports.
 
 		dmarcctx, dmarccancel := context.WithTimeout(ctx, time.Minute)
 		defer dmarccancel()
-		dmarcUse, dmarcResult = dmarc.Verify(dmarcctx, c.resolver, msgFrom.Domain, dkimResults, receivedSPF.Result, spfIdentity, applyRandomPercentage)
+		dmarcUse, dmarcResult = dmarc.Verify(dmarcctx, c.log.Logger, c.resolver, msgFrom.Domain, dkimResults, receivedSPF.Result, spfIdentity, applyRandomPercentage)
 		dmarccancel()
 		var comment string
 		if dmarcResult.RecordAuthentic {
@@ -2194,7 +2585,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			Comment: comment,
 			Props: []message.AuthProp{
 				// ../rfc/7489:1489
-				message.MakeAuthProp("header", "from", msgFrom.Domain.ASCII, true, msgFrom.Domain.ASCIIExtra(c.smtputf8)),
+				message.MakeAuthProp("header", "from", msgFrom.Domain.ASCII, true, msgFrom.Domain.ASCIIExtra(c.msgsmtputf8)),
 			},
 		}
 
@@ -2202,10 +2593,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			msgFromValidation = store.ValidationDMARC
 		}
 
-		// todo future: consider enforcing an spf fail if there is no dmarc policy or the dmarc policy is none. ../rfc/7489:1507
+		// todo future: consider enforcing an spf (soft)fail if there is no dmarc policy or the dmarc policy is none. ../rfc/7489:1507
 	}
-	authResults.Methods = append(authResults.Methods, dmarcMethod)
-	c.log.Debug("dmarc verification", mlog.Field("result", dmarcResult.Status), mlog.Field("domain", msgFrom.Domain))
+	c.log.Debug("dmarc verification", slog.Any("result", dmarcResult.Status), slog.Any("domain", msgFrom.Domain))
 
 	// Prepare for analyzing content, calculating reputation.
 	ipmasked1, ipmasked2, ipmasked3 := ipmasked(c.remoteIP)
@@ -2242,141 +2632,64 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		errmsg    string
 	}
 	var deliverErrors []deliverError
-	addError := func(rcptAcc rcptAccount, code int, secode string, userError bool, errmsg string) {
-		e := deliverError{rcptAcc.rcptTo, code, secode, userError, errmsg}
-		c.log.Info("deliver error", mlog.Field("rcptto", e.rcptTo), mlog.Field("code", code), mlog.Field("secode", "secode"), mlog.Field("usererror", userError), mlog.Field("errmsg", errmsg))
+	addError := func(rcpt recipient, code int, secode string, userError bool, errmsg string) {
+		e := deliverError{rcpt.addr, code, secode, userError, errmsg}
+		c.log.Info("deliver error",
+			slog.Any("rcptto", e.rcptTo),
+			slog.Int("code", code),
+			slog.String("secode", "secode"),
+			slog.Bool("usererror", userError),
+			slog.String("errmsg", errmsg))
 		deliverErrors = append(deliverErrors, e)
 	}
 
-	// For each recipient, do final spam analysis and delivery.
-	for _, rcptAcc := range c.recipients {
-		log := c.log.Fields(mlog.Field("mailfrom", c.mailFrom), mlog.Field("rcptto", rcptAcc.rcptTo))
-
-		// If this is not a valid local user, we send back a DSN. This can only happen when
-		// there are also valid recipients, and only when remote is SPF-verified, so the DSN
-		// should not cause backscatter.
-		// In case of serious errors, we abort the transaction. We may have already
-		// delivered some messages. Perhaps it would be better to continue with other
-		// deliveries, and return an error at the end? Though the failure conditions will
-		// probably prevent any other successful deliveries too...
-		// We'll continue delivering to other recipients. ../rfc/5321:3275
-		if !rcptAcc.local {
-			metricDelivery.WithLabelValues("unknownuser", "").Inc()
-			addError(rcptAcc, smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, true, "no such user")
-			continue
+	// Sort recipients: local accounts, aliases, unknown. For ensuring we don't deliver
+	// to an alias destination that was also explicitly sent to.
+	rcptScore := func(r recipient) int {
+		if r.account != nil {
+			return 0
+		} else if r.alias != nil {
+			return 1
 		}
+		return 2
+	}
+	sort.SliceStable(c.recipients, func(i, j int) bool {
+		return rcptScore(c.recipients[i]) < rcptScore(c.recipients[j])
+	})
 
-		acc, err := store.OpenAccount(rcptAcc.accountName)
+	// Return whether address is a regular explicit recipient in this transaction. Used
+	// to prevent delivering a message to an address both for alias and explicit
+	// addressee. Relies on c.recipients being sorted as above.
+	regularRecipient := func(addr smtp.Path) bool {
+		for _, rcpt := range c.recipients {
+			if rcpt.account == nil {
+				break
+			} else if rcpt.addr.Equal(addr) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Prepare a message, analyze it against account's junk filter.
+	// The returned analysis has an open account that must be closed by the caller.
+	// We call this for all alias destinations, also when we already delivered to that
+	// recipient: It may be the only recipient that would allow the message.
+	messageAnalyze := func(log mlog.Log, smtpRcptTo, deliverTo smtp.Path, accountName string, destination config.Destination, canonicalAddr string) (a *analysis, rerr error) {
+		acc, err := store.OpenAccount(log, accountName)
 		if err != nil {
-			log.Errorx("open account", err, mlog.Field("account", rcptAcc.accountName))
+			log.Errorx("open account", err, slog.Any("account", accountName))
 			metricDelivery.WithLabelValues("accounterror", "").Inc()
-			addError(rcptAcc, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
-			continue
+			return nil, err
 		}
 		defer func() {
-			if acc != nil {
+			if a == nil {
 				err := acc.Close()
-				log.Check(err, "closing account after delivery")
+				log.Check(err, "closing account during analysis")
 			}
 		}()
 
-		// We don't want to let a single IP or network deliver too many messages to an
-		// account. They may fill up the mailbox, either with messages that have to be
-		// purged, or by filling the disk. We check both cases for IP's and networks.
-		var rateError bool // Whether returned error represents a rate error.
-		err = acc.DB.Read(ctx, func(tx *bstore.Tx) (retErr error) {
-			now := time.Now()
-			defer func() {
-				log.Debugx("checking message and size delivery rates", retErr, mlog.Field("duration", time.Since(now)))
-			}()
-
-			checkCount := func(msg store.Message, window time.Duration, limit int) {
-				if retErr != nil {
-					return
-				}
-				q := bstore.QueryTx[store.Message](tx)
-				q.FilterNonzero(msg)
-				q.FilterGreater("Received", now.Add(-window))
-				q.FilterEqual("Expunged", false)
-				n, err := q.Count()
-				if err != nil {
-					retErr = err
-					return
-				}
-				if n >= limit {
-					rateError = true
-					retErr = fmt.Errorf("more than %d messages in past %s from your ip/network", limit, window)
-				}
-			}
-
-			checkSize := func(msg store.Message, window time.Duration, limit int64) {
-				if retErr != nil {
-					return
-				}
-				q := bstore.QueryTx[store.Message](tx)
-				q.FilterNonzero(msg)
-				q.FilterGreater("Received", now.Add(-window))
-				q.FilterEqual("Expunged", false)
-				size := msgWriter.Size
-				err := q.ForEach(func(v store.Message) error {
-					size += v.Size
-					return nil
-				})
-				if err != nil {
-					retErr = err
-					return
-				}
-				if size > limit {
-					rateError = true
-					retErr = fmt.Errorf("more than %d bytes in past %s from your ip/network", limit, window)
-				}
-			}
-
-			// todo future: make these configurable
-			// todo: should we have a limit for forwarded messages? they are stored with empty RemoteIPMasked*
-
-			const day = 24 * time.Hour
-			checkCount(store.Message{RemoteIPMasked1: ipmasked1}, time.Minute, limitIPMasked1MessagesPerMinute)
-			checkCount(store.Message{RemoteIPMasked1: ipmasked1}, day, 20*500)
-			checkCount(store.Message{RemoteIPMasked2: ipmasked2}, time.Minute, 1500)
-			checkCount(store.Message{RemoteIPMasked2: ipmasked2}, day, 20*1500)
-			checkCount(store.Message{RemoteIPMasked3: ipmasked3}, time.Minute, 4500)
-			checkCount(store.Message{RemoteIPMasked3: ipmasked3}, day, 20*4500)
-
-			const MB = 1024 * 1024
-			checkSize(store.Message{RemoteIPMasked1: ipmasked1}, time.Minute, limitIPMasked1SizePerMinute)
-			checkSize(store.Message{RemoteIPMasked1: ipmasked1}, day, 3*1000*MB)
-			checkSize(store.Message{RemoteIPMasked2: ipmasked2}, time.Minute, 3000*MB)
-			checkSize(store.Message{RemoteIPMasked2: ipmasked2}, day, 3*3000*MB)
-			checkSize(store.Message{RemoteIPMasked3: ipmasked3}, time.Minute, 9000*MB)
-			checkSize(store.Message{RemoteIPMasked3: ipmasked3}, day, 3*9000*MB)
-
-			return retErr
-		})
-		if err != nil && !rateError {
-			log.Errorx("checking delivery rates", err)
-			metricDelivery.WithLabelValues("checkrates", "").Inc()
-			addError(rcptAcc, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
-			continue
-		} else if err != nil {
-			log.Debugx("refusing due to high delivery rate", err)
-			metricDelivery.WithLabelValues("highrate", "").Inc()
-			c.setSlow(true)
-			addError(rcptAcc, smtp.C452StorageFull, smtp.SeMailbox2Full2, true, err.Error())
-			continue
-		}
-
-		// ../rfc/5321:3204
-		// Received-SPF header goes before Received. ../rfc/7208:2038
-		msgPrefix := []byte(
-			"Delivered-To: " + rcptAcc.rcptTo.XString(c.smtputf8) + "\r\n" + // ../rfc/9228:274
-				"Return-Path: <" + c.mailFrom.String() + ">\r\n" + // ../rfc/5321:3300
-				authResults.Header() +
-				receivedSPF.Header() +
-				recvHdrFor(rcptAcc.rcptTo.String()),
-		)
-
-		m := &store.Message{
+		m := store.Message{
 			Received:           time.Now(),
 			RemoteIP:           c.remoteIP.String(),
 			RemoteIPMasked1:    ipmasked1,
@@ -2386,11 +2699,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			MailFrom:           c.mailFrom.String(),
 			MailFromLocalpart:  c.mailFrom.Localpart,
 			MailFromDomain:     c.mailFrom.IPDomain.Domain.Name(),
-			RcptToLocalpart:    rcptAcc.rcptTo.Localpart,
-			RcptToDomain:       rcptAcc.rcptTo.IPDomain.Domain.Name(),
+			RcptToLocalpart:    smtpRcptTo.Localpart,
+			RcptToDomain:       smtpRcptTo.IPDomain.Domain.Name(),
 			MsgFromLocalpart:   msgFrom.Localpart,
 			MsgFromDomain:      msgFrom.Domain.Name(),
-			MsgFromOrgDomain:   publicsuffix.Lookup(ctx, msgFrom.Domain).Name(),
+			MsgFromOrgDomain:   publicsuffix.Lookup(ctx, log.Logger, msgFrom.Domain).Name(),
 			EHLOValidated:      ehloValidation == store.ValidationPass,
 			MailFromValidated:  mailFromValidation == store.ValidationPass,
 			MsgFromValidated:   msgFromValidation == store.ValidationStrict || msgFromValidation == store.ValidationDMARC || msgFromValidation == store.ValidationRelaxed,
@@ -2398,133 +2711,465 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			MailFromValidation: mailFromValidation,
 			MsgFromValidation:  msgFromValidation,
 			DKIMDomains:        verifiedDKIMDomains,
-			Size:               int64(len(msgPrefix)) + msgWriter.Size,
-			MsgPrefix:          msgPrefix,
+			DSN:                isDSN,
+			Size:               msgWriter.Size,
 		}
-		d := delivery{m, dataFile, rcptAcc, acc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, iprevStatus}
-		a := analyze(ctx, log, c.resolver, d)
-		if a.reason != "" {
-			xmoxreason := "X-Mox-Reason: " + a.reason + "\r\n"
-			m.MsgPrefix = append([]byte(xmoxreason), m.MsgPrefix...)
-			m.Size += int64(len(xmoxreason))
+		if c.tls {
+			tlsState := c.conn.(*tls.Conn).ConnectionState()
+			m.ReceivedTLSVersion = tlsState.Version
+			m.ReceivedTLSCipherSuite = tlsState.CipherSuite
+			if c.requireTLS != nil {
+				m.ReceivedRequireTLS = *c.requireTLS
+			}
+		} else {
+			m.ReceivedTLSVersion = 1 // Signals plain text delivery.
 		}
-		if !a.accept {
-			conf, _ := acc.Conf()
-			if conf.RejectsMailbox != "" {
-				present, _, messagehash, err := rejectPresent(log, acc, conf.RejectsMailbox, m, dataFile)
-				if err != nil {
-					log.Errorx("checking whether reject is already present", err)
-				} else if !present {
-					m.IsReject = true
-					m.Seen = true // We don't want to draw attention.
-					// Regular automatic junk flags configuration applies to these messages. The
-					// default is to treat these as neutral, so they won't cause outright rejections
-					// due to reputation for later delivery attempts.
-					m.MessageHash = messagehash
-					acc.WithWLock(func() {
-						hasSpace := true
-						var err error
-						if !conf.KeepRejects {
-							hasSpace, err = acc.TidyRejectsMailbox(c.log, conf.RejectsMailbox)
-						}
-						if err != nil {
-							log.Errorx("tidying rejects mailbox", err)
-						} else if hasSpace {
-							if err := acc.DeliverMailbox(log, conf.RejectsMailbox, m, dataFile); err != nil {
-								log.Errorx("delivering spammy mail to rejects mailbox", err)
-							} else {
-								log.Info("delivered spammy mail to rejects mailbox")
-							}
-						} else {
-							log.Info("not storing spammy mail to full rejects mailbox")
-						}
-					})
-				} else {
-					log.Info("reject message is already present, ignoring")
-				}
+
+		var msgTo, msgCc []message.Address
+		if envelope != nil {
+			msgTo = envelope.To
+			msgCc = envelope.CC
+		}
+		d := delivery{c.tls, &m, dataFile, smtpRcptTo, deliverTo, destination, canonicalAddr, acc, msgTo, msgCc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, iprevStatus}
+
+		r := analyze(ctx, log, c.resolver, d)
+		return &r, nil
+	}
+
+	// Either deliver the message, or call addError to register the recipient as failed.
+	// If recipient is an alias, we may be delivering to multiple address/accounts and
+	// we will consider a message delivered if we delivered it to at least one account
+	// (others may be over quota).
+	processRecipient := func(rcpt recipient) {
+		log := c.log.With(slog.Any("mailfrom", c.mailFrom), slog.Any("rcptto", rcpt.addr))
+
+		// If this is not a valid local user, we send back a DSN. This can only happen when
+		// there are also valid recipients, and only when remote is SPF-verified, so the DSN
+		// should not cause backscatter.
+		// In case of serious errors, we abort the transaction. We may have already
+		// delivered some messages. Perhaps it would be better to continue with other
+		// deliveries, and return an error at the end? Though the failure conditions will
+		// probably prevent any other successful deliveries too...
+		// We'll continue delivering to other recipients. ../rfc/5321:3275
+		if rcpt.account == nil && rcpt.alias == nil {
+			metricDelivery.WithLabelValues("unknownuser", "").Inc()
+			addError(rcpt, smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, true, "no such user")
+			return
+		}
+
+		// la holds all analysis, and message preparation, for all accounts (multiple for
+		// aliases). Each has an open account that we we close on return.
+		var la []analysis
+		defer func() {
+			for _, a := range la {
+				err := a.d.acc.Close()
+				log.Check(err, "close account")
+			}
+		}()
+
+		// For aliases, we prepare & analyze for each recipient. We accept the message if
+		// any recipient accepts it. Regular destination have just a single account to
+		// check. We check all alias destinations, even if we already explicitly delivered
+		// to them: they may be the only destination that would accept the message.
+		var a0 *analysis // Analysis we've used for accept/reject decision.
+		if rcpt.alias != nil {
+			// Check if msgFrom address is acceptable. This doesn't take validation into
+			// consideration. If the header was forged, the message may be rejected later on.
+			if !aliasAllowedMsgFrom(rcpt.alias.alias, msgFrom) {
+				addError(rcpt, smtp.C550MailboxUnavail, smtp.SePol7ExpnProhibited2, true, "not allowed to send to destination")
+				return
 			}
 
-			log.Info("incoming message rejected", mlog.Field("reason", a.reason), mlog.Field("msgfrom", msgFrom))
-			metricDelivery.WithLabelValues("reject", a.reason).Inc()
+			la = make([]analysis, 0, len(rcpt.alias.alias.ParsedAddresses))
+			for _, aa := range rcpt.alias.alias.ParsedAddresses {
+				a, err := messageAnalyze(log, rcpt.addr, aa.Address.Path(), aa.AccountName, aa.Destination, rcpt.alias.canonicalAddress)
+				if err != nil {
+					addError(rcpt, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
+					return
+				}
+				la = append(la, *a)
+				if a.accept && a0 == nil {
+					// Address that caused us to accept.
+					a0 = &la[len(la)-1]
+				}
+			}
+			if a0 == nil {
+				// First address, for rejecting.
+				a0 = &la[0]
+			}
+		} else {
+			a, err := messageAnalyze(log, rcpt.addr, rcpt.addr, rcpt.account.accountName, rcpt.account.destination, rcpt.account.canonicalAddress)
+			if err != nil {
+				addError(rcpt, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
+				return
+			}
+			la = []analysis{*a}
+			a0 = &la[0]
+		}
+
+		if !a0.accept && a0.reason == reasonHighRate {
+			log.Info("incoming message rejected for high rate, not storing in rejects mailbox", slog.String("reason", a0.reason), slog.Any("msgfrom", msgFrom))
+			metricDelivery.WithLabelValues("reject", a0.reason).Inc()
 			c.setSlow(true)
-			addError(rcptAcc, a.code, a.secode, a.userError, a.errmsg)
-			continue
+			addError(rcpt, a0.code, a0.secode, a0.userError, a0.errmsg)
+			return
+		}
+
+		// Any DMARC result override is stored in the evaluation for outgoing DMARC
+		// aggregate reports, and added to the Authentication-Results message header.
+		// We want to tell the sender that we have an override, e.g. for mailing lists, so
+		// they don't overestimate the potential damage of switching from p=none to
+		// p=reject.
+		var dmarcOverrides []string
+		if a0.dmarcOverrideReason != "" {
+			dmarcOverrides = []string{a0.dmarcOverrideReason}
+		}
+		if dmarcResult.Record != nil && !dmarcUse {
+			dmarcOverrides = append(dmarcOverrides, string(dmarcrpt.PolicyOverrideSampledOut))
+		}
+
+		// Add per-recipient DMARC method to Authentication-Results. Each account can have
+		// their own override rules, e.g. based on configured mailing lists/forwards.
+		// ../rfc/7489:1486
+		rcptDMARCMethod := dmarcMethod
+		if len(dmarcOverrides) > 0 {
+			if rcptDMARCMethod.Comment != "" {
+				rcptDMARCMethod.Comment += ", "
+			}
+			rcptDMARCMethod.Comment += "override " + strings.Join(dmarcOverrides, ",")
+		}
+		rcptAuthResults := authResults
+		rcptAuthResults.Methods = append([]message.AuthMethod{}, authResults.Methods...)
+		rcptAuthResults.Methods = append(rcptAuthResults.Methods, rcptDMARCMethod)
+
+		// Prepend reason as message header, for easy display in mail clients.
+		var xmox string
+		if a0.reason != "" {
+			xmox = "X-Mox-Reason: " + a0.reason + "\r\n"
+		}
+		xmox += a0.headers
+
+		for i := range la {
+			// ../rfc/5321:3204
+			// Received-SPF header goes before Received. ../rfc/7208:2038
+			la[i].d.m.MsgPrefix = []byte(
+				xmox +
+					"Delivered-To: " + la[i].d.deliverTo.XString(c.msgsmtputf8) + "\r\n" + // ../rfc/9228:274
+					"Return-Path: <" + c.mailFrom.String() + ">\r\n" + // ../rfc/5321:3300
+					rcptAuthResults.Header() +
+					receivedSPF.Header() +
+					recvHdrFor(rcpt.addr.String()),
+			)
+			la[i].d.m.Size += int64(len(la[i].d.m.MsgPrefix))
+		}
+
+		// Store DMARC evaluation for inclusion in an aggregate report. Only if there is at
+		// least one reporting address: We don't want to needlessly store a row in a
+		// database for each delivery attempt. If we reject a message for being junk, we
+		// are also not going to send it a DMARC report. The DMARC check is done early in
+		// the analysis, we will report on rejects because of DMARC, because it could be
+		// valuable feedback about forwarded or mailing list messages.
+		// ../rfc/7489:1492
+		if !mox.Conf.Static.NoOutgoingDMARCReports && dmarcResult.Record != nil && len(dmarcResult.Record.AggregateReportAddresses) > 0 && (a0.accept && !a0.d.m.IsReject || a0.reason == reasonDMARCPolicy) {
+			// Disposition holds our decision on whether to accept the message. Not what the
+			// DMARC evaluation resulted in. We can override, e.g. because of mailing lists,
+			// forwarding, or local policy.
+			// We treat quarantine as reject, so never claim to quarantine.
+			// ../rfc/7489:1691
+			disposition := dmarcrpt.DispositionNone
+			if !a0.accept {
+				disposition = dmarcrpt.DispositionReject
+			}
+
+			// unknownDomain returns whether the sender is domain with which this account has
+			// not had positive interaction.
+			unknownDomain := func() (unknown bool) {
+				err := a0.d.acc.DB.Read(ctx, func(tx *bstore.Tx) (err error) {
+					// See if we received a non-junk message from this organizational domain.
+					q := bstore.QueryTx[store.Message](tx)
+					q.FilterNonzero(store.Message{MsgFromOrgDomain: a0.d.m.MsgFromOrgDomain})
+					q.FilterEqual("Notjunk", true)
+					q.FilterEqual("IsReject", false)
+					exists, err := q.Exists()
+					if err != nil {
+						return fmt.Errorf("querying for non-junk message from organizational domain: %v", err)
+					}
+					if exists {
+						return nil
+					}
+
+					// See if we sent a message to this organizational domain.
+					qr := bstore.QueryTx[store.Recipient](tx)
+					qr.FilterNonzero(store.Recipient{OrgDomain: a0.d.m.MsgFromOrgDomain})
+					exists, err = qr.Exists()
+					if err != nil {
+						return fmt.Errorf("querying for message sent to organizational domain: %v", err)
+					}
+					if !exists {
+						unknown = true
+					}
+					return nil
+				})
+				if err != nil {
+					log.Errorx("checking if sender is unknown domain, for dmarc aggregate report evaluation", err)
+				}
+				return
+			}
+
+			r := dmarcResult.Record
+			addresses := make([]string, len(r.AggregateReportAddresses))
+			for i, a := range r.AggregateReportAddresses {
+				addresses[i] = a.String()
+			}
+			sp := dmarcrpt.Disposition(r.SubdomainPolicy)
+			if r.SubdomainPolicy == dmarc.PolicyEmpty {
+				sp = dmarcrpt.Disposition(r.Policy)
+			}
+			eval := dmarcdb.Evaluation{
+				// Evaluated and IntervalHours set by AddEvaluation.
+				PolicyDomain: dmarcResult.Domain.Name(),
+
+				// Optional evaluations don't cause a report to be sent, but will be included.
+				// Useful for automated inter-mailer messages, we don't want to get in a reporting
+				// loop. We also don't want to be used for sending reports to unsuspecting domains
+				// we have no relation with.
+				// todo: would it make sense to also mark some percentage of mailing-list-policy-overrides optional? to lower the load on mail servers of folks sending to large mailing lists.
+				Optional: a0.d.destination.DMARCReports || a0.d.destination.HostTLSReports || a0.d.destination.DomainTLSReports || a0.reason == reasonDMARCPolicy && unknownDomain(),
+
+				Addresses: addresses,
+
+				PolicyPublished: dmarcrpt.PolicyPublished{
+					Domain:          dmarcResult.Domain.Name(),
+					ADKIM:           dmarcrpt.Alignment(r.ADKIM),
+					ASPF:            dmarcrpt.Alignment(r.ASPF),
+					Policy:          dmarcrpt.Disposition(r.Policy),
+					SubdomainPolicy: sp,
+					Percentage:      r.Percentage,
+					// We don't save ReportingOptions, we don't do per-message failure reporting.
+				},
+				SourceIP:        c.remoteIP.String(),
+				Disposition:     disposition,
+				AlignedDKIMPass: dmarcResult.AlignedDKIMPass,
+				AlignedSPFPass:  dmarcResult.AlignedSPFPass,
+				EnvelopeTo:      rcpt.addr.IPDomain.String(),
+				EnvelopeFrom:    c.mailFrom.IPDomain.String(),
+				HeaderFrom:      msgFrom.Domain.Name(),
+			}
+
+			for _, s := range dmarcOverrides {
+				reason := dmarcrpt.PolicyOverrideReason{Type: dmarcrpt.PolicyOverride(s)}
+				eval.OverrideReasons = append(eval.OverrideReasons, reason)
+			}
+
+			// We'll include all signatures for the organizational domain, even if they weren't
+			// relevant due to strict alignment requirement.
+			for _, dkimResult := range dkimResults {
+				if dkimResult.Sig == nil || publicsuffix.Lookup(ctx, log.Logger, msgFrom.Domain) != publicsuffix.Lookup(ctx, log.Logger, dkimResult.Sig.Domain) {
+					continue
+				}
+				r := dmarcrpt.DKIMAuthResult{
+					Domain:   dkimResult.Sig.Domain.Name(),
+					Selector: dkimResult.Sig.Selector.ASCII,
+					Result:   dmarcrpt.DKIMResult(dkimResult.Status),
+				}
+				eval.DKIMResults = append(eval.DKIMResults, r)
+			}
+
+			switch receivedSPF.Identity {
+			case spf.ReceivedHELO:
+				spfAuthResult := dmarcrpt.SPFAuthResult{
+					Domain: spfArgs.HelloDomain.String(), // Can be unicode and also IP.
+					Scope:  dmarcrpt.SPFDomainScopeHelo,
+					Result: dmarcrpt.SPFResult(receivedSPF.Result),
+				}
+				eval.SPFResults = []dmarcrpt.SPFAuthResult{spfAuthResult}
+			case spf.ReceivedMailFrom:
+				spfAuthResult := dmarcrpt.SPFAuthResult{
+					Domain: spfArgs.MailFromDomain.Name(), // Can be unicode.
+					Scope:  dmarcrpt.SPFDomainScopeMailFrom,
+					Result: dmarcrpt.SPFResult(receivedSPF.Result),
+				}
+				eval.SPFResults = []dmarcrpt.SPFAuthResult{spfAuthResult}
+			}
+
+			err := dmarcdb.AddEvaluation(ctx, dmarcResult.Record.AggregateReportingInterval, &eval)
+			log.Check(err, "adding dmarc evaluation to database for aggregate report")
+		}
+
+		if !a0.accept {
+			for _, a := range la {
+				// Don't add message if address was also explicitly present in a RCPT TO command.
+				if rcpt.alias != nil && regularRecipient(a.d.deliverTo) {
+					continue
+				}
+
+				conf, _ := a.d.acc.Conf()
+				if conf.RejectsMailbox == "" {
+					continue
+				}
+				present, _, messagehash, err := rejectPresent(log, a.d.acc, conf.RejectsMailbox, a.d.m, dataFile)
+				if err != nil {
+					log.Errorx("checking whether reject is already present", err)
+					continue
+				} else if present {
+					log.Info("reject message is already present, ignoring")
+					continue
+				}
+				a.d.m.IsReject = true
+				a.d.m.Seen = true // We don't want to draw attention.
+				// Regular automatic junk flags configuration applies to these messages. The
+				// default is to treat these as neutral, so they won't cause outright rejections
+				// due to reputation for later delivery attempts.
+				a.d.m.MessageHash = messagehash
+				a.d.acc.WithWLock(func() {
+					hasSpace := true
+					var err error
+					if !conf.KeepRejects {
+						hasSpace, err = a.d.acc.TidyRejectsMailbox(c.log, conf.RejectsMailbox)
+					}
+					if err != nil {
+						log.Errorx("tidying rejects mailbox", err)
+					} else if hasSpace {
+						if err := a.d.acc.DeliverMailbox(log, conf.RejectsMailbox, a.d.m, dataFile); err != nil {
+							log.Errorx("delivering spammy mail to rejects mailbox", err)
+						} else {
+							log.Info("delivered spammy mail to rejects mailbox")
+						}
+					} else {
+						log.Info("not storing spammy mail to full rejects mailbox")
+					}
+				})
+			}
+
+			log.Info("incoming message rejected", slog.String("reason", a0.reason), slog.Any("msgfrom", msgFrom))
+			metricDelivery.WithLabelValues("reject", a0.reason).Inc()
+			c.setSlow(true)
+			addError(rcpt, a0.code, a0.secode, a0.userError, a0.errmsg)
+			return
 		}
 
 		delayFirstTime := true
-		if a.dmarcReport != nil {
+		if rcpt.account != nil && a0.dmarcReport != nil {
 			// todo future: add rate limiting to prevent DoS attacks. ../rfc/7489:2570
-			if err := dmarcdb.AddReport(ctx, a.dmarcReport, msgFrom.Domain); err != nil {
-				log.Errorx("saving dmarc report in database", err)
+			if err := dmarcdb.AddReport(ctx, a0.dmarcReport, msgFrom.Domain); err != nil {
+				log.Errorx("saving dmarc aggregate report in database", err)
 			} else {
-				log.Info("dmarc report processed")
-				m.Flags.Seen = true
+				log.Info("dmarc aggregate report processed")
+				a0.d.m.Flags.Seen = true
 				delayFirstTime = false
 			}
 		}
-		if a.tlsReport != nil {
+		if rcpt.account != nil && a0.tlsReport != nil {
 			// todo future: add rate limiting to prevent DoS attacks.
-			if err := tlsrptdb.AddReport(ctx, msgFrom.Domain, c.mailFrom.String(), a.tlsReport); err != nil {
+			if err := tlsrptdb.AddReport(ctx, c.log, msgFrom.Domain, c.mailFrom.String(), a0.d.destination.HostTLSReports, a0.tlsReport); err != nil {
 				log.Errorx("saving TLSRPT report in database", err)
 			} else {
 				log.Info("tlsrpt report processed")
-				m.Flags.Seen = true
+				a0.d.m.Flags.Seen = true
 				delayFirstTime = false
 			}
 		}
 
-		// If this is a first-time sender and not a forwarded message, wait before actually
-		// delivering. If this turns out to be a spammer, we've kept one of their
-		// connections busy.
-		if delayFirstTime && !m.IsForward && a.reason == reasonNoBadSignals && c.firstTimeSenderDelay > 0 {
-			log.Debug("delaying before delivering from sender without reputation", mlog.Field("delay", c.firstTimeSenderDelay))
+		// If this is a first-time sender and not a forwarded/mailing list message, wait
+		// before actually delivering. If this turns out to be a spammer, we've kept one of
+		// their connections busy.
+		a0conf, _ := a0.d.acc.Conf()
+		if delayFirstTime && !a0.d.m.IsForward && !a0.d.m.IsMailingList && a0.reason == reasonNoBadSignals && !a0conf.NoFirstTimeSenderDelay && c.firstTimeSenderDelay > 0 {
+			log.Debug("delaying before delivering from sender without reputation", slog.Duration("delay", c.firstTimeSenderDelay))
 			mox.Sleep(mox.Context, c.firstTimeSenderDelay)
+		}
+
+		if Localserve {
+			code, timeout := mox.LocalserveNeedsError(rcpt.addr.Localpart)
+			if timeout {
+				log.Info("timing out due to special localpart")
+				mox.Sleep(mox.Context, time.Hour)
+				xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeOther00}, "timing out delivery due to special localpart")
+			} else if code != 0 {
+				log.Info("failure due to special localpart", slog.Int("code", code))
+				metricDelivery.WithLabelValues("delivererror", "localserve").Inc()
+				addError(rcpt, code, smtp.SeOther00, false, fmt.Sprintf("failure with code %d due to special localpart", code))
+				return
+			}
 		}
 
 		// Gather the message-id before we deliver and the file may be consumed.
 		if !parsedMessageID {
-			if p, err := message.Parse(c.log, false, store.FileMsgReader(m.MsgPrefix, dataFile)); err != nil {
+			if p, err := message.Parse(c.log.Logger, false, store.FileMsgReader(a0.d.m.MsgPrefix, dataFile)); err != nil {
 				log.Infox("parsing message for message-id", err)
 			} else if header, err := p.Header(); err != nil {
 				log.Infox("parsing message header for message-id", err)
 			} else {
 				messageID = header.Get("Message-Id")
 			}
+			parsedMessageID = true
 		}
 
-		if Localserve {
-			code, timeout := localserveNeedsError(rcptAcc.rcptTo.Localpart)
-			if timeout {
-				c.log.Info("timing out due to special localpart")
-				mox.Sleep(mox.Context, time.Hour)
-				xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeOther00}, "timing out delivery due to special localpart")
-			} else if code != 0 {
-				c.log.Info("failure due to special localpart", mlog.Field("code", code))
-				metricDelivery.WithLabelValues("delivererror", "localserve").Inc()
-				addError(rcptAcc, code, smtp.SeOther00, false, fmt.Sprintf("failure with code %d due to special localpart", code))
+		// Finally deliver the message to the account(s).
+		var nerr int       // Number of non-quota errors.
+		var nfull int      // Number of failed deliveries due to over quota.
+		var ndelivered int // Number delivered to account.
+		for _, a := range la {
+			// Don't deliver to recipient that was explicitly present in SMTP transaction, or
+			// is sending the message to an alias they are member of.
+			if rcpt.alias != nil && (regularRecipient(a.d.deliverTo) || a.d.deliverTo.Equal(msgFrom.Path())) {
+				continue
 			}
-		}
-		acc.WithWLock(func() {
-			if err := acc.DeliverMailbox(log, a.mailbox, m, dataFile); err != nil {
-				log.Errorx("delivering", err)
-				metricDelivery.WithLabelValues("delivererror", a.reason).Inc()
-				addError(rcptAcc, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
-				return
-			}
-			metricDelivery.WithLabelValues("delivered", a.reason).Inc()
-			log.Info("incoming message delivered", mlog.Field("reason", a.reason), mlog.Field("msgfrom", msgFrom))
 
-			conf, _ := acc.Conf()
-			if conf.RejectsMailbox != "" && m.MessageID != "" {
-				if err := acc.RejectsRemove(log, conf.RejectsMailbox, m.MessageID); err != nil {
-					log.Errorx("removing message from rejects mailbox", err, mlog.Field("messageid", messageID))
+			var delivered bool
+			a.d.acc.WithWLock(func() {
+				if err := a.d.acc.DeliverMailbox(log, a.mailbox, a.d.m, dataFile); err != nil {
+					log.Errorx("delivering", err)
+					metricDelivery.WithLabelValues("delivererror", a0.reason).Inc()
+					if errors.Is(err, store.ErrOverQuota) {
+						nfull++
+					} else {
+						addError(rcpt, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
+						nerr++
+					}
+					return
 				}
-			}
-		})
+				delivered = true
+				ndelivered++
+				metricDelivery.WithLabelValues("delivered", a0.reason).Inc()
+				log.Info("incoming message delivered", slog.String("reason", a0.reason), slog.Any("msgfrom", msgFrom))
 
-		err = acc.Close()
-		log.Check(err, "closing account after delivering")
-		acc = nil
+				conf, _ := a.d.acc.Conf()
+				if conf.RejectsMailbox != "" && a.d.m.MessageID != "" {
+					if err := a.d.acc.RejectsRemove(log, conf.RejectsMailbox, a.d.m.MessageID); err != nil {
+						log.Errorx("removing message from rejects mailbox", err, slog.String("messageid", messageID))
+					}
+				}
+			})
+
+			// Pass delivered messages to queue for DSN processing and/or hooks.
+			if delivered {
+				mr := store.FileMsgReader(a.d.m.MsgPrefix, dataFile)
+				part, err := a.d.m.LoadPart(mr)
+				if err != nil {
+					log.Errorx("loading parsed part for evaluating webhook", err)
+				} else {
+					err = queue.Incoming(context.Background(), log, a.d.acc, messageID, *a.d.m, part, a.mailbox)
+					log.Check(err, "queueing webhook for incoming delivery")
+				}
+			} else if nerr > 0 && ndelivered == 0 {
+				// Don't continue if we had an error and haven't delivered yet. If we only had
+				// quota-related errors, we keep trying for an account to deliver to.
+				break
+			}
+		}
+		if ndelivered == 0 && (nerr > 0 || nfull > 0) {
+			if nerr == 0 {
+				addError(rcpt, smtp.C452StorageFull, smtp.SeMailbox2Full2, true, "account storage full")
+			} else {
+				addError(rcpt, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
+			}
+		}
+	}
+
+	// For each recipient, do final spam analysis and delivery.
+	for _, rcpt := range c.recipients {
+		processRecipient(rcpt)
 	}
 
 	// If all recipients failed to deliver, return an error.
@@ -2566,10 +3211,11 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	if len(deliverErrors) > 0 {
 		now := time.Now()
 		dsnMsg := dsn.Message{
-			SMTPUTF8:   c.smtputf8,
+			SMTPUTF8:   c.msgsmtputf8,
 			From:       smtp.Path{Localpart: "postmaster", IPDomain: deliverErrors[0].rcptTo.IPDomain},
 			To:         *c.mailFrom,
 			Subject:    "mail delivery failure",
+			MessageID:  mox.MessageIDGen(false),
 			References: messageID,
 
 			// Per-message details.
@@ -2605,7 +3251,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 
 		if Localserve {
 			c.log.Error("not queueing dsn for incoming delivery due to localserve")
-		} else if err := queueDSN(context.TODO(), c, *c.mailFrom, dsnMsg, c.requireTLS != nil && *c.requireTLS); err != nil {
+		} else if err := queueDSN(context.TODO(), c.log, c, *c.mailFrom, dsnMsg, c.requireTLS != nil && *c.requireTLS); err != nil {
 			metricServerErrors.WithLabelValues("queuedsn").Inc()
 			c.log.Errorx("queuing DSN for incoming delivery, no DSN sent", err)
 		}
@@ -2615,6 +3261,21 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	c.transactionBad-- // Compensate for early earlier pessimistic increase.
 	c.rset()
 	c.writecodeline(smtp.C250Completed, smtp.SeMailbox2Other0, "it is done", nil)
+}
+
+// Return whether msgFrom address is allowed to send a message to alias.
+func aliasAllowedMsgFrom(alias config.Alias, msgFrom smtp.Address) bool {
+	for _, aa := range alias.ParsedAddresses {
+		if aa.Address == msgFrom {
+			return true
+		}
+	}
+	lp, err := smtp.ParseLocalpart(alias.LocalpartStr)
+	xcheckf(err, "parsing alias localpart")
+	if msgFrom == smtp.NewAddress(lp, alias.Domain) {
+		return alias.AllowMsgFrom
+	}
+	return alias.PostPublic
 }
 
 // ecode returns either ecode, or a more specific error based on err.
@@ -2679,6 +3340,8 @@ func (c *conn) cmdExpn(p *parser) {
 		p.xtake("SMTPUTF8")
 	}
 	p.xend()
+
+	// todo: we could implement expn for local aliases for authenticated users, when members have permission to list. would anyone use it?
 
 	// ../rfc/5321:4239
 	xsmtpUserErrorf(smtp.C252WithoutVrfy, smtp.SePol7Other0, "no expand but will try delivery")

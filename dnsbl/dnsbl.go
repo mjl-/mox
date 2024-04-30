@@ -1,39 +1,39 @@
 // Package dnsbl implements DNS block lists (RFC 5782), for checking incoming messages from sources without reputation.
+//
+// A DNS block list contains IP addresses that should be blocked. The DNSBL is
+// queried using DNS "A" lookups. The DNSBL starts at a "zone", e.g.
+// "dnsbl.example". To look up whether an IP address is listed, a DNS name is
+// composed: For 10.11.12.13, that name would be "13.12.11.10.dnsbl.example". If
+// the lookup returns "record does not exist", the IP is not listed. If an IP
+// address is returned, the IP is listed. If an IP is listed, an additional TXT
+// lookup is done for more information about the block. IPv6 addresses are also
+// looked up with an DNS "A" lookup of a name similar to an IPv4 address, but with
+// 4-bit hexadecimal dot-separated characters, in reverse.
+//
+// The health of a DNSBL "zone" can be check through a lookup of 127.0.0.1
+// (must not be present) and 127.0.0.2 (must be present).
 package dnsbl
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/stub"
 )
-
-var xlog = mlog.New("dnsbl")
 
 var (
-	metricLookup = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "mox_dnsbl_lookup_duration_seconds",
-			Help:    "DNSBL lookup",
-			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.100, 0.5, 1, 5, 10, 20},
-		},
-		[]string{
-			"zone",
-			"status",
-		},
-	)
+	MetricLookup stub.HistogramVec = stub.HistogramVecIgnore{}
 )
 
-var ErrDNS = errors.New("dnsbl: dns error")
+var ErrDNS = errors.New("dnsbl: dns error") // Temporary error.
 
 // Status is the result of a DNSBL lookup.
 type Status string
@@ -45,12 +45,17 @@ var (
 )
 
 // Lookup checks if "ip" occurs in the DNS block list "zone" (e.g. dnsbl.example.org).
-func Lookup(ctx context.Context, resolver dns.Resolver, zone dns.Domain, ip net.IP) (rstatus Status, rexplanation string, rerr error) {
-	log := xlog.WithContext(ctx)
+func Lookup(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, zone dns.Domain, ip net.IP) (rstatus Status, rexplanation string, rerr error) {
+	log := mlog.New("dnsbl", elog)
 	start := time.Now()
 	defer func() {
-		metricLookup.WithLabelValues(zone.Name(), string(rstatus)).Observe(float64(time.Since(start)) / float64(time.Second))
-		log.Debugx("dnsbl lookup result", rerr, mlog.Field("zone", zone), mlog.Field("ip", ip), mlog.Field("status", rstatus), mlog.Field("explanation", rexplanation), mlog.Field("duration", time.Since(start)))
+		MetricLookup.ObserveLabels(float64(time.Since(start))/float64(time.Second), zone.Name(), string(rstatus))
+		log.Debugx("dnsbl lookup result", rerr,
+			slog.Any("zone", zone),
+			slog.Any("ip", ip),
+			slog.Any("status", rstatus),
+			slog.String("explanation", rexplanation),
+			slog.Duration("duration", time.Since(start)))
 	}()
 
 	b := &strings.Builder{}
@@ -93,7 +98,7 @@ func Lookup(ctx context.Context, resolver dns.Resolver, zone dns.Domain, ip net.
 	if dns.IsNotFound(err) {
 		return StatusFail, "", nil
 	} else if err != nil {
-		log.Debugx("looking up txt record from dnsbl", err, mlog.Field("addr", addr))
+		log.Debugx("looking up txt record from dnsbl", err, slog.String("addr", addr))
 		return StatusFail, "", nil
 	}
 	return StatusFail, strings.Join(txts, "; "), nil
@@ -104,16 +109,16 @@ func Lookup(ctx context.Context, resolver dns.Resolver, zone dns.Domain, ip net.
 // Users of a DNSBL should periodically check if the DNSBL is still operating
 // properly.
 // For temporary errors, ErrDNS is returned.
-func CheckHealth(ctx context.Context, resolver dns.Resolver, zone dns.Domain) (rerr error) {
-	log := xlog.WithContext(ctx)
+func CheckHealth(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, zone dns.Domain) (rerr error) {
+	log := mlog.New("dnsbl", elog)
 	start := time.Now()
 	defer func() {
-		log.Debugx("dnsbl healthcheck result", rerr, mlog.Field("zone", zone), mlog.Field("duration", time.Since(start)))
+		log.Debugx("dnsbl healthcheck result", rerr, slog.Any("zone", zone), slog.Duration("duration", time.Since(start)))
 	}()
 
 	// ../rfc/5782:355
-	status1, _, err1 := Lookup(ctx, resolver, zone, net.IPv4(127, 0, 0, 1))
-	status2, _, err2 := Lookup(ctx, resolver, zone, net.IPv4(127, 0, 0, 2))
+	status1, _, err1 := Lookup(ctx, log.Logger, resolver, zone, net.IPv4(127, 0, 0, 1))
+	status2, _, err2 := Lookup(ctx, log.Logger, resolver, zone, net.IPv4(127, 0, 0, 2))
 	if status1 == StatusPass && status2 == StatusFail {
 		return nil
 	} else if status1 == StatusFail {

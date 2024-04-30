@@ -59,7 +59,7 @@ func (tc *testconn) xesearch(exp imapclient.UntaggedEsearch) {
 func TestSearch(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
 	// Add 5 and delete first 4 messages. So UIDs start at 5.

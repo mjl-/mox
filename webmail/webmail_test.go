@@ -1,16 +1,19 @@
 package webmail
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
-	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -20,13 +23,21 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/mjl-/sherpa"
+
 	"github.com/mjl-/mox/message"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/store"
+	"github.com/mjl-/mox/webauth"
 )
 
 var ctxbg = context.Background()
+
+func init() {
+	webauth.BadAuthDelay = 0
+}
 
 func tcheck(t *testing.T, err error, msg string) {
 	t.Helper()
@@ -181,6 +192,7 @@ var (
 		From:    "mjl <mjl@mox.example>",
 		To:      "mox <mox@other.example>",
 		Subject: "html message",
+		Headers: [][2]string{{"List-Id", "test <list.mox.example>"}},
 		Part:    Part{Type: "text/html", Content: `<html>the body <img src="cid:img1@mox.example" /></html>`},
 	}
 	msgAlt = Message{
@@ -252,19 +264,36 @@ type testmsg struct {
 }
 
 func tdeliver(t *testing.T, acc *store.Account, tm *testmsg) {
-	msgFile, err := store.CreateMessageTemp("webmail-test")
+	msgFile, err := store.CreateMessageTemp(pkglog, "webmail-test")
 	tcheck(t, err, "create message temp")
 	defer os.Remove(msgFile.Name())
 	defer msgFile.Close()
 	size, err := msgFile.Write(tm.msg.Marshal(t))
 	tcheck(t, err, "write message temp")
-	m := store.Message{Flags: tm.Flags, Keywords: tm.Keywords, Size: int64(size)}
-	err = acc.DeliverMailbox(xlog, tm.Mailbox, &m, msgFile)
+	m := store.Message{
+		Flags:            tm.Flags,
+		RcptToLocalpart:  "mox",
+		RcptToDomain:     "other.example",
+		MsgFromLocalpart: "mjl",
+		MsgFromDomain:    "mox.example",
+		DKIMDomains:      []string{"mox.example"},
+		Keywords:         tm.Keywords,
+		Size:             int64(size),
+	}
+	err = acc.DeliverMailbox(pkglog, tm.Mailbox, &m, msgFile)
 	tcheck(t, err, "deliver test message")
 	err = msgFile.Close()
 	tcheck(t, err, "closing test message")
 	tm.m = m
 	tm.ID = m.ID
+}
+
+func readBody(r io.Reader) string {
+	buf, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Sprintf("read error: %s", err)
+	}
+	return fmt.Sprintf("data: %q", buf)
 }
 
 // Test scenario with an account with some mailboxes, messages, then make all
@@ -279,21 +308,44 @@ func TestWebmail(t *testing.T) {
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
 
-	acc, err := store.OpenAccount("mjl")
+	log := mlog.New("webmail", nil)
+	acc, err := store.OpenAccount(pkglog, "mjl")
 	tcheck(t, err, "open account")
-	err = acc.SetPassword("test1234")
+	err = acc.SetPassword(pkglog, "test1234")
 	tcheck(t, err, "set password")
 	defer func() {
 		err := acc.Close()
-		xlog.Check(err, "closing account")
+		pkglog.Check(err, "closing account")
+		acc.CheckClosed()
 	}()
 
-	api := Webmail{maxMessageSize: 1024 * 1024}
-	apiHandler, err := makeSherpaHandler(api.maxMessageSize)
+	api := Webmail{maxMessageSize: 1024 * 1024, cookiePath: "/webmail/"}
+	apiHandler, err := makeSherpaHandler(api.maxMessageSize, api.cookiePath, false)
 	tcheck(t, err, "sherpa handler")
 
-	reqInfo := requestInfo{"mjl@mox.example", "mjl", &http.Request{}}
+	respRec := httptest.NewRecorder()
+	reqInfo := requestInfo{log, "", nil, "", respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
 	ctx := context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
+
+	// Prepare loginToken.
+	loginCookie := &http.Cookie{Name: "webmaillogin"}
+	loginCookie.Value = api.LoginPrep(ctx)
+	reqInfo.Request.Header = http.Header{"Cookie": []string{loginCookie.String()}}
+
+	csrfToken := api.Login(ctx, loginCookie.Value, "mjl@mox.example", "test1234")
+	var sessionCookie *http.Cookie
+	for _, c := range respRec.Result().Cookies() {
+		if c.Name == "webmailsession" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatalf("missing session cookie")
+	}
+
+	reqInfo = requestInfo{log, "mjl@mox.example", acc, "", respRec, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
+	ctx = context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
 
 	tneedError(t, func() { api.MailboxCreate(ctx, "Inbox") })   // Cannot create inbox.
 	tneedError(t, func() { api.MailboxCreate(ctx, "Archive") }) // Already exists.
@@ -324,10 +376,12 @@ func TestWebmail(t *testing.T) {
 	ctJS := [2]string{"Content-Type", "application/javascript; charset=utf-8"}
 	ctJSON := [2]string{"Content-Type", "application/json; charset=utf-8"}
 
-	const authOK = "mjl@mox.example:test1234"
-	const authBad = "mjl@mox.example:badpassword"
-	hdrAuthOK := [2]string{"Authorization", "Basic " + base64.StdEncoding.EncodeToString([]byte(authOK))}
-	hdrAuthBad := [2]string{"Authorization", "Basic " + base64.StdEncoding.EncodeToString([]byte(authBad))}
+	cookieOK := &http.Cookie{Name: "webmailsession", Value: sessionCookie.Value}
+	cookieBad := &http.Cookie{Name: "webmailsession", Value: "AAAAAAAAAAAAAAAAAAAAAA mjl"}
+	hdrSessionOK := [2]string{"Cookie", cookieOK.String()}
+	hdrSessionBad := [2]string{"Cookie", cookieBad.String()}
+	hdrCSRFOK := [2]string{"x-mox-csrf", string(csrfToken)}
+	hdrCSRFBad := [2]string{"x-mox-csrf", "AAAAAAAAAAAAAAAAAAAAAA"}
 
 	testHTTP := func(method, path string, headers httpHeaders, expStatusCode int, expHeaders httpHeaders, check func(resp *http.Response)) {
 		t.Helper()
@@ -337,9 +391,10 @@ func TestWebmail(t *testing.T) {
 			req.Header.Add(kv[0], kv[1])
 		}
 		rr := httptest.NewRecorder()
-		handle(apiHandler, rr, req)
+		rr.Body = &bytes.Buffer{}
+		handle(apiHandler, false, "", rr, req)
 		if rr.Code != expStatusCode {
-			t.Fatalf("got status %d, expected %d", rr.Code, expStatusCode)
+			t.Fatalf("got status %d, expected %d (%s)", rr.Code, expStatusCode, readBody(rr.Body))
 		}
 
 		resp := rr.Result()
@@ -353,41 +408,143 @@ func TestWebmail(t *testing.T) {
 			check(resp)
 		}
 	}
-	testHTTPAuth := func(method, path string, expStatusCode int, expHeaders httpHeaders, check func(resp *http.Response)) {
+	testHTTPAuthAPI := func(method, path string, expStatusCode int, expHeaders httpHeaders, check func(resp *http.Response)) {
 		t.Helper()
-		testHTTP(method, path, httpHeaders{hdrAuthOK}, expStatusCode, expHeaders, check)
+		testHTTP(method, path, httpHeaders{hdrCSRFOK, hdrSessionOK}, expStatusCode, expHeaders, check)
+	}
+	testHTTPAuthREST := func(method, path string, expStatusCode int, expHeaders httpHeaders, check func(resp *http.Response)) {
+		t.Helper()
+		testHTTP(method, path, httpHeaders{hdrSessionOK}, expStatusCode, expHeaders, check)
+	}
+
+	userAuthError := func(resp *http.Response, expCode string) {
+		t.Helper()
+
+		var response struct {
+			Error *sherpa.Error `json:"error"`
+		}
+		err := json.NewDecoder(resp.Body).Decode(&response)
+		tcheck(t, err, "parsing response as json")
+		if response.Error == nil {
+			t.Fatalf("expected sherpa error with code %s, no error", expCode)
+		}
+		if response.Error.Code != expCode {
+			t.Fatalf("got sherpa error code %q, expected %s", response.Error.Code, expCode)
+		}
+	}
+	badAuth := func(resp *http.Response) {
+		t.Helper()
+		userAuthError(resp, "user:badAuth")
+	}
+	noAuth := func(resp *http.Response) {
+		t.Helper()
+		userAuthError(resp, "user:noAuth")
 	}
 
 	// HTTP webmail
-	testHTTP("GET", "/", httpHeaders{}, http.StatusUnauthorized, nil, nil)
-	testHTTP("GET", "/", httpHeaders{hdrAuthBad}, http.StatusUnauthorized, nil, nil)
-	testHTTPAuth("GET", "/", http.StatusOK, httpHeaders{ctHTML}, nil)
-	testHTTPAuth("POST", "/", http.StatusMethodNotAllowed, nil, nil)
-	testHTTP("GET", "/", httpHeaders{hdrAuthOK, [2]string{"Accept-Encoding", "gzip"}}, http.StatusOK, httpHeaders{ctHTML, [2]string{"Content-Encoding", "gzip"}}, nil)
-	testHTTP("GET", "/msg.js", httpHeaders{hdrAuthBad}, http.StatusUnauthorized, nil, nil)
-	testHTTPAuth("POST", "/msg.js", http.StatusMethodNotAllowed, nil, nil)
-	testHTTPAuth("GET", "/msg.js", http.StatusOK, httpHeaders{ctJS}, nil)
-	testHTTP("GET", "/text.js", httpHeaders{hdrAuthBad}, http.StatusUnauthorized, nil, nil)
-	testHTTPAuth("GET", "/text.js", http.StatusOK, httpHeaders{ctJS}, nil)
+	testHTTP("GET", "/", httpHeaders{}, http.StatusOK, nil, nil)
+	testHTTP("POST", "/", httpHeaders{}, http.StatusMethodNotAllowed, nil, nil)
+	testHTTP("GET", "/", httpHeaders{[2]string{"Accept-Encoding", "gzip"}}, http.StatusOK, httpHeaders{ctHTML, [2]string{"Content-Encoding", "gzip"}}, nil)
+	testHTTP("GET", "/msg.js", httpHeaders{}, http.StatusOK, httpHeaders{ctJS}, nil)
+	testHTTP("POST", "/msg.js", httpHeaders{}, http.StatusMethodNotAllowed, nil, nil)
+	testHTTP("GET", "/text.js", httpHeaders{}, http.StatusOK, httpHeaders{ctJS}, nil)
+	testHTTP("POST", "/text.js", httpHeaders{}, http.StatusMethodNotAllowed, nil, nil)
 
-	testHTTP("GET", "/api/Bogus", httpHeaders{}, http.StatusUnauthorized, nil, nil)
-	testHTTP("GET", "/api/Bogus", httpHeaders{hdrAuthBad}, http.StatusUnauthorized, nil, nil)
-	testHTTPAuth("GET", "/api/Bogus", http.StatusNotFound, nil, nil)
-	testHTTPAuth("GET", "/api/SSETypes", http.StatusOK, httpHeaders{ctJSON}, nil)
+	testHTTP("POST", "/api/Bogus", httpHeaders{}, http.StatusOK, nil, noAuth)
+	testHTTP("POST", "/api/Bogus", httpHeaders{hdrCSRFBad}, http.StatusOK, nil, noAuth)
+	testHTTP("POST", "/api/Bogus", httpHeaders{hdrSessionBad}, http.StatusOK, nil, noAuth)
+	testHTTP("POST", "/api/Bogus", httpHeaders{hdrCSRFBad, hdrSessionBad}, http.StatusOK, nil, badAuth)
+	testHTTP("POST", "/api/Bogus", httpHeaders{hdrCSRFOK}, http.StatusOK, nil, noAuth)
+	testHTTP("POST", "/api/Bogus", httpHeaders{hdrSessionOK}, http.StatusOK, nil, noAuth)
+	testHTTP("POST", "/api/Bogus", httpHeaders{hdrCSRFBad, hdrSessionOK}, http.StatusOK, nil, badAuth)
+	testHTTP("POST", "/api/Bogus", httpHeaders{hdrCSRFOK, hdrSessionBad}, http.StatusOK, nil, badAuth)
+	testHTTPAuthAPI("GET", "/api/Bogus", http.StatusMethodNotAllowed, nil, nil)
+	testHTTPAuthAPI("POST", "/api/Bogus", http.StatusNotFound, nil, nil)
+	testHTTPAuthAPI("POST", "/api/SSETypes", http.StatusOK, httpHeaders{ctJSON}, nil)
 
 	// Unknown.
-	testHTTPAuth("GET", "/other", http.StatusNotFound, nil, nil)
+	testHTTP("GET", "/other", httpHeaders{}, http.StatusForbidden, nil, nil)
+
+	// Export.
+	testHTTP("GET", "/export", httpHeaders{}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", "/export", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", "/export", httpHeaders{hdrSessionOK}, http.StatusForbidden, nil, nil)
+
+	testExport := func(format, archive, mailbox string, recursive bool, expectFiles int) {
+		t.Helper()
+
+		fields := url.Values{
+			"csrf":    []string{string(csrfToken)},
+			"format":  []string{format},
+			"archive": []string{archive},
+			"mailbox": []string{mailbox},
+		}
+		if recursive {
+			fields.Add("recursive", "on")
+		}
+		r := httptest.NewRequest("POST", "/export", strings.NewReader(fields.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Add("Cookie", cookieOK.String())
+		w := httptest.NewRecorder()
+		handle(apiHandler, false, "", w, r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("export, got status code %d, expected 200: %s", w.Code, w.Body.Bytes())
+		}
+		var count int
+		if archive == "zip" {
+			buf := w.Body.Bytes()
+			zr, err := zip.NewReader(bytes.NewReader(buf), int64(len(buf)))
+			tcheck(t, err, "reading zip")
+			for _, f := range zr.File {
+				if !strings.HasSuffix(f.Name, "/") {
+					count++
+				}
+			}
+		} else {
+			var src io.Reader = w.Body
+			if archive == "tgz" {
+				gzr, err := gzip.NewReader(src)
+				tcheck(t, err, "gzip reader")
+				src = gzr
+			}
+			tr := tar.NewReader(src)
+			for {
+				h, err := tr.Next()
+				if err == io.EOF {
+					break
+				}
+				tcheck(t, err, "next file in tar")
+				if !strings.HasSuffix(h.Name, "/") {
+					count++
+				}
+				_, err = io.Copy(io.Discard, tr)
+				tcheck(t, err, "reading from tar")
+			}
+		}
+		if count != expectFiles {
+			t.Fatalf("export, has %d files, expected %d", count, expectFiles)
+		}
+	}
+
+	testExport("maildir", "tgz", "", true, 8+1) // 8 messages, 1 flags file
+	testExport("maildir", "zip", "", true, 8+1)
+	testExport("mbox", "tar", "", true, 6+5) // 6 default mailboxes, 5 created
+	testExport("mbox", "zip", "", true, 6+5)
+	testExport("mbox", "zip", "Lists", true, 3)
+	testExport("mbox", "zip", "Lists", false, 1)
 
 	// HTTP message, generic
-	testHTTP("GET", fmt.Sprintf("/msg/%v/attachments.zip", inboxMinimal.ID), nil, http.StatusUnauthorized, nil, nil)
-	testHTTP("GET", fmt.Sprintf("/msg/%v/attachments.zip", inboxMinimal.ID), httpHeaders{hdrAuthBad}, http.StatusUnauthorized, nil, nil)
-	testHTTPAuth("GET", fmt.Sprintf("/msg/%v/attachments.zip", 0), http.StatusNotFound, nil, nil)
-	testHTTPAuth("GET", fmt.Sprintf("/msg/%v/attachments.zip", testmsgs[len(testmsgs)-1].ID+1), http.StatusNotFound, nil, nil)
-	testHTTPAuth("GET", fmt.Sprintf("/msg/%v/bogus", inboxMinimal.ID), http.StatusNotFound, nil, nil)
-	testHTTPAuth("GET", fmt.Sprintf("/msg/%v/view/bogus", inboxMinimal.ID), http.StatusNotFound, nil, nil)
-	testHTTPAuth("GET", fmt.Sprintf("/msg/%v/bogus/0", inboxMinimal.ID), http.StatusNotFound, nil, nil)
-	testHTTPAuth("GET", "/msg/", http.StatusNotFound, nil, nil)
-	testHTTPAuth("POST", fmt.Sprintf("/msg/%v/attachments.zip", inboxMinimal.ID), http.StatusMethodNotAllowed, nil, nil)
+	testHTTP("GET", fmt.Sprintf("/msg/%v/attachments.zip", inboxMinimal.ID), nil, http.StatusForbidden, nil, nil)
+	testHTTP("GET", fmt.Sprintf("/msg/%v/attachments.zip", inboxMinimal.ID), httpHeaders{hdrCSRFBad}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", fmt.Sprintf("/msg/%v/attachments.zip", inboxMinimal.ID), httpHeaders{hdrCSRFOK}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", fmt.Sprintf("/msg/%v/attachments.zip", inboxMinimal.ID), httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
+	testHTTPAuthREST("GET", fmt.Sprintf("/msg/%v/attachments.zip", 0), http.StatusNotFound, nil, nil)
+	testHTTPAuthREST("GET", fmt.Sprintf("/msg/%v/attachments.zip", testmsgs[len(testmsgs)-1].ID+1), http.StatusNotFound, nil, nil)
+	testHTTPAuthREST("GET", fmt.Sprintf("/msg/%v/bogus", inboxMinimal.ID), http.StatusNotFound, nil, nil)
+	testHTTPAuthREST("GET", fmt.Sprintf("/msg/%v/view/bogus", inboxMinimal.ID), http.StatusNotFound, nil, nil)
+	testHTTPAuthREST("GET", fmt.Sprintf("/msg/%v/bogus/0", inboxMinimal.ID), http.StatusNotFound, nil, nil)
+	testHTTPAuthREST("GET", "/msg/", http.StatusNotFound, nil, nil)
+	testHTTPAuthREST("POST", fmt.Sprintf("/msg/%v/attachments.zip", inboxMinimal.ID), http.StatusMethodNotAllowed, nil, nil)
 
 	// HTTP message: attachments.zip
 	ctZip := [2]string{"Content-Type", "application/zip"}
@@ -415,39 +572,39 @@ func TestWebmail(t *testing.T) {
 	}
 
 	pathInboxMinimal := fmt.Sprintf("/msg/%d", inboxMinimal.ID)
-	testHTTP("GET", pathInboxMinimal+"/attachments.zip", httpHeaders{}, http.StatusUnauthorized, nil, nil)
-	testHTTP("GET", pathInboxMinimal+"/attachments.zip", httpHeaders{hdrAuthBad}, http.StatusUnauthorized, nil, nil)
+	testHTTP("GET", pathInboxMinimal+"/attachments.zip", httpHeaders{}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", pathInboxMinimal+"/attachments.zip", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
 
-	testHTTPAuth("GET", pathInboxMinimal+"/attachments.zip", http.StatusOK, httpHeaders{ctZip}, func(resp *http.Response) {
+	testHTTPAuthREST("GET", pathInboxMinimal+"/attachments.zip", http.StatusOK, httpHeaders{ctZip}, func(resp *http.Response) {
 		checkZip(resp, nil)
 	})
 	pathInboxRelAlt := fmt.Sprintf("/msg/%d", inboxAltRel.ID)
-	testHTTPAuth("GET", pathInboxRelAlt+"/attachments.zip", http.StatusOK, httpHeaders{ctZip}, func(resp *http.Response) {
+	testHTTPAuthREST("GET", pathInboxRelAlt+"/attachments.zip", http.StatusOK, httpHeaders{ctZip}, func(resp *http.Response) {
 		checkZip(resp, [][2]string{{"test1.png", "PNG..."}})
 	})
 	pathInboxAttachments := fmt.Sprintf("/msg/%d", inboxAttachments.ID)
-	testHTTPAuth("GET", pathInboxAttachments+"/attachments.zip", http.StatusOK, httpHeaders{ctZip}, func(resp *http.Response) {
+	testHTTPAuthREST("GET", pathInboxAttachments+"/attachments.zip", http.StatusOK, httpHeaders{ctZip}, func(resp *http.Response) {
 		checkZip(resp, [][2]string{{"attachment-1.png", "PNG..."}, {"attachment-2.png", "PNG..."}, {"test.jpg", "JPG..."}, {"test-1.jpg", "JPG..."}})
 	})
 
 	// HTTP message: raw
 	pathInboxAltRel := fmt.Sprintf("/msg/%d", inboxAltRel.ID)
 	pathInboxText := fmt.Sprintf("/msg/%d", inboxText.ID)
-	testHTTP("GET", pathInboxAltRel+"/raw", httpHeaders{}, http.StatusUnauthorized, nil, nil)
-	testHTTP("GET", pathInboxAltRel+"/raw", httpHeaders{hdrAuthBad}, http.StatusUnauthorized, nil, nil)
-	testHTTPAuth("GET", pathInboxAltRel+"/raw", http.StatusOK, httpHeaders{ctTextNoCharset}, nil)
-	testHTTPAuth("GET", pathInboxText+"/raw", http.StatusOK, httpHeaders{ctText}, nil)
+	testHTTP("GET", pathInboxAltRel+"/raw", httpHeaders{}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", pathInboxAltRel+"/raw", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/raw", http.StatusOK, httpHeaders{ctTextNoCharset}, nil)
+	testHTTPAuthREST("GET", pathInboxText+"/raw", http.StatusOK, httpHeaders{ctText}, nil)
 
 	// HTTP message: parsedmessage.js
-	testHTTP("GET", pathInboxMinimal+"/parsedmessage.js", httpHeaders{}, http.StatusUnauthorized, nil, nil)
-	testHTTP("GET", pathInboxMinimal+"/parsedmessage.js", httpHeaders{hdrAuthBad}, http.StatusUnauthorized, nil, nil)
-	testHTTPAuth("GET", pathInboxMinimal+"/parsedmessage.js", http.StatusOK, httpHeaders{ctJS}, nil)
+	testHTTP("GET", pathInboxMinimal+"/parsedmessage.js", httpHeaders{}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", pathInboxMinimal+"/parsedmessage.js", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
+	testHTTPAuthREST("GET", pathInboxMinimal+"/parsedmessage.js", http.StatusOK, httpHeaders{ctJS}, nil)
 
 	mox.LimitersInit()
 	// HTTP message: text,html,htmlexternal and msgtext,msghtml,msghtmlexternal
 	for _, elem := range []string{"text", "html", "htmlexternal", "msgtext", "msghtml", "msghtmlexternal"} {
-		testHTTP("GET", pathInboxAltRel+"/"+elem, httpHeaders{}, http.StatusUnauthorized, nil, nil)
-		testHTTP("GET", pathInboxAltRel+"/"+elem, httpHeaders{hdrAuthBad}, http.StatusUnauthorized, nil, nil)
+		testHTTP("GET", pathInboxAltRel+"/"+elem, httpHeaders{}, http.StatusForbidden, nil, nil)
+		testHTTP("GET", pathInboxAltRel+"/"+elem, httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
 		mox.LimitersInit() // Reset, for too many failures.
 	}
 
@@ -455,6 +612,11 @@ func TestWebmail(t *testing.T) {
 	cspText := [2]string{
 		"Content-Security-Policy",
 		"frame-ancestors 'self'; default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'self'; frame-src 'self'; connect-src 'self'",
+	}
+	// Text and img-src 'self', for viewing image files inline.
+	cspTextImg := [2]string{
+		"Content-Security-Policy",
+		"frame-ancestors 'self'; default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'self'; frame-src 'self'; connect-src 'self'",
 	}
 	// HTML as viewed in the regular viewer, not in a new tab.
 	cspHTML := [2]string{
@@ -486,37 +648,46 @@ func TestWebmail(t *testing.T) {
 		"Content-Security-Policy",
 		"frame-ancestors 'self'; default-src 'none'; img-src data: http: https: 'unsafe-inline'; style-src 'unsafe-inline' data: http: https:; font-src data: http: https: 'unsafe-inline'; media-src 'unsafe-inline' data: http: https:; script-src 'unsafe-inline' 'self'; frame-src 'self'; connect-src 'self'",
 	}
-	testHTTPAuth("GET", pathInboxAltRel+"/text", http.StatusOK, httpHeaders{ctHTML, cspText}, nil)
-	testHTTPAuth("GET", pathInboxAltRel+"/html", http.StatusOK, httpHeaders{ctHTML, cspHTML}, nil)
-	testHTTPAuth("GET", pathInboxAltRel+"/htmlexternal", http.StatusOK, httpHeaders{ctHTML, cspHTMLExternal}, nil)
-	testHTTPAuth("GET", pathInboxAltRel+"/msgtext", http.StatusOK, httpHeaders{ctHTML, cspText}, nil)
-	testHTTPAuth("GET", pathInboxAltRel+"/msghtml", http.StatusOK, httpHeaders{ctHTML, cspMsgHTML}, nil)
-	testHTTPAuth("GET", pathInboxAltRel+"/msghtmlexternal", http.StatusOK, httpHeaders{ctHTML, cspMsgHTMLExternal}, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/text", http.StatusOK, httpHeaders{ctHTML, cspTextImg}, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/html", http.StatusOK, httpHeaders{ctHTML, cspHTML}, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/htmlexternal", http.StatusOK, httpHeaders{ctHTML, cspHTMLExternal}, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/msgtext", http.StatusOK, httpHeaders{ctHTML, cspText}, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/msghtml", http.StatusOK, httpHeaders{ctHTML, cspMsgHTML}, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/msghtmlexternal", http.StatusOK, httpHeaders{ctHTML, cspMsgHTMLExternal}, nil)
 
-	testHTTPAuth("GET", pathInboxAltRel+"/html?sameorigin=true", http.StatusOK, httpHeaders{ctHTML, cspHTMLSameOrigin}, nil)
-	testHTTPAuth("GET", pathInboxAltRel+"/htmlexternal?sameorigin=true", http.StatusOK, httpHeaders{ctHTML, cspHTMLExternalSameOrigin}, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/html?sameorigin=true", http.StatusOK, httpHeaders{ctHTML, cspHTMLSameOrigin}, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/htmlexternal?sameorigin=true", http.StatusOK, httpHeaders{ctHTML, cspHTMLExternalSameOrigin}, nil)
 
 	// No HTML part.
 	for _, elem := range []string{"html", "htmlexternal", "msghtml", "msghtmlexternal"} {
-		testHTTPAuth("GET", pathInboxText+"/"+elem, http.StatusBadRequest, nil, nil)
+		testHTTPAuthREST("GET", pathInboxText+"/"+elem, http.StatusBadRequest, nil, nil)
 
 	}
 	// No text part.
 	pathInboxHTML := fmt.Sprintf("/msg/%d", inboxHTML.ID)
 	for _, elem := range []string{"text", "msgtext"} {
-		testHTTPAuth("GET", pathInboxHTML+"/"+elem, http.StatusBadRequest, nil, nil)
+		testHTTPAuthREST("GET", pathInboxHTML+"/"+elem, http.StatusBadRequest, nil, nil)
 	}
 
 	// HTTP message part: view,viewtext,download
 	for _, elem := range []string{"view", "viewtext", "download"} {
-		testHTTP("GET", pathInboxAltRel+"/"+elem+"/0", httpHeaders{}, http.StatusUnauthorized, nil, nil)
-		testHTTP("GET", pathInboxAltRel+"/"+elem+"/0", httpHeaders{hdrAuthBad}, http.StatusUnauthorized, nil, nil)
-		testHTTPAuth("GET", pathInboxAltRel+"/"+elem+"/0", http.StatusOK, nil, nil)
-		testHTTPAuth("GET", pathInboxAltRel+"/"+elem+"/0.0", http.StatusOK, nil, nil)
-		testHTTPAuth("GET", pathInboxAltRel+"/"+elem+"/0.1", http.StatusOK, nil, nil)
-		testHTTPAuth("GET", pathInboxAltRel+"/"+elem+"/0.2", http.StatusNotFound, nil, nil)
-		testHTTPAuth("GET", pathInboxAltRel+"/"+elem+"/1", http.StatusNotFound, nil, nil)
+		testHTTP("GET", pathInboxAltRel+"/"+elem+"/0", httpHeaders{}, http.StatusForbidden, nil, nil)
+		testHTTP("GET", pathInboxAltRel+"/"+elem+"/0", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
+		testHTTPAuthREST("GET", pathInboxAltRel+"/"+elem+"/0", http.StatusOK, nil, nil)
+		testHTTPAuthREST("GET", pathInboxAltRel+"/"+elem+"/0.0", http.StatusOK, nil, nil)
+		testHTTPAuthREST("GET", pathInboxAltRel+"/"+elem+"/0.1", http.StatusOK, nil, nil)
+		testHTTPAuthREST("GET", pathInboxAltRel+"/"+elem+"/0.2", http.StatusNotFound, nil, nil)
+		testHTTPAuthREST("GET", pathInboxAltRel+"/"+elem+"/1", http.StatusNotFound, nil, nil)
 	}
+
+	// Logout invalidates the session. Must work exactly once.
+	// Normally the generic /api/ auth check returns a user error. We bypass it and
+	// check for the server error.
+	sessionToken := store.SessionToken(strings.SplitN(sessionCookie.Value, " ", 2)[0])
+	reqInfo = requestInfo{log, "mjl@mox.example", acc, sessionToken, httptest.NewRecorder(), &http.Request{RemoteAddr: "127.0.0.1:1234"}}
+	ctx = context.WithValue(ctxbg, requestInfoCtxKey, reqInfo)
+	api.Logout(ctx)
+	tneedErrorCode(t, "server:error", func() { api.Logout(ctx) })
 }
 
 func TestSanitize(t *testing.T) {

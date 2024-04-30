@@ -14,10 +14,10 @@ func TestCopy(t *testing.T) {
 	tc2 := startNoSwitchboard(t)
 	defer tc2.close()
 
-	tc.client.Login("mjl@mox.example", "testtest")
+	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
 
-	tc2.client.Login("mjl@mox.example", "testtest")
+	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("Trash")
 
 	tc.transactf("bad", "copy")          // Missing params.
@@ -58,4 +58,15 @@ func TestCopy(t *testing.T) {
 		imapclient.UntaggedFetch{Seq: 3, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(3), imapclient.FetchFlags(nil)}},
 		imapclient.UntaggedFetch{Seq: 4, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(4), imapclient.FetchFlags(nil)}},
 	)
+
+	tclimit := startArgs(t, false, false, true, true, "limit")
+	defer tclimit.close()
+	tclimit.client.Login("limit@mox.example", password0)
+	tclimit.client.Select("inbox")
+	// First message of 1 byte is within limits.
+	tclimit.transactf("ok", "append inbox (\\Seen Label1 $label2) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
+	tclimit.xuntagged(imapclient.UntaggedExists(1))
+	// Second message would take account past limit.
+	tclimit.transactf("no", "copy 1:* Trash")
+	tclimit.xcode("OVERQUOTA")
 }

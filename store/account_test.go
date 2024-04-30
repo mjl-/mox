@@ -19,6 +19,7 @@ import (
 )
 
 var ctxbg = context.Background()
+var pkglog = mlog.New("store", nil)
 
 func tcheck(t *testing.T, err error, msg string) {
 	t.Helper()
@@ -28,20 +29,20 @@ func tcheck(t *testing.T, err error, msg string) {
 }
 
 func TestMailbox(t *testing.T) {
+	log := mlog.New("store", nil)
 	os.RemoveAll("../testdata/store/data")
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
-	acc, err := OpenAccount("mjl")
+	acc, err := OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
 	defer func() {
 		err = acc.Close()
 		tcheck(t, err, "closing account")
+		acc.CheckClosed()
 	}()
 	defer Switchboard()()
 
-	log := mlog.New("store")
-
-	msgFile, err := CreateMessageTemp("account-test")
+	msgFile, err := CreateMessageTemp(log, "account-test")
 	if err != nil {
 		t.Fatalf("creating temp msg file: %s", err)
 	}
@@ -72,7 +73,7 @@ func TestMailbox(t *testing.T) {
 	}
 	acc.WithWLock(func() {
 		conf, _ := acc.Conf()
-		err := acc.DeliverDestination(xlog, conf.Destinations["mjl"], &m, msgFile)
+		err := acc.DeliverDestination(log, conf.Destinations["mjl"], &m, msgFile)
 		tcheck(t, err, "deliver without consume")
 
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
@@ -81,7 +82,7 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "sent mailbox")
 			msent.MailboxID = mbsent.ID
 			msent.MailboxOrigID = mbsent.ID
-			err = acc.DeliverMessage(xlog, tx, &msent, msgFile, true, false, false)
+			err = acc.DeliverMessage(pkglog, tx, &msent, msgFile, true, false, false, true)
 			tcheck(t, err, "deliver message")
 			if !msent.ThreadMuted || !msent.ThreadCollapsed {
 				t.Fatalf("thread muted & collapsed should have been copied from parent (duplicate message-id) m")
@@ -97,7 +98,7 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "insert rejects mailbox")
 			mreject.MailboxID = mbrejects.ID
 			mreject.MailboxOrigID = mbrejects.ID
-			err = acc.DeliverMessage(xlog, tx, &mreject, msgFile, true, false, false)
+			err = acc.DeliverMessage(pkglog, tx, &mreject, msgFile, true, false, false, true)
 			tcheck(t, err, "deliver message")
 
 			err = tx.Get(&mbrejects)
@@ -110,7 +111,7 @@ func TestMailbox(t *testing.T) {
 		})
 		tcheck(t, err, "deliver as sent and rejects")
 
-		err = acc.DeliverDestination(xlog, conf.Destinations["mjl"], &mconsumed, msgFile)
+		err = acc.DeliverDestination(pkglog, conf.Destinations["mjl"], &mconsumed, msgFile)
 		tcheck(t, err, "deliver with consume")
 
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
@@ -141,7 +142,7 @@ func TestMailbox(t *testing.T) {
 	})
 	tcheck(t, err, "untraining non-junk")
 
-	err = acc.SetPassword("testtest")
+	err = acc.SetPassword(log, "testtest")
 	tcheck(t, err, "set password")
 
 	key0, err := acc.Subjectpass("test@localhost")
@@ -223,37 +224,37 @@ func TestMailbox(t *testing.T) {
 
 	// Run the auth tests twice for possible cache effects.
 	for i := 0; i < 2; i++ {
-		_, err := OpenEmailAuth("mjl@mox.example", "bogus")
+		_, err := OpenEmailAuth(log, "mjl@mox.example", "bogus")
 		if err != ErrUnknownCredentials {
 			t.Fatalf("got %v, expected ErrUnknownCredentials", err)
 		}
 	}
 
 	for i := 0; i < 2; i++ {
-		acc2, err := OpenEmailAuth("mjl@mox.example", "testtest")
+		acc2, err := OpenEmailAuth(log, "mjl@mox.example", "testtest")
 		tcheck(t, err, "open for email with auth")
 		err = acc2.Close()
 		tcheck(t, err, "close account")
 	}
 
-	acc2, err := OpenEmailAuth("other@mox.example", "testtest")
+	acc2, err := OpenEmailAuth(log, "other@mox.example", "testtest")
 	tcheck(t, err, "open for email with auth")
 	err = acc2.Close()
 	tcheck(t, err, "close account")
 
-	_, err = OpenEmailAuth("bogus@mox.example", "testtest")
+	_, err = OpenEmailAuth(log, "bogus@mox.example", "testtest")
 	if err != ErrUnknownCredentials {
 		t.Fatalf("got %v, expected ErrUnknownCredentials", err)
 	}
 
-	_, err = OpenEmailAuth("mjl@test.example", "testtest")
+	_, err = OpenEmailAuth(log, "mjl@test.example", "testtest")
 	if err != ErrUnknownCredentials {
 		t.Fatalf("got %v, expected ErrUnknownCredentials", err)
 	}
 }
 
 func TestMessageRuleset(t *testing.T) {
-	f, err := CreateMessageTemp("msgruleset")
+	f, err := CreateMessageTemp(pkglog, "msgruleset")
 	tcheck(t, err, "creating temp msg file")
 	defer os.Remove(f.Name())
 	defer f.Close()
@@ -284,7 +285,7 @@ Rulesets:
 	}
 	dest.Rulesets[0].HeadersRegexpCompiled = hdrs
 
-	c := MessageRuleset(xlog, dest, &Message{}, msgBuf, f)
+	c := MessageRuleset(pkglog, dest, &Message{}, msgBuf, f)
 	if c == nil {
 		t.Fatalf("expected ruleset match")
 	}
@@ -293,7 +294,7 @@ Rulesets:
 
 test
 `, "\n", "\r\n"))
-	c = MessageRuleset(xlog, dest, &Message{}, msg2Buf, f)
+	c = MessageRuleset(pkglog, dest, &Message{}, msg2Buf, f)
 	if c != nil {
 		t.Fatalf("expected no ruleset match")
 	}

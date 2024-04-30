@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	mathrand "math/rand"
 	"net/http"
 	"runtime/debug"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/store"
 )
 
 type eventWriter struct {
@@ -24,6 +26,11 @@ type eventWriter struct {
 	sync.Mutex
 	closed bool
 
+	// Before writing an event, we check if session is still valid. If not, we send a
+	// fatal error instead.
+	accountName  string
+	sessionToken store.SessionToken
+
 	wrote  bool // To be reset by user, set on write.
 	events chan struct {
 		name string    // E.g. "start" for EventStart.
@@ -33,8 +40,8 @@ type eventWriter struct {
 	errors chan error // If we have an events channel, we read errors and abort for them.
 }
 
-func newEventWriter(out writeFlusher, waitMin, waitMax time.Duration) *eventWriter {
-	return &eventWriter{out: out, waitMin: waitMin, waitMax: waitMax}
+func newEventWriter(out writeFlusher, waitMin, waitMax time.Duration, accountName string, sessionToken store.SessionToken) *eventWriter {
+	return &eventWriter{out: out, waitMin: waitMin, waitMax: waitMax, accountName: accountName, sessionToken: sessionToken}
 }
 
 // close shuts down the events channel, causing the goroutine (if created) to
@@ -69,7 +76,14 @@ var waitGen = mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
 
 // Schedule an event for writing to the connection. If events get a delay, this
 // function still returns immediately.
-func (ew *eventWriter) xsendEvent(ctx context.Context, log *mlog.Log, name string, v any) {
+func (ew *eventWriter) xsendEvent(ctx context.Context, log mlog.Log, name string, v any) {
+	if name != "fatalErr" {
+		if _, err := store.SessionUse(ctx, log, ew.accountName, ew.sessionToken, ""); err != nil {
+			ew.xsendEvent(ctx, log, "fatalErr", "session no longer valid")
+			return
+		}
+	}
+
 	if (ew.waitMin > 0 || ew.waitMax > 0) && ew.events == nil {
 		// First write on a connection with delay.
 		ew.events = make(chan struct {
@@ -82,7 +96,7 @@ func (ew *eventWriter) xsendEvent(ctx context.Context, log *mlog.Log, name strin
 			defer func() {
 				x := recover() // Should not happen, but don't take program down if it does.
 				if x != nil {
-					log.WithContext(ctx).Error("writeEvent panic", mlog.Field("err", x))
+					log.WithContext(ctx).Error("writeEvent panic", slog.Any("err", x))
 					debug.PrintStack()
 					metrics.PanicInc(metrics.Webmailsendevent)
 				}

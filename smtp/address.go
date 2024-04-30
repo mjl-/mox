@@ -6,15 +6,20 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/text/unicode/norm"
+
 	"github.com/mjl-/mox/dns"
-	"github.com/mjl-/mox/moxvar"
 )
+
+// Pedantic enables stricter parsing.
+var Pedantic bool
 
 var ErrBadAddress = errors.New("invalid email address")
 
 // Localpart is a decoded local part of an email address, before the "@".
 // For quoted strings, values do not hold the double quote or escaping backslashes.
 // An empty string can be a valid localpart.
+// Localparts are in Unicode NFC.
 type Localpart string
 
 // String returns a packed representation of an address, with proper escaping/quoting, for use in SMTP.
@@ -105,6 +110,10 @@ type Address struct {
 // NewAddress returns an address.
 func NewAddress(localpart Localpart, domain dns.Domain) Address {
 	return Address{localpart, domain}
+}
+
+func (a Address) Path() Path {
+	return Path{Localpart: a.Localpart, IPDomain: dns.IPDomain{Domain: a.Domain}}
 }
 
 func (a Address) IsZero() bool {
@@ -258,11 +267,11 @@ func (p *parser) xlocalpart() Localpart {
 		}
 	}
 	// In the wild, some services use large localparts for generated (bounce) addresses.
-	if moxvar.Pedantic && len(s) > 64 || len(s) > 128 {
+	if Pedantic && len(s) > 64 || len(s) > 128 {
 		// ../rfc/5321:3486
 		p.xerrorf("localpart longer than 64 octets")
 	}
-	return Localpart(s)
+	return Localpart(norm.NFC.String(s))
 }
 
 func (p *parser) xquotedString() string {

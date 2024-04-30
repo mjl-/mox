@@ -26,11 +26,11 @@ func (p *parser) checkInt(un uint64) int {
 }
 
 // Fieldmap starts a new fieldmap for n fields.
-func (p *parser) Fieldmap(n int) *fieldmap {
+func (p *parser) Fieldmap(n int) fieldmap {
 	// log.Printf("parse fieldmap %d bits", n)
 	nb := (n + 7) / 8
 	buf := p.Take(nb)
-	return &fieldmap{n, buf, 0, 0, p.Errorf}
+	return fieldmap{n, buf, 0, 0, p.Errorf}
 }
 
 // Take reads nb bytes.

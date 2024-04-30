@@ -12,8 +12,17 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/text/secure/precis"
+
 	"github.com/mjl-/mox/scram"
 )
+
+func TestAuthenticateLogin(t *testing.T) {
+	// NFD username and PRECIS-cleaned password.
+	tc := start(t)
+	tc.client.Login("mo\u0301x@mox.example", password1)
+	tc.close()
+}
 
 func TestAuthenticatePlain(t *testing.T) {
 	tc := start(t)
@@ -28,21 +37,26 @@ func TestAuthenticatePlain(t *testing.T) {
 	tc.xcode("AUTHENTICATIONFAILED")
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000test")))
 	tc.xcode("AUTHENTICATIONFAILED")
-	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000testtesttest")))
+	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000test"+password0)))
 	tc.xcode("AUTHENTICATIONFAILED")
 	tc.transactf("bad", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000")))
 	tc.xcode("")
-	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("other\u0000mjl@mox.example\u0000testtest")))
+	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("other\u0000mjl@mox.example\u0000"+password0)))
 	tc.xcode("AUTHORIZATIONFAILED")
-	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000testtest")))
+	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000"+password0)))
 	tc.close()
 
 	tc = start(t)
-	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("mjl@mox.example\u0000mjl@mox.example\u0000testtest")))
+	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("mjl@mox.example\u0000mjl@mox.example\u0000"+password0)))
+	tc.close()
+
+	// NFD username and PRECIS-cleaned password.
+	tc = start(t)
+	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("mo\u0301x@mox.example\u0000mo\u0301x@mox.example\u0000"+password1)))
 	tc.close()
 
 	tc = start(t)
-	tc.client.AuthenticatePlain("mjl@mox.example", "testtest")
+	tc.client.AuthenticatePlain("mjl@mox.example", password0)
 	tc.close()
 
 	tc = start(t)
@@ -55,27 +69,36 @@ func TestAuthenticatePlain(t *testing.T) {
 
 	tc.cmdf("", "authenticate plain")
 	tc.readprefixline("+ ")
-	tc.writelinef("%s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000testtest")))
+	tc.writelinef("%s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000"+password0)))
 	tc.readstatus("ok")
 }
 
 func TestAuthenticateSCRAMSHA1(t *testing.T) {
-	testAuthenticateSCRAM(t, "SCRAM-SHA-1", sha1.New)
+	testAuthenticateSCRAM(t, false, "SCRAM-SHA-1", sha1.New)
 }
 
 func TestAuthenticateSCRAMSHA256(t *testing.T) {
-	testAuthenticateSCRAM(t, "SCRAM-SHA-256", sha256.New)
+	testAuthenticateSCRAM(t, false, "SCRAM-SHA-256", sha256.New)
 }
 
-func testAuthenticateSCRAM(t *testing.T, method string, h func() hash.Hash) {
-	tc := start(t)
-	tc.client.AuthenticateSCRAM(method, h, "mjl@mox.example", "testtest")
+func TestAuthenticateSCRAMSHA1PLUS(t *testing.T) {
+	testAuthenticateSCRAM(t, true, "SCRAM-SHA-1-PLUS", sha1.New)
+}
+
+func TestAuthenticateSCRAMSHA256PLUS(t *testing.T) {
+	testAuthenticateSCRAM(t, true, "SCRAM-SHA-256-PLUS", sha256.New)
+}
+
+func testAuthenticateSCRAM(t *testing.T, tls bool, method string, h func() hash.Hash) {
+	tc := startArgs(t, true, tls, true, true, "mjl")
+	tc.client.AuthenticateSCRAM(method, h, "mjl@mox.example", password0)
 	tc.close()
 
 	auth := func(status string, serverFinalError error, username, password string) {
 		t.Helper()
 
-		sc := scram.NewClient(h, username, "")
+		noServerPlus := false
+		sc := scram.NewClient(h, username, "", noServerPlus, tc.client.TLSConnectionState())
 		clientFirst, err := sc.ClientFirst()
 		tc.check(err, "scram clientFirst")
 		tc.client.LastTag = "x001"
@@ -116,15 +139,19 @@ func testAuthenticateSCRAM(t *testing.T, method string, h func() hash.Hash) {
 		}
 	}
 
-	tc = start(t)
+	tc = startArgs(t, true, tls, true, true, "mjl")
 	auth("no", scram.ErrInvalidProof, "mjl@mox.example", "badpass")
 	auth("no", scram.ErrInvalidProof, "mjl@mox.example", "")
 	// todo: server aborts due to invalid username. we should probably make client continue with fake determinisitically generated salt and result in error in the end.
-	// auth("no", nil, "other@mox.example", "testtest")
+	// auth("no", nil, "other@mox.example", password0)
 
 	tc.transactf("no", "authenticate bogus ")
 	tc.transactf("bad", "authenticate %s not base64...", method)
 	tc.transactf("bad", "authenticate %s %s", method, base64.StdEncoding.EncodeToString([]byte("bad data")))
+
+	// NFD username, with PRECIS-cleaned password.
+	auth("ok", nil, "mo\u0301x@mox.example", password1)
+
 	tc.close()
 }
 
@@ -154,6 +181,10 @@ func TestAuthenticateCRAMMD5(t *testing.T) {
 		}
 
 		chal := xreadContinuation()
+		pw, err := precis.OpaqueString.String(password)
+		if err == nil {
+			password = pw
+		}
 		h := hmac.New(md5.New, []byte(password))
 		h.Write([]byte(chal))
 		resp := fmt.Sprintf("%s %x", username, h.Sum(nil))
@@ -168,9 +199,14 @@ func TestAuthenticateCRAMMD5(t *testing.T) {
 
 	auth("no", "mjl@mox.example", "badpass")
 	auth("no", "mjl@mox.example", "")
-	auth("no", "other@mox.example", "testtest")
+	auth("no", "other@mox.example", password0)
 
-	auth("ok", "mjl@mox.example", "testtest")
+	auth("ok", "mjl@mox.example", password0)
 
+	tc.close()
+
+	// NFD username, with PRECIS-cleaned password.
+	tc = start(t)
+	auth("ok", "mo\u0301x@mox.example", password1)
 	tc.close()
 }

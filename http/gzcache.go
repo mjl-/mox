@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -75,7 +76,7 @@ func loadStaticGzipCache(dir string, maxSize int64) {
 	os.MkdirAll(dir, 0700)
 	entries, err := os.ReadDir(dir)
 	if err != nil && !os.IsNotExist(err) {
-		xlog.Errorx("listing static gzip cache files", err, mlog.Field("dir", dir))
+		pkglog.Errorx("listing static gzip cache files", err, slog.String("dir", dir))
 	}
 	for _, e := range entries {
 		name := e.Name()
@@ -111,9 +112,12 @@ func loadStaticGzipCache(dir string, maxSize int64) {
 			atime, err = statAtime(fi.Sys())
 		}
 		if err != nil {
-			xlog.Infox("removing unusable/unrecognized file in static gzip cache dir", err)
+			pkglog.Infox("removing unusable/unrecognized file in static gzip cache dir", err)
 			xerr := os.Remove(filepath.Join(dir, name))
-			xlog.Check(xerr, "removing unusable file in static gzip cache dir", mlog.Field("error", err), mlog.Field("dir", dir), mlog.Field("filename", name))
+			pkglog.Check(xerr, "removing unusable file in static gzip cache dir",
+				slog.Any("error", err),
+				slog.String("dir", dir),
+				slog.String("filename", name))
 			continue
 		}
 		staticgzcache.paths[path] = gzfile{
@@ -163,7 +167,7 @@ func (c *gzcache) evictPath(path string) {
 	c.unlink(gf.use)
 	c.size -= gf.gzsize
 	err := os.Remove(staticCachePath(c.dir, path, gf.mtime))
-	xlog.Check(err, "removing cached gzipped static file", mlog.Field("path", path))
+	pkglog.Check(err, "removing cached gzipped static file", slog.String("path", path))
 }
 
 // Open cached file for path, requiring it has mtime. If there is no usable cached
@@ -189,7 +193,7 @@ func (c *gzcache) openPath(path string, mtime int64) (*os.File, int64) {
 	p := staticCachePath(c.dir, path, gf.mtime)
 	f, err := os.Open(p)
 	if err != nil {
-		xlog.Errorx("open static cached gzip file, removing from cache", err, mlog.Field("path", path))
+		pkglog.Errorx("open static cached gzip file, removing from cache", err, slog.String("path", path))
 		// Perhaps someone removed the file? Remove from cache, it will be recreated.
 		c.evictPath(path)
 		return nil, 0
@@ -303,8 +307,8 @@ type staticgzcacheReplacer struct {
 	handled bool
 }
 
-func (w *staticgzcacheReplacer) logger() *mlog.Log {
-	return xlog.WithContext(w.r.Context())
+func (w *staticgzcacheReplacer) logger() mlog.Log {
+	return pkglog.WithContext(w.r.Context())
 }
 
 // Header returns the header of the underlying ResponseWriter.
@@ -353,7 +357,7 @@ func (w *staticgzcacheReplacer) WriteHeader(statusCode int) {
 		p := staticCachePath(staticgzcache.dir, w.uncomprPath, w.uncomprMtime.UnixNano())
 		ngzf, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
 		if err != nil {
-			w.logger().Errorx("create new static gzip cache file", err, mlog.Field("requestpath", w.uncomprPath), mlog.Field("fspath", p))
+			w.logger().Errorx("create new static gzip cache file", err, slog.String("requestpath", w.uncomprPath), slog.String("fspath", p))
 			staticgzcache.abortPath(w.uncomprPath)
 			return
 		}
@@ -361,9 +365,9 @@ func (w *staticgzcacheReplacer) WriteHeader(statusCode int) {
 			if ngzf != nil {
 				staticgzcache.abortPath(w.uncomprPath)
 				err := ngzf.Close()
-				w.logger().Check(err, "closing failed static gzip cache file", mlog.Field("requestpath", w.uncomprPath), mlog.Field("fspath", p))
+				w.logger().Check(err, "closing failed static gzip cache file", slog.String("requestpath", w.uncomprPath), slog.String("fspath", p))
 				err = os.Remove(p)
-				w.logger().Check(err, "removing failed static gzip cache file", mlog.Field("requestpath", w.uncomprPath), mlog.Field("fspath", p))
+				w.logger().Check(err, "removing failed static gzip cache file", slog.String("requestpath", w.uncomprPath), slog.String("fspath", p))
 			}
 		}()
 

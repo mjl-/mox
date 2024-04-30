@@ -1,11 +1,24 @@
 package tlsrpt
 
 import (
+	"context"
+	"crypto/ed25519"
+	cryptorand "crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"io"
+	"math/big"
+	"net"
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/mjl-/mox/mlog"
 )
+
+var pkglog = mlog.New("tlsrpt", nil)
 
 const reportJSON = `{
      "organization-name": "Company-X",
@@ -102,26 +115,26 @@ Content-Disposition: attachment;
 func TestReport(t *testing.T) {
 	// ../rfc/8460:1756
 
-	var report Report
+	var report ReportJSON
 	dec := json.NewDecoder(strings.NewReader(reportJSON))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&report); err != nil {
 		t.Fatalf("parsing report: %s", err)
 	}
 
-	if _, err := ParseMessage(xlog, strings.NewReader(tlsrptMessage)); err != nil {
+	if _, err := ParseMessage(pkglog.Logger, strings.NewReader(tlsrptMessage)); err != nil {
 		t.Fatalf("parsing TLSRPT from message: %s", err)
 	}
 
-	if _, err := ParseMessage(xlog, strings.NewReader(tlsrptMessage2)); err != nil {
+	if _, err := ParseMessage(pkglog.Logger, strings.NewReader(tlsrptMessage2)); err != nil {
 		t.Fatalf("parsing TLSRPT from message: %s", err)
 	}
 
-	if _, err := ParseMessage(xlog, strings.NewReader(strings.ReplaceAll(tlsrptMessage, "multipart/report", "multipart/related"))); err != ErrNoReport {
+	if _, err := ParseMessage(pkglog.Logger, strings.NewReader(strings.ReplaceAll(tlsrptMessage, "multipart/report", "multipart/related"))); err != ErrNoReport {
 		t.Fatalf("got err %v, expected ErrNoReport", err)
 	}
 
-	if _, err := ParseMessage(xlog, strings.NewReader(strings.ReplaceAll(tlsrptMessage, "application/tlsrpt+json", "application/json"))); err != ErrNoReport {
+	if _, err := ParseMessage(pkglog.Logger, strings.NewReader(strings.ReplaceAll(tlsrptMessage, "application/tlsrpt+json", "application/json"))); err != ErrNoReport {
 		t.Fatalf("got err %v, expected ErrNoReport", err)
 	}
 
@@ -134,16 +147,175 @@ func TestReport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open %q: %s", file, err)
 		}
-		if _, err := ParseMessage(xlog, f); err != nil {
+		if _, err := ParseMessage(pkglog.Logger, f); err != nil {
 			t.Fatalf("parsing TLSRPT from message %q: %s", file.Name(), err)
 		}
 		f.Close()
 	}
 }
 
+func TestTLSFailureDetails(t *testing.T) {
+	const alert70 = "tls-remote-alert-70-protocol-version-not-supported"
+
+	test := func(expResultType ResultType, expReasonCode string, client func(net.Conn) error, server func(net.Conn)) {
+		t.Helper()
+
+		cconn, sconn := net.Pipe()
+		defer cconn.Close()
+		defer sconn.Close()
+		go server(sconn)
+		err := client(cconn)
+		if err == nil {
+			t.Fatalf("expected tls error")
+		}
+
+		resultType, reasonCode := TLSFailureDetails(err)
+		if resultType != expResultType || !(reasonCode == expReasonCode || expReasonCode == alert70 && reasonCode == "tls-remote-alert-70") {
+			t.Fatalf("got %v %v, expected %v %v", resultType, reasonCode, expResultType, expReasonCode)
+		}
+	}
+
+	newPool := func(certs ...tls.Certificate) *x509.CertPool {
+		pool := x509.NewCertPool()
+		for _, cert := range certs {
+			pool.AddCert(cert.Leaf)
+		}
+		return pool
+	}
+
+	// Expired certificate.
+	expiredCert := fakeCert(t, "localhost", true)
+	test(ResultCertificateExpired, "",
+		func(conn net.Conn) error {
+			config := tls.Config{ServerName: "localhost", RootCAs: newPool(expiredCert)}
+			return tls.Client(conn, &config).Handshake()
+		},
+		func(conn net.Conn) {
+			config := tls.Config{Certificates: []tls.Certificate{expiredCert}}
+			tls.Server(conn, &config).Handshake()
+		},
+	)
+
+	// Hostname mismatch.
+	okCert := fakeCert(t, "localhost", false)
+	test(ResultCertificateHostMismatch, "", func(conn net.Conn) error {
+		config := tls.Config{ServerName: "otherhost", RootCAs: newPool(okCert)}
+		return tls.Client(conn, &config).Handshake()
+	},
+		func(conn net.Conn) {
+			config := tls.Config{Certificates: []tls.Certificate{okCert}}
+			tls.Server(conn, &config).Handshake()
+		},
+	)
+
+	// Not signed by trusted CA.
+	test(ResultCertificateNotTrusted, "", func(conn net.Conn) error {
+		config := tls.Config{ServerName: "localhost", RootCAs: newPool()}
+		return tls.Client(conn, &config).Handshake()
+	},
+		func(conn net.Conn) {
+			config := tls.Config{Certificates: []tls.Certificate{okCert}}
+			tls.Server(conn, &config).Handshake()
+		},
+	)
+
+	// We don't support the right protocol version.
+	test(ResultValidationFailure, alert70, func(conn net.Conn) error {
+		config := tls.Config{ServerName: "localhost", RootCAs: newPool(okCert), MinVersion: tls.VersionTLS10, MaxVersion: tls.VersionTLS10}
+		return tls.Client(conn, &config).Handshake()
+	},
+		func(conn net.Conn) {
+			config := tls.Config{Certificates: []tls.Certificate{okCert}, MinVersion: tls.VersionTLS12}
+			tls.Server(conn, &config).Handshake()
+		},
+	)
+
+	// todo: ideally a test for tls-local-alert-*
+
+	// Remote is not speaking TLS.
+	test(ResultValidationFailure, "tls-record-header-error", func(conn net.Conn) error {
+		config := tls.Config{ServerName: "localhost", RootCAs: newPool(okCert)}
+		return tls.Client(conn, &config).Handshake()
+	},
+		func(conn net.Conn) {
+			go io.Copy(io.Discard, conn)
+			buf := make([]byte, 128)
+			for {
+				_, err := conn.Write(buf)
+				if err != nil {
+					break
+				}
+			}
+		},
+	)
+
+	// Context deadline exceeded during handshake.
+	test(ResultValidationFailure, "io-timeout-during-handshake",
+		func(conn net.Conn) error {
+			config := tls.Config{ServerName: "localhost", RootCAs: newPool(okCert)}
+			ctx, cancel := context.WithTimeout(context.Background(), 1)
+			defer cancel()
+			return tls.Client(conn, &config).HandshakeContext(ctx)
+		},
+		func(conn net.Conn) {},
+	)
+
+	// Timeout during handshake.
+	test(ResultValidationFailure, "io-timeout-during-handshake",
+		func(conn net.Conn) error {
+			config := tls.Config{ServerName: "localhost", RootCAs: newPool(okCert)}
+			conn.SetDeadline(time.Now())
+			return tls.Client(conn, &config).Handshake()
+		},
+		func(conn net.Conn) {},
+	)
+
+	// Closing connection during handshake.
+	test(ResultValidationFailure, "connection-closed-during-handshake", func(conn net.Conn) error {
+		config := tls.Config{ServerName: "localhost", RootCAs: newPool(okCert)}
+		return tls.Client(conn, &config).Handshake()
+	},
+		func(conn net.Conn) {
+			conn.Close()
+		},
+	)
+}
+
+// Just a cert that appears valid.
+func fakeCert(t *testing.T, name string, expired bool) tls.Certificate {
+	notAfter := time.Now()
+	if expired {
+		notAfter = notAfter.Add(-time.Hour)
+	} else {
+		notAfter = notAfter.Add(time.Hour)
+	}
+
+	privKey := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)) // Fake key, don't use this for real!
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1), // Required field...
+		DNSNames:     []string{name},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     notAfter,
+	}
+	localCertBuf, err := x509.CreateCertificate(cryptorand.Reader, template, template, privKey.Public(), privKey)
+	if err != nil {
+		t.Fatalf("making certificate: %s", err)
+	}
+	cert, err := x509.ParseCertificate(localCertBuf)
+	if err != nil {
+		t.Fatalf("parsing generated certificate: %s", err)
+	}
+	c := tls.Certificate{
+		Certificate: [][]byte{localCertBuf},
+		PrivateKey:  privKey,
+		Leaf:        cert,
+	}
+	return c
+}
+
 func FuzzParseMessage(f *testing.F) {
 	f.Add(tlsrptMessage)
 	f.Fuzz(func(t *testing.T, s string) {
-		ParseMessage(xlog, strings.NewReader(s))
+		ParseMessage(pkglog.Logger, strings.NewReader(s))
 	})
 }

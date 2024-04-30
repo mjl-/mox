@@ -61,13 +61,26 @@ func (c *Conn) AuthenticatePlain(username, password string) (untagged []Untagged
 	return
 }
 
-// Authenticate with SCRAM-SHA-1 or SCRAM-SHA-256, where the password is not
-// exchanged in original plaintext form, but only derived hashes are exchanged by
-// both parties as proof of knowledge of password.
+// Authenticate with SCRAM-SHA-256(-PLUS) or SCRAM-SHA-1(-PLUS). With SCRAM, the
+// password is not exchanged in plaintext form, but only derived hashes are
+// exchanged by both parties as proof of knowledge of password.
+//
+// The PLUS variants bind the authentication exchange to the TLS connection,
+// detecting MitM attacks.
 func (c *Conn) AuthenticateSCRAM(method string, h func() hash.Hash, username, password string) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
 
-	sc := scram.NewClient(h, username, "")
+	var cs *tls.ConnectionState
+	lmethod := strings.ToLower(method)
+	if strings.HasSuffix(lmethod, "-plus") {
+		tlsConn, ok := c.conn.(*tls.Conn)
+		if !ok {
+			c.xerrorf("cannot use scram plus without tls")
+		}
+		xcs := tlsConn.ConnectionState()
+		cs = &xcs
+	}
+	sc := scram.NewClient(h, username, "", false, cs)
 	clientFirst, err := sc.ClientFirst()
 	c.xcheckf(err, "scram clientFirst")
 	c.LastTag = c.nextTag()
@@ -193,10 +206,15 @@ func (c *Conn) Namespace() (untagged []Untagged, result Result, rerr error) {
 	return c.Transactf("namespace")
 }
 
-// Status requests information about a mailbox, such as number of messages, size, etc.
-func (c *Conn) Status(mailbox string) (untagged []Untagged, result Result, rerr error) {
+// Status requests information about a mailbox, such as number of messages, size,
+// etc. At least one attribute required.
+func (c *Conn) Status(mailbox string, attrs ...StatusAttr) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
-	return c.Transactf("status %s", astring(mailbox))
+	l := make([]string, len(attrs))
+	for i, a := range attrs {
+		l[i] = string(a)
+	}
+	return c.Transactf("status %s (%s)", astring(mailbox), strings.Join(l, " "))
 }
 
 // Append adds message to mailbox with flags and optional receive time.

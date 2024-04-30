@@ -31,7 +31,7 @@ func (f *Filter) tokenizeMail(path string) (bool, map[string]struct{}, error) {
 	if err != nil {
 		return false, nil, err
 	}
-	p, _ := message.EnsurePart(f.log, false, mf, fi.Size())
+	p, _ := message.EnsurePart(f.log.Logger, false, mf, fi.Size())
 	words, err := f.ParseMessage(p)
 	return true, words, err
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dnsbl"
+	"github.com/mjl-/mox/mlog"
 )
 
 var dnsblHealth = struct {
@@ -23,12 +24,12 @@ type dnsblStatus struct {
 }
 
 // checkDNSBLHealth checks healthiness of DNSBL "zone", keeping the result cached for 4 hours.
-func checkDNSBLHealth(ctx context.Context, resolver dns.Resolver, zone dns.Domain) (rok bool) {
+func checkDNSBLHealth(ctx context.Context, log mlog.Log, resolver dns.Resolver, zone dns.Domain) (rok bool) {
 	dnsblHealth.Lock()
 	defer dnsblHealth.Unlock()
 	status, ok := dnsblHealth.zones[zone]
 	if !ok || time.Since(status.last) > 4*time.Hour {
-		status.err = dnsbl.CheckHealth(ctx, resolver, zone)
+		status.err = dnsbl.CheckHealth(ctx, log.Logger, resolver, zone)
 		status.last = time.Now()
 		dnsblHealth.zones[zone] = status
 	}

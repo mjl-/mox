@@ -6,16 +6,19 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
+	golog "log"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 )
 
 func TestUpdates(t *testing.T) {
+	log := mlog.New("updates", nil)
+
 	resolver := dns.MockResolver{
 		TXT: map[string][]string{
 			"_updates.mox.example.":        {"v=UPDATES0; l=v0.0.1"},
@@ -39,7 +42,7 @@ func TestUpdates(t *testing.T) {
 		d, _ := dns.ParseDomain(dom)
 		expv, _ := ParseVersion(expVersion)
 
-		version, record, err := Lookup(context.Background(), resolver, d)
+		version, record, err := Lookup(context.Background(), log.Logger, resolver, d)
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("lookup: got err %v, expected %v", err, expErr)
 		}
@@ -87,14 +90,14 @@ func TestUpdates(t *testing.T) {
 			}
 		})
 		s := httptest.NewUnstartedServer(mux)
-		s.Config.ErrorLog = log.New(io.Discard, "", 0)
+		s.Config.ErrorLog = golog.New(io.Discard, "", 0)
 		s.Start()
 		defer s.Close()
 		if baseURL == "" {
 			baseURL = s.URL
 		}
 
-		changelog, err := FetchChangelog(context.Background(), baseURL, version, pubKey)
+		changelog, err := FetchChangelog(context.Background(), log.Logger, baseURL, version, pubKey)
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("fetch changelog: got err %v, expected %v", err, expErr)
 		}
@@ -129,14 +132,14 @@ func TestUpdates(t *testing.T) {
 			}
 		})
 		s := httptest.NewUnstartedServer(mux)
-		s.Config.ErrorLog = log.New(io.Discard, "", 0)
+		s.Config.ErrorLog = golog.New(io.Discard, "", 0)
 		s.Start()
 		defer s.Close()
 		if baseURL == "" {
 			baseURL = s.URL
 		}
 
-		version, record, changelog, err := Check(context.Background(), resolver, dns.Domain{ASCII: dom}, base, baseURL, pubKey)
+		version, record, changelog, err := Check(context.Background(), log.Logger, resolver, dns.Domain{ASCII: dom}, base, baseURL, pubKey)
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("check: got err %v, expected %v", err, expErr)
 		}

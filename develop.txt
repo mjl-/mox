@@ -1,6 +1,34 @@
 This file has notes useful for mox developers.
 
-# Code style & guidelines
+# Building & testing
+
+For a full build, you'll need a recent Go compiler/toolchain and nodejs/npm for
+the frontend. Run "make build" to do a full build. Run "make test" to run the
+test suite. With docker installed, you can run "make test-integration" to start
+up a few mox instances, a dns server, a postfix instance, and send email
+between them.
+
+The mox localserve command is a convenient way to test locally. Most of the
+code paths are reachable/testable with mox localserve, but some use cases will
+require a full setup.
+
+Before committing, run at least "make fmt" and "make check" (which requires
+staticcheck, run "make install-staticcheck" once). Also run "make check-shadow"
+and fix any shadowed variables other than "err" (which are filtered out, but
+causes the command to always exit with an error code; run "make install-shadow"
+once to install the shadow command). If you've updated RFC references, run
+"make" in rfc/, it verifies the referenced files exist.
+
+When making changes to the public API of a package listed in
+apidiff/packages.txt, run "make genapidiff" to update the list of changes in
+the upcoming release (run "make install-apidiff" once to install the apidiff
+command).
+
+New features may be worth mentioning on the website, see website/ and
+instructions below.
+
+
+# Code style, guidelines, notes
 
 - Keep the same style as existing code.
 - For Windows: use package "path/filepath" when dealing with files/directories.
@@ -8,6 +36,75 @@ This file has notes useful for mox developers.
   but use proper filepath functions when parameters are passed and in non-test
   code.  Mailbox names always use forward slash, so use package "path" for mailbox
   name/path manipulation. Do not remove/rename files that are still open.
+- Not all code uses adns, the DNSSEC-aware resolver. Such as code that makes
+  http requests, like mtasts and autotls/autocert.
+- We don't have an internal/ directory, really just to prevent long paths in
+  the repo, and to keep all Go code matching *.go */*.go (without matching
+  vendor/). Part of the packages are reusable by other software. Those reusable
+  packages must not cause mox implementation details (such as bstore) to get out,
+  which would cause unexpected dependencies. Those packages also only expose the
+  standard slog package for logging, not our mlog package. Packages not intended
+  for reuse do use mlog as it is more convenient. Internally, we always use
+  mlog.Log to do the logging, wrapping an slog.Logger.
+
+
+# Reusable packages
+
+Most non-server Go packages are meant to be reusable. This means internal
+details are not exposed in the API, and we don't make unneeded changes. We can
+still make breaking changes when it improves mox: We don't want to be stuck
+with bad API. Third party users aren't affected too seriously due to Go's
+minimal version selection. The reusable packages are in apidiff/packages.txt.
+We generate the incompatible changes with each release.
+
+
+# Web interfaces/frontend
+
+The web interface frontends (for webmail/, webadmin/ and webaccount/) are
+written in strict TypeScript. The web API is a simple self-documenting
+HTTP/JSON RPC API mechanism called sherpa,
+https://www.ueber.net/who/mjl/sherpa/. The web API exposes types and functions
+as implemented in Go, using https://github.com/mjl-/sherpa. API definitions in
+JSON form are generated with https://github.com/mjl-/sherpadoc. Those API
+definitions are used to generate TypeScript clients with by
+https://github.com/mjl-/sherpats/.
+
+The JavaScript that is generated from the TypeScript is included in the
+repository. This makes it available for inclusion in the binary, which is
+practical for users, and desirable given Go's reproducible builds. When
+developing, run "make" to also build the frontend code. Run "make
+install-frontend" once to install the TypeScript compiler into ./node_modules/.
+
+There are no other external (runtime or devtime) frontend dependencies. A
+light-weight abstraction over the DOM is provided by ./lib.ts. A bit more
+manual UI state management must be done compared to "frameworks", but it is
+little code, and this allows JavaScript/TypeScript developer to quickly get
+started. UI state is often encapsulated in a JavaScript object with a
+TypeScript interface exposing a "root" HTMLElement that is added to the DOM,
+and functions for accessing/changing the internal state, keeping the UI
+managable.
+
+
+# Website
+
+The content of the public website at https://www.xmox.nl is in website/, as
+markdown files. The website HTML is generated with "make genwebsite", which
+writes to website/html/ (files not committed).  The FAQ is taken from
+README.md, the protocol support table is generated from rfc/index.txt. The
+website is kept in this repository so a commit can change both the
+implementation and the documentation on the website. Some of the info in
+README.md is duplicated on the website, often more elaborate and possibly with
+a slightly less technical audience.  The website should also mostly be readable
+through the markdown in the git repo.
+
+Large files (images/videos) are in https://github.com/mjl-/mox-website-files to
+keep the repository reasonably sized.
+
+The public website may serve the content from the "website" branch. After a
+release release, the main branch (with latest development code and
+corresponding changes to the website about new features) is merged into the
+website branch.  Commits to the website branch (e.g. for a news item, or any
+other change unrelated to a new release) is merged back into the main branch.
 
 
 # TLS certificates
@@ -89,6 +186,7 @@ Listeners:
 				CertFile: ../../cfssl/wildcard.$domain.pem
 				KeyFile: ../../cfssl/wildcard.$domain-key.pem
 ```
+
 
 # ACME
 
@@ -187,7 +285,7 @@ for i in 0 12; do
 done
 ```
 
-With the following "tobmox.sh" script:
+With the following "tombox.sh" script:
 
 ```
 #!/bin/sh
@@ -206,18 +304,28 @@ done
 - Gather feedback on recent changes.
 - Check if dependencies need updates.
 - Check code if there are deprecated features that can be removed.
-- Update features & roadmap in README.md
-- Write release notes.
+- Generate apidiff and check if breaking changes can be prevented. Update moxtools.
+- Update features & roadmap in README.md and website.
+- Write release notes, copy from previous.
 - Build and run tests with previous major Go release.
-- Run tests, including with race detector.
+- Run tests, including with race detector, also with TZ= for UTC-behaviour.
 - Run integration and upgrade tests.
 - Run fuzzing tests for a while.
 - Deploy to test environment. Test the update instructions.
+- Test mox localserve on various OSes (linux, bsd, macos, windows).
 - Send and receive email through the major webmail providers, check headers.
 - Send and receive email with imap4/smtp clients.
 - Check DNS check admin page.
-- Check with https://internet.nl
-- Create git tag, push code.
+- Check with https://internet.nl.
+- Move apidiff/next.txt to apidiff/<version>.txt, and create empty next.txt.
+- Add release to the Latest release & News sections of website/index.md.
+- Create git tag (note: "#" is comment, not title/header), push code.
 - Publish new docker image.
 - Publish signed release notes for updates.xmox.nl and update DNS record.
+- Deploy update to website.
 - Create new release on the github page, so watchers get a notification.
+  Copy/paste it manually from the tag text, and add link to download/compile
+  instructions to prevent confusion about "assets" github links to.
+- Publish new cross-referenced code/rfc to www.xmox.nl/xr/.
+- Update moxtools with latest version.
+- Update implementations support matrix.

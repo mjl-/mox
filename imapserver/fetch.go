@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/textproto"
 	"sort"
 	"strings"
@@ -16,9 +17,8 @@ import (
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/message"
-	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/store"
 )
 
@@ -102,7 +102,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 				p.xspace()
 				changedSince = p.xnumber64()
 				// workaround: ios mail (16.5.1) was seen sending changedSince 0 on an existing account that got condstore enabled.
-				if changedSince == 0 && moxvar.Pedantic {
+				if changedSince == 0 && mox.Pedantic {
 					// ../rfc/7162:2551
 					xsyntaxErrorf("changedsince modseq must be > 0")
 				}
@@ -233,7 +233,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 
 		for _, uid := range uids {
 			cmd.uid = uid
-			mlog.Field("processing uid", mlog.Field("uid", uid))
+			cmd.conn.log.Debug("processing uid", slog.Any("uid", uid))
 			cmd.process(atts)
 		}
 
@@ -243,6 +243,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 			err := tx.Update(&mb)
 			xcheckf(err, "updating mailbox counts")
 			cmd.changes = append(cmd.changes, mb.ChangeCounts())
+			// No need to update account total message size.
 		}
 	})
 
@@ -326,7 +327,7 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 			cmd.expungeIssued = true
 			return
 		}
-		cmd.conn.log.Infox("processing fetch attribute", err, mlog.Field("uid", cmd.uid))
+		cmd.conn.log.Infox("processing fetch attribute", err, slog.Any("uid", cmd.uid))
 		xuserErrorf("processing fetch attribute: %v", err)
 	}()
 
@@ -349,6 +350,7 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 		m.ModSeq = cmd.xmodseq()
 		err := cmd.tx.Update(m)
 		xcheckf(err, "marking message as seen")
+		// No need to update account total message size.
 
 		cmd.changes = append(cmd.changes, m.ChangeFlags(origFlags))
 	}

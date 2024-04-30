@@ -1,0 +1,83 @@
+Below are the incompatible changes between v0.0.8 and v0.0.9, per package.
+
+# dane
+- Dial: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, string, string, []github.com/mjl-/adns.TLSAUsage) (net.Conn, github.com/mjl-/adns.TLSA, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, string, string, []github.com/mjl-/adns.TLSAUsage, *crypto/x509.CertPool) (net.Conn, github.com/mjl-/adns.TLSA, error)
+- TLSClientConfig: changed from func(*github.com/mjl-/mox/mlog.Log, []github.com/mjl-/adns.TLSA, github.com/mjl-/mox/dns.Domain, []github.com/mjl-/mox/dns.Domain, *github.com/mjl-/adns.TLSA) crypto/tls.Config to func(*golang.org/x/exp/slog.Logger, []github.com/mjl-/adns.TLSA, github.com/mjl-/mox/dns.Domain, []github.com/mjl-/mox/dns.Domain, *github.com/mjl-/adns.TLSA, *crypto/x509.CertPool) crypto/tls.Config
+- Verify: changed from func(*github.com/mjl-/mox/mlog.Log, []github.com/mjl-/adns.TLSA, crypto/tls.ConnectionState, github.com/mjl-/mox/dns.Domain, []github.com/mjl-/mox/dns.Domain) (bool, github.com/mjl-/adns.TLSA, error) to func(*golang.org/x/exp/slog.Logger, []github.com/mjl-/adns.TLSA, crypto/tls.ConnectionState, github.com/mjl-/mox/dns.Domain, []github.com/mjl-/mox/dns.Domain, *crypto/x509.CertPool) (bool, github.com/mjl-/adns.TLSA, error)
+
+# dmarc
+- Lookup: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (Status, github.com/mjl-/mox/dns.Domain, *Record, string, bool, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (Status, github.com/mjl-/mox/dns.Domain, *Record, string, bool, error)
+- LookupExternalReportsAccepted: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, github.com/mjl-/mox/dns.Domain) (bool, Status, []*Record, []string, bool, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, github.com/mjl-/mox/dns.Domain) (bool, Status, []*Record, []string, bool, error)
+- Verify: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, []github.com/mjl-/mox/dkim.Result, github.com/mjl-/mox/spf.Status, *github.com/mjl-/mox/dns.Domain, bool) (bool, Result) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, []github.com/mjl-/mox/dkim.Result, github.com/mjl-/mox/spf.Status, *github.com/mjl-/mox/dns.Domain, bool) (bool, Result)
+
+# dmarcrpt
+- ParseMessageReport: changed from func(*github.com/mjl-/mox/mlog.Log, io.ReaderAt) (*Feedback, error) to func(*golang.org/x/exp/slog.Logger, io.ReaderAt) (*Feedback, error)
+
+# dns
+
+# dnsbl
+- CheckHealth: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) error to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) error
+- Lookup: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, net.IP) (Status, string, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, net.IP) (Status, string, error)
+
+# iprev
+
+# message
+- (*Part).ParseNextPart: changed from func(*github.com/mjl-/mox/mlog.Log) (*Part, error) to func(*golang.org/x/exp/slog.Logger) (*Part, error)
+- (*Part).Walk: changed from func(*github.com/mjl-/mox/mlog.Log, *Part) error to func(*golang.org/x/exp/slog.Logger, *Part) error
+- EnsurePart: changed from func(*github.com/mjl-/mox/mlog.Log, bool, io.ReaderAt, int64) (Part, error) to func(*golang.org/x/exp/slog.Logger, bool, io.ReaderAt, int64) (Part, error)
+- From: changed from func(*github.com/mjl-/mox/mlog.Log, bool, io.ReaderAt) (github.com/mjl-/mox/smtp.Address, net/textproto.MIMEHeader, error) to func(*golang.org/x/exp/slog.Logger, bool, io.ReaderAt) (github.com/mjl-/mox/smtp.Address, *Envelope, net/textproto.MIMEHeader, error)
+- Parse: changed from func(*github.com/mjl-/mox/mlog.Log, bool, io.ReaderAt) (Part, error) to func(*golang.org/x/exp/slog.Logger, bool, io.ReaderAt) (Part, error)
+- TLSReceivedComment: removed
+
+# mtasts
+- FetchPolicy: changed from func(context.Context, github.com/mjl-/mox/dns.Domain) (*Policy, string, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Domain) (*Policy, string, error)
+- Get: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (*Record, *Policy, string, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (*Record, *Policy, string, error)
+- LookupRecord: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (*Record, string, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (*Record, string, error)
+
+# publicsuffix
+- List.Lookup: changed from func(context.Context, github.com/mjl-/mox/dns.Domain) github.com/mjl-/mox/dns.Domain to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Domain) github.com/mjl-/mox/dns.Domain
+- Lookup: changed from func(context.Context, github.com/mjl-/mox/dns.Domain) github.com/mjl-/mox/dns.Domain to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Domain) github.com/mjl-/mox/dns.Domain
+- ParseList: changed from func(io.Reader) (List, error) to func(*golang.org/x/exp/slog.Logger, io.Reader) (List, error)
+
+# ratelimit
+
+# sasl
+- NewClientSCRAMSHA1: changed from func(string, string) Client to func(string, string, bool) Client
+- NewClientSCRAMSHA256: changed from func(string, string) Client to func(string, string, bool) Client
+
+# scram
+- HMAC: removed
+- NewClient: changed from func(func() hash.Hash, string, string) *Client to func(func() hash.Hash, string, string, bool, *crypto/tls.ConnectionState) *Client
+- NewServer: changed from func(func() hash.Hash, []byte) (*Server, error) to func(func() hash.Hash, []byte, *crypto/tls.ConnectionState, bool) (*Server, error)
+
+# smtp
+
+# smtpclient
+- (*Client).TLSEnabled: removed
+- Dial: changed from func(context.Context, *github.com/mjl-/mox/mlog.Log, Dialer, github.com/mjl-/mox/dns.IPDomain, []net.IP, int, map[string][]net.IP) (net.Conn, net.IP, error) to func(context.Context, *golang.org/x/exp/slog.Logger, Dialer, github.com/mjl-/mox/dns.IPDomain, []net.IP, int, map[string][]net.IP, []net.IP) (net.Conn, net.IP, error)
+- GatherDestinations: changed from func(context.Context, *github.com/mjl-/mox/mlog.Log, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.IPDomain) (bool, bool, bool, github.com/mjl-/mox/dns.Domain, []github.com/mjl-/mox/dns.IPDomain, bool, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.IPDomain) (bool, bool, bool, github.com/mjl-/mox/dns.Domain, []github.com/mjl-/mox/dns.IPDomain, bool, error)
+- GatherIPs: changed from func(context.Context, *github.com/mjl-/mox/mlog.Log, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.IPDomain, map[string][]net.IP) (bool, bool, github.com/mjl-/mox/dns.Domain, []net.IP, bool, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.IPDomain, map[string][]net.IP) (bool, bool, github.com/mjl-/mox/dns.Domain, []net.IP, bool, error)
+- GatherTLSA: changed from func(context.Context, *github.com/mjl-/mox/mlog.Log, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, bool, github.com/mjl-/mox/dns.Domain) (bool, []github.com/mjl-/adns.TLSA, github.com/mjl-/mox/dns.Domain, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, bool, github.com/mjl-/mox/dns.Domain) (bool, []github.com/mjl-/adns.TLSA, github.com/mjl-/mox/dns.Domain, error)
+- New: changed from func(context.Context, *github.com/mjl-/mox/mlog.Log, net.Conn, TLSMode, bool, github.com/mjl-/mox/dns.Domain, github.com/mjl-/mox/dns.Domain, Opts) (*Client, error) to func(context.Context, *golang.org/x/exp/slog.Logger, net.Conn, TLSMode, bool, github.com/mjl-/mox/dns.Domain, github.com/mjl-/mox/dns.Domain, Opts) (*Client, error)
+- Opts.Auth: changed from []github.com/mjl-/mox/sasl.Client to func([]string, *crypto/tls.ConnectionState) (github.com/mjl-/mox/sasl.Client, error)
+
+# spf
+- Evaluate: changed from func(context.Context, *Record, github.com/mjl-/mox/dns.Resolver, Args) (Status, string, string, bool, error) to func(context.Context, *golang.org/x/exp/slog.Logger, *Record, github.com/mjl-/mox/dns.Resolver, Args) (Status, string, string, bool, error)
+- Lookup: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (Status, string, *Record, bool, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (Status, string, *Record, bool, error)
+- Verify: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, Args) (Received, github.com/mjl-/mox/dns.Domain, string, bool, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, Args) (Received, github.com/mjl-/mox/dns.Domain, string, bool, error)
+
+# subjectpass
+- Generate: changed from func(github.com/mjl-/mox/smtp.Address, []byte, time.Time) string to func(*golang.org/x/exp/slog.Logger, github.com/mjl-/mox/smtp.Address, []byte, time.Time) string
+- Verify: changed from func(*github.com/mjl-/mox/mlog.Log, io.ReaderAt, []byte, time.Duration) error to func(*golang.org/x/exp/slog.Logger, io.ReaderAt, []byte, time.Duration) error
+
+# tlsrpt
+- (*TLSRPTDateRange).UnmarshalJSON: removed
+- Lookup: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (*Record, string, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (*Record, string, error)
+- Parse: changed from func(io.Reader) (*Report, error) to func(io.Reader) (*ReportJSON, error)
+- ParseMessage: changed from func(*github.com/mjl-/mox/mlog.Log, io.ReaderAt) (*Report, error) to func(*golang.org/x/exp/slog.Logger, io.ReaderAt) (*ReportJSON, error)
+
+# updates
+- Check: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, Version, string, []byte) (Version, *Record, *Changelog, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain, Version, string, []byte) (Version, *Record, *Changelog, error)
+- FetchChangelog: changed from func(context.Context, string, Version, []byte) (*Changelog, error) to func(context.Context, *golang.org/x/exp/slog.Logger, string, Version, []byte) (*Changelog, error)
+- Lookup: changed from func(context.Context, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (Version, *Record, error) to func(context.Context, *golang.org/x/exp/slog.Logger, github.com/mjl-/mox/dns.Resolver, github.com/mjl-/mox/dns.Domain) (Version, *Record, error)
+

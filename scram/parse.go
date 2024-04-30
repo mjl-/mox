@@ -223,9 +223,27 @@ func (p *parser) xsaslname() string {
 	return r
 }
 
-func (p *parser) xchannelBinding() string {
+// ../rfc/5802:889
+func (p *parser) xcbname() string {
+	o := p.o
+	for ; o < len(p.s); o++ {
+		c := p.s[o]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '-' {
+			continue
+		}
+		break
+	}
+	if o == p.o {
+		p.xerrorf("empty channel binding name")
+	}
+	r := p.s[p.o:o]
+	p.o = o
+	return string(r)
+}
+
+func (p *parser) xchannelBinding() []byte {
 	p.xtake("c=")
-	return string(p.xbase64())
+	return p.xbase64()
 }
 
 func (p *parser) xproof() []byte {

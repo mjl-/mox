@@ -1,26 +1,31 @@
-//go:build !quickstart && !integration
+//go:build !integration
 
 package main
 
 import (
 	"context"
 	"flag"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dmarcdb"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/mtastsdb"
 	"github.com/mjl-/mox/queue"
+	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/tlsrptdb"
 )
 
 var ctxbg = context.Background()
+var pkglog = mlog.New("ctl", nil)
 
 func tcheck(t *testing.T, err error, errmsg string) {
 	if err != nil {
@@ -36,19 +41,20 @@ func TestCtl(t *testing.T) {
 	os.RemoveAll("testdata/ctl/data")
 	mox.ConfigStaticPath = filepath.FromSlash("testdata/ctl/mox.conf")
 	mox.ConfigDynamicPath = filepath.FromSlash("testdata/ctl/domains.conf")
-	if errs := mox.LoadConfig(ctxbg, true, false); len(errs) > 0 {
+	if errs := mox.LoadConfig(ctxbg, pkglog, true, false); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}
 	defer store.Switchboard()()
 
-	xlog := mlog.New("ctl")
+	err := queue.Init()
+	tcheck(t, err, "queue init")
 
 	testctl := func(fn func(clientctl *ctl)) {
 		t.Helper()
 
 		cconn, sconn := net.Pipe()
-		clientctl := ctl{conn: cconn, log: xlog}
-		serverctl := ctl{conn: sconn, log: xlog}
+		clientctl := ctl{conn: cconn, log: pkglog}
+		serverctl := ctl{conn: sconn, log: pkglog}
 		go servectlcmd(ctxbg, &serverctl, func() {})
 		fn(&clientctl)
 		cconn.Close()
@@ -65,25 +71,178 @@ func TestCtl(t *testing.T) {
 		ctlcmdSetaccountpassword(ctl, "mjl", "test4321")
 	})
 
-	err := queue.Init()
-	tcheck(t, err, "queue init")
-
-	// "queue"
 	testctl(func(ctl *ctl) {
-		ctlcmdQueueList(ctl)
+		ctlcmdQueueHoldrulesList(ctl)
 	})
 
-	// "queuekick"
+	// All messages.
 	testctl(func(ctl *ctl) {
-		ctlcmdQueueKick(ctl, 0, "", "", "")
+		ctlcmdQueueHoldrulesAdd(ctl, "", "", "")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(ctl, "mjl", "", "")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(ctl, "", "☺.mox.example", "")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(ctl, "mox", "☺.mox.example", "example.com")
+	})
+
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesRemove(ctl, 1)
+	})
+
+	// Queue a message to list/change/dump.
+	msg := "Subject: subject\r\n\r\nbody\r\n"
+	msgFile, err := store.CreateMessageTemp(pkglog, "queuedump-test")
+	tcheck(t, err, "temp file")
+	_, err = msgFile.Write([]byte(msg))
+	tcheck(t, err, "write message")
+	_, err = msgFile.Seek(0, 0)
+	tcheck(t, err, "rewind message")
+	defer os.Remove(msgFile.Name())
+	defer msgFile.Close()
+	addr, err := smtp.ParseAddress("mjl@mox.example")
+	tcheck(t, err, "parse address")
+	qml := []queue.Msg{queue.MakeMsg(addr.Path(), addr.Path(), false, false, int64(len(msg)), "<random@localhost>", nil, nil, time.Now(), "subject")}
+	queue.Add(ctxbg, pkglog, "mjl", msgFile, qml...)
+	qmid := qml[0].ID
+
+	// Has entries now.
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesList(ctl)
+	})
+
+	// "queuelist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueList(ctl, queue.Filter{}, queue.Sort{})
+	})
+
+	// "queueholdset"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldSet(ctl, queue.Filter{}, true)
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldSet(ctl, queue.Filter{}, false)
+	})
+
+	// "queueschedule"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSchedule(ctl, queue.Filter{}, true, time.Minute)
+	})
+
+	// "queuetransport"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueTransport(ctl, queue.Filter{}, "socks")
+	})
+
+	// "queuerequiretls"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueRequireTLS(ctl, queue.Filter{}, nil)
+	})
+
+	// "queuedump"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueDump(ctl, fmt.Sprintf("%d", qmid))
+	})
+
+	// "queuefail"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueFail(ctl, queue.Filter{})
 	})
 
 	// "queuedrop"
 	testctl(func(ctl *ctl) {
-		ctlcmdQueueDrop(ctl, 0, "", "")
+		ctlcmdQueueDrop(ctl, queue.Filter{})
 	})
 
-	// no "queuedump", we don't have a message to dump, and the commands exits without a message.
+	// "queueholdruleslist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesList(ctl)
+	})
+
+	// "queueholdrulesadd"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(ctl, "mjl", "", "")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(ctl, "mjl", "localhost", "")
+	})
+
+	// "queueholdrulesremove"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesRemove(ctl, 2)
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHoldrulesList(ctl)
+	})
+
+	// "queuesuppresslist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressList(ctl, "mjl")
+	})
+
+	// "queuesuppressadd"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressAdd(ctl, "mjl", "base@localhost")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressAdd(ctl, "mjl", "other@localhost")
+	})
+
+	// "queuesuppresslookup"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressLookup(ctl, "mjl", "base@localhost")
+	})
+
+	// "queuesuppressremove"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressRemove(ctl, "mjl", "base@localhost")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueSuppressList(ctl, "mjl")
+	})
+
+	// "queueretiredlist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueRetiredList(ctl, queue.RetiredFilter{}, queue.RetiredSort{})
+	})
+
+	// "queueretiredprint"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueRetiredPrint(ctl, "1")
+	})
+
+	// "queuehooklist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookList(ctl, queue.HookFilter{}, queue.HookSort{})
+	})
+
+	// "queuehookschedule"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookSchedule(ctl, queue.HookFilter{}, true, time.Minute)
+	})
+
+	// "queuehookprint"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookPrint(ctl, "1")
+	})
+
+	// "queuehookcancel"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookCancel(ctl, queue.HookFilter{})
+	})
+
+	// "queuehookretiredlist"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookRetiredList(ctl, queue.HookRetiredFilter{}, queue.HookRetiredSort{})
+	})
+
+	// "queuehookretiredprint"
+	testctl(func(ctl *ctl) {
+		ctlcmdQueueHookRetiredPrint(ctl, "1")
+	})
 
 	// "importmbox"
 	testctl(func(ctl *ctl) {
@@ -134,6 +293,41 @@ func TestCtl(t *testing.T) {
 		ctlcmdConfigDomainRemove(ctl, dns.Domain{ASCII: "mox2.example"})
 	})
 
+	// "aliasadd"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasAdd(ctl, "support@mox.example", config.Alias{Addresses: []string{"mjl@mox.example"}})
+	})
+
+	// "aliaslist"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasList(ctl, "mox.example")
+	})
+
+	// "aliasprint"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasPrint(ctl, "support@mox.example")
+	})
+
+	// "aliasupdate"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasUpdate(ctl, "support@mox.example", "true", "true", "true")
+	})
+
+	// "aliasaddaddr"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasAddaddr(ctl, "support@mox.example", []string{"mjl2@mox.example"})
+	})
+
+	// "aliasrmaddr"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasRmaddr(ctl, "support@mox.example", []string{"mjl2@mox.example"})
+	})
+
+	// "aliasrm"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAliasRemove(ctl, "support@mox.example")
+	})
+
 	// "loglevels"
 	testctl(func(ctl *ctl) {
 		ctlcmdLoglevels(ctl)
@@ -148,8 +342,8 @@ func TestCtl(t *testing.T) {
 	})
 
 	// Export data, import it again
-	xcmdExport(true, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, nil)
-	xcmdExport(false, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/maildir/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, nil)
+	xcmdExport(true, false, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, &cmd{log: pkglog})
+	xcmdExport(false, false, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/maildir/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, &cmd{log: pkglog})
 	testctl(func(ctl *ctl) {
 		ctlcmdImport(ctl, true, "mjl", "inbox", filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/Inbox.mbox"))
 	})
@@ -167,22 +361,25 @@ func TestCtl(t *testing.T) {
 		ctlcmdFixmsgsize(ctl, "mjl")
 	})
 	testctl(func(ctl *ctl) {
-		acc, err := store.OpenAccount("mjl")
+		acc, err := store.OpenAccount(ctl.log, "mjl")
 		tcheck(t, err, "open account")
-		defer acc.Close()
+		defer func() {
+			acc.Close()
+			acc.CheckClosed()
+		}()
 
 		content := []byte("Subject: hi\r\n\r\nbody\r\n")
 
 		deliver := func(m *store.Message) {
 			t.Helper()
 			m.Size = int64(len(content))
-			msgf, err := store.CreateMessageTemp("ctltest")
+			msgf, err := store.CreateMessageTemp(ctl.log, "ctltest")
 			tcheck(t, err, "create temp file")
 			defer os.Remove(msgf.Name())
 			defer msgf.Close()
 			_, err = msgf.Write(content)
 			tcheck(t, err, "write message file")
-			err = acc.DeliverMailbox(xlog, "Inbox", m, msgf)
+			err = acc.DeliverMailbox(ctl.log, "Inbox", m, msgf)
 			tcheck(t, err, "deliver message")
 		}
 

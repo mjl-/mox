@@ -8,7 +8,8 @@ import (
 	"crypto/x509"
 	"errors"
 	"io"
-	"log"
+	golog "log"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -25,7 +26,8 @@ import (
 )
 
 func TestLookup(t *testing.T) {
-	mlog.SetConfig(map[string]mlog.Level{"": mlog.LevelDebug})
+	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelDebug})
+	log := mlog.New("mtasts", nil)
 
 	resolver := dns.MockResolver{
 		TXT: map[string][]string{
@@ -50,7 +52,7 @@ func TestLookup(t *testing.T) {
 	test := func(host string, expRecord *Record, expErr error) {
 		t.Helper()
 
-		record, _, err := LookupRecord(context.Background(), resolver, dns.Domain{ASCII: host})
+		record, _, err := LookupRecord(context.Background(), log.Logger, resolver, dns.Domain{ASCII: host})
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("lookup: got err %#v, expected %#v", err, expErr)
 		}
@@ -184,6 +186,8 @@ func fakeCert(t *testing.T, expired bool) tls.Certificate {
 }
 
 func TestFetch(t *testing.T) {
+	log := mlog.New("mtasts", nil)
+
 	certok := fakeCert(t, false)
 	certbad := fakeCert(t, true)
 
@@ -218,7 +222,7 @@ func TestFetch(t *testing.T) {
 				TLSConfig: &tls.Config{
 					Certificates: []tls.Certificate{cert},
 				},
-				ErrorLog: log.New(io.Discard, "", 0),
+				ErrorLog: golog.New(io.Discard, "", 0),
 			}
 			s.ServeTLS(l, "", "")
 		}()
@@ -235,7 +239,7 @@ func TestFetch(t *testing.T) {
 			},
 		}
 
-		p, _, err := FetchPolicy(context.Background(), dns.Domain{ASCII: domain})
+		p, _, err := FetchPolicy(context.Background(), log.Logger, dns.Domain{ASCII: domain})
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("policy: got err %#v, expected %#v", err, expErr)
 		}
@@ -247,7 +251,7 @@ func TestFetch(t *testing.T) {
 			expErr = ErrNoRecord
 		}
 
-		_, p, err = Get(context.Background(), resolver, dns.Domain{ASCII: domain})
+		_, p, _, err = Get(context.Background(), log.Logger, resolver, dns.Domain{ASCII: domain})
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("get: got err %#v, expected %#v", err, expErr)
 		}

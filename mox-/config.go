@@ -11,10 +11,12 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -22,6 +24,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,23 +39,29 @@ import (
 
 	"github.com/mjl-/mox/autotls"
 	"github.com/mjl-/mox/config"
+	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/smtp"
 )
 
-var xlog = mlog.New("mox")
+var pkglog = mlog.New("mox", nil)
+
+// Pedantic enables stricter parsing.
+var Pedantic bool
 
 // Config paths are set early in program startup. They will point to files in
 // the same directory.
 var (
 	ConfigStaticPath  string
 	ConfigDynamicPath string
-	Conf              = Config{Log: map[string]mlog.Level{"": mlog.LevelError}}
+	Conf              = Config{Log: map[string]slog.Level{"": slog.LevelError}}
 )
+
+var ErrConfig = errors.New("config error")
 
 // Config as used in the code, a processed version of what is in the config file.
 //
@@ -61,7 +70,7 @@ type Config struct {
 	Static config.Static // Does not change during the lifetime of a running instance.
 
 	logMutex sync.Mutex // For accessing the log levels.
-	Log      map[string]mlog.Level
+	Log      map[string]slog.Level
 
 	dynamicMutex     sync.Mutex
 	Dynamic          config.Dynamic // Can only be accessed directly by tests. Use methods on Config for locked access.
@@ -71,6 +80,8 @@ type Config struct {
 	// case-insensitive, stripped of catchall separator) to account and address.
 	// Domains are IDNA names in utf8.
 	accountDestinations map[string]AccountDestination
+	// Like accountDestinations, but for aliases.
+	aliases map[string]config.Alias
 }
 
 type AccountDestination struct {
@@ -83,31 +94,31 @@ type AccountDestination struct {
 // LogLevelSet sets a new log level for pkg. An empty pkg sets the default log
 // value that is used if no explicit log level is configured for a package.
 // This change is ephemeral, no config file is changed.
-func (c *Config) LogLevelSet(pkg string, level mlog.Level) {
+func (c *Config) LogLevelSet(log mlog.Log, pkg string, level slog.Level) {
 	c.logMutex.Lock()
 	defer c.logMutex.Unlock()
 	l := c.copyLogLevels()
 	l[pkg] = level
 	c.Log = l
-	xlog.Print("log level changed", mlog.Field("pkg", pkg), mlog.Field("level", mlog.LevelStrings[level]))
+	log.Print("log level changed", slog.String("pkg", pkg), slog.Any("level", mlog.LevelStrings[level]))
 	mlog.SetConfig(c.Log)
 }
 
 // LogLevelRemove removes a configured log level for a package.
-func (c *Config) LogLevelRemove(pkg string) {
+func (c *Config) LogLevelRemove(log mlog.Log, pkg string) {
 	c.logMutex.Lock()
 	defer c.logMutex.Unlock()
 	l := c.copyLogLevels()
 	delete(l, pkg)
 	c.Log = l
-	xlog.Print("log level cleared", mlog.Field("pkg", pkg))
+	log.Print("log level cleared", slog.String("pkg", pkg))
 	mlog.SetConfig(c.Log)
 }
 
 // copyLogLevels returns a copy of c.Log, for modifications.
 // must be called with log lock held.
-func (c *Config) copyLogLevels() map[string]mlog.Level {
-	m := map[string]mlog.Level{}
+func (c *Config) copyLogLevels() map[string]slog.Level {
+	m := map[string]slog.Level{}
 	for pkg, level := range c.Log {
 		m[pkg] = level
 	}
@@ -115,7 +126,7 @@ func (c *Config) copyLogLevels() map[string]mlog.Level {
 }
 
 // LogLevels returns a copy of the current log levels.
-func (c *Config) LogLevels() map[string]mlog.Level {
+func (c *Config) LogLevels() map[string]slog.Level {
 	c.logMutex.Lock()
 	defer c.logMutex.Unlock()
 	return c.copyLogLevels()
@@ -128,12 +139,12 @@ func (c *Config) withDynamicLock(fn func()) {
 	if now.Sub(c.DynamicLastCheck) > time.Second {
 		c.DynamicLastCheck = now
 		if fi, err := os.Stat(ConfigDynamicPath); err != nil {
-			xlog.Errorx("stat domains config", err)
+			pkglog.Errorx("stat domains config", err)
 		} else if !fi.ModTime().Equal(c.dynamicMtime) {
 			if errs := c.loadDynamic(); len(errs) > 0 {
-				xlog.Errorx("loading domains config", errs[0], mlog.Field("errors", errs))
+				pkglog.Errorx("loading domains config", errs[0], slog.Any("errors", errs))
 			} else {
-				xlog.Info("domains config reloaded")
+				pkglog.Info("domains config reloaded")
 				c.dynamicMtime = fi.ModTime()
 			}
 		}
@@ -143,15 +154,24 @@ func (c *Config) withDynamicLock(fn func()) {
 
 // must be called with dynamic lock held.
 func (c *Config) loadDynamic() []error {
-	d, mtime, accDests, err := ParseDynamicConfig(context.Background(), ConfigDynamicPath, c.Static)
+	d, mtime, accDests, aliases, err := ParseDynamicConfig(context.Background(), pkglog, ConfigDynamicPath, c.Static)
 	if err != nil {
 		return err
 	}
 	c.Dynamic = d
 	c.dynamicMtime = mtime
 	c.accountDestinations = accDests
-	c.allowACMEHosts(true)
+	c.aliases = aliases
+	c.allowACMEHosts(pkglog, true)
 	return nil
+}
+
+// DynamicConfig returns a shallow copy of the dynamic config. Must not be modified.
+func (c *Config) DynamicConfig() (config config.Dynamic) {
+	c.withDynamicLock(func() {
+		config = c.Dynamic // Shallow copy.
+	})
+	return
 }
 
 func (c *Config) Domains() (l []string) {
@@ -176,10 +196,12 @@ func (c *Config) Accounts() (l []string) {
 }
 
 // DomainLocalparts returns a mapping of encoded localparts to account names for a
-// domain. An empty localpart is a catchall destination for a domain.
-func (c *Config) DomainLocalparts(d dns.Domain) map[string]string {
+// domain, and encoded localparts to aliases. An empty localpart is a catchall
+// destination for a domain.
+func (c *Config) DomainLocalparts(d dns.Domain) (map[string]string, map[string]config.Alias) {
 	suffix := "@" + d.Name()
 	m := map[string]string{}
+	aliases := map[string]config.Alias{}
 	c.withDynamicLock(func() {
 		for addr, ad := range c.accountDestinations {
 			if strings.HasSuffix(addr, suffix) {
@@ -190,8 +212,13 @@ func (c *Config) DomainLocalparts(d dns.Domain) map[string]string {
 				}
 			}
 		}
+		for addr, a := range c.aliases {
+			if strings.HasSuffix(addr, suffix) {
+				aliases[a.LocalpartStr] = a
+			}
+		}
 	})
-	return m
+	return m, aliases
 }
 
 func (c *Config) Domain(d dns.Domain) (dom config.Domain, ok bool) {
@@ -208,19 +235,18 @@ func (c *Config) Account(name string) (acc config.Account, ok bool) {
 	return
 }
 
-func (c *Config) AccountDestination(addr string) (accDests AccountDestination, ok bool) {
+func (c *Config) AccountDestination(addr string) (accDest AccountDestination, alias *config.Alias, ok bool) {
 	c.withDynamicLock(func() {
-		accDests, ok = c.accountDestinations[addr]
+		accDest, ok = c.accountDestinations[addr]
+		if !ok {
+			var a config.Alias
+			a, ok = c.aliases[addr]
+			if ok {
+				alias = &a
+			}
+		}
 	})
 	return
-}
-
-func (c *Config) WebServer() (r map[dns.Domain]dns.Domain, l []config.WebHandler) {
-	c.withDynamicLock(func() {
-		r = c.Dynamic.WebDNSDomainRedirects
-		l = c.Dynamic.WebHandlers
-	})
-	return r, l
 }
 
 func (c *Config) Routes(accountName string, domain dns.Domain) (accountRoutes, domainRoutes, globalRoutes []config.Route) {
@@ -236,7 +262,7 @@ func (c *Config) Routes(accountName string, domain dns.Domain) (accountRoutes, d
 	return
 }
 
-func (c *Config) allowACMEHosts(checkACMEHosts bool) {
+func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 	for _, l := range c.Static.Listeners {
 		if l.TLS == nil || l.TLS.ACME == "" {
 			continue
@@ -251,9 +277,15 @@ func (c *Config) allowACMEHosts(checkACMEHosts bool) {
 		}
 
 		for _, dom := range c.Dynamic.Domains {
+			// Do not allow TLS certificates for domains for which we only accept DMARC/TLS
+			// reports as external party.
+			if dom.ReportsOnly {
+				continue
+			}
+
 			if l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS {
 				if d, err := dns.ParseDomain("autoconfig." + dom.Domain.ASCII); err != nil {
-					xlog.Errorx("parsing autoconfig domain", err, mlog.Field("domain", dom.Domain))
+					log.Errorx("parsing autoconfig domain", err, slog.Any("domain", dom.Domain))
 				} else {
 					hostnames[d] = struct{}{}
 				}
@@ -262,10 +294,14 @@ func (c *Config) allowACMEHosts(checkACMEHosts bool) {
 			if l.MTASTSHTTPS.Enabled && dom.MTASTS != nil && !l.MTASTSHTTPS.NonTLS {
 				d, err := dns.ParseDomain("mta-sts." + dom.Domain.ASCII)
 				if err != nil {
-					xlog.Errorx("parsing mta-sts domain", err, mlog.Field("domain", dom.Domain))
+					log.Errorx("parsing mta-sts domain", err, slog.Any("domain", dom.Domain))
 				} else {
 					hostnames[d] = struct{}{}
 				}
+			}
+
+			if dom.ClientSettingsDomain != "" {
+				hostnames[dom.ClientSettingsDNSDomain] = struct{}{}
 			}
 		}
 
@@ -286,17 +322,18 @@ func (c *Config) allowACMEHosts(checkACMEHosts bool) {
 		if public.IPsNATed {
 			ips = nil
 		}
-		m.SetAllowedHostnames(dns.StrictResolver{Pkg: "autotls"}, hostnames, ips, checkACMEHosts)
+		m.SetAllowedHostnames(log, dns.StrictResolver{Pkg: "autotls", Log: log.Logger}, hostnames, ips, checkACMEHosts)
 	}
 }
 
 // todo future: write config parsing & writing code that can read a config and remembers the exact tokens including newlines and comments, and can write back a modified file. the goal is to be able to write a config file automatically (after changing fields through the ui), but not loose comments and whitespace, to still get useful diffs for storing the config in a version control system.
 
 // must be called with lock held.
-func writeDynamic(ctx context.Context, log *mlog.Log, c config.Dynamic) error {
-	accDests, errs := prepareDynamicConfig(ctx, ConfigDynamicPath, Conf.Static, &c)
+// Returns ErrConfig if the configuration is not valid.
+func writeDynamic(ctx context.Context, log mlog.Log, c config.Dynamic) error {
+	accDests, aliases, errs := prepareDynamicConfig(ctx, log, ConfigDynamicPath, Conf.Static, &c)
 	if len(errs) > 0 {
-		return errs[0]
+		return fmt.Errorf("%w: %v", ErrConfig, errs[0])
 	}
 
 	var b bytes.Buffer
@@ -324,7 +361,7 @@ func writeDynamic(ctx context.Context, log *mlog.Log, c config.Dynamic) error {
 	if err := f.Sync(); err != nil {
 		return fmt.Errorf("sync domains.conf after write: %v", err)
 	}
-	if err := moxio.SyncDir(filepath.Dir(ConfigDynamicPath)); err != nil {
+	if err := moxio.SyncDir(log, filepath.Dir(ConfigDynamicPath)); err != nil {
 		return fmt.Errorf("sync dir of domains.conf after write: %v", err)
 	}
 
@@ -342,33 +379,34 @@ func writeDynamic(ctx context.Context, log *mlog.Log, c config.Dynamic) error {
 	Conf.DynamicLastCheck = time.Now()
 	Conf.Dynamic = c
 	Conf.accountDestinations = accDests
+	Conf.aliases = aliases
 
-	Conf.allowACMEHosts(true)
+	Conf.allowACMEHosts(log, true)
 
 	return nil
 }
 
 // MustLoadConfig loads the config, quitting on errors.
 func MustLoadConfig(doLoadTLSKeyCerts, checkACMEHosts bool) {
-	errs := LoadConfig(context.Background(), doLoadTLSKeyCerts, checkACMEHosts)
+	errs := LoadConfig(context.Background(), pkglog, doLoadTLSKeyCerts, checkACMEHosts)
 	if len(errs) > 1 {
-		xlog.Error("loading config file: multiple errors")
+		pkglog.Error("loading config file: multiple errors")
 		for _, err := range errs {
-			xlog.Errorx("config error", err)
+			pkglog.Errorx("config error", err)
 		}
-		xlog.Fatal("stopping after multiple config errors")
+		pkglog.Fatal("stopping after multiple config errors")
 	} else if len(errs) == 1 {
-		xlog.Fatalx("loading config file", errs[0])
+		pkglog.Fatalx("loading config file", errs[0])
 	}
 }
 
 // LoadConfig attempts to parse and load a config, returning any errors
 // encountered.
-func LoadConfig(ctx context.Context, doLoadTLSKeyCerts, checkACMEHosts bool) []error {
+func LoadConfig(ctx context.Context, log mlog.Log, doLoadTLSKeyCerts, checkACMEHosts bool) []error {
 	Shutdown, ShutdownCancel = context.WithCancel(context.Background())
 	Context, ContextCancel = context.WithCancel(context.Background())
 
-	c, errs := ParseConfig(ctx, ConfigStaticPath, false, doLoadTLSKeyCerts, checkACMEHosts)
+	c, errs := ParseConfig(ctx, log, ConfigStaticPath, false, doLoadTLSKeyCerts, checkACMEHosts)
 	if len(errs) > 0 {
 		return errs
 	}
@@ -381,7 +419,7 @@ func LoadConfig(ctx context.Context, doLoadTLSKeyCerts, checkACMEHosts bool) []e
 // SetConfig sets a new config. Not to be used during normal operation.
 func SetConfig(c *Config) {
 	// Cannot just assign *c to Conf, it would copy the mutex.
-	Conf = Config{c.Static, sync.Mutex{}, c.Log, sync.Mutex{}, c.Dynamic, c.dynamicMtime, c.DynamicLastCheck, c.accountDestinations}
+	Conf = Config{c.Static, sync.Mutex{}, c.Log, sync.Mutex{}, c.Dynamic, c.dynamicMtime, c.DynamicLastCheck, c.accountDestinations, c.aliases}
 
 	// If we have non-standard CA roots, use them for all HTTPS requests.
 	if Conf.Static.TLS.CertPool != nil {
@@ -390,7 +428,16 @@ func SetConfig(c *Config) {
 		}
 	}
 
-	moxvar.Pedantic = c.Static.Pedantic
+	SetPedantic(c.Static.Pedantic)
+}
+
+// Set pedantic in all packages.
+func SetPedantic(p bool) {
+	dkim.Pedantic = p
+	dns.Pedantic = p
+	message.Pedantic = p
+	smtp.Pedantic = p
+	Pedantic = p
 }
 
 // ParseConfig parses the static config at path p. If checkOnly is true, no changes
@@ -399,7 +446,7 @@ func SetConfig(c *Config) {
 // quickstart in the case the user is going to provide their own certificates.
 // If checkACMEHosts is true, the hosts allowed for acme are compared with the
 // explicitly configured ips we are listening on.
-func ParseConfig(ctx context.Context, p string, checkOnly, doLoadTLSKeyCerts, checkACMEHosts bool) (c *Config, errs []error) {
+func ParseConfig(ctx context.Context, log mlog.Log, p string, checkOnly, doLoadTLSKeyCerts, checkACMEHosts bool) (c *Config, errs []error) {
 	c = &Config{
 		Static: config.Static{
 			DataDir: ".",
@@ -418,15 +465,15 @@ func ParseConfig(ctx context.Context, p string, checkOnly, doLoadTLSKeyCerts, ch
 		return nil, []error{fmt.Errorf("parsing %s%v", p, err)}
 	}
 
-	if xerrs := PrepareStaticConfig(ctx, p, c, checkOnly, doLoadTLSKeyCerts); len(xerrs) > 0 {
+	if xerrs := PrepareStaticConfig(ctx, log, p, c, checkOnly, doLoadTLSKeyCerts); len(xerrs) > 0 {
 		return nil, xerrs
 	}
 
 	pp := filepath.Join(filepath.Dir(p), "domains.conf")
-	c.Dynamic, c.dynamicMtime, c.accountDestinations, errs = ParseDynamicConfig(ctx, pp, c.Static)
+	c.Dynamic, c.dynamicMtime, c.accountDestinations, c.aliases, errs = ParseDynamicConfig(ctx, log, pp, c.Static)
 
 	if !checkOnly {
-		c.allowACMEHosts(checkACMEHosts)
+		c.allowACMEHosts(log, checkACMEHosts)
 	}
 
 	return c, errs
@@ -435,12 +482,10 @@ func ParseConfig(ctx context.Context, p string, checkOnly, doLoadTLSKeyCerts, ch
 // PrepareStaticConfig parses the static config file and prepares data structures
 // for starting mox. If checkOnly is set no substantial changes are made, like
 // creating an ACME registration.
-func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, checkOnly, doLoadTLSKeyCerts bool) (errs []error) {
+func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, conf *Config, checkOnly, doLoadTLSKeyCerts bool) (errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
-
-	log := xlog.WithContext(ctx)
 
 	c := &conf.Static
 
@@ -455,7 +500,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 
 	// Post-process logging config.
 	if logLevel, ok := mlog.Levels[c.LogLevel]; ok {
-		conf.Log = map[string]mlog.Level{"": logLevel}
+		conf.Log = map[string]slog.Level{"": logLevel}
 	} else {
 		addErrorf("invalid log level %q", c.LogLevel)
 	}
@@ -497,9 +542,21 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 	if err != nil {
 		addErrorf("parsing hostname: %s", err)
 	} else if hostname.Name() != c.Hostname {
-		addErrorf("hostname must be in IDNA form %q", hostname.Name())
+		addErrorf("hostname must be in unicode form %q instead of %q", hostname.Name(), c.Hostname)
 	}
 	c.HostnameDomain = hostname
+
+	if c.HostTLSRPT.Account != "" {
+		tlsrptLocalpart, err := smtp.ParseLocalpart(c.HostTLSRPT.Localpart)
+		if err != nil {
+			addErrorf("invalid localpart %q for host tlsrpt: %v", c.HostTLSRPT.Localpart, err)
+		} else if tlsrptLocalpart.IsInternational() {
+			// Does not appear documented in ../rfc/8460, but similar to DMARC it makes sense
+			// to keep this ascii-only addresses.
+			addErrorf("host TLSRPT localpart %q is an internationalized address, only conventional ascii-only address allowed for interopability", tlsrptLocalpart)
+		}
+		c.HostTLSRPT.ParsedLocalpart = tlsrptLocalpart
+	}
 
 	// Return private key for host name for use with an ACME. Used to return the same
 	// private key as pre-generated for use with DANE, with its public key in DNS.
@@ -551,10 +608,16 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 				key = findACMEHostPrivateKey(acmeName, host, keyType, 2)
 			}
 			if key != nil {
-				log.Debug("found existing private key for certificate for host", mlog.Field("acmename", acmeName), mlog.Field("host", host), mlog.Field("keytype", keyType))
+				log.Debug("found existing private key for certificate for host",
+					slog.String("acmename", acmeName),
+					slog.String("host", host),
+					slog.Any("keytype", keyType))
 				return key, nil
 			}
-			log.Debug("generating new private key for certificate for host", mlog.Field("acmename", acmeName), mlog.Field("host", host), mlog.Field("keytype", keyType))
+			log.Debug("generating new private key for certificate for host",
+				slog.String("acmename", acmeName),
+				slog.String("host", host),
+				slog.Any("keytype", keyType))
 			switch keyType {
 			case autocert.KeyRSA2048:
 				return rsa.GenerateKey(cryptorand.Reader, 2048)
@@ -566,16 +629,42 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 		}
 	}
 	for name, acme := range c.ACME {
+		var eabKeyID string
+		var eabKey []byte
+		if acme.ExternalAccountBinding != nil {
+			eabKeyID = acme.ExternalAccountBinding.KeyID
+			p := configDirPath(configFile, acme.ExternalAccountBinding.KeyFile)
+			buf, err := os.ReadFile(p)
+			if err != nil {
+				addErrorf("reading external account binding key for acme provider %q: %s", name, err)
+			} else {
+				dec := make([]byte, base64.RawURLEncoding.DecodedLen(len(buf)))
+				n, err := base64.RawURLEncoding.Decode(dec, buf)
+				if err != nil {
+					addErrorf("parsing external account binding key as base64 for acme provider %q: %s", name, err)
+				} else {
+					eabKey = dec[:n]
+				}
+			}
+		}
+
 		if checkOnly {
 			continue
 		}
+
 		acmeDir := dataDirPath(configFile, c.DataDir, "acme")
 		os.MkdirAll(acmeDir, 0770)
-		manager, err := autotls.Load(name, acmeDir, acme.ContactEmail, acme.DirectoryURL, makeGetPrivateKey(name), Shutdown.Done())
+		manager, err := autotls.Load(name, acmeDir, acme.ContactEmail, acme.DirectoryURL, eabKeyID, eabKey, makeGetPrivateKey(name), Shutdown.Done())
 		if err != nil {
 			addErrorf("loading ACME identity for %q: %s", name, err)
 		}
 		acme.Manager = manager
+
+		// Help configurations from older quickstarts.
+		if acme.IssuerDomainName == "" && acme.DirectoryURL == "https://acme-v02.api.letsencrypt.org/directory" {
+			acme.IssuerDomainName = "letsencrypt.org"
+		}
+
 		c.ACME[name] = acme
 	}
 
@@ -640,18 +729,24 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 				switch k := privKey.(type) {
 				case *rsa.PrivateKey:
 					if k.N.BitLen() != 2048 {
-						log.Error("need rsa key with 2048 bits, for host private key for DANE/ACME certificates, ignoring", mlog.Field("listener", name), mlog.Field("file", keyPath), mlog.Field("bits", k.N.BitLen()))
+						log.Error("need rsa key with 2048 bits, for host private key for DANE/ACME certificates, ignoring",
+							slog.String("listener", name),
+							slog.String("file", keyPath),
+							slog.Int("bits", k.N.BitLen()))
 						continue
 					}
 					l.TLS.HostPrivateRSA2048Keys = append(l.TLS.HostPrivateRSA2048Keys, k)
 				case *ecdsa.PrivateKey:
 					if k.Curve != elliptic.P256() {
-						log.Error("unrecognized ecdsa curve for host private key for DANE/ACME certificates, ignoring", mlog.Field("listener", name), mlog.Field("file", keyPath))
+						log.Error("unrecognized ecdsa curve for host private key for DANE/ACME certificates, ignoring", slog.String("listener", name), slog.String("file", keyPath))
 						continue
 					}
 					l.TLS.HostPrivateECDSAP256Keys = append(l.TLS.HostPrivateECDSAP256Keys, k)
 				default:
-					log.Error("unrecognized key type for host private key for DANE/ACME certificates, ignoring", mlog.Field("listener", name), mlog.Field("file", keyPath), mlog.Field("keytype", fmt.Sprintf("%T", privKey)))
+					log.Error("unrecognized key type for host private key for DANE/ACME certificates, ignoring",
+						slog.String("listener", name),
+						slog.String("file", keyPath),
+						slog.String("keytype", fmt.Sprintf("%T", privKey)))
 					continue
 				}
 			}
@@ -812,7 +907,9 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 			}
 			seen[m] = true
 			switch m {
+			case "SCRAM-SHA-256-PLUS":
 			case "SCRAM-SHA-256":
+			case "SCRAM-SHA-1-PLUS":
 			case "SCRAM-SHA-1":
 			case "CRAM-MD5":
 			case "PLAIN":
@@ -823,7 +920,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 
 		t.Auth.EffectiveMechanisms = t.Auth.Mechanisms
 		if len(t.Auth.EffectiveMechanisms) == 0 {
-			t.Auth.EffectiveMechanisms = []string{"SCRAM-SHA-256", "SCRAM-SHA-1", "CRAM-MD5"}
+			t.Auth.EffectiveMechanisms = []string{"SCRAM-SHA-256-PLUS", "SCRAM-SHA-256", "SCRAM-SHA-1-PLUS", "SCRAM-SHA-1", "CRAM-MD5"}
 		}
 	}
 
@@ -846,6 +943,19 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 		}
 	}
 
+	checkTransportDirect := func(name string, t *config.TransportDirect) {
+		if t.DisableIPv4 && t.DisableIPv6 {
+			addErrorf("transport %s: both IPv4 and IPv6 are disabled, enable at least one", name)
+		}
+		t.IPFamily = "ip"
+		if t.DisableIPv4 {
+			t.IPFamily = "ip6"
+		}
+		if t.DisableIPv6 {
+			t.IPFamily = "ip4"
+		}
+	}
+
 	for name, t := range c.Transports {
 		n := 0
 		if t.Submissions != nil {
@@ -863,6 +973,10 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 		if t.Socks != nil {
 			n++
 			checkTransportSocks(name, t.Socks)
+		}
+		if t.Direct != nil {
+			n++
+			checkTransportDirect(name, t.Direct)
 		}
 		if n > 1 {
 			addErrorf("transport %s: cannot have multiple methods in a transport", name)
@@ -896,7 +1010,7 @@ func PrepareStaticConfig(ctx context.Context, configFile string, conf *Config, c
 }
 
 // PrepareDynamicConfig parses the dynamic config file given a static file.
-func ParseDynamicConfig(ctx context.Context, dynamicPath string, static config.Static) (c config.Dynamic, mtime time.Time, accDests map[string]AccountDestination, errs []error) {
+func ParseDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string, static config.Static) (c config.Dynamic, mtime time.Time, accDests map[string]AccountDestination, aliases map[string]config.Alias, errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
@@ -916,13 +1030,11 @@ func ParseDynamicConfig(ctx context.Context, dynamicPath string, static config.S
 		return
 	}
 
-	accDests, errs = prepareDynamicConfig(ctx, dynamicPath, static, &c)
-	return c, fi.ModTime(), accDests, errs
+	accDests, aliases, errs = prepareDynamicConfig(ctx, log, dynamicPath, static, &c)
+	return c, fi.ModTime(), accDests, aliases, errs
 }
 
-func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config.Static, c *config.Dynamic) (accDests map[string]AccountDestination, errs []error) {
-	log := xlog.WithContext(ctx)
-
+func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string, static config.Static, c *config.Dynamic) (accDests map[string]AccountDestination, aliases map[string]config.Alias, errs []error) {
 	addErrorf := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
@@ -941,6 +1053,26 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		addErrorf("postmaster account %q does not exist", static.Postmaster.Account)
 	}
 	checkMailboxNormf(static.Postmaster.Mailbox, "postmaster mailbox")
+
+	accDests = map[string]AccountDestination{}
+	aliases = map[string]config.Alias{}
+
+	// Validate host TLSRPT account/address.
+	if static.HostTLSRPT.Account != "" {
+		if _, ok := c.Accounts[static.HostTLSRPT.Account]; !ok {
+			addErrorf("host tlsrpt account %q does not exist", static.HostTLSRPT.Account)
+		}
+		checkMailboxNormf(static.HostTLSRPT.Mailbox, "host tlsrpt mailbox")
+
+		// Localpart has been parsed already.
+
+		addrFull := smtp.NewAddress(static.HostTLSRPT.ParsedLocalpart, static.HostnameDomain).String()
+		dest := config.Destination{
+			Mailbox:        static.HostTLSRPT.Mailbox,
+			HostTLSReports: true,
+		}
+		accDests[addrFull] = AccountDestination{false, static.HostTLSRPT.ParsedLocalpart, static.HostTLSRPT.Account, dest}
+	}
 
 	var haveSTSListener, haveWebserverListener bool
 	for _, l := range static.Listeners {
@@ -993,10 +1125,18 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		if err != nil {
 			addErrorf("bad domain %q: %s", d, err)
 		} else if dnsdomain.Name() != d {
-			addErrorf("domain %s must be specified in IDNA form, %s", d, dnsdomain.Name())
+			addErrorf("domain %s must be specified in unicode form, %s", d, dnsdomain.Name())
 		}
 
 		domain.Domain = dnsdomain
+
+		if domain.ClientSettingsDomain != "" {
+			csd, err := dns.ParseDomain(domain.ClientSettingsDomain)
+			if err != nil {
+				addErrorf("bad client settings domain %q: %s", domain.ClientSettingsDomain, err)
+			}
+			domain.ClientSettingsDNSDomain = csd
+		}
 
 		for _, sign := range domain.DKIM.Sign {
 			if _, ok := domain.DKIM.Selectors[sign]; !ok {
@@ -1008,7 +1148,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			if err != nil {
 				addErrorf("bad selector %q: %s", name, err)
 			} else if seld.Name() != name {
-				addErrorf("selector %q must be specified in IDNA form, %q", name, seld.Name())
+				addErrorf("selector %q must be specified in unicode form, %q", name, seld.Name())
 			}
 			sel.Domain = seld
 
@@ -1055,11 +1195,13 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 					addErrorf("rsa keys should be >= 1024 bits")
 				}
 				sel.Key = k
+				sel.Algorithm = fmt.Sprintf("rsa-%d", k.N.BitLen())
 			case ed25519.PrivateKey:
 				if sel.HashEffective != "sha256" {
 					addErrorf("hash algorithm %q is not supported with ed25519, only sha256 is", sel.HashEffective)
 				}
 				sel.Key = k
+				sel.Algorithm = "ed25519"
 			default:
 				addErrorf("private key type %T not yet supported, at selector %s in domain %s", key, name, d)
 			}
@@ -1110,8 +1252,10 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		c.Domains[d] = domain
 	}
 
+	// To determine ReportsOnly.
+	domainHasAddress := map[string]bool{}
+
 	// Validate email addresses.
-	accDests = map[string]AccountDestination{}
 	for accName, acc := range c.Accounts {
 		var err error
 		acc.DNSDomain, err = dns.ParseDomain(acc.Domain)
@@ -1145,7 +1289,54 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			}
 			acc.NotJunkMailbox = r
 		}
+
+		acc.ParsedFromIDLoginAddresses = make([]smtp.Address, len(acc.FromIDLoginAddresses))
+		for i, s := range acc.FromIDLoginAddresses {
+			a, err := smtp.ParseAddress(s)
+			if err != nil {
+				addErrorf("invalid fromid login address %q in account %q: %v", s, accName, err)
+			}
+			// We check later on if address belongs to account.
+			dom, ok := c.Domains[a.Domain.Name()]
+			if !ok {
+				addErrorf("unknown domain in fromid login address %q for account %q", s, accName)
+			} else if dom.LocalpartCatchallSeparator == "" {
+				addErrorf("localpart catchall separator not configured for domain for fromid login address %q for account %q", s, accName)
+			}
+			acc.ParsedFromIDLoginAddresses[i] = a
+		}
+
+		// Clear any previously derived state.
+		acc.Aliases = nil
+
 		c.Accounts[accName] = acc
+
+		if acc.OutgoingWebhook != nil {
+			u, err := url.Parse(acc.OutgoingWebhook.URL)
+			if err == nil && (u.Scheme != "http" && u.Scheme != "https") {
+				err = errors.New("scheme must be http or https")
+			}
+			if err != nil {
+				addErrorf("parsing outgoing hook url %q in account %q: %v", acc.OutgoingWebhook.URL, accName, err)
+			}
+
+			// note: outgoing hook events are in ../queue/hooks.go, ../mox-/config.go, ../queue.go and ../webapi/gendoc.sh. keep in sync.
+			outgoingHookEvents := []string{"delivered", "suppressed", "delayed", "failed", "relayed", "expanded", "canceled", "unrecognized"}
+			for _, e := range acc.OutgoingWebhook.Events {
+				if !slices.Contains(outgoingHookEvents, e) {
+					addErrorf("unknown outgoing hook event %q", e)
+				}
+			}
+		}
+		if acc.IncomingWebhook != nil {
+			u, err := url.Parse(acc.IncomingWebhook.URL)
+			if err == nil && (u.Scheme != "http" && u.Scheme != "https") {
+				err = errors.New("scheme must be http or https")
+			}
+			if err != nil {
+				addErrorf("parsing incoming hook url %q in account %q: %v", acc.IncomingWebhook.URL, accName, err)
+			}
+		}
 
 		// todo deprecated: only localpart as keys for Destinations, we are replacing them with full addresses. if domains.conf is written, we won't have to do this again.
 		replaceLocalparts := map[string]string{}
@@ -1165,6 +1356,14 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 						addErrorf("invalid SMTPMailFrom regular expression: %v", err)
 					}
 					c.Accounts[accName].Destinations[addrName].Rulesets[i].SMTPMailFromRegexpCompiled = r
+				}
+				if rs.MsgFromRegexp != "" {
+					n++
+					r, err := regexp.Compile(rs.MsgFromRegexp)
+					if err != nil {
+						addErrorf("invalid MsgFrom regular expression: %v", err)
+					}
+					c.Accounts[accName].Destinations[addrName].Rulesets[i].MsgFromRegexpCompiled = r
 				}
 				if rs.VerifiedDomain != "" {
 					n++
@@ -1232,6 +1431,7 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 					addErrorf("unknown domain for address %q in account %q", addrName, accName)
 					continue
 				}
+				domainHasAddress[d.Name()] = true
 				addrFull := "@" + d.Name()
 				if _, ok := accDests[addrFull]; ok {
 					addErrorf("duplicate canonicalized catchall destination address %s", addrFull)
@@ -1266,9 +1466,9 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 
 			origLP := address.Localpart
 			dc := c.Domains[address.Domain.Name()]
-			if lp, err := CanonicalLocalpart(address.Localpart, dc); err != nil {
-				addErrorf("canonicalizing localpart %s: %v", address.Localpart, err)
-			} else if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(address.Localpart), dc.LocalpartCatchallSeparator) {
+			domainHasAddress[address.Domain.Name()] = true
+			lp := CanonicalLocalpart(address.Localpart, dc)
+			if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(address.Localpart), dc.LocalpartCatchallSeparator) {
 				addErrorf("localpart of address %s includes domain catchall separator %s", address, dc.LocalpartCatchallSeparator)
 			} else {
 				address.Localpart = lp
@@ -1285,9 +1485,26 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			if !ok {
 				addErrorf("could not find localpart %q to replace with address in destinations", lp)
 			} else {
-				log.Error(`deprecation warning: support for account destination addresses specified as just localpart ("username") instead of full email address will be removed in the future; update domains.conf, for each Account, for each Destination, ensure each key is an email address by appending "@" and the default domain for the account`, mlog.Field("localpart", lp), mlog.Field("address", addr), mlog.Field("account", accName))
+				log.Warn(`deprecation warning: support for account destination addresses specified as just localpart ("username") instead of full email address will be removed in the future; update domains.conf, for each Account, for each Destination, ensure each key is an email address by appending "@" and the default domain for the account`,
+					slog.Any("localpart", lp),
+					slog.Any("address", addr),
+					slog.String("account", accName))
 				acc.Destinations[addr] = dest
 				delete(acc.Destinations, lp)
+			}
+		}
+
+		// Now that all addresses are parsed, check if all fromid login addresses match
+		// configured addresses.
+		for i, a := range acc.ParsedFromIDLoginAddresses {
+			// For domain catchall.
+			if _, ok := accDests["@"+a.Domain.Name()]; ok {
+				continue
+			}
+			dc := c.Domains[a.Domain.Name()]
+			a.Localpart = CanonicalLocalpart(a.Localpart, dc)
+			if _, ok := accDests[a.Pack(true)]; !ok {
+				addErrorf("fromid login address %q for account %q does not match its destination addresses", acc.FromIDLoginAddresses[i], accName)
 			}
 		}
 
@@ -1317,8 +1534,11 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 			if err != nil {
 				addErrorf("DMARC domain %q: %s", dmarc.Domain, err)
 			} else if _, ok := c.Domains[addrdom.Name()]; !ok {
-				addErrorf("unknown domain %q for DMARC address in domain %q", dmarc.Domain, d)
+				addErrorf("unknown domain %q for DMARC address in domain %q", addrdom, d)
 			}
+		}
+		if addrdom == domain.Domain {
+			domainHasAddress[addrdom.Name()] = true
 		}
 
 		domain.DMARC.ParsedLocalpart = lp
@@ -1360,17 +1580,107 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 				addErrorf("unknown domain %q for TLSRPT address in domain %q", tlsrpt.Domain, d)
 			}
 		}
+		if addrdom == domain.Domain {
+			domainHasAddress[addrdom.Name()] = true
+		}
 
 		domain.TLSRPT.ParsedLocalpart = lp
 		domain.TLSRPT.DNSDomain = addrdom
 		c.Domains[d] = domain
 		addrFull := smtp.NewAddress(lp, addrdom).String()
 		dest := config.Destination{
-			Mailbox:    tlsrpt.Mailbox,
-			TLSReports: true,
+			Mailbox:          tlsrpt.Mailbox,
+			DomainTLSReports: true,
 		}
 		checkMailboxNormf(tlsrpt.Mailbox, "TLSRPT mailbox for account %q", tlsrpt.Account)
 		accDests[addrFull] = AccountDestination{false, lp, tlsrpt.Account, dest}
+	}
+
+	// Set ReportsOnly for domains, based on whether we have seen addresses (possibly
+	// from DMARC or TLS reporting).
+	for d, domain := range c.Domains {
+		domain.ReportsOnly = !domainHasAddress[domain.Domain.Name()]
+		c.Domains[d] = domain
+	}
+
+	// Aliases, per domain. Also add references to accounts.
+	for d, domain := range c.Domains {
+		for lpstr, a := range domain.Aliases {
+			var err error
+			a.LocalpartStr = lpstr
+			var clp smtp.Localpart
+			lp, err := smtp.ParseLocalpart(lpstr)
+			if err != nil {
+				addErrorf("domain %q: parsing localpart %q for alias: %v", d, lpstr, err)
+				continue
+			} else if domain.LocalpartCatchallSeparator != "" && strings.Contains(string(lp), domain.LocalpartCatchallSeparator) {
+				addErrorf("domain %q: alias %q contains localpart catchall separator", d, a.LocalpartStr)
+				continue
+			} else {
+				clp = CanonicalLocalpart(lp, domain)
+			}
+
+			addr := smtp.NewAddress(clp, domain.Domain).Pack(true)
+			if _, ok := aliases[addr]; ok {
+				addErrorf("domain %q: duplicate alias address %q", d, addr)
+				continue
+			}
+			if _, ok := accDests[addr]; ok {
+				addErrorf("domain %q: alias %q already present as regular address", d, addr)
+				continue
+			}
+			if len(a.Addresses) == 0 {
+				// Not currently possible, Addresses isn't optional.
+				addErrorf("domain %q: alias %q needs at least one destination address", d, addr)
+				continue
+			}
+			a.ParsedAddresses = make([]config.AliasAddress, 0, len(a.Addresses))
+			seen := map[string]bool{}
+			for _, destAddr := range a.Addresses {
+				da, err := smtp.ParseAddress(destAddr)
+				if err != nil {
+					addErrorf("domain %q: parsing destination address %q in alias %q: %v", d, destAddr, addr, err)
+					continue
+				}
+				dastr := da.Pack(true)
+				accDest, ok := accDests[dastr]
+				if !ok {
+					addErrorf("domain %q: alias %q references non-existent address %q", d, addr, destAddr)
+					continue
+				}
+				if seen[dastr] {
+					addErrorf("domain %q: alias %q has duplicate address %q", d, addr, destAddr)
+					continue
+				}
+				seen[dastr] = true
+				aa := config.AliasAddress{Address: da, AccountName: accDest.Account, Destination: accDest.Destination}
+				a.ParsedAddresses = append(a.ParsedAddresses, aa)
+			}
+			a.Domain = domain.Domain
+			c.Domains[d].Aliases[lpstr] = a
+			aliases[addr] = a
+
+			for _, aa := range a.ParsedAddresses {
+				acc := c.Accounts[aa.AccountName]
+				var addrs []string
+				if a.ListMembers {
+					addrs = make([]string, len(a.ParsedAddresses))
+					for i := range a.ParsedAddresses {
+						addrs[i] = a.ParsedAddresses[i].Address.Pack(true)
+					}
+				}
+				// Keep the non-sensitive fields.
+				accAlias := config.Alias{
+					PostPublic:   a.PostPublic,
+					ListMembers:  a.ListMembers,
+					AllowMsgFrom: a.AllowMsgFrom,
+					LocalpartStr: a.LocalpartStr,
+					Domain:       a.Domain,
+				}
+				acc.Aliases = append(acc.Aliases, config.AddressAlias{SubscriptionAddress: aa.Address.Pack(true), Alias: accAlias, MemberAddresses: addrs})
+				c.Accounts[aa.AccountName] = acc
+			}
+		}
 	}
 
 	// Check webserver configs.
@@ -1487,6 +1797,20 @@ func prepareDynamicConfig(ctx context.Context, dynamicPath string, static config
 		if n != 1 {
 			addErrorf("webhandler %s %s: must have exactly one handler, not %d", wh.Domain, wh.PathRegexp, n)
 		}
+	}
+
+	c.MonitorDNSBLZones = nil
+	for _, s := range c.MonitorDNSBLs {
+		d, err := dns.ParseDomain(s)
+		if err != nil {
+			addErrorf("invalid monitor dnsbl zone %s: %v", s, err)
+			continue
+		}
+		if slices.Contains(c.MonitorDNSBLZones, d) {
+			addErrorf("duplicate zone %s in monitor dnsbl zones", d)
+			continue
+		}
+		c.MonitorDNSBLZones = append(c.MonitorDNSBLZones, d)
 	}
 
 	return

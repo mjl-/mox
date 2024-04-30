@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"runtime"
+	"slices"
 	"sort"
 	"time"
-
-	"golang.org/x/exp/slices"
 
 	"github.com/mjl-/bstore"
 
@@ -26,7 +26,7 @@ import (
 // may have a threadid 0. That results in this message getting threadid 0, which
 // will handled by the background upgrade process assigning a threadid when it gets
 // to this message.
-func assignThread(log *mlog.Log, tx *bstore.Tx, m *Message, part *message.Part) error {
+func assignThread(log mlog.Log, tx *bstore.Tx, m *Message, part *message.Part) error {
 	if m.MessageID != "" {
 		// Match against existing different message with same Message-ID.
 		q := bstore.QueryTx[Message](tx)
@@ -47,18 +47,18 @@ func assignThread(log *mlog.Log, tx *bstore.Tx, m *Message, part *message.Part) 
 
 	h, err := part.Header()
 	if err != nil {
-		log.Errorx("assigning threads: parsing references/in-reply-to headers, not matching by message-id", err, mlog.Field("msgid", m.ID))
+		log.Errorx("assigning threads: parsing references/in-reply-to headers, not matching by message-id", err, slog.Int64("msgid", m.ID))
 	}
 	messageIDs, err := message.ReferencedIDs(h.Values("References"), h.Values("In-Reply-To"))
 	if err != nil {
-		log.Errorx("assigning threads: parsing references/in-reply-to headers, not matching by message-id", err, mlog.Field("msgid", m.ID))
+		log.Errorx("assigning threads: parsing references/in-reply-to headers, not matching by message-id", err, slog.Int64("msgid", m.ID))
 	}
 	for i := len(messageIDs) - 1; i >= 0; i-- {
 		messageID := messageIDs[i]
 		if messageID == m.MessageID {
 			continue
 		}
-		tm, _, err := lookupThreadMessage(tx, m.ID, messageID, m.SubjectBase)
+		tm, _, err := lookupThreadMessage(tx, m.ID, messageID, m.SubjectBase, m.DSN)
 		if err != nil {
 			return fmt.Errorf("looking up thread message for new message: %v", err)
 		} else if tm != nil {
@@ -123,7 +123,7 @@ func assignParent(m *Message, pm Message, updateSeen bool) {
 //
 // ModSeq is not changed. Calles should bump the uid validity of the mailboxes
 // to propagate the changes to IMAP clients.
-func (a *Account) ResetThreading(ctx context.Context, log *mlog.Log, batchSize int, clearIDs bool) (int, error) {
+func (a *Account) ResetThreading(ctx context.Context, log mlog.Log, batchSize int, clearIDs bool) (int, error) {
 	// todo: should this send Change events for ThreadMuted and ThreadCollapsed? worth it?
 
 	var lastID int64
@@ -147,13 +147,13 @@ func (a *Account) ResetThreading(ctx context.Context, log *mlog.Log, batchSize i
 					Envelope *message.Envelope
 				}
 				if err := json.Unmarshal(m.ParsedBuf, &part); err != nil {
-					log.Errorx("unmarshal json parsedbuf for setting message-id, skipping", err, mlog.Field("msgid", m.ID))
+					log.Errorx("unmarshal json parsedbuf for setting message-id, skipping", err, slog.Int64("msgid", m.ID))
 				} else {
 					m.MessageID = ""
 					if part.Envelope != nil && part.Envelope.MessageID != "" {
 						s, _, err := message.MessageIDCanonical(part.Envelope.MessageID)
 						if err != nil {
-							log.Debugx("parsing message-id, skipping", err, mlog.Field("msgid", m.ID), mlog.Field("messageid", part.Envelope.MessageID))
+							log.Debugx("parsing message-id, skipping", err, slog.Int64("msgid", m.ID), slog.String("messageid", part.Envelope.MessageID))
 						}
 						m.MessageID = s
 					}
@@ -231,7 +231,7 @@ func (a *Account) ResetThreading(ctx context.Context, log *mlog.Log, batchSize i
 // Does not set Seen flag for muted threads.
 //
 // Progress is written to progressWriter, every 100k messages.
-func (a *Account) AssignThreads(ctx context.Context, log *mlog.Log, txOpt *bstore.Tx, startMessageID int64, batchSize int, progressWriter io.Writer) error {
+func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore.Tx, startMessageID int64, batchSize int, progressWriter io.Writer) error {
 	// We use a more basic version of the thread-matching algorithm describe in:
 	// ../rfc/5256:443
 	// The algorithm assumes you'll select messages, then group into threads. We normally do
@@ -294,7 +294,7 @@ func (a *Account) AssignThreads(ctx context.Context, log *mlog.Log, txOpt *bstor
 
 		refids, err := message.ReferencedIDs(references, inReplyTo)
 		if err != nil {
-			log.Errorx("assigning threads: parsing references/in-reply-to headers, not matching by message-id", err, mlog.Field("msgid", m.ID))
+			log.Errorx("assigning threads: parsing references/in-reply-to headers, not matching by message-id", err, slog.Int64("msgid", m.ID))
 		}
 
 		for i := len(refids) - 1; i >= 0; i-- {
@@ -302,7 +302,7 @@ func (a *Account) AssignThreads(ctx context.Context, log *mlog.Log, txOpt *bstor
 			if messageID == m.MessageID {
 				continue
 			}
-			tm, exists, err := lookupThreadMessage(tx, m.ID, messageID, m.SubjectBase)
+			tm, exists, err := lookupThreadMessage(tx, m.ID, messageID, m.SubjectBase, m.DSN)
 			if err != nil {
 				return false, fmt.Errorf("lookup up thread by message-id %s for message id %d: %w", messageID, m.ID, err)
 			} else if tm != nil {
@@ -485,7 +485,7 @@ func (a *Account) AssignThreads(ctx context.Context, log *mlog.Log, txOpt *bstor
 			return nil
 		}
 
-		// Use multiple worker goroutines to read parse headers from on-disk messages.
+		// Use multiple worker goroutines to parse headers from on-disk messages.
 		procs := runtime.GOMAXPROCS(0)
 		wq := moxio.NewWorkQueue[Message, threadPrep](2*procs, 4*procs, prepareMessages, processMessage)
 
@@ -527,7 +527,7 @@ func (a *Account) AssignThreads(ctx context.Context, log *mlog.Log, txOpt *bstor
 		}
 		nassigned += n
 		if nassigned%100000 == 0 {
-			log.Debug("assigning threads, progress", mlog.Field("count", nassigned), mlog.Field("unresolved", len(pending)))
+			log.Debug("assigning threads, progress", slog.Int("count", nassigned), slog.Int("unresolved", len(pending)))
 			if _, err := fmt.Fprintf(progressWriter, "assigning threads, progress: %d messages\n", nassigned); err != nil {
 				return fmt.Errorf("writing progress: %v", err)
 			}
@@ -537,7 +537,7 @@ func (a *Account) AssignThreads(ctx context.Context, log *mlog.Log, txOpt *bstor
 		return fmt.Errorf("writing progress: %v", err)
 	}
 
-	log.Debug("assigning threads, mostly done, finishing with resolving of cyclic messages", mlog.Field("count", nassigned), mlog.Field("unresolved", len(pending)))
+	log.Debug("assigning threads, mostly done, finishing with resolving of cyclic messages", slog.Int("count", nassigned), slog.Int("unresolved", len(pending)))
 
 	if _, err := fmt.Fprintf(progressWriter, "assigning threads, resolving %d cyclic pending message-ids\n", len(pending)); err != nil {
 		return fmt.Errorf("writing progress: %v", err)
@@ -674,16 +674,18 @@ func (a *Account) AssignThreads(ctx context.Context, log *mlog.Log, txOpt *bstor
 	return nil
 }
 
-// lookupThreadMessage tries to find the parent message with messageID that must
-// have a matching subjectBase.
+// lookupThreadMessage tries to find the parent message with messageID, that must
+// have a matching subjectBase (unless it is a DSN).
 //
 // If the message isn't present (with a valid thread id), a nil message and nil
 // error is returned. The bool return value indicates if a message with the
 // message-id exists at all.
-func lookupThreadMessage(tx *bstore.Tx, mID int64, messageID, subjectBase string) (*Message, bool, error) {
+func lookupThreadMessage(tx *bstore.Tx, mID int64, messageID, subjectBase string, isDSN bool) (*Message, bool, error) {
 	q := bstore.QueryTx[Message](tx)
 	q.FilterNonzero(Message{MessageID: messageID})
-	q.FilterEqual("SubjectBase", subjectBase)
+	if !isDSN {
+		q.FilterEqual("SubjectBase", subjectBase)
+	}
 	q.FilterEqual("Expunged", false)
 	q.FilterNotEqual("ID", mID)
 	q.SortAsc("ID")
@@ -723,8 +725,8 @@ func lookupThreadMessageSubject(tx *bstore.Tx, m Message, subjectBase string) (*
 	return &tm, nil
 }
 
-func upgradeThreads(ctx context.Context, acc *Account, up *Upgrade) error {
-	log := xlog.Fields(mlog.Field("account", acc.Name))
+func upgradeThreads(ctx context.Context, log mlog.Log, acc *Account, up *Upgrade) error {
+	log = log.With(slog.String("account", acc.Name))
 
 	if up.Threads == 0 {
 		// Step 1 in the threads upgrade is storing the canonicalized Message-ID for each
@@ -745,7 +747,7 @@ func upgradeThreads(ctx context.Context, acc *Account, up *Upgrade) error {
 			up.Threads = 0
 			return fmt.Errorf("saving upgrade process while upgrading account to threads storage, step 1/2: %w", err)
 		}
-		log.Info("upgrading account for threading, step 1/2: completed", mlog.Field("duration", time.Since(t0)), mlog.Field("messages", total))
+		log.Info("upgrading account for threading, step 1/2: completed", slog.Duration("duration", time.Since(t0)), slog.Int("messages", total))
 	}
 
 	if up.Threads == 1 {
@@ -765,7 +767,7 @@ func upgradeThreads(ctx context.Context, acc *Account, up *Upgrade) error {
 			up.Threads = 1
 			return fmt.Errorf("saving upgrade process for thread storage, step 2/2: %w", err)
 		}
-		log.Info("upgrading account for threading, step 2/2: completed", mlog.Field("duration", time.Since(t0)))
+		log.Info("upgrading account for threading, step 2/2: completed", slog.Duration("duration", time.Since(t0)))
 	}
 
 	// Note: Not bumping uidvalidity or setting modseq. Clients haven't been able to

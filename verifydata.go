@@ -8,10 +8,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
-
-	"golang.org/x/exp/slices"
 
 	bolt "go.etcd.io/bbolt"
 
@@ -97,9 +96,12 @@ possibly making them potentially no longer readable by the previous version.
 
 	// Check a database file by opening it with BoltDB and bstore and lightly checking
 	// its contents.
-	checkDB := func(path string, types []any) {
+	checkDB := func(required bool, path string, types []any) {
 		_, err := os.Stat(path)
-		checkf(err, path, "checking if file exists")
+		if !required && err != nil && errors.Is(err, fs.ErrNotExist) {
+			return
+		}
+		checkf(err, path, "checking if database file exists")
 		if err != nil {
 			return
 		}
@@ -156,7 +158,7 @@ possibly making them potentially no longer readable by the previous version.
 
 	checkQueue := func() {
 		dbpath := filepath.Join(dataDir, "queue/index.db")
-		checkDB(dbpath, queue.DBTypes)
+		checkDB(true, dbpath, queue.DBTypes)
 
 		// Check that all messages present in the database also exist on disk.
 		seen := map[string]struct{}{}
@@ -222,12 +224,12 @@ possibly making them potentially no longer readable by the previous version.
 	// Check an account, with its database file and messages.
 	checkAccount := func(name string) {
 		accdir := filepath.Join(dataDir, "accounts", name)
-		checkDB(filepath.Join(accdir, "index.db"), store.DBTypes)
+		checkDB(true, filepath.Join(accdir, "index.db"), store.DBTypes)
 
 		jfdbpath := filepath.Join(accdir, "junkfilter.db")
 		jfbloompath := filepath.Join(accdir, "junkfilter.bloom")
 		if exists(jfdbpath) || exists(jfbloompath) {
-			checkDB(jfdbpath, junk.DBTypes)
+			checkDB(true, jfdbpath, junk.DBTypes)
 		}
 		// todo: add some kind of check for the bloom filter?
 
@@ -262,6 +264,7 @@ possibly making them potentially no longer readable by the previous version.
 			checkf(err, dbpath, "reading mailboxes to check uidnext consistency")
 
 			mbCounts := map[int64]store.MailboxCounts{}
+			var totalSize int64
 			err = bstore.QueryDB[store.Message](ctxbg, db).ForEach(func(m store.Message) error {
 				mb := mailboxes[m.MailboxID]
 				if m.UID >= mb.UIDNext {
@@ -279,6 +282,7 @@ possibly making them potentially no longer readable by the previous version.
 				if m.Expunged {
 					return nil
 				}
+				totalSize += m.Size
 
 				mp := store.MessagePath(m.ID)
 				seen[mp] = struct{}{}
@@ -314,10 +318,26 @@ possibly making them potentially no longer readable by the previous version.
 			})
 			checkf(err, dbpath, "reading messages in account database to check files")
 
+			haveCounts := true
 			for _, mb := range mailboxes {
 				// We only check if database doesn't have zero values, i.e. not yet set.
+				if !mb.HaveCounts {
+					haveCounts = false
+				}
 				if mb.HaveCounts && mb.MailboxCounts != mbCounts[mb.ID] {
 					checkf(errors.New(`wrong mailbox counts, see "mox recalculatemailboxcounts"`), dbpath, "mailbox %q (id %d) has wrong counts %s, should be %s", mb.Name, mb.ID, mb.MailboxCounts, mbCounts[mb.ID])
+				}
+			}
+
+			if haveCounts {
+				du := store.DiskUsage{ID: 1}
+				err := db.Get(ctxbg, &du)
+				if err == nil {
+					if du.MessageSize != totalSize {
+						checkf(errors.New(`wrong total message size, see mox recalculatemailboxcounts"`), dbpath, "account has wrong total message size %d, should be %d", du.MessageSize, totalSize)
+					}
+				} else if err != nil && !errors.Is(err, bstore.ErrAbsent) {
+					checkf(err, dbpath, "get disk usage")
 				}
 			}
 		}
@@ -399,7 +419,7 @@ possibly making them potentially no longer readable by the previous version.
 				p = p[len(dataDir)+1:]
 			}
 			switch p {
-			case "dmarcrpt.db", "mtasts.db", "tlsrpt.db", "receivedid.key", "lastknownversion":
+			case "dmarcrpt.db", "dmarceval.db", "mtasts.db", "tlsrpt.db", "tlsrptresult.db", "receivedid.key", "lastknownversion":
 				return nil
 			case "acme", "queue", "accounts", "tmp", "moved":
 				return fs.SkipDir
@@ -417,9 +437,11 @@ possibly making them potentially no longer readable by the previous version.
 		checkf(err, dataDir, "walking data directory")
 	}
 
-	checkDB(filepath.Join(dataDir, "dmarcrpt.db"), dmarcdb.DBTypes)
-	checkDB(filepath.Join(dataDir, "mtasts.db"), mtastsdb.DBTypes)
-	checkDB(filepath.Join(dataDir, "tlsrpt.db"), tlsrptdb.DBTypes)
+	checkDB(true, filepath.Join(dataDir, "dmarcrpt.db"), dmarcdb.ReportsDBTypes)
+	checkDB(false, filepath.Join(dataDir, "dmarceval.db"), dmarcdb.EvalDBTypes) // After v0.0.7.
+	checkDB(true, filepath.Join(dataDir, "mtasts.db"), mtastsdb.DBTypes)
+	checkDB(true, filepath.Join(dataDir, "tlsrpt.db"), tlsrptdb.ReportDBTypes)
+	checkDB(false, filepath.Join(dataDir, "tlsrptresult.db"), tlsrptdb.ResultDBTypes) // After v0.0.7.
 	checkQueue()
 	checkAccounts()
 	checkOther()

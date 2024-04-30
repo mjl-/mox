@@ -10,11 +10,14 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -34,19 +37,20 @@ import (
 	"github.com/mjl-/mox/tlsrpt"
 )
 
-// TXTStrings returns a TXT record value as one or more quoted strings, taking the max
-// length of 255 characters for a string into account. In case of multiple
-// strings, a multi-line record is returned.
+var ErrRequest = errors.New("bad request")
+
+// TXTStrings returns a TXT record value as one or more quoted strings, each max
+// 100 characters. In case of multiple strings, a multi-line record is returned.
 func TXTStrings(s string) string {
-	if len(s) <= 255 {
+	if len(s) <= 100 {
 		return `"` + s + `"`
 	}
 
 	r := "(\n"
 	for len(s) > 0 {
 		n := len(s)
-		if n > 255 {
-			n = 255
+		if n > 100 {
+			n = 100
 		}
 		if r != "" {
 			r += " "
@@ -96,7 +100,7 @@ func dkimKeyNote(kind string, selector, domain dns.Domain) string {
 	return s
 }
 
-// MakeDKIMEd25519Key returns a PEM buffer containing an rsa key for use with
+// MakeDKIMRSAKey returns a PEM buffer containing an rsa key for use with
 // DKIM.
 // selector and domain can be empty. If not, they are used in the note.
 func MakeDKIMRSAKey(selector, domain dns.Domain) ([]byte, error) {
@@ -152,10 +156,35 @@ func MakeAccountConfig(addr smtp.Address) config.Account {
 	return account
 }
 
+func writeFile(log mlog.Log, path string, data []byte) error {
+	os.MkdirAll(filepath.Dir(path), 0770)
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0660)
+	if err != nil {
+		return fmt.Errorf("creating file %s: %s", path, err)
+	}
+	defer func() {
+		if f != nil {
+			err := f.Close()
+			log.Check(err, "closing file after error")
+			err = os.Remove(path)
+			log.Check(err, "removing file after error", slog.String("path", path))
+		}
+	}()
+	if _, err := f.Write(data); err != nil {
+		return fmt.Errorf("writing file %s: %s", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close file: %v", err)
+	}
+	f = nil
+	return nil
+}
+
 // MakeDomainConfig makes a new config for a domain, creating DKIM keys, using
 // accountName for DMARC and TLS reports.
 func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountName string, withMTASTS bool) (config.Domain, []string, error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 
 	now := time.Now()
 	year := now.Format("2006")
@@ -165,34 +194,9 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 	defer func() {
 		for _, p := range paths {
 			err := os.Remove(p)
-			log.Check(err, "removing path for domain config", mlog.Field("path", p))
+			log.Check(err, "removing path for domain config", slog.String("path", p))
 		}
 	}()
-
-	writeFile := func(path string, data []byte) error {
-		os.MkdirAll(filepath.Dir(path), 0770)
-
-		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0660)
-		if err != nil {
-			return fmt.Errorf("creating file %s: %s", path, err)
-		}
-		defer func() {
-			if f != nil {
-				err := f.Close()
-				log.Check(err, "closing file after error")
-				err = os.Remove(path)
-				log.Check(err, "removing file after error", mlog.Field("path", path))
-			}
-		}()
-		if _, err := f.Write(data); err != nil {
-			return fmt.Errorf("writing file %s: %s", path, err)
-		}
-		if err := f.Close(); err != nil {
-			return fmt.Errorf("close file: %v", err)
-		}
-		f = nil
-		return nil
-	}
 
 	confDKIM := config.DKIM{
 		Selectors: map[string]config.Selector{},
@@ -202,7 +206,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 		record := fmt.Sprintf("%s._domainkey.%s", name, domain.ASCII)
 		keyPath := filepath.Join("dkim", fmt.Sprintf("%s.%s.%s.privatekey.pkcs8.pem", record, timestamp, kind))
 		p := configDirPath(ConfigDynamicPath, keyPath)
-		if err := writeFile(p, privKey); err != nil {
+		if err := writeFile(log, p, privKey); err != nil {
 			return err
 		}
 		paths = append(paths, p)
@@ -251,6 +255,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 	confDKIM.Sign = []string{year + "a", year + "b"}
 
 	confDomain := config.Domain{
+		ClientSettingsDomain:       "mail." + domain.Name(),
 		LocalpartCatchallSeparator: "+",
 		DKIM:                       confDKIM,
 		DMARC: &config.DMARC{
@@ -282,6 +287,164 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 	return confDomain, rpaths, nil
 }
 
+// DKIMAdd adds a DKIM selector for a domain, generating a key and writing it to disk.
+func DKIMAdd(ctx context.Context, domain, selector dns.Domain, algorithm, hash string, headerRelaxed, bodyRelaxed, seal bool, headers []string, lifetime time.Duration) (rerr error) {
+	log := pkglog.WithContext(ctx)
+	defer func() {
+		if rerr != nil {
+			log.Errorx("adding dkim key", rerr,
+				slog.Any("domain", domain),
+				slog.Any("selector", selector))
+		}
+	}()
+
+	switch hash {
+	case "sha256", "sha1":
+	default:
+		return fmt.Errorf("%w: unknown hash algorithm %q", ErrRequest, hash)
+	}
+
+	var privKey []byte
+	var err error
+	var kind string
+	switch algorithm {
+	case "rsa":
+		privKey, err = MakeDKIMRSAKey(selector, domain)
+		kind = "rsa2048"
+	case "ed25519":
+		privKey, err = MakeDKIMEd25519Key(selector, domain)
+		kind = "ed25519"
+	default:
+		err = fmt.Errorf("unknown algorithm")
+	}
+	if err != nil {
+		return fmt.Errorf("%w: making dkim key: %v", ErrRequest, err)
+	}
+
+	// Only take lock now, we don't want to hold it while generating a key.
+	Conf.dynamicMutex.Lock()
+	defer Conf.dynamicMutex.Unlock()
+
+	c := Conf.Dynamic
+	d, ok := c.Domains[domain.Name()]
+	if !ok {
+		return fmt.Errorf("%w: domain does not exist", ErrRequest)
+	}
+
+	if _, ok := d.DKIM.Selectors[selector.Name()]; ok {
+		return fmt.Errorf("%w: selector already exists for domain", ErrRequest)
+	}
+
+	record := fmt.Sprintf("%s._domainkey.%s", selector.ASCII, domain.ASCII)
+	timestamp := time.Now().Format("20060102T150405")
+	keyPath := filepath.Join("dkim", fmt.Sprintf("%s.%s.%s.privatekey.pkcs8.pem", record, timestamp, kind))
+	p := configDirPath(ConfigDynamicPath, keyPath)
+	if err := writeFile(log, p, privKey); err != nil {
+		return fmt.Errorf("writing key file: %v", err)
+	}
+	removePath := p
+	defer func() {
+		if removePath != "" {
+			err := os.Remove(removePath)
+			log.Check(err, "removing path for dkim key", slog.String("path", removePath))
+		}
+	}()
+
+	nsel := config.Selector{
+		Hash: hash,
+		Canonicalization: config.Canonicalization{
+			HeaderRelaxed: headerRelaxed,
+			BodyRelaxed:   bodyRelaxed,
+		},
+		Headers:         headers,
+		DontSealHeaders: !seal,
+		Expiration:      lifetime.String(),
+		PrivateKeyFile:  keyPath,
+	}
+
+	// All good, time to update the config.
+	nd := d
+	nd.DKIM.Selectors = map[string]config.Selector{}
+	for name, osel := range d.DKIM.Selectors {
+		nd.DKIM.Selectors[name] = osel
+	}
+	nd.DKIM.Selectors[selector.Name()] = nsel
+	nc := c
+	nc.Domains = map[string]config.Domain{}
+	for name, dom := range c.Domains {
+		nc.Domains[name] = dom
+	}
+	nc.Domains[domain.Name()] = nd
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %w", err)
+	}
+
+	log.Info("dkim key added", slog.Any("domain", domain), slog.Any("selector", selector))
+	removePath = "" // Prevent cleanup of key file.
+	return nil
+}
+
+// DKIMRemove removes the selector from the domain, moving the key file out of the way.
+func DKIMRemove(ctx context.Context, domain, selector dns.Domain) (rerr error) {
+	log := pkglog.WithContext(ctx)
+	defer func() {
+		if rerr != nil {
+			log.Errorx("removing dkim key", rerr,
+				slog.Any("domain", domain),
+				slog.Any("selector", selector))
+		}
+	}()
+
+	Conf.dynamicMutex.Lock()
+	defer Conf.dynamicMutex.Unlock()
+
+	c := Conf.Dynamic
+	d, ok := c.Domains[domain.Name()]
+	if !ok {
+		return fmt.Errorf("%w: domain does not exist", ErrRequest)
+	}
+
+	sel, ok := d.DKIM.Selectors[selector.Name()]
+	if !ok {
+		return fmt.Errorf("%w: selector does not exist for domain", ErrRequest)
+	}
+
+	nsels := map[string]config.Selector{}
+	for name, sel := range d.DKIM.Selectors {
+		if name != selector.Name() {
+			nsels[name] = sel
+		}
+	}
+	nsign := make([]string, 0, len(d.DKIM.Sign))
+	for _, name := range d.DKIM.Sign {
+		if name != selector.Name() {
+			nsign = append(nsign, name)
+		}
+	}
+
+	nd := d
+	nd.DKIM = config.DKIM{Selectors: nsels, Sign: nsign}
+	nc := c
+	nc.Domains = map[string]config.Domain{}
+	for name, dom := range c.Domains {
+		nc.Domains[name] = dom
+	}
+	nc.Domains[domain.Name()] = nd
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %w", err)
+	}
+
+	// Move away a DKIM private key to a subdirectory "old". But only if
+	// not in use by other domains.
+	usedKeyPaths := gatherUsedKeysPaths(nc)
+	moveAwayKeys(log, map[string]config.Selector{selector.Name(): sel}, usedKeyPaths)
+
+	log.Info("dkim key removed", slog.Any("domain", domain), slog.Any("selector", selector))
+	return nil
+}
+
 // DomainAdd adds the domain to the domains config, rewriting domains.conf and
 // marking it loaded.
 //
@@ -289,10 +452,13 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 // If the account does not exist, it is created with localpart. Localpart must be
 // set only if the account does not yet exist.
 func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, localpart smtp.Localpart) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("adding domain", rerr, mlog.Field("domain", domain), mlog.Field("account", accountName), mlog.Field("localpart", localpart))
+			log.Errorx("adding domain", rerr,
+				slog.Any("domain", domain),
+				slog.String("account", accountName),
+				slog.Any("localpart", localpart))
 		}
 	}()
 
@@ -301,7 +467,7 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 
 	c := Conf.Dynamic
 	if _, ok := c.Domains[domain.Name()]; ok {
-		return fmt.Errorf("domain already present")
+		return fmt.Errorf("%w: domain already present", ErrRequest)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -328,16 +494,16 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 	defer func() {
 		for _, f := range cleanupFiles {
 			err := os.Remove(f)
-			log.Check(err, "cleaning up file after error", mlog.Field("path", f))
+			log.Check(err, "cleaning up file after error", slog.String("path", f))
 		}
 	}()
 
 	if _, ok := c.Accounts[accountName]; ok && localpart != "" {
-		return fmt.Errorf("account already exists (leave localpart empty when using an existing account)")
+		return fmt.Errorf("%w: account already exists (leave localpart empty when using an existing account)", ErrRequest)
 	} else if !ok && localpart == "" {
-		return fmt.Errorf("account does not yet exist (specify a localpart)")
+		return fmt.Errorf("%w: account does not yet exist (specify a localpart)", ErrRequest)
 	} else if accountName == "" {
-		return fmt.Errorf("account name is empty")
+		return fmt.Errorf("%w: account name is empty", ErrRequest)
 	} else if !ok {
 		nc.Accounts[accountName] = MakeAccountConfig(smtp.Address{Localpart: localpart, Domain: domain})
 	} else if accountName != Conf.Static.Postmaster.Account {
@@ -355,9 +521,9 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 	nc.Domains[domain.Name()] = confDomain
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
-	log.Info("domain added", mlog.Field("domain", domain))
+	log.Info("domain added", slog.Any("domain", domain))
 	cleanupFiles = nil // All good, don't cleanup.
 	return nil
 }
@@ -366,10 +532,10 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 //
 // No accounts are removed, also not when they still reference this domain.
 func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("removing domain", rerr, mlog.Field("domain", domain))
+			log.Errorx("removing domain", rerr, slog.Any("domain", domain))
 		}
 	}()
 
@@ -379,7 +545,7 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 	c := Conf.Dynamic
 	domConf, ok := c.Domains[domain.Name()]
 	if !ok {
-		return fmt.Errorf("domain does not exist")
+		return fmt.Errorf("%w: domain does not exist", ErrRequest)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -394,18 +560,30 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 	}
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 
 	// Move away any DKIM private keys to a subdirectory "old". But only if
 	// they are not in use by other domains.
+	usedKeyPaths := gatherUsedKeysPaths(nc)
+	moveAwayKeys(log, domConf.DKIM.Selectors, usedKeyPaths)
+
+	log.Info("domain removed", slog.Any("domain", domain))
+	return nil
+}
+
+func gatherUsedKeysPaths(nc config.Dynamic) map[string]bool {
 	usedKeyPaths := map[string]bool{}
 	for _, dc := range nc.Domains {
 		for _, sel := range dc.DKIM.Selectors {
 			usedKeyPaths[filepath.Clean(sel.PrivateKeyFile)] = true
 		}
 	}
-	for _, sel := range domConf.DKIM.Selectors {
+	return usedKeyPaths
+}
+
+func moveAwayKeys(log mlog.Log, sels map[string]config.Selector, usedKeyPaths map[string]bool) {
+	for _, sel := range sels {
 		if sel.PrivateKeyFile == "" || usedKeyPaths[filepath.Clean(sel.PrivateKeyFile)] {
 			continue
 		}
@@ -419,36 +597,75 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 			err = os.Rename(src, dst)
 		}
 		if err != nil {
-			log.Errorx("renaming dkim private key file for removed domain", err, mlog.Field("src", src), mlog.Field("dst", dst))
+			log.Errorx("renaming dkim private key file for removed domain", err, slog.String("src", src), slog.String("dst", dst))
 		}
 	}
-
-	log.Info("domain removed", mlog.Field("domain", domain))
-	return nil
 }
 
-func WebserverConfigSet(ctx context.Context, domainRedirects map[string]string, webhandlers []config.WebHandler) (rerr error) {
-	log := xlog.WithContext(ctx)
+// DomainSave calls xmodify with a shallow copy of the domain config. xmodify
+// can modify the config, but must clone all referencing data it changes.
+// xmodify may employ panic-based error handling. After xmodify returns, the
+// modified config is verified, saved and takes effect.
+func DomainSave(ctx context.Context, domainName string, xmodify func(config *config.Domain) error) (rerr error) {
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("saving webserver config", rerr)
+			log.Errorx("saving domain config", rerr)
 		}
 	}()
 
 	Conf.dynamicMutex.Lock()
 	defer Conf.dynamicMutex.Unlock()
 
-	// Compose new config without modifying existing data structures. If we fail, we
-	// leave no trace.
-	nc := Conf.Dynamic
-	nc.WebDomainRedirects = domainRedirects
-	nc.WebHandlers = webhandlers
-
-	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+	nc := Conf.Dynamic                // Shallow copy.
+	dom, ok := nc.Domains[domainName] // dom is a shallow copy.
+	if !ok {
+		return fmt.Errorf("%w: domain not present", ErrRequest)
 	}
 
-	log.Info("webserver config saved")
+	if err := xmodify(&dom); err != nil {
+		return err
+	}
+
+	// Compose new config without modifying existing data structures. If we fail, we
+	// leave no trace.
+	nc.Domains = map[string]config.Domain{}
+	for name, d := range Conf.Dynamic.Domains {
+		nc.Domains[name] = d
+	}
+	nc.Domains[domainName] = dom
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %w", err)
+	}
+
+	log.Info("domain saved")
+	return nil
+}
+
+// ConfigSave calls xmodify with a shallow copy of the dynamic config. xmodify
+// can modify the config, but must clone all referencing data it changes.
+// xmodify may employ panic-based error handling. After xmodify returns, the
+// modified config is verified, saved and takes effect.
+func ConfigSave(ctx context.Context, xmodify func(config *config.Dynamic)) (rerr error) {
+	log := pkglog.WithContext(ctx)
+	defer func() {
+		if rerr != nil {
+			log.Errorx("saving config", rerr)
+		}
+	}()
+
+	Conf.dynamicMutex.Lock()
+	defer Conf.dynamicMutex.Unlock()
+
+	nc := Conf.Dynamic // Shallow copy.
+	xmodify(&nc)
+
+	if err := writeDynamic(ctx, log, nc); err != nil {
+		return fmt.Errorf("writing domains.conf: %w", err)
+	}
+
+	log.Info("config saved")
 	return nil
 }
 
@@ -456,10 +673,16 @@ func WebserverConfigSet(ctx context.Context, domainRedirects map[string]string, 
 
 // DomainRecords returns text lines describing DNS records required for configuring
 // a domain.
-func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]string, error) {
+//
+// If certIssuerDomainName is set, CAA records to limit TLS certificate issuance to
+// that caID will be suggested. If acmeAccountURI is also set, CAA records also
+// restricting issuance to that account ID will be suggested.
+func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, certIssuerDomainName, acmeAccountURI string) ([]string, error) {
 	d := domain.ASCII
 	h := Conf.Static.HostnameDomain.ASCII
 
+	// The first line with ";" is used by ../testdata/integration/moxacmepebble.sh and
+	// ../testdata/integration/moxmail2.sh for selecting DNS records
 	records := []string{
 		"; Time To Live of 5 minutes, may be recognized if importing as a zone file.",
 		"; Once your setup is working, you may want to increase the TTL.",
@@ -469,15 +692,15 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 
 	if public, ok := Conf.Static.Listeners["public"]; ok && public.TLS != nil && (len(public.TLS.HostPrivateRSA2048Keys) > 0 || len(public.TLS.HostPrivateECDSAP256Keys) > 0) {
 		records = append(records,
-			"; DANE: These records indicate that a remote mail server trying to deliver email",
-			"; with SMTP (TCP port 25) must verify the TLS certificate with DANE-EE (3), based",
-			"; on the certificate public key (\"SPKI\", 1) that is SHA2-256-hashed (1) to the",
-			"; hexadecimal hash. DANE-EE verification means only the certificate or public",
-			"; key is verified, not whether the certificate is signed by a (centralized)",
-			"; certificate authority (CA), is expired, or matches the host name.",
-			";",
-			"; NOTE: Create the records below only once: They are for the machine, and apply",
-			"; to all hosted domains.",
+			`; DANE: These records indicate that a remote mail server trying to deliver email`,
+			`; with SMTP (TCP port 25) must verify the TLS certificate with DANE-EE (3), based`,
+			`; on the certificate public key ("SPKI", 1) that is SHA2-256-hashed (1) to the`,
+			`; hexadecimal hash. DANE-EE verification means only the certificate or public`,
+			`; key is verified, not whether the certificate is signed by a (centralized)`,
+			`; certificate authority (CA), is expired, or matches the host name.`,
+			`;`,
+			`; NOTE: Create the records below only once: They are for the machine, and apply`,
+			`; to all hosted domains.`,
 		)
 		if !hasDNSSEC {
 			records = append(records,
@@ -523,8 +746,25 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 
 	if d != h {
 		records = append(records,
-			"; For the machine, only needs to be created once, for the first domain added.",
+			"; For the machine, only needs to be created once, for the first domain added:",
+			"; ",
+			"; SPF-allow host for itself, resulting in relaxed DMARC pass for (postmaster)",
+			"; messages (DSNs) sent from host:",
 			fmt.Sprintf(`%-*s TXT "v=spf1 a -all"`, 20+len(d), h+"."), // ../rfc/7208:2263 ../rfc/7208:2287
+			"",
+		)
+	}
+	if d != h && Conf.Static.HostTLSRPT.ParsedLocalpart != "" {
+		uri := url.URL{
+			Scheme: "mailto",
+			Opaque: smtp.NewAddress(Conf.Static.HostTLSRPT.ParsedLocalpart, Conf.Static.HostnameDomain).Pack(false),
+		}
+		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]tlsrpt.RUA{{tlsrpt.RUA(uri.String())}}}
+		records = append(records,
+			"; For the machine, only needs to be created once, for the first domain added:",
+			"; ",
+			"; Request reporting about success/failures of TLS connections to (MX) host, for DANE.",
+			fmt.Sprintf(`_smtp._tls.%-*s         TXT "%s"`, 20+len(d)-len("_smtp._tls."), h+".", tlsrptr.String()),
 			"",
 		)
 	}
@@ -561,10 +801,9 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 			return nil, fmt.Errorf("making DKIM DNS TXT record: %v", err)
 		}
 
-		if len(txt) > 255 {
+		if len(txt) > 100 {
 			records = append(records,
-				"; NOTE: Ensure the next record is added in DNS as a single record, it consists",
-				"; of multiple strings (max size of each is 255 bytes).",
+				"; NOTE: The following strings must be added to DNS as single record.",
 			)
 		}
 		s := fmt.Sprintf("%s._domainkey.%s.   TXT %s", name, d, TXTStrings(txt))
@@ -621,10 +860,20 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 			Scheme: "mailto",
 			Opaque: smtp.NewAddress(domConf.TLSRPT.ParsedLocalpart, domConf.TLSRPT.DNSDomain).Pack(false),
 		}
-		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]string{{uri.String()}}}
+		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]tlsrpt.RUA{{tlsrpt.RUA(uri.String())}}}
 		records = append(records,
 			"; Request reporting about TLS failures.",
 			fmt.Sprintf(`_smtp._tls.%s.         TXT "%s"`, d, tlsrptr.String()),
+			"",
+		)
+	}
+
+	if domConf.ClientSettingsDomain != "" && domConf.ClientSettingsDNSDomain != Conf.Static.HostnameDomain {
+		records = append(records,
+			"; Client settings will reference a subdomain of the hosted domain, making it",
+			"; easier to migrate to a different server in the future by not requiring settings",
+			"; in all clients to be updated.",
+			fmt.Sprintf(`%-*s CNAME %s.`, 20+len(d), domConf.ClientSettingsDNSDomain.ASCII+".", h),
 			"",
 		)
 	}
@@ -648,13 +897,53 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 		fmt.Sprintf(`_submission._tcp.%s.   SRV 0 1 587 .`, d),
 		fmt.Sprintf(`_pop3._tcp.%s.         SRV 0 1 110 .`, d),
 		fmt.Sprintf(`_pop3s._tcp.%s.        SRV 0 1 995 .`, d),
-		"",
-
-		"; Optional:",
-		"; You could mark Let's Encrypt as the only Certificate Authority allowed to",
-		"; sign TLS certificates for your domain.",
-		fmt.Sprintf("%s.                    CAA 0 issue \"letsencrypt.org\"", d),
 	)
+
+	if certIssuerDomainName != "" {
+		// ../rfc/8659:18 for CAA records.
+		records = append(records,
+			"",
+			"; Optional:",
+			"; You could mark Let's Encrypt as the only Certificate Authority allowed to",
+			"; sign TLS certificates for your domain.",
+			fmt.Sprintf(`%s.                    CAA 0 issue "%s"`, d, certIssuerDomainName),
+		)
+		if acmeAccountURI != "" {
+			// ../rfc/8657:99 for accounturi.
+			// ../rfc/8657:147 for validationmethods.
+			records = append(records,
+				";",
+				"; Optionally limit certificates for this domain to the account ID and methods used by mox.",
+				fmt.Sprintf(`;; %s.                 CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
+				";",
+				"; Or alternatively only limit for email-specific subdomains, so you can use",
+				"; other accounts/methods for other subdomains.",
+				fmt.Sprintf(`;; autoconfig.%s.      CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
+				fmt.Sprintf(`;; mta-sts.%s.         CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
+			)
+			if domConf.ClientSettingsDomain != "" && domConf.ClientSettingsDNSDomain != Conf.Static.HostnameDomain {
+				records = append(records,
+					fmt.Sprintf(`;; %-*s CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, 20-3+len(d), domConf.ClientSettingsDNSDomain.ASCII, certIssuerDomainName, acmeAccountURI),
+				)
+			}
+			if strings.HasSuffix(h, "."+d) {
+				records = append(records,
+					";",
+					"; And the mail hostname.",
+					fmt.Sprintf(`;; %-*s CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, 20-3+len(d), h+".", certIssuerDomainName, acmeAccountURI),
+				)
+			}
+		} else {
+			// The string "will be suggested" is used by
+			// ../testdata/integration/moxacmepebble.sh and ../testdata/integration/moxmail2.sh
+			// as end of DNS records.
+			records = append(records,
+				";",
+				"; Note: After starting up, once an ACME account has been created, CAA records",
+				"; that restrict issuance to the account will be suggested.",
+			)
+		}
+	}
 	return records, nil
 }
 
@@ -665,16 +954,16 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool) ([]
 //
 // Catchall addresses are not supported for AccountAdd. Add separately with AddressAdd.
 func AccountAdd(ctx context.Context, account, address string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("adding account", rerr, mlog.Field("account", account), mlog.Field("address", address))
+			log.Errorx("adding account", rerr, slog.String("account", account), slog.String("address", address))
 		}
 	}()
 
 	addr, err := smtp.ParseAddress(address)
 	if err != nil {
-		return fmt.Errorf("parsing email address: %v", err)
+		return fmt.Errorf("%w: parsing email address: %v", ErrRequest, err)
 	}
 
 	Conf.dynamicMutex.Lock()
@@ -682,11 +971,11 @@ func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 
 	c := Conf.Dynamic
 	if _, ok := c.Accounts[account]; ok {
-		return fmt.Errorf("account already present")
+		return fmt.Errorf("%w: account already present", ErrRequest)
 	}
 
 	if err := checkAddressAvailable(addr); err != nil {
-		return fmt.Errorf("address not available: %v", err)
+		return fmt.Errorf("%w: address not available: %v", ErrRequest, err)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -699,18 +988,18 @@ func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 	nc.Accounts[account] = MakeAccountConfig(addr)
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
-	log.Info("account added", mlog.Field("account", account), mlog.Field("address", addr))
+	log.Info("account added", slog.String("account", account), slog.Any("address", addr))
 	return nil
 }
 
 // AccountRemove removes an account and reloads the configuration.
 func AccountRemove(ctx context.Context, account string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("adding account", rerr, mlog.Field("account", account))
+			log.Errorx("adding account", rerr, slog.String("account", account))
 		}
 	}()
 
@@ -719,7 +1008,7 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 
 	c := Conf.Dynamic
 	if _, ok := c.Accounts[account]; !ok {
-		return fmt.Errorf("account does not exist")
+		return fmt.Errorf("%w: account does not exist", ErrRequest)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -733,9 +1022,9 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 	}
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
-	log.Info("account removed", mlog.Field("account", account))
+	log.Info("account removed", slog.String("account", account))
 	return nil
 }
 
@@ -745,14 +1034,17 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 //
 // Must be called with config lock held.
 func checkAddressAvailable(addr smtp.Address) error {
-	if dc, ok := Conf.Dynamic.Domains[addr.Domain.Name()]; !ok {
+	dc, ok := Conf.Dynamic.Domains[addr.Domain.Name()]
+	if !ok {
 		return fmt.Errorf("domain does not exist")
-	} else if lp, err := CanonicalLocalpart(addr.Localpart, dc); err != nil {
-		return fmt.Errorf("canonicalizing localpart: %v", err)
-	} else if _, ok := Conf.accountDestinations[smtp.NewAddress(lp, addr.Domain).String()]; ok {
+	}
+	lp := CanonicalLocalpart(addr.Localpart, dc)
+	if _, ok := Conf.accountDestinations[smtp.NewAddress(lp, addr.Domain).String()]; ok {
 		return fmt.Errorf("canonicalized address %s already configured", smtp.NewAddress(lp, addr.Domain))
 	} else if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(addr.Localpart), dc.LocalpartCatchallSeparator) {
 		return fmt.Errorf("localpart cannot include domain catchall separator %s", dc.LocalpartCatchallSeparator)
+	} else if _, ok := dc.Aliases[lp.String()]; ok {
+		return fmt.Errorf("address in use as alias")
 	}
 	return nil
 }
@@ -760,10 +1052,10 @@ func checkAddressAvailable(addr smtp.Address) error {
 // AddressAdd adds an email address to an account and reloads the configuration. If
 // address starts with an @ it is treated as a catchall address for the domain.
 func AddressAdd(ctx context.Context, address, account string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("adding address", rerr, mlog.Field("address", address), mlog.Field("account", account))
+			log.Errorx("adding address", rerr, slog.String("address", address), slog.String("account", account))
 		}
 	}()
 
@@ -773,30 +1065,30 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 	c := Conf.Dynamic
 	a, ok := c.Accounts[account]
 	if !ok {
-		return fmt.Errorf("account does not exist")
+		return fmt.Errorf("%w: account does not exist", ErrRequest)
 	}
 
 	var destAddr string
 	if strings.HasPrefix(address, "@") {
 		d, err := dns.ParseDomain(address[1:])
 		if err != nil {
-			return fmt.Errorf("parsing domain: %v", err)
+			return fmt.Errorf("%w: parsing domain: %v", ErrRequest, err)
 		}
 		dname := d.Name()
 		destAddr = "@" + dname
 		if _, ok := Conf.Dynamic.Domains[dname]; !ok {
-			return fmt.Errorf("domain does not exist")
+			return fmt.Errorf("%w: domain does not exist", ErrRequest)
 		} else if _, ok := Conf.accountDestinations[destAddr]; ok {
-			return fmt.Errorf("catchall address already configured for domain")
+			return fmt.Errorf("%w: catchall address already configured for domain", ErrRequest)
 		}
 	} else {
 		addr, err := smtp.ParseAddress(address)
 		if err != nil {
-			return fmt.Errorf("parsing email address: %v", err)
+			return fmt.Errorf("%w: parsing email address: %v", ErrRequest, err)
 		}
 
 		if err := checkAddressAvailable(addr); err != nil {
-			return fmt.Errorf("address not available: %v", err)
+			return fmt.Errorf("%w: address not available: %v", ErrRequest, err)
 		}
 		destAddr = addr.String()
 	}
@@ -817,18 +1109,22 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 	nc.Accounts[account] = a
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
-	log.Info("address added", mlog.Field("address", address), mlog.Field("account", account))
+	log.Info("address added", slog.String("address", address), slog.String("account", account))
 	return nil
 }
 
 // AddressRemove removes an email address and reloads the configuration.
+// Address can be a catchall address for the domain of the form "@<domain>".
+//
+// If the address is member of an alias, remove it from from the alias, unless it
+// is the last member.
 func AddressRemove(ctx context.Context, address string) (rerr error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("removing address", rerr, mlog.Field("address", address))
+			log.Errorx("removing address", rerr, slog.String("address", address))
 		}
 	}()
 
@@ -837,7 +1133,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 
 	ad, ok := Conf.accountDestinations[address]
 	if !ok {
-		return fmt.Errorf("address does not exists")
+		return fmt.Errorf("%w: address does not exists", ErrRequest)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
@@ -857,28 +1153,184 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		}
 	}
 	if !dropped {
-		return fmt.Errorf("address not removed, likely a postmaster/reporting address")
+		return fmt.Errorf("%w: address not removed, likely a postmaster/reporting address", ErrRequest)
 	}
+
+	// Also remove matching address from FromIDLoginAddresses, composing a new slice.
+	var fromIDLoginAddresses []string
+	var dom dns.Domain
+	var pa smtp.Address // For non-catchall addresses (most).
+	var err error
+	if strings.HasPrefix(address, "@") {
+		dom, err = dns.ParseDomain(address[1:])
+		if err != nil {
+			return fmt.Errorf("%w: parsing domain for catchall address: %v", ErrRequest, err)
+		}
+	} else {
+		pa, err = smtp.ParseAddress(address)
+		if err != nil {
+			return fmt.Errorf("%w: parsing address: %v", ErrRequest, err)
+		}
+		dom = pa.Domain
+	}
+	for i, fa := range a.ParsedFromIDLoginAddresses {
+		if fa.Domain != dom {
+			// Keep for different domain.
+			fromIDLoginAddresses = append(fromIDLoginAddresses, a.FromIDLoginAddresses[i])
+			continue
+		}
+		if strings.HasPrefix(address, "@") {
+			continue
+		}
+		dc, ok := Conf.Dynamic.Domains[dom.Name()]
+		if !ok {
+			return fmt.Errorf("%w: unknown domain in fromid login address %q", ErrRequest, fa.Pack(true))
+		}
+		flp := CanonicalLocalpart(fa.Localpart, dc)
+		alp := CanonicalLocalpart(pa.Localpart, dc)
+		if alp != flp {
+			// Keep for different localpart.
+			fromIDLoginAddresses = append(fromIDLoginAddresses, a.FromIDLoginAddresses[i])
+		}
+	}
+	na.FromIDLoginAddresses = fromIDLoginAddresses
+
+	// And remove as member from aliases configured in domains.
+	domains := maps.Clone(Conf.Dynamic.Domains)
+	for _, aa := range na.Aliases {
+		if aa.SubscriptionAddress != address {
+			continue
+		}
+
+		aliasAddr := fmt.Sprintf("%s@%s", aa.Alias.LocalpartStr, aa.Alias.Domain.Name())
+
+		dom, ok := Conf.Dynamic.Domains[aa.Alias.Domain.Name()]
+		if !ok {
+			return fmt.Errorf("cannot find domain for alias %s", aliasAddr)
+		}
+		a, ok := dom.Aliases[aa.Alias.LocalpartStr]
+		if !ok {
+			return fmt.Errorf("cannot find alias %s", aliasAddr)
+		}
+		a.Addresses = slices.Clone(a.Addresses)
+		a.Addresses = slices.DeleteFunc(a.Addresses, func(v string) bool { return v == address })
+		if len(a.Addresses) == 0 {
+			return fmt.Errorf("address is last member of alias %s, add new members or remove alias first", aliasAddr)
+		}
+		a.ParsedAddresses = nil // Filled when parsing config.
+		dom.Aliases = maps.Clone(dom.Aliases)
+		dom.Aliases[aa.Alias.LocalpartStr] = a
+		domains[aa.Alias.Domain.Name()] = dom
+	}
+	na.Aliases = nil // Filled when parsing config.
+
 	nc := Conf.Dynamic
 	nc.Accounts = map[string]config.Account{}
 	for name, a := range Conf.Dynamic.Accounts {
 		nc.Accounts[name] = a
 	}
 	nc.Accounts[ad.Account] = na
+	nc.Domains = domains
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
-	log.Info("address removed", mlog.Field("address", address), mlog.Field("account", ad.Account))
+	log.Info("address removed", slog.String("address", address), slog.String("account", ad.Account))
 	return nil
 }
 
-// AccountFullNameSave updates the full name for an account and reloads the configuration.
-func AccountFullNameSave(ctx context.Context, account, fullName string) (rerr error) {
-	log := xlog.WithContext(ctx)
+func AliasAdd(ctx context.Context, addr smtp.Address, alias config.Alias) error {
+	return DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		if _, ok := d.Aliases[addr.Localpart.String()]; ok {
+			return fmt.Errorf("%w: alias already present", ErrRequest)
+		}
+		if d.Aliases == nil {
+			d.Aliases = map[string]config.Alias{}
+		}
+		d.Aliases = maps.Clone(d.Aliases)
+		d.Aliases[addr.Localpart.String()] = alias
+		return nil
+	})
+}
+
+func AliasUpdate(ctx context.Context, addr smtp.Address, alias config.Alias) error {
+	return DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		a, ok := d.Aliases[addr.Localpart.String()]
+		if !ok {
+			return fmt.Errorf("%w: alias does not exist", ErrRequest)
+		}
+		a.PostPublic = alias.PostPublic
+		a.ListMembers = alias.ListMembers
+		a.AllowMsgFrom = alias.AllowMsgFrom
+		d.Aliases = maps.Clone(d.Aliases)
+		d.Aliases[addr.Localpart.String()] = a
+		return nil
+	})
+}
+
+func AliasRemove(ctx context.Context, addr smtp.Address) error {
+	return DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		_, ok := d.Aliases[addr.Localpart.String()]
+		if !ok {
+			return fmt.Errorf("%w: alias does not exist", ErrRequest)
+		}
+		d.Aliases = maps.Clone(d.Aliases)
+		delete(d.Aliases, addr.Localpart.String())
+		return nil
+	})
+}
+
+func AliasAddressesAdd(ctx context.Context, addr smtp.Address, addresses []string) error {
+	if len(addresses) == 0 {
+		return fmt.Errorf("%w: at least one address required", ErrRequest)
+	}
+	return DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		alias, ok := d.Aliases[addr.Localpart.String()]
+		if !ok {
+			return fmt.Errorf("%w: no such alias", ErrRequest)
+		}
+		alias.Addresses = append(slices.Clone(alias.Addresses), addresses...)
+		alias.ParsedAddresses = nil
+		d.Aliases = maps.Clone(d.Aliases)
+		d.Aliases[addr.Localpart.String()] = alias
+		return nil
+	})
+}
+
+func AliasAddressesRemove(ctx context.Context, addr smtp.Address, addresses []string) error {
+	if len(addresses) == 0 {
+		return fmt.Errorf("%w: need at least one address", ErrRequest)
+	}
+	return DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		alias, ok := d.Aliases[addr.Localpart.String()]
+		if !ok {
+			return fmt.Errorf("%w: no such alias", ErrRequest)
+		}
+		alias.Addresses = slices.DeleteFunc(slices.Clone(alias.Addresses), func(addr string) bool {
+			n := len(addresses)
+			addresses = slices.DeleteFunc(addresses, func(a string) bool { return a == addr })
+			return n > len(addresses)
+		})
+		if len(addresses) > 0 {
+			return fmt.Errorf("%w: address not found: %s", ErrRequest, strings.Join(addresses, ", "))
+		}
+		alias.ParsedAddresses = nil
+		d.Aliases = maps.Clone(d.Aliases)
+		d.Aliases[addr.Localpart.String()] = alias
+		return nil
+	})
+}
+
+// AccountSave updates the configuration of an account. Function xmodify is called
+// with a shallow copy of the current configuration of the account. It must not
+// change referencing fields (e.g. existing slice/map/pointer), they may still be
+// in use, and the change may be rolled back. Referencing values must be copied and
+// replaced by the modify. The function may raise a panic for error handling.
+func AccountSave(ctx context.Context, account string, xmodify func(acc *config.Account)) (rerr error) {
+	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
-			log.Errorx("saving account full name", rerr, mlog.Field("account", account))
+			log.Errorx("saving account fields", rerr, slog.String("account", account))
 		}
 	}()
 
@@ -888,8 +1340,10 @@ func AccountFullNameSave(ctx context.Context, account, fullName string) (rerr er
 	c := Conf.Dynamic
 	acc, ok := c.Accounts[account]
 	if !ok {
-		return fmt.Errorf("account not present")
+		return fmt.Errorf("%w: account not present", ErrRequest)
 	}
+
+	xmodify(&acc)
 
 	// Compose new config without modifying existing data structures. If we fail, we
 	// leave no trace.
@@ -898,95 +1352,12 @@ func AccountFullNameSave(ctx context.Context, account, fullName string) (rerr er
 	for name, a := range c.Accounts {
 		nc.Accounts[name] = a
 	}
-
-	acc.FullName = fullName
 	nc.Accounts[account] = acc
 
 	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
+		return fmt.Errorf("writing domains.conf: %w", err)
 	}
-	log.Info("account full name saved", mlog.Field("account", account))
-	return nil
-}
-
-// DestinationSave updates a destination for an account and reloads the configuration.
-func DestinationSave(ctx context.Context, account, destName string, newDest config.Destination) (rerr error) {
-	log := xlog.WithContext(ctx)
-	defer func() {
-		if rerr != nil {
-			log.Errorx("saving destination", rerr, mlog.Field("account", account), mlog.Field("destname", destName), mlog.Field("destination", newDest))
-		}
-	}()
-
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
-
-	c := Conf.Dynamic
-	acc, ok := c.Accounts[account]
-	if !ok {
-		return fmt.Errorf("account not present")
-	}
-
-	if _, ok := acc.Destinations[destName]; !ok {
-		return fmt.Errorf("destination not present")
-	}
-
-	// Compose new config without modifying existing data structures. If we fail, we
-	// leave no trace.
-	nc := c
-	nc.Accounts = map[string]config.Account{}
-	for name, a := range c.Accounts {
-		nc.Accounts[name] = a
-	}
-	nd := map[string]config.Destination{}
-	for dn, d := range acc.Destinations {
-		nd[dn] = d
-	}
-	nd[destName] = newDest
-	nacc := nc.Accounts[account]
-	nacc.Destinations = nd
-	nc.Accounts[account] = nacc
-
-	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
-	}
-	log.Info("destination saved", mlog.Field("account", account), mlog.Field("destname", destName))
-	return nil
-}
-
-// AccountLimitsSave saves new message sending limits for an account.
-func AccountLimitsSave(ctx context.Context, account string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int) (rerr error) {
-	log := xlog.WithContext(ctx)
-	defer func() {
-		if rerr != nil {
-			log.Errorx("saving account limits", rerr, mlog.Field("account", account))
-		}
-	}()
-
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
-
-	c := Conf.Dynamic
-	acc, ok := c.Accounts[account]
-	if !ok {
-		return fmt.Errorf("account not present")
-	}
-
-	// Compose new config without modifying existing data structures. If we fail, we
-	// leave no trace.
-	nc := c
-	nc.Accounts = map[string]config.Account{}
-	for name, a := range c.Accounts {
-		nc.Accounts[name] = a
-	}
-	acc.MaxOutgoingMessagesPerDay = maxOutgoingMessagesPerDay
-	acc.MaxFirstTimeRecipientsPerDay = maxFirstTimeRecipientsPerDay
-	nc.Accounts[account] = acc
-
-	if err := writeDynamic(ctx, log, nc); err != nil {
-		return fmt.Errorf("writing domains.conf: %v", err)
-	}
-	log.Info("account limits saved", mlog.Field("account", account))
+	log.Info("account fields saved", slog.String("account", account))
 	return nil
 }
 
@@ -1014,14 +1385,18 @@ type ClientConfig struct {
 func ClientConfigDomain(d dns.Domain) (rconfig ClientConfig, rerr error) {
 	var haveIMAP, haveSubmission bool
 
-	if _, ok := Conf.Domain(d); !ok {
-		return ClientConfig{}, fmt.Errorf("unknown domain")
+	domConf, ok := Conf.Domain(d)
+	if !ok {
+		return ClientConfig{}, fmt.Errorf("%w: unknown domain", ErrRequest)
 	}
 
 	gather := func(l config.Listener) (done bool) {
 		host := Conf.Static.HostnameDomain
 		if l.Hostname != "" {
 			host = l.HostnameDomain
+		}
+		if domConf.ClientSettingsDomain != "" {
+			host = domConf.ClientSettingsDNSDomain
 		}
 		if !haveIMAP && l.IMAPS.Enabled {
 			rconfig.IMAP.Host = host
@@ -1070,7 +1445,7 @@ func ClientConfigDomain(d dns.Domain) (rconfig ClientConfig, rerr error) {
 			return
 		}
 	}
-	return ClientConfig{}, fmt.Errorf("no listeners found for imap and/or submission")
+	return ClientConfig{}, fmt.Errorf("%w: no listeners found for imap and/or submission", ErrRequest)
 }
 
 // ClientConfigs holds the client configuration for IMAP/Submission for a
@@ -1090,9 +1465,9 @@ type ClientConfigsEntry struct {
 // ClientConfigsDomain returns the client configs for IMAP/Submission for a
 // domain.
 func ClientConfigsDomain(d dns.Domain) (ClientConfigs, error) {
-	_, ok := Conf.Domain(d)
+	domConf, ok := Conf.Domain(d)
 	if !ok {
-		return ClientConfigs{}, fmt.Errorf("unknown domain")
+		return ClientConfigs{}, fmt.Errorf("%w: unknown domain", ErrRequest)
 	}
 
 	c := ClientConfigs{}
@@ -1122,6 +1497,9 @@ func ClientConfigsDomain(d dns.Domain) (ClientConfigs, error) {
 		if l.Hostname != "" {
 			host = l.HostnameDomain
 		}
+		if domConf.ClientSettingsDomain != "" {
+			host = domConf.ClientSettingsDNSDomain
+		}
 		if l.Submissions.Enabled {
 			c.Entries = append(c.Entries, ClientConfigsEntry{"Submission (SMTP)", host, config.Port(l.Submissions.Port, 465), name, "with TLS"})
 		}
@@ -1142,7 +1520,7 @@ func ClientConfigsDomain(d dns.Domain) (ClientConfigs, error) {
 // IPs returns ip addresses we may be listening/receiving mail on or
 // connecting/sending from to the outside.
 func IPs(ctx context.Context, receiveOnly bool) ([]net.IP, error) {
-	log := xlog.WithContext(ctx)
+	log := pkglog.WithContext(ctx)
 
 	// Try to gather all IPs we are listening on by going through the config.
 	// If we encounter 0.0.0.0 or ::, we'll gather all local IPs afterwards.
@@ -1193,7 +1571,7 @@ func IPs(ctx context.Context, receiveOnly bool) ([]net.IP, error) {
 			for _, addr := range addrs {
 				ip, _, err := net.ParseCIDR(addr.String())
 				if err != nil {
-					log.Errorx("bad interface addr", err, mlog.Field("address", addr))
+					log.Errorx("bad interface addr", err, slog.Any("address", addr))
 					continue
 				}
 				v4 := ip.To4() != nil

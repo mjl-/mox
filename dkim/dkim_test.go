@@ -15,9 +15,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 )
+
+var pkglog = mlog.New("dkim", nil)
 
 func policyOK(sig *Sig) error {
 	return nil
@@ -143,7 +145,7 @@ test
 		},
 	}
 
-	results, err := Verify(context.Background(), resolver, false, policyOK, strings.NewReader(message), false)
+	results, err := Verify(context.Background(), pkglog.Logger, resolver, false, policyOK, strings.NewReader(message), false)
 	if err != nil {
 		t.Fatalf("dkim verify: %v", err)
 	}
@@ -190,7 +192,7 @@ Joe.
 		},
 	}
 
-	results, err := Verify(context.Background(), resolver, false, policyOK, strings.NewReader(message), false)
+	results, err := Verify(context.Background(), pkglog.Logger, resolver, false, policyOK, strings.NewReader(message), false)
 	if err != nil {
 		t.Fatalf("dkim verify: %v", err)
 	}
@@ -219,50 +221,42 @@ test
 	rsaKey := getRSAKey(t)
 	ed25519Key := ed25519.NewKeyFromSeed(make([]byte, 32))
 
-	selrsa := config.Selector{
-		HashEffective:    "sha256",
-		Key:              rsaKey,
-		HeadersEffective: strings.Split("From,To,Cc,Bcc,Reply-To,References,In-Reply-To,Subject,Date,Message-ID,Content-Type", ","),
-		Domain:           dns.Domain{ASCII: "testrsa"},
+	selrsa := Selector{
+		Hash:       "sha256",
+		PrivateKey: rsaKey,
+		Headers:    strings.Split("From,To,Cc,Bcc,Reply-To,References,In-Reply-To,Subject,Date,Message-ID,Content-Type", ","),
+		Domain:     dns.Domain{ASCII: "testrsa"},
 	}
 
 	// Now with sha1 and relaxed canonicalization.
-	selrsa2 := config.Selector{
-		HashEffective:    "sha1",
-		Key:              rsaKey,
-		HeadersEffective: strings.Split("From,To,Cc,Bcc,Reply-To,References,In-Reply-To,Subject,Date,Message-ID,Content-Type", ","),
-		Domain:           dns.Domain{ASCII: "testrsa2"},
+	selrsa2 := Selector{
+		Hash:       "sha1",
+		PrivateKey: rsaKey,
+		Headers:    strings.Split("From,To,Cc,Bcc,Reply-To,References,In-Reply-To,Subject,Date,Message-ID,Content-Type", ","),
+		Domain:     dns.Domain{ASCII: "testrsa2"},
 	}
-	selrsa2.Canonicalization.HeaderRelaxed = true
-	selrsa2.Canonicalization.BodyRelaxed = true
+	selrsa2.HeaderRelaxed = true
+	selrsa2.BodyRelaxed = true
 
 	// Ed25519 key.
-	seled25519 := config.Selector{
-		HashEffective:    "sha256",
-		Key:              ed25519Key,
-		HeadersEffective: strings.Split("From,To,Cc,Bcc,Reply-To,References,In-Reply-To,Subject,Date,Message-ID,Content-Type", ","),
-		Domain:           dns.Domain{ASCII: "tested25519"},
+	seled25519 := Selector{
+		Hash:       "sha256",
+		PrivateKey: ed25519Key,
+		Headers:    strings.Split("From,To,Cc,Bcc,Reply-To,References,In-Reply-To,Subject,Date,Message-ID,Content-Type", ","),
+		Domain:     dns.Domain{ASCII: "tested25519"},
 	}
 	// Again ed25519, but without sealing headers. Use sha256 again, for reusing the body hash from the previous dkim-signature.
-	seled25519b := config.Selector{
-		HashEffective:    "sha256",
-		Key:              ed25519Key,
-		HeadersEffective: strings.Split("From,To,Cc,Bcc,Reply-To,Subject,Date", ","),
-		DontSealHeaders:  true,
-		Domain:           dns.Domain{ASCII: "tested25519b"},
+	seled25519b := Selector{
+		Hash:        "sha256",
+		PrivateKey:  ed25519Key,
+		Headers:     strings.Split("From,To,Cc,Bcc,Reply-To,Subject,Date", ","),
+		SealHeaders: true,
+		Domain:      dns.Domain{ASCII: "tested25519b"},
 	}
-	dkimConf := config.DKIM{
-		Selectors: map[string]config.Selector{
-			"testrsa":      selrsa,
-			"testrsa2":     selrsa2,
-			"tested25519":  seled25519,
-			"tested25519b": seled25519b,
-		},
-		Sign: []string{"testrsa", "testrsa2", "tested25519", "tested25519b"},
-	}
+	selectors := []Selector{selrsa, selrsa2, seled25519, seled25519b}
 
 	ctx := context.Background()
-	headers, err := Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader(message))
+	headers, err := Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, selectors, false, strings.NewReader(message))
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -293,7 +287,7 @@ test
 
 	nmsg := headers + message
 
-	results, err := Verify(ctx, resolver, false, policyOK, strings.NewReader(nmsg), false)
+	results, err := Verify(ctx, pkglog.Logger, resolver, false, policyOK, strings.NewReader(nmsg), false)
 	if err != nil {
 		t.Fatalf("verify: %s", err)
 	}
@@ -304,31 +298,31 @@ test
 	//log.Infof("nmsg\n%s", nmsg)
 
 	// Multiple From headers.
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("From: <mjl@mox.example>\r\nFrom: <mjl@mox.example>\r\n\r\ntest"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, selectors, false, strings.NewReader("From: <mjl@mox.example>\r\nFrom: <mjl@mox.example>\r\n\r\ntest"))
 	if !errors.Is(err, ErrFrom) {
 		t.Fatalf("sign, got err %v, expected ErrFrom", err)
 	}
 
 	// No From header.
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("Brom: <mjl@mox.example>\r\n\r\ntest"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, selectors, false, strings.NewReader("Brom: <mjl@mox.example>\r\n\r\ntest"))
 	if !errors.Is(err, ErrFrom) {
 		t.Fatalf("sign, got err %v, expected ErrFrom", err)
 	}
 
 	// Malformed headers.
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader(":\r\n\r\ntest"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, selectors, false, strings.NewReader(":\r\n\r\ntest"))
 	if !errors.Is(err, ErrHeaderMalformed) {
 		t.Fatalf("sign, got err %v, expected ErrHeaderMalformed", err)
 	}
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader(" From:<mjl@mox.example>\r\n\r\ntest"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, selectors, false, strings.NewReader(" From:<mjl@mox.example>\r\n\r\ntest"))
 	if !errors.Is(err, ErrHeaderMalformed) {
 		t.Fatalf("sign, got err %v, expected ErrHeaderMalformed", err)
 	}
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("Frøm:<mjl@mox.example>\r\n\r\ntest"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, selectors, false, strings.NewReader("Frøm:<mjl@mox.example>\r\n\r\ntest"))
 	if !errors.Is(err, ErrHeaderMalformed) {
 		t.Fatalf("sign, got err %v, expected ErrHeaderMalformed", err)
 	}
-	_, err = Sign(ctx, "mjl", dns.Domain{ASCII: "mox.example"}, dkimConf, false, strings.NewReader("From:<mjl@mox.example>"))
+	_, err = Sign(ctx, pkglog.Logger, "mjl", dns.Domain{ASCII: "mox.example"}, selectors, false, strings.NewReader("From:<mjl@mox.example>"))
 	if !errors.Is(err, ErrHeaderMalformed) {
 		t.Fatalf("sign, got err %v, expected ErrHeaderMalformed", err)
 	}
@@ -355,9 +349,9 @@ test
 	var record *Record
 	var recordTxt string
 	var msg string
-	var sel config.Selector
-	var dkimConf config.DKIM
 	var policy func(*Sig) error
+	var sel Selector
+	var selectors []Selector
 	var signed bool
 	var signDomain dns.Domain
 
@@ -386,18 +380,13 @@ test
 			},
 		}
 
-		sel = config.Selector{
-			HashEffective:    "sha256",
-			Key:              key,
-			HeadersEffective: strings.Split("From,To,Cc,Bcc,Reply-To,References,In-Reply-To,Subject,Date,Message-ID,Content-Type", ","),
-			Domain:           dns.Domain{ASCII: "test"},
+		sel = Selector{
+			Hash:       "sha256",
+			PrivateKey: key,
+			Headers:    strings.Split("From,To,Cc,Bcc,Reply-To,References,In-Reply-To,Subject,Date,Message-ID,Content-Type", ","),
+			Domain:     dns.Domain{ASCII: "test"},
 		}
-		dkimConf = config.DKIM{
-			Selectors: map[string]config.Selector{
-				"test": sel,
-			},
-			Sign: []string{"test"},
-		}
+		selectors = []Selector{sel}
 
 		msg = message
 		signed = false
@@ -408,7 +397,7 @@ test
 
 		msg = strings.ReplaceAll(msg, "\n", "\r\n")
 
-		headers, err := Sign(context.Background(), "mjl", signDomain, dkimConf, false, strings.NewReader(msg))
+		headers, err := Sign(context.Background(), pkglog.Logger, "mjl", signDomain, selectors, false, strings.NewReader(msg))
 		if err != nil {
 			t.Fatalf("sign: %v", err)
 		}
@@ -425,7 +414,7 @@ test
 			sign()
 		}
 
-		results, err := Verify(context.Background(), resolver, true, policy, strings.NewReader(msg), false)
+		results, err := Verify(context.Background(), pkglog.Logger, resolver, true, policy, strings.NewReader(msg), false)
 		if (err == nil) != (expErr == nil) || err != nil && !errors.Is(err, expErr) {
 			t.Fatalf("got verify error %v, expected %v", err, expErr)
 		}
@@ -512,11 +501,9 @@ test
 	})
 	// Unknown canonicalization.
 	test(nil, StatusPermerror, ErrCanonicalizationUnknown, func() {
-		sel.Canonicalization.HeaderRelaxed = true
-		sel.Canonicalization.BodyRelaxed = true
-		dkimConf.Selectors = map[string]config.Selector{
-			"test": sel,
-		}
+		sel.HeaderRelaxed = true
+		sel.BodyRelaxed = true
+		selectors = []Selector{sel}
 
 		sign()
 		msg = strings.ReplaceAll(msg, "relaxed/relaxed", "bogus/bogus")
@@ -574,10 +561,8 @@ test
 		resolver.TXT = map[string][]string{
 			"test._domainkey.mox.example.": {txt},
 		}
-		sel.Key = key
-		dkimConf.Selectors = map[string]config.Selector{
-			"test": sel,
-		}
+		sel.PrivateKey = key
+		selectors = []Selector{sel}
 	})
 	// Key not allowed for email by DNS record. ../rfc/6376:1541
 	test(nil, StatusPermerror, ErrKeyNotForEmail, func() {
@@ -600,18 +585,14 @@ test
 
 	// Check that last-occurring header field is used.
 	test(nil, StatusFail, ErrSigVerify, func() {
-		sel.DontSealHeaders = true
-		dkimConf.Selectors = map[string]config.Selector{
-			"test": sel,
-		}
+		sel.SealHeaders = false
+		selectors = []Selector{sel}
 		sign()
 		msg = strings.ReplaceAll(msg, "\r\n\r\n", "\r\nsubject: another\r\n\r\n")
 	})
 	test(nil, StatusPass, nil, func() {
-		sel.DontSealHeaders = true
-		dkimConf.Selectors = map[string]config.Selector{
-			"test": sel,
-		}
+		sel.SealHeaders = false
+		selectors = []Selector{sel}
 		sign()
 		msg = "subject: another\r\n" + msg
 	})

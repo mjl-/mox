@@ -212,7 +212,7 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 				if extended != nil {
 					extStr = " " + extended.pack(c)
 				}
-				line := fmt.Sprintf(`* LIST %s "/" %s%s`, flags.pack(c), astring(name).pack(c), extStr)
+				line := fmt.Sprintf(`* LIST %s "/" %s%s`, flags.pack(c), astring(c.encodeMailbox(name)).pack(c), extStr)
 				responseLines = append(responseLines, line)
 
 				if retStatusAttrs != nil && info.mailbox != nil {

@@ -19,12 +19,17 @@ func (e parseErr) Error() string {
 // for easy comparison.
 //
 // DefaultRecord provides default values for tags not present in s.
+//
+// isdmarc indicates if the record starts tag "v" with value "DMARC1", and should
+// be treated as a valid DMARC record. Used to detect possibly multiple DMARC
+// records (invalid) for a domain with multiple TXT record (quite common).
 func ParseRecord(s string) (record *Record, isdmarc bool, rerr error) {
 	return parseRecord(s, true)
 }
 
 // ParseRecordNoRequired is like ParseRecord, but don't check for required fields
-// for regular DMARC records. Useful for checking the _report._dmarc record.
+// for regular DMARC records. Useful for checking the _report._dmarc record,
+// used for opting into receiving reports for other domains.
 func ParseRecordNoRequired(s string) (record *Record, isdmarc bool, rerr error) {
 	return parseRecord(s, false)
 }
@@ -87,9 +92,9 @@ func parseRecord(s string, checkRequired bool) (record *Record, isdmarc bool, re
 				// ../rfc/7489:1105
 				p.xerrorf("p= (policy) must be first tag")
 			}
-			r.Policy = DMARCPolicy(p.xtakelist("none", "quarantine", "reject"))
+			r.Policy = Policy(p.xtakelist("none", "quarantine", "reject"))
 		case "sp":
-			r.SubdomainPolicy = DMARCPolicy(p.xkeyword())
+			r.SubdomainPolicy = Policy(p.xkeyword())
 			// note: we check if the value is valid before returning.
 		case "rua":
 			r.AggregateReportAddresses = append(r.AggregateReportAddresses, p.xuri())

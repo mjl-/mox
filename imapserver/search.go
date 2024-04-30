@@ -2,13 +2,13 @@ package imapserver
 
 import (
 	"fmt"
+	"log/slog"
 	"net/textproto"
 	"strings"
 
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/message"
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/store"
 )
 
@@ -221,7 +221,9 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 
 		// No untagged ESEARCH response if nothing was requested. ../rfc/9051:4160
 		if len(eargs) > 0 {
-			resp := fmt.Sprintf("* ESEARCH (TAG %s)", tag)
+			// The tag was originally a string, became an astring in IMAP4rev2, better stick to
+			// string. ../rfc/4466:707 ../rfc/5259:1163 ../rfc/9051:7087
+			resp := fmt.Sprintf(`* ESEARCH (TAG "%s")`, tag)
 			if isUID {
 				resp += " UID"
 			}
@@ -391,7 +393,7 @@ func (s *search) match0(sk searchKey) bool {
 		lower := strings.ToLower(value)
 		h, err := s.p.Header()
 		if err != nil {
-			c.log.Debugx("parsing message header", err, mlog.Field("uid", s.uid))
+			c.log.Debugx("parsing message header", err, slog.Any("uid", s.uid))
 			return false
 		}
 		for _, v := range h.Values(field) {
@@ -515,7 +517,7 @@ func (s *search) match0(sk searchKey) bool {
 	}
 
 	if s.p == nil {
-		c.log.Info("missing parsed message, not matching", mlog.Field("uid", s.uid))
+		c.log.Info("missing parsed message, not matching", slog.Any("uid", s.uid))
 		return false
 	}
 
@@ -544,7 +546,7 @@ func (s *search) match0(sk searchKey) bool {
 		lower := strings.ToLower(sk.astring)
 		h, err := s.p.Header()
 		if err != nil {
-			c.log.Errorx("parsing header for search", err, mlog.Field("uid", s.uid))
+			c.log.Errorx("parsing header for search", err, slog.Any("uid", s.uid))
 			return false
 		}
 		k := textproto.CanonicalMIMEHeaderKey(sk.headerField)

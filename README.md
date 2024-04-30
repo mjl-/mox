@@ -1,5 +1,7 @@
 Mox is a modern full-featured open source secure mail server for low-maintenance self-hosted email.
 
+For more details, see the mox website, https://www.xmox.nl.
+
 See Quickstart below to get started.
 
 ## Features
@@ -8,7 +10,8 @@ See Quickstart below to get started.
 - SMTP (with extensions) for receiving, submitting and delivering email.
 - IMAP4 (with extensions) for giving email clients access to email.
 - Webmail for reading/sending email from the browser.
-- SPF/DKIM/DMARC for authenticating messages/delivery, also DMARC reports.
+- SPF/DKIM/DMARC for authenticating messages/delivery, also DMARC aggregate
+  reports.
 - Reputation tracking, learning (per user) host-, domain- and
   sender address-based reputation from (Non-)Junk email classification.
 - Bayesian spam filtering that learns (per user) from (Non-)Junk email.
@@ -20,19 +23,22 @@ See Quickstart below to get started.
   ("localparts"), and in domain names (IDNA).
 - Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
 - DANE and MTA-STS for inbound and outbound delivery over SMTP with STARTTLS,
-  including REQUIRETLS and with incoming TLSRPT reporting.
-- Web admin interface that helps you set up your domains and accounts
-  (instructions to create DNS records, configure
-  SPF/DKIM/DMARC/TLSRPT/MTA-STS), for status information, managing
-  accounts/domains, and modifying the configuration file.
+  including REQUIRETLS and with incoming/outgoing TLSRPT reporting.
+- Web admin interface that helps you set up your domains, accounts and list
+  aliases (instructions to create DNS records, configure
+  SPF/DKIM/DMARC/TLSRPT/MTA-STS), for status information, and modifying the
+  configuration file.
 - Account autodiscovery (with SRV records, Microsoft-style, Thunderbird-style,
   and Apple device management profiles) for easy account setup (though client
   support is limited).
 - Webserver with serving static files and forwarding requests (reverse
   proxy), so port 443 can also be used to serve websites.
+- Simple HTTP/JSON API for sending transaction email and receiving delivery
+  events and incoming messages (webapi and webhooks).
 - Prometheus metrics and structured logging for operational insight.
 - "mox localserve" subcommand for running mox locally for email-related
   testing/developing, including pedantic mode.
+- Most non-server Go packages mox consists of are written to be reusable.
 
 Mox is available under the MIT-license and was created by Mechiel Lukkien,
 mechiel@ueber.net. Mox includes BSD-3-claused code from the Go Authors, and the
@@ -46,12 +52,12 @@ proton.me.
 
 The code is heavily cross-referenced with the RFCs for readability/maintainability.
 
-
 # Quickstart
 
 The easiest way to get started with serving email for your domain is to get a
-(virtual) machine dedicated to serving email, name it [host].[domain] (e.g.
-mail.example.com), login as root, and run:
+(virtual) machine dedicated to serving email, name it `[host].[domain]` (e.g.
+mail.example.com). Having a DNSSEC-verifying resolver installed, such as
+unbound, is highly recommended. Run as root:
 
 	# Create mox user and homedir (or pick another name or homedir):
 	useradd -m -d /home/mox mox
@@ -62,50 +68,66 @@ mail.example.com), login as root, and run:
 	# Generate config files for your address/domain:
 	./mox quickstart you@example.com
 
-The quickstart creates configuration files for the domain and account,
-generates an admin and account password, prints the DNS records you need to add
-and prints commands to start mox and optionally install mox as a service.
+The quickstart:
+
+- Creates configuration files mox.conf and domains.conf.
+- Adds the domain and an account for the email address to domains.conf
+- Generates an admin and account password.
+- Prints the DNS records you need to add, for the machine and domain.
+- Prints commands to start mox, and optionally install mox as a service.
 
 A machine that doesn't already run a webserver is highly recommended because
-modern email requires HTTPS, and mox currently needs it for automatic TLS.  You
-could combine mox with an existing webserver, but it requires a lot more
-configuration. If you want to serve websites on the same machine, consider using
-the webserver built into mox. It's pretty good! If you want to run an existing
-webserver on port 443/80, see "mox help quickstart".
+modern email requires HTTPS, and mox currently needs to run a webserver for
+automatic TLS with ACME.  You could combine mox with an existing webserver, but
+it requires a lot more configuration. If you want to serve websites on the same
+machine, consider using the webserver built into mox. It's pretty good! If you
+want to run an existing webserver on port 443/80, see `mox help quickstart`.
 
 After starting, you can access the admin web interface on internal IPs.
 
 # Download
 
-You can easily (cross) compile mox if you have a recent Go toolchain installed
-(see "go version", it must be >= 1.20; otherwise, see https://go.dev/dl/ or
-https://go.dev/doc/manage-install and $HOME/go/bin):
+Download a mox binary from
+https://beta.gobuilds.org/github.com/mjl-/mox@latest/linux-amd64-latest/.
+
+Symlink or rename it to "mox".
+
+The URL above always resolves to the latest release for linux/amd64 built with
+the latest Go toolchain.  See the links at the bottom of that page for binaries
+for other platforms.
+
+# Compiling
+
+You can easily (cross) compile mox yourself. You need a recent Go toolchain
+installed.  Run `go version`, it must be >= 1.21. Download the latest version
+from https://go.dev/dl/ or see https://go.dev/doc/manage-install.
+
+To download the source code of the latest release, and compile it to binary "mox":
 
 	GOBIN=$PWD CGO_ENABLED=0 go install github.com/mjl-/mox@latest
-
-Or you can download a binary built with the latest Go toolchain from
-https://beta.gobuilds.org/github.com/mjl-/mox@latest/linux-amd64-latest/, and
-symlink or rename it to "mox".
-
-Verify you have a working mox binary:
-
-	./mox version
 
 Mox only compiles for and fully works on unix systems. Mox also compiles for
 Windows, but "mox serve" does not yet work, though "mox localserve" (for a
 local test instance) and most other subcommands do. Mox does not compile for
 Plan 9.
 
-You can also run mox with docker image `r.xmox.nl/mox`, with tags like `v0.0.1`
-and `v0.0.1-go1.20.1-alpine3.17.2`, see https://r.xmox.nl/r/mox/. Though new
-docker images aren't (automatically) generated for new Go runtime/compile
-releases. See docker-compose.yml in this repository for instructions on
-starting. It is important to run with docker host networking, so mox can use
-the public IPs and has correct remote IP information for incoming connections
-(important for junk filtering and rate-limiting). Given these caveats, it's
-recommended to run mox without docker.
+# Docker
+
+Although not recommended, you can also run mox with docker image
+`r.xmox.nl/mox`, with tags like `v0.0.1` and `v0.0.1-go1.20.1-alpine3.17.2`, see
+https://r.xmox.nl/r/mox/.  See
+https://github.com/mjl-/mox/blob/main/docker-compose.yml to get started.
+
+New docker images aren't (automatically) generated for new Go runtime/compile
+releases.
+
+It is important to run with docker host networking, so mox can use the public
+IPs and has correct remote IP information for incoming connections (important
+for junk filtering and rate-limiting).
 
 # Future/development
+
+See develop.txt for instructions/tips for developing on mox.
 
 Mox will receive funding for essentially full-time continued work from August
 2023 to August 2024 through NLnet/EU's NGI0 Entrust, see
@@ -113,44 +135,40 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- Sending DMARC and TLS reports (currently only receiving)
-- Authentication other than HTTP-basic for webmail/webadmin/webaccount
-- Per-domain webmail and IMAP/SMTP host name (and TLS cert) and client settings
-- Make mox Go packages more easily reusable, each pulling in fewer (internal)
-  dependencies
-- HTTP-based API for sending messages and receiving delivery feedback
 - Calendaring with CalDAV/iCal
 - More IMAP extensions (PREVIEW, WITHIN, IMPORTANT, COMPRESS=DEFLATE,
   CREATE-SPECIAL-USE, SAVEDATE, UNAUTHENTICATE, REPLACE, QUOTA, NOTIFY,
-  MULTIAPPEND, OBJECTID, MULTISEARCH)
+  MULTIAPPEND, OBJECTID, MULTISEARCH, THREAD, SORT)
+- SMTP DSN extension
 - ARC, with forwarded email from trusted source
 - Forwarding (to an external address)
 - Add special IMAP mailbox ("Queue?") that contains queued but
-  not-yet-delivered messages, updated with IMAP flags/keywords/tags.
-- Sieve for filtering (for now see Rulesets in the account config)
-- Expose threading through IMAP extension
+  undelivered messages, updated with IMAP flags/keywords/tags and message headers.
+- External addresses in aliases/lists.
 - Autoresponder (out of office/vacation)
 - OAUTH2 support, for single sign on
+- IMAP extensions for "online"/non-syncing/webmail clients (SORT (including
+  DISPLAYFROM, DISPLAYTO), THREAD, PARTIAL, CONTEXT=SEARCH CONTEXT=SORT ESORT,
+  FILTERS)
+- Improve support for mobile clients with extensions: IMAP URLAUTH, SMTP
+  CHUNKING and BINARYMIME, IMAP CATENATE
+- Mailing list manager
 - Privilege separation, isolating parts of the application to more restricted
   sandbox (e.g. new unauthenticated connections)
 - Using mox as backup MX
 - JMAP
+- Sieve for filtering (for now see Rulesets in the account config)
 - Milter support, for integration with external tools
-- IMAP extensions for "online"/non-syncing/webmail clients (SORT (including
-  DISPLAYFROM, DISPLAYTO), THREAD, PARTIAL, CONTEXT=SEARCH CONTEXT=SORT ESORT,
-  FILTERS)
 - IMAP Sieve extension, to run Sieve scripts after message changes (not only
   new deliveries)
-- Improve support for mobile clients with extensions: IMAP URLAUTH, SMTP
-  CHUNKING and BINARYMIME, IMAP CATENATE
 
 There are many smaller improvements to make as well, search for "todo" in the code.
 
 ## Not supported/planned
 
-But perhaps in the future...
+There is currently no plan to implement the following. Though this may
+change in the future.
 
-- Mailing list manager
 - Functioning as SMTP relay
 - POP3
 - Delivery to (unix) OS system users
@@ -175,11 +193,15 @@ make that easy.
 
 ## Where is the documentation?
 
-See all commands and help output at https://pkg.go.dev/github.com/mjl-/mox/.
+To keep mox as a project maintainable, documentation is integrated into, and
+generated from the code.
 
-See the commented example config files at
-https://pkg.go.dev/github.com/mjl-/mox/config/. They often contain enough
-documentation about a feature and how to configure it.
+A list of mox commands, and their help output, are at
+https://www.xmox.nl/commands/.
+
+Mox is configured through configuration files, and each field comes with
+documentation. See https://www.xmox.nl/config/ for config files containing all
+fields and their documentation.
 
 You can get the same information by running "mox" without arguments to list its
 subcommands and usage, and "mox help [subcommand]" for more details.
@@ -187,9 +209,44 @@ subcommands and usage, and "mox help [subcommand]" for more details.
 The example config files are printed by "mox config describe-static" and "mox
 config describe-dynamic".
 
-Mox is still in early stages, and documentation is still limited. Please create
-an issue describing what is unclear or confusing, and we'll try to improve the
-documentation.
+If you're missing some documentation, please create an issue describing what is
+unclear or confusing, and we'll try to improve the documentation.
+
+## Is Mox affected by SMTP smuggling?
+
+Mox itself is not affected: it only treats "\r\n.\r\n" as SMTP end-of-message.
+But read on for caveats.
+
+SMTP smuggling exploits differences in handling by SMTP servers of: carriage
+returns (CR, or "\r"), newlines (line feeds, LF, "\n") in the context of "dot
+stuffing".  SMTP is a text-based protocol. An SMTP transaction to send a
+message is finalized with a "\r\n.\r\n" sequence. This sequence could occur in
+the message being transferred, so any verbatim "." at the start of a line in a
+message is "escaped" with another dot ("dot stuffing"), to not trigger the SMTP
+end-of-message. SMTP smuggling takes advantage of bugs in some mail servers
+that interpret other sequences than "\r\n.\r\n" as SMTP end-of-message. For
+example "\n.\n" or even "\r.\r", and perhaps even other magic character
+combinations.
+
+Before v0.0.9, mox accepted SMTP transactions with bare carriage returns
+(without newline) for compatibility with real-world email messages, considering
+them meaningless and therefore innocuous.
+
+Since v0.0.9, SMTP transactions with bare carriage returns are rejected.
+Sending messages with bare carriage returns to buggy mail servers can cause
+those mail servers to materialize non-existent messages. Now that mox rejects
+messages with bare carriage returns, sending a message through mox can no
+longer be used to trigger those bugs.
+
+Mox can still handle bare carriage returns in email messages, e.g. those
+imported from mbox files or Maildirs, or from messages added over IMAP. Mox
+still fixes up messages with bare newlines by adding the missing carriage
+returns.
+
+Before v0.0.9, an SMTP transaction for a message containing "\n.\n" would
+result in a non-specific error message, and "\r\n.\n" would result in the dot
+being dropped. Since v0.0.9, these sequences are rejected with a message
+mentioning SMTP smuggling.
 
 ## How do I import/export email?
 
@@ -229,23 +286,23 @@ MIT license (like mox), and have the rights to do so.
 
 ## Where can I discuss mox?
 
-Join #mox on irc.oftc.net, or #mox on the "Gopher slack".
+Join #mox on irc.oftc.net, or #mox:matrix.org, or #mox on the "Gopher slack".
 
 For bug reports, please file an issue at https://github.com/mjl-/mox/issues/new.
 
 ## How do I change my password?
 
 Regular users (doing IMAP/SMTP with authentication) can change their password
-at the account page, e.g. http://localhost/. Or you can set a password with "mox
+at the account page, e.g. `http://localhost/`. Or you can set a password with "mox
 setaccountpassword".
 
 The admin can change the password of any account through the admin page, at
-http://localhost/admin/ by default (leave username empty when logging in).
+`http://localhost/admin/` by default (leave username empty when logging in).
 
 The account and admin pages are served on localhost for configs created with
 the quickstart.  To access these from your browser, run
 `ssh -L 8080:localhost:80 you@yourmachine` locally and open
-http://localhost:8080/[...].
+`http://localhost:8080/[...]`.
 
 The admin password can be changed with "mox setadminpassword".
 
@@ -335,19 +392,6 @@ should account for the size of the email messages (no compression currently),
 an additional 15% overhead for the meta data, and add some more headroom.
 Expand as necessary.
 
-## Can I see some screenshots?
-
-Yes, see https://www.xmox.nl/screenshots/.
-
-Mox has a webmail for reading/writing messages.
-
-Mox also has an "account" web interface where users can view their account and
-manage their address configuration, such as rules for automatically delivering
-certain incoming messages to a specific mailbox.
-
-And mox has an "admin" web interface where the administrator can make changes,
-e.g. add/remove/modify domains/accounts/addresses.
-
 ## Won't the big email providers block my email?
 
 It is a common misconception that it is impossible to run your own email server
@@ -377,12 +421,50 @@ to determine if your email message could be spam and should be rejected. Mox
 helps you set up a system that doesn't trigger most of the technical signals
 (e.g. with SPF/DKIM/DMARC). But there are more signals, for example: Sending to
 a mail server or address for the first time. Sending from a newly registered
-domain. Sending messages with content that resembles known spam messages.
+domain (especially if you're sending automated messages, and if you send more
+messages after previous messages were rejected), domains that existed for a few
+weeks to a month are treated more friendly. Sending messages with content that
+resembles known spam messages.
 
 Should your email be rejected, you will typically get an error message during
 the SMTP transaction that explains why. In the case of big email providers the
-error message often has instructions on how to prove to them you are a legimate
-sender.
+error message often has instructions on how to prove to them you are a
+legitimate sender.
+
+## Can mox deliver through a smarthost?
+
+Yes, you can configure a "Transport" in mox.conf and configure "Routes" in
+domains.conf to send some or all messages through the transport. A transport
+can be an SMTP relay or authenticated submission, or making mox make outgoing
+connections through a SOCKS proxy.
+
+For an example, see https://www.xmox.nl/config/#hdr-example-transport. For
+details about Transports and Routes, see
+https://www.xmox.nl/config/#cfg-mox-conf-Transports and
+https://www.xmox.nl/config/#cfg-domains-conf-Routes.
+
+Remember to add the IP addresses of the transport to the SPF records of your
+domains. Keep in mind some 3rd party submission servers may mishandle your
+messages, for example by replacing your Message-Id header and thereby
+invalidating your DKIM-signatures, or rejecting messages with more than one
+DKIM-signature.
+
+## Can I use mox to send transactional email?
+
+Yes. While you can use SMTP submission to send messages you've composed
+yourself, and monitor a mailbox for DSNs, a more convenient option is to use
+the mox HTTP/JSON-based webapi and webhooks.
+
+The mox webapi can be used to send outgoing messages that mox composes. The web
+api can also be used to deal with messages stored in an account, like changing
+message flags, retrieving messages in parsed form or individual parts of
+multipart messages, or moving messages to another mailbox or deleting messages
+altogether.
+
+Mox webhooks can be used to receive updates about incoming and outgoing
+deliveries. Mox can automatically manage per account suppression lists.
+
+See https://www.xmox.nl/features/#hdr-webapi-and-webhooks for details.
 
 ## Can I use existing TLS certificates/keys?
 
@@ -390,19 +472,58 @@ Yes. The quickstart command creates a config that uses ACME with Let's Encrypt,
 but you can change the config file to use existing certificate and key files.
 
 You'll see "ACME: letsencrypt" in the "TLS" section of the "public" Listener.
-Remove or comment out the ACME-line, and add a "KeyCerts" section like in the
-example config file in
-https://pkg.go.dev/github.com/mjl-/mox/config#hdr-mox_conf. You can have
-multiple certificates and keys: The line with the "-" (dash) is the start of a
-list item. Duplicate that line up to and including the line with KeyFile for
-each certificate/key you have. Mox makes a TLS config that holds all specified
-certificates/keys, and uses it for all services for that Listener (including a
-webserver), choosing the correct certificate for incoming requests.
+Remove or comment out the ACME-line, and add a "KeyCerts" section, see
+https://www.xmox.nl/config/#cfg-mox-conf-Listeners-x-TLS-KeyCerts
+
+You can have multiple certificates and keys: The line with the "-" (dash) is
+the start of a list item. Duplicate that line up to and including the line with
+KeyFile for each certificate/key you have. Mox makes a TLS config that holds
+all specified certificates/keys, and uses it for all services for that Listener
+(including a webserver), choosing the correct certificate for incoming
+requests.
 
 Keep in mind that for each email domain you host, you will need a certificate
-for `mta-sts.<domain>` and `autoconfig.<domain>`, unless you disable MTA-STS
-and autoconfig for that domain.
+for `mta-sts.<domain>`, `autoconfig.<domain>` and `mail.<domain>`, unless you
+disable MTA-STS, autoconfig and the client-settings-domain for that domain.
 
 Mox opens the key and certificate files during initial startup, as root (and
 passes file descriptors to the unprivileged process).  No special permissions
 are needed on the key and certificate files.
+
+## Can I directly access mailboxes through the file system?
+
+No, mox only provides access to email through protocols like IMAP.
+
+While it can be convenient for users/email clients to access email through
+conventions like Maildir, providing such access puts quite a burden on the
+server: The server has to continuously watch for changes made to the mail store
+by external programs, and sync its internal state. By only providing access to
+emails through mox, the storage/state management is simpler and easier to
+implement reliably.
+
+Not providing direct file system access also allows future improvements in the
+storage mechanism. Such as encryption of all stored messages. Programs won't be
+able to access such messages directly.
+
+Mox stores metadata about delivered messages in its per-account message index
+database, more than fits in a simple (filename-based) format like Maildir. The
+IP address of the remote SMTP server during delivery, SPF/DKIM/DMARC domains
+and validation status, and more...
+
+For efficiency, mox doesn't prepend message headers generated during delivery
+(e.g. Authentication-Results) to the on-disk message file, but only stores it
+in the database. This prevents a rewrite of the entire message file. When
+reading a message, mox combines the prepended headers from the database with
+the message file.
+
+Mox user accounts have no relation to operating system user accounts. Multiple
+system users reading their email on a single machine is not very common
+anymore. All data (for all accounts) stored by mox is accessible only by the
+mox process.  Messages are currently stored as individual files in standard
+Internet Message Format (IMF), at `data/accounts/<account>/msg/<dir>/<msgid>`:
+`msgid` is a consecutive unique integer id assigned by the per-account message
+index database; `dir` groups 8k consecutive message ids into a directory,
+ensuring they don't become too large.  The message index database file for an
+account is at `data/accounts/<account>/index.db`, accessed with the bstore
+database library, which uses bbolt (formerly BoltDB) for storage, a
+transactional key/value library/file format inspired by LMDB.

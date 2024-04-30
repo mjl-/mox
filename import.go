@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -20,7 +21,6 @@ import (
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
-	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/store"
 )
@@ -119,10 +119,9 @@ func xcmdXImport(mbox bool, c *cmd) {
 	}
 	defer store.Switchboard()()
 
-	xlog := mlog.New("import")
 	cconn, sconn := net.Pipe()
-	clientctl := ctl{conn: cconn, r: bufio.NewReader(cconn), log: xlog}
-	serverctl := ctl{conn: sconn, r: bufio.NewReader(sconn), log: xlog}
+	clientctl := ctl{conn: cconn, r: bufio.NewReader(cconn), log: c.log}
+	serverctl := ctl{conn: sconn, r: bufio.NewReader(sconn), log: c.log}
 	go servectlcmd(context.Background(), &serverctl, func() {})
 
 	ctlcmdImport(&clientctl, mbox, account, args[1], args[2])
@@ -177,7 +176,11 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	if mbox {
 		kind = "mbox"
 	}
-	ctl.log.Info("importing messages", mlog.Field("kind", kind), mlog.Field("account", account), mlog.Field("mailbox", mailbox), mlog.Field("source", src))
+	ctl.log.Info("importing messages",
+		slog.String("kind", kind),
+		slog.String("account", account),
+		slog.String("mailbox", mailbox),
+		slog.String("source", src))
 
 	var err error
 	var mboxf *os.File
@@ -186,7 +189,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 
 	// Open account, creating a database file if it doesn't exist yet. It must be known
 	// in the configuration file.
-	a, err := store.OpenAccount(account)
+	a, err := store.OpenAccount(ctl.log, account)
 	ctl.xcheck(err, "opening account")
 	defer func() {
 		if a != nil {
@@ -222,13 +225,13 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	if mbox {
 		mboxf, err = os.Open(src)
 		ctl.xcheck(err, "open mbox file")
-		msgreader = store.NewMboxReader(store.CreateMessageTemp, src, mboxf, ctl.log)
+		msgreader = store.NewMboxReader(ctl.log, store.CreateMessageTemp, src, mboxf)
 	} else {
 		mdnewf, err = os.Open(filepath.Join(src, "new"))
 		ctl.xcheck(err, "open subdir new of maildir")
 		mdcurf, err = os.Open(filepath.Join(src, "cur"))
 		ctl.xcheck(err, "open subdir cur of maildir")
-		msgreader = store.NewMaildirReader(store.CreateMessageTemp, mdnewf, mdcurf, ctl.log)
+		msgreader = store.NewMaildirReader(ctl.log, store.CreateMessageTemp, mdnewf, mdcurf)
 	}
 
 	tx, err := a.DB.Begin(ctx, true)
@@ -253,7 +256,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		}
 
 		if x != ctl.x {
-			ctl.log.Error("import error", mlog.Field("panic", fmt.Errorf("%v", x)))
+			ctl.log.Error("import error", slog.String("panic", fmt.Sprintf("%v", x)))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Import)
 		} else {
@@ -263,7 +266,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		for _, id := range deliveredIDs {
 			p := a.MessagePath(id)
 			err := os.Remove(p)
-			ctl.log.Check(err, "closing message file after import error", mlog.Field("path", p))
+			ctl.log.Check(err, "closing message file after import error", slog.String("path", p))
 		}
 
 		ctl.xerror(fmt.Sprintf("import error: %v", x))
@@ -279,10 +282,11 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		const sync = false
 		const notrain = true
 		const nothreads = true
-		err := a.DeliverMessage(ctl.log, tx, m, mf, sync, notrain, nothreads)
+		const updateDiskUsage = false
+		err := a.DeliverMessage(ctl.log, tx, m, mf, sync, notrain, nothreads, updateDiskUsage)
 		ctl.xcheck(err, "delivering message")
 		deliveredIDs = append(deliveredIDs, m.ID)
-		ctl.log.Debug("delivered message", mlog.Field("id", m.ID))
+		ctl.log.Debug("delivered message", slog.Int64("id", m.ID))
 		changes = append(changes, m.ChangeAddUID())
 	}
 
@@ -310,14 +314,19 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 
 		conf, _ := a.Conf()
 
+		maxSize := a.QuotaMessageSize()
+		var addSize int64
+		du := store.DiskUsage{ID: 1}
+		err = tx.Get(&du)
+		ctl.xcheck(err, "get disk usage")
+
 		process := func(m *store.Message, msgf *os.File, origPath string) {
-			defer func() {
-				name := msgf.Name()
-				err := msgf.Close()
-				ctl.log.Check(err, "closing temporary message after failing to import")
-				err = os.Remove(name)
-				ctl.log.Check(err, "removing temporary message after failing to import", mlog.Field("path", name))
-			}()
+			defer store.CloseRemoveTempFile(ctl.log, msgf, "message to import")
+
+			addSize += m.Size
+			if maxSize > 0 && du.MessageSize+addSize > maxSize {
+				ctl.xcheck(fmt.Errorf("account over maximum total message size %d", maxSize), "checking quota")
+			}
 
 			for _, kw := range m.Keywords {
 				mailboxKeywords[kw] = true
@@ -325,9 +334,9 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			mb.Add(m.MailboxCounts())
 
 			// Parse message and store parsed information for later fast retrieval.
-			p, err := message.EnsurePart(ctl.log, false, msgf, m.Size)
+			p, err := message.EnsurePart(ctl.log.Logger, false, msgf, m.Size)
 			if err != nil {
-				ctl.log.Infox("parsing message, continuing", err, mlog.Field("path", origPath))
+				ctl.log.Infox("parsing message, continuing", err, slog.String("path", origPath))
 			}
 			m.ParsedBuf, err = json.Marshal(p)
 			ctl.xcheck(err, "marshal parsed message structure")
@@ -351,7 +360,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			m.JunkFlagsForMailbox(mb, conf)
 			if jf != nil && m.NeedsTraining() {
 				if words, err := jf.ParseMessage(p); err != nil {
-					ctl.log.Infox("parsing message for updating junk filter", err, mlog.Field("parse", ""), mlog.Field("path", origPath))
+					ctl.log.Infox("parsing message for updating junk filter", err, slog.String("parse", ""), slog.String("path", origPath))
 				} else {
 					err = jf.Train(ctx, !m.Junk, words)
 					ctl.xcheck(err, "training junk filter")
@@ -410,10 +419,13 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		ctl.xcheck(err, "updating message counts and keywords in mailbox")
 		changes = append(changes, mb.ChangeCounts())
 
+		err = a.AddMessageSize(ctl.log, tx, addSize)
+		xcheckf(err, "updating total message size")
+
 		err = tx.Commit()
 		ctl.xcheck(err, "commit")
 		tx = nil
-		ctl.log.Info("delivered messages through import", mlog.Field("count", len(deliveredIDs)))
+		ctl.log.Info("delivered messages through import", slog.Int("count", len(deliveredIDs)))
 		deliveredIDs = nil
 
 		store.BroadcastChanges(a, changes)
