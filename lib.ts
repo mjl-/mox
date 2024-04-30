@@ -175,6 +175,7 @@ const dom = {
 	ul: (...l: ElemArg[]) => _domKids(document.createElement('ul'), l),
 	li: (...l: ElemArg[]) => _domKids(document.createElement('li'), l),
 	iframe: (...l: ElemArg[]) => _domKids(document.createElement('iframe'), l),
+	embed: (...l: ElemArg[]) => _domKids(document.createElement('embed'), l),
 	b: (...l: ElemArg[]) => _domKids(document.createElement('b'), l),
 	img: (...l: ElemArg[]) => _domKids(document.createElement('img'), l),
 	style: (...l: ElemArg[]) => _domKids(document.createElement('style'), l),
