@@ -27,14 +27,15 @@ See [Features](features/) for the details, including roadmap.
 
 ## Latest release
 
-The latest release is v0.0.10, released on 2024-03-09, see [release
-notes](https://github.com/mjl-/mox/releases/tag/v0.0.10), [download
-binaries](https://beta.gobuilds.org/github.com/mjl-/mox@v0.0.10/linux-amd64-latest/),
+The latest release is v0.0.11, released on 2024-04-30, see [release
+notes](https://github.com/mjl-/mox/releases/tag/v0.0.11), [download
+binaries](https://beta.gobuilds.org/github.com/mjl-/mox@v0.0.11/linux-amd64-latest/),
 or see [all releases](https://github.com/mjl-/mox/releases).
 
 
 ## News
 
+- 2024-04-30, [v0.0.11](https://github.com/mjl-/mox/releases/tag/v0.0.11) released
 - 2024-03-09, [v0.0.10](https://github.com/mjl-/mox/releases/tag/v0.0.10) released
 - 2024-01-09, [v0.0.9](https://github.com/mjl-/mox/releases/tag/v0.0.9) released
 - 2023-12-08, There will be a
