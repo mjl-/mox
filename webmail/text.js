@@ -179,6 +179,7 @@ const [dom, style, attr, prop] = (function () {
 		ul: (...l) => _domKids(document.createElement('ul'), l),
 		li: (...l) => _domKids(document.createElement('li'), l),
 		iframe: (...l) => _domKids(document.createElement('iframe'), l),
+		embed: (...l) => _domKids(document.createElement('embed'), l),
 		b: (...l) => _domKids(document.createElement('b'), l),
 		img: (...l) => _domKids(document.createElement('img'), l),
 		style: (...l) => _domKids(document.createElement('style'), l),
