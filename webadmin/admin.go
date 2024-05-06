@@ -1393,7 +1393,7 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		instr := "Ensure DNS records like the following exist:\n\n"
 		r.SRVConf.SRVs = map[string][]net.SRV{}
 		for _, req := range reqs {
-			name := req.name + "_.tcp." + domain.ASCII
+			name := req.name + "._tcp." + domain.ASCII
 			instr += fmt.Sprintf("\t%s._tcp.%-*s SRV 0 1 %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", req.port, req.host)
 			r.SRVConf.SRVs[req.name] = unptr(req.srvs)
 			if err != nil {
