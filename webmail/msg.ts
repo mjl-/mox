@@ -10,7 +10,7 @@ const init = () => {
 	if (mi.Attachments && mi.Attachments.length > 0) {
 		dom._kids(msgattachmentview,
 			dom.div(
-				style({borderTop: '1px solid #ccc'}),
+				css('msgAttachments', {borderTop: '1px solid', borderTopColor: styles.borderColor}),
 				dom.div(dom._class('pad'),
 					'Attachments: ',
 					join(mi.Attachments.map(a => a.Filename || '(unnamed)'), () => ', '),
@@ -19,7 +19,7 @@ const init = () => {
 		)
 	}
 
-	const msgheaderview = dom.table(dom._class('msgheaders'), style({marginBottom: '1ex', width: '100%'}))
+	const msgheaderview = dom.table(styleClasses.msgHeaders)
 	loadMsgheaderView(msgheaderview, mi, [], null, true)
 
 	const l = window.location.pathname.split('/')
@@ -41,14 +41,14 @@ const init = () => {
 	const page = document.getElementById('page')!
 	dom._kids(page,
 		dom.div(
-			style({backgroundColor: '#f8f8f8', borderBottom: '1px solid #ccc'}),
+			css('msgMeta', {backgroundColor: styles.backgroundColorMild, borderBottom: '1px solid', borderBottomColor: styles.borderColor}),
 			msgheaderview,
 			msgattachmentview,
 		),
 		iframe=dom.iframe(
 			attr.title('Message body.'),
 			attr.src(iframepath),
-			style({border: '0', width: '100%', height: '100%'}),
+			css('msgIframe', {width: '100%', height: '100%'}),
 			function load() {
 				// Note: we load the iframe content specifically in a way that fires the load event only when the content is fully rendered.
 				iframe.style.height = iframe.contentDocument!.documentElement.scrollHeight+'px'

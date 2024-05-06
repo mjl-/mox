@@ -74,7 +74,6 @@ Enable consistency checking in UI updates:
 - todo: only show orange underline where it could be a problem? in addresses and anchor texts. we may be lighting up a christmas tree now, desensitizing users.
 - todo: saved searches that are displayed below list of mailboxes, for quick access to preset view
 - todo: when search on free-form text is active, highlight the searched text in the message view.
-- todo: composeView: save as draft, periodically and when closing.
 - todo: forwarding of html parts, including inline attachments, so the html version can be rendered like the original by the receiver.
 - todo: buttons/mechanism to operate on all messages in a mailbox/search query, without having to list and select all messages. e.g. clearing flags/labels.
 - todo: can we detect if browser supports proper CSP? if not, refuse to load html messages?
@@ -83,7 +82,6 @@ Enable consistency checking in UI updates:
 - todo: configurable keyboard shortcuts? we use strings like "ctrl p" which we already generate and match on, add a mapping from command name to cmd* functions, and have a map of keys to command names. the commands for up/down with shift/ctrl modifiers may need special attention.
 - todo: consider composing messages with bcc headers that are sent as message Bcc headers to the bcc-addressees, optionally with checkbox.
 - todo: improve accessibility
-- todo: threading mode where we don't show messages in Trash/Sent in thread?
 - todo: msglistView: preload next message?
 - todo: previews of zip files
 - todo: undo?
@@ -105,6 +103,31 @@ const zindexes = {
 	shortcut: '6',
 	login: '7',
 }
+
+// Buttons and input elements.
+ensureCSS('.button', {display: 'inline-block'})
+ensureCSS('button, .button, select', {color: styles.color, backgroundColor: styles.buttonBackground, border: '1px solid', borderColor: styles.buttonBorderColor, borderRadius: '.15em', padding: '0 .15em'})
+ensureCSS('button.active, .button.active, button.active:hover, .button.active:hover', {backgroundColor: styles.highlightBackground})
+ensureCSS('button:hover, .button:hover, select:hover', {backgroundColor: styles.buttonHoverBackground})
+ensureCSS('input, textarea', {backgroundColor: styles.backgroundColor, color: styles.color, border: '1px solid', borderColor: '#888', borderRadius: '.15em', padding: '0 .15em'})
+ensureCSS('input:hover, textarea:hover', {borderColor: styles.colorMilder})
+
+ensureCSS('.btngroup button, .btngroup .button', {borderRadius: 0, borderRightWidth: 0 })
+ensureCSS('.btngroup button:first-child, .btngroup .button:first-child', {borderRadius: '.15em 0 0 .15em'})
+ensureCSS('.btngroup button:last-child, .btngroup .button:last-child', {borderRadius: '0 .15em .15em 0', borderRightWidth: '1px'})
+
+const keywordButtonStyle = css('keywordButton', {cursor: 'pointer'})
+ensureCSS('.keywordButton:hover', {backgroundColor: styles.highlightBackgroundHover})
+
+
+const yscrollStyle = css('yscroll', {overflowY: 'scroll', position: 'absolute', top: 0, bottom: 0, left: 0, right: 0})
+const yscrollAutoStyle = css('yscrollAuto', {overflowY: 'auto', position: 'absolute', top: 0, bottom: 0, left: 0, right: 0})
+
+// Input elements that automatically grow based on input, with additional JS.
+const autosizeStyle = css('autosize', {display: 'inline-grid', maxWidth: '90vw'})
+ensureCSS('.autosize.input', {gridArea: '1 / 2'})
+ensureCSS('.autosize::after', {content: 'attr(data-value)', marginRight: '1em', lineHeight: 0, visibility: 'hidden', whiteSpace: 'pre-wrap', overflowX: 'hidden'})
+
 
 // From HTML.
 declare let page: HTMLElement
@@ -249,11 +272,23 @@ const login = async (reason: string) => {
 		let username: HTMLInputElement
 		let password: HTMLInputElement
 		const root = dom.div(
-			style({position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zindexes.login, animation: 'fadein .15s ease-in'}),
+			css('loginOverlay', {position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: styles.overlayOpaqueBackgroundColor, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zindexes.login, animation: 'fadein .15s ease-in'}),
 			dom.div(
-				reasonElem=reason ? dom.div(style({marginBottom: '2ex', textAlign: 'center'}), reason) : dom.div(),
+				reasonElem=reason ? dom.div(css('sessionError', {marginBottom: '2ex', textAlign: 'center'}), reason) : dom.div(),
 				dom.div(
-					style({backgroundColor: 'white', borderRadius: '.25em', padding: '1em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto', marginBottom: '20vh'}),
+					css('loginPopup', {
+						backgroundColor: styles.popupBackgroundColor,
+						boxShadow: styles.boxShadow,
+						border: '1px solid',
+						borderColor: styles.popupBorderColor,
+						borderRadius: '.25em',
+						padding: '1em',
+						maxWidth: '95vw',
+						overflowX: 'auto',
+						maxHeight: '95vh',
+						overflowY: 'auto',
+						marginBottom: '20vh',
+					}),
 					dom.form(
 						async function submit(e: SubmitEvent) {
 							e.preventDefault()
@@ -347,7 +382,7 @@ const envelopeIdentity = (l: api.MessageAddress[]): api.MessageAddress | null =>
 }
 
 // We can display keyboard shortcuts when a user clicks a button that has a shortcut.
-let shortcutElem = dom.div(style({fontSize: '2em', position: 'absolute', left: '.25em', bottom: '.25em', backgroundColor: '#888', padding: '0.25em .5em', color: 'white', borderRadius: '.15em'}))
+let shortcutElem = dom.div(css('shortcutFlash', {fontSize: '2em', position: 'absolute', left: '.25em', bottom: '.25em', backgroundColor: '#888', padding: '0.25em .5em', color: 'white', borderRadius: '.15em'}))
 let shortcutTimer = 0
 const showShortcut = (c: string) => {
 	if (!settings.showShortcuts) {
@@ -756,8 +791,9 @@ const flagList = (miv: MsgitemView): HTMLElement[] => {
 		}
 	}
 
-	return msgflags.map(t => dom.span(dom._class('msgitemflag'), t[1], attr.title(t[0])))
-		.concat(othermsgflags.map(t => dom.span(dom._class('msgitemflag'), dom._class('msgitemflagcollapsed'), t[1], attr.title(t[0]))))
+	const msgItemFlagStyle = css('msgItemFlag', {marginRight: '1px', fontWeight: 'normal', fontSize: '.9em'})
+	return msgflags.map(t => dom.span(msgItemFlagStyle, t[1], attr.title(t[0])))
+		.concat(othermsgflags.map(t => dom.span(msgItemFlagStyle, css('msgItemFlagCollapsed', {color: styles.colorMilder}), t[1], attr.title(t[0]))))
 }
 
 // Turn filters from the search bar into filters with the refine filters (buttons
@@ -976,7 +1012,7 @@ const popover = (target: HTMLElement, opts: {transparent?: boolean, fullscreen?:
 
 	let content: HTMLElement
 	const root = dom.div(
-		style({position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: zindexes.popover, backgroundColor: 'rgba(0, 0, 0, 0.2)'}),
+		css('popoverOverlay', {position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: zindexes.popover, backgroundColor: styles.overlayBackgroundColor}),
 		function click(e: MouseEvent) {
 			e.stopPropagation()
 			close()
@@ -989,17 +1025,20 @@ const popover = (target: HTMLElement, opts: {transparent?: boolean, fullscreen?:
 		},
 		content=dom.div(
 			attr.tabindex('0'),
-			style({
+			css('popoverContent', {
 				position: 'absolute',
 				overflowY: 'auto',
 			}),
 			posx, posy,
 			opts.transparent ? [] : [
-				style({
-					backgroundColor: 'white',
+				css('popoverContentOpaque', {
+					backgroundColor: styles.popupBackgroundColor,
 					padding: '1em',
 					borderRadius: '.15em',
-					boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)',
+					boxShadow: styles.boxShadow,
+					border: '1px solid',
+					borderColor: styles.popupBorderColor,
+					color: styles.popupColor,
 				}),
 				function click(e: MouseEvent) {
 					e.stopPropagation()
@@ -1039,7 +1078,7 @@ const popup = (...kids: ElemArg[]) => {
 	}
 	let content: HTMLElement
 	const root = dom.div(
-		style({position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0, 0, 0, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zindexes.popup}),
+		css('popupOverlay', {position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: styles.overlayBackgroundColor, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zindexes.popup}),
 		function keydown(e: KeyboardEvent) {
 			if (e.key === 'Escape') {
 				e.stopPropagation()
@@ -1052,7 +1091,7 @@ const popup = (...kids: ElemArg[]) => {
 		},
 		content=dom.div(
 			attr.tabindex('0'),
-			style({backgroundColor: 'white', borderRadius: '.25em', padding: '1em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto'}),
+			css('popupContent', {backgroundColor: styles.popupBackgroundColor, boxShadow: styles.boxShadow, border: '1px solid', borderColor: styles.popupBorderColor, borderRadius: '.25em', padding: '1em', maxWidth: '95vw', overflowX: 'auto', maxHeight: '95vh', overflowY: 'auto'}),
 			function click(e: MouseEvent) {
 				e.stopPropagation()
 			},
@@ -1077,7 +1116,7 @@ const cmdSettings = async () => {
 	}
 
 	const remove = popup(
-		style({padding: '1em 1em 2em 1em', minWidth: '30em'}),
+		css('popupSettings', {padding: '1em 1em 2em 1em', minWidth: '30em'}),
 		dom.h1('Settings'),
 		dom.form(
 			async function submit(e: SubmitEvent) {
@@ -1131,7 +1170,7 @@ const cmdSettings = async () => {
 // Show help popup, with shortcuts and basic explanation.
 const cmdHelp = async () => {
 	const remove = popup(
-		style({padding: '1em 1em 2em 1em'}),
+		css('popupHelp', {padding: '1em 1em 2em 1em'}),
 		dom.h1('Help and keyboard shortcuts'),
 		dom.div(style({display: 'flex'}),
 			dom.div(
@@ -1158,7 +1197,7 @@ const cmdHelp = async () => {
 					dom.tr(
 						dom.td('↓', ', j'),
 						dom.td('down one message'),
-						dom.td(attr.rowspan('6'), style({color: '#888', borderLeft: '2px solid #ddd', paddingLeft: '.5em'}), 'hold ctrl to only move focus', dom.br(), 'hold shift to expand selection'),
+						dom.td(attr.rowspan('6'), css('helpSideNote', {color: '#888', borderLeft: '2px solid', borderLeftColor: '#888', paddingLeft: '.5em'}), 'hold ctrl to only move focus', dom.br(), 'hold shift to expand selection'),
 					),
 					[
 						[['↑', ', k'], 'up one message'],
@@ -1324,7 +1363,7 @@ const cmdTooltip = async () => {
 			const title = e.getAttribute('title') || ''
 			const pos = e.getBoundingClientRect()
 			return dom.div(
-				style({position: 'absolute', backgroundColor: 'black', color: 'white', borderRadius: '.15em', padding: '.15em .25em', maxWidth: '50em'}),
+				css('tooltipContent', {position: 'absolute', backgroundColor: ['black', 'white'], color: ['white', 'black'], borderRadius: '.15em', padding: '.15em .25em', maxWidth: '50em'}),
 				pos.x < window.innerWidth/3 ?
 					style({left: ''+(pos.x)+'px'}) :
 					style({right: ''+(window.innerWidth - pos.x - pos.width)+'px'}),
@@ -1639,20 +1678,20 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 
 			const color = (v: api.SecurityResult) => {
 				if (v === api.SecurityResult.SecurityResultYes) {
-					return underlineGreen
+					return styles.underlineGreen
 				} else if (v === api.SecurityResult.SecurityResultNo) {
-					return underlineRed
+					return styles.underlineRed
 				} else if (v === api.SecurityResult.SecurityResultUnknown) {
-					return 'white'
+					return 'transparent'
 				}
-				return underlineGrey
+				return styles.underlineGrey
 			}
 			const setBar = (c0: string, c1: string, c2: string, c3: string, c4: string) => {
 				const stops = [
-					c0 + ' 0%', c0 + ' 19%', 'white 19%', 'white 20%',
-					c1 + ' 20%', c1 + ' 39%', 'white 39%', 'white 40%',
-					c2 + ' 40%', c2 + ' 59%', 'white 59%', 'white 60%',
-					c3 + ' 60%', c3 + ' 79%', 'white 79%', 'white 80%',
+					c0 + ' 0%', c0 + ' 19%', 'transparent 19%', 'transparent 20%',
+					c1 + ' 20%', c1 + ' 39%', 'transparent 39%', 'transparent 40%',
+					c2 + ' 40%', c2 + ' 59%', 'transparent 59%', 'transparent 60%',
+					c3 + ' 60%', c3 + ' 79%', 'transparent 79%', 'transparent 80%',
 					c4 + ' 80%', c4 + ' 100%',
 				].join(', ')
 				securityBar.style.borderImage = 'linear-gradient(to right, ' + stops + ') 1'
@@ -1740,8 +1779,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 					},
 				),
 				securityBar=dom.span(
-					dom._class('securitybar'),
-					style({
+					css('securitybar', {
 						margin: '0 1px',
 						borderBottom: '1.5px solid',
 						borderBottomColor: 'transparent',
@@ -1862,15 +1900,19 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	const initWidth = window.innerWidth === settings.composeViewportWidth ? settings.composeWidth : 0
 	const initHeight = window.innerHeight === settings.composeViewportHeight ? settings.composeHeight : 0
 
+	const composeTextMildStyle = css('composeTextMild', {textAlign: 'right', color: styles.colorMild})
+	const composeCellStyle = css('composeCell', {lineHeight: '1.5'})
+
 	const composeElem = dom.div(
-		style({
+		css('composePopup', {
 			position: 'fixed',
 			bottom: '1ex',
 			right: '1ex',
 			zIndex: zindexes.compose,
-			backgroundColor: 'white',
-			boxShadow: '0px 0px 20px rgba(0, 0, 0, 0.1)',
-			border: '1px solid #ccc',
+			backgroundColor: styles.popupBackgroundColor,
+			boxShadow: styles.boxShadow,
+			border: '1px solid',
+			borderColor: styles.popupBorderColor,
 			padding: '1em',
 			minWidth: '40em',
 			maxWidth: '95vw',
@@ -1881,7 +1923,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		initWidth ? style({width: initWidth+'px'}) : [],
 		initHeight ? style({height: initHeight+'px'}) : [],
 		dom.div(
-			style({position: 'absolute', marginTop: '-1em', marginLeft: '-1em', width: '1em', height: '1em', cursor: 'nw-resize'}),
+			css('composeResizeGrab', {position: 'absolute', marginTop: '-1em', marginLeft: '-1em', width: '1em', height: '1em', cursor: 'nw-resize'}),
 			function mousedown(e: MouseEvent) {
 				resizeLast = null
 				startDrag(e, (e: MouseEvent) => {
@@ -1904,13 +1946,13 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 			},
 		),
 		dom.form(
-			style({
+			css('composeForm', {
 				flexGrow: '1',
 				display: 'flex',
 				flexDirection: 'column',
 			}),
 			fieldset=dom.fieldset(
-				style({
+				css('composeFields', {
 					flexGrow: '1',
 					display: 'flex',
 					flexDirection: 'column',
@@ -1919,7 +1961,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 					style({width: '100%'}),
 					dom.tr(
 						dom.td(
-							style({textAlign: 'right', color: '#555'}),
+							composeTextMildStyle,
 							dom.span('From:'),
 						),
 						dom.td(
@@ -1949,23 +1991,23 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 						),
 					),
 					toRow=dom.tr(
-						dom.td('To:', style({textAlign: 'right', color: '#555'})),
-						toCell=dom.td(style({lineHeight: '1.5'})),
+						dom.td('To:', composeTextMildStyle),
+						toCell=dom.td(composeCellStyle),
 					),
 					replyToRow=dom.tr(
-						dom.td('Reply-To:', style({textAlign: 'right', color: '#555'})),
-						replyToCell=dom.td(style({lineHeight: '1.5'})),
+						dom.td('Reply-To:', composeTextMildStyle),
+						replyToCell=dom.td(composeCellStyle),
 					),
 					ccRow=dom.tr(
-						dom.td('Cc:', style({textAlign: 'right', color: '#555'})),
-						ccCell=dom.td(style({lineHeight: '1.5'})),
+						dom.td('Cc:', composeTextMildStyle),
+						ccCell=dom.td(composeCellStyle),
 					),
 					bccRow=dom.tr(
-						dom.td('Bcc:', style({textAlign: 'right', color: '#555'})),
-						bccCell=dom.td(style({lineHeight: '1.5'})),
+						dom.td('Bcc:', composeTextMildStyle),
+						bccCell=dom.td(composeCellStyle),
 					),
 					dom.tr(
-						dom.td('Subject:', style({textAlign: 'right', color: '#555'})),
+						dom.td('Subject:', composeTextMildStyle),
 						dom.td(
 							subjectAutosize=dom.span(
 								dom._class('autosize'),
@@ -2010,7 +2052,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 						const filename = a.Filename || '(unnamed)'
 						const size = formatSize(a.Part.DecodedSize)
 						const checkbox = dom.input(attr.type('checkbox'), function change() { checkAttachments() })
-						const root = dom.label(checkbox, ' '+filename+' ', dom.span('('+size+') ', style({color: '#666'})))
+						const root = dom.label(checkbox, ' '+filename+' ', dom.span('('+size+') ', styleClasses.textMild))
 						const v: ForwardAttachmentView = {
 							path: a.Path || [],
 							root: root,
@@ -2018,11 +2060,11 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 						}
 						return v
 					}),
-					dom.label(style({color: '#666'}), dom.input(attr.type('checkbox'), function change(e: Event) {
+					dom.label(styleClasses.textMild, dom.input(attr.type('checkbox'), function change(e: Event) {
 						forwardAttachmentViews.forEach(v => v.checkbox.checked = (e.target! as HTMLInputElement).checked)
 					}), ' (Toggle all)')
 				),
-				noAttachmentsWarning=dom.div(style({display: 'none', backgroundColor: '#fcd284', padding: '0.15em .25em', margin: '.5em 0'}), 'Message mentions attachments, but no files are attached.'),
+				noAttachmentsWarning=dom.div(style({display: 'none'}), css('composeNoAttachmentsWarning', {backgroundColor: styles.warningBackgroundColor, padding: '0.15em .25em', margin: '.5em 0'}), 'Message mentions attachments, but no files are attached.'),
 				dom.label(style({margin: '1ex 0', display: 'block'}), 'Attachments ', attachments=dom.input(attr.type('file'), attr.multiple(''), function change() { checkAttachments() })),
 				dom.label(
 					style({margin: '1ex 0', display: 'block'}),
@@ -2147,7 +2189,7 @@ const labelsPopover = (e: MouseEvent, msgs: api.Message[], possibleLabels: possi
 
 	const remove = popover(e.target! as HTMLElement, {},
 		dom.div(
-			style({display: 'flex', flexDirection: 'column', gap: '1ex'}),
+			css('popoverLabels', {display: 'flex', flexDirection: 'column', gap: '1ex'}),
 			knownLabels.map(l =>
 				dom.div(
 					dom.label(
@@ -2166,7 +2208,7 @@ const labelsPopover = (e: MouseEvent, msgs: api.Message[], possibleLabels: possi
 							},
 						),
 						' ',
-						dom.span(dom._class('keyword'), l),
+						dom.span(styleClasses.keyword, l),
 					),
 				)
 			),
@@ -2198,7 +2240,7 @@ const movePopover = (e: MouseEvent, mailboxes: api.Mailbox[], msgs: api.Message[
 
 	const remove = popover(e.target! as HTMLElement, {},
 		dom.div(
-			style({display: 'flex', flexDirection: 'column', gap: '.25em'}),
+			css('popoverMove', {display: 'flex', flexDirection: 'column', gap: '.25em'}),
 			mailboxes.map(mb =>
 				dom.div(
 					dom.clickbutton(
@@ -2357,7 +2399,12 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 	let ageTimer = 0
 
 	// Show with a tag if we are in the cc/bcc headers, or - if none.
-	const identityTag = (s: string, title: string) => dom.span(dom._class('msgitemidentity'), s, attr.title(title))
+	const identityTag = (s: string, title: string) =>
+		dom.span(
+			css('msgItemIdentity', {padding: '0 .15em', marginLeft: '.15em', borderRadius: '.15em', fontWeight: 'normal', fontSize: '.9em', whiteSpace: 'nowrap', backgroundColor: styles.backgroundColorMilder, color: styles.color, border: '1px solid', borderColor: styles.colorMilder}),
+			s,
+			attr.title(title),
+		)
 	const identityHeader: HTMLElement[] = []
 	if (!envelopeIdentity(mi.Envelope.From || []) && !envelopeIdentity(mi.Envelope.To || [])) {
 		if (envelopeIdentity(mi.Envelope.CC || [])) {
@@ -2444,7 +2491,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 		// Keywords are normally shown per message. For collapsed threads, we show the
 		// keywords of the thread root message as normal, and any additional keywords from
 		// children in a way that draws less attention.
-		const keywords = (m.Keywords || []).map(kw => dom.span(dom._class('keyword'), kw))
+		const keywords = (m.Keywords || []).map(kw => dom.span(styleClasses.keyword, kw))
 		if (msgitemView.isCollapsedThreadRoot()) {
 			const keywordsSeen = new Set<string>()
 			for (const kw of (m.Keywords || [])) {
@@ -2454,7 +2501,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 				for (const kw of (miv.messageitem.Message.Keywords || [])) {
 					if (!keywordsSeen.has(kw)) {
 						keywordsSeen.add(kw)
-						keywords.push(dom.span(dom._class('keyword'), dom._class('keywordcollapsed'), kw))
+						keywords.push(dom.span(styleClasses.keyword, dom._class('keywordCollapsed'), kw))
 					}
 				}
 			}
@@ -2536,7 +2583,9 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 					name = first.substring(0, 8) + '/.../' + last.substring(0, 8)
 				}
 			}
-			const e = dom.span(dom._class('msgitemmailbox'), isCollapsedKid ? dom._class('msgitemmailboxcollapsed') : [],
+			const e = dom.span(
+				css('msgItemMailbox', {padding: '0 .15em', marginLeft: '.15em', borderRadius: '.15em', fontWeight: 'normal', fontSize: '.9em', whiteSpace: 'nowrap', background: styles.backgroundColorMilder, color: ['white', '#ddd'], border: '1px solid', borderColor: styles.colorMilder}),
+				isCollapsedKid ? css('msgItemMailboxCollapsed', {background: '#eee', color: '#333'}, true) : [],
 				name === mb.Name ? [] : attr.title(mb.Name),
 				name,
 			)
@@ -2621,11 +2670,19 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 			]
 		}
 
+		const msgItemCellStyle = css('msgItemCell', {padding: '2px 4px'})
+
+		const msgItemStyle = css('msgItem', {display: 'flex', userSelect: 'none', cursor: 'pointer', borderRadius: '.15em', border: '1px solid transparent'})
+		ensureCSS('.msgItem.focus', {borderColor: styles.msgItemFocusBorderColor, border: '1px solid'})
+		ensureCSS('.msgItem:hover', {backgroundColor: styles.msgItemHoverBackgroundColor})
+		ensureCSS('.msgItem.active', {background: styles.msgItemActiveBackground})
+
 		// When rerendering, we remember active & focus states. So we don't have to make
 		// the caller also call redraw on MsglistView.
 		const active = msgitemView.root && msgitemView.root.classList.contains('active')
 		const focus = msgitemView.root && msgitemView.root.classList.contains('focus')
-		const elem = dom.div(dom._class('msgitem'),
+		const elem = dom.div(
+			msgItemStyle,
 			active ? dom._class('active') : [],
 			focus ? dom._class('focus') : [],
 			attr.draggable('true'),
@@ -2656,11 +2713,12 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 						msglistView.viewportEnsureMessages()
 					}
 				} : [],
-			isUnread() ? style({fontWeight: 'bold'}) : [],
+			isUnread() ? css('msgItemUnread', {fontWeight: 'bold'}) : [],
 			// Relevant means not muted and matching the query.
-			isRelevant() ? [] : style({opacity: '.4'}),
-			dom.div(dom._class('msgitemcell', 'msgitemflags'),
-				dom.div(style({display: 'flex', justifyContent: 'space-between'}),
+			isRelevant() ? [] : css('msgItemNotRelevant', {opacity: '.4'}),
+			dom.div(msgItemCellStyle, dom._class('msgItemFlags'),
+				dom.div(
+					css('msgItemFlagsSpread', {display: 'flex', justifyContent: 'space-between'}),
 					dom.div(flagList(msgitemView)),
 					!msgitemView.parent && msgitemView.kids.length > 0 && msgitemView.collapsed ?
 						dom.clickbutton('' + (1+msgitemView.descendants().length), attr.tabindex('-1'), attr.title('Expand thread.'), attr.arialabel('Expand thread.'), function click(e: MouseEvent) {
@@ -2681,29 +2739,34 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 						}) : [],
 				),
 			),
-			dom.div(dom._class('msgitemcell', 'msgitemfrom'),
-				dom.div(style({display: 'flex', justifyContent: 'space-between'}),
-					dom.div(dom._class('msgitemfromtext', 'silenttitle'), correspondents()),
+			dom.div(msgItemCellStyle, dom._class('msgItemFrom'),
+				dom.div(css('msgItemFromSpread', {display: 'flex', justifyContent: 'space-between'}),
+					dom.div(
+						dom._class('silenttitle'),
+						css('msgItemFromText', {whiteSpace: 'nowrap', overflow: 'hidden'}),
+						correspondents(),
+					),
 					identityHeader,
 				),
 				// Thread messages are connected by a vertical bar. The first and last message are
 				// only half the height of the item, to indicate start/end, and so it stands out
 				// from any thread above/below.
 				((msgitemView.parent || msgitemView.kids.length > 0) && !msgitemView.threadRoot().collapsed) ?
-					dom.div(dom._class('msgitemfromthreadbar'),
-						!msgitemView.parent ? style({top: '50%', bottom: '-1px'}) : (
+					dom.div(css('msgItemThreadBar', {position: 'absolute', right: 0, top: 0, bottom: 0, borderRight: '2px solid', borderRightColor: styles.colorMilder}),
+						!msgitemView.parent ? css('msgItemThreadBarFirst', {top: '50%', bottom: '-1px'}) : (
 							isThreadLast() ?
-								style({top: '-1px', bottom: '50%'}) :
-								style({top: '-1px', bottom: '-1px'})
+								css('msgItemThreadBarLast', {top: '-1px', bottom: '50%'}) :
+								css('msgItemThreadBarMiddle', {top: '-1px', bottom: '-1px'})
 						)
 					) : []
 			),
-			dom.div(dom._class('msgitemcell', 'msgitemsubject'),
-				dom.div(style({display: 'flex', justifyContent: 'space-between', position: 'relative'}),
-					dom.div(dom._class('msgitemsubjecttext'),
-						threadIndent > 0 ? dom.span(threadChar, style({paddingLeft: (threadIndent/2)+'em', color: '#444', fontWeight: 'normal'}), threadCharTitle ? attr.title(threadCharTitle) : []) : [],
+			dom.div(msgItemCellStyle, css('msgItemSubject', {position: 'relative'}),
+				dom.div(css('msgItemSubjectSpread', {display: 'flex', justifyContent: 'space-between', position: 'relative'}),
+					dom.div(
+						css('msgItemSubjectText', {whiteSpace: 'nowrap', overflow: 'hidden'}),
+						threadIndent > 0 ? dom.span(threadChar, style({paddingLeft: (threadIndent/2)+'em'}), css('msgItemThreadChar', {opacity: '.75', fontWeight: 'normal'}), threadCharTitle ? attr.title(threadCharTitle) : []) : [],
 						msgitemView.parent ? [] : mi.Envelope.Subject || '(no subject)',
-						dom.span(dom._class('msgitemsubjectsnippet'), ' '+mi.FirstLine),
+						dom.span(css('msgItemSubjectSnippet', {fontWeight: 'normal', color: styles.colorMilder}), ' '+mi.FirstLine),
 					),
 					dom.div(
 						keywords,
@@ -2711,7 +2774,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 					),
 				),
 			),
-			dom.div(dom._class('msgitemcell', 'msgitemage'), age(received())),
+			dom.div(msgItemCellStyle, dom._class('msgItemAge'), age(received())),
 			function click(e: MouseEvent) {
 				e.preventDefault()
 				e.stopPropagation()
@@ -3018,15 +3081,15 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			(p.MediaType + '/' + p.MediaSubType).toLowerCase(),
 			p.ContentTypeParams ? ' '+JSON.stringify(p.ContentTypeParams) : [],
 			p.Parts && p.Parts.length === 0 ? [] : dom.ul(
-				style({listStyle: 'disc', marginLeft: '1em'}),
+				css('internalsList', {listStyle: 'disc', marginLeft: '1em'}),
 				(p.Parts || []).map(pp => mimepart(pp))
 			)
 		)
 		popup(
-			style({display: 'flex', gap: '1em'}),
-			dom.div(dom.h1('Mime structure'), dom.ul(style({listStyle: 'disc', marginLeft: '1em'}), mimepart(pm.Part))),
-			dom.div(style({whiteSpace: 'pre-wrap', tabSize: 4, maxWidth: '50%'}), dom.h1('Message'), JSON.stringify(m, undefined, '\t')),
-			dom.div(style({whiteSpace: 'pre-wrap', tabSize: 4, maxWidth: '50%'}), dom.h1('Part'), JSON.stringify(pm.Part, undefined, '\t')),
+			css('popupInternals', {display: 'flex', gap: '1em'}),
+			dom.div(dom.h1('Mime structure'), dom.ul(css('internalsList', {listStyle: 'disc', marginLeft: '1em'}), mimepart(pm.Part))),
+			dom.div(css('internalsMessage', {whiteSpace: 'pre-wrap', tabSize: 4, maxWidth: '50%'}), dom.h1('Message'), JSON.stringify(m, undefined, '\t')),
+			dom.div(css('internalsParts', {whiteSpace: 'pre-wrap', tabSize: 4, maxWidth: '50%'}), dom.h1('Part'), JSON.stringify(pm.Part, undefined, '\t')),
 		)
 	}
 
@@ -3072,26 +3135,26 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	let msgheaderdetailsElem: HTMLElement | null = null // When full headers are visible, or some headers are requested through settings.
 
 	const msgmetaElem = dom.div(
-		style({backgroundColor: '#f8f8f8', borderBottom: '5px solid white', maxHeight: '90%', overflowY: 'auto'}),
+		css('msgmeta', {backgroundColor: styles.backgroundColorMild, borderBottom: '5px solid', borderBottomColor: ['white', 'black'], maxHeight: '90%', overflowY: 'auto'}),
 		attr.role('region'), attr.arialabel('Buttons and headers for message'),
 		msgbuttonElem=dom.div(),
 		dom.div(
 			attr.arialive('assertive'),
-			msgheaderElem=dom.table(dom._class('msgheaders'), style({marginBottom: '1ex', width: '100%'})),
+			msgheaderElem=dom.table(styleClasses.msgHeaders),
 			msgattachmentElem=dom.div(),
 			msgmodeElem=dom.div(),
 		),
-		// Explicit gray line with white border below that separates headers from body, to
+		// Explicit separator that separates headers from body, to
 		// prevent HTML messages from faking UI elements.
-		dom.div(style({height: '2px', backgroundColor: '#ccc'})),
+		dom.div(css('headerBodySeparator', {height: '2px', backgroundColor: styles.borderColor})),
 	)
 
-	const msgscrollElem = dom.div(dom._class('pad', 'yscrollauto'),
+	const msgscrollElem = dom.div(dom._class('pad'), yscrollAutoStyle,
 		attr.role('region'), attr.arialabel('Message body'),
-		style({backgroundColor: 'white'}),
+		css('msgscroll', {backgroundColor: styles.backgroundColor}),
 	)
-	const msgcontentElem = dom.div(dom._class('scrollparent'),
-		style({flexGrow: '1'}),
+	const msgcontentElem = dom.div(
+		css('scrollparent', {position: 'relative', flexGrow: '1'}),
 	)
 
 	const trashMailboxID = listMailboxes().find(mb => mb.Trash)?.ID
@@ -3121,7 +3184,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				dom.clickbutton('More...', attr.title('Show more actions.'), function click(e: MouseEvent) {
 					popover(e.target! as HTMLElement, {transparent: true},
 						dom.div(
-							style({display: 'flex', flexDirection: 'column', gap: '.5ex', textAlign: 'right'}),
+							css('popupMore', {display: 'flex', flexDirection: 'column', gap: '.5ex', textAlign: 'right'}),
 							[
 								dom.clickbutton('Print', attr.title('Print message, opens in new tab and opens print dialog.'), clickCmd(cmdPrint, shortcuts)),
 								dom.clickbutton('Mark Not Junk', attr.title('Mark as not junk, causing this message to be used in spam classification of new incoming messages.'), clickCmd(msglistView.cmdMarkNotJunk, shortcuts)),
@@ -3143,6 +3206,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 
 	loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword, false)
 
+	const headerTextMildStyle = css('headerTextMild', {textAlign: 'right', color: styles.colorMild})
+
 	const loadHeaderDetails = (pm: api.ParsedMessage) => {
 		if (msgheaderdetailsElem) {
 			msgheaderdetailsElem.remove()
@@ -3152,11 +3217,11 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			return
 		}
 		msgheaderdetailsElem = dom.table(
-			style({marginBottom: '1ex', width: '100%'}),
+			css('msgHeaderDetails', {marginBottom: '1ex', width: '100%'}),
 			Object.entries(pm.Headers || {}).sort().map(t =>
 				(t[1] || []).map(v =>
 					dom.tr(
-						dom.td(t[0]+':', style({textAlign: 'right', color: '#555'})),
+						dom.td(t[0]+':', headerTextMildStyle),
 						dom.td(v),
 					)
 				)
@@ -3218,18 +3283,21 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			Escape: cmdViewClose,
 		}
 
+		const attachmentsArrowStyle = css('attachmentsArrow', {color: styles.backgroundColor, backgroundColor: styles.color, width: '2em', height: '2em', borderRadius: '1em', lineHeight: '2em', textAlign: 'center', fontWeight: 'bold'})
+		const attachmentsIframeStyle = css('attachmentsIframe', {flexGrow: 1, boxShadow: styles.boxShadow, backgroundColor: styles.popupBackgroundColor, margin: '0 5em'})
+
 		let content: HTMLElement
 		const popupRoot = dom.div(
-			style({position: 'fixed', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.2)', display: 'flex', flexDirection: 'column', alignContent: 'stretch', padding: '1em', zIndex: zindexes.attachments}),
+			css('attachmentsOverlay', {position: 'fixed', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: styles.overlayBackgroundColor, display: 'flex', flexDirection: 'column', alignContent: 'stretch', padding: '1em', zIndex: zindexes.attachments}),
 			function click(e: MouseEvent) {
 				e.stopPropagation()
 				cmdViewClose()
 			},
 			attr.tabindex('0'),
 			!(index > 0) ? [] : dom.div(
-				style({position: 'absolute', left: '1em', top: 0, bottom: 0, fontSize: '1.5em', width: '2em', display: 'flex', alignItems: 'center', cursor: 'pointer'}),
+				css('attachmentsPrevious', {position: 'absolute', left: '1em', top: 0, bottom: 0, fontSize: '1.5em', width: '2em', display: 'flex', alignItems: 'center', cursor: 'pointer'}),
 				dom.div(dom._class('silenttitle'),
-					style({backgroundColor: 'rgba(0, 0, 0, .8)', color: 'white', width: '2em', height: '2em', borderRadius: '1em', lineHeight: '2em', textAlign: 'center', fontWeight: 'bold'}),
+					attachmentsArrowStyle,
 					attr.title('To previous viewable attachment.'),
 					'←',
 				),
@@ -3238,12 +3306,12 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				enterCmd(cmdViewPrev, attachShortcuts),
 			),
 			dom.div(
-				style({textAlign: 'center', paddingBottom: '30px'}),
+				css('attachmentsDownloadHeaderBox', {textAlign: 'center', paddingBottom: '30px'}),
 				dom.span(dom._class('pad'),
 					function click(e: MouseEvent) {
 						e.stopPropagation()
 					},
-					style({backgroundColor: 'white', borderRadius: '.25em', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', border: '1px solid #ddd'}),
+					css('attachmentsDownloadHeader', {backgroundColor: styles.popupBackgroundColor, color: styles.popupColor, boxShadow: styles.boxShadow, border: '1px solid', borderColor: styles.popupBorderColor, borderRadius: '.25em'}),
 					a.Filename || '(unnamed)', ' - ',
 					formatSize(a.Part.DecodedSize), ' - ',
 					dom.a('Download', attr.download(''), attr.href('msg/'+m.ID+'/download/'+pathStr), function click(e: MouseEvent) { e.stopPropagation() }),
@@ -3251,35 +3319,35 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			),
 			isImage(a) ?
 				dom.div(
-					style({flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100% - 50px)', margin: '0 5em'}),
+					css('attachmentsImageBox', {flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100% - 50px)', margin: '0 5em'}),
 					dom.img(
-						attr.src('msg/'+m.ID+'/view/'+pathStr),
-						style({backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', margin: '0 30px'})
+						css('attachmentsImage', {maxWidth: '100%', maxHeight: '100%', boxShadow: styles.boxShadow , margin: '0 30px'}),
+						attr.src('msg/'+m.ID+'/view/'+pathStr)
 					),
 				) : (
 					isText(a) ?
 						dom.iframe(
 							attr.title('Attachment shown as text.'),
-							style({flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em'}),
+							attachmentsIframeStyle,
 							attr.src('msg/'+m.ID+'/viewtext/'+pathStr)
 						) : (
 							isPDF(a) ?
 								dom.iframe(
-									style({flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em'}),
 									attr.title('Attachment as PDF.'),
+									attachmentsIframeStyle,
 									attr.src('msg/'+m.ID+'/view/'+pathStr)
 								) :
 								content=dom.div(
 									function click(e: MouseEvent) {
 										e.stopPropagation()
 									},
-									style({minWidth: '30em', padding: '2ex', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em', textAlign: 'center'}),
+									css('attachmentsBinary', {minWidth: '30em', padding: '2ex', boxShadow: styles.boxShadow, backgroundColor: styles.popupBackgroundColor, margin: '0 5em', textAlign: 'center'}),
 									dom.div(style({marginBottom: '2ex'}), 'Attachment could be a binary file.'),
 									dom.clickbutton('View as text', function click() {
 										content.replaceWith(
 											dom.iframe(
 												attr.title('Attachment shown as text, though it could be a binary file.'),
-												style({flexGrow: 1, boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)', backgroundColor: 'white', margin: '0 5em'}),
+												attachmentsIframeStyle,
 												attr.src('msg/'+m.ID+'/viewtext/'+pathStr)
 											)
 										)
@@ -3288,9 +3356,9 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 					)
 				),
 			!(index < attachments.length-1) ? [] : dom.div(
-				style({position: 'absolute', right: '1em', top: 0, bottom: 0, fontSize: '1.5em', width: '2em', display: 'flex', alignItems: 'center', cursor: 'pointer'}),
+				css('attachmentsNext', {position: 'absolute', right: '1em', top: 0, bottom: 0, fontSize: '1.5em', width: '2em', display: 'flex', alignItems: 'center', cursor: 'pointer'}),
 				dom.div(dom._class('silenttitle'),
-					style({backgroundColor: 'rgba(0, 0, 0, .8)', color: 'white', width: '2em', height: '2em', borderRadius: '1em', lineHeight: '2em', textAlign: 'center', fontWeight: 'bold'}),
+					attachmentsArrowStyle,
 					attr.title('To next viewable attachment.'),
 					'→',
 				),
@@ -3309,7 +3377,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		const l = mi.Attachments || []
 		dom._kids(msgattachmentElem,
 			(l && l.length === 0) ? [] : dom.div(
-				style({borderTop: '1px solid #ccc'}),
+				css('inlineAttachmentsSeparator', {borderTop: '1px solid', borderTopColor: styles.borderColor}),
 				dom.div(dom._class('pad'),
 					'Attachments: ',
 					l.slice(0, filesAll ? l.length : 4).map(a => {
@@ -3339,7 +3407,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	}
 	renderAttachments()
 
-	const root = dom.div(style({position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column'}))
+	const root = dom.div(css('msgViewRoot', {position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', flexDirection: 'column'}))
 	dom._kids(root, msgmetaElem, msgcontentElem)
 
 	const loadText = (pm: api.ParsedMessage): void => {
@@ -3354,11 +3422,11 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				const pathStr = [0].concat(f.Path || []).join('.')
 				return dom.div(
 					dom.div(
-						style({flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100% - 50px)'}),
+						css('msgAttachmentBox', {flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100% - 50px)'}),
 						dom.img(
 							attr.src('msg/'+m.ID+'/view/'+pathStr),
 							attr.title(f.Filename),
-							style({backgroundColor: 'white', maxWidth: '100%', maxHeight: '100%', boxShadow: '0 0 20px rgba(0, 0, 0, 0.1)'})
+							css('msgInlineImage', {boxShadow: styles.boxShadow, maxWidth: '100%', maxHeight: '100%'})
 						),
 					)
 				)
@@ -3376,7 +3444,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				attr.tabindex('0'),
 				attr.title('HTML version of message with images inlined, without external resources loaded.'),
 				attr.src('msg/'+m.ID+'/'+urlType),
-				style({border: '0', position: 'absolute', width: '100%', height: '100%', backgroundColor: 'white'}),
+				css('msgIframeHTML', {position: 'absolute', width: '100%', height: '100%'}),
 			)
 		)
 		renderAttachments() // Rerender opaciy on inline images.
@@ -3388,7 +3456,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 				attr.tabindex('0'),
 				attr.title('HTML version of message with images inlined and with external resources loaded.'),
 				attr.src('msg/'+m.ID+'/'+urlType),
-				style({border: '0', position: 'absolute', width: '100%', height: '100%', backgroundColor: 'white'}),
+				css('msgIframeHTML', {position: 'absolute', width: '100%', height: '100%'}),
 			)
 		)
 		renderAttachments() // Rerender opaciy on inline images.
@@ -3408,7 +3476,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			}
 			vl.forEach(v => {
 				const e = dom.tr(
-					dom.td(k+':', style({textAlign: 'right', color: '#555', whiteSpace: 'nowrap'})),
+					dom.td(k+':', headerTextMildStyle, style({whiteSpace: 'nowrap'})),
 					dom.td(v),
 				)
 				msgheaderElem.appendChild(e)
@@ -3453,14 +3521,17 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		loadHeaderDetails(pm)
 		loadMoreHeaders(pm)
 
+		const msgHeaderSeparatorStyle = css('msgHeaderSeparator', {borderTop: '1px solid', borderTopColor: styles.borderColor})
+		const msgModeWarningStyle = css('msgModeWarning', {backgroundColor: styles.warningBackgroundColor, padding: '0 .15em'})
+
 		const htmlNote = 'In the HTML viewer, the following potentially dangerous functionality is disabled: submitting forms, starting a download from a link, navigating away from this page by clicking a link. If a link does not work, try explicitly opening it in a new tab.'
 		const haveText = pm.Texts && pm.Texts.length > 0
 		if (!haveText && !pm.HasHTML) {
 			dom._kids(msgcontentElem)
 			dom._kids(msgmodeElem,
 				dom.div(dom._class('pad'),
-					style({borderTop: '1px solid #ccc'}),
-					dom.span('No textual content', style({backgroundColor: '#ffca91', padding: '0 .15em'})),
+					msgHeaderSeparatorStyle,
+					dom.span('No textual content', msgModeWarningStyle),
 				),
 			)
 		} else if (haveText && !pm.HasHTML) {
@@ -3470,8 +3541,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			const text = haveText && (pm.ViewMode == api.ViewMode.ModeText || pm.ViewMode == api.ViewMode.ModeDefault && !settings.showHTML)
 			dom._kids(msgmodeElem,
 				dom.div(dom._class('pad'),
-					style({borderTop: '1px solid #ccc'}),
-					!haveText ? dom.span('HTML-only message', attr.title(htmlNote), style({backgroundColor: '#ffca91', padding: '0 .15em', marginRight: '.25em'})) : [],
+					msgHeaderSeparatorStyle,
+					!haveText ? dom.span('HTML-only message', attr.title(htmlNote), msgModeWarningStyle, style({marginRight: '.25em'})) : [],
 					dom.span(dom._class('btngroup'),
 						haveText ? textbtn=dom.clickbutton(text ? dom._class('active') : [], 'Text', clickCmd(cmdShowText, shortcuts)) : [],
 						htmlbtn=dom.clickbutton(text || pm.ViewMode != api.ViewMode.ModeHTML ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
@@ -3963,9 +4034,9 @@ const newMsglistView = (msgElem: HTMLElement, listMailboxes: listMailboxes, setL
 			dom._kids(msgElem,
 				dom.div(
 					attr.role('region'), attr.arialabel('Buttons for multiple messages'),
-					style({position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}),
+					css('multimsgBg', {position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}),
 					dom.div(
-						style({padding: '4ex', backgroundColor: 'white', borderRadius: '.25em', border: '1px solid #ccc'}),
+						css('multimsgBox', {backgroundColor: styles.backgroundColor, border: '1px solid', borderColor: styles.borderColor, padding: '4ex', borderRadius: '.25em'}),
 						dom.div(
 							style({textAlign: 'center', marginBottom: '4ex'}),
 							''+effselected.length+' messages selected',
@@ -4972,7 +5043,7 @@ const popoverExport = (reference: HTMLElement, mailboxName: string) => {
 			dom.input(attr.type('hidden'), attr.name('csrf'), attr.value(localStorageGet('webmailcsrftoken') || '')),
 			dom.input(attr.type('hidden'), attr.name('mailbox'), attr.value(mailboxName)),
 
-			dom.div(style({display: 'flex', flexDirection: 'column', gap: '.5ex'}),
+			dom.div(css('exportFields', {display: 'flex', flexDirection: 'column', gap: '.5ex'}),
 				dom.div(
 					dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('maildir'), attr.checked('')), ' Maildir'), ' ',
 					dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('mbox')), ' Mbox'),
@@ -5005,7 +5076,7 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 		mailboxlistView.updateHidden()
 		mbv.root.focus()
 	}
-	const collapseElem = dom.span(dom._class('mailboxcollapse'), minusbox, function click(e: MouseEvent) {
+	const collapseElem = dom.span(dom._class('mailboxCollapse'), minusbox, function click(e: MouseEvent) {
 		e.stopPropagation()
 		cmdCollapse()
 	})
@@ -5113,7 +5184,17 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 	// leave event from browsers, we get events for multiple of this elements children.
 	let drags = 0
 
-	const root = dom.div(dom._class('mailboxitem'),
+	const mailboxItemStyle = css('mailboxItem', {cursor: 'pointer', borderRadius: '.15em', userSelect: 'none'})
+	ensureCSS('.mailboxItem.dropping', {background: styles.highlightBackground}, true)
+	ensureCSS('.mailboxItem:hover', {backgroundColor: styles.mailboxHoverBackgroundColor})
+	ensureCSS('.mailboxItem.active', { background: styles.mailboxActiveBackground})
+	ensureCSS('.mailboxHoverOnly', {visibility: 'hidden'})
+	ensureCSS('.mailboxItem:hover .mailboxHoverOnly, .mailboxItem:focus .mailboxHoverOnly', {visibility: 'visible'})
+	ensureCSS('.mailboxCollapse', {visibility: 'hidden'})
+	ensureCSS('.mailboxItem:hover .mailboxCollapse, .mailboxItem:focus .mailboxCollapse', {visibility: 'visible'})
+
+	const root = dom.div(
+		mailboxItemStyle,
 		attr.tabindex('0'),
 		async function keydown(e: KeyboardEvent) {
 			if (e.key === 'Enter') {
@@ -5179,12 +5260,12 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 				await moveAskRuleset(msgID, mbSrcID, xmb, mailboxlistView.mailboxes())
 			}
 		},
-		dom.div(dom._class('mailbox'),
-			style({display: 'flex', justifyContent: 'space-between'}),
-			name=dom.div(style({whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'})),
+		dom.div(
+			css('mailbox', {padding: '.15em .25em', display: 'flex', justifyContent: 'space-between'}),
+			name=dom.div(css('mailboxName', {whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'})),
 			dom.div(
 				style({whiteSpace: 'nowrap'}),
-				actionBtn=dom.clickbutton(dom._class('mailboxhoveronly'),
+				actionBtn=dom.clickbutton(dom._class('mailboxHoverOnly'),
 					'...',
 					attr.tabindex('-1'), // Without, tab breaks because this disappears when mailbox loses focus.
 					attr.arialabel('Mailbox actions'),
@@ -5390,7 +5471,7 @@ const newMailboxlistView = (msglistView: MsglistView, requestNewView: requestNew
 	dom._kids(root,
 		dom.div(attr.role('region'), attr.arialabel('Mailboxes'),
 			dom.div(
-				dom.h1('Mailboxes', style({display: 'inline', fontSize: 'inherit'})),
+				dom.h1('Mailboxes', css('mailboxesTitle', {display: 'inline', fontSize: 'inherit'})),
 				' ',
 
 				dom.clickbutton(
@@ -5401,7 +5482,7 @@ const newMailboxlistView = (msglistView: MsglistView, requestNewView: requestNew
 						e.stopPropagation()
 
 						const remove = popover(e.target! as HTMLElement, {transparent: true},
-							dom.div(style({display: 'flex', flexDirection: 'column', gap: '.5ex'}),
+							dom.div(css('mailboxesActions', {display: 'flex', flexDirection: 'column', gap: '.5ex'}),
 								dom.div(
 									dom.clickbutton('Create mailbox', attr.arialabel('Create new mailbox.'), attr.title('Create new mailbox.'), style({padding: '0 .25em'}), function click(e: MouseEvent) {
 										let fieldset: HTMLFieldSetElement
@@ -5858,8 +5939,11 @@ const newSearchView = (searchbarElem: HTMLInputElement, mailboxlistView: Mailbox
 		updateSearchbar()
 	}
 
+	const searchTableStyle = css('searchTable', {width: '100%'})
+	ensureCSS('.searchTable td', {padding: '.25em'})
+
 	const root = dom.div(
-		style({position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.2)', zIndex: zindexes.compose}),
+		css('searchOverlay', {position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: styles.overlayBackgroundColor, zIndex: zindexes.compose}),
 		function click(e: MouseEvent) {
 			e.stopPropagation()
 			searchViewClose()
@@ -5871,14 +5955,14 @@ const newSearchView = (searchbarElem: HTMLInputElement, mailboxlistView: Mailbox
 			}
 		},
 		dom.search(
-			style({position: 'absolute', width: '50em', padding: '.5ex', backgroundColor: 'white', boxShadow: '0px 0px 20px rgba(0, 0, 0, 0.1)', borderRadius: '.15em'}),
+			css('searchContent', {position: 'absolute', width: '50em', padding: '.5ex', backgroundColor: styles.popupBackgroundColor, boxShadow: styles.boxShadow, border: '1px solid', borderColor: styles.popupBorderColor, color: styles.popupColor, borderRadius: '.15em'}),
 			function click(e: MouseEvent) {
 				e.stopPropagation()
 			},
 			// This is a separate form, inside the form with the overall search field because
 			// when updating the form based on the parsed searchbar, we first need to reset it.
 			form=dom.form(
-				dom.table(dom._class('search'), style({width: '100%'}),
+				dom.table(searchTableStyle,
 					dom.tr(
 						dom.td(dom.label('Mailbox', attr.for('searchMailbox')), attr.title('Filter by mailbox, including children of the mailbox.')),
 						dom.td(
@@ -5990,7 +6074,10 @@ const newSearchView = (searchbarElem: HTMLInputElement, mailboxlistView: Mailbox
 										updateSearchbar()
 									}),
 									update: () => {
-										v.root.style.backgroundColor = v.active === true ? '#c4ffa9' : (v.active === false ? '#ffb192' : '')
+										css('searchFlagTrue', {backgroundColor: styles.buttonTristateOnBackground}, true)
+										css('searchFlagFalse', {backgroundColor: styles.buttonTristateOffBackground}, true)
+										v.root.classList.toggle('searchFlagTrue', v.active===true)
+										v.root.classList.toggle('searchFlagFalse', v.active===false)
 									},
 								}
 								return v
@@ -6097,9 +6184,9 @@ const init = async () => {
 	let queryactivityElem: HTMLElement // We show ... when a query is active and data is forthcoming.
 
 	// Shown at the bottom of msglistscrollElem, immediately below the msglistView, when appropriate.
-	const listendElem = dom.div(style({borderTop: '1px solid #ccc', color: '#666', margin: '1ex'}))
-	const listloadingElem = dom.div(style({textAlign: 'center', padding: '.15em 0', color: '#333', border: '1px solid #ccc', margin: '1ex', backgroundColor: '#f8f8f8'}), 'loading...')
-	const listerrElem = dom.div(style({textAlign: 'center', padding: '.15em 0', color: '#333', border: '1px solid #ccc', margin: '1ex', backgroundColor: '#f8f8f8'}))
+	const listendElem = dom.div(css('msgListEnd', {borderTop: '1px solid', borderColor: styles.borderColor, color: styles.colorMilder, margin: '1ex'}))
+	const listloadingElem = dom.div(css('msgListLoading', {textAlign: 'center', padding: '.15em 0', color: styles.colorMild, border: '1px solid', borderColor: styles.borderColor, margin: '1ex', backgroundColor: styles.backgroundColorMild}), 'loading...')
+	const listerrElem = dom.div(css('msgListErr', {textAlign: 'center', padding: '.15em 0', color: styles.colorMild, border: '1px solid', borderColor: styles.borderColor, margin: '1ex', backgroundColor: styles.backgroundColorMild}))
 
 	let sseID = 0 // Sent by server in initial SSE response. We use it in API calls to make the SSE endpoint return new data we need.
 	let viewSequence = 0 // Counter for assigning viewID.
@@ -6148,12 +6235,12 @@ const init = async () => {
 	const loadSearch = (q: string) => {
 		search = {active: true, query: q}
 		searchbarElem.value = q
-		searchbarElem.style.background = 'linear-gradient(135deg, #ffc7ab 0%, #ffdeab 100%)' // Cleared when another view is loaded.
+		searchbarElem.classList.toggle('searchbarActive', true) // Cleared when another view is loaded.
 		searchbarElemBox.style.flexGrow = '4'
 	}
 	const unloadSearch = () => {
 		searchbarElem.value = ''
-		searchbarElem.style.background = ''
+		searchbarElem.classList.toggle('searchbarActive', false)
 		searchbarElem.style.zIndex = ''
 		searchbarElemBox.style.flexGrow = '' // Make search bar smaller again.
 		search = {active: false, query: ''}
@@ -6222,8 +6309,7 @@ const init = async () => {
 
 	// msgElem can show a message, show actions on multiple messages, or be empty.
 	let msgElem = dom.div(
-		style({position: 'absolute', right: 0, left: 0, top: 0, bottom: 0}),
-		style({backgroundColor: '#f8f8f8'}),
+		css('msgElem', {position: 'absolute', right: 0, left: 0, top: 0, bottom: 0, backgroundColor: styles.backgroundColorMild}),
 	)
 
 	// Returns possible labels based, either from active mailbox (possibly from search), or all mailboxes.
@@ -6281,13 +6367,14 @@ const init = async () => {
 
 	let threadMode: HTMLSelectElement
 
-	let msglistElem = dom.div(dom._class('msglist'),
-		style({position: 'absolute', left: '0', right: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column'}),
+	const msgColumnDraggerStyle = css('msgColumnDragger', {position: 'absolute', top: 0, bottom: 0, width: '1px', backgroundColor: styles.popupBorderColor, left: '2.5px'})
+
+	let msglistElem = dom.div(css('msgList', {backgroundColor: styles.msglistBackgroundColor, position: 'absolute', left: '0', right: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column'}),
 		dom.div(
 			attr.role('region'), attr.arialabel('Filter and sorting buttons for message list'),
-			style({display: 'flex', justifyContent: 'space-between', backgroundColor: '#f8f8f8', borderBottom: '1px solid #ccc', padding: '.25em .5em'}),
+			css('msgListFilterSorting', {display: 'flex', justifyContent: 'space-between', backgroundColor: styles.backgroundColorMild, borderBottom: '1px solid', borderBottomColor: styles.borderColor, padding: '.25em .5em'}),
 			dom.div(
-				dom.h1('Refine:', style({fontWeight: 'normal', fontSize: 'inherit', display: 'inline', margin: 0}), attr.title('Refine message listing with quick filters. These refinement filters are in addition to any search criteria, but the refine attachment filter overrides a search attachment criteria.')),
+				dom.h1('Refine:', css('refineTitle', {fontWeight: 'normal', fontSize: 'inherit', display: 'inline', margin: 0}), attr.title('Refine message listing with quick filters. These refinement filters are in addition to any search criteria, but the refine attachment filter overrides a search attachment criteria.')),
 				' ',
 				dom.span(dom._class('btngroup'),
 					refineUnreadBtn=dom.clickbutton(settings.refine === 'unread' ? dom._class('active') : [],
@@ -6333,7 +6420,7 @@ const init = async () => {
 											remove()
 										}
 										return dom.div(
-											dom.clickbutton(dom._class('keyword'), l, async function click() {
+											dom.clickbutton(styleClasses.keyword, keywordButtonStyle, l, async function click() {
 												await selectLabel()
 											}),
 										)
@@ -6390,9 +6477,9 @@ const init = async () => {
 		),
 		dom.div(
 			style({height: '1ex', position: 'relative'}),
-			dom.div(dom._class('msgitemflags')),
-			dom.div(dom._class('msgitemflagsoffset'), style({position: 'absolute', width: '6px', top: 0, bottom: 0, marginLeft: '-3px', cursor: 'ew-resize'}),
-				dom.div(style({position: 'absolute', top: 0, bottom: 0, width: '1px', backgroundColor: '#aaa', left: '2.5px'})),
+			dom.div(dom._class('msgItemFlags')),
+			dom.div(dom._class('msgItemFlagsOffset'), css('msgItemFlagsGrab', {position: 'absolute', width: '6px', top: 0, bottom: 0, marginLeft: '-3px', cursor: 'ew-resize'}),
+				dom.div(msgColumnDraggerStyle),
 				function mousedown(e: MouseEvent) {
 					startDrag(e, (e) => {
 						const bounds = msglistscrollElem.getBoundingClientRect()
@@ -6402,9 +6489,9 @@ const init = async () => {
 					})
 				}
 			),
-			dom.div(dom._class('msgitemfrom')),
-			dom.div(dom._class('msgitemfromoffset'), style({position: 'absolute', width: '6px', top: 0, bottom: 0, marginLeft: '-3px', cursor: 'ew-resize'}),
-				dom.div(style({position: 'absolute', top: 0, bottom: 0, width: '1px', backgroundColor: '#aaa', left: '2.5px'})),
+			dom.div(dom._class('msgItemFrom')),
+			dom.div(dom._class('msgItemFromOffset'), css('msgItemFlagsGrab', {position: 'absolute', width: '6px', top: 0, bottom: 0, marginLeft: '-3px', cursor: 'ew-resize'}),
+				dom.div(msgColumnDraggerStyle),
 				function mousedown(e: MouseEvent) {
 					startDrag(e, (e) => {
 						const bounds = msglistscrollElem.getBoundingClientRect()
@@ -6416,9 +6503,9 @@ const init = async () => {
 					})
 				}
 			),
-			dom.div(dom._class('msgitemsubject')),
-			dom.div(dom._class('msgitemsubjectoffset'), style({position: 'absolute', width: '6px', top: 0, bottom: 0, marginLeft: '-3px', cursor: 'ew-resize'}),
-				dom.div(style({position: 'absolute', top: 0, bottom: 0, width: '1px', backgroundColor: '#aaa', left: '2.5px'})),
+			dom.div(dom._class('msgItemSubject')),
+			dom.div(dom._class('msgItemSubjectOffset'), css('msgItemFlagsGrab', {position: 'absolute', width: '6px', top: 0, bottom: 0, marginLeft: '-3px', cursor: 'ew-resize'}),
+				dom.div(msgColumnDraggerStyle),
 				function mousedown(e: MouseEvent) {
 					startDrag(e, (e) => {
 						const bounds = msglistscrollElem.getBoundingClientRect()
@@ -6428,11 +6515,11 @@ const init = async () => {
 					})
 				}
 			),
-			dom.div(dom._class('msgitemage')),
+			dom.div(dom._class('msgItemAge')),
 		),
 		dom.div(
 			style({flexGrow: '1', position: 'relative'}),
-			msglistscrollElem=dom.div(dom._class('yscroll'),
+			msglistscrollElem=dom.div(yscrollStyle,
 				attr.role('region'), attr.arialabel('Message list'),
 				async function scroll() {
 					if (!sseID || requestViewEnd || requestID) {
@@ -6467,7 +6554,7 @@ const init = async () => {
 		search = {active: true, query: searchbarElem.value}
 		mailboxlistView.closeMailbox()
 		setLocationHash()
-		searchbarElem.style.background = 'linear-gradient(135deg, #ffc7ab 0%, #ffdeab 100%)' // Cleared when another view is loaded.
+		searchbarElem.classList.toggle('searchbarActive', true) // Cleared when another view is loaded.
 		searchView.root.remove()
 		searchbarElem.blur()
 		document.body.focus()
@@ -6560,9 +6647,12 @@ const init = async () => {
 		'ctrl !': cmdSettings,
 	}
 
+	const topMailboxesStyle = css('topMailboxes', {backgroundColor: styles.mailboxesTopBackgroundColor})
+	css('searchbarActive', {background: styles.mailboxActiveBackground}) // class set on searchbarElem when active.
+
 	const webmailroot = dom.div(
-		style({display: 'flex', flexDirection: 'column', alignContent: 'stretch', height: '100dvh'}),
-		dom.div(dom._class('topbar'),
+		css('webmailRoot', {display: 'flex', flexDirection: 'column', alignContent: 'stretch', height: '100dvh'}),
+		dom.div(topMailboxesStyle,
 			style({display: 'flex'}),
 			attr.role('region'), attr.arialabel('Top bar'),
 			topcomposeboxElem=dom.div(dom._class('pad'),
@@ -6572,7 +6662,7 @@ const init = async () => {
 				}),
 			),
 			dom.div(dom._class('pad'),
-				style({paddingLeft: 0, display: 'flex', flexGrow: 1}),
+				css('searchbarBox', {paddingLeft: 0, display: 'flex', flexGrow: 1}),
 				searchbarElemBox=dom.search(
 					style({display: 'flex', marginRight: '.5em'}),
 					dom.form(
@@ -6644,7 +6734,7 @@ const init = async () => {
 					),
 				),
 				connectionElem=dom.div(),
-				statusElem=dom.div(style({marginLeft: '.5em', flexGrow: '1'}), attr.role('status')),
+				statusElem=dom.div(css('status', {marginLeft: '.5em', flexGrow: '1'}), attr.role('status')),
 				dom.div(
 					style({paddingLeft: '1em'}),
 					layoutElem=dom.select(
@@ -6685,21 +6775,20 @@ const init = async () => {
 			),
 		),
 		dom.div(
-			style({flexGrow: '1'}),
-			style({position: 'relative'}),
-			mailboxesElem=dom.div(dom._class('mailboxesbar'),
-				style({position: 'absolute', left: 0, width: settings.mailboxesWidth + 'px', top: 0, bottom: 0}),
-				style({display: 'flex', flexDirection: 'column', alignContent: 'stretch'}),
-				dom.div(dom._class('pad', 'yscrollauto'),
-					style({flexGrow: '1'}),
-					style({position: 'relative'}),
+			css('mailboxesListMsgBox', {flexGrow: '1', position: 'relative'}),
+			mailboxesElem=dom.div(topMailboxesStyle,
+				style({width: settings.mailboxesWidth + 'px'}),
+				css('mailboxesBox', {display: 'flex', flexDirection: 'column', alignContent: 'stretch', position: 'absolute', left: 0,top: 0, bottom: 0}),
+				dom.div(dom._class('pad'), yscrollAutoStyle,
+					style({flexGrow: '1', position: 'relative'}),
 					mailboxlistView.root,
 				),
 			),
 			mailboxessplitElem=dom.div(
-				style({position: 'absolute', left: 'calc('+settings.mailboxesWidth +'px - 2px)', width: '5px', top: 0, bottom: 0, cursor: 'ew-resize', zIndex: zindexes.splitter}),
+				css('mailboxesListGrab', {position: 'absolute', width: '5px', top: 0, bottom: 0, cursor: 'ew-resize', zIndex: zindexes.splitter}),
+				style({left: 'calc('+settings.mailboxesWidth +'px - 2px)'}),
 				dom.div(
-					style({position: 'absolute', width: '1px', top: 0, bottom: 0, left: '2px', right: '2px', backgroundColor: '#aaa'}),
+					css('mailboxesListLine', {position: 'absolute', width: '1px', top: 0, bottom: 0, left: '2px', right: '2px', backgroundColor: styles.popupBorderColor}),
 				),
 				function mousedown(e: MouseEvent) {
 					startDrag(e, (e) => {
@@ -6711,7 +6800,7 @@ const init = async () => {
 					})
 				}
 			),
-			splitElem=dom.div(style({position: 'absolute', left: 'calc(' + settings.mailboxesWidth+'px + 1px)', right: 0, top: 0, bottom: 0, borderTop: '1px solid #bbb'})),
+			splitElem=dom.div(css('listMsgBox', {position: 'absolute', left: 'calc(' + settings.mailboxesWidth+'px + 1px)', right: 0, top: 0, bottom: 0, borderTop: '1px solid', borderTopColor: styles.borderColor})),
 		),
 	)
 
@@ -6784,12 +6873,14 @@ const init = async () => {
 			let left: HTMLElement, split: HTMLElement, right: HTMLElement
 			dom._kids(splitElem,
 				left=dom.div(
-					style({position: 'absolute', left: 0, width: 'calc(' + settings.leftWidthPct + '% - 1px)', top: 0, bottom: 0}),
+					css('layoutLeft', {position: 'absolute', left: 0, top: 0, bottom: 0}),
+					style({width: 'calc(' + settings.leftWidthPct + '% - 1px)'}),
 					msglistElem,
 				),
 				split=dom.div(
-					style({position: 'absolute', left: 'calc(' + settings.leftWidthPct + '% - 2px)', width: '5px', top: 0, bottom: 0, cursor: 'ew-resize', zIndex: zindexes.splitter}),
-					dom.div(style({position: 'absolute', backgroundColor: '#aaa', top: 0, bottom: 0, width: '1px', left: '2px', right: '2px'})),
+					css('listMsgLeftRightGrab', {position: 'absolute', width: '5px', top: 0, bottom: 0, cursor: 'ew-resize', zIndex: zindexes.splitter}),
+					style({left: 'calc(' + settings.leftWidthPct + '% - 2px)'}),
+					dom.div(css('listMsgLeftRightLine', {position: 'absolute', backgroundColor: styles.popupBorderColor, top: 0, bottom: 0, width: '1px', left: '2px', right: '2px'})),
 					function mousedown(e: MouseEvent) {
 						startDrag(e, (e) => {
 							const bounds = left.getBoundingClientRect()
@@ -6803,7 +6894,8 @@ const init = async () => {
 					}
 				),
 				right=dom.div(
-					style({position: 'absolute', right: 0, left: 'calc(' + settings.leftWidthPct + '% + 1px)', top: 0, bottom: 0}),
+					css('layoutRight', {position: 'absolute', right: 0, top: 0, bottom: 0}),
+					style({left: 'calc(' + settings.leftWidthPct + '% + 1px)'}),
 					msgElem,
 				),
 			)
@@ -6811,12 +6903,14 @@ const init = async () => {
 			let top: HTMLElement, split: HTMLElement, bottom: HTMLElement
 			dom._kids(splitElem,
 				top=dom.div(
-					style({position: 'absolute', top: 0, height: 'calc(' + settings.topHeightPct + '% - 1px)', left: 0, right: 0}),
+					css('layoutTop', {position: 'absolute', top: 0, left: 0, right: 0}),
+					style({height: 'calc(' + settings.topHeightPct + '% - 1px)'}),
 					msglistElem,
 				),
 				split=dom.div(
-					style({position: 'absolute', top: 'calc(' + settings.topHeightPct + '% - 2px)', height: '5px', left: '0', right: '0', cursor: 'ns-resize', zIndex: zindexes.splitter}),
-					dom.div(style({position: 'absolute', backgroundColor: '#aaa', left: 0, right: 0, height: '1px', top: '2px', bottom: '2px'})),
+					css('listMsgTopBottomGrab', {position: 'absolute', height: '5px', left: '0', right: '0', cursor: 'ns-resize', zIndex: zindexes.splitter}),
+					style({top: 'calc(' + settings.topHeightPct + '% - 2px)'}),
+					dom.div(css('listmsgTopBottomLine', {position: 'absolute', backgroundColor: styles.popupBorderColor, left: 0, right: 0, height: '1px', top: '2px', bottom: '2px'})),
 					function mousedown(e: MouseEvent) {
 						startDrag(e, (e) => {
 							const bounds = top.getBoundingClientRect()
@@ -6829,7 +6923,8 @@ const init = async () => {
 					}
 				),
 				bottom=dom.div(
-					style({position: 'absolute', bottom: 0, top: 'calc(' + settings.topHeightPct + '% + 1px)', left: 0, right: 0}),
+					css('layoutBottom', {position: 'absolute', bottom: 0, left: 0, right: 0}),
+					style({top: 'calc(' + settings.topHeightPct + '% + 1px)'}),
 					msgElem,
 				),
 			)
@@ -6878,14 +6973,14 @@ const init = async () => {
 		const remain = width - (flagswidth+agewidth)
 		const fromwidth = Math.floor(frompct * remain / 100)
 		const subjectwidth = Math.floor(remain - fromwidth)
-		const cssRules: [string, {[style: string]: number}][] = [
-			['.msgitemflags', {width: flagswidth}],
-			['.msgitemfrom', {width: fromwidth}],
-			['.msgitemsubject', {width: subjectwidth}],
-			['.msgitemage', {width: agewidth}],
-			['.msgitemflagsoffset', {left: flagswidth}],
-			['.msgitemfromoffset', {left: flagswidth + fromwidth}],
-			['.msgitemsubjectoffset', {left: flagswidth + fromwidth + subjectwidth}],
+		const cssRules: [string, {[style: string]: number | string}][] = [
+			['.msgItemFlags', {width: flagswidth}],
+			['.msgItemFrom', {width: fromwidth, position: 'relative'}],
+			['.msgItemSubject', {width: subjectwidth}],
+			['.msgItemAge', {width: agewidth, 'text-align': 'right'}],
+			['.msgItemFlagsOffset', {left: flagswidth}],
+			['.msgItemFromOffset', {left: flagswidth + fromwidth}],
+			['.msgItemSubjectOffset', {left: flagswidth + fromwidth + subjectwidth}],
 		]
 		if (!rulesInserted) {
 			cssRules.forEach((rule, i) => { stylesheet.insertRule(rule[0] + '{}', i) })
@@ -6894,7 +6989,11 @@ const init = async () => {
 		cssRules.forEach((rule, i) => {
 			const r = stylesheet.cssRules[i] as CSSStyleRule
 			for (const k in rule[1]) {
-				r.style.setProperty(k, ''+rule[1][k]+'px')
+				let v = rule[1][k]
+				if (typeof v !== 'string') {
+					v = ''+v+'px'
+				}
+				r.style.setProperty(k, v)
 			}
 		})
 		lastflagswidth = flagswidth
@@ -6999,7 +7098,7 @@ const init = async () => {
 	const showNotConnected = () => {
 		dom._kids(connectionElem,
 			attr.role('status'),
-			dom.span(style({backgroundColor: '#ffa9a9', padding: '0 .15em', borderRadius: '.15em'}), 'Not connected', attr.title('Not receiving real-time updates, including of new deliveries.')),
+			dom.span(css('connectionStatus', {backgroundColor: styles.warningBackgroundColor, padding: '0 .15em', borderRadius: '.15em'}), 'Not connected', attr.title('Not receiving real-time updates, including of new deliveries.')),
 			' ',
 			dom.clickbutton('Reconnect', function click() {
 				if (!eventSource && !connecting) {
@@ -7393,7 +7492,7 @@ const showUnhandledError = (err: Error, lineno: number, colno: number) => {
 	}
 	const xerrmsg = err.toString()
 	const box = dom.div(
-		style({position: 'absolute', bottom: '1ex', left: '1ex', backgroundColor: 'rgba(249, 191, 191, .9)', maxWidth: '14em', padding: '.25em .5em', borderRadius: '.25em', fontSize: '.8em', wordBreak: 'break-all', zIndex: zindexes.shortcut}),
+		css('unhandledErrorBox', {position: 'absolute', bottom: '1ex', left: '1ex', backgroundColor: 'rgba(255, 110, 110, .9)', maxWidth: '14em', padding: '.25em .5em', borderRadius: '.25em', fontSize: '.8em', wordBreak: 'break-all', zIndex: zindexes.shortcut}),
 		dom.div(style({marginBottom: '.5ex'}), ''+xerrmsg),
 		dom.clickbutton('Details', function click() {
 			box.remove()
@@ -7417,7 +7516,7 @@ Details of the error and browser:
 				style({maxWidth: '60em'}),
 				dom.h1('A JavaScript error occurred'),
 				dom.pre(dom._class('mono'),
-					style({backgroundColor: '#f8f8f8', padding: '1ex', borderRadius: '.15em', border: '1px solid #ccc', whiteSpace: 'pre-wrap'}),
+					css('unhandledErrorMsg', {backgroundColor: styles.backgroundColorMild, padding: '1ex', borderRadius: '.15em', border: '1px solid', borderColor: styles.borderColor, whiteSpace: 'pre-wrap'}),
 					msg,
 				),
 				dom.br(),
