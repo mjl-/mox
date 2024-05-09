@@ -825,8 +825,12 @@ All files in the data directory that aren't recognized (i.e. other than known
 database files, message files, an acme directory, the "tmp" directory, etc),
 are stored, but with a warning.
 
-A clean successful backup does not print any output by default. Use the
--verbose flag for details, including timing.
+Remove files in the destination directory before doing another backup. The
+backup command will not overwrite files, but print and return errors.
+
+Exit code 0 indicates the backup was successful. A clean successful backup does
+not print any output, but may print warnings. Use the -verbose flag for
+details, including timing.
 
 To restore a backup, first shut down mox, move away the old data directory and
 move an earlier backed up directory in its place, run "mox verifydata",
