@@ -1229,7 +1229,7 @@ func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (r
 
 	var msgFrom string
 	if d, err := dns.ParseDomain(m.MsgFromDomain); err == nil {
-		msgFrom = smtp.Address{Localpart: m.MsgFromLocalpart, Domain: d}.Pack(true)
+		msgFrom = smtp.NewAddress(m.MsgFromLocalpart, d).Pack(true)
 	}
 	meta := webapi.MessageMeta{
 		Size:                m.Size,

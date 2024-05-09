@@ -51,6 +51,6 @@ func From(elog *slog.Logger, strict bool, r io.ReaderAt, p *Part) (raddr smtp.Ad
 	if err != nil {
 		return raddr, nil, nil, fmt.Errorf("parsing localpart in from address: %v", err)
 	}
-	addr := smtp.Address{Localpart: lp, Domain: d}
+	addr := smtp.NewAddress(lp, d)
 	return addr, p.Envelope, textproto.MIMEHeader(header), nil
 }

@@ -187,7 +187,7 @@ func fromAddrViewMode(tx *bstore.Tx, from MessageAddress) (store.ViewMode, error
 	if err != nil {
 		return store.ModeDefault, nil
 	}
-	fromAddr := smtp.Address{Localpart: lp, Domain: from.Domain}.Pack(true)
+	fromAddr := smtp.NewAddress(lp, from.Domain).Pack(true)
 	fas := store.FromAddressSettings{FromAddress: fromAddr}
 	err = tx.Get(&fas)
 	if err == bstore.ErrAbsent {

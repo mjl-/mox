@@ -505,14 +505,14 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 	} else if accountName == "" {
 		return fmt.Errorf("%w: account name is empty", ErrRequest)
 	} else if !ok {
-		nc.Accounts[accountName] = MakeAccountConfig(smtp.Address{Localpart: localpart, Domain: domain})
+		nc.Accounts[accountName] = MakeAccountConfig(smtp.NewAddress(localpart, domain))
 	} else if accountName != Conf.Static.Postmaster.Account {
 		nacc := nc.Accounts[accountName]
 		nd := map[string]config.Destination{}
 		for k, v := range nacc.Destinations {
 			nd[k] = v
 		}
-		pmaddr := smtp.Address{Localpart: "postmaster", Domain: domain}
+		pmaddr := smtp.NewAddress("postmaster", domain)
 		nd[pmaddr.String()] = config.Destination{}
 		nacc.Destinations = nd
 		nc.Accounts[accountName] = nacc

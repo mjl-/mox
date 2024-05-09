@@ -779,7 +779,7 @@ func sendReportDomain(ctx context.Context, log mlog.Log, resolver dns.Resolver, 
 	// DKIM keys, so we can DKIM-sign our reports. SPF should pass anyway.
 	// A single report can contain deliveries from a single policy domain
 	// to multiple of our configured domains.
-	from := smtp.Address{Localpart: "postmaster", Domain: mox.Conf.Static.HostnameDomain}
+	from := smtp.NewAddress("postmaster", mox.Conf.Static.HostnameDomain)
 
 	// Subject follows the form in RFC. ../rfc/7489:1871
 	subject := fmt.Sprintf("Report Domain: %s Submitter: %s Report-ID: <%s>", dom.ASCII, mox.Conf.Static.HostnameDomain.ASCII, report.ReportMetadata.ReportID)

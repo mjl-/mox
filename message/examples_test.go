@@ -107,7 +107,7 @@ func ExampleComposer() {
 	}()
 
 	// Add an address header.
-	xc.HeaderAddrs("From", []message.NameAddress{{DisplayName: "Charlie", Address: smtp.Address{Localpart: "root", Domain: dns.Domain{ASCII: "localhost"}}}})
+	xc.HeaderAddrs("From", []message.NameAddress{{DisplayName: "Charlie", Address: smtp.NewAddress("root", dns.Domain{ASCII: "localhost"})}})
 
 	// Add subject header, with encoding
 	xc.Subject("hi ☺")

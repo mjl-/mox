@@ -508,7 +508,7 @@ func sendReportDomain(ctx context.Context, log mlog.Log, resolver dns.Resolver, 
 	// typical setup the host is a subdomain of a configured domain with
 	// DKIM keys, so we can DKIM-sign our reports. SPF should pass anyway.
 	// todo future: when sending, use an SMTP MAIL FROM that we can relate back to recipient reporting address so we can stop trying to send reports in case of repeated delivery failure DSNs.
-	from := smtp.Address{Localpart: "postmaster", Domain: fromDom}
+	from := smtp.NewAddress("postmaster", fromDom)
 
 	// Subject follows the form from RFC. ../rfc/8460:959
 	subject := fmt.Sprintf("Report Domain: %s Submitter: %s Report-ID: <%s>", polDom.ASCII, fromDom, report.ReportID)

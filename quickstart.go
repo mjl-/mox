@@ -673,7 +673,7 @@ many authentication failures).
 	// Messages to postmaster will get to the account too.
 	var contactEmail string
 	if addr.Localpart.IsInternational() {
-		contactEmail = smtp.Address{Localpart: "postmaster", Domain: addr.Domain}.Pack(false)
+		contactEmail = smtp.NewAddress("postmaster", addr.Domain).Pack(false)
 	} else {
 		contactEmail = addr.Pack(false)
 	}
