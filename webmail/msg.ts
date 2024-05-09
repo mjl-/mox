@@ -5,6 +5,7 @@ declare let messageItem: api.MessageItem
 
 const init = () => {
 	const mi = api.parser.MessageItem(messageItem)
+	document.title = '"' + mi.Envelope.Subject + '"- from '+((mi.Envelope.From || []).map(a => formatAddress(a)).join(', ') || '-') + ' (id '+mi.Message.ID+')'
 
 	let msgattachmentview = dom.div()
 	if (mi.Attachments && mi.Attachments.length > 0) {

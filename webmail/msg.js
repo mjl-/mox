@@ -1391,6 +1391,7 @@ const loadMsgheaderView = (msgheaderelem, mi, moreHeaders, refineKeyword, allAdd
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 const init = () => {
 	const mi = api.parser.MessageItem(messageItem);
+	document.title = '"' + mi.Envelope.Subject + '"- from ' + ((mi.Envelope.From || []).map(a => formatAddress(a)).join(', ') || '-') + ' (id ' + mi.Message.ID + ')';
 	let msgattachmentview = dom.div();
 	if (mi.Attachments && mi.Attachments.length > 0) {
 		dom._kids(msgattachmentview, dom.div(css('msgAttachments', { borderTop: '1px solid', borderTopColor: styles.borderColor }), dom.div(dom._class('pad'), 'Attachments: ', join(mi.Attachments.map(a => a.Filename || '(unnamed)'), () => ', '))));
