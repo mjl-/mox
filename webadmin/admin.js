@@ -2194,7 +2194,7 @@ const account = async (name) => {
 		formPassword.reset();
 	}), dom.br(), RoutesEditor('account-specific', transports, config.Routes || [], async (routes) => await client.AccountRoutesSave(name, routes)), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove account', async function click(e) {
 		e.preventDefault();
-		if (!window.confirm('Are you sure you want to remove this account?')) {
+		if (!window.confirm('Are you sure you want to remove this account? All account data, including messages will be removed.')) {
 			return;
 		}
 		await check(e.target, client.AccountRemove(name));

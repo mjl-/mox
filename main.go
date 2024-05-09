@@ -890,6 +890,8 @@ func cmdConfigAccountRemove(c *cmd) {
 
 Email addresses for this account will also be removed, and incoming email for
 these addresses will be rejected.
+
+All data for the account will be removed.
 `
 	args := c.Parse()
 	if len(args) != 1 {

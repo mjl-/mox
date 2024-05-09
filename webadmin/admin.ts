@@ -999,7 +999,7 @@ const account = async (name: string) => {
 		dom.h2('Danger'),
 		dom.clickbutton('Remove account', async function click(e: MouseEvent) {
 			e.preventDefault()
-			if (!window.confirm('Are you sure you want to remove this account?')) {
+			if (!window.confirm('Are you sure you want to remove this account? All account data, including messages will be removed.')) {
 				return
 			}
 			await check(e.target! as HTMLButtonElement, client.AccountRemove(name))

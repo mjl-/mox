@@ -1024,6 +1024,18 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 	if err := writeDynamic(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
+
+	odir := filepath.Join(DataDirPath("accounts"), account)
+	tmpdir := filepath.Join(DataDirPath("tmp"), "oldaccount-"+account)
+	if err := os.Rename(odir, tmpdir); err != nil {
+		log.Errorx("moving old account data directory out of the way", err, slog.String("account", account))
+		return fmt.Errorf("account removed, but account data directory %q could not be moved out of the way: %v", odir, err)
+	}
+	if err := os.RemoveAll(tmpdir); err != nil {
+		log.Errorx("removing old account data directory", err, slog.String("account", account))
+		return fmt.Errorf("account removed, its data directory moved to %q, but removing failed: %v", odir, err)
+	}
+
 	log.Info("account removed", slog.String("account", account))
 	return nil
 }

@@ -937,6 +937,8 @@ Remove an account and reload the configuration.
 Email addresses for this account will also be removed, and incoming email for
 these addresses will be rejected.
 
+All data for the account will be removed.
+
 	usage: mox config account rm account
 
 # mox config address add
