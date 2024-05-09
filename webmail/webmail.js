@@ -2443,7 +2443,7 @@ const cmdHelp = async () => {
 	].map(t => dom.tr(dom.td(t[0]), dom.td(t[1]))))), dom.div(style({ width: '40em' }), dom.table(dom.tr(dom.td(attr.colspan('2'), dom.h2('Compose', style({ margin: '0' })))), [
 		['ctrl Enter', 'send message'],
 		['ctrl shift Enter', 'send message and archive thread'],
-		['ctrl w', 'cancel message'],
+		['ctrl w', 'close message'],
 		['ctrl O', 'add To'],
 		['ctrl C', 'add Cc'],
 		['ctrl B', 'add Bcc'],
@@ -2624,16 +2624,19 @@ const compose = (opts, listMailboxes) => {
 	// when focus is on a textarea or not any specific UI element. So this isn't always
 	// triggered. But we still have the beforeunload handler that checks for
 	// unsavedChanges to protect the user in such cases.
-	const cmdCancel = async () => {
+	const cmdClose = async () => {
 		draftCancelSave();
 		await draftSavePromise;
 		if (unsavedChanges()) {
 			const action = await new Promise((resolve) => {
-				const remove = popup(dom.p('Message has unsaved changes.'), dom.br(), dom.div(dom.clickbutton('Save draft', function click() {
+				const remove = popup(dom.p(dom.b('Message has unsaved changes')), dom.br(), dom.div(dom.clickbutton('Save draft', function click() {
 					resolve('save');
 					remove();
-				}), ' ', dom.clickbutton('Remove draft', function click() {
+				}), ' ', draftMessageID ? dom.clickbutton('Remove draft', function click() {
 					resolve('remove');
+					remove();
+				}) : [], ' ', dom.clickbutton('Discard changes', function click() {
+					resolve('discard');
 					remove();
 				}), ' ', dom.clickbutton('Cancel', function click() {
 					resolve('cancel');
@@ -2648,18 +2651,9 @@ const compose = (opts, listMailboxes) => {
 					await withStatus('Removing draft', client.MessageDelete([draftMessageID]));
 				}
 			}
-			else {
+			else if (action === 'cancel') {
 				return;
 			}
-		}
-		composeElem.remove();
-		composeView = null;
-	};
-	const cmdClose = async () => {
-		draftCancelSave();
-		await draftSavePromise;
-		if (unsavedChanges()) {
-			await withStatus('Saving draft', draftSave());
 		}
 		composeElem.remove();
 		composeView = null;
@@ -2740,7 +2734,7 @@ const compose = (opts, listMailboxes) => {
 	const shortcuts = {
 		'ctrl Enter': cmdSend,
 		'ctrl shift Enter': cmdSendArchive,
-		'ctrl w': cmdCancel,
+		'ctrl w': cmdClose,
 		'ctrl O': cmdAddTo,
 		'ctrl C': cmdAddCc,
 		'ctrl B': cmdAddBcc,
@@ -3010,10 +3004,9 @@ const compose = (opts, listMailboxes) => {
 		flexGrow: '1',
 		display: 'flex',
 		flexDirection: 'column',
-	}), dom.table(style({ width: '100%' }), dom.tr(dom.td(composeTextMildStyle, dom.span('From:')), dom.td(dom.div(style({ display: 'flex', gap: '1em' }), dom.div(from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts))), dom.div(listMailboxes().find(mb => mb.Draft) ? [
+	}), dom.table(style({ width: '100%' }), dom.tr(dom.td(composeTextMildStyle, dom.span('From:')), dom.td(dom.div(css('composeButtonsSpread', { display: 'flex', gap: '1em', justifyContent: 'space-between' }), dom.div(from = dom.select(attr.required(''), style({ width: 'auto' }), fromOptions), ' ', toBtn = dom.clickbutton('To', clickCmd(cmdAddTo, shortcuts)), ' ', ccBtn = dom.clickbutton('Cc', clickCmd(cmdAddCc, shortcuts)), ' ', bccBtn = dom.clickbutton('Bcc', clickCmd(cmdAddBcc, shortcuts)), ' ', replyToBtn = dom.clickbutton('ReplyTo', clickCmd(cmdReplyTo, shortcuts)), ' ', customFromBtn = dom.clickbutton('From', attr.title('Set custom From address/name.'), clickCmd(cmdCustomFrom, shortcuts))), dom.div(listMailboxes().find(mb => mb.Draft) ? [
 		dom.clickbutton('Save', attr.title('Save draft message.'), clickCmd(cmdSave, shortcuts)), ' ',
-		dom.clickbutton('Close', attr.title('Close window, saving draft message if body has changed or a draft was saved earlier.'), clickCmd(cmdClose, shortcuts)), ' ',
-	] : [], dom.clickbutton('Cancel', attr.title('Close window, discarding (draft) message.'), clickCmd(cmdCancel, shortcuts)))))), toRow = dom.tr(dom.td('To:', composeTextMildStyle), toCell = dom.td(composeCellStyle)), replyToRow = dom.tr(dom.td('Reply-To:', composeTextMildStyle), replyToCell = dom.td(composeCellStyle)), ccRow = dom.tr(dom.td('Cc:', composeTextMildStyle), ccCell = dom.td(composeCellStyle)), bccRow = dom.tr(dom.td('Bcc:', composeTextMildStyle), bccCell = dom.td(composeCellStyle)), dom.tr(dom.td('Subject:', composeTextMildStyle), dom.td(subjectAutosize = dom.span(dom._class('autosize'), style({ width: '100%' }), // Without 100% width, the span takes minimal width for input, we want the full table cell.
+	] : [], dom.clickbutton('Close', attr.title('Close window, saving draft message if body has changed or a draft was saved earlier.'), clickCmd(cmdClose, shortcuts)))))), toRow = dom.tr(dom.td('To:', composeTextMildStyle), toCell = dom.td(composeCellStyle)), replyToRow = dom.tr(dom.td('Reply-To:', composeTextMildStyle), replyToCell = dom.td(composeCellStyle)), ccRow = dom.tr(dom.td('Cc:', composeTextMildStyle), ccCell = dom.td(composeCellStyle)), bccRow = dom.tr(dom.td('Bcc:', composeTextMildStyle), bccCell = dom.td(composeCellStyle)), dom.tr(dom.td('Subject:', composeTextMildStyle), dom.td(subjectAutosize = dom.span(dom._class('autosize'), style({ width: '100%' }), // Without 100% width, the span takes minimal width for input, we want the full table cell.
 	subject = dom.input(style({ width: '100%' }), attr.value(opts.subject || ''), attr.required(''), focusPlaceholder('subject...'), function input() {
 		subjectAutosize.dataset.value = subject.value;
 	}))))), body = dom.textarea(dom._class('mono'), style({

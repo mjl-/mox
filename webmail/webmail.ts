@@ -1236,7 +1236,7 @@ const cmdHelp = async () => {
 					[
 						['ctrl Enter', 'send message'],
 						['ctrl shift Enter', 'send message and archive thread'],
-						['ctrl w', 'cancel message'],
+						['ctrl w', 'close message'],
 						['ctrl O', 'add To'],
 						['ctrl C', 'add Cc'],
 						['ctrl B', 'add Bcc'],
@@ -1506,21 +1506,25 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	// when focus is on a textarea or not any specific UI element. So this isn't always
 	// triggered. But we still have the beforeunload handler that checks for
 	// unsavedChanges to protect the user in such cases.
-	const cmdCancel = async () => {
+	const cmdClose = async () => {
 		draftCancelSave()
 		await draftSavePromise
 		if (unsavedChanges()) {
 			const action = await new Promise<string>((resolve) => {
 				const remove = popup(
-					dom.p('Message has unsaved changes.'),
+					dom.p(dom.b('Message has unsaved changes')),
 					dom.br(),
 					dom.div(
 						dom.clickbutton('Save draft', function click() {
 							resolve('save')
 							remove()
 						}), ' ',
-						dom.clickbutton('Remove draft', function click() {
+						draftMessageID ? dom.clickbutton('Remove draft', function click() {
 							resolve('remove')
+							remove()
+						}) : [], ' ',
+						dom.clickbutton('Discard changes', function click() {
+							resolve('discard')
 							remove()
 						}), ' ',
 						dom.clickbutton('Cancel', function click() {
@@ -1536,7 +1540,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 				if (draftMessageID) {
 					await withStatus('Removing draft', client.MessageDelete([draftMessageID]))
 				}
-			} else {
+			} else if (action === 'cancel') {
 				return
 			}
 		}
@@ -1544,15 +1548,6 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		composeView = null
 	}
 
-	const cmdClose = async () => {
-		draftCancelSave()
-		await draftSavePromise
-		if (unsavedChanges()) {
-			await withStatus('Saving draft', draftSave())
-		}
-		composeElem.remove()
-		composeView = null
-	}
 	const cmdSave = async () => {
 		draftCancelSave()
 		await draftSavePromise
@@ -1637,7 +1632,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	const shortcuts: {[key: string]: command} = {
 		'ctrl Enter': cmdSend,
 		'ctrl shift Enter': cmdSendArchive,
-		'ctrl w': cmdCancel,
+		'ctrl w': cmdClose,
 		'ctrl O': cmdAddTo,
 		'ctrl C': cmdAddCc,
 		'ctrl B': cmdAddBcc,
@@ -1966,7 +1961,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 						),
 						dom.td(
 							dom.div(
-								style({display: 'flex', gap: '1em'}),
+								css('composeButtonsSpread', {display: 'flex', gap: '1em', justifyContent: 'space-between'}),
 								dom.div(
 									from=dom.select(
 										attr.required(''),
@@ -1983,9 +1978,8 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 								dom.div(
 									listMailboxes().find(mb => mb.Draft) ? [
 										dom.clickbutton('Save', attr.title('Save draft message.'), clickCmd(cmdSave, shortcuts)), ' ',
-										dom.clickbutton('Close', attr.title('Close window, saving draft message if body has changed or a draft was saved earlier.'), clickCmd(cmdClose, shortcuts)), ' ',
 									] : [],
-									dom.clickbutton('Cancel', attr.title('Close window, discarding (draft) message.'), clickCmd(cmdCancel, shortcuts)),
+									dom.clickbutton('Close', attr.title('Close window, saving draft message if body has changed or a draft was saved earlier.'), clickCmd(cmdClose, shortcuts)),
 								),
 							),
 						),
