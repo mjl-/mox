@@ -140,6 +140,8 @@ https://nlnet.nl/project/Mox/.
   CREATE-SPECIAL-USE, SAVEDATE, UNAUTHENTICATE, REPLACE, QUOTA, NOTIFY,
   MULTIAPPEND, OBJECTID, MULTISEARCH, THREAD, SORT)
 - SMTP DSN extension
+- "mox setup" command, with webapp for interactive setup
+- Introbox, to which first-time senders are delivered
 - ARC, with forwarded email from trusted source
 - Forwarding (to an external address)
 - Add special IMAP mailbox ("Queue?") that contains queued but
