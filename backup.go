@@ -10,7 +10,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mjl-/bstore"
@@ -234,7 +236,11 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			// No point in trying with regular copy, we would warn twice.
 			return false, err
 		} else if !warnedHardlink {
-			xwarnx("creating hardlink to message failed, will be doing regular file copies and not warn again", err, slog.String("srcpath", srcpath), slog.String("dstpath", dstpath))
+			var hardlinkHint string
+			if runtime.GOOS == "linux" && errors.Is(err, syscall.EXDEV) {
+				hardlinkHint = " (hint: if running under systemd, ReadWritePaths in mox.service may cause multiple mountpoints; consider merging paths into a single parent directory to prevent cross-device/mountpoint hardlinks)"
+			}
+			xwarnx("creating hardlink to message failed, will be doing regular file copies and not warn again"+hardlinkHint, err, slog.String("srcpath", srcpath), slog.String("dstpath", dstpath))
 			warnedHardlink = true
 		}
 
