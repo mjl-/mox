@@ -782,7 +782,6 @@ const account = async (name: string) => {
 	let passwordHint: HTMLElement
 
 	const xparseSize = (s: string) => {
-		const origs = s
 		s = s.toLowerCase()
 		let mult = 1
 		if (s.endsWith('k')) {
@@ -798,8 +797,8 @@ const account = async (name: string) => {
 			s = s.substring(0, s.length-1)
 		}
 		let v = parseInt(s)
-		if (isNaN(v) || origs !== formatQuotaSize(v*mult)) {
-			throw new Error('invalid number')
+		if (isNaN(v) || s !== ''+v) {
+			throw new Error('invalid number; use units like "k", "m", "g", for example "2g". specify 0 to use the global default quota, or -1 for unlimited storage overriding the global quota')
 		}
 		return v*mult
 	}
@@ -929,7 +928,7 @@ const account = async (name: string) => {
 				),
 				dom.label(
 					style({display: 'block', marginBottom: '.5ex'}),
-					dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage.')),
+					dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage. Use units "k" for kilobytes, or "m", "g", "t".')),
 					dom.br(),
 					quotaMessageSize=dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize))),
 					' Current usage is ', formatQuotaSize(Math.floor(diskUsage/(1024*1024))*1024*1024), '.',
@@ -946,7 +945,7 @@ const account = async (name: string) => {
 			async function submit(e: SubmitEvent) {
 				e.stopPropagation()
 				e.preventDefault()
-				await check(fieldsetSettings, client.AccountSettingsSave(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value), firstTimeSenderDelay.checked))
+				await check(fieldsetSettings, (async () => client.AccountSettingsSave(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value), firstTimeSenderDelay.checked))())
 			},
 		),
 		dom.br(),
