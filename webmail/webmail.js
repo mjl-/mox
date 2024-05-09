@@ -2928,7 +2928,7 @@ const compose = (opts, listMailboxes) => {
 		return accountAddresses.find(a => a.Domain.ASCII === addr.Domain.ASCII && (a.User === '' || normalizeUser(a) === normalizeUser(addr)));
 	};
 	let haveFrom = false;
-	const fromOptions = accountAddresses.map(a => {
+	const fromOptions = accountAddresses.filter(a => a.User).map(a => {
 		const selected = opts.from && opts.from.length === 1 && equalAddress(a, opts.from[0]) || loginAddress && equalAddress(a, loginAddress) && (!opts.from || envelopeIdentity(opts.from));
 		const o = dom.option(formatAddress(a), selected ? attr.selected('') : []);
 		if (selected) {
