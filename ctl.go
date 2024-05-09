@@ -442,7 +442,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		> id
 		< "ok" or error
 		*/
-		id, err := strconv.ParseInt(ctl.xread(), 10, 64)
+		idstr := ctl.xread()
+		id, err := strconv.ParseInt(idstr, 10, 64)
 		ctl.xcheck(err, "parsing id")
 		err = queue.HoldRuleRemove(ctx, log, id)
 		ctl.xcheck(err, "remove hold rule")
@@ -456,10 +457,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< "ok"
 		< stream
 		*/
+		filterline := ctl.xread()
+		sortline := ctl.xread()
 		var f queue.Filter
-		xparseJSON(ctl, ctl.xread(), &f)
+		xparseJSON(ctl, filterline, &f)
 		var s queue.Sort
-		xparseJSON(ctl, ctl.xread(), &s)
+		xparseJSON(ctl, sortline, &s)
 		qmsgs, err := queue.List(ctx, f, s)
 		ctl.xcheck(err, "listing queue")
 		ctl.xwriteok()
@@ -487,9 +490,10 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		var f queue.Filter
-		xparseJSON(ctl, ctl.xread(), &f)
+		filterline := ctl.xread()
 		hold := ctl.xread() == "true"
+		var f queue.Filter
+		xparseJSON(ctl, filterline, &f)
 		count, err := queue.HoldSet(ctx, f, hold)
 		ctl.xcheck(err, "setting on hold status for messages")
 		ctl.xwriteok()
@@ -505,10 +509,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		var f queue.Filter
-		xparseJSON(ctl, ctl.xread(), &f)
+		filterline := ctl.xread()
 		relnow := ctl.xread()
-		d, err := time.ParseDuration(ctl.xread())
+		duration := ctl.xread()
+		var f queue.Filter
+		xparseJSON(ctl, filterline, &f)
+		d, err := time.ParseDuration(duration)
 		ctl.xcheck(err, "parsing duration for next delivery attempt")
 		var count int
 		if relnow == "" {
@@ -529,9 +535,10 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		var f queue.Filter
-		xparseJSON(ctl, ctl.xread(), &f)
+		filterline := ctl.xread()
 		transport := ctl.xread()
+		var f queue.Filter
+		xparseJSON(ctl, filterline, &f)
 		count, err := queue.TransportSet(ctx, f, transport)
 		ctl.xcheck(err, "adding to next delivery attempts in queue")
 		ctl.xwriteok()
@@ -546,8 +553,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		var f queue.Filter
-		xparseJSON(ctl, ctl.xread(), &f)
+		filterline := ctl.xread()
 		reqtls := ctl.xread()
 		var req *bool
 		switch reqtls {
@@ -561,6 +567,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		default:
 			ctl.xcheck(fmt.Errorf("unknown value %q", reqtls), "parsing value")
 		}
+		var f queue.Filter
+		xparseJSON(ctl, filterline, &f)
 		count, err := queue.RequireTLSSet(ctx, f, req)
 		ctl.xcheck(err, "setting tls requirements on messages in queue")
 		ctl.xwriteok()
@@ -574,8 +582,9 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
+		filterline := ctl.xread()
 		var f queue.Filter
-		xparseJSON(ctl, ctl.xread(), &f)
+		xparseJSON(ctl, filterline, &f)
 		count, err := queue.Fail(ctx, log, f)
 		ctl.xcheck(err, "marking messages from queue as failed")
 		ctl.xwriteok()
@@ -589,8 +598,9 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
+		filterline := ctl.xread()
 		var f queue.Filter
-		xparseJSON(ctl, ctl.xread(), &f)
+		xparseJSON(ctl, filterline, &f)
 		count, err := queue.Drop(ctx, log, f)
 		ctl.xcheck(err, "dropping messages from queue")
 		ctl.xwriteok()
@@ -626,10 +636,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< "ok"
 		< stream
 		*/
+		filterline := ctl.xread()
+		sortline := ctl.xread()
 		var f queue.RetiredFilter
-		xparseJSON(ctl, ctl.xread(), &f)
+		xparseJSON(ctl, filterline, &f)
 		var s queue.RetiredSort
-		xparseJSON(ctl, ctl.xread(), &s)
+		xparseJSON(ctl, sortline, &s)
 		qmsgs, err := queue.RetiredList(ctx, f, s)
 		ctl.xcheck(err, "listing retired queue")
 		ctl.xwriteok()
@@ -688,10 +700,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< "ok"
 		< stream
 		*/
+		filterline := ctl.xread()
+		sortline := ctl.xread()
 		var f queue.HookFilter
-		xparseJSON(ctl, ctl.xread(), &f)
+		xparseJSON(ctl, filterline, &f)
 		var s queue.HookSort
-		xparseJSON(ctl, ctl.xread(), &s)
+		xparseJSON(ctl, sortline, &s)
 		hooks, err := queue.HookList(ctx, f, s)
 		ctl.xcheck(err, "listing webhooks")
 		ctl.xwriteok()
@@ -720,10 +734,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
-		var f queue.HookFilter
-		xparseJSON(ctl, ctl.xread(), &f)
+		filterline := ctl.xread()
 		relnow := ctl.xread()
-		d, err := time.ParseDuration(ctl.xread())
+		duration := ctl.xread()
+		var f queue.HookFilter
+		xparseJSON(ctl, filterline, &f)
+		d, err := time.ParseDuration(duration)
 		ctl.xcheck(err, "parsing duration for next delivery attempt")
 		var count int
 		if relnow == "" {
@@ -743,8 +759,9 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< count
 		*/
 
+		filterline := ctl.xread()
 		var f queue.HookFilter
-		xparseJSON(ctl, ctl.xread(), &f)
+		xparseJSON(ctl, filterline, &f)
 		count, err := queue.HookCancel(ctx, log, f)
 		ctl.xcheck(err, "canceling webhooks in queue")
 		ctl.xwriteok()
@@ -784,10 +801,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< "ok"
 		< stream
 		*/
+		filterline := ctl.xread()
+		sortline := ctl.xread()
 		var f queue.HookRetiredFilter
-		xparseJSON(ctl, ctl.xread(), &f)
+		xparseJSON(ctl, filterline, &f)
 		var s queue.HookRetiredSort
-		xparseJSON(ctl, ctl.xread(), &s)
+		xparseJSON(ctl, sortline, &s)
 		l, err := queue.HookRetiredList(ctx, f, s)
 		ctl.xcheck(err, "listing retired webhooks")
 		ctl.xwriteok()
