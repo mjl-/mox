@@ -508,6 +508,15 @@ var api;
 			const params = [enabled, junkRegexp, neutralRegexp, notJunkRegexp];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		// JunkFilterSave saves junk filter settings. If junkFilter is nil, the junk filter
+		// is disabled. Otherwise all fields except Threegrams are stored.
+		async JunkFilterSave(junkFilter) {
+			const fn = "JunkFilterSave";
+			const paramTypes = [["nullable", "JunkFilter"]];
+			const returnTypes = [];
+			const params = [junkFilter];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 		// RejectsSave saves the RejectsMailbox and KeepRejects settings.
 		async RejectsSave(mailbox, keep) {
 			const fn = "RejectsSave";
@@ -1097,6 +1106,15 @@ const index = async () => {
 	let junkMailboxRegexp;
 	let neutralMailboxRegexp;
 	let notJunkMailboxRegexp;
+	let junkFilterFields;
+	let junkFilterEnabled;
+	let junkThreshold;
+	let junkOnegrams;
+	let junkTwograms;
+	let junkMaxPower;
+	let junkTopWords;
+	let junkIgnoreWords;
+	let junkRareWords;
 	let rejectsFieldset;
 	let rejectsMailbox;
 	let keepRejects;
@@ -1378,7 +1396,7 @@ const index = async () => {
 		body.setAttribute('rows', '' + Math.min(40, (body.value.split('\n').length + 1)));
 		onchange();
 	};
-	dom._kids(page, crumbs('Mox Account'), dom.p('NOTE: Not all account settings can be configured through these pages yet. See the configuration file for more options.'), dom.div('Default domain: ', acc.DNSDomain.ASCII ? domainString(acc.DNSDomain) : '(none)'), dom.br(), fullNameForm = dom.form(fullNameFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Full name', dom.br(), fullName = dom.input(attr.value(acc.FullName), attr.title('Name to use in From header when composing messages. Can be overridden per configured address.'))), ' ', dom.submitbutton('Save')), async function submit(e) {
+	dom._kids(page, crumbs('Mox Account'), dom.div('Default domain: ', acc.DNSDomain.ASCII ? domainString(acc.DNSDomain) : '(none)'), dom.br(), fullNameForm = dom.form(fullNameFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Full name', dom.br(), fullName = dom.input(attr.value(acc.FullName), attr.title('Name to use in From header when composing messages. Can be overridden per configured address.'))), ' ', dom.submitbutton('Save')), async function submit(e) {
 		e.preventDefault();
 		await check(fullNameFieldset, client.AccountSaveFullName(fullName.value));
 		fullName.setAttribute('value', fullName.value);
@@ -1422,7 +1440,27 @@ const index = async () => {
 		e.preventDefault();
 		e.stopPropagation();
 		await check(autoJunkFlagsFieldset, client.AutomaticJunkFlagsSave(autoJunkFlagsEnabled.checked, junkMailboxRegexp.value, neutralMailboxRegexp.value, notJunkMailboxRegexp.value));
-	}, autoJunkFlagsFieldset = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.label('Enabled', attr.title("If enabled, junk/nonjunk flags will be set automatically if they match a regular expression below. When two of the three mailbox regular expressions are set, the remaining one will match all unmatched messages. Messages are matched in order 'junk', 'neutral', 'not junk', and the search stops on the first match. Mailboxes are lowercased before matching."), dom.div(autoJunkFlagsEnabled = dom.input(attr.type('checkbox'), acc.AutomaticJunkFlags.Enabled ? attr.checked('') : []))), dom.label('Junk mailbox regexp', dom.div(junkMailboxRegexp = dom.input(attr.value(acc.AutomaticJunkFlags.JunkMailboxRegexp)))), dom.label('Neutral mailbox regexp', dom.div(neutralMailboxRegexp = dom.input(attr.value(acc.AutomaticJunkFlags.NeutralMailboxRegexp)))), dom.label('Not Junk mailbox regexp', dom.div(notJunkMailboxRegexp = dom.input(attr.value(acc.AutomaticJunkFlags.NotJunkMailboxRegexp)))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save')))))), dom.br(), dom.h2('Rejects'), dom.form(async function submit(e) {
+	}, autoJunkFlagsFieldset = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.label('Enabled', attr.title("If enabled, junk/nonjunk flags will be set automatically if they match a regular expression below. When two of the three mailbox regular expressions are set, the remaining one will match all unmatched messages. Messages are matched in order 'junk', 'neutral', 'not junk', and the search stops on the first match. Mailboxes are lowercased before matching."), dom.div(autoJunkFlagsEnabled = dom.input(attr.type('checkbox'), acc.AutomaticJunkFlags.Enabled ? attr.checked('') : []))), dom.label('Junk mailbox regexp', dom.div(junkMailboxRegexp = dom.input(attr.value(acc.AutomaticJunkFlags.JunkMailboxRegexp)))), dom.label('Neutral mailbox regexp', dom.div(neutralMailboxRegexp = dom.input(attr.value(acc.AutomaticJunkFlags.NeutralMailboxRegexp)))), dom.label('Not Junk mailbox regexp', dom.div(notJunkMailboxRegexp = dom.input(attr.value(acc.AutomaticJunkFlags.NotJunkMailboxRegexp)))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save')))))), dom.br(), dom.h2('Junk filter', attr.title('Content-based filtering, using the junk-status of individual messages to rank words in such messages as spam or ham. It is recommended you always set the applicable (non)-junk status on messages, and that you do not empty your Trash because those messages contain valuable ham/spam training information.')), dom.form(async function submit(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		const xjunkFilter = () => {
+			if (!junkFilterEnabled.checked) {
+				return null;
+			}
+			const r = {
+				Threshold: parseFloat(junkThreshold.value),
+				Onegrams: junkOnegrams.checked,
+				Twograms: junkTwograms.checked,
+				Threegrams: acc.JunkFilter?.Threegrams || false,
+				MaxPower: parseFloat(junkMaxPower.value),
+				TopWords: parseInt(junkTopWords.value),
+				IgnoreWords: parseFloat(junkIgnoreWords.value),
+				RareWords: parseInt(junkRareWords.value),
+			};
+			return r;
+		};
+		await check(junkFilterFields, (async () => await client.JunkFilterSave(xjunkFilter()))());
+	}, junkFilterFields = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.label('Enabled', attr.title("If enabled, the junk filter is used to classify incoming email from first-time senders. The result, along with other checks, determines if the message will be accepted or rejected"), dom.div(junkFilterEnabled = dom.input(attr.type('checkbox'), acc.JunkFilter ? attr.checked('') : []))), dom.label('Threshold', attr.title('Approximate spaminess score between 0 and 1 above which emails are rejected as spam. Each delivery attempt adds a little noise to make it slightly harder for spammers to identify words that strongly indicate non-spaminess and use it to bypass the filter. E.g. 0.95.'), dom.div(junkThreshold = dom.input(attr.value('' + (acc.JunkFilter?.Threshold || '0.95'))))), dom.label('Onegrams', attr.title('Track ham/spam ranking for single words.'), dom.div(junkOnegrams = dom.input(attr.type('checkbox'), acc.JunkFilter?.Onegrams ? attr.checked('') : []))), dom.label('Twograms', attr.title('Track ham/spam ranking for each two consecutive words.'), dom.div(junkTwograms = dom.input(attr.type('checkbox'), acc.JunkFilter?.Twograms ? attr.checked('') : []))), dom.label('Threegrams', attr.title('Track ham/spam ranking for each three consecutive words. Can only be changed by admin.'), dom.div(dom.input(attr.type('checkbox'), attr.disabled(''), acc.JunkFilter?.Threegrams ? attr.checked('') : []))), dom.label('Max power', attr.title('Maximum power a word (combination) can have. If spaminess is 0.99, and max power is 0.1, spaminess of the word will be set to 0.9. Similar for ham words.'), dom.div(junkMaxPower = dom.input(attr.value('' + (acc.JunkFilter?.MaxPower || 0.01))))), dom.label('Top words', attr.title('Number of most spammy/hammy words to use for calculating probability. E.g. 10.'), dom.div(junkTopWords = dom.input(attr.value('' + (acc.JunkFilter?.TopWords || 10))))), dom.label('Ignore words', attr.title('Ignore words that are this much away from 0.5 haminess/spaminess. E.g. 0.1, causing word (combinations) of 0.4 to 0.6 to be ignored.'), dom.div(junkIgnoreWords = dom.input(attr.value('' + (acc.JunkFilter?.IgnoreWords || 0.1))))), dom.label('Rare words', attr.title('Occurrences in word database until a word is considered rare and its influence in calculating probability reduced. E.g. 1 or 2.'), dom.div(junkRareWords = dom.input(attr.value('' + (acc.JunkFilter?.RareWords || 2))))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save')))))), dom.br(), dom.h2('Rejects'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		await check(rejectsFieldset, client.RejectsSave(rejectsMailbox.value, keepRejects.checked));

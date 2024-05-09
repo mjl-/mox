@@ -333,7 +333,11 @@ func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 func writeDynamic(ctx context.Context, log mlog.Log, c config.Dynamic) error {
 	accDests, aliases, errs := prepareDynamicConfig(ctx, log, ConfigDynamicPath, Conf.Static, &c)
 	if len(errs) > 0 {
-		return fmt.Errorf("%w: %v", ErrConfig, errs[0])
+		errstrs := make([]string, len(errs))
+		for i, err := range errs {
+			errstrs[i] = err.Error()
+		}
+		return fmt.Errorf("%w: %s", ErrConfig, strings.Join(errstrs, "; "))
 	}
 
 	var b bytes.Buffer
@@ -1288,6 +1292,22 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				addErrorf("invalid NotJunkMailboxRegexp regular expression: %v", err)
 			}
 			acc.NotJunkMailbox = r
+		}
+
+		if acc.JunkFilter != nil {
+			params := acc.JunkFilter.Params
+			if params.MaxPower < 0 || params.MaxPower > 0.5 {
+				addErrorf("junk filter MaxPower must be >= 0 and < 0.5")
+			}
+			if params.TopWords < 0 {
+				addErrorf("junk filter TopWords must be >= 0")
+			}
+			if params.IgnoreWords < 0 || params.IgnoreWords > 0.5 {
+				addErrorf("junk filter IgnoreWords must be >= 0 and < 0.5")
+			}
+			if params.RareWords < 0 {
+				addErrorf("junk filter RareWords must be >= 0")
+			}
 		}
 
 		acc.ParsedFromIDLoginAddresses = make([]smtp.Address, len(acc.FromIDLoginAddresses))

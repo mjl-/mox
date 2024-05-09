@@ -311,6 +311,16 @@ const index = async () => {
 	let neutralMailboxRegexp: HTMLInputElement
 	let notJunkMailboxRegexp: HTMLInputElement
 
+	let junkFilterFields: HTMLFieldSetElement
+	let junkFilterEnabled: HTMLInputElement
+	let junkThreshold: HTMLInputElement
+	let junkOnegrams: HTMLInputElement
+	let junkTwograms: HTMLInputElement
+	let junkMaxPower: HTMLInputElement
+	let junkTopWords: HTMLInputElement
+	let junkIgnoreWords: HTMLInputElement
+	let junkRareWords: HTMLInputElement
+
 	let rejectsFieldset: HTMLFieldSetElement
 	let rejectsMailbox: HTMLInputElement
 	let keepRejects: HTMLInputElement
@@ -728,7 +738,6 @@ const index = async () => {
 
 	dom._kids(page,
 		crumbs('Mox Account'),
-		dom.p('NOTE: Not all account settings can be configured through these pages yet. See the configuration file for more options.'),
 		dom.div(
 			'Default domain: ',
 			acc.DNSDomain.ASCII ? domainString(acc.DNSDomain) : '(none)',
@@ -894,6 +903,83 @@ const index = async () => {
 					dom.label(
 						'Not Junk mailbox regexp',
 						dom.div(notJunkMailboxRegexp=dom.input(attr.value(acc.AutomaticJunkFlags.NotJunkMailboxRegexp))),
+					),
+					dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))),
+				),
+			),
+		),
+		dom.br(),
+
+		dom.h2('Junk filter', attr.title('Content-based filtering, using the junk-status of individual messages to rank words in such messages as spam or ham. It is recommended you always set the applicable (non)-junk status on messages, and that you do not empty your Trash because those messages contain valuable ham/spam training information.')),
+		dom.form(
+			async function submit(e: SubmitEvent) {
+				e.preventDefault()
+				e.stopPropagation()
+
+				const xjunkFilter = () => {
+					if (!junkFilterEnabled.checked) {
+						return null
+					}
+					const r: api.JunkFilter = {
+						Threshold: parseFloat(junkThreshold.value),
+						Onegrams: junkOnegrams.checked,
+						Twograms: junkTwograms.checked,
+						Threegrams: acc.JunkFilter?.Threegrams || false, // Ignored on server.
+						MaxPower: parseFloat(junkMaxPower.value),
+						TopWords: parseInt(junkTopWords.value),
+						IgnoreWords: parseFloat(junkIgnoreWords.value),
+						RareWords: parseInt(junkRareWords.value),
+					}
+					return r
+				}
+				await check(junkFilterFields, (async () => await client.JunkFilterSave(xjunkFilter()))())
+			},
+			junkFilterFields=dom.fieldset(
+				dom.div(style({display: 'flex', gap: '1em'}),
+					dom.label(
+						'Enabled',
+						attr.title("If enabled, the junk filter is used to classify incoming email from first-time senders. The result, along with other checks, determines if the message will be accepted or rejected"),
+						dom.div(junkFilterEnabled=dom.input(attr.type('checkbox'), acc.JunkFilter ? attr.checked('') : [])),
+					),
+					dom.label(
+						'Threshold',
+						attr.title('Approximate spaminess score between 0 and 1 above which emails are rejected as spam. Each delivery attempt adds a little noise to make it slightly harder for spammers to identify words that strongly indicate non-spaminess and use it to bypass the filter. E.g. 0.95.'),
+						dom.div(junkThreshold=dom.input(attr.value(''+(acc.JunkFilter?.Threshold || '0.95')))),
+					),
+					dom.label(
+						'Onegrams',
+						attr.title('Track ham/spam ranking for single words.'),
+						dom.div(junkOnegrams=dom.input(attr.type('checkbox'), acc.JunkFilter?.Onegrams ? attr.checked('') : [])),
+					),
+					dom.label(
+						'Twograms',
+						attr.title('Track ham/spam ranking for each two consecutive words.'),
+						dom.div(junkTwograms=dom.input(attr.type('checkbox'), acc.JunkFilter?.Twograms ? attr.checked('') : [])),
+					),
+					dom.label(
+						'Threegrams',
+						attr.title('Track ham/spam ranking for each three consecutive words. Can only be changed by admin.'),
+						dom.div(dom.input(attr.type('checkbox'), attr.disabled(''), acc.JunkFilter?.Threegrams ? attr.checked('') : [])),
+					),
+					dom.label(
+						'Max power',
+						attr.title('Maximum power a word (combination) can have. If spaminess is 0.99, and max power is 0.1, spaminess of the word will be set to 0.9. Similar for ham words.'),
+						dom.div(junkMaxPower=dom.input(attr.value('' + (acc.JunkFilter?.MaxPower || 0.01)))),
+					),
+					dom.label(
+						'Top words',
+						attr.title('Number of most spammy/hammy words to use for calculating probability. E.g. 10.'),
+						dom.div(junkTopWords=dom.input(attr.value('' + (acc.JunkFilter?.TopWords || 10)))),
+					),
+					dom.label(
+						'Ignore words',
+						attr.title('Ignore words that are this much away from 0.5 haminess/spaminess. E.g. 0.1, causing word (combinations) of 0.4 to 0.6 to be ignored.'),
+						dom.div(junkIgnoreWords=dom.input(attr.value('' + (acc.JunkFilter?.IgnoreWords || 0.1)))),
+					),
+					dom.label(
+						'Rare words',
+						attr.title('Occurrences in word database until a word is considered rare and its influence in calculating probability reduced. E.g. 1 or 2.'),
+						dom.div(junkRareWords=dom.input(attr.value('' + (acc.JunkFilter?.RareWords || 2)))),
 					),
 					dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))),
 				),

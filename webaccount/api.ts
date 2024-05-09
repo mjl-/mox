@@ -517,6 +517,16 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
+	// JunkFilterSave saves junk filter settings. If junkFilter is nil, the junk filter
+	// is disabled. Otherwise all fields except Threegrams are stored.
+	async JunkFilterSave(junkFilter: JunkFilter | null): Promise<void> {
+		const fn: string = "JunkFilterSave"
+		const paramTypes: string[][] = [["nullable","JunkFilter"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [junkFilter]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
 	// RejectsSave saves the RejectsMailbox and KeepRejects settings.
 	async RejectsSave(mailbox: string, keep: boolean): Promise<void> {
 		const fn: string = "RejectsSave"

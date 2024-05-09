@@ -639,6 +639,28 @@ func (Account) AutomaticJunkFlagsSave(ctx context.Context, enabled bool, junkReg
 	xcheckf(ctx, err, "saving account automatic junk flags")
 }
 
+// JunkFilterSave saves junk filter settings. If junkFilter is nil, the junk filter
+// is disabled. Otherwise all fields except Threegrams are stored.
+func (Account) JunkFilterSave(ctx context.Context, junkFilter *config.JunkFilter) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+		if junkFilter == nil {
+			acc.JunkFilter = nil
+			return
+		}
+		old := acc.JunkFilter
+		acc.JunkFilter = junkFilter
+		acc.JunkFilter.Params.Threegrams = false
+		if old != nil {
+			acc.JunkFilter.Params.Threegrams = old.Params.Threegrams
+		}
+	})
+	if err != nil && errors.Is(err, mox.ErrConfig) {
+		xcheckuserf(ctx, err, "saving account junk filter settings")
+	}
+	xcheckf(ctx, err, "saving account junk filter settings")
+}
+
 // RejectsSave saves the RejectsMailbox and KeepRejects settings.
 func (Account) RejectsSave(ctx context.Context, mailbox string, keep bool) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)

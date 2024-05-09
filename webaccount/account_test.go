@@ -28,6 +28,7 @@ import (
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/junk"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/queue"
@@ -462,6 +463,18 @@ func TestAccount(t *testing.T) {
 
 	api.AutomaticJunkFlagsSave(ctx, true, "^(junk|spam)", "^(inbox|neutral|postmaster|dmarc|tlsrpt|rejects)", "")
 	api.AutomaticJunkFlagsSave(ctx, false, "", "", "")
+
+	api.JunkFilterSave(ctx, nil)
+	jf := config.JunkFilter{
+		Threshold: 0.95,
+		Params: junk.Params{
+			Twograms:    true,
+			MaxPower:    0.1,
+			TopWords:    10,
+			IgnoreWords: 0.1,
+		},
+	}
+	api.JunkFilterSave(ctx, &jf)
 
 	api.RejectsSave(ctx, "Rejects", true)
 	api.RejectsSave(ctx, "Rejects", false)

@@ -419,6 +419,20 @@
 			"Returns": []
 		},
 		{
+			"Name": "JunkFilterSave",
+			"Docs": "JunkFilterSave saves junk filter settings. If junkFilter is nil, the junk filter\nis disabled. Otherwise all fields except Threegrams are stored.",
+			"Params": [
+				{
+					"Name": "junkFilter",
+					"Typewords": [
+						"nullable",
+						"JunkFilter"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "RejectsSave",
 			"Docs": "RejectsSave saves the RejectsMailbox and KeepRejects settings.",
 			"Params": [
