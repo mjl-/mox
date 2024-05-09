@@ -104,6 +104,11 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 	if err == nil {
 		return
 	}
+	// If caller tried saving a config that is invalid, or because of a bad request, cause a user error.
+	if errors.Is(err, mox.ErrConfig) || errors.Is(err, mox.ErrRequest) {
+		xcheckuserf(ctx, err, format, args...)
+	}
+
 	msg := fmt.Sprintf(format, args...)
 	errmsg := fmt.Sprintf("%s: %s", msg, err)
 	pkglog.WithContext(ctx).Errorx(msg, err)
@@ -516,9 +521,6 @@ func (Account) OutgoingWebhookSave(ctx context.Context, url, authorization strin
 			acc.OutgoingWebhook = &config.OutgoingWebhook{URL: url, Authorization: authorization, Events: events}
 		}
 	})
-	if err != nil && errors.Is(err, mox.ErrConfig) {
-		xcheckuserf(ctx, err, "saving account outgoing webhook")
-	}
 	xcheckf(ctx, err, "saving account outgoing webhook")
 }
 
@@ -558,9 +560,6 @@ func (Account) IncomingWebhookSave(ctx context.Context, url, authorization strin
 			acc.IncomingWebhook = &config.IncomingWebhook{URL: url, Authorization: authorization}
 		}
 	})
-	if err != nil && errors.Is(err, mox.ErrConfig) {
-		xcheckuserf(ctx, err, "saving account incoming webhook")
-	}
 	xcheckf(ctx, err, "saving account incoming webhook")
 }
 
@@ -602,9 +601,6 @@ func (Account) FromIDLoginAddressesSave(ctx context.Context, loginAddresses []st
 	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.FromIDLoginAddresses = loginAddresses
 	})
-	if err != nil && errors.Is(err, mox.ErrConfig) {
-		xcheckuserf(ctx, err, "saving account fromid login addresses")
-	}
 	xcheckf(ctx, err, "saving account fromid login addresses")
 }
 
@@ -615,9 +611,6 @@ func (Account) KeepRetiredPeriodsSave(ctx context.Context, keepRetiredMessagePer
 		acc.KeepRetiredMessagePeriod = keepRetiredMessagePeriod
 		acc.KeepRetiredWebhookPeriod = keepRetiredWebhookPeriod
 	})
-	if err != nil && errors.Is(err, mox.ErrConfig) {
-		xcheckuserf(ctx, err, "saving account keep retired periods")
-	}
 	xcheckf(ctx, err, "saving account keep retired periods")
 }
 
@@ -633,9 +626,6 @@ func (Account) AutomaticJunkFlagsSave(ctx context.Context, enabled bool, junkReg
 			NotJunkMailboxRegexp: notJunkRegexp,
 		}
 	})
-	if err != nil && errors.Is(err, mox.ErrConfig) {
-		xcheckuserf(ctx, err, "saving account automatic junk flags")
-	}
 	xcheckf(ctx, err, "saving account automatic junk flags")
 }
 
@@ -655,9 +645,6 @@ func (Account) JunkFilterSave(ctx context.Context, junkFilter *config.JunkFilter
 			acc.JunkFilter.Params.Threegrams = old.Params.Threegrams
 		}
 	})
-	if err != nil && errors.Is(err, mox.ErrConfig) {
-		xcheckuserf(ctx, err, "saving account junk filter settings")
-	}
 	xcheckf(ctx, err, "saving account junk filter settings")
 }
 
@@ -668,8 +655,5 @@ func (Account) RejectsSave(ctx context.Context, mailbox string, keep bool) {
 		acc.RejectsMailbox = mailbox
 		acc.KeepRejects = keep
 	})
-	if err != nil && errors.Is(err, mox.ErrConfig) {
-		xcheckuserf(ctx, err, "saving account rejects settings")
-	}
 	xcheckf(ctx, err, "saving account rejects settings")
 }
