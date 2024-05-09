@@ -803,7 +803,9 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 
 		if len(txt) > 100 {
 			records = append(records,
-				"; NOTE: The following strings must be added to DNS as single record.",
+				"; NOTE: The following is a single long record split over several lines for use",
+				"; in zone files. When adding through a DNS operator web interface, combine the",
+				"; strings into a single string, without ().",
 			)
 		}
 		s := fmt.Sprintf("%s._domainkey.%s.   TXT %s", name, d, TXTStrings(txt))

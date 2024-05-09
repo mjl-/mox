@@ -183,14 +183,30 @@ verification.
 
 Recommended action: Install unbound, a DNSSEC-verifying recursive DNS resolver,
 ensure it has DNSSEC root keys (see unbound-anchor), and enable support for
-"extended dns errors" (EDE, available since unbound v1.16.0). Test with
-"dig com. ns" and look for "ad" (authentic data) in response "flags".
+"extended dns errors" (EDE, available since unbound v1.16.0, see below; not
+required, but it gives helpful error messages about DNSSEC failures instead of
+generic DNS SERVFAIL errors). Test with "dig com. ns" and look for "ad"
+(authentic data) in response "flags".
 
 cat <<EOF >/etc/unbound/unbound.conf.d/ede.conf
 server:
     ede: yes
     val-log-level: 2
 EOF
+
+Troubleshooting hints:
+- Ensure /etc/resolv.conf has "nameserver 127.0.0.1". If the IP is 127.0.0.53,
+  DNS resolving is done by systemd-resolved. Make sure "resolvconf" isn't
+  overwriting /etc/resolv.conf (Debian has a package "openresolv" that makes this
+  easier). "dig" also shows to which IP the DNS request was sent.
+- Ensure unbound has DNSSEC root keys available. See unbound config option
+  "auto-trust-anchor-file" and the unbound-anchor command. Ensure the file exists.
+- Run "./mox dns lookup ns com." to simulate the DNSSEC check done by mox. The
+  output should say "with dnssec".
+- The "delv" command can check whether a domain is DNSSEC-signed, but it does
+  its own DNSSEC verification instead of relying on the resolver, so you cannot
+  use it to check whether unbound is verifying DNSSEC correctly.
+- Increase logging in unbound, see options "verbosity" and "log-queries".
 
 `)
 	} else {
