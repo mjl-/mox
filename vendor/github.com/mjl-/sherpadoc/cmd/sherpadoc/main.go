@@ -46,6 +46,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/mjl-/sherpadoc"
@@ -59,6 +60,8 @@ var (
 	rename              = flag.String("rename", "", "comma-separated list of type renames as used with a package selector, e.g. \"somepkg SomeName OtherName\"")
 	title               = flag.String("title", "", "title of the API, default is the name of the type of the main API")
 	adjustFunctionNames = flag.String("adjust-function-names", "", `by default, the first character of function names is turned into lower case; with "lowerWord" the first string of upper case characters is lower cased, with "none" the name is left as is`)
+	sortfuncs           = flag.Bool("sort-funcs", false, "sort functions within section by name")
+	sorttypes           = flag.Bool("sort-types", false, "sort types within section by name")
 )
 
 // If there is a "vendor" directory, we'll load packages from there (instead of
@@ -176,11 +179,13 @@ func main() {
 				log.Printf("duplicate rename %q", elem)
 				usage()
 			}
-			if to[l[2]] {
-				log.Printf("duplicate rename type %q", l[2])
-				usage()
+			if !sherpadoc.IsBasicType(l[2]) {
+				if to[l[2]] {
+					log.Printf("duplicate rename type %q", l[2])
+					usage()
+				}
+				to[l[2]] = true
 			}
-			to[l[2]] = true
 			renames[src] = l[2]
 		}
 	}
@@ -223,7 +228,31 @@ func main() {
 	err := sherpadoc.Check(doc)
 	check(err, "checking sherpadoc output before writing")
 
+	sortFuncs(doc)
+
 	writeJSON(doc)
+}
+
+func sortFuncs(s *sherpadoc.Section) {
+	if *sortfuncs {
+		sort.Slice(s.Functions, func(i, j int) bool {
+			return s.Functions[i].Name < s.Functions[j].Name
+		})
+	}
+	if *sorttypes {
+		sort.Slice(s.Structs, func(i, j int) bool {
+			return s.Structs[i].Name < s.Structs[j].Name
+		})
+		sort.Slice(s.Ints, func(i, j int) bool {
+			return s.Ints[i].Name < s.Ints[j].Name
+		})
+		sort.Slice(s.Strings, func(i, j int) bool {
+			return s.Strings[i].Name < s.Strings[j].Name
+		})
+	}
+	for _, ss := range s.Sections {
+		sortFuncs(ss)
+	}
 }
 
 func writeJSON(v interface{}) {

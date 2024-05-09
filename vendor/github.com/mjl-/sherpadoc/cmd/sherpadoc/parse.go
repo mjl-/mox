@@ -186,6 +186,9 @@ func parseSection(t *doc.Type, pp *parsedPackage) *section {
 func ensureNamedType(t *doc.Type, sec *section, pp *parsedPackage) (name string) {
 	if s, ok := renames[renameSrc{pp.Pkg.Name, t.Name}]; ok {
 		name = s
+		if sherpadoc.IsBasicType(s) {
+			return
+		}
 	} else {
 		name = t.Name
 	}

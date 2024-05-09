@@ -2444,12 +2444,12 @@ const domainDMARC = async (d: string) => {
 					if (r.PolicyPublished.Domain !== d) {
 						policy.push(r.PolicyPublished.Domain)
 					}
-					const alignments = {'': '', 'r': 'relaxed', 's': 'strict'}
+					const alignments: {[k: string]: string} = {'': '', 'r': 'relaxed', 's': 'strict'}
 					if (r.PolicyPublished.ADKIM as string !== '') {
-						policy.push('dkim '+(alignments[r.PolicyPublished.ADKIM] || r.PolicyPublished.ADKIM))
+						policy.push('dkim '+(alignments[r.PolicyPublished.ADKIM] || ('invalid dkim alignment: '+(r.PolicyPublished.ADKIM || '(missing)'))))
 					}
 					if (r.PolicyPublished.ASPF as string !== '') {
-						policy.push('spf '+(alignments[r.PolicyPublished.ASPF] || r.PolicyPublished.ASPF))
+						policy.push('spf '+(alignments[r.PolicyPublished.ASPF] || ('invalid spf alignment: '+(r.PolicyPublished.ASPF || '(missing)'))))
 					}
 					if (r.PolicyPublished.Policy as string !== '') {
 						policy.push('policy '+r.PolicyPublished.Policy)
@@ -2490,7 +2490,7 @@ const domainDMARC = async (d: string) => {
 						const recordRowspan = attr.rowspan('' + (dkims.length+spfs.length))
 						const valignTop = style({verticalAlign: 'top'})
 
-						const dmarcStatuses = {
+						const dmarcStatuses: {[k: string]: string} = {
 							'': '(missing)',
 							none: 'DMARC checks or were not applied. This does not mean these messages are definitely not spam though, and they may have been rejected based on other checks, such as reputation or content-based filters.',
 							quarantine: 'DMARC policy is to mark message as spam.',
@@ -2509,7 +2509,7 @@ const domainDMARC = async (d: string) => {
 									dom.td(recordRowspan, valignTop, sourceIP(row.SourceIP)),
 									dom.td(recordRowspan, valignTop, '' + row.Count),
 									dom.td(recordRowspan, valignTop,
-										dom.span(pol.Disposition === 'none' ? 'none' : box(red, pol.Disposition), attr.title(pol.Disposition + ': ' + dmarcStatuses[pol.Disposition])),
+										dom.span(pol.Disposition === 'none' ? 'none' : box(red, pol.Disposition), attr.title(pol.Disposition + ': ' + (dmarcStatuses[pol.Disposition] || '(invalid disposition)'))),
 										(pol.Reasons || []).map(reason => [dom.br(), dom.span(reason.Type + (reason.Comment ? ' (' + reason.Comment + ')' : ''), attr.title('Policy was overridden by remote mail server for this reasons.'))]),
 									),
 									dom.td(recordRowspan, valignTop, pol.DKIM === 'pass' ? 'pass' : box(yellow, dom.span(pol.DKIM, attr.title('No or no valid DKIM-signature is present that is "aligned" with the domain name.')))),
@@ -2523,7 +2523,7 @@ const domainDMARC = async (d: string) => {
 							rows.push(tr)
 						}
 						for (const dkim of dkims) {
-							const statuses = {
+							const statuses: {[k: string]: string} = {
 								'': '(missing)',
 								none: 'Message was not signed',
 								pass: 'Message was signed and signature was verified.',
@@ -2543,7 +2543,7 @@ const domainDMARC = async (d: string) => {
 							)
 						}
 						for (const spf of spfs) {
-							const statuses = {
+							const statuses: {[k: string]: string} = {
 								'': '(missing)',
 								none: 'No SPF policy found.',
 								neutral: 'Policy states nothing about IP, typically due to "?" qualifier in SPF record.',

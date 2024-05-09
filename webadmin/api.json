@@ -4494,7 +4494,7 @@
 					"Name": "Type",
 					"Docs": "",
 					"Typewords": [
-						"PolicyType"
+						"string"
 					]
 				},
 				{
@@ -4550,7 +4550,7 @@
 					"Name": "ResultType",
 					"Docs": "",
 					"Typewords": [
-						"ResultType"
+						"string"
 					]
 				},
 				{
@@ -4779,28 +4779,28 @@
 					"Name": "ADKIM",
 					"Docs": "",
 					"Typewords": [
-						"Alignment"
+						"string"
 					]
 				},
 				{
 					"Name": "ASPF",
 					"Docs": "",
 					"Typewords": [
-						"Alignment"
+						"string"
 					]
 				},
 				{
 					"Name": "Policy",
 					"Docs": "",
 					"Typewords": [
-						"Disposition"
+						"string"
 					]
 				},
 				{
 					"Name": "SubdomainPolicy",
 					"Docs": "",
 					"Typewords": [
-						"Disposition"
+						"string"
 					]
 				},
 				{
@@ -4881,21 +4881,21 @@
 					"Name": "Disposition",
 					"Docs": "",
 					"Typewords": [
-						"Disposition"
+						"string"
 					]
 				},
 				{
 					"Name": "DKIM",
 					"Docs": "",
 					"Typewords": [
-						"DMARCResult"
+						"string"
 					]
 				},
 				{
 					"Name": "SPF",
 					"Docs": "",
 					"Typewords": [
-						"DMARCResult"
+						"string"
 					]
 				},
 				{
@@ -4916,7 +4916,7 @@
 					"Name": "Type",
 					"Docs": "",
 					"Typewords": [
-						"PolicyOverride"
+						"string"
 					]
 				},
 				{
@@ -4999,7 +4999,7 @@
 					"Name": "Result",
 					"Docs": "",
 					"Typewords": [
-						"DKIMResult"
+						"string"
 					]
 				},
 				{
@@ -5026,14 +5026,14 @@
 					"Name": "Scope",
 					"Docs": "",
 					"Typewords": [
-						"SPFDomainScope"
+						"string"
 					]
 				},
 				{
 					"Name": "Result",
 					"Docs": "",
 					"Typewords": [
-						"SPFResult"
+						"string"
 					]
 				}
 			]
@@ -6912,7 +6912,7 @@
 					"Name": "Disposition",
 					"Docs": "",
 					"Typewords": [
-						"Disposition"
+						"string"
 					]
 				},
 				{
@@ -7292,310 +7292,6 @@
 			"Name": "Localpart",
 			"Docs": "Localpart is a decoded local part of an email address, before the \"@\".\nFor quoted strings, values do not hold the double quote or escaping backslashes.\nAn empty string can be a valid localpart.\nLocalparts are in Unicode NFC.",
 			"Values": null
-		},
-		{
-			"Name": "PolicyType",
-			"Docs": "PolicyType indicates the policy success/failure results are for.",
-			"Values": [
-				{
-					"Name": "TLSA",
-					"Value": "tlsa",
-					"Docs": "For DANE, against a mail host (not recipient domain)."
-				},
-				{
-					"Name": "STS",
-					"Value": "sts",
-					"Docs": "For MTA-STS, against a recipient domain (not a mail host)."
-				},
-				{
-					"Name": "NoPolicyFound",
-					"Value": "no-policy-found",
-					"Docs": "Recipient domain did not have MTA-STS policy, or mail host (TSLA base domain)\ndid not have DANE TLSA records."
-				}
-			]
-		},
-		{
-			"Name": "ResultType",
-			"Docs": "ResultType represents a TLS error.",
-			"Values": [
-				{
-					"Name": "ResultSTARTTLSNotSupported",
-					"Value": "starttls-not-supported",
-					"Docs": ""
-				},
-				{
-					"Name": "ResultCertificateHostMismatch",
-					"Value": "certificate-host-mismatch",
-					"Docs": ""
-				},
-				{
-					"Name": "ResultCertificateExpired",
-					"Value": "certificate-expired",
-					"Docs": ""
-				},
-				{
-					"Name": "ResultTLSAInvalid",
-					"Value": "tlsa-invalid",
-					"Docs": ""
-				},
-				{
-					"Name": "ResultDNSSECInvalid",
-					"Value": "dnssec-invalid",
-					"Docs": ""
-				},
-				{
-					"Name": "ResultDANERequired",
-					"Value": "dane-required",
-					"Docs": ""
-				},
-				{
-					"Name": "ResultCertificateNotTrusted",
-					"Value": "certificate-not-trusted",
-					"Docs": ""
-				},
-				{
-					"Name": "ResultSTSPolicyInvalid",
-					"Value": "sts-policy-invalid",
-					"Docs": ""
-				},
-				{
-					"Name": "ResultSTSWebPKIInvalid",
-					"Value": "sts-webpki-invalid",
-					"Docs": ""
-				},
-				{
-					"Name": "ResultValidationFailure",
-					"Value": "validation-failure",
-					"Docs": "Other error."
-				},
-				{
-					"Name": "ResultSTSPolicyFetch",
-					"Value": "sts-policy-fetch-error",
-					"Docs": ""
-				}
-			]
-		},
-		{
-			"Name": "Alignment",
-			"Docs": "Alignment is the identifier alignment.",
-			"Values": [
-				{
-					"Name": "AlignmentAbsent",
-					"Value": "",
-					"Docs": ""
-				},
-				{
-					"Name": "AlignmentRelaxed",
-					"Value": "r",
-					"Docs": "Subdomains match the DMARC from-domain."
-				},
-				{
-					"Name": "AlignmentStrict",
-					"Value": "s",
-					"Docs": "Only exact from-domain match."
-				}
-			]
-		},
-		{
-			"Name": "Disposition",
-			"Docs": "Disposition is the requested action for a DMARC fail as specified in the\nDMARC policy in DNS.",
-			"Values": [
-				{
-					"Name": "DispositionAbsent",
-					"Value": "",
-					"Docs": ""
-				},
-				{
-					"Name": "DispositionNone",
-					"Value": "none",
-					"Docs": ""
-				},
-				{
-					"Name": "DispositionQuarantine",
-					"Value": "quarantine",
-					"Docs": ""
-				},
-				{
-					"Name": "DispositionReject",
-					"Value": "reject",
-					"Docs": ""
-				}
-			]
-		},
-		{
-			"Name": "DMARCResult",
-			"Docs": "DMARCResult is the final validation and alignment verdict for SPF and DKIM.",
-			"Values": [
-				{
-					"Name": "DMARCAbsent",
-					"Value": "",
-					"Docs": ""
-				},
-				{
-					"Name": "DMARCPass",
-					"Value": "pass",
-					"Docs": ""
-				},
-				{
-					"Name": "DMARCFail",
-					"Value": "fail",
-					"Docs": ""
-				}
-			]
-		},
-		{
-			"Name": "PolicyOverride",
-			"Docs": "PolicyOverride is a reason the requested DMARC policy from the DNS record\nwas not applied.",
-			"Values": [
-				{
-					"Name": "PolicyOverrideAbsent",
-					"Value": "",
-					"Docs": ""
-				},
-				{
-					"Name": "PolicyOverrideForwarded",
-					"Value": "forwarded",
-					"Docs": ""
-				},
-				{
-					"Name": "PolicyOverrideSampledOut",
-					"Value": "sampled_out",
-					"Docs": ""
-				},
-				{
-					"Name": "PolicyOverrideTrustedForwarder",
-					"Value": "trusted_forwarder",
-					"Docs": ""
-				},
-				{
-					"Name": "PolicyOverrideMailingList",
-					"Value": "mailing_list",
-					"Docs": ""
-				},
-				{
-					"Name": "PolicyOverrideLocalPolicy",
-					"Value": "local_policy",
-					"Docs": ""
-				},
-				{
-					"Name": "PolicyOverrideOther",
-					"Value": "other",
-					"Docs": ""
-				}
-			]
-		},
-		{
-			"Name": "DKIMResult",
-			"Docs": "",
-			"Values": [
-				{
-					"Name": "DKIMAbsent",
-					"Value": "",
-					"Docs": ""
-				},
-				{
-					"Name": "DKIMNone",
-					"Value": "none",
-					"Docs": ""
-				},
-				{
-					"Name": "DKIMPass",
-					"Value": "pass",
-					"Docs": ""
-				},
-				{
-					"Name": "DKIMFail",
-					"Value": "fail",
-					"Docs": ""
-				},
-				{
-					"Name": "DKIMPolicy",
-					"Value": "policy",
-					"Docs": ""
-				},
-				{
-					"Name": "DKIMNeutral",
-					"Value": "neutral",
-					"Docs": ""
-				},
-				{
-					"Name": "DKIMTemperror",
-					"Value": "temperror",
-					"Docs": ""
-				},
-				{
-					"Name": "DKIMPermerror",
-					"Value": "permerror",
-					"Docs": ""
-				}
-			]
-		},
-		{
-			"Name": "SPFDomainScope",
-			"Docs": "",
-			"Values": [
-				{
-					"Name": "SPFDomainScopeAbsent",
-					"Value": "",
-					"Docs": ""
-				},
-				{
-					"Name": "SPFDomainScopeHelo",
-					"Value": "helo",
-					"Docs": "SMTP EHLO"
-				},
-				{
-					"Name": "SPFDomainScopeMailFrom",
-					"Value": "mfrom",
-					"Docs": "SMTP \"MAIL FROM\"."
-				}
-			]
-		},
-		{
-			"Name": "SPFResult",
-			"Docs": "",
-			"Values": [
-				{
-					"Name": "SPFAbsent",
-					"Value": "",
-					"Docs": ""
-				},
-				{
-					"Name": "SPFNone",
-					"Value": "none",
-					"Docs": ""
-				},
-				{
-					"Name": "SPFNeutral",
-					"Value": "neutral",
-					"Docs": ""
-				},
-				{
-					"Name": "SPFPass",
-					"Value": "pass",
-					"Docs": ""
-				},
-				{
-					"Name": "SPFFail",
-					"Value": "fail",
-					"Docs": ""
-				},
-				{
-					"Name": "SPFSoftfail",
-					"Value": "softfail",
-					"Docs": ""
-				},
-				{
-					"Name": "SPFTemperror",
-					"Value": "temperror",
-					"Docs": ""
-				},
-				{
-					"Name": "SPFPermerror",
-					"Value": "permerror",
-					"Docs": ""
-				}
-			]
 		},
 		{
 			"Name": "IP",

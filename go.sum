@@ -35,8 +35,8 @@ github.com/mjl-/sconf v0.0.6/go.mod h1:uF8OdWtLT8La3i4ln176i1pB0ps9pXGCaABEU55Zk
 github.com/mjl-/sherpa v0.6.7 h1:C5F8XQdV5nCuS4fvB+ye/ziUQrajEhOoj/t2w5T14BY=
 github.com/mjl-/sherpa v0.6.7/go.mod h1:dSpAOdgpwdqQZ72O4n3EHo/tR68eKyan8tYYraUMPNc=
 github.com/mjl-/sherpadoc v0.0.0-20190505200843-c0a7f43f5f1d/go.mod h1:5khTKxoKKNXcB8bkVUO6GlzC7PFtMmkHq578lPbmnok=
-github.com/mjl-/sherpadoc v0.0.14 h1:Xrdg8RhAmTDQXlEU+qDSlige4zfhMHr+VKBJNpPeWe4=
-github.com/mjl-/sherpadoc v0.0.14/go.mod h1:vh5zcsk3j/Tvm725EY+unTZb3EZcZcpiEQzrODSa6+I=
+github.com/mjl-/sherpadoc v0.0.16 h1:BdlFNXfnTaA7qO54kof4xpNFJxYBTY0cIObRk7QAP6M=
+github.com/mjl-/sherpadoc v0.0.16/go.mod h1:vh5zcsk3j/Tvm725EY+unTZb3EZcZcpiEQzrODSa6+I=
 github.com/mjl-/sherpaprom v0.0.2 h1:1dlbkScsNafM5jURI44uiWrZMSwfZtcOFEEq7vx2C1Y=
 github.com/mjl-/sherpaprom v0.0.2/go.mod h1:cl5nMNOvqhzMiQJ2FzccQ9ReivjHXe53JhOVkPfSvw4=
 github.com/mjl-/sherpats v0.0.6 h1:2lSoJbb+jkjLOdlvoMxItq0QQrrnkH+rnm3PMRfpbmA=

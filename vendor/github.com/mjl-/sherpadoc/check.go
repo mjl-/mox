@@ -4,6 +4,15 @@ import (
 	"fmt"
 )
 
+// IsBasicType returns whether name is a basic type, like int32, string, any, timestamp, etc.
+func IsBasicType(name string) bool {
+	switch name {
+	case "any", "bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "int64s", "uint64s", "float32", "float64", "string", "timestamp":
+		return true
+	}
+	return false
+}
+
 type genError struct{ error }
 
 func parseError(path string, format string, args ...interface{}) {
@@ -88,6 +97,13 @@ func (c checker) checkTypewords(path string, tokens []string, okNullable bool) {
 	}
 	t := tokens[0]
 	tokens = tokens[1:]
+	if IsBasicType(t) {
+		if len(tokens) != 0 {
+			parseError(path, "leftover typewords %v", tokens)
+		}
+		return
+	}
+
 	switch t {
 	case "nullable":
 		if !okNullable {
@@ -97,10 +113,6 @@ func (c checker) checkTypewords(path string, tokens []string, okNullable bool) {
 			parseError(path, "missing typeword after %#v", t)
 		}
 		c.checkTypewords(path, tokens, false)
-	case "any", "bool", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "int64s", "uint64s", "float32", "float64", "string", "timestamp":
-		if len(tokens) != 0 {
-			parseError(path, "leftover typewords %v", tokens)
-		}
 	case "[]", "{}":
 		if len(tokens) == 0 {
 			parseError(path, "missing typeword after %#v", t)

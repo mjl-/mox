@@ -490,7 +490,7 @@ export interface Result {
 }
 
 export interface ResultPolicy {
-	Type: PolicyType
+	Type: string
 	String?: string[] | null
 	Domain: string  // ASCII/A-labels, ../rfc/8460:704
 	MXHost?: string[] | null
@@ -502,7 +502,7 @@ export interface Summary {
 }
 
 export interface FailureDetails {
-	ResultType: ResultType
+	ResultType: string
 	SendingMTAIP: string
 	ReceivingMXHostname: string
 	ReceivingMXHelo: string
@@ -549,10 +549,10 @@ export interface DateRange {
 // PolicyPublished is the policy as found in DNS for the domain.
 export interface PolicyPublished {
 	Domain: string  // Domain is where DMARC record was found, not necessarily message From. Reports we generate use unicode names, incoming reports may have either ASCII-only or Unicode domains.
-	ADKIM: Alignment
-	ASPF: Alignment
-	Policy: Disposition
-	SubdomainPolicy: Disposition
+	ADKIM: string
+	ASPF: string
+	Policy: string
+	SubdomainPolicy: string
 	Percentage: number
 	ReportingOptions: string
 }
@@ -570,14 +570,14 @@ export interface Row {
 }
 
 export interface PolicyEvaluated {
-	Disposition: Disposition
-	DKIM: DMARCResult
-	SPF: DMARCResult
+	Disposition: string
+	DKIM: string
+	SPF: string
 	Reasons?: PolicyOverrideReason[] | null
 }
 
 export interface PolicyOverrideReason {
-	Type: PolicyOverride
+	Type: string
 	Comment: string
 }
 
@@ -595,14 +595,14 @@ export interface AuthResults {
 export interface DKIMAuthResult {
 	Domain: string
 	Selector: string
-	Result: DKIMResult
+	Result: string
 	HumanResult: string
 }
 
 export interface SPFAuthResult {
 	Domain: string
-	Scope: SPFDomainScope
-	Result: SPFResult
+	Scope: string
+	Result: string
 }
 
 // DMARCSummary presents DMARC aggregate reporting statistics for a single domain
@@ -987,7 +987,7 @@ export interface Evaluation {
 	Addresses?: string[] | null  // "rua" in DMARC record, we only store evaluations for records with aggregate reporting addresses, so always non-empty.
 	PolicyPublished: PolicyPublished  // Policy used for evaluation. We don't store the "fo" field for failure reporting options, since we don't send failure reports for individual messages.
 	SourceIP: string  // For "row" in a report record.
-	Disposition: Disposition
+	Disposition: string
 	AlignedDKIMPass: boolean
 	AlignedSPFPass: boolean
 	OverrideReasons?: PolicyOverrideReason[] | null
@@ -1079,93 +1079,6 @@ export enum Mode {
 // Localparts are in Unicode NFC.
 export type Localpart = string
 
-// PolicyType indicates the policy success/failure results are for.
-export enum PolicyType {
-	TLSA = "tlsa",  // For DANE, against a mail host (not recipient domain).
-	STS = "sts",  // For MTA-STS, against a recipient domain (not a mail host).
-	// Recipient domain did not have MTA-STS policy, or mail host (TSLA base domain)
-	// did not have DANE TLSA records.
-	NoPolicyFound = "no-policy-found",
-}
-
-// ResultType represents a TLS error.
-export enum ResultType {
-	ResultSTARTTLSNotSupported = "starttls-not-supported",
-	ResultCertificateHostMismatch = "certificate-host-mismatch",
-	ResultCertificateExpired = "certificate-expired",
-	ResultTLSAInvalid = "tlsa-invalid",
-	ResultDNSSECInvalid = "dnssec-invalid",
-	ResultDANERequired = "dane-required",
-	ResultCertificateNotTrusted = "certificate-not-trusted",
-	ResultSTSPolicyInvalid = "sts-policy-invalid",
-	ResultSTSWebPKIInvalid = "sts-webpki-invalid",
-	ResultValidationFailure = "validation-failure",  // Other error.
-	ResultSTSPolicyFetch = "sts-policy-fetch-error",
-}
-
-// Alignment is the identifier alignment.
-export enum Alignment {
-	AlignmentAbsent = "",
-	AlignmentRelaxed = "r",  // Subdomains match the DMARC from-domain.
-	AlignmentStrict = "s",  // Only exact from-domain match.
-}
-
-// Disposition is the requested action for a DMARC fail as specified in the
-// DMARC policy in DNS.
-export enum Disposition {
-	DispositionAbsent = "",
-	DispositionNone = "none",
-	DispositionQuarantine = "quarantine",
-	DispositionReject = "reject",
-}
-
-// DMARCResult is the final validation and alignment verdict for SPF and DKIM.
-export enum DMARCResult {
-	DMARCAbsent = "",
-	DMARCPass = "pass",
-	DMARCFail = "fail",
-}
-
-// PolicyOverride is a reason the requested DMARC policy from the DNS record
-// was not applied.
-export enum PolicyOverride {
-	PolicyOverrideAbsent = "",
-	PolicyOverrideForwarded = "forwarded",
-	PolicyOverrideSampledOut = "sampled_out",
-	PolicyOverrideTrustedForwarder = "trusted_forwarder",
-	PolicyOverrideMailingList = "mailing_list",
-	PolicyOverrideLocalPolicy = "local_policy",
-	PolicyOverrideOther = "other",
-}
-
-export enum DKIMResult {
-	DKIMAbsent = "",
-	DKIMNone = "none",
-	DKIMPass = "pass",
-	DKIMFail = "fail",
-	DKIMPolicy = "policy",
-	DKIMNeutral = "neutral",
-	DKIMTemperror = "temperror",
-	DKIMPermerror = "permerror",
-}
-
-export enum SPFDomainScope {
-	SPFDomainScopeAbsent = "",
-	SPFDomainScopeHelo = "helo",  // SMTP EHLO
-	SPFDomainScopeMailFrom = "mfrom",  // SMTP "MAIL FROM".
-}
-
-export enum SPFResult {
-	SPFAbsent = "",
-	SPFNone = "none",
-	SPFNeutral = "neutral",
-	SPFPass = "pass",
-	SPFFail = "fail",
-	SPFSoftfail = "softfail",
-	SPFTemperror = "temperror",
-	SPFPermerror = "permerror",
-}
-
 // An IP is a single IP address, a slice of bytes.
 // Functions in this package accept either 4-byte (IPv4)
 // or 16-byte (IPv6) slices as input.
@@ -1178,7 +1091,7 @@ export enum SPFResult {
 export type IP = string
 
 export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"Canonicalization":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"ConfigDomain":true,"DANECheckResult":true,"DKIM":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARC":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Dynamic":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"Hook":true,"HookFilter":true,"HookResult":true,"HookRetired":true,"HookRetiredFilter":true,"HookRetiredSort":true,"HookSort":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"IncomingWebhook":true,"JunkFilter":true,"MTASTS":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"MsgResult":true,"MsgRetired":true,"OutgoingWebhook":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"RetiredFilter":true,"RetiredSort":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Selector":true,"Sort":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSRPT":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
-export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"Alignment":true,"CSRFToken":true,"DKIMResult":true,"DMARCPolicy":true,"DMARCResult":true,"Disposition":true,"IP":true,"Localpart":true,"Mode":true,"PolicyOverride":true,"PolicyType":true,"RUA":true,"ResultType":true,"SPFDomainScope":true,"SPFResult":true}
+export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"CSRFToken":true,"DMARCPolicy":true,"IP":true,"Localpart":true,"Mode":true,"RUA":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
 	"CheckResult": {"Name":"CheckResult","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"DNSSEC","Docs":"","Typewords":["DNSSECResult"]},{"Name":"IPRev","Docs":"","Typewords":["IPRevCheckResult"]},{"Name":"MX","Docs":"","Typewords":["MXCheckResult"]},{"Name":"TLS","Docs":"","Typewords":["TLSCheckResult"]},{"Name":"DANE","Docs":"","Typewords":["DANECheckResult"]},{"Name":"SPF","Docs":"","Typewords":["SPFCheckResult"]},{"Name":"DKIM","Docs":"","Typewords":["DKIMCheckResult"]},{"Name":"DMARC","Docs":"","Typewords":["DMARCCheckResult"]},{"Name":"HostTLSRPT","Docs":"","Typewords":["TLSRPTCheckResult"]},{"Name":"DomainTLSRPT","Docs":"","Typewords":["TLSRPTCheckResult"]},{"Name":"MTASTS","Docs":"","Typewords":["MTASTSCheckResult"]},{"Name":"SRVConf","Docs":"","Typewords":["SRVConfCheckResult"]},{"Name":"Autoconf","Docs":"","Typewords":["AutoconfCheckResult"]},{"Name":"Autodiscover","Docs":"","Typewords":["AutodiscoverCheckResult"]}]},
@@ -1237,22 +1150,22 @@ export const types: TypenameMap = {
 	"Report": {"Name":"Report","Docs":"","Fields":[{"Name":"OrganizationName","Docs":"","Typewords":["string"]},{"Name":"DateRange","Docs":"","Typewords":["TLSRPTDateRange"]},{"Name":"ContactInfo","Docs":"","Typewords":["string"]},{"Name":"ReportID","Docs":"","Typewords":["string"]},{"Name":"Policies","Docs":"","Typewords":["[]","Result"]}]},
 	"TLSRPTDateRange": {"Name":"TLSRPTDateRange","Docs":"","Fields":[{"Name":"Start","Docs":"","Typewords":["timestamp"]},{"Name":"End","Docs":"","Typewords":["timestamp"]}]},
 	"Result": {"Name":"Result","Docs":"","Fields":[{"Name":"Policy","Docs":"","Typewords":["ResultPolicy"]},{"Name":"Summary","Docs":"","Typewords":["Summary"]},{"Name":"FailureDetails","Docs":"","Typewords":["[]","FailureDetails"]}]},
-	"ResultPolicy": {"Name":"ResultPolicy","Docs":"","Fields":[{"Name":"Type","Docs":"","Typewords":["PolicyType"]},{"Name":"String","Docs":"","Typewords":["[]","string"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"MXHost","Docs":"","Typewords":["[]","string"]}]},
+	"ResultPolicy": {"Name":"ResultPolicy","Docs":"","Fields":[{"Name":"Type","Docs":"","Typewords":["string"]},{"Name":"String","Docs":"","Typewords":["[]","string"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"MXHost","Docs":"","Typewords":["[]","string"]}]},
 	"Summary": {"Name":"Summary","Docs":"","Fields":[{"Name":"TotalSuccessfulSessionCount","Docs":"","Typewords":["int64"]},{"Name":"TotalFailureSessionCount","Docs":"","Typewords":["int64"]}]},
-	"FailureDetails": {"Name":"FailureDetails","Docs":"","Fields":[{"Name":"ResultType","Docs":"","Typewords":["ResultType"]},{"Name":"SendingMTAIP","Docs":"","Typewords":["string"]},{"Name":"ReceivingMXHostname","Docs":"","Typewords":["string"]},{"Name":"ReceivingMXHelo","Docs":"","Typewords":["string"]},{"Name":"ReceivingIP","Docs":"","Typewords":["string"]},{"Name":"FailedSessionCount","Docs":"","Typewords":["int64"]},{"Name":"AdditionalInformation","Docs":"","Typewords":["string"]},{"Name":"FailureReasonCode","Docs":"","Typewords":["string"]}]},
+	"FailureDetails": {"Name":"FailureDetails","Docs":"","Fields":[{"Name":"ResultType","Docs":"","Typewords":["string"]},{"Name":"SendingMTAIP","Docs":"","Typewords":["string"]},{"Name":"ReceivingMXHostname","Docs":"","Typewords":["string"]},{"Name":"ReceivingMXHelo","Docs":"","Typewords":["string"]},{"Name":"ReceivingIP","Docs":"","Typewords":["string"]},{"Name":"FailedSessionCount","Docs":"","Typewords":["int64"]},{"Name":"AdditionalInformation","Docs":"","Typewords":["string"]},{"Name":"FailureReasonCode","Docs":"","Typewords":["string"]}]},
 	"TLSRPTSummary": {"Name":"TLSRPTSummary","Docs":"","Fields":[{"Name":"PolicyDomain","Docs":"","Typewords":["Domain"]},{"Name":"Success","Docs":"","Typewords":["int64"]},{"Name":"Failure","Docs":"","Typewords":["int64"]},{"Name":"ResultTypeCounts","Docs":"","Typewords":["{}","int64"]}]},
 	"DomainFeedback": {"Name":"DomainFeedback","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"FromDomain","Docs":"","Typewords":["string"]},{"Name":"Version","Docs":"","Typewords":["string"]},{"Name":"ReportMetadata","Docs":"","Typewords":["ReportMetadata"]},{"Name":"PolicyPublished","Docs":"","Typewords":["PolicyPublished"]},{"Name":"Records","Docs":"","Typewords":["[]","ReportRecord"]}]},
 	"ReportMetadata": {"Name":"ReportMetadata","Docs":"","Fields":[{"Name":"OrgName","Docs":"","Typewords":["string"]},{"Name":"Email","Docs":"","Typewords":["string"]},{"Name":"ExtraContactInfo","Docs":"","Typewords":["string"]},{"Name":"ReportID","Docs":"","Typewords":["string"]},{"Name":"DateRange","Docs":"","Typewords":["DateRange"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]}]},
 	"DateRange": {"Name":"DateRange","Docs":"","Fields":[{"Name":"Begin","Docs":"","Typewords":["int64"]},{"Name":"End","Docs":"","Typewords":["int64"]}]},
-	"PolicyPublished": {"Name":"PolicyPublished","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"ADKIM","Docs":"","Typewords":["Alignment"]},{"Name":"ASPF","Docs":"","Typewords":["Alignment"]},{"Name":"Policy","Docs":"","Typewords":["Disposition"]},{"Name":"SubdomainPolicy","Docs":"","Typewords":["Disposition"]},{"Name":"Percentage","Docs":"","Typewords":["int32"]},{"Name":"ReportingOptions","Docs":"","Typewords":["string"]}]},
+	"PolicyPublished": {"Name":"PolicyPublished","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"ADKIM","Docs":"","Typewords":["string"]},{"Name":"ASPF","Docs":"","Typewords":["string"]},{"Name":"Policy","Docs":"","Typewords":["string"]},{"Name":"SubdomainPolicy","Docs":"","Typewords":["string"]},{"Name":"Percentage","Docs":"","Typewords":["int32"]},{"Name":"ReportingOptions","Docs":"","Typewords":["string"]}]},
 	"ReportRecord": {"Name":"ReportRecord","Docs":"","Fields":[{"Name":"Row","Docs":"","Typewords":["Row"]},{"Name":"Identifiers","Docs":"","Typewords":["Identifiers"]},{"Name":"AuthResults","Docs":"","Typewords":["AuthResults"]}]},
 	"Row": {"Name":"Row","Docs":"","Fields":[{"Name":"SourceIP","Docs":"","Typewords":["string"]},{"Name":"Count","Docs":"","Typewords":["int32"]},{"Name":"PolicyEvaluated","Docs":"","Typewords":["PolicyEvaluated"]}]},
-	"PolicyEvaluated": {"Name":"PolicyEvaluated","Docs":"","Fields":[{"Name":"Disposition","Docs":"","Typewords":["Disposition"]},{"Name":"DKIM","Docs":"","Typewords":["DMARCResult"]},{"Name":"SPF","Docs":"","Typewords":["DMARCResult"]},{"Name":"Reasons","Docs":"","Typewords":["[]","PolicyOverrideReason"]}]},
-	"PolicyOverrideReason": {"Name":"PolicyOverrideReason","Docs":"","Fields":[{"Name":"Type","Docs":"","Typewords":["PolicyOverride"]},{"Name":"Comment","Docs":"","Typewords":["string"]}]},
+	"PolicyEvaluated": {"Name":"PolicyEvaluated","Docs":"","Fields":[{"Name":"Disposition","Docs":"","Typewords":["string"]},{"Name":"DKIM","Docs":"","Typewords":["string"]},{"Name":"SPF","Docs":"","Typewords":["string"]},{"Name":"Reasons","Docs":"","Typewords":["[]","PolicyOverrideReason"]}]},
+	"PolicyOverrideReason": {"Name":"PolicyOverrideReason","Docs":"","Fields":[{"Name":"Type","Docs":"","Typewords":["string"]},{"Name":"Comment","Docs":"","Typewords":["string"]}]},
 	"Identifiers": {"Name":"Identifiers","Docs":"","Fields":[{"Name":"EnvelopeTo","Docs":"","Typewords":["string"]},{"Name":"EnvelopeFrom","Docs":"","Typewords":["string"]},{"Name":"HeaderFrom","Docs":"","Typewords":["string"]}]},
 	"AuthResults": {"Name":"AuthResults","Docs":"","Fields":[{"Name":"DKIM","Docs":"","Typewords":["[]","DKIMAuthResult"]},{"Name":"SPF","Docs":"","Typewords":["[]","SPFAuthResult"]}]},
-	"DKIMAuthResult": {"Name":"DKIMAuthResult","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Selector","Docs":"","Typewords":["string"]},{"Name":"Result","Docs":"","Typewords":["DKIMResult"]},{"Name":"HumanResult","Docs":"","Typewords":["string"]}]},
-	"SPFAuthResult": {"Name":"SPFAuthResult","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Scope","Docs":"","Typewords":["SPFDomainScope"]},{"Name":"Result","Docs":"","Typewords":["SPFResult"]}]},
+	"DKIMAuthResult": {"Name":"DKIMAuthResult","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Selector","Docs":"","Typewords":["string"]},{"Name":"Result","Docs":"","Typewords":["string"]},{"Name":"HumanResult","Docs":"","Typewords":["string"]}]},
+	"SPFAuthResult": {"Name":"SPFAuthResult","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Scope","Docs":"","Typewords":["string"]},{"Name":"Result","Docs":"","Typewords":["string"]}]},
 	"DMARCSummary": {"Name":"DMARCSummary","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Total","Docs":"","Typewords":["int32"]},{"Name":"DispositionNone","Docs":"","Typewords":["int32"]},{"Name":"DispositionQuarantine","Docs":"","Typewords":["int32"]},{"Name":"DispositionReject","Docs":"","Typewords":["int32"]},{"Name":"DKIMFail","Docs":"","Typewords":["int32"]},{"Name":"SPFFail","Docs":"","Typewords":["int32"]},{"Name":"PolicyOverrides","Docs":"","Typewords":["{}","int32"]}]},
 	"Reverse": {"Name":"Reverse","Docs":"","Fields":[{"Name":"Hostnames","Docs":"","Typewords":["[]","string"]}]},
 	"ClientConfigs": {"Name":"ClientConfigs","Docs":"","Fields":[{"Name":"Entries","Docs":"","Typewords":["[]","ClientConfigsEntry"]}]},
@@ -1284,7 +1197,7 @@ export const types: TypenameMap = {
 	"TransportSocks": {"Name":"TransportSocks","Docs":"","Fields":[{"Name":"Address","Docs":"","Typewords":["string"]},{"Name":"RemoteIPs","Docs":"","Typewords":["[]","string"]},{"Name":"RemoteHostname","Docs":"","Typewords":["string"]}]},
 	"TransportDirect": {"Name":"TransportDirect","Docs":"","Fields":[{"Name":"DisableIPv4","Docs":"","Typewords":["bool"]},{"Name":"DisableIPv6","Docs":"","Typewords":["bool"]}]},
 	"EvaluationStat": {"Name":"EvaluationStat","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["Domain"]},{"Name":"Dispositions","Docs":"","Typewords":["[]","string"]},{"Name":"Count","Docs":"","Typewords":["int32"]},{"Name":"SendReport","Docs":"","Typewords":["bool"]}]},
-	"Evaluation": {"Name":"Evaluation","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"PolicyDomain","Docs":"","Typewords":["string"]},{"Name":"Evaluated","Docs":"","Typewords":["timestamp"]},{"Name":"Optional","Docs":"","Typewords":["bool"]},{"Name":"IntervalHours","Docs":"","Typewords":["int32"]},{"Name":"Addresses","Docs":"","Typewords":["[]","string"]},{"Name":"PolicyPublished","Docs":"","Typewords":["PolicyPublished"]},{"Name":"SourceIP","Docs":"","Typewords":["string"]},{"Name":"Disposition","Docs":"","Typewords":["Disposition"]},{"Name":"AlignedDKIMPass","Docs":"","Typewords":["bool"]},{"Name":"AlignedSPFPass","Docs":"","Typewords":["bool"]},{"Name":"OverrideReasons","Docs":"","Typewords":["[]","PolicyOverrideReason"]},{"Name":"EnvelopeTo","Docs":"","Typewords":["string"]},{"Name":"EnvelopeFrom","Docs":"","Typewords":["string"]},{"Name":"HeaderFrom","Docs":"","Typewords":["string"]},{"Name":"DKIMResults","Docs":"","Typewords":["[]","DKIMAuthResult"]},{"Name":"SPFResults","Docs":"","Typewords":["[]","SPFAuthResult"]}]},
+	"Evaluation": {"Name":"Evaluation","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"PolicyDomain","Docs":"","Typewords":["string"]},{"Name":"Evaluated","Docs":"","Typewords":["timestamp"]},{"Name":"Optional","Docs":"","Typewords":["bool"]},{"Name":"IntervalHours","Docs":"","Typewords":["int32"]},{"Name":"Addresses","Docs":"","Typewords":["[]","string"]},{"Name":"PolicyPublished","Docs":"","Typewords":["PolicyPublished"]},{"Name":"SourceIP","Docs":"","Typewords":["string"]},{"Name":"Disposition","Docs":"","Typewords":["string"]},{"Name":"AlignedDKIMPass","Docs":"","Typewords":["bool"]},{"Name":"AlignedSPFPass","Docs":"","Typewords":["bool"]},{"Name":"OverrideReasons","Docs":"","Typewords":["[]","PolicyOverrideReason"]},{"Name":"EnvelopeTo","Docs":"","Typewords":["string"]},{"Name":"EnvelopeFrom","Docs":"","Typewords":["string"]},{"Name":"HeaderFrom","Docs":"","Typewords":["string"]},{"Name":"DKIMResults","Docs":"","Typewords":["[]","DKIMAuthResult"]},{"Name":"SPFResults","Docs":"","Typewords":["[]","SPFAuthResult"]}]},
 	"SuppressAddress": {"Name":"SuppressAddress","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Inserted","Docs":"","Typewords":["timestamp"]},{"Name":"ReportingAddress","Docs":"","Typewords":["string"]},{"Name":"Until","Docs":"","Typewords":["timestamp"]},{"Name":"Comment","Docs":"","Typewords":["string"]}]},
 	"TLSResult": {"Name":"TLSResult","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"PolicyDomain","Docs":"","Typewords":["string"]},{"Name":"DayUTC","Docs":"","Typewords":["string"]},{"Name":"RecipientDomain","Docs":"","Typewords":["string"]},{"Name":"Created","Docs":"","Typewords":["timestamp"]},{"Name":"Updated","Docs":"","Typewords":["timestamp"]},{"Name":"IsHost","Docs":"","Typewords":["bool"]},{"Name":"SendReport","Docs":"","Typewords":["bool"]},{"Name":"SentToRecipientDomain","Docs":"","Typewords":["bool"]},{"Name":"RecipientDomainReportingAddresses","Docs":"","Typewords":["[]","string"]},{"Name":"SentToPolicyDomain","Docs":"","Typewords":["bool"]},{"Name":"Results","Docs":"","Typewords":["[]","Result"]}]},
 	"TLSRPTSuppressAddress": {"Name":"TLSRPTSuppressAddress","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Inserted","Docs":"","Typewords":["timestamp"]},{"Name":"ReportingAddress","Docs":"","Typewords":["string"]},{"Name":"Until","Docs":"","Typewords":["timestamp"]},{"Name":"Comment","Docs":"","Typewords":["string"]}]},
@@ -1295,15 +1208,6 @@ export const types: TypenameMap = {
 	"RUA": {"Name":"RUA","Docs":"","Values":null},
 	"Mode": {"Name":"Mode","Docs":"","Values":[{"Name":"ModeEnforce","Value":"enforce","Docs":""},{"Name":"ModeTesting","Value":"testing","Docs":""},{"Name":"ModeNone","Value":"none","Docs":""}]},
 	"Localpart": {"Name":"Localpart","Docs":"","Values":null},
-	"PolicyType": {"Name":"PolicyType","Docs":"","Values":[{"Name":"TLSA","Value":"tlsa","Docs":""},{"Name":"STS","Value":"sts","Docs":""},{"Name":"NoPolicyFound","Value":"no-policy-found","Docs":""}]},
-	"ResultType": {"Name":"ResultType","Docs":"","Values":[{"Name":"ResultSTARTTLSNotSupported","Value":"starttls-not-supported","Docs":""},{"Name":"ResultCertificateHostMismatch","Value":"certificate-host-mismatch","Docs":""},{"Name":"ResultCertificateExpired","Value":"certificate-expired","Docs":""},{"Name":"ResultTLSAInvalid","Value":"tlsa-invalid","Docs":""},{"Name":"ResultDNSSECInvalid","Value":"dnssec-invalid","Docs":""},{"Name":"ResultDANERequired","Value":"dane-required","Docs":""},{"Name":"ResultCertificateNotTrusted","Value":"certificate-not-trusted","Docs":""},{"Name":"ResultSTSPolicyInvalid","Value":"sts-policy-invalid","Docs":""},{"Name":"ResultSTSWebPKIInvalid","Value":"sts-webpki-invalid","Docs":""},{"Name":"ResultValidationFailure","Value":"validation-failure","Docs":""},{"Name":"ResultSTSPolicyFetch","Value":"sts-policy-fetch-error","Docs":""}]},
-	"Alignment": {"Name":"Alignment","Docs":"","Values":[{"Name":"AlignmentAbsent","Value":"","Docs":""},{"Name":"AlignmentRelaxed","Value":"r","Docs":""},{"Name":"AlignmentStrict","Value":"s","Docs":""}]},
-	"Disposition": {"Name":"Disposition","Docs":"","Values":[{"Name":"DispositionAbsent","Value":"","Docs":""},{"Name":"DispositionNone","Value":"none","Docs":""},{"Name":"DispositionQuarantine","Value":"quarantine","Docs":""},{"Name":"DispositionReject","Value":"reject","Docs":""}]},
-	"DMARCResult": {"Name":"DMARCResult","Docs":"","Values":[{"Name":"DMARCAbsent","Value":"","Docs":""},{"Name":"DMARCPass","Value":"pass","Docs":""},{"Name":"DMARCFail","Value":"fail","Docs":""}]},
-	"PolicyOverride": {"Name":"PolicyOverride","Docs":"","Values":[{"Name":"PolicyOverrideAbsent","Value":"","Docs":""},{"Name":"PolicyOverrideForwarded","Value":"forwarded","Docs":""},{"Name":"PolicyOverrideSampledOut","Value":"sampled_out","Docs":""},{"Name":"PolicyOverrideTrustedForwarder","Value":"trusted_forwarder","Docs":""},{"Name":"PolicyOverrideMailingList","Value":"mailing_list","Docs":""},{"Name":"PolicyOverrideLocalPolicy","Value":"local_policy","Docs":""},{"Name":"PolicyOverrideOther","Value":"other","Docs":""}]},
-	"DKIMResult": {"Name":"DKIMResult","Docs":"","Values":[{"Name":"DKIMAbsent","Value":"","Docs":""},{"Name":"DKIMNone","Value":"none","Docs":""},{"Name":"DKIMPass","Value":"pass","Docs":""},{"Name":"DKIMFail","Value":"fail","Docs":""},{"Name":"DKIMPolicy","Value":"policy","Docs":""},{"Name":"DKIMNeutral","Value":"neutral","Docs":""},{"Name":"DKIMTemperror","Value":"temperror","Docs":""},{"Name":"DKIMPermerror","Value":"permerror","Docs":""}]},
-	"SPFDomainScope": {"Name":"SPFDomainScope","Docs":"","Values":[{"Name":"SPFDomainScopeAbsent","Value":"","Docs":""},{"Name":"SPFDomainScopeHelo","Value":"helo","Docs":""},{"Name":"SPFDomainScopeMailFrom","Value":"mfrom","Docs":""}]},
-	"SPFResult": {"Name":"SPFResult","Docs":"","Values":[{"Name":"SPFAbsent","Value":"","Docs":""},{"Name":"SPFNone","Value":"none","Docs":""},{"Name":"SPFNeutral","Value":"neutral","Docs":""},{"Name":"SPFPass","Value":"pass","Docs":""},{"Name":"SPFFail","Value":"fail","Docs":""},{"Name":"SPFSoftfail","Value":"softfail","Docs":""},{"Name":"SPFTemperror","Value":"temperror","Docs":""},{"Name":"SPFPermerror","Value":"permerror","Docs":""}]},
 	"IP": {"Name":"IP","Docs":"","Values":[]},
 }
 
@@ -1422,15 +1326,6 @@ export const parser = {
 	RUA: (v: any) => parse("RUA", v) as RUA,
 	Mode: (v: any) => parse("Mode", v) as Mode,
 	Localpart: (v: any) => parse("Localpart", v) as Localpart,
-	PolicyType: (v: any) => parse("PolicyType", v) as PolicyType,
-	ResultType: (v: any) => parse("ResultType", v) as ResultType,
-	Alignment: (v: any) => parse("Alignment", v) as Alignment,
-	Disposition: (v: any) => parse("Disposition", v) as Disposition,
-	DMARCResult: (v: any) => parse("DMARCResult", v) as DMARCResult,
-	PolicyOverride: (v: any) => parse("PolicyOverride", v) as PolicyOverride,
-	DKIMResult: (v: any) => parse("DKIMResult", v) as DKIMResult,
-	SPFDomainScope: (v: any) => parse("SPFDomainScope", v) as SPFDomainScope,
-	SPFResult: (v: any) => parse("SPFResult", v) as SPFResult,
 	IP: (v: any) => parse("IP", v) as IP,
 }
 
