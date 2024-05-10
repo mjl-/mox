@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"reflect"
 	"sort"
@@ -50,6 +51,17 @@ var errSchemaCheck = errors.New("schema check")
 // to "changed", an error is returned if there is no schema change. If it is set to
 // "unchanged", an error is returned if there was a schema change.
 func (db *DB) Register(ctx context.Context, typeValues ...any) error {
+	return db.register(ctx, slog.New(discardHandler{}), typeValues...)
+}
+
+type discardHandler struct{}
+
+func (l discardHandler) Enabled(context.Context, slog.Level) bool  { return false }
+func (l discardHandler) Handle(context.Context, slog.Record) error { return nil }
+func (l discardHandler) WithAttrs(attrs []slog.Attr) slog.Handler  { return l }
+func (l discardHandler) WithGroup(name string) slog.Handler        { return l }
+
+func (db *DB) register(ctx context.Context, log *slog.Logger, typeValues ...any) error {
 	// We will drop/create new indices as needed. For changed indices, we drop
 	// and recreate. E.g. if an index becomes a unique index, or if a field in
 	// an index changes.  These values map type and index name to their index.
@@ -148,6 +160,9 @@ func (db *DB) Register(ctx context.Context, typeValues ...any) error {
 				tv.Version = 1
 				if st.Current != nil {
 					tv.Version = st.Current.Version + 1
+					log.Debug("updating schema for type", slog.String("type", tv.name), slog.Uint64("version", uint64(tv.Version)))
+				} else {
+					log.Debug("adding schema for new type", slog.String("type", tv.name), slog.Uint64("version", uint64(tv.Version)))
 				}
 				k, v, err := packSchema(tv)
 				if err != nil {
@@ -299,6 +314,7 @@ func (db *DB) Register(ctx context.Context, typeValues ...any) error {
 						}
 
 						foundField = true
+						log.Debug("verifying foreign key constraint for new reference", slog.String("fromtype", ntname), slog.String("fromfield", f.Name), slog.String("totype", name))
 
 						// For newly added references, check they are valid.
 						b, err := tx.recordsBucket(ntname, ntv.fillPercent)
@@ -396,6 +412,7 @@ func (db *DB) Register(ctx context.Context, typeValues ...any) error {
 				db.types[st.Type] = *st
 				db.typeNames[st.Name] = *st
 				ntvp = &ntv
+				log.Debug("updating schema for type due to new incoming reference", slog.String("type", name), slog.Uint64("version", uint64(ntv.Version)))
 			}
 
 			k, v, err := packSchema(ntvp)
@@ -453,6 +470,7 @@ func (db *DB) Register(ctx context.Context, typeValues ...any) error {
 				if !drop {
 					continue
 				}
+				log.Debug("dropping old/modified index", slog.String("type", name), slog.String("indexname", iname))
 				b, err := tx.typeBucket(name)
 				if err != nil {
 					return err
@@ -482,6 +500,7 @@ func (db *DB) Register(ctx context.Context, typeValues ...any) error {
 				if !create {
 					continue
 				}
+				log.Debug("preparing for new/modified index for type", slog.String("type", name), slog.String("indexname", iname))
 				b, err := tx.typeBucket(name)
 				if err != nil {
 					return err
@@ -577,6 +596,8 @@ func (db *DB) Register(ctx context.Context, typeValues ...any) error {
 				}
 				return nil
 			}
+
+			log.Debug("creating new/modified indexes for type", slog.String("type", name))
 
 			// Now do all sorts + inserts.
 			for i, ib := range ibs {

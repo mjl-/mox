@@ -62,7 +62,8 @@ func xcmdExport(mbox, single bool, args []string, c *cmd) {
 	}
 
 	dbpath := filepath.Join(accountDir, "index.db")
-	db, err := bstore.Open(context.Background(), dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, store.DBTypes...)
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: c.log.Logger}
+	db, err := bstore.Open(context.Background(), dbpath, &opts, store.DBTypes...)
 	xcheckf(err, "open database %q", dbpath)
 	defer func() {
 		if err := db.Close(); err != nil {

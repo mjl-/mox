@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	golog "log"
 	"math/big"
 	"net"
 	"net/http"
@@ -39,15 +39,14 @@ func TestRefresh(t *testing.T) {
 	os.Remove(dbpath)
 	defer os.Remove(dbpath)
 
-	if err := Init(false); err != nil {
-		t.Fatalf("init database: %s", err)
-	}
-	defer Close()
+	log := mlog.New("mtastsdb", nil)
 
-	db, err := database(ctxbg)
-	if err != nil {
-		t.Fatalf("database: %s", err)
-	}
+	err := Init(false)
+	tcheckf(t, err, "init database")
+	defer func() {
+		err := Close()
+		tcheckf(t, err, "close database")
+	}()
 
 	cert := fakeCert(t, false)
 	defer func() {
@@ -70,7 +69,7 @@ func TestRefresh(t *testing.T) {
 		}
 
 		pr := PolicyRecord{domain, time.Time{}, validEnd, lastUpdate, lastUse, backoff, recordID, policy, policy.String()}
-		if err := db.Insert(ctxbg, &pr); err != nil {
+		if err := DB.Insert(ctxbg, &pr); err != nil {
 			t.Fatalf("insert policy: %s", err)
 		}
 	}
@@ -114,7 +113,7 @@ func TestRefresh(t *testing.T) {
 			TLSConfig: &tls.Config{
 				Certificates: []tls.Certificate{cert},
 			},
-			ErrorLog: log.New(io.Discard, "", 0),
+			ErrorLog: golog.New(io.Discard, "", 0),
 		}
 		s.ServeTLS(l, "", "")
 	}()
@@ -136,7 +135,6 @@ func TestRefresh(t *testing.T) {
 			t.Fatalf("bad sleep duration %v", d)
 		}
 	}
-	log := mlog.New("mtastsdb", nil)
 	if n, err := refresh1(ctxbg, log, resolver, sleep); err != nil || n != 3 {
 		t.Fatalf("refresh1: err %s, n %d, expected no error, 3", err, n)
 	}
@@ -146,7 +144,7 @@ func TestRefresh(t *testing.T) {
 	time.Sleep(time.Second / 10) // Give goroutine time to write result, before we cleanup the database.
 
 	// Should not do any more refreshes and return immediately.
-	q := bstore.QueryDB[PolicyRecord](ctxbg, db)
+	q := bstore.QueryDB[PolicyRecord](ctxbg, DB)
 	q.FilterNonzero(PolicyRecord{Domain: "policybad.mox.example"})
 	if _, err := q.Delete(); err != nil {
 		t.Fatalf("delete record that would be refreshed: %v", err)

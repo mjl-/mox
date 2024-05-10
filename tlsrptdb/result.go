@@ -3,14 +3,11 @@ package tlsrptdb
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/dns"
-	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/tlsrpt"
 )
 
@@ -70,33 +67,13 @@ type SuppressAddress struct {
 	Comment          string
 }
 
-func resultDB(ctx context.Context) (rdb *bstore.DB, rerr error) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	if ResultDB == nil {
-		p := mox.DataDirPath("tlsrptresult.db")
-		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, ResultDBTypes...)
-		if err != nil {
-			return nil, err
-		}
-		ResultDB = db
-	}
-	return ResultDB, nil
-}
-
 // AddTLSResults adds or merges all tls results for delivering to a policy domain,
 // on its UTC day to a recipient domain to the database. Results may cause multiple
 // separate reports to be sent.
 func AddTLSResults(ctx context.Context, results []TLSResult) error {
-	db, err := resultDB(ctx)
-	if err != nil {
-		return err
-	}
-
 	now := time.Now()
 
-	err = db.Write(ctx, func(tx *bstore.Tx) error {
+	err := ResultDB.Write(ctx, func(tx *bstore.Tx) error {
 		for _, result := range results {
 			// Ensure all slices are non-nil. We do this now so all readers will marshal to
 			// compliant with the JSON schema. And also for consistent equality checks when
@@ -148,102 +125,57 @@ func AddTLSResults(ctx context.Context, results []TLSResult) error {
 // Results returns all TLS results in the database, for all policy domains each
 // with potentially multiple days. Sorted by RecipientDomain and day.
 func Results(ctx context.Context) ([]TLSResult, error) {
-	db, err := resultDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return bstore.QueryDB[TLSResult](ctx, db).SortAsc("PolicyDomain", "DayUTC", "RecipientDomain").List()
+	return bstore.QueryDB[TLSResult](ctx, ResultDB).SortAsc("PolicyDomain", "DayUTC", "RecipientDomain").List()
 }
 
 // ResultsDomain returns all TLSResults for a policy domain, potentially for
 // multiple days.
 func ResultsPolicyDomain(ctx context.Context, policyDomain dns.Domain) ([]TLSResult, error) {
-	db, err := resultDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return bstore.QueryDB[TLSResult](ctx, db).FilterNonzero(TLSResult{PolicyDomain: policyDomain.Name()}).SortAsc("DayUTC", "RecipientDomain").List()
+	return bstore.QueryDB[TLSResult](ctx, ResultDB).FilterNonzero(TLSResult{PolicyDomain: policyDomain.Name()}).SortAsc("DayUTC", "RecipientDomain").List()
 }
 
 // ResultsRecipientDomain returns all TLSResults for a recipient domain,
 // potentially for multiple days.
 func ResultsRecipientDomain(ctx context.Context, recipientDomain dns.Domain) ([]TLSResult, error) {
-	db, err := resultDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return bstore.QueryDB[TLSResult](ctx, db).FilterNonzero(TLSResult{RecipientDomain: recipientDomain.Name()}).SortAsc("DayUTC", "PolicyDomain").List()
+	return bstore.QueryDB[TLSResult](ctx, ResultDB).FilterNonzero(TLSResult{RecipientDomain: recipientDomain.Name()}).SortAsc("DayUTC", "PolicyDomain").List()
 }
 
 // RemoveResultsPolicyDomain removes all TLSResults for the policy domain on the
 // day from the database.
 func RemoveResultsPolicyDomain(ctx context.Context, policyDomain dns.Domain, dayUTC string) error {
-	db, err := resultDB(ctx)
-	if err != nil {
-		return err
-	}
-
-	_, err = bstore.QueryDB[TLSResult](ctx, db).FilterNonzero(TLSResult{PolicyDomain: policyDomain.Name(), DayUTC: dayUTC}).Delete()
+	_, err := bstore.QueryDB[TLSResult](ctx, ResultDB).FilterNonzero(TLSResult{PolicyDomain: policyDomain.Name(), DayUTC: dayUTC}).Delete()
 	return err
 }
 
 // RemoveResultsRecipientDomain removes all TLSResults for the recipient domain on
 // the day from the database.
 func RemoveResultsRecipientDomain(ctx context.Context, recipientDomain dns.Domain, dayUTC string) error {
-	db, err := resultDB(ctx)
-	if err != nil {
-		return err
-	}
-
-	_, err = bstore.QueryDB[TLSResult](ctx, db).FilterNonzero(TLSResult{RecipientDomain: recipientDomain.Name(), DayUTC: dayUTC}).Delete()
+	_, err := bstore.QueryDB[TLSResult](ctx, ResultDB).FilterNonzero(TLSResult{RecipientDomain: recipientDomain.Name(), DayUTC: dayUTC}).Delete()
 	return err
 }
 
 // SuppressAdd adds an address to the suppress list.
 func SuppressAdd(ctx context.Context, ba *SuppressAddress) error {
-	db, err := resultDB(ctx)
-	if err != nil {
-		return err
-	}
-
-	return db.Insert(ctx, ba)
+	return ResultDB.Insert(ctx, ba)
 }
 
 // SuppressList returns all reporting addresses on the suppress list.
 func SuppressList(ctx context.Context) ([]SuppressAddress, error) {
-	db, err := resultDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return bstore.QueryDB[SuppressAddress](ctx, db).SortDesc("ID").List()
+	return bstore.QueryDB[SuppressAddress](ctx, ResultDB).SortDesc("ID").List()
 }
 
 // SuppressRemove removes a reporting address record from the suppress list.
 func SuppressRemove(ctx context.Context, id int64) error {
-	db, err := resultDB(ctx)
-	if err != nil {
-		return err
-	}
-
-	return db.Delete(ctx, &SuppressAddress{ID: id})
+	return ResultDB.Delete(ctx, &SuppressAddress{ID: id})
 }
 
 // SuppressUpdate updates the until field of a reporting address record.
 func SuppressUpdate(ctx context.Context, id int64, until time.Time) error {
-	db, err := resultDB(ctx)
-	if err != nil {
-		return err
-	}
-
 	ba := SuppressAddress{ID: id}
-	err = db.Get(ctx, &ba)
+	err := ResultDB.Get(ctx, &ba)
 	if err != nil {
 		return err
 	}
 	ba.Until = until
-	return db.Update(ctx, &ba)
+	return ResultDB.Update(ctx, &ba)
 }

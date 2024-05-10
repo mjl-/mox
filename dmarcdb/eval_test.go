@@ -41,13 +41,13 @@ func TestEvaluations(t *testing.T) {
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/dmarcdb/mox.conf")
 	mox.MustLoadConfig(true, false)
-	EvalDB = nil
 
-	_, err := evalDB(ctxbg)
-	tcheckf(t, err, "database")
+	os.Remove(mox.DataDirPath("dmarceval.db"))
+	err := Init()
+	tcheckf(t, err, "init")
 	defer func() {
-		EvalDB.Close()
-		EvalDB = nil
+		err := Close()
+		tcheckf(t, err, "close")
 	}()
 
 	parseJSON := func(s string) (e Evaluation) {
@@ -163,13 +163,13 @@ func TestSendReports(t *testing.T) {
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/dmarcdb/mox.conf")
 	mox.MustLoadConfig(true, false)
-	EvalDB = nil
 
-	db, err := evalDB(ctxbg)
-	tcheckf(t, err, "database")
+	os.Remove(mox.DataDirPath("dmarceval.db"))
+	err := Init()
+	tcheckf(t, err, "init")
 	defer func() {
-		EvalDB.Close()
-		EvalDB = nil
+		err := Close()
+		tcheckf(t, err, "close")
 	}()
 
 	resolver := dns.MockResolver{
@@ -288,7 +288,7 @@ func TestSendReports(t *testing.T) {
 		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 
 		for _, e := range evals {
-			err := db.Insert(ctxbg, &e)
+			err := EvalDB.Insert(ctxbg, &e)
 			tcheckf(t, err, "inserting evaluation")
 		}
 
@@ -359,13 +359,13 @@ func TestSendReports(t *testing.T) {
 
 	// Address is suppressed.
 	sa := SuppressAddress{ReportingAddress: "dmarcrpt@sender.example", Until: time.Now().Add(time.Minute)}
-	err = db.Insert(ctxbg, &sa)
+	err = EvalDB.Insert(ctxbg, &sa)
 	tcheckf(t, err, "insert suppress address")
 	test([]Evaluation{eval}, map[string]struct{}{}, map[string]struct{}{}, nil)
 
 	// Suppression has expired.
 	sa.Until = time.Now().Add(-time.Minute)
-	err = db.Update(ctxbg, &sa)
+	err = EvalDB.Update(ctxbg, &sa)
 	tcheckf(t, err, "update suppress address")
 	test([]Evaluation{eval}, map[string]struct{}{"dmarcrpt@sender.example": {}}, map[string]struct{}{}, expFeedback)
 

@@ -10,8 +10,6 @@ import (
 func TestSuppression(t *testing.T) {
 	_, cleanup := setup(t)
 	defer cleanup()
-	err := Init()
-	tcheck(t, err, "queue init")
 
 	l, err := SuppressionList(ctxbg, "bogus")
 	tcheck(t, err, "listing suppressions for unknown account")

@@ -313,7 +313,8 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 
 		dstdbpath := filepath.Join(dstDataDir, path)
-		db, err := bstore.Open(ctx, dstdbpath, &bstore.Options{MustExist: true}, queue.DBTypes...)
+		opts := bstore.Options{MustExist: true, RegisterLogger: ctl.log.Logger}
+		db, err := bstore.Open(ctx, dstdbpath, &opts, queue.DBTypes...)
 		if err != nil {
 			xerrx("open copied queue database", err, slog.String("dstpath", dstdbpath), slog.Duration("duration", time.Since(tmQueue)))
 			return
@@ -419,7 +420,8 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 
 		dstdbpath := filepath.Join(dstDataDir, dbpath)
-		db, err := bstore.Open(ctx, dstdbpath, &bstore.Options{MustExist: true}, store.DBTypes...)
+		opts := bstore.Options{MustExist: true, RegisterLogger: ctl.log.Logger}
+		db, err := bstore.Open(ctx, dstdbpath, &opts, store.DBTypes...)
 		if err != nil {
 			xerrx("open copied account database", err, slog.String("dstpath", dstdbpath), slog.Duration("duration", time.Since(tmAccount)))
 			return

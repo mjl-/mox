@@ -20,16 +20,12 @@ func TestDMARCDB(t *testing.T) {
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/dmarcdb/mox.conf")
 	mox.MustLoadConfig(true, false)
 
-	dbpath := mox.DataDirPath("dmarcrpt.db")
-	os.MkdirAll(filepath.Dir(dbpath), 0770)
-
-	if err := Init(); err != nil {
-		t.Fatalf("init database: %s", err)
-	}
-	defer os.Remove(dbpath)
+	os.Remove(mox.DataDirPath("dmarcrpt.db"))
+	err := Init()
+	tcheckf(t, err, "init")
 	defer func() {
-		ReportsDB.Close()
-		ReportsDB = nil
+		err := Close()
+		tcheckf(t, err, "close")
 	}()
 
 	feedback := &dmarcrpt.Feedback{

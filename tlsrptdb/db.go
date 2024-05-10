@@ -1,7 +1,11 @@
 package tlsrptdb
 
 import (
-	"sync"
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/mjl-/bstore"
 
@@ -12,7 +16,6 @@ import (
 var (
 	ReportDBTypes = []any{Record{}}
 	ReportDB      *bstore.DB
-	mutex         sync.Mutex
 
 	// Accessed directly by tlsrptsend.
 	ResultDBTypes = []any{TLSResult{}, SuppressAddress{}}
@@ -21,29 +24,48 @@ var (
 
 // Init opens and possibly initializes the databases.
 func Init() error {
-	if _, err := reportDB(mox.Shutdown); err != nil {
-		return err
+	if ReportDB != nil || ResultDB != nil {
+		return fmt.Errorf("already initialized")
 	}
-	if _, err := resultDB(mox.Shutdown); err != nil {
-		return err
+
+	log := mlog.New("tlsrptdb", nil)
+	var err error
+
+	ReportDB, err = openReportDB(mox.Shutdown, log)
+	if err != nil {
+		return fmt.Errorf("opening report db: %v", err)
+	}
+	ResultDB, err = openResultDB(mox.Shutdown, log)
+	if err != nil {
+		return fmt.Errorf("opening result db: %v", err)
 	}
 	return nil
 }
 
-// Close closes the database connections.
-func Close() {
-	log := mlog.New("tlsrptdb", nil)
-	if ResultDB != nil {
-		err := ResultDB.Close()
-		log.Check(err, "closing result database")
-		ResultDB = nil
-	}
+func openReportDB(ctx context.Context, log mlog.Log) (*bstore.DB, error) {
+	p := mox.DataDirPath("tlsrpt.db")
+	os.MkdirAll(filepath.Dir(p), 0770)
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	return bstore.Open(ctx, p, &opts, ReportDBTypes...)
+}
 
-	mutex.Lock()
-	defer mutex.Unlock()
-	if ReportDB != nil {
-		err := ReportDB.Close()
-		log.Check(err, "closing report database")
-		ReportDB = nil
+func openResultDB(ctx context.Context, log mlog.Log) (*bstore.DB, error) {
+	p := mox.DataDirPath("tlsrptresult.db")
+	os.MkdirAll(filepath.Dir(p), 0770)
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	return bstore.Open(ctx, p, &opts, ResultDBTypes...)
+}
+
+// Close closes the database connections.
+func Close() error {
+	if err := ResultDB.Close(); err != nil {
+		return fmt.Errorf("closing result db: %w", err)
 	}
+	ResultDB = nil
+
+	if err := ReportDB.Close(); err != nil {
+		return fmt.Errorf("closing report db: %w", err)
+	}
+	ReportDB = nil
+	return nil
 }

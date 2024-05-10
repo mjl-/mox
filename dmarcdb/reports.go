@@ -3,9 +3,6 @@ package dmarcdb
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -15,13 +12,11 @@ import (
 
 	"github.com/mjl-/mox/dmarcrpt"
 	"github.com/mjl-/mox/dns"
-	"github.com/mjl-/mox/mox-"
 )
 
 var (
 	ReportsDBTypes = []any{DomainFeedback{}} // Types stored in DB.
 	ReportsDB      *bstore.DB                // Exported for backups.
-	reportsMutex   sync.Mutex
 )
 
 var (
@@ -59,38 +54,18 @@ type DomainFeedback struct {
 	dmarcrpt.Feedback
 }
 
-func reportsDB(ctx context.Context) (rdb *bstore.DB, rerr error) {
-	reportsMutex.Lock()
-	defer reportsMutex.Unlock()
-	if ReportsDB == nil {
-		p := mox.DataDirPath("dmarcrpt.db")
-		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, ReportsDBTypes...)
-		if err != nil {
-			return nil, err
-		}
-		ReportsDB = db
-	}
-	return ReportsDB, nil
-}
-
 // AddReport adds a DMARC aggregate feedback report from an email to the database,
 // and updates prometheus metrics.
 //
 // fromDomain is the domain in the report message From header.
 func AddReport(ctx context.Context, f *dmarcrpt.Feedback, fromDomain dns.Domain) error {
-	db, err := reportsDB(ctx)
-	if err != nil {
-		return err
-	}
-
 	d, err := dns.ParseDomain(f.PolicyPublished.Domain)
 	if err != nil {
 		return fmt.Errorf("parsing domain in report: %v", err)
 	}
 
 	df := DomainFeedback{0, d.Name(), fromDomain.Name(), *f}
-	if err := db.Insert(ctx, &df); err != nil {
+	if err := ReportsDB.Insert(ctx, &df); err != nil {
 		return err
 	}
 
@@ -129,38 +104,23 @@ func AddReport(ctx context.Context, f *dmarcrpt.Feedback, fromDomain dns.Domain)
 
 // Records returns all reports in the database.
 func Records(ctx context.Context) ([]DomainFeedback, error) {
-	db, err := reportsDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return bstore.QueryDB[DomainFeedback](ctx, db).List()
+	return bstore.QueryDB[DomainFeedback](ctx, ReportsDB).List()
 }
 
 // RecordID returns the report for the ID.
 func RecordID(ctx context.Context, id int64) (DomainFeedback, error) {
-	db, err := reportsDB(ctx)
-	if err != nil {
-		return DomainFeedback{}, err
-	}
-
 	e := DomainFeedback{ID: id}
-	err = db.Get(ctx, &e)
+	err := ReportsDB.Get(ctx, &e)
 	return e, err
 }
 
 // RecordsPeriodDomain returns the reports overlapping start and end, for the given
 // domain. If domain is empty, all records match for domain.
 func RecordsPeriodDomain(ctx context.Context, start, end time.Time, domain string) ([]DomainFeedback, error) {
-	db, err := reportsDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	s := start.Unix()
 	e := end.Unix()
 
-	q := bstore.QueryDB[DomainFeedback](ctx, db)
+	q := bstore.QueryDB[DomainFeedback](ctx, ReportsDB)
 	if domain != "" {
 		q.FilterNonzero(DomainFeedback{Domain: domain})
 	}

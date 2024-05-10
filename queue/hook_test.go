@@ -24,8 +24,6 @@ import (
 func TestHookIncoming(t *testing.T) {
 	acc, cleanup := setup(t)
 	defer cleanup()
-	err := Init()
-	tcheck(t, err, "queue init")
 
 	accret, err := store.OpenAccount(pkglog, "retired")
 	tcheck(t, err, "open account for retired")
@@ -119,8 +117,6 @@ func TestHookIncoming(t *testing.T) {
 func TestFromIDIncomingDelivery(t *testing.T) {
 	acc, cleanup := setup(t)
 	defer cleanup()
-	err := Init()
-	tcheck(t, err, "queue init")
 
 	accret, err := store.OpenAccount(pkglog, "retired")
 	tcheck(t, err, "open account for retired")
@@ -525,8 +521,6 @@ func TestFromIDIncomingDelivery(t *testing.T) {
 func TestHookListFilterSort(t *testing.T) {
 	_, cleanup := setup(t)
 	defer cleanup()
-	err := Init()
-	tcheck(t, err, "queue init")
 
 	now := time.Now().Round(0)
 	h := Hook{0, 0, "fromid", "messageid", "subj", nil, "mjl", "http://localhost", "", false, "delivered", "", now, 0, now, []HookResult{}}
@@ -534,7 +528,7 @@ func TestHookListFilterSort(t *testing.T) {
 	h1.Submitted = now.Add(-time.Second)
 	h1.NextAttempt = now.Add(time.Minute)
 	hl := []Hook{h, h, h, h, h, h1}
-	err = DB.Write(ctxbg, func(tx *bstore.Tx) error {
+	err := DB.Write(ctxbg, func(tx *bstore.Tx) error {
 		for i := range hl {
 			err := hookInsert(tx, &hl[i], now, time.Minute)
 			tcheck(t, err, "insert hook")

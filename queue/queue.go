@@ -350,7 +350,9 @@ func Init() error {
 	}
 
 	var err error
-	DB, err = bstore.Open(mox.Shutdown, qpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
+	log := mlog.New("queue", nil)
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	DB, err = bstore.Open(mox.Shutdown, qpath, &opts, DBTypes...)
 	if err == nil {
 		err = DB.Read(mox.Shutdown, func(tx *bstore.Tx) error {
 			return metricHoldUpdate(tx)

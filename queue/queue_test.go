@@ -28,6 +28,7 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/mtastsdb"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
@@ -60,6 +61,12 @@ func setup(t *testing.T) (*store.Account, func()) {
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/queue/mox.conf")
 	mox.MustLoadConfig(true, false)
+	err := Init()
+	tcheck(t, err, "queue init")
+	err = mtastsdb.Init(false)
+	tcheck(t, err, "mtastsdb init")
+	err = tlsrptdb.Init()
+	tcheck(t, err, "tlsrptdb init")
 	acc, err := store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(log, "testtest")
@@ -72,6 +79,10 @@ func setup(t *testing.T) (*store.Account, func()) {
 		mox.ShutdownCancel()
 		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 		Shutdown()
+		err := mtastsdb.Close()
+		tcheck(t, err, "mtastsdb close")
+		err = tlsrptdb.Close()
+		tcheck(t, err, "tlsrptdb close")
 		switchStop()
 	}
 }
@@ -95,8 +106,6 @@ func prepareFile(t *testing.T) *os.File {
 func TestQueue(t *testing.T) {
 	acc, cleanup := setup(t)
 	defer cleanup()
-	err := Init()
-	tcheck(t, err, "queue init")
 
 	idfilter := func(msgID int64) Filter {
 		return Filter{IDs: []int64{msgID}}
@@ -951,8 +960,6 @@ func checkTLSResults(t *testing.T, policyDomain, expRecipientDomain string, expI
 func TestRetiredHooks(t *testing.T) {
 	_, cleanup := setup(t)
 	defer cleanup()
-	err := Init()
-	tcheck(t, err, "queue init")
 
 	addr, err := smtp.ParseAddress("mjl@mox.example")
 	tcheck(t, err, "parse address")
@@ -1193,6 +1200,7 @@ func TestQueueStart(t *testing.T) {
 		<-done
 		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 	}()
+	Shutdown() // DB was opened already. Start will open it again. Just close it before.
 	err := Start(resolver, done)
 	tcheck(t, err, "queue start")
 
@@ -1284,8 +1292,6 @@ func TestQueueStart(t *testing.T) {
 func TestListFilterSort(t *testing.T) {
 	_, cleanup := setup(t)
 	defer cleanup()
-	err := Init()
-	tcheck(t, err, "queue init")
 
 	// insert Msgs. insert RetiredMsgs based on that. call list with filters and sort. filter to select a single. filter to paginate one by one, and in reverse.
 
@@ -1301,7 +1307,7 @@ func TestListFilterSort(t *testing.T) {
 	qm1.Queued = now.Add(-time.Second)
 	qm1.NextAttempt = now.Add(time.Minute)
 	qml := []Msg{qm, qm, qm, qm, qm, qm1}
-	err = Add(ctxbg, pkglog, "mjl", mf, qml...)
+	err := Add(ctxbg, pkglog, "mjl", mf, qml...)
 	tcheck(t, err, "add messages to queue")
 	qm1 = qml[len(qml)-1]
 

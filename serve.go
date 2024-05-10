@@ -71,11 +71,15 @@ func start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec boo
 	}
 
 	if err := mtastsdb.Init(mtastsdbRefresher); err != nil {
-		return fmt.Errorf("mtasts init: %s", err)
+		return fmt.Errorf("mtastsdb init: %s", err)
 	}
 
 	if err := tlsrptdb.Init(); err != nil {
-		return fmt.Errorf("tlsrpt init: %s", err)
+		return fmt.Errorf("tlsrptdb init: %s", err)
+	}
+
+	if err := dmarcdb.Init(); err != nil {
+		return fmt.Errorf("dmarcdb init: %s", err)
 	}
 
 	done := make(chan struct{}) // Goroutines for messages and webhooks, and cleaners.
@@ -83,10 +87,6 @@ func start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec boo
 		return fmt.Errorf("queue start: %s", err)
 	}
 
-	// dmarcdb starts after queue because it may start sending reports through the queue.
-	if err := dmarcdb.Init(); err != nil {
-		return fmt.Errorf("dmarc init: %s", err)
-	}
 	if sendDMARCReports {
 		dmarcdb.Start(dns.StrictResolver{Pkg: "dmarcdb"})
 	}

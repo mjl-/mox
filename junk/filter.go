@@ -125,7 +125,7 @@ func OpenFilter(ctx context.Context, log mlog.Log, params Params, dbPath, bloomP
 		}
 	}
 
-	db, err := openDB(ctx, dbPath)
+	db, err := openDB(ctx, log, dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %s", err)
 	}
@@ -230,18 +230,20 @@ func newDB(ctx context.Context, log mlog.Log, path string) (db *bstore.DB, rerr 
 		}
 	}()
 
-	db, err := bstore.Open(ctx, path, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	db, err := bstore.Open(ctx, path, &opts, DBTypes...)
 	if err != nil {
 		return nil, fmt.Errorf("open new database: %w", err)
 	}
 	return db, nil
 }
 
-func openDB(ctx context.Context, path string) (*bstore.DB, error) {
+func openDB(ctx context.Context, log mlog.Log, path string) (*bstore.DB, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, fmt.Errorf("stat db file: %w", err)
 	}
-	return bstore.Open(ctx, path, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	return bstore.Open(ctx, path, &opts, DBTypes...)
 }
 
 // Save stores modifications, e.g. from training, to the database and bloom

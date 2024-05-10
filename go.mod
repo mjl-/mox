@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/mjl-/adns v0.0.0-20240509092456-2dc8715bf4af
 	github.com/mjl-/autocert v0.0.0-20231214125928-31b7400acb05
-	github.com/mjl-/bstore v0.0.5
+	github.com/mjl-/bstore v0.0.6
 	github.com/mjl-/sconf v0.0.6
 	github.com/mjl-/sherpa v0.6.7
 	github.com/mjl-/sherpadoc v0.0.16

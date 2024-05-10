@@ -51,19 +51,14 @@ func refresh() int {
 // jitter to the timing. Each refresh is done in a new goroutine, so a single slow
 // refresh doesn't mess up the timing.
 func refresh1(ctx context.Context, log mlog.Log, resolver dns.Resolver, sleep func(d time.Duration)) (int, error) {
-	db, err := database(ctx)
-	if err != nil {
-		return 0, err
-	}
-
 	now := timeNow()
-	qdel := bstore.QueryDB[PolicyRecord](ctx, db)
+	qdel := bstore.QueryDB[PolicyRecord](ctx, DB)
 	qdel.FilterLess("LastUse", now.Add(-180*24*time.Hour))
 	if _, err := qdel.Delete(); err != nil {
 		return 0, fmt.Errorf("deleting old unused policies: %s", err)
 	}
 
-	qup := bstore.QueryDB[PolicyRecord](ctx, db)
+	qup := bstore.QueryDB[PolicyRecord](ctx, DB)
 	qup.FilterLess("LastUpdate", now.Add(-12*time.Hour))
 	prs, err := qup.List()
 	if err != nil {
@@ -89,7 +84,7 @@ func refresh1(ctx context.Context, log mlog.Log, resolver dns.Resolver, sleep fu
 	log.Debug("will refresh mta-sts policies over next 3 hours", slog.Int("count", len(prs)))
 	start := timeNow()
 	for i, pr := range prs {
-		go refreshDomain(ctx, log, db, resolver, pr)
+		go refreshDomain(ctx, log, DB, resolver, pr)
 		if i < len(prs)-1 {
 			interval := 3 * int64(time.Hour) / int64(len(prs)-1)
 			extra := time.Duration(rand.Int63n(interval) - interval/2)

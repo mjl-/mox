@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -55,21 +53,6 @@ type Record struct {
 	Report     tlsrpt.Report
 }
 
-func reportDB(ctx context.Context) (rdb *bstore.DB, rerr error) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	if ReportDB == nil {
-		p := mox.DataDirPath("tlsrpt.db")
-		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, ReportDBTypes...)
-		if err != nil {
-			return nil, err
-		}
-		ReportDB = db
-	}
-	return ReportDB, nil
-}
-
 // AddReport adds a TLS report to the database.
 //
 // The report should have come in over SMTP, with a DKIM-validated
@@ -82,17 +65,12 @@ func reportDB(ctx context.Context) (rdb *bstore.DB, rerr error) {
 //
 // Prometheus metrics are updated only for configured domains.
 func AddReport(ctx context.Context, log mlog.Log, verifiedFromDomain dns.Domain, mailFrom string, hostReport bool, r *tlsrpt.Report) error {
-	db, err := reportDB(ctx)
-	if err != nil {
-		return err
-	}
-
 	if len(r.Policies) == 0 {
 		return fmt.Errorf("no policies in report")
 	}
 
 	var inserted int
-	return db.Write(ctx, func(tx *bstore.Tx) error {
+	return ReportDB.Write(ctx, func(tx *bstore.Tx) error {
 		for _, p := range r.Policies {
 			pp := p.Policy
 
@@ -132,22 +110,13 @@ func AddReport(ctx context.Context, log mlog.Log, verifiedFromDomain dns.Domain,
 
 // Records returns all TLS reports in the database.
 func Records(ctx context.Context) ([]Record, error) {
-	db, err := reportDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return bstore.QueryDB[Record](ctx, db).List()
+	return bstore.QueryDB[Record](ctx, ReportDB).List()
 }
 
 // RecordID returns the report for the ID.
 func RecordID(ctx context.Context, id int64) (Record, error) {
-	db, err := reportDB(ctx)
-	if err != nil {
-		return Record{}, err
-	}
-
 	e := Record{ID: id}
-	err = db.Get(ctx, &e)
+	err := ReportDB.Get(ctx, &e)
 	return e, err
 }
 
@@ -155,12 +124,7 @@ func RecordID(ctx context.Context, id int64) (Record, error) {
 // given policy domain. If policy domain is empty, records for all domains are
 // returned.
 func RecordsPeriodDomain(ctx context.Context, start, end time.Time, policyDomain dns.Domain) ([]Record, error) {
-	db, err := reportDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	q := bstore.QueryDB[Record](ctx, db)
+	q := bstore.QueryDB[Record](ctx, ReportDB)
 	var zerodom dns.Domain
 	if policyDomain != zerodom {
 		q.FilterNonzero(Record{Domain: policyDomain.Name()})

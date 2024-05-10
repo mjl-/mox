@@ -907,7 +907,8 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		os.MkdirAll(accountDir, 0770)
 	}
 
-	db, err := bstore.Open(context.TODO(), dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	db, err := bstore.Open(context.TODO(), dbpath, &opts, DBTypes...)
 	if err != nil {
 		return nil, err
 	}

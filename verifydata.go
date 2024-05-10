@@ -120,7 +120,8 @@ possibly making them potentially no longer readable by the previous version.
 		checkf(err, path, "reading bolt database")
 		bdb.Close()
 
-		db, err := bstore.Open(ctxbg, path, nil, types...)
+		opts := bstore.Options{RegisterLogger: c.log.Logger}
+		db, err := bstore.Open(ctxbg, path, &opts, types...)
 		checkf(err, path, "open database with bstore")
 		if err != nil {
 			return
@@ -162,7 +163,8 @@ possibly making them potentially no longer readable by the previous version.
 
 		// Check that all messages present in the database also exist on disk.
 		seen := map[string]struct{}{}
-		db, err := bstore.Open(ctxbg, dbpath, &bstore.Options{MustExist: true}, queue.DBTypes...)
+		opts := bstore.Options{MustExist: true, RegisterLogger: c.log.Logger}
+		db, err := bstore.Open(ctxbg, dbpath, &opts, queue.DBTypes...)
 		checkf(err, dbpath, "opening queue database to check messages")
 		if err == nil {
 			err := bstore.QueryDB[queue.Msg](ctxbg, db).ForEach(func(m queue.Msg) error {
@@ -237,7 +239,8 @@ possibly making them potentially no longer readable by the previous version.
 		// And check consistency of UIDs with the mailbox UIDNext, and check UIDValidity.
 		seen := map[string]struct{}{}
 		dbpath := filepath.Join(accdir, "index.db")
-		db, err := bstore.Open(ctxbg, dbpath, &bstore.Options{MustExist: true}, store.DBTypes...)
+		opts := bstore.Options{MustExist: true, RegisterLogger: c.log.Logger}
+		db, err := bstore.Open(ctxbg, dbpath, &opts, store.DBTypes...)
 		checkf(err, dbpath, "opening account database to check messages")
 		if err == nil {
 			uidvalidity := store.NextUIDValidity{ID: 1}

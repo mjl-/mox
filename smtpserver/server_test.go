@@ -105,11 +105,6 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 
 	ts := testserver{t: t, cid: 1, resolver: resolver, tlsmode: smtpclient.TLSOpportunistic}
 
-	if dmarcdb.EvalDB != nil {
-		dmarcdb.EvalDB.Close()
-		dmarcdb.EvalDB = nil
-	}
-
 	log := mlog.New("smtpserver", nil)
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = configPath
@@ -117,7 +112,11 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)
 
-	var err error
+	err := dmarcdb.Init()
+	tcheck(t, err, "dmarcdb init")
+	err = tlsrptdb.Init()
+	tcheck(t, err, "tlsrptdb init")
+
 	ts.acc, err = store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
 	err = ts.acc.SetPassword(log, password0)
@@ -136,10 +135,14 @@ func (ts *testserver) close() {
 	if ts.acc == nil {
 		return
 	}
+	err := dmarcdb.Close()
+	tcheck(ts.t, err, "dmarcdb close")
+	err = tlsrptdb.Close()
+	tcheck(ts.t, err, "tlsrptdb close")
 	ts.comm.Unregister()
 	queue.Shutdown()
 	ts.switchStop()
-	err := ts.acc.Close()
+	err = ts.acc.Close()
 	tcheck(ts.t, err, "closing account")
 	ts.acc.CheckClosed()
 	ts.acc = nil

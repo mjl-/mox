@@ -15,7 +15,6 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"slices"
 	"sort"
@@ -66,8 +65,7 @@ var (
 	// Exported for backups. For incoming deliveries the SMTP server adds evaluations
 	// to the database. Every hour, a goroutine wakes up that gathers evaluations from
 	// the last hour(s), sends a report, and removes the evaluations from the database.
-	EvalDB    *bstore.DB
-	evalMutex sync.Mutex
+	EvalDB *bstore.DB
 )
 
 // Evaluation is the result of an evaluation of a DMARC policy, to be included
@@ -162,21 +160,6 @@ func (e Evaluation) ReportRecord(count int) dmarcrpt.ReportRecord {
 	}
 }
 
-func evalDB(ctx context.Context) (rdb *bstore.DB, rerr error) {
-	evalMutex.Lock()
-	defer evalMutex.Unlock()
-	if EvalDB == nil {
-		p := mox.DataDirPath("dmarceval.db")
-		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, EvalDBTypes...)
-		if err != nil {
-			return nil, err
-		}
-		EvalDB = db
-	}
-	return EvalDB, nil
-}
-
 var intervalOpts = []int{24, 12, 8, 6, 4, 3, 2}
 
 func intervalHours(seconds int) int {
@@ -197,23 +180,13 @@ func intervalHours(seconds int) int {
 func AddEvaluation(ctx context.Context, aggregateReportingIntervalSeconds int, e *Evaluation) error {
 	e.IntervalHours = intervalHours(aggregateReportingIntervalSeconds)
 
-	db, err := evalDB(ctx)
-	if err != nil {
-		return err
-	}
-
 	e.ID = 0
-	return db.Insert(ctx, e)
+	return EvalDB.Insert(ctx, e)
 }
 
 // Evaluations returns all evaluations in the database.
 func Evaluations(ctx context.Context) ([]Evaluation, error) {
-	db, err := evalDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	q := bstore.QueryDB[Evaluation](ctx, db)
+	q := bstore.QueryDB[Evaluation](ctx, EvalDB)
 	q.SortAsc("Evaluated")
 	return q.List()
 }
@@ -229,14 +202,9 @@ type EvaluationStat struct {
 
 // EvaluationStats returns evaluation counts and report-sending status per domain.
 func EvaluationStats(ctx context.Context) (map[string]EvaluationStat, error) {
-	db, err := evalDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	r := map[string]EvaluationStat{}
 
-	err = bstore.QueryDB[Evaluation](ctx, db).ForEach(func(e Evaluation) error {
+	err := bstore.QueryDB[Evaluation](ctx, EvalDB).ForEach(func(e Evaluation) error {
 		if stat, ok := r[e.PolicyDomain]; ok {
 			if !slices.Contains(stat.Dispositions, string(e.Disposition)) {
 				stat.Dispositions = append(stat.Dispositions, string(e.Disposition))
@@ -263,12 +231,7 @@ func EvaluationStats(ctx context.Context) (map[string]EvaluationStat, error) {
 
 // EvaluationsDomain returns all evaluations for a domain.
 func EvaluationsDomain(ctx context.Context, domain dns.Domain) ([]Evaluation, error) {
-	db, err := evalDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	q := bstore.QueryDB[Evaluation](ctx, db)
+	q := bstore.QueryDB[Evaluation](ctx, EvalDB)
 	q.FilterNonzero(Evaluation{PolicyDomain: domain.Name()})
 	q.SortAsc("Evaluated")
 	return q.List()
@@ -277,14 +240,9 @@ func EvaluationsDomain(ctx context.Context, domain dns.Domain) ([]Evaluation, er
 // RemoveEvaluationsDomain removes evaluations for domain so they won't be sent in
 // an aggregate report.
 func RemoveEvaluationsDomain(ctx context.Context, domain dns.Domain) error {
-	db, err := evalDB(ctx)
-	if err != nil {
-		return err
-	}
-
-	q := bstore.QueryDB[Evaluation](ctx, db)
+	q := bstore.QueryDB[Evaluation](ctx, EvalDB)
 	q.FilterNonzero(Evaluation{PolicyDomain: domain.Name()})
-	_, err = q.Delete()
+	_, err := q.Delete()
 	return err
 }
 
@@ -318,12 +276,6 @@ func Start(resolver dns.Resolver) {
 
 		ctx := mox.Shutdown
 
-		db, err := evalDB(ctx)
-		if err != nil {
-			log.Errorx("opening dmarc evaluations database for sending dmarc aggregate reports, not sending reports", err)
-			return
-		}
-
 		for {
 			now := time.Now()
 			nextEnd := nextWholeHour(now)
@@ -355,12 +307,12 @@ func Start(resolver dns.Resolver) {
 			// 24 hour interval). They should have been processed by now. We may have kept them
 			// during temporary errors, but persistent temporary errors shouldn't fill up our
 			// database. This also cleans up evaluations that were all optional for a domain.
-			_, err := bstore.QueryDB[Evaluation](ctx, db).FilterLess("Evaluated", nextEnd.Add(-48*time.Hour)).Delete()
+			_, err := bstore.QueryDB[Evaluation](ctx, EvalDB).FilterLess("Evaluated", nextEnd.Add(-48*time.Hour)).Delete()
 			log.Check(err, "removing stale dmarc evaluations from database")
 
 			clog := log.WithCid(mox.Cid())
 			clog.Info("sending dmarc aggregate reports", slog.Time("end", nextEnd.UTC()), slog.Any("intervals", intervals))
-			if err := sendReports(ctx, clog, resolver, db, nextEnd, intervals); err != nil {
+			if err := sendReports(ctx, clog, resolver, EvalDB, nextEnd, intervals); err != nil {
 				clog.Errorx("sending dmarc aggregate reports", err)
 				metricReportError.Inc()
 			} else {
@@ -1091,46 +1043,26 @@ func dkimSign(ctx context.Context, log mlog.Log, fromAddr smtp.Address, smtputf8
 
 // SuppressAdd adds an address to the suppress list.
 func SuppressAdd(ctx context.Context, ba *SuppressAddress) error {
-	db, err := evalDB(ctx)
-	if err != nil {
-		return err
-	}
-
-	return db.Insert(ctx, ba)
+	return EvalDB.Insert(ctx, ba)
 }
 
 // SuppressList returns all reporting addresses on the suppress list.
 func SuppressList(ctx context.Context) ([]SuppressAddress, error) {
-	db, err := evalDB(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return bstore.QueryDB[SuppressAddress](ctx, db).SortDesc("ID").List()
+	return bstore.QueryDB[SuppressAddress](ctx, EvalDB).SortDesc("ID").List()
 }
 
 // SuppressRemove removes a reporting address record from the suppress list.
 func SuppressRemove(ctx context.Context, id int64) error {
-	db, err := evalDB(ctx)
-	if err != nil {
-		return err
-	}
-
-	return db.Delete(ctx, &SuppressAddress{ID: id})
+	return EvalDB.Delete(ctx, &SuppressAddress{ID: id})
 }
 
 // SuppressUpdate updates the until field of a reporting address record.
 func SuppressUpdate(ctx context.Context, id int64, until time.Time) error {
-	db, err := evalDB(ctx)
-	if err != nil {
-		return err
-	}
-
 	ba := SuppressAddress{ID: id}
-	err = db.Get(ctx, &ba)
+	err := EvalDB.Get(ctx, &ba)
 	if err != nil {
 		return err
 	}
 	ba.Until = until
-	return db.Update(ctx, &ba)
+	return EvalDB.Update(ctx, &ba)
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/mtastsdb"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/store"
 )
@@ -58,6 +59,8 @@ func TestAPI(t *testing.T) {
 	defer store.Switchboard()()
 
 	log := mlog.New("webmail", nil)
+	err := mtastsdb.Init(false)
+	tcheck(t, err, "mtastsdb init")
 	acc, err := store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
 	const pw0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
@@ -65,7 +68,9 @@ func TestAPI(t *testing.T) {
 	err = acc.SetPassword(log, pw0)
 	tcheck(t, err, "set password")
 	defer func() {
-		err := acc.Close()
+		err := mtastsdb.Close()
+		tcheck(t, err, "mtastsdb close")
+		err = acc.Close()
 		pkglog.Check(err, "closing account")
 		acc.CheckClosed()
 	}()

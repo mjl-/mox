@@ -121,7 +121,8 @@ func TestThreadingUpgrade(t *testing.T) {
 
 	// Now clear the threading upgrade, and the threading fields and close the account.
 	// We open the database file directly, so we don't trigger the consistency checker.
-	db, err := bstore.Open(ctxbg, dbpath, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	db, err := bstore.Open(ctxbg, dbpath, &opts, DBTypes...)
 	err = db.Write(ctxbg, func(tx *bstore.Tx) error {
 		up := Upgrade{ID: 1}
 		err := tx.Delete(&up)

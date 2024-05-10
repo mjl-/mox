@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -68,27 +67,17 @@ var (
 
 var DBTypes = []any{PolicyRecord{}} // Types stored in DB.
 var DB *bstore.DB                   // Exported for backups.
-var mutex sync.Mutex
-
-func database(ctx context.Context) (rdb *bstore.DB, rerr error) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	if DB == nil {
-		p := mox.DataDirPath("mtasts.db")
-		os.MkdirAll(filepath.Dir(p), 0770)
-		db, err := bstore.Open(ctx, p, &bstore.Options{Timeout: 5 * time.Second, Perm: 0660}, DBTypes...)
-		if err != nil {
-			return nil, err
-		}
-		DB = db
-	}
-	return DB, nil
-}
 
 // Init opens the database and starts a goroutine that refreshes policies in
 // the database, and keeps doing so periodically.
 func Init(refresher bool) error {
-	_, err := database(mox.Shutdown)
+	log := mlog.New("mtastsdb", nil)
+
+	p := mox.DataDirPath("mtasts.db")
+	os.MkdirAll(filepath.Dir(p), 0770)
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	var err error
+	DB, err = bstore.Open(mox.Shutdown, p, &opts, DBTypes...)
 	if err != nil {
 		return err
 	}
@@ -102,14 +91,12 @@ func Init(refresher bool) error {
 }
 
 // Close closes the database.
-func Close() {
-	mutex.Lock()
-	defer mutex.Unlock()
-	if DB != nil {
-		err := DB.Close()
-		mlog.New("mtastsdb", nil).Check(err, "closing database")
-		DB = nil
+func Close() error {
+	if err := DB.Close(); err != nil {
+		return fmt.Errorf("close db: %w", err)
 	}
+	DB = nil
+	return nil
 }
 
 // lookup looks up a policy for the domain in the database.
@@ -119,16 +106,11 @@ func Close() {
 // Returns ErrNotFound if record is not present.
 // Returns ErrBackoff if a recent attempt to fetch a record failed.
 func lookup(ctx context.Context, log mlog.Log, domain dns.Domain) (*PolicyRecord, error) {
-	db, err := database(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	if domain.IsZero() {
 		return nil, fmt.Errorf("empty domain")
 	}
 	now := timeNow()
-	q := bstore.QueryDB[PolicyRecord](ctx, db)
+	q := bstore.QueryDB[PolicyRecord](ctx, DB)
 	q.FilterNonzero(PolicyRecord{Domain: domain.Name()})
 	q.FilterGreater("ValidEnd", now)
 	pr, err := q.Get()
@@ -139,7 +121,7 @@ func lookup(ctx context.Context, log mlog.Log, domain dns.Domain) (*PolicyRecord
 	}
 
 	pr.LastUse = now
-	if err := db.Update(ctx, &pr); err != nil {
+	if err := DB.Update(ctx, &pr); err != nil {
 		log.Errorx("marking cached mta-sts policy as used in database", err)
 	}
 	if pr.Backoff {
@@ -151,12 +133,7 @@ func lookup(ctx context.Context, log mlog.Log, domain dns.Domain) (*PolicyRecord
 // Upsert adds the policy to the database, overwriting an existing policy for the domain.
 // Policy can be nil, indicating a failure to fetch the policy.
 func Upsert(ctx context.Context, domain dns.Domain, recordID string, policy *mtasts.Policy, policyText string) error {
-	db, err := database(ctx)
-	if err != nil {
-		return err
-	}
-
-	return db.Write(ctx, func(tx *bstore.Tx) error {
+	return DB.Write(ctx, func(tx *bstore.Tx) error {
 		pr := PolicyRecord{Domain: domain.Name()}
 		err := tx.Get(&pr)
 		if err != nil && err != bstore.ErrAbsent {
@@ -195,11 +172,7 @@ func Upsert(ctx context.Context, domain dns.Domain, recordID string, policy *mta
 // PolicyRecords returns all policies in the database, sorted descending by last
 // use, domain.
 func PolicyRecords(ctx context.Context) ([]PolicyRecord, error) {
-	db, err := database(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return bstore.QueryDB[PolicyRecord](ctx, db).SortDesc("LastUse", "Domain").List()
+	return bstore.QueryDB[PolicyRecord](ctx, DB).SortDesc("LastUse", "Domain").List()
 }
 
 // Get retrieves an MTA-STS policy for domain and whether it is fresh.

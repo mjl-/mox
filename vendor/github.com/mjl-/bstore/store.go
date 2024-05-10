@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"reflect"
 	"sync"
@@ -282,9 +283,10 @@ type fieldType struct {
 
 // Options configure how a database should be opened or initialized.
 type Options struct {
-	Timeout   time.Duration // Abort if opening DB takes longer than Timeout. If not set, the deadline from the context is used.
-	Perm      fs.FileMode   // Permissions for new file if created. If zero, 0600 is used.
-	MustExist bool          // Before opening, check that file exists. If not, io/fs.ErrNotExist is returned.
+	Timeout        time.Duration // Abort if opening DB takes longer than Timeout. If not set, the deadline from the context is used.
+	Perm           fs.FileMode   // Permissions for new file if created. If zero, 0600 is used.
+	MustExist      bool          // Before opening, check that file exists. If not, io/fs.ErrNotExist is returned.
+	RegisterLogger *slog.Logger  // For debug logging about schema upgrades.
 }
 
 // Open opens a bstore database and registers types by calling Register.
@@ -326,7 +328,16 @@ func Open(ctx context.Context, path string, opts *Options, typeValues ...any) (*
 	typeNames := map[string]storeType{}
 	types := map[reflect.Type]storeType{}
 	db := &DB{bdb: bdb, typeNames: typeNames, types: types}
-	if err := db.Register(ctx, typeValues...); err != nil {
+	var log *slog.Logger
+	if opts != nil {
+		log = opts.RegisterLogger
+	}
+	if log == nil {
+		log = slog.New(discardHandler{})
+	} else {
+		log = log.With("dbpath", path)
+	}
+	if err := db.register(ctx, log, typeValues...); err != nil {
 		bdb.Close()
 		return nil, err
 	}
