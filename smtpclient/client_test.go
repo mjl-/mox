@@ -37,6 +37,7 @@ func TestClient(t *testing.T) {
 	log := mlog.New("smtpclient", nil)
 
 	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelTrace})
+	defer mlog.SetConfig(map[string]slog.Level{"": mlog.LevelDebug})
 
 	type options struct {
 		// Server behaviour.

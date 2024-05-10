@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -40,8 +39,6 @@ func tcompare(t *testing.T, got, expect any) {
 }
 
 func TestSendReports(t *testing.T) {
-	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelDebug})
-
 	os.RemoveAll("../testdata/tlsrptsend/data")
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/tlsrptsend/mox.conf")

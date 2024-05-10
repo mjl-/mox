@@ -120,11 +120,14 @@ during those commands instead of during "data".
 		existingConfig = true
 	}
 
-	if level, ok := mlog.Levels[loglevel]; loglevel != "" && ok {
-		mox.Conf.Log[""] = level
-		mlog.SetConfig(mox.Conf.Log)
-	} else if loglevel != "" && !ok {
-		log.Fatal("unknown loglevel", slog.String("loglevel", loglevel))
+	// For new configs, we keep the "info" loglevel set by writeLocalConfig until after
+	// initializing database files, to prevent lots of schema upgrade logging.
+	fallbackLevel := mox.Conf.Static.LogLevel
+	if fallbackLevel == "" {
+		fallbackLevel = "debug"
+	}
+	if existingConfig {
+		loadLoglevel(log, fallbackLevel)
 	}
 
 	// Initialize receivedid.
@@ -158,6 +161,9 @@ during those commands instead of during "data".
 	if err := start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec); err != nil {
 		log.Fatalx("starting mox", err)
 	}
+
+	loadLoglevel(log, fallbackLevel)
+
 	golog.Printf("mox, version %s, %s %s/%s", moxvar.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	golog.Print("")
 	golog.Printf("the default user is mox@localhost, with password moxmoxmox")
@@ -471,6 +477,9 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 	err = localLoadConfig(log, dir)
 	xcheck(err, "loading config")
 
+	// Info so we don't log lots about initializing database.
+	loadLoglevel(log, "info")
+
 	// Set password on account.
 	a, _, err := store.OpenEmail(log, "mox@localhost")
 	xcheck(err, "opening account to set password")
@@ -482,6 +491,19 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 
 	golog.Printf("config created in %s", dir)
 	return nil
+}
+
+func loadLoglevel(log mlog.Log, fallback string) {
+	ll := loglevel
+	if ll == "" {
+		ll = fallback
+	}
+	if level, ok := mlog.Levels[ll]; ok {
+		mox.Conf.Log[""] = level
+		mlog.SetConfig(mox.Conf.Log)
+	} else {
+		log.Fatal("unknown loglevel", slog.String("loglevel", loglevel))
+	}
 }
 
 func localLoadConfig(log mlog.Log, dir string) error {

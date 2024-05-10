@@ -12,7 +12,6 @@ import (
 	"crypto/x509/pkix"
 	"errors"
 	"fmt"
-	"log/slog"
 	"math/big"
 	"net"
 	"reflect"
@@ -36,7 +35,6 @@ func tcheckf(t *testing.T, err error, format string, args ...any) {
 
 // Test dialing and DANE TLS verification.
 func TestDial(t *testing.T) {
-	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelDebug})
 	log := mlog.New("dane", nil)
 
 	// Create fake CA/trusted-anchor certificate.

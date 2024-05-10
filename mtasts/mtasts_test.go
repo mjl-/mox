@@ -9,7 +9,6 @@ import (
 	"errors"
 	"io"
 	golog "log"
-	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -26,7 +25,6 @@ import (
 )
 
 func TestLookup(t *testing.T) {
-	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelDebug})
 	log := mlog.New("mtasts", nil)
 
 	resolver := dns.MockResolver{

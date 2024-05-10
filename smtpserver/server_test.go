@@ -1119,6 +1119,7 @@ func TestRatelimitConnectionrate(t *testing.T) {
 	// We'll be creating 300 connections, no TLS and reduce noise.
 	ts.tlsmode = smtpclient.TLSSkip
 	mlog.SetConfig(map[string]slog.Level{"": mlog.LevelInfo})
+	defer mlog.SetConfig(map[string]slog.Level{"": mlog.LevelDebug})
 
 	// We may be passing a window boundary during this tests. The limit is 300/minute.
 	// So make twice that many connections and hope the tests don't take too long.

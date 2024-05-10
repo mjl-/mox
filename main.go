@@ -416,7 +416,7 @@ func usage(l []cmd, unlisted bool) {
 	os.Exit(2)
 }
 
-var loglevel string
+var loglevel string // Empty will be interpreted as info, except by localserve.
 var pedantic bool
 
 // subcommands that are not "serve" should use this function to load the config, it
@@ -424,10 +424,14 @@ var pedantic bool
 // loglevels from the config file and it does not load files like TLS keys/certs.
 func mustLoadConfig() {
 	mox.MustLoadConfig(false, false)
-	if level, ok := mlog.Levels[loglevel]; loglevel != "" && ok {
+	ll := loglevel
+	if ll == "" {
+		ll = "info"
+	}
+	if level, ok := mlog.Levels[ll]; ok {
 		mox.Conf.Log[""] = level
 		mlog.SetConfig(mox.Conf.Log)
-	} else if loglevel != "" && !ok {
+	} else {
 		log.Fatal("unknown loglevel", slog.String("loglevel", loglevel))
 	}
 	if pedantic {
@@ -486,10 +490,16 @@ func main() {
 	}
 
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
-	if level, ok := mlog.Levels[loglevel]; ok && loglevel != "" {
+	ll := loglevel
+	if ll == "" {
+		ll = "info"
+	}
+	if level, ok := mlog.Levels[ll]; ok {
 		mox.Conf.Log[""] = level
 		mlog.SetConfig(mox.Conf.Log)
 		// note: SetConfig may be called again when subcommands loads config.
+	} else {
+		log.Fatalf("unknown loglevel %q", loglevel)
 	}
 
 	var partial []cmd

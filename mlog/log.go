@@ -43,7 +43,7 @@ var lowestLevel atomic.Int32                     // For quick initial check.
 var config atomic.Pointer[map[string]slog.Level] // For secondary complete check for match.
 
 func init() {
-	SetConfig(map[string]slog.Level{"": LevelInfo})
+	SetConfig(map[string]slog.Level{"": LevelDebug})
 }
 
 // SetConfig atomically sets the new log levels used by all Log instances.

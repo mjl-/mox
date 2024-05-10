@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -157,8 +156,6 @@ func TestEvaluations(t *testing.T) {
 }
 
 func TestSendReports(t *testing.T) {
-	mlog.SetConfig(map[string]slog.Level{"": slog.LevelDebug})
-
 	os.RemoveAll("../testdata/dmarcdb/data")
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/dmarcdb/mox.conf")
