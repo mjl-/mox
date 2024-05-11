@@ -46,13 +46,13 @@ func recvid(r *http.Request) string {
 // WebHandle runs after the built-in handlers for mta-sts, autoconfig, etc.
 // If no handler matched, false is returned.
 // WebHandle sets w.Name to that of the matching handler.
-func WebHandle(w *loggingWriter, r *http.Request, host dns.Domain) (handled bool) {
+func WebHandle(w *loggingWriter, r *http.Request, host dns.IPDomain) (handled bool) {
 	conf := mox.Conf.DynamicConfig()
 	redirects := conf.WebDNSDomainRedirects
 	handlers := conf.WebHandlers
 
 	for from, to := range redirects {
-		if host != from {
+		if host.Domain != from {
 			continue
 		}
 		u := r.URL
@@ -64,7 +64,7 @@ func WebHandle(w *loggingWriter, r *http.Request, host dns.Domain) (handled bool
 	}
 
 	for _, h := range handlers {
-		if host != h.DNSDomain {
+		if host.Domain != h.DNSDomain {
 			continue
 		}
 		loc := h.Path.FindStringIndex(r.URL.Path)
@@ -96,6 +96,10 @@ func WebHandle(w *loggingWriter, r *http.Request, host dns.Domain) (handled bool
 			return true
 		}
 		if h.WebForward != nil && HandleForward(h.WebForward, w, r, path) {
+			w.Handler = h.Name
+			return true
+		}
+		if h.WebInternal != nil && HandleInternal(h.WebInternal, w, r) {
 			w.Handler = h.Name
 			return true
 		}
@@ -393,6 +397,12 @@ func HandleRedirect(h *config.WebRedirect, w http.ResponseWriter, r *http.Reques
 	}
 
 	http.Redirect(w, r, u.String(), code)
+	return true
+}
+
+// HandleInternal passes the request to an internal service.
+func HandleInternal(h *config.WebInternal, w http.ResponseWriter, r *http.Request) (handled bool) {
+	h.Handler.ServeHTTP(w, r)
 	return true
 }
 

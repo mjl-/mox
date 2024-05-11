@@ -6529,6 +6529,14 @@
 					]
 				},
 				{
+					"Name": "WebInternal",
+					"Docs": "",
+					"Typewords": [
+						"nullable",
+						"WebInternal"
+					]
+				},
+				{
 					"Name": "Name",
 					"Docs": "Either LogName, or numeric index if LogName was empty. Used instead of LogName in logging/metrics.",
 					"Typewords": [
@@ -6643,6 +6651,26 @@
 					"Docs": "",
 					"Typewords": [
 						"{}",
+						"string"
+					]
+				}
+			]
+		},
+		{
+			"Name": "WebInternal",
+			"Docs": "",
+			"Fields": [
+				{
+					"Name": "BasePath",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Service",
+					"Docs": "",
+					"Typewords": [
 						"string"
 					]
 				}

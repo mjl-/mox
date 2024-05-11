@@ -172,7 +172,10 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# NATed. Skips IP-related DNS self-checks. (optional)
 			IPsNATed: false
 
-			# If empty, the config global Hostname is used. (optional)
+			# If empty, the config global Hostname is used. The internal services webadmin,
+			# webaccount, webmail and webapi only match requests to IPs, this hostname,
+			# "localhost". All except webadmin also match for any client settings domain.
+			# (optional)
 			Hostname:
 
 			# For SMTP/IMAP STARTTLS, direct TLS and HTTPS connections. (optional)
@@ -303,7 +306,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			AccountHTTP:
 				Enabled: false
 
-				# Default 80 for HTTP and 443 for HTTPS. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. See Hostname at Listener for hostname
+				# matching behaviour. (optional)
 				Port: 0
 
 				# Path to serve requests on. (optional)
@@ -318,7 +322,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			AccountHTTPS:
 				Enabled: false
 
-				# Default 80 for HTTP and 443 for HTTPS. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. See Hostname at Listener for hostname
+				# matching behaviour. (optional)
 				Port: 0
 
 				# Path to serve requests on. (optional)
@@ -336,7 +341,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			AdminHTTP:
 				Enabled: false
 
-				# Default 80 for HTTP and 443 for HTTPS. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. See Hostname at Listener for hostname
+				# matching behaviour. (optional)
 				Port: 0
 
 				# Path to serve requests on. (optional)
@@ -351,7 +357,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			AdminHTTPS:
 				Enabled: false
 
-				# Default 80 for HTTP and 443 for HTTPS. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. See Hostname at Listener for hostname
+				# matching behaviour. (optional)
 				Port: 0
 
 				# Path to serve requests on. (optional)
@@ -365,7 +372,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			WebmailHTTP:
 				Enabled: false
 
-				# Default 80 for HTTP and 443 for HTTPS. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. See Hostname at Listener for hostname
+				# matching behaviour. (optional)
 				Port: 0
 
 				# Path to serve requests on. (optional)
@@ -380,7 +388,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			WebmailHTTPS:
 				Enabled: false
 
-				# Default 80 for HTTP and 443 for HTTPS. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. See Hostname at Listener for hostname
+				# matching behaviour. (optional)
 				Port: 0
 
 				# Path to serve requests on. (optional)
@@ -394,7 +403,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			WebAPIHTTP:
 				Enabled: false
 
-				# Default 80 for HTTP and 443 for HTTPS. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. See Hostname at Listener for hostname
+				# matching behaviour. (optional)
 				Port: 0
 
 				# Path to serve requests on. (optional)
@@ -409,7 +419,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			WebAPIHTTPS:
 				Enabled: false
 
-				# Default 80 for HTTP and 443 for HTTPS. (optional)
+				# Default 80 for HTTP and 443 for HTTPS. See Hostname at Listener for hostname
+				# matching behaviour. (optional)
 				Port: 0
 
 				# Path to serve requests on. (optional)
@@ -1225,12 +1236,15 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 	WebDomainRedirects:
 		x:
 
-	# Handle webserver requests by serving static files, redirecting or
-	# reverse-proxying HTTP(s). The first matching WebHandler will handle the request.
-	# Built-in handlers, e.g. for account, admin, autoconfig and mta-sts always run
-	# first. If no handler matches, the response status code is file not found (404).
-	# If functionality you need is missng, simply forward the requests to an
-	# application that can provide the needed functionality. (optional)
+	# Handle webserver requests by serving static files, redirecting, reverse-proxying
+	# HTTP(s) or passing the request to an internal service. The first matching
+	# WebHandler will handle the request. Built-in system handlers, e.g. for ACME
+	# validation, autoconfig and mta-sts always run first. Built-in handlers for
+	# admin, account, webmail and webapi are evaluated after all handlers, including
+	# webhandlers (allowing for overrides of internal services for some domains). If
+	# no handler matches, the response status code is file not found (404). If
+	# webserver features are missing, forward the requests to an application that
+	# provides the needed functionality itself. (optional)
 	WebHandlers:
 		-
 
@@ -1238,7 +1252,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			LogName:
 
 			# Both Domain and PathRegexp must match for this WebHandler to match a request.
-			# Exactly one of WebStatic, WebRedirect, WebForward must be set.
+			# Exactly one of WebStatic, WebRedirect, WebForward, WebInternal must be set.
 			Domain:
 
 			# Regular expression matched against request path, must always start with ^ to
@@ -1344,6 +1358,15 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# headers. (optional)
 				ResponseHeaders:
 					x:
+
+			# Pass request to internal service, like webmail, webapi, etc. (optional)
+			WebInternal:
+
+				# Path to use as root of internal service, e.g. /webmail/.
+				BasePath:
+
+				# Name of the service, values: admin, account, webmail, webapi.
+				Service:
 
 	# Routes for delivering outgoing messages through the queue. Each delivery attempt
 	# evaluates account routes, domain routes and finally these global routes. The

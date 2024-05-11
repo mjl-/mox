@@ -351,37 +351,40 @@ func (w *loggingWriter) Done() {
 	pkglog.WithContext(w.R.Context()).Debugx("http request", err, attrs...)
 }
 
-// Set some http headers that should prevent potential abuse. Better safe than sorry.
-func safeHeaders(fn http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("X-Frame-Options", "deny")
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline' data:")
-		h.Set("Referrer-Policy", "same-origin")
-		fn.ServeHTTP(w, r)
-	})
-}
-
 // Built-in handlers, e.g. mta-sts and autoconfig.
 type pathHandler struct {
-	Name      string                    // For logging/metrics.
-	HostMatch func(dom dns.Domain) bool // If not nil, called to see if domain of requests matches. Only called if requested host is a valid domain.
-	Path      string                    // Path to register, like on http.ServeMux.
+	Name      string                       // For logging/metrics.
+	HostMatch func(host dns.IPDomain) bool // If not nil, called to see if domain of requests matches. Host can be zero value for invalid domain/ip.
+	Path      string                       // Path to register, like on http.ServeMux.
 	Handler   http.Handler
 }
 type serve struct {
-	Kinds        []string // Type of handler and protocol (e.g. acme-tls-alpn-01, account-http, admin-https).
-	TLSConfig    *tls.Config
-	PathHandlers []pathHandler // Sorted, longest first.
-	Webserver    bool          // Whether serving WebHandler. PathHandlers are always evaluated before WebHandlers.
+	Kinds     []string // Type of handler and protocol (e.g. acme-tls-alpn-01, account-http, admin-https).
+	TLSConfig *tls.Config
+
+	// SystemHandlers are for MTA-STS, autoconfig, ACME validation. They can't be
+	// overridden by WebHandlers. WebHandlers are evaluated next, and the internal
+	// service handlers from Listeners in mox.conf (for admin, account, webmail, webapi
+	// interfaces) last. WebHandlers can also pass requests to the internal servers.
+	// This order allows admins to serve other content on domains serving the mox.conf
+	// internal services.
+	SystemHandlers  []pathHandler // Sorted, longest first.
+	Webserver       bool
+	ServiceHandlers []pathHandler // Sorted, longest first.
 }
 
-// Handle registers a named handler for a path and optional host. If path ends with
-// a slash, it is used as prefix match, otherwise a full path match is required. If
-// hostOpt is set, only requests to those host are handled by this handler.
-func (s *serve) Handle(name string, hostMatch func(dns.Domain) bool, path string, fn http.Handler) {
-	s.PathHandlers = append(s.PathHandlers, pathHandler{name, hostMatch, path, fn})
+// SystemHandle registers a named system handler for a path and optional host. If
+// path ends with a slash, it is used as prefix match, otherwise a full path match
+// is required. If hostOpt is set, only requests to those host are handled by this
+// handler.
+func (s *serve) SystemHandle(name string, hostMatch func(dns.IPDomain) bool, path string, fn http.Handler) {
+	s.SystemHandlers = append(s.SystemHandlers, pathHandler{name, hostMatch, path, fn})
+}
+
+// Like SystemHandle, but for internal services "admin", "account", "webmail",
+// "webapi" configured in the mox.conf Listener.
+func (s *serve) ServiceHandle(name string, hostMatch func(dns.IPDomain) bool, path string, fn http.Handler) {
+	s.ServiceHandlers = append(s.ServiceHandlers, pathHandler{name, hostMatch, path, fn})
 }
 
 var (
@@ -452,28 +455,44 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 		r.URL.Path += "/"
 	}
 
-	var dom dns.Domain
 	host := r.Host
 	nhost, _, err := net.SplitHostPort(host)
 	if err == nil {
 		host = nhost
 	}
-	// host could be an IP, some handles may match, not an error.
-	dom, domErr := dns.ParseDomain(host)
+	ipdom := dns.IPDomain{IP: net.ParseIP(host)}
+	if ipdom.IP == nil {
+		dom, domErr := dns.ParseDomain(host)
+		if domErr == nil {
+			ipdom = dns.IPDomain{Domain: dom}
+		}
+	}
 
-	for _, h := range s.PathHandlers {
-		if h.HostMatch != nil && (domErr != nil || !h.HostMatch(dom)) {
-			continue
+	handle := func(h pathHandler) bool {
+		if h.HostMatch != nil && !h.HostMatch(ipdom) {
+			return false
 		}
 		if r.URL.Path == h.Path || strings.HasSuffix(h.Path, "/") && strings.HasPrefix(r.URL.Path, h.Path) {
 			nw.Handler = h.Name
 			nw.Compress = true
 			h.Handler.ServeHTTP(nw, r)
+			return true
+		}
+		return false
+	}
+
+	for _, h := range s.SystemHandlers {
+		if handle(h) {
 			return
 		}
 	}
-	if s.Webserver && domErr == nil {
-		if WebHandle(nw, r, dom) {
+	if s.Webserver {
+		if WebHandle(nw, r, ipdom) {
+			return
+		}
+	}
+	for _, h := range s.ServiceHandlers {
+		if handle(h) {
 			return
 		}
 	}
@@ -481,289 +500,330 @@ func (s *serve) ServeHTTP(xw http.ResponseWriter, r *http.Request) {
 	http.NotFound(nw, r)
 }
 
+func redirectToTrailingSlash(srv *serve, hostMatch func(dns.IPDomain) bool, name, path string) {
+	// Helpfully redirect user to version with ending slash.
+	if path != "/" && strings.HasSuffix(path, "/") {
+		handler := mox.SafeHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, path, http.StatusSeeOther)
+		}))
+		srv.ServiceHandle(name, hostMatch, path[:len(path)-1], handler)
+	}
+}
+
 // Listen binds to sockets for HTTP listeners, including those required for ACME to
 // generate TLS certificates. It stores the listeners so Serve can start serving them.
 func Listen() {
-	redirectToTrailingSlash := func(srv *serve, name, path string) {
-		// Helpfully redirect user to version with ending slash.
-		if path != "/" && strings.HasSuffix(path, "/") {
-			handler := safeHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				http.Redirect(w, r, path, http.StatusSeeOther)
-			}))
-			srv.Handle(name, nil, path[:len(path)-1], handler)
-		}
-	}
-
 	// Initialize listeners in deterministic order for the same potential error
 	// messages.
 	names := maps.Keys(mox.Conf.Static.Listeners)
 	sort.Strings(names)
 	for _, name := range names {
 		l := mox.Conf.Static.Listeners[name]
-
-		portServe := map[int]*serve{}
-
-		var ensureServe func(https bool, port int, kind string) *serve
-		ensureServe = func(https bool, port int, kind string) *serve {
-			s := portServe[port]
-			if s == nil {
-				s = &serve{nil, nil, nil, false}
-				portServe[port] = s
-			}
-			s.Kinds = append(s.Kinds, kind)
-			if https && l.TLS.ACME != "" {
-				s.TLSConfig = l.TLS.ACMEConfig
-			} else if https {
-				s.TLSConfig = l.TLS.Config
-				if l.TLS.ACME != "" {
-					tlsport := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
-					ensureServe(true, tlsport, "acme-tls-alpn-01")
-				}
-			}
-			return s
-		}
-
-		if l.TLS != nil && l.TLS.ACME != "" && (l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.IMAPS.Enabled) {
-			port := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
-			ensureServe(true, port, "acme-tls-alpn-01")
-		}
-
-		if l.AccountHTTP.Enabled {
-			port := config.Port(l.AccountHTTP.Port, 80)
-			path := "/"
-			if l.AccountHTTP.Path != "" {
-				path = l.AccountHTTP.Path
-			}
-			srv := ensureServe(false, port, "account-http at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handler(path, l.AccountHTTP.Forwarded))))
-			srv.Handle("account", nil, path, handler)
-			redirectToTrailingSlash(srv, "account", path)
-		}
-		if l.AccountHTTPS.Enabled {
-			port := config.Port(l.AccountHTTPS.Port, 443)
-			path := "/"
-			if l.AccountHTTPS.Path != "" {
-				path = l.AccountHTTPS.Path
-			}
-			srv := ensureServe(true, port, "account-https at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handler(path, l.AccountHTTPS.Forwarded))))
-			srv.Handle("account", nil, path, handler)
-			redirectToTrailingSlash(srv, "account", path)
-		}
-
-		if l.AdminHTTP.Enabled {
-			port := config.Port(l.AdminHTTP.Port, 80)
-			path := "/admin/"
-			if l.AdminHTTP.Path != "" {
-				path = l.AdminHTTP.Path
-			}
-			srv := ensureServe(false, port, "admin-http at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handler(path, l.AdminHTTP.Forwarded))))
-			srv.Handle("admin", nil, path, handler)
-			redirectToTrailingSlash(srv, "admin", path)
-		}
-		if l.AdminHTTPS.Enabled {
-			port := config.Port(l.AdminHTTPS.Port, 443)
-			path := "/admin/"
-			if l.AdminHTTPS.Path != "" {
-				path = l.AdminHTTPS.Path
-			}
-			srv := ensureServe(true, port, "admin-https at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handler(path, l.AdminHTTPS.Forwarded))))
-			srv.Handle("admin", nil, path, handler)
-			redirectToTrailingSlash(srv, "admin", path)
-		}
-
-		maxMsgSize := l.SMTPMaxMessageSize
-		if maxMsgSize == 0 {
-			maxMsgSize = config.DefaultMaxMsgSize
-		}
-
-		if l.WebAPIHTTP.Enabled {
-			port := config.Port(l.WebAPIHTTP.Port, 80)
-			path := "/webapi/"
-			if l.WebAPIHTTP.Path != "" {
-				path = l.WebAPIHTTP.Path
-			}
-			srv := ensureServe(false, port, "webapi-http at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTP.Forwarded)))
-			srv.Handle("webapi", nil, path, handler)
-			redirectToTrailingSlash(srv, "webapi", path)
-		}
-		if l.WebAPIHTTPS.Enabled {
-			port := config.Port(l.WebAPIHTTPS.Port, 443)
-			path := "/webapi/"
-			if l.WebAPIHTTPS.Path != "" {
-				path = l.WebAPIHTTPS.Path
-			}
-			srv := ensureServe(true, port, "webapi-https at "+path)
-			handler := safeHeaders(http.StripPrefix(path[:len(path)-1], webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTPS.Forwarded)))
-			srv.Handle("webapi", nil, path, handler)
-			redirectToTrailingSlash(srv, "webapi", path)
-		}
-
-		if l.WebmailHTTP.Enabled {
-			port := config.Port(l.WebmailHTTP.Port, 80)
-			path := "/webmail/"
-			if l.WebmailHTTP.Path != "" {
-				path = l.WebmailHTTP.Path
-			}
-			srv := ensureServe(false, port, "webmail-http at "+path)
-			var accountPath string
-			if l.AccountHTTP.Enabled {
-				accountPath = "/"
-				if l.AccountHTTP.Path != "" {
-					accountPath = l.AccountHTTP.Path
-				}
-			}
-			handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTP.Forwarded, accountPath)))
-			srv.Handle("webmail", nil, path, handler)
-			redirectToTrailingSlash(srv, "webmail", path)
-		}
-		if l.WebmailHTTPS.Enabled {
-			port := config.Port(l.WebmailHTTPS.Port, 443)
-			path := "/webmail/"
-			if l.WebmailHTTPS.Path != "" {
-				path = l.WebmailHTTPS.Path
-			}
-			srv := ensureServe(true, port, "webmail-https at "+path)
-			var accountPath string
-			if l.AccountHTTPS.Enabled {
-				accountPath = "/"
-				if l.AccountHTTPS.Path != "" {
-					accountPath = l.AccountHTTPS.Path
-				}
-			}
-			handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTPS.Forwarded, accountPath)))
-			srv.Handle("webmail", nil, path, handler)
-			redirectToTrailingSlash(srv, "webmail", path)
-		}
-
-		if l.MetricsHTTP.Enabled {
-			port := config.Port(l.MetricsHTTP.Port, 8010)
-			srv := ensureServe(false, port, "metrics-http")
-			srv.Handle("metrics", nil, "/metrics", safeHeaders(promhttp.Handler()))
-			srv.Handle("metrics", nil, "/", safeHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != "/" {
-					http.NotFound(w, r)
-					return
-				} else if r.Method != "GET" {
-					http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-					return
-				}
-				w.Header().Set("Content-Type", "text/html")
-				fmt.Fprint(w, `<html><body>see <a href="metrics">metrics</a></body></html>`)
-			})))
-		}
-		if l.AutoconfigHTTPS.Enabled {
-			port := config.Port(l.AutoconfigHTTPS.Port, 443)
-			srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, port, "autoconfig-https")
-			autoconfigMatch := func(dom dns.Domain) bool {
-				// Thunderbird requests an autodiscovery URL at the email address domain name, so
-				// autoconfig prefix is optional.
-				if strings.HasPrefix(dom.ASCII, "autoconfig.") {
-					dom.ASCII = strings.TrimPrefix(dom.ASCII, "autoconfig.")
-					dom.Unicode = strings.TrimPrefix(dom.Unicode, "autoconfig.")
-				}
-				// Autodiscovery uses a SRV record. It shouldn't point to a CNAME. So we directly
-				// use the mail server's host name.
-				if dom == mox.Conf.Static.HostnameDomain || dom == mox.Conf.Static.Listeners["public"].HostnameDomain {
-					return true
-				}
-				dc, ok := mox.Conf.Domain(dom)
-				return ok && !dc.ReportsOnly
-			}
-			srv.Handle("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", safeHeaders(http.HandlerFunc(autoconfHandle)))
-			srv.Handle("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", safeHeaders(http.HandlerFunc(autodiscoverHandle)))
-			srv.Handle("mobileconfig", autoconfigMatch, "/profile.mobileconfig", safeHeaders(http.HandlerFunc(mobileconfigHandle)))
-			srv.Handle("mobileconfigqrcodepng", autoconfigMatch, "/profile.mobileconfig.qrcode.png", safeHeaders(http.HandlerFunc(mobileconfigQRCodeHandle)))
-		}
-		if l.MTASTSHTTPS.Enabled {
-			port := config.Port(l.MTASTSHTTPS.Port, 443)
-			srv := ensureServe(!l.MTASTSHTTPS.NonTLS, port, "mtasts-https")
-			mtastsMatch := func(dom dns.Domain) bool {
-				// todo: may want to check this against the configured domains, could in theory be just a webserver.
-				return strings.HasPrefix(dom.ASCII, "mta-sts.")
-			}
-			srv.Handle("mtasts", mtastsMatch, "/.well-known/mta-sts.txt", safeHeaders(http.HandlerFunc(mtastsPolicyHandle)))
-		}
-		if l.PprofHTTP.Enabled {
-			// Importing net/http/pprof registers handlers on the default serve mux.
-			port := config.Port(l.PprofHTTP.Port, 8011)
-			if _, ok := portServe[port]; ok {
-				pkglog.Fatal("cannot serve pprof on same endpoint as other http services")
-			}
-			srv := &serve{[]string{"pprof-http"}, nil, nil, false}
-			portServe[port] = srv
-			srv.Handle("pprof", nil, "/", http.DefaultServeMux)
-		}
-		if l.WebserverHTTP.Enabled {
-			port := config.Port(l.WebserverHTTP.Port, 80)
-			srv := ensureServe(false, port, "webserver-http")
-			srv.Webserver = true
-		}
-		if l.WebserverHTTPS.Enabled {
-			port := config.Port(l.WebserverHTTPS.Port, 443)
-			srv := ensureServe(true, port, "webserver-https")
-			srv.Webserver = true
-		}
-
-		if l.TLS != nil && l.TLS.ACME != "" {
-			m := mox.Conf.Static.ACME[l.TLS.ACME].Manager
-
-			// If we are listening on port 80 for plain http, also register acme http-01
-			// validation handler.
-			if srv, ok := portServe[80]; ok && srv.TLSConfig == nil {
-				srv.Kinds = append(srv.Kinds, "acme-http-01")
-				srv.Handle("acme-http-01", nil, "/.well-known/acme-challenge/", m.Manager.HTTPHandler(nil))
-			}
-
-			hosts := map[dns.Domain]struct{}{
-				mox.Conf.Static.HostnameDomain: {},
-			}
-			if l.HostnameDomain.ASCII != "" {
-				hosts[l.HostnameDomain] = struct{}{}
-			}
-			// All domains are served on all listeners. Gather autoconfig hostnames to ensure
-			// presence of TLS certificates for.
-			for _, name := range mox.Conf.Domains() {
-				if dom, err := dns.ParseDomain(name); err != nil {
-					pkglog.Errorx("parsing domain from config", err)
-				} else if d, _ := mox.Conf.Domain(dom); d.ReportsOnly {
-					// Do not gather autoconfig name if we aren't accepting email for this domain.
-					continue
-				}
-
-				autoconfdom, err := dns.ParseDomain("autoconfig." + name)
-				if err != nil {
-					pkglog.Errorx("parsing domain from config for autoconfig", err)
-				} else {
-					hosts[autoconfdom] = struct{}{}
-				}
-			}
-
-			ensureManagerHosts[m] = hosts
-		}
+		portServe := portServes(l)
 
 		ports := maps.Keys(portServe)
 		sort.Ints(ports)
 		for _, port := range ports {
 			srv := portServe[port]
-			sort.Slice(srv.PathHandlers, func(i, j int) bool {
-				a := srv.PathHandlers[i].Path
-				b := srv.PathHandlers[j].Path
-				if len(a) == len(b) {
-					// For consistent order.
-					return a < b
-				}
-				// Longest paths first.
-				return len(a) > len(b)
-			})
 			for _, ip := range l.IPs {
 				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv)
 			}
 		}
 	}
+}
+
+func portServes(l config.Listener) map[int]*serve {
+	portServe := map[int]*serve{}
+
+	// For system/services, we serve on host localhost too, for ssh tunnel scenario's.
+	localhost := dns.Domain{ASCII: "localhost"}
+
+	ldom := l.HostnameDomain
+	if l.Hostname == "" {
+		ldom = mox.Conf.Static.HostnameDomain
+	}
+	listenerHostMatch := func(host dns.IPDomain) bool {
+		if host.IsIP() {
+			return true
+		}
+		return host.Domain == ldom || host.Domain == localhost
+	}
+	accountHostMatch := func(host dns.IPDomain) bool {
+		if listenerHostMatch(host) {
+			return true
+		}
+		return mox.Conf.IsClientSettingsDomain(host.Domain)
+	}
+
+	var ensureServe func(https bool, port int, kind string) *serve
+	ensureServe = func(https bool, port int, kind string) *serve {
+		s := portServe[port]
+		if s == nil {
+			s = &serve{nil, nil, nil, false, nil}
+			portServe[port] = s
+		}
+		s.Kinds = append(s.Kinds, kind)
+		if https && l.TLS.ACME != "" {
+			s.TLSConfig = l.TLS.ACMEConfig
+		} else if https {
+			s.TLSConfig = l.TLS.Config
+			if l.TLS.ACME != "" {
+				tlsport := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
+				ensureServe(true, tlsport, "acme-tls-alpn-01")
+			}
+		}
+		return s
+	}
+
+	if l.TLS != nil && l.TLS.ACME != "" && (l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.IMAPS.Enabled) {
+		port := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
+		ensureServe(true, port, "acme-tls-alpn-01")
+	}
+
+	if l.AccountHTTP.Enabled {
+		port := config.Port(l.AccountHTTP.Port, 80)
+		path := "/"
+		if l.AccountHTTP.Path != "" {
+			path = l.AccountHTTP.Path
+		}
+		srv := ensureServe(false, port, "account-http at "+path)
+		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handler(path, l.AccountHTTP.Forwarded))))
+		srv.ServiceHandle("account", accountHostMatch, path, handler)
+		redirectToTrailingSlash(srv, accountHostMatch, "account", path)
+	}
+	if l.AccountHTTPS.Enabled {
+		port := config.Port(l.AccountHTTPS.Port, 443)
+		path := "/"
+		if l.AccountHTTPS.Path != "" {
+			path = l.AccountHTTPS.Path
+		}
+		srv := ensureServe(true, port, "account-https at "+path)
+		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handler(path, l.AccountHTTPS.Forwarded))))
+		srv.ServiceHandle("account", accountHostMatch, path, handler)
+		redirectToTrailingSlash(srv, accountHostMatch, "account", path)
+	}
+
+	if l.AdminHTTP.Enabled {
+		port := config.Port(l.AdminHTTP.Port, 80)
+		path := "/admin/"
+		if l.AdminHTTP.Path != "" {
+			path = l.AdminHTTP.Path
+		}
+		srv := ensureServe(false, port, "admin-http at "+path)
+		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handler(path, l.AdminHTTP.Forwarded))))
+		srv.ServiceHandle("admin", listenerHostMatch, path, handler)
+		redirectToTrailingSlash(srv, listenerHostMatch, "admin", path)
+	}
+	if l.AdminHTTPS.Enabled {
+		port := config.Port(l.AdminHTTPS.Port, 443)
+		path := "/admin/"
+		if l.AdminHTTPS.Path != "" {
+			path = l.AdminHTTPS.Path
+		}
+		srv := ensureServe(true, port, "admin-https at "+path)
+		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handler(path, l.AdminHTTPS.Forwarded))))
+		srv.ServiceHandle("admin", listenerHostMatch, path, handler)
+		redirectToTrailingSlash(srv, listenerHostMatch, "admin", path)
+	}
+
+	maxMsgSize := l.SMTPMaxMessageSize
+	if maxMsgSize == 0 {
+		maxMsgSize = config.DefaultMaxMsgSize
+	}
+
+	if l.WebAPIHTTP.Enabled {
+		port := config.Port(l.WebAPIHTTP.Port, 80)
+		path := "/webapi/"
+		if l.WebAPIHTTP.Path != "" {
+			path = l.WebAPIHTTP.Path
+		}
+		srv := ensureServe(false, port, "webapi-http at "+path)
+		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTP.Forwarded)))
+		srv.ServiceHandle("webapi", accountHostMatch, path, handler)
+		redirectToTrailingSlash(srv, accountHostMatch, "webapi", path)
+	}
+	if l.WebAPIHTTPS.Enabled {
+		port := config.Port(l.WebAPIHTTPS.Port, 443)
+		path := "/webapi/"
+		if l.WebAPIHTTPS.Path != "" {
+			path = l.WebAPIHTTPS.Path
+		}
+		srv := ensureServe(true, port, "webapi-https at "+path)
+		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTPS.Forwarded)))
+		srv.ServiceHandle("webapi", accountHostMatch, path, handler)
+		redirectToTrailingSlash(srv, accountHostMatch, "webapi", path)
+	}
+
+	if l.WebmailHTTP.Enabled {
+		port := config.Port(l.WebmailHTTP.Port, 80)
+		path := "/webmail/"
+		if l.WebmailHTTP.Path != "" {
+			path = l.WebmailHTTP.Path
+		}
+		srv := ensureServe(false, port, "webmail-http at "+path)
+		var accountPath string
+		if l.AccountHTTP.Enabled {
+			accountPath = "/"
+			if l.AccountHTTP.Path != "" {
+				accountPath = l.AccountHTTP.Path
+			}
+		}
+		handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTP.Forwarded, accountPath)))
+		srv.ServiceHandle("webmail", accountHostMatch, path, handler)
+		redirectToTrailingSlash(srv, accountHostMatch, "webmail", path)
+	}
+	if l.WebmailHTTPS.Enabled {
+		port := config.Port(l.WebmailHTTPS.Port, 443)
+		path := "/webmail/"
+		if l.WebmailHTTPS.Path != "" {
+			path = l.WebmailHTTPS.Path
+		}
+		srv := ensureServe(true, port, "webmail-https at "+path)
+		var accountPath string
+		if l.AccountHTTPS.Enabled {
+			accountPath = "/"
+			if l.AccountHTTPS.Path != "" {
+				accountPath = l.AccountHTTPS.Path
+			}
+		}
+		handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTPS.Forwarded, accountPath)))
+		srv.ServiceHandle("webmail", accountHostMatch, path, handler)
+		redirectToTrailingSlash(srv, accountHostMatch, "webmail", path)
+	}
+
+	if l.MetricsHTTP.Enabled {
+		port := config.Port(l.MetricsHTTP.Port, 8010)
+		srv := ensureServe(false, port, "metrics-http")
+		srv.SystemHandle("metrics", nil, "/metrics", mox.SafeHeaders(promhttp.Handler()))
+		srv.SystemHandle("metrics", nil, "/", mox.SafeHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/" {
+				http.NotFound(w, r)
+				return
+			} else if r.Method != "GET" {
+				http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, `<html><body>see <a href="metrics">metrics</a></body></html>`)
+		})))
+	}
+	if l.AutoconfigHTTPS.Enabled {
+		port := config.Port(l.AutoconfigHTTPS.Port, 443)
+		srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, port, "autoconfig-https")
+		autoconfigMatch := func(ipdom dns.IPDomain) bool {
+			dom := ipdom.Domain
+			if dom.IsZero() {
+				return false
+			}
+			// Thunderbird requests an autodiscovery URL at the email address domain name, so
+			// autoconfig prefix is optional.
+			if strings.HasPrefix(dom.ASCII, "autoconfig.") {
+				dom.ASCII = strings.TrimPrefix(dom.ASCII, "autoconfig.")
+				dom.Unicode = strings.TrimPrefix(dom.Unicode, "autoconfig.")
+			}
+			// Autodiscovery uses a SRV record. It shouldn't point to a CNAME. So we directly
+			// use the mail server's host name.
+			if dom == mox.Conf.Static.HostnameDomain || dom == mox.Conf.Static.Listeners["public"].HostnameDomain {
+				return true
+			}
+			dc, ok := mox.Conf.Domain(dom)
+			return ok && !dc.ReportsOnly
+		}
+		srv.SystemHandle("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", mox.SafeHeaders(http.HandlerFunc(autoconfHandle)))
+		srv.SystemHandle("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", mox.SafeHeaders(http.HandlerFunc(autodiscoverHandle)))
+		srv.SystemHandle("mobileconfig", autoconfigMatch, "/profile.mobileconfig", mox.SafeHeaders(http.HandlerFunc(mobileconfigHandle)))
+		srv.SystemHandle("mobileconfigqrcodepng", autoconfigMatch, "/profile.mobileconfig.qrcode.png", mox.SafeHeaders(http.HandlerFunc(mobileconfigQRCodeHandle)))
+	}
+	if l.MTASTSHTTPS.Enabled {
+		port := config.Port(l.MTASTSHTTPS.Port, 443)
+		srv := ensureServe(!l.MTASTSHTTPS.NonTLS, port, "mtasts-https")
+		mtastsMatch := func(ipdom dns.IPDomain) bool {
+			// todo: may want to check this against the configured domains, could in theory be just a webserver.
+			dom := ipdom.Domain
+			if dom.IsZero() {
+				return false
+			}
+			return strings.HasPrefix(dom.ASCII, "mta-sts.")
+		}
+		srv.SystemHandle("mtasts", mtastsMatch, "/.well-known/mta-sts.txt", mox.SafeHeaders(http.HandlerFunc(mtastsPolicyHandle)))
+	}
+	if l.PprofHTTP.Enabled {
+		// Importing net/http/pprof registers handlers on the default serve mux.
+		port := config.Port(l.PprofHTTP.Port, 8011)
+		if _, ok := portServe[port]; ok {
+			pkglog.Fatal("cannot serve pprof on same endpoint as other http services")
+		}
+		srv := &serve{[]string{"pprof-http"}, nil, nil, false, nil}
+		portServe[port] = srv
+		srv.SystemHandle("pprof", nil, "/", http.DefaultServeMux)
+	}
+	if l.WebserverHTTP.Enabled {
+		port := config.Port(l.WebserverHTTP.Port, 80)
+		srv := ensureServe(false, port, "webserver-http")
+		srv.Webserver = true
+	}
+	if l.WebserverHTTPS.Enabled {
+		port := config.Port(l.WebserverHTTPS.Port, 443)
+		srv := ensureServe(true, port, "webserver-https")
+		srv.Webserver = true
+	}
+
+	if l.TLS != nil && l.TLS.ACME != "" {
+		m := mox.Conf.Static.ACME[l.TLS.ACME].Manager
+
+		// If we are listening on port 80 for plain http, also register acme http-01
+		// validation handler.
+		if srv, ok := portServe[80]; ok && srv.TLSConfig == nil {
+			srv.Kinds = append(srv.Kinds, "acme-http-01")
+			srv.SystemHandle("acme-http-01", nil, "/.well-known/acme-challenge/", m.Manager.HTTPHandler(nil))
+		}
+
+		hosts := map[dns.Domain]struct{}{
+			mox.Conf.Static.HostnameDomain: {},
+		}
+		if l.HostnameDomain.ASCII != "" {
+			hosts[l.HostnameDomain] = struct{}{}
+		}
+		// All domains are served on all listeners. Gather autoconfig hostnames to ensure
+		// presence of TLS certificates for.
+		for _, name := range mox.Conf.Domains() {
+			if dom, err := dns.ParseDomain(name); err != nil {
+				pkglog.Errorx("parsing domain from config", err)
+			} else if d, _ := mox.Conf.Domain(dom); d.ReportsOnly {
+				// Do not gather autoconfig name if we aren't accepting email for this domain.
+				continue
+			}
+
+			autoconfdom, err := dns.ParseDomain("autoconfig." + name)
+			if err != nil {
+				pkglog.Errorx("parsing domain from config for autoconfig", err)
+			} else {
+				hosts[autoconfdom] = struct{}{}
+			}
+		}
+
+		ensureManagerHosts[m] = hosts
+	}
+
+	for _, srv := range portServe {
+		sortPathHandlers(srv.SystemHandlers)
+		sortPathHandlers(srv.ServiceHandlers)
+	}
+
+	return portServe
+}
+
+func sortPathHandlers(l []pathHandler) {
+	sort.Slice(l, func(i, j int) bool {
+		a := l[i].Path
+		b := l[j].Path
+		if len(a) == len(b) {
+			// For consistent order.
+			return a < b
+		}
+		// Longest paths first.
+		return len(a) > len(b)
+	})
 }
 
 // functions to be launched in goroutine that will serve on a listener.

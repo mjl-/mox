@@ -4537,6 +4537,10 @@ const webserver = async () => {
 		root: HTMLElement
 		get: () => api.WebForward
 	}
+	type WebInternalView = {
+		root: HTMLElement
+		get: () => api.WebInternal
+	}
 
 	// Make a handler row. This is more complicated, since it can be one of the three
 	// types (static, redirect, forward), and can change between those types.
@@ -4546,6 +4550,7 @@ const webserver = async () => {
 		let staticView: WebStaticView | null = null
 		let redirectView: WebRedirectView | null = null
 		let forwardView: WebForwardView | null = null
+		let internalView: WebInternalView | null = null
 
 		let moveButtons: HTMLElement
 
@@ -4602,6 +4607,7 @@ const webserver = async () => {
 							dom.option('Static', attr.selected('')),
 							dom.option('Redirect'),
 							dom.option('Forward'),
+							dom.option('Internal'),
 							function change(e: MouseEvent) {
 								makeType((e.target! as HTMLSelectElement).value)
 							},
@@ -4671,6 +4677,7 @@ const webserver = async () => {
 							dom.option('Static'),
 							dom.option('Redirect', attr.selected('')),
 							dom.option('Forward'),
+							dom.option('Internal'),
 							function change(e: MouseEvent) {
 								makeType((e.target! as HTMLSelectElement).value)
 							},
@@ -4735,6 +4742,7 @@ const webserver = async () => {
 							dom.option('Static', ),
 							dom.option('Redirect'),
 							dom.option('Forward', attr.selected('')),
+							dom.option('Internal'),
 							function change(e: MouseEvent) {
 								makeType((e.target! as HTMLSelectElement).value)
 							},
@@ -4748,6 +4756,60 @@ const webserver = async () => {
 					),
 					dom.td(
 						responseHeaders,
+					),
+				),
+			)
+			view = {root: root, get: get}
+			return view
+		}
+
+		const makeWebInternal = (wi: api.WebInternal) => {
+			let view: WebInternalView
+
+			let basePath: HTMLInputElement
+			let service: HTMLSelectElement
+
+			const get = (): api.WebInternal => {
+				return {
+					BasePath: basePath.value,
+					Service: service.value,
+				}
+			}
+			const root = dom.table(
+				dom.tr(
+					dom.td('Type'),
+					dom.td(
+						'Base path',
+						attr.title('Path to use as root of internal service, e.g. /webmail/.'),
+					),
+					dom.td(
+						'Service',
+					),
+				),
+				dom.tr(
+					dom.td(
+						dom.select(
+							attr.required(''),
+							dom.option('Static', ),
+							dom.option('Redirect'),
+							dom.option('Forward'),
+							dom.option('Internal', attr.selected('')),
+							function change(e: MouseEvent) {
+								makeType((e.target! as HTMLSelectElement).value)
+							},
+						),
+					),
+					dom.td(
+						basePath=dom.input(attr.value(wi.BasePath), attr.required(''), attr.placeholder('/.../')),
+					),
+					dom.td(
+						service=dom.select(
+							dom.option('Admin', attr.value('admin')),
+							dom.option('Account', attr.value('account')),
+							dom.option('Webmail', attr.value('webmail')),
+							dom.option('Webapi', attr.value('webapi')),
+							attr.value(wi.Service),
+						),
 					),
 				),
 			)
@@ -4794,6 +4856,12 @@ const webserver = async () => {
 					ResponseHeaders: {},
 				})
 				detailsRoot(forwardView.root)
+			} else if (s === 'Internal') {
+				internalView = makeWebInternal(wh.WebInternal || {
+					BasePath: '',
+					Service: 'admin',
+				})
+				detailsRoot(internalView.root)
 			} else {
 				throw new Error('unknown handler type')
 			}
@@ -4901,6 +4969,8 @@ const webserver = async () => {
 				wh.WebRedirect = redirectView.get()
 			} else if (handlerType === 'Forward' && forwardView !== null) {
 				wh.WebForward = forwardView.get()
+			} else if (handlerType === 'Internal' && internalView !== null) {
+				wh.WebInternal = internalView.get()
 			} else {
 				throw new Error('unknown WebHandler type')
 			}
@@ -4914,6 +4984,8 @@ const webserver = async () => {
 			handlerType = 'Redirect'
 		} else if (wh.WebForward) {
 			handlerType = 'Forward'
+		} else if (wh.WebInternal) {
+			handlerType = 'Internal'
 		} else {
 			throw new Error('unknown WebHandler type')
 		}
@@ -4999,7 +5071,7 @@ const webserver = async () => {
 				),
 				dom.br(),
 				dom.h2('Handlers', attr.title('Corresponds with WebHandlers in domains.conf')),
-				dom.p('Each incoming request is check against these handlers, in order. The first matching handler serves the request. Don\'t forget to save after making a change.'),
+				dom.p('Each incoming request is matched against the configured handlers, in order. The first matching handler serves the request. System handlers such as for ACME validation, MTA-STS and autoconfig, come first. Then these webserver handlers. Finally the internal service handlers for admin, account, webmail and webapi configured in mox.conf. Don\'t forget to save after making a change.'),
 				dom.table(dom._class('long'),
 					dom.thead(
 						dom.tr(

@@ -63,6 +63,16 @@ var (
 
 var ErrConfig = errors.New("config error")
 
+// Set by packages webadmin, webaccount, webmail, webapisrv to prevent cyclic dependencies.
+var NewWebadminHandler = func(basePath string, isForwarded bool) http.Handler { return nopHandler }
+var NewWebaccountHandler = func(basePath string, isForwarded bool) http.Handler { return nopHandler }
+var NewWebmailHandler = func(maxMsgSize int64, basePath string, isForwarded bool, accountPath string) http.Handler {
+	return nopHandler
+}
+var NewWebapiHandler = func(maxMsgSize int64, basePath string, isForwarded bool) http.Handler { return nopHandler }
+
+var nopHandler = http.HandlerFunc(nil)
+
 // Config as used in the code, a processed version of what is in the config file.
 //
 // Use methods to lookup a domain/account/address in the dynamic configuration.
@@ -258,6 +268,13 @@ func (c *Config) Routes(accountName string, domain dns.Domain) (accountRoutes, d
 		domainRoutes = dom.Routes
 
 		globalRoutes = c.Dynamic.Routes
+	})
+	return
+}
+
+func (c *Config) IsClientSettingsDomain(d dns.Domain) (is bool) {
+	c.withDynamicLock(func() {
+		_, is = c.Dynamic.ClientSettingDomains[d]
 	})
 	return
 }
@@ -1124,6 +1141,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 	checkRoutes("global routes", c.Routes)
 
 	// Validate domains.
+	c.ClientSettingDomains = map[dns.Domain]struct{}{}
 	for d, domain := range c.Domains {
 		dnsdomain, err := dns.ParseDomain(d)
 		if err != nil {
@@ -1140,6 +1158,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				addErrorf("bad client settings domain %q: %s", domain.ClientSettingsDomain, err)
 			}
 			domain.ClientSettingsDNSDomain = csd
+			c.ClientSettingDomains[csd] = struct{}{}
 		}
 
 		for _, sign := range domain.DKIM.Sign {
@@ -1813,6 +1832,29 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 					addErrorf("webforward %s %s: bad header %q", wh.Domain, wh.PathRegexp, xk)
 				}
 			}
+		}
+		if wh.WebInternal != nil {
+			n++
+			wi := wh.WebInternal
+			if !strings.HasPrefix(wi.BasePath, "/") || !strings.HasSuffix(wi.BasePath, "/") {
+				addErrorf("webinternal %s %s: base path %q must start and end with /", wh.Domain, wh.PathRegexp, wi.BasePath)
+			}
+			// todo: we could make maxMsgSize and accountPath configurable
+			const isForwarded = false
+			switch wi.Service {
+			case "admin":
+				wi.Handler = NewWebadminHandler(wi.BasePath, isForwarded)
+			case "account":
+				wi.Handler = NewWebaccountHandler(wi.BasePath, isForwarded)
+			case "webmail":
+				accountPath := ""
+				wi.Handler = NewWebmailHandler(config.DefaultMaxMsgSize, wi.BasePath, isForwarded, accountPath)
+			case "webapi":
+				wi.Handler = NewWebapiHandler(config.DefaultMaxMsgSize, wi.BasePath, isForwarded)
+			default:
+				addErrorf("webinternal %s %s: unknown service %q", wh.Domain, wh.PathRegexp, wi.Service)
+			}
+			wi.Handler = SafeHeaders(http.StripPrefix(wi.BasePath[:len(wi.BasePath)-1], wi.Handler))
 		}
 		if n != 1 {
 			addErrorf("webhandler %s %s: must have exactly one handler, not %d", wh.Domain, wh.PathRegexp, n)

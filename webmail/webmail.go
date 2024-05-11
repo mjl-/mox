@@ -170,6 +170,12 @@ func serveContentFallback(log mlog.Log, w http.ResponseWriter, r *http.Request, 
 	http.ServeContent(w, r, "", mox.FallbackMtime(log), bytes.NewReader(fallback))
 }
 
+func init() {
+	mox.NewWebmailHandler = func(maxMsgSize int64, basePath string, isForwarded bool, accountPath string) http.Handler {
+		return http.HandlerFunc(Handler(maxMsgSize, basePath, isForwarded, accountPath))
+	}
+}
+
 // Handler returns a handler for the webmail endpoints, customized for the max
 // message size coming from the listener and cookiePath.
 func Handler(maxMessageSize int64, cookiePath string, isForwarded bool, accountPath string) func(w http.ResponseWriter, r *http.Request) {

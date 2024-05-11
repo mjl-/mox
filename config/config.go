@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"net"
+	"net/http"
 	"net/url"
 	"reflect"
 	"regexp"
@@ -109,12 +110,13 @@ type Dynamic struct {
 	Domains            map[string]Domain  `sconf-doc:"NOTE: This config file is in 'sconf' format. Indent with tabs. Comments must be on their own line, they don't end a line. Do not escape or quote strings. Details: https://pkg.go.dev/github.com/mjl-/sconf.\n\n\nDomains for which email is accepted. For internationalized domains, use their IDNA names in UTF-8."`
 	Accounts           map[string]Account `sconf-doc:"Accounts represent mox users, each with a password and email address(es) to which email can be delivered (possibly at different domains). Each account has its own on-disk directory holding its messages and index database. An account name is not an email address."`
 	WebDomainRedirects map[string]string  `sconf:"optional" sconf-doc:"Redirect all requests from domain (key) to domain (value). Always redirects to HTTPS. For plain HTTP redirects, use a WebHandler with a WebRedirect."`
-	WebHandlers        []WebHandler       `sconf:"optional" sconf-doc:"Handle webserver requests by serving static files, redirecting or reverse-proxying HTTP(s). The first matching WebHandler will handle the request. Built-in handlers, e.g. for account, admin, autoconfig and mta-sts always run first. If no handler matches, the response status code is file not found (404). If functionality you need is missng, simply forward the requests to an application that can provide the needed functionality."`
+	WebHandlers        []WebHandler       `sconf:"optional" sconf-doc:"Handle webserver requests by serving static files, redirecting, reverse-proxying HTTP(s) or passing the request to an internal service. The first matching WebHandler will handle the request. Built-in system handlers, e.g. for ACME validation, autoconfig and mta-sts always run first. Built-in handlers for admin, account, webmail and webapi are evaluated after all handlers, including webhandlers (allowing for overrides of internal services for some domains). If no handler matches, the response status code is file not found (404). If webserver features are missing, forward the requests to an application that provides the needed functionality itself."`
 	Routes             []Route            `sconf:"optional" sconf-doc:"Routes for delivering outgoing messages through the queue. Each delivery attempt evaluates account routes, domain routes and finally these global routes. The transport of the first matching route is used in the delivery attempt. If no routes match, which is the default with no configured routes, messages are delivered directly from the queue."`
 	MonitorDNSBLs      []string           `sconf:"optional" sconf-doc:"DNS blocklists to periodically check with if IPs we send from are present, without using them for checking incoming deliveries.. Also see DNSBLs in SMTP listeners in mox.conf, which specifies DNSBLs to use both for incoming deliveries and for checking our IPs against. Example DNSBLs: sbl.spamhaus.org, bl.spamcop.net."`
 
 	WebDNSDomainRedirects map[dns.Domain]dns.Domain `sconf:"-" json:"-"`
 	MonitorDNSBLZones     []dns.Domain              `sconf:"-"`
+	ClientSettingDomains  map[dns.Domain]struct{}   `sconf:"-" json:"-"`
 }
 
 type ACME struct {
@@ -138,7 +140,7 @@ type Listener struct {
 	IPs            []string   `sconf-doc:"Use 0.0.0.0 to listen on all IPv4 and/or :: to listen on all IPv6 addresses, but it is better to explicitly specify the IPs you want to use for email, as mox will make sure outgoing connections will only be made from one of those IPs. If both outgoing IPv4 and IPv6 connectivity is possible, and only one family has explicitly configured addresses, both address families are still used for outgoing connections. Use the \"direct\" transport to limit address families for outgoing connections."`
 	NATIPs         []string   `sconf:"optional" sconf-doc:"If set, the mail server is configured behind a NAT and field IPs are internal instead of the public IPs, while NATIPs lists the public IPs. Used during IP-related DNS self-checks, such as for iprev, mx, spf, autoconfig, autodiscover, and for autotls."`
 	IPsNATed       bool       `sconf:"optional" sconf-doc:"Deprecated, use NATIPs instead. If set, IPs are not the public IPs, but are NATed. Skips IP-related DNS self-checks."`
-	Hostname       string     `sconf:"optional" sconf-doc:"If empty, the config global Hostname is used."`
+	Hostname       string     `sconf:"optional" sconf-doc:"If empty, the config global Hostname is used. The internal services webadmin, webaccount, webmail and webapi only match requests to IPs, this hostname, \"localhost\". All except webadmin also match for any client settings domain."`
 	HostnameDomain dns.Domain `sconf:"-" json:"-"` // Set when parsing config.
 
 	TLS                *TLS  `sconf:"optional" sconf-doc:"For SMTP/IMAP STARTTLS, direct TLS and HTTPS connections."`
@@ -215,7 +217,7 @@ type Listener struct {
 // WebService is an internal web interface: webmail, webaccount, webadmin, webapi.
 type WebService struct {
 	Enabled   bool
-	Port      int    `sconf:"optional" sconf-doc:"Default 80 for HTTP and 443 for HTTPS."`
+	Port      int    `sconf:"optional" sconf-doc:"Default 80 for HTTP and 443 for HTTPS. See Hostname at Listener for hostname matching behaviour."`
 	Path      string `sconf:"optional" sconf-doc:"Path to serve requests on."`
 	Forwarded bool   `sconf:"optional" sconf-doc:"If set, X-Forwarded-* headers are used for the remote IP address for rate limiting and for the \"secure\" status of cookies."`
 }
@@ -521,15 +523,18 @@ type TLS struct {
 	HostPrivateECDSAP256Keys []crypto.Signer `sconf:"-" json:"-"`
 }
 
+// todo: we could implement matching WebHandler.Domain as IPs too
+
 type WebHandler struct {
 	LogName               string       `sconf:"optional" sconf-doc:"Name to use in logging and metrics."`
-	Domain                string       `sconf-doc:"Both Domain and PathRegexp must match for this WebHandler to match a request. Exactly one of WebStatic, WebRedirect, WebForward must be set."`
+	Domain                string       `sconf-doc:"Both Domain and PathRegexp must match for this WebHandler to match a request. Exactly one of WebStatic, WebRedirect, WebForward, WebInternal must be set."`
 	PathRegexp            string       `sconf-doc:"Regular expression matched against request path, must always start with ^ to ensure matching from the start of the path. The matching prefix can optionally be stripped by WebForward. The regular expression does not have to end with $."`
 	DontRedirectPlainHTTP bool         `sconf:"optional" sconf-doc:"If set, plain HTTP requests are not automatically permanently redirected (308) to HTTPS. If you don't have a HTTPS webserver configured, set this to true."`
 	Compress              bool         `sconf:"optional" sconf-doc:"Transparently compress responses (currently with gzip) if the client supports it, the status is 200 OK, no Content-Encoding is set on the response yet and the Content-Type of the response hints that the data is compressible (text/..., specific application/... and .../...+json and .../...+xml). For static files only, a cache with compressed files is kept."`
 	WebStatic             *WebStatic   `sconf:"optional" sconf-doc:"Serve static files."`
 	WebRedirect           *WebRedirect `sconf:"optional" sconf-doc:"Redirect requests to configured URL."`
 	WebForward            *WebForward  `sconf:"optional" sconf-doc:"Forward requests to another webserver, i.e. reverse proxy."`
+	WebInternal           *WebInternal `sconf:"optional" sconf-doc:"Pass request to internal service, like webmail, webapi, etc."`
 
 	Name      string         `sconf:"-"` // Either LogName, or numeric index if LogName was empty. Used instead of LogName in logging/metrics.
 	DNSDomain dns.Domain     `sconf:"-"`
@@ -545,6 +550,7 @@ func (wh WebHandler) Equal(o WebHandler) bool {
 		x.WebStatic = nil
 		x.WebRedirect = nil
 		x.WebForward = nil
+		x.WebInternal = nil
 		return x
 	}
 	cwh := clean(wh)
@@ -552,7 +558,7 @@ func (wh WebHandler) Equal(o WebHandler) bool {
 	if cwh != co {
 		return false
 	}
-	if (wh.WebStatic == nil) != (o.WebStatic == nil) || (wh.WebRedirect == nil) != (o.WebRedirect == nil) || (wh.WebForward == nil) != (o.WebForward == nil) {
+	if (wh.WebStatic == nil) != (o.WebStatic == nil) || (wh.WebRedirect == nil) != (o.WebRedirect == nil) || (wh.WebForward == nil) != (o.WebForward == nil) || (wh.WebInternal == nil) != (o.WebInternal == nil) {
 		return false
 	}
 	if wh.WebStatic != nil {
@@ -563,6 +569,9 @@ func (wh WebHandler) Equal(o WebHandler) bool {
 	}
 	if wh.WebForward != nil {
 		return wh.WebForward.equal(*o.WebForward)
+	}
+	if wh.WebInternal != nil {
+		return wh.WebInternal.equal(*o.WebInternal)
 	}
 	return true
 }
@@ -605,4 +614,17 @@ func (wf WebForward) equal(o WebForward) bool {
 	wf.TargetURL = nil
 	o.TargetURL = nil
 	return reflect.DeepEqual(wf, o)
+}
+
+type WebInternal struct {
+	BasePath string `sconf-doc:"Path to use as root of internal service, e.g. /webmail/."`
+	Service  string `sconf-doc:"Name of the service, values: admin, account, webmail, webapi."`
+
+	Handler http.Handler `sconf:"-" json:"-"`
+}
+
+func (wi WebInternal) equal(o WebInternal) bool {
+	wi.Handler = nil
+	o.Handler = nil
+	return reflect.DeepEqual(wi, o)
 }

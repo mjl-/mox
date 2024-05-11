@@ -134,6 +134,10 @@ func TestWebserver(t *testing.T) {
 
 	test("GET", "http://mox.example/bogus", nil, http.StatusNotFound, "", nil)         // path not registered.
 	test("GET", "http://bogus.mox.example/static/", nil, http.StatusNotFound, "", nil) // domain not registered.
+	test("GET", "http://mox.example/xadmin/", nil, http.StatusOK, "", nil)             // internal admin service
+	test("GET", "http://mox.example/xaccount/", nil, http.StatusOK, "", nil)           // internal account service
+	test("GET", "http://mox.example/xwebmail/", nil, http.StatusOK, "", nil)           // internal webmail service
+	test("GET", "http://mox.example/xwebapi/v0/", nil, http.StatusOK, "", nil)         // internal webapi service
 
 	npaths := len(staticgzcache.paths)
 	if npaths != 1 {
@@ -335,5 +339,4 @@ func TestWebsocket(t *testing.T) {
 		w.WriteHeader(http.StatusSwitchingProtocols)
 	})
 	test("GET", wsreqhdrs, http.StatusSwitchingProtocols, wsresphdrs)
-
 }

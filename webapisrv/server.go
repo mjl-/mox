@@ -252,6 +252,10 @@ fieldset { border: 0; }
 		panic("executing api docs index template: " + err.Error())
 	}
 	docsIndex = b.Bytes()
+
+	mox.NewWebapiHandler = func(maxMsgSize int64, basePath string, isForwarded bool) http.Handler {
+		return NewServer(maxMsgSize, basePath, isForwarded)
+	}
 }
 
 // NewServer returns a new http.Handler for a webapi server.

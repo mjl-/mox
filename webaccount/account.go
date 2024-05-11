@@ -85,6 +85,10 @@ func init() {
 	if err != nil {
 		pkglog.Fatalx("sherpa handler", err)
 	}
+
+	mox.NewWebaccountHandler = func(basePath string, isForwarded bool) http.Handler {
+		return http.HandlerFunc(Handler(basePath, isForwarded))
+	}
 }
 
 // Handler returns a handler for the webaccount endpoints, customized for the

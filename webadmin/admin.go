@@ -114,6 +114,10 @@ func init() {
 	if err != nil {
 		pkglog.Fatalx("sherpa handler", err)
 	}
+
+	mox.NewWebadminHandler = func(basePath string, isForwarded bool) http.Handler {
+		return http.HandlerFunc(Handler(basePath, isForwarded))
+	}
 }
 
 // Handler returns a handler for the webadmin endpoints, customized for the
