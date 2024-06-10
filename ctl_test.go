@@ -48,6 +48,7 @@ func TestCtl(t *testing.T) {
 
 	err := queue.Init()
 	tcheck(t, err, "queue init")
+	defer queue.Shutdown()
 
 	testctl := func(fn func(clientctl *ctl)) {
 		t.Helper()
@@ -426,10 +427,13 @@ func TestCtl(t *testing.T) {
 	// "backup", backup account.
 	err = dmarcdb.Init()
 	tcheck(t, err, "dmarcdb init")
+	defer dmarcdb.Close()
 	err = mtastsdb.Init(false)
 	tcheck(t, err, "mtastsdb init")
+	defer mtastsdb.Close()
 	err = tlsrptdb.Init()
 	tcheck(t, err, "tlsrptdb init")
+	defer tlsrptdb.Close()
 	testctl(func(ctl *ctl) {
 		os.RemoveAll("testdata/ctl/data/tmp/backup-data")
 		err := os.WriteFile("testdata/ctl/data/receivedid.key", make([]byte, 16), 0600)

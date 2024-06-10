@@ -6,24 +6,17 @@ import (
 	"net"
 	"os"
 	"testing"
-
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestLifecycle(t *testing.T) {
 	Shutdown, ShutdownCancel = context.WithCancel(context.Background())
-	c := &connections{
-		conns:  map[net.Conn]connKind{},
-		gauges: map[connKind]prometheus.GaugeFunc{},
-		active: map[connKind]int64{},
-	}
 	nc0, nc1 := net.Pipe()
 	defer nc0.Close()
 	defer nc1.Close()
-	c.Register(nc0, "proto", "listener")
-	c.Shutdown()
+	Connections.Register(nc0, "proto", "listener")
+	Connections.Shutdown()
 
-	done := c.Done()
+	done := Connections.Done()
 	select {
 	case <-done:
 		t.Fatalf("already done, but still a connection open")
@@ -37,7 +30,7 @@ func TestLifecycle(t *testing.T) {
 	if !errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Fatalf("got %v, expected os.ErrDeadlineExceeded", err)
 	}
-	c.Unregister(nc0)
+	Connections.Unregister(nc0)
 	select {
 	case <-done:
 	default:

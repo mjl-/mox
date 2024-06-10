@@ -65,6 +65,7 @@ func TestServer(t *testing.T) {
 	defer store.Switchboard()()
 	err := queue.Init()
 	tcheckf(t, err, "queue init")
+	defer queue.Shutdown()
 
 	log := mlog.New("webapisrv", nil)
 	acc, err := store.OpenAccount(log, "mjl")

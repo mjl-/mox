@@ -308,7 +308,7 @@ done
 - Update features & roadmap in README.md and website.
 - Write release notes, copy from previous.
 - Build and run tests with previous major Go release.
-- Run tests, including with race detector, also with TZ= for UTC-behaviour.
+- Run tests, including with race detector, also with TZ= for UTC-behaviour, and with -count 2.
 - Run integration and upgrade tests.
 - Run fuzzing tests for a while.
 - Deploy to test environment. Test the update instructions.

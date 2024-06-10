@@ -314,6 +314,7 @@ func TestAPI(t *testing.T) {
 	queue.Localserve = true // Deliver directly to us instead attempting actual delivery.
 	err = queue.Init()
 	tcheck(t, err, "queue init")
+	defer queue.Shutdown()
 	api.MessageSubmit(ctx, SubmitMessage{
 		From:           "mjl@mox.example",
 		To:             []string{"mjl+to@mox.example", "mjl to2 <mjl+to2@mox.example>"},

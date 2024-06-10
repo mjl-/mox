@@ -46,6 +46,7 @@ func TestSendReports(t *testing.T) {
 
 	err := tlsrptdb.Init()
 	tcheckf(t, err, "init database")
+	defer tlsrptdb.Close()
 
 	db := tlsrptdb.ResultDB
 

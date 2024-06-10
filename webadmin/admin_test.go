@@ -220,6 +220,7 @@ func TestAdmin(t *testing.T) {
 	mox.MustLoadConfig(true, false)
 	err := queue.Init()
 	tcheck(t, err, "queue init")
+	defer queue.Shutdown()
 
 	api := Admin{}
 

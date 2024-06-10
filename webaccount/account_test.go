@@ -230,6 +230,7 @@ func TestAccount(t *testing.T) {
 
 	err = queue.Init() // For DB.
 	tcheck(t, err, "queue init")
+	defer queue.Shutdown()
 
 	account, _, _, _ := api.Account(ctx)
 
@@ -250,6 +251,9 @@ func TestAccount(t *testing.T) {
 	api.AccountSaveFullName(ctx, account.FullName)
 
 	go ImportManage()
+	defer func() {
+		importers.Stop <- struct{}{}
+	}()
 
 	// Import mbox/maildir tgz/zip.
 	testImport := func(filename string, expect int) {

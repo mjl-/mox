@@ -57,11 +57,13 @@ var importers = struct {
 	Unregister chan *importListener
 	Events     chan importEvent
 	Abort      chan importAbortRequest
+	Stop       chan struct{}
 }{
 	make(chan *importListener, 1),
 	make(chan *importListener, 1),
 	make(chan importEvent),
 	make(chan importAbortRequest),
+	make(chan struct{}),
 }
 
 // ImportManage should be run as a goroutine, it manages imports of mboxes/maildirs, propagating progress over SSE connections.
@@ -89,38 +91,38 @@ func ImportManage() {
 		select {
 		case l := <-importers.Register:
 			// If we have state, send it so the client is up to date.
-			if s, ok := imports[l.Token]; ok {
-				l.Register <- true
-				s.Listeners[l] = struct{}{}
+			s, ok := imports[l.Token]
+			l.Register <- ok
+			if !ok {
+				break
+			}
+			s.Listeners[l] = struct{}{}
 
-				sendEvent := func(kind string, v any) {
-					buf, err := json.Marshal(v)
-					if err != nil {
-						log.Errorx("marshal event", err, slog.String("kind", kind), slog.Any("event", v))
-						return
-					}
-					ssemsg := fmt.Sprintf("event: %s\ndata: %s\n\n", kind, buf)
+			sendEvent := func(kind string, v any) {
+				buf, err := json.Marshal(v)
+				if err != nil {
+					log.Errorx("marshal event", err, slog.String("kind", kind), slog.Any("event", v))
+					return
+				}
+				ssemsg := fmt.Sprintf("event: %s\ndata: %s\n\n", kind, buf)
 
-					select {
-					case l.Events <- importEvent{kind, []byte(ssemsg), nil, nil}:
-					default:
-						log.Debug("dropped initial import event to slow consumer")
-					}
+				select {
+				case l.Events <- importEvent{kind, []byte(ssemsg), nil, nil}:
+				default:
+					log.Debug("dropped initial import event to slow consumer")
 				}
+			}
 
-				for m, c := range s.MailboxCounts {
-					sendEvent("count", importCount{m, c})
-				}
-				for _, p := range s.Problems {
-					sendEvent("problem", importProblem{p})
-				}
-				if s.Done != nil {
-					sendEvent("done", importDone{})
-				} else if s.Aborted != nil {
-					sendEvent("aborted", importAborted{})
-				}
-			} else {
-				l.Register <- false
+			for m, c := range s.MailboxCounts {
+				sendEvent("count", importCount{m, c})
+			}
+			for _, p := range s.Problems {
+				sendEvent("problem", importProblem{p})
+			}
+			if s.Done != nil {
+				sendEvent("done", importDone{})
+			} else if s.Aborted != nil {
+				sendEvent("aborted", importAborted{})
 			}
 
 		case l := <-importers.Unregister:
@@ -172,6 +174,9 @@ func ImportManage() {
 			}
 			s.Cancel()
 			a.Response <- nil
+
+		case <-importers.Stop:
+			return
 		}
 
 		// Cleanup old state.
