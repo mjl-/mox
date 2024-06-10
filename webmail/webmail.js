@@ -3700,6 +3700,9 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		}
 	};
 	const cmdComposeDraft = async () => {
+		if (m.MailboxID !== draftMailboxID) {
+			return;
+		}
 		// Compose based on message. Most information is available, we just need to find
 		// the ID of the stored message this is a reply/forward to, based in In-Reply-To
 		// header.
@@ -3823,9 +3826,10 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 	const msgscrollElem = dom.div(dom._class('pad'), yscrollAutoStyle, attr.role('region'), attr.arialabel('Message body'), css('msgscroll', { backgroundColor: styles.backgroundColor }));
 	const msgcontentElem = dom.div(css('scrollparent', { position: 'relative', flexGrow: '1' }));
 	const trashMailboxID = listMailboxes().find(mb => mb.Trash)?.ID;
+	const draftMailboxID = listMailboxes().find(mb => mb.Draft)?.ID;
 	// Initially called with potentially null pm, once loaded called again with pm set.
 	const loadButtons = (pm) => {
-		dom._kids(msgbuttonElem, dom.div(dom._class('pad'), !listMailboxes().find(mb => mb.Draft) ? [] : dom.clickbutton('Edit', attr.title('Continue editing this draft message.'), clickCmd(cmdComposeDraft, shortcuts)), ' ', (!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ', (pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ', (mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
+		dom._kids(msgbuttonElem, dom.div(dom._class('pad'), m.MailboxID === draftMailboxID ? dom.clickbutton('Edit', attr.title('Continue editing this draft message.'), clickCmd(cmdComposeDraft, shortcuts)) : [], ' ', (!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ', (pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ', (mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
 			dom.clickbutton('Reply all', attr.title('Compose a reply to all participants of this message.'), clickCmd(cmdReplyAll, shortcuts)), ' ', dom.clickbutton('Forward', attr.title('Compose a forwarding message, optionally including attachments.'), clickCmd(cmdForward, shortcuts)), ' ', dom.clickbutton('Archive', attr.title('Move to the Archive mailbox.'), clickCmd(msglistView.cmdArchive, shortcuts)), ' ', m.MailboxID === trashMailboxID ?
 			dom.clickbutton('Delete', attr.title('Permanently delete message.'), clickCmd(msglistView.cmdDelete, shortcuts)) :
 			dom.clickbutton('Trash', attr.title('Move to the Trash mailbox.'), clickCmd(msglistView.cmdTrash, shortcuts)), ' ', dom.clickbutton('Junk', attr.title('Move to Junk mailbox, marking as junk and causing this message to be used in spam classification of new incoming messages.'), clickCmd(msglistView.cmdJunk, shortcuts)), ' ', dom.clickbutton('Move to...', function click(e) {

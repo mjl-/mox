@@ -2989,6 +2989,10 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 	}
 	const cmdComposeDraft = async () => {
+		if (m.MailboxID !== draftMailboxID) {
+			return
+		}
+
 		// Compose based on message. Most information is available, we just need to find
 		// the ID of the stored message this is a reply/forward to, based in In-Reply-To
 		// header.
@@ -3152,12 +3156,13 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	)
 
 	const trashMailboxID = listMailboxes().find(mb => mb.Trash)?.ID
+	const draftMailboxID = listMailboxes().find(mb => mb.Draft)?.ID
 
 	// Initially called with potentially null pm, once loaded called again with pm set.
 	const loadButtons = (pm: api.ParsedMessage | null) => {
 		dom._kids(msgbuttonElem,
 			dom.div(dom._class('pad'),
-				!listMailboxes().find(mb => mb.Draft) ? [] : dom.clickbutton('Edit', attr.title('Continue editing this draft message.'), clickCmd(cmdComposeDraft, shortcuts)), ' ',
+				m.MailboxID === draftMailboxID ? dom.clickbutton('Edit', attr.title('Continue editing this draft message.'), clickCmd(cmdComposeDraft, shortcuts)) : [], ' ',
 				(!pm || !pm.ListReplyAddress) ? [] : dom.clickbutton('Reply to list', attr.title('Compose a reply to this mailing list.'), clickCmd(cmdReplyList, shortcuts)), ' ',
 				(pm && pm.ListReplyAddress && formatEmail(pm.ListReplyAddress) === fromAddress) ? [] : dom.clickbutton('Reply', attr.title('Compose a reply to the sender of this message.'), clickCmd(cmdReply, shortcuts)), ' ',
 				(mi.Envelope.To || []).length <= 1 && (mi.Envelope.CC || []).length === 0 && (mi.Envelope.BCC || []).length === 0 ? [] :
