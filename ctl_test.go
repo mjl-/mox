@@ -56,9 +56,14 @@ func TestCtl(t *testing.T) {
 		cconn, sconn := net.Pipe()
 		clientctl := ctl{conn: cconn, log: pkglog}
 		serverctl := ctl{conn: sconn, log: pkglog}
-		go servectlcmd(ctxbg, &serverctl, func() {})
+		done := make(chan struct{})
+		go func() {
+			servectlcmd(ctxbg, &serverctl, func() {})
+			close(done)
+		}()
 		fn(&clientctl)
 		cconn.Close()
+		<-done
 		sconn.Close()
 	}
 
