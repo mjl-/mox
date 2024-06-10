@@ -3909,7 +3909,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			Escape: cmdViewClose,
 		};
 		const attachmentsArrowStyle = css('attachmentsArrow', { color: styles.backgroundColor, backgroundColor: styles.color, width: '2em', height: '2em', borderRadius: '1em', lineHeight: '2em', textAlign: 'center', fontWeight: 'bold' });
-		const attachmentsIframeStyle = css('attachmentsIframe', { flexGrow: 1, boxShadow: styles.boxShadow, backgroundColor: styles.popupBackgroundColor, margin: '0 5em' });
+		const attachmentsIframeStyle = css('attachmentsIframe', { flexGrow: 1, boxShadow: styles.boxShadow, margin: '0 5em' });
 		let content;
 		const popupRoot = dom.div(css('attachmentsOverlay', { position: 'fixed', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: styles.overlayBackgroundColor, display: 'flex', flexDirection: 'column', alignContent: 'stretch', padding: '1em', zIndex: zindexes.attachments }), function click(e) {
 			e.stopPropagation();

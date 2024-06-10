@@ -139,12 +139,12 @@ ensureCSS('.keyword.keywordCollapsed', {opacity: .75}),
 
 // Generic styling.
 ensureCSS('*', {fontSize: 'inherit', fontFamily: "'ubuntu', 'lato', sans-serif", margin: 0, padding: 0, boxSizing: 'border-box'})
-ensureCSS('.mono, .mono *', {fontFamily: "'ubuntu mono', monospace" })
+ensureCSS('.mono, .mono *', {fontFamily: "'ubuntu mono', monospace"})
 ensureCSS('table td, table th', {padding: '.15em .25em'})
 ensureCSS('.pad', {padding: '.5em'})
 ensureCSS('iframe', {border: 0})
 ensureCSS('img, embed, video, iframe', {backgroundColor: 'white', color: 'black'})
-ensureCSS(':root', {backgroundColor: styles.backgroundColor, color: styles.color })
+ensureCSS(':root', {backgroundColor: styles.backgroundColor, color: styles.color})
 ensureCSS('a', {color: ['rgb(9, 107, 194)', 'rgb(99, 182, 255)']})
 ensureCSS('a:visited', {color: ['rgb(7, 4, 193)', 'rgb(199, 99, 255)']})
 
