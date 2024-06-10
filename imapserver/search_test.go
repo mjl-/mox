@@ -1,6 +1,7 @@
 package imapserver
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -338,6 +339,53 @@ func TestSearch(t *testing.T) {
 	tc.client.Enable("IMAP4rev2")
 	tc.transactf("ok", `search undraft`)
 	tc.xesearch(esearchall("1:2"))
+
+	// Long commands should be rejected, not allocating too much memory.
+	lit := make([]byte, 100*1024+1)
+	for i := range lit {
+		lit[i] = 'x'
+	}
+	writeTextLit := func(n int, expok bool) {
+		_, err := fmt.Fprintf(tc.client, " TEXT ")
+		tcheck(t, err, "write text")
+
+		_, err = fmt.Fprintf(tc.client, "{%d}\r\n", n)
+		tcheck(t, err, "write literal size")
+		line, err := tc.client.Readline()
+		tcheck(t, err, "read line")
+		if expok && !strings.HasPrefix(line, "+") {
+			tcheck(t, fmt.Errorf("no continuation after writing size: %s", line), "sending literal")
+		} else if !expok && !strings.HasPrefix(line, "x0 BAD [TOOBIG]") {
+			tcheck(t, fmt.Errorf("got line %s", line), "expected TOOBIG error")
+		}
+		if !expok {
+			return
+		}
+		_, err = tc.client.Write(lit[:n])
+		tcheck(t, err, "write literal data")
+	}
+
+	// More than 100k for a literal.
+	_, err := fmt.Fprintf(tc.client, "x0 uid search")
+	tcheck(t, err, "write start of uit search")
+	writeTextLit(100*1024+1, false)
+
+	// More than 1mb total for literals.
+	_, err = fmt.Fprintf(tc.client, "x0 uid search")
+	tcheck(t, err, "write start of uit search")
+	for i := 0; i < 10; i++ {
+		writeTextLit(100*1024, true)
+	}
+	writeTextLit(1, false)
+
+	// More than 1000 literals.
+	_, err = fmt.Fprintf(tc.client, "x0 uid search")
+	tcheck(t, err, "write start of uit search")
+	for i := 0; i < 1000; i++ {
+		writeTextLit(1, true)
+	}
+	writeTextLit(1, false)
+
 }
 
 // esearchall makes an UntaggedEsearch response with All set, for comparisons.

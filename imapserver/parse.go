@@ -48,11 +48,13 @@ type parser struct {
 	// Orig is the line in original casing, and upper in upper casing. We often match
 	// against upper for easy case insensitive handling as IMAP requires, but sometimes
 	// return from orig to keep the original case.
-	orig     string
-	upper    string
-	o        int      // Current offset in parsing.
-	contexts []string // What we're parsing, for error messages.
-	conn     *conn
+	orig        string
+	upper       string
+	o           int      // Current offset in parsing.
+	contexts    []string // What we're parsing, for error messages.
+	literals    int      // Literals in command, for limit.
+	literalSize int64    // Total size of literals in command, for limit.
+	conn        *conn
 }
 
 // toUpper upper cases bytes that are a-z. strings.ToUpper does too much. and
@@ -70,7 +72,7 @@ func toUpper(s string) string {
 }
 
 func newParser(s string, conn *conn) *parser {
-	return &parser{s, toUpper(s), 0, nil, conn}
+	return &parser{s, toUpper(s), 0, nil, 0, 0, conn}
 }
 
 func (p *parser) xerrorf(format string, args ...any) {
@@ -302,7 +304,7 @@ func (p *parser) xstring() (r string) {
 		}
 		p.xerrorf("missing closing dquote in string")
 	}
-	size, sync := p.xliteralSize(100*1024, false)
+	size, sync := p.xliteralSize(false, true)
 	s := p.conn.xreadliteral(size, sync)
 	line := p.conn.readline(false)
 	p.orig, p.upper, p.o = line, toUpper(line), 0
@@ -741,23 +743,47 @@ func (p *parser) xdateTime() time.Time {
 }
 
 // ../rfc/9051:6655 ../rfc/7888:330 ../rfc/3501:4801
-func (p *parser) xliteralSize(maxSize int64, lit8 bool) (size int64, sync bool) {
+func (p *parser) xliteralSize(lit8 bool, checkSize bool) (size int64, sync bool) {
 	// todo: enforce that we get non-binary when ~ isn't present?
 	if lit8 {
 		p.take("~")
 	}
 	p.xtake("{")
 	size = p.xnumber64()
-	if maxSize > 0 && size > maxSize {
-		// ../rfc/7888:249
-		line := fmt.Sprintf("* BYE [ALERT] Max literal size %d is larger than allowed %d in this context", size, maxSize)
-		err := errors.New("literal too big")
-		panic(syntaxError{line, "TOOBIG", err.Error(), err})
-	}
 
 	sync = !p.take("+")
 	p.xtake("}")
 	p.xempty()
+
+	if checkSize {
+		// ../rfc/7888:249
+		var errmsg string
+		const (
+			litSizeMax      = 100 * 1024
+			totalLitSizeMax = 10 * litSizeMax
+			litMax          = 1000
+		)
+		p.literalSize += size
+		p.literals++
+		if size > litSizeMax {
+			errmsg = fmt.Sprintf("max literal size %d is larger than allowed %d", size, litSizeMax)
+		} else if p.literalSize > totalLitSizeMax {
+			errmsg = fmt.Sprintf("max total literal size for command %d is larger than allowed %d", p.literalSize, totalLitSizeMax)
+		} else if p.literals > litMax {
+			errmsg = fmt.Sprintf("max literals for command %d is larger than allowed %d", p.literals, litMax)
+		}
+		if errmsg != "" {
+			// ../rfc/9051:357 ../rfc/3501:347
+			err := errors.New("literal too big: " + errmsg)
+			if sync {
+				errmsg = ""
+			} else {
+				errmsg = "* BYE [ALERT] " + errmsg
+			}
+			panic(syntaxError{errmsg, "TOOBIG", err.Error(), err})
+		}
+	}
+
 	return size, sync
 }
 

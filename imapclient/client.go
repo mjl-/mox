@@ -238,19 +238,27 @@ func (c *Conn) Write(buf []byte) (n int, rerr error) {
 
 // WriteSyncLiteral first writes the synchronous literal size, then read the
 // continuation "+" and finally writes the data.
-func (c *Conn) WriteSyncLiteral(s string) (rerr error) {
+func (c *Conn) WriteSyncLiteral(s string) (untagged []Untagged, rerr error) {
 	defer c.recover(&rerr)
 
 	_, err := fmt.Fprintf(c.conn, "{%d}\r\n", len(s))
 	c.xcheckf(err, "write sync literal size")
-	line, err := c.Readline()
-	c.xcheckf(err, "read line")
-	if !strings.HasPrefix(line, "+") {
-		c.xerrorf("no continuation received for sync literal")
+
+	plus, err := c.r.Peek(1)
+	c.xcheckf(err, "read continuation")
+	if plus[0] == '+' {
+		_, err = c.Readline()
+		c.xcheckf(err, "read continuation line")
+
+		_, err = c.conn.Write([]byte(s))
+		c.xcheckf(err, "write literal data")
+		return nil, nil
 	}
-	_, err = c.conn.Write([]byte(s))
-	c.xcheckf(err, "write literal data")
-	return nil
+	untagged, result, err := c.Response()
+	if err == nil && result.Status == OK {
+		c.xerrorf("no continuation, but invalid ok response (%q)", result.More)
+	}
+	return untagged, fmt.Errorf("no continuation (%s)", result.Status)
 }
 
 // Transactf writes format and args as an IMAP command, using Commandf with an

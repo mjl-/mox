@@ -2729,7 +2729,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 	// todo: this is only relevant if we also support the CATENATE extension?
 	// ../rfc/6855:204
 	utf8 := p.take("UTF8 (")
-	size, sync := p.xliteralSize(0, utf8)
+	size, sync := p.xliteralSize(utf8, false)
 
 	name = xcheckmailboxname(name, true)
 	c.xdbread(func(tx *bstore.Tx) {
