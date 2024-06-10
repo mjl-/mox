@@ -225,20 +225,24 @@ func (p *parser) parseStruct0(v reflect.Value) {
 			var more string
 			if strings.TrimSpace(s) == "" {
 				more = " (perhaps stray whitespace)"
+			} else if strings.HasPrefix(l[0], " ") {
+				more = " (perhaps mixed tab/space indenting)"
 			}
-			p.stop(fmt.Sprintf("missing colon for key/value on non-empty line %q%s", origs, more))
+			p.stop(fmt.Sprintf("missing colon for struct key/value on non-empty line %q%s", origs, more))
 		}
 		k := l[0]
 		if k == "" {
-			p.stop("empty key")
+			p.stop("empty key in struct")
+		} else if strings.HasPrefix(k, " ") {
+			p.stop("key in struct starting with space (perhaps mixed tab/space indenting)")
 		}
 		if _, ok := seen[k]; ok {
-			p.stop("duplicate key")
+			p.stop("duplicate key in struct")
 		}
 		seen[k] = struct{}{}
 		s = l[1]
 		if s != "" && !strings.HasPrefix(s, " ") {
-			p.stop("missing space after colon")
+			p.stop("missing space after colon in struct")
 		}
 		if s != "" {
 			s = s[1:]
@@ -288,20 +292,26 @@ func (p *parser) parseMap0(v reflect.Value) {
 			var more string
 			if strings.TrimSpace(s) == "" {
 				more = " (perhaps stray whitespace)"
+			} else if strings.HasPrefix(l[0], " ") {
+				more = " (perhaps mixed tab/space indenting)"
 			}
-			p.stop(fmt.Sprintf("missing colon for key/value on non-empty line %q%s", origs, more))
+			p.stop(fmt.Sprintf("missing colon for map key/value on non-empty line %q%s", origs, more))
 		}
 		k := l[0]
 		if k == "" {
-			p.stop("empty key")
+			p.stop("empty key in map")
 		}
 		if _, ok := seen[k]; ok {
-			p.stop("duplicate key")
+			p.stop("duplicate key in map")
 		}
 		seen[k] = struct{}{}
 		s = l[1]
 		if s != "" && !strings.HasPrefix(s, " ") {
-			p.stop("missing space after colon")
+			var more string
+			if strings.HasPrefix(k, " ") {
+				more = " (key starts with space, perhaps mixed tab/space indenting)"
+			}
+			p.stop("missing space after colon in map" + more)
 		}
 		if s != "" {
 			s = s[1:]
