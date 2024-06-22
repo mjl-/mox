@@ -1098,7 +1098,7 @@ EOF
 				addf(&r.DKIM.Errors, "Making DKIM record for instructions: %s", err)
 				continue
 			}
-			instr += fmt.Sprintf("\n\t%s._domainkey TXT %s\n", sel, mox.TXTStrings(txt))
+			instr += fmt.Sprintf("\n\t%s._domainkey.%s TXT %s\n", sel, domain.ASCII+".", mox.TXTStrings(txt))
 		}
 		if instr != "" {
 			instr = "Ensure the following DNS record(s) exists, so mail servers receiving emails from this domain can verify the signatures in the mail headers:\n" + instr
@@ -1178,7 +1178,7 @@ EOF
 		} else {
 			addf(&r.DMARC.Instructions, `Configure a DMARC destination in domain in config file.`)
 		}
-		instr := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_dmarc TXT %s\n\nYou can start with testing mode by replacing p=reject with p=none. You can also request for the policy to be applied to a percentage of emails instead of all, by adding pct=X, with X between 0 and 100. Keep in mind that receiving mail servers will apply some anti-spam assessment regardless of the policy and whether it is applied to the message. The ruf= part requests daily aggregate reports to be sent to the specified address, which is automatically configured and reports automatically analyzed.", mox.TXTStrings(dmarcr.String()))
+		instr := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_dmarc.%s TXT %s\n\nYou can start with testing mode by replacing p=reject with p=none. You can also request for the policy to be applied to a percentage of emails instead of all, by adding pct=X, with X between 0 and 100. Keep in mind that receiving mail servers will apply some anti-spam assessment regardless of the policy and whether it is applied to the message. The ruf= part requests daily aggregate reports to be sent to the specified address, which is automatically configured and reports automatically analyzed.", domain.ASCII+".", mox.TXTStrings(dmarcr.String()))
 		addf(&r.DMARC.Instructions, instr)
 		if extInstr != "" {
 			addf(&r.DMARC.Instructions, extInstr)
@@ -1216,8 +1216,9 @@ EOF
 
 Ensure a DNS TXT record like the following exists:
 
-	_smtp._tls TXT %s
-`, mox.TXTStrings(tlsrptr.String()))
+	_smtp._tls.%s TXT %s
+
+`, dom.ASCII+".", mox.TXTStrings(tlsrptr.String()))
 
 			if err == nil {
 				found := false
@@ -1334,14 +1335,14 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 
 		addf(&r.MTASTS.Instructions, `Enable a policy through the configuration file. For new deployments, it is best to start with mode "testing" while enabling TLSRPT. Start with a short "max_age", so updates to your policy are picked up quickly. When confidence in the deployment is high enough, switch to "enforce" mode and a longer "max age". A max age in the order of weeks is recommended. If you foresee a change to your setup in the future, requiring different policies or MX records, you may want to dial back the "max age" ahead of time, similar to how you would handle TTL's in DNS record updates.`)
 
-		host := fmt.Sprintf("Ensure DNS CNAME/A/AAAA records exist that resolve mta-sts.%s to this mail server. For example:\n\n\t%s CNAME %s\n\n", domain.ASCII, "mta-sts."+domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
+		host := fmt.Sprintf("Ensure DNS CNAME/A/AAAA records exist that resolves mta-sts.%s to this mail server. For example:\n\n\tmta-sts.%s CNAME %s\n\n", domain.ASCII, domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 		addf(&r.MTASTS.Instructions, host)
 
 		mtastsr := mtasts.Record{
 			Version: "STSv1",
 			ID:      time.Now().Format("20060102T150405"),
 		}
-		dns := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_mta-sts TXT %s\n\nConfigure the ID in the configuration file, it must be of the form [a-zA-Z0-9]{1,31}. It represents the version of the policy. For each policy change, you must change the ID to a new unique value. You could use a timestamp like 20220621T123000. When this field exists, an SMTP server will fetch a policy at https://mta-sts.%s/.well-known/mta-sts.txt. This policy is served by mox.", mox.TXTStrings(mtastsr.String()), domain.Name())
+		dns := fmt.Sprintf("Ensure a DNS TXT record like the following exists:\n\n\t_mta-sts.%s TXT %s\n\nConfigure the ID in the configuration file, it must be of the form [a-zA-Z0-9]{1,31}. It represents the version of the policy. For each policy change, you must change the ID to a new unique value. You could use a timestamp like 20220621T123000. When this field exists, an SMTP server will fetch a policy at https://mta-sts.%s/.well-known/mta-sts.txt. This policy is served by mox.", domain.ASCII+".", mox.TXTStrings(mtastsr.String()), domain.Name())
 		addf(&r.MTASTS.Instructions, dns)
 	}()
 
