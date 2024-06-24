@@ -1362,7 +1362,7 @@ const index = async () => {
 							mailboxFileHint.style.display = ''
 						}),
 					),
-					mailboxFileHint=dom.p(style({display: 'none', fontStyle: 'italic', marginTop: '.5ex'}), 'This file must either be a zip file or a gzipped tar file with mbox and/or maildir mailboxes. For maildirs, an optional file "dovecot-keywords" is read additional keywords, like Forwarded/Junk/NotJunk. If an imported mailbox already exists by name, messages are added to the existing mailbox. If a mailbox does not yet exist it will be created.'),
+					mailboxFileHint=dom.p(style({display: 'none', fontStyle: 'italic', marginTop: '.5ex'}), 'This file must either be a zip file or a gzipped tar file with mbox and/or maildir mailboxes. For maildirs, an optional file "dovecot-keywords" is read additional keywords, like Forwarded/Junk/NotJunk. If an imported mailbox already exists by name, messages are added to the existing mailbox. If a mailbox does not yet exist it will be created. Messages are not deduplicated, importing them twice will result in duplicates.'),
 				),
 				dom.div(
 					style({marginBottom: '1ex'}),

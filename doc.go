@@ -695,6 +695,9 @@ recipients to be accepted, unless other reputation signals prevent that.
 Users can also import mailboxes/messages through the account web page by
 uploading a zip or tgz file with mbox and/or maildirs.
 
+Messages are imported even if already present. Importing messages twice will
+result in duplicate messages.
+
 Mailbox flags, like "seen", "answered", will be imported. An optional
 dovecot-keywords file can specify additional flags, like Forwarded/Junk/NotJunk.
 
@@ -721,6 +724,9 @@ recipients to be accepted, unless other reputation signals prevent that.
 
 Users can also import mailboxes/messages through the account web page by
 uploading a zip or tgz file with mbox and/or maildirs.
+
+Messages are imported even if already present. Importing messages twice will
+result in duplicate messages.
 
 	usage: mox import mbox accountname mailboxname mbox
 

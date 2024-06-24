@@ -42,6 +42,9 @@ recipients to be accepted, unless other reputation signals prevent that.
 
 Users can also import mailboxes/messages through the account web page by
 uploading a zip or tgz file with mbox and/or maildirs.
+
+Messages are imported even if already present. Importing messages twice will
+result in duplicate messages.
 `
 
 func cmdImportMaildir(c *cmd) {
