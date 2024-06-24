@@ -1906,7 +1906,7 @@ const domainDNSRecords = async (d: string) => {
 			'DNS Records',
 		),
 		dom.h1('Required DNS records'),
-		dom.pre('pre', dom._class('literal'), (records || []).join('\n')),
+		dom.pre(dom._class('literal'), (records || []).join('\n')),
 		dom.br(),
 	)
 }

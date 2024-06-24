@@ -2580,7 +2580,7 @@ const domainDNSRecords = async (d) => {
 		client.DomainRecords(d),
 		client.ParseDomain(d),
 	]);
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), 'DNS Records'), dom.h1('Required DNS records'), dom.pre('pre', dom._class('literal'), (records || []).join('\n')), dom.br());
+	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), 'DNS Records'), dom.h1('Required DNS records'), dom.pre(dom._class('literal'), (records || []).join('\n')), dom.br());
 };
 const domainDNSCheck = async (d) => {
 	const [checks, dnsdomain] = await Promise.all([
