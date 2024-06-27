@@ -1404,7 +1404,11 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 			if err != nil {
 				addf(&r.SRVConf.Errors, "Looking up SRV record %q: %s", name, err)
 			} else if len(req.srvs) == 0 {
-				addf(&r.SRVConf.Errors, "Missing SRV record %q", name)
+				if req.host == "." {
+					addf(&r.SRVConf.Warnings, "Missing optional SRV record %q", name)
+				} else {
+					addf(&r.SRVConf.Errors, "Missing SRV record %q", name)
+				}
 			} else if len(req.srvs) != 1 || req.srvs[0].Target != req.host || req.srvs[0].Port != req.port {
 				addf(&r.SRVConf.Errors, "Unexpected SRV record(s) for %q", name)
 			}

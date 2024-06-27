@@ -1928,8 +1928,8 @@ const domainDNSCheck = async (d: string) => {
 		if ((r.Errors || []).length === 0 && (r.Warnings || []).length === 0) {
 			success = box(green, 'OK')
 		}
-		const errors = (r.Errors || []).length === 0 ? [] : box(red, dom.ul(style({marginLeft: '1em'}), (r.Errors || []).map(s => dom.li(s))))
-		const warnings = (r.Warnings || []).length === 0 ? [] : box(yellow, dom.ul(style({marginLeft: '1em'}), (r.Warnings || []).map(s => dom.li(s))))
+		const errors = (r.Errors || []).length === 0 ? [] : box(red, dom.ul((r.Errors || []).map(s => dom.li(s))))
+		const warnings = (r.Warnings || []).length === 0 ? [] : box(yellow, dom.ul((r.Warnings || []).map(s => dom.li(s))))
 
 		let instructions: HTMLElement | null = null
 		if (r.Instructions && r.Instructions.length > 0) {
