@@ -929,6 +929,11 @@ EOF
 				instr += fmt.Sprintf("\t_25._tcp.%s. TLSA %s\n", pubDom.ASCII, r)
 			}
 			addf(&r.DANE.Instructions, instr)
+		} else {
+			addf(&r.DANE.Warnings, "DANE not configured: no static TLS host keys.")
+
+			instr := "Add static TLS keys for use with DANE to mox.conf under: Listeners, public, TLS, HostPrivateKeyFiles.\n\nIf automatic TLS certificate management with ACME is configured, run \"mox config ensureacmehostprivatekeys\" to generate static TLS keys and to print a snippet for \"HostPrivateKeyFiles\" for inclusion in mox.conf.\n\nIf TLS keys and certificates are managed externally, configure the TLS keys manually under \"HostPrivateKeyFiles\" in mox.conf, and make sure new TLS keys are not generated for each new certificate (look for an option to \"reuse private keys\" when doing ACME). Important: Before using new TLS keys, corresponding new DANE (TLSA) DNS records must be published (taking TTL into account to let the previous records expire). Using new TLS keys without updating DANE (TLSA) DNS records will cause DANE verification failures, breaking incoming deliveries.\n\nWith \"HostPrivateKeyFiles\" configured, DNS records for DANE based on those TLS keys will be suggested, and future DNS checks will look for those DNS records. Once those DNS records are published, DANE is active for all domains with an MX record pointing to the host."
+			addf(&r.DANE.Instructions, instr)
 		}
 	}()
 
