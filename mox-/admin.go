@@ -34,6 +34,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/spf"
 	"github.com/mjl-/mox/tlsrpt"
 )
 
@@ -669,6 +670,31 @@ func ConfigSave(ctx context.Context, xmodify func(config *config.Dynamic)) (rerr
 	return nil
 }
 
+// DomainSPFIPs returns IPs to include in SPF records for domains. It includes the
+// IPs on listeners that have SMTP enabled, and includes IPs configured for SOCKS
+// transports.
+func DomainSPFIPs() (ips []net.IP) {
+	for _, l := range Conf.Static.Listeners {
+		if !l.SMTP.Enabled || l.IPsNATed {
+			continue
+		}
+		ipstrs := l.IPs
+		if len(l.NATIPs) > 0 {
+			ipstrs = l.NATIPs
+		}
+		for _, ipstr := range ipstrs {
+			ip := net.ParseIP(ipstr)
+			ips = append(ips, ip)
+		}
+	}
+	for _, t := range Conf.Static.Transports {
+		if t.Socks != nil {
+			ips = append(ips, t.Socks.IPs...)
+		}
+	}
+	return ips
+}
+
 // todo: find a way to automatically create the dns records as it would greatly simplify setting up email for a domain. we could also dynamically make changes, e.g. providing grace periods after disabling a dkim key, only automatically removing the dkim dns key after a few days. but this requires some kind of api and authentication to the dns server. there doesn't appear to be a single commonly used api for dns management. each of the numerous cloud providers have their own APIs and rather large SKDs to use them. we don't want to link all of them in.
 
 // DomainRecords returns text lines describing DNS records required for configuring
@@ -823,13 +849,29 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 			{Address: uri.String(), MaxSize: 10, Unit: "m"},
 		}
 	}
+	dspfr := spf.Record{Version: "spf1"}
+	for _, ip := range DomainSPFIPs() {
+		mech := "ip4"
+		if ip.To4() == nil {
+			mech = "ip6"
+		}
+		dspfr.Directives = append(dspfr.Directives, spf.Directive{Mechanism: mech, IP: ip})
+	}
+	dspfr.Directives = append(dspfr.Directives,
+		spf.Directive{Mechanism: "mx"},
+		spf.Directive{Qualifier: "~", Mechanism: "all"},
+	)
+	dspftxt, err := dspfr.Record()
+	if err != nil {
+		return nil, fmt.Errorf("making domain spf record: %v", err)
+	}
 	records = append(records,
 		"",
 
 		"; Specify the MX host is allowed to send for our domain and for itself (for DSNs).",
 		"; ~all means softfail for anything else, which is done instead of -all to prevent older",
 		"; mail servers from rejecting the message because they never get to looking for a dkim/dmarc pass.",
-		fmt.Sprintf(`%s.                    TXT "v=spf1 mx ~all"`, d),
+		fmt.Sprintf(`%s.                    TXT "%s"`, d, dspftxt),
 		"",
 
 		"; Emails that fail the DMARC check (without aligned DKIM and without aligned SPF)",

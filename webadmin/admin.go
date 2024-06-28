@@ -945,7 +945,12 @@ EOF
 		defer wg.Done()
 
 		// Verify a domain with the configured IPs that do SMTP.
-		verifySPF := func(kind string, domain dns.Domain) (string, *SPFRecord, spf.Record) {
+		verifySPF := func(isHost bool, domain dns.Domain) (string, *SPFRecord, spf.Record) {
+			kind := "domain"
+			if isHost {
+				kind = "host"
+			}
+
 			_, txt, record, _, err := spf.Lookup(ctx, log.Logger, resolver, domain)
 			if err != nil {
 				addf(&r.SPF.Errors, "Looking up %s SPF record: %s", kind, err)
@@ -986,36 +991,27 @@ EOF
 				}
 			}
 
-			for _, l := range mox.Conf.Static.Listeners {
-				if !l.SMTP.Enabled || l.IPsNATed {
-					continue
-				}
-				ips := l.IPs
-				if len(l.NATIPs) > 0 {
-					ips = l.NATIPs
-				}
-				for _, ipstr := range ips {
-					ip := net.ParseIP(ipstr)
-					checkSPFIP(ip)
-				}
-			}
-			for _, t := range mox.Conf.Static.Transports {
-				if t.Socks != nil {
-					for _, ip := range t.Socks.IPs {
-						checkSPFIP(ip)
-					}
-				}
+			for _, ip := range mox.DomainSPFIPs() {
+				checkSPFIP(ip)
 			}
 
-			spfr.Directives = append(spfr.Directives, spf.Directive{Qualifier: "-", Mechanism: "all"})
+			if !isHost {
+				spfr.Directives = append(spfr.Directives, spf.Directive{Mechanism: "mx"})
+			}
+
+			qual := "~"
+			if isHost {
+				qual = "-"
+			}
+			spfr.Directives = append(spfr.Directives, spf.Directive{Qualifier: qual, Mechanism: "all"})
 			return txt, xrecord, spfr
 		}
 
 		// Check SPF record for domain.
 		var dspfr spf.Record
-		r.SPF.DomainTXT, r.SPF.DomainRecord, dspfr = verifySPF("domain", domain)
+		r.SPF.DomainTXT, r.SPF.DomainRecord, dspfr = verifySPF(false, domain)
 		// todo: possibly check all hosts for MX records? assuming they are also sending mail servers.
-		r.SPF.HostTXT, r.SPF.HostRecord, _ = verifySPF("host", mox.Conf.Static.HostnameDomain)
+		r.SPF.HostTXT, r.SPF.HostRecord, _ = verifySPF(true, mox.Conf.Static.HostnameDomain)
 
 		dtxt, err := dspfr.Record()
 		if err != nil {

@@ -27,7 +27,7 @@ sed -i -e 's/moxtest1@mox1.example: nil/moxtest1@mox1.example: nil\n\t\t\tpostfi
 	cat /integration/example.zone;
 	sed -n '/^;/,/will be suggested/p' output.txt |
 		# allow sending from postfix for mox1.example.
-		sed 's/mox1.example.  *TXT "v=spf1 mx ~all"/mox1.example. TXT "v=spf1 mx ip4:172.28.1.70 ~all"/'
+		sed 's/mox1.example.  *TXT "v=spf1 ip4:172.28.1.10 mx ~all"/mox1.example. TXT "v=spf1 ip4:172.28.1.10 ip4:172.28.1.70 mx ~all"/'
 ) >/integration/example-integration.zone
 unbound-control -s 172.28.1.30 reload # reload unbound with zone file changes
 
