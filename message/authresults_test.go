@@ -311,6 +311,22 @@ func TestAuthResultsParse(t *testing.T) {
 		},
 	})
 
+	const dkimReason = `host.example;
+ dkim=none reason="no dkim signatures"
+`
+	ar, err = ParseAuthResults(dkimReason)
+	tcheck(t, err, "parsing auth results header")
+	tcompare(t, ar, AuthResults{
+		Hostname: "host.example",
+		Methods: []AuthMethod{
+			{
+				Method: "dkim",
+				Result: "none",
+				Reason: "no dkim signatures",
+			},
+		},
+	})
+
 	// Outlook adds an invalid line, missing required hostname at the start. And their
 	// dmarc "action=none" is invalid. Nothing to be done.
 	const outlook = `x; spf=pass (sender IP is 84.22.96.237)

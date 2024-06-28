@@ -425,6 +425,8 @@ func (p *parser) xresinfo(methodKeyword string) (am AuthMethod) {
 	p.cfws()
 	if p.take("reason") {
 		p.cfws()
+		p.xtake("=")
+		p.cfws()
 		am.Reason = p.xvalue()
 	}
 	p.cfws()
