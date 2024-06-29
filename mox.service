@@ -13,6 +13,7 @@ ExecStart=/home/mox/mox serve
 RestartSec=5s
 Restart=always
 ExecStop=/home/mox/mox stop
+SyslogFacility=mail
 
 # Isolate process, reducing attack surface.
 PrivateDevices=yes
