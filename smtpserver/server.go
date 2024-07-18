@@ -1018,10 +1018,12 @@ func (c *conn) cmdAuth(p *parser) {
 	p.xspace()
 	mech := p.xsaslMech()
 
-	xreadInitial := func() []byte {
+	// Read the first parameter, either as initial parameter or by sending a
+	// continuation with the optional encChal (must already be base64-encoded).
+	xreadInitial := func(encChal string) []byte {
 		var auth string
 		if p.empty() {
-			c.writelinef("%d ", smtp.C334ContinueAuth) // ../rfc/4954:205
+			c.writelinef("%d %s", smtp.C334ContinueAuth, encChal) // ../rfc/4954:205
 			// todo future: handle max length of 12288 octets and return proper responde codes otherwise ../rfc/4954:253
 			auth = c.readline()
 			if auth == "*" {
@@ -1080,7 +1082,7 @@ func (c *conn) cmdAuth(p *parser) {
 
 		// Password is in line in plain text, so hide it.
 		defer c.xtrace(mlog.LevelTraceauth)()
-		buf := xreadInitial()
+		buf := xreadInitial("")
 		c.xtrace(mlog.LevelTrace) // Restore.
 		plain := bytes.Split(buf, []byte{0})
 		if len(plain) != 3 {
@@ -1125,11 +1127,13 @@ func (c *conn) cmdAuth(p *parser) {
 			xsmtpUserErrorf(smtp.C538EncReqForAuth, smtp.SePol7EncReqForAuth11, "authentication requires tls")
 		}
 
-		// Read user name. The I-D says the client should ignore the server challenge, we
-		// send an empty one.
+		// Read user name. The I-D says the client should ignore the server challenge, but
+		// also that some clients may require challenge "Username:" instead of "User
+		// Name". We can't sent both...
 		// I-D says maximum length must be 64 bytes. We allow more, for long user names
 		// (domains).
-		username := string(xreadInitial())
+		encChal := base64.StdEncoding.EncodeToString([]byte("User Name"))
+		username := string(xreadInitial(encChal))
 		username = norm.NFC.String(username)
 
 		// Again, client should ignore the challenge, we send the same as the example in
@@ -1258,7 +1262,7 @@ func (c *conn) cmdAuth(p *parser) {
 			xcs := c.conn.(*tls.Conn).ConnectionState()
 			cs = &xcs
 		}
-		c0 := xreadInitial()
+		c0 := xreadInitial("")
 		ss, err := scram.NewServer(h, c0, cs, channelBindingRequired)
 		xcheckf(err, "starting scram")
 		authc := norm.NFC.String(ss.Authentication)
