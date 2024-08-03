@@ -2133,17 +2133,23 @@ const refineFilters = (f, notf) => {
 // is the mousedown event. Move is the function to call when the bar was dragged,
 // typically adjusting styling, e.g. absolutely positioned offsets, possibly based
 // on the event.clientX and element bounds offset.
+// The returned promise is resolved when dragging is done (and immediately if
+// dragging wasn't activated).
 const startDrag = (e, move) => {
-	if (e.buttons === 1) {
+	if (e.buttons !== 1) {
+		return Promise.resolve();
+	}
+	return new Promise((resolve, _) => {
 		e.preventDefault();
 		e.stopPropagation();
 		const stop = () => {
 			document.body.removeEventListener('mousemove', move);
 			document.body.removeEventListener('mouseup', stop);
+			resolve();
 		};
 		document.body.addEventListener('mousemove', move);
 		document.body.addEventListener('mouseup', stop);
-	}
+	});
 };
 // Returns two handler functions: one for focus that sets a placeholder on the
 // target element, and one for blur that restores/clears it again. Keeps forms uncluttered,
@@ -6640,8 +6646,12 @@ const init = async () => {
 		}
 		if (want === 'leftright') {
 			let left, split, right;
-			dom._kids(splitElem, left = dom.div(css('layoutLeft', { position: 'absolute', left: 0, top: 0, bottom: 0 }), style({ width: 'calc(' + settings.leftWidthPct + '% - 1px)' }), msglistElem), split = dom.div(css('listMsgLeftRightGrab', { position: 'absolute', width: '5px', top: 0, bottom: 0, cursor: 'ew-resize', zIndex: zindexes.splitter }), style({ left: 'calc(' + settings.leftWidthPct + '% - 2px)' }), dom.div(css('listMsgLeftRightLine', { position: 'absolute', backgroundColor: styles.popupBorderColor, top: 0, bottom: 0, width: '1px', left: '2px', right: '2px' })), function mousedown(e) {
-				startDrag(e, (e) => {
+			dom._kids(splitElem, left = dom.div(css('layoutLeft', { position: 'absolute', left: 0, top: 0, bottom: 0 }), style({ width: 'calc(' + settings.leftWidthPct + '% - 1px)' }), msglistElem), split = dom.div(css('listMsgLeftRightGrab', { position: 'absolute', width: '5px', top: 0, bottom: 0, cursor: 'ew-resize', zIndex: zindexes.splitter }), style({ left: 'calc(' + settings.leftWidthPct + '% - 2px)' }), dom.div(css('listMsgLeftRightLine', { position: 'absolute', backgroundColor: styles.popupBorderColor, top: 0, bottom: 0, width: '1px', left: '2px', right: '2px' })), async function mousedown(e) {
+				// Disable pointer events on the message view. If it has an iframe with a message,
+				// mouse events while dragging would be consumed by the iframe, breaking our
+				// resize.
+				right.style.pointerEvents = 'none';
+				await startDrag(e, (e) => {
 					const bounds = left.getBoundingClientRect();
 					const x = Math.round(e.clientX - bounds.x);
 					left.style.width = 'calc(' + x + 'px - 1px)';
@@ -6650,6 +6660,7 @@ const init = async () => {
 					settingsPut({ ...settings, leftWidthPct: Math.round(100 * bounds.width / splitElem.getBoundingClientRect().width) });
 					updateMsglistWidths();
 				});
+				right.style.pointerEvents = '';
 			}), right = dom.div(css('layoutRight', { position: 'absolute', right: 0, top: 0, bottom: 0 }), style({ left: 'calc(' + settings.leftWidthPct + '% + 1px)' }), msgElem));
 		}
 		else {
