@@ -240,18 +240,34 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 	}
 
 	pm.Texts = []string{}
-	pm.attachments = []Attachment{}
+
+	// We track attachments from multipart/mixed differently from other attachments.
+	// The others are often inline, sometimes just some logo's in HTML alternative
+	// messages. We want to have our mixed attachments at the start of the list, but
+	// our descent-first parsing would result in inline messages first in the typical
+	// message.
+	var attachmentsMixed []Attachment
+	var attachmentsOther []Attachment
+
+	addAttachment := func(a Attachment, isMixed bool) {
+		if isMixed {
+			attachmentsMixed = append(attachmentsMixed, a)
+		} else {
+			attachmentsOther = append(attachmentsOther, a)
+		}
+	}
 
 	// todo: how should we handle messages where a user prefers html, and we want to show it, but it's a DSN that also has textual-only parts? e.g. gmail's dsn where the first part is multipart/related with multipart/alternative, and second part is the regular message/delivery-status. we want to display both the html and the text.
 
-	var usePart func(p message.Part, index int, parent *message.Part, path []int)
-	usePart = func(p message.Part, index int, parent *message.Part, path []int) {
+	var usePart func(p message.Part, index int, parent *message.Part, path []int, parentMixed bool)
+	usePart = func(p message.Part, index int, parent *message.Part, path []int, parentMixed bool) {
 		mt := p.MediaType + "/" + p.MediaSubType
+		newParentMixed := mt == "MULTIPART/MIXED"
 		for i, sp := range p.Parts {
 			if mt == "MULTIPART/SIGNED" && i >= 1 {
 				continue
 			}
-			usePart(sp, i, &p, append(append([]int{}, path...), i))
+			usePart(sp, i, &p, append(append([]int{}, path...), i), newParentMixed)
 		}
 		switch mt {
 		case "TEXT/PLAIN", "/":
@@ -269,7 +285,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 						if name == "" {
 							name = tryDecodeParam(log, params["filename"])
 						}
-						pm.attachments = append(pm.attachments, Attachment{path, name, p})
+						addAttachment(Attachment{path, name, p}, parentMixed)
 						return
 					}
 				}
@@ -333,7 +349,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 					return
 				}
 				if parentct == "MULTIPART/REPORT" && index == 2 && (mt == "MESSAGE/GLOBAL" || mt == "TEXT/RFC822") {
-					pm.attachments = append(pm.attachments, Attachment{path, "original.eml", p})
+					addAttachment(Attachment{path, "original.eml", p}, parentMixed)
 					return
 				}
 
@@ -349,11 +365,15 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 						name = tryDecodeParam(log, params["filename"])
 					}
 				}
-				pm.attachments = append(pm.attachments, Attachment{path, name, p})
+				addAttachment(Attachment{path, name, p}, parentMixed)
 			}
 		}
 	}
-	usePart(*state.part, -1, nil, []int{})
+	usePart(*state.part, -1, nil, []int{}, false)
+
+	pm.attachments = []Attachment{}
+	pm.attachments = append(pm.attachments, attachmentsMixed...)
+	pm.attachments = append(pm.attachments, attachmentsOther...)
 
 	if rerr == nil {
 		pm.ID = m.ID
