@@ -65,7 +65,6 @@ Enable consistency checking in UI updates:
 - todo: in msglistView, show names of people we have sent to, and address otherwise. or at don't show names for first-time senders.
 - todo: implement settings stored in the server, such as mailboxCollapsed, keyboard shortcuts. name to use for "From", optional default Reply-To and Bcc addresses, signatures (per address), configured labels/keywords with human-readable name, colors and toggling with shortcut keys 1-9.
 - todo: automated tests? perhaps some unit tests, then ui scenario's.
-- todo: compose, wrap lines
 - todo: composing of html messages. possibly based on contenteditable. would be good if we can include original html, but quoted. must make sure to not include dangerous scripts/resources, or sandbox it.
 - todo: make alt up/down keys work on html iframe too. requires loading it from sameorigin, to get access to its inner document.
 - todo: reconnect with last known modseq and don't clear the message list, only update it
@@ -86,7 +85,6 @@ Enable consistency checking in UI updates:
 - todo: previews of zip files
 - todo: undo?
 - todo: mobile-friendly version. should perhaps be a completely different app, because it is so different.
-- todo: basic vim key bindings in textarea/input. or just let users use a browser plugin.
 */
 
 class ConsistencyError extends Error {
