@@ -176,6 +176,21 @@ func ParseAddress(s string) (address Address, err error) {
 	return Address{lp, d}, err
 }
 
+// ParseNetMailAddress parses a not-quite-valid address as found in
+// net/mail.Address.Address.
+//
+// net/mail does parse quoted addresses properly, but stores the localpart
+// unquoted. So an address `" "@example.com` would be stored as ` @example.com`,
+// which we would fail to parse without special attention.
+func ParseNetMailAddress(a string) (address Address, err error) {
+	i := strings.LastIndex(a, "@")
+	if i < 0 {
+		return Address{}, fmt.Errorf("%w: missing @", ErrBadAddress)
+	}
+	addrStr := Localpart(a[:i]).String() + "@" + a[i+1:]
+	return ParseAddress(addrStr)
+}
+
 var ErrBadLocalpart = errors.New("invalid localpart")
 
 // ParseLocalpart parses the local part.

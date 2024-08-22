@@ -201,7 +201,11 @@ binary should be setgid that group:
 						if len(addrs) != 1 {
 							log.Fatalf("only single address allowed in To header")
 						}
-						recipient = addrs[0].Address
+						addr, err := smtp.ParseNetMailAddress(addrs[0].Address)
+						if err != nil {
+							log.Fatalf("parsing address: %v", err)
+						}
+						recipient = addr.Pack(false)
 					}
 				}
 				if k == "to" {

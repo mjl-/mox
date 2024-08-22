@@ -497,9 +497,9 @@ func parseAddressList(log mlog.Log, h mail.Header, k string) []Address {
 	for _, a := range l {
 		// todo: parse more fully according to ../rfc/5322:959
 		var user, host string
-		addr, err := smtp.ParseAddress(a.Address)
+		addr, err := smtp.ParseNetMailAddress(a.Address)
 		if err != nil {
-			log.Infox("parsing address (continuing)", err, slog.Any("address", a.Address))
+			log.Infox("parsing address (continuing)", err, slog.Any("netmailaddress", a.Address))
 		} else {
 			user = addr.Localpart.String()
 			host = addr.Domain.ASCII

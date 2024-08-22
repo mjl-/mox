@@ -596,3 +596,10 @@ func TestEmbedded2(t *testing.T) {
 	_, err = EnsurePart(pkglog.Logger, false, bytes.NewReader(buf), int64(len(buf)))
 	tfail(t, err, nil)
 }
+
+func TestNetMailAddress(t *testing.T) {
+	const s = "From: \" \"@example.com\r\n\r\nbody\r\n"
+	p, err := EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
+	tcheck(t, err, "parse")
+	tcompare(t, p.Envelope.From, []Address{{"", `" "`, "example.com"}})
+}
