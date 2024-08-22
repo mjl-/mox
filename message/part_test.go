@@ -603,3 +603,10 @@ func TestNetMailAddress(t *testing.T) {
 	tcheck(t, err, "parse")
 	tcompare(t, p.Envelope.From, []Address{{"", `" "`, "example.com"}})
 }
+
+func TestParseQuotedCharset(t *testing.T) {
+	const s = "From: =?iso-8859-2?Q?Krist=FDna?= <k@example.com>\r\n\r\nbody\r\n"
+	p, err := EnsurePart(pkglog.Logger, false, strings.NewReader(s), int64(len(s)))
+	tcheck(t, err, "parse")
+	tcompare(t, p.Envelope.From, []Address{{"Kristýna", "k", "example.com"}})
+}

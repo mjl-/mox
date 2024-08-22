@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/mail"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,6 +18,7 @@ import (
 	"github.com/mjl-/sconf"
 
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtp"
@@ -196,16 +196,12 @@ binary should be setgid that group:
 						}
 						recipient = submitconf.DefaultDestination
 					} else {
-						addrs, err := mail.ParseAddressList(s)
+						addrs, err := message.ParseAddressList(s)
 						xcheckf(err, "parsing To address list")
 						if len(addrs) != 1 {
 							log.Fatalf("only single address allowed in To header")
 						}
-						addr, err := smtp.ParseNetMailAddress(addrs[0].Address)
-						if err != nil {
-							log.Fatalf("parsing address: %v", err)
-						}
-						recipient = addr.Pack(false)
+						recipient = addrs[0].User + "@" + addrs[0].Host
 					}
 				}
 				if k == "to" {

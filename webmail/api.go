@@ -517,13 +517,14 @@ type File struct {
 // parseAddress expects either a plain email address like "user@domain", or a
 // single address as used in a message header, like "name <user@domain>".
 func parseAddress(msghdr string) (message.NameAddress, error) {
-	a, err := mail.ParseAddress(msghdr)
+	// todo: parse more fully according to ../rfc/5322:959
+	parser := mail.AddressParser{WordDecoder: &wordDecoder}
+	a, err := parser.Parse(msghdr)
 	if err != nil {
 		return message.NameAddress{}, err
 	}
 
-	// todo: parse more fully according to ../rfc/5322:959
-	path, err := smtp.ParseAddress(a.Address)
+	path, err := smtp.ParseNetMailAddress(a.Address)
 	if err != nil {
 		return message.NameAddress{}, err
 	}
@@ -1658,12 +1659,12 @@ func recipientSecurity(ctx context.Context, log mlog.Log, resolver dns.Resolver,
 		SecurityResultUnknown,
 	}
 
-	msgAddr, err := mail.ParseAddress(messageAddressee)
+	parser := mail.AddressParser{WordDecoder: &wordDecoder}
+	msgAddr, err := parser.Parse(messageAddressee)
 	if err != nil {
-		return rs, fmt.Errorf("parsing message addressee: %v", err)
+		return rs, fmt.Errorf("parsing addressee: %v", err)
 	}
-
-	addr, err := smtp.ParseAddress(msgAddr.Address)
+	addr, err := smtp.ParseNetMailAddress(msgAddr.Address)
 	if err != nil {
 		return rs, fmt.Errorf("parsing address: %v", err)
 	}

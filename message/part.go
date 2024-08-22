@@ -489,7 +489,12 @@ func parseEnvelope(log mlog.Log, h mail.Header) (*Envelope, error) {
 
 func parseAddressList(log mlog.Log, h mail.Header, k string) []Address {
 	// todo: possibly work around ios mail generating incorrect q-encoded "phrases" with unencoded double quotes? ../rfc/2047:382
-	l, err := h.AddressList(k)
+	v := h.Get(k)
+	if v == "" {
+		return nil
+	}
+	parser := mail.AddressParser{WordDecoder: &wordDecoder}
+	l, err := parser.ParseList(v)
 	if err != nil {
 		return nil
 	}
