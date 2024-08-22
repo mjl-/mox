@@ -43,7 +43,7 @@ test-upgrade: build
 
 # needed for "check" target
 install-staticcheck:
-	go install honnef.co/go/tools/cmd/staticcheck@v0.4.7
+	go install honnef.co/go/tools/cmd/staticcheck@latest
 
 check:
 	CGO_ENABLED=0 go vet -tags integration
@@ -61,7 +61,7 @@ check:
 
 # needed for check-shadow
 install-shadow:
-	go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@v0.19.0
+	go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
 
 # having "err" shadowed is common, best to not have others
 check-shadow:
