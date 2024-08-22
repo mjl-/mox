@@ -758,6 +758,33 @@ func TestErrors(t *testing.T) {
 		}
 	})
 
+	// Remote closes connection after 554 response to RCPT TO in pipelined
+	// connection. Should result in permanent error, not temporary read error.
+	// E.g. icloud.com that has your IP blocklisted.
+	run(t, func(s xserver) {
+		s.writeline("220 mox.example")
+		s.readline("EHLO")
+		s.writeline("250-mox.example")
+		s.writeline("250-ENHANCEDSTATUSCODES")
+		s.writeline("250 PIPELINING")
+		s.readline("MAIL FROM:")
+		s.writeline("250 2.1.0 ok")
+		s.readline("RCPT TO:")
+		s.writeline("554 5.7.0 Blocked")
+	}, func(conn net.Conn) {
+		c, err := New(ctx, log.Logger, conn, TLSOpportunistic, false, localhost, zerohost, Opts{})
+		if err != nil {
+			panic(err)
+		}
+
+		msg := ""
+		err = c.Deliver(ctx, "postmaster@other.example", "mjl@mox.example", int64(len(msg)), strings.NewReader(msg), false, false, false)
+		var xerr Error
+		if err == nil || !errors.Is(err, ErrStatus) || !errors.As(err, &xerr) || !xerr.Permanent {
+			panic(fmt.Errorf("got %#v, expected ErrStatus with Permanent", err))
+		}
+	})
+
 	// If we try multiple recipients and first is 452, it is an error and a
 	// non-pipelined deliver will be aborted.
 	run(t, func(s xserver) {

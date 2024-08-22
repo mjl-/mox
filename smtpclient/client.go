@@ -1265,6 +1265,15 @@ func (c *Client) DeliverMultiple(ctx context.Context, mailFrom string, rcptTo []
 			c.xbotchf(0, "", "", nil, "writing pipelined mail/rcpt/data: %w", writeerr)
 		}
 
+		// If remote closed the connection before writing a DATA response, and the RCPT
+		// TO's failed (e.g. after deciding we're on a blocklist), use the last response
+		// for a rcptto as result.
+		if dataerr != nil && errors.Is(dataerr, io.ErrUnexpectedEOF) && nok == 0 {
+			c.botched = true
+			r := rcptResps[len(rcptResps)-1]
+			c.xerrorf(r.Permanent, r.Code, r.Secode, r.Line, r.MoreLines, "%w: server closed connection just before responding to data command", ErrStatus)
+		}
+
 		// If the data command had an i/o or protocol error, it's also a failure for the
 		// entire transaction.
 		if dataerr != nil {
