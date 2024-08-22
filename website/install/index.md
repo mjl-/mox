@@ -53,7 +53,7 @@ for other platforms.
 ## Compiling
 
 You can easily (cross) compile mox yourself. You need a recent Go toolchain
-installed.  Run `go version`, it must be >= 1.21. Download the latest version
+installed.  Run `go version`, it must be >= 1.22. Download the latest version
 from https://go.dev/dl/ or see https://go.dev/doc/manage-install.
 
 To download the source code of the latest release, and compile it to binary "mox":

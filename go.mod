@@ -1,6 +1,6 @@
 module github.com/mjl-/mox
 
-go 1.21
+go 1.22
 
 require (
 	github.com/mjl-/adns v0.0.0-20240509092456-2dc8715bf4af
@@ -13,7 +13,7 @@ require (
 	github.com/mjl-/sherpats v0.0.6
 	github.com/prometheus/client_golang v1.18.0
 	github.com/russross/blackfriday/v2 v2.1.0
-	go.etcd.io/bbolt v1.3.10
+	go.etcd.io/bbolt v1.3.11
 	golang.org/x/crypto v0.22.0
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
 	golang.org/x/net v0.24.0
