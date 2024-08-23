@@ -3548,12 +3548,12 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 					!haveText ? dom.span('HTML-only message', attr.title(htmlNote), msgModeWarningStyle, style({marginRight: '.25em'})) : [],
 					dom.span(dom._class('btngroup'),
 						haveText ? textbtn=dom.clickbutton(text ? dom._class('active') : [], 'Text', clickCmd(cmdShowText, shortcuts)) : [],
-						htmlbtn=dom.clickbutton(text || pm.ViewMode != api.ViewMode.ModeHTML ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
+						htmlbtn=dom.clickbutton(text || !text && pm.ViewMode == api.ViewMode.ModeHTMLExt ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
 							// Shortcuts has a function that cycles through html and htmlexternal.
 							showShortcut('T')
 							await cmdShowHTML()
 						}),
-						htmlextbtn=dom.clickbutton(text || pm.ViewMode != api.ViewMode.ModeHTMLExt ? [] : dom._class('active'), 'HTML with external resources', attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)),
+						htmlextbtn=dom.clickbutton(text || !text && pm.ViewMode != api.ViewMode.ModeHTMLExt ? [] : dom._class('active'), 'HTML with external resources', attr.title(htmlNote), clickCmd(cmdShowHTMLExternal, shortcuts)),
 					),
 				)
 			)
