@@ -190,9 +190,13 @@ func Listen() {
 	for _, name := range names {
 		listener := mox.Conf.Static.Listeners[name]
 
-		var tlsConfig *tls.Config
+		var tlsConfig, tlsConfigDelivery *tls.Config
 		if listener.TLS != nil {
 			tlsConfig = listener.TLS.Config
+			// For SMTP delivery, if we get a TLS handshake for an SNI hostname that we don't
+			// allow, we'll fallback to a certificate for the listener hostname instead of
+			// causing the connection to fail. May improve interoperability.
+			tlsConfigDelivery = listener.TLS.ConfigFallback
 		}
 
 		maxMsgSize := listener.SMTPMaxMessageSize
@@ -208,7 +212,7 @@ func Listen() {
 			port := config.Port(listener.SMTP.Port, 25)
 			for _, ip := range listener.IPs {
 				firstTimeSenderDelay := durationDefault(listener.SMTP.FirstTimeSenderDelay, firstTimeSenderDelayDefault)
-				listen1("smtp", name, ip, port, hostname, tlsConfig, false, false, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, !listener.SMTP.NoRequireTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay)
+				listen1("smtp", name, ip, port, hostname, tlsConfigDelivery, false, false, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, !listener.SMTP.NoRequireTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay)
 			}
 		}
 		if listener.Submission.Enabled {

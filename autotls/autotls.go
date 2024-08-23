@@ -54,7 +54,6 @@ var (
 // certificates for allowlisted hosts.
 type Manager struct {
 	ACMETLSConfig *tls.Config // For serving HTTPS on port 443, which is required for certificate requests to succeed.
-	TLSConfig     *tls.Config // For all TLS servers not used for validating ACME requests. Like SMTP and IMAP (including with STARTTLS) and HTTPS on ports other than 443.
 	Manager       *autocert.Manager
 
 	shutdown <-chan struct{}
@@ -158,50 +157,79 @@ func Load(name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eab
 		}
 	}
 
-	loggingGetCertificate := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		log := mlog.New("autotls", nil).WithContext(hello.Context())
-
-		// We handle missing invalid hostnames/ip's by returning a nil certificate and nil
-		// error, which crypto/tls turns into a TLS alert "unrecognized name", which can be
-		// interpreted by clients as a hint that they are using the wrong hostname, or a
-		// certificate is missing.
-
-		// Handle missing SNI to prevent logging an error below.
-		// At startup, during config initialization, we already adjust the tls config to
-		// inject the listener hostname if there isn't one in the TLS client hello. This is
-		// common for SMTP STARTTLS connections, which often do not care about the
-		// verification of the certificate.
-		if hello.ServerName == "" {
-			log.Debug("tls request without sni servername, rejecting", slog.Any("localaddr", hello.Conn.LocalAddr()), slog.Any("supportedprotos", hello.SupportedProtos))
-			return nil, nil
-		}
-
-		cert, err := m.GetCertificate(hello)
-		if err != nil && errors.Is(err, errHostNotAllowed) {
-			log.Debugx("requesting certificate", err, slog.String("host", hello.ServerName))
-			return nil, nil
-		} else if err != nil {
-			log.Errorx("requesting certificate", err, slog.String("host", hello.ServerName))
-		}
-		return cert, err
-	}
-
-	acmeTLSConfig := *m.TLSConfig()
-	acmeTLSConfig.GetCertificate = loggingGetCertificate
-
-	tlsConfig := tls.Config{
-		GetCertificate: loggingGetCertificate,
-	}
-
 	a := &Manager{
-		ACMETLSConfig: &acmeTLSConfig,
-		TLSConfig:     &tlsConfig,
-		Manager:       m,
-		shutdown:      shutdown,
-		hosts:         map[dns.Domain]struct{}{},
+		Manager:  m,
+		shutdown: shutdown,
+		hosts:    map[dns.Domain]struct{}{},
 	}
 	m.HostPolicy = a.HostPolicy
+	acmeTLSConfig := *m.TLSConfig()
+	acmeTLSConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		return a.loggingGetCertificate(hello, dns.Domain{}, false, false)
+	}
+	a.ACMETLSConfig = &acmeTLSConfig
 	return a, nil
+}
+
+// logigngGetCertificate is a helper to implement crypto/tls.Config.GetCertificate,
+// optionally falling back to a certificate for fallbackHostname in case SNI is
+// absent or for an unknown hostname.
+func (m *Manager) loggingGetCertificate(hello *tls.ClientHelloInfo, fallbackHostname dns.Domain, fallbackNoSNI, fallbackUnknownSNI bool) (*tls.Certificate, error) {
+	log := mlog.New("autotls", nil).WithContext(hello.Context())
+
+	// If we can't find a certificate (depending on fallback parameters), we return a
+	// nil certificate and nil error, which crypto/tls turns into a TLS alert
+	// "unrecognized name", which can be interpreted by clients as a hint that they are
+	// using the wrong hostname, or a certificate is missing.
+
+	if hello.ServerName == "" && fallbackNoSNI {
+		hello.ServerName = fallbackHostname.ASCII
+	}
+
+	// Handle missing SNI to prevent logging an error below.
+	if hello.ServerName == "" {
+		log.Debug("tls request without sni servername, rejecting", slog.Any("localaddr", hello.Conn.LocalAddr()), slog.Any("supportedprotos", hello.SupportedProtos))
+		return nil, nil
+	}
+
+	cert, err := m.Manager.GetCertificate(hello)
+	if err != nil && errors.Is(err, errHostNotAllowed) {
+		if !fallbackUnknownSNI {
+			log.Debugx("requesting certificate", err, slog.String("host", hello.ServerName))
+			return nil, nil
+		}
+
+		log.Debug("certificate for unknown hostname, using fallback hostname", slog.String("host", hello.ServerName))
+		hello.ServerName = fallbackHostname.ASCII
+		cert, err = m.Manager.GetCertificate(hello)
+		if err != nil {
+			log.Errorx("requesting certificate for fallback hostname", err, slog.String("host", hello.ServerName))
+		} else {
+			log.Debugx("requesting certificate for fallback hostname", err, slog.String("host", hello.ServerName))
+		}
+		return cert, err
+	} else if err != nil {
+		log.Errorx("requesting certificate", err, slog.String("host", hello.ServerName))
+	}
+	return cert, err
+}
+
+// TLSConfig returns a TLS server config that optionally returns a certificate for
+// fallbackHostname if no SNI was done, or for an unknown hostname.
+//
+// If fallbackNoSNI is set, TLS connections without SNI will use a certificate for
+// fallbackHostname. Otherwise, connections without SNI will fail with a message
+// that no TLS certificate is available.
+//
+// If fallbackUnknownSNI is set, TLS connections with an SNI hostname that is not
+// allowlisted will instead use a certificate for fallbackHostname. Otherwise, such
+// TLS connections will fail.
+func (m *Manager) TLSConfig(fallbackHostname dns.Domain, fallbackNoSNI, fallbackUnknownSNI bool) *tls.Config {
+	return &tls.Config{
+		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			return m.loggingGetCertificate(hello, fallbackHostname, fallbackNoSNI, fallbackUnknownSNI)
+		},
+	}
 }
 
 // CertAvailable checks whether a non-expired ECDSA certificate is available in the

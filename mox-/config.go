@@ -709,28 +709,26 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 
 				// If only checking or with missing ACME definition, we don't have an acme manager,
 				// so set an empty tls config to continue.
-				var tlsconfig *tls.Config
+				var tlsconfig, tlsconfigFallback *tls.Config
 				if checkOnly || acme.Manager == nil {
 					tlsconfig = &tls.Config{}
+					tlsconfigFallback = &tls.Config{}
 				} else {
-					tlsconfig = acme.Manager.TLSConfig.Clone()
-					l.TLS.ACMEConfig = acme.Manager.ACMETLSConfig
-
-					// SMTP STARTTLS connections are commonly made without SNI, because certificates
-					// often aren't verified.
 					hostname := c.HostnameDomain
 					if l.Hostname != "" {
 						hostname = l.HostnameDomain
 					}
-					getCert := tlsconfig.GetCertificate
-					tlsconfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-						if hello.ServerName == "" {
-							hello.ServerName = hostname.ASCII
-						}
-						return getCert(hello)
-					}
+					// If SNI is absent, we will use the listener hostname, but reject connections with
+					// an SNI hostname that is not allowlisted.
+					// Incoming SMTP deliveries use tlsconfigFallback for interoperability. TLS
+					// connections for unknown SNI hostnames fall back to a certificate for the
+					// listener hostname instead of causing the TLS connection to fail.
+					tlsconfig = acme.Manager.TLSConfig(hostname, true, false)
+					tlsconfigFallback = acme.Manager.TLSConfig(hostname, true, true)
+					l.TLS.ACMEConfig = acme.Manager.ACMETLSConfig
 				}
 				l.TLS.Config = tlsconfig
+				l.TLS.ConfigFallback = tlsconfigFallback
 			} else if len(l.TLS.KeyCerts) != 0 {
 				if doLoadTLSKeyCerts {
 					if err := loadTLSKeyCerts(configFile, "listener "+name, l.TLS); err != nil {
@@ -792,6 +790,9 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 			}
 			if l.TLS.Config != nil {
 				l.TLS.Config.MinVersion = minVersion
+			}
+			if l.TLS.ConfigFallback != nil {
+				l.TLS.ConfigFallback.MinVersion = minVersion
 			}
 			if l.TLS.ACMEConfig != nil {
 				l.TLS.ACMEConfig.MinVersion = minVersion
@@ -1921,6 +1922,7 @@ func loadTLSKeyCerts(configFile, kind string, ctls *config.TLS) error {
 	ctls.Config = &tls.Config{
 		Certificates: certs,
 	}
+	ctls.ConfigFallback = ctls.Config
 	return nil
 }
 

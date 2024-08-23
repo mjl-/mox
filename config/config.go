@@ -517,7 +517,8 @@ type TLS struct {
 	MinVersion          string    `sconf:"optional" sconf-doc:"Minimum TLS version. Default: TLSv1.2."`
 	HostPrivateKeyFiles []string  `sconf:"optional" sconf-doc:"Private keys used for ACME certificates. Specified explicitly so DANE TLSA DNS records can be generated, even before the certificates are requested. DANE is a mechanism to authenticate remote TLS certificates based on a public key or certificate specified in DNS, protected with DNSSEC. DANE is opportunistic and attempted when delivering SMTP with STARTTLS. The private key files must be in PEM format. PKCS8 is recommended, but PKCS1 and EC private keys are recognized as well. Only RSA 2048 bit and ECDSA P-256 keys are currently used. The first of each is used when requesting new certificates through ACME."`
 
-	Config                   *tls.Config     `sconf:"-" json:"-"` // TLS config for non-ACME-verification connections, i.e. SMTP and IMAP, and not port 443.
+	Config                   *tls.Config     `sconf:"-" json:"-"` // TLS config for non-ACME-verification connections, i.e. SMTP and IMAP, and not port 443. Connections without SNI will use a certificate for the hostname of the listener, connections with an SNI hostname that isn't allowed will be rejected.
+	ConfigFallback           *tls.Config     `sconf:"-" json:"-"` // Like Config, but uses the certificate for the listener hostname when the requested SNI hostname is not allowed, instead of causing the connection to fail.
 	ACMEConfig               *tls.Config     `sconf:"-" json:"-"` // TLS config that handles ACME verification, for serving on port 443.
 	HostPrivateRSA2048Keys   []crypto.Signer `sconf:"-" json:"-"` // Private keys for new TLS certificates for listener host name, for new certificates with ACME, and for DANE records.
 	HostPrivateECDSAP256Keys []crypto.Signer `sconf:"-" json:"-"`
