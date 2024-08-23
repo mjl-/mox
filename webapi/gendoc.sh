@@ -33,7 +33,7 @@ The webapi has a base URL at /webapi/v0/ by default, but configurable, which
 serves an introduction that points to this documentation and lists the API
 methods available.
 
-An HTTP POST to /webapi/v0/<method> calls a method.The form can be either
+An HTTP POST to /webapi/v0/<method> calls a method. The form can be either
 "application/x-www-form-urlencoded" or "multipart/form-data".  Form field
 "request" must contain the request parameters, encoded as JSON.
 
@@ -52,7 +52,7 @@ errors).  Most successful calls return a JSON object, but some return data
 (e.g. a raw message or an attachment of a message). See [Methods] for the
 methods and and [Client] for their documentation. The first element of their
 return values indicate their JSON object type or io.ReadCloser for non-JSON
-data. The request and response types are converted from/to JSON.  optional and
+data. The request and response types are converted from/to JSON.  Optional and
 missing/empty fields/values are converted into Go zero values: zero for
 numbers, empty strings, empty lists and empty objects. New fields may be added
 in response objects in future versions, parsers should ignore unrecognized
@@ -100,7 +100,7 @@ that spammy behaviour and blocklist your mail server.
 Automatic suppression list management already prevents most repeated sending
 attempts.  The webhooks make it easy to receive failure notifications.
 
-To keep spam complaints about your messages a minimum, include links to
+To keep spam complaints about your messages to a minimum, include links to
 unsubscribe from future messages without requiring further actions from the
 user, such as logins. Include an unsubscribe link in the footer, and include
 List-* message headers, such as List-Id, List-Unsubscribe and
@@ -273,7 +273,7 @@ Get a raw, unparsed message, as bytes:
 	\$ curl --user mox@localhost:moxmoxmox --data request='{"MsgID": 123}' http://localhost:1080/webapi/v0/MessageRawGet
 	[message as bytes in raw form]
 
-Mark a message as read:
+Mark a message as read and set flag "custom":
 
 	\$ curl --user mox@localhost:moxmoxmox --data request='{"MsgID": 424, "Flags": ["\\\\Seen", "custom"]}' http://localhost:1080/webapi/v0/MessageFlagsAdd
 	{}
