@@ -102,7 +102,7 @@ func sessionUse(ctx context.Context, log mlog.Log, accountName string, sessionTo
 	if !ok {
 		return LoginSession{}, fmt.Errorf("unknown session token")
 	} else if time.Until(ls.Expires) < 0 {
-		return LoginSession{}, fmt.Errorf("session expired")
+		return LoginSession{}, fmt.Errorf("session expired (after 24 hours inactivity)")
 	} else if csrfToken != "" && csrfToken != ls.csrfToken {
 		return LoginSession{}, fmt.Errorf("mismatch between csrf and session tokens")
 	}

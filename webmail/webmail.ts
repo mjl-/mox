@@ -271,6 +271,7 @@ const login = async (reason: string) => {
 		const root = dom.div(
 			css('loginOverlay', {position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: styles.overlayOpaqueBackgroundColor, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: zindexes.login, animation: 'fadein .15s ease-in'}),
 			dom.div(
+				style({display: 'flex', flexDirection: 'column', alignItems: 'center'}),
 				reasonElem=reason ? dom.div(css('sessionError', {marginBottom: '2ex', textAlign: 'center'}), reason) : dom.div(),
 				dom.div(
 					css('loginPopup', {

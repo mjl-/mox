@@ -105,9 +105,9 @@ func (a *adminSessionAuth) use(ctx context.Context, log mlog.Log, accountName st
 
 	s, ok := a.sessions[sessionToken]
 	if !ok {
-		return "", fmt.Errorf("unknown session")
+		return "", fmt.Errorf("unknown session (due to server restart or 10 new admin sessions)")
 	} else if time.Until(s.expires) < 0 {
-		return "", fmt.Errorf("session expired")
+		return "", fmt.Errorf("session expired (after 12 hours inactivity)")
 	} else if csrfToken != "" && csrfToken != s.csrfToken {
 		return "", fmt.Errorf("mismatch between csrf and session tokens")
 	}
