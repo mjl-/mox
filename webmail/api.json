@@ -1743,6 +1743,13 @@
 					"Typewords": [
 						"bool"
 					]
+				},
+				{
+					"Name": "ShowHTML",
+					"Docs": "Show HTML version of message by default, instead of plain text.",
+					"Typewords": [
+						"bool"
+					]
 				}
 			]
 		},
@@ -3255,11 +3262,6 @@
 			"Name": "ViewMode",
 			"Docs": "ViewMode how a message should be viewed: its text parts, html parts, or html\nwith loading external resources.",
 			"Values": [
-				{
-					"Name": "ModeDefault",
-					"Value": "",
-					"Docs": ""
-				},
 				{
 					"Name": "ModeText",
 					"Value": "text",

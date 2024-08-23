@@ -218,6 +218,7 @@ export interface Settings {
 	Signature: string
 	Quoting: Quoting
 	ShowAddressSecurity: boolean  // Whether to show the bars underneath the address input fields indicating starttls/dnssec/dane/mtasts/requiretls support by address.
+	ShowHTML: boolean  // Show HTML version of message by default, instead of plain text.
 }
 
 export interface Ruleset {
@@ -551,7 +552,6 @@ export enum AttachmentType {
 // ViewMode how a message should be viewed: its text parts, html parts, or html
 // with loading external resources.
 export enum ViewMode {
-	ModeDefault = "",
 	ModeText = "text",
 	ModeHTML = "html",
 	ModeHTMLExt = "htmlext",  // HTML with external resources.
@@ -603,7 +603,7 @@ export const types: TypenameMap = {
 	"ForwardAttachments": {"Name":"ForwardAttachments","Docs":"","Fields":[{"Name":"MessageID","Docs":"","Typewords":["int64"]},{"Name":"Paths","Docs":"","Typewords":["[]","[]","int32"]}]},
 	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
 	"RecipientSecurity": {"Name":"RecipientSecurity","Docs":"","Fields":[{"Name":"STARTTLS","Docs":"","Typewords":["SecurityResult"]},{"Name":"MTASTS","Docs":"","Typewords":["SecurityResult"]},{"Name":"DNSSEC","Docs":"","Typewords":["SecurityResult"]},{"Name":"DANE","Docs":"","Typewords":["SecurityResult"]},{"Name":"RequireTLS","Docs":"","Typewords":["SecurityResult"]}]},
-	"Settings": {"Name":"Settings","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["uint8"]},{"Name":"Signature","Docs":"","Typewords":["string"]},{"Name":"Quoting","Docs":"","Typewords":["Quoting"]},{"Name":"ShowAddressSecurity","Docs":"","Typewords":["bool"]}]},
+	"Settings": {"Name":"Settings","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["uint8"]},{"Name":"Signature","Docs":"","Typewords":["string"]},{"Name":"Quoting","Docs":"","Typewords":["Quoting"]},{"Name":"ShowAddressSecurity","Docs":"","Typewords":["bool"]},{"Name":"ShowHTML","Docs":"","Typewords":["bool"]}]},
 	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"MsgFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Comment","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"EventStart": {"Name":"EventStart","Docs":"","Fields":[{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"LoginAddress","Docs":"","Typewords":["MessageAddress"]},{"Name":"Addresses","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"DomainAddressConfigs","Docs":"","Typewords":["{}","DomainAddressConfig"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Mailboxes","Docs":"","Typewords":["[]","Mailbox"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"Settings","Docs":"","Typewords":["Settings"]},{"Name":"AccountPath","Docs":"","Typewords":["string"]},{"Name":"Version","Docs":"","Typewords":["string"]}]},
 	"DomainAddressConfig": {"Name":"DomainAddressConfig","Docs":"","Fields":[{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]}]},
@@ -633,7 +633,7 @@ export const types: TypenameMap = {
 	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"ThreadMode": {"Name":"ThreadMode","Docs":"","Values":[{"Name":"ThreadOff","Value":"off","Docs":""},{"Name":"ThreadOn","Value":"on","Docs":""},{"Name":"ThreadUnread","Value":"unread","Docs":""}]},
 	"AttachmentType": {"Name":"AttachmentType","Docs":"","Values":[{"Name":"AttachmentIndifferent","Value":"","Docs":""},{"Name":"AttachmentNone","Value":"none","Docs":""},{"Name":"AttachmentAny","Value":"any","Docs":""},{"Name":"AttachmentImage","Value":"image","Docs":""},{"Name":"AttachmentPDF","Value":"pdf","Docs":""},{"Name":"AttachmentArchive","Value":"archive","Docs":""},{"Name":"AttachmentSpreadsheet","Value":"spreadsheet","Docs":""},{"Name":"AttachmentDocument","Value":"document","Docs":""},{"Name":"AttachmentPresentation","Value":"presentation","Docs":""}]},
-	"ViewMode": {"Name":"ViewMode","Docs":"","Values":[{"Name":"ModeDefault","Value":"","Docs":""},{"Name":"ModeText","Value":"text","Docs":""},{"Name":"ModeHTML","Value":"html","Docs":""},{"Name":"ModeHTMLExt","Value":"htmlext","Docs":""}]},
+	"ViewMode": {"Name":"ViewMode","Docs":"","Values":[{"Name":"ModeText","Value":"text","Docs":""},{"Name":"ModeHTML","Value":"html","Docs":""},{"Name":"ModeHTMLExt","Value":"htmlext","Docs":""}]},
 	"SecurityResult": {"Name":"SecurityResult","Docs":"","Values":[{"Name":"SecurityResultError","Value":"error","Docs":""},{"Name":"SecurityResultNo","Value":"no","Docs":""},{"Name":"SecurityResultYes","Value":"yes","Docs":""},{"Name":"SecurityResultUnknown","Value":"unknown","Docs":""}]},
 	"Quoting": {"Name":"Quoting","Docs":"","Values":[{"Name":"Default","Value":"","Docs":""},{"Name":"Bottom","Value":"bottom","Docs":""},{"Name":"Top","Value":"top","Docs":""}]},
 	"Localpart": {"Name":"Localpart","Docs":"","Values":null},

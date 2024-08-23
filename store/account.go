@@ -738,6 +738,9 @@ type Settings struct {
 	// Whether to show the bars underneath the address input fields indicating
 	// starttls/dnssec/dane/mtasts/requiretls support by address.
 	ShowAddressSecurity bool
+
+	// Show HTML version of message by default, instead of plain text.
+	ShowHTML bool
 }
 
 // ViewMode how a message should be viewed: its text parts, html parts, or html
@@ -745,7 +748,6 @@ type Settings struct {
 type ViewMode string
 
 const (
-	ModeDefault ViewMode = ""
 	ModeText    ViewMode = "text"
 	ModeHTML    ViewMode = "html"
 	ModeHTMLExt ViewMode = "htmlext" // HTML with external resources.

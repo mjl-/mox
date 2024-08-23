@@ -156,7 +156,6 @@ const defaultSettings = {
 	refine: '', // Refine filters, e.g. '', 'attachments', 'read', 'unread', 'label:...'.
 	orderAsc: false, // Order from most recent to least recent by default.
 	ignoreErrorsUntil: 0, // For unhandled javascript errors/rejected promises, we normally show a popup for details, but users can ignore them for a week at a time.
-	showHTML: false, // Whether we show HTML version of email instead of plain text if both are present.
 	mailboxCollapsed: {} as {[mailboxID: number]: boolean}, // Mailboxes that are collapsed.
 	showAllHeaders: false, // Whether to show all message headers.
 	showHeaders: [] as string[], // Additional message headers to show.
@@ -214,7 +213,6 @@ const parseSettings = (): typeof defaultSettings => {
 			ignoreErrorsUntil: getInt('ignoreErrorsUntil'),
 			layout: getString('layout', 'auto', 'leftright', 'topbottom'),
 			showShortcuts: getBool('showShortcuts'),
-			showHTML: getBool('showHTML'),
 			mailboxCollapsed: mailboxCollapsed,
 			showAllHeaders: getBool('showAllHeaders'),
 			showHeaders: getStringArray('showHeaders'),
@@ -1114,6 +1112,7 @@ const cmdSettings = async () => {
 	let signature: HTMLTextAreaElement
 	let quoting: HTMLSelectElement
 	let showAddressSecurity: HTMLInputElement
+	let showHTML: HTMLInputElement
 
 	if (!accountSettings) {
 		window.alert('No account settings fetched yet.')
@@ -1131,6 +1130,7 @@ const cmdSettings = async () => {
 					Signature: signature.value,
 					Quoting: quoting.value as api.Quoting,
 					ShowAddressSecurity: showAddressSecurity.checked,
+					ShowHTML: showHTML.checked,
 				}
 				await withDisabled(fieldset, client.SettingsSave(accSet))
 				accountSettings = accSet
@@ -1161,6 +1161,11 @@ const cmdSettings = async () => {
 					showAddressSecurity=dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []),
 					' Show address security indications',
 					attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.'),
+				),
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					showHTML=dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []),
+					' Show HTML instead of text version by default',
 				),
 				dom.br(),
 				dom.div(
@@ -3050,7 +3055,6 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			return
 		}
 		loadText(await parsedMessagePromise)
-		settingsPut({...settings, showHTML: false})
 		activeBtn(textbtn)
 		await fromAddressSettingsSave(api.ViewMode.ModeText)
 	}
@@ -3541,7 +3545,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			loadText(pm)
 			dom._kids(msgmodeElem)
 		} else {
-			const text = haveText && (pm.ViewMode == api.ViewMode.ModeText || pm.ViewMode == api.ViewMode.ModeDefault && !settings.showHTML)
+			const text = haveText && pm.ViewMode == api.ViewMode.ModeText
 			dom._kids(msgmodeElem,
 				dom.div(dom._class('pad'),
 					msgHeaderSeparatorStyle,

@@ -183,15 +183,26 @@ func (Webmail) ParsedMessage(ctx context.Context, msgID int64) (pm ParsedMessage
 
 // fromAddrViewMode returns the view mode for a from address.
 func fromAddrViewMode(tx *bstore.Tx, from MessageAddress) (store.ViewMode, error) {
+	settingsViewMode := func() (store.ViewMode, error) {
+		settings := store.Settings{ID: 1}
+		if err := tx.Get(&settings); err != nil {
+			return store.ModeText, err
+		}
+		if settings.ShowHTML {
+			return store.ModeHTML, nil
+		}
+		return store.ModeText, nil
+	}
+
 	lp, err := smtp.ParseLocalpart(from.User)
 	if err != nil {
-		return store.ModeDefault, nil
+		return settingsViewMode()
 	}
 	fromAddr := smtp.NewAddress(lp, from.Domain).Pack(true)
 	fas := store.FromAddressSettings{FromAddress: fromAddr}
 	err = tx.Get(&fas)
 	if err == bstore.ErrAbsent {
-		return store.ModeDefault, nil
+		return settingsViewMode()
 	}
 	return fas.ViewMode, err
 }

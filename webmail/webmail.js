@@ -267,7 +267,6 @@ var api;
 	// with loading external resources.
 	let ViewMode;
 	(function (ViewMode) {
-		ViewMode["ModeDefault"] = "";
 		ViewMode["ModeText"] = "text";
 		ViewMode["ModeHTML"] = "html";
 		ViewMode["ModeHTMLExt"] = "htmlext";
@@ -312,7 +311,7 @@ var api;
 		"ForwardAttachments": { "Name": "ForwardAttachments", "Docs": "", "Fields": [{ "Name": "MessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Paths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }] },
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
 		"RecipientSecurity": { "Name": "RecipientSecurity", "Docs": "", "Fields": [{ "Name": "STARTTLS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["SecurityResult"] }] },
-		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }] },
+		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHTML", "Docs": "", "Typewords": ["bool"] }] },
 		"Ruleset": { "Name": "Ruleset", "Docs": "", "Fields": [{ "Name": "SMTPMailFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "HeadersRegexp", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListAllowDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "AcceptRejectsToMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "ListAllowDNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"EventStart": { "Name": "EventStart", "Docs": "", "Fields": [{ "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["MessageAddress"] }, { "Name": "Addresses", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "DomainAddressConfigs", "Docs": "", "Typewords": ["{}", "DomainAddressConfig"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailboxes", "Docs": "", "Typewords": ["[]", "Mailbox"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Settings", "Docs": "", "Typewords": ["Settings"] }, { "Name": "AccountPath", "Docs": "", "Typewords": ["string"] }, { "Name": "Version", "Docs": "", "Typewords": ["string"] }] },
 		"DomainAddressConfig": { "Name": "DomainAddressConfig", "Docs": "", "Fields": [{ "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }] },
@@ -342,7 +341,7 @@ var api;
 		"CSRFToken": { "Name": "CSRFToken", "Docs": "", "Values": null },
 		"ThreadMode": { "Name": "ThreadMode", "Docs": "", "Values": [{ "Name": "ThreadOff", "Value": "off", "Docs": "" }, { "Name": "ThreadOn", "Value": "on", "Docs": "" }, { "Name": "ThreadUnread", "Value": "unread", "Docs": "" }] },
 		"AttachmentType": { "Name": "AttachmentType", "Docs": "", "Values": [{ "Name": "AttachmentIndifferent", "Value": "", "Docs": "" }, { "Name": "AttachmentNone", "Value": "none", "Docs": "" }, { "Name": "AttachmentAny", "Value": "any", "Docs": "" }, { "Name": "AttachmentImage", "Value": "image", "Docs": "" }, { "Name": "AttachmentPDF", "Value": "pdf", "Docs": "" }, { "Name": "AttachmentArchive", "Value": "archive", "Docs": "" }, { "Name": "AttachmentSpreadsheet", "Value": "spreadsheet", "Docs": "" }, { "Name": "AttachmentDocument", "Value": "document", "Docs": "" }, { "Name": "AttachmentPresentation", "Value": "presentation", "Docs": "" }] },
-		"ViewMode": { "Name": "ViewMode", "Docs": "", "Values": [{ "Name": "ModeDefault", "Value": "", "Docs": "" }, { "Name": "ModeText", "Value": "text", "Docs": "" }, { "Name": "ModeHTML", "Value": "html", "Docs": "" }, { "Name": "ModeHTMLExt", "Value": "htmlext", "Docs": "" }] },
+		"ViewMode": { "Name": "ViewMode", "Docs": "", "Values": [{ "Name": "ModeText", "Value": "text", "Docs": "" }, { "Name": "ModeHTML", "Value": "html", "Docs": "" }, { "Name": "ModeHTMLExt", "Value": "htmlext", "Docs": "" }] },
 		"SecurityResult": { "Name": "SecurityResult", "Docs": "", "Values": [{ "Name": "SecurityResultError", "Value": "error", "Docs": "" }, { "Name": "SecurityResultNo", "Value": "no", "Docs": "" }, { "Name": "SecurityResultYes", "Value": "yes", "Docs": "" }, { "Name": "SecurityResultUnknown", "Value": "unknown", "Docs": "" }] },
 		"Quoting": { "Name": "Quoting", "Docs": "", "Values": [{ "Name": "Default", "Value": "", "Docs": "" }, { "Name": "Bottom", "Value": "bottom", "Docs": "" }, { "Name": "Top", "Value": "top", "Docs": "" }] },
 		"Localpart": { "Name": "Localpart", "Docs": "", "Values": null },
@@ -1527,7 +1526,6 @@ const defaultSettings = {
 	refine: '',
 	orderAsc: false,
 	ignoreErrorsUntil: 0,
-	showHTML: false,
 	mailboxCollapsed: {},
 	showAllHeaders: false,
 	showHeaders: [],
@@ -1584,7 +1582,6 @@ const parseSettings = () => {
 			ignoreErrorsUntil: getInt('ignoreErrorsUntil'),
 			layout: getString('layout', 'auto', 'leftright', 'topbottom'),
 			showShortcuts: getBool('showShortcuts'),
-			showHTML: getBool('showHTML'),
 			mailboxCollapsed: mailboxCollapsed,
 			showAllHeaders: getBool('showAllHeaders'),
 			showHeaders: getStringArray('showHeaders'),
@@ -2390,6 +2387,7 @@ const cmdSettings = async () => {
 	let signature;
 	let quoting;
 	let showAddressSecurity;
+	let showHTML;
 	if (!accountSettings) {
 		window.alert('No account settings fetched yet.');
 	}
@@ -2401,11 +2399,12 @@ const cmdSettings = async () => {
 			Signature: signature.value,
 			Quoting: quoting.value,
 			ShowAddressSecurity: showAddressSecurity.checked,
+			ShowHTML: showHTML.checked,
 		};
 		await withDisabled(fieldset, client.SettingsSave(accSet));
 		accountSettings = accSet;
 		remove();
-	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.br(), dom.div(dom.submitbutton('Save')))));
+	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showHTML = dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []), ' Show HTML instead of text version by default'), dom.br(), dom.div(dom.submitbutton('Save')))));
 };
 // Show help popup, with shortcuts and basic explanation.
 const cmdHelp = async () => {
@@ -3755,7 +3754,6 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			return;
 		}
 		loadText(await parsedMessagePromise);
-		settingsPut({ ...settings, showHTML: false });
 		activeBtn(textbtn);
 		await fromAddressSettingsSave(api.ViewMode.ModeText);
 	};
@@ -4055,7 +4053,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			dom._kids(msgmodeElem);
 		}
 		else {
-			const text = haveText && (pm.ViewMode == api.ViewMode.ModeText || pm.ViewMode == api.ViewMode.ModeDefault && !settings.showHTML);
+			const text = haveText && pm.ViewMode == api.ViewMode.ModeText;
 			dom._kids(msgmodeElem, dom.div(dom._class('pad'), msgHeaderSeparatorStyle, !haveText ? dom.span('HTML-only message', attr.title(htmlNote), msgModeWarningStyle, style({ marginRight: '.25em' })) : [], dom.span(dom._class('btngroup'), haveText ? textbtn = dom.clickbutton(text ? dom._class('active') : [], 'Text', clickCmd(cmdShowText, shortcuts)) : [], htmlbtn = dom.clickbutton(text || !text && pm.ViewMode == api.ViewMode.ModeHTMLExt ? [] : dom._class('active'), 'HTML', attr.title(htmlNote), async function click() {
 				// Shortcuts has a function that cycles through html and htmlexternal.
 				showShortcut('T');

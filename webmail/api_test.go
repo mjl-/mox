@@ -232,7 +232,7 @@ func TestAPI(t *testing.T) {
 	tneedError(t, func() { api.ParsedMessage(ctx, 0) })
 	tneedError(t, func() { api.ParsedMessage(ctx, testmsgs[len(testmsgs)-1].ID+1) })
 	pm := api.ParsedMessage(ctx, inboxText.ID)
-	tcompare(t, pm.ViewMode, store.ModeDefault)
+	tcompare(t, pm.ViewMode, store.ModeText)
 
 	api.FromAddressSettingsSave(ctx, store.FromAddressSettings{FromAddress: "mjl@mox.example", ViewMode: store.ModeHTMLExt})
 	pm = api.ParsedMessage(ctx, inboxText.ID)
