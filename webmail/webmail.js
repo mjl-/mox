@@ -1491,14 +1491,15 @@ const zindexes = {
 ensureCSS('.button', { display: 'inline-block' });
 ensureCSS('button, .button, select', { color: styles.color, backgroundColor: styles.buttonBackground, border: '1px solid', borderColor: styles.buttonBorderColor, borderRadius: '.15em', padding: '0 .15em' });
 ensureCSS('button.active, .button.active, button.active:hover, .button.active:hover', { backgroundColor: styles.highlightBackground });
-ensureCSS('button:hover, .button:hover, select:hover', { backgroundColor: styles.buttonHoverBackground });
+ensureCSS('button:hover:not(:disabled), .button:hover:not(:disabled), select:hover:not(:disabled)', { backgroundColor: styles.buttonHoverBackground });
+ensureCSS('button:disabled, .button:disabled, select:disabled', { opacity: .5 });
 ensureCSS('input, textarea', { backgroundColor: styles.backgroundColor, color: styles.color, border: '1px solid', borderColor: '#888', borderRadius: '.15em', padding: '0 .15em' });
-ensureCSS('input:hover, textarea:hover', { borderColor: styles.colorMilder });
+ensureCSS('input:hover:not(:disabled), textarea:hover:not(:disabled)', { borderColor: styles.colorMilder });
 ensureCSS('.btngroup button, .btngroup .button', { borderRadius: 0, borderRightWidth: 0 });
 ensureCSS('.btngroup button:first-child, .btngroup .button:first-child', { borderRadius: '.15em 0 0 .15em' });
 ensureCSS('.btngroup button:last-child, .btngroup .button:last-child', { borderRadius: '0 .15em .15em 0', borderRightWidth: '1px' });
 const keywordButtonStyle = css('keywordButton', { cursor: 'pointer' });
-ensureCSS('.keywordButton:hover', { backgroundColor: styles.highlightBackgroundHover });
+ensureCSS('.keywordButton:hover:not(:disabled)', { backgroundColor: styles.highlightBackgroundHover });
 const yscrollStyle = css('yscroll', { overflowY: 'scroll', position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 });
 const yscrollAutoStyle = css('yscrollAuto', { overflowY: 'auto', position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 });
 // Input elements that automatically grow based on input, with additional JS.
