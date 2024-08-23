@@ -7208,7 +7208,7 @@ const init = async () => {
 			}
 		} catch (err) {}
 
-		eventSource = new window.EventSource('events?token=' + encodeURIComponent(token)+'&request='+encodeURIComponent(JSON.stringify(request))+slow)
+		eventSource = new window.EventSource('events?singleUseToken=' + encodeURIComponent(token)+'&request='+encodeURIComponent(JSON.stringify(request))+slow)
 		let eventID = window.setTimeout(() => dom._kids(statusElem, 'Connecting... '), 1000)
 		eventSource.addEventListener('open', (e: Event) => {
 			log('eventsource open', {e})

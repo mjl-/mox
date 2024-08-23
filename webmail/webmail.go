@@ -194,8 +194,8 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 	log := pkglog.WithContext(ctx).With(slog.String("userauth", ""))
 
 	// Server-sent event connection, for all initial data (list of mailboxes), list of
-	// messages, and all events afterwards. Authenticated through a token in the query
-	// string, which it got from a Token API call.
+	// messages, and all events afterwards. Authenticated through a single use token in
+	// the query string, which it got from a Token API call.
 	if r.URL.Path == "/events" {
 		serveEvents(ctx, log, accountPath, w, r)
 		return

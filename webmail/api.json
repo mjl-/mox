@@ -55,7 +55,7 @@
 		},
 		{
 			"Name": "Token",
-			"Docs": "Token returns a token to use for an SSE connection. A token can only be used for\na single SSE connection. Tokens are stored in memory for a maximum of 1 minute,\nwith at most 10 unused tokens (the most recently created) per account.",
+			"Docs": "Token returns a single-use token to use for an SSE connection. A token can only\nbe used for a single SSE connection. Tokens are stored in memory for a maximum\nof 1 minute, with at most 10 unused tokens (the most recently created) per\naccount.",
 			"Params": [],
 			"Returns": [
 				{

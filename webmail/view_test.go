@@ -131,13 +131,13 @@ func TestView(t *testing.T) {
 		}
 	}
 
-	testFail("POST", eventsURL+"?token="+tokens[0]+"&request="+string(requestJSON), http.StatusMethodNotAllowed) // Must be GET.
-	testFail("GET", eventsURL, http.StatusBadRequest)                                                            // Missing token.
-	testFail("GET", eventsURL+"?token="+tokens[0]+"&request="+string(requestJSON), http.StatusBadRequest)        // Bad (old) token.
-	testFail("GET", eventsURL+"?token="+tokens[len(tokens)-5]+"&request=bad", http.StatusBadRequest)             // Bad request.
+	testFail("POST", eventsURL+"?singleUseToken="+tokens[0]+"&request="+string(requestJSON), http.StatusMethodNotAllowed) // Must be GET.
+	testFail("GET", eventsURL, http.StatusBadRequest)                                                                     // Missing token.
+	testFail("GET", eventsURL+"?singleUseToken="+tokens[0]+"&request="+string(requestJSON), http.StatusBadRequest)        // Bad (old) token.
+	testFail("GET", eventsURL+"?singleUseToken="+tokens[len(tokens)-5]+"&request=bad", http.StatusBadRequest)             // Bad request.
 
 	// Start connection for testing and filters below.
-	req, err := http.NewRequest("GET", eventsURL+"?token="+tokens[len(tokens)-1]+"&request="+string(requestJSON), nil)
+	req, err := http.NewRequest("GET", eventsURL+"?singleUseToken="+tokens[len(tokens)-1]+"&request="+string(requestJSON), nil)
 	tcheck(t, err, "making request")
 	resp, err := http.DefaultClient.Do(req)
 	tcheck(t, err, "http transaction")
@@ -168,7 +168,7 @@ func TestView(t *testing.T) {
 	}
 
 	// Can only use a token once.
-	testFail("GET", eventsURL+"?token="+tokens[len(tokens)-1]+"&request=bad", http.StatusBadRequest)
+	testFail("GET", eventsURL+"?singleUseToken="+tokens[len(tokens)-1]+"&request=bad", http.StatusBadRequest)
 
 	// Check a few initial query/page combinations.
 	testConn := func(token, more string, request Request, check func(EventStart, eventReader)) {
@@ -176,7 +176,7 @@ func TestView(t *testing.T) {
 
 		reqJSON, err := json.Marshal(request)
 		tcheck(t, err, "marshal request json")
-		req, err := http.NewRequest("GET", eventsURL+"?token="+token+more+"&request="+string(reqJSON), nil)
+		req, err := http.NewRequest("GET", eventsURL+"?singleUseToken="+token+more+"&request="+string(reqJSON), nil)
 		tcheck(t, err, "making request")
 		resp, err := http.DefaultClient.Do(req)
 		tcheck(t, err, "http transaction")

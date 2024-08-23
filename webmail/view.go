@@ -489,7 +489,8 @@ type ioErr struct {
 }
 
 // serveEvents serves an SSE connection. Authentication is done through a query
-// string parameter "token", a one-time-use token returned by the Token API call.
+// string parameter "singleUseToken", a one-time-use token returned by the Token
+// API call.
 func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
@@ -504,7 +505,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 	}
 
 	q := r.URL.Query()
-	token := q.Get("token")
+	token := q.Get("singleUseToken")
 	if token == "" {
 		http.Error(w, "400 - bad request - missing credentials", http.StatusBadRequest)
 		return
