@@ -114,10 +114,10 @@ func badResponse(hresp *http.Response) error {
 // Configure webhooks to receive updates about deliveries.
 //
 // If the request is a multipart/form-data, uploaded files with the form keys
-// "inlinefile" and/or "attachedfile" will be added to the message. If the uploaded
-// file has content-type and/or content-id headers, they will be included. If no
-// content-type is present in the request, and it can be detected, it is included
-// automatically.
+// "alternativefile", "inlinefile" and/or "attachedfile" will be added to the
+// message. If the uploaded file has content-type and/or content-id headers, they
+// will be included. If no content-type is present in the request, and it can be
+// detected, it is included automatically.
 //
 // Example call with a text and html message, with an inline and an attached image:
 //

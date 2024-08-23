@@ -115,6 +115,11 @@ type SendRequest struct {
 	// Unless a User-Agent or X-Mailer header is present, a User-Agent is added.
 	Headers [][2]string
 
+	// Alternative files are added as (full) alternative representation of the text
+	// and/or html parts. Alternative files cause a part with content-type
+	// "multipart/alternative" to be added to the message. Optional.
+	AlternativeFiles []File
+
 	// Inline files are added to the message and should be displayed by mail clients as
 	// part of the message contents. Inline files cause a part with content-type
 	// "multipart/related" to be added to the message. Optional.

@@ -759,8 +759,9 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		xc.Header("User-Agent", "mox/"+moxvar.Version)
 	}
 
-	// Whether we have additional separately inline/attached file(s).
+	// Whether we have additional separately alternative/inline/attached file(s).
 	mpf := reqInfo.Request.MultipartForm
+	formAlternative := mpf != nil && len(mpf.File["alternativefile"]) > 0
 	formInline := mpf != nil && len(mpf.File["inlinefile"]) > 0
 	formAttachment := mpf != nil && len(mpf.File["attachedfile"]) > 0
 
@@ -770,6 +771,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 	//     - multipart/alternative (in case we have both text and html bodies)
 	//       - text/plain (optional)
 	//       - text/html (optional)
+	//       - alternative file, ...
 	//     - inline file, ...
 	//   - attached file, ...
 
@@ -811,7 +813,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		related = xcreateMultipart("related")
 		cur = related
 	}
-	if m.Text != "" && m.HTML != "" {
+	if m.Text != "" && m.HTML != "" || len(req.AlternativeFiles) > 0 || formAlternative {
 		alternative = xcreateMultipart("alternative")
 		cur = alternative
 	}
@@ -826,10 +828,6 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		tp := xcreatePart(textproto.MIMEHeader{"Content-Type": []string{ct}, "Content-Transfer-Encoding": []string{cte}})
 		_, err := tp.Write([]byte(htmlBody))
 		xcheckf(err, "write html part")
-	}
-	if alternative != nil {
-		alternative.Close()
-		alternative = nil
 	}
 
 	xaddFileBase64 := func(ct string, inline bool, filename string, cid string, base64Data string) {
@@ -921,6 +919,18 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		xcheckf(err, "adding uploaded file")
 		err = bw.Close()
 		xcheckf(err, "flushing uploaded file")
+	}
+
+	cur = alternative
+	xaddJSONFiles(req.AlternativeFiles, true)
+	if mpf != nil {
+		for _, fh := range mpf.File["alternativefile"] {
+			xaddFile(fh, true)
+		}
+	}
+	if alternative != nil {
+		alternative.Close()
+		alternative = nil
 	}
 
 	cur = related

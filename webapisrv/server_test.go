@@ -181,6 +181,13 @@ func TestServer(t *testing.T) {
 		},
 		Extra:   map[string]string{"a": "123"},
 		Headers: [][2]string{{"x-custom", "header"}},
+		AlternativeFiles: []webapi.File{
+			{
+				Name:        "x.ics",
+				ContentType: "text/calendar",
+				Data:        base64.StdEncoding.EncodeToString([]byte("ics data...")),
+			},
+		},
 		InlineFiles: []webapi.File{
 			{
 				Name:        "x.png",
@@ -228,8 +235,15 @@ func TestServer(t *testing.T) {
 	sendReqBuf, err := json.Marshal(fdSendReq)
 	tcheckf(t, err, "send request")
 	mp.WriteField("request", string(sendReqBuf))
+
+	// One alternative file.
+	pw, err := mp.CreateFormFile("alternativefile", "test.ics")
+	tcheckf(t, err, "create alternative ics file")
+	_, err = fmt.Fprint(pw, "ICS...")
+	tcheckf(t, err, "write ics")
+
 	// Two inline PDFs.
-	pw, err := mp.CreateFormFile("inlinefile", "test.pdf")
+	pw, err = mp.CreateFormFile("inlinefile", "test.pdf")
 	tcheckf(t, err, "create inline pdf file")
 	_, err = fmt.Fprint(pw, "%PDF-")
 	tcheckf(t, err, "write pdf")
