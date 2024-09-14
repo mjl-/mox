@@ -8,5 +8,5 @@ set -euo pipefail
 out=$1
 shift
 ./node_modules/.bin/tsc --noEmitOnError true --pretty false --newLine lf --strict --allowUnreachableCode false --allowUnusedLabels false --noFallthroughCasesInSwitch true --noImplicitReturns true --noUnusedLocals true --noImplicitThis true --noUnusedParameters true --target es2022 --module none --outFile $out.spaces "$@" | sed -E 's/^([^\(]+)\(([0-9]+),([0-9]+)\):/\1:\2:\3: /'
-unexpand -t4 <$out.spaces >$out
+CGO_ENABLED=0 go run unexpand.go -t 4 <$out.spaces >$out
 rm $out.spaces

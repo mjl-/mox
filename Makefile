@@ -43,7 +43,7 @@ test-upgrade: build
 
 # needed for "check" target
 install-staticcheck:
-	go install honnef.co/go/tools/cmd/staticcheck@latest
+	CGO_ENABLED=0 go install honnef.co/go/tools/cmd/staticcheck@latest
 
 check:
 	CGO_ENABLED=0 go vet -tags integration
@@ -52,25 +52,25 @@ check:
 	CGO_ENABLED=0 go vet -tags errata rfc/errata.go
 	CGO_ENABLED=0 go vet -tags xr rfc/xr.go
 	GOARCH=386 CGO_ENABLED=0 go vet ./...
-	staticcheck ./...
-	staticcheck -tags integration
-	staticcheck -tags website website/website.go
-	staticcheck -tags link rfc/link.go
-	staticcheck -tags errata rfc/errata.go
-	staticcheck -tags xr rfc/xr.go
+	CGO_ENABLED=0 staticcheck ./...
+	CGO_ENABLED=0 staticcheck -tags integration
+	CGO_ENABLED=0 staticcheck -tags website website/website.go
+	CGO_ENABLED=0 staticcheck -tags link rfc/link.go
+	CGO_ENABLED=0 staticcheck -tags errata rfc/errata.go
+	CGO_ENABLED=0 staticcheck -tags xr rfc/xr.go
 
 # needed for check-shadow
 install-shadow:
-	go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
+	CGO_ENABLED=0 go install golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest
 
 # having "err" shadowed is common, best to not have others
 check-shadow:
-	go vet -vettool=$$(which shadow) ./... 2>&1 | grep -v '"err"'
-	go vet -tags integration -vettool=$$(which shadow) 2>&1 | grep -v '"err"'
-	go vet -tags website -vettool=$$(which shadow) website/website.go 2>&1 | grep -v '"err"'
-	go vet -tags link -vettool=$$(which shadow) rfc/link.go 2>&1 | grep -v '"err"'
-	go vet -tags errata -vettool=$$(which shadow) rfc/errata.go 2>&1 | grep -v '"err"'
-	go vet -tags xr -vettool=$$(which shadow) rfc/xr.go 2>&1 | grep -v '"err"'
+	CGO_ENABLED=0 go vet -vettool=$$(which shadow) ./... 2>&1 | grep -v '"err"'
+	CGO_ENABLED=0 go vet -tags integration -vettool=$$(which shadow) 2>&1 | grep -v '"err"'
+	CGO_ENABLED=0 go vet -tags website -vettool=$$(which shadow) website/website.go 2>&1 | grep -v '"err"'
+	CGO_ENABLED=0 go vet -tags link -vettool=$$(which shadow) rfc/link.go 2>&1 | grep -v '"err"'
+	CGO_ENABLED=0 go vet -tags errata -vettool=$$(which shadow) rfc/errata.go 2>&1 | grep -v '"err"'
+	CGO_ENABLED=0 go vet -tags xr -vettool=$$(which shadow) rfc/xr.go 2>&1 | grep -v '"err"'
 
 fuzz:
 	go test -fuzz FuzzParseSignature -fuzztime 5m ./dkim
@@ -125,24 +125,24 @@ install-js0:
 	npm install --ignore-scripts --save-dev --save-exact typescript@5.1.6
 
 webmail/webmail.js: lib.ts webmail/api.ts webmail/lib.ts webmail/webmail.ts
-	./tsc.sh $@ $^
+	./tsc.sh $@ lib.ts webmail/api.ts webmail/lib.ts webmail/webmail.ts
 
 webmail/msg.js: lib.ts webmail/api.ts webmail/lib.ts webmail/msg.ts
-	./tsc.sh $@ $^
+	./tsc.sh $@ lib.ts webmail/api.ts webmail/lib.ts webmail/msg.ts
 
 webmail/text.js: lib.ts webmail/api.ts webmail/lib.ts webmail/text.ts
-	./tsc.sh $@ $^
+	./tsc.sh $@ lib.ts webmail/api.ts webmail/lib.ts webmail/text.ts
 
 webadmin/admin.js: lib.ts webadmin/api.ts webadmin/admin.ts
-	./tsc.sh $@ $^
+	./tsc.sh $@ lib.ts webadmin/api.ts webadmin/admin.ts
 
 webaccount/account.js: lib.ts webaccount/api.ts webaccount/account.ts
-	./tsc.sh $@ $^
+	./tsc.sh $@ lib.ts webaccount/api.ts webaccount/account.ts
 
 frontend: node_modules/.bin/tsc webadmin/admin.js webaccount/account.js webmail/webmail.js webmail/msg.js webmail/text.js
 
 install-apidiff:
-	go install golang.org/x/exp/cmd/apidiff@v0.0.0-20231206192017-f3f8817b8deb
+	CGO_ENABLED=0 go install golang.org/x/exp/cmd/apidiff@v0.0.0-20231206192017-f3f8817b8deb
 
 genapidiff:
 	./apidiff.sh
@@ -157,17 +157,17 @@ genwebsite:
 	./genwebsite.sh
 
 buildall:
-	GOOS=linux GOARCH=arm go build
-	GOOS=linux GOARCH=arm64 go build
-	GOOS=linux GOARCH=amd64 go build
-	GOOS=linux GOARCH=386 go build
-	GOOS=openbsd GOARCH=amd64 go build
-	GOOS=freebsd GOARCH=amd64 go build
-	GOOS=netbsd GOARCH=amd64 go build
-	GOOS=darwin GOARCH=amd64 go build
-	GOOS=dragonfly GOARCH=amd64 go build
-	GOOS=illumos GOARCH=amd64 go build
-	GOOS=solaris GOARCH=amd64 go build
-	GOOS=aix GOARCH=ppc64 go build
-	GOOS=windows GOARCH=amd64 go build
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm go build
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build
+	CGO_ENABLED=0 GOOS=linux GOARCH=386 go build
+	CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build
+	CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build
+	CGO_ENABLED=0 GOOS=netbsd GOARCH=amd64 go build
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build
+	CGO_ENABLED=0 GOOS=dragonfly GOARCH=amd64 go build
+	CGO_ENABLED=0 GOOS=illumos GOARCH=amd64 go build
+	CGO_ENABLED=0 GOOS=solaris GOARCH=amd64 go build
+	CGO_ENABLED=0 GOOS=aix GOARCH=ppc64 go build
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build
 	# no plan9 for now

@@ -1051,8 +1051,8 @@ var api;
 // - To keep the style definitions closer to their use.
 // - To make it easier to provide both light/regular and dark mode colors.
 // - To use class names for styling, instead of the the many inline styles.
-//	 Makes it easier to look through a DOM, and easier to change the style of all
-//	 instances of a class.
+//   Makes it easier to look through a DOM, and easier to change the style of all
+//   instances of a class.
 // We keep the default/regular styles and dark-mode styles in separate stylesheets.
 const cssStyle = dom.style(attr.type('text/css'));
 document.head.appendChild(cssStyle);

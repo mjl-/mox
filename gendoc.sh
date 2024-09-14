@@ -26,7 +26,7 @@ any parameters. Followed by the help and usage information for each command.
 
 EOF
 
-./mox 2>&1 | sed -e 's/^usage: */\t/' -e 's/^  */\t/'
+./mox 2>&1 | sed -e 's/^usage: */	/' -e 's/^  */	/'
 echo
 ./mox helpall 2>&1
 
@@ -80,14 +80,14 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 # mox.conf
 
 EOF
-./mox config describe-static | sed 's/^/\t/'
+./mox config describe-static | sed 's/^/	/'
 
 cat <<EOF
 
 # domains.conf
 
 EOF
-./mox config describe-domains | sed 's/^/\t/'
+./mox config describe-domains | sed 's/^/	/'
 
 cat <<EOF
 
@@ -102,7 +102,7 @@ EOF
 for ex in $(./mox config example); do
 	echo '# Example '$ex
 	echo
-	./mox config example $ex | sed 's/^/\t/'
+	./mox config example $ex | sed 's/^/	/'
 	echo
 done
 
