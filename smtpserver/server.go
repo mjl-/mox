@@ -931,6 +931,9 @@ func (c *conn) cmdStarttls(p *parser) {
 	if c.account != nil {
 		xsmtpUserErrorf(smtp.C503BadCmdSeq, smtp.SeProto5BadCmdOrSeq1, "cannot starttls after authentication")
 	}
+	if c.tlsConfig == nil {
+		xsmtpUserErrorf(smtp.C503BadCmdSeq, smtp.SeProto5BadCmdOrSeq1, "starttls not offered")
+	}
 
 	// We don't want to do TLS on top of c.r because it also prints protocol traces: We
 	// don't want to log the TLS stream. So we'll do TLS on the underlying connection,

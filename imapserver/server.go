@@ -1454,6 +1454,9 @@ func (c *conn) cmdStarttls(tag, cmd string, p *parser) {
 	if c.tls {
 		xsyntaxErrorf("tls already active") // ../rfc/9051:1353
 	}
+	if c.tlsConfig == nil {
+		xsyntaxErrorf("starttls not announced")
+	}
 
 	conn := c.conn
 	if n := c.br.Buffered(); n > 0 {
