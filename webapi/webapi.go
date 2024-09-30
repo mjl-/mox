@@ -157,8 +157,9 @@ type MessageMeta struct {
 	Size                int64    // Total size of raw message file.
 	DSN                 bool     // Whether this message is a DSN.
 	Flags               []string // Standard message flags like \seen, \answered, $forwarded, $junk, $nonjunk, and custom keywords.
-	MailFrom            string   // Address used during SMTP "MAIL FROM" command.
+	MailFrom            string   // Address used during SMTP "MAIL FROM" command. Unicode.
 	MailFromValidated   bool     // Whether SMTP MAIL FROM address was SPF-validated.
+	RcptTo              string   // Address delivered to with SMTP "RCPT TO" command. Unicode.
 	MsgFrom             string   // Address used in message "From" header.
 	MsgFromValidated    bool     // Whether address in message "From"-header was DMARC(-like) validated.
 	DKIMVerifiedDomains []string // Verified domains from DKIM-signature in message. Can be different domain than used in addresses.

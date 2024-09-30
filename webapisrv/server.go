@@ -1245,12 +1245,17 @@ func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (r
 	if d, err := dns.ParseDomain(m.MsgFromDomain); err == nil {
 		msgFrom = smtp.NewAddress(m.MsgFromLocalpart, d).Pack(true)
 	}
+	var rcptTo string
+	if m.RcptToDomain != "" {
+		rcptTo = m.RcptToLocalpart.String() + "@" + m.RcptToDomain
+	}
 	meta := webapi.MessageMeta{
 		Size:                m.Size,
 		DSN:                 m.DSN,
 		Flags:               append(m.Flags.Strings(), m.Keywords...),
 		MailFrom:            m.MailFrom,
 		MailFromValidated:   m.MailFromValidated,
+		RcptTo:              rcptTo,
 		MsgFrom:             msgFrom,
 		MsgFromValidated:    m.MsgFromValidated,
 		DKIMVerifiedDomains: m.DKIMDomains,

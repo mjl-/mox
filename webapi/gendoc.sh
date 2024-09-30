@@ -249,9 +249,10 @@ Get a message in parsed form:
 				"\$notjunk",
 				"\\seen"
 			],
-			"MailFrom": "",
+			"MailFrom": "mox@localhost",
+			"RcptTo": "mox@localhost",
 			"MailFromValidated": false,
-			"MsgFrom": "",
+			"MsgFrom": "mox@localhost",
 			"MsgFromValidated": false,
 			"DKIMVerifiedDomains": [],
 			"RemoteIP": "",
