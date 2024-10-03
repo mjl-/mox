@@ -1136,16 +1136,17 @@ func (c *conn) cmdAuth(p *parser) {
 
 		// Read user name. The I-D says the client should ignore the server challenge, but
 		// also that some clients may require challenge "Username:" instead of "User
-		// Name". We can't sent both...
+		// Name". We can't sent both... Servers most commonly return "Username:" and
+		// "Password:", so we do the same.
 		// I-D says maximum length must be 64 bytes. We allow more, for long user names
 		// (domains).
-		encChal := base64.StdEncoding.EncodeToString([]byte("User Name"))
+		encChal := base64.StdEncoding.EncodeToString([]byte("Username:"))
 		username := string(xreadInitial(encChal))
 		username = norm.NFC.String(username)
 
 		// Again, client should ignore the challenge, we send the same as the example in
 		// the I-D.
-		c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte("Password")))
+		c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte("Password:")))
 
 		// Password is in line in plain text, so hide it.
 		defer c.xtrace(mlog.LevelTraceauth)()
