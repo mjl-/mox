@@ -147,7 +147,7 @@ func testAuthenticateSCRAM(t *testing.T, tls bool, method string, h func() hash.
 
 	tc.transactf("no", "authenticate bogus ")
 	tc.transactf("bad", "authenticate %s not base64...", method)
-	tc.transactf("bad", "authenticate %s %s", method, base64.StdEncoding.EncodeToString([]byte("bad data")))
+	tc.transactf("no", "authenticate %s %s", method, base64.StdEncoding.EncodeToString([]byte("bad data")))
 
 	// NFD username, with PRECIS-cleaned password.
 	auth("ok", nil, "mo\u0301x@mox.example", password1)

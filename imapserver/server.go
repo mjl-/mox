@@ -1708,7 +1708,8 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		c0 := xreadInitial()
 		ss, err := scram.NewServer(h, c0, cs, requireChannelBinding)
 		if err != nil {
-			xsyntaxErrorf("starting scram: %s", err)
+			c.log.Infox("scram protocol error", err, slog.Any("remote", c.remoteIP))
+			xuserErrorf("scram protocol error: %s", err)
 		}
 		c.log.Debug("scram auth", slog.String("authentication", ss.Authentication))
 		acc, _, err := store.OpenEmail(c.log, ss.Authentication)
@@ -1767,6 +1768,13 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 				authResult = "badcreds"
 				c.log.Info("failed authentication attempt", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
+			} else if errors.Is(err, scram.ErrChannelBindingsDontMatch) {
+				authResult = "badchanbind"
+				c.log.Warn("bad channel binding during authentication, potential mitm", slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
+				xusercodeErrorf("AUTHENTICATIONFAILED", "channel bindings do not match, potential mitm")
+			} else if errors.Is(err, scram.ErrInvalidEncoding) {
+				c.log.Infox("bad scram protocol message", err, slog.String("username", ss.Authentication), slog.Any("remote", c.remoteIP))
+				xuserErrorf("bad scram protocol message: %s", err)
 			}
 			xuserErrorf("server final: %w", err)
 		}

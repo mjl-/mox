@@ -1186,11 +1186,9 @@ func (c *conn) cmdAuth(p *parser) {
 		addr := norm.NFC.String(t[0])
 		c.log.Debug("cram-md5 auth", slog.String("address", addr))
 		acc, _, err := store.OpenEmail(c.log, addr)
-		if err != nil {
-			if errors.Is(err, store.ErrUnknownCredentials) {
-				c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
-				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
-			}
+		if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
+			c.log.Info("failed authentication attempt", slog.String("username", addr), slog.Any("remote", c.remoteIP))
+			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
 		}
 		xcheckf(err, "looking up address")
 		defer func() {
@@ -1271,7 +1269,10 @@ func (c *conn) cmdAuth(p *parser) {
 		}
 		c0 := xreadInitial("")
 		ss, err := scram.NewServer(h, c0, cs, channelBindingRequired)
-		xcheckf(err, "starting scram")
+		if err != nil {
+			c.log.Infox("scram protocol error", err, slog.Any("remote", c.remoteIP))
+			xsmtpUserErrorf(smtp.C455BadParams, smtp.SePol7Other0, "scram protocol error: %s", err)
+		}
 		authc := norm.NFC.String(ss.Authentication)
 		c.log.Debug("scram auth", slog.String("authentication", authc))
 		acc, _, err := store.OpenEmail(c.log, authc)
@@ -1332,6 +1333,13 @@ func (c *conn) cmdAuth(p *parser) {
 				authResult = "badcreds"
 				c.log.Info("failed authentication attempt", slog.String("username", authc), slog.Any("remote", c.remoteIP))
 				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad credentials")
+			} else if errors.Is(err, scram.ErrChannelBindingsDontMatch) {
+				authResult = "badchanbind"
+				c.log.Warn("bad channel binding during authentication, potential mitm", slog.String("username", authc), slog.Any("remote", c.remoteIP))
+				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7MsgIntegrity7, "channel bindings do not match, potential mitm")
+			} else if errors.Is(err, scram.ErrInvalidEncoding) {
+				c.log.Infox("bad scram protocol message", err, slog.String("username", authc), slog.Any("remote", c.remoteIP))
+				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7Other0, "bad scram protocol message")
 			}
 			xcheckf(err, "server final")
 		}
