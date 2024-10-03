@@ -886,7 +886,7 @@ const account = async (name: string) => {
 		dom.table(
 			dom.thead(
 				dom.tr(
-					dom.th('Alias address'),
+					dom.th('Alias address', attr.title('Messages sent to this address will be delivered to all members of the alias/list. A member does not receive a message if their address is in the message From header.')),
 					dom.th('Subscription address'),
 					dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')),
 					dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')),
@@ -1829,6 +1829,7 @@ const domainAlias = async (d: string, aliasLocalpart: string) => {
 		dom.br(),
 
 		dom.h2('Members'),
+		dom.p('Members receive messages sent to the alias. If a member address is in the message From header, the member will not receive the message.'),
 		dom.table(
 			dom.thead(
 				dom.tr(

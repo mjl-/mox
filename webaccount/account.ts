@@ -782,7 +782,7 @@ const index = async () => {
 		dom.table(
 			dom.thead(
 				dom.tr(
-					dom.th('Alias address', attr.title('Messages sent to this address will be delivered to all members of the alias/list.')),
+					dom.th('Alias address', attr.title('Messages sent to this address will be delivered to all members of the alias/list. A member does not receive a message if their address is in the message From header.')),
 					dom.th('Subscription address', attr.title('Address subscribed to the alias/list.')),
 					dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')),
 					dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')),
