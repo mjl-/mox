@@ -113,8 +113,11 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 
 			# TLS port for ACME validation, 443 by default. You should only override this if
 			# you cannot listen on port 443 directly. ACME will make requests to port 443, so
-			# you'll have to add an external mechanism to get the connection here, e.g. by
-			# configuring port forwarding. (optional)
+			# you'll have to add an external mechanism to get the tls connection here, e.g. by
+			# configuring firewall-level port forwarding. Validation over the https port uses
+			# tls-alpn-01 with application-layer protocol negotiation, which essentially means
+			# the original tls connection must make it here unmodified, an https reverse proxy
+			# will not work. (optional)
 			Port: 0
 
 			# If set, used for suggested CAA DNS records, for restricting TLS certificate
