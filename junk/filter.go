@@ -343,21 +343,23 @@ func loadWords(ctx context.Context, db *bstore.DB, l []string, dst map[string]wo
 	return nil
 }
 
-// ClassifyWords returns the spam probability for the given words, and number of recognized ham and spam words.
-func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (probability float64, nham, nspam int, rerr error) {
-	if f.closed {
-		return 0, 0, 0, errClosed
-	}
+// WordScore is a word with its score as used in classifications, based on
+// (historic) training.
+type WordScore struct {
+	Word  string
+	Score float64 // 0 is ham, 1 is spam.
+}
 
-	type xword struct {
-		Word string
-		R    float64
+// ClassifyWords returns the spam probability for the given words, and number of recognized ham and spam words.
+func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (probability float64, hams, spams []WordScore, rerr error) {
+	if f.closed {
+		return 0, nil, nil, errClosed
 	}
 
 	var hamHigh float64 = 0
 	var spamLow float64 = 1
-	var topHam []xword
-	var topSpam []xword
+	var topHam []WordScore
+	var topSpam []WordScore
 
 	// Find words that should be in the database.
 	lookupWords := []string{}
@@ -389,7 +391,7 @@ func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (
 	fetched := map[string]word{}
 	if len(lookupWords) > 0 {
 		if err := loadWords(ctx, f.db, lookupWords, fetched); err != nil {
-			return 0, 0, 0, err
+			return 0, nil, nil, err
 		}
 		for w, c := range fetched {
 			delete(expect, w)
@@ -432,7 +434,7 @@ func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (
 			if len(topHam) >= f.TopWords && r > hamHigh {
 				continue
 			}
-			topHam = append(topHam, xword{w, r})
+			topHam = append(topHam, WordScore{w, r})
 			if r > hamHigh {
 				hamHigh = r
 			}
@@ -440,7 +442,7 @@ func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (
 			if len(topSpam) >= f.TopWords && r < spamLow {
 				continue
 			}
-			topSpam = append(topSpam, xword{w, r})
+			topSpam = append(topSpam, WordScore{w, r})
 			if r < spamLow {
 				spamLow = r
 			}
@@ -449,24 +451,24 @@ func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (
 
 	sort.Slice(topHam, func(i, j int) bool {
 		a, b := topHam[i], topHam[j]
-		if a.R == b.R {
+		if a.Score == b.Score {
 			return len(a.Word) > len(b.Word)
 		}
-		return a.R < b.R
+		return a.Score < b.Score
 	})
 	sort.Slice(topSpam, func(i, j int) bool {
 		a, b := topSpam[i], topSpam[j]
-		if a.R == b.R {
+		if a.Score == b.Score {
 			return len(a.Word) > len(b.Word)
 		}
-		return a.R > b.R
+		return a.Score > b.Score
 	})
 
-	nham = f.TopWords
+	nham := f.TopWords
 	if nham > len(topHam) {
 		nham = len(topHam)
 	}
-	nspam = f.TopWords
+	nspam := f.TopWords
 	if nspam > len(topSpam) {
 		nspam = len(topSpam)
 	}
@@ -475,27 +477,27 @@ func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (
 
 	var eta float64
 	for _, x := range topHam {
-		eta += math.Log(1-x.R) - math.Log(x.R)
+		eta += math.Log(1-x.Score) - math.Log(x.Score)
 	}
 	for _, x := range topSpam {
-		eta += math.Log(1-x.R) - math.Log(x.R)
+		eta += math.Log(1-x.Score) - math.Log(x.Score)
 	}
 
 	f.log.Debug("top words", slog.Any("hams", topHam), slog.Any("spams", topSpam))
 
 	prob := 1 / (1 + math.Pow(math.E, eta))
-	return prob, len(topHam), len(topSpam), nil
+	return prob, topHam, topSpam, nil
 }
 
 // ClassifyMessagePath is a convenience wrapper for calling ClassifyMessage on a file.
-func (f *Filter) ClassifyMessagePath(ctx context.Context, path string) (probability float64, words map[string]struct{}, nham, nspam int, rerr error) {
+func (f *Filter) ClassifyMessagePath(ctx context.Context, path string) (probability float64, words map[string]struct{}, hams, spams []WordScore, rerr error) {
 	if f.closed {
-		return 0, nil, 0, 0, errClosed
+		return 0, nil, nil, nil, errClosed
 	}
 
 	mf, err := os.Open(path)
 	if err != nil {
-		return 0, nil, 0, 0, err
+		return 0, nil, nil, nil, err
 	}
 	defer func() {
 		err := mf.Close()
@@ -503,33 +505,33 @@ func (f *Filter) ClassifyMessagePath(ctx context.Context, path string) (probabil
 	}()
 	fi, err := mf.Stat()
 	if err != nil {
-		return 0, nil, 0, 0, err
+		return 0, nil, nil, nil, err
 	}
 	return f.ClassifyMessageReader(ctx, mf, fi.Size())
 }
 
-func (f *Filter) ClassifyMessageReader(ctx context.Context, mf io.ReaderAt, size int64) (probability float64, words map[string]struct{}, nham, nspam int, rerr error) {
+func (f *Filter) ClassifyMessageReader(ctx context.Context, mf io.ReaderAt, size int64) (probability float64, words map[string]struct{}, hams, spams []WordScore, rerr error) {
 	m, err := message.EnsurePart(f.log.Logger, false, mf, size)
 	if err != nil && errors.Is(err, message.ErrBadContentType) {
 		// Invalid content-type header is a sure sign of spam.
 		//f.log.Infox("parsing content", err)
-		return 1, nil, 0, 0, nil
+		return 1, nil, nil, nil, nil
 	}
 	return f.ClassifyMessage(ctx, m)
 }
 
 // ClassifyMessage parses the mail message in r and returns the spam probability
 // (between 0 and 1), along with the tokenized words found in the message, and the
-// number of recognized ham and spam words.
-func (f *Filter) ClassifyMessage(ctx context.Context, m message.Part) (probability float64, words map[string]struct{}, nham, nspam int, rerr error) {
+// ham and spam words and their scores used.
+func (f *Filter) ClassifyMessage(ctx context.Context, m message.Part) (probability float64, words map[string]struct{}, hams, spams []WordScore, rerr error) {
 	var err error
 	words, err = f.ParseMessage(m)
 	if err != nil {
-		return 0, nil, 0, 0, err
+		return 0, nil, nil, nil, err
 	}
 
-	probability, nham, nspam, err = f.ClassifyWords(ctx, words)
-	return probability, words, nham, nspam, err
+	probability, hams, spams, err = f.ClassifyWords(ctx, words)
+	return probability, words, hams, spams, err
 }
 
 // Train adds the words of a single message to the filter.

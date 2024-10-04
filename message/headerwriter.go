@@ -1,6 +1,7 @@
 package message
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 )
@@ -39,12 +40,20 @@ func (w *HeaderWriter) Add(separator string, texts ...string) {
 	}
 }
 
-// AddWrap adds data, folding anywhere in the buffer. E.g. for base64 data.
-func (w *HeaderWriter) AddWrap(buf []byte) {
+// AddWrap adds data. If text is set, wrapping happens at space/tab, otherwise
+// anywhere in the buffer (e.g. for base64 data).
+func (w *HeaderWriter) AddWrap(buf []byte, text bool) {
 	for len(buf) > 0 {
 		line := buf
 		n := 78 - w.lineLen
 		if len(buf) > n {
+			if text {
+				if i := bytes.LastIndexAny(buf[:n], " \t"); i > 0 {
+					n = i
+				} else if i = bytes.IndexAny(buf, " \t"); i > 0 {
+					n = i
+				}
+			}
 			line, buf = buf[:n], buf[n:]
 		} else {
 			buf = nil

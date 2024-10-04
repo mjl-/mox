@@ -2750,7 +2750,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			msgTo = envelope.To
 			msgCc = envelope.CC
 		}
-		d := delivery{c.tls, &m, dataFile, smtpRcptTo, deliverTo, destination, canonicalAddr, acc, msgTo, msgCc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, iprevStatus}
+		d := delivery{c.tls, &m, dataFile, smtpRcptTo, deliverTo, destination, canonicalAddr, acc, msgTo, msgCc, msgFrom, c.dnsBLs, dmarcUse, dmarcResult, dkimResults, iprevStatus, c.smtputf8}
 
 		r := analyze(ctx, log, c.resolver, d)
 		return &r, nil
@@ -2862,10 +2862,25 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		rcptAuthResults.Methods = append([]message.AuthMethod{}, authResults.Methods...)
 		rcptAuthResults.Methods = append(rcptAuthResults.Methods, rcptDMARCMethod)
 
-		// Prepend reason as message header, for easy display in mail clients.
+		// Prepend reason as message header, for easy viewing in mail clients.
 		var xmox string
 		if a0.reason != "" {
-			xmox = "X-Mox-Reason: " + a0.reason + "\r\n"
+			hw := &message.HeaderWriter{}
+			hw.Add(" ", "X-Mox-Reason:")
+			hw.Add(" ", a0.reason)
+			for i, s := range a0.reasonText {
+				if i == 0 {
+					s = "; " + s
+				} else {
+					hw.Newline()
+				}
+				// Just in case any of the strings has a newline, replace it with space to not break the message.
+				s = strings.ReplaceAll(s, "\n", " ")
+				s = strings.ReplaceAll(s, "\r", " ")
+				s += ";"
+				hw.AddWrap([]byte(s), true)
+			}
+			xmox = hw.String()
 		}
 		xmox += a0.headers
 

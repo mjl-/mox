@@ -148,7 +148,7 @@ func TestReputation(t *testing.T) {
 		var method reputationMethod
 		err = db.Read(ctxbg, func(tx *bstore.Tx) error {
 			var err error
-			isjunk, conclusive, method, err = reputation(tx, pkglog, &m)
+			isjunk, conclusive, method, _, err = reputation(tx, pkglog, &m, false)
 			return err
 		})
 		tcheck(t, err, "read tx")

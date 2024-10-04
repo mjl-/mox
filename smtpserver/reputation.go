@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
@@ -97,7 +99,7 @@ const (
 // ../rfc/6376:1915
 // ../rfc/6376:3716
 // ../rfc/7208:2167
-func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rconclusive bool, rmethod reputationMethod, rerr error) {
+func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message, smtputf8 bool) (rjunk *bool, rconclusive bool, rmethod reputationMethod, reasonText string, rerr error) {
 	boolptr := func(v bool) *bool {
 		return &v
 	}
@@ -179,7 +181,7 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 			// todo: we may want to look at dkim/spf in this case.
 			spam := msgs[0].Junk && (len(msgs) == 1 || msgs[1].Junk)
 			conclusive := m.MsgFromValidated
-			return &spam, conclusive, methodMsgfromFull, nil
+			return &spam, conclusive, methodMsgfromFull, "reputation of exact message-from address", nil
 		}
 		if !m.MsgFromValidated {
 			// Look for historic messages that were validated. If present, this is likely spam.
@@ -189,7 +191,7 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 			msgs = xmessageList(q, "msgfromfull-validated")
 			if len(msgs) > 0 {
 				spam := msgs[0].Junk && (len(msgs) == 1 || msgs[1].Junk)
-				return xtrue, spam, methodMsgfromFull, nil
+				return xtrue, spam, methodMsgfromFull, "unvalidated message with validated historic messages with exact message-from address", nil
 			}
 		}
 
@@ -199,21 +201,23 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 		qr.FilterEqual("Domain", m.MsgFromDomain)
 		qr.FilterGreaterEqual("Sent", now.Add(-3*year))
 		if xrecipientExists(qr) {
-			return xfalse, true, methodMsgtoFull, nil
+			return xfalse, true, methodMsgtoFull, "exact message-from address was earlier message recipient", nil
 		}
 
 		// Look for domain match, then for organizational domain match.
 		for _, orgdomain := range []bool{false, true} {
 			qm := store.Message{}
 			var method reputationMethod
-			var descr string
+			var source, descr string
 			if orgdomain {
 				qm.MsgFromOrgDomain = m.MsgFromOrgDomain
 				method = methodMsgfromOrgDomain
+				source = "organizational domain of message-from address"
 				descr = "msgfromorgdomain"
 			} else {
 				qm.MsgFromDomain = m.MsgFromDomain
 				method = methodMsgfromDomain
+				source = "exact domain of message-from address"
 				descr = "msgfromdomain"
 			}
 
@@ -228,7 +232,8 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 					}
 				}
 				if 100*nonjunk/len(msgs) > 80 {
-					return xfalse, true, method, nil
+					reasonText = fmt.Sprintf("positive reputation with %s based on %d messages", source, len(msgs))
+					return xfalse, true, method, reasonText, nil
 				}
 				if nonjunk == 0 {
 					// Only conclusive with at least 3 different localparts.
@@ -236,13 +241,16 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 					for _, m := range msgs {
 						localparts[m.MsgFromLocalpart] = struct{}{}
 						if len(localparts) == 3 {
-							return xtrue, true, method, nil
+							reasonText = fmt.Sprintf("negative reputation of at least 3 addresses with %s based on %d messages", source, len(msgs))
+							return xtrue, true, method, reasonText, nil
 						}
 					}
-					return xtrue, false, method, nil
+					reasonText = fmt.Sprintf("negative reputation with %s based on %d messages", source, len(msgs))
+					return xtrue, false, method, reasonText, nil
 				}
 				// Mixed signals from domain. We don't want to block a new sender.
-				return nil, false, method, nil
+				reasonText = fmt.Sprintf("mixed signals with %s based on %d messages", source, len(msgs))
+				return nil, false, method, reasonText, nil
 			}
 			if !m.MsgFromValidated {
 				// Look for historic messages that were validated. If present, this is likely spam.
@@ -253,7 +261,8 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 				msgs = xmessageList(q, descr+"-validated")
 				if len(msgs) > 0 {
 					spam := msgs[0].Junk && (len(msgs) == 1 || msgs[1].Junk)
-					return xtrue, spam, method, nil
+					reasonText = fmt.Sprintf("unvalidated message with %s while we have validated messages from that source", source)
+					return xtrue, spam, method, reasonText, nil
 				}
 			}
 
@@ -262,13 +271,16 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 			if orgdomain {
 				qr.FilterEqual("OrgDomain", m.MsgFromOrgDomain)
 				method = methodMsgtoOrgDomain
+				source = "organizational domain of message-from address"
 			} else {
 				qr.FilterEqual("Domain", m.MsgFromDomain)
 				method = methodMsgtoDomain
+				source = "exact domain of message-from address"
 			}
 			qr.FilterGreaterEqual("Sent", now.Add(-2*year))
 			if xrecipientExists(qr) {
-				return xfalse, true, method, nil
+				reasonText = fmt.Sprintf("%s was recipient address", source)
+				return xfalse, true, method, reasonText, nil
 			}
 		}
 	}
@@ -277,6 +289,7 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 	// We only use identities that passed validation. Failed identities are ignored. ../rfc/6376:2447
 	// todo future: we could do something with the DKIM identity (i=) field if it is more specific than just the domain (d=).
 	dkimspfsignals := []float64{}
+	dkimspfreasondoms := []string{}
 	dkimspfmsgs := 0
 	for _, dom := range m.DKIMDomains {
 		q := messageQuery(nil, year/2, 50)
@@ -291,12 +304,15 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 			}
 			pspam := float64(nspam) / float64(len(msgs))
 			dkimspfsignals = append(dkimspfsignals, pspam)
+			dkimspfreasondoms = append(dkimspfreasondoms, dom)
 			dkimspfmsgs = len(msgs)
 		}
 	}
 	if m.MailFromValidated || m.EHLOValidated {
+		var dom string
 		var msgs []store.Message
 		if m.MailFromValidated && m.MailFromDomain != "" {
+			dom = m.MailFromDomain
 			q := messageQuery(&store.Message{MailFromLocalpart: m.MailFromLocalpart, MailFromDomain: m.MailFromDomain}, year/2, 50)
 			msgs = xmessageList(q, "mailfrom")
 			if len(msgs) == 0 {
@@ -305,6 +321,7 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 			}
 		}
 		if len(msgs) == 0 && m.EHLOValidated && m.EHLODomain != "" {
+			dom = m.EHLODomain
 			q := messageQuery(&store.Message{EHLODomain: m.EHLODomain}, year/2, 50)
 			msgs = xmessageList(q, "ehlodomain")
 		}
@@ -317,6 +334,7 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 			}
 			pspam := float64(nspam) / float64(len(msgs))
 			dkimspfsignals = append(dkimspfsignals, pspam)
+			dkimspfreasondoms = append(dkimspfreasondoms, dom)
 			if len(msgs) > dkimspfmsgs {
 				dkimspfmsgs = len(msgs)
 			}
@@ -324,20 +342,27 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 	}
 	if len(dkimspfsignals) > 0 {
 		var nham, nspam int
-		for _, p := range dkimspfsignals {
+		var hamdoms, spamdoms []string
+		for i, p := range dkimspfsignals {
+			d, _ := dns.ParseDomain(dkimspfreasondoms[i])
 			if p < .1 {
 				nham++
+				hamdoms = append(hamdoms, d.XName(smtputf8))
 			} else if p > .9 {
 				nspam++
+				spamdoms = append(spamdoms, d.XName(smtputf8))
 			}
 		}
 		if nham > 0 && nspam == 0 {
-			return xfalse, true, methodDKIMSPF, nil
+			reasonText = fmt.Sprintf("positive dkim/spf reputation for domain(s) %s", strings.Join(hamdoms, ","))
+			return xfalse, true, methodDKIMSPF, reasonText, nil
 		}
 		if nspam > 0 && nham == 0 {
-			return xtrue, dkimspfmsgs > 1, methodDKIMSPF, nil
+			reasonText = fmt.Sprintf("negative dkim/spf reputation for domain(s) %s", strings.Join(hamdoms, ","))
+			return xtrue, dkimspfmsgs > 1, methodDKIMSPF, reasonText, nil
 		}
-		return nil, false, methodDKIMSPF, nil
+		reasonText = fmt.Sprintf("mixed dkim/spf reputation, positive for %s, negative for %s", strings.Join(hamdoms, ","), strings.Join(spamdoms, ","))
+		return nil, false, methodDKIMSPF, reasonText, nil
 	}
 
 	// IP-based. A wider mask needs more messages to be conclusive.
@@ -345,23 +370,27 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 	var msgs []store.Message
 	var need int
 	var method reputationMethod
+	var ip string
 	if m.RemoteIPMasked1 != "" {
 		q := messageQuery(&store.Message{RemoteIPMasked1: m.RemoteIPMasked1}, year/4, 50)
 		msgs = xmessageList(q, "ip1")
 		need = 2
 		method = methodIP1
+		ip = m.RemoteIPMasked1
 	}
 	if len(msgs) == 0 && m.RemoteIPMasked2 != "" {
 		q := messageQuery(&store.Message{RemoteIPMasked2: m.RemoteIPMasked2}, year/4, 50)
 		msgs = xmessageList(q, "ip2")
 		need = 5
 		method = methodIP2
+		ip = m.RemoteIPMasked2
 	}
 	if len(msgs) == 0 && m.RemoteIPMasked3 != "" {
 		q := messageQuery(&store.Message{RemoteIPMasked3: m.RemoteIPMasked3}, year/4, 50)
 		msgs = xmessageList(q, "ip3")
 		need = 10
 		method = methodIP3
+		ip = m.RemoteIPMasked3
 	}
 	if len(msgs) > 0 {
 		nspam := 0
@@ -378,8 +407,24 @@ func reputation(tx *bstore.Tx, log mlog.Log, m *store.Message) (rjunk *bool, rco
 			spam = xtrue
 		}
 		conclusive := len(msgs) >= need && (pspam <= 0.1 || pspam >= 0.9)
-		return spam, conclusive, method, nil
+		v6 := strings.Contains(m.RemoteIP, ":")
+		reasonText = fmt.Sprintf("reputation for ip %s%s, spam score %.2f", ip, maskclasses[classmask{v6, method}], pspam)
+		return spam, conclusive, method, reasonText, nil
 	}
 
-	return nil, false, methodNone, nil
+	return nil, false, methodNone, "no address/spf/dkim/ip reputation", nil
+}
+
+type classmask struct {
+	v6     bool
+	method reputationMethod
+}
+
+var maskclasses = map[classmask]string{
+	{false, methodIP1}: "/32",
+	{false, methodIP2}: "/26",
+	{false, methodIP3}: "/21",
+	{true, methodIP1}:  "/64",
+	{true, methodIP2}:  "/48",
+	{true, methodIP3}:  "/32",
 }

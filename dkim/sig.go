@@ -147,7 +147,7 @@ func (s *Sig) Header() (string, error) {
 
 	w.Addf(" ", "b=")
 	if len(s.Signature) > 0 {
-		w.AddWrap([]byte(base64.StdEncoding.EncodeToString(s.Signature)))
+		w.AddWrap([]byte(base64.StdEncoding.EncodeToString(s.Signature)), false)
 	}
 	w.Add("\r\n")
 	return w.String(), nil
