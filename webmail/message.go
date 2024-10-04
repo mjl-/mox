@@ -181,6 +181,8 @@ func formatFirstLine(r io.Reader) (string, error) {
 }
 
 func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem bool) (pm ParsedMessage, rerr error) {
+	pm.ViewMode = store.ModeText // Valid default, in case this makes it to frontend.
+
 	if full || msgitem {
 		if !state.ensurePart(m, true) {
 			return pm, state.err

@@ -204,8 +204,10 @@ func fromAddrViewMode(tx *bstore.Tx, from MessageAddress) (store.ViewMode, error
 	err = tx.Get(&fas)
 	if err == bstore.ErrAbsent {
 		return settingsViewMode()
+	} else if err != nil {
+		return store.ModeText, err
 	}
-	return fas.ViewMode, err
+	return fas.ViewMode, nil
 }
 
 // FromAddressSettingsSave saves per-"From"-address settings.
