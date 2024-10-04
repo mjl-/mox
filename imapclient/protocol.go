@@ -479,21 +479,26 @@ type BodyFields struct {
 	Octets                       int32
 }
 
-// BodyTypeMpart represents the body structure a multipart message, with subparts and the multipart media subtype. Used in a FETCH response.
+// BodyTypeMpart represents the body structure a multipart message, with
+// subparts and the multipart media subtype. Used in a FETCH response.
 type BodyTypeMpart struct {
 	// ../rfc/9051:6411
 	Bodies       []any // BodyTypeBasic, BodyTypeMsg, BodyTypeText
 	MediaSubtype string
+	Ext          *BodyExtensionMpart
 }
 
-// BodyTypeBasic represents basic information about a part, used in a FETCH response.
+// BodyTypeBasic represents basic information about a part, used in a FETCH
+// response.
 type BodyTypeBasic struct {
 	// ../rfc/9051:6407
 	MediaType, MediaSubtype string
 	BodyFields              BodyFields
+	Ext                     *BodyExtension1Part
 }
 
-// BodyTypeMsg represents an email message as a body structure, used in a FETCH response.
+// BodyTypeMsg represents an email message as a body structure, used in a FETCH
+// response.
 type BodyTypeMsg struct {
 	// ../rfc/9051:6415
 	MediaType, MediaSubtype string
@@ -501,14 +506,49 @@ type BodyTypeMsg struct {
 	Envelope                Envelope
 	Bodystructure           any // One of the BodyType*
 	Lines                   int64
+	Ext                     *BodyExtension1Part
 }
 
-// BodyTypeText represents a text part as a body structure, used in a FETCH response.
+// BodyTypeText represents a text part as a body structure, used in a FETCH
+// response.
 type BodyTypeText struct {
 	// ../rfc/9051:6418
 	MediaType, MediaSubtype string
 	BodyFields              BodyFields
 	Lines                   int64
+	Ext                     *BodyExtension1Part
+}
+
+// BodyExtension1Part has the extensible form fields of a BODYSTRUCTURE for
+// multiparts.
+type BodyExtensionMpart struct {
+	// ../rfc/9051:5986 ../rfc/3501:4161 ../rfc/9051:6371 ../rfc/3501:4599
+	Params            [][2]string
+	Disposition       string
+	DispositionParams [][2]string
+	Language          []string
+	Location          string
+	More              []BodyExtension
+}
+
+// BodyExtension1Part has the extensible form fields of a BODYSTRUCTURE for
+// non-multiparts.
+type BodyExtension1Part struct {
+	// ../rfc/9051:6023 ../rfc/3501:4191 ../rfc/9051:6366 ../rfc/3501:4584
+	MD5               string
+	Disposition       string
+	DispositionParams [][2]string
+	Language          []string
+	Location          string
+	More              []BodyExtension
+}
+
+// BodyExtension has the additional extension fields for future expansion of
+// extensions.
+type BodyExtension struct {
+	String *string
+	Number *int64
+	More   []BodyExtension
 }
 
 // "BINARY" fetch response.
