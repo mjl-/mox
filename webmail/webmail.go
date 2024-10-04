@@ -235,6 +235,17 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		}
 		return
 
+	case "/licenses.txt":
+		switch r.Method {
+		case "GET", "HEAD":
+			h := w.Header()
+			h.Set("Content-Type", "text/plain; charset=utf-8")
+			mox.LicensesWrite(w)
+		default:
+			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
+		}
+		return
+
 	case "/msg.js", "/text.js":
 		switch r.Method {
 		default:

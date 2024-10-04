@@ -164,6 +164,15 @@ func handle(apiHandler http.Handler, isForwarded bool, w http.ResponseWriter, r 
 			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
 		}
 		return
+	} else if r.URL.Path == "/licenses.txt" {
+		switch r.Method {
+		case "GET", "HEAD":
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			mox.LicensesWrite(w)
+		default:
+			http.Error(w, "405 - method not allowed - use get", http.StatusMethodNotAllowed)
+		}
+		return
 	}
 
 	isAPI := strings.HasPrefix(r.URL.Path, "/api/")

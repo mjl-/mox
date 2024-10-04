@@ -209,6 +209,7 @@ const footer = dom.div(
 	link('https://www.xmox.nl', 'mox'),
 	' ',
 	moxversion,
+	', ', dom.a(attr.href('licenses.txt'), 'licenses')
 )
 
 const domainName = (d: api.Domain) => {

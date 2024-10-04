@@ -197,6 +197,7 @@ const footer = dom.div(
 	moxversion, ' ',
 	moxgoversion, ' ',
 	moxgoos, '/', moxgoarch,
+	', ', dom.a(attr.href('licenses.txt'), 'licenses')
 )
 
 const age = (date: Date, future: boolean, nowSecs: number) => {

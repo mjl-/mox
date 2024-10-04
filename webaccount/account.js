@@ -1016,7 +1016,7 @@ const crumbs = (...l) => {
 	];
 };
 const errmsg = (err) => '' + (err.message || '(no error message)');
-const footer = dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion);
+const footer = dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion, ', ', dom.a(attr.href('licenses.txt'), 'licenses'));
 const domainName = (d) => {
 	return d.Unicode || d.ASCII;
 };

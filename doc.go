@@ -57,6 +57,7 @@ any parameters. Followed by the help and usage information for each command.
 	mox help [command ...]
 	mox backup dest-dir
 	mox verifydata data-dir
+	mox licenses
 	mox config test
 	mox config dnscheck domain
 	mox config dnsrecords domain
@@ -879,6 +880,12 @@ possibly making them potentially no longer readable by the previous version.
 	    	fix fixable problems, such as moving away message files not referenced by their database
 	  -skip-size-check
 	    	skip the check for message size
+
+# mox licenses
+
+Print licenses of mox source code and dependencies.
+
+	usage: mox licenses
 
 # mox config test
 

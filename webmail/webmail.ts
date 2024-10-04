@@ -1335,7 +1335,7 @@ const cmdHelp = async () => {
 						window.alert('"mailto:" protocol handler unregistered.')
 					}),
 				),
-				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version ', moxversion, ', built with ', moxgoversion, '. Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new'), '.'),
+				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version ', moxversion, ', built with ', moxgoversion, ', see ', dom.a(attr.href('licenses.txt'), 'licenses'), '.', dom.br(), 'Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new')),
 			),
 		),
 	)

@@ -136,6 +136,7 @@ var commands = []struct {
 	{"help", cmdHelp},
 	{"backup", cmdBackup},
 	{"verifydata", cmdVerifydata},
+	{"licenses", cmdLicenses},
 
 	{"config test", cmdConfigTest},
 	{"config dnscheck", cmdConfigDNSCheck},

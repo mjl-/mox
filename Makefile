@@ -86,6 +86,10 @@ fuzz:
 	go test -fuzz FuzzParseRecord -fuzztime 5m ./tlsrpt
 	go test -fuzz FuzzParseMessage -fuzztime 5m ./tlsrpt
 
+govendor:
+	go mod tidy
+	go mod vendor
+	./genlicenses.sh
 
 test-integration:
 	docker image build --pull --no-cache -f Dockerfile -t mox_integration_moxmail .
