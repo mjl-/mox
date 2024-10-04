@@ -698,8 +698,8 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 func isASCII(s string) bool {
 	for _, b := range []byte(s) {
 		if b >= 0x80 {
-			return true
+			return false
 		}
 	}
-	return false
+	return true
 }
