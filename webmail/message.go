@@ -232,7 +232,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 	if full && state.part.BodyOffset > 0 {
 		hdrs, err := state.part.Header()
 		if err != nil {
-			return ParsedMessage{}, fmt.Errorf("parsing headers: %v", err)
+			return ParsedMessage{}, fmt.Errorf("parsing headers: %w", err)
 		}
 		pm.Headers = hdrs
 

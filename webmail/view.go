@@ -1486,16 +1486,19 @@ func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bs
 
 		var pm *ParsedMessage
 		if m.ID == page.DestMessageID || page.DestMessageID == 0 && have == 0 && page.AnchorMessageID == 0 {
-			// For threads, if there was not DestMessageID, we may be getting the newest
+			// For threads, if there was no DestMessageID, we may be getting the newest
 			// message. For an initial view, this isn't necessarily the first the user is
 			// expected to read first, that would be the first unread, which we'll get below
 			// when gathering the thread.
 			found = true
 			xpm, err := parsedMessage(log, m, &state, true, false)
-			if err != nil {
+			if err != nil && errors.Is(err, message.ErrHeader) {
+				log.Debug("not returning parsed message due to invalid headers", slog.Int64("msgid", m.ID), slog.Any("err", err))
+			} else if err != nil {
 				return fmt.Errorf("parsing message %d: %v", m.ID, err)
+			} else {
+				pm = &xpm
 			}
-			pm = &xpm
 		}
 
 		mi, err := messageItem(log, m, &state)
@@ -1613,10 +1616,13 @@ func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m sto
 			if tm.ID == destMessageID || destMessageID == 0 && first && (pm == nil || !firstUnread && !tm.Seen) {
 				firstUnread = !tm.Seen
 				xpm, err := parsedMessage(log, tm, &xstate, true, false)
-				if err != nil {
+				if err != nil && errors.Is(err, message.ErrHeader) {
+					log.Debug("not returning parsed message due to invalid headers", slog.Int64("msgid", m.ID), slog.Any("err", err))
+				} else if err != nil {
 					return fmt.Errorf("parsing thread message %d: %v", tm.ID, err)
+				} else {
+					pm = &xpm
 				}
-				pm = &xpm
 			}
 			return nil
 		}()
@@ -1631,10 +1637,13 @@ func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m sto
 		xstate := msgState{acc: acc}
 		defer xstate.clear()
 		xpm, err := parsedMessage(log, m, &xstate, true, false)
-		if err != nil {
+		if err != nil && errors.Is(err, message.ErrHeader) {
+			log.Debug("not returning parsed message due to invalid headers", slog.Int64("msgid", m.ID), slog.Any("err", err))
+		} else if err != nil {
 			return nil, nil, fmt.Errorf("parsing thread message %d: %v", m.ID, err)
+		} else {
+			pm = &xpm
 		}
-		pm = &xpm
 	}
 
 	return mil, pm, nil
