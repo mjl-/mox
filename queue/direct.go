@@ -303,7 +303,7 @@ func deliverDirect(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		for i, mr := range result.delivered {
 			mqlog := nqlog.With(slog.Int64("msgid", mr.msg.ID), slog.Any("recipient", mr.msg.Recipient()))
 			mqlog.Info("delivered from queue")
-			mr.msg.markResult(0, "", "", true)
+			mr.msg.markResult(mr.resp.Code, mr.resp.Secode, "", true)
 			delMsgs[i] = *mr.msg
 		}
 		if len(delMsgs) > 0 {
@@ -745,6 +745,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 			} else if i > 0 && (resps[i].Code == smtp.C452StorageFull || resps[i].Code == smtp.C552MailboxFull) {
 				ntodo = append(ntodo, mr)
 			} else if resps[i].Code == smtp.C250Completed {
+				mr.resp = resps[i]
 				delivered = append(delivered, mr)
 			} else {
 				failed = append(failed, mr)

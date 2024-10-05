@@ -206,7 +206,7 @@ func (m *Msg) markResult(code int, secode string, errmsg string, success bool) {
 	result.Code = code
 	result.Secode = secode
 	result.Error = errmsg
-	result.Success = false
+	result.Success = success
 }
 
 // LastResult returns the last result entry, or an empty result.

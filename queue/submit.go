@@ -264,7 +264,8 @@ func processDeliveries(qlog mlog.Log, m0 *Msg, msgs []*Msg, remoteAddr string, r
 			failMsgsDB(qmlog, []*Msg{m}, m0.DialedIPs, backoff, remoteMTA, err)
 			failed++
 		} else {
-			m.markResult(0, "", "", true)
+			resp := rcptErrs[i]
+			m.markResult(resp.Code, resp.Secode, "", true)
 			delMsgs = append(delMsgs, *m)
 			qmlog.Info("delivered from queue with transport")
 			delivered++

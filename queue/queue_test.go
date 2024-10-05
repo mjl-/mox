@@ -1027,6 +1027,10 @@ func TestRetiredHooks(t *testing.T) {
 			if expResult.Secode != "" {
 				ecode = fmt.Sprintf("%d.%s", expResult.Code/100, expResult.Secode)
 			}
+			var code int // Only set for errors.
+			if expResult.Code != 250 {
+				code = expResult.Code
+			}
 			expOut := webhook.Outgoing{
 				Event:            webhook.OutgoingEvent(expEvent),
 				Suppressing:      expSuppressing,
@@ -1034,7 +1038,7 @@ func TestRetiredHooks(t *testing.T) {
 				FromID:           mr.FromID,
 				MessageID:        mr.MessageID,
 				Subject:          mr.Subject,
-				SMTPCode:         expResult.Code,
+				SMTPCode:         code,
 				SMTPEnhancedCode: ecode,
 				Extra:            mr.Extra,
 			}
@@ -1130,7 +1134,7 @@ func TestRetiredHooks(t *testing.T) {
 	}
 
 	testAction("mjl", makeLaunchAction(smtpAccept), nil, "", false)
-	testAction("retired", makeLaunchAction(smtpAccept), &MsgResult{}, string(webhook.EventDelivered), false)
+	testAction("retired", makeLaunchAction(smtpAccept), &MsgResult{Code: 250, Success: true}, string(webhook.EventDelivered), false)
 	// 554 is generic, doesn't immediately cause suppression.
 	testAction("mjl", makeLaunchAction(smtpReject(554)), nil, "", false)
 	testAction("retired", makeLaunchAction(smtpReject(554)), &MsgResult{Code: 554, Secode: "1.0", Error: "nonempty"}, string(webhook.EventFailed), false)
