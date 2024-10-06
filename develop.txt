@@ -307,7 +307,7 @@ done
 - Generate apidiff and check if breaking changes can be prevented. Update moxtools.
 - Update features & roadmap in README.md and website.
 - Write release notes, copy from previous.
-- Build and run tests with previous major Go release.
+- Build and run tests with previous major Go release, run "make docker-release" to test building images.
 - Run tests, including with race detector, also with TZ= for UTC-behaviour, and with -count 2.
 - Run integration and upgrade tests.
 - Run fuzzing tests for a while.
@@ -320,7 +320,7 @@ done
 - Move apidiff/next.txt to apidiff/<version>.txt, and create empty next.txt.
 - Add release to the Latest release & News sections of website/index.md.
 - Create git tag (note: "#" is comment, not title/header), push code.
-- Publish new docker image.
+- Build and publish new docker image.
 - Publish signed release notes for updates.xmox.nl and update DNS record.
 - Deploy update to website.
 - Create new release on the github page, so watchers get a notification.
