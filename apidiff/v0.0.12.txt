@@ -1,0 +1,43 @@
+Below are the incompatible changes between v0.0.11 and next, per package.
+
+# dane
+
+# dmarc
+
+# dmarcrpt
+
+# dns
+
+# dnsbl
+
+# iprev
+
+# message
+- (*HeaderWriter).AddWrap: changed from func([]byte) to func([]byte, bool)
+
+# mtasts
+
+# publicsuffix
+
+# ratelimit
+
+# sasl
+
+# scram
+
+# smtp
+
+# smtpclient
+
+# spf
+
+# subjectpass
+
+# tlsrpt
+
+# updates
+
+# webapi
+
+# webhook
+
