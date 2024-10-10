@@ -2391,7 +2391,7 @@ const cmdSettings = async () => {
 	let showAddressSecurity;
 	let showHTML;
 	if (!accountSettings) {
-		window.alert('No account settings fetched yet.');
+		throw new Error('No account settings fetched yet.');
 	}
 	const remove = popup(css('popupSettings', { padding: '1em 1em 2em 1em', minWidth: '30em' }), dom.h1('Settings'), dom.form(async function submit(e) {
 		e.preventDefault();

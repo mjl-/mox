@@ -1117,7 +1117,7 @@ const cmdSettings = async () => {
 	let showHTML: HTMLInputElement
 
 	if (!accountSettings) {
-		window.alert('No account settings fetched yet.')
+		throw new Error('No account settings fetched yet.')
 	}
 
 	const remove = popup(
