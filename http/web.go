@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -605,6 +606,16 @@ func portServes(l config.Listener) map[int]*serve {
 		return s
 	}
 
+	// If TLS with ACME is enabled on this plain HTTP port, and it hasn't been enabled
+	// yet, add http-01 validation mechanism handler to server.
+	ensureACMEHTTP01 := func(srv *serve) {
+		if l.TLS != nil && l.TLS.ACME != "" && !slices.Contains(srv.Kinds, "acme-http-01") {
+			m := mox.Conf.Static.ACME[l.TLS.ACME].Manager
+			srv.Kinds = append(srv.Kinds, "acme-http-01")
+			srv.SystemHandle("acme-http-01", nil, "/.well-known/acme-challenge/", m.Manager.HTTPHandler(nil))
+		}
+	}
+
 	if l.TLS != nil && l.TLS.ACME != "" && (l.SMTP.Enabled && !l.SMTP.NoSTARTTLS || l.Submissions.Enabled || l.IMAPS.Enabled) {
 		port := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
 		ensureServe(true, port, "acme-tls-alpn-01", false)
@@ -620,6 +631,7 @@ func portServes(l config.Listener) map[int]*serve {
 		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handler(path, l.AccountHTTP.Forwarded))))
 		srv.ServiceHandle("account", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "account", path)
+		ensureACMEHTTP01(srv)
 	}
 	if l.AccountHTTPS.Enabled {
 		port := config.Port(l.AccountHTTPS.Port, 443)
@@ -643,6 +655,7 @@ func portServes(l config.Listener) map[int]*serve {
 		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handler(path, l.AdminHTTP.Forwarded))))
 		srv.ServiceHandle("admin", listenerHostMatch, path, handler)
 		redirectToTrailingSlash(srv, listenerHostMatch, "admin", path)
+		ensureACMEHTTP01(srv)
 	}
 	if l.AdminHTTPS.Enabled {
 		port := config.Port(l.AdminHTTPS.Port, 443)
@@ -671,6 +684,7 @@ func portServes(l config.Listener) map[int]*serve {
 		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTP.Forwarded)))
 		srv.ServiceHandle("webapi", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "webapi", path)
+		ensureACMEHTTP01(srv)
 	}
 	if l.WebAPIHTTPS.Enabled {
 		port := config.Port(l.WebAPIHTTPS.Port, 443)
@@ -701,6 +715,7 @@ func portServes(l config.Listener) map[int]*serve {
 		handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTP.Forwarded, accountPath)))
 		srv.ServiceHandle("webmail", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "webmail", path)
+		ensureACMEHTTP01(srv)
 	}
 	if l.WebmailHTTPS.Enabled {
 		port := config.Port(l.WebmailHTTPS.Port, 443)
@@ -740,6 +755,9 @@ func portServes(l config.Listener) map[int]*serve {
 	if l.AutoconfigHTTPS.Enabled {
 		port := config.Port(l.AutoconfigHTTPS.Port, 443)
 		srv := ensureServe(!l.AutoconfigHTTPS.NonTLS, port, "autoconfig-https", false)
+		if l.AutoconfigHTTPS.NonTLS {
+			ensureACMEHTTP01(srv)
+		}
 		autoconfigMatch := func(ipdom dns.IPDomain) bool {
 			dom := ipdom.Domain
 			if dom.IsZero() {
@@ -767,6 +785,9 @@ func portServes(l config.Listener) map[int]*serve {
 	if l.MTASTSHTTPS.Enabled {
 		port := config.Port(l.MTASTSHTTPS.Port, 443)
 		srv := ensureServe(!l.MTASTSHTTPS.NonTLS, port, "mtasts-https", false)
+		if l.MTASTSHTTPS.NonTLS {
+			ensureACMEHTTP01(srv)
+		}
 		mtastsMatch := func(ipdom dns.IPDomain) bool {
 			// todo: may want to check this against the configured domains, could in theory be just a webserver.
 			dom := ipdom.Domain
@@ -791,6 +812,7 @@ func portServes(l config.Listener) map[int]*serve {
 		port := config.Port(l.WebserverHTTP.Port, 80)
 		srv := ensureServe(false, port, "webserver-http", false)
 		srv.Webserver = true
+		ensureACMEHTTP01(srv)
 	}
 	if l.WebserverHTTPS.Enabled {
 		port := config.Port(l.WebserverHTTPS.Port, 443)
@@ -799,15 +821,6 @@ func portServes(l config.Listener) map[int]*serve {
 	}
 
 	if l.TLS != nil && l.TLS.ACME != "" {
-		m := mox.Conf.Static.ACME[l.TLS.ACME].Manager
-
-		// If we are listening on port 80 for plain http, also register acme http-01
-		// validation handler.
-		if srv, ok := portServe[80]; ok && srv.TLSConfig == nil {
-			srv.Kinds = append(srv.Kinds, "acme-http-01")
-			srv.SystemHandle("acme-http-01", nil, "/.well-known/acme-challenge/", m.Manager.HTTPHandler(nil))
-		}
-
 		hosts := map[dns.Domain]struct{}{
 			mox.Conf.Static.HostnameDomain: {},
 		}
@@ -832,6 +845,7 @@ func portServes(l config.Listener) map[int]*serve {
 			}
 		}
 
+		m := mox.Conf.Static.ACME[l.TLS.ACME].Manager
 		ensureManagerHosts[m] = hosts
 	}
 
