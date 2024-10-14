@@ -1857,6 +1857,17 @@ ruleset:
 		for _, t := range rs.HeadersRegexpCompiled {
 			for k, vl := range header {
 				k = strings.ToLower(k)
+				if t[0].MatchString("body") { // message body match
+					ws := PrepareWordSearch([]string{t[1].String()}, []string{})
+					// todo: regexp match
+					ok, err := ws.MatchPart(log, &p, true)
+					if err != nil {
+						log.Errorx("Failed to match body: %v", err)
+					}
+					if ok {
+						continue header
+					}
+				}
 				if !t[0].MatchString(k) {
 					continue
 				}
