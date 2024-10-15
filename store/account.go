@@ -1855,6 +1855,7 @@ ruleset:
 
 	header:
 		for _, t := range rs.HeadersRegexpCompiled {
+			isSubjectMatch := t[0].MatchString("subject")
 			for k, vl := range header {
 				k = strings.ToLower(k)
 				if t[0].MatchString("body") { // message body match
@@ -1872,6 +1873,13 @@ ruleset:
 					continue
 				}
 				for _, v := range vl {
+					if isSubjectMatch {
+						// todo: memorize decoded text
+						v, err = decodeRFC2047(v)
+						if err != nil {
+							log.Errorx("Failed to decode subject: %v", err, slog.String("v", v))
+						}
+					}
 					v = strings.ToLower(strings.TrimSpace(v))
 					if t[1].MatchString(v) {
 						continue header
