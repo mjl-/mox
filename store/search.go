@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"mime/quotedprintable"
 	"regexp"
 	"strings"
 	"unicode"
@@ -204,7 +205,7 @@ func toLower(buf []byte) []byte {
 
 func decodeRFC2047(encoded string) (string, error) {
 	// match e.g. =?(iso-2022-jp)?(B)?(Rnc6...)?=
-	r := regexp.MustCompile(`=\?([^?]+)\?([BQ])\?([^?]+)\?=`)
+	r := regexp.MustCompile(`(?i)=\?([^?]+)\?([BQ])\?([^?]+)\?=`)
 	matches := r.FindAllStringSubmatch(encoded, -1)
 
 	if len(matches) == 0 { // no match. Looks ASCII.
@@ -214,19 +215,25 @@ func decodeRFC2047(encoded string) (string, error) {
 	var decodedStrings []string
 	for _, match := range matches {
 		charset := match[1]
-		encodingName := match[2]
+		encodingName := strings.ToUpper(match[2])
 		encodedText := match[3]
 
 		// Decode Base64 or Quoted-Printable
 		var decodedBytes []byte
 		var err error
-		if encodingName == "B" {
+		switch encodingName {
+		case "B": // Base64
 			decodedBytes, err = base64.StdEncoding.DecodeString(encodedText)
 			if err != nil {
-				return "", fmt.Errorf("Base64 decode error: %w", err)
+				return encoded, fmt.Errorf("Base64 decode error: %w", err)
 			}
-		} else {
-			return "", fmt.Errorf("not supported encoding: %s", encodingName)
+		case "Q": // Quoted-Printable
+			decodedBytes, err = io.ReadAll(quotedprintable.NewReader(strings.NewReader(encodedText)))
+			if err != nil {
+				return "", fmt.Errorf("Quoted-Printable decode error: %w", err)
+			}
+		default:
+			return encoded, fmt.Errorf("not supported encoding: %s", encodingName)
 		}
 
 		// Select charset
@@ -237,14 +244,14 @@ func decodeRFC2047(encoded string) (string, error) {
 		case "utf-8":
 			enc = encUnicode.UTF8
 		default:
-			return "", fmt.Errorf("not supported charset: %s", charset)
+			return encoded, fmt.Errorf("not supported charset: %s", charset)
 		}
 
 		// Decode with charset
 		reader := transform.NewReader(strings.NewReader(string(decodedBytes)), enc.NewDecoder())
 		decodedText, err := io.ReadAll(reader)
 		if err != nil {
-			return "", err
+			return encoded, err
 		}
 
 		decodedStrings = append(decodedStrings, string(decodedText))
