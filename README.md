@@ -288,7 +288,8 @@ MIT license (like mox), and have the rights to do so.
 
 ## Where can I discuss mox?
 
-Join #mox on irc.oftc.net, or #mox:matrix.org, or #mox on the "Gopher slack".
+Join #mox on irc.oftc.net, or #mox:matrix.org (https://matrix.to/#/#mox:matrix.org),
+or #mox on the "Gopher slack".
 
 For bug reports, please file an issue at https://github.com/mjl-/mox/issues/new.
 
