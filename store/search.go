@@ -91,11 +91,26 @@ func (ws WordSearch) matchPart(log mlog.Log, p *message.Part, headerToo bool, se
 	}
 
 	if len(p.Parts) == 0 {
+		var tp io.Reader
 		if p.MediaType != "TEXT" {
-			// todo: for other types we could try to find a library for parsing and search in there too.
-			return false, nil
+			if p.MediaType == "MULTIPART" {
+				// Decode and make io.Reader
+				// todo: avoid to load all content
+				content, err := io.ReadAll(p.RawReader())
+				if err != nil {
+					return false, err
+				}
+				tp, err = decodeMultiPart(string(content), p.GetBound())
+				if err != nil {
+					return false, err
+				}
+			} else {
+				// todo: for other types we could try to find a library for parsing and search in there too.
+				return false, nil
+			}
+		} else {
+			tp = p.ReaderUTF8OrBinary()
 		}
-		tp := p.ReaderUTF8OrBinary()
 		// todo: for html and perhaps other types, we could try to parse as text and filter on the text.
 		miss, err := ws.searchReader(log, tp, seen)
 		if miss || err != nil || ws.isQuickHit(seen) {

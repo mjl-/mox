@@ -2,7 +2,14 @@ package store
 
 import (
 	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"strings"
 	"testing"
+
+	"github.com/mjl-/mox/message"
+	"github.com/mjl-/mox/mlog"
 )
 
 func TestSubjectMatch(t *testing.T) {
@@ -35,4 +42,45 @@ func TestSubjectMatch(t *testing.T) {
 			t.Fatalf("Decode mismatch %s != %s", originalSubject, decodedSubject)
 		}
 	}
+}
+
+func TestMultipartMailDecode(t *testing.T) {
+	log := mlog.New("search", nil)
+
+	// Load raw mail file
+	filePath := "../../data/mail_raw.txt" // multipart mail raw data
+	wordFilePath := "../../data/word.txt"
+
+	msgFile, err := os.Open(filePath)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
+	defer msgFile.Close()
+
+	// load word
+	wordFile, err := os.Open(wordFilePath)
+	if err != nil {
+		t.Fatalf("Failed to open file: %v", err)
+	}
+	defer wordFile.Close()
+	tmp, err := io.ReadAll(wordFile)
+	if err != nil {
+		t.Fatalf("Failed to load search word: %v", err)
+	}
+	searchWord := strings.TrimSpace(string(tmp))
+
+	// Parse mail
+	mr := FileMsgReader([]byte{}, msgFile)
+	p, err := message.Parse(log.Logger, false, mr)
+	if err != nil {
+		t.Fatalf("parsing message for evaluating rulesets, continuing with headers %v, %s", err, slog.String("parse", ""))
+	}
+
+	// Match
+	ws := PrepareWordSearch([]string{searchWord}, []string{})
+	ok, _ := ws.MatchPart(log, &p, true)
+	if !ok {
+		t.Fatalf("Match failed %s", ws.words)
+	}
+	log.Debug("Check match", slog.String("word", string(searchWord)), slog.Bool("ok", ok))
 }
