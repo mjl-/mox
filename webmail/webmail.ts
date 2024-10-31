@@ -1408,6 +1408,7 @@ type ComposeOptions = {
 	isList?: boolean
 	editOffset?: number // For cursor, default at start.
 	draftMessageID?: number // For composing for existing draft message, to be removed when message is sent.
+	archiveReferenceMailboxID?: number // For "send and archive", the mailbox from which to move messages to the archive mailbox.
 }
 
 interface ComposeView {
@@ -1613,6 +1614,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 			RequireTLS: requiretls.value === '' ? null : requiretls.value === 'yes',
 			FutureRelease: scheduleTime.value ? new Date(scheduleTime.value) : null,
 			ArchiveThread: archive,
+			ArchiveReferenceMailboxID: opts.archiveReferenceMailboxID || 0,
 			DraftMessageID: draftMessageID,
 		}
 		await client.MessageSubmit(message)
@@ -2939,6 +2941,11 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			responseMessageID: m.ID,
 			isList: m.IsMailingList,
 			editOffset: editOffset,
+			// For "send and archive", we only move messages from the current open mailbox
+			// (fallback to mailbox of response message for search results) to the archive
+			// mailbox. We don't want to move messages in other mailboxes, like Sent, Trash, or
+			// for cross-posted messages in other mailboxes.
+			archiveReferenceMailboxID: msglistView.activeMailbox()?.ID || m.MailboxID,
 		}
 		compose(opts, listMailboxes)
 	}
@@ -3625,6 +3632,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 // query is opened.
 interface MsglistView {
 	root: HTMLElement
+
 	updateFlags: (mailboxID: number, uid: number, modseq: number, mask: api.Flags, flags: api.Flags, keywords: string[]) => void
 	addMessageItems: (messageItems: (api.MessageItem[] | null)[], isChange: boolean, requestMsgID: number) => void
 	removeUIDs: (mailboxID: number, uids: number[]) => void
@@ -3639,6 +3647,7 @@ interface MsglistView {
 	click: (miv: MsgitemView, ctrl: boolean, shift: boolean) => void
 	key: (k: string, e: KeyboardEvent) => void
 	mailboxes: () => api.Mailbox[]
+	activeMailbox: () => api.Mailbox | null
 	itemHeight: () => number // For calculating how many messageitems to request to load next view.
 	threadExpand: (miv: MsgitemView) => void
 	threadCollapse: (miv: MsgitemView) => void
@@ -3657,7 +3666,7 @@ interface MsglistView {
 	cmdUnmute: () => Promise<void>
 }
 
-const newMsglistView = (msgElem: HTMLElement, listMailboxes: listMailboxes, setLocationHash: setLocationHash, otherMailbox: otherMailbox, possibleLabels: possibleLabels, scrollElemHeight: () => number, refineKeyword: (kw: string) => Promise<void>, viewportEnsureMessages: () => Promise<void>): MsglistView => {
+const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox | null, listMailboxes: listMailboxes, setLocationHash: setLocationHash, otherMailbox: otherMailbox, possibleLabels: possibleLabels, scrollElemHeight: () => number, refineKeyword: (kw: string) => Promise<void>, viewportEnsureMessages: () => Promise<void>): MsglistView => {
 	// msgitemViews holds all visible item views: All thread roots, and kids only if
 	// the thread is expanded, in order of descendants. All descendants of a collapsed
 	// root are in collapsedMsgitemViews, unsorted. Having msgitemViews as a list is
@@ -5000,6 +5009,7 @@ const newMsglistView = (msgElem: HTMLElement, listMailboxes: listMailboxes, setL
 			}
 		},
 		mailboxes: () => listMailboxes(),
+		activeMailbox: () => activeMailbox(),
 		itemHeight: () => msgitemViews.length > 0 ? msgitemViews[0].root.getBoundingClientRect().height : 25,
 		threadExpand: (miv: MsgitemView) => threadExpand(miv, true),
 		threadCollapse: (miv: MsgitemView) => threadCollapse(miv, true),
@@ -6361,7 +6371,8 @@ const init = async () => {
 
 	const otherMailbox = (mailboxID: number): api.Mailbox | null => requestFilter.MailboxID !== mailboxID ? (mailboxlistView.findMailboxByID(mailboxID) || null) : null
 	const listMailboxes = () => mailboxlistView.mailboxes()
-	const msglistView = newMsglistView(msgElem, listMailboxes, setLocationHash, otherMailbox, possibleLabels, () => msglistscrollElem ? msglistscrollElem.getBoundingClientRect().height : 0, refineKeyword, viewportEnsureMessages)
+	const activeMailbox = () => mailboxlistView.activeMailbox()
+	const msglistView = newMsglistView(msgElem, activeMailbox, listMailboxes, setLocationHash, otherMailbox, possibleLabels, () => msglistscrollElem ? msglistscrollElem.getBoundingClientRect().height : 0, refineKeyword, viewportEnsureMessages)
 	const mailboxlistView = newMailboxlistView(msglistView, requestNewView, updatePageTitle, setLocationHash, unloadSearch, otherMailbox)
 
 	let refineUnreadBtn: HTMLButtonElement, refineReadBtn: HTMLButtonElement, refineAttachmentsBtn: HTMLButtonElement, refineLabelBtn: HTMLButtonElement

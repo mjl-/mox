@@ -497,22 +497,23 @@ type Attachment struct {
 // Addresses are formatted as just email address, or with a name like "name
 // <user@host>".
 type SubmitMessage struct {
-	From               string
-	To                 []string
-	Cc                 []string
-	Bcc                []string
-	ReplyTo            string // If non-empty, Reply-To header to add to message.
-	Subject            string
-	TextBody           string
-	Attachments        []File
-	ForwardAttachments ForwardAttachments
-	IsForward          bool
-	ResponseMessageID  int64      // If set, this was a reply or forward, based on IsForward.
-	UserAgent          string     // User-Agent header added if not empty.
-	RequireTLS         *bool      // For "Require TLS" extension during delivery.
-	FutureRelease      *time.Time // If set, time (in the future) when message should be delivered from queue.
-	ArchiveThread      bool       // If set, thread is archived after sending message.
-	DraftMessageID     int64      // If set, draft message that will be removed after sending.
+	From                      string
+	To                        []string
+	Cc                        []string
+	Bcc                       []string
+	ReplyTo                   string // If non-empty, Reply-To header to add to message.
+	Subject                   string
+	TextBody                  string
+	Attachments               []File
+	ForwardAttachments        ForwardAttachments
+	IsForward                 bool
+	ResponseMessageID         int64      // If set, this was a reply or forward, based on IsForward.
+	UserAgent                 string     // User-Agent header added if not empty.
+	RequireTLS                *bool      // For "Require TLS" extension during delivery.
+	FutureRelease             *time.Time // If set, time (in the future) when message should be delivered from queue.
+	ArchiveThread             bool       // If set, thread is archived after sending message.
+	ArchiveReferenceMailboxID int64      // If ArchiveThread is set, thread messages from this mailbox ID are moved to the archive mailbox ID. E.g. of Inbox.
+	DraftMessageID            int64      // If set, draft message that will be removed after sending.
 }
 
 // ForwardAttachments references attachments by a list of message.Part paths.
@@ -1057,7 +1058,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 					var msgIDs []int64
 					q := bstore.QueryTx[store.Message](tx)
-					q.FilterNonzero(store.Message{ThreadID: rm.ThreadID, MailboxID: rm.MailboxID})
+					q.FilterNonzero(store.Message{ThreadID: rm.ThreadID, MailboxID: m.ArchiveReferenceMailboxID})
 					q.FilterEqual("Expunged", false)
 					err = q.IDs(&msgIDs)
 					xcheckf(ctx, err, "listing messages in thread to archive")

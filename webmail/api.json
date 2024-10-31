@@ -1502,6 +1502,13 @@
 					]
 				},
 				{
+					"Name": "ArchiveReferenceMailboxID",
+					"Docs": "If ArchiveThread is set, thread messages from this mailbox ID are moved to the archive mailbox ID. E.g. of Inbox.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
 					"Name": "DraftMessageID",
 					"Docs": "If set, draft message that will be removed after sending.",
 					"Typewords": [
