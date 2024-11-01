@@ -426,29 +426,39 @@ func stringValue(iscid, nested bool, v any) string {
 	}
 	n := rv.NumField()
 	t := rv.Type()
-	b := &strings.Builder{}
-	first := true
-	for i := 0; i < n; i++ {
-		fv := rv.Field(i)
-		if !t.Field(i).IsExported() {
-			continue
+
+	// We first try making a string without recursing into structs/pointers/interfaces,
+	// but will try again with those fields if we otherwise would otherwise log an
+	// empty string.
+	for j := 0; j < 2; j++ {
+		first := true
+		b := &strings.Builder{}
+		for i := 0; i < n; i++ {
+			fv := rv.Field(i)
+			if !t.Field(i).IsExported() {
+				continue
+			}
+			if j == 0 && (fv.Kind() == reflect.Struct || fv.Kind() == reflect.Ptr || fv.Kind() == reflect.Interface) {
+				// Don't recurse.
+				continue
+			}
+			vs := stringValue(false, true, fv.Interface())
+			if vs == "" {
+				continue
+			}
+			if !first {
+				b.WriteByte(' ')
+			}
+			first = false
+			k := strings.ToLower(t.Field(i).Name)
+			b.WriteString(k + "=" + vs)
 		}
-		if fv.Kind() == reflect.Struct || fv.Kind() == reflect.Ptr || fv.Kind() == reflect.Interface {
-			// Don't recurse.
-			continue
+		rs := b.String()
+		if rs != "" {
+			return rs
 		}
-		vs := stringValue(false, true, fv.Interface())
-		if vs == "" {
-			continue
-		}
-		if !first {
-			b.WriteByte(' ')
-		}
-		first = false
-		k := strings.ToLower(t.Field(i).Name)
-		b.WriteString(k + "=" + vs)
 	}
-	return b.String()
+	return ""
 }
 
 func writeAttr(w io.Writer, separator, group string, a slog.Attr) {

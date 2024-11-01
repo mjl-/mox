@@ -344,24 +344,24 @@ type conn struct {
 }
 
 type rcptAccount struct {
-	accountName      string
-	destination      config.Destination
-	canonicalAddress string // Optional catchall part stripped and/or lowercased.
+	AccountName      string
+	Destination      config.Destination
+	CanonicalAddress string // Optional catchall part stripped and/or lowercased.
 }
 
 type rcptAlias struct {
-	alias            config.Alias
-	canonicalAddress string // Optional catchall part stripped and/or lowercased.
+	Alias            config.Alias
+	CanonicalAddress string // Optional catchall part stripped and/or lowercased.
 }
 
 type recipient struct {
-	addr smtp.Path
+	Addr smtp.Path
 
 	// If account and alias are both not set, this is not for a local address. This is
 	// normal for submission, where messages are added to the queue. For incoming
 	// deliveries, this will result in an error.
-	account *rcptAccount // If set, recipient address is for this local account.
-	alias   *rcptAlias   // If set, for a local alias.
+	Account *rcptAccount // If set, recipient address is for this local account.
+	Alias   *rcptAlias   // If set, for a local alias.
 }
 
 func isClosed(err error) bool {
@@ -1732,7 +1732,7 @@ func (c *conn) isSMTPUTF8Required(part *message.Part) bool {
 	}
 	// Check all "RCPT TO".
 	for _, rcpt := range c.recipients {
-		if hasNonASCII(strings.NewReader(string(rcpt.addr.Localpart))) {
+		if hasNonASCII(strings.NewReader(string(rcpt.Addr.Localpart))) {
 			return true
 		}
 	}
@@ -2037,7 +2037,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	err = c.account.DB.Read(ctx, func(tx *bstore.Tx) error {
 		rcpts := make([]smtp.Path, len(c.recipients))
 		for i, r := range c.recipients {
-			rcpts[i] = r.addr
+			rcpts[i] = r.Addr
 		}
 		msglimit, rcptlimit, err := c.account.SendLimitReached(tx, rcpts)
 		xcheckf(err, "checking sender limit")
@@ -2136,7 +2136,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	qml := make([]queue.Msg, len(c.recipients))
 	for i, rcpt := range c.recipients {
 		if Localserve {
-			code, timeout := mox.LocalserveNeedsError(rcpt.addr.Localpart)
+			code, timeout := mox.LocalserveNeedsError(rcpt.Addr.Localpart)
 			if timeout {
 				c.log.Info("timing out submission due to special localpart")
 				mox.Sleep(mox.Context, time.Hour)
@@ -2160,11 +2160,11 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		// messages in a single smtp transaction.
 		var rcptTo string
 		if len(c.recipients) == 1 {
-			rcptTo = rcpt.addr.String()
+			rcptTo = rcpt.Addr.String()
 		}
 		xmsgPrefix := append([]byte(recvHdrFor(rcptTo)), msgPrefix...)
 		msgSize := int64(len(xmsgPrefix)) + msgWriter.Size
-		qm := queue.MakeMsg(fp, rcpt.addr, msgWriter.Has8bit, c.msgsmtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS, now, header.Get("Subject"))
+		qm := queue.MakeMsg(fp, rcpt.Addr, msgWriter.Has8bit, c.msgsmtputf8, msgSize, messageID, xmsgPrefix, c.requireTLS, now, header.Get("Subject"))
 		if !c.futureRelease.IsZero() {
 			qm.NextAttempt = c.futureRelease
 			qm.FutureReleaseRequest = c.futureReleaseRequest
@@ -2190,7 +2190,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	for i, rcpt := range c.recipients {
 		c.log.Info("messages queued for delivery",
 			slog.Any("mailfrom", *c.mailFrom),
-			slog.Any("rcptto", rcpt.addr),
+			slog.Any("rcptto", rcpt.Addr),
 			slog.Bool("smtputf8", c.smtputf8),
 			slog.Bool("msgsmtputf8", c.msgsmtputf8),
 			slog.Int64("msgsize", qml[i].Size))
@@ -2198,7 +2198,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 
 	err = c.account.DB.Write(ctx, func(tx *bstore.Tx) error {
 		for _, rcpt := range c.recipients {
-			outgoing := store.Outgoing{Recipient: rcpt.addr.XString(true)}
+			outgoing := store.Outgoing{Recipient: rcpt.Addr.XString(true)}
 			if err := tx.Insert(&outgoing); err != nil {
 				return fmt.Errorf("adding outgoing message: %v", err)
 			}
@@ -2418,7 +2418,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	// Give immediate response if all recipients are unknown.
 	nunknown := 0
 	for _, r := range c.recipients {
-		if r.account == nil && r.alias == nil {
+		if r.Account == nil && r.Alias == nil {
 			nunknown++
 		}
 	}
@@ -2653,7 +2653,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	}
 	var deliverErrors []deliverError
 	addError := func(rcpt recipient, code int, secode string, userError bool, errmsg string) {
-		e := deliverError{rcpt.addr, code, secode, userError, errmsg}
+		e := deliverError{rcpt.Addr, code, secode, userError, errmsg}
 		c.log.Info("deliver error",
 			slog.Any("rcptto", e.rcptTo),
 			slog.Int("code", code),
@@ -2666,9 +2666,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	// Sort recipients: local accounts, aliases, unknown. For ensuring we don't deliver
 	// to an alias destination that was also explicitly sent to.
 	rcptScore := func(r recipient) int {
-		if r.account != nil {
+		if r.Account != nil {
 			return 0
-		} else if r.alias != nil {
+		} else if r.Alias != nil {
 			return 1
 		}
 		return 2
@@ -2682,9 +2682,9 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	// addressee. Relies on c.recipients being sorted as above.
 	regularRecipient := func(addr smtp.Path) bool {
 		for _, rcpt := range c.recipients {
-			if rcpt.account == nil {
+			if rcpt.Account == nil {
 				break
-			} else if rcpt.addr.Equal(addr) {
+			} else if rcpt.Addr.Equal(addr) {
 				return true
 			}
 		}
@@ -2761,7 +2761,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	// we will consider a message delivered if we delivered it to at least one account
 	// (others may be over quota).
 	processRecipient := func(rcpt recipient) {
-		log := c.log.With(slog.Any("mailfrom", c.mailFrom), slog.Any("rcptto", rcpt.addr))
+		log := c.log.With(slog.Any("mailfrom", c.mailFrom), slog.Any("rcptto", rcpt.Addr))
 
 		// If this is not a valid local user, we send back a DSN. This can only happen when
 		// there are also valid recipients, and only when remote is SPF-verified, so the DSN
@@ -2771,7 +2771,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		// deliveries, and return an error at the end? Though the failure conditions will
 		// probably prevent any other successful deliveries too...
 		// We'll continue delivering to other recipients. ../rfc/5321:3275
-		if rcpt.account == nil && rcpt.alias == nil {
+		if rcpt.Account == nil && rcpt.Alias == nil {
 			metricDelivery.WithLabelValues("unknownuser", "").Inc()
 			addError(rcpt, smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, true, "no such user")
 			return
@@ -2792,17 +2792,17 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		// check. We check all alias destinations, even if we already explicitly delivered
 		// to them: they may be the only destination that would accept the message.
 		var a0 *analysis // Analysis we've used for accept/reject decision.
-		if rcpt.alias != nil {
+		if rcpt.Alias != nil {
 			// Check if msgFrom address is acceptable. This doesn't take validation into
 			// consideration. If the header was forged, the message may be rejected later on.
-			if !aliasAllowedMsgFrom(rcpt.alias.alias, msgFrom) {
+			if !aliasAllowedMsgFrom(rcpt.Alias.Alias, msgFrom) {
 				addError(rcpt, smtp.C550MailboxUnavail, smtp.SePol7ExpnProhibited2, true, "not allowed to send to destination")
 				return
 			}
 
-			la = make([]analysis, 0, len(rcpt.alias.alias.ParsedAddresses))
-			for _, aa := range rcpt.alias.alias.ParsedAddresses {
-				a, err := messageAnalyze(log, rcpt.addr, aa.Address.Path(), aa.AccountName, aa.Destination, rcpt.alias.canonicalAddress)
+			la = make([]analysis, 0, len(rcpt.Alias.Alias.ParsedAddresses))
+			for _, aa := range rcpt.Alias.Alias.ParsedAddresses {
+				a, err := messageAnalyze(log, rcpt.Addr, aa.Address.Path(), aa.AccountName, aa.Destination, rcpt.Alias.CanonicalAddress)
 				if err != nil {
 					addError(rcpt, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
 					return
@@ -2818,7 +2818,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				a0 = &la[0]
 			}
 		} else {
-			a, err := messageAnalyze(log, rcpt.addr, rcpt.addr, rcpt.account.accountName, rcpt.account.destination, rcpt.account.canonicalAddress)
+			a, err := messageAnalyze(log, rcpt.Addr, rcpt.Addr, rcpt.Account.AccountName, rcpt.Account.Destination, rcpt.Account.CanonicalAddress)
 			if err != nil {
 				addError(rcpt, smtp.C451LocalErr, smtp.SeSys3Other0, false, "error processing")
 				return
@@ -2893,7 +2893,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					"Return-Path: <" + c.mailFrom.String() + ">\r\n" + // ../rfc/5321:3300
 					rcptAuthResults.Header() +
 					receivedSPF.Header() +
-					recvHdrFor(rcpt.addr.String()),
+					recvHdrFor(rcpt.Addr.String()),
 			)
 			la[i].d.m.Size += int64(len(la[i].d.m.MsgPrefix))
 		}
@@ -2986,7 +2986,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				Disposition:     disposition,
 				AlignedDKIMPass: dmarcResult.AlignedDKIMPass,
 				AlignedSPFPass:  dmarcResult.AlignedSPFPass,
-				EnvelopeTo:      rcpt.addr.IPDomain.String(),
+				EnvelopeTo:      rcpt.Addr.IPDomain.String(),
 				EnvelopeFrom:    c.mailFrom.IPDomain.String(),
 				HeaderFrom:      msgFrom.Domain.Name(),
 			}
@@ -3034,7 +3034,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		if !a0.accept {
 			for _, a := range la {
 				// Don't add message if address was also explicitly present in a RCPT TO command.
-				if rcpt.alias != nil && regularRecipient(a.d.deliverTo) {
+				if rcpt.Alias != nil && regularRecipient(a.d.deliverTo) {
 					continue
 				}
 
@@ -3084,7 +3084,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		}
 
 		delayFirstTime := true
-		if rcpt.account != nil && a0.dmarcReport != nil {
+		if rcpt.Account != nil && a0.dmarcReport != nil {
 			// todo future: add rate limiting to prevent DoS attacks. ../rfc/7489:2570
 			if err := dmarcdb.AddReport(ctx, a0.dmarcReport, msgFrom.Domain); err != nil {
 				log.Errorx("saving dmarc aggregate report in database", err)
@@ -3094,7 +3094,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				delayFirstTime = false
 			}
 		}
-		if rcpt.account != nil && a0.tlsReport != nil {
+		if rcpt.Account != nil && a0.tlsReport != nil {
 			// todo future: add rate limiting to prevent DoS attacks.
 			if err := tlsrptdb.AddReport(ctx, c.log, msgFrom.Domain, c.mailFrom.String(), a0.d.destination.HostTLSReports, a0.tlsReport); err != nil {
 				log.Errorx("saving TLSRPT report in database", err)
@@ -3115,7 +3115,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		}
 
 		if Localserve {
-			code, timeout := mox.LocalserveNeedsError(rcpt.addr.Localpart)
+			code, timeout := mox.LocalserveNeedsError(rcpt.Addr.Localpart)
 			if timeout {
 				log.Info("timing out due to special localpart")
 				mox.Sleep(mox.Context, time.Hour)
@@ -3147,7 +3147,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		for _, a := range la {
 			// Don't deliver to recipient that was explicitly present in SMTP transaction, or
 			// is sending the message to an alias they are member of.
-			if rcpt.alias != nil && (regularRecipient(a.d.deliverTo) || a.d.deliverTo.Equal(msgFrom.Path())) {
+			if rcpt.Alias != nil && (regularRecipient(a.d.deliverTo) || a.d.deliverTo.Equal(msgFrom.Path())) {
 				continue
 			}
 
