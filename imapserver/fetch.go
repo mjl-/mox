@@ -406,7 +406,7 @@ func (cmd *fetchCmd) xprocessAtt(a fetchAtt) []token {
 
 	case "BODYSTRUCTURE":
 		_, part := cmd.xensureParsed()
-		bs := xbodystructure(part)
+		bs := xbodystructure(part, true)
 		return []token{bare("BODYSTRUCTURE"), bs}
 
 	case "BODY":
@@ -660,7 +660,7 @@ func (cmd *fetchCmd) xbody(a fetchAtt) (string, token) {
 
 	if a.section == nil {
 		// Non-extensible form of BODYSTRUCTURE.
-		return a.field, xbodystructure(part)
+		return a.field, xbodystructure(part, false)
 	}
 
 	cmd.peekOrSeen(a.peek)
@@ -865,20 +865,33 @@ func bodyFldEnc(s string) token {
 
 // xbodystructure returns a "body".
 // calls itself for multipart messages and message/{rfc822,global}.
-func xbodystructure(p *message.Part) token {
+func xbodystructure(p *message.Part, extensible bool) token {
 	if p.MediaType == "MULTIPART" {
 		// Multipart, ../rfc/9051:6355 ../rfc/9051:6411
 		var bodies concat
 		for i := range p.Parts {
-			bodies = append(bodies, xbodystructure(&p.Parts[i]))
+			bodies = append(bodies, xbodystructure(&p.Parts[i], extensible))
 		}
-		return listspace{bodies, string0(p.MediaSubType)}
+		r := listspace{bodies, string0(p.MediaSubType)}
+		if extensible {
+			if len(p.ContentTypeParams) == 0 {
+				r = append(r, nilt)
+			} else {
+				params := make(listspace, 0, 2*len(p.ContentTypeParams))
+				for k, v := range p.ContentTypeParams {
+					params = append(params, string0(k), string0(v))
+				}
+				r = append(r, params)
+			}
+		}
+		return r
 	}
 
 	// ../rfc/9051:6355
+	var r listspace
 	if p.MediaType == "TEXT" {
 		// ../rfc/9051:6404 ../rfc/9051:6418
-		return listspace{
+		r = listspace{
 			dquote("TEXT"), string0(p.MediaSubType), // ../rfc/9051:6739
 			// ../rfc/9051:6376
 			bodyFldParams(p.ContentTypeParams), // ../rfc/9051:6401
@@ -891,7 +904,7 @@ func xbodystructure(p *message.Part) token {
 	} else if p.MediaType == "MESSAGE" && (p.MediaSubType == "RFC822" || p.MediaSubType == "GLOBAL") {
 		// ../rfc/9051:6415
 		// note: we don't have to prepare p.Message for reading, because we aren't going to read from it.
-		return listspace{
+		r = listspace{
 			dquote("MESSAGE"), dquote(p.MediaSubType), // ../rfc/9051:6732
 			// ../rfc/9051:6376
 			bodyFldParams(p.ContentTypeParams), // ../rfc/9051:6401
@@ -900,25 +913,28 @@ func xbodystructure(p *message.Part) token {
 			bodyFldEnc(p.ContentTransferEncoding),
 			number(p.EndOffset - p.BodyOffset),
 			xenvelope(p.Message),
-			xbodystructure(p.Message),
+			xbodystructure(p.Message, extensible),
 			number(p.RawLineCount), // todo: or mp.RawLineCount?
 		}
+	} else {
+		var media token
+		switch p.MediaType {
+		case "APPLICATION", "AUDIO", "IMAGE", "FONT", "MESSAGE", "MODEL", "VIDEO":
+			media = dquote(p.MediaType)
+		default:
+			media = string0(p.MediaType)
+		}
+		// ../rfc/9051:6404 ../rfc/9051:6407
+		r = listspace{
+			media, string0(p.MediaSubType), // ../rfc/9051:6723
+			// ../rfc/9051:6376
+			bodyFldParams(p.ContentTypeParams), // ../rfc/9051:6401
+			nilOrString(p.ContentID),
+			nilOrString(p.ContentDescription),
+			bodyFldEnc(p.ContentTransferEncoding),
+			number(p.EndOffset - p.BodyOffset),
+		}
 	}
-	var media token
-	switch p.MediaType {
-	case "APPLICATION", "AUDIO", "IMAGE", "FONT", "MESSAGE", "MODEL", "VIDEO":
-		media = dquote(p.MediaType)
-	default:
-		media = string0(p.MediaType)
-	}
-	// ../rfc/9051:6404 ../rfc/9051:6407
-	return listspace{
-		media, string0(p.MediaSubType), // ../rfc/9051:6723
-		// ../rfc/9051:6376
-		bodyFldParams(p.ContentTypeParams), // ../rfc/9051:6401
-		nilOrString(p.ContentID),
-		nilOrString(p.ContentDescription),
-		bodyFldEnc(p.ContentTransferEncoding),
-		number(p.EndOffset - p.BodyOffset),
-	}
+	// todo: if "extensible", we could add the value of the "content-md5" header. we don't have it in our parsed data structure, so we don't add it. likely no one would use it, also not any of the other optional fields. ../rfc/9051:6366
+	return r
 }

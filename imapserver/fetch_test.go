@@ -241,6 +241,7 @@ func TestFetch(t *testing.T) {
 						imapclient.BodyTypeBasic{MediaType: "IMAGE", MediaSubtype: "JPEG", BodyFields: imapclient.BodyFields{CTE: "BASE64"}},
 					},
 					MediaSubtype: "PARALLEL",
+					Ext:          &imapclient.BodyExtensionMpart{Params: [][2]string{{"boundary", "unique-boundary-2"}}},
 				},
 				imapclient.BodyTypeText{MediaType: "TEXT", MediaSubtype: "ENRICHED", BodyFields: imapclient.BodyFields{Octets: 145}, Lines: 5},
 				imapclient.BodyTypeMsg{
@@ -260,6 +261,7 @@ func TestFetch(t *testing.T) {
 				},
 			},
 			MediaSubtype: "MIXED",
+			Ext:          &imapclient.BodyExtensionMpart{Params: [][2]string{{"boundary", "unique-boundary-1"}}},
 		},
 	}
 	tc.client.Append("inbox", nil, &received, []byte(nestedMessage))
