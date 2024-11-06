@@ -229,6 +229,7 @@ func (m *Manager) TLSConfig(fallbackHostname dns.Domain, fallbackNoSNI, fallback
 		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 			return m.loggingGetCertificate(hello, fallbackHostname, fallbackNoSNI, fallbackUnknownSNI)
 		},
+		SessionTicketsDisabled: true,
 	}
 }
 
