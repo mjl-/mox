@@ -937,10 +937,10 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 		"; Next records specify POP3 and non-TLS ports are not to be used.",
 		"; These are optional and safe to leave out (e.g. if you have to click a lot in a",
 		"; DNS admin web interface).",
-		fmt.Sprintf(`_imap._tcp.%s.         SRV 0 1 143 .`, d),
-		fmt.Sprintf(`_submission._tcp.%s.   SRV 0 1 587 .`, d),
-		fmt.Sprintf(`_pop3._tcp.%s.         SRV 0 1 110 .`, d),
-		fmt.Sprintf(`_pop3s._tcp.%s.        SRV 0 1 995 .`, d),
+		fmt.Sprintf(`_imap._tcp.%s.         SRV 0 0 0 .`, d),
+		fmt.Sprintf(`_submission._tcp.%s.   SRV 0 0 0 .`, d),
+		fmt.Sprintf(`_pop3._tcp.%s.         SRV 0 0 0 .`, d),
+		fmt.Sprintf(`_pop3s._tcp.%s.        SRV 0 0 0 .`, d),
 	)
 
 	if certIssuerDomainName != "" {
