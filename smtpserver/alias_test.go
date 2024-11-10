@@ -1,6 +1,7 @@
 package smtpserver
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -61,6 +62,12 @@ test email
 func TestAliasSubmitMsgFromDenied(t *testing.T) {
 	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
 	defer ts.close()
+
+	// Trying to open account by alias should result in proper error.
+	_, _, err := store.OpenEmail(pkglog, "public@mox.example")
+	if err == nil || !errors.Is(err, store.ErrUnknownCredentials) {
+		t.Fatalf("opening alias, got err %v, expected store.ErrUnknownCredentials", err)
+	}
 
 	acc, err := store.OpenAccount(pkglog, "☺")
 	tcheck(t, err, "open account")

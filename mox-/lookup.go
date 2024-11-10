@@ -63,7 +63,10 @@ func LookupAddress(localpart smtp.Localpart, domain dns.Domain, allowPostmaster,
 	canonical := smtp.NewAddress(localpart, domain).String()
 
 	accAddr, alias, ok := Conf.AccountDestination(canonical)
-	if ok && alias != nil && allowAlias {
+	if ok && alias != nil {
+		if !allowAlias {
+			return "", nil, "", config.Destination{}, ErrAddressNotFound
+		}
 		return "", alias, canonical, config.Destination{}, nil
 	} else if !ok {
 		if accAddr, alias, ok = Conf.AccountDestination("@" + domain.Name()); !ok || alias != nil {
