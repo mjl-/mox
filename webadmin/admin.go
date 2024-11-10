@@ -1409,7 +1409,11 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		r.SRVConf.SRVs = map[string][]net.SRV{}
 		for _, req := range reqs {
 			name := req.name + "._tcp." + domain.ASCII
-			instr += fmt.Sprintf("\t%s._tcp.%-*s SRV 0 1 %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", req.port, req.host)
+			weight := 1
+			if req.host == "." {
+				weight = 0
+			}
+			instr += fmt.Sprintf("\t%s._tcp.%-*s SRV 0 %d %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", weight, req.port, req.host)
 			r.SRVConf.SRVs[req.name] = unptr(req.srvs)
 			if err != nil {
 				addf(&r.SRVConf.Errors, "Looking up SRV record %q: %s", name, err)
