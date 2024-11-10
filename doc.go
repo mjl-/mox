@@ -1008,7 +1008,7 @@ Print settings and members of alias.
 
 # mox config alias add
 
-Add new alias with one or more addresses.
+Add new alias with one or more addresses and public posting enabled.
 
 	usage: mox config alias add alias@domain rcpt1@domain ...
 

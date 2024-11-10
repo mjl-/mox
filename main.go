@@ -770,13 +770,13 @@ func ctlcmdConfigAliasPrint(ctl *ctl, address string) {
 
 func cmdConfigAliasAdd(c *cmd) {
 	c.params = "alias@domain rcpt1@domain ..."
-	c.help = `Add new alias with one or more addresses.`
+	c.help = `Add new alias with one or more addresses and public posting enabled.`
 	args := c.Parse()
 	if len(args) < 2 {
 		c.Usage()
 	}
 
-	alias := config.Alias{Addresses: args[1:]}
+	alias := config.Alias{PostPublic: true, Addresses: args[1:]}
 
 	mustLoadConfig()
 	ctlcmdConfigAliasAdd(xctl(), args[0], alias)

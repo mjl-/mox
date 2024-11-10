@@ -1347,7 +1347,7 @@ const domain = async (d: string) => {
 				e.stopPropagation()
 				const alias: api.Alias = {
 					Addresses: aliasAddresses.value.split('\n').map(s => s.trim()).filter(s => !!s),
-					PostPublic: false,
+					PostPublic: true,
 					ListMembers: false,
 					AllowMsgFrom: false,
 					// Ignored:
@@ -1814,7 +1814,8 @@ const domainAlias = async (d: string, aliasLocalpart: string) => {
 				style({display: 'flex', flexDirection: 'column', gap: '.5ex'}),
 				dom.label(
 					postPublic=dom.input(attr.type('checkbox'), alias.PostPublic ? attr.checked('') : []),
-					' Public, anyone can post instead of only members',
+					' Public, anyone is allowed to send to the alias, instead of only members of the alias',
+					attr.title('Based on address in message From header, which is assumed to be DMARC-like verified. If this setting is disabled and a non-member sends a message to the alias, the message is rejected.'),
 				),
 				dom.label(
 					listMembers=dom.input(attr.type('checkbox'), alias.ListMembers ? attr.checked('') : []),

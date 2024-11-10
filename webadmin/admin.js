@@ -2358,7 +2358,7 @@ const domain = async (d) => {
 		e.stopPropagation();
 		const alias = {
 			Addresses: aliasAddresses.value.split('\n').map(s => s.trim()).filter(s => !!s),
-			PostPublic: false,
+			PostPublic: true,
 			ListMembers: false,
 			AllowMsgFrom: false,
 			// Ignored:
@@ -2554,7 +2554,7 @@ const domainAlias = async (d, aliasLocalpart) => {
 		e.preventDefault();
 		e.stopPropagation();
 		check(aliasFieldset, client.AliasUpdate(aliasLocalpart, d, postPublic.checked, listMembers.checked, allowMsgFrom.checked));
-	}, aliasFieldset = dom.fieldset(style({ display: 'flex', flexDirection: 'column', gap: '.5ex' }), dom.label(postPublic = dom.input(attr.type('checkbox'), alias.PostPublic ? attr.checked('') : []), ' Public, anyone can post instead of only members'), dom.label(listMembers = dom.input(attr.type('checkbox'), alias.ListMembers ? attr.checked('') : []), ' Members can list other members'), dom.label(allowMsgFrom = dom.input(attr.type('checkbox'), alias.AllowMsgFrom ? attr.checked('') : []), ' Allow messages to use the alias address in the message From header'), dom.div(style({ marginTop: '1ex' }), dom.submitbutton('Save')))), dom.br(), dom.h2('Members'), dom.p('Members receive messages sent to the alias. If a member address is in the message From header, the member will not receive the message.'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th())), dom.tbody((alias.Addresses || []).map((address, index) => {
+	}, aliasFieldset = dom.fieldset(style({ display: 'flex', flexDirection: 'column', gap: '.5ex' }), dom.label(postPublic = dom.input(attr.type('checkbox'), alias.PostPublic ? attr.checked('') : []), ' Public, anyone is allowed to send to the alias, instead of only members of the alias', attr.title('Based on address in message From header, which is assumed to be DMARC-like verified. If this setting is disabled and a non-member sends a message to the alias, the message is rejected.')), dom.label(listMembers = dom.input(attr.type('checkbox'), alias.ListMembers ? attr.checked('') : []), ' Members can list other members'), dom.label(allowMsgFrom = dom.input(attr.type('checkbox'), alias.AllowMsgFrom ? attr.checked('') : []), ' Allow messages to use the alias address in the message From header'), dom.div(style({ marginTop: '1ex' }), dom.submitbutton('Save')))), dom.br(), dom.h2('Members'), dom.p('Members receive messages sent to the alias. If a member address is in the message From header, the member will not receive the message.'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th())), dom.tbody((alias.Addresses || []).map((address, index) => {
 		const pa = (alias.ParsedAddresses || [])[index];
 		return dom.tr(dom.td(prewrap(address)), dom.td(dom.a(pa.AccountName, attr.href('#accounts/' + pa.AccountName))), dom.td(dom.clickbutton('Remove', async function click(e) {
 			await check(e.target, client.AliasAddressesRemove(aliasLocalpart, d, [address]));
