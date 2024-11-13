@@ -245,6 +245,10 @@ func (p *Part) String() string {
 	return fmt.Sprintf("&Part{%s/%s offsets %d/%d/%d/%d lines %d decodedsize %d next %d last %d bound %q parts %v}", p.MediaType, p.MediaSubType, p.BoundaryOffset, p.HeaderOffset, p.BodyOffset, p.EndOffset, p.RawLineCount, p.DecodedSize, p.nextBoundOffset, p.lastBoundOffset, p.bound, p.Parts)
 }
 
+func (p *Part) GetBound() string {
+	return string(p.bound)
+}
+
 // newPart parses a new part, which can be the top-level message.
 // offset is the bound offset for parts, and the start of message for top-level messages. parent indicates if this is a top-level message or sub-part.
 // If an error occurs, p's exported values can still be relevant. EnsurePart uses these values.

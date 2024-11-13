@@ -2,13 +2,22 @@ package store
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"io"
+	"mime/quotedprintable"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
+
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/japanese"
+	encUnicode "golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
 )
 
 // WordSearch holds context for a search, with scratch buffers to prevent
@@ -82,11 +91,26 @@ func (ws WordSearch) matchPart(log mlog.Log, p *message.Part, headerToo bool, se
 	}
 
 	if len(p.Parts) == 0 {
+		var tp io.Reader
 		if p.MediaType != "TEXT" {
-			// todo: for other types we could try to find a library for parsing and search in there too.
-			return false, nil
+			if p.MediaType == "MULTIPART" {
+				// Decode and make io.Reader
+				// todo: avoid to load all content
+				content, err := io.ReadAll(p.RawReader())
+				if err != nil {
+					return false, err
+				}
+				tp, err = decodeMultiPart(string(content), p.GetBound())
+				if err != nil {
+					return false, err
+				}
+			} else {
+				// todo: for other types we could try to find a library for parsing and search in there too.
+				return false, nil
+			}
+		} else {
+			tp = p.ReaderUTF8OrBinary()
 		}
-		tp := p.ReaderUTF8OrBinary()
 		// todo: for html and perhaps other types, we could try to parse as text and filter on the text.
 		miss, err := ws.searchReader(log, tp, seen)
 		if miss || err != nil || ws.isQuickHit(seen) {
@@ -192,4 +216,149 @@ func toLower(buf []byte) []byte {
 		r = utf8.AppendRune(r, nc)
 	}
 	return r
+}
+
+func decodeRFC2047(encoded string) (string, error) {
+	// match e.g. =?(iso-2022-jp)?(B)?(Rnc6...)?=
+	r := regexp.MustCompile(`(?i)=\?([^?]+)\?([BQ])\?([^?]+)\?=`)
+	matches := r.FindAllStringSubmatch(encoded, -1)
+
+	if len(matches) == 0 { // no match. Looks ASCII.
+		return encoded, nil
+	}
+
+	var decodedStrings []string
+	for _, match := range matches {
+		charset := match[1]
+		encodingName := match[2]
+		encodedText := match[3]
+
+		reader, err := decodeTransferEncodeAndCharset(encodingName, charset, encodedText)
+		if err != nil {
+			return encoded, err
+		}
+
+		decodedText, err := io.ReadAll(reader)
+		if err != nil {
+			return encoded, err
+		}
+
+		decodedStrings = append(decodedStrings, string(decodedText))
+	}
+
+	// Concat multiple strings
+	return strings.Join(decodedStrings, ""), nil
+}
+
+func decodeTransferEncodeAndCharset(encodingName string, charset string, encodedText string) (io.Reader, error) {
+	decodedString, err := decodeTransferEncode(encodingName, encodedText)
+	if len(decodedString) == 0 && err != nil {
+		return nil, err
+	}
+
+	// try to decode even if unknown encoding
+	reader, err := decodeCharset(charset, decodedString)
+	if err != nil {
+		return nil, err
+	}
+	return reader, nil
+}
+
+// Decode Base64 or Quoted Printable
+func decodeTransferEncode(encodingName string, encodedText string) (string, error) {
+	// Decode Base64 or Quoted-Printable
+	var decodedBytes []byte
+	var err error
+	switch strings.ToUpper(encodingName) {
+	case "B": // Base64
+		decodedBytes, err = base64.StdEncoding.DecodeString(encodedText)
+		if err != nil {
+			return string(decodedBytes), fmt.Errorf("Base64 decode error: %w", err)
+		}
+	case "Q": // Quoted-Printable
+		decodedBytes, err = io.ReadAll(quotedprintable.NewReader(strings.NewReader(encodedText)))
+		if err != nil {
+			return string(decodedBytes), fmt.Errorf("Quoted-Printable decode error: %w", err)
+		}
+	default:
+		return encodedText, fmt.Errorf("not supported encoding: %s", encodingName)
+	}
+	return string(decodedBytes), nil
+}
+
+func decodeCharset(charset string, decodedString string) (io.Reader, error) {
+	// Select charset
+	var enc encoding.Encoding
+	switch strings.ToLower(charset) {
+	case "iso-2022-jp":
+		enc = japanese.ISO2022JP
+	case "utf-8":
+		enc = encUnicode.UTF8
+	case "us-ascii":
+		return strings.NewReader(decodedString), nil
+	default:
+		return nil, fmt.Errorf("not supported charset: %s", charset)
+	}
+
+	// Decode with charset
+	reader := transform.NewReader(strings.NewReader(decodedString), enc.NewDecoder())
+	return reader, nil
+}
+
+func decodeMultiPart(body string, boundary string) (io.Reader, error) {
+	encPattern := `Content-Transfer-Encoding:\s+(\w+)`
+	charsetPattern := `charset="((?:\w|-)+)"`
+
+	// Regexp for MIME encode type & Charset match
+	encRe, err := regexp.Compile(encPattern)
+	if err != nil {
+		return nil, fmt.Errorf("error compiling regex:%v", err)
+	}
+	charsetRe, err := regexp.Compile(charsetPattern)
+	if err != nil {
+		return nil, fmt.Errorf("error compiling regex:%v", err)
+	}
+
+	// Split by boundary
+	parts := strings.Split(body, boundary)
+	var readers []io.Reader
+
+	// Make decoded io.Readers for each part
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if len(part) == 0 {
+			continue
+		}
+
+		// Extract MIME header and body
+		headerBody := strings.SplitN(part, "\r\n\r\n", 2)
+		if len(headerBody) < 2 {
+			// retry
+			headerBody = strings.SplitN(part, "\n\n", 2)
+			if len(headerBody) < 2 {
+				continue
+			}
+		}
+
+		mimeHeader := headerBody[0]
+		encodedBody := headerBody[1]
+
+		// Find encode types
+		encMatches := encRe.FindStringSubmatch(mimeHeader)
+		charsetMatches := charsetRe.FindStringSubmatch(mimeHeader)
+
+		// Decode
+		if len(encMatches) > 1 && len(charsetMatches) > 1 {
+			reader, err := decodeTransferEncodeAndCharset(encMatches[1][0:1], charsetMatches[1], encodedBody)
+			if err != nil {
+				return nil, err
+			}
+			readers = append(readers, reader)
+
+		} else {
+			return nil, fmt.Errorf("failed to match encoding and charset in:\n%s", mimeHeader)
+		}
+	}
+
+	return io.MultiReader(readers...), nil
 }
