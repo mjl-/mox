@@ -59,8 +59,11 @@ func ForkExecUnprivileged() {
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		sig := <-sigc
-		p.Signal(sig)
+		for {
+			sig := <-sigc
+			err := p.Signal(sig)
+			pkglog.Check(err, "forwarding signal root to unprivileged process")
+		}
 	}()
 
 	st, err := p.Wait()
