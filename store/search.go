@@ -2,13 +2,22 @@ package store
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"io"
+	"mime/quotedprintable"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
+
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/japanese"
+	encUnicode "golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
 )
 
 // WordSearch holds context for a search, with scratch buffers to prevent
@@ -192,4 +201,62 @@ func toLower(buf []byte) []byte {
 		r = utf8.AppendRune(r, nc)
 	}
 	return r
+}
+
+func decodeRFC2047(encoded string) (string, error) {
+	// match e.g. =?(iso-2022-jp)?(B)?(Rnc6...)?=
+	r := regexp.MustCompile(`(?i)=\?([^?]+)\?([BQ])\?([^?]+)\?=`)
+	matches := r.FindAllStringSubmatch(encoded, -1)
+
+	if len(matches) == 0 { // no match. Looks ASCII.
+		return encoded, nil
+	}
+
+	var decodedStrings []string
+	for _, match := range matches {
+		charset := match[1]
+		encodingName := strings.ToUpper(match[2])
+		encodedText := match[3]
+
+		// Decode Base64 or Quoted-Printable
+		var decodedBytes []byte
+		var err error
+		switch encodingName {
+		case "B": // Base64
+			decodedBytes, err = base64.StdEncoding.DecodeString(encodedText)
+			if err != nil {
+				return encoded, fmt.Errorf("Base64 decode error: %w", err)
+			}
+		case "Q": // Quoted-Printable
+			decodedBytes, err = io.ReadAll(quotedprintable.NewReader(strings.NewReader(encodedText)))
+			if err != nil {
+				return "", fmt.Errorf("Quoted-Printable decode error: %w", err)
+			}
+		default:
+			return encoded, fmt.Errorf("not supported encoding: %s", encodingName)
+		}
+
+		// Select charset
+		var enc encoding.Encoding
+		switch strings.ToLower(charset) {
+		case "iso-2022-jp":
+			enc = japanese.ISO2022JP
+		case "utf-8":
+			enc = encUnicode.UTF8
+		default:
+			return encoded, fmt.Errorf("not supported charset: %s", charset)
+		}
+
+		// Decode with charset
+		reader := transform.NewReader(strings.NewReader(string(decodedBytes)), enc.NewDecoder())
+		decodedText, err := io.ReadAll(reader)
+		if err != nil {
+			return encoded, err
+		}
+
+		decodedStrings = append(decodedStrings, string(decodedText))
+	}
+
+	// Concat multiple strings
+	return strings.Join(decodedStrings, ""), nil
 }
