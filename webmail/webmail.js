@@ -2862,6 +2862,23 @@ const compose = (opts, listMailboxes) => {
 		}, function change() {
 			autosizeElem.dataset.value = inputElem.value;
 			fetchRecipientSecurity();
+		}, function paste(e) {
+			const data = e.clipboardData?.getData('text/plain');
+			if (typeof data !== 'string' || data === '') {
+				return;
+			}
+			const split = data.split(',');
+			if (split.length <= 1) {
+				return;
+			}
+			autosizeElem.dataset.value = inputElem.value = split[0];
+			let last;
+			for (const rest of split.splice(1)) {
+				last = newAddrView(rest.trim(), isRecipient, views, btn, cell, row, single);
+			}
+			last.input.focus();
+			e.preventDefault();
+			e.stopPropagation();
 		}), securityBar = dom.span(css('securitybar', {
 			margin: '0 1px',
 			borderBottom: '1.5px solid',
