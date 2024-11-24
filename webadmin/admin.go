@@ -1281,8 +1281,13 @@ Ensure a DNS TXT record like the following exists:
 		defer logPanic(ctx)
 		defer wg.Done()
 
+		// The admin has explicitly disabled mta-sts, keep warning about it.
+		if domConf.MTASTS == nil {
+			addf(&r.MTASTS.Warnings, "MTA-STS is not configured for this domain.")
+		}
+
 		record, txt, err := mtasts.LookupRecord(ctx, log.Logger, resolver, domain)
-		if err != nil {
+		if err != nil && !(domConf.MTASTS == nil && errors.Is(err, mtasts.ErrNoRecord)) {
 			addf(&r.MTASTS.Errors, "Looking up MTA-STS record: %s", err)
 		}
 		r.MTASTS.TXT = txt
@@ -1292,7 +1297,9 @@ Ensure a DNS TXT record like the following exists:
 
 		policy, text, err := mtasts.FetchPolicy(ctx, log.Logger, domain)
 		if err != nil {
-			addf(&r.MTASTS.Errors, "Fetching MTA-STS policy: %s", err)
+			if !(domConf.MTASTS == nil && errors.Is(err, mtasts.ErrNoPolicy)) {
+				addf(&r.MTASTS.Errors, "Fetching MTA-STS policy: %s", err)
+			}
 		} else if policy.Mode == mtasts.ModeNone {
 			addf(&r.MTASTS.Warnings, "MTA-STS policy is present, but does not require TLS.")
 		} else if policy.Mode == mtasts.ModeTesting {

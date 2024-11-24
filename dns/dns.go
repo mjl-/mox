@@ -5,6 +5,7 @@ package dns
 import (
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 
 	"golang.org/x/net/idna"
@@ -148,7 +149,9 @@ func ParseDomainLax(s string) (Domain, error) {
 	return Domain{ASCII: s}, nil
 }
 
-// IsNotFound returns whether an error is an adns.DNSError with IsNotFound set.
+// IsNotFound returns whether an error is an adns.DNSError or net.DNSError with
+// IsNotFound set.
+//
 // IsNotFound means the requested type does not exist for the given domain (a
 // nodata or nxdomain response). It doesn't not necessarily mean no other types for
 // that name exist.
@@ -158,6 +161,7 @@ func ParseDomainLax(s string) (Domain, error) {
 // The adns resolver (just like the Go resolver) returns an IsNotFound error for
 // both cases, there is no need to explicitly check for zero entries.
 func IsNotFound(err error) bool {
-	var dnsErr *adns.DNSError
-	return err != nil && errors.As(err, &dnsErr) && dnsErr.IsNotFound
+	var adnsErr *adns.DNSError
+	var dnsErr *net.DNSError
+	return err != nil && (errors.As(err, &adnsErr) && adnsErr.IsNotFound || errors.As(err, &dnsErr) && dnsErr.IsNotFound)
 }
