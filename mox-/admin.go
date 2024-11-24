@@ -684,6 +684,9 @@ func DomainSPFIPs() (ips []net.IP) {
 		}
 		for _, ipstr := range ipstrs {
 			ip := net.ParseIP(ipstr)
+			if ip.IsUnspecified() {
+				continue
+			}
 			ips = append(ips, ip)
 		}
 	}

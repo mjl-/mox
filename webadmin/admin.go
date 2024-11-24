@@ -953,6 +953,8 @@ EOF
 		defer logPanic(ctx)
 		defer wg.Done()
 
+		ips := mox.DomainSPFIPs()
+
 		// Verify a domain with the configured IPs that do SMTP.
 		verifySPF := func(isHost bool, domain dns.Domain) (string, *SPFRecord, spf.Record) {
 			kind := "domain"
@@ -1000,10 +1002,9 @@ EOF
 				}
 			}
 
-			for _, ip := range mox.DomainSPFIPs() {
+			for _, ip := range ips {
 				checkSPFIP(ip)
 			}
-
 			if !isHost {
 				spfr.Directives = append(spfr.Directives, spf.Directive{Mechanism: "mx"})
 			}
@@ -1021,6 +1022,10 @@ EOF
 		r.SPF.DomainTXT, r.SPF.DomainRecord, dspfr = verifySPF(false, domain)
 		// todo: possibly check all hosts for MX records? assuming they are also sending mail servers.
 		r.SPF.HostTXT, r.SPF.HostRecord, _ = verifySPF(true, mox.Conf.Static.HostnameDomain)
+
+		if len(ips) == 0 {
+			addf(&r.SPF.Warnings, `No explicitly configured IPs found to check SPF policy against. Consider configuring public IPs instead of unspecified addresses (0.0.0.0 and/or ::) in the "public" listener in mox.conf, or NATIPs in case of NAT.`)
+		}
 
 		dtxt, err := dspfr.Record()
 		if err != nil {
