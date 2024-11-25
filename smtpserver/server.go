@@ -1853,6 +1853,9 @@ func (c *conn) cmdData(p *parser) {
 				c.msgsmtputf8 = c.isSMTPUTF8Required(part)
 			}
 		}
+		if err != nil {
+			c.log.Debugx("parsing message for smtputf8 check", err)
+		}
 		if c.smtputf8 != c.msgsmtputf8 {
 			c.log.Debug("smtputf8 flag changed", slog.Bool("smtputf8", c.smtputf8), slog.Bool("msgsmtputf8", c.msgsmtputf8))
 		}
