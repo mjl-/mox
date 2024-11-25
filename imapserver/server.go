@@ -623,6 +623,10 @@ func (c *conn) xhighestModSeq(tx *bstore.Tx, mailboxID int64) store.ModSeq {
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
+func ServeConn(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noRequireSTARTTLS bool) {
+	serve(listenerName, cid, tlsConfig, nc, xtls, noRequireSTARTTLS)
+}
+
 func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noRequireSTARTTLS bool) {
 	var remoteIP net.IP
 	if a, ok := nc.RemoteAddr().(*net.TCPAddr); ok {

@@ -24,6 +24,7 @@ import (
 	_ "net/http/pprof"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/net/http2"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -32,9 +33,11 @@ import (
 	"github.com/mjl-/mox/autotls"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/imapserver"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/ratelimit"
+	"github.com/mjl-/mox/smtpserver"
 	"github.com/mjl-/mox/webaccount"
 	"github.com/mjl-/mox/webadmin"
 	"github.com/mjl-/mox/webapisrv"
@@ -777,6 +780,9 @@ func portServes(l config.Listener) map[int]*serve {
 			dc, ok := mox.Conf.Domain(dom)
 			return ok && !dc.ReportsOnly
 		}
+		// TODO: decide how to explicitly configure ALPN multiplexing in a way
+		// that makes sense, rather than tying it to Autoconfig.
+		srv.TLSConfig.NextProtos = []string{"h2", "imap", "smtp"}
 		srv.SystemHandle("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", mox.SafeHeaders(http.HandlerFunc(autoconfHandle)))
 		srv.SystemHandle("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", mox.SafeHeaders(http.HandlerFunc(autodiscoverHandle)))
 		srv.SystemHandle("mobileconfig", autoconfigMatch, "/profile.mobileconfig", mox.SafeHeaders(http.HandlerFunc(mobileconfigHandle)))
@@ -921,12 +927,39 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       65 * time.Second, // Chrome closes connections after 60 seconds, firefox after 115 seconds.
 		ErrorLog:          golog.New(mlog.LogWriter(pkglog.With(slog.String("pkg", "net/http")), slog.LevelInfo, protocol+" error"), "", 0),
+		TLSNextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){
+			"imap": handleIMAP,
+			"smtp": handleSMTP,
+		},
+	}
+	// By default, the Go 1.6 and above http.Server includes support for HTTP2.
+	// However, HTTP2 is negotiated via ALPN. Because we are configuring
+	// TLSNextProto above, we have to explicitly enable HTTP2 by importing http2
+	// and calling ConfigureServer.
+	err = http2.ConfigureServer(server, nil)
+	if err != nil {
+		pkglog.Fatalx("https: unable to configure http2", err)
 	}
 	serve := func() {
 		err := server.Serve(ln)
 		pkglog.Fatalx(protocol+": serve", err)
 	}
 	servers = append(servers, serve)
+}
+
+func handleIMAP(server *http.Server, conn *tls.Conn, _ http.Handler) {
+	cid := mox.Cid()
+
+	imapserver.ServeConn("imaps-alpn", cid, server.TLSConfig, conn, true, false)
+}
+
+func handleSMTP(server *http.Server, conn *tls.Conn, _ http.Handler) {
+	cid := mox.Cid()
+	hostname := mox.Conf.Static.HostnameDomain
+	var maxMsgSize int64 = config.DefaultMaxMsgSize
+	resolver := dns.StrictResolver{Log: pkglog.Logger}
+
+	smtpserver.ServeConn("submissions-alpn", cid, hostname, server.TLSConfig, conn, resolver, true, true, maxMsgSize, true, true, true, nil, 0)
 }
 
 // Serve starts serving on the initialized listeners.
