@@ -3,7 +3,6 @@
 // From HTML.
 declare let page: HTMLElement
 declare let moxversion: string
-declare let moxgoversion: string
 declare let moxgoos: string
 declare let moxgoarch: string
 

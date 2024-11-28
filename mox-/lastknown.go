@@ -19,7 +19,7 @@ func StoreLastKnown(v updates.Version) error {
 // LastKnown returns the last known version that has been mentioned in an update
 // email, or the current application.
 func LastKnown() (current, lastknown updates.Version, mtime time.Time, rerr error) {
-	curv, curerr := updates.ParseVersion(moxvar.Version)
+	curv, curerr := updates.ParseVersion(moxvar.VersionBare)
 
 	p := DataDirPath("lastknownversion")
 	fi, _ := os.Stat(p)
@@ -44,7 +44,7 @@ func LastKnown() (current, lastknown updates.Version, mtime time.Time, rerr erro
 	} else if lasterr == nil {
 		return curv, lastknown, mtime, nil
 	}
-	if moxvar.Version == "(devel)" {
+	if strings.HasPrefix(moxvar.Version, "(devel)") {
 		return curv, updates.Version{}, mtime, fmt.Errorf("development version")
 	}
 	return curv, updates.Version{}, mtime, fmt.Errorf("parsing version: %w", err)

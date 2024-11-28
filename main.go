@@ -2845,7 +2845,7 @@ func cmdVersion(c *cmd) {
 		c.Usage()
 	}
 	fmt.Println(moxvar.Version)
-	fmt.Printf("%s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	fmt.Printf("%s/%s\n", runtime.GOOS, runtime.GOARCH)
 }
 
 func cmdWebapi(c *cmd) {

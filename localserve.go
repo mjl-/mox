@@ -164,7 +164,7 @@ during those commands instead of during "data".
 
 	loadLoglevel(log, fallbackLevel)
 
-	golog.Printf("mox, version %s, %s %s/%s", moxvar.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	golog.Printf("mox, version %s %s/%s", moxvar.Version, runtime.GOOS, runtime.GOARCH)
 	golog.Print("")
 	golog.Printf("the default user is mox@localhost, with password moxmoxmox")
 	golog.Printf("the default admin password is moxadmin")

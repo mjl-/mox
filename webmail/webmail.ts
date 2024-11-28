@@ -131,7 +131,6 @@ ensureCSS('.autosize::after', {content: 'attr(data-value)', marginRight: '1em', 
 // From HTML.
 declare let page: HTMLElement
 declare let moxversion: string
-declare let moxgoversion: string
 declare let moxgoos: string
 declare let moxgoarch: string
 
@@ -1335,7 +1334,7 @@ const cmdHelp = async () => {
 						window.alert('"mailto:" protocol handler unregistered.')
 					}),
 				),
-				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version ', moxversion, ', built with ', moxgoversion, ', see ', dom.a(attr.href('licenses.txt'), 'licenses'), '.', dom.br(), 'Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new')),
+				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version ', moxversion, ', see ', dom.a(attr.href('licenses.txt'), 'licenses'), '.', dom.br(), 'Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new')),
 			),
 		),
 	)
