@@ -1225,7 +1225,7 @@ const cmdHelp = async () => {
 						['q', 'move to junk folder'],
 						['Q', 'mark not junk'],
 						['a', 'move to archive folder'],
-						['M', 'mark unread'],
+						['M', 'mark unread and clear (non)junk flags'],
 						['m', 'mark read'],
 						['u', 'to next unread message'],
 						['p', 'to root of thread or previous thread'],
@@ -3612,7 +3612,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk) {
 			window.setTimeout(async () => {
 				const mailboxIsReject = () => !!listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID && mb.Name === rejectsMailbox)
-				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxIsReject()) {
+				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxIsReject()) {
 					await withStatus('Marking current message as not junk', client.FlagsAdd([miv.messageitem.Message.ID], ['$notjunk']))
 				}
 			}, 5*1000)
@@ -3762,7 +3762,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 	}
 	const cmdMarkNotJunk = async () => { await withStatus('Marking as not junk', client.FlagsAdd(mlv.selected().map(miv => miv.messageitem.Message.ID), ['$notjunk'])) }
 	const cmdMarkRead = async () => { await withStatus('Marking as read', client.FlagsAdd(mlv.selected().map(miv => miv.messageitem.Message.ID), ['\\seen'])) }
-	const cmdMarkUnread = async () => { await withStatus('Marking as not read', client.FlagsClear(mlv.selected().map(miv => miv.messageitem.Message.ID), ['\\seen'])) }
+	const cmdMarkUnread = async () => { await withStatus('Marking as not read', client.FlagsClear(mlv.selected().map(miv => miv.messageitem.Message.ID), ['\\seen', '$junk', '$notjunk'])) }
 	const cmdMute = async () => {
 		const l = mlv.selected()
 		await withStatus('Muting thread', client.ThreadMute(l.map(miv => miv.messageitem.Message.ID), true))
