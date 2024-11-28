@@ -1953,9 +1953,13 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		initHeight ? style({height: initHeight+'px'}) : [],
 		dom.div(
 			css('composeResizeGrab', {position: 'absolute', marginTop: '-1em', marginLeft: '-1em', width: '1em', height: '1em', cursor: 'nw-resize'}),
-			function mousedown(e: MouseEvent) {
+			async function mousedown(e: MouseEvent) {
+				// Disable pointer events on the message view. If it has an iframe with a message,
+				// mouse events while dragging would be consumed by the iframe, breaking our
+				// resize.
+				page.style.pointerEvents = 'none'
 				resizeLast = null
-				startDrag(e, (e: MouseEvent) => {
+				await startDrag(e, (e: MouseEvent) => {
 					if (resizeLast) {
 						const bounds = composeElem.getBoundingClientRect()
 						const width = Math.round(bounds.width + resizeLast.x - e.clientX)
@@ -1972,6 +1976,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 					}
 					resizeLast = {x: e.clientX, y: e.clientY}
 				})
+				page.style.pointerEvents = ''
 			},
 		),
 		dom.form(

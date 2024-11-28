@@ -3005,9 +3005,13 @@ const compose = (opts, listMailboxes) => {
 		borderRadius: '.25em',
 		display: 'flex',
 		flexDirection: 'column',
-	}), initWidth ? style({ width: initWidth + 'px' }) : [], initHeight ? style({ height: initHeight + 'px' }) : [], dom.div(css('composeResizeGrab', { position: 'absolute', marginTop: '-1em', marginLeft: '-1em', width: '1em', height: '1em', cursor: 'nw-resize' }), function mousedown(e) {
+	}), initWidth ? style({ width: initWidth + 'px' }) : [], initHeight ? style({ height: initHeight + 'px' }) : [], dom.div(css('composeResizeGrab', { position: 'absolute', marginTop: '-1em', marginLeft: '-1em', width: '1em', height: '1em', cursor: 'nw-resize' }), async function mousedown(e) {
+		// Disable pointer events on the message view. If it has an iframe with a message,
+		// mouse events while dragging would be consumed by the iframe, breaking our
+		// resize.
+		page.style.pointerEvents = 'none';
 		resizeLast = null;
-		startDrag(e, (e) => {
+		await startDrag(e, (e) => {
 			if (resizeLast) {
 				const bounds = composeElem.getBoundingClientRect();
 				const width = Math.round(bounds.width + resizeLast.x - e.clientX);
@@ -3024,6 +3028,7 @@ const compose = (opts, listMailboxes) => {
 			}
 			resizeLast = { x: e.clientX, y: e.clientY };
 		});
+		page.style.pointerEvents = '';
 	}), dom.form(css('composeForm', {
 		flexGrow: '1',
 		display: 'flex',
