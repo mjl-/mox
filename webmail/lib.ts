@@ -420,8 +420,8 @@ const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, more
 						mi.Message.ReceivedTLSVersion === 1 ? dom.span(msgAttrStyle, css('msgAttrNoTLS', {borderBottom: '1.5px solid', borderBottomColor: styles.underlineRed}), 'Without TLS', attr.title('Message received (last hop) without TLS.')) : [],
 						mi.Message.ReceivedTLSVersion > 1 && !mi.Message.ReceivedRequireTLS ? dom.span(msgAttrStyle, css('msgAttrTLS', {borderBottom: '1.5px solid', borderBottomColor: styles.underlineGreen}), 'With TLS', attr.title('Message received (last hop) with TLS.')) : [],
 						mi.Message.ReceivedRequireTLS ? dom.span(css('msgAttrRequireTLS', {padding: '.1em .3em', fontSize: '.9em', backgroundColor: styles.successBackground, border: '1px solid', borderColor: styles.borderColor, borderRadius: '3px'}), 'With RequireTLS', attr.title('Transported with RequireTLS, ensuring TLS along the entire delivery path from sender to recipient, with TLS certificate verification through MTA-STS and/or DANE.')) : [],
-						mi.IsSigned ? dom.span(msgAttrStyle, css('msgAttrSigned', {backgroundColor: styles.emphasisBackground, color: styles.color, borderRadius: '.15em'}), 'Message has a signature') : [],
-						mi.IsEncrypted ? dom.span(msgAttrStyle, css('msgAttrEncrypted', {backgroundColor: styles.emphasisBackground, color: styles.color, borderRadius: '.15em'}), 'Message is encrypted') : [],
+						mi.IsSigned ? dom.span(msgAttrStyle, css('msgAttrSigned', {backgroundColor: styles.colorMild, color: styles.backgroundColorMild, borderRadius: '.15em'}), 'Message has a signature') : [],
+						mi.IsEncrypted ? dom.span(msgAttrStyle, css('msgAttrEncrypted', {backgroundColor: styles.colorMild, color: styles.backgroundColorMild, borderRadius: '.15em'}), 'Message is encrypted') : [],
 						refineKeyword ? (mi.Message.Keywords || []).map(kw =>
 							dom.clickbutton(styleClasses.keyword, dom._class('keywordButton'), kw, async function click() {
 								await refineKeyword(kw)
