@@ -1464,7 +1464,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	let draftSavePromise = Promise.resolve(0)
 	let draftLastText = opts.body
 
-	const draftCancelSave = () => {
+	const draftCancelSaveTimer = () => {
 		if (draftSaveTimer) {
 			window.clearTimeout(draftSaveTimer)
 			draftSaveTimer = 0
@@ -1483,7 +1483,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	}
 
 	const draftSave = async () => {
-		draftCancelSave()
+		draftCancelSaveTimer()
 		let replyTo = ''
 		if (replytoViews && replytoViews.length === 1 && replytoViews[0].input.value) {
 			replyTo = replytoViews[0].input.value
@@ -1504,7 +1504,11 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 			throw new Error('no designated drafts mailbox')
 		}
 		draftSavePromise = client.MessageCompose(cm, mbdrafts.ID)
-		draftMessageID = await draftSavePromise
+		try {
+			draftMessageID = await draftSavePromise
+		} finally {
+			draftSavePromise = Promise.resolve(0)
+		}
 		draftLastText = cm.TextBody
 	}
 
@@ -1518,7 +1522,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	// triggered. But we still have the beforeunload handler that checks for
 	// unsavedChanges to protect the user in such cases.
 	const cmdClose = async () => {
-		draftCancelSave()
+		draftCancelSaveTimer()
 		await draftSavePromise
 		if (unsavedChanges()) {
 			const action = await new Promise<string>((resolve) => {
@@ -1560,13 +1564,13 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	}
 
 	const cmdSave = async () => {
-		draftCancelSave()
+		draftCancelSaveTimer()
 		await draftSavePromise
 		await withStatus('Saving draft', draftSave())
 	}
 
 	const submit = async (archive: boolean) => {
-		draftCancelSave()
+		draftCancelSaveTimer()
 		await draftSavePromise
 
 		const files = await new Promise<api.File[]>((resolve, reject) => {

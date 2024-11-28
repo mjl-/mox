@@ -2581,7 +2581,7 @@ const compose = (opts, listMailboxes) => {
 	let draftSaveTimer = 0;
 	let draftSavePromise = Promise.resolve(0);
 	let draftLastText = opts.body;
-	const draftCancelSave = () => {
+	const draftCancelSaveTimer = () => {
 		if (draftSaveTimer) {
 			window.clearTimeout(draftSaveTimer);
 			draftSaveTimer = 0;
@@ -2598,7 +2598,7 @@ const compose = (opts, listMailboxes) => {
 		}, 60 * 1000);
 	};
 	const draftSave = async () => {
-		draftCancelSave();
+		draftCancelSaveTimer();
 		let replyTo = '';
 		if (replytoViews && replytoViews.length === 1 && replytoViews[0].input.value) {
 			replyTo = replytoViews[0].input.value;
@@ -2619,7 +2619,12 @@ const compose = (opts, listMailboxes) => {
 			throw new Error('no designated drafts mailbox');
 		}
 		draftSavePromise = client.MessageCompose(cm, mbdrafts.ID);
-		draftMessageID = await draftSavePromise;
+		try {
+			draftMessageID = await draftSavePromise;
+		}
+		finally {
+			draftSavePromise = Promise.resolve(0);
+		}
 		draftLastText = cm.TextBody;
 	};
 	// todo future: on visibilitychange with visibilityState "hidden", use navigator.sendBeacon to save latest modified draft message?
@@ -2630,7 +2635,7 @@ const compose = (opts, listMailboxes) => {
 	// triggered. But we still have the beforeunload handler that checks for
 	// unsavedChanges to protect the user in such cases.
 	const cmdClose = async () => {
-		draftCancelSave();
+		draftCancelSaveTimer();
 		await draftSavePromise;
 		if (unsavedChanges()) {
 			const action = await new Promise((resolve) => {
@@ -2664,12 +2669,12 @@ const compose = (opts, listMailboxes) => {
 		composeView = null;
 	};
 	const cmdSave = async () => {
-		draftCancelSave();
+		draftCancelSaveTimer();
 		await draftSavePromise;
 		await withStatus('Saving draft', draftSave());
 	};
 	const submit = async (archive) => {
-		draftCancelSave();
+		draftCancelSaveTimer();
 		await draftSavePromise;
 		const files = await new Promise((resolve, reject) => {
 			const l = [];
