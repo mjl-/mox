@@ -252,7 +252,7 @@ var jitterRand = mox.NewPseudoRand()
 // Jitter so we don't cause load at exactly whole hours, other processes may
 // already be doing that.
 var jitteredTimeUntil = func(t time.Time) time.Duration {
-	return time.Until(t.Add(time.Duration(30+jitterRand.Intn(60)) * time.Second))
+	return time.Until(t.Add(time.Duration(30+jitterRand.IntN(60)) * time.Second))
 }
 
 // Start launches a goroutine that wakes up at each whole hour (plus jitter) and

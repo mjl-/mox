@@ -1119,7 +1119,7 @@ func hookDeliver(log mlog.Log, h Hook) {
 	} else {
 		backoff = hookIntervals[len(hookIntervals)-1] * time.Duration(2)
 	}
-	backoff += time.Duration(jitter.Intn(200)-100) * backoff / 10000
+	backoff += time.Duration(jitter.IntN(200)-100) * backoff / 10000
 	h.Attempts++
 	now := time.Now()
 	h.NextAttempt = now.Add(backoff)

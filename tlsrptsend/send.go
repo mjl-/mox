@@ -73,7 +73,7 @@ var jitterRand = mox.NewPseudoRand()
 // Jitter so we don't cause load at exactly midnight, other processes may
 // already be doing that.
 var jitteredTimeUntil = func(t time.Time) time.Duration {
-	return time.Until(t.Add(time.Duration(240+jitterRand.Intn(120)) * time.Second))
+	return time.Until(t.Add(time.Duration(240+jitterRand.IntN(120)) * time.Second))
 }
 
 // Start launches a goroutine that wakes up just after 00:00 UTC to send TLSRPT
