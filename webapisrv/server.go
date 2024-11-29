@@ -199,7 +199,7 @@ var docsIndex []byte
 
 func init() {
 	var methods []string
-	mt := reflect.TypeOf((*webapi.Methods)(nil)).Elem()
+	mt := reflect.TypeFor[webapi.Methods]()
 	n := mt.NumMethod()
 	for i := 0; i < n; i++ {
 		methods = append(methods, mt.Method(i).Name)

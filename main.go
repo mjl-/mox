@@ -2856,7 +2856,7 @@ func cmdWebapi(c *cmd) {
 		c.Usage()
 	}
 
-	t := reflect.TypeOf((*webapi.Methods)(nil)).Elem()
+	t := reflect.TypeFor[webapi.Methods]()
 	methods := map[string]reflect.Type{}
 	var ml []string
 	for i := 0; i < t.NumMethod(); i++ {
