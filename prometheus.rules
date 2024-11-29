@@ -62,9 +62,14 @@ groups:
   # the alerts below can be used to keep a closer eye or when starting to use mox,
   # but can be noisy, or you may not be able to prevent them.
 
+  - alert: mox-incoming-delivery-starttls-errors
+    expr: sum by (instance) (increase(mox_smtpserver_delivery_starttls_errors_total[1h])) / sum by (instance) (increase(mox_smtpserver_delivery_starttls_total[1h])) > 0.1
+    annotations:
+      summary: starttls handshake errors for >10% of incoming smtp delivery connections
+
   # change period to match your expected incoming message rate.
   - alert: mox-no-deliveries
-    expr: sum(rate(mox_smtpserver_delivery_total{result="delivered"}[6h])) == 0
+    expr: sum by (instance) (rate(mox_smtpserver_delivery_total{result="delivered"}[6h])) == 0
     annotations:
       summary: no mail delivered for 6 hours
 

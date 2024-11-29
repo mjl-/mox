@@ -8,6 +8,7 @@ import (
 	"fmt"
 )
 
-func formatAlert(alert uint8) string {
+// FormatAlert formats a TLS alert in the form "alert-<num>".
+func FormatAlert(alert uint8) string {
 	return fmt.Sprintf("alert-%d", alert)
 }

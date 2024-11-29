@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/textproto"
 	"os"
+	"reflect"
 	"runtime/debug"
 	"slices"
 	"sort"
@@ -59,6 +60,7 @@ import (
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/spf"
 	"github.com/mjl-/mox/store"
+	"github.com/mjl-/mox/tlsrpt"
 	"github.com/mjl-/mox/tlsrptdb"
 )
 
@@ -169,6 +171,21 @@ var (
 		},
 		[]string{
 			"error",
+		},
+	)
+	metricDeliveryStarttls = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "mox_smtpserver_delivery_starttls_total",
+			Help: "Total number of STARTTLS handshakes for incoming deliveries.",
+		},
+	)
+	metricDeliveryStarttlsErrors = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "mox_smtpserver_delivery_starttls_errors_total",
+			Help: "Errors with TLS handshake during STARTTLS for incoming deliveries.",
+		},
+		[]string{
+			"reason", // "eof", "sslv2", "unsupportedversions", "nottls", "alert-<num>-<msg>", "other"
 		},
 	)
 )
@@ -955,7 +972,25 @@ func (c *conn) cmdStarttls(p *parser) {
 	ctx, cancel := context.WithTimeout(cidctx, time.Minute)
 	defer cancel()
 	c.log.Debug("starting tls server handshake")
+	metricDeliveryStarttls.Inc()
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		// Errors from crypto/tls mostly aren't typed. We'll have to look for strings...
+		reason := "other"
+		if errors.Is(err, io.EOF) {
+			reason = "eof"
+		} else if alert, ok := asTLSAlert(err); ok {
+			reason = tlsrpt.FormatAlert(alert)
+		} else {
+			s := err.Error()
+			if strings.Contains(s, "tls: client offered only unsupported versions") {
+				reason = "unsupportedversions"
+			} else if strings.Contains(s, "tls: first record does not look like a TLS handshake") {
+				reason = "nottls"
+			} else if strings.Contains(s, "tls: unsupported SSLv2 handshake received") {
+				reason = "sslv2"
+			}
+		}
+		metricDeliveryStarttlsErrors.WithLabelValues(reason).Inc()
 		panic(fmt.Errorf("starttls handshake: %s (%w)", err, errIO))
 	}
 	cancel()
@@ -969,6 +1004,22 @@ func (c *conn) cmdStarttls(p *parser) {
 
 	c.reset() // ../rfc/3207:210
 	c.tls = true
+}
+
+func asTLSAlert(err error) (alert uint8, ok bool) {
+	// If the remote client aborts the connection, it can send an alert indicating why.
+	// crypto/tls gives us a net.OpError with "Op" set to "remote error", an an Err
+	// with the unexported type "alert", a uint8. So we try to read it.
+
+	var opErr *net.OpError
+	if !errors.As(err, &opErr) || opErr.Op != "remote error" || opErr.Err == nil {
+		return
+	}
+	v := reflect.ValueOf(opErr.Err)
+	if v.Kind() != reflect.Uint8 || v.Type().Name() != "alert" {
+		return
+	}
+	return uint8(v.Uint()), true
 }
 
 // ../rfc/4954:139

@@ -10,7 +10,8 @@ import (
 	"strings"
 )
 
-func formatAlert(alert uint8) string {
+// FormatAlert formats a TLS alert in the form "alert-<num>" or "alert-<num>-<shortcode>".
+func FormatAlert(alert uint8) string {
 	s := fmt.Sprintf("alert-%d", alert)
 	err := tls.AlertError(alert) // Since go1.21.0
 	// crypto/tls returns messages like "tls: short message" or "tls: alert(321)".
