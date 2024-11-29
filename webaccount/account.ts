@@ -61,6 +61,7 @@ const login = async (reason: string) => {
 								autosize=dom.span(dom._class('autosize'),
 									username=dom.input(
 										attr.required(''),
+										attr.autocomplete('username'),
 										attr.placeholder('jane@example.org'),
 										function change() { autosize.dataset.value = username.value },
 										function input() { autosize.dataset.value = username.value },
@@ -70,7 +71,7 @@ const login = async (reason: string) => {
 							dom.label(
 								style({display: 'block', marginBottom: '2ex'}),
 								dom.div('Password', style({marginBottom: '.5ex'})),
-								password=dom.input(attr.type('password'), attr.required('')),
+								password=dom.input(attr.type('password'), attr.autocomplete('current-password'), attr.required('')),
 							),
 							dom.div(
 								style({textAlign: 'center'}),
