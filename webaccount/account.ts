@@ -5,6 +5,8 @@ declare let page: HTMLElement
 declare let moxversion: string
 declare let moxgoos: string
 declare let moxgoarch: string
+// From customization script.
+declare let moxBeforeDisplay: (webmailroot: HTMLElement) => void
 
 const login = async (reason: string) => {
 	return new Promise<string>((resolve: (v: string) => void, _) => {
@@ -737,7 +739,7 @@ const index = async () => {
 		onchange()
 	}
 
-	dom._kids(page,
+	const root = dom.div(
 		crumbs('Mox Account'),
 		dom.div(
 			'Default domain: ',
@@ -1390,36 +1392,40 @@ const index = async () => {
 		footer,
 	)
 
-	// Try to show the progress of an earlier import session. The user may have just
-	// refreshed the browser.
-	let importToken: string
-	try {
-		importToken = window.sessionStorage.getItem('ImportToken') || ''
-	} catch (err) {
-		console.log('looking up ImportToken in session storage', {err})
-		return
-	}
-	if (!importToken) {
-		return
-	}
-	importFieldset.disabled = true
-	dom._kids(importProgress,
-		dom.div(
-			dom.div('Reconnecting to import...'),
-		),
-	)
-	importProgress.style.display = ''
-	importTrack(importToken)
-	.catch(() => {
-		if (window.confirm('Error reconnecting to import. Remove this import session?')) {
-			window.sessionStorage.removeItem('ImportToken')
-			dom._kids(importProgress)
-			importProgress.style.display = 'none'
+	;(async () => {
+		// Try to show the progress of an earlier import session. The user may have just
+		// refreshed the browser.
+		let importToken: string
+		try {
+			importToken = window.sessionStorage.getItem('ImportToken') || ''
+		} catch (err) {
+			console.log('looking up ImportToken in session storage', {err})
+			return
 		}
-	})
-	.finally(() => {
-		importFieldset.disabled = false
-	})
+		if (!importToken) {
+			return
+		}
+		importFieldset.disabled = true
+		dom._kids(importProgress,
+			dom.div(
+				dom.div('Reconnecting to import...'),
+			),
+		)
+		importProgress.style.display = ''
+		importTrack(importToken)
+		.catch(() => {
+			if (window.confirm('Error reconnecting to import. Remove this import session?')) {
+				window.sessionStorage.removeItem('ImportToken')
+				dom._kids(importProgress)
+				importProgress.style.display = 'none'
+			}
+		})
+		.finally(() => {
+			importFieldset.disabled = false
+		})
+	})()
+
+	return root
 }
 
 const destination = async (name: string) => {
@@ -1552,7 +1558,7 @@ const destination = async (name: string) => {
 
 	const addresses = [name, ...Object.keys(acc.Destinations || {}).filter(a => !a.startsWith('@') && a !== name)]
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Account', '#'),
 			'Destination ' + name,
@@ -1664,13 +1670,18 @@ const init = async () => {
 		const t = h.split('/')
 		page.classList.add('loading')
 		try {
+			let root: HTMLElement
 			if (h === '') {
-				await index()
+				root = await index()
 			} else if (t[0] === 'destinations' && t.length === 2) {
-				await destination(t[1])
+				root = await destination(t[1])
 			} else {
-				dom._kids(page, 'page not found')
+				root = dom.div('page not found')
 			}
+			if ((window as any).moxBeforeDisplay) {
+				moxBeforeDisplay(root)
+			}
+			dom._kids(page, root)
 		} catch (err) {
 			console.log({err})
 			window.alert('Error: ' + errmsg(err))

@@ -133,6 +133,8 @@ declare let page: HTMLElement
 declare let moxversion: string
 declare let moxgoos: string
 declare let moxgoarch: string
+// From customization script.
+declare let moxBeforeDisplay: (root: HTMLElement) => void
 
 // All logging goes through log() instead of console.log, except "should not happen" logging.
 let log: (...args: any[]) => void = () => {}
@@ -7056,6 +7058,9 @@ const init = async () => {
 		autoselectLayout()
 	} else {
 		selectLayout(layoutElem.value)
+	}
+	if ((window as any).moxBeforeDisplay) {
+		moxBeforeDisplay(webmailroot)
 	}
 	dom._kids(page, webmailroot)
 	checkMsglistWidth()

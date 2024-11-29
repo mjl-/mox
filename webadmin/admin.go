@@ -80,10 +80,11 @@ var adminHTML []byte
 var adminJS []byte
 
 var webadminFile = &mox.WebappFile{
-	HTML:     adminHTML,
-	JS:       adminJS,
-	HTMLPath: filepath.FromSlash("webadmin/admin.html"),
-	JSPath:   filepath.FromSlash("webadmin/admin.js"),
+	HTML:       adminHTML,
+	JS:         adminJS,
+	HTMLPath:   filepath.FromSlash("webadmin/admin.html"),
+	JSPath:     filepath.FromSlash("webadmin/admin.js"),
+	CustomStem: "webadmin",
 }
 
 var adminDoc = mustParseAPI("admin", adminapiJSON)

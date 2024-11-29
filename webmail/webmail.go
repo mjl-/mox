@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "embed"
 
@@ -147,27 +149,62 @@ func xdbread(ctx context.Context, acc *store.Account, fn func(tx *bstore.Tx)) {
 }
 
 var webmailFile = &mox.WebappFile{
-	HTML:     webmailHTML,
-	JS:       webmailJS,
-	HTMLPath: filepath.FromSlash("webmail/webmail.html"),
-	JSPath:   filepath.FromSlash("webmail/webmail.js"),
+	HTML:       webmailHTML,
+	JS:         webmailJS,
+	HTMLPath:   filepath.FromSlash("webmail/webmail.html"),
+	JSPath:     filepath.FromSlash("webmail/webmail.js"),
+	CustomStem: "webmail",
 }
 
-// Serve content, either from a file, or return the fallback data. Caller
-// should already have set the content-type. We use this to return a file from
-// the local file system (during development), or embedded in the binary (when
-// deployed).
-func serveContentFallback(log mlog.Log, w http.ResponseWriter, r *http.Request, path string, fallback []byte) {
+func customization() (css, js []byte, err error) {
+	if css, err = os.ReadFile(mox.ConfigDirPath("webmail.css")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, err
+	}
+	if js, err = os.ReadFile(mox.ConfigDirPath("webmail.js")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, err
+	}
+	css = append([]byte("/* Custom CSS by admin from $configdir/webmail.css: */\n"), css...)
+	js = append([]byte("// Custom JS by admin from $configdir/webmail.js:\n"), js...)
+	js = append(js, '\n')
+	return css, js, nil
+}
+
+// Serve HTML content, either from a file, or return the fallback data. If
+// customize is set, css/js is inserted if configured. Caller should already have
+// set the content-type. We use this to return a file from the local file system
+// (during development), or embedded in the binary (when deployed).
+func serveContentFallback(log mlog.Log, w http.ResponseWriter, r *http.Request, path string, fallback []byte, customize bool) {
+	serve := func(mtime time.Time, rd io.ReadSeeker) {
+		if customize {
+			buf, err := io.ReadAll(rd)
+			if err != nil {
+				log.Errorx("reading content to customize", err)
+				http.Error(w, "500 - internal server error - reading content to customize", http.StatusInternalServerError)
+				return
+			}
+			customCSS, customJS, err := customization()
+			if err != nil {
+				log.Errorx("reading customizations", err)
+				http.Error(w, "500 - internal server error - reading customizations", http.StatusInternalServerError)
+				return
+			}
+			buf = bytes.Replace(buf, []byte("/* css placeholder */"), customCSS, 1)
+			buf = bytes.Replace(buf, []byte("/* js placeholder */"), customJS, 1)
+			rd = bytes.NewReader(buf)
+		}
+		http.ServeContent(w, r, "", mtime, rd)
+	}
+
 	f, err := os.Open(path)
 	if err == nil {
 		defer f.Close()
 		st, err := f.Stat()
 		if err == nil {
-			http.ServeContent(w, r, "", st.ModTime(), f)
+			serve(st.ModTime(), f)
 			return
 		}
 	}
-	http.ServeContent(w, r, "", mox.FallbackMtime(log), bytes.NewReader(fallback))
+	serve(mox.FallbackMtime(log), bytes.NewReader(fallback))
 }
 
 func init() {
@@ -261,7 +298,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		}
 
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		serveContentFallback(log, w, r, path, fallback)
+		serveContentFallback(log, w, r, path, fallback, false)
 		return
 	}
 
@@ -621,7 +658,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 
 		path := filepath.FromSlash("webmail/msg.html")
 		fallback := webmailmsgHTML
-		serveContentFallback(log, w, r, path, fallback)
+		serveContentFallback(log, w, r, path, fallback, true)
 
 	case len(t) == 2 && t[1] == "parsedmessage.js":
 		// Used by msg.html, for the msg* endpoints, for the data needed to show all data
@@ -689,7 +726,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		// from disk.
 		path := filepath.FromSlash("webmail/text.html")
 		fallback := webmailtextHTML
-		serveContentFallback(log, w, r, path, fallback)
+		serveContentFallback(log, w, r, path, fallback, true)
 
 	case len(t) == 2 && (t[1] == "html" || t[1] == "htmlexternal"):
 		// Returns the first HTML part, with "cid:" URIs replaced with an inlined datauri

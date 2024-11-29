@@ -1396,7 +1396,7 @@ const index = async () => {
 		body.setAttribute('rows', '' + Math.min(40, (body.value.split('\n').length + 1)));
 		onchange();
 	};
-	dom._kids(page, crumbs('Mox Account'), dom.div('Default domain: ', acc.DNSDomain.ASCII ? domainString(acc.DNSDomain) : '(none)'), dom.br(), fullNameForm = dom.form(fullNameFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Full name', dom.br(), fullName = dom.input(attr.value(acc.FullName), attr.title('Name to use in From header when composing messages. Can be overridden per configured address.'))), ' ', dom.submitbutton('Save')), async function submit(e) {
+	const root = dom.div(crumbs('Mox Account'), dom.div('Default domain: ', acc.DNSDomain.ASCII ? domainString(acc.DNSDomain) : '(none)'), dom.br(), fullNameForm = dom.form(fullNameFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Full name', dom.br(), fullName = dom.input(attr.value(acc.FullName), attr.title('Name to use in From header when composing messages. Can be overridden per configured address.'))), ' ', dom.submitbutton('Save')), async function submit(e) {
 		e.preventDefault();
 		await check(fullNameFieldset, client.AccountSaveFullName(fullName.value));
 		fullName.setAttribute('value', fullName.value);
@@ -1590,33 +1590,36 @@ const index = async () => {
 		mailboxPrefixHint.style.display = '';
 	})), mailboxPrefixHint = dom.p(style({ display: 'none', fontStyle: 'italic', marginTop: '.5ex' }), 'If set, any mbox/maildir path with this prefix will have it stripped before importing. For example, if all mailboxes are in a directory "Takeout", specify that path in the field above so mailboxes like "Takeout/Inbox.mbox" are imported into a mailbox called "Inbox" instead of "Takeout/Inbox".')), dom.div(dom.submitbutton('Upload and import'), dom.p(style({ fontStyle: 'italic', marginTop: '.5ex' }), 'The file is uploaded first, then its messages are imported, finally messages are matched for threading. Importing is done in a transaction, you can abort the entire import before it is finished.')))), importAbortBox = dom.div(), // Outside fieldset because it gets disabled, above progress because may be scrolling it down quickly with problems.
 	importProgress = dom.div(style({ display: 'none' })), dom.br(), footer);
-	// Try to show the progress of an earlier import session. The user may have just
-	// refreshed the browser.
-	let importToken;
-	try {
-		importToken = window.sessionStorage.getItem('ImportToken') || '';
-	}
-	catch (err) {
-		console.log('looking up ImportToken in session storage', { err });
-		return;
-	}
-	if (!importToken) {
-		return;
-	}
-	importFieldset.disabled = true;
-	dom._kids(importProgress, dom.div(dom.div('Reconnecting to import...')));
-	importProgress.style.display = '';
-	importTrack(importToken)
-		.catch(() => {
-		if (window.confirm('Error reconnecting to import. Remove this import session?')) {
-			window.sessionStorage.removeItem('ImportToken');
-			dom._kids(importProgress);
-			importProgress.style.display = 'none';
+	(async () => {
+		// Try to show the progress of an earlier import session. The user may have just
+		// refreshed the browser.
+		let importToken;
+		try {
+			importToken = window.sessionStorage.getItem('ImportToken') || '';
 		}
-	})
-		.finally(() => {
-		importFieldset.disabled = false;
-	});
+		catch (err) {
+			console.log('looking up ImportToken in session storage', { err });
+			return;
+		}
+		if (!importToken) {
+			return;
+		}
+		importFieldset.disabled = true;
+		dom._kids(importProgress, dom.div(dom.div('Reconnecting to import...')));
+		importProgress.style.display = '';
+		importTrack(importToken)
+			.catch(() => {
+			if (window.confirm('Error reconnecting to import. Remove this import session?')) {
+				window.sessionStorage.removeItem('ImportToken');
+				dom._kids(importProgress);
+				importProgress.style.display = 'none';
+			}
+		})
+			.finally(() => {
+			importFieldset.disabled = false;
+		});
+	})();
+	return root;
 };
 const destination = async (name) => {
 	const [acc] = await client.Account();
@@ -1692,7 +1695,7 @@ const destination = async (name) => {
 	let fullName;
 	let saveButton;
 	const addresses = [name, ...Object.keys(acc.Destinations || {}).filter(a => !a.startsWith('@') && a !== name)];
-	dom._kids(page, crumbs(crumblink('Mox Account', '#'), 'Destination ' + name), dom.div(dom.span('Default mailbox', attr.title('Default mailbox where email for this recipient is delivered to if it does not match any ruleset. Default is Inbox.')), dom.br(), defaultMailbox = dom.input(attr.value(dest.Mailbox), attr.placeholder('Inbox'))), dom.br(), dom.div(dom.span('Full name', attr.title('Name to use in From header when composing messages. If not set, the account default full name is used.')), dom.br(), fullName = dom.input(attr.value(dest.FullName))), dom.br(), dom.h2('Rulesets'), dom.p('Incoming messages are checked against the rulesets. If a ruleset matches, the message is delivered to the mailbox configured for the ruleset instead of to the default mailbox.'), dom.p('"Is Forward" does not affect matching, but changes prevents the sending mail server from being included in future junk classifications by clearing fields related to the forwarding email server (IP address, EHLO domain, MAIL FROM domain and a matching DKIM domain), and prevents DMARC rejects for forwarded messages.'), dom.p('"List allow domain" does not affect matching, but skips the regular spam checks if one of the verified domains is a (sub)domain of the domain mentioned here.'), dom.p('"Accept rejects to mailbox" does not affect matching, but causes messages classified as junk to be accepted and delivered to this mailbox, instead of being rejected during the SMTP transaction. Useful for incoming forwarded messages where rejecting incoming messages may cause the forwarding server to stop forwarding.'), dom.table(dom.thead(dom.tr(dom.th('SMTP "MAIL FROM" regexp', attr.title('Matches if this regular expression matches (a substring of) the SMTP MAIL FROM address (not the message From-header). E.g. user@example.org.')), dom.th('Message "From" address regexp', attr.title('Matches if this regular expression matches (a substring of) the single address in the message From header.')), dom.th('Verified domain', attr.title('Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain.')), dom.th('Headers regexp', attr.title('Matches if these header field/value regular expressions all match (substrings of) the message headers. Header fields and valuees are converted to lower case before matching. Whitespace is trimmed from the value before matching. A header field can occur multiple times in a message, only one instance has to match. For mailing lists, you could match on ^list-id$ with the value typically the mailing list address in angled brackets with @ replaced with a dot, e.g. <name\\.lists\\.example\\.org>.')), dom.th('Is Forward', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. Can only be used together with SMTPMailFromRegexp and VerifiedDomain. SMTPMailFromRegexp must be set to the address used to deliver the forwarded message, e.g. '^user(|\\+.*)@forward\\.example$'. Changes to junk analysis: 1. Messages are not rejected for failing a DMARC policy, because a legitimate forwarded message without valid/intact/aligned DKIM signature would be rejected because any verified SPF domain will be 'unaligned', of the forwarding mail server. 2. The sending mail server IP address, and sending EHLO and MAIL FROM domains and matching DKIM domain aren't used in future reputation-based spam classifications (but other verified DKIM domains are) because the forwarding server is not a useful spam signal for future messages.")), dom.th('List allow domain', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation.")), dom.th('Allow rejects to mailbox', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. If a message is classified as spam, it isn't rejected during the SMTP transaction (the normal behaviour), but accepted during the SMTP transaction and delivered to the specified mailbox. The specified mailbox is not automatically cleaned up like the account global Rejects mailbox, unless set to that Rejects mailbox.")), dom.th('Mailbox', attr.title('Mailbox to deliver to if this ruleset matches.')), dom.th('Comment', attr.title('Free-form comments.')), dom.th('Action'))), rulesetsTbody, dom.tfoot(dom.tr(dom.td(attr.colspan('9')), dom.td(dom.clickbutton('Add ruleset', function click() {
+	return dom.div(crumbs(crumblink('Mox Account', '#'), 'Destination ' + name), dom.div(dom.span('Default mailbox', attr.title('Default mailbox where email for this recipient is delivered to if it does not match any ruleset. Default is Inbox.')), dom.br(), defaultMailbox = dom.input(attr.value(dest.Mailbox), attr.placeholder('Inbox'))), dom.br(), dom.div(dom.span('Full name', attr.title('Name to use in From header when composing messages. If not set, the account default full name is used.')), dom.br(), fullName = dom.input(attr.value(dest.FullName))), dom.br(), dom.h2('Rulesets'), dom.p('Incoming messages are checked against the rulesets. If a ruleset matches, the message is delivered to the mailbox configured for the ruleset instead of to the default mailbox.'), dom.p('"Is Forward" does not affect matching, but changes prevents the sending mail server from being included in future junk classifications by clearing fields related to the forwarding email server (IP address, EHLO domain, MAIL FROM domain and a matching DKIM domain), and prevents DMARC rejects for forwarded messages.'), dom.p('"List allow domain" does not affect matching, but skips the regular spam checks if one of the verified domains is a (sub)domain of the domain mentioned here.'), dom.p('"Accept rejects to mailbox" does not affect matching, but causes messages classified as junk to be accepted and delivered to this mailbox, instead of being rejected during the SMTP transaction. Useful for incoming forwarded messages where rejecting incoming messages may cause the forwarding server to stop forwarding.'), dom.table(dom.thead(dom.tr(dom.th('SMTP "MAIL FROM" regexp', attr.title('Matches if this regular expression matches (a substring of) the SMTP MAIL FROM address (not the message From-header). E.g. user@example.org.')), dom.th('Message "From" address regexp', attr.title('Matches if this regular expression matches (a substring of) the single address in the message From header.')), dom.th('Verified domain', attr.title('Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain.')), dom.th('Headers regexp', attr.title('Matches if these header field/value regular expressions all match (substrings of) the message headers. Header fields and valuees are converted to lower case before matching. Whitespace is trimmed from the value before matching. A header field can occur multiple times in a message, only one instance has to match. For mailing lists, you could match on ^list-id$ with the value typically the mailing list address in angled brackets with @ replaced with a dot, e.g. <name\\.lists\\.example\\.org>.')), dom.th('Is Forward', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. Can only be used together with SMTPMailFromRegexp and VerifiedDomain. SMTPMailFromRegexp must be set to the address used to deliver the forwarded message, e.g. '^user(|\\+.*)@forward\\.example$'. Changes to junk analysis: 1. Messages are not rejected for failing a DMARC policy, because a legitimate forwarded message without valid/intact/aligned DKIM signature would be rejected because any verified SPF domain will be 'unaligned', of the forwarding mail server. 2. The sending mail server IP address, and sending EHLO and MAIL FROM domains and matching DKIM domain aren't used in future reputation-based spam classifications (but other verified DKIM domains are) because the forwarding server is not a useful spam signal for future messages.")), dom.th('List allow domain', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation.")), dom.th('Allow rejects to mailbox', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. If a message is classified as spam, it isn't rejected during the SMTP transaction (the normal behaviour), but accepted during the SMTP transaction and delivered to the specified mailbox. The specified mailbox is not automatically cleaned up like the account global Rejects mailbox, unless set to that Rejects mailbox.")), dom.th('Mailbox', attr.title('Mailbox to deliver to if this ruleset matches.')), dom.th('Comment', attr.title('Free-form comments.')), dom.th('Action'))), rulesetsTbody, dom.tfoot(dom.tr(dom.td(attr.colspan('9')), dom.td(dom.clickbutton('Add ruleset', function click() {
 		addRulesetsRow({
 			SMTPMailFromRegexp: '',
 			MsgFromRegexp: '',
@@ -1743,15 +1746,20 @@ const init = async () => {
 		const t = h.split('/');
 		page.classList.add('loading');
 		try {
+			let root;
 			if (h === '') {
-				await index();
+				root = await index();
 			}
 			else if (t[0] === 'destinations' && t.length === 2) {
-				await destination(t[1]);
+				root = await destination(t[1]);
 			}
 			else {
-				dom._kids(page, 'page not found');
+				root = dom.div('page not found');
 			}
+			if (window.moxBeforeDisplay) {
+				moxBeforeDisplay(root);
+			}
+			dom._kids(page, root);
 		}
 		catch (err) {
 			console.log({ err });

@@ -51,10 +51,11 @@ var accountHTML []byte
 var accountJS []byte
 
 var webaccountFile = &mox.WebappFile{
-	HTML:     accountHTML,
-	JS:       accountJS,
-	HTMLPath: filepath.FromSlash("webaccount/account.html"),
-	JSPath:   filepath.FromSlash("webaccount/account.js"),
+	HTML:       accountHTML,
+	JS:         accountJS,
+	HTMLPath:   filepath.FromSlash("webaccount/account.html"),
+	JSPath:     filepath.FromSlash("webaccount/account.js"),
+	CustomStem: "webaccount",
 }
 
 var accountDoc = mustParseAPI("account", accountapiJSON)
