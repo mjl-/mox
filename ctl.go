@@ -21,6 +21,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
@@ -973,7 +974,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		localpart := ctl.xread()
 		d, err := dns.ParseDomain(domain)
 		ctl.xcheck(err, "parsing domain")
-		err = mox.DomainAdd(ctx, d, account, smtp.Localpart(localpart))
+		err = admin.DomainAdd(ctx, d, account, smtp.Localpart(localpart))
 		ctl.xcheck(err, "adding domain")
 		ctl.xwriteok()
 
@@ -986,7 +987,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		domain := ctl.xread()
 		d, err := dns.ParseDomain(domain)
 		ctl.xcheck(err, "parsing domain")
-		err = mox.DomainRemove(ctx, d)
+		err = admin.DomainRemove(ctx, d)
 		ctl.xcheck(err, "removing domain")
 		ctl.xwriteok()
 
@@ -999,7 +1000,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		*/
 		account := ctl.xread()
 		address := ctl.xread()
-		err := mox.AccountAdd(ctx, account, address)
+		err := admin.AccountAdd(ctx, account, address)
 		ctl.xcheck(err, "adding account")
 		ctl.xwriteok()
 
@@ -1010,7 +1011,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< "ok" or error
 		*/
 		account := ctl.xread()
-		err := mox.AccountRemove(ctx, account)
+		err := admin.AccountRemove(ctx, account)
 		ctl.xcheck(err, "removing account")
 		ctl.xwriteok()
 
@@ -1023,7 +1024,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		*/
 		address := ctl.xread()
 		account := ctl.xread()
-		err := mox.AddressAdd(ctx, address, account)
+		err := admin.AddressAdd(ctx, address, account)
 		ctl.xcheck(err, "adding address")
 		ctl.xwriteok()
 
@@ -1034,7 +1035,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< "ok" or error
 		*/
 		address := ctl.xread()
-		err := mox.AddressRemove(ctx, address)
+		err := admin.AddressRemove(ctx, address)
 		ctl.xcheck(err, "removing address")
 		ctl.xwriteok()
 
@@ -1099,7 +1100,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		ctl.xcheck(err, "parsing address")
 		var alias config.Alias
 		xparseJSON(ctl, line, &alias)
-		err = mox.AliasAdd(ctx, addr, alias)
+		err = admin.AliasAdd(ctx, addr, alias)
 		ctl.xcheck(err, "adding alias")
 		ctl.xwriteok()
 
@@ -1118,7 +1119,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		allowmsgfrom := ctl.xread()
 		addr, err := smtp.ParseAddress(address)
 		ctl.xcheck(err, "parsing address")
-		err = mox.DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		err = admin.DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
 			a, ok := d.Aliases[addr.Localpart.String()]
 			if !ok {
 				return fmt.Errorf("alias does not exist")
@@ -1159,7 +1160,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		address := ctl.xread()
 		addr, err := smtp.ParseAddress(address)
 		ctl.xcheck(err, "parsing address")
-		err = mox.AliasRemove(ctx, addr)
+		err = admin.AliasRemove(ctx, addr)
 		ctl.xcheck(err, "removing alias")
 		ctl.xwriteok()
 
@@ -1176,7 +1177,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		ctl.xcheck(err, "parsing address")
 		var addresses []string
 		xparseJSON(ctl, line, &addresses)
-		err = mox.AliasAddressesAdd(ctx, addr, addresses)
+		err = admin.AliasAddressesAdd(ctx, addr, addresses)
 		ctl.xcheck(err, "adding addresses to alias")
 		ctl.xwriteok()
 
@@ -1193,7 +1194,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		ctl.xcheck(err, "parsing address")
 		var addresses []string
 		xparseJSON(ctl, line, &addresses)
-		err = mox.AliasAddressesRemove(ctx, addr, addresses)
+		err = admin.AliasAddressesRemove(ctx, addr, addresses)
 		ctl.xcheck(err, "removing addresses to alias")
 		ctl.xwriteok()
 

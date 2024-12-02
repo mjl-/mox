@@ -11,7 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"rsc.io/qr"
 
-	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -70,13 +70,13 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	socketType := func(tlsMode mox.TLSMode) (string, error) {
+	socketType := func(tlsMode admin.TLSMode) (string, error) {
 		switch tlsMode {
-		case mox.TLSModeImmediate:
+		case admin.TLSModeImmediate:
 			return "SSL", nil
-		case mox.TLSModeSTARTTLS:
+		case admin.TLSModeSTARTTLS:
 			return "STARTTLS", nil
-		case mox.TLSModeNone:
+		case admin.TLSModeNone:
 			return "plain", nil
 		default:
 			return "", fmt.Errorf("unknown tls mode %v", tlsMode)
@@ -84,7 +84,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var imapTLS, submissionTLS string
-	config, err := mox.ClientConfigDomain(addr.Domain)
+	config, err := admin.ClientConfigDomain(addr.Domain)
 	if err == nil {
 		imapTLS, err = socketType(config.IMAP.TLSMode)
 	}
@@ -170,13 +170,13 @@ func autodiscoverHandle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// tlsmode returns the "ssl" and "encryption" fields.
-	tlsmode := func(tlsMode mox.TLSMode) (string, string, error) {
+	tlsmode := func(tlsMode admin.TLSMode) (string, string, error) {
 		switch tlsMode {
-		case mox.TLSModeImmediate:
+		case admin.TLSModeImmediate:
 			return "on", "TLS", nil
-		case mox.TLSModeSTARTTLS:
+		case admin.TLSModeSTARTTLS:
 			return "on", "", nil
-		case mox.TLSModeNone:
+		case admin.TLSModeNone:
 			return "off", "", nil
 		default:
 			return "", "", fmt.Errorf("unknown tls mode %v", tlsMode)
@@ -185,7 +185,7 @@ func autodiscoverHandle(w http.ResponseWriter, r *http.Request) {
 
 	var imapSSL, imapEncryption string
 	var submissionSSL, submissionEncryption string
-	config, err := mox.ClientConfigDomain(addr.Domain)
+	config, err := admin.ClientConfigDomain(addr.Domain)
 	if err == nil {
 		imapSSL, imapEncryption, err = tlsmode(config.IMAP.TLSMode)
 	}

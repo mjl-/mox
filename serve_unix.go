@@ -266,7 +266,7 @@ Only implemented on unix systems, not Windows.
 	if mox.Conf.Static.CheckUpdates {
 		checkUpdates := func() time.Duration {
 			next := 24 * time.Hour
-			current, lastknown, mtime, err := mox.LastKnown()
+			current, lastknown, mtime, err := store.LastKnown()
 			if err != nil {
 				log.Infox("determining own version before checking for updates, trying again in 24h", err)
 				return next
@@ -350,7 +350,7 @@ Only implemented on unix systems, not Windows.
 				slog.Any("current", current),
 				slog.Any("lastknown", lastknown),
 				slog.Any("latest", latest))
-			if err := mox.StoreLastKnown(latest); err != nil {
+			if err := store.StoreLastKnown(latest); err != nil {
 				// This will be awkward, we'll keep notifying the postmaster once every 24h...
 				log.Infox("updating last known version", err)
 			}

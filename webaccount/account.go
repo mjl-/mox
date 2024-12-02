@@ -26,6 +26,7 @@ import (
 	"github.com/mjl-/sherpadoc"
 	"github.com/mjl-/sherpaprom"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -110,7 +111,7 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 		return
 	}
 	// If caller tried saving a config that is invalid, or because of a bad request, cause a user error.
-	if errors.Is(err, mox.ErrConfig) || errors.Is(err, mox.ErrRequest) {
+	if errors.Is(err, mox.ErrConfig) || errors.Is(err, admin.ErrRequest) {
 		xcheckuserf(ctx, err, format, args...)
 	}
 
@@ -433,7 +434,7 @@ func (Account) Account(ctx context.Context) (account config.Account, storageUsed
 // for the account.
 func (Account) AccountSaveFullName(ctx context.Context, fullName string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.FullName = fullName
 	})
 	xcheckf(ctx, err, "saving account full name")
@@ -445,7 +446,7 @@ func (Account) AccountSaveFullName(ctx context.Context, fullName string) {
 func (Account) DestinationSave(ctx context.Context, destName string, oldDest, newDest config.Destination) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(conf *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(conf *config.Account) {
 		curDest, ok := conf.Destinations[destName]
 		if !ok {
 			xcheckuserf(ctx, errors.New("not found"), "looking up destination")
@@ -527,7 +528,7 @@ func (Account) SuppressionRemove(ctx context.Context, address string) {
 // to be delivered, or all if empty/nil.
 func (Account) OutgoingWebhookSave(ctx context.Context, url, authorization string, events []string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		if url == "" {
 			acc.OutgoingWebhook = nil
 		} else {
@@ -566,7 +567,7 @@ func (Account) OutgoingWebhookTest(ctx context.Context, urlStr, authorization st
 // the Authorization header in requests.
 func (Account) IncomingWebhookSave(ctx context.Context, url, authorization string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		if url == "" {
 			acc.IncomingWebhook = nil
 		} else {
@@ -611,7 +612,7 @@ func (Account) IncomingWebhookTest(ctx context.Context, urlStr, authorization st
 // MAIL FROM addresses ("fromid") for deliveries from the queue.
 func (Account) FromIDLoginAddressesSave(ctx context.Context, loginAddresses []string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.FromIDLoginAddresses = loginAddresses
 	})
 	xcheckf(ctx, err, "saving account fromid login addresses")
@@ -620,7 +621,7 @@ func (Account) FromIDLoginAddressesSave(ctx context.Context, loginAddresses []st
 // KeepRetiredPeriodsSave saves periods to save retired messages and webhooks.
 func (Account) KeepRetiredPeriodsSave(ctx context.Context, keepRetiredMessagePeriod, keepRetiredWebhookPeriod time.Duration) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.KeepRetiredMessagePeriod = keepRetiredMessagePeriod
 		acc.KeepRetiredWebhookPeriod = keepRetiredWebhookPeriod
 	})
@@ -631,7 +632,7 @@ func (Account) KeepRetiredPeriodsSave(ctx context.Context, keepRetiredMessagePer
 // junk/nonjunk when moved to mailboxes matching certain regular expressions.
 func (Account) AutomaticJunkFlagsSave(ctx context.Context, enabled bool, junkRegexp, neutralRegexp, notJunkRegexp string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.AutomaticJunkFlags = config.AutomaticJunkFlags{
 			Enabled:              enabled,
 			JunkMailboxRegexp:    junkRegexp,
@@ -646,7 +647,7 @@ func (Account) AutomaticJunkFlagsSave(ctx context.Context, enabled bool, junkReg
 // is disabled. Otherwise all fields except Threegrams are stored.
 func (Account) JunkFilterSave(ctx context.Context, junkFilter *config.JunkFilter) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		if junkFilter == nil {
 			acc.JunkFilter = nil
 			return
@@ -664,7 +665,7 @@ func (Account) JunkFilterSave(ctx context.Context, junkFilter *config.JunkFilter
 // RejectsSave saves the RejectsMailbox and KeepRejects settings.
 func (Account) RejectsSave(ctx context.Context, mailbox string, keep bool) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.RejectsMailbox = mailbox
 		acc.KeepRejects = keep
 	})

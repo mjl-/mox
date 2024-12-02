@@ -45,6 +45,7 @@ import (
 	"github.com/mjl-/sconf"
 	"github.com/mjl-/sherpa"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dane"
 	"github.com/mjl-/mox/dkim"
@@ -570,7 +571,7 @@ configured over otherwise secured connections, like a VPN.
 }
 
 func printClientConfig(d dns.Domain) {
-	cc, err := mox.ClientConfigsDomain(d)
+	cc, err := admin.ClientConfigsDomain(d)
 	xcheckf(err, "getting client config")
 	fmt.Printf("%-20s %-30s %5s %-15s %s\n", "Protocol", "Host", "Port", "Listener", "Note")
 	for _, e := range cc.Entries {
@@ -1006,7 +1007,7 @@ configured.
 		}
 	}
 
-	records, err := mox.DomainRecords(domConf, d, result.Authentic, certIssuerDomainName, acmeAccountURI)
+	records, err := admin.DomainRecords(domConf, d, result.Authentic, certIssuerDomainName, acmeAccountURI)
 	xcheckf(err, "records")
 	fmt.Print(strings.Join(records, "\n") + "\n")
 }
@@ -1539,7 +1540,7 @@ with DKIM, by mox.
 		c.Usage()
 	}
 
-	buf, err := mox.MakeDKIMRSAKey(dns.Domain{}, dns.Domain{})
+	buf, err := admin.MakeDKIMRSAKey(dns.Domain{}, dns.Domain{})
 	xcheckf(err, "making rsa private key")
 	_, err = os.Stdout.Write(buf)
 	xcheckf(err, "writing rsa private key")
@@ -2077,7 +2078,7 @@ so it is recommended to sign messages with both RSA and ed25519 keys.
 		c.Usage()
 	}
 
-	buf, err := mox.MakeDKIMEd25519Key(dns.Domain{}, dns.Domain{})
+	buf, err := admin.MakeDKIMEd25519Key(dns.Domain{}, dns.Domain{})
 	xcheckf(err, "making dkim ed25519 key")
 	_, err = os.Stdout.Write(buf)
 	xcheckf(err, "writing dkim ed25519 key")
@@ -2786,7 +2787,7 @@ printed.
 	}
 	mustLoadConfig()
 
-	current, lastknown, _, err := mox.LastKnown()
+	current, lastknown, _, err := store.LastKnown()
 	if err != nil {
 		log.Printf("getting last known version: %s", err)
 	} else {

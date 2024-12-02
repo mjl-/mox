@@ -25,6 +25,7 @@ import (
 
 	"github.com/mjl-/sconf"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
@@ -421,7 +422,7 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 		},
 	}
 
-	dkimKeyBuf, err := mox.MakeDKIMEd25519Key(dns.Domain{ASCII: "localserve"}, dns.Domain{ASCII: "localhost"})
+	dkimKeyBuf, err := admin.MakeDKIMEd25519Key(dns.Domain{ASCII: "localserve"}, dns.Domain{ASCII: "localhost"})
 	xcheck(err, "making dkim key")
 	dkimKeyPath := "dkim.localserve.privatekey.pkcs8.pem"
 	err = os.WriteFile(filepath.Join(dir, dkimKeyPath), dkimKeyBuf, 0660)

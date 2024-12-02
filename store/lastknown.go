@@ -1,4 +1,4 @@
-package mox
+package store
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/updates"
 )
@@ -13,7 +14,7 @@ import (
 // StoreLastKnown stores the the last known version. Future update checks compare
 // against it, or the currently running version, whichever is newer.
 func StoreLastKnown(v updates.Version) error {
-	return os.WriteFile(DataDirPath("lastknownversion"), []byte(v.String()), 0660)
+	return os.WriteFile(mox.DataDirPath("lastknownversion"), []byte(v.String()), 0660)
 }
 
 // LastKnown returns the last known version that has been mentioned in an update
@@ -21,7 +22,7 @@ func StoreLastKnown(v updates.Version) error {
 func LastKnown() (current, lastknown updates.Version, mtime time.Time, rerr error) {
 	curv, curerr := updates.ParseVersion(moxvar.VersionBare)
 
-	p := DataDirPath("lastknownversion")
+	p := mox.DataDirPath("lastknownversion")
 	fi, _ := os.Stat(p)
 	if fi != nil {
 		mtime = fi.ModTime()

@@ -28,6 +28,7 @@ import (
 
 	"github.com/mjl-/sconf"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dnsbl"
@@ -827,9 +828,9 @@ and check the admin page for the needed DNS records.`)
 
 	mox.Conf.DynamicLastCheck = time.Now() // Prevent error logging by Make calls below.
 
-	accountConf := mox.MakeAccountConfig(addr)
+	accountConf := admin.MakeAccountConfig(addr)
 	const withMTASTS = true
-	confDomain, keyPaths, err := mox.MakeDomainConfig(context.Background(), domain, dnshostname, accountName, withMTASTS)
+	confDomain, keyPaths, err := admin.MakeDomainConfig(context.Background(), domain, dnshostname, accountName, withMTASTS)
 	if err != nil {
 		fatalf("making domain config: %s", err)
 	}
@@ -989,7 +990,7 @@ have been configured correctly. The DNS records to add:
 	// priming dns caches with negative/absent records, causing our "quick setup" to
 	// appear to fail or take longer than "quick".
 
-	records, err := mox.DomainRecords(confDomain, domain, domainDNSSECResult.Authentic, "letsencrypt.org", "")
+	records, err := admin.DomainRecords(confDomain, domain, domainDNSSECResult.Authentic, "letsencrypt.org", "")
 	if err != nil {
 		fatalf("making required DNS records")
 	}

@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/exp/maps"
 
-	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -122,7 +122,7 @@ func MobileConfig(addresses []string, fullName string) ([]byte, error) {
 		return nil, fmt.Errorf("parsing address: %v", err)
 	}
 
-	config, err := mox.ClientConfigDomain(addr.Domain)
+	config, err := admin.ClientConfigDomain(addr.Domain)
 	if err != nil {
 		return nil, fmt.Errorf("getting config for domain: %v", err)
 	}
@@ -175,12 +175,12 @@ func MobileConfig(addresses []string, fullName string) ([]byte, error) {
 					"IncomingMailServerUsername":             addresses[0],
 					"IncomingMailServerHostName":             config.IMAP.Host.ASCII,
 					"IncomingMailServerPortNumber":           config.IMAP.Port,
-					"IncomingMailServerUseSSL":               config.IMAP.TLSMode == mox.TLSModeImmediate,
+					"IncomingMailServerUseSSL":               config.IMAP.TLSMode == admin.TLSModeImmediate,
 					"OutgoingMailServerAuthentication":       "EmailAuthCRAMMD5", // SCRAM not an option at time of writing...
 					"OutgoingMailServerHostName":             config.Submission.Host.ASCII,
 					"OutgoingMailServerPortNumber":           config.Submission.Port,
 					"OutgoingMailServerUsername":             addresses[0],
-					"OutgoingMailServerUseSSL":               config.Submission.TLSMode == mox.TLSModeImmediate,
+					"OutgoingMailServerUseSSL":               config.Submission.TLSMode == admin.TLSModeImmediate,
 					"OutgoingPasswordSameAsIncomingPassword": true,
 					"PayloadIdentifier":                      reverseAddr + ".email.account",
 					"PayloadType":                            "com.apple.mail.managed",

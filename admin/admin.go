@@ -1,67 +1,36 @@
-package mox
+package admin
 
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"crypto/ed25519"
 	cryptorand "crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
 	"golang.org/x/exp/maps"
 
-	"github.com/mjl-/adns"
-
 	"github.com/mjl-/mox/config"
-	"github.com/mjl-/mox/dkim"
-	"github.com/mjl-/mox/dmarc"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/junk"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/smtp"
-	"github.com/mjl-/mox/spf"
-	"github.com/mjl-/mox/tlsrpt"
 )
 
+var pkglog = mlog.New("admin", nil)
+
 var ErrRequest = errors.New("bad request")
-
-// TXTStrings returns a TXT record value as one or more quoted strings, each max
-// 100 characters. In case of multiple strings, a multi-line record is returned.
-func TXTStrings(s string) string {
-	if len(s) <= 100 {
-		return `"` + s + `"`
-	}
-
-	r := "(\n"
-	for len(s) > 0 {
-		n := len(s)
-		if n > 100 {
-			n = 100
-		}
-		if r != "" {
-			r += " "
-		}
-		r += "\t\t\"" + s[:n] + "\"\n"
-		s = s[n:]
-	}
-	r += "\t)"
-	return r
-}
 
 // MakeDKIMEd25519Key returns a PEM buffer containing an ed25519 key for use
 // with DKIM.
@@ -206,7 +175,7 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 	addSelector := func(kind, name string, privKey []byte) error {
 		record := fmt.Sprintf("%s._domainkey.%s", name, domain.ASCII)
 		keyPath := filepath.Join("dkim", fmt.Sprintf("%s.%s.%s.privatekey.pkcs8.pem", record, timestamp, kind))
-		p := configDirPath(ConfigDynamicPath, keyPath)
+		p := mox.ConfigDynamicDirPath(keyPath)
 		if err := writeFile(log, p, privKey); err != nil {
 			return err
 		}
@@ -323,10 +292,9 @@ func DKIMAdd(ctx context.Context, domain, selector dns.Domain, algorithm, hash s
 	}
 
 	// Only take lock now, we don't want to hold it while generating a key.
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	c := Conf.Dynamic
+	c := mox.Conf.Dynamic
 	d, ok := c.Domains[domain.Name()]
 	if !ok {
 		return fmt.Errorf("%w: domain does not exist", ErrRequest)
@@ -339,7 +307,7 @@ func DKIMAdd(ctx context.Context, domain, selector dns.Domain, algorithm, hash s
 	record := fmt.Sprintf("%s._domainkey.%s", selector.ASCII, domain.ASCII)
 	timestamp := time.Now().Format("20060102T150405")
 	keyPath := filepath.Join("dkim", fmt.Sprintf("%s.%s.%s.privatekey.pkcs8.pem", record, timestamp, kind))
-	p := configDirPath(ConfigDynamicPath, keyPath)
+	p := mox.ConfigDynamicDirPath(keyPath)
 	if err := writeFile(log, p, privKey); err != nil {
 		return fmt.Errorf("writing key file: %v", err)
 	}
@@ -377,7 +345,7 @@ func DKIMAdd(ctx context.Context, domain, selector dns.Domain, algorithm, hash s
 	}
 	nc.Domains[domain.Name()] = nd
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 
@@ -397,10 +365,9 @@ func DKIMRemove(ctx context.Context, domain, selector dns.Domain) (rerr error) {
 		}
 	}()
 
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	c := Conf.Dynamic
+	c := mox.Conf.Dynamic
 	d, ok := c.Domains[domain.Name()]
 	if !ok {
 		return fmt.Errorf("%w: domain does not exist", ErrRequest)
@@ -433,7 +400,7 @@ func DKIMRemove(ctx context.Context, domain, selector dns.Domain) (rerr error) {
 	}
 	nc.Domains[domain.Name()] = nd
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 
@@ -463,10 +430,9 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 		}
 	}()
 
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	c := Conf.Dynamic
+	c := mox.Conf.Dynamic
 	if _, ok := c.Domains[domain.Name()]; ok {
 		return fmt.Errorf("%w: domain already present", ErrRequest)
 	}
@@ -481,14 +447,14 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 
 	// Only enable mta-sts for domain if there is a listener with mta-sts.
 	var withMTASTS bool
-	for _, l := range Conf.Static.Listeners {
+	for _, l := range mox.Conf.Static.Listeners {
 		if l.MTASTSHTTPS.Enabled {
 			withMTASTS = true
 			break
 		}
 	}
 
-	confDomain, cleanupFiles, err := MakeDomainConfig(ctx, domain, Conf.Static.HostnameDomain, accountName, withMTASTS)
+	confDomain, cleanupFiles, err := MakeDomainConfig(ctx, domain, mox.Conf.Static.HostnameDomain, accountName, withMTASTS)
 	if err != nil {
 		return fmt.Errorf("preparing domain config: %v", err)
 	}
@@ -507,7 +473,7 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 		return fmt.Errorf("%w: account name is empty", ErrRequest)
 	} else if !ok {
 		nc.Accounts[accountName] = MakeAccountConfig(smtp.NewAddress(localpart, domain))
-	} else if accountName != Conf.Static.Postmaster.Account {
+	} else if accountName != mox.Conf.Static.Postmaster.Account {
 		nacc := nc.Accounts[accountName]
 		nd := map[string]config.Destination{}
 		for k, v := range nacc.Destinations {
@@ -521,7 +487,7 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 
 	nc.Domains[domain.Name()] = confDomain
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("domain added", slog.Any("domain", domain))
@@ -540,10 +506,9 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 		}
 	}()
 
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	c := Conf.Dynamic
+	c := mox.Conf.Dynamic
 	domConf, ok := c.Domains[domain.Name()]
 	if !ok {
 		return fmt.Errorf("%w: domain does not exist", ErrRequest)
@@ -560,7 +525,7 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 		}
 	}
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 
@@ -588,8 +553,8 @@ func moveAwayKeys(log mlog.Log, sels map[string]config.Selector, usedKeyPaths ma
 		if sel.PrivateKeyFile == "" || usedKeyPaths[filepath.Clean(sel.PrivateKeyFile)] {
 			continue
 		}
-		src := ConfigDirPath(sel.PrivateKeyFile)
-		dst := ConfigDirPath(filepath.Join(filepath.Dir(sel.PrivateKeyFile), "old", filepath.Base(sel.PrivateKeyFile)))
+		src := mox.ConfigDirPath(sel.PrivateKeyFile)
+		dst := mox.ConfigDirPath(filepath.Join(filepath.Dir(sel.PrivateKeyFile), "old", filepath.Base(sel.PrivateKeyFile)))
 		_, err := os.Stat(dst)
 		if err == nil {
 			err = fmt.Errorf("destination already exists")
@@ -615,10 +580,9 @@ func DomainSave(ctx context.Context, domainName string, xmodify func(config *con
 		}
 	}()
 
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	nc := Conf.Dynamic                // Shallow copy.
+	nc := mox.Conf.Dynamic            // Shallow copy.
 	dom, ok := nc.Domains[domainName] // dom is a shallow copy.
 	if !ok {
 		return fmt.Errorf("%w: domain not present", ErrRequest)
@@ -631,12 +595,12 @@ func DomainSave(ctx context.Context, domainName string, xmodify func(config *con
 	// Compose new config without modifying existing data structures. If we fail, we
 	// leave no trace.
 	nc.Domains = map[string]config.Domain{}
-	for name, d := range Conf.Dynamic.Domains {
+	for name, d := range mox.Conf.Dynamic.Domains {
 		nc.Domains[name] = d
 	}
 	nc.Domains[domainName] = dom
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 
@@ -656,342 +620,17 @@ func ConfigSave(ctx context.Context, xmodify func(config *config.Dynamic)) (rerr
 		}
 	}()
 
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	nc := Conf.Dynamic // Shallow copy.
+	nc := mox.Conf.Dynamic // Shallow copy.
 	xmodify(&nc)
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 
 	log.Info("config saved")
 	return nil
-}
-
-// DomainSPFIPs returns IPs to include in SPF records for domains. It includes the
-// IPs on listeners that have SMTP enabled, and includes IPs configured for SOCKS
-// transports.
-func DomainSPFIPs() (ips []net.IP) {
-	for _, l := range Conf.Static.Listeners {
-		if !l.SMTP.Enabled || l.IPsNATed {
-			continue
-		}
-		ipstrs := l.IPs
-		if len(l.NATIPs) > 0 {
-			ipstrs = l.NATIPs
-		}
-		for _, ipstr := range ipstrs {
-			ip := net.ParseIP(ipstr)
-			if ip.IsUnspecified() {
-				continue
-			}
-			ips = append(ips, ip)
-		}
-	}
-	for _, t := range Conf.Static.Transports {
-		if t.Socks != nil {
-			ips = append(ips, t.Socks.IPs...)
-		}
-	}
-	return ips
-}
-
-// todo: find a way to automatically create the dns records as it would greatly simplify setting up email for a domain. we could also dynamically make changes, e.g. providing grace periods after disabling a dkim key, only automatically removing the dkim dns key after a few days. but this requires some kind of api and authentication to the dns server. there doesn't appear to be a single commonly used api for dns management. each of the numerous cloud providers have their own APIs and rather large SKDs to use them. we don't want to link all of them in.
-
-// DomainRecords returns text lines describing DNS records required for configuring
-// a domain.
-//
-// If certIssuerDomainName is set, CAA records to limit TLS certificate issuance to
-// that caID will be suggested. If acmeAccountURI is also set, CAA records also
-// restricting issuance to that account ID will be suggested.
-func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, certIssuerDomainName, acmeAccountURI string) ([]string, error) {
-	d := domain.ASCII
-	h := Conf.Static.HostnameDomain.ASCII
-
-	// The first line with ";" is used by ../testdata/integration/moxacmepebble.sh and
-	// ../testdata/integration/moxmail2.sh for selecting DNS records
-	records := []string{
-		"; Time To Live of 5 minutes, may be recognized if importing as a zone file.",
-		"; Once your setup is working, you may want to increase the TTL.",
-		"$TTL 300",
-		"",
-	}
-
-	if public, ok := Conf.Static.Listeners["public"]; ok && public.TLS != nil && (len(public.TLS.HostPrivateRSA2048Keys) > 0 || len(public.TLS.HostPrivateECDSAP256Keys) > 0) {
-		records = append(records,
-			`; DANE: These records indicate that a remote mail server trying to deliver email`,
-			`; with SMTP (TCP port 25) must verify the TLS certificate with DANE-EE (3), based`,
-			`; on the certificate public key ("SPKI", 1) that is SHA2-256-hashed (1) to the`,
-			`; hexadecimal hash. DANE-EE verification means only the certificate or public`,
-			`; key is verified, not whether the certificate is signed by a (centralized)`,
-			`; certificate authority (CA), is expired, or matches the host name.`,
-			`;`,
-			`; NOTE: Create the records below only once: They are for the machine, and apply`,
-			`; to all hosted domains.`,
-		)
-		if !hasDNSSEC {
-			records = append(records,
-				";",
-				"; WARNING: Domain does not appear to be DNSSEC-signed. To enable DANE, first",
-				"; enable DNSSEC on your domain, then add the TLSA records. Records below have been",
-				"; commented out.",
-			)
-		}
-		addTLSA := func(privKey crypto.Signer) error {
-			spkiBuf, err := x509.MarshalPKIXPublicKey(privKey.Public())
-			if err != nil {
-				return fmt.Errorf("marshal SubjectPublicKeyInfo for DANE record: %v", err)
-			}
-			sum := sha256.Sum256(spkiBuf)
-			tlsaRecord := adns.TLSA{
-				Usage:     adns.TLSAUsageDANEEE,
-				Selector:  adns.TLSASelectorSPKI,
-				MatchType: adns.TLSAMatchTypeSHA256,
-				CertAssoc: sum[:],
-			}
-			var s string
-			if hasDNSSEC {
-				s = fmt.Sprintf("_25._tcp.%-*s TLSA %s", 20+len(d)-len("_25._tcp."), h+".", tlsaRecord.Record())
-			} else {
-				s = fmt.Sprintf(";; _25._tcp.%-*s TLSA %s", 20+len(d)-len(";; _25._tcp."), h+".", tlsaRecord.Record())
-			}
-			records = append(records, s)
-			return nil
-		}
-		for _, privKey := range public.TLS.HostPrivateECDSAP256Keys {
-			if err := addTLSA(privKey); err != nil {
-				return nil, err
-			}
-		}
-		for _, privKey := range public.TLS.HostPrivateRSA2048Keys {
-			if err := addTLSA(privKey); err != nil {
-				return nil, err
-			}
-		}
-		records = append(records, "")
-	}
-
-	if d != h {
-		records = append(records,
-			"; For the machine, only needs to be created once, for the first domain added:",
-			"; ",
-			"; SPF-allow host for itself, resulting in relaxed DMARC pass for (postmaster)",
-			"; messages (DSNs) sent from host:",
-			fmt.Sprintf(`%-*s TXT "v=spf1 a -all"`, 20+len(d), h+"."), // ../rfc/7208:2263 ../rfc/7208:2287
-			"",
-		)
-	}
-	if d != h && Conf.Static.HostTLSRPT.ParsedLocalpart != "" {
-		uri := url.URL{
-			Scheme: "mailto",
-			Opaque: smtp.NewAddress(Conf.Static.HostTLSRPT.ParsedLocalpart, Conf.Static.HostnameDomain).Pack(false),
-		}
-		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]tlsrpt.RUA{{tlsrpt.RUA(uri.String())}}}
-		records = append(records,
-			"; For the machine, only needs to be created once, for the first domain added:",
-			"; ",
-			"; Request reporting about success/failures of TLS connections to (MX) host, for DANE.",
-			fmt.Sprintf(`_smtp._tls.%-*s         TXT "%s"`, 20+len(d)-len("_smtp._tls."), h+".", tlsrptr.String()),
-			"",
-		)
-	}
-
-	records = append(records,
-		"; Deliver email for the domain to this host.",
-		fmt.Sprintf("%s.                    MX 10 %s.", d, h),
-		"",
-
-		"; Outgoing messages will be signed with the first two DKIM keys. The other two",
-		"; configured for backup, switching to them is just a config change.",
-	)
-	var selectors []string
-	for name := range domConf.DKIM.Selectors {
-		selectors = append(selectors, name)
-	}
-	sort.Slice(selectors, func(i, j int) bool {
-		return selectors[i] < selectors[j]
-	})
-	for _, name := range selectors {
-		sel := domConf.DKIM.Selectors[name]
-		dkimr := dkim.Record{
-			Version:   "DKIM1",
-			Hashes:    []string{"sha256"},
-			PublicKey: sel.Key.Public(),
-		}
-		if _, ok := sel.Key.(ed25519.PrivateKey); ok {
-			dkimr.Key = "ed25519"
-		} else if _, ok := sel.Key.(*rsa.PrivateKey); !ok {
-			return nil, fmt.Errorf("unrecognized private key for DKIM selector %q: %T", name, sel.Key)
-		}
-		txt, err := dkimr.Record()
-		if err != nil {
-			return nil, fmt.Errorf("making DKIM DNS TXT record: %v", err)
-		}
-
-		if len(txt) > 100 {
-			records = append(records,
-				"; NOTE: The following is a single long record split over several lines for use",
-				"; in zone files. When adding through a DNS operator web interface, combine the",
-				"; strings into a single string, without ().",
-			)
-		}
-		s := fmt.Sprintf("%s._domainkey.%s.   TXT %s", name, d, TXTStrings(txt))
-		records = append(records, s)
-
-	}
-	dmarcr := dmarc.DefaultRecord
-	dmarcr.Policy = "reject"
-	if domConf.DMARC != nil {
-		uri := url.URL{
-			Scheme: "mailto",
-			Opaque: smtp.NewAddress(domConf.DMARC.ParsedLocalpart, domConf.DMARC.DNSDomain).Pack(false),
-		}
-		dmarcr.AggregateReportAddresses = []dmarc.URI{
-			{Address: uri.String(), MaxSize: 10, Unit: "m"},
-		}
-	}
-	dspfr := spf.Record{Version: "spf1"}
-	for _, ip := range DomainSPFIPs() {
-		mech := "ip4"
-		if ip.To4() == nil {
-			mech = "ip6"
-		}
-		dspfr.Directives = append(dspfr.Directives, spf.Directive{Mechanism: mech, IP: ip})
-	}
-	dspfr.Directives = append(dspfr.Directives,
-		spf.Directive{Mechanism: "mx"},
-		spf.Directive{Qualifier: "~", Mechanism: "all"},
-	)
-	dspftxt, err := dspfr.Record()
-	if err != nil {
-		return nil, fmt.Errorf("making domain spf record: %v", err)
-	}
-	records = append(records,
-		"",
-
-		"; Specify the MX host is allowed to send for our domain and for itself (for DSNs).",
-		"; ~all means softfail for anything else, which is done instead of -all to prevent older",
-		"; mail servers from rejecting the message because they never get to looking for a dkim/dmarc pass.",
-		fmt.Sprintf(`%s.                    TXT "%s"`, d, dspftxt),
-		"",
-
-		"; Emails that fail the DMARC check (without aligned DKIM and without aligned SPF)",
-		"; should be rejected, and request reports. If you email through mailing lists that",
-		"; strip DKIM-Signature headers and don't rewrite the From header, you may want to",
-		"; set the policy to p=none.",
-		fmt.Sprintf(`_dmarc.%s.             TXT "%s"`, d, dmarcr.String()),
-		"",
-	)
-
-	if sts := domConf.MTASTS; sts != nil {
-		records = append(records,
-			"; Remote servers can use MTA-STS to verify our TLS certificate with the",
-			"; WebPKI pool of CA's (certificate authorities) when delivering over SMTP with",
-			"; STARTTLSTLS.",
-			fmt.Sprintf(`mta-sts.%s.            CNAME %s.`, d, h),
-			fmt.Sprintf(`_mta-sts.%s.           TXT "v=STSv1; id=%s"`, d, sts.PolicyID),
-			"",
-		)
-	} else {
-		records = append(records,
-			"; Note: No MTA-STS to indicate TLS should be used. Either because disabled for the",
-			"; domain or because mox.conf does not have a listener with MTA-STS configured.",
-			"",
-		)
-	}
-
-	if domConf.TLSRPT != nil {
-		uri := url.URL{
-			Scheme: "mailto",
-			Opaque: smtp.NewAddress(domConf.TLSRPT.ParsedLocalpart, domConf.TLSRPT.DNSDomain).Pack(false),
-		}
-		tlsrptr := tlsrpt.Record{Version: "TLSRPTv1", RUAs: [][]tlsrpt.RUA{{tlsrpt.RUA(uri.String())}}}
-		records = append(records,
-			"; Request reporting about TLS failures.",
-			fmt.Sprintf(`_smtp._tls.%s.         TXT "%s"`, d, tlsrptr.String()),
-			"",
-		)
-	}
-
-	if domConf.ClientSettingsDomain != "" && domConf.ClientSettingsDNSDomain != Conf.Static.HostnameDomain {
-		records = append(records,
-			"; Client settings will reference a subdomain of the hosted domain, making it",
-			"; easier to migrate to a different server in the future by not requiring settings",
-			"; in all clients to be updated.",
-			fmt.Sprintf(`%-*s CNAME %s.`, 20+len(d), domConf.ClientSettingsDNSDomain.ASCII+".", h),
-			"",
-		)
-	}
-
-	records = append(records,
-		"; Autoconfig is used by Thunderbird. Autodiscover is (in theory) used by Microsoft.",
-		fmt.Sprintf(`autoconfig.%s.         CNAME %s.`, d, h),
-		fmt.Sprintf(`_autodiscover._tcp.%s. SRV 0 1 443 %s.`, d, h),
-		"",
-
-		// ../rfc/6186:133 ../rfc/8314:692
-		"; For secure IMAP and submission autoconfig, point to mail host.",
-		fmt.Sprintf(`_imaps._tcp.%s.        SRV 0 1 993 %s.`, d, h),
-		fmt.Sprintf(`_submissions._tcp.%s.  SRV 0 1 465 %s.`, d, h),
-		"",
-		// ../rfc/6186:242
-		"; Next records specify POP3 and non-TLS ports are not to be used.",
-		"; These are optional and safe to leave out (e.g. if you have to click a lot in a",
-		"; DNS admin web interface).",
-		fmt.Sprintf(`_imap._tcp.%s.         SRV 0 0 0 .`, d),
-		fmt.Sprintf(`_submission._tcp.%s.   SRV 0 0 0 .`, d),
-		fmt.Sprintf(`_pop3._tcp.%s.         SRV 0 0 0 .`, d),
-		fmt.Sprintf(`_pop3s._tcp.%s.        SRV 0 0 0 .`, d),
-	)
-
-	if certIssuerDomainName != "" {
-		// ../rfc/8659:18 for CAA records.
-		records = append(records,
-			"",
-			"; Optional:",
-			"; You could mark Let's Encrypt as the only Certificate Authority allowed to",
-			"; sign TLS certificates for your domain.",
-			fmt.Sprintf(`%s.                    CAA 0 issue "%s"`, d, certIssuerDomainName),
-		)
-		if acmeAccountURI != "" {
-			// ../rfc/8657:99 for accounturi.
-			// ../rfc/8657:147 for validationmethods.
-			records = append(records,
-				";",
-				"; Optionally limit certificates for this domain to the account ID and methods used by mox.",
-				fmt.Sprintf(`;; %s.                 CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
-				";",
-				"; Or alternatively only limit for email-specific subdomains, so you can use",
-				"; other accounts/methods for other subdomains.",
-				fmt.Sprintf(`;; autoconfig.%s.      CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
-				fmt.Sprintf(`;; mta-sts.%s.         CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, d, certIssuerDomainName, acmeAccountURI),
-			)
-			if domConf.ClientSettingsDomain != "" && domConf.ClientSettingsDNSDomain != Conf.Static.HostnameDomain {
-				records = append(records,
-					fmt.Sprintf(`;; %-*s CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, 20-3+len(d), domConf.ClientSettingsDNSDomain.ASCII, certIssuerDomainName, acmeAccountURI),
-				)
-			}
-			if strings.HasSuffix(h, "."+d) {
-				records = append(records,
-					";",
-					"; And the mail hostname.",
-					fmt.Sprintf(`;; %-*s CAA 0 issue "%s; accounturi=%s; validationmethods=tls-alpn-01,http-01"`, 20-3+len(d), h+".", certIssuerDomainName, acmeAccountURI),
-				)
-			}
-		} else {
-			// The string "will be suggested" is used by
-			// ../testdata/integration/moxacmepebble.sh and ../testdata/integration/moxmail2.sh
-			// as end of DNS records.
-			records = append(records,
-				";",
-				"; Note: After starting up, once an ACME account has been created, CAA records",
-				"; that restrict issuance to the account will be suggested.",
-			)
-		}
-	}
-	return records, nil
 }
 
 // AccountAdd adds an account and an initial address and reloads the configuration.
@@ -1013,10 +652,9 @@ func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 		return fmt.Errorf("%w: parsing email address: %v", ErrRequest, err)
 	}
 
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	c := Conf.Dynamic
+	c := mox.Conf.Dynamic
 	if _, ok := c.Accounts[account]; ok {
 		return fmt.Errorf("%w: account already present", ErrRequest)
 	}
@@ -1034,7 +672,7 @@ func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 	}
 	nc.Accounts[account] = MakeAccountConfig(addr)
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("account added", slog.String("account", account), slog.Any("address", addr))
@@ -1050,10 +688,9 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 		}
 	}()
 
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	c := Conf.Dynamic
+	c := mox.Conf.Dynamic
 	if _, ok := c.Accounts[account]; !ok {
 		return fmt.Errorf("%w: account does not exist", ErrRequest)
 	}
@@ -1068,12 +705,12 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 		}
 	}
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 
-	odir := filepath.Join(DataDirPath("accounts"), account)
-	tmpdir := filepath.Join(DataDirPath("tmp"), "oldaccount-"+account)
+	odir := filepath.Join(mox.DataDirPath("accounts"), account)
+	tmpdir := filepath.Join(mox.DataDirPath("tmp"), "oldaccount-"+account)
 	if err := os.Rename(odir, tmpdir); err != nil {
 		log.Errorx("moving old account data directory out of the way", err, slog.String("account", account))
 		return fmt.Errorf("account removed, but account data directory %q could not be moved out of the way: %v", odir, err)
@@ -1093,12 +730,12 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 //
 // Must be called with config lock held.
 func checkAddressAvailable(addr smtp.Address) error {
-	dc, ok := Conf.Dynamic.Domains[addr.Domain.Name()]
+	dc, ok := mox.Conf.Dynamic.Domains[addr.Domain.Name()]
 	if !ok {
 		return fmt.Errorf("domain does not exist")
 	}
-	lp := CanonicalLocalpart(addr.Localpart, dc)
-	if _, ok := Conf.accountDestinations[smtp.NewAddress(lp, addr.Domain).String()]; ok {
+	lp := mox.CanonicalLocalpart(addr.Localpart, dc)
+	if _, ok := mox.Conf.AccountDestinationsLocked[smtp.NewAddress(lp, addr.Domain).String()]; ok {
 		return fmt.Errorf("canonicalized address %s already configured", smtp.NewAddress(lp, addr.Domain))
 	} else if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(addr.Localpart), dc.LocalpartCatchallSeparator) {
 		return fmt.Errorf("localpart cannot include domain catchall separator %s", dc.LocalpartCatchallSeparator)
@@ -1118,10 +755,9 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 		}
 	}()
 
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	c := Conf.Dynamic
+	c := mox.Conf.Dynamic
 	a, ok := c.Accounts[account]
 	if !ok {
 		return fmt.Errorf("%w: account does not exist", ErrRequest)
@@ -1135,9 +771,9 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 		}
 		dname := d.Name()
 		destAddr = "@" + dname
-		if _, ok := Conf.Dynamic.Domains[dname]; !ok {
+		if _, ok := mox.Conf.Dynamic.Domains[dname]; !ok {
 			return fmt.Errorf("%w: domain does not exist", ErrRequest)
-		} else if _, ok := Conf.accountDestinations[destAddr]; ok {
+		} else if _, ok := mox.Conf.AccountDestinationsLocked[destAddr]; ok {
 			return fmt.Errorf("%w: catchall address already configured for domain", ErrRequest)
 		}
 	} else {
@@ -1167,7 +803,7 @@ func AddressAdd(ctx context.Context, address, account string) (rerr error) {
 	a.Destinations = nd
 	nc.Accounts[account] = a
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("address added", slog.String("address", address), slog.String("account", account))
@@ -1187,17 +823,16 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		}
 	}()
 
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	ad, ok := Conf.accountDestinations[address]
+	ad, ok := mox.Conf.AccountDestinationsLocked[address]
 	if !ok {
 		return fmt.Errorf("%w: address does not exists", ErrRequest)
 	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
 	// leave no trace.
-	a, ok := Conf.Dynamic.Accounts[ad.Account]
+	a, ok := mox.Conf.Dynamic.Accounts[ad.Account]
 	if !ok {
 		return fmt.Errorf("internal error: cannot find account")
 	}
@@ -1241,12 +876,12 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		if strings.HasPrefix(address, "@") {
 			continue
 		}
-		dc, ok := Conf.Dynamic.Domains[dom.Name()]
+		dc, ok := mox.Conf.Dynamic.Domains[dom.Name()]
 		if !ok {
 			return fmt.Errorf("%w: unknown domain in fromid login address %q", ErrRequest, fa.Pack(true))
 		}
-		flp := CanonicalLocalpart(fa.Localpart, dc)
-		alp := CanonicalLocalpart(pa.Localpart, dc)
+		flp := mox.CanonicalLocalpart(fa.Localpart, dc)
+		alp := mox.CanonicalLocalpart(pa.Localpart, dc)
 		if alp != flp {
 			// Keep for different localpart.
 			fromIDLoginAddresses = append(fromIDLoginAddresses, a.FromIDLoginAddresses[i])
@@ -1255,7 +890,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	na.FromIDLoginAddresses = fromIDLoginAddresses
 
 	// And remove as member from aliases configured in domains.
-	domains := maps.Clone(Conf.Dynamic.Domains)
+	domains := maps.Clone(mox.Conf.Dynamic.Domains)
 	for _, aa := range na.Aliases {
 		if aa.SubscriptionAddress != address {
 			continue
@@ -1263,7 +898,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 
 		aliasAddr := fmt.Sprintf("%s@%s", aa.Alias.LocalpartStr, aa.Alias.Domain.Name())
 
-		dom, ok := Conf.Dynamic.Domains[aa.Alias.Domain.Name()]
+		dom, ok := mox.Conf.Dynamic.Domains[aa.Alias.Domain.Name()]
 		if !ok {
 			return fmt.Errorf("cannot find domain for alias %s", aliasAddr)
 		}
@@ -1283,15 +918,15 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	}
 	na.Aliases = nil // Filled when parsing config.
 
-	nc := Conf.Dynamic
+	nc := mox.Conf.Dynamic
 	nc.Accounts = map[string]config.Account{}
-	for name, a := range Conf.Dynamic.Accounts {
+	for name, a := range mox.Conf.Dynamic.Accounts {
 		nc.Accounts[name] = a
 	}
 	nc.Accounts[ad.Account] = na
 	nc.Domains = domains
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("address removed", slog.String("address", address), slog.String("account", ad.Account))
@@ -1393,10 +1028,9 @@ func AccountSave(ctx context.Context, account string, xmodify func(acc *config.A
 		}
 	}()
 
-	Conf.dynamicMutex.Lock()
-	defer Conf.dynamicMutex.Unlock()
+	defer mox.Conf.DynamicLockUnlock()()
 
-	c := Conf.Dynamic
+	c := mox.Conf.Dynamic
 	acc, ok := c.Accounts[account]
 	if !ok {
 		return fmt.Errorf("%w: account not present", ErrRequest)
@@ -1413,243 +1047,9 @@ func AccountSave(ctx context.Context, account string, xmodify func(acc *config.A
 	}
 	nc.Accounts[account] = acc
 
-	if err := writeDynamic(ctx, log, nc); err != nil {
+	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 	log.Info("account fields saved", slog.String("account", account))
 	return nil
-}
-
-type TLSMode uint8
-
-const (
-	TLSModeImmediate TLSMode = 0
-	TLSModeSTARTTLS  TLSMode = 1
-	TLSModeNone      TLSMode = 2
-)
-
-type ProtocolConfig struct {
-	Host    dns.Domain
-	Port    int
-	TLSMode TLSMode
-}
-
-type ClientConfig struct {
-	IMAP       ProtocolConfig
-	Submission ProtocolConfig
-}
-
-// ClientConfigDomain returns a single IMAP and Submission client configuration for
-// a domain.
-func ClientConfigDomain(d dns.Domain) (rconfig ClientConfig, rerr error) {
-	var haveIMAP, haveSubmission bool
-
-	domConf, ok := Conf.Domain(d)
-	if !ok {
-		return ClientConfig{}, fmt.Errorf("%w: unknown domain", ErrRequest)
-	}
-
-	gather := func(l config.Listener) (done bool) {
-		host := Conf.Static.HostnameDomain
-		if l.Hostname != "" {
-			host = l.HostnameDomain
-		}
-		if domConf.ClientSettingsDomain != "" {
-			host = domConf.ClientSettingsDNSDomain
-		}
-		if !haveIMAP && l.IMAPS.Enabled {
-			rconfig.IMAP.Host = host
-			rconfig.IMAP.Port = config.Port(l.IMAPS.Port, 993)
-			rconfig.IMAP.TLSMode = TLSModeImmediate
-			haveIMAP = true
-		}
-		if !haveIMAP && l.IMAP.Enabled {
-			rconfig.IMAP.Host = host
-			rconfig.IMAP.Port = config.Port(l.IMAP.Port, 143)
-			rconfig.IMAP.TLSMode = TLSModeSTARTTLS
-			if l.TLS == nil {
-				rconfig.IMAP.TLSMode = TLSModeNone
-			}
-			haveIMAP = true
-		}
-		if !haveSubmission && l.Submissions.Enabled {
-			rconfig.Submission.Host = host
-			rconfig.Submission.Port = config.Port(l.Submissions.Port, 465)
-			rconfig.Submission.TLSMode = TLSModeImmediate
-			haveSubmission = true
-		}
-		if !haveSubmission && l.Submission.Enabled {
-			rconfig.Submission.Host = host
-			rconfig.Submission.Port = config.Port(l.Submission.Port, 587)
-			rconfig.Submission.TLSMode = TLSModeSTARTTLS
-			if l.TLS == nil {
-				rconfig.Submission.TLSMode = TLSModeNone
-			}
-			haveSubmission = true
-		}
-		return haveIMAP && haveSubmission
-	}
-
-	// Look at the public listener first. Most likely the intended configuration.
-	if public, ok := Conf.Static.Listeners["public"]; ok {
-		if gather(public) {
-			return
-		}
-	}
-	// Go through the other listeners in consistent order.
-	names := maps.Keys(Conf.Static.Listeners)
-	sort.Strings(names)
-	for _, name := range names {
-		if gather(Conf.Static.Listeners[name]) {
-			return
-		}
-	}
-	return ClientConfig{}, fmt.Errorf("%w: no listeners found for imap and/or submission", ErrRequest)
-}
-
-// ClientConfigs holds the client configuration for IMAP/Submission for a
-// domain.
-type ClientConfigs struct {
-	Entries []ClientConfigsEntry
-}
-
-type ClientConfigsEntry struct {
-	Protocol string
-	Host     dns.Domain
-	Port     int
-	Listener string
-	Note     string
-}
-
-// ClientConfigsDomain returns the client configs for IMAP/Submission for a
-// domain.
-func ClientConfigsDomain(d dns.Domain) (ClientConfigs, error) {
-	domConf, ok := Conf.Domain(d)
-	if !ok {
-		return ClientConfigs{}, fmt.Errorf("%w: unknown domain", ErrRequest)
-	}
-
-	c := ClientConfigs{}
-	c.Entries = []ClientConfigsEntry{}
-	var listeners []string
-
-	for name := range Conf.Static.Listeners {
-		listeners = append(listeners, name)
-	}
-	sort.Slice(listeners, func(i, j int) bool {
-		return listeners[i] < listeners[j]
-	})
-
-	note := func(tls bool, requiretls bool) string {
-		if !tls {
-			return "plain text, no STARTTLS configured"
-		}
-		if requiretls {
-			return "STARTTLS required"
-		}
-		return "STARTTLS optional"
-	}
-
-	for _, name := range listeners {
-		l := Conf.Static.Listeners[name]
-		host := Conf.Static.HostnameDomain
-		if l.Hostname != "" {
-			host = l.HostnameDomain
-		}
-		if domConf.ClientSettingsDomain != "" {
-			host = domConf.ClientSettingsDNSDomain
-		}
-		if l.Submissions.Enabled {
-			c.Entries = append(c.Entries, ClientConfigsEntry{"Submission (SMTP)", host, config.Port(l.Submissions.Port, 465), name, "with TLS"})
-		}
-		if l.IMAPS.Enabled {
-			c.Entries = append(c.Entries, ClientConfigsEntry{"IMAP", host, config.Port(l.IMAPS.Port, 993), name, "with TLS"})
-		}
-		if l.Submission.Enabled {
-			c.Entries = append(c.Entries, ClientConfigsEntry{"Submission (SMTP)", host, config.Port(l.Submission.Port, 587), name, note(l.TLS != nil, !l.Submission.NoRequireSTARTTLS)})
-		}
-		if l.IMAP.Enabled {
-			c.Entries = append(c.Entries, ClientConfigsEntry{"IMAP", host, config.Port(l.IMAPS.Port, 143), name, note(l.TLS != nil, !l.IMAP.NoRequireSTARTTLS)})
-		}
-	}
-
-	return c, nil
-}
-
-// IPs returns ip addresses we may be listening/receiving mail on or
-// connecting/sending from to the outside.
-func IPs(ctx context.Context, receiveOnly bool) ([]net.IP, error) {
-	log := pkglog.WithContext(ctx)
-
-	// Try to gather all IPs we are listening on by going through the config.
-	// If we encounter 0.0.0.0 or ::, we'll gather all local IPs afterwards.
-	var ips []net.IP
-	var ipv4all, ipv6all bool
-	for _, l := range Conf.Static.Listeners {
-		// If NATed, we don't know our external IPs.
-		if l.IPsNATed {
-			return nil, nil
-		}
-		check := l.IPs
-		if len(l.NATIPs) > 0 {
-			check = l.NATIPs
-		}
-		for _, s := range check {
-			ip := net.ParseIP(s)
-			if ip.IsUnspecified() {
-				if ip.To4() != nil {
-					ipv4all = true
-				} else {
-					ipv6all = true
-				}
-				continue
-			}
-			ips = append(ips, ip)
-		}
-	}
-
-	// We'll list the IPs on the interfaces. How useful is this? There is a good chance
-	// we're listening on all addresses because of a load balancer/firewall.
-	if ipv4all || ipv6all {
-		ifaces, err := net.Interfaces()
-		if err != nil {
-			return nil, fmt.Errorf("listing network interfaces: %v", err)
-		}
-		for _, iface := range ifaces {
-			if iface.Flags&net.FlagUp == 0 {
-				continue
-			}
-			addrs, err := iface.Addrs()
-			if err != nil {
-				return nil, fmt.Errorf("listing addresses for network interface: %v", err)
-			}
-			if len(addrs) == 0 {
-				continue
-			}
-
-			for _, addr := range addrs {
-				ip, _, err := net.ParseCIDR(addr.String())
-				if err != nil {
-					log.Errorx("bad interface addr", err, slog.Any("address", addr))
-					continue
-				}
-				v4 := ip.To4() != nil
-				if ipv4all && v4 || ipv6all && !v4 {
-					ips = append(ips, ip)
-				}
-			}
-		}
-	}
-
-	if receiveOnly {
-		return ips, nil
-	}
-
-	for _, t := range Conf.Static.Transports {
-		if t.Socks != nil {
-			ips = append(ips, t.Socks.IPs...)
-		}
-	}
-
-	return ips, nil
 }
