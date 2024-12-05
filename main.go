@@ -150,6 +150,11 @@ var commands = []struct {
 	{"config address rm", cmdConfigAddressRemove},
 	{"config domain add", cmdConfigDomainAdd},
 	{"config domain rm", cmdConfigDomainRemove},
+	{"config tlspubkey list", cmdConfigTlspubkeyList},
+	{"config tlspubkey get", cmdConfigTlspubkeyGet},
+	{"config tlspubkey add", cmdConfigTlspubkeyAdd},
+	{"config tlspubkey rm", cmdConfigTlspubkeyRemove},
+	{"config tlspubkey gen", cmdConfigTlspubkeyGen},
 	{"config alias list", cmdConfigAliasList},
 	{"config alias print", cmdConfigAliasPrint},
 	{"config alias add", cmdConfigAliasAdd},
@@ -919,6 +924,200 @@ func ctlcmdConfigAccountRemove(ctl *ctl, account string) {
 	ctl.xwrite(account)
 	ctl.xreadok()
 	fmt.Println("account removed")
+}
+
+func cmdConfigTlspubkeyList(c *cmd) {
+	c.params = "[account]"
+	c.help = `List TLS public keys for TLS client certificate authentication.
+
+If account is absent, the TLS public keys for all accounts are listed.
+`
+	args := c.Parse()
+	var accountOpt string
+	if len(args) == 1 {
+		accountOpt = args[0]
+	} else if len(args) > 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigTlspubkeyList(xctl(), accountOpt)
+}
+
+func ctlcmdConfigTlspubkeyList(ctl *ctl, accountOpt string) {
+	ctl.xwrite("tlspubkeylist")
+	ctl.xwrite(accountOpt)
+	ctl.xreadok()
+	ctl.xstreamto(os.Stdout)
+}
+
+func cmdConfigTlspubkeyGet(c *cmd) {
+	c.params = "fingerprint"
+	c.help = `Get a TLS public key for a fingerprint.
+
+Prints the type, name, account and address for the key, and the certificate in
+PEM format.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigTlspubkeyGet(xctl(), args[0])
+}
+
+func ctlcmdConfigTlspubkeyGet(ctl *ctl, fingerprint string) {
+	ctl.xwrite("tlspubkeyget")
+	ctl.xwrite(fingerprint)
+	ctl.xreadok()
+	typ := ctl.xread()
+	name := ctl.xread()
+	account := ctl.xread()
+	address := ctl.xread()
+	noimappreauth := ctl.xread()
+	var b bytes.Buffer
+	ctl.xstreamto(&b)
+	buf := b.Bytes()
+	var block *pem.Block
+	if len(buf) != 0 {
+		block = &pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: buf,
+		}
+	}
+
+	fmt.Printf("type: %s\nname: %s\naccount: %s\naddress: %s\nno imap preauth: %s\n", typ, name, account, address, noimappreauth)
+	if block != nil {
+		fmt.Printf("certificate:\n\n")
+		pem.Encode(os.Stdout, block)
+	}
+}
+
+func cmdConfigTlspubkeyAdd(c *cmd) {
+	c.params = "address [name] < cert.pem"
+	c.help = `Add a TLS public key to the account of the given address.
+
+The public key is read from the certificate.
+
+The optional name is a human-readable descriptive name of the key. If absent,
+the CommonName from the certificate is used.
+`
+	var noimappreauth bool
+	c.flag.BoolVar(&noimappreauth, "no-imap-preauth", false, "Don't automatically switch new IMAP connections authenticated with this key to \"authenticated\" state after the TLS handshake. For working around clients that ignore the untagged IMAP PREAUTH response and try to authenticate while already authenticated.")
+	args := c.Parse()
+	var address, name string
+	if len(args) == 1 {
+		address = args[0]
+	} else if len(args) == 2 {
+		address, name = args[0], args[1]
+	} else {
+		c.Usage()
+	}
+
+	buf, err := io.ReadAll(os.Stdin)
+	xcheckf(err, "reading from stdin")
+	block, _ := pem.Decode(buf)
+	if block == nil {
+		err = errors.New("no pem block found")
+	} else if block.Type != "CERTIFICATE" {
+		err = fmt.Errorf("unexpected type %q, expected CERTIFICATE", block.Type)
+	}
+	xcheckf(err, "parsing pem")
+
+	mustLoadConfig()
+	ctlcmdConfigTlspubkeyAdd(xctl(), address, name, noimappreauth, block.Bytes)
+}
+
+func ctlcmdConfigTlspubkeyAdd(ctl *ctl, address, name string, noimappreauth bool, certDER []byte) {
+	ctl.xwrite("tlspubkeyadd")
+	ctl.xwrite(address)
+	ctl.xwrite(name)
+	ctl.xwrite(fmt.Sprintf("%v", noimappreauth))
+	ctl.xstreamfrom(bytes.NewReader(certDER))
+	ctl.xreadok()
+}
+
+func cmdConfigTlspubkeyRemove(c *cmd) {
+	c.params = "fingerprint"
+	c.help = `Remove TLS public key for fingerprint.`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigTlspubkeyRemove(xctl(), args[0])
+}
+
+func ctlcmdConfigTlspubkeyRemove(ctl *ctl, fingerprint string) {
+	ctl.xwrite("tlspubkeyrm")
+	ctl.xwrite(fingerprint)
+	ctl.xreadok()
+}
+
+func cmdConfigTlspubkeyGen(c *cmd) {
+	c.params = "stem"
+	c.help = `Generate an ed25519 private key and minimal certificate for use a TLS public key and write to files starting with stem.
+
+The private key is written to $stem.$timestamp.ed25519privatekey.pkcs8.pem.
+The certificate is written to $stem.$timestamp.certificate.pem.
+The private key and certificate are also written to
+$stem.$timestamp.ed25519privatekey-certificate.pem.
+
+The certificate can be added to an account with "mox config account tlspubkey add".
+
+The combined file can be used with "mox sendmail".
+
+The private key is also written to standard error in raw-url-base64-encoded
+form, also for use with "mox sendmail". The fingerprint is written to standard
+error too, for reference.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	stem := args[0]
+	timestamp := time.Now().Format("200601021504")
+	prefix := stem + "." + timestamp
+
+	seed := make([]byte, ed25519.SeedSize)
+	if _, err := cryptorand.Read(seed); err != nil {
+		panic(err)
+	}
+	privKey := ed25519.NewKeyFromSeed(seed)
+	privKeyBuf, err := x509.MarshalPKCS8PrivateKey(privKey)
+	xcheckf(err, "marshal private key as pkcs8")
+	var b bytes.Buffer
+	err = pem.Encode(&b, &pem.Block{Type: "PRIVATE KEY", Bytes: privKeyBuf})
+	xcheckf(err, "marshal pkcs8 private key to pem")
+	privKeyBufPEM := b.Bytes()
+
+	certBuf, tlsCert := xminimalCert(privKey)
+	b = bytes.Buffer{}
+	err = pem.Encode(&b, &pem.Block{Type: "CERTIFICATE", Bytes: certBuf})
+	xcheckf(err, "marshal certificate to pem")
+	certBufPEM := b.Bytes()
+
+	xwriteFile := func(p string, data []byte, what string) {
+		log.Printf("writing %s", p)
+		err = os.WriteFile(p, data, 0600)
+		xcheckf(err, "writing %s file: %v", what, err)
+	}
+
+	xwriteFile(prefix+".ed25519privatekey.pkcs8.pem", privKeyBufPEM, "private key")
+	xwriteFile(prefix+".certificate.pem", certBufPEM, "certificate")
+	combinedPEM := append(append([]byte{}, privKeyBufPEM...), certBufPEM...)
+	xwriteFile(prefix+".ed25519privatekey-certificate.pem", combinedPEM, "combined private key and certificate")
+
+	shabuf := sha256.Sum256(tlsCert.Leaf.RawSubjectPublicKeyInfo)
+
+	_, err = fmt.Fprintf(os.Stderr, "ed25519 private key as raw-url-base64: %s\ned25519 public key fingerprint: %s\n",
+		base64.RawURLEncoding.EncodeToString(seed),
+		base64.RawURLEncoding.EncodeToString(shabuf[:]),
+	)
+	xcheckf(err, "write private key and public key fingerprint")
 }
 
 func cmdConfigAddressAdd(c *cmd) {

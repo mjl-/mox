@@ -8,6 +8,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -670,4 +671,81 @@ func (Account) RejectsSave(ctx context.Context, mailbox string, keep bool) {
 		acc.KeepRejects = keep
 	})
 	xcheckf(ctx, err, "saving account rejects settings")
+}
+
+func (Account) TLSPublicKeys(ctx context.Context) ([]store.TLSPublicKey, error) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	return store.TLSPublicKeyList(ctx, reqInfo.AccountName)
+}
+
+func (Account) TLSPublicKeyAdd(ctx context.Context, loginAddress, name string, noIMAPPreauth bool, certPEM string) (store.TLSPublicKey, error) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	block, rest := pem.Decode([]byte(certPEM))
+	var err error
+	if block == nil {
+		err = errors.New("no pem data found")
+	} else if block.Type != "CERTIFICATE" {
+		err = fmt.Errorf("unexpected type %q, need CERTIFICATE", block.Type)
+	} else if len(rest) != 0 {
+		err = errors.New("only single pem block allowed")
+	}
+	xcheckuserf(ctx, err, "parsing pem file")
+
+	tpk, err := store.ParseTLSPublicKeyCert(block.Bytes)
+	xcheckuserf(ctx, err, "parsing certificate")
+	if name != "" {
+		tpk.Name = name
+	}
+	tpk.Account = reqInfo.AccountName
+	tpk.LoginAddress = loginAddress
+	tpk.NoIMAPPreauth = noIMAPPreauth
+	err = store.TLSPublicKeyAdd(ctx, &tpk)
+	if err != nil && errors.Is(err, bstore.ErrUnique) {
+		xcheckuserf(ctx, err, "add tls public key")
+	} else {
+		xcheckf(ctx, err, "add tls public key")
+	}
+	return tpk, nil
+}
+
+func xtlspublickey(ctx context.Context, account string, fingerprint string) store.TLSPublicKey {
+	tpk, err := store.TLSPublicKeyGet(ctx, fingerprint)
+	if err == nil && tpk.Account != account {
+		err = bstore.ErrAbsent
+	}
+	if err == bstore.ErrAbsent {
+		xcheckuserf(ctx, err, "get tls public key")
+	}
+	xcheckf(ctx, err, "get tls public key")
+	return tpk
+}
+
+func (Account) TLSPublicKeyRemove(ctx context.Context, fingerprint string) error {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	xtlspublickey(ctx, reqInfo.AccountName, fingerprint)
+	return store.TLSPublicKeyRemove(ctx, fingerprint)
+}
+
+func (Account) TLSPublicKeyUpdate(ctx context.Context, pubKey store.TLSPublicKey) error {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	tpk := xtlspublickey(ctx, reqInfo.AccountName, pubKey.Fingerprint)
+	log := pkglog.WithContext(ctx)
+	acc, _, err := store.OpenEmail(log, pubKey.LoginAddress)
+	if err == nil && acc.Name != reqInfo.AccountName {
+		err = store.ErrUnknownCredentials
+	}
+	if acc != nil {
+		xerr := acc.Close()
+		log.Check(xerr, "close account")
+	}
+	if err == store.ErrUnknownCredentials {
+		xcheckuserf(ctx, errors.New("unknown address"), "looking up address")
+	}
+	tpk.Name = pubKey.Name
+	tpk.LoginAddress = pubKey.LoginAddress
+	tpk.NoIMAPPreauth = pubKey.NoIMAPPreauth
+	err = store.TLSPublicKeyUpdate(ctx, &tpk)
+	xcheckf(ctx, err, "updating tls public key")
+	return nil
 }

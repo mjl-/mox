@@ -1052,6 +1052,19 @@ export interface Dynamic {
 	MonitorDNSBLZones?: Domain[] | null
 }
 
+// TLSPublicKey is a public key for use with TLS client authentication based on the
+// public key of the certificate.
+export interface TLSPublicKey {
+	Fingerprint: string  // Raw-url-base64-encoded Subject Public Key Info of certificate.
+	Created: Date
+	Type: string  // E.g. "rsa-2048", "ecdsa-p256", "ed25519"
+	Name: string  // Descriptive name to identify the key, e.g. the device where key is used.
+	NoIMAPPreauth: boolean  // If set, new immediate authenticated TLS connections are not moved to "authenticated" state. For clients that don't understand it, and will try an authenticate command anyway.
+	CertDER?: string | null
+	Account: string  // Key authenticates this account.
+	LoginAddress: string  // Must belong to account.
+}
+
 export type CSRFToken = string
 
 // Policy as used in DMARC DNS record for "p=" or "sp=".
@@ -1096,7 +1109,7 @@ export type Localpart = string
 // be an IPv4 address.
 export type IP = string
 
-export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"Canonicalization":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"ConfigDomain":true,"DANECheckResult":true,"DKIM":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARC":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Dynamic":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"Hook":true,"HookFilter":true,"HookResult":true,"HookRetired":true,"HookRetiredFilter":true,"HookRetiredSort":true,"HookSort":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"IncomingWebhook":true,"JunkFilter":true,"MTASTS":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"MsgResult":true,"MsgRetired":true,"OutgoingWebhook":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"RetiredFilter":true,"RetiredSort":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Selector":true,"Sort":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSRPT":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebInternal":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
+export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"Canonicalization":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"ConfigDomain":true,"DANECheckResult":true,"DKIM":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARC":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Dynamic":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"Hook":true,"HookFilter":true,"HookResult":true,"HookRetired":true,"HookRetiredFilter":true,"HookRetiredSort":true,"HookSort":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"IncomingWebhook":true,"JunkFilter":true,"MTASTS":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"MsgResult":true,"MsgRetired":true,"OutgoingWebhook":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"RetiredFilter":true,"RetiredSort":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Selector":true,"Sort":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSPublicKey":true,"TLSRPT":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebInternal":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
 export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"CSRFToken":true,"DMARCPolicy":true,"IP":true,"Localpart":true,"Mode":true,"RUA":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
@@ -1209,6 +1222,7 @@ export const types: TypenameMap = {
 	"TLSResult": {"Name":"TLSResult","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"PolicyDomain","Docs":"","Typewords":["string"]},{"Name":"DayUTC","Docs":"","Typewords":["string"]},{"Name":"RecipientDomain","Docs":"","Typewords":["string"]},{"Name":"Created","Docs":"","Typewords":["timestamp"]},{"Name":"Updated","Docs":"","Typewords":["timestamp"]},{"Name":"IsHost","Docs":"","Typewords":["bool"]},{"Name":"SendReport","Docs":"","Typewords":["bool"]},{"Name":"SentToRecipientDomain","Docs":"","Typewords":["bool"]},{"Name":"RecipientDomainReportingAddresses","Docs":"","Typewords":["[]","string"]},{"Name":"SentToPolicyDomain","Docs":"","Typewords":["bool"]},{"Name":"Results","Docs":"","Typewords":["[]","Result"]}]},
 	"TLSRPTSuppressAddress": {"Name":"TLSRPTSuppressAddress","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Inserted","Docs":"","Typewords":["timestamp"]},{"Name":"ReportingAddress","Docs":"","Typewords":["string"]},{"Name":"Until","Docs":"","Typewords":["timestamp"]},{"Name":"Comment","Docs":"","Typewords":["string"]}]},
 	"Dynamic": {"Name":"Dynamic","Docs":"","Fields":[{"Name":"Domains","Docs":"","Typewords":["{}","ConfigDomain"]},{"Name":"Accounts","Docs":"","Typewords":["{}","Account"]},{"Name":"WebDomainRedirects","Docs":"","Typewords":["{}","string"]},{"Name":"WebHandlers","Docs":"","Typewords":["[]","WebHandler"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"MonitorDNSBLs","Docs":"","Typewords":["[]","string"]},{"Name":"MonitorDNSBLZones","Docs":"","Typewords":["[]","Domain"]}]},
+	"TLSPublicKey": {"Name":"TLSPublicKey","Docs":"","Fields":[{"Name":"Fingerprint","Docs":"","Typewords":["string"]},{"Name":"Created","Docs":"","Typewords":["timestamp"]},{"Name":"Type","Docs":"","Typewords":["string"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"NoIMAPPreauth","Docs":"","Typewords":["bool"]},{"Name":"CertDER","Docs":"","Typewords":["nullable","string"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"LoginAddress","Docs":"","Typewords":["string"]}]},
 	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"DMARCPolicy": {"Name":"DMARCPolicy","Docs":"","Values":[{"Name":"PolicyEmpty","Value":"","Docs":""},{"Name":"PolicyNone","Value":"none","Docs":""},{"Name":"PolicyQuarantine","Value":"quarantine","Docs":""},{"Name":"PolicyReject","Value":"reject","Docs":""}]},
 	"Align": {"Name":"Align","Docs":"","Values":[{"Name":"AlignStrict","Value":"s","Docs":""},{"Name":"AlignRelaxed","Value":"r","Docs":""}]},
@@ -1328,6 +1342,7 @@ export const parser = {
 	TLSResult: (v: any) => parse("TLSResult", v) as TLSResult,
 	TLSRPTSuppressAddress: (v: any) => parse("TLSRPTSuppressAddress", v) as TLSRPTSuppressAddress,
 	Dynamic: (v: any) => parse("Dynamic", v) as Dynamic,
+	TLSPublicKey: (v: any) => parse("TLSPublicKey", v) as TLSPublicKey,
 	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 	DMARCPolicy: (v: any) => parse("DMARCPolicy", v) as DMARCPolicy,
 	Align: (v: any) => parse("Align", v) as Align,
@@ -2234,6 +2249,14 @@ export class Client {
 		const returnTypes: string[][] = []
 		const params: any[] = [aliaslp, domainName, addresses]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async TLSPublicKeys(accountOpt: string): Promise<TLSPublicKey[] | null> {
+		const fn: string = "TLSPublicKeys"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = [["[]","TLSPublicKey"]]
+		const params: any[] = [accountOpt]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSPublicKey[] | null
 	}
 }
 

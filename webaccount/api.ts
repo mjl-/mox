@@ -204,6 +204,19 @@ export interface IncomingMeta {
 	Automated: boolean  // Whether this message was automated and should not receive automated replies. E.g. out of office or mailing list messages.
 }
 
+// TLSPublicKey is a public key for use with TLS client authentication based on the
+// public key of the certificate.
+export interface TLSPublicKey {
+	Fingerprint: string  // Raw-url-base64-encoded Subject Public Key Info of certificate.
+	Created: Date
+	Type: string  // E.g. "rsa-2048", "ecdsa-p256", "ed25519"
+	Name: string  // Descriptive name to identify the key, e.g. the device where key is used.
+	NoIMAPPreauth: boolean  // If set, new immediate authenticated TLS connections are not moved to "authenticated" state. For clients that don't understand it, and will try an authenticate command anyway.
+	CertDER?: string | null
+	Account: string  // Key authenticates this account.
+	LoginAddress: string  // Must belong to account.
+}
+
 export type CSRFToken = string
 
 // Localpart is a decoded local part of an email address, before the "@".
@@ -238,7 +251,7 @@ export enum OutgoingEvent {
 	EventUnrecognized = "unrecognized",
 }
 
-export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AutomaticJunkFlags":true,"Destination":true,"Domain":true,"ImportProgress":true,"Incoming":true,"IncomingMeta":true,"IncomingWebhook":true,"JunkFilter":true,"NameAddress":true,"Outgoing":true,"OutgoingWebhook":true,"Route":true,"Ruleset":true,"Structure":true,"SubjectPass":true,"Suppression":true}
+export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AutomaticJunkFlags":true,"Destination":true,"Domain":true,"ImportProgress":true,"Incoming":true,"IncomingMeta":true,"IncomingWebhook":true,"JunkFilter":true,"NameAddress":true,"Outgoing":true,"OutgoingWebhook":true,"Route":true,"Ruleset":true,"Structure":true,"SubjectPass":true,"Suppression":true,"TLSPublicKey":true}
 export const stringsTypes: {[typename: string]: boolean} = {"CSRFToken":true,"Localpart":true,"OutgoingEvent":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
@@ -263,6 +276,7 @@ export const types: TypenameMap = {
 	"NameAddress": {"Name":"NameAddress","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"Address","Docs":"","Typewords":["string"]}]},
 	"Structure": {"Name":"Structure","Docs":"","Fields":[{"Name":"ContentType","Docs":"","Typewords":["string"]},{"Name":"ContentTypeParams","Docs":"","Typewords":["{}","string"]},{"Name":"ContentID","Docs":"","Typewords":["string"]},{"Name":"DecodedSize","Docs":"","Typewords":["int64"]},{"Name":"Parts","Docs":"","Typewords":["[]","Structure"]}]},
 	"IncomingMeta": {"Name":"IncomingMeta","Docs":"","Fields":[{"Name":"MsgID","Docs":"","Typewords":["int64"]},{"Name":"MailFrom","Docs":"","Typewords":["string"]},{"Name":"MailFromValidated","Docs":"","Typewords":["bool"]},{"Name":"MsgFromValidated","Docs":"","Typewords":["bool"]},{"Name":"RcptTo","Docs":"","Typewords":["string"]},{"Name":"DKIMVerifiedDomains","Docs":"","Typewords":["[]","string"]},{"Name":"RemoteIP","Docs":"","Typewords":["string"]},{"Name":"Received","Docs":"","Typewords":["timestamp"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Automated","Docs":"","Typewords":["bool"]}]},
+	"TLSPublicKey": {"Name":"TLSPublicKey","Docs":"","Fields":[{"Name":"Fingerprint","Docs":"","Typewords":["string"]},{"Name":"Created","Docs":"","Typewords":["timestamp"]},{"Name":"Type","Docs":"","Typewords":["string"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"NoIMAPPreauth","Docs":"","Typewords":["bool"]},{"Name":"CertDER","Docs":"","Typewords":["nullable","string"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"LoginAddress","Docs":"","Typewords":["string"]}]},
 	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"Localpart": {"Name":"Localpart","Docs":"","Values":null},
 	"OutgoingEvent": {"Name":"OutgoingEvent","Docs":"","Values":[{"Name":"EventDelivered","Value":"delivered","Docs":""},{"Name":"EventSuppressed","Value":"suppressed","Docs":""},{"Name":"EventDelayed","Value":"delayed","Docs":""},{"Name":"EventFailed","Value":"failed","Docs":""},{"Name":"EventRelayed","Value":"relayed","Docs":""},{"Name":"EventExpanded","Value":"expanded","Docs":""},{"Name":"EventCanceled","Value":"canceled","Docs":""},{"Name":"EventUnrecognized","Value":"unrecognized","Docs":""}]},
@@ -290,6 +304,7 @@ export const parser = {
 	NameAddress: (v: any) => parse("NameAddress", v) as NameAddress,
 	Structure: (v: any) => parse("Structure", v) as Structure,
 	IncomingMeta: (v: any) => parse("IncomingMeta", v) as IncomingMeta,
+	TLSPublicKey: (v: any) => parse("TLSPublicKey", v) as TLSPublicKey,
 	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 	Localpart: (v: any) => parse("Localpart", v) as Localpart,
 	OutgoingEvent: (v: any) => parse("OutgoingEvent", v) as OutgoingEvent,
@@ -533,6 +548,38 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["bool"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [mailbox, keep]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async TLSPublicKeys(): Promise<TLSPublicKey[] | null> {
+		const fn: string = "TLSPublicKeys"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["[]","TLSPublicKey"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSPublicKey[] | null
+	}
+
+	async TLSPublicKeyAdd(loginAddress: string, name: string, noIMAPPreauth: boolean, certPEM: string): Promise<TLSPublicKey> {
+		const fn: string = "TLSPublicKeyAdd"
+		const paramTypes: string[][] = [["string"],["string"],["bool"],["string"]]
+		const returnTypes: string[][] = [["TLSPublicKey"]]
+		const params: any[] = [loginAddress, name, noIMAPPreauth, certPEM]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSPublicKey
+	}
+
+	async TLSPublicKeyRemove(fingerprint: string): Promise<void> {
+		const fn: string = "TLSPublicKeyRemove"
+		const paramTypes: string[][] = [["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [fingerprint]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async TLSPublicKeyUpdate(pubKey: TLSPublicKey): Promise<void> {
+		const fn: string = "TLSPublicKeyUpdate"
+		const paramTypes: string[][] = [["TLSPublicKey"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [pubKey]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 }

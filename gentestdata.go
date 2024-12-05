@@ -187,6 +187,12 @@ Accounts:
 	err = os.WriteFile(filepath.Join(destDataDir, "moxversion"), []byte(moxvar.Version), 0660)
 	xcheckf(err, "writing moxversion")
 
+	// Populate auth.db
+	err = store.Init(ctxbg)
+	xcheckf(err, "store init")
+	err = store.TLSPublicKeyAdd(ctxbg, &store.TLSPublicKey{Fingerprint: "...", Type: "ecdsa-p256", CertDER: []byte("..."), Account: "test0", LoginAddress: "test0@mox.example"})
+	xcheckf(err, "adding tlspubkey")
+
 	// Populate dmarc.db.
 	err = dmarcdb.Init()
 	xcheckf(err, "dmarcdb init")

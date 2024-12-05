@@ -69,6 +69,11 @@ any parameters. Followed by the help and usage information for each command.
 	mox config address rm address
 	mox config domain add domain account [localpart]
 	mox config domain rm domain
+	mox config tlspubkey list [account]
+	mox config tlspubkey get fingerprint
+	mox config tlspubkey add address [name] < cert.pem
+	mox config tlspubkey rm fingerprint
+	mox config tlspubkey gen stem
 	mox config alias list domain
 	mox config alias print alias
 	mox config alias add alias@domain rcpt1@domain ...
@@ -993,6 +998,61 @@ This is a dangerous operation. Incoming email delivery for this domain will be
 rejected.
 
 	usage: mox config domain rm domain
+
+# mox config tlspubkey list
+
+List TLS public keys for TLS client certificate authentication.
+
+If account is absent, the TLS public keys for all accounts are listed.
+
+	usage: mox config tlspubkey list [account]
+
+# mox config tlspubkey get
+
+Get a TLS public key for a fingerprint.
+
+Prints the type, name, account and address for the key, and the certificate in
+PEM format.
+
+	usage: mox config tlspubkey get fingerprint
+
+# mox config tlspubkey add
+
+Add a TLS public key to the account of the given address.
+
+The public key is read from the certificate.
+
+The optional name is a human-readable descriptive name of the key. If absent,
+the CommonName from the certificate is used.
+
+	usage: mox config tlspubkey add address [name] < cert.pem
+	  -no-imap-preauth
+	    	Don't automatically switch new IMAP connections authenticated with this key to "authenticated" state after the TLS handshake. For working around clients that ignore the untagged IMAP PREAUTH response and try to authenticate while already authenticated.
+
+# mox config tlspubkey rm
+
+Remove TLS public key for fingerprint.
+
+	usage: mox config tlspubkey rm fingerprint
+
+# mox config tlspubkey gen
+
+Generate an ed25519 private key and minimal certificate for use a TLS public key and write to files starting with stem.
+
+The private key is written to $stem.$timestamp.ed25519privatekey.pkcs8.pem.
+The certificate is written to $stem.$timestamp.certificate.pem.
+The private key and certificate are also written to
+$stem.$timestamp.ed25519privatekey-certificate.pem.
+
+The certificate can be added to an account with "mox config account tlspubkey add".
+
+The combined file can be used with "mox sendmail".
+
+The private key is also written to standard error in raw-url-base64-encoded
+form, also for use with "mox sendmail". The fingerprint is written to standard
+error too, for reference.
+
+	usage: mox config tlspubkey gen stem
 
 # mox config alias list
 

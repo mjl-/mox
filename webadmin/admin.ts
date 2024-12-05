@@ -759,10 +759,11 @@ const RoutesEditor = (kind: string, transports: { [key: string]: api.Transport }
 }
 
 const account = async (name: string) => {
-	const [[config, diskUsage], domains, transports] = await Promise.all([
+	const [[config, diskUsage], domains, transports, tlspubkeys] = await Promise.all([
 		client.Account(name),
 		client.Domains(),
 		client.Transports(),
+		client.TLSPublicKeys(name),
 	])
 
 	// todo: show suppression list, and buttons to add/remove entries.
@@ -994,6 +995,33 @@ const account = async (name: string) => {
 				formPassword.reset()
 			},
 		),
+		dom.br(),
+		dom.h2('TLS public keys', attr.title('For TLS client authentication with certificates, for IMAP and/or submission (SMTP). Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration or constraints are not verified.')),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('Login address'),
+					dom.th('Name'),
+					dom.th('Type'),
+					dom.th('No IMAP "preauth"', attr.title('New IMAP immediate TLS connections authenticated with a client certificate are automatically switched to "authenticated" state with an untagged IMAP "preauth" message by default. IMAP connections have a state machine specifying when commands are allowed. Authenticating is not allowed while in the "authenticated" state. Enable this option to work around clients that would try to authenticated anyway.')),
+					dom.th('Fingerprint'),
+				),
+			),
+			dom.tbody(
+				tlspubkeys?.length ? [] : dom.tr(dom.td(attr.colspan('5'), 'None')),
+				(tlspubkeys || []).map(tpk => {
+					const row = dom.tr(
+						dom.td(tpk.LoginAddress),
+						dom.td(tpk.Name),
+						dom.td(tpk.Type),
+						dom.td(tpk.NoIMAPPreauth ? 'Enabled' : ''),
+						dom.td(tpk.Fingerprint),
+					)
+					return row
+				}),
+			),
+		),
+
 		dom.br(),
 		RoutesEditor('account-specific', transports, config.Routes || [], async (routes: api.Route[]) => await client.AccountRoutesSave(name, routes)),
 		dom.br(),

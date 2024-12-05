@@ -2038,6 +2038,27 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "TLSPublicKeys",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "accountOpt",
+					"Typewords": [
+						"string"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"TLSPublicKey"
+					]
+				}
+			]
 		}
 	],
 	"Sections": [],
@@ -7236,6 +7257,69 @@
 					"Typewords": [
 						"[]",
 						"Domain"
+					]
+				}
+			]
+		},
+		{
+			"Name": "TLSPublicKey",
+			"Docs": "TLSPublicKey is a public key for use with TLS client authentication based on the\npublic key of the certificate.",
+			"Fields": [
+				{
+					"Name": "Fingerprint",
+					"Docs": "Raw-url-base64-encoded Subject Public Key Info of certificate.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Created",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Type",
+					"Docs": "E.g. \"rsa-2048\", \"ecdsa-p256\", \"ed25519\"",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Name",
+					"Docs": "Descriptive name to identify the key, e.g. the device where key is used.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "NoIMAPPreauth",
+					"Docs": "If set, new immediate authenticated TLS connections are not moved to \"authenticated\" state. For clients that don't understand it, and will try an authenticate command anyway.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "CertDER",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"uint8"
+					]
+				},
+				{
+					"Name": "Account",
+					"Docs": "Key authenticates this account.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LoginAddress",
+					"Docs": "Must belong to account.",
+					"Typewords": [
+						"string"
 					]
 				}
 			]

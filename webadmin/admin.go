@@ -2682,3 +2682,7 @@ func (Admin) AliasAddressesRemove(ctx context.Context, aliaslp string, domainNam
 	err := admin.AliasAddressesRemove(ctx, addr, addresses)
 	xcheckf(ctx, err, "removing address from alias")
 }
+
+func (Admin) TLSPublicKeys(ctx context.Context, accountOpt string) ([]store.TLSPublicKey, error) {
+	return store.TLSPublicKeyList(ctx, accountOpt)
+}

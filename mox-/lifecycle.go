@@ -142,7 +142,7 @@ func OpenPrivileged(path string) (*os.File, error) {
 
 // Shutdown is canceled when a graceful shutdown is initiated. SMTP, IMAP, periodic
 // processes should check this before starting a new operation. If this context is
-// canaceled, the operation should not be started, and new connections/commands should
+// canceled, the operation should not be started, and new connections/commands should
 // receive a message that the service is currently not available.
 var Shutdown context.Context
 var ShutdownCancel func()

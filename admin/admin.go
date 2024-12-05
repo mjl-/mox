@@ -26,6 +26,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/smtp"
+	"github.com/mjl-/mox/store"
 )
 
 var pkglog = mlog.New("admin", nil)
@@ -514,6 +515,18 @@ func DomainRemove(ctx context.Context, domain dns.Domain) (rerr error) {
 		return fmt.Errorf("%w: domain does not exist", ErrRequest)
 	}
 
+	// Check that the domain isn't referenced in a TLS public key.
+	tlspubkeys, err := store.TLSPublicKeyList(ctx, "")
+	if err != nil {
+		return fmt.Errorf("%w: listing tls public keys: %s", ErrRequest, err)
+	}
+	atdom := "@" + domain.Name()
+	for _, tpk := range tlspubkeys {
+		if strings.HasSuffix(tpk.LoginAddress, atdom) {
+			return fmt.Errorf("%w: domain is still referenced in tls public key by login address %q of account %q, change or remove it first", ErrRequest, tpk.LoginAddress, tpk.Account)
+		}
+	}
+
 	// Compose new config without modifying existing data structures. If we fail, we
 	// leave no trace.
 	nc := c
@@ -720,6 +733,11 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 		return fmt.Errorf("account removed, its data directory moved to %q, but removing failed: %v", odir, err)
 	}
 
+	if err := store.TLSPublicKeyRemoveForAccount(context.Background(), account); err != nil {
+		log.Errorx("removing tls public keys for removed account", err)
+		return fmt.Errorf("account removed, but removing tls public keys failed: %v", err)
+	}
+
 	log.Info("account removed", slog.String("account", account))
 	return nil
 }
@@ -851,7 +869,7 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 	}
 
 	// Also remove matching address from FromIDLoginAddresses, composing a new slice.
-	var fromIDLoginAddresses []string
+	// Refuse if address is referenced in a TLS public key.
 	var dom dns.Domain
 	var pa smtp.Address // For non-catchall addresses (most).
 	var err error
@@ -867,6 +885,12 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		}
 		dom = pa.Domain
 	}
+	dc, ok := mox.Conf.Dynamic.Domains[dom.Name()]
+	if !ok {
+		return fmt.Errorf("%w: unknown domain in address %q", ErrRequest, address)
+	}
+
+	var fromIDLoginAddresses []string
 	for i, fa := range a.ParsedFromIDLoginAddresses {
 		if fa.Domain != dom {
 			// Keep for different domain.
@@ -876,10 +900,6 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		if strings.HasPrefix(address, "@") {
 			continue
 		}
-		dc, ok := mox.Conf.Dynamic.Domains[dom.Name()]
-		if !ok {
-			return fmt.Errorf("%w: unknown domain in fromid login address %q", ErrRequest, fa.Pack(true))
-		}
 		flp := mox.CanonicalLocalpart(fa.Localpart, dc)
 		alp := mox.CanonicalLocalpart(pa.Localpart, dc)
 		if alp != flp {
@@ -888,6 +908,23 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		}
 	}
 	na.FromIDLoginAddresses = fromIDLoginAddresses
+
+	// Refuse if there is still a TLS public key that references this address.
+	tlspubkeys, err := store.TLSPublicKeyList(ctx, ad.Account)
+	if err != nil {
+		return fmt.Errorf("%w: listing tls public keys for account: %v", ErrRequest, err)
+	}
+	for _, tpk := range tlspubkeys {
+		a, err := smtp.ParseAddress(tpk.LoginAddress)
+		if err != nil {
+			return fmt.Errorf("%w: parsing address from tls public key: %v", ErrRequest, err)
+		}
+		lp := mox.CanonicalLocalpart(a.Localpart, dc)
+		ca := smtp.NewAddress(lp, a.Domain)
+		if xad, ok := mox.Conf.AccountDestinationsLocked[ca.String()]; ok && xad.Localpart == ad.Localpart {
+			return fmt.Errorf("%w: tls public key %q references this address as login address %q, remove the tls public key before removing the address", ErrRequest, tpk.Fingerprint, tpk.LoginAddress)
+		}
+	}
 
 	// And remove as member from aliases configured in domains.
 	domains := maps.Clone(mox.Conf.Dynamic.Domains)

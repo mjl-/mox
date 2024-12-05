@@ -288,6 +288,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	if err := os.WriteFile(filepath.Join(dstDataDir, "moxversion"), []byte(moxvar.Version), 0660); err != nil {
 		xerrx("writing moxversion", err)
 	}
+	backupDB(store.AuthDB, "auth.db")
 	backupDB(dmarcdb.ReportsDB, "dmarcrpt.db")
 	backupDB(dmarcdb.EvalDB, "dmarceval.db")
 	backupDB(mtastsdb.DB, "mtasts.db")
@@ -548,7 +549,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 
 		switch p {
-		case "dmarcrpt.db", "dmarceval.db", "mtasts.db", "tlsrpt.db", "tlsrptresult.db", "receivedid.key", "ctl":
+		case "auth.db", "dmarcrpt.db", "dmarceval.db", "mtasts.db", "tlsrpt.db", "tlsrptresult.db", "receivedid.key", "ctl":
 			// Already handled.
 			return nil
 		case "lastknownversion": // Optional file, not yet handled.

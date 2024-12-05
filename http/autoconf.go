@@ -105,6 +105,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	resp.EmailProvider.DisplayShortName = addr.Domain.ASCII
 
 	// todo: specify SCRAM-SHA-256 once thunderbird and autoconfig supports it. or perhaps that will fall under "password-encrypted" by then.
+	// todo: let user configure they prefer or require tls client auth and specify "TLS-client-cert"
 
 	resp.EmailProvider.IncomingServer.Type = "imap"
 	resp.EmailProvider.IncomingServer.Hostname = config.IMAP.Host.ASCII
@@ -207,6 +208,8 @@ func autodiscoverHandle(w http.ResponseWriter, r *http.Request) {
 	// https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxdscli/21fd2dd5-c4ee-485b-94fb-e7db5da93726
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+
+	// todo: let user configure they prefer or require tls client auth and add "AuthPackage" with value "certificate" to Protocol? see https://learn.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxdscli/21fd2dd5-c4ee-485b-94fb-e7db5da93726
 
 	resp := autodiscoverResponse{}
 	resp.XMLName.Local = "Autodiscover"

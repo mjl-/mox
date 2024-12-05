@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1013,6 +1014,94 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		account := ctl.xread()
 		err := admin.AccountRemove(ctx, account)
 		ctl.xcheck(err, "removing account")
+		ctl.xwriteok()
+
+	case "tlspubkeylist":
+		/* protocol:
+		> "tlspubkeylist"
+		> account (or empty)
+		< "ok" or error
+		< stream
+		*/
+		accountOpt := ctl.xread()
+		tlspubkeys, err := store.TLSPublicKeyList(ctx, accountOpt)
+		ctl.xcheck(err, "list tls public keys")
+		ctl.xwriteok()
+		xw := ctl.writer()
+		fmt.Fprintf(xw, "# fingerprint, type, name, account, login address, no imap preauth (%d)\n", len(tlspubkeys))
+		for _, k := range tlspubkeys {
+			fmt.Fprintf(xw, "%s\t%s\t%q\t%s\t%s\t%v\n", k.Fingerprint, k.Type, k.Name, k.Account, k.LoginAddress, k.NoIMAPPreauth)
+		}
+		xw.xclose()
+
+	case "tlspubkeyget":
+		/* protocol:
+		> "tlspubkeyget"
+		> fingerprint
+		< "ok" or error
+		< type
+		< name
+		< account
+		< address
+		< noimappreauth (true/false)
+		< stream (certder)
+		*/
+		fp := ctl.xread()
+		tlspubkey, err := store.TLSPublicKeyGet(ctx, fp)
+		ctl.xcheck(err, "looking tls public key")
+		ctl.xwriteok()
+		ctl.xwrite(tlspubkey.Type)
+		ctl.xwrite(tlspubkey.Name)
+		ctl.xwrite(tlspubkey.Account)
+		ctl.xwrite(tlspubkey.LoginAddress)
+		ctl.xwrite(fmt.Sprintf("%v", tlspubkey.NoIMAPPreauth))
+		ctl.xstreamfrom(bytes.NewReader(tlspubkey.CertDER))
+
+	case "tlspubkeyadd":
+		/* protocol:
+		> "tlspubkeyadd"
+		> loginaddress
+		> name (or empty)
+		> noimappreauth (true/false)
+		> stream (certder)
+		< "ok" or error
+		*/
+		loginAddress := ctl.xread()
+		name := ctl.xread()
+		noimappreauth := ctl.xread()
+		if noimappreauth != "true" && noimappreauth != "false" {
+			ctl.xcheck(fmt.Errorf("bad value %q", noimappreauth), "parsing noimappreauth")
+		}
+		var b bytes.Buffer
+		ctl.xstreamto(&b)
+		tlspubkey, err := store.ParseTLSPublicKeyCert(b.Bytes())
+		ctl.xcheck(err, "parsing certificate")
+		if name != "" {
+			tlspubkey.Name = name
+		}
+		acc, _, err := store.OpenEmail(ctl.log, loginAddress)
+		ctl.xcheck(err, "open account for address")
+		defer func() {
+			err := acc.Close()
+			ctl.log.Check(err, "close account")
+		}()
+		tlspubkey.Account = acc.Name
+		tlspubkey.LoginAddress = loginAddress
+		tlspubkey.NoIMAPPreauth = noimappreauth == "true"
+
+		err = store.TLSPublicKeyAdd(ctx, &tlspubkey)
+		ctl.xcheck(err, "adding tls public key")
+		ctl.xwriteok()
+
+	case "tlspubkeyrm":
+		/* protocol:
+		> "tlspubkeyadd"
+		> fingerprint
+		< "ok" or error
+		*/
+		fp := ctl.xread()
+		err := store.TLSPublicKeyRemove(ctx, fp)
+		ctl.xcheck(err, "removing tls public key")
 		ctl.xwriteok()
 
 	case "addressadd":
