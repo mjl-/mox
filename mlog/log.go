@@ -25,9 +25,33 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var noctx = context.Background()
+
+var (
+	metricLogInfo = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "mox_logging_level_info_total",
+			Help: "Total number of logging events at level info.",
+		},
+	)
+	metricLogWarn = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "mox_logging_level_warn_total",
+			Help: "Total number of logging events at level warn.",
+		},
+	)
+	metricLogError = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "mox_logging_level_error_total",
+			Help: "Total number of logging events at level error.",
+		},
+	)
+)
 
 // Logfmt enabled output in logfmt, instead of output more suitable for
 // command-line tools. Must be set early in a program lifecycle.
@@ -324,6 +348,15 @@ func (h *handler) Handle(ctx context.Context, r slog.Record) error {
 	l, ok := h.configMatch(r.Level)
 	if !ok {
 		return nil
+	}
+	if r.Level >= LevelInfo {
+		if r.Level == LevelInfo {
+			metricLogInfo.Inc()
+		} else if r.Level <= LevelWarn {
+			metricLogWarn.Inc()
+		} else if r.Level <= LevelError {
+			metricLogError.Inc()
+		}
 	}
 	if hideData, hideAuth := traceLevel(l, r.Level); hideData {
 		r.Message = "..."
