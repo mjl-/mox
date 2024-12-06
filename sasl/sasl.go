@@ -1,4 +1,15 @@
-// Package SASL implements Simple Authentication and Security Layer, RFC 4422.
+// Package SASL implements a client for Simple Authentication and Security Layer, RFC 4422.
+//
+// Supported authentication mechanisms:
+//
+//   - EXTERNAL
+//   - SCRAM-SHA-256-PLUS
+//   - SCRAM-SHA-1-PLUS
+//   - SCRAM-SHA-256
+//   - SCRAM-SHA-1
+//   - CRAM-MD5
+//   - PLAIN
+//   - LOGIN
 package sasl
 
 import (

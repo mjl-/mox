@@ -1,9 +1,10 @@
-// Package scram implements the SCRAM-SHA-* SASL authentication mechanism, RFC 7677 and RFC 5802.
+// Package scram implements the SCRAM-SHA-* SASL authentication mechanisms, including the PLUS variants, RFC 7677 and RFC 5802.
 //
 // SCRAM-SHA-256 and SCRAM-SHA-1 allow a client to authenticate to a server using a
 // password without handing plaintext password over to the server. The client also
-// verifies the server knows (a derivative of) the password. Both the client and
-// server side are implemented.
+// verifies the server knows (a derivative of) the password. The *-PLUS variants
+// bind the authentication exchange to the TLS session, preventing MitM attempts.
+// Both the client and server side are implemented.
 package scram
 
 // todo: test with messages that contains extensions
