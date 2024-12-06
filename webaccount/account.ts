@@ -669,6 +669,8 @@ const index = async () => {
 				ContentType: 'text/plain',
 				ContentTypeParams: {charset: 'utf-8'},
 				ContentID: '',
+				ContentDisposition: '',
+				Filename: '',
 				DecodedSize: 8,
 				Parts: [],
 			},

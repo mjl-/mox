@@ -796,13 +796,18 @@ func Incoming(ctx context.Context, log mlog.Log, acc *store.Account, messageID s
 
 		log.Debug("composing webhook for incoming message")
 
+		structure, err := webhook.PartStructure(log, &part)
+		if err != nil {
+			return fmt.Errorf("parsing part structure: %v", err)
+		}
+
 		isIncoming = true
 		var rcptTo string
 		if m.RcptToDomain != "" {
 			rcptTo = m.RcptToLocalpart.String() + "@" + m.RcptToDomain
 		}
 		in := webhook.Incoming{
-			Structure: webhook.PartStructure(&part),
+			Structure: structure,
 			Meta: webhook.IncomingMeta{
 				MsgID:               m.ID,
 				MailFrom:            m.MailFrom,

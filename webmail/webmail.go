@@ -521,13 +521,11 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		names := map[string]bool{}
 		for _, a := range mi.Attachments {
 			ap := a.Part
-			name := tryDecodeParam(log, ap.ContentTypeParams["name"])
-			if name == "" {
-				// We don't check errors, this is all best-effort.
-				h, _ := ap.Header()
-				disposition := h.Get("Content-Disposition")
-				_, params, _ := mime.ParseMediaType(disposition)
-				name = tryDecodeParam(log, params["filename"])
+			_, name, err := ap.DispositionFilename()
+			if err != nil && errors.Is(err, message.ErrParamEncoding) {
+				log.Debugx("parsing disposition header for filename", err)
+			} else {
+				xcheckf(ctx, err, "reading disposition header")
 			}
 			if name != "" {
 				name = filepath.Base(name)
@@ -816,13 +814,11 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		h.Set("Content-Type", ct)
 		h.Set("Cache-Control", "no-store, max-age=0")
 		if t[1] == "download" {
-			name := tryDecodeParam(log, ap.ContentTypeParams["name"])
-			if name == "" {
-				// We don't check errors, this is all best-effort.
-				h, _ := ap.Header()
-				disposition := h.Get("Content-Disposition")
-				_, params, _ := mime.ParseMediaType(disposition)
-				name = tryDecodeParam(log, params["filename"])
+			_, name, err := ap.DispositionFilename()
+			if err != nil && errors.Is(err, message.ErrParamEncoding) {
+				log.Debugx("parsing disposition/filename", err)
+			} else {
+				xcheckf(ctx, err, "reading disposition/filename")
 			}
 			if name == "" {
 				name = "attachment.bin"

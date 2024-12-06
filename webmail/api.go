@@ -904,7 +904,12 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 							ap = ap.Parts[xp]
 						}
 
-						filename := tryDecodeParam(log, ap.ContentTypeParams["name"])
+						_, filename, err := ap.DispositionFilename()
+						if err != nil && errors.Is(err, message.ErrParamEncoding) {
+							log.Debugx("parsing disposition/filename", err)
+						} else {
+							xcheckf(ctx, err, "reading disposition")
+						}
 						if filename == "" {
 							filename = "unnamed.bin"
 						}

@@ -1263,9 +1263,12 @@ func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (r
 		MailboxName:         mb.Name,
 	}
 
+	structure, err := webhook.PartStructure(log, &p)
+	xcheckf(err, "parsing structure")
+
 	result := webapi.MessageGetResult{
 		Message:   msg,
-		Structure: webhook.PartStructure(&p),
+		Structure: structure,
 		Meta:      meta,
 	}
 	return result, nil

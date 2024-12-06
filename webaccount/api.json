@@ -1496,6 +1496,20 @@
 					]
 				},
 				{
+					"Name": "ContentDisposition",
+					"Docs": "Lower-case value, e.g. \"attachment\", \"inline\" or empty when absent. Without the key/value header parameters.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Filename",
+					"Docs": "Filename for this part, based on \"filename\" parameter from Content-Disposition, or \"name\" from Content-Type after decoding.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "DecodedSize",
 					"Docs": "Size of content after decoding content-transfer-encoding. For text and HTML parts, this can be larger than the data returned since this size includes \\r\\n line endings.",
 					"Typewords": [
