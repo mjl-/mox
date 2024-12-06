@@ -229,6 +229,13 @@ func Listen() {
 			port := config.Port(listener.SMTP.Port, 25)
 			for _, ip := range listener.IPs {
 				firstTimeSenderDelay := durationDefault(listener.SMTP.FirstTimeSenderDelay, firstTimeSenderDelayDefault)
+				if tlsConfigDelivery != nil {
+					tlsConfigDelivery = tlsConfigDelivery.Clone()
+					// Default setting is currently to have session tickets disabled, to work around
+					// TLS interoperability issues with incoming deliveries from Microsoft. See
+					// https://github.com/golang/go/issues/70232.
+					tlsConfigDelivery.SessionTicketsDisabled = listener.SMTP.TLSSessionTicketsDisabled == nil || *listener.SMTP.TLSSessionTicketsDisabled
+				}
 				listen1("smtp", name, ip, port, hostname, tlsConfigDelivery, false, false, maxMsgSize, false, listener.SMTP.RequireSTARTTLS, !listener.SMTP.NoRequireTLS, listener.SMTP.DNSBLZones, firstTimeSenderDelay)
 			}
 		}

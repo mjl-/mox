@@ -262,6 +262,10 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# account. Default: 15s. (optional)
 				FirstTimeSenderDelay: 0s
 
+				# Override default setting for enabling TLS session tickets. Disabling session
+				# tickets may work around TLS interoperability issues. (optional)
+				TLSSessionTicketsDisabled: false
+
 			# SMTP for submitting email, e.g. by email applications. Starts out in plain text,
 			# can be upgraded to TLS with the STARTTLS command. Prefer using Submissions which
 			# is always a TLS connection. (optional)

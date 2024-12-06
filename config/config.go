@@ -158,6 +158,8 @@ type Listener struct {
 
 		FirstTimeSenderDelay *time.Duration `sconf:"optional" sconf-doc:"Delay before accepting a message from a first-time sender for the destination account. Default: 15s."`
 
+		TLSSessionTicketsDisabled *bool `sconf:"optional" sconf-doc:"Override default setting for enabling TLS session tickets. Disabling session tickets may work around TLS interoperability issues."`
+
 		DNSBLZones []dns.Domain `sconf:"-"`
 	} `sconf:"optional"`
 	Submission struct {

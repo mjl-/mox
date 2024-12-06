@@ -1933,8 +1933,7 @@ func loadTLSKeyCerts(configFile, kind string, ctls *config.TLS) error {
 		certs = append(certs, cert)
 	}
 	ctls.Config = &tls.Config{
-		Certificates:           certs,
-		SessionTicketsDisabled: true,
+		Certificates: certs,
 	}
 	ctls.ConfigFallback = ctls.Config
 	return nil
