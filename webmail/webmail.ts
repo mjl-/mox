@@ -262,6 +262,7 @@ let rejectsMailbox: string = ''
 let lastServerVersion: string = ''
 
 const login = async (reason: string) => {
+	popupOpen = true // Prevent global key event handler from consuming keys.
 	return new Promise<string>((resolve: (v: string) => void, _) => {
 		const origFocus = document.activeElement
 		let reasonElem: HTMLElement
@@ -308,6 +309,7 @@ const login = async (reason: string) => {
 								if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
 									origFocus.focus()
 								}
+								popupOpen = false
 								resolve(token)
 							} catch (err) {
 								console.log('login error', err)

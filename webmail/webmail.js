@@ -1679,6 +1679,7 @@ let rejectsMailbox = '';
 // Last known server version. For asking to reload.
 let lastServerVersion = '';
 const login = async (reason) => {
+	popupOpen = true; // Prevent global key event handler from consuming keys.
 	return new Promise((resolve, _) => {
 		const origFocus = document.activeElement;
 		let reasonElem;
@@ -1716,6 +1717,7 @@ const login = async (reason) => {
 				if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
 					origFocus.focus();
 				}
+				popupOpen = false;
 				resolve(token);
 			}
 			catch (err) {
