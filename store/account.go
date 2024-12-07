@@ -741,6 +741,12 @@ type Settings struct {
 
 	// Show HTML version of message by default, instead of plain text.
 	ShowHTML bool
+
+	// If true, don't show shortcuts in webmail after mouse interaction.
+	NoShowShortcuts bool
+
+	// Additional headers to display in message view. E.g. Delivered-To, User-Agent, X-Mox-Reason.
+	ShowHeaders []string
 }
 
 // ViewMode how a message should be viewed: its text parts, html parts, or html

@@ -1757,6 +1757,21 @@
 					"Typewords": [
 						"bool"
 					]
+				},
+				{
+					"Name": "NoShowShortcuts",
+					"Docs": "If true, don't show shortcuts in webmail after mouse interaction.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ShowHeaders",
+					"Docs": "Additional headers to display in message view. E.g. Delivered-To, User-Agent, X-Mox-Reason.",
+					"Typewords": [
+						"[]",
+						"string"
+					]
 				}
 			]
 		},

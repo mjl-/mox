@@ -311,7 +311,7 @@ var api;
 		"ForwardAttachments": { "Name": "ForwardAttachments", "Docs": "", "Fields": [{ "Name": "MessageID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Paths", "Docs": "", "Typewords": ["[]", "[]", "int32"] }] },
 		"Mailbox": { "Name": "Mailbox", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "UIDValidity", "Docs": "", "Typewords": ["uint32"] }, { "Name": "UIDNext", "Docs": "", "Typewords": ["UID"] }, { "Name": "Archive", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Sent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Trash", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HaveCounts", "Docs": "", "Typewords": ["bool"] }, { "Name": "Total", "Docs": "", "Typewords": ["int64"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unread", "Docs": "", "Typewords": ["int64"] }, { "Name": "Unseen", "Docs": "", "Typewords": ["int64"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }] },
 		"RecipientSecurity": { "Name": "RecipientSecurity", "Docs": "", "Fields": [{ "Name": "STARTTLS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["SecurityResult"] }, { "Name": "RequireTLS", "Docs": "", "Typewords": ["SecurityResult"] }] },
-		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHTML", "Docs": "", "Typewords": ["bool"] }] },
+		"Settings": { "Name": "Settings", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["uint8"] }, { "Name": "Signature", "Docs": "", "Typewords": ["string"] }, { "Name": "Quoting", "Docs": "", "Typewords": ["Quoting"] }, { "Name": "ShowAddressSecurity", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHTML", "Docs": "", "Typewords": ["bool"] }, { "Name": "NoShowShortcuts", "Docs": "", "Typewords": ["bool"] }, { "Name": "ShowHeaders", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"Ruleset": { "Name": "Ruleset", "Docs": "", "Fields": [{ "Name": "SMTPMailFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "HeadersRegexp", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListAllowDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "AcceptRejectsToMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "ListAllowDNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
 		"EventStart": { "Name": "EventStart", "Docs": "", "Fields": [{ "Name": "SSEID", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["MessageAddress"] }, { "Name": "Addresses", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "DomainAddressConfigs", "Docs": "", "Typewords": ["{}", "DomainAddressConfig"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailboxes", "Docs": "", "Typewords": ["[]", "Mailbox"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Settings", "Docs": "", "Typewords": ["Settings"] }, { "Name": "AccountPath", "Docs": "", "Typewords": ["string"] }, { "Name": "Version", "Docs": "", "Typewords": ["string"] }] },
 		"DomainAddressConfig": { "Name": "DomainAddressConfig", "Docs": "", "Fields": [{ "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }] },
@@ -1493,10 +1493,6 @@ To simulate slow API calls and SSE events:
 
 	localStorage.setItem('sherpats-debug', JSON.stringify({waitMinMsec: 2000, waitMaxMsec: 4000}))
 
-Show additional headers of messages:
-
-	settingsPut({...settings, showHeaders: ['Delivered-To', 'User-Agent', 'X-Mailer', 'Message-Id', 'List-Id', 'List-Post', 'X-Mox-Reason', 'TLS-Required']})
-
 Enable logging and reload afterwards:
 
 	localStorage.setItem('log', 'yes')
@@ -1571,7 +1567,6 @@ try {
 catch (err) { }
 let accountSettings;
 const defaultSettings = {
-	showShortcuts: true,
 	mailboxesWidth: 240,
 	layout: 'auto',
 	leftWidthPct: 50,
@@ -1584,7 +1579,6 @@ const defaultSettings = {
 	ignoreErrorsUntil: 0,
 	mailboxCollapsed: {},
 	showAllHeaders: false,
-	showHeaders: [],
 	threading: api.ThreadMode.ThreadOn,
 	checkConsistency: location.hostname === 'localhost',
 	composeWidth: 0,
@@ -1619,13 +1613,6 @@ const parseSettings = () => {
 		if (!mailboxCollapsed || typeof mailboxCollapsed !== 'object') {
 			mailboxCollapsed = def.mailboxCollapsed;
 		}
-		const getStringArray = (k) => {
-			const v = x[k];
-			if (v && Array.isArray(v) && (v.length === 0 || typeof v[0] === 'string')) {
-				return v;
-			}
-			return def[k];
-		};
 		return {
 			refine: getString('refine'),
 			orderAsc: getBool('orderAsc'),
@@ -1637,10 +1624,8 @@ const parseSettings = () => {
 			msglistfromPct: getInt('msglistfromPct'),
 			ignoreErrorsUntil: getInt('ignoreErrorsUntil'),
 			layout: getString('layout', 'auto', 'leftright', 'topbottom'),
-			showShortcuts: getBool('showShortcuts'),
 			mailboxCollapsed: mailboxCollapsed,
 			showAllHeaders: getBool('showAllHeaders'),
-			showHeaders: getStringArray('showHeaders'),
 			threading: getString('threading', api.ThreadMode.ThreadOff, api.ThreadMode.ThreadOn, api.ThreadMode.ThreadUnread),
 			checkConsistency: getBool('checkConsistency'),
 			composeWidth: getInt('composeWidth'),
@@ -1764,7 +1749,7 @@ const envelopeIdentity = (l) => {
 let shortcutElem = dom.div(css('shortcutFlash', { fontSize: '2em', position: 'absolute', left: '.25em', bottom: '.25em', backgroundColor: '#888', padding: '0.25em .5em', color: 'white', borderRadius: '.15em' }));
 let shortcutTimer = 0;
 const showShortcut = (c) => {
-	if (!settings.showShortcuts) {
+	if (accountSettings?.NoShowShortcuts) {
 		return;
 	}
 	if (shortcutTimer) {
@@ -2446,6 +2431,8 @@ const cmdSettings = async () => {
 	let quoting;
 	let showAddressSecurity;
 	let showHTML;
+	let showShortcuts;
+	let showHeaders;
 	if (!accountSettings) {
 		throw new Error('No account settings fetched yet.');
 	}
@@ -2458,15 +2445,43 @@ const cmdSettings = async () => {
 			Quoting: quoting.value,
 			ShowAddressSecurity: showAddressSecurity.checked,
 			ShowHTML: showHTML.checked,
+			NoShowShortcuts: !showShortcuts.checked,
+			ShowHeaders: showHeaders.value.split('\n').map(s => s.trim()).filter(s => !!s),
 		};
 		await withDisabled(fieldset, client.SettingsSave(accSet));
 		accountSettings = accSet;
 		remove();
-	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showHTML = dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []), ' Show HTML instead of text version by default'), dom.br(), dom.div(dom.submitbutton('Save')))));
+	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showHTML = dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []), ' Show email as HTML instead of text by default for first-time senders', attr.title('Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showShortcuts = dom.input(attr.type('checkbox'), accountSettings.NoShowShortcuts ? [] : attr.checked('')), ' Show shortcut keys in bottom left after interaction with mouse'), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Show additional headers'), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join('\n')), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: 'italic' }), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...')), dom.div(style({ marginTop: '2ex' }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
+		if (!window.navigator.registerProtocolHandler) {
+			window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.');
+			return;
+		}
+		try {
+			window.navigator.registerProtocolHandler('mailto', '#compose %s');
+			window.alert('"mailto:"-links have been registered');
+		}
+		catch (err) {
+			window.alert('Error registering "mailto:" protocol handler: ' + errmsg(err));
+		}
+	}), ' ', dom.clickbutton('Unregister', attr.title('Not all browsers implement unregistering via JavaScript.'), function click() {
+		// Not supported on firefox at the time of writing, and the signature is not in the types.
+		if (!window.navigator.unregisterProtocolHandler) {
+			window.alert('Unregistering a protocol handler ("mailto:") via JavaScript is not supported by your browser. See your browser settings to unregister.');
+			return;
+		}
+		try {
+			window.navigator.unregisterProtocolHandler('mailto', '#compose %s');
+		}
+		catch (err) {
+			window.alert('Error unregistering "mailto:" protocol handler: ' + errmsg(err));
+			return;
+		}
+		window.alert('"mailto:" protocol handler unregistered.');
+	})), dom.br(), dom.div(dom.submitbutton('Save')))));
 };
 // Show help popup, with shortcuts and basic explanation.
 const cmdHelp = async () => {
-	const remove = popup(css('popupHelp', { padding: '1em 1em 2em 1em' }), dom.h1('Help and keyboard shortcuts'), dom.div(style({ display: 'flex' }), dom.div(style({ width: '40em' }), dom.table(dom.tr(dom.td(attr.colspan('2'), dom.h2('Global', style({ margin: '0' })))), [
+	popup(css('popupHelp', { padding: '1em 1em 2em 1em' }), dom.h1('Help and keyboard shortcuts'), dom.div(style({ display: 'flex' }), dom.div(style({ width: '40em' }), dom.table(dom.tr(dom.td(attr.colspan('2'), dom.h2('Global', style({ margin: '0' })))), [
 		['c', 'compose new message'],
 		['/', 'search'],
 		['i', 'open inbox'],
@@ -2534,42 +2549,7 @@ const cmdHelp = async () => {
 		['0', 'first attachment'],
 		['$', 'next attachment'],
 		['d', 'download'],
-	].map(t => dom.tr(dom.td(t[0]), dom.td(t[1])))), dom.div(style({ marginTop: '2ex', marginBottom: '1ex' }), dom.span('Underdotted text', attr.title('Underdotted text shows additional information on hover.')), ' show an explanation or additional information when hovered.'), dom.div(style({ marginBottom: '1ex' }), 'Multiple messages can be selected by clicking messages while holding the control and/or shift keys. Dragging messages and dropping them on a mailbox moves the messages to that mailbox.'), dom.div(style({ marginBottom: '1ex' }), 'Text that changes ', dom.span(attr.title('Unicode blocks, e.g. from basic latin to cyrillic, or to emoticons.'), '"character groups"'), ' without whitespace has an ', dom.span(dom._class('scriptswitch'), 'orange underline'), ', which can be a sign of an intent to mislead (e.g. phishing).'), settings.showShortcuts ?
-		dom.div(style({ marginTop: '2ex' }), 'Shortcut keys for mouse operation are shown in the bottom left. ', dom.clickbutton('Disable', function click() {
-			settingsPut({ ...settings, showShortcuts: false });
-			remove();
-			cmdHelp();
-		})) :
-		dom.div(style({ marginTop: '2ex' }), 'Shortcut keys for mouse operation are currently not shown. ', dom.clickbutton('Enable', function click() {
-			settingsPut({ ...settings, showShortcuts: true });
-			remove();
-			cmdHelp();
-		})), dom.div(style({ marginTop: '2ex' }), 'To start composing a message when opening a "mailto:" link, register this application with your browser/system. ', dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
-		if (!window.navigator.registerProtocolHandler) {
-			window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.');
-			return;
-		}
-		try {
-			window.navigator.registerProtocolHandler('mailto', '#compose %s');
-		}
-		catch (err) {
-			window.alert('Error registering "mailto:" protocol handler: ' + errmsg(err));
-		}
-	}), ' ', dom.clickbutton('Unregister', attr.title('Not all browsers implement unregistering via JavaScript.'), function click() {
-		// Not supported on firefox at the time of writing, and the signature is not in the types.
-		if (!window.navigator.unregisterProtocolHandler) {
-			window.alert('Unregistering a protocol handler ("mailto:") via JavaScript is not supported by your browser. See your browser settings to unregister.');
-			return;
-		}
-		try {
-			window.navigator.unregisterProtocolHandler('mailto', '#compose %s');
-		}
-		catch (err) {
-			window.alert('Error unregistering "mailto:" protocol handler: ' + errmsg(err));
-			return;
-		}
-		window.alert('"mailto:" protocol handler unregistered.');
-	})), dom.div(style({ marginTop: '2ex' }), 'Mox is open source email server software, this is version ', moxversion, ', see ', dom.a(attr.href('licenses.txt'), 'licenses'), '.', dom.br(), 'Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new')))));
+	].map(t => dom.tr(dom.td(t[0]), dom.td(t[1])))), dom.div(style({ marginTop: '2ex', marginBottom: '1ex' }), dom.span('Underdotted text', attr.title('Underdotted text shows additional information on hover.')), ' show an explanation or additional information when hovered.'), dom.div(style({ marginBottom: '1ex' }), 'Multiple messages can be selected by clicking messages while holding the control and/or shift keys. Dragging messages and dropping them on a mailbox moves the messages to that mailbox.'), dom.div(style({ marginBottom: '1ex' }), 'Text that changes ', dom.span(attr.title('Unicode blocks, e.g. from basic latin to cyrillic, or to emoticons.'), '"character groups"'), ' without whitespace has an ', dom.span(dom._class('scriptswitch'), 'orange underline'), ', which can be a sign of an intent to mislead (e.g. phishing).'), dom.div(style({ marginTop: '2ex' }), 'Mox is open source email server software, this is version ', moxversion, ', see ', dom.a(attr.href('licenses.txt'), 'licenses'), '.', dom.br(), 'Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new')))));
 };
 // Show tooltips for either the focused element, or otherwise for all elements
 // that aren't reachable with tabindex and aren't marked specially to prevent
@@ -3944,7 +3924,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		})));
 	};
 	loadButtons(parsedMessageOpt || null);
-	loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword, false);
+	loadMsgheaderView(msgheaderElem, miv.messageitem, accountSettings.ShowHeaders || [], refineKeyword, false);
 	const headerTextMildStyle = css('headerTextMild', { textAlign: 'right', color: styles.colorMild });
 	const loadHeaderDetails = (pm) => {
 		if (msgheaderdetailsElem) {
@@ -4077,13 +4057,14 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		renderAttachments(); // Rerender opaciy on inline images.
 	};
 	const loadMoreHeaders = (pm) => {
-		if (settings.showHeaders.length === 0) {
+		const hl = accountSettings.ShowHeaders || [];
+		if (hl.length === 0) {
 			return;
 		}
-		for (let i = 0; i < settings.showHeaders.length; i++) {
+		for (let i = 0; i < hl.length; i++) {
 			msgheaderElem.children[msgheaderElem.children.length - 1].remove();
 		}
-		settings.showHeaders.forEach(k => {
+		hl.forEach(k => {
 			const vl = pm.Headers?.[k];
 			if (!vl || vl.length === 0) {
 				return;
@@ -4102,7 +4083,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		updateKeywords: async (modseq, keywords) => {
 			mi.Message.ModSeq = modseq;
 			mi.Message.Keywords = keywords;
-			loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword, false);
+			loadMsgheaderView(msgheaderElem, miv.messageitem, accountSettings.ShowHeaders || [], refineKeyword, false);
 			loadMoreHeaders(await parsedMessagePromise);
 		},
 	};
