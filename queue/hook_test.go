@@ -82,7 +82,7 @@ func TestHookIncoming(t *testing.T) {
 		tcheck(t, err, "decode incoming webhook")
 		in.Meta.Received = in.Meta.Received.Local() // For TZ UTC.
 
-		structure, err := webhook.PartStructure(pkglog, &part)
+		structure, err := PartStructure(pkglog, &part)
 		tcheck(t, err, "part structure")
 
 		expIncoming := webhook.Incoming{

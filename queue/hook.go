@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -796,7 +797,7 @@ func Incoming(ctx context.Context, log mlog.Log, acc *store.Account, messageID s
 
 		log.Debug("composing webhook for incoming message")
 
-		structure, err := webhook.PartStructure(log, &part)
+		structure, err := PartStructure(log, &part)
 		if err != nil {
 			return fmt.Errorf("parsing part structure: %v", err)
 		}
@@ -910,6 +911,38 @@ func Incoming(ctx context.Context, log mlog.Log, acc *store.Account, messageID s
 	log.Debug("queued webhook for incoming message", h.attrs()...)
 	hookqueueKick()
 	return nil
+}
+
+// PartStructure returns a webhook.Structure for a parsed message part.
+func PartStructure(log mlog.Log, p *message.Part) (webhook.Structure, error) {
+	parts := make([]webhook.Structure, len(p.Parts))
+	for i := range p.Parts {
+		var err error
+		parts[i], err = PartStructure(log, &p.Parts[i])
+		if err != nil && !errors.Is(err, message.ErrParamEncoding) {
+			return webhook.Structure{}, err
+		}
+	}
+	disp, filename, err := p.DispositionFilename()
+	if err != nil && errors.Is(err, message.ErrParamEncoding) {
+		log.Debugx("parsing disposition/filename", err)
+	} else if err != nil {
+		return webhook.Structure{}, err
+	}
+	s := webhook.Structure{
+		ContentType:        strings.ToLower(p.MediaType + "/" + p.MediaSubType),
+		ContentTypeParams:  p.ContentTypeParams,
+		ContentID:          p.ContentID,
+		ContentDisposition: strings.ToLower(disp),
+		Filename:           filename,
+		DecodedSize:        p.DecodedSize,
+		Parts:              parts,
+	}
+	// Replace nil map with empty map, for easier to use JSON.
+	if s.ContentTypeParams == nil {
+		s.ContentTypeParams = map[string]string{}
+	}
+	return s, nil
 }
 
 func isAutomated(h textproto.MIMEHeader) bool {

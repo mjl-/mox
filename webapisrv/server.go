@@ -44,7 +44,6 @@ import (
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/webapi"
 	"github.com/mjl-/mox/webauth"
-	"github.com/mjl-/mox/webhook"
 	"github.com/mjl-/mox/webops"
 )
 
@@ -1263,7 +1262,7 @@ func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (r
 		MailboxName:         mb.Name,
 	}
 
-	structure, err := webhook.PartStructure(log, &p)
+	structure, err := queue.PartStructure(log, &p)
 	xcheckf(err, "parsing structure")
 
 	result := webapi.MessageGetResult{
