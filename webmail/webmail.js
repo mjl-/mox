@@ -2477,7 +2477,7 @@ const cmdHelp = async () => {
 		['←', 'collapse'],
 		['→', 'expand'],
 		['b', 'show more actions'],
-	].map(t => dom.tr(dom.td(t[0]), dom.td(t[1]))), dom.tr(dom.td(attr.colspan('2'), dom.h2('Message list', style({ margin: '1ex 0 0 0' })))), dom.tr(dom.td('↓', ', j'), dom.td('down one message'), dom.td(attr.rowspan('6'), css('helpSideNote', { color: '#888', borderLeft: '2px solid', borderLeftColor: '#888', paddingLeft: '.5em' }), 'hold ctrl to only move focus', dom.br(), 'hold shift to expand selection')), [
+	].map(t => dom.tr(dom.td(t[0]), dom.td(t[1]))), dom.tr(dom.td(attr.colspan('2'), dom.h2('Message list', style({ margin: '1ex 0 0 0' })))), dom.tr(dom.td('↓', ', j'), dom.td('down one message'), dom.td(attr.rowspan('6'), css('helpSideNote', { color: '#888', borderLeft: '2px solid', borderLeftColor: '#888', paddingLeft: '.5em' }), dom.div('hold ctrl to only move focus', attr.title('ctrl-l and ctrl-u are left for the browser the handle')), dom.div('hold shift to expand selection'))), [
 		[['↑', ', k'], 'up one message'],
 		['PageDown, l', 'down one screen'],
 		['PageUp, h', 'up one screen'],
@@ -2523,7 +2523,7 @@ const cmdHelp = async () => {
 		['O', 'show raw message'],
 		['ctrl p', 'print message'],
 		['I', 'toggle internals'],
-		['ctrl I', 'toggle all headers'],
+		['ctrl i', 'toggle all headers'],
 		['alt k, alt ArrowUp', 'scroll up'],
 		['alt j, alt ArrowDown', 'scroll down'],
 		['alt K', 'scroll to top'],
@@ -3893,7 +3893,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		v: cmdViewAttachments,
 		t: cmdShowText,
 		T: cmdShowHTMLCycle,
-		'ctrl I': cmdToggleHeaders,
+		'ctrl i': cmdToggleHeaders,
 		'alt j': cmdDown,
 		'alt k': cmdUp,
 		'alt ArrowDown': cmdDown,
@@ -5380,6 +5380,11 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 					moveclick(i + 1, e.key === 'J');
 				}
 				else if (e.key === 'PageUp' || e.key === 'h' || e.key === 'H' || e.key === 'PageDown' || e.key === 'l' || e.key === 'L') {
+					// Commonly bound to "focus to browser address bar", moving cursor to one page down
+					// without opening isn't useful enough.
+					if (e.key === 'l' && e.ctrlKey) {
+						return;
+					}
 					if (msgitemViews.length > 0) {
 						let n = Math.max(1, Math.floor(scrollElemHeight() / mlv.itemHeight()) - 1);
 						if (e.key === 'PageUp' || e.key === 'h' || e.key === 'H') {
@@ -5423,6 +5428,11 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 					}
 				}
 				else if (e.key === 'u' || e.key === 'U') {
+					// Commonly bound to "view source", moving cursor to next unread message without
+					// opening isn't useful enough.
+					if (e.key === 'u' && e.ctrlKey) {
+						return;
+					}
 					for (i = i < 0 ? 0 : i + 1; i < msgitemViews.length; i += 1) {
 						if (!msgitemViews[i].messageitem.Message.Seen || msgitemViews[i].collapsed && msgitemViews[i].findDescendant(miv => !miv.messageitem.Message.Seen)) {
 							moveclick(i, true);
