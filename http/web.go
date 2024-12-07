@@ -33,11 +33,9 @@ import (
 	"github.com/mjl-/mox/autotls"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
-	"github.com/mjl-/mox/imapserver"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/ratelimit"
-	"github.com/mjl-/mox/smtpserver"
 	"github.com/mjl-/mox/webaccount"
 	"github.com/mjl-/mox/webadmin"
 	"github.com/mjl-/mox/webapisrv"
@@ -541,22 +539,34 @@ func redirectToTrailingSlash(srv *serve, hostMatch func(dns.IPDomain) bool, name
 
 // Listen binds to sockets for HTTP listeners, including those required for ACME to
 // generate TLS certificates. It stores the listeners so Serve can start serving them.
-func Listen() {
+func Listen(smtpHelper, imapHelper FnALPNHelper) {
 	// Initialize listeners in deterministic order for the same potential error
 	// messages.
 	names := maps.Keys(mox.Conf.Static.Listeners)
 	sort.Strings(names)
 	for _, name := range names {
+		found443 := false
 		l := mox.Conf.Static.Listeners[name]
 		portServe := portServes(l)
 
 		ports := maps.Keys(portServe)
 		sort.Ints(ports)
 		for _, port := range ports {
+			if port == 443 {
+				found443 = true
+			}
 			srv := portServe[port]
 			for _, ip := range l.IPs {
-				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv)
+				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv, smtpHelper, imapHelper)
 			}
+		}
+		if !found443 && (smtpHelper != nil || imapHelper != nil) {
+			pkglog.Warn(
+				"Listener asks for non-HTTP protocols to be available via ALPN on port 443, but does not configure any HTTPS listeners on port 443. Therefore, the EnableOnHTTPS setting has no effect. Configure an HTTPS listener on port 443 to fix this.",
+				slog.String("listenerName", name),
+				slog.Any("SubmissionsEnableOnHTTPS", smtpHelper != nil),
+				slog.Any("IMAPSEnableOnHTTPS", imapHelper != nil),
+			)
 		}
 	}
 }
@@ -780,9 +790,6 @@ func portServes(l config.Listener) map[int]*serve {
 			dc, ok := mox.Conf.Domain(dom)
 			return ok && !dc.ReportsOnly
 		}
-		// TODO: decide how to explicitly configure ALPN multiplexing in a way
-		// that makes sense, rather than tying it to Autoconfig.
-		srv.TLSConfig.NextProtos = []string{"h2", "imap", "smtp"}
 		srv.SystemHandle("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", mox.SafeHeaders(http.HandlerFunc(autoconfHandle)))
 		srv.SystemHandle("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", mox.SafeHeaders(http.HandlerFunc(autodiscoverHandle)))
 		srv.SystemHandle("mobileconfig", autoconfigMatch, "/profile.mobileconfig", mox.SafeHeaders(http.HandlerFunc(mobileconfigHandle)))
@@ -886,13 +893,38 @@ var servers []func()
 // the certificate to be given during the first https connection.
 var ensureManagerHosts = map[*autotls.Manager]map[dns.Domain]struct{}{}
 
+type FnALPNHelper = func(*tls.Config, net.Conn)
+type tlsNextProtoMap = map[string]func(*http.Server, *tls.Conn, http.Handler)
+
+func serverTlsSetup(port int, tlsConfig *tls.Config, smtpHelper, imapHelper FnALPNHelper) (*tls.Config, tlsNextProtoMap) {
+	cfg := tlsConfig.Clone()
+	npMap := tlsNextProtoMap{}
+	if port != 443 {
+		return cfg, npMap
+	}
+	doConfig := func(proto string, helperFunc FnALPNHelper) {
+		if helperFunc != nil {
+			cfg.NextProtos = append(cfg.NextProtos, proto)
+			npMap[proto] = func(_ *http.Server, conn *tls.Conn, _ http.Handler) {
+				helperFunc(cfg, conn)
+			}
+			pkglog.Print("Enabled ALPN listener", slog.String("proto", proto), slog.Any("NextProtos", cfg.NextProtos))
+		}
+	}
+	doConfig("smtp", smtpHelper)
+	doConfig("imap", imapHelper)
+	return cfg, npMap
+}
+
 // listen prepares a listener, and adds it to "servers", to be launched (if not running as root) through Serve.
-func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, handler http.Handler) {
+func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, handler http.Handler, smtpHelper, imapHelper FnALPNHelper) {
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 
 	var protocol string
 	var ln net.Listener
 	var err error
+	var updatedTlsConfig *tls.Config
+	var npMap tlsNextProtoMap
 	if tlsConfig == nil {
 		protocol = "http"
 		if os.Getuid() == 0 {
@@ -913,24 +945,22 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 				slog.String("kinds", strings.Join(kinds, ",")),
 				slog.String("address", addr))
 		}
+		updatedTlsConfig, npMap = serverTlsSetup(port, tlsConfig, smtpHelper, imapHelper)
 		ln, err = mox.Listen(mox.Network(ip), addr)
 		if err != nil {
 			pkglog.Fatalx("https: listen", err, slog.String("addr", addr))
 		}
-		ln = tls.NewListener(ln, tlsConfig)
+		ln = tls.NewListener(ln, updatedTlsConfig)
 	}
 
 	server := &http.Server{
 		Handler: handler,
 		// Clone because our multiple Server.Serve calls modify config concurrently leading to data race.
-		TLSConfig:         tlsConfig.Clone(),
+		TLSConfig:         updatedTlsConfig,
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       65 * time.Second, // Chrome closes connections after 60 seconds, firefox after 115 seconds.
 		ErrorLog:          golog.New(mlog.LogWriter(pkglog.With(slog.String("pkg", "net/http")), slog.LevelInfo, protocol+" error"), "", 0),
-		TLSNextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){
-			"imap": handleIMAP,
-			"smtp": handleSMTP,
-		},
+		TLSNextProto:      npMap,
 	}
 	// By default, the Go 1.6 and above http.Server includes support for HTTP2.
 	// However, HTTP2 is negotiated via ALPN. Because we are configuring
@@ -945,21 +975,6 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 		pkglog.Fatalx(protocol+": serve", err)
 	}
 	servers = append(servers, serve)
-}
-
-func handleIMAP(server *http.Server, conn *tls.Conn, _ http.Handler) {
-	cid := mox.Cid()
-
-	imapserver.ServeConn("imaps-alpn", cid, server.TLSConfig, conn, true, false)
-}
-
-func handleSMTP(server *http.Server, conn *tls.Conn, _ http.Handler) {
-	cid := mox.Cid()
-	hostname := mox.Conf.Static.HostnameDomain
-	var maxMsgSize int64 = config.DefaultMaxMsgSize
-	resolver := dns.StrictResolver{Log: pkglog.Logger}
-
-	smtpserver.ServeConn("submissions-alpn", cid, hostname, server.TLSConfig, conn, resolver, true, true, maxMsgSize, true, true, true, nil, 0)
 }
 
 // Serve starts serving on the initialized listeners.
