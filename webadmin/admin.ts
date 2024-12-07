@@ -3,9 +3,10 @@
 // From HTML.
 declare let page: HTMLElement
 declare let moxversion: string
-declare let moxgoversion: string
 declare let moxgoos: string
 declare let moxgoarch: string
+// From customization script.
+declare let moxBeforeDisplay: (webmailroot: HTMLElement) => void
 
 const login = async (reason: string) => {
 	return new Promise<string>((resolve: (v: string) => void, _) => {
@@ -53,7 +54,7 @@ const login = async (reason: string) => {
 							dom.label(
 								style({display: 'block', marginBottom: '2ex'}),
 								dom.div('Password', style({marginBottom: '.5ex'})),
-								password=dom.input(attr.type('password'), attr.required('')),
+								password=dom.input(attr.type('password'), attr.autocomplete('current-password'), attr.required('')),
 							),
 							dom.div(
 								style({textAlign: 'center'}),
@@ -195,7 +196,6 @@ const footer = dom.div(
 	link('https://www.xmox.nl', 'mox'),
 	' ',
 	moxversion, ' ',
-	moxgoversion, ' ',
 	moxgoos, '/', moxgoarch,
 	', ', dom.a(attr.href('licenses.txt'), 'licenses')
 )
@@ -348,7 +348,7 @@ const index = async () => {
 	let recvID: HTMLInputElement
 	let cidElem: HTMLSpanElement
 
-	dom._kids(page,
+	return dom.div(
 		crumbs('Mox Admin'),
 		checkUpdatesEnabled ? [] : dom.p(box(yellow, 'Warning: Checking for updates has not been enabled in mox.conf (CheckUpdates: true).', dom.br(), 'Make sure you stay up to date through another mechanism!', dom.br(), 'You have a responsibility to keep the internet-connected software you run up to date and secure!', dom.br(), 'See ', link('https://updates.xmox.nl/changelog'))),
 		dom.p(
@@ -441,7 +441,7 @@ const globalRoutes = async () => {
 		client.Config(),
 	])
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'Routes',
@@ -453,7 +453,7 @@ const globalRoutes = async () => {
 const config = async () => {
 	const [staticPath, dynamicPath, staticText, dynamicText] = await client.ConfigFiles()
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'Config',
@@ -475,7 +475,7 @@ const loglevels = async () => {
 	let pkg: HTMLInputElement
 	let level: HTMLSelectElement
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'Log levels',
@@ -586,7 +586,7 @@ const accounts = async () => {
 	let account: HTMLInputElement
 	let accountModified = false
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'Accounts',
@@ -759,10 +759,11 @@ const RoutesEditor = (kind: string, transports: { [key: string]: api.Transport }
 }
 
 const account = async (name: string) => {
-	const [[config, diskUsage], domains, transports] = await Promise.all([
+	const [[config, diskUsage], domains, transports, tlspubkeys] = await Promise.all([
 		client.Account(name),
 		client.Domains(),
 		client.Transports(),
+		client.TLSPublicKeys(name),
 	])
 
 	// todo: show suppression list, and buttons to add/remove entries.
@@ -805,7 +806,7 @@ const account = async (name: string) => {
 		return v*mult
 	}
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('Accounts', '#accounts'),
@@ -994,6 +995,33 @@ const account = async (name: string) => {
 				formPassword.reset()
 			},
 		),
+		dom.br(),
+		dom.h2('TLS public keys', attr.title('For TLS client authentication with certificates, for IMAP and/or submission (SMTP). Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration or constraints are not verified.')),
+		dom.table(
+			dom.thead(
+				dom.tr(
+					dom.th('Login address'),
+					dom.th('Name'),
+					dom.th('Type'),
+					dom.th('No IMAP "preauth"', attr.title('New IMAP immediate TLS connections authenticated with a client certificate are automatically switched to "authenticated" state with an untagged IMAP "preauth" message by default. IMAP connections have a state machine specifying when commands are allowed. Authenticating is not allowed while in the "authenticated" state. Enable this option to work around clients that would try to authenticated anyway.')),
+					dom.th('Fingerprint'),
+				),
+			),
+			dom.tbody(
+				tlspubkeys?.length ? [] : dom.tr(dom.td(attr.colspan('5'), 'None')),
+				(tlspubkeys || []).map(tpk => {
+					const row = dom.tr(
+						dom.td(tpk.LoginAddress),
+						dom.td(tpk.Name),
+						dom.td(tpk.Type),
+						dom.td(tpk.NoIMAPPreauth ? 'Enabled' : ''),
+						dom.td(tpk.Fingerprint),
+					)
+					return row
+				}),
+			),
+		),
+
 		dom.br(),
 		RoutesEditor('account-specific', transports, config.Routes || [], async (routes: api.Route[]) => await client.AccountRoutesSave(name, routes)),
 		dom.br(),
@@ -1221,7 +1249,7 @@ const domain = async (d: string) => {
 		)
 	}
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'Domain ' + domainString(dnsdomain),
@@ -1796,7 +1824,7 @@ const domainAlias = async (d: string, aliasLocalpart: string) => {
 
 	let delFieldset: HTMLFieldSetElement
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('Domain ' + domainString(domain.Domain), '#domains/'+d),
@@ -1903,7 +1931,7 @@ const domainDNSRecords = async (d: string) => {
 		client.ParseDomain(d),
 	])
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('Domain ' + domainString(dnsdomain), '#domains/'+d),
@@ -2058,7 +2086,7 @@ const domainDNSCheck = async (d: string) => {
 		),
 	]
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('Domain ' + domainString(dnsdomain), '#domains/'+d),
@@ -2084,7 +2112,7 @@ const domainDNSCheck = async (d: string) => {
 }
 
 const dmarcIndex = async () => {
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'DMARC',
@@ -2105,7 +2133,7 @@ const dmarcReports = async () => {
 	const start = new Date(new Date().getTime() - 30*24*3600*1000)
 	const summaries = await client.DMARCSummaries(start, end, "")
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('DMARC', '#dmarc'),
@@ -2167,7 +2195,7 @@ const dmarcEvaluations = async () => {
 
 	const nextmonth = new Date(new Date().getTime()+31*24*3600*1000)
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('DMARC', '#dmarc'),
@@ -2307,7 +2335,7 @@ const dmarcEvaluationsDomain = async (domain: string) => {
 		return r
 	}
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('DMARC', '#dmarc'),
@@ -2413,7 +2441,7 @@ const domainDMARC = async (d: string) => {
 
 	// todo future: table sorting? period selection (last day, 7 days, 1 month, 1 year, custom period)? collapse rows for a report? show totals per report? a simple bar graph to visualize messages and dmarc/dkim/spf fails? similar for TLSRPT.
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('Domain ' + domainString(dnsdomain), '#domains/'+d),
@@ -2580,7 +2608,7 @@ const domainDMARCReport = async (d: string, reportID: number) => {
 		client.Domain(d),
 	])
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('Domain ' + domainString(dnsdomain), '#domains/'+d),
@@ -2593,7 +2621,7 @@ const domainDMARCReport = async (d: string, reportID: number) => {
 }
 
 const tlsrptIndex = async () => {
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'TLSRPT',
@@ -2623,7 +2651,7 @@ const tlsrptResults = async () => {
 	let comment: HTMLInputElement
 	const nextmonth = new Date(new Date().getTime()+31*24*3600*1000)
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('TLSRPT', '#tlsrpt'),
@@ -2760,7 +2788,7 @@ const tlsrptResultsPolicyDomain = async (isrcptdom: boolean, domain: string) => 
 	const recordPromise = client.LookupTLSRPTRecord(domain)
 
 	let recordBox: HTMLElement
-	dom._kids(page,
+	const root = dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('TLSRPT', '#tlsrpt'),
@@ -2810,6 +2838,8 @@ const tlsrptResultsPolicyDomain = async (isrcptdom: boolean, domain: string) => 
 		}
 		dom._kids(recordBox, l)
 	})()
+
+	return root
 }
 
 const tlsrptReports = async () => {
@@ -2817,7 +2847,7 @@ const tlsrptReports = async () => {
 	const start = new Date(new Date().getTime() - 30*24*3600*1000)
 	const summaries = await client.TLSRPTSummaries(start, end, '')
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('TLSRPT', '#tlsrpt'),
@@ -2874,7 +2904,7 @@ const domainTLSRPT = async (d: string) => {
 		return s
 	}
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('TLSRPT', '#tlsrpt'),
@@ -2970,7 +3000,7 @@ const domainTLSRPTID = async (d: string, reportID: number) => {
 		client.ParseDomain(d),
 	])
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('TLSRPT', '#tlsrpt'),
@@ -2986,7 +3016,7 @@ const domainTLSRPTID = async (d: string, reportID: number) => {
 const mtasts = async () => {
 	const policies = await client.MTASTSPolicies()
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'MTA-STS policies',
@@ -3058,7 +3088,7 @@ const dnsbl = async () => {
 	let fieldset: HTMLFieldSetElement
 	let monitorTextarea: HTMLTextAreaElement
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'DNS blocklist status for IPs',
@@ -3258,7 +3288,7 @@ const queueList = async () => {
 		window.location.reload() // todo: reload less
 	})
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'Queue',
@@ -3698,7 +3728,7 @@ const retiredList = async () => {
 	}
 	render()
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('Queue', '#queue'),
@@ -3980,7 +4010,7 @@ const hooksList = async () => {
 		window.location.reload() // todo: reload less
 	})
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'Webhook queue',
@@ -4268,7 +4298,7 @@ const hooksRetiredList = async () => {
 	}
 	render()
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			crumblink('Webhook queue', '#webhookqueue'),
@@ -5041,7 +5071,7 @@ const webserver = async () => {
 		]
 	}
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Admin', '#'),
 			'Webserver config',
@@ -5123,67 +5153,72 @@ const init = async () => {
 		const t = h.split('/')
 		page.classList.add('loading')
 		try {
+			let root: HTMLElement
 			if (h == '') {
-				await index()
+				root = await index()
 			} else if (h === 'config') {
-				await config()
+				root = await config()
 			} else if (h === 'loglevels') {
-				await loglevels()
+				root = await loglevels()
 			} else if (h === 'accounts') {
-				await accounts()
+				root = await accounts()
 			} else if (t[0] === 'accounts' && t.length === 2) {
-				await account(t[1])
+				root = await account(t[1])
 			} else if (t[0] === 'domains' && t.length === 2) {
-				await domain(t[1])
+				root = await domain(t[1])
 			} else if (t[0] === 'domains' && t.length === 4 && t[2] === 'alias') {
-				await domainAlias(t[1], t[3])
+				root = await domainAlias(t[1], t[3])
 			} else if (t[0] === 'domains' && t.length === 3 && t[2] === 'dmarc') {
-				await domainDMARC(t[1])
+				root = await domainDMARC(t[1])
 			} else if (t[0] === 'domains' && t.length === 4 && t[2] === 'dmarc' && parseInt(t[3])) {
-				await domainDMARCReport(t[1], parseInt(t[3]))
+				root = await domainDMARCReport(t[1], parseInt(t[3]))
 			} else if (t[0] === 'domains' && t.length === 3 && t[2] === 'dnscheck') {
-				await domainDNSCheck(t[1])
+				root = await domainDNSCheck(t[1])
 			} else if (t[0] === 'domains' && t.length === 3 && t[2] === 'dnsrecords') {
-				await domainDNSRecords(t[1])
+				root = await domainDNSRecords(t[1])
 			} else if (h === 'queue') {
-				await queueList()
+				root = await queueList()
 			} else if (h === 'queue/retired') {
-				await retiredList()
+				root = await retiredList()
 			} else if (h === 'webhookqueue') {
-				await hooksList()
+				root = await hooksList()
 			} else if (h === 'webhookqueue/retired') {
-				await hooksRetiredList()
+				root = await hooksRetiredList()
 			} else if (h === 'tlsrpt') {
-				await tlsrptIndex()
+				root = await tlsrptIndex()
 			} else if (h === 'tlsrpt/reports') {
-				await tlsrptReports()
+				root = await tlsrptReports()
 			} else if (t[0] === 'tlsrpt' && t[1] === 'reports' && t.length === 3) {
-				await domainTLSRPT(t[2])
+				root = await domainTLSRPT(t[2])
 			} else if (t[0] === 'tlsrpt' && t[1] === 'reports' && t.length === 4 && parseInt(t[3])) {
-				await domainTLSRPTID(t[2], parseInt(t[3]))
+				root = await domainTLSRPTID(t[2], parseInt(t[3]))
 			} else if (h === 'tlsrpt/results') {
-				await tlsrptResults()
+				root = await tlsrptResults()
 			} else if (t[0] == 'tlsrpt' && t[1] == 'results' && (t[2] === 'rcptdom' || t[2] == 'host') && t.length === 4) {
-				await tlsrptResultsPolicyDomain(t[2] === 'rcptdom', t[3])
+				root = await tlsrptResultsPolicyDomain(t[2] === 'rcptdom', t[3])
 			} else if (h === 'dmarc') {
-				await dmarcIndex()
+				root = await dmarcIndex()
 			} else if (h === 'dmarc/reports') {
-				await dmarcReports()
+				root = await dmarcReports()
 			} else if (h === 'dmarc/evaluations') {
-				await dmarcEvaluations()
+				root = await dmarcEvaluations()
 			} else if (t[0] == 'dmarc' && t[1] == 'evaluations' && t.length === 3) {
-				await dmarcEvaluationsDomain(t[2])
+				root = await dmarcEvaluationsDomain(t[2])
 			} else if (h === 'mtasts') {
-				await mtasts()
+				root = await mtasts()
 			} else if (h === 'dnsbl') {
-				await dnsbl()
+				root = await dnsbl()
 			} else if (h === 'routes') {
-				await globalRoutes()
+				root = await globalRoutes()
 			} else if (h === 'webserver') {
-				await webserver()
+				root = await webserver()
 			} else {
-				dom._kids(page, 'page not found')
+				root = dom.div('page not found')
 			}
+			if ((window as any).moxBeforeDisplay) {
+				moxBeforeDisplay(root)
+			}
+			dom._kids(page, root)
 		} catch (err) {
 			console.log('error', err)
 			window.alert('Error: ' + errmsg(err))

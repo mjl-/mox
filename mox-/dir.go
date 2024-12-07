@@ -5,9 +5,16 @@ import (
 )
 
 // ConfigDirPath returns the path to "f". Either f itself when absolute, or
-// interpreted relative to the directory of the current config file.
+// interpreted relative to the directory of the static configuration file
+// (mox.conf).
 func ConfigDirPath(f string) string {
 	return configDirPath(ConfigStaticPath, f)
+}
+
+// Like ConfigDirPath, but relative paths are interpreted relative to the directory
+// of the dynamic configuration file (domains.conf).
+func ConfigDynamicDirPath(f string) string {
+	return configDirPath(ConfigDynamicPath, f)
 }
 
 // DataDirPath returns to the path to "f". Either f itself when absolute, or

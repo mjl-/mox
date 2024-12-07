@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	mathrand "math/rand"
+	mathrand2 "math/rand/v2"
 	"runtime/debug"
 	"time"
 
@@ -71,12 +71,11 @@ func refresh1(ctx context.Context, log mlog.Log, resolver dns.Resolver, sleep fu
 	}
 
 	// Randomize list.
-	rand := mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
 	for i := range prs {
 		if i == 0 {
 			continue
 		}
-		j := rand.Intn(i + 1)
+		j := mathrand2.IntN(i + 1)
 		prs[i], prs[j] = prs[j], prs[i]
 	}
 
@@ -87,7 +86,7 @@ func refresh1(ctx context.Context, log mlog.Log, resolver dns.Resolver, sleep fu
 		go refreshDomain(ctx, log, DB, resolver, pr)
 		if i < len(prs)-1 {
 			interval := 3 * int64(time.Hour) / int64(len(prs)-1)
-			extra := time.Duration(rand.Int63n(interval) - interval/2)
+			extra := time.Duration(mathrand2.Int64N(interval) - interval/2)
 			next := start.Add(time.Duration(int64(i+1)*interval) + extra)
 			d := next.Sub(timeNow())
 			if d > 0 {

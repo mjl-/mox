@@ -82,19 +82,23 @@ test email, unique.
 `, "\n", "\r\n")
 
 type testserver struct {
-	t          *testing.T
-	acc        *store.Account
-	switchStop func()
-	comm       *store.Comm
-	cid        int64
-	resolver   dns.Resolver
-	auth       func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)
-	user, pass string
-	submission bool
-	requiretls bool
-	dnsbls     []dns.Domain
-	tlsmode    smtpclient.TLSMode
-	tlspkix    bool
+	t            *testing.T
+	acc          *store.Account
+	switchStop   func()
+	comm         *store.Comm
+	cid          int64
+	resolver     dns.Resolver
+	auth         func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)
+	user, pass   string
+	immediateTLS bool
+	serverConfig *tls.Config
+	clientConfig *tls.Config
+	clientCert   *tls.Certificate // Passed to smtpclient for starttls authentication.
+	submission   bool
+	requiretls   bool
+	dnsbls       []dns.Domain
+	tlsmode      smtpclient.TLSMode
+	tlspkix      bool
 }
 
 const password0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
@@ -103,9 +107,23 @@ const password1 = "tést    "                      // PRECIS normalized, with NF
 func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *testserver {
 	limitersInit() // Reset rate limiters.
 
-	ts := testserver{t: t, cid: 1, resolver: resolver, tlsmode: smtpclient.TLSOpportunistic}
-
 	log := mlog.New("smtpserver", nil)
+
+	ts := testserver{
+		t:        t,
+		cid:      1,
+		resolver: resolver,
+		tlsmode:  smtpclient.TLSOpportunistic,
+		serverConfig: &tls.Config{
+			Certificates: []tls.Certificate{fakeCert(t, false)},
+		},
+	}
+
+	// Ensure session keys, for tests that check resume and authentication.
+	ctx, cancel := context.WithCancel(ctxbg)
+	defer cancel()
+	mox.StartTLSSessionTicketKeyRefresher(ctx, log, ts.serverConfig)
+
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = configPath
 	mox.MustLoadConfig(true, false)
@@ -116,6 +134,8 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 	tcheck(t, err, "dmarcdb init")
 	err = tlsrptdb.Init()
 	tcheck(t, err, "tlsrptdb init")
+	err = store.Init(ctxbg)
+	tcheck(t, err, "store init")
 
 	ts.acc, err = store.OpenAccount(log, "mjl")
 	tcheck(t, err, "open account")
@@ -139,6 +159,8 @@ func (ts *testserver) close() {
 	tcheck(ts.t, err, "dmarcdb close")
 	err = tlsrptdb.Close()
 	tcheck(ts.t, err, "tlsrptdb close")
+	err = store.Close()
+	tcheck(ts.t, err, "store close")
 	ts.comm.Unregister()
 	queue.Shutdown()
 	ts.switchStop()
@@ -180,8 +202,9 @@ func (ts *testserver) run(fn func(helloErr error, client *smtpclient.Client)) {
 		ourHostname := mox.Conf.Static.HostnameDomain
 		remoteHostname := dns.Domain{ASCII: "mox.example"}
 		opts := smtpclient.Opts{
-			Auth:    auth,
-			RootCAs: mox.Conf.Static.TLS.CertPool,
+			Auth:       auth,
+			RootCAs:    mox.Conf.Static.TLS.CertPool,
+			ClientCert: ts.clientCert,
 		}
 		log := pkglog.WithCid(ts.cid - 1)
 		client, err := smtpclient.New(ctxbg, log.Logger, conn, ts.tlsmode, ts.tlspkix, ourHostname, remoteHostname, opts)
@@ -206,12 +229,13 @@ func (ts *testserver) runRaw(fn func(clientConn net.Conn)) {
 	defer func() { <-serverdone }()
 
 	go func() {
-		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{fakeCert(ts.t)},
-		}
-		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, 100<<20, false, false, ts.requiretls, ts.dnsbls, 0)
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, ts.serverConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, 100<<20, false, false, ts.requiretls, ts.dnsbls, 0)
 		close(serverdone)
 	}()
+
+	if ts.immediateTLS {
+		clientConn = tls.Client(clientConn, ts.clientConfig)
+	}
 
 	fn(clientConn)
 }
@@ -228,10 +252,17 @@ func (ts *testserver) smtpErr(err error, expErr *smtpclient.Error) {
 // Just a cert that appears valid. SMTP client will not verify anything about it
 // (that is opportunistic TLS for you, "better some than none"). Let's enjoy this
 // one moment where it makes life easier.
-func fakeCert(t *testing.T) tls.Certificate {
-	privKey := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)) // Fake key, don't use this for real!
+func fakeCert(t *testing.T, randomkey bool) tls.Certificate {
+	seed := make([]byte, ed25519.SeedSize)
+	if randomkey {
+		cryptorand.Read(seed)
+	}
+	privKey := ed25519.NewKeyFromSeed(seed) // Fake key, don't use this for real!
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(1), // Required field...
+		// Valid period is needed to get session resumption enabled.
+		NotBefore: time.Now().Add(-time.Minute),
+		NotAfter:  time.Now().Add(time.Hour),
 	}
 	localCertBuf, err := x509.CreateCertificate(cryptorand.Reader, template, template, privKey.Public(), privKey)
 	if err != nil {
@@ -329,6 +360,108 @@ func TestSubmission(t *testing.T) {
 		testAuth(fn, "móx@mox.example", password1, nil)
 		testAuth(fn, "mo\u0301x@mox.example", password0, nil)
 		testAuth(fn, "mo\u0301x@mox.example", password1, nil)
+	}
+
+	// Create a certificate, register its public key with account, and make a tls
+	// client config that sends the certificate.
+	clientCert0 := fakeCert(ts.t, true)
+	tlspubkey, err := store.ParseTLSPublicKeyCert(clientCert0.Certificate[0])
+	tcheck(t, err, "parse certificate")
+	tlspubkey.Account = "mjl"
+	tlspubkey.LoginAddress = "mjl@mox.example"
+	err = store.TLSPublicKeyAdd(ctxbg, &tlspubkey)
+	tcheck(t, err, "add tls public key to account")
+	ts.immediateTLS = true
+	ts.clientConfig = &tls.Config{
+		InsecureSkipVerify: true,
+		Certificates: []tls.Certificate{
+			clientCert0,
+		},
+	}
+
+	// No explicit address in EXTERNAL.
+	testAuth(func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+		return sasl.NewClientExternal(user)
+	}, "", "", nil)
+
+	// Same username in EXTERNAL as configured for key.
+	testAuth(func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+		return sasl.NewClientExternal(user)
+	}, "mjl@mox.example", "", nil)
+
+	// Different username in EXTERNAL as configured for key, but same account.
+	testAuth(func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+		return sasl.NewClientExternal(user)
+	}, "móx@mox.example", "", nil)
+
+	// Different username as configured for key, but same account, but not EXTERNAL auth.
+	testAuth(func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+		return sasl.NewClientSCRAMSHA256PLUS(user, pass, *cs)
+	}, "móx@mox.example", password0, nil)
+
+	// Different account results in error.
+	testAuth(func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+		return sasl.NewClientExternal(user)
+	}, "☺@mox.example", "", &smtpclient.Error{Code: smtp.C535AuthBadCreds, Secode: smtp.SePol7AuthBadCreds8})
+
+	// Starttls with client cert should authenticate too.
+	ts.immediateTLS = false
+	ts.clientCert = &clientCert0
+	testAuth(func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+		return sasl.NewClientExternal(user)
+	}, "", "", nil)
+	ts.immediateTLS = true
+	ts.clientCert = nil
+
+	// Add a client session cache, so our connections will be resumed. We are testing
+	// that the credentials are applied to resumed connections too.
+	ts.clientConfig.ClientSessionCache = tls.NewLRUClientSessionCache(10)
+	testAuth(func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+		if cs.DidResume {
+			panic("tls connection was resumed")
+		}
+		return sasl.NewClientExternal(user)
+	}, "", "", nil)
+	testAuth(func(user, pass string, cs *tls.ConnectionState) sasl.Client {
+		if !cs.DidResume {
+			panic("tls connection was not resumed")
+		}
+		return sasl.NewClientExternal(user)
+	}, "", "", nil)
+
+	// Unknown client certificate should fail the connection.
+	serverConn, clientConn := net.Pipe()
+	serverdone := make(chan struct{})
+	defer func() { <-serverdone }()
+
+	go func() {
+		defer serverConn.Close()
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{fakeCert(ts.t, false)},
+		}
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, 100<<20, false, false, false, ts.dnsbls, 0)
+		close(serverdone)
+	}()
+
+	defer clientConn.Close()
+
+	// Authentication with an unknown/untrusted certificate should fail.
+	clientCert1 := fakeCert(ts.t, true)
+	ts.clientConfig.ClientSessionCache = nil
+	ts.clientConfig.Certificates = []tls.Certificate{
+		clientCert1,
+	}
+	clientConn = tls.Client(clientConn, ts.clientConfig)
+	// note: It's not enough to do a handshake and check if that was successful. If the
+	// client cert is not acceptable, we only learn after the handshake, when the first
+	// data messages are exchanged.
+	buf := make([]byte, 100)
+	_, err = clientConn.Read(buf)
+	if err == nil {
+		t.Fatalf("tls handshake with unknown client certificate succeeded")
+	}
+	if alert, ok := mox.AsTLSAlert(err); !ok || alert != 42 {
+		t.Fatalf("got err %#v, expected tls 'bad certificate' alert", err)
 	}
 }
 
@@ -1247,7 +1380,7 @@ func TestNonSMTP(t *testing.T) {
 
 	go func() {
 		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{fakeCert(ts.t)},
+			Certificates: []tls.Certificate{fakeCert(ts.t, false)},
 		}
 		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, 100<<20, false, false, false, ts.dnsbls, 0)
 		close(serverdone)

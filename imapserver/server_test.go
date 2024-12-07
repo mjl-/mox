@@ -162,6 +162,7 @@ type testconn struct {
 	done       chan struct{}
 	serverConn net.Conn
 	account    *store.Account
+	switchStop func()
 
 	// Result of last command.
 	lastUntagged []imapclient.Untagged
@@ -315,6 +316,9 @@ func (tc *testconn) close() {
 	tc.client.Close()
 	tc.serverConn.Close()
 	tc.waitDone()
+	if tc.switchStop != nil {
+		tc.switchStop()
+	}
 }
 
 func xparseNumSet(s string) imapclient.NumSet {
@@ -338,15 +342,23 @@ func startNoSwitchboard(t *testing.T) *testconn {
 const password0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
 const password1 = "tést    "                      // PRECIS normalized, with NFC.
 
-func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS, setPassword bool, accname string) *testconn {
+func startArgs(t *testing.T, first, immediateTLS bool, allowLoginWithoutTLS, setPassword bool, accname string) *testconn {
+	return startArgsMore(t, first, immediateTLS, nil, nil, allowLoginWithoutTLS, false, setPassword, accname, nil)
+}
+
+// todo: the parameters and usage are too much now. change to scheme similar to smtpserver, with params in a struct, and a separate method for init and making a connection.
+func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientConfig *tls.Config, allowLoginWithoutTLS, noCloseSwitchboard, setPassword bool, accname string, afterInit func() error) *testconn {
 	limitersInit() // Reset rate limiters.
 
-	if first {
-		os.RemoveAll("../testdata/imap/data")
-	}
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
 	mox.MustLoadConfig(true, false)
+	if first {
+		store.Close() // May not be open, we ignore error.
+		os.RemoveAll("../testdata/imap/data")
+		err := store.Init(ctxbg)
+		tcheck(t, err, "store init")
+	}
 	acc, err := store.OpenAccount(pkglog, accname)
 	tcheck(t, err, "open account")
 	if setPassword {
@@ -358,33 +370,55 @@ func startArgs(t *testing.T, first, isTLS, allowLoginWithoutTLS, setPassword boo
 		switchStop = store.Switchboard()
 	}
 
+	if afterInit != nil {
+		err := afterInit()
+		tcheck(t, err, "after init")
+	}
+
 	serverConn, clientConn := net.Pipe()
 
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{fakeCert(t)},
+	if serverConfig == nil {
+		serverConfig = &tls.Config{
+			Certificates: []tls.Certificate{fakeCert(t, false)},
+		}
 	}
-	if isTLS {
-		serverConn = tls.Server(serverConn, tlsConfig)
-		clientConn = tls.Client(clientConn, &tls.Config{InsecureSkipVerify: true})
+	if immediateTLS {
+		if clientConfig == nil {
+			clientConfig = &tls.Config{InsecureSkipVerify: true}
+		}
+		clientConn = tls.Client(clientConn, clientConfig)
 	}
 
 	done := make(chan struct{})
 	connCounter++
 	cid := connCounter
 	go func() {
-		serve("test", cid, tlsConfig, serverConn, isTLS, allowLoginWithoutTLS)
-		switchStop()
+		serve("test", cid, serverConfig, serverConn, immediateTLS, allowLoginWithoutTLS)
+		if !noCloseSwitchboard {
+			switchStop()
+		}
 		close(done)
 	}()
 	client, err := imapclient.New(clientConn, true)
 	tcheck(t, err, "new client")
-	return &testconn{t: t, conn: clientConn, client: client, done: done, serverConn: serverConn, account: acc}
+	tc := &testconn{t: t, conn: clientConn, client: client, done: done, serverConn: serverConn, account: acc}
+	if first && noCloseSwitchboard {
+		tc.switchStop = switchStop
+	}
+	return tc
 }
 
-func fakeCert(t *testing.T) tls.Certificate {
-	privKey := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)) // Fake key, don't use this for real!
+func fakeCert(t *testing.T, randomkey bool) tls.Certificate {
+	seed := make([]byte, ed25519.SeedSize)
+	if randomkey {
+		cryptorand.Read(seed)
+	}
+	privKey := ed25519.NewKeyFromSeed(seed) // Fake key, don't use this for real!
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(1), // Required field...
+		// Valid period is needed to get session resumption enabled.
+		NotBefore: time.Now().Add(-time.Minute),
+		NotAfter:  time.Now().Add(time.Hour),
 	}
 	localCertBuf, err := x509.CreateCertificate(cryptorand.Reader, template, template, privKey.Public(), privKey)
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	mathrand "math/rand"
+	mathrand2 "math/rand/v2"
 	"time"
 
 	"github.com/mjl-/mox/dkim"
@@ -257,7 +257,7 @@ func Verify(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, msgFr
 
 	// Record can request sampling of messages to apply policy.
 	// See ../rfc/7489:1432
-	useResult = !applyRandomPercentage || record.Percentage == 100 || mathrand.Intn(100) < record.Percentage
+	useResult = !applyRandomPercentage || record.Percentage == 100 || mathrand2.IntN(100) < record.Percentage
 
 	// We treat "quarantine" and "reject" the same. Thus, we also don't "downgrade"
 	// from reject to quarantine if this message was sampled out.

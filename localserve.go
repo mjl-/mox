@@ -25,6 +25,7 @@ import (
 
 	"github.com/mjl-/sconf"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
@@ -164,7 +165,7 @@ during those commands instead of during "data".
 
 	loadLoglevel(log, fallbackLevel)
 
-	golog.Printf("mox, version %s, %s %s/%s", moxvar.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	golog.Printf("mox, version %s %s/%s", moxvar.Version, runtime.GOOS, runtime.GOARCH)
 	golog.Print("")
 	golog.Printf("the default user is mox@localhost, with password moxmoxmox")
 	golog.Printf("the default admin password is moxadmin")
@@ -421,7 +422,7 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 		},
 	}
 
-	dkimKeyBuf, err := mox.MakeDKIMEd25519Key(dns.Domain{ASCII: "localserve"}, dns.Domain{ASCII: "localhost"})
+	dkimKeyBuf, err := admin.MakeDKIMEd25519Key(dns.Domain{ASCII: "localserve"}, dns.Domain{ASCII: "localhost"})
 	xcheck(err, "making dkim key")
 	dkimKeyPath := "dkim.localserve.privatekey.pkcs8.pem"
 	err = os.WriteFile(filepath.Join(dir, dkimKeyPath), dkimKeyBuf, 0660)

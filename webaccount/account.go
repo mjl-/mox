@@ -8,6 +8,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ import (
 	"github.com/mjl-/sherpadoc"
 	"github.com/mjl-/sherpaprom"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -51,10 +53,11 @@ var accountHTML []byte
 var accountJS []byte
 
 var webaccountFile = &mox.WebappFile{
-	HTML:     accountHTML,
-	JS:       accountJS,
-	HTMLPath: filepath.FromSlash("webaccount/account.html"),
-	JSPath:   filepath.FromSlash("webaccount/account.js"),
+	HTML:       accountHTML,
+	JS:         accountJS,
+	HTMLPath:   filepath.FromSlash("webaccount/account.html"),
+	JSPath:     filepath.FromSlash("webaccount/account.js"),
+	CustomStem: "webaccount",
 }
 
 var accountDoc = mustParseAPI("account", accountapiJSON)
@@ -109,7 +112,7 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 		return
 	}
 	// If caller tried saving a config that is invalid, or because of a bad request, cause a user error.
-	if errors.Is(err, mox.ErrConfig) || errors.Is(err, mox.ErrRequest) {
+	if errors.Is(err, mox.ErrConfig) || errors.Is(err, admin.ErrRequest) {
 		xcheckuserf(ctx, err, format, args...)
 	}
 
@@ -432,7 +435,7 @@ func (Account) Account(ctx context.Context) (account config.Account, storageUsed
 // for the account.
 func (Account) AccountSaveFullName(ctx context.Context, fullName string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.FullName = fullName
 	})
 	xcheckf(ctx, err, "saving account full name")
@@ -444,7 +447,7 @@ func (Account) AccountSaveFullName(ctx context.Context, fullName string) {
 func (Account) DestinationSave(ctx context.Context, destName string, oldDest, newDest config.Destination) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(conf *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(conf *config.Account) {
 		curDest, ok := conf.Destinations[destName]
 		if !ok {
 			xcheckuserf(ctx, errors.New("not found"), "looking up destination")
@@ -526,7 +529,7 @@ func (Account) SuppressionRemove(ctx context.Context, address string) {
 // to be delivered, or all if empty/nil.
 func (Account) OutgoingWebhookSave(ctx context.Context, url, authorization string, events []string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		if url == "" {
 			acc.OutgoingWebhook = nil
 		} else {
@@ -565,7 +568,7 @@ func (Account) OutgoingWebhookTest(ctx context.Context, urlStr, authorization st
 // the Authorization header in requests.
 func (Account) IncomingWebhookSave(ctx context.Context, url, authorization string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		if url == "" {
 			acc.IncomingWebhook = nil
 		} else {
@@ -610,7 +613,7 @@ func (Account) IncomingWebhookTest(ctx context.Context, urlStr, authorization st
 // MAIL FROM addresses ("fromid") for deliveries from the queue.
 func (Account) FromIDLoginAddressesSave(ctx context.Context, loginAddresses []string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.FromIDLoginAddresses = loginAddresses
 	})
 	xcheckf(ctx, err, "saving account fromid login addresses")
@@ -619,7 +622,7 @@ func (Account) FromIDLoginAddressesSave(ctx context.Context, loginAddresses []st
 // KeepRetiredPeriodsSave saves periods to save retired messages and webhooks.
 func (Account) KeepRetiredPeriodsSave(ctx context.Context, keepRetiredMessagePeriod, keepRetiredWebhookPeriod time.Duration) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.KeepRetiredMessagePeriod = keepRetiredMessagePeriod
 		acc.KeepRetiredWebhookPeriod = keepRetiredWebhookPeriod
 	})
@@ -630,7 +633,7 @@ func (Account) KeepRetiredPeriodsSave(ctx context.Context, keepRetiredMessagePer
 // junk/nonjunk when moved to mailboxes matching certain regular expressions.
 func (Account) AutomaticJunkFlagsSave(ctx context.Context, enabled bool, junkRegexp, neutralRegexp, notJunkRegexp string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.AutomaticJunkFlags = config.AutomaticJunkFlags{
 			Enabled:              enabled,
 			JunkMailboxRegexp:    junkRegexp,
@@ -645,7 +648,7 @@ func (Account) AutomaticJunkFlagsSave(ctx context.Context, enabled bool, junkReg
 // is disabled. Otherwise all fields except Threegrams are stored.
 func (Account) JunkFilterSave(ctx context.Context, junkFilter *config.JunkFilter) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		if junkFilter == nil {
 			acc.JunkFilter = nil
 			return
@@ -663,9 +666,86 @@ func (Account) JunkFilterSave(ctx context.Context, junkFilter *config.JunkFilter
 // RejectsSave saves the RejectsMailbox and KeepRejects settings.
 func (Account) RejectsSave(ctx context.Context, mailbox string, keep bool) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	err := mox.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.AccountName, func(acc *config.Account) {
 		acc.RejectsMailbox = mailbox
 		acc.KeepRejects = keep
 	})
 	xcheckf(ctx, err, "saving account rejects settings")
+}
+
+func (Account) TLSPublicKeys(ctx context.Context) ([]store.TLSPublicKey, error) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	return store.TLSPublicKeyList(ctx, reqInfo.AccountName)
+}
+
+func (Account) TLSPublicKeyAdd(ctx context.Context, loginAddress, name string, noIMAPPreauth bool, certPEM string) (store.TLSPublicKey, error) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+
+	block, rest := pem.Decode([]byte(certPEM))
+	var err error
+	if block == nil {
+		err = errors.New("no pem data found")
+	} else if block.Type != "CERTIFICATE" {
+		err = fmt.Errorf("unexpected type %q, need CERTIFICATE", block.Type)
+	} else if len(rest) != 0 {
+		err = errors.New("only single pem block allowed")
+	}
+	xcheckuserf(ctx, err, "parsing pem file")
+
+	tpk, err := store.ParseTLSPublicKeyCert(block.Bytes)
+	xcheckuserf(ctx, err, "parsing certificate")
+	if name != "" {
+		tpk.Name = name
+	}
+	tpk.Account = reqInfo.AccountName
+	tpk.LoginAddress = loginAddress
+	tpk.NoIMAPPreauth = noIMAPPreauth
+	err = store.TLSPublicKeyAdd(ctx, &tpk)
+	if err != nil && errors.Is(err, bstore.ErrUnique) {
+		xcheckuserf(ctx, err, "add tls public key")
+	} else {
+		xcheckf(ctx, err, "add tls public key")
+	}
+	return tpk, nil
+}
+
+func xtlspublickey(ctx context.Context, account string, fingerprint string) store.TLSPublicKey {
+	tpk, err := store.TLSPublicKeyGet(ctx, fingerprint)
+	if err == nil && tpk.Account != account {
+		err = bstore.ErrAbsent
+	}
+	if err == bstore.ErrAbsent {
+		xcheckuserf(ctx, err, "get tls public key")
+	}
+	xcheckf(ctx, err, "get tls public key")
+	return tpk
+}
+
+func (Account) TLSPublicKeyRemove(ctx context.Context, fingerprint string) error {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	xtlspublickey(ctx, reqInfo.AccountName, fingerprint)
+	return store.TLSPublicKeyRemove(ctx, fingerprint)
+}
+
+func (Account) TLSPublicKeyUpdate(ctx context.Context, pubKey store.TLSPublicKey) error {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	tpk := xtlspublickey(ctx, reqInfo.AccountName, pubKey.Fingerprint)
+	log := pkglog.WithContext(ctx)
+	acc, _, err := store.OpenEmail(log, pubKey.LoginAddress)
+	if err == nil && acc.Name != reqInfo.AccountName {
+		err = store.ErrUnknownCredentials
+	}
+	if acc != nil {
+		xerr := acc.Close()
+		log.Check(xerr, "close account")
+	}
+	if err == store.ErrUnknownCredentials {
+		xcheckuserf(ctx, errors.New("unknown address"), "looking up address")
+	}
+	tpk.Name = pubKey.Name
+	tpk.LoginAddress = pubKey.LoginAddress
+	tpk.NoIMAPPreauth = pubKey.NoIMAPPreauth
+	err = store.TLSPublicKeyUpdate(ctx, &tpk)
+	xcheckf(ctx, err, "updating tls public key")
+	return nil
 }

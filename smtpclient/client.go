@@ -109,10 +109,11 @@ type Client struct {
 	tlsVerifyPKIX         bool
 	ignoreTLSVerifyErrors bool
 	rootCAs               *x509.CertPool
-	remoteHostname        dns.Domain   // TLS with SNI and name verification.
-	daneRecords           []adns.TLSA  // For authenticating (START)TLS connection.
-	daneMoreHostnames     []dns.Domain // Additional allowed names in TLS certificate for DANE-TA.
-	daneVerifiedRecord    *adns.TLSA   // If non-nil, then will be set to verified DANE record if any.
+	remoteHostname        dns.Domain       // TLS with SNI and name verification.
+	daneRecords           []adns.TLSA      // For authenticating (START)TLS connection.
+	daneMoreHostnames     []dns.Domain     // Additional allowed names in TLS certificate for DANE-TA.
+	daneVerifiedRecord    *adns.TLSA       // If non-nil, then will be set to verified DANE record if any.
+	clientCert            *tls.Certificate // If non-nil, tls client authentication is done.
 
 	// TLS connection success/failure are added. These are always non-nil, regardless
 	// of what was passed in opts. It lets us unconditionally dereference them.
@@ -226,6 +227,9 @@ type Opts struct {
 	// If not nil, used instead of the system default roots for TLS PKIX verification.
 	RootCAs *x509.CertPool
 
+	// If set, the TLS client certificate authentication is done.
+	ClientCert *tls.Certificate
+
 	// TLS verification successes/failures is added to these TLS reporting results.
 	// Once the STARTTLS handshake is attempted, a successful/failed connection is
 	// tracked.
@@ -281,6 +285,7 @@ func New(ctx context.Context, elog *slog.Logger, conn net.Conn, tlsMode TLSMode,
 		daneRecords:           opts.DANERecords,
 		daneMoreHostnames:     opts.DANEMoreHostnames,
 		daneVerifiedRecord:    opts.DANEVerifiedRecord,
+		clientCert:            opts.ClientCert,
 		lastlog:               time.Now(),
 		cmds:                  []string{"(none)"},
 		recipientDomainResult: ensureResult(opts.RecipientDomainResult),
@@ -417,12 +422,18 @@ func (c *Client) tlsConfig() *tls.Config {
 		return nil
 	}
 
+	var certs []tls.Certificate
+	if c.clientCert != nil {
+		certs = []tls.Certificate{*c.clientCert}
+	}
+
 	return &tls.Config{
 		ServerName: c.remoteHostname.ASCII, // For SNI.
 		// todo: possibly accept older TLS versions for TLSOpportunistic? or would our private key be at risk?
 		MinVersion:         tls.VersionTLS12, // ../rfc/8996:31 ../rfc/8997:66
 		InsecureSkipVerify: true,             // VerifyConnection below is called and will do all verification.
 		VerifyConnection:   verifyConnection,
+		Certificates:       certs,
 	}
 }
 

@@ -1,4 +1,15 @@
-// Package SASL implements Simple Authentication and Security Layer, RFC 4422.
+// Package SASL implements a client for Simple Authentication and Security Layer, RFC 4422.
+//
+// Supported authentication mechanisms:
+//
+//   - EXTERNAL
+//   - SCRAM-SHA-256-PLUS
+//   - SCRAM-SHA-1-PLUS
+//   - SCRAM-SHA-256
+//   - SCRAM-SHA-1
+//   - CRAM-MD5
+//   - PLAIN
+//   - LOGIN
 package sasl
 
 import (
@@ -282,6 +293,34 @@ func (a *clientSCRAMSHA) Next(fromServer []byte) (toServer []byte, last bool, re
 		err := a.scram.ServerFinal(fromServer)
 		return nil, true, err
 
+	default:
+		return nil, false, fmt.Errorf("invalid step %d", a.step)
+	}
+}
+
+type clientExternal struct {
+	Username string
+	step     int
+}
+
+var _ Client = (*clientExternal)(nil)
+
+// NewClientExternal returns a client for SASL EXTERNAL authentication.
+//
+// Username is optional.
+func NewClientExternal(username string) Client {
+	return &clientExternal{username, 0}
+}
+
+func (a *clientExternal) Info() (name string, hasCleartextCredentials bool) {
+	return "EXTERNAL", false
+}
+
+func (a *clientExternal) Next(fromServer []byte) (toServer []byte, last bool, rerr error) {
+	defer func() { a.step++ }()
+	switch a.step {
+	case 0:
+		return []byte(a.Username), true, nil
 	default:
 		return nil, false, fmt.Errorf("invalid step %d", a.step)
 	}

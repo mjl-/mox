@@ -1370,7 +1370,7 @@ func deliver(log mlog.Log, resolver dns.Resolver, m0 Msg) {
 			return fmt.Errorf("get message to be delivered: %v", err)
 		}
 
-		backoff = time.Duration(7*60+30+jitter.Intn(10)-5) * time.Second
+		backoff = time.Duration(7*60+30+jitter.IntN(10)-5) * time.Second
 		for i := 0; i < m0.Attempts; i++ {
 			backoff *= time.Duration(2)
 		}

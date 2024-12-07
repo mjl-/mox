@@ -3,9 +3,10 @@
 // From HTML.
 declare let page: HTMLElement
 declare let moxversion: string
-declare let moxgoversion: string
 declare let moxgoos: string
 declare let moxgoarch: string
+// From customization script.
+declare let moxBeforeDisplay: (webmailroot: HTMLElement) => void
 
 const login = async (reason: string) => {
 	return new Promise<string>((resolve: (v: string) => void, _) => {
@@ -60,6 +61,7 @@ const login = async (reason: string) => {
 								autosize=dom.span(dom._class('autosize'),
 									username=dom.input(
 										attr.required(''),
+										attr.autocomplete('username'),
 										attr.placeholder('jane@example.org'),
 										function change() { autosize.dataset.value = username.value },
 										function input() { autosize.dataset.value = username.value },
@@ -69,7 +71,7 @@ const login = async (reason: string) => {
 							dom.label(
 								style({display: 'block', marginBottom: '2ex'}),
 								dom.div('Password', style({marginBottom: '.5ex'})),
-								password=dom.input(attr.type('password'), attr.required('')),
+								password=dom.input(attr.type('password'), attr.autocomplete('current-password'), attr.required('')),
 							),
 							dom.div(
 								style({textAlign: 'center'}),
@@ -296,7 +298,11 @@ const formatQuotaSize = (v: number) => {
 }
 
 const index = async () => {
-	const [acc, storageUsed, storageLimit, suppressions] = await client.Account()
+	const [[acc, storageUsed, storageLimit, suppressions], tlspubkeys0] = await Promise.all([
+		client.Account(),
+		client.TLSPublicKeys(),
+	])
+	const tlspubkeys = tlspubkeys0 || []
 
 	let fullNameForm: HTMLFormElement
 	let fullNameFieldset: HTMLFieldSetElement
@@ -599,7 +605,7 @@ const index = async () => {
 						dom.div(
 							dom.h2('Parameters'),
 							dom.div(
-								style({marginBottom: '.5ex'}), 
+								style({marginBottom: '.5ex'}),
 								dom.label(
 									'Event',
 									dom.div(
@@ -663,6 +669,8 @@ const index = async () => {
 				ContentType: 'text/plain',
 				ContentTypeParams: {charset: 'utf-8'},
 				ContentID: '',
+				ContentDisposition: '',
+				Filename: '',
 				DecodedSize: 8,
 				Parts: [],
 			},
@@ -738,7 +746,7 @@ const index = async () => {
 		onchange()
 	}
 
-	dom._kids(page,
+	const root = dom.div(
 		crumbs('Mox Account'),
 		dom.div(
 			'Default domain: ',
@@ -868,6 +876,199 @@ const index = async () => {
 				passwordForm.reset()
 			},
 		),
+		dom.br(),
+
+		dom.h2('TLS public keys'),
+		dom.p('For TLS client authentication with certificates, for IMAP and/or submission (SMTP). Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration or constraints are not verified.'),
+		(() => {
+			let elem = dom.div()
+
+			const preauthHelp = 'New IMAP immediate TLS connections authenticated with a client certificate are automatically switched to "authenticated" state with an untagged IMAP "preauth" message by default. IMAP connections have a state machine specifying when commands are allowed. Authenticating is not allowed while in the "authenticated" state. Enable this option to work around clients that would try to authenticated anyway.'
+
+			const render = () => {
+				const e = dom.div(
+					dom.table(
+						dom.thead(
+							dom.tr(
+								dom.th('Login address'),
+								dom.th('Name'),
+								dom.th('Type'),
+			                                        dom.th('No IMAP "preauth"', attr.title(preauthHelp)),
+								dom.th('Fingerprint'),
+								dom.th('Update'),
+								dom.th('Remove'),
+							),
+						),
+						dom.tbody(
+							tlspubkeys.length === 0 ? dom.tr(dom.td(attr.colspan('7'), 'None')) : [],
+							tlspubkeys.map((tpk, index) => {
+								let loginAddress: HTMLInputElement
+								let name: HTMLInputElement
+								let noIMAPPreauth: HTMLInputElement
+								let update: HTMLButtonElement
+
+								const formID = 'tlk-'+index
+								const row = dom.tr(
+									dom.td(
+										dom.form(
+											attr.id(formID),
+											async function submit(e: SubmitEvent) {
+												e.stopPropagation()
+												e.preventDefault()
+
+												const ntpk: api.TLSPublicKey = {...tpk}
+												ntpk.LoginAddress = loginAddress.value
+												ntpk.Name = name.value
+												ntpk.NoIMAPPreauth = noIMAPPreauth.checked
+												await check(update, client.TLSPublicKeyUpdate(ntpk))
+												tpk.LoginAddress = ntpk.LoginAddress
+												tpk.Name = ntpk.Name
+												tpk.NoIMAPPreauth = ntpk.NoIMAPPreauth
+											},
+											loginAddress=dom.input(attr.type('email'), attr.value(tpk.LoginAddress), attr.required('')),
+										),
+									),
+									dom.td(name=dom.input(attr.form(formID), attr.value(tpk.Name), attr.required(''))),
+									dom.td(tpk.Type),
+									dom.td(dom.label(noIMAPPreauth=dom.input(attr.form(formID), attr.type('checkbox'), tpk.NoIMAPPreauth ? attr.checked('') : []), ' No IMAP "preauth"', attr.title(preauthHelp))),
+									dom.td(tpk.Fingerprint),
+									dom.td(update=dom.submitbutton(attr.form(formID), 'Update')),
+									dom.td(
+										dom.form(
+											async function submit(e: SubmitEvent & {target: {disabled: boolean}}) {
+												e.stopPropagation()
+												e.preventDefault()
+												await check(e.target, client.TLSPublicKeyRemove(tpk.Fingerprint))
+												tlspubkeys.splice(tlspubkeys.indexOf(tpk), 1)
+												render()
+											},
+											dom.submitbutton('Remove'),
+										),
+									),
+								)
+								return row
+							}),
+						),
+					),
+					dom.clickbutton('Add', style({marginTop: '1ex'}), function click() {
+						let address: HTMLInputElement
+						let name: HTMLInputElement
+						let noIMAPPreauth: HTMLInputElement
+						let file: HTMLInputElement
+
+						const close = popup(
+							dom.div(
+								style({maxWidth: '45em'}),
+								dom.h1('Add TLS public key'),
+								dom.form(
+									async function submit(e: SubmitEvent & {target: {disabled: boolean}}) {
+										e.preventDefault()
+										e.stopPropagation()
+										if (file.files?.length !== 1) {
+											throw new Error('exactly 1 certificate required') // xxx
+										}
+										const certPEM = await new Promise<string>((resolve, reject) => {
+											const fr = new window.FileReader()
+											fr.addEventListener('load', () => {
+												resolve(fr.result as string)
+											})
+											fr.addEventListener('error', () => {
+												reject(fr.error)
+											})
+											fr.readAsText(file.files![0])
+										})
+										const ntpk = await check(e.target, client.TLSPublicKeyAdd(address.value, name.value, noIMAPPreauth.checked, certPEM))
+										tlspubkeys.push(ntpk)
+										render()
+										close()
+									},
+									dom.label(
+										style({display: 'block', marginBottom: '1ex'}),
+										dom.div(dom.b('Login address')),
+										address=dom.input(attr.type('email'), attr.value(localStorageGet('webaccountaddress') || ''), attr.required('')),
+										dom.div(style({fontStyle: 'italic', marginTop: '.5ex'}), 'Login address used for sessions using this key.'),
+									),
+									dom.label(
+										style({display: 'block', marginBottom: '1ex'}),
+										noIMAPPreauth=dom.input(attr.type('checkbox')),
+										' No IMAP "preauth"',
+										attr.title(preauthHelp),
+									),
+									dom.div(
+										style({display: 'block', marginBottom: '1ex'}),
+										dom.label(
+											dom.div(dom.b('Certificate')),
+											file=dom.input(attr.type('file'), attr.required('')),
+										),
+										dom.p(
+											style({fontStyle: 'italic', margin: '1ex 0'}),
+											'Upload a PEM file containing a certificate, not a private key. Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration, and constraints are not verified. ',
+											dom.a('Show suggested commands', attr.href(''), function click(e: MouseEvent) {
+												e.preventDefault()
+												popup(
+													dom.h1('Generate a private key and certificate'),
+													dom.pre(
+														dom._class('literal'),
+`export keyname=...    # Used for file names, certificate "common name" and as name of tls public key.
+                      # Suggestion: Use an application name and/or email address.
+export passphrase=... # Protects the private key in the PEM and p12 files.
+
+# Generate an ECDSA P-256 private key and a long-lived, unsigned, basic certificate
+# for the corresponding public key.
+openssl req \\
+	-config /dev/null \\
+	-x509 \\
+	-newkey ec \\
+	-pkeyopt ec_paramgen_curve:P-256 \\
+	-passout env:passphrase \\
+	-keyout "$keyname.ecdsa-p256.privatekey.pkcs8.pem" \\
+	-out "$keyname.ecdsa-p256.certificate.pem" \\
+	-days 36500 \\
+	-subj "/CN=$keyname"
+
+# Generate a p12 file containing both certificate and private key, for
+# applications/operating systems that cannot read PEM files with
+# certificates/private keys.
+openssl pkcs12 \\
+	-export \\
+	-in "$keyname.ecdsa-p256.certificate.pem" \\
+	-inkey "$keyname.ecdsa-p256.privatekey.pkcs8.pem" \\
+	-name "$keyname" \\
+	-passin env:passphrase \\
+	-passout env:passphrase \\
+	-out "$keyname.ecdsa-p256-privatekey-certificate.p12"
+
+# If the p12 file cannot be imported in the destination OS or email application,
+# try adding -legacy to the "openssl pkcs12" command.
+`
+													),
+												)
+											}),
+											' for generating a private key and certificate.',
+										),
+									),
+									dom.label(
+										style({display: 'block', marginBottom: '1ex'}),
+										dom.div(dom.b('Name')),
+										name=dom.input(),
+										dom.div(style({fontStyle: 'italic', marginTop: '.5ex'}), 'Optional. If empty, the "subject common name" from the certificate is used.'),
+									),
+									dom.br(),
+									dom.submitbutton('Add'),
+								),
+							),
+						)
+					})
+				)
+
+				if (elem) {
+					elem.replaceWith(e)
+				}
+				elem = e
+			}
+			render()
+			return elem
+		})(),
 		dom.br(),
 
 		dom.h2('Disk usage'),
@@ -1391,36 +1592,40 @@ const index = async () => {
 		footer,
 	)
 
-	// Try to show the progress of an earlier import session. The user may have just
-	// refreshed the browser.
-	let importToken: string
-	try {
-		importToken = window.sessionStorage.getItem('ImportToken') || ''
-	} catch (err) {
-		console.log('looking up ImportToken in session storage', {err})
-		return
-	}
-	if (!importToken) {
-		return
-	}
-	importFieldset.disabled = true
-	dom._kids(importProgress,
-		dom.div(
-			dom.div('Reconnecting to import...'),
-		),
-	)
-	importProgress.style.display = ''
-	importTrack(importToken)
-	.catch(() => {
-		if (window.confirm('Error reconnecting to import. Remove this import session?')) {
-			window.sessionStorage.removeItem('ImportToken')
-			dom._kids(importProgress)
-			importProgress.style.display = 'none'
+	;(async () => {
+		// Try to show the progress of an earlier import session. The user may have just
+		// refreshed the browser.
+		let importToken: string
+		try {
+			importToken = window.sessionStorage.getItem('ImportToken') || ''
+		} catch (err) {
+			console.log('looking up ImportToken in session storage', {err})
+			return
 		}
-	})
-	.finally(() => {
-		importFieldset.disabled = false
-	})
+		if (!importToken) {
+			return
+		}
+		importFieldset.disabled = true
+		dom._kids(importProgress,
+			dom.div(
+				dom.div('Reconnecting to import...'),
+			),
+		)
+		importProgress.style.display = ''
+		importTrack(importToken)
+		.catch(() => {
+			if (window.confirm('Error reconnecting to import. Remove this import session?')) {
+				window.sessionStorage.removeItem('ImportToken')
+				dom._kids(importProgress)
+				importProgress.style.display = 'none'
+			}
+		})
+		.finally(() => {
+			importFieldset.disabled = false
+		})
+	})()
+
+	return root
 }
 
 const destination = async (name: string) => {
@@ -1553,7 +1758,7 @@ const destination = async (name: string) => {
 
 	const addresses = [name, ...Object.keys(acc.Destinations || {}).filter(a => !a.startsWith('@') && a !== name)]
 
-	dom._kids(page,
+	return dom.div(
 		crumbs(
 			crumblink('Mox Account', '#'),
 			'Destination ' + name,
@@ -1642,7 +1847,7 @@ const destination = async (name: string) => {
 		dom.br(),
 		dom.br(),
 		dom.br(),
-		dom.p("Apple's mail applications don't do account autoconfiguration, and when adding an account it can choose defaults that don't work with modern email servers. Adding an account through a \"mobileconfig\" profile file can be more convenient: It contains the IMAP/SMTP settings such as host name, port, TLS, authentication mechanism and user name. This profile does not contain a login password. Opening the profile adds it under Profiles in System Preferences (macOS) or Settings (iOS), where you can install it. These profiles are not signed, so users will have to ignore the warnings about them being unsigned. ",
+		dom.p("Apple's mail applications don't do account autoconfiguration, and when adding an account it can choose defaults that don't work with modern email servers. Adding an account through a \"mobileconfig\" profile file can be more convenient: It contains the IMAP/SMTP settings such as host name, port, TLS, authentication mechanism and user name. This profile does not contain a login password. Opening the profile in Safari adds it to the Files app on iOS. Opening the profile in the Files app then adds it under Profiles in System Preferences (macOS) or Settings (iOS), where you can install it. These profiles are not signed, so users will have to ignore the warnings about them being unsigned. ",
 			dom.br(),
 			dom.a(attr.href('https://autoconfig.'+domainName(acc.DNSDomain)+'/profile.mobileconfig?addresses='+encodeURIComponent(addresses.join(','))+'&name='+encodeURIComponent(dest.FullName)), attr.download(''), 'Download .mobileconfig email account profile'),
 			dom.br(),
@@ -1665,13 +1870,18 @@ const init = async () => {
 		const t = h.split('/')
 		page.classList.add('loading')
 		try {
+			let root: HTMLElement
 			if (h === '') {
-				await index()
+				root = await index()
 			} else if (t[0] === 'destinations' && t.length === 2) {
-				await destination(t[1])
+				root = await destination(t[1])
 			} else {
-				dom._kids(page, 'page not found')
+				root = dom.div('page not found')
 			}
+			if ((window as any).moxBeforeDisplay) {
+				moxBeforeDisplay(root)
+			}
+			dom._kids(page, root)
 		} catch (err) {
 			console.log({err})
 			window.alert('Error: ' + errmsg(err))

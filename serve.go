@@ -82,6 +82,10 @@ func start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec boo
 		return fmt.Errorf("dmarcdb init: %s", err)
 	}
 
+	if err := store.Init(mox.Context); err != nil {
+		return fmt.Errorf("store init: %s", err)
+	}
+
 	done := make(chan struct{}) // Goroutines for messages and webhooks, and cleaners.
 	if err := queue.Start(dns.StrictResolver{Pkg: "queue"}, done); err != nil {
 		return fmt.Errorf("queue start: %s", err)

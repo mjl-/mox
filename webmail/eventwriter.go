@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	mathrand "math/rand"
+	mathrand2 "math/rand/v2"
 	"net/http"
 	"runtime/debug"
 	"sync"
@@ -71,9 +71,6 @@ func (ew *eventWriter) write(name string, v any) error {
 	return ew.out.Flush()
 }
 
-// For random wait between min and max delay.
-var waitGen = mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
-
 // Schedule an event for writing to the connection. If events get a delay, this
 // function still returns immediately.
 func (ew *eventWriter) xsendEvent(ctx context.Context, log mlog.Log, name string, v any) {
@@ -136,7 +133,7 @@ func (ew *eventWriter) xsendEvent(ctx context.Context, log mlog.Log, name string
 	}
 	// If we have an events channel, we have a goroutine that write the events, delayed.
 	if ew.events != nil {
-		wait := ew.waitMin + time.Duration(waitGen.Intn(1000))*(ew.waitMax-ew.waitMin)/1000
+		wait := ew.waitMin + time.Duration(mathrand2.IntN(1000))*(ew.waitMax-ew.waitMin)/1000
 		when := time.Now().Add(wait)
 		ew.events <- struct {
 			name string

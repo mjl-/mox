@@ -250,7 +250,7 @@ var api;
 		Mode["ModeTesting"] = "testing";
 		Mode["ModeNone"] = "none";
 	})(Mode = api.Mode || (api.Mode = {}));
-	api.structTypes = { "Account": true, "Address": true, "AddressAlias": true, "Alias": true, "AliasAddress": true, "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "AutomaticJunkFlags": true, "Canonicalization": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "ConfigDomain": true, "DANECheckResult": true, "DKIM": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARC": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Destination": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Dynamic": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "Hook": true, "HookFilter": true, "HookResult": true, "HookRetired": true, "HookRetiredFilter": true, "HookRetiredSort": true, "HookSort": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "IncomingWebhook": true, "JunkFilter": true, "MTASTS": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "MsgResult": true, "MsgRetired": true, "OutgoingWebhook": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "RetiredFilter": true, "RetiredSort": true, "Reverse": true, "Route": true, "Row": true, "Ruleset": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Selector": true, "Sort": true, "SubjectPass": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSRPT": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportDirect": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebInternal": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
+	api.structTypes = { "Account": true, "Address": true, "AddressAlias": true, "Alias": true, "AliasAddress": true, "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "AutomaticJunkFlags": true, "Canonicalization": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "ConfigDomain": true, "DANECheckResult": true, "DKIM": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARC": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Destination": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Dynamic": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "Hook": true, "HookFilter": true, "HookResult": true, "HookRetired": true, "HookRetiredFilter": true, "HookRetiredSort": true, "HookSort": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "IncomingWebhook": true, "JunkFilter": true, "MTASTS": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "MsgResult": true, "MsgRetired": true, "OutgoingWebhook": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "RetiredFilter": true, "RetiredSort": true, "Reverse": true, "Route": true, "Row": true, "Ruleset": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Selector": true, "Sort": true, "SubjectPass": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSPublicKey": true, "TLSRPT": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportDirect": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebInternal": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
 	api.stringsTypes = { "Align": true, "CSRFToken": true, "DMARCPolicy": true, "IP": true, "Localpart": true, "Mode": true, "RUA": true };
 	api.intsTypes = {};
 	api.types = {
@@ -363,6 +363,7 @@ var api;
 		"TLSResult": { "Name": "TLSResult", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "PolicyDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "DayUTC", "Docs": "", "Typewords": ["string"] }, { "Name": "RecipientDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "Created", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Updated", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "IsHost", "Docs": "", "Typewords": ["bool"] }, { "Name": "SendReport", "Docs": "", "Typewords": ["bool"] }, { "Name": "SentToRecipientDomain", "Docs": "", "Typewords": ["bool"] }, { "Name": "RecipientDomainReportingAddresses", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "SentToPolicyDomain", "Docs": "", "Typewords": ["bool"] }, { "Name": "Results", "Docs": "", "Typewords": ["[]", "Result"] }] },
 		"TLSRPTSuppressAddress": { "Name": "TLSRPTSuppressAddress", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Inserted", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "ReportingAddress", "Docs": "", "Typewords": ["string"] }, { "Name": "Until", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }] },
 		"Dynamic": { "Name": "Dynamic", "Docs": "", "Fields": [{ "Name": "Domains", "Docs": "", "Typewords": ["{}", "ConfigDomain"] }, { "Name": "Accounts", "Docs": "", "Typewords": ["{}", "Account"] }, { "Name": "WebDomainRedirects", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "WebHandlers", "Docs": "", "Typewords": ["[]", "WebHandler"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "MonitorDNSBLs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "MonitorDNSBLZones", "Docs": "", "Typewords": ["[]", "Domain"] }] },
+		"TLSPublicKey": { "Name": "TLSPublicKey", "Docs": "", "Fields": [{ "Name": "Fingerprint", "Docs": "", "Typewords": ["string"] }, { "Name": "Created", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Type", "Docs": "", "Typewords": ["string"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "NoIMAPPreauth", "Docs": "", "Typewords": ["bool"] }, { "Name": "CertDER", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["string"] }] },
 		"CSRFToken": { "Name": "CSRFToken", "Docs": "", "Values": null },
 		"DMARCPolicy": { "Name": "DMARCPolicy", "Docs": "", "Values": [{ "Name": "PolicyEmpty", "Value": "", "Docs": "" }, { "Name": "PolicyNone", "Value": "none", "Docs": "" }, { "Name": "PolicyQuarantine", "Value": "quarantine", "Docs": "" }, { "Name": "PolicyReject", "Value": "reject", "Docs": "" }] },
 		"Align": { "Name": "Align", "Docs": "", "Values": [{ "Name": "AlignStrict", "Value": "s", "Docs": "" }, { "Name": "AlignRelaxed", "Value": "r", "Docs": "" }] },
@@ -481,6 +482,7 @@ var api;
 		TLSResult: (v) => api.parse("TLSResult", v),
 		TLSRPTSuppressAddress: (v) => api.parse("TLSRPTSuppressAddress", v),
 		Dynamic: (v) => api.parse("Dynamic", v),
+		TLSPublicKey: (v) => api.parse("TLSPublicKey", v),
 		CSRFToken: (v) => api.parse("CSRFToken", v),
 		DMARCPolicy: (v) => api.parse("DMARCPolicy", v),
 		Align: (v) => api.parse("Align", v),
@@ -1291,6 +1293,13 @@ var api;
 			const params = [aliaslp, domainName, addresses];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		async TLSPublicKeys(accountOpt) {
+			const fn = "TLSPublicKeys";
+			const paramTypes = [["string"]];
+			const returnTypes = [["[]", "TLSPublicKey"]];
+			const params = [accountOpt];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 	}
 	api.Client = Client;
 	api.defaultBaseURL = (function () {
@@ -1676,7 +1685,7 @@ const login = async (reason) => {
 			finally {
 				fieldset.disabled = false;
 			}
-		}, fieldset = dom.fieldset(dom.h1('Admin'), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Password', style({ marginBottom: '.5ex' })), password = dom.input(attr.type('password'), attr.required(''))), dom.div(style({ textAlign: 'center' }), dom.submitbutton('Login')))))));
+		}, fieldset = dom.fieldset(dom.h1('Admin'), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Password', style({ marginBottom: '.5ex' })), password = dom.input(attr.type('password'), attr.autocomplete('current-password'), attr.required(''))), dom.div(style({ textAlign: 'center' }), dom.submitbutton('Login')))))));
 		document.body.appendChild(root);
 		password.focus();
 	});
@@ -1782,7 +1791,7 @@ const crumbs = (...l) => {
 	];
 };
 const errmsg = (err) => '' + (err.message || '(no error message)');
-const footer = dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion, ' ', moxgoversion, ' ', moxgoos, '/', moxgoarch, ', ', dom.a(attr.href('licenses.txt'), 'licenses'));
+const footer = dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion, ' ', moxgoos, '/', moxgoarch, ', ', dom.a(attr.href('licenses.txt'), 'licenses'));
 const age = (date, future, nowSecs) => {
 	if (!nowSecs) {
 		nowSecs = new Date().getTime() / 1000;
@@ -1921,7 +1930,7 @@ const index = async () => {
 	let recvIDFieldset;
 	let recvID;
 	let cidElem;
-	dom._kids(page, crumbs('Mox Admin'), checkUpdatesEnabled ? [] : dom.p(box(yellow, 'Warning: Checking for updates has not been enabled in mox.conf (CheckUpdates: true).', dom.br(), 'Make sure you stay up to date through another mechanism!', dom.br(), 'You have a responsibility to keep the internet-connected software you run up to date and secure!', dom.br(), 'See ', link('https://updates.xmox.nl/changelog'))), dom.p(dom.a('Accounts', attr.href('#accounts')), dom.br(), dom.a('Queue', attr.href('#queue')), ' (' + queueSize + ')', dom.br(), dom.a('Webhook queue', attr.href('#webhookqueue')), ' (' + hooksQueueSize + ')', dom.br()), dom.h2('Domains'), (domains || []).length === 0 ? box(red, 'No domains') :
+	return dom.div(crumbs('Mox Admin'), checkUpdatesEnabled ? [] : dom.p(box(yellow, 'Warning: Checking for updates has not been enabled in mox.conf (CheckUpdates: true).', dom.br(), 'Make sure you stay up to date through another mechanism!', dom.br(), 'You have a responsibility to keep the internet-connected software you run up to date and secure!', dom.br(), 'See ', link('https://updates.xmox.nl/changelog'))), dom.p(dom.a('Accounts', attr.href('#accounts')), dom.br(), dom.a('Queue', attr.href('#queue')), ' (' + queueSize + ')', dom.br(), dom.a('Webhook queue', attr.href('#webhookqueue')), ' (' + hooksQueueSize + ')', dom.br()), dom.h2('Domains'), (domains || []).length === 0 ? box(red, 'No domains') :
 		dom.ul((domains || []).map(d => dom.li(dom.a(attr.href('#domains/' + domainName(d)), domainString(d))))), dom.br(), dom.h2('Add domain'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
@@ -1942,11 +1951,11 @@ const globalRoutes = async () => {
 		client.Transports(),
 		client.Config(),
 	]);
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Routes'), RoutesEditor('global', transports, config.Routes || [], async (routes) => await client.RoutesSave(routes)));
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Routes'), RoutesEditor('global', transports, config.Routes || [], async (routes) => await client.RoutesSave(routes)));
 };
 const config = async () => {
 	const [staticPath, dynamicPath, staticText, dynamicText] = await client.ConfigFiles();
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Config'), dom.h2(staticPath), dom.pre(dom._class('literal'), staticText), dom.h2(dynamicPath), dom.pre(dom._class('literal'), dynamicText));
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Config'), dom.h2(staticPath), dom.pre(dom._class('literal'), staticText), dom.h2(dynamicPath), dom.pre(dom._class('literal'), dynamicText));
 };
 const loglevels = async () => {
 	const loglevels = await client.LogLevels();
@@ -1955,7 +1964,7 @@ const loglevels = async () => {
 	let fieldset;
 	let pkg;
 	let level;
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Log levels'), dom.p('Note: changing a log level here only changes it for the current process. When mox restarts, it sets the log levels from the configuration file. Change mox.conf to keep the changes.'), dom.table(dom.thead(dom.tr(dom.th('Package', attr.title('Log levels can be configured per package. E.g. smtpserver, imapserver, dkim, dmarc, tlsrpt, etc.')), dom.th('Level', attr.title('If you set the log level to "trace", imap and smtp protocol transcripts will be logged. Sensitive authentication is replaced with "***" unless the level is >= "traceauth". Data is masked with "..." unless the level is "tracedata".')), dom.th('Action'))), dom.tbody(Object.entries(loglevels).map(t => {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Log levels'), dom.p('Note: changing a log level here only changes it for the current process. When mox restarts, it sets the log levels from the configuration file. Change mox.conf to keep the changes.'), dom.table(dom.thead(dom.tr(dom.th('Package', attr.title('Log levels can be configured per package. E.g. smtpserver, imapserver, dkim, dmarc, tlsrpt, etc.')), dom.th('Level', attr.title('If you set the log level to "trace", imap and smtp protocol transcripts will be logged. Sensitive authentication is replaced with "***" unless the level is >= "traceauth". Data is masked with "..." unless the level is "tracedata".')), dom.th('Action'))), dom.tbody(Object.entries(loglevels).map(t => {
 		let lvl;
 		return dom.tr(dom.td(t[0] || '(default)'), dom.td(lvl = dom.select(levels.map(l => dom.option(l, t[1] === l ? attr.selected('') : [])))), dom.td(dom.clickbutton('Save', attr.title('Set new log level for package.'), async function click(e) {
 			e.preventDefault();
@@ -2000,7 +2009,7 @@ const accounts = async () => {
 	let domain;
 	let account;
 	let accountModified = false;
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Accounts'), dom.h2('Accounts'), (accounts || []).length === 0 ? dom.p('No accounts') :
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Accounts'), dom.h2('Accounts'), (accounts || []).length === 0 ? dom.p('No accounts') :
 		dom.ul((accounts || []).map(s => dom.li(dom.a(s, attr.href('#accounts/' + s))))), dom.br(), dom.h2('Add account'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
@@ -2091,10 +2100,11 @@ const RoutesEditor = (kind, transports, routes, save) => {
 	return render();
 };
 const account = async (name) => {
-	const [[config, diskUsage], domains, transports] = await Promise.all([
+	const [[config, diskUsage], domains, transports, tlspubkeys] = await Promise.all([
 		client.Account(name),
 		client.Domains(),
 		client.Transports(),
+		client.TLSPublicKeys(name),
 	]);
 	// todo: show suppression list, and buttons to add/remove entries.
 	let form;
@@ -2134,7 +2144,7 @@ const account = async (name) => {
 		}
 		return v * mult;
 	};
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), name), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Action'))), dom.tbody(Object.keys(config.Destinations || {}).length === 0 ? dom.tr(dom.td(attr.colspan('2'), '(None, login disabled)')) : [], Object.keys(config.Destinations || {}).map(k => {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), name), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Action'))), dom.tbody(Object.keys(config.Destinations || {}).length === 0 ? dom.tr(dom.td(attr.colspan('2'), '(None, login disabled)')) : [], Object.keys(config.Destinations || {}).map(k => {
 		let v = k;
 		const t = k.split('@');
 		if (t.length > 1) {
@@ -2194,7 +2204,10 @@ const account = async (name) => {
 		await check(fieldsetPassword, client.SetPassword(name, password.value));
 		window.alert('Password has been changed.');
 		formPassword.reset();
-	}), dom.br(), RoutesEditor('account-specific', transports, config.Routes || [], async (routes) => await client.AccountRoutesSave(name, routes)), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove account', async function click(e) {
+	}), dom.br(), dom.h2('TLS public keys', attr.title('For TLS client authentication with certificates, for IMAP and/or submission (SMTP). Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration or constraints are not verified.')), dom.table(dom.thead(dom.tr(dom.th('Login address'), dom.th('Name'), dom.th('Type'), dom.th('No IMAP "preauth"', attr.title('New IMAP immediate TLS connections authenticated with a client certificate are automatically switched to "authenticated" state with an untagged IMAP "preauth" message by default. IMAP connections have a state machine specifying when commands are allowed. Authenticating is not allowed while in the "authenticated" state. Enable this option to work around clients that would try to authenticated anyway.')), dom.th('Fingerprint'))), dom.tbody(tlspubkeys?.length ? [] : dom.tr(dom.td(attr.colspan('5'), 'None')), (tlspubkeys || []).map(tpk => {
+		const row = dom.tr(dom.td(tpk.LoginAddress), dom.td(tpk.Name), dom.td(tpk.Type), dom.td(tpk.NoIMAPPreauth ? 'Enabled' : ''), dom.td(tpk.Fingerprint));
+		return row;
+	}))), dom.br(), RoutesEditor('account-specific', transports, config.Routes || [], async (routes) => await client.AccountRoutesSave(name, routes)), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove account', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this account? All account data, including messages will be removed.')) {
 			return;
@@ -2338,7 +2351,7 @@ const domain = async (d) => {
 			window.location.reload(); // todo: reload only dkim section
 		}, fieldset = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.div(dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Selector', attr.title('Used in the DKIM-Signature header, and used to form a DNS record under ._domainkey.<domain>.'), dom.div(selector = dom.input(attr.required(''), attr.value(defaultSelector())))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Algorithm', attr.title('For signing messages. RSA is common at the time of writing, not all mail servers recognize ed25519 signature.'), dom.div(algorithm = dom.select(dom.option('rsa'), dom.option('ed25519')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Hash', attr.title("Used in signing messages. Don't use sha1 unless you understand the consequences."), dom.div(hash = dom.select(dom.option('sha256')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Canonicalization - header', attr.title('Canonicalization processes the message headers before signing. Relaxed allows more whitespace changes, making it more likely for DKIM signatures to validate after transit through servers that make whitespace modifications. Simple is more strict.'), dom.div(canonHeader = dom.select(dom.option('relaxed'), dom.option('simple')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Canonicalization - body', attr.title('Like canonicalization for headers, but for the bodies.'), dom.div(canonBody = dom.select(dom.option('relaxed'), dom.option('simple')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Signature lifetime', attr.title('How long a signature remains valid. Should be as long as a message may take to be delivered. The signature must be valid at the time a message is being delivered to the final destination.'), dom.div(lifetime = dom.input(attr.value('3d'), attr.required('')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Seal headers', attr.title("DKIM-signatures cover headers. If headers are not sealed, additional message headers can be added with the same key without invalidating the signature. This may confuse software about which headers are trustworthy. Sealing is the safer option."), dom.div(seal = dom.input(attr.type('checkbox'), attr.checked(''))))), dom.div(dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Headers (optional)', attr.title('Headers to sign. If left empty, a set of standard headers are signed. The (standard set of) headers are most easily edited after creating the selector/key.'), dom.div(headers = dom.textarea(attr.rows('15')))))), dom.div(dom.submitbutton('Add')))));
 	};
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Domain ' + domainString(dnsdomain)), dom.ul(dom.li(dom.a('Required DNS records', attr.href('#domains/' + d + '/dnsrecords'))), dom.li(dom.a('Check current actual DNS records and domain configuration', attr.href('#domains/' + d + '/dnscheck')))), dom.br(), dom.h2('Client configuration'), dom.p('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password. ', dom.span('Explicitly configure', attr.title('To prevent authentication mechanism downgrade attempts that may result in clients sending plain text passwords to a MitM.')), ' the first supported authentication mechanism: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5.'), dom.table(dom.thead(dom.tr(dom.th('Protocol'), dom.th('Host'), dom.th('Port'), dom.th('Listener'), dom.th('Note'))), dom.tbody((clientConfigs.Entries || []).map(e => dom.tr(dom.td(e.Protocol), dom.td(domainString(e.Host)), dom.td('' + e.Port), dom.td('' + e.Listener), dom.td('' + e.Note))))), dom.br(), dom.h2('DMARC aggregate reports summary'), renderDMARCSummaries(dmarcSummaries || []), dom.br(), dom.h2('TLS reports summary'), renderTLSRPTSummaries(tlsrptSummaries || []), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th('Action'))), dom.tbody(Object.entries(localpartAccounts).map(t => dom.tr(dom.td(prewrap(t[0]) || '(catchall)'), dom.td(dom.a(t[1], attr.href('#accounts/' + t[1]))), dom.td(dom.clickbutton('Remove', async function click(e) {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Domain ' + domainString(dnsdomain)), dom.ul(dom.li(dom.a('Required DNS records', attr.href('#domains/' + d + '/dnsrecords'))), dom.li(dom.a('Check current actual DNS records and domain configuration', attr.href('#domains/' + d + '/dnscheck')))), dom.br(), dom.h2('Client configuration'), dom.p('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password. ', dom.span('Explicitly configure', attr.title('To prevent authentication mechanism downgrade attempts that may result in clients sending plain text passwords to a MitM.')), ' the first supported authentication mechanism: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5.'), dom.table(dom.thead(dom.tr(dom.th('Protocol'), dom.th('Host'), dom.th('Port'), dom.th('Listener'), dom.th('Note'))), dom.tbody((clientConfigs.Entries || []).map(e => dom.tr(dom.td(e.Protocol), dom.td(domainString(e.Host)), dom.td('' + e.Port), dom.td('' + e.Listener), dom.td('' + e.Note))))), dom.br(), dom.h2('DMARC aggregate reports summary'), renderDMARCSummaries(dmarcSummaries || []), dom.br(), dom.h2('TLS reports summary'), renderTLSRPTSummaries(tlsrptSummaries || []), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th('Action'))), dom.tbody(Object.entries(localpartAccounts).map(t => dom.tr(dom.td(prewrap(t[0]) || '(catchall)'), dom.td(dom.a(t[1], attr.href('#accounts/' + t[1]))), dom.td(dom.clickbutton('Remove', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this address? If it is a member of an alias, it will be removed from the alias.')) {
 			return;
@@ -2550,7 +2563,7 @@ const domainAlias = async (d, aliasLocalpart) => {
 	let addFieldset;
 	let addAddress;
 	let delFieldset;
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(domain.Domain), '#domains/' + d), 'Alias ' + aliasLocalpart + '@' + domainName(domain.Domain)), dom.h2('Alias'), dom.form(async function submit(e) {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(domain.Domain), '#domains/' + d), 'Alias ' + aliasLocalpart + '@' + domainName(domain.Domain)), dom.h2('Alias'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		check(aliasFieldset, client.AliasUpdate(aliasLocalpart, d, postPublic.checked, listMembers.checked, allowMsgFrom.checked));
@@ -2580,7 +2593,7 @@ const domainDNSRecords = async (d) => {
 		client.DomainRecords(d),
 		client.ParseDomain(d),
 	]);
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), 'DNS Records'), dom.h1('Required DNS records'), dom.pre(dom._class('literal'), (records || []).join('\n')), dom.br());
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), 'DNS Records'), dom.h1('Required DNS records'), dom.pre(dom._class('literal'), (records || []).join('\n')), dom.br());
 };
 const domainDNSCheck = async (d) => {
 	const [checks, dnsdomain] = await Promise.all([
@@ -2668,16 +2681,16 @@ const domainDNSCheck = async (d) => {
 	const detailsAutodiscover = !checks.Autodiscover.Records ? [] : [
 		dom.table(dom.thead(dom.tr(dom.th('Host'), dom.th('Port'), dom.th('Priority'), dom.th('Weight'), dom.th('IPs'))), dom.tbody((checks.Autodiscover.Records || []).map(r => dom.tr([r.Target, r.Port, r.Priority, r.Weight, (r.IPs || []).join(', ')].map(s => dom.td('' + s)))))),
 	];
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), 'Check DNS'), dom.h1('DNS records and domain configuration check'), resultSection('DNSSEC', checks.DNSSEC, detailsDNSSEC), resultSection('IPRev', checks.IPRev, detailsIPRev), resultSection('MX', checks.MX, detailsMX), resultSection('TLS', checks.TLS, detailsTLS), resultSection('DANE', checks.DANE, detailsDANE), resultSection('SPF', checks.SPF, detailsSPF), resultSection('DKIM', checks.DKIM, detailsDKIM), resultSection('DMARC', checks.DMARC, detailsDMARC), resultSection('Host TLSRPT', checks.HostTLSRPT, detailsTLSRPT(checks.HostTLSRPT)), resultSection('Domain TLSRPT', checks.DomainTLSRPT, detailsTLSRPT(checks.DomainTLSRPT)), resultSection('MTA-STS', checks.MTASTS, detailsMTASTS), resultSection('SRV conf', checks.SRVConf, detailsSRVConf), resultSection('Autoconf', checks.Autoconf, detailsAutoconf), resultSection('Autodiscover', checks.Autodiscover, detailsAutodiscover), dom.br());
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), 'Check DNS'), dom.h1('DNS records and domain configuration check'), resultSection('DNSSEC', checks.DNSSEC, detailsDNSSEC), resultSection('IPRev', checks.IPRev, detailsIPRev), resultSection('MX', checks.MX, detailsMX), resultSection('TLS', checks.TLS, detailsTLS), resultSection('DANE', checks.DANE, detailsDANE), resultSection('SPF', checks.SPF, detailsSPF), resultSection('DKIM', checks.DKIM, detailsDKIM), resultSection('DMARC', checks.DMARC, detailsDMARC), resultSection('Host TLSRPT', checks.HostTLSRPT, detailsTLSRPT(checks.HostTLSRPT)), resultSection('Domain TLSRPT', checks.DomainTLSRPT, detailsTLSRPT(checks.DomainTLSRPT)), resultSection('MTA-STS', checks.MTASTS, detailsMTASTS), resultSection('SRV conf', checks.SRVConf, detailsSRVConf), resultSection('Autoconf', checks.Autoconf, detailsAutoconf), resultSection('Autodiscover', checks.Autodiscover, detailsAutodiscover), dom.br());
 };
 const dmarcIndex = async () => {
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'DMARC'), dom.ul(dom.li(dom.a(attr.href('#dmarc/reports'), 'Reports'), ', incoming DMARC aggregate reports.'), dom.li(dom.a(attr.href('#dmarc/evaluations'), 'Evaluations'), ', for outgoing DMARC aggregate reports.')));
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'DMARC'), dom.ul(dom.li(dom.a(attr.href('#dmarc/reports'), 'Reports'), ', incoming DMARC aggregate reports.'), dom.li(dom.a(attr.href('#dmarc/evaluations'), 'Evaluations'), ', for outgoing DMARC aggregate reports.')));
 };
 const dmarcReports = async () => {
 	const end = new Date();
 	const start = new Date(new Date().getTime() - 30 * 24 * 3600 * 1000);
 	const summaries = await client.DMARCSummaries(start, end, "");
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('DMARC', '#dmarc'), 'Aggregate reporting summary'), dom.p('DMARC reports are periodically sent by other mail servers that received an email message with a "From" header with our domain. Domains can have a DMARC DNS record that asks other mail servers to send these aggregate reports for analysis.'), renderDMARCSummaries(summaries || []));
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('DMARC', '#dmarc'), 'Aggregate reporting summary'), dom.p('DMARC reports are periodically sent by other mail servers that received an email message with a "From" header with our domain. Domains can have a DMARC DNS record that asks other mail servers to send these aggregate reports for analysis.'), renderDMARCSummaries(summaries || []));
 };
 const renderDMARCSummaries = (summaries) => {
 	return [
@@ -2702,7 +2715,7 @@ const dmarcEvaluations = async () => {
 	let until;
 	let comment;
 	const nextmonth = new Date(new Date().getTime() + 31 * 24 * 3600 * 1000);
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('DMARC', '#dmarc'), 'Evaluations'), dom.p('Incoming messages are checked against the DMARC policy of the domain in the message From header. If the policy requests reporting on the resulting evaluations, they are stored in the database. Each interval of 1 to 24 hours, the evaluations may be sent to a reporting address specified in the domain\'s DMARC policy. Not all evaluations are a reason to send a report, but if a report is sent all evaluations are included.'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('Domain', attr.title('Domain in the message From header. Keep in mind these can be forged, so this does not necessarily mean someone from this domain authentically tried delivering email.')), dom.th('Dispositions', attr.title('Unique dispositions occurring in report.')), dom.th('Evaluations', attr.title('Total number of message delivery attempts, including retries.')), dom.th('Send report', attr.title('Whether the current evaluations will cause a report to be sent.')))), dom.tbody(Object.entries(evalStats).sort((a, b) => a[0] < b[0] ? -1 : 1).map(t => dom.tr(dom.td(dom.a(attr.href('#dmarc/evaluations/' + domainName(t[1].Domain)), domainString(t[1].Domain))), dom.td((t[1].Dispositions || []).join(' ')), dom.td(style({ textAlign: 'right' }), '' + t[1].Count), dom.td(style({ textAlign: 'right' }), t[1].SendReport ? '✓' : ''))), isEmpty(evalStats) ? dom.tr(dom.td(attr.colspan('3'), 'No evaluations.')) : [])), dom.br(), dom.br(), dom.h2('Suppressed reporting addresses'), dom.p('In practice, sending a DMARC report to a reporting address can cause DSN to be sent back. Such addresses can be added to a suppression list for a period, to reduce noise in the postmaster mailbox.'), dom.form(async function submit(e) {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('DMARC', '#dmarc'), 'Evaluations'), dom.p('Incoming messages are checked against the DMARC policy of the domain in the message From header. If the policy requests reporting on the resulting evaluations, they are stored in the database. Each interval of 1 to 24 hours, the evaluations may be sent to a reporting address specified in the domain\'s DMARC policy. Not all evaluations are a reason to send a report, but if a report is sent all evaluations are included.'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('Domain', attr.title('Domain in the message From header. Keep in mind these can be forged, so this does not necessarily mean someone from this domain authentically tried delivering email.')), dom.th('Dispositions', attr.title('Unique dispositions occurring in report.')), dom.th('Evaluations', attr.title('Total number of message delivery attempts, including retries.')), dom.th('Send report', attr.title('Whether the current evaluations will cause a report to be sent.')))), dom.tbody(Object.entries(evalStats).sort((a, b) => a[0] < b[0] ? -1 : 1).map(t => dom.tr(dom.td(dom.a(attr.href('#dmarc/evaluations/' + domainName(t[1].Domain)), domainString(t[1].Domain))), dom.td((t[1].Dispositions || []).join(' ')), dom.td(style({ textAlign: 'right' }), '' + t[1].Count), dom.td(style({ textAlign: 'right' }), t[1].SendReport ? '✓' : ''))), isEmpty(evalStats) ? dom.tr(dom.td(attr.colspan('3'), 'No evaluations.')) : [])), dom.br(), dom.br(), dom.h2('Suppressed reporting addresses'), dom.p('In practice, sending a DMARC report to a reporting address can cause DSN to be sent back. Such addresses can be added to a suppression list for a period, to reduce noise in the postmaster mailbox.'), dom.form(async function submit(e) {
 		e.stopPropagation();
 		e.preventDefault();
 		await check(fieldset, client.DMARCSuppressAdd(reportingAddress.value, new Date(until.value), comment.value));
@@ -2752,7 +2765,7 @@ const dmarcEvaluationsDomain = async (domain) => {
 		});
 		return r;
 	};
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('DMARC', '#dmarc'), crumblink('Evaluations', '#dmarc/evaluations'), 'Domain ' + domainString(d)), dom.div(dom.clickbutton('Remove evaluations', async function click(e) {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('DMARC', '#dmarc'), crumblink('Evaluations', '#dmarc/evaluations'), 'Domain ' + domainString(d)), dom.div(dom.clickbutton('Remove evaluations', async function click(e) {
 		await check(e.target, client.DMARCRemoveEvaluations(domain));
 		window.location.reload(); // todo: only clear the table?
 	})), dom.br(), dom.p('The evaluations below will be sent in a DMARC aggregate report to the addresses found in the published DMARC DNS record, which is fetched again before sending the report. The fields Interval hours, Addresses and Policy are only filled for the first row and whenever a new value in the published DMARC record is encountered.'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('ID'), dom.th('Evaluated'), dom.th('Optional', attr.title('Some evaluations will not cause a DMARC aggregate report to be sent. But if a report is sent, optional records are included.')), dom.th('Interval hours', attr.title('DMARC policies published by a domain can specify how often they would like to receive reports. The default is 24 hours, but can be as often as each hour. To keep reports comparable between different mail servers that send reports, reports are sent at rounded up intervals of whole hours that can divide a 24 hour day, and are aligned with the start of a day at UTC.')), dom.th('Addresses', attr.title('Addresses that will receive the report. An address can have a maximum report size configured. If there is no address, no report will be sent.')), dom.th('Policy', attr.title('Summary of the policy as encountered in the DMARC DNS record of the domain, and used for evaluation.')), dom.th('IP', attr.title('IP address of delivery attempt that was evaluated, relevant for SPF.')), dom.th('Disposition', attr.title('Our decision to accept/reject this message. It may be different than requested by the published policy. For example, when overriding due to delivery from a mailing list or forwarded address.')), dom.th('Aligned DKIM/SPF', attr.title('Whether DKIM and SPF had an aligned pass, where strict/relaxed alignment means whether the domain of an SPF pass and DKIM pass matches the exact domain (strict) or optionally a subdomain (relaxed). A DMARC pass requires at least one pass.')), dom.th('Envelope to', attr.title('Domain used in SMTP RCPT TO during delivery.')), dom.th('Envelope from', attr.title('Domain used in SMTP MAIL FROM during delivery.')), dom.th('Message from', attr.title('Domain in "From" message header.')), dom.th('DKIM details', attr.title('Results of verifying DKIM-Signature headers in message. Only signatures with matching organizational domain are included, regardless of strict/relaxed DKIM alignment in DMARC policy.')), dom.th('SPF details', attr.title('Results of SPF check used in DMARC evaluation. "mfrom" indicates the "SMTP MAIL FROM" domain was used, "helo" indicates the SMTP EHLO domain was used.')))), dom.tbody((evaluations || []).map(e => {
@@ -2799,7 +2812,7 @@ const domainDMARC = async (d) => {
 		client.Domain(d),
 	]);
 	// todo future: table sorting? period selection (last day, 7 days, 1 month, 1 year, custom period)? collapse rows for a report? show totals per report? a simple bar graph to visualize messages and dmarc/dkim/spf fails? similar for TLSRPT.
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), 'DMARC aggregate reports'), dom.p('DMARC reports are periodically sent by other mail servers that received an email message with a "From" header with our domain. Domains can have a DMARC DNS record that asks other mail servers to send these aggregate reports for analysis.'), dom.p('Below the DMARC aggregate reports for the past 30 days.'), (reports || []).length === 0 ? dom.div('No DMARC reports for domain.') :
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), 'DMARC aggregate reports'), dom.p('DMARC reports are periodically sent by other mail servers that received an email message with a "From" header with our domain. Domains can have a DMARC DNS record that asks other mail servers to send these aggregate reports for analysis.'), dom.p('Below the DMARC aggregate reports for the past 30 days.'), (reports || []).length === 0 ? dom.div('No DMARC reports for domain.') :
 		dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('ID'), dom.th('Organisation', attr.title('Organization that sent the DMARC report.')), dom.th('Period (UTC)', attr.title('Period this reporting period is about. Mail servers are recommended to stick to whole UTC days.')), dom.th('Policy', attr.title('The DMARC policy that the remote mail server had fetched and applied to the message. A policy that changed during the reporting period may result in unexpected policy evaluations.')), dom.th('Source IP', attr.title('Remote IP address of session at remote mail server.')), dom.th('Messages', attr.title('Total messages that the results apply to.')), dom.th('Result', attr.title('DMARC evaluation result.')), dom.th('ADKIM', attr.title('DKIM alignment. For a pass, one of the DKIM signatures that pass must be strict/relaxed-aligned with the domain, as specified by the policy.')), dom.th('ASPF', attr.title('SPF alignment. For a pass, the SPF policy must pass and be strict/relaxed-aligned with the domain, as specified by the policy.')), dom.th('SMTP to', attr.title('Domain of destination address, as specified during the SMTP session.')), dom.th('SMTP from', attr.title('Domain of originating address, as specified during the SMTP session.')), dom.th('Header from', attr.title('Domain of address in From-header of message.')), dom.th('Auth Results', attr.title('Details of DKIM and/or SPF authentication results. DMARC requires at least one aligned DKIM or SPF pass.')))), dom.tbody((reports || []).map(r => {
 			const m = r.ReportMetadata;
 			let policy = [];
@@ -2912,10 +2925,10 @@ const domainDMARCReport = async (d, reportID) => {
 		client.DMARCReportID(d, reportID),
 		client.Domain(d),
 	]);
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), crumblink('DMARC aggregate reports', '#domains/' + d + '/dmarc'), 'Report ' + reportID), dom.p('Below is the raw report as received from the remote mail server.'), dom.div(dom._class('literal'), JSON.stringify(report, null, '\t')));
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Domain ' + domainString(dnsdomain), '#domains/' + d), crumblink('DMARC aggregate reports', '#domains/' + d + '/dmarc'), 'Report ' + reportID), dom.p('Below is the raw report as received from the remote mail server.'), dom.div(dom._class('literal'), JSON.stringify(report, null, '\t')));
 };
 const tlsrptIndex = async () => {
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'TLSRPT'), dom.ul(dom.li(dom.a(attr.href('#tlsrpt/reports'), 'Reports'), ', incoming TLS reports.'), dom.li(dom.a(attr.href('#tlsrpt/results'), 'Results'), ', for outgoing TLS reports.')));
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'TLSRPT'), dom.ul(dom.li(dom.a(attr.href('#tlsrpt/reports'), 'Reports'), ', incoming TLS reports.'), dom.li(dom.a(attr.href('#tlsrpt/results'), 'Results'), ', for outgoing TLS reports.')));
 };
 const tlsrptResults = async () => {
 	const [results, suppressAddresses] = await Promise.all([
@@ -2928,7 +2941,7 @@ const tlsrptResults = async () => {
 	let until;
 	let comment;
 	const nextmonth = new Date(new Date().getTime() + 31 * 24 * 3600 * 1000);
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), 'Results'), dom.p('Messages are delivered with SMTP with TLS using STARTTLS if supported and/or required by the recipient domain\'s mail server. TLS connections may fail for various reasons, such as mismatching certificate host name, expired certificates or TLS protocol version/cipher suite incompatibilities. Statistics about successful connections and failed connections are tracked. Results can be tracked for recipient domains (for MTA-STS policies), and per MX host (for DANE). A domain/host can publish a TLSRPT DNS record with addresses that should receive TLS reports. Reports are sent every 24 hours. Not all results are enough reason to send a report, but if a report is sent all results are included. By default, reports are only sent if a report contains a connection failure. Sending reports about all-successful connections can be configured. Reports sent to recipient domains include the results for its MX hosts, and reports for an MX host reference the recipient domains.'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('Day (UTC)', attr.title('Day covering these results, a whole day from 00:00 UTC to 24:00 UTC.')), dom.th('Recipient domain', attr.title('Domain of addressee. For delivery to a recipient, the recipient and policy domains will match for reporting on MTA-STS policies, but can also result in reports for hosts from the MX record of the recipient to report on DANE policies.')), dom.th('Policy domain', attr.title('Domain for TLSRPT policy, specifying URIs to which reports should be sent.')), dom.th('Host', attr.title('Whether policy domain is an (MX) host (for DANE), or a recipient domain (for MTA-STS).')), dom.th('Policies', attr.title('Policies found.')), dom.th('Success', attr.title('Total number of successful connections.')), dom.th('Failure', attr.title('Total number of failed connection attempts.')), dom.th('Failure details', attr.title('Total number of details about failures.')), dom.th('Send report', attr.title('Whether the current results may cause a report to be sent. To prevent report loops, reports are not sent for TLS connections used to deliver TLS or DMARC reports. Whether a report is eventually sent depends on more factors, such as whether the policy domain has a TLSRPT policy with reporting addresses, and whether TLS connection failures were registered (depending on configuration).')))), dom.tbody((results || []).sort((a, b) => {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), 'Results'), dom.p('Messages are delivered with SMTP with TLS using STARTTLS if supported and/or required by the recipient domain\'s mail server. TLS connections may fail for various reasons, such as mismatching certificate host name, expired certificates or TLS protocol version/cipher suite incompatibilities. Statistics about successful connections and failed connections are tracked. Results can be tracked for recipient domains (for MTA-STS policies), and per MX host (for DANE). A domain/host can publish a TLSRPT DNS record with addresses that should receive TLS reports. Reports are sent every 24 hours. Not all results are enough reason to send a report, but if a report is sent all results are included. By default, reports are only sent if a report contains a connection failure. Sending reports about all-successful connections can be configured. Reports sent to recipient domains include the results for its MX hosts, and reports for an MX host reference the recipient domains.'), dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('Day (UTC)', attr.title('Day covering these results, a whole day from 00:00 UTC to 24:00 UTC.')), dom.th('Recipient domain', attr.title('Domain of addressee. For delivery to a recipient, the recipient and policy domains will match for reporting on MTA-STS policies, but can also result in reports for hosts from the MX record of the recipient to report on DANE policies.')), dom.th('Policy domain', attr.title('Domain for TLSRPT policy, specifying URIs to which reports should be sent.')), dom.th('Host', attr.title('Whether policy domain is an (MX) host (for DANE), or a recipient domain (for MTA-STS).')), dom.th('Policies', attr.title('Policies found.')), dom.th('Success', attr.title('Total number of successful connections.')), dom.th('Failure', attr.title('Total number of failed connection attempts.')), dom.th('Failure details', attr.title('Total number of details about failures.')), dom.th('Send report', attr.title('Whether the current results may cause a report to be sent. To prevent report loops, reports are not sent for TLS connections used to deliver TLS or DMARC reports. Whether a report is eventually sent depends on more factors, such as whether the policy domain has a TLSRPT policy with reporting addresses, and whether TLS connection failures were registered (depending on configuration).')))), dom.tbody((results || []).sort((a, b) => {
 		if (a.DayUTC !== b.DayUTC) {
 			return a.DayUTC < b.DayUTC ? -1 : 1;
 		}
@@ -2970,7 +2983,7 @@ const tlsrptResultsPolicyDomain = async (isrcptdom, domain) => {
 	const [d, tlsresults] = await client.TLSRPTResultsDomain(isrcptdom, domain);
 	const recordPromise = client.LookupTLSRPTRecord(domain);
 	let recordBox;
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), crumblink('Results', '#tlsrpt/results'), (isrcptdom ? 'Recipient domain ' : 'Host ') + domainString(d)), dom.div(dom.clickbutton('Remove results', async function click(e) {
+	const root = dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), crumblink('Results', '#tlsrpt/results'), (isrcptdom ? 'Recipient domain ' : 'Host ') + domainString(d)), dom.div(dom.clickbutton('Remove results', async function click(e) {
 		e.preventDefault();
 		await check(e.target, client.TLSRPTRemoveResults(isrcptdom, domain, ''));
 		window.location.reload(); // todo: only clear the table?
@@ -2999,12 +3012,13 @@ const tlsrptResultsPolicyDomain = async (isrcptdom, domain) => {
 		}
 		dom._kids(recordBox, l);
 	})();
+	return root;
 };
 const tlsrptReports = async () => {
 	const end = new Date();
 	const start = new Date(new Date().getTime() - 30 * 24 * 3600 * 1000);
 	const summaries = await client.TLSRPTSummaries(start, end, '');
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), 'Reports'), dom.p('TLSRPT (TLS reporting) is a mechanism to request feedback from other mail servers about TLS connections to your mail server. If is typically used along with MTA-STS and/or DANE to enforce that SMTP connections are protected with TLS. Mail servers implementing TLSRPT will typically send a daily report with both successful and failed connection counts, including details about failures.'), renderTLSRPTSummaries(summaries || []));
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), 'Reports'), dom.p('TLSRPT (TLS reporting) is a mechanism to request feedback from other mail servers about TLS connections to your mail server. If is typically used along with MTA-STS and/or DANE to enforce that SMTP connections are protected with TLS. Mail servers implementing TLSRPT will typically send a daily report with both successful and failed connection counts, including details about failures.'), renderTLSRPTSummaries(summaries || []));
 };
 const renderTLSRPTSummaries = (summaries) => {
 	return [
@@ -3030,7 +3044,7 @@ const domainTLSRPT = async (d) => {
 		}
 		return s;
 	};
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), crumblink('Reports', '#tlsrpt/reports'), 'Domain ' + domainString(dnsdomain)), dom.p('TLSRPT (TLS reporting) is a mechanism to request feedback from other mail servers about TLS connections to your mail server. If is typically used along with MTA-STS and/or DANE to enforce that SMTP connections are protected with TLS. Mail servers implementing TLSRPT will typically send a daily report with both successful and failed connection counts, including details about failures.'), dom.p('Below the TLS reports for the past 30 days.'), (records || []).length === 0 ? dom.div('No TLS reports for domain.') :
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), crumblink('Reports', '#tlsrpt/reports'), 'Domain ' + domainString(dnsdomain)), dom.p('TLSRPT (TLS reporting) is a mechanism to request feedback from other mail servers about TLS connections to your mail server. If is typically used along with MTA-STS and/or DANE to enforce that SMTP connections are protected with TLS. Mail servers implementing TLSRPT will typically send a daily report with both successful and failed connection counts, including details about failures.'), dom.p('Below the TLS reports for the past 30 days.'), (records || []).length === 0 ? dom.div('No TLS reports for domain.') :
 		dom.table(dom._class('hover'), dom.thead(dom.tr(dom.th('Report', attr.colspan('3')), dom.th('Policy', attr.colspan('3')), dom.th('Failure Details', attr.colspan('8'))), dom.tr(dom.th('ID'), dom.th('From', attr.title('SMTP mail from from which we received the report.')), dom.th('Period (UTC)', attr.title('Period this reporting period is about. Mail servers are recommended to stick to whole UTC days.')), dom.th('Policy', attr.title('The policy applied, typically STSv1.')), dom.th('Successes', attr.title('Total number of successful TLS connections for policy.')), dom.th('Failures', attr.title('Total number of failed TLS connections for policy.')), dom.th('Result Type', attr.title('Type of failure.')), dom.th('Sending MTA', attr.title('IP of sending MTA.')), dom.th('Receiving MX Host'), dom.th('Receiving MX HELO'), dom.th('Receiving IP'), dom.th('Count', attr.title('Number of TLS connections that failed with these details.')), dom.th('More', attr.title('Optional additional information about the failure.')), dom.th('Code', attr.title('Optional API error code relating to the failure.')))), dom.tbody((records || []).map(record => {
 			const r = record.Report;
 			let nrows = 0;
@@ -3080,11 +3094,11 @@ const domainTLSRPTID = async (d, reportID) => {
 		client.TLSReportID(d, reportID),
 		client.ParseDomain(d),
 	]);
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), crumblink('Reports', '#tlsrpt/reports'), crumblink('Domain ' + domainString(dnsdomain), '#tlsrpt/reports/' + d + ''), 'Report ' + reportID), dom.p('Below is the raw report as received from the remote mail server.'), dom.div(dom._class('literal'), JSON.stringify(report, null, '\t')));
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('TLSRPT', '#tlsrpt'), crumblink('Reports', '#tlsrpt/reports'), crumblink('Domain ' + domainString(dnsdomain), '#tlsrpt/reports/' + d + ''), 'Report ' + reportID), dom.p('Below is the raw report as received from the remote mail server.'), dom.div(dom._class('literal'), JSON.stringify(report, null, '\t')));
 };
 const mtasts = async () => {
 	const policies = await client.MTASTSPolicies();
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'MTA-STS policies'), dom.p("MTA-STS is a mechanism allowing email domains to publish a policy for using SMTP STARTTLS and TLS verification. See ", link('https://www.rfc-editor.org/rfc/rfc8461.html', 'RFC 8461'), '.'), dom.p("The SMTP protocol is unencrypted by default, though the SMTP STARTTLS command is typically used to enable TLS on a connection. However, MTA's using STARTTLS typically do not validate the TLS certificate. An MTA-STS policy can specify that validation of host name, non-expiration and webpki trust is required."), makeMTASTSTable(policies || []));
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'MTA-STS policies'), dom.p("MTA-STS is a mechanism allowing email domains to publish a policy for using SMTP STARTTLS and TLS verification. See ", link('https://www.rfc-editor.org/rfc/rfc8461.html', 'RFC 8461'), '.'), dom.p("The SMTP protocol is unencrypted by default, though the SMTP STARTTLS command is typically used to enable TLS on a connection. However, MTA's using STARTTLS typically do not validate the TLS certificate. An MTA-STS policy can specify that validation of host name, non-expiration and webpki trust is required."), makeMTASTSTable(policies || []));
 };
 const formatMTASTSMX = (mx) => {
 	return mx.map(e => {
@@ -3131,7 +3145,7 @@ const dnsbl = async () => {
 	const url = (ip) => 'https://multirbl.valli.org/lookup/' + encodeURIComponent(ip) + '.html';
 	let fieldset;
 	let monitorTextarea;
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'DNS blocklist status for IPs'), dom.p('Follow the external links to a third party DNSBL checker to see if the IP is on one of the many blocklist.'), dom.ul(Object.entries(ipZoneResults).sort().map(ipZones => {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'DNS blocklist status for IPs'), dom.p('Follow the external links to a third party DNSBL checker to see if the IP is on one of the many blocklist.'), dom.ul(Object.entries(ipZoneResults).sort().map(ipZones => {
 		const [ip, zoneResults] = ipZones;
 		return dom.li(link(url(ip), ip), !ipZones.length ? [] : dom.ul(Object.entries(zoneResults).sort().map(zoneResult => dom.li(zoneResult[0] + ': ', zoneResult[1] === 'pass' ? 'pass' : box(red, zoneResult[1])))));
 	})), !Object.entries(ipZoneResults).length ? box(red, 'No IPs found.') : [], dom.br(), dom.h2('DNSBL zones checked due to being used for incoming deliveries'), (usingZones || []).length === 0 ?
@@ -3230,7 +3244,7 @@ const queueList = async () => {
 		window.alert('' + n + ' message(s) updated');
 		window.location.reload(); // todo: reload less
 	});
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Queue'), dom.p(dom.a(attr.href('#queue/retired'), 'Retired messages')), dom.h2('Hold rules', attr.title('Messages submitted to the queue that match a hold rule are automatically marked as "on hold", preventing delivery until explicitly taken off hold again.')), dom.form(attr.id('holdRuleForm'), async function submit(e) {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Queue'), dom.p(dom.a(attr.href('#queue/retired'), 'Retired messages')), dom.h2('Hold rules', attr.title('Messages submitted to the queue that match a hold rule are automatically marked as "on hold", preventing delivery until explicitly taken off hold again.')), dom.form(attr.id('holdRuleForm'), async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		const pr = {
@@ -3406,7 +3420,7 @@ const retiredList = async () => {
 		tbody = ntbody;
 	};
 	render();
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Queue', '#queue'), 'Retired messages'), 
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Queue', '#queue'), 'Retired messages'), 
 	// Filtering.
 	filterForm = dom.form(attr.id('queuefilter'), // Referenced by input elements in table row.
 	async function submit(e) {
@@ -3531,7 +3545,7 @@ const hooksList = async () => {
 		window.alert('' + n + ' hook(s) updated');
 		window.location.reload(); // todo: reload less
 	});
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Webhook queue'), dom.p(dom.a(attr.href('#webhookqueue/retired'), 'Retired webhooks')), dom.h2('Webhooks'), dom.table(dom._class('hover'), style({ width: '100%' }), dom.thead(dom.tr(dom.td(attr.colspan('2'), 'Filter'), dom.td(filterSubmitted = dom.input(attr.form('hooksfilter'), style({ width: '7em' }), attr.title('Example: "<-1h" for filtering webhooks submitted more than 1 hour ago.'))), dom.td(), dom.td(), dom.td(), dom.td(filterAccount = dom.input(attr.form('hooksfilter'), style({ width: '8em' }))), dom.td(filterEvent = dom.select(attr.form('hooksfilter'), function change() {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Webhook queue'), dom.p(dom.a(attr.href('#webhookqueue/retired'), 'Retired webhooks')), dom.h2('Webhooks'), dom.table(dom._class('hover'), style({ width: '100%' }), dom.thead(dom.tr(dom.td(attr.colspan('2'), 'Filter'), dom.td(filterSubmitted = dom.input(attr.form('hooksfilter'), style({ width: '7em' }), attr.title('Example: "<-1h" for filtering webhooks submitted more than 1 hour ago.'))), dom.td(), dom.td(), dom.td(), dom.td(filterAccount = dom.input(attr.form('hooksfilter'), style({ width: '8em' }))), dom.td(filterEvent = dom.select(attr.form('hooksfilter'), function change() {
 		filterForm.requestSubmit();
 	}, dom.option(''), 
 	// note: outgoing hook events are in ../webhook/webhook.go, ../mox-/config.go ../webadmin/admin.ts and ../webapi/gendoc.sh. keep in sync.
@@ -3625,7 +3639,7 @@ const hooksRetiredList = async () => {
 		tbody = ntbody;
 	};
 	render();
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), crumblink('Webhook queue', '#webhookqueue'), 'Retired webhooks'), dom.h2('Retired webhooks'), dom.table(dom._class('hover'), style({ width: '100%' }), dom.thead(dom.tr(dom.td('Filter'), dom.td(), dom.td(filterLastActivity = dom.input(attr.form('hooksfilter'), style({ width: '7em' }), attr.title('Example: ">-1h" for filtering last activity for webhooks more than 1 hour ago.'))), dom.td(filterSubmitted = dom.input(attr.form('hooksfilter'), style({ width: '7em' }), attr.title('Example: "<-1h" for filtering webhooks submitted more than 1 hour ago.'))), dom.td(), dom.td(), dom.td(), dom.td(filterAccount = dom.input(attr.form('hooksfilter'), style({ width: '8em' }))), dom.td(filterEvent = dom.select(attr.form('hooksfilter'), function change() {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Webhook queue', '#webhookqueue'), 'Retired webhooks'), dom.h2('Retired webhooks'), dom.table(dom._class('hover'), style({ width: '100%' }), dom.thead(dom.tr(dom.td('Filter'), dom.td(), dom.td(filterLastActivity = dom.input(attr.form('hooksfilter'), style({ width: '7em' }), attr.title('Example: ">-1h" for filtering last activity for webhooks more than 1 hour ago.'))), dom.td(filterSubmitted = dom.input(attr.form('hooksfilter'), style({ width: '7em' }), attr.title('Example: "<-1h" for filtering webhooks submitted more than 1 hour ago.'))), dom.td(), dom.td(), dom.td(), dom.td(filterAccount = dom.input(attr.form('hooksfilter'), style({ width: '8em' }))), dom.td(filterEvent = dom.select(attr.form('hooksfilter'), function change() {
 		filterForm.requestSubmit();
 	}, dom.option(''), 
 	// note: outgoing hook events are in ../webhook/webhook.go, ../mox-/config.go ../webadmin/admin.ts and ../webapi/gendoc.sh. keep in sync.
@@ -4004,7 +4018,7 @@ const webserver = async () => {
 			}),
 		];
 	};
-	dom._kids(page, crumbs(crumblink('Mox Admin', '#'), 'Webserver config'), dom.form(fieldset = dom.fieldset(dom.h2('Domain redirects', attr.title('Corresponds with WebDomainRedirects in domains.conf')), dom.p('Incoming requests for these domains are redirected to the target domain, with HTTPS.'), dom.table(dom.thead(dom.tr(dom.th('From'), dom.th('To'), dom.th('Action ', dom.clickbutton('Add', function click() {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Webserver config'), dom.form(fieldset = dom.fieldset(dom.h2('Domain redirects', attr.title('Corresponds with WebDomainRedirects in domains.conf')), dom.p('Incoming requests for these domains are redirected to the target domain, with HTTPS.'), dom.table(dom.thead(dom.tr(dom.th('From'), dom.th('To'), dom.th('Action ', dom.clickbutton('Add', function click() {
 		const row = redirectRow([{ ASCII: '', Unicode: '' }, { ASCII: '', Unicode: '' }]);
 		redirectsTbody.appendChild(row.root);
 		noredirect.style.display = redirectRows.length ? 'none' : '';
@@ -4027,96 +4041,101 @@ const init = async () => {
 		const t = h.split('/');
 		page.classList.add('loading');
 		try {
+			let root;
 			if (h == '') {
-				await index();
+				root = await index();
 			}
 			else if (h === 'config') {
-				await config();
+				root = await config();
 			}
 			else if (h === 'loglevels') {
-				await loglevels();
+				root = await loglevels();
 			}
 			else if (h === 'accounts') {
-				await accounts();
+				root = await accounts();
 			}
 			else if (t[0] === 'accounts' && t.length === 2) {
-				await account(t[1]);
+				root = await account(t[1]);
 			}
 			else if (t[0] === 'domains' && t.length === 2) {
-				await domain(t[1]);
+				root = await domain(t[1]);
 			}
 			else if (t[0] === 'domains' && t.length === 4 && t[2] === 'alias') {
-				await domainAlias(t[1], t[3]);
+				root = await domainAlias(t[1], t[3]);
 			}
 			else if (t[0] === 'domains' && t.length === 3 && t[2] === 'dmarc') {
-				await domainDMARC(t[1]);
+				root = await domainDMARC(t[1]);
 			}
 			else if (t[0] === 'domains' && t.length === 4 && t[2] === 'dmarc' && parseInt(t[3])) {
-				await domainDMARCReport(t[1], parseInt(t[3]));
+				root = await domainDMARCReport(t[1], parseInt(t[3]));
 			}
 			else if (t[0] === 'domains' && t.length === 3 && t[2] === 'dnscheck') {
-				await domainDNSCheck(t[1]);
+				root = await domainDNSCheck(t[1]);
 			}
 			else if (t[0] === 'domains' && t.length === 3 && t[2] === 'dnsrecords') {
-				await domainDNSRecords(t[1]);
+				root = await domainDNSRecords(t[1]);
 			}
 			else if (h === 'queue') {
-				await queueList();
+				root = await queueList();
 			}
 			else if (h === 'queue/retired') {
-				await retiredList();
+				root = await retiredList();
 			}
 			else if (h === 'webhookqueue') {
-				await hooksList();
+				root = await hooksList();
 			}
 			else if (h === 'webhookqueue/retired') {
-				await hooksRetiredList();
+				root = await hooksRetiredList();
 			}
 			else if (h === 'tlsrpt') {
-				await tlsrptIndex();
+				root = await tlsrptIndex();
 			}
 			else if (h === 'tlsrpt/reports') {
-				await tlsrptReports();
+				root = await tlsrptReports();
 			}
 			else if (t[0] === 'tlsrpt' && t[1] === 'reports' && t.length === 3) {
-				await domainTLSRPT(t[2]);
+				root = await domainTLSRPT(t[2]);
 			}
 			else if (t[0] === 'tlsrpt' && t[1] === 'reports' && t.length === 4 && parseInt(t[3])) {
-				await domainTLSRPTID(t[2], parseInt(t[3]));
+				root = await domainTLSRPTID(t[2], parseInt(t[3]));
 			}
 			else if (h === 'tlsrpt/results') {
-				await tlsrptResults();
+				root = await tlsrptResults();
 			}
 			else if (t[0] == 'tlsrpt' && t[1] == 'results' && (t[2] === 'rcptdom' || t[2] == 'host') && t.length === 4) {
-				await tlsrptResultsPolicyDomain(t[2] === 'rcptdom', t[3]);
+				root = await tlsrptResultsPolicyDomain(t[2] === 'rcptdom', t[3]);
 			}
 			else if (h === 'dmarc') {
-				await dmarcIndex();
+				root = await dmarcIndex();
 			}
 			else if (h === 'dmarc/reports') {
-				await dmarcReports();
+				root = await dmarcReports();
 			}
 			else if (h === 'dmarc/evaluations') {
-				await dmarcEvaluations();
+				root = await dmarcEvaluations();
 			}
 			else if (t[0] == 'dmarc' && t[1] == 'evaluations' && t.length === 3) {
-				await dmarcEvaluationsDomain(t[2]);
+				root = await dmarcEvaluationsDomain(t[2]);
 			}
 			else if (h === 'mtasts') {
-				await mtasts();
+				root = await mtasts();
 			}
 			else if (h === 'dnsbl') {
-				await dnsbl();
+				root = await dnsbl();
 			}
 			else if (h === 'routes') {
-				await globalRoutes();
+				root = await globalRoutes();
 			}
 			else if (h === 'webserver') {
-				await webserver();
+				root = await webserver();
 			}
 			else {
-				dom._kids(page, 'page not found');
+				root = dom.div('page not found');
 			}
+			if (window.moxBeforeDisplay) {
+				moxBeforeDisplay(root);
+			}
+			dom._kids(page, root);
 		}
 		catch (err) {
 			console.log('error', err);

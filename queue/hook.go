@@ -796,13 +796,18 @@ func Incoming(ctx context.Context, log mlog.Log, acc *store.Account, messageID s
 
 		log.Debug("composing webhook for incoming message")
 
+		structure, err := webhook.PartStructure(log, &part)
+		if err != nil {
+			return fmt.Errorf("parsing part structure: %v", err)
+		}
+
 		isIncoming = true
 		var rcptTo string
 		if m.RcptToDomain != "" {
 			rcptTo = m.RcptToLocalpart.String() + "@" + m.RcptToDomain
 		}
 		in := webhook.Incoming{
-			Structure: webhook.PartStructure(&part),
+			Structure: structure,
 			Meta: webhook.IncomingMeta{
 				MsgID:               m.ID,
 				MailFrom:            m.MailFrom,
@@ -1119,7 +1124,7 @@ func hookDeliver(log mlog.Log, h Hook) {
 	} else {
 		backoff = hookIntervals[len(hookIntervals)-1] * time.Duration(2)
 	}
-	backoff += time.Duration(jitter.Intn(200)-100) * backoff / 10000
+	backoff += time.Duration(jitter.IntN(200)-100) * backoff / 10000
 	h.Attempts++
 	now := time.Now()
 	h.NextAttempt = now.Add(backoff)

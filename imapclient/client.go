@@ -32,6 +32,7 @@ type Conn struct {
 	record    bool // If true, bytes read are added to recordBuf. recorded() resets.
 	recordBuf []byte
 
+	Preauth      bool
 	LastTag      string
 	CapAvailable map[Capability]struct{} // Capabilities available at server, from CAPABILITY command or response code.
 	CapEnabled   map[Capability]struct{} // Capabilities enabled through ENABLE command.
@@ -53,7 +54,9 @@ func (e Error) Unwrap() error {
 // If xpanic is true, functions that would return an error instead panic. For parse
 // errors, the resulting stack traces show typically show what was being parsed.
 //
-// The initial untagged greeting response is read and must be "OK".
+// The initial untagged greeting response is read and must be "OK" or
+// "PREAUTH". If preauth, the connection is already in authenticated state,
+// typically through TLS client certificate. This is indicated in Conn.Preauth.
 func New(conn net.Conn, xpanic bool) (client *Conn, rerr error) {
 	c := Conn{
 		conn:         conn,
@@ -77,7 +80,8 @@ func New(conn net.Conn, xpanic bool) (client *Conn, rerr error) {
 		}
 		return &c, nil
 	case UntaggedPreauth:
-		c.xerrorf("greeting: unexpected preauth")
+		c.Preauth = true
+		return &c, nil
 	case UntaggedBye:
 		c.xerrorf("greeting: server sent bye")
 	default:

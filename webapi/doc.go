@@ -347,6 +347,8 @@ Example JSON body for webhooks for incoming delivery of basic message:
 				"charset": "utf-8"
 			},
 			"ContentID": "",
+			"ContentDisposition": "",
+			"Filename": "",
 			"DecodedSize": 17,
 			"Parts": []
 		},

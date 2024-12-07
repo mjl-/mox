@@ -1055,10 +1055,10 @@ var api;
 //   instances of a class.
 // We keep the default/regular styles and dark-mode styles in separate stylesheets.
 const cssStyle = dom.style(attr.type('text/css'));
-document.head.appendChild(cssStyle);
+document.head.prepend(cssStyle);
 const styleSheet = cssStyle.sheet;
 const cssStyleDark = dom.style(attr.type('text/css'));
-document.head.appendChild(cssStyleDark);
+document.head.prepend(cssStyleDark);
 const styleSheetDark = cssStyleDark.sheet;
 styleSheetDark.insertRule('@media (prefers-color-scheme: dark) {}');
 const darkModeRule = styleSheetDark.cssRules[0];
@@ -1085,8 +1085,11 @@ const ensureCSS = (selector, styles, important) => {
 	let darkst;
 	for (let [k, v] of Object.entries(styles)) {
 		// We've kept the camel-case in our code which we had from when we did "st[prop] =
-		// value". It is more convenient as object keys. So convert to kebab-case.
-		k = k.replace(/[A-Z]/g, s => '-' + s.toLowerCase());
+		// value". It is more convenient as object keys. So convert to kebab-case, but only
+		// if this is not a css property.
+		if (!k.startsWith('--')) {
+			k = k.replace(/[A-Z]/g, s => '-' + s.toLowerCase());
+		}
 		if (Array.isArray(v)) {
 			if (v.length !== 2) {
 				throw new Error('2 elements required for light/dark mode style, got ' + v.length);
@@ -1112,54 +1115,105 @@ const css = (className, styles, important) => {
 };
 // todo: reduce number of colors. hopefully we can derive some colors from a few base colors (making them brighter/darker, or shifting hue, etc). then make them configurable through settings.
 // todo: add the standard padding and border-radius, perhaps more.
-// todo: could make some of these {prop: value} objects and pass them directly to css()
-const styles = {
-	color: ['black', '#ddd'],
-	colorMild: ['#555', '#bbb'],
-	colorMilder: ['#666', '#aaa'],
-	backgroundColor: ['white', '#222'],
-	backgroundColorMild: ['#f8f8f8', '#080808'],
-	backgroundColorMilder: ['#999', '#777'],
-	borderColor: ['#ccc', '#333'],
-	mailboxesTopBackgroundColor: ['#fdfdf1', 'rgb(26, 18, 0)'],
-	msglistBackgroundColor: ['#f5ffff', 'rgb(4, 19, 13)'],
-	boxShadow: ['0 0 20px rgba(0, 0, 0, 0.1)', '0px 0px 20px #000'],
-	buttonBackground: ['#eee', '#222'],
-	buttonBorderColor: ['#888', '#666'],
-	buttonHoverBackground: ['#ddd', '#333'],
-	overlayOpaqueBackgroundColor: ['#eee', '#011'],
-	overlayBackgroundColor: ['rgba(0, 0, 0, 0.2)', 'rgba(0, 0, 0, 0.5)'],
-	popupColor: ['black', 'white'],
-	popupBackgroundColor: ['white', 'rgb(49, 50, 51)'],
-	popupBorderColor: ['#ccc', '#555'],
-	highlightBackground: ['gold', '#a70167'],
-	highlightBorderColor: ['#8c7600', 'rgb(253, 31, 167)'],
-	highlightBackgroundHover: ['#ffbd21', 'rgb(113, 4, 71)'],
-	mailboxActiveBackground: ['linear-gradient(135deg, #ffc7ab 0%, #ffdeab 100%)', 'linear-gradient(135deg, rgb(182, 61, 0) 0%, rgb(140, 90, 13) 100%)'],
-	mailboxHoverBackgroundColor: ['#eee', 'rgb(66, 31, 21)'],
-	msgItemActiveBackground: ['linear-gradient(135deg, #8bc8ff 0%, #8ee5ff 100%)', 'linear-gradient(135deg, rgb(4, 92, 172) 0%, rgb(2, 123, 160) 100%)'],
-	msgItemHoverBackgroundColor: ['#eee', 'rgb(7, 51, 72)'],
-	msgItemFocusBorderColor: ['#2685ff', '#2685ff'],
-	buttonTristateOnBackground: ['#c4ffa9', 'rgb(39, 126, 0)'],
-	buttonTristateOffBackground: ['#ffb192', 'rgb(191, 65, 15)'],
-	warningBackgroundColor: ['#ffca91', 'rgb(168, 87, 0)'],
-	successBackground: ['#d2f791', '#1fa204'],
-	emphasisBackground: ['#666', '#aaa'],
+// We define css variables, making them easy to override.
+ensureCSS(':root', {
+	'--color': ['black', '#ddd'],
+	'--colorMild': ['#555', '#bbb'],
+	'--colorMilder': ['#666', '#aaa'],
+	'--backgroundColor': ['white', '#222'],
+	'--backgroundColorMild': ['#f8f8f8', '#080808'],
+	'--backgroundColorMilder': ['#999', '#777'],
+	'--borderColor': ['#ccc', '#333'],
+	'--mailboxesTopBackgroundColor': ['#fdfdf1', '#1a1200'],
+	'--msglistBackgroundColor': ['#f5ffff', '#04130d'],
+	'--boxShadow': ['0 0 20px rgba(0, 0, 0, 0.1)', '0px 0px 20px #000'],
+	'--buttonBackground': ['#eee', '#222'],
+	'--buttonBorderColor': ['#888', '#666'],
+	'--buttonHoverBackground': ['#ddd', '#333'],
+	'--overlayOpaqueBackgroundColor': ['#eee', '#011'],
+	'--overlayBackgroundColor': ['rgba(0, 0, 0, 0.2)', 'rgba(0, 0, 0, 0.5)'],
+	'--popupColor': ['black', 'white'],
+	'--popupBackgroundColor': ['white', '#313233'],
+	'--popupBorderColor': ['#ccc', '#555'],
+	'--highlightBackground': ['gold', '#a70167'],
+	'--highlightBorderColor': ['#8c7600', '#fd1fa7'],
+	'--highlightBackgroundHover': ['#ffbd21', '#710447'],
+	'--mailboxActiveBackground': ['linear-gradient(135deg, #ffc7ab 0%, #ffdeab 100%)', 'linear-gradient(135deg, #b63d00 0%, #8c5a0d 100%)'],
+	'--mailboxHoverBackgroundColor': ['#eee', '#421f15'],
+	'--msgItemActiveBackground': ['linear-gradient(135deg, #8bc8ff 0%, #8ee5ff 100%)', 'linear-gradient(135deg, #045cac 0%, #027ba0 100%)'],
+	'--msgItemHoverBackgroundColor': ['#eee', '#073348'],
+	'--msgItemFocusBorderColor': ['#2685ff', '#2685ff'],
+	'--buttonTristateOnBackground': ['#c4ffa9', '#277e00'],
+	'--buttonTristateOffBackground': ['#ffb192', '#bf410f'],
+	'--warningBackgroundColor': ['#ffca91', '#a85700'],
+	'--successBackground': ['#d2f791', '#1fa204'],
+	'--emphasisBackground': ['#666', '#aaa'],
 	// For authentication/security results.
-	underlineGreen: '#50c40f',
-	underlineRed: '#e15d1c',
-	underlineBlue: '#09f',
-	underlineGrey: '#888',
+	'--underlineGreen': '#50c40f',
+	'--underlineRed': '#e15d1c',
+	'--underlineBlue': '#09f',
+	'--underlineGrey': '#888',
+	'--quoted1Color': ['#03828f', '#71f2ff'],
+	'--quoted2Color': ['#c7445c', '#ec4c4c'],
+	'--quoted3Color': ['#417c10', '#73e614'],
+	'--scriptSwitchUnderlineColor': ['#dca053', '#e88f1e'],
+	'--linkColor': ['#096bc2', '#63b6ff'],
+	'--linkVisitedColor': ['#0704c1', '#c763ff'],
+});
+// Typed way to reference a css variables. Kept from before used variables.
+const styles = {
+	color: 'var(--color)',
+	colorMild: 'var(--colorMild)',
+	colorMilder: 'var(--colorMilder)',
+	backgroundColor: 'var(--backgroundColor)',
+	backgroundColorMild: 'var(--backgroundColorMild)',
+	backgroundColorMilder: 'var(--backgroundColorMilder)',
+	borderColor: 'var(--borderColor)',
+	mailboxesTopBackgroundColor: 'var(--mailboxesTopBackgroundColor)',
+	msglistBackgroundColor: 'var(--msglistBackgroundColor)',
+	boxShadow: 'var(--boxShadow)',
+	buttonBackground: 'var(--buttonBackground)',
+	buttonBorderColor: 'var(--buttonBorderColor)',
+	buttonHoverBackground: 'var(--buttonHoverBackground)',
+	overlayOpaqueBackgroundColor: 'var(--overlayOpaqueBackgroundColor)',
+	overlayBackgroundColor: 'var(--overlayBackgroundColor)',
+	popupColor: 'var(--popupColor)',
+	popupBackgroundColor: 'var(--popupBackgroundColor)',
+	popupBorderColor: 'var(--popupBorderColor)',
+	highlightBackground: 'var(--highlightBackground)',
+	highlightBorderColor: 'var(--highlightBorderColor)',
+	highlightBackgroundHover: 'var(--highlightBackgroundHover)',
+	mailboxActiveBackground: 'var(--mailboxActiveBackground)',
+	mailboxHoverBackgroundColor: 'var(--mailboxHoverBackgroundColor)',
+	msgItemActiveBackground: 'var(--msgItemActiveBackground)',
+	msgItemHoverBackgroundColor: 'var(--msgItemHoverBackgroundColor)',
+	msgItemFocusBorderColor: 'var(--msgItemFocusBorderColor)',
+	buttonTristateOnBackground: 'var(--buttonTristateOnBackground)',
+	buttonTristateOffBackground: 'var(--buttonTristateOffBackground)',
+	warningBackgroundColor: 'var(--warningBackgroundColor)',
+	successBackground: 'var(--successBackground)',
+	emphasisBackground: 'var(--emphasisBackground)',
+	// For authentication/security results.
+	underlineGreen: 'var(--underlineGreen)',
+	underlineRed: 'var(--underlineRed)',
+	underlineBlue: 'var(--underlineBlue)',
+	underlineGrey: 'var(--underlineGrey)',
+	quoted1Color: 'var(--quoted1Color)',
+	quoted2Color: 'var(--quoted2Color)',
+	quoted3Color: 'var(--quoted3Color)',
+	scriptSwitchUnderlineColor: 'var(--scriptSwitchUnderlineColor)',
+	linkColor: 'var(--linkColor)',
+	linkVisitedColor: 'var(--linkVisitedColor)',
 };
 const styleClasses = {
 	// For quoted text, with multiple levels of indentations.
 	quoted: [
-		css('quoted1', { color: ['#03828f', '#71f2ff'] }),
-		css('quoted2', { color: ['#c7445c', 'rgb(236, 76, 76)'] }),
-		css('quoted3', { color: ['#417c10', 'rgb(115, 230, 20)'] }), // blue
+		css('quoted1', { color: styles.quoted1Color }),
+		css('quoted2', { color: styles.quoted2Color }),
+		css('quoted3', { color: styles.quoted3Color }),
 	],
 	// When text switches between unicode scripts.
-	scriptswitch: css('scriptswitch', { textDecoration: 'underline 2px', textDecorationColor: ['#dca053', 'rgb(232, 143, 30)'] }),
+	scriptswitch: css('scriptswitch', { textDecoration: 'underline 2px', textDecorationColor: styles.scriptSwitchUnderlineColor }),
 	textMild: css('textMild', { color: styles.colorMild }),
 	// For keywords (also known as flags/labels/tags) on messages.
 	keyword: css('keyword', { padding: '0 .15em', borderRadius: '.15em', fontWeight: 'normal', fontSize: '.9em', margin: '0 .15em', whiteSpace: 'nowrap', background: styles.highlightBackground, color: styles.color, border: '1px solid', borderColor: styles.highlightBorderColor }),
@@ -1168,15 +1222,15 @@ const styleClasses = {
 ensureCSS('.msgHeaders td', { wordBreak: 'break-word' }); // Prevent horizontal scroll bar for long header values.
 ensureCSS('.keyword.keywordCollapsed', { opacity: .75 }),
 	// Generic styling.
-	ensureCSS('*', { fontSize: 'inherit', fontFamily: "'ubuntu', 'lato', sans-serif", margin: 0, padding: 0, boxSizing: 'border-box' });
+	ensureCSS('html', { backgroundColor: 'var(--backgroundColor)', color: 'var(--color)' });
+ensureCSS('*', { fontSize: 'inherit', fontFamily: "'ubuntu', 'lato', sans-serif", margin: 0, padding: 0, boxSizing: 'border-box' });
 ensureCSS('.mono, .mono *', { fontFamily: "'ubuntu mono', monospace" });
 ensureCSS('table td, table th', { padding: '.15em .25em' });
 ensureCSS('.pad', { padding: '.5em' });
 ensureCSS('iframe', { border: 0 });
 ensureCSS('img, embed, video, iframe', { backgroundColor: 'white', color: 'black' });
-ensureCSS(':root', { backgroundColor: styles.backgroundColor, color: styles.color });
-ensureCSS('a', { color: ['rgb(9, 107, 194)', 'rgb(99, 182, 255)'] });
-ensureCSS('a:visited', { color: ['rgb(7, 4, 193)', 'rgb(199, 99, 255)'] });
+ensureCSS('a', { color: styles.linkColor });
+ensureCSS('a:visited', { color: styles.linkVisitedColor });
 // For message view with multiple inline elements (often a single text and multiple messages).
 ensureCSS('.textmulti > *:nth-child(even)', { backgroundColor: ['#f4f4f4', '#141414'] });
 ensureCSS('.textmulti > *', { padding: '2ex .5em', margin: '-.5em' /* compensate pad */ });
@@ -1384,7 +1438,7 @@ const loadMsgheaderView = (msgheaderelem, mi, moreHeaders, refineKeyword, allAdd
 	const msgAttrStyle = css('msgAttr', { padding: '0px 0.15em', fontSize: '.9em' });
 	dom._kids(msgheaderelem, 
 	// todo: make addresses clickable, start search (keep current mailbox if any)
-	dom.tr(dom.td('From:', msgHeaderFieldStyle), dom.td(style({ width: '100%' }), dom.div(css('msgFromReceivedSpread', { display: 'flex', justifyContent: 'space-between' }), dom.div(join((msgenv.From || []).map(a => formatAddressValidated(a, mi.Message, !!msgenv.From && msgenv.From.length === 1)), () => ', ')), dom.div(attr.title('Received: ' + received.toString() + ';\nDate header in message: ' + (msgenv.Date ? msgenv.Date.toString() : '(missing/invalid)')), receivedlocal.toDateString() + ' ' + receivedlocal.toTimeString().split(' ')[0])))), (msgenv.ReplyTo || []).length === 0 ? [] : dom.tr(dom.td('Reply-To:', msgHeaderFieldStyle), dom.td(join((msgenv.ReplyTo || []).map(a => formatAddressElem(a)), () => ', '))), dom.tr(dom.td('To:', msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.To || []))), (msgenv.CC || []).length === 0 ? [] : dom.tr(dom.td('Cc:', msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.CC || []))), (msgenv.BCC || []).length === 0 ? [] : dom.tr(dom.td('Bcc:', msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.BCC || []))), dom.tr(dom.td('Subject:', msgHeaderFieldStyle), dom.td(dom.div(css('msgSubjectAttrsSpread', { display: 'flex', justifyContent: 'space-between' }), dom.div(msgenv.Subject || ''), dom.div(mi.Message.IsForward ? dom.span(msgAttrStyle, 'Forwarded', attr.title('Message came in from a forwarded address. Some message authentication policies, like DMARC, were not evaluated.')) : [], mi.Message.IsMailingList ? dom.span(msgAttrStyle, 'Mailing list', attr.title('Message was received from a mailing list. Some message authentication policies, like DMARC, were not evaluated.')) : [], mi.Message.ReceivedTLSVersion === 1 ? dom.span(msgAttrStyle, css('msgAttrNoTLS', { borderBottom: '1.5px solid', borderBottomColor: styles.underlineRed }), 'Without TLS', attr.title('Message received (last hop) without TLS.')) : [], mi.Message.ReceivedTLSVersion > 1 && !mi.Message.ReceivedRequireTLS ? dom.span(msgAttrStyle, css('msgAttrTLS', { borderBottom: '1.5px solid', borderBottomColor: styles.underlineGreen }), 'With TLS', attr.title('Message received (last hop) with TLS.')) : [], mi.Message.ReceivedRequireTLS ? dom.span(css('msgAttrRequireTLS', { padding: '.1em .3em', fontSize: '.9em', backgroundColor: styles.successBackground, border: '1px solid', borderColor: styles.borderColor, borderRadius: '3px' }), 'With RequireTLS', attr.title('Transported with RequireTLS, ensuring TLS along the entire delivery path from sender to recipient, with TLS certificate verification through MTA-STS and/or DANE.')) : [], mi.IsSigned ? dom.span(msgAttrStyle, css('msgAttrSigned', { backgroundColor: styles.emphasisBackground, color: styles.color, borderRadius: '.15em' }), 'Message has a signature') : [], mi.IsEncrypted ? dom.span(msgAttrStyle, css('msgAttrEncrypted', { backgroundColor: styles.emphasisBackground, color: styles.color, borderRadius: '.15em' }), 'Message is encrypted') : [], refineKeyword ? (mi.Message.Keywords || []).map(kw => dom.clickbutton(styleClasses.keyword, dom._class('keywordButton'), kw, async function click() {
+	dom.tr(dom.td('From:', msgHeaderFieldStyle), dom.td(style({ width: '100%' }), dom.div(css('msgFromReceivedSpread', { display: 'flex', justifyContent: 'space-between' }), dom.div(join((msgenv.From || []).map(a => formatAddressValidated(a, mi.Message, !!msgenv.From && msgenv.From.length === 1)), () => ', ')), dom.div(attr.title('Received: ' + received.toString() + ';\nDate header in message: ' + (msgenv.Date ? msgenv.Date.toString() : '(missing/invalid)')), receivedlocal.toDateString() + ' ' + receivedlocal.toTimeString().split(' ')[0])))), (msgenv.ReplyTo || []).length === 0 ? [] : dom.tr(dom.td('Reply-To:', msgHeaderFieldStyle), dom.td(join((msgenv.ReplyTo || []).map(a => formatAddressElem(a)), () => ', '))), dom.tr(dom.td('To:', msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.To || []))), (msgenv.CC || []).length === 0 ? [] : dom.tr(dom.td('Cc:', msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.CC || []))), (msgenv.BCC || []).length === 0 ? [] : dom.tr(dom.td('Bcc:', msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.BCC || []))), dom.tr(dom.td('Subject:', msgHeaderFieldStyle), dom.td(dom.div(css('msgSubjectAttrsSpread', { display: 'flex', justifyContent: 'space-between' }), dom.div(msgenv.Subject || ''), dom.div(mi.Message.IsForward ? dom.span(msgAttrStyle, 'Forwarded', attr.title('Message came in from a forwarded address. Some message authentication policies, like DMARC, were not evaluated.')) : [], mi.Message.IsMailingList ? dom.span(msgAttrStyle, 'Mailing list', attr.title('Message was received from a mailing list. Some message authentication policies, like DMARC, were not evaluated.')) : [], mi.Message.ReceivedTLSVersion === 1 ? dom.span(msgAttrStyle, css('msgAttrNoTLS', { borderBottom: '1.5px solid', borderBottomColor: styles.underlineRed }), 'Without TLS', attr.title('Message received (last hop) without TLS.')) : [], mi.Message.ReceivedTLSVersion > 1 && !mi.Message.ReceivedRequireTLS ? dom.span(msgAttrStyle, css('msgAttrTLS', { borderBottom: '1.5px solid', borderBottomColor: styles.underlineGreen }), 'With TLS', attr.title('Message received (last hop) with TLS.')) : [], mi.Message.ReceivedRequireTLS ? dom.span(css('msgAttrRequireTLS', { padding: '.1em .3em', fontSize: '.9em', backgroundColor: styles.successBackground, border: '1px solid', borderColor: styles.borderColor, borderRadius: '3px' }), 'With RequireTLS', attr.title('Transported with RequireTLS, ensuring TLS along the entire delivery path from sender to recipient, with TLS certificate verification through MTA-STS and/or DANE.')) : [], mi.IsSigned ? dom.span(msgAttrStyle, css('msgAttrSigned', { backgroundColor: styles.colorMild, color: styles.backgroundColorMild, borderRadius: '.15em' }), 'Message has a signature') : [], mi.IsEncrypted ? dom.span(msgAttrStyle, css('msgAttrEncrypted', { backgroundColor: styles.colorMild, color: styles.backgroundColorMild, borderRadius: '.15em' }), 'Message is encrypted') : [], refineKeyword ? (mi.Message.Keywords || []).map(kw => dom.clickbutton(styleClasses.keyword, dom._class('keywordButton'), kw, async function click() {
 		await refineKeyword(kw);
 	})) : [])))), moreHeaders.map(k => dom.tr(dom.td(k + ':', msgHeaderFieldStyle), dom.td())));
 };
@@ -1417,13 +1471,17 @@ const init = () => {
 	iframepath += '?sameorigin=true';
 	let iframe;
 	const page = document.getElementById('page');
-	dom._kids(page, dom.div(css('msgMeta', { backgroundColor: styles.backgroundColorMild, borderBottom: '1px solid', borderBottomColor: styles.borderColor }), msgheaderview, msgattachmentview), iframe = dom.iframe(attr.title('Message body.'), attr.src(iframepath), css('msgIframe', { width: '100%', height: '100%' }), function load() {
+	const root = dom.div(dom.div(css('msgMeta', { backgroundColor: styles.backgroundColorMild, borderBottom: '1px solid', borderBottomColor: styles.borderColor }), msgheaderview, msgattachmentview), iframe = dom.iframe(attr.title('Message body.'), attr.src(iframepath), css('msgIframe', { width: '100%', height: '100%' }), function load() {
 		// Note: we load the iframe content specifically in a way that fires the load event only when the content is fully rendered.
 		iframe.style.height = iframe.contentDocument.documentElement.scrollHeight + 'px';
 		if (window.location.hash === '#print') {
 			window.print();
 		}
 	}));
+	if (typeof moxBeforeDisplay !== 'undefined') {
+		moxBeforeDisplay(root);
+	}
+	dom._kids(page, root);
 };
 try {
 	init();

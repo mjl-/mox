@@ -601,7 +601,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			s += "junk"
 		}
 		s += fmt.Sprintf(", spamscore %.2f, threshold %.2f%s", contentProb, threshold, thresholdRemark)
-		s += "(ham words: "
+		s += " (ham words: "
 		for i, w := range hams {
 			if i > 0 {
 				s += ", "

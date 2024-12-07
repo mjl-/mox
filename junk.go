@@ -214,12 +214,12 @@ messages are shuffled, with optional random seed.`
 	hamFiles := listDir(hamDir)
 	spamFiles := listDir(spamDir)
 
-	var rand *mathrand.Rand
+	var seed int64
 	if a.seed {
-		rand = mathrand.New(mathrand.NewSource(time.Now().UnixMilli()))
-	} else {
-		rand = mathrand.New(mathrand.NewSource(0))
+		seed = time.Now().UnixMilli()
 	}
+	// Still at math/rand (v1 instead of v2) for potential comparison to earlier test results.
+	rand := mathrand.New(mathrand.NewSource(seed))
 
 	shuffle := func(l []string) {
 		count := len(l)

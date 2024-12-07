@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/message"
@@ -973,7 +975,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		localpart := ctl.xread()
 		d, err := dns.ParseDomain(domain)
 		ctl.xcheck(err, "parsing domain")
-		err = mox.DomainAdd(ctx, d, account, smtp.Localpart(localpart))
+		err = admin.DomainAdd(ctx, d, account, smtp.Localpart(localpart))
 		ctl.xcheck(err, "adding domain")
 		ctl.xwriteok()
 
@@ -986,7 +988,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		domain := ctl.xread()
 		d, err := dns.ParseDomain(domain)
 		ctl.xcheck(err, "parsing domain")
-		err = mox.DomainRemove(ctx, d)
+		err = admin.DomainRemove(ctx, d)
 		ctl.xcheck(err, "removing domain")
 		ctl.xwriteok()
 
@@ -999,7 +1001,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		*/
 		account := ctl.xread()
 		address := ctl.xread()
-		err := mox.AccountAdd(ctx, account, address)
+		err := admin.AccountAdd(ctx, account, address)
 		ctl.xcheck(err, "adding account")
 		ctl.xwriteok()
 
@@ -1010,8 +1012,96 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< "ok" or error
 		*/
 		account := ctl.xread()
-		err := mox.AccountRemove(ctx, account)
+		err := admin.AccountRemove(ctx, account)
 		ctl.xcheck(err, "removing account")
+		ctl.xwriteok()
+
+	case "tlspubkeylist":
+		/* protocol:
+		> "tlspubkeylist"
+		> account (or empty)
+		< "ok" or error
+		< stream
+		*/
+		accountOpt := ctl.xread()
+		tlspubkeys, err := store.TLSPublicKeyList(ctx, accountOpt)
+		ctl.xcheck(err, "list tls public keys")
+		ctl.xwriteok()
+		xw := ctl.writer()
+		fmt.Fprintf(xw, "# fingerprint, type, name, account, login address, no imap preauth (%d)\n", len(tlspubkeys))
+		for _, k := range tlspubkeys {
+			fmt.Fprintf(xw, "%s\t%s\t%q\t%s\t%s\t%v\n", k.Fingerprint, k.Type, k.Name, k.Account, k.LoginAddress, k.NoIMAPPreauth)
+		}
+		xw.xclose()
+
+	case "tlspubkeyget":
+		/* protocol:
+		> "tlspubkeyget"
+		> fingerprint
+		< "ok" or error
+		< type
+		< name
+		< account
+		< address
+		< noimappreauth (true/false)
+		< stream (certder)
+		*/
+		fp := ctl.xread()
+		tlspubkey, err := store.TLSPublicKeyGet(ctx, fp)
+		ctl.xcheck(err, "looking tls public key")
+		ctl.xwriteok()
+		ctl.xwrite(tlspubkey.Type)
+		ctl.xwrite(tlspubkey.Name)
+		ctl.xwrite(tlspubkey.Account)
+		ctl.xwrite(tlspubkey.LoginAddress)
+		ctl.xwrite(fmt.Sprintf("%v", tlspubkey.NoIMAPPreauth))
+		ctl.xstreamfrom(bytes.NewReader(tlspubkey.CertDER))
+
+	case "tlspubkeyadd":
+		/* protocol:
+		> "tlspubkeyadd"
+		> loginaddress
+		> name (or empty)
+		> noimappreauth (true/false)
+		> stream (certder)
+		< "ok" or error
+		*/
+		loginAddress := ctl.xread()
+		name := ctl.xread()
+		noimappreauth := ctl.xread()
+		if noimappreauth != "true" && noimappreauth != "false" {
+			ctl.xcheck(fmt.Errorf("bad value %q", noimappreauth), "parsing noimappreauth")
+		}
+		var b bytes.Buffer
+		ctl.xstreamto(&b)
+		tlspubkey, err := store.ParseTLSPublicKeyCert(b.Bytes())
+		ctl.xcheck(err, "parsing certificate")
+		if name != "" {
+			tlspubkey.Name = name
+		}
+		acc, _, err := store.OpenEmail(ctl.log, loginAddress)
+		ctl.xcheck(err, "open account for address")
+		defer func() {
+			err := acc.Close()
+			ctl.log.Check(err, "close account")
+		}()
+		tlspubkey.Account = acc.Name
+		tlspubkey.LoginAddress = loginAddress
+		tlspubkey.NoIMAPPreauth = noimappreauth == "true"
+
+		err = store.TLSPublicKeyAdd(ctx, &tlspubkey)
+		ctl.xcheck(err, "adding tls public key")
+		ctl.xwriteok()
+
+	case "tlspubkeyrm":
+		/* protocol:
+		> "tlspubkeyadd"
+		> fingerprint
+		< "ok" or error
+		*/
+		fp := ctl.xread()
+		err := store.TLSPublicKeyRemove(ctx, fp)
+		ctl.xcheck(err, "removing tls public key")
 		ctl.xwriteok()
 
 	case "addressadd":
@@ -1023,7 +1113,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		*/
 		address := ctl.xread()
 		account := ctl.xread()
-		err := mox.AddressAdd(ctx, address, account)
+		err := admin.AddressAdd(ctx, address, account)
 		ctl.xcheck(err, "adding address")
 		ctl.xwriteok()
 
@@ -1034,7 +1124,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< "ok" or error
 		*/
 		address := ctl.xread()
-		err := mox.AddressRemove(ctx, address)
+		err := admin.AddressRemove(ctx, address)
 		ctl.xcheck(err, "removing address")
 		ctl.xwriteok()
 
@@ -1099,7 +1189,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		ctl.xcheck(err, "parsing address")
 		var alias config.Alias
 		xparseJSON(ctl, line, &alias)
-		err = mox.AliasAdd(ctx, addr, alias)
+		err = admin.AliasAdd(ctx, addr, alias)
 		ctl.xcheck(err, "adding alias")
 		ctl.xwriteok()
 
@@ -1118,7 +1208,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		allowmsgfrom := ctl.xread()
 		addr, err := smtp.ParseAddress(address)
 		ctl.xcheck(err, "parsing address")
-		err = mox.DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
+		err = admin.DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
 			a, ok := d.Aliases[addr.Localpart.String()]
 			if !ok {
 				return fmt.Errorf("alias does not exist")
@@ -1159,7 +1249,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		address := ctl.xread()
 		addr, err := smtp.ParseAddress(address)
 		ctl.xcheck(err, "parsing address")
-		err = mox.AliasRemove(ctx, addr)
+		err = admin.AliasRemove(ctx, addr)
 		ctl.xcheck(err, "removing alias")
 		ctl.xwriteok()
 
@@ -1176,7 +1266,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		ctl.xcheck(err, "parsing address")
 		var addresses []string
 		xparseJSON(ctl, line, &addresses)
-		err = mox.AliasAddressesAdd(ctx, addr, addresses)
+		err = admin.AliasAddressesAdd(ctx, addr, addresses)
 		ctl.xcheck(err, "adding addresses to alias")
 		ctl.xwriteok()
 
@@ -1193,7 +1283,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		ctl.xcheck(err, "parsing address")
 		var addresses []string
 		xparseJSON(ctl, line, &addresses)
-		err = mox.AliasAddressesRemove(ctx, addr, addresses)
+		err = admin.AliasAddressesRemove(ctx, addr, addresses)
 		ctl.xcheck(err, "removing addresses to alias")
 		ctl.xwriteok()
 

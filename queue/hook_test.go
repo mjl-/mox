@@ -82,6 +82,9 @@ func TestHookIncoming(t *testing.T) {
 		tcheck(t, err, "decode incoming webhook")
 		in.Meta.Received = in.Meta.Received.Local() // For TZ UTC.
 
+		structure, err := webhook.PartStructure(pkglog, &part)
+		tcheck(t, err, "part structure")
+
 		expIncoming := webhook.Incoming{
 			From:       []webhook.NameAddress{{Address: "mjl@mox.example"}},
 			To:         []webhook.NameAddress{{Address: "mjl@mox.example"}},
@@ -92,7 +95,7 @@ func TestHookIncoming(t *testing.T) {
 			Subject:    "test",
 			Text:       "test email\n",
 
-			Structure: webhook.PartStructure(&part),
+			Structure: structure,
 			Meta: webhook.IncomingMeta{
 				MsgID:               m.ID,
 				MailFrom:            m.MailFrom,

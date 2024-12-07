@@ -3,11 +3,13 @@
 // Loaded from synchronous javascript.
 declare let messageItem: api.MessageItem
 declare let parsedMessage: api.ParsedMessage
+// From customization script.
+declare let moxBeforeDisplay: (root: HTMLElement) => void
 
 const init = async () => {
 	const pm = api.parser.ParsedMessage(parsedMessage)
 	const mi = api.parser.MessageItem(messageItem)
-	dom._kids(document.body,
+	const root = dom.div(
 		dom.div(dom._class('pad', 'mono', 'textmulti'),
 			css('msgTextPreformatted', {whiteSpace: 'pre-wrap'}),
 			(pm.Texts || []).map(t => renderText(t.replace(/\r\n/g, '\n'))),
@@ -26,6 +28,10 @@ const init = async () => {
 			}),
 		)
 	)
+	if (typeof moxBeforeDisplay !== 'undefined') {
+		moxBeforeDisplay(root)
+	}
+	dom._kids(document.body, root)
 }
 
 init()

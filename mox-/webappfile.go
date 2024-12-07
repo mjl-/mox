@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -25,6 +26,7 @@ import (
 type WebappFile struct {
 	HTML, JS         []byte // Embedded html/js data.
 	HTMLPath, JSPath string // Paths to load html/js from during development.
+	CustomStem       string // For trying to read css/js customizations from $configdir/$stem.{css,js}.
 
 	sync.Mutex
 	combined     []byte
@@ -107,28 +109,82 @@ func (a *WebappFile) Serve(ctx context.Context, log mlog.Log, w http.ResponseWri
 		}
 	}
 
+	// Check mtime of css/js files.
+	var haveCustomCSS, haveCustomJS bool
+	checkCustomMtime := func(ext string, have *bool) bool {
+		path := ConfigDirPath(a.CustomStem + "." + ext)
+		if fi, err := os.Stat(path); err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				a.serverError(log, w, err, "stat customization file")
+				return false
+			}
+		} else if mtm := fi.ModTime(); mtm.After(diskmtime) {
+			diskmtime = mtm
+			*have = true
+		}
+		return true
+	}
+	if !checkCustomMtime("css", &haveCustomCSS) || !checkCustomMtime("js", &haveCustomJS) {
+		return
+	}
+	// Detect removal of custom files.
+	if fi, err := os.Stat(ConfigDirPath(".")); err == nil && fi.ModTime().After(diskmtime) {
+		diskmtime = fi.ModTime()
+	}
+
+	a.Lock()
+	refreshdisk = refreshdisk || diskmtime.After(a.mtime)
+	a.Unlock()
+
 	gz := AcceptsGzip(r)
 	var out []byte
 	var mtime time.Time
 	var origSize int64
 
-	func() {
+	ok := func() bool {
 		a.Lock()
 		defer a.Unlock()
 
 		if refreshdisk || a.combined == nil {
-			script := []byte(`<script>/* placeholder */</script>`)
-			index := bytes.Index(html, script)
-			if index < 0 {
-				a.serverError(log, w, errors.New("script not found"), "generating combined html")
-				return
+			var customCSS, customJS []byte
+			var err error
+			if haveCustomCSS {
+				customCSS, err = os.ReadFile(ConfigDirPath(a.CustomStem + ".css"))
+				if err != nil {
+					a.serverError(log, w, err, "read custom css file")
+					return false
+				}
+			}
+			if haveCustomJS {
+				customJS, err = os.ReadFile(ConfigDirPath(a.CustomStem + ".js"))
+				if err != nil {
+					a.serverError(log, w, err, "read custom js file")
+					return false
+				}
+			}
+
+			cssp := []byte(`/* css placeholder */`)
+			cssi := bytes.Index(html, cssp)
+			if cssi < 0 {
+				a.serverError(log, w, errors.New("css placeholder not found"), "generating combined html")
+				return false
+			}
+			jsp := []byte(`/* js placeholder */`)
+			jsi := bytes.Index(html, jsp)
+			if jsi < 0 {
+				a.serverError(log, w, errors.New("js placeholder not found"), "generating combined html")
+				return false
 			}
 			var b bytes.Buffer
-			b.Write(html[:index])
-			fmt.Fprintf(&b, "<script>\n// Javascript is generated from typescript, don't modify the javascript because changes will be lost.\nconst moxversion = \"%s\";\nconst moxgoversion = \"%s\";\nconst moxgoos = \"%s\";\nconst moxgoarch = \"%s\";\n", moxvar.Version, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+			b.Write(html[:cssi])
+			fmt.Fprintf(&b, "/* Custom CSS by admin from $configdir/%s.css: */\n", a.CustomStem)
+			b.Write(customCSS)
+			b.Write(html[cssi+len(cssp) : jsi])
+			fmt.Fprintf(&b, "// Custom JS by admin from $configdir/%s.js:\n", a.CustomStem)
+			b.Write(customJS)
+			fmt.Fprintf(&b, "\n// Javascript is generated from typescript, don't modify the javascript because changes will be lost.\nconst moxversion = \"%s\";\nconst moxgoos = \"%s\";\nconst moxgoarch = \"%s\";\n", moxvar.Version, runtime.GOOS, runtime.GOARCH)
 			b.Write(js)
-			b.WriteString("\t\t</script>")
-			b.Write(html[index+len(script):])
+			b.Write(html[jsi+len(jsp):])
 			out = b.Bytes()
 			a.combined = out
 			if refreshdisk {
@@ -152,7 +208,7 @@ func (a *WebappFile) Serve(ctx context.Context, log mlog.Log, w http.ResponseWri
 				}
 				if err != nil {
 					a.serverError(log, w, err, "gzipping combined html")
-					return
+					return false
 				}
 				a.combinedGzip = b.Bytes()
 			}
@@ -160,7 +216,11 @@ func (a *WebappFile) Serve(ctx context.Context, log mlog.Log, w http.ResponseWri
 			out = a.combinedGzip
 		}
 		mtime = a.mtime
+		return true
 	}()
+	if !ok {
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	http.ServeContent(gzipInjector{w, gz, origSize}, r, "", mtime, bytes.NewReader(out))

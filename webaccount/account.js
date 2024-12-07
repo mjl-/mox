@@ -255,7 +255,7 @@ var api;
 		// per-outgoing-message address used for sending.
 		OutgoingEvent["EventUnrecognized"] = "unrecognized";
 	})(OutgoingEvent = api.OutgoingEvent || (api.OutgoingEvent = {}));
-	api.structTypes = { "Account": true, "Address": true, "AddressAlias": true, "Alias": true, "AliasAddress": true, "AutomaticJunkFlags": true, "Destination": true, "Domain": true, "ImportProgress": true, "Incoming": true, "IncomingMeta": true, "IncomingWebhook": true, "JunkFilter": true, "NameAddress": true, "Outgoing": true, "OutgoingWebhook": true, "Route": true, "Ruleset": true, "Structure": true, "SubjectPass": true, "Suppression": true };
+	api.structTypes = { "Account": true, "Address": true, "AddressAlias": true, "Alias": true, "AliasAddress": true, "AutomaticJunkFlags": true, "Destination": true, "Domain": true, "ImportProgress": true, "Incoming": true, "IncomingMeta": true, "IncomingWebhook": true, "JunkFilter": true, "NameAddress": true, "Outgoing": true, "OutgoingWebhook": true, "Route": true, "Ruleset": true, "Structure": true, "SubjectPass": true, "Suppression": true, "TLSPublicKey": true };
 	api.stringsTypes = { "CSRFToken": true, "Localpart": true, "OutgoingEvent": true };
 	api.intsTypes = {};
 	api.types = {
@@ -278,8 +278,9 @@ var api;
 		"Outgoing": { "Name": "Outgoing", "Docs": "", "Fields": [{ "Name": "Version", "Docs": "", "Typewords": ["int32"] }, { "Name": "Event", "Docs": "", "Typewords": ["OutgoingEvent"] }, { "Name": "DSN", "Docs": "", "Typewords": ["bool"] }, { "Name": "Suppressing", "Docs": "", "Typewords": ["bool"] }, { "Name": "QueueMsgID", "Docs": "", "Typewords": ["int64"] }, { "Name": "FromID", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "WebhookQueued", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "SMTPCode", "Docs": "", "Typewords": ["int32"] }, { "Name": "SMTPEnhancedCode", "Docs": "", "Typewords": ["string"] }, { "Name": "Error", "Docs": "", "Typewords": ["string"] }, { "Name": "Extra", "Docs": "", "Typewords": ["{}", "string"] }] },
 		"Incoming": { "Name": "Incoming", "Docs": "", "Fields": [{ "Name": "Version", "Docs": "", "Typewords": ["int32"] }, { "Name": "From", "Docs": "", "Typewords": ["[]", "NameAddress"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "NameAddress"] }, { "Name": "CC", "Docs": "", "Typewords": ["[]", "NameAddress"] }, { "Name": "BCC", "Docs": "", "Typewords": ["[]", "NameAddress"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["[]", "NameAddress"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "InReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "References", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Date", "Docs": "", "Typewords": ["nullable", "timestamp"] }, { "Name": "Text", "Docs": "", "Typewords": ["string"] }, { "Name": "HTML", "Docs": "", "Typewords": ["string"] }, { "Name": "Structure", "Docs": "", "Typewords": ["Structure"] }, { "Name": "Meta", "Docs": "", "Typewords": ["IncomingMeta"] }] },
 		"NameAddress": { "Name": "NameAddress", "Docs": "", "Fields": [{ "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "Address", "Docs": "", "Typewords": ["string"] }] },
-		"Structure": { "Name": "Structure", "Docs": "", "Fields": [{ "Name": "ContentType", "Docs": "", "Typewords": ["string"] }, { "Name": "ContentTypeParams", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "ContentID", "Docs": "", "Typewords": ["string"] }, { "Name": "DecodedSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "Parts", "Docs": "", "Typewords": ["[]", "Structure"] }] },
+		"Structure": { "Name": "Structure", "Docs": "", "Fields": [{ "Name": "ContentType", "Docs": "", "Typewords": ["string"] }, { "Name": "ContentTypeParams", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "ContentID", "Docs": "", "Typewords": ["string"] }, { "Name": "ContentDisposition", "Docs": "", "Typewords": ["string"] }, { "Name": "Filename", "Docs": "", "Typewords": ["string"] }, { "Name": "DecodedSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "Parts", "Docs": "", "Typewords": ["[]", "Structure"] }] },
 		"IncomingMeta": { "Name": "IncomingMeta", "Docs": "", "Fields": [{ "Name": "MsgID", "Docs": "", "Typewords": ["int64"] }, { "Name": "MailFrom", "Docs": "", "Typewords": ["string"] }, { "Name": "MailFromValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "MsgFromValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "RcptTo", "Docs": "", "Typewords": ["string"] }, { "Name": "DKIMVerifiedDomains", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "RemoteIP", "Docs": "", "Typewords": ["string"] }, { "Name": "Received", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Automated", "Docs": "", "Typewords": ["bool"] }] },
+		"TLSPublicKey": { "Name": "TLSPublicKey", "Docs": "", "Fields": [{ "Name": "Fingerprint", "Docs": "", "Typewords": ["string"] }, { "Name": "Created", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Type", "Docs": "", "Typewords": ["string"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "NoIMAPPreauth", "Docs": "", "Typewords": ["bool"] }, { "Name": "CertDER", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["string"] }] },
 		"CSRFToken": { "Name": "CSRFToken", "Docs": "", "Values": null },
 		"Localpart": { "Name": "Localpart", "Docs": "", "Values": null },
 		"OutgoingEvent": { "Name": "OutgoingEvent", "Docs": "", "Values": [{ "Name": "EventDelivered", "Value": "delivered", "Docs": "" }, { "Name": "EventSuppressed", "Value": "suppressed", "Docs": "" }, { "Name": "EventDelayed", "Value": "delayed", "Docs": "" }, { "Name": "EventFailed", "Value": "failed", "Docs": "" }, { "Name": "EventRelayed", "Value": "relayed", "Docs": "" }, { "Name": "EventExpanded", "Value": "expanded", "Docs": "" }, { "Name": "EventCanceled", "Value": "canceled", "Docs": "" }, { "Name": "EventUnrecognized", "Value": "unrecognized", "Docs": "" }] },
@@ -306,6 +307,7 @@ var api;
 		NameAddress: (v) => api.parse("NameAddress", v),
 		Structure: (v) => api.parse("Structure", v),
 		IncomingMeta: (v) => api.parse("IncomingMeta", v),
+		TLSPublicKey: (v) => api.parse("TLSPublicKey", v),
 		CSRFToken: (v) => api.parse("CSRFToken", v),
 		Localpart: (v) => api.parse("Localpart", v),
 		OutgoingEvent: (v) => api.parse("OutgoingEvent", v),
@@ -523,6 +525,34 @@ var api;
 			const paramTypes = [["string"], ["bool"]];
 			const returnTypes = [];
 			const params = [mailbox, keep];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async TLSPublicKeys() {
+			const fn = "TLSPublicKeys";
+			const paramTypes = [];
+			const returnTypes = [["[]", "TLSPublicKey"]];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async TLSPublicKeyAdd(loginAddress, name, noIMAPPreauth, certPEM) {
+			const fn = "TLSPublicKeyAdd";
+			const paramTypes = [["string"], ["string"], ["bool"], ["string"]];
+			const returnTypes = [["TLSPublicKey"]];
+			const params = [loginAddress, name, noIMAPPreauth, certPEM];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async TLSPublicKeyRemove(fingerprint) {
+			const fn = "TLSPublicKeyRemove";
+			const paramTypes = [["string"]];
+			const returnTypes = [];
+			const params = [fingerprint];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async TLSPublicKeyUpdate(pubKey) {
+			const fn = "TLSPublicKeyUpdate";
+			const paramTypes = [["TLSPublicKey"]];
+			const returnTypes = [];
+			const params = [pubKey];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 	}
@@ -913,7 +943,7 @@ const login = async (reason) => {
 			finally {
 				fieldset.disabled = false;
 			}
-		}, fieldset = dom.fieldset(dom.h1('Account'), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Email address', style({ marginBottom: '.5ex' })), autosize = dom.span(dom._class('autosize'), username = dom.input(attr.required(''), attr.placeholder('jane@example.org'), function change() { autosize.dataset.value = username.value; }, function input() { autosize.dataset.value = username.value; }))), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Password', style({ marginBottom: '.5ex' })), password = dom.input(attr.type('password'), attr.required(''))), dom.div(style({ textAlign: 'center' }), dom.submitbutton('Login')))))));
+		}, fieldset = dom.fieldset(dom.h1('Account'), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Email address', style({ marginBottom: '.5ex' })), autosize = dom.span(dom._class('autosize'), username = dom.input(attr.required(''), attr.autocomplete('username'), attr.placeholder('jane@example.org'), function change() { autosize.dataset.value = username.value; }, function input() { autosize.dataset.value = username.value; }))), dom.label(style({ display: 'block', marginBottom: '2ex' }), dom.div('Password', style({ marginBottom: '.5ex' })), password = dom.input(attr.type('password'), attr.autocomplete('current-password'), attr.required(''))), dom.div(style({ textAlign: 'center' }), dom.submitbutton('Login')))))));
 		document.body.appendChild(root);
 		username.focus();
 	});
@@ -1092,7 +1122,11 @@ const formatQuotaSize = (v) => {
 	return '' + v;
 };
 const index = async () => {
-	const [acc, storageUsed, storageLimit, suppressions] = await client.Account();
+	const [[acc, storageUsed, storageLimit, suppressions], tlspubkeys0] = await Promise.all([
+		client.Account(),
+		client.TLSPublicKeys(),
+	]);
+	const tlspubkeys = tlspubkeys0 || [];
 	let fullNameForm;
 	let fullNameFieldset;
 	let fullName;
@@ -1356,6 +1390,8 @@ const index = async () => {
 				ContentType: 'text/plain',
 				ContentTypeParams: { charset: 'utf-8' },
 				ContentID: '',
+				ContentDisposition: '',
+				Filename: '',
 				DecodedSize: 8,
 				Parts: [],
 			},
@@ -1396,7 +1432,7 @@ const index = async () => {
 		body.setAttribute('rows', '' + Math.min(40, (body.value.split('\n').length + 1)));
 		onchange();
 	};
-	dom._kids(page, crumbs('Mox Account'), dom.div('Default domain: ', acc.DNSDomain.ASCII ? domainString(acc.DNSDomain) : '(none)'), dom.br(), fullNameForm = dom.form(fullNameFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Full name', dom.br(), fullName = dom.input(attr.value(acc.FullName), attr.title('Name to use in From header when composing messages. Can be overridden per configured address.'))), ' ', dom.submitbutton('Save')), async function submit(e) {
+	const root = dom.div(crumbs('Mox Account'), dom.div('Default domain: ', acc.DNSDomain.ASCII ? domainString(acc.DNSDomain) : '(none)'), dom.br(), fullNameForm = dom.form(fullNameFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'Full name', dom.br(), fullName = dom.input(attr.value(acc.FullName), attr.title('Name to use in From header when composing messages. Can be overridden per configured address.'))), ' ', dom.submitbutton('Save')), async function submit(e) {
 		e.preventDefault();
 		await check(fullNameFieldset, client.AccountSaveFullName(fullName.value));
 		fullName.setAttribute('value', fullName.value);
@@ -1431,7 +1467,104 @@ const index = async () => {
 		}
 		await check(passwordFieldset, client.SetPassword(password1.value));
 		passwordForm.reset();
-	}), dom.br(), dom.h2('Disk usage'), dom.p('Storage used is ', dom.b(formatQuotaSize(Math.floor(storageUsed / (1024 * 1024)) * 1024 * 1024)), storageLimit > 0 ? [
+	}), dom.br(), dom.h2('TLS public keys'), dom.p('For TLS client authentication with certificates, for IMAP and/or submission (SMTP). Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration or constraints are not verified.'), (() => {
+		let elem = dom.div();
+		const preauthHelp = 'New IMAP immediate TLS connections authenticated with a client certificate are automatically switched to "authenticated" state with an untagged IMAP "preauth" message by default. IMAP connections have a state machine specifying when commands are allowed. Authenticating is not allowed while in the "authenticated" state. Enable this option to work around clients that would try to authenticated anyway.';
+		const render = () => {
+			const e = dom.div(dom.table(dom.thead(dom.tr(dom.th('Login address'), dom.th('Name'), dom.th('Type'), dom.th('No IMAP "preauth"', attr.title(preauthHelp)), dom.th('Fingerprint'), dom.th('Update'), dom.th('Remove'))), dom.tbody(tlspubkeys.length === 0 ? dom.tr(dom.td(attr.colspan('7'), 'None')) : [], tlspubkeys.map((tpk, index) => {
+				let loginAddress;
+				let name;
+				let noIMAPPreauth;
+				let update;
+				const formID = 'tlk-' + index;
+				const row = dom.tr(dom.td(dom.form(attr.id(formID), async function submit(e) {
+					e.stopPropagation();
+					e.preventDefault();
+					const ntpk = { ...tpk };
+					ntpk.LoginAddress = loginAddress.value;
+					ntpk.Name = name.value;
+					ntpk.NoIMAPPreauth = noIMAPPreauth.checked;
+					await check(update, client.TLSPublicKeyUpdate(ntpk));
+					tpk.LoginAddress = ntpk.LoginAddress;
+					tpk.Name = ntpk.Name;
+					tpk.NoIMAPPreauth = ntpk.NoIMAPPreauth;
+				}, loginAddress = dom.input(attr.type('email'), attr.value(tpk.LoginAddress), attr.required('')))), dom.td(name = dom.input(attr.form(formID), attr.value(tpk.Name), attr.required(''))), dom.td(tpk.Type), dom.td(dom.label(noIMAPPreauth = dom.input(attr.form(formID), attr.type('checkbox'), tpk.NoIMAPPreauth ? attr.checked('') : []), ' No IMAP "preauth"', attr.title(preauthHelp))), dom.td(tpk.Fingerprint), dom.td(update = dom.submitbutton(attr.form(formID), 'Update')), dom.td(dom.form(async function submit(e) {
+					e.stopPropagation();
+					e.preventDefault();
+					await check(e.target, client.TLSPublicKeyRemove(tpk.Fingerprint));
+					tlspubkeys.splice(tlspubkeys.indexOf(tpk), 1);
+					render();
+				}, dom.submitbutton('Remove'))));
+				return row;
+			}))), dom.clickbutton('Add', style({ marginTop: '1ex' }), function click() {
+				let address;
+				let name;
+				let noIMAPPreauth;
+				let file;
+				const close = popup(dom.div(style({ maxWidth: '45em' }), dom.h1('Add TLS public key'), dom.form(async function submit(e) {
+					e.preventDefault();
+					e.stopPropagation();
+					if (file.files?.length !== 1) {
+						throw new Error('exactly 1 certificate required'); // xxx
+					}
+					const certPEM = await new Promise((resolve, reject) => {
+						const fr = new window.FileReader();
+						fr.addEventListener('load', () => {
+							resolve(fr.result);
+						});
+						fr.addEventListener('error', () => {
+							reject(fr.error);
+						});
+						fr.readAsText(file.files[0]);
+					});
+					const ntpk = await check(e.target, client.TLSPublicKeyAdd(address.value, name.value, noIMAPPreauth.checked, certPEM));
+					tlspubkeys.push(ntpk);
+					render();
+					close();
+				}, dom.label(style({ display: 'block', marginBottom: '1ex' }), dom.div(dom.b('Login address')), address = dom.input(attr.type('email'), attr.value(localStorageGet('webaccountaddress') || ''), attr.required('')), dom.div(style({ fontStyle: 'italic', marginTop: '.5ex' }), 'Login address used for sessions using this key.')), dom.label(style({ display: 'block', marginBottom: '1ex' }), noIMAPPreauth = dom.input(attr.type('checkbox')), ' No IMAP "preauth"', attr.title(preauthHelp)), dom.div(style({ display: 'block', marginBottom: '1ex' }), dom.label(dom.div(dom.b('Certificate')), file = dom.input(attr.type('file'), attr.required(''))), dom.p(style({ fontStyle: 'italic', margin: '1ex 0' }), 'Upload a PEM file containing a certificate, not a private key. Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration, and constraints are not verified. ', dom.a('Show suggested commands', attr.href(''), function click(e) {
+					e.preventDefault();
+					popup(dom.h1('Generate a private key and certificate'), dom.pre(dom._class('literal'), `export keyname=...    # Used for file names, certificate "common name" and as name of tls public key.
+					  # Suggestion: Use an application name and/or email address.
+export passphrase=... # Protects the private key in the PEM and p12 files.
+
+# Generate an ECDSA P-256 private key and a long-lived, unsigned, basic certificate
+# for the corresponding public key.
+openssl req \\
+	-config /dev/null \\
+	-x509 \\
+	-newkey ec \\
+	-pkeyopt ec_paramgen_curve:P-256 \\
+	-passout env:passphrase \\
+	-keyout "$keyname.ecdsa-p256.privatekey.pkcs8.pem" \\
+	-out "$keyname.ecdsa-p256.certificate.pem" \\
+	-days 36500 \\
+	-subj "/CN=$keyname"
+
+# Generate a p12 file containing both certificate and private key, for
+# applications/operating systems that cannot read PEM files with
+# certificates/private keys.
+openssl pkcs12 \\
+	-export \\
+	-in "$keyname.ecdsa-p256.certificate.pem" \\
+	-inkey "$keyname.ecdsa-p256.privatekey.pkcs8.pem" \\
+	-name "$keyname" \\
+	-passin env:passphrase \\
+	-passout env:passphrase \\
+	-out "$keyname.ecdsa-p256-privatekey-certificate.p12"
+
+# If the p12 file cannot be imported in the destination OS or email application,
+# try adding -legacy to the "openssl pkcs12" command.
+`));
+				}), ' for generating a private key and certificate.')), dom.label(style({ display: 'block', marginBottom: '1ex' }), dom.div(dom.b('Name')), name = dom.input(), dom.div(style({ fontStyle: 'italic', marginTop: '.5ex' }), 'Optional. If empty, the "subject common name" from the certificate is used.')), dom.br(), dom.submitbutton('Add'))));
+			}));
+			if (elem) {
+				elem.replaceWith(e);
+			}
+			elem = e;
+		};
+		render();
+		return elem;
+	})(), dom.br(), dom.h2('Disk usage'), dom.p('Storage used is ', dom.b(formatQuotaSize(Math.floor(storageUsed / (1024 * 1024)) * 1024 * 1024)), storageLimit > 0 ? [
 		dom.b('/', formatQuotaSize(storageLimit)),
 		' (',
 		'' + Math.floor(100 * storageUsed / storageLimit),
@@ -1590,33 +1723,36 @@ const index = async () => {
 		mailboxPrefixHint.style.display = '';
 	})), mailboxPrefixHint = dom.p(style({ display: 'none', fontStyle: 'italic', marginTop: '.5ex' }), 'If set, any mbox/maildir path with this prefix will have it stripped before importing. For example, if all mailboxes are in a directory "Takeout", specify that path in the field above so mailboxes like "Takeout/Inbox.mbox" are imported into a mailbox called "Inbox" instead of "Takeout/Inbox".')), dom.div(dom.submitbutton('Upload and import'), dom.p(style({ fontStyle: 'italic', marginTop: '.5ex' }), 'The file is uploaded first, then its messages are imported, finally messages are matched for threading. Importing is done in a transaction, you can abort the entire import before it is finished.')))), importAbortBox = dom.div(), // Outside fieldset because it gets disabled, above progress because may be scrolling it down quickly with problems.
 	importProgress = dom.div(style({ display: 'none' })), dom.br(), footer);
-	// Try to show the progress of an earlier import session. The user may have just
-	// refreshed the browser.
-	let importToken;
-	try {
-		importToken = window.sessionStorage.getItem('ImportToken') || '';
-	}
-	catch (err) {
-		console.log('looking up ImportToken in session storage', { err });
-		return;
-	}
-	if (!importToken) {
-		return;
-	}
-	importFieldset.disabled = true;
-	dom._kids(importProgress, dom.div(dom.div('Reconnecting to import...')));
-	importProgress.style.display = '';
-	importTrack(importToken)
-		.catch(() => {
-		if (window.confirm('Error reconnecting to import. Remove this import session?')) {
-			window.sessionStorage.removeItem('ImportToken');
-			dom._kids(importProgress);
-			importProgress.style.display = 'none';
+	(async () => {
+		// Try to show the progress of an earlier import session. The user may have just
+		// refreshed the browser.
+		let importToken;
+		try {
+			importToken = window.sessionStorage.getItem('ImportToken') || '';
 		}
-	})
-		.finally(() => {
-		importFieldset.disabled = false;
-	});
+		catch (err) {
+			console.log('looking up ImportToken in session storage', { err });
+			return;
+		}
+		if (!importToken) {
+			return;
+		}
+		importFieldset.disabled = true;
+		dom._kids(importProgress, dom.div(dom.div('Reconnecting to import...')));
+		importProgress.style.display = '';
+		importTrack(importToken)
+			.catch(() => {
+			if (window.confirm('Error reconnecting to import. Remove this import session?')) {
+				window.sessionStorage.removeItem('ImportToken');
+				dom._kids(importProgress);
+				importProgress.style.display = 'none';
+			}
+		})
+			.finally(() => {
+			importFieldset.disabled = false;
+		});
+	})();
+	return root;
 };
 const destination = async (name) => {
 	const [acc] = await client.Account();
@@ -1692,7 +1828,7 @@ const destination = async (name) => {
 	let fullName;
 	let saveButton;
 	const addresses = [name, ...Object.keys(acc.Destinations || {}).filter(a => !a.startsWith('@') && a !== name)];
-	dom._kids(page, crumbs(crumblink('Mox Account', '#'), 'Destination ' + name), dom.div(dom.span('Default mailbox', attr.title('Default mailbox where email for this recipient is delivered to if it does not match any ruleset. Default is Inbox.')), dom.br(), defaultMailbox = dom.input(attr.value(dest.Mailbox), attr.placeholder('Inbox'))), dom.br(), dom.div(dom.span('Full name', attr.title('Name to use in From header when composing messages. If not set, the account default full name is used.')), dom.br(), fullName = dom.input(attr.value(dest.FullName))), dom.br(), dom.h2('Rulesets'), dom.p('Incoming messages are checked against the rulesets. If a ruleset matches, the message is delivered to the mailbox configured for the ruleset instead of to the default mailbox.'), dom.p('"Is Forward" does not affect matching, but changes prevents the sending mail server from being included in future junk classifications by clearing fields related to the forwarding email server (IP address, EHLO domain, MAIL FROM domain and a matching DKIM domain), and prevents DMARC rejects for forwarded messages.'), dom.p('"List allow domain" does not affect matching, but skips the regular spam checks if one of the verified domains is a (sub)domain of the domain mentioned here.'), dom.p('"Accept rejects to mailbox" does not affect matching, but causes messages classified as junk to be accepted and delivered to this mailbox, instead of being rejected during the SMTP transaction. Useful for incoming forwarded messages where rejecting incoming messages may cause the forwarding server to stop forwarding.'), dom.table(dom.thead(dom.tr(dom.th('SMTP "MAIL FROM" regexp', attr.title('Matches if this regular expression matches (a substring of) the SMTP MAIL FROM address (not the message From-header). E.g. user@example.org.')), dom.th('Message "From" address regexp', attr.title('Matches if this regular expression matches (a substring of) the single address in the message From header.')), dom.th('Verified domain', attr.title('Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain.')), dom.th('Headers regexp', attr.title('Matches if these header field/value regular expressions all match (substrings of) the message headers. Header fields and valuees are converted to lower case before matching. Whitespace is trimmed from the value before matching. A header field can occur multiple times in a message, only one instance has to match. For mailing lists, you could match on ^list-id$ with the value typically the mailing list address in angled brackets with @ replaced with a dot, e.g. <name\\.lists\\.example\\.org>.')), dom.th('Is Forward', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. Can only be used together with SMTPMailFromRegexp and VerifiedDomain. SMTPMailFromRegexp must be set to the address used to deliver the forwarded message, e.g. '^user(|\\+.*)@forward\\.example$'. Changes to junk analysis: 1. Messages are not rejected for failing a DMARC policy, because a legitimate forwarded message without valid/intact/aligned DKIM signature would be rejected because any verified SPF domain will be 'unaligned', of the forwarding mail server. 2. The sending mail server IP address, and sending EHLO and MAIL FROM domains and matching DKIM domain aren't used in future reputation-based spam classifications (but other verified DKIM domains are) because the forwarding server is not a useful spam signal for future messages.")), dom.th('List allow domain', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation.")), dom.th('Allow rejects to mailbox', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. If a message is classified as spam, it isn't rejected during the SMTP transaction (the normal behaviour), but accepted during the SMTP transaction and delivered to the specified mailbox. The specified mailbox is not automatically cleaned up like the account global Rejects mailbox, unless set to that Rejects mailbox.")), dom.th('Mailbox', attr.title('Mailbox to deliver to if this ruleset matches.')), dom.th('Comment', attr.title('Free-form comments.')), dom.th('Action'))), rulesetsTbody, dom.tfoot(dom.tr(dom.td(attr.colspan('9')), dom.td(dom.clickbutton('Add ruleset', function click() {
+	return dom.div(crumbs(crumblink('Mox Account', '#'), 'Destination ' + name), dom.div(dom.span('Default mailbox', attr.title('Default mailbox where email for this recipient is delivered to if it does not match any ruleset. Default is Inbox.')), dom.br(), defaultMailbox = dom.input(attr.value(dest.Mailbox), attr.placeholder('Inbox'))), dom.br(), dom.div(dom.span('Full name', attr.title('Name to use in From header when composing messages. If not set, the account default full name is used.')), dom.br(), fullName = dom.input(attr.value(dest.FullName))), dom.br(), dom.h2('Rulesets'), dom.p('Incoming messages are checked against the rulesets. If a ruleset matches, the message is delivered to the mailbox configured for the ruleset instead of to the default mailbox.'), dom.p('"Is Forward" does not affect matching, but changes prevents the sending mail server from being included in future junk classifications by clearing fields related to the forwarding email server (IP address, EHLO domain, MAIL FROM domain and a matching DKIM domain), and prevents DMARC rejects for forwarded messages.'), dom.p('"List allow domain" does not affect matching, but skips the regular spam checks if one of the verified domains is a (sub)domain of the domain mentioned here.'), dom.p('"Accept rejects to mailbox" does not affect matching, but causes messages classified as junk to be accepted and delivered to this mailbox, instead of being rejected during the SMTP transaction. Useful for incoming forwarded messages where rejecting incoming messages may cause the forwarding server to stop forwarding.'), dom.table(dom.thead(dom.tr(dom.th('SMTP "MAIL FROM" regexp', attr.title('Matches if this regular expression matches (a substring of) the SMTP MAIL FROM address (not the message From-header). E.g. user@example.org.')), dom.th('Message "From" address regexp', attr.title('Matches if this regular expression matches (a substring of) the single address in the message From header.')), dom.th('Verified domain', attr.title('Matches if this domain matches an SPF- and/or DKIM-verified (sub)domain.')), dom.th('Headers regexp', attr.title('Matches if these header field/value regular expressions all match (substrings of) the message headers. Header fields and valuees are converted to lower case before matching. Whitespace is trimmed from the value before matching. A header field can occur multiple times in a message, only one instance has to match. For mailing lists, you could match on ^list-id$ with the value typically the mailing list address in angled brackets with @ replaced with a dot, e.g. <name\\.lists\\.example\\.org>.')), dom.th('Is Forward', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. Can only be used together with SMTPMailFromRegexp and VerifiedDomain. SMTPMailFromRegexp must be set to the address used to deliver the forwarded message, e.g. '^user(|\\+.*)@forward\\.example$'. Changes to junk analysis: 1. Messages are not rejected for failing a DMARC policy, because a legitimate forwarded message without valid/intact/aligned DKIM signature would be rejected because any verified SPF domain will be 'unaligned', of the forwarding mail server. 2. The sending mail server IP address, and sending EHLO and MAIL FROM domains and matching DKIM domain aren't used in future reputation-based spam classifications (but other verified DKIM domains are) because the forwarding server is not a useful spam signal for future messages.")), dom.th('List allow domain', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. If this domain matches an SPF- and/or DKIM-verified (sub)domain, the message is accepted without further spam checks, such as a junk filter or DMARC reject evaluation. DMARC rejects should not apply for mailing lists that are not configured to rewrite the From-header of messages that don't have a passing DKIM signature of the From-domain. Otherwise, by rejecting messages, you may be automatically unsubscribed from the mailing list. The assumption is that mailing lists do their own spam filtering/moderation.")), dom.th('Allow rejects to mailbox', attr.title("Influences spam filtering only, this option does not change whether a message matches this ruleset. If a message is classified as spam, it isn't rejected during the SMTP transaction (the normal behaviour), but accepted during the SMTP transaction and delivered to the specified mailbox. The specified mailbox is not automatically cleaned up like the account global Rejects mailbox, unless set to that Rejects mailbox.")), dom.th('Mailbox', attr.title('Mailbox to deliver to if this ruleset matches.')), dom.th('Comment', attr.title('Free-form comments.')), dom.th('Action'))), rulesetsTbody, dom.tfoot(dom.tr(dom.td(attr.colspan('9')), dom.td(dom.clickbutton('Add ruleset', function click() {
 		addRulesetsRow({
 			SMTPMailFromRegexp: '',
 			MsgFromRegexp: '',
@@ -1728,7 +1864,7 @@ const destination = async (name) => {
 		};
 		await check(saveButton, client.DestinationSave(name, dest, newDest));
 		window.location.reload(); // todo: only refresh part of ui
-	}), dom.br(), dom.br(), dom.br(), dom.p("Apple's mail applications don't do account autoconfiguration, and when adding an account it can choose defaults that don't work with modern email servers. Adding an account through a \"mobileconfig\" profile file can be more convenient: It contains the IMAP/SMTP settings such as host name, port, TLS, authentication mechanism and user name. This profile does not contain a login password. Opening the profile adds it under Profiles in System Preferences (macOS) or Settings (iOS), where you can install it. These profiles are not signed, so users will have to ignore the warnings about them being unsigned. ", dom.br(), dom.a(attr.href('https://autoconfig.' + domainName(acc.DNSDomain) + '/profile.mobileconfig?addresses=' + encodeURIComponent(addresses.join(',')) + '&name=' + encodeURIComponent(dest.FullName)), attr.download(''), 'Download .mobileconfig email account profile'), dom.br(), dom.a(attr.href('https://autoconfig.' + domainName(acc.DNSDomain) + '/profile.mobileconfig.qrcode.png?addresses=' + encodeURIComponent(addresses.join(',')) + '&name=' + encodeURIComponent(dest.FullName)), attr.download(''), 'Open QR-code with link to .mobileconfig profile')));
+	}), dom.br(), dom.br(), dom.br(), dom.p("Apple's mail applications don't do account autoconfiguration, and when adding an account it can choose defaults that don't work with modern email servers. Adding an account through a \"mobileconfig\" profile file can be more convenient: It contains the IMAP/SMTP settings such as host name, port, TLS, authentication mechanism and user name. This profile does not contain a login password. Opening the profile in Safari adds it to the Files app on iOS. Opening the profile in the Files app then adds it under Profiles in System Preferences (macOS) or Settings (iOS), where you can install it. These profiles are not signed, so users will have to ignore the warnings about them being unsigned. ", dom.br(), dom.a(attr.href('https://autoconfig.' + domainName(acc.DNSDomain) + '/profile.mobileconfig?addresses=' + encodeURIComponent(addresses.join(',')) + '&name=' + encodeURIComponent(dest.FullName)), attr.download(''), 'Download .mobileconfig email account profile'), dom.br(), dom.a(attr.href('https://autoconfig.' + domainName(acc.DNSDomain) + '/profile.mobileconfig.qrcode.png?addresses=' + encodeURIComponent(addresses.join(',')) + '&name=' + encodeURIComponent(dest.FullName)), attr.download(''), 'Open QR-code with link to .mobileconfig profile')));
 };
 const init = async () => {
 	let curhash;
@@ -1743,15 +1879,20 @@ const init = async () => {
 		const t = h.split('/');
 		page.classList.add('loading');
 		try {
+			let root;
 			if (h === '') {
-				await index();
+				root = await index();
 			}
 			else if (t[0] === 'destinations' && t.length === 2) {
-				await destination(t[1]);
+				root = await destination(t[1]);
 			}
 			else {
-				dom._kids(page, 'page not found');
+				root = dom.div('page not found');
 			}
+			if (window.moxBeforeDisplay) {
+				moxBeforeDisplay(root);
+			}
+			dom._kids(page, root);
 		}
 		catch (err) {
 			console.log({ err });

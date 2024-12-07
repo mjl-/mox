@@ -86,11 +86,13 @@ type Config struct {
 	Dynamic          config.Dynamic // Can only be accessed directly by tests. Use methods on Config for locked access.
 	dynamicMtime     time.Time
 	DynamicLastCheck time.Time // For use by quickstart only to skip checks.
+
 	// From canonical full address (localpart@domain, lower-cased when
 	// case-insensitive, stripped of catchall separator) to account and address.
-	// Domains are IDNA names in utf8.
-	accountDestinations map[string]AccountDestination
-	// Like accountDestinations, but for aliases.
+	// Domains are IDNA names in utf8. Dynamic config lock must be held when accessing.
+	AccountDestinationsLocked map[string]AccountDestination
+
+	// Like AccountDestinationsLocked, but for aliases.
 	aliases map[string]config.Alias
 }
 
@@ -142,9 +144,11 @@ func (c *Config) LogLevels() map[string]slog.Level {
 	return c.copyLogLevels()
 }
 
-func (c *Config) withDynamicLock(fn func()) {
+// DynamicLockUnlock locks the dynamic config, will try updating the latest state
+// from disk, and return an unlock function. Should be called as "defer
+// Conf.DynamicLockUnlock()()".
+func (c *Config) DynamicLockUnlock() func() {
 	c.dynamicMutex.Lock()
-	defer c.dynamicMutex.Unlock()
 	now := time.Now()
 	if now.Sub(c.DynamicLastCheck) > time.Second {
 		c.DynamicLastCheck = now
@@ -159,6 +163,11 @@ func (c *Config) withDynamicLock(fn func()) {
 			}
 		}
 	}
+	return c.dynamicMutex.Unlock
+}
+
+func (c *Config) withDynamicLock(fn func()) {
+	defer c.DynamicLockUnlock()()
 	fn()
 }
 
@@ -170,7 +179,7 @@ func (c *Config) loadDynamic() []error {
 	}
 	c.Dynamic = d
 	c.dynamicMtime = mtime
-	c.accountDestinations = accDests
+	c.AccountDestinationsLocked = accDests
 	c.aliases = aliases
 	c.allowACMEHosts(pkglog, true)
 	return nil
@@ -213,7 +222,7 @@ func (c *Config) DomainLocalparts(d dns.Domain) (map[string]string, map[string]c
 	m := map[string]string{}
 	aliases := map[string]config.Alias{}
 	c.withDynamicLock(func() {
-		for addr, ad := range c.accountDestinations {
+		for addr, ad := range c.AccountDestinationsLocked {
 			if strings.HasSuffix(addr, suffix) {
 				if ad.Catchall {
 					m[""] = ad.Account
@@ -247,7 +256,7 @@ func (c *Config) Account(name string) (acc config.Account, ok bool) {
 
 func (c *Config) AccountDestination(addr string) (accDest AccountDestination, alias *config.Alias, ok bool) {
 	c.withDynamicLock(func() {
-		accDest, ok = c.accountDestinations[addr]
+		accDest, ok = c.AccountDestinationsLocked[addr]
 		if !ok {
 			var a config.Alias
 			a, ok = c.aliases[addr]
@@ -345,9 +354,13 @@ func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 
 // todo future: write config parsing & writing code that can read a config and remembers the exact tokens including newlines and comments, and can write back a modified file. the goal is to be able to write a config file automatically (after changing fields through the ui), but not loose comments and whitespace, to still get useful diffs for storing the config in a version control system.
 
-// must be called with lock held.
+// WriteDynamicLocked prepares an updated internal state for the new dynamic
+// config, then writes it to disk and activates it.
+//
 // Returns ErrConfig if the configuration is not valid.
-func writeDynamic(ctx context.Context, log mlog.Log, c config.Dynamic) error {
+//
+// Must be called with config lock held.
+func WriteDynamicLocked(ctx context.Context, log mlog.Log, c config.Dynamic) error {
 	accDests, aliases, errs := prepareDynamicConfig(ctx, log, ConfigDynamicPath, Conf.Static, &c)
 	if len(errs) > 0 {
 		errstrs := make([]string, len(errs))
@@ -399,7 +412,7 @@ func writeDynamic(ctx context.Context, log mlog.Log, c config.Dynamic) error {
 	Conf.dynamicMtime = fi.ModTime()
 	Conf.DynamicLastCheck = time.Now()
 	Conf.Dynamic = c
-	Conf.accountDestinations = accDests
+	Conf.AccountDestinationsLocked = accDests
 	Conf.aliases = aliases
 
 	Conf.allowACMEHosts(log, true)
@@ -440,7 +453,7 @@ func LoadConfig(ctx context.Context, log mlog.Log, doLoadTLSKeyCerts, checkACMEH
 // SetConfig sets a new config. Not to be used during normal operation.
 func SetConfig(c *Config) {
 	// Cannot just assign *c to Conf, it would copy the mutex.
-	Conf = Config{c.Static, sync.Mutex{}, c.Log, sync.Mutex{}, c.Dynamic, c.dynamicMtime, c.DynamicLastCheck, c.accountDestinations, c.aliases}
+	Conf = Config{c.Static, sync.Mutex{}, c.Log, sync.Mutex{}, c.Dynamic, c.dynamicMtime, c.DynamicLastCheck, c.AccountDestinationsLocked, c.aliases}
 
 	// If we have non-standard CA roots, use them for all HTTPS requests.
 	if Conf.Static.TLS.CertPool != nil {
@@ -491,7 +504,7 @@ func ParseConfig(ctx context.Context, log mlog.Log, p string, checkOnly, doLoadT
 	}
 
 	pp := filepath.Join(filepath.Dir(p), "domains.conf")
-	c.Dynamic, c.dynamicMtime, c.accountDestinations, c.aliases, errs = ParseDynamicConfig(ctx, log, pp, c.Static)
+	c.Dynamic, c.dynamicMtime, c.AccountDestinationsLocked, c.aliases, errs = ParseDynamicConfig(ctx, log, pp, c.Static)
 
 	if !checkOnly {
 		c.allowACMEHosts(log, checkACMEHosts)
@@ -1920,8 +1933,7 @@ func loadTLSKeyCerts(configFile, kind string, ctls *config.TLS) error {
 		certs = append(certs, cert)
 	}
 	ctls.Config = &tls.Config{
-		Certificates:           certs,
-		SessionTicketsDisabled: true,
+		Certificates: certs,
 	}
 	ctls.ConfigFallback = ctls.Config
 	return nil

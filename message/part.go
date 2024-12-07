@@ -598,6 +598,70 @@ func (p *Part) IsDSN() bool {
 		(p.Parts[1].MediaSubType == "DELIVERY-STATUS" || p.Parts[1].MediaSubType == "GLOBAL-DELIVERY-STATUS")
 }
 
+var ErrParamEncoding = errors.New("bad header parameter encoding")
+
+// DispositionFilename tries to parse the disposition header and the "filename"
+// parameter. If the filename parameter is absent or can't be parsed, the "name"
+// parameter from the Content-Type header is used for the filename. The returned
+// filename is decoded according to RFC 2231 or RFC 2047. This is a best-effort
+// attempt to find a filename for a part. If no Content-Disposition header, or
+// filename was found, empty values without error are returned.
+//
+// If the returned error is an ErrParamEncoding, it can be treated as a diagnostic
+// and a filename may still be returned.
+func (p *Part) DispositionFilename() (disposition string, filename string, err error) {
+	h, err := p.Header()
+	if err != nil {
+		return "", "", fmt.Errorf("parsing header: %v", err)
+	}
+	var disp string
+	var params map[string]string
+	cd := h.Get("Content-Disposition")
+	if cd != "" {
+		disp, params, err = mime.ParseMediaType(cd)
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("%w: parsing disposition header: %v", ErrParamEncoding, err)
+	}
+	filename, err = tryDecodeParam(params["filename"])
+	if filename == "" {
+		s, err2 := tryDecodeParam(p.ContentTypeParams["name"])
+		filename = s
+		if err == nil {
+			err = err2
+		}
+	}
+	return disp, filename, err
+}
+
+// Attempt q/b-word-decode name, coming from Content-Type "name" field or
+// Content-Disposition "filename" field.
+//
+// RFC 2231 specifies an encoding for non-ascii values in mime header parameters. But
+// it appears common practice to instead just q/b-word encode the values.
+// Thunderbird and gmail.com do this for the Content-Type "name" parameter.
+// gmail.com also does that for the Content-Disposition "filename" parameter, where
+// Thunderbird uses the RFC 2231-defined encoding. Go's mime.ParseMediaType parses
+// the mechanism specified in RFC 2231 only. The value for "name" we get here would
+// already be decoded properly for standards-compliant headers, like
+// "filename*0*=UTF-8”%...; filename*1*=%.... We'll look for Q/B-word encoding
+// markers ("=?"-prefix or "?="-suffix) and try to decode if present. This would
+// only cause trouble for filenames having this prefix/suffix.
+func tryDecodeParam(name string) (string, error) {
+	if name == "" || !strings.HasPrefix(name, "=?") && !strings.HasSuffix(name, "?=") {
+		return name, nil
+	}
+	// todo: find where this is allowed. it seems quite common. perhaps we should remove the pedantic check?
+	if Pedantic {
+		return name, fmt.Errorf("%w: attachment contains rfc2047 q/b-word-encoded mime parameter instead of rfc2231-encoded", ErrParamEncoding)
+	}
+	s, err := wordDecoder.DecodeHeader(name)
+	if err != nil {
+		return name, fmt.Errorf("%w: q/b-word decoding mime parameter: %v", ErrParamEncoding, err)
+	}
+	return s, nil
+}
+
 // Reader returns a reader for the decoded body content.
 func (p *Part) Reader() io.Reader {
 	return p.bodyReader(p.RawReader())

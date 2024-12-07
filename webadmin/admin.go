@@ -45,6 +45,7 @@ import (
 	"github.com/mjl-/sherpadoc"
 	"github.com/mjl-/sherpaprom"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dmarc"
@@ -80,10 +81,11 @@ var adminHTML []byte
 var adminJS []byte
 
 var webadminFile = &mox.WebappFile{
-	HTML:     adminHTML,
-	JS:       adminJS,
-	HTMLPath: filepath.FromSlash("webadmin/admin.html"),
-	JSPath:   filepath.FromSlash("webadmin/admin.js"),
+	HTML:       adminHTML,
+	JS:         adminJS,
+	HTMLPath:   filepath.FromSlash("webadmin/admin.html"),
+	JSPath:     filepath.FromSlash("webadmin/admin.js"),
+	CustomStem: "webadmin",
 }
 
 var adminDoc = mustParseAPI("admin", adminapiJSON)
@@ -208,7 +210,7 @@ func xcheckf(ctx context.Context, err error, format string, args ...any) {
 		return
 	}
 	// If caller tried saving a config that is invalid, or because of a bad request, cause a user error.
-	if errors.Is(err, mox.ErrConfig) || errors.Is(err, mox.ErrRequest) {
+	if errors.Is(err, mox.ErrConfig) || errors.Is(err, admin.ErrRequest) {
 		xcheckuserf(ctx, err, format, args...)
 	}
 
@@ -1897,7 +1899,7 @@ func (Admin) MonitorDNSBLsSave(ctx context.Context, text string) {
 		zones = append(zones, d)
 	}
 
-	err := mox.ConfigSave(ctx, func(conf *config.Dynamic) {
+	err := admin.ConfigSave(ctx, func(conf *config.Dynamic) {
 		conf.MonitorDNSBLs = make([]string, len(zones))
 		conf.MonitorDNSBLZones = nil
 		for i, z := range zones {
@@ -1943,7 +1945,7 @@ func DomainRecords(ctx context.Context, log mlog.Log, domain string) []string {
 		}
 	}
 
-	records, err := mox.DomainRecords(dc, d, result.Authentic, certIssuerDomainName, acmeAccountURI)
+	records, err := admin.DomainRecords(dc, d, result.Authentic, certIssuerDomainName, acmeAccountURI)
 	xcheckf(ctx, err, "dns records")
 	return records
 }
@@ -1953,7 +1955,7 @@ func (Admin) DomainAdd(ctx context.Context, domain, accountName, localpart strin
 	d, err := dns.ParseDomain(domain)
 	xcheckuserf(ctx, err, "parsing domain")
 
-	err = mox.DomainAdd(ctx, d, accountName, smtp.Localpart(norm.NFC.String(localpart)))
+	err = admin.DomainAdd(ctx, d, accountName, smtp.Localpart(norm.NFC.String(localpart)))
 	xcheckf(ctx, err, "adding domain")
 }
 
@@ -1962,32 +1964,32 @@ func (Admin) DomainRemove(ctx context.Context, domain string) {
 	d, err := dns.ParseDomain(domain)
 	xcheckuserf(ctx, err, "parsing domain")
 
-	err = mox.DomainRemove(ctx, d)
+	err = admin.DomainRemove(ctx, d)
 	xcheckf(ctx, err, "removing domain")
 }
 
 // AccountAdd adds existing a new account, with an initial email address, and
 // reloads the configuration.
 func (Admin) AccountAdd(ctx context.Context, accountName, address string) {
-	err := mox.AccountAdd(ctx, accountName, address)
+	err := admin.AccountAdd(ctx, accountName, address)
 	xcheckf(ctx, err, "adding account")
 }
 
 // AccountRemove removes an existing account and reloads the configuration.
 func (Admin) AccountRemove(ctx context.Context, accountName string) {
-	err := mox.AccountRemove(ctx, accountName)
+	err := admin.AccountRemove(ctx, accountName)
 	xcheckf(ctx, err, "removing account")
 }
 
 // AddressAdd adds a new address to the account, which must already exist.
 func (Admin) AddressAdd(ctx context.Context, address, accountName string) {
-	err := mox.AddressAdd(ctx, address, accountName)
+	err := admin.AddressAdd(ctx, address, accountName)
 	xcheckf(ctx, err, "adding address")
 }
 
 // AddressRemove removes an existing address.
 func (Admin) AddressRemove(ctx context.Context, address string) {
-	err := mox.AddressRemove(ctx, address)
+	err := admin.AddressRemove(ctx, address)
 	xcheckf(ctx, err, "removing address")
 }
 
@@ -2011,7 +2013,7 @@ func (Admin) SetPassword(ctx context.Context, accountName, password string) {
 
 // AccountSettingsSave set new settings for an account that only an admin can set.
 func (Admin) AccountSettingsSave(ctx context.Context, accountName string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, maxMsgSize int64, firstTimeSenderDelay bool) {
-	err := mox.AccountSave(ctx, accountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, accountName, func(acc *config.Account) {
 		acc.MaxOutgoingMessagesPerDay = maxOutgoingMessagesPerDay
 		acc.MaxFirstTimeRecipientsPerDay = maxFirstTimeRecipientsPerDay
 		acc.QuotaMessageSize = maxMsgSize
@@ -2022,11 +2024,11 @@ func (Admin) AccountSettingsSave(ctx context.Context, accountName string, maxOut
 
 // ClientConfigsDomain returns configurations for email clients, IMAP and
 // Submission (SMTP) for the domain.
-func (Admin) ClientConfigsDomain(ctx context.Context, domain string) mox.ClientConfigs {
+func (Admin) ClientConfigsDomain(ctx context.Context, domain string) admin.ClientConfigs {
 	d, err := dns.ParseDomain(domain)
 	xcheckuserf(ctx, err, "parsing domain")
 
-	cc, err := mox.ClientConfigsDomain(d)
+	cc, err := admin.ClientConfigsDomain(d)
 	xcheckf(ctx, err, "client config for domain")
 	return cc
 }
@@ -2280,7 +2282,7 @@ func (Admin) WebserverConfigSave(ctx context.Context, oldConf, newConf Webserver
 		domainRedirects[x[0]] = x[1]
 	}
 
-	err := mox.ConfigSave(ctx, func(conf *config.Dynamic) {
+	err := admin.ConfigSave(ctx, func(conf *config.Dynamic) {
 		conf.WebDomainRedirects = domainRedirects
 		conf.WebHandlers = newConf.WebHandlers
 	})
@@ -2457,7 +2459,7 @@ func (Admin) Config(ctx context.Context) config.Dynamic {
 
 // AccountRoutesSave saves routes for an account.
 func (Admin) AccountRoutesSave(ctx context.Context, accountName string, routes []config.Route) {
-	err := mox.AccountSave(ctx, accountName, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, accountName, func(acc *config.Account) {
 		acc.Routes = routes
 	})
 	xcheckf(ctx, err, "saving account routes")
@@ -2465,7 +2467,7 @@ func (Admin) AccountRoutesSave(ctx context.Context, accountName string, routes [
 
 // DomainRoutesSave saves routes for a domain.
 func (Admin) DomainRoutesSave(ctx context.Context, domainName string, routes []config.Route) {
-	err := mox.DomainSave(ctx, domainName, func(domain *config.Domain) error {
+	err := admin.DomainSave(ctx, domainName, func(domain *config.Domain) error {
 		domain.Routes = routes
 		return nil
 	})
@@ -2474,7 +2476,7 @@ func (Admin) DomainRoutesSave(ctx context.Context, domainName string, routes []c
 
 // RoutesSave saves global routes.
 func (Admin) RoutesSave(ctx context.Context, routes []config.Route) {
-	err := mox.ConfigSave(ctx, func(config *config.Dynamic) {
+	err := admin.ConfigSave(ctx, func(config *config.Dynamic) {
 		config.Routes = routes
 	})
 	xcheckf(ctx, err, "saving global routes")
@@ -2482,7 +2484,7 @@ func (Admin) RoutesSave(ctx context.Context, routes []config.Route) {
 
 // DomainDescriptionSave saves the description for a domain.
 func (Admin) DomainDescriptionSave(ctx context.Context, domainName, descr string) {
-	err := mox.DomainSave(ctx, domainName, func(domain *config.Domain) error {
+	err := admin.DomainSave(ctx, domainName, func(domain *config.Domain) error {
 		domain.Description = descr
 		return nil
 	})
@@ -2491,7 +2493,7 @@ func (Admin) DomainDescriptionSave(ctx context.Context, domainName, descr string
 
 // DomainClientSettingsDomainSave saves the client settings domain for a domain.
 func (Admin) DomainClientSettingsDomainSave(ctx context.Context, domainName, clientSettingsDomain string) {
-	err := mox.DomainSave(ctx, domainName, func(domain *config.Domain) error {
+	err := admin.DomainSave(ctx, domainName, func(domain *config.Domain) error {
 		domain.ClientSettingsDomain = clientSettingsDomain
 		return nil
 	})
@@ -2501,7 +2503,7 @@ func (Admin) DomainClientSettingsDomainSave(ctx context.Context, domainName, cli
 // DomainLocalpartConfigSave saves the localpart catchall and case-sensitive
 // settings for a domain.
 func (Admin) DomainLocalpartConfigSave(ctx context.Context, domainName, localpartCatchallSeparator string, localpartCaseSensitive bool) {
-	err := mox.DomainSave(ctx, domainName, func(domain *config.Domain) error {
+	err := admin.DomainSave(ctx, domainName, func(domain *config.Domain) error {
 		domain.LocalpartCatchallSeparator = localpartCatchallSeparator
 		domain.LocalpartCaseSensitive = localpartCaseSensitive
 		return nil
@@ -2513,7 +2515,7 @@ func (Admin) DomainLocalpartConfigSave(ctx context.Context, domainName, localpar
 // configuration for a domain. If localpart is empty, processing reports is
 // disabled.
 func (Admin) DomainDMARCAddressSave(ctx context.Context, domainName, localpart, domain, account, mailbox string) {
-	err := mox.DomainSave(ctx, domainName, func(d *config.Domain) error {
+	err := admin.DomainSave(ctx, domainName, func(d *config.Domain) error {
 		if localpart == "" {
 			d.DMARC = nil
 		} else {
@@ -2533,7 +2535,7 @@ func (Admin) DomainDMARCAddressSave(ctx context.Context, domainName, localpart, 
 // configuration for a domain. If localpart is empty, processing reports is
 // disabled.
 func (Admin) DomainTLSRPTAddressSave(ctx context.Context, domainName, localpart, domain, account, mailbox string) {
-	err := mox.DomainSave(ctx, domainName, func(d *config.Domain) error {
+	err := admin.DomainSave(ctx, domainName, func(d *config.Domain) error {
 		if localpart == "" {
 			d.TLSRPT = nil
 		} else {
@@ -2552,7 +2554,7 @@ func (Admin) DomainTLSRPTAddressSave(ctx context.Context, domainName, localpart,
 // DomainMTASTSSave saves the MTASTS policy for a domain. If policyID is empty,
 // no MTASTS policy is served.
 func (Admin) DomainMTASTSSave(ctx context.Context, domainName, policyID string, mode mtasts.Mode, maxAge time.Duration, mx []string) {
-	err := mox.DomainSave(ctx, domainName, func(d *config.Domain) error {
+	err := admin.DomainSave(ctx, domainName, func(d *config.Domain) error {
 		if policyID == "" {
 			d.MTASTS = nil
 		} else {
@@ -2575,7 +2577,7 @@ func (Admin) DomainDKIMAdd(ctx context.Context, domainName, selector, algorithm,
 	xcheckuserf(ctx, err, "parsing domain")
 	s, err := dns.ParseDomain(selector)
 	xcheckuserf(ctx, err, "parsing selector")
-	err = mox.DKIMAdd(ctx, d, s, algorithm, hash, headerRelaxed, bodyRelaxed, seal, headers, lifetime)
+	err = admin.DKIMAdd(ctx, d, s, algorithm, hash, headerRelaxed, bodyRelaxed, seal, headers, lifetime)
 	xcheckf(ctx, err, "adding dkim key")
 }
 
@@ -2585,7 +2587,7 @@ func (Admin) DomainDKIMRemove(ctx context.Context, domainName, selector string) 
 	xcheckuserf(ctx, err, "parsing domain")
 	s, err := dns.ParseDomain(selector)
 	xcheckuserf(ctx, err, "parsing selector")
-	err = mox.DKIMRemove(ctx, d, s)
+	err = admin.DKIMRemove(ctx, d, s)
 	xcheckf(ctx, err, "removing dkim key")
 }
 
@@ -2599,7 +2601,7 @@ func (Admin) DomainDKIMSave(ctx context.Context, domainName string, selectors ma
 		}
 	}
 
-	err := mox.DomainSave(ctx, domainName, func(d *config.Domain) error {
+	err := admin.DomainSave(ctx, domainName, func(d *config.Domain) error {
 		if len(selectors) != len(d.DKIM.Selectors) {
 			xcheckuserf(ctx, fmt.Errorf("cannot add/remove dkim selectors with this function"), "checking selectors")
 		}
@@ -2648,7 +2650,7 @@ func xparseAddress(ctx context.Context, lp, domain string) smtp.Address {
 
 func (Admin) AliasAdd(ctx context.Context, aliaslp string, domainName string, alias config.Alias) {
 	addr := xparseAddress(ctx, aliaslp, domainName)
-	err := mox.AliasAdd(ctx, addr, alias)
+	err := admin.AliasAdd(ctx, addr, alias)
 	xcheckf(ctx, err, "adding alias")
 }
 
@@ -2659,24 +2661,28 @@ func (Admin) AliasUpdate(ctx context.Context, aliaslp string, domainName string,
 		ListMembers:  listMembers,
 		AllowMsgFrom: allowMsgFrom,
 	}
-	err := mox.AliasUpdate(ctx, addr, alias)
+	err := admin.AliasUpdate(ctx, addr, alias)
 	xcheckf(ctx, err, "saving alias")
 }
 
 func (Admin) AliasRemove(ctx context.Context, aliaslp string, domainName string) {
 	addr := xparseAddress(ctx, aliaslp, domainName)
-	err := mox.AliasRemove(ctx, addr)
+	err := admin.AliasRemove(ctx, addr)
 	xcheckf(ctx, err, "removing alias")
 }
 
 func (Admin) AliasAddressesAdd(ctx context.Context, aliaslp string, domainName string, addresses []string) {
 	addr := xparseAddress(ctx, aliaslp, domainName)
-	err := mox.AliasAddressesAdd(ctx, addr, addresses)
+	err := admin.AliasAddressesAdd(ctx, addr, addresses)
 	xcheckf(ctx, err, "adding address to alias")
 }
 
 func (Admin) AliasAddressesRemove(ctx context.Context, aliaslp string, domainName string, addresses []string) {
 	addr := xparseAddress(ctx, aliaslp, domainName)
-	err := mox.AliasAddressesRemove(ctx, addr, addresses)
+	err := admin.AliasAddressesRemove(ctx, addr, addresses)
 	xcheckf(ctx, err, "removing address from alias")
+}
+
+func (Admin) TLSPublicKeys(ctx context.Context, accountOpt string) ([]store.TLSPublicKey, error) {
+	return store.TLSPublicKeyList(ctx, accountOpt)
 }

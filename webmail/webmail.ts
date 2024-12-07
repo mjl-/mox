@@ -131,9 +131,10 @@ ensureCSS('.autosize::after', {content: 'attr(data-value)', marginRight: '1em', 
 // From HTML.
 declare let page: HTMLElement
 declare let moxversion: string
-declare let moxgoversion: string
 declare let moxgoos: string
 declare let moxgoarch: string
+// From customization script.
+declare let moxBeforeDisplay: (root: HTMLElement) => void
 
 // All logging goes through log() instead of console.log, except "should not happen" logging.
 let log: (...args: any[]) => void = () => {}
@@ -261,6 +262,7 @@ let rejectsMailbox: string = ''
 let lastServerVersion: string = ''
 
 const login = async (reason: string) => {
+	popupOpen = true // Prevent global key event handler from consuming keys.
 	return new Promise<string>((resolve: (v: string) => void, _) => {
 		const origFocus = document.activeElement
 		let reasonElem: HTMLElement
@@ -307,6 +309,7 @@ const login = async (reason: string) => {
 								if (origFocus && origFocus instanceof HTMLElement && origFocus.parentNode) {
 									origFocus.focus()
 								}
+								popupOpen = false
 								resolve(token)
 							} catch (err) {
 								console.log('login error', err)
@@ -323,6 +326,7 @@ const login = async (reason: string) => {
 								autosize=dom.span(dom._class('autosize'),
 									username=dom.input(
 										attr.required(''),
+										attr.autocomplete('username'),
 										attr.placeholder('jane@example.org'),
 										function change() { autosize.dataset.value = username.value },
 										function input() { autosize.dataset.value = username.value },
@@ -332,7 +336,7 @@ const login = async (reason: string) => {
 							dom.label(
 								style({display: 'block', marginBottom: '2ex'}),
 								dom.div('Password', style({marginBottom: '.5ex'})),
-								password=dom.input(attr.type('password'), attr.required('')),
+								password=dom.input(attr.type('password'), attr.autocomplete('current-password'), attr.required('')),
 							),
 							dom.div(
 								style({textAlign: 'center'}),
@@ -1226,7 +1230,7 @@ const cmdHelp = async () => {
 						['q', 'move to junk folder'],
 						['Q', 'mark not junk'],
 						['a', 'move to archive folder'],
-						['M', 'mark unread'],
+						['M', 'mark unread and clear (non)junk flags'],
 						['m', 'mark read'],
 						['u', 'to next unread message'],
 						['p', 'to root of thread or previous thread'],
@@ -1335,7 +1339,7 @@ const cmdHelp = async () => {
 						window.alert('"mailto:" protocol handler unregistered.')
 					}),
 				),
-				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version ', moxversion, ', built with ', moxgoversion, ', see ', dom.a(attr.href('licenses.txt'), 'licenses'), '.', dom.br(), 'Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new')),
+				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version ', moxversion, ', see ', dom.a(attr.href('licenses.txt'), 'licenses'), '.', dom.br(), 'Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new')),
 			),
 		),
 	)
@@ -1465,7 +1469,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	let draftSavePromise = Promise.resolve(0)
 	let draftLastText = opts.body
 
-	const draftCancelSave = () => {
+	const draftCancelSaveTimer = () => {
 		if (draftSaveTimer) {
 			window.clearTimeout(draftSaveTimer)
 			draftSaveTimer = 0
@@ -1484,7 +1488,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	}
 
 	const draftSave = async () => {
-		draftCancelSave()
+		draftCancelSaveTimer()
 		let replyTo = ''
 		if (replytoViews && replytoViews.length === 1 && replytoViews[0].input.value) {
 			replyTo = replytoViews[0].input.value
@@ -1505,7 +1509,11 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 			throw new Error('no designated drafts mailbox')
 		}
 		draftSavePromise = client.MessageCompose(cm, mbdrafts.ID)
-		draftMessageID = await draftSavePromise
+		try {
+			draftMessageID = await draftSavePromise
+		} finally {
+			draftSavePromise = Promise.resolve(0)
+		}
 		draftLastText = cm.TextBody
 	}
 
@@ -1519,7 +1527,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	// triggered. But we still have the beforeunload handler that checks for
 	// unsavedChanges to protect the user in such cases.
 	const cmdClose = async () => {
-		draftCancelSave()
+		draftCancelSaveTimer()
 		await draftSavePromise
 		if (unsavedChanges()) {
 			const action = await new Promise<string>((resolve) => {
@@ -1561,13 +1569,13 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	}
 
 	const cmdSave = async () => {
-		draftCancelSave()
+		draftCancelSaveTimer()
 		await draftSavePromise
 		await withStatus('Saving draft', draftSave())
 	}
 
 	const submit = async (archive: boolean) => {
-		draftCancelSave()
+		draftCancelSaveTimer()
 		await draftSavePromise
 
 		const files = await new Promise<api.File[]>((resolve, reject) => {
@@ -1950,9 +1958,13 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		initHeight ? style({height: initHeight+'px'}) : [],
 		dom.div(
 			css('composeResizeGrab', {position: 'absolute', marginTop: '-1em', marginLeft: '-1em', width: '1em', height: '1em', cursor: 'nw-resize'}),
-			function mousedown(e: MouseEvent) {
+			async function mousedown(e: MouseEvent) {
+				// Disable pointer events on the message view. If it has an iframe with a message,
+				// mouse events while dragging would be consumed by the iframe, breaking our
+				// resize.
+				page.style.pointerEvents = 'none'
 				resizeLast = null
-				startDrag(e, (e: MouseEvent) => {
+				await startDrag(e, (e: MouseEvent) => {
 					if (resizeLast) {
 						const bounds = composeElem.getBoundingClientRect()
 						const width = Math.round(bounds.width + resizeLast.x - e.clientX)
@@ -1969,6 +1981,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 					}
 					resizeLast = {x: e.clientX, y: e.clientY}
 				})
+				page.style.pointerEvents = ''
 			},
 		),
 		dom.form(
@@ -3609,7 +3622,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk) {
 			window.setTimeout(async () => {
 				const mailboxIsReject = () => !!listMailboxes().find(mb => mb.ID === miv.messageitem.Message.MailboxID && mb.Name === rejectsMailbox)
-				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxIsReject()) {
+				if (!miv.messageitem.Message.Junk && !miv.messageitem.Message.Notjunk && miv.messageitem.Message.Seen && miv.messageitem.Message.ID === msglistView.activeMessageID() && !mailboxIsReject()) {
 					await withStatus('Marking current message as not junk', client.FlagsAdd([miv.messageitem.Message.ID], ['$notjunk']))
 				}
 			}, 5*1000)
@@ -3759,7 +3772,7 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 	}
 	const cmdMarkNotJunk = async () => { await withStatus('Marking as not junk', client.FlagsAdd(mlv.selected().map(miv => miv.messageitem.Message.ID), ['$notjunk'])) }
 	const cmdMarkRead = async () => { await withStatus('Marking as read', client.FlagsAdd(mlv.selected().map(miv => miv.messageitem.Message.ID), ['\\seen'])) }
-	const cmdMarkUnread = async () => { await withStatus('Marking as not read', client.FlagsClear(mlv.selected().map(miv => miv.messageitem.Message.ID), ['\\seen'])) }
+	const cmdMarkUnread = async () => { await withStatus('Marking as not read', client.FlagsClear(mlv.selected().map(miv => miv.messageitem.Message.ID), ['\\seen', '$junk', '$notjunk'])) }
 	const cmdMute = async () => {
 		const l = mlv.selected()
 		await withStatus('Muting thread', client.ThreadMute(l.map(miv => miv.messageitem.Message.ID), true))
@@ -7048,6 +7061,9 @@ const init = async () => {
 		autoselectLayout()
 	} else {
 		selectLayout(layoutElem.value)
+	}
+	if ((window as any).moxBeforeDisplay) {
+		moxBeforeDisplay(webmailroot)
 	}
 	dom._kids(page, webmailroot)
 	checkMsglistWidth()

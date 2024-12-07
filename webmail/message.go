@@ -2,6 +2,7 @@ package webmail
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -275,21 +276,16 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 		case "TEXT/PLAIN", "/":
 			// Don't include if Content-Disposition attachment.
 			if full || msgitem {
-				// todo: should have this, and perhaps all content-* headers, preparsed in message.Part?
-				h, err := p.Header()
-				log.Check(err, "parsing attachment headers", slog.Int64("msgid", m.ID))
-				cp := h.Get("Content-Disposition")
-				if cp != "" {
-					disp, params, err := mime.ParseMediaType(cp)
-					log.Check(err, "parsing content-disposition", slog.String("cp", cp))
-					if strings.EqualFold(disp, "attachment") {
-						name := tryDecodeParam(log, p.ContentTypeParams["name"])
-						if name == "" {
-							name = tryDecodeParam(log, params["filename"])
-						}
-						addAttachment(Attachment{path, name, p}, parentMixed)
-						return
-					}
+				disp, name, err := p.DispositionFilename()
+				if err != nil && errors.Is(err, message.ErrParamEncoding) {
+					log.Debugx("parsing disposition/filename", err)
+				} else if err != nil {
+					rerr = fmt.Errorf("reading disposition/filename: %v", err)
+					return
+				}
+				if strings.EqualFold(disp, "attachment") {
+					addAttachment(Attachment{path, name, p}, parentMixed)
+					return
 				}
 			}
 

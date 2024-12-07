@@ -1829,11 +1829,17 @@ func attachmentTypes(log mlog.Log, m store.Message, state *msgState) (map[Attach
 		mt := strings.ToLower(a.Part.MediaType + "/" + a.Part.MediaSubType)
 		if t, ok := attachmentMimetypes[mt]; ok {
 			types[t] = true
-		} else if ext := filepath.Ext(tryDecodeParam(log, a.Part.ContentTypeParams["name"])); ext != "" {
+			continue
+		}
+		_, filename, err := a.Part.DispositionFilename()
+		if err != nil && errors.Is(err, message.ErrParamEncoding) {
+			log.Debugx("parsing disposition/filename", err)
+		} else if err != nil {
+			return nil, fmt.Errorf("reading disposition/filename: %v", err)
+		}
+		if ext := filepath.Ext(filename); ext != "" {
 			if t, ok := attachmentExtensions[strings.ToLower(ext)]; ok {
 				types[t] = true
-			} else {
-				continue
 			}
 		}
 	}

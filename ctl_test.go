@@ -4,8 +4,12 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	cryptorand "crypto/rand"
+	"crypto/x509"
 	"flag"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -49,6 +53,10 @@ func TestCtl(t *testing.T) {
 	err := queue.Init()
 	tcheck(t, err, "queue init")
 	defer queue.Shutdown()
+
+	err = store.Init(ctxbg)
+	tcheck(t, err, "store init")
+	defer store.Close()
 
 	testctl := func(fn func(clientctl *ctl)) {
 		t.Helper()
@@ -334,6 +342,43 @@ func TestCtl(t *testing.T) {
 		ctlcmdConfigAliasRemove(ctl, "support@mox.example")
 	})
 
+	// accounttlspubkeyadd
+	certDER := fakeCert(t)
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigTlspubkeyAdd(ctl, "mjl@mox.example", "testkey", false, certDER)
+	})
+
+	// "accounttlspubkeylist"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigTlspubkeyList(ctl, "")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigTlspubkeyList(ctl, "mjl")
+	})
+
+	tpkl, err := store.TLSPublicKeyList(ctxbg, "")
+	tcheck(t, err, "list tls public keys")
+	if len(tpkl) != 1 {
+		t.Fatalf("got %d tls public keys, expected 1", len(tpkl))
+	}
+	fingerprint := tpkl[0].Fingerprint
+
+	// "accounttlspubkeyget"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigTlspubkeyGet(ctl, fingerprint)
+	})
+
+	// "accounttlspubkeyrm"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigTlspubkeyRemove(ctl, fingerprint)
+	})
+
+	tpkl, err = store.TLSPublicKeyList(ctxbg, "")
+	tcheck(t, err, "list tls public keys")
+	if len(tpkl) != 0 {
+		t.Fatalf("got %d tls public keys, expected 0", len(tpkl))
+	}
+
 	// "loglevels"
 	testctl(func(ctl *ctl) {
 		ctlcmdLoglevels(ctl)
@@ -452,4 +497,16 @@ func TestCtl(t *testing.T) {
 		flagArgs: []string{filepath.FromSlash("testdata/ctl/data/tmp/backup-data")},
 	}
 	cmdVerifydata(&xcmd)
+}
+
+func fakeCert(t *testing.T) []byte {
+	t.Helper()
+	seed := make([]byte, ed25519.SeedSize)
+	privKey := ed25519.NewKeyFromSeed(seed) // Fake key, don't use this for real!
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1), // Required field...
+	}
+	localCertBuf, err := x509.CreateCertificate(cryptorand.Reader, template, template, privKey.Public(), privKey)
+	tcheck(t, err, "making certificate")
+	return localCertBuf
 }

@@ -6,9 +6,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ed25519"
+	cryptorand "crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -484,6 +489,65 @@ func TestAccount(t *testing.T) {
 	api.RejectsSave(ctx, "Rejects", false)
 	api.RejectsSave(ctx, "", false) // Restore.
 
+	// Make cert for TLSPublicKey.
+	certBuf := fakeCert(t)
+	var b bytes.Buffer
+	err = pem.Encode(&b, &pem.Block{Type: "CERTIFICATE", Bytes: certBuf})
+	tcheck(t, err, "encoding certificate as pem")
+	certPEM := b.String()
+
+	err = store.Init(ctx)
+	tcheck(t, err, "store init")
+	defer func() {
+		err := store.Close()
+		tcheck(t, err, "store close")
+	}()
+
+	tpkl, err := api.TLSPublicKeys(ctx)
+	tcheck(t, err, "list tls public keys")
+	tcompare(t, len(tpkl), 0)
+
+	tpk, err := api.TLSPublicKeyAdd(ctx, "mjl☺@mox.example", "", false, certPEM)
+	tcheck(t, err, "add tls public key")
+	// Key already exists.
+	tneedErrorCode(t, "user:error", func() { api.TLSPublicKeyAdd(ctx, "mjl☺@mox.example", "", false, certPEM) })
+
+	tpkl, err = api.TLSPublicKeys(ctx)
+	tcheck(t, err, "list tls public keys")
+	tcompare(t, tpkl, []store.TLSPublicKey{tpk})
+
+	tpk.NoIMAPPreauth = true
+	err = api.TLSPublicKeyUpdate(ctx, tpk)
+	tcheck(t, err, "tls public key update")
+	badtpk := tpk
+	badtpk.Fingerprint = "bogus"
+	tneedErrorCode(t, "user:error", func() { api.TLSPublicKeyUpdate(ctx, badtpk) })
+
+	tpkl, err = api.TLSPublicKeys(ctx)
+	tcheck(t, err, "list tls public keys")
+	tcompare(t, len(tpkl), 1)
+	tcompare(t, tpkl[0].NoIMAPPreauth, true)
+
+	err = api.TLSPublicKeyRemove(ctx, tpk.Fingerprint)
+	tcheck(t, err, "tls public key remove")
+	tneedErrorCode(t, "user:error", func() { api.TLSPublicKeyRemove(ctx, tpk.Fingerprint) })
+
+	tpkl, err = api.TLSPublicKeys(ctx)
+	tcheck(t, err, "list tls public keys")
+	tcompare(t, len(tpkl), 0)
+
 	api.Logout(ctx)
 	tneedErrorCode(t, "server:error", func() { api.Logout(ctx) })
+}
+
+func fakeCert(t *testing.T) []byte {
+	t.Helper()
+	seed := make([]byte, ed25519.SeedSize)
+	privKey := ed25519.NewKeyFromSeed(seed) // Fake key, don't use this for real!
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1), // Required field...
+	}
+	localCertBuf, err := x509.CreateCertificate(cryptorand.Reader, template, template, privKey.Public(), privKey)
+	tcheck(t, err, "making certificate")
+	return localCertBuf
 }

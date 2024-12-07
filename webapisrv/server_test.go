@@ -418,7 +418,9 @@ func TestServer(t *testing.T) {
 	tcheckf(t, err, "reading raw message")
 	part, err := message.EnsurePart(log.Logger, true, bytes.NewReader(b.Bytes()), int64(b.Len()))
 	tcheckf(t, err, "parsing raw message")
-	tcompare(t, webhook.PartStructure(&part), msgRes.Structure)
+	structure, err := webhook.PartStructure(log, &part)
+	tcheckf(t, err, "part structure")
+	tcompare(t, structure, msgRes.Structure)
 
 	_, err = client.MessageRawGet(ctxbg, webapi.MessageRawGetRequest{MsgID: 1 + 999})
 	terrcode(t, err, "messageNotFound")

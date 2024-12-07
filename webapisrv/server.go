@@ -199,7 +199,7 @@ var docsIndex []byte
 
 func init() {
 	var methods []string
-	mt := reflect.TypeOf((*webapi.Methods)(nil)).Elem()
+	mt := reflect.TypeFor[webapi.Methods]()
 	n := mt.NumMethod()
 	for i := 0; i < n; i++ {
 		methods = append(methods, mt.Method(i).Name)
@@ -1263,9 +1263,12 @@ func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (r
 		MailboxName:         mb.Name,
 	}
 
+	structure, err := webhook.PartStructure(log, &p)
+	xcheckf(err, "parsing structure")
+
 	result := webapi.MessageGetResult{
 		Message:   msg,
-		Structure: webhook.PartStructure(&p),
+		Structure: structure,
 		Meta:      meta,
 	}
 	return result, nil

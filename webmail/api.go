@@ -33,6 +33,7 @@ import (
 	"github.com/mjl-/sherpadoc"
 	"github.com/mjl-/sherpaprom"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dkim"
 	"github.com/mjl-/mox/dns"
@@ -903,7 +904,12 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 							ap = ap.Parts[xp]
 						}
 
-						filename := tryDecodeParam(log, ap.ContentTypeParams["name"])
+						_, filename, err := ap.DispositionFilename()
+						if err != nil && errors.Is(err, message.ErrParamEncoding) {
+							log.Debugx("parsing disposition/filename", err)
+						} else {
+							xcheckf(ctx, err, "reading disposition")
+						}
 						if filename == "" {
 							filename = "unnamed.bin"
 						}
@@ -1986,7 +1992,7 @@ func parseListID(s string) (listID string, dom dns.Domain) {
 func (Webmail) RulesetAdd(ctx context.Context, rcptTo string, ruleset config.Ruleset) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 
-	err := mox.AccountSave(ctx, reqInfo.Account.Name, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.Account.Name, func(acc *config.Account) {
 		dest, ok := acc.Destinations[rcptTo]
 		if !ok {
 			// todo: we could find the catchall address and add the rule, or add the address explicitly.
@@ -2007,7 +2013,7 @@ func (Webmail) RulesetAdd(ctx context.Context, rcptTo string, ruleset config.Rul
 func (Webmail) RulesetRemove(ctx context.Context, rcptTo string, ruleset config.Ruleset) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 
-	err := mox.AccountSave(ctx, reqInfo.Account.Name, func(acc *config.Account) {
+	err := admin.AccountSave(ctx, reqInfo.Account.Name, func(acc *config.Account) {
 		dest, ok := acc.Destinations[rcptTo]
 		if !ok {
 			xcheckuserf(ctx, errors.New("destination address not found in account"), "looking up address")

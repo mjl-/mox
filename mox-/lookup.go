@@ -14,7 +14,7 @@ var (
 	ErrAddressNotFound = errors.New("address not found")
 )
 
-// FindAccount looks up the account for localpart and domain.
+// LookupAddress looks up the account for localpart and domain.
 //
 // Can return ErrDomainNotFound and ErrAddressNotFound.
 func LookupAddress(localpart smtp.Localpart, domain dns.Domain, allowPostmaster, allowAlias bool) (accountName string, alias *config.Alias, canonicalAddress string, dest config.Destination, rerr error) {

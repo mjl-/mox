@@ -2,6 +2,8 @@
 
 // Loaded from synchronous javascript.
 declare let messageItem: api.MessageItem
+// From customization script.
+declare let moxBeforeDisplay: (root: HTMLElement) => void
 
 const init = () => {
 	const mi = api.parser.MessageItem(messageItem)
@@ -40,7 +42,7 @@ const init = () => {
 
 	let iframe: HTMLIFrameElement
 	const page = document.getElementById('page')!
-	dom._kids(page,
+	const root = dom.div(
 		dom.div(
 			css('msgMeta', {backgroundColor: styles.backgroundColorMild, borderBottom: '1px solid', borderBottomColor: styles.borderColor}),
 			msgheaderview,
@@ -59,6 +61,10 @@ const init = () => {
 			},
 		)
 	)
+	if (typeof moxBeforeDisplay !== 'undefined') {
+		moxBeforeDisplay(root)
+	}
+	dom._kids(page, root)
 }
 
 try {

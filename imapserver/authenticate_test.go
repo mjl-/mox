@@ -1,20 +1,28 @@
 package imapserver
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"hash"
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/text/secure/precis"
 
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/scram"
+	"github.com/mjl-/mox/store"
 )
 
 func TestAuthenticateLogin(t *testing.T) {
@@ -209,4 +217,150 @@ func TestAuthenticateCRAMMD5(t *testing.T) {
 	tc = start(t)
 	auth("ok", "mo\u0301x@mox.example", password1)
 	tc.close()
+}
+
+func TestAuthenticateTLSClientCert(t *testing.T) {
+	tc := startArgs(t, true, true, true, true, "mjl")
+	tc.transactf("no", "authenticate external ") // No TLS auth.
+	tc.close()
+
+	// Create a certificate, register its public key with account, and make a tls
+	// client config that sends the certificate.
+	clientCert0 := fakeCert(t, true)
+	clientConfig := tls.Config{
+		InsecureSkipVerify: true,
+		Certificates:       []tls.Certificate{clientCert0},
+	}
+
+	tlspubkey, err := store.ParseTLSPublicKeyCert(clientCert0.Certificate[0])
+	tcheck(t, err, "parse certificate")
+	tlspubkey.Account = "mjl"
+	tlspubkey.LoginAddress = "mjl@mox.example"
+	tlspubkey.NoIMAPPreauth = true
+
+	addClientCert := func() error {
+		return store.TLSPublicKeyAdd(ctxbg, &tlspubkey)
+	}
+
+	// No preauth, explicit authenticate with TLS.
+	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, true, "mjl", addClientCert)
+	if tc.client.Preauth {
+		t.Fatalf("preauthentication while not configured for tls public key")
+	}
+	tc.transactf("ok", "authenticate external ")
+	tc.close()
+
+	// External with explicit username.
+	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, true, "mjl", addClientCert)
+	if tc.client.Preauth {
+		t.Fatalf("preauthentication while not configured for tls public key")
+	}
+	tc.transactf("ok", "authenticate external %s", base64.StdEncoding.EncodeToString([]byte("mjl@mox.example")))
+	tc.close()
+
+	// No preauth, also allow other mechanisms.
+	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, true, "mjl", addClientCert)
+	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000mjl@mox.example\u0000"+password0)))
+	tc.close()
+
+	// No preauth, also allow other username for same account.
+	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, true, "mjl", addClientCert)
+	tc.transactf("ok", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000móx@mox.example\u0000"+password0)))
+	tc.close()
+
+	// No preauth, other mechanism must be for same account.
+	acc, err := store.OpenAccount(pkglog, "other")
+	tcheck(t, err, "open account")
+	err = acc.SetPassword(pkglog, "test1234")
+	tcheck(t, err, "set password")
+	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, true, "mjl", addClientCert)
+	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000other@mox.example\u0000test1234")))
+	tc.close()
+
+	// Starttls and external auth.
+	tc = startArgsMore(t, true, false, nil, &clientConfig, false, true, true, "mjl", addClientCert)
+	tc.client.Starttls(&clientConfig)
+	tc.transactf("ok", "authenticate external =")
+	tc.close()
+
+	tlspubkey.NoIMAPPreauth = false
+	err = store.TLSPublicKeyUpdate(ctxbg, &tlspubkey)
+	tcheck(t, err, "update tls public key")
+
+	// With preauth, no authenticate command needed/allowed.
+	// Already set up tls session ticket cache, for next test.
+	serverConfig := tls.Config{
+		Certificates: []tls.Certificate{fakeCert(t, false)},
+	}
+	ctx, cancel := context.WithCancel(ctxbg)
+	defer cancel()
+	mox.StartTLSSessionTicketKeyRefresher(ctx, pkglog, &serverConfig)
+	clientConfig.ClientSessionCache = tls.NewLRUClientSessionCache(10)
+	tc = startArgsMore(t, true, true, &serverConfig, &clientConfig, false, true, true, "mjl", addClientCert)
+	if !tc.client.Preauth {
+		t.Fatalf("not preauthentication while configured for tls public key")
+	}
+	cs := tc.conn.(*tls.Conn).ConnectionState()
+	if cs.DidResume {
+		t.Fatalf("tls connection was resumed")
+	}
+	tc.transactf("no", "authenticate external ") // Not allowed, already in authenticated state.
+	tc.close()
+
+	// Authentication works with TLS resumption.
+	tc = startArgsMore(t, true, true, &serverConfig, &clientConfig, false, true, true, "mjl", addClientCert)
+	if !tc.client.Preauth {
+		t.Fatalf("not preauthentication while configured for tls public key")
+	}
+	cs = tc.conn.(*tls.Conn).ConnectionState()
+	if !cs.DidResume {
+		t.Fatalf("tls connection was not resumed")
+	}
+	// Check that operations that require an account work.
+	tc.client.Enable("imap4rev2")
+	received, err := time.Parse(time.RFC3339, "2022-11-16T10:01:00+01:00")
+	tc.check(err, "parse time")
+	tc.client.Append("inbox", nil, &received, []byte(exampleMsg))
+	tc.client.Select("inbox")
+	tc.close()
+
+	// Authentication with unknown key should fail.
+	// todo: less duplication, change startArgs so this can be merged into it.
+	err = store.Close()
+	tcheck(t, err, "store close")
+	os.RemoveAll("../testdata/imap/data")
+	err = store.Init(ctxbg)
+	tcheck(t, err, "store init")
+	mox.Context = ctxbg
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
+	mox.MustLoadConfig(true, false)
+	switchStop := store.Switchboard()
+	defer switchStop()
+
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+
+	done := make(chan struct{})
+	defer func() { <-done }()
+	connCounter++
+	cid := connCounter
+	go func() {
+		defer serverConn.Close()
+		serve("test", cid, &serverConfig, serverConn, true, false)
+		close(done)
+	}()
+
+	clientConfig.ClientSessionCache = nil
+	clientConn = tls.Client(clientConn, &clientConfig)
+	// note: It's not enough to do a handshake and check if that was successful. If the
+	// client cert is not acceptable, we only learn after the handshake, when the first
+	// data messages are exchanged.
+	buf := make([]byte, 100)
+	_, err = clientConn.Read(buf)
+	if err == nil {
+		t.Fatalf("tls handshake with unknown client certificate succeeded")
+	}
+	if alert, ok := mox.AsTLSAlert(err); !ok || alert != 42 {
+		t.Fatalf("got err %#v, expected tls 'bad certificate' alert", err)
+	}
 }
