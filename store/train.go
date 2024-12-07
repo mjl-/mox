@@ -117,7 +117,7 @@ func (a *Account) RetrainMessage(ctx context.Context, log mlog.Log, tx *bstore.T
 
 	words, err := jf.ParseMessage(p)
 	if err != nil {
-		log.Errorx("parsing message for updating junk filter", err, slog.Any("parse", ""))
+		log.Infox("parsing message for updating junk filter", err, slog.Any("parse", ""))
 		return nil
 	}
 
@@ -162,7 +162,7 @@ func (a *Account) TrainMessage(ctx context.Context, log mlog.Log, jf *junk.Filte
 
 	words, err := jf.ParseMessage(p)
 	if err != nil {
-		log.Errorx("parsing message for updating junk filter", err, slog.Any("parse", ""))
+		log.Infox("parsing message for updating junk filter", err, slog.Any("parse", ""))
 		return false, nil
 	}
 
