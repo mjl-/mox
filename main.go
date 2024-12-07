@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto"
@@ -3519,35 +3518,10 @@ func cmdMessageParse(c *cmd) {
 	err = enc.Encode(part)
 	xcheckf(err, "write")
 
-	hasNonASCII := func(r io.Reader) bool {
-		br := bufio.NewReader(r)
-		for {
-			b, err := br.ReadByte()
-			if err == io.EOF {
-				break
-			}
-			xcheckf(err, "read header")
-			if b > 0x7f {
-				return true
-			}
-		}
-		return false
-	}
-
-	var walk func(p *message.Part) bool
-	walk = func(p *message.Part) bool {
-		if hasNonASCII(p.HeaderReader()) {
-			return true
-		}
-		for _, pp := range p.Parts {
-			if walk(&pp) {
-				return true
-			}
-		}
-		return false
-	}
 	if smtputf8 {
-		fmt.Println("message needs smtputf8:", walk(&part))
+		needs, err := part.NeedsSMTPUTF8()
+		xcheckf(err, "checking if message needs smtputf8")
+		fmt.Println("message needs smtputf8:", needs)
 	}
 }
 

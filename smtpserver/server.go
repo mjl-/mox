@@ -1940,47 +1940,32 @@ func (c *conn) cmdRcpt(p *parser) {
 	c.bwritecodeline(smtp.C250Completed, smtp.SeAddr1Other0, "now on the list", nil)
 }
 
-// ../rfc/6531:497
-func (c *conn) isSMTPUTF8Required(part *message.Part) bool {
-	hasNonASCII := func(r io.Reader) bool {
-		br := bufio.NewReader(r)
-		for {
-			b, err := br.ReadByte()
-			if err == io.EOF {
-				break
-			}
-			xcheckf(err, "read header")
-			if b > unicode.MaxASCII {
-				return true
-			}
-		}
-		return false
-	}
-	var hasNonASCIIPartHeader func(p *message.Part) bool
-	hasNonASCIIPartHeader = func(p *message.Part) bool {
-		if hasNonASCII(p.HeaderReader()) {
+func hasNonASCII(s string) bool {
+	for _, c := range []byte(s) {
+		if c > unicode.MaxASCII {
 			return true
 		}
-		for _, pp := range p.Parts {
-			if hasNonASCIIPartHeader(&pp) {
-				return true
-			}
-		}
-		return false
 	}
+	return false
+}
 
+// ../rfc/6531:497
+func (c *conn) isSMTPUTF8Required(part *message.Part) bool {
 	// Check "MAIL FROM".
-	if hasNonASCII(strings.NewReader(string(c.mailFrom.Localpart))) {
+	if hasNonASCII(string(c.mailFrom.Localpart)) {
 		return true
 	}
 	// Check all "RCPT TO".
 	for _, rcpt := range c.recipients {
-		if hasNonASCII(strings.NewReader(string(rcpt.Addr.Localpart))) {
+		if hasNonASCII(string(rcpt.Addr.Localpart)) {
 			return true
 		}
 	}
+
 	// Check header in all message parts.
-	return hasNonASCIIPartHeader(part)
+	smtputf8, err := part.NeedsSMTPUTF8()
+	xcheckf(err, "checking if smtputf8 is required")
+	return smtputf8
 }
 
 // ../rfc/5321:1992 ../rfc/5321:1098
