@@ -1056,25 +1056,29 @@ error too, for reference.
 
 # mox config alias list
 
-List aliases for domain.
+Show aliases (lists) for domain.
 
 	usage: mox config alias list domain
 
 # mox config alias print
 
-Print settings and members of alias.
+Print settings and members of alias (list).
 
 	usage: mox config alias print alias
 
 # mox config alias add
 
-Add new alias with one or more addresses and public posting enabled.
+Add new alias (list) with one or more addresses and public posting enabled.
+
+An alias is used for delivering incoming email to multiple recipients. If you
+want to add an address to an account, don't use an alias, just add the address
+to the account.
 
 	usage: mox config alias add alias@domain rcpt1@domain ...
 
 # mox config alias update
 
-Update alias configuration.
+Update alias (list) configuration.
 
 	usage: mox config alias update alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]
 	  -allowmsgfrom string
@@ -1086,19 +1090,19 @@ Update alias configuration.
 
 # mox config alias rm
 
-Remove alias.
+Remove alias (list).
 
 	usage: mox config alias rm alias@domain
 
 # mox config alias addaddr
 
-Add addresses to alias.
+Add addresses to alias (list).
 
 	usage: mox config alias addaddr alias@domain rcpt1@domain ...
 
 # mox config alias rmaddr
 
-Remove addresses from alias.
+Remove addresses from alias (list).
 
 	usage: mox config alias rmaddr alias@domain rcpt1@domain ...
 

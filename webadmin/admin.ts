@@ -884,7 +884,7 @@ const account = async (name: string) => {
 		),
 		dom.br(),
 
-		dom.h2('Aliases/lists'),
+		dom.h2('Alias (list) membership'),
 		dom.table(
 			dom.thead(
 				dom.tr(
@@ -1094,6 +1094,7 @@ const domain = async (d: string) => {
 	let aliasFieldset: HTMLFieldSetElement
 	let aliasLocalpart: HTMLInputElement
 	let aliasAddresses: HTMLTextAreaElement
+	let aliasAddText: HTMLElement
 
 	let descrFieldset: HTMLFieldSetElement
 	let descrText: HTMLInputElement
@@ -1347,7 +1348,7 @@ const domain = async (d: string) => {
 		),
 		dom.br(),
 
-		dom.h2('Aliases/lists'),
+		dom.h2('Aliases (lists)'),
 		dom.table(
 			dom.thead(
 				dom.tr(
@@ -1368,7 +1369,7 @@ const domain = async (d: string) => {
 			}),
 		),
 		dom.br(),
-		dom.h2('Add alias'),
+		dom.h2('Add alias (list)'),
 		dom.form(
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
@@ -1395,11 +1396,15 @@ const domain = async (d: string) => {
 				),
 				dom.label(
 					dom.div('Addresses', attr.title('One members address per line, full address of form localpart@domain. At least one address required.')),
-					aliasAddresses=dom.textarea(attr.required(''), attr.rows('1'), function focus() { aliasAddresses.setAttribute('rows', '5') }),
+					aliasAddresses=dom.textarea(attr.required(''), attr.rows('1'), function focus() {
+						aliasAddresses.setAttribute('rows', '5')
+						aliasAddText.style.visibility = 'visible'
+					}),
 				),
 				dom.div(
 					dom.div('\u00a0'),
 					dom.submitbutton('Add alias', attr.title('Alias will be added and the config reloaded.')),
+					aliasAddText=dom.p(style({visibility: 'hidden', fontStyle: 'italic'}), 'Messages sent to aliases are delivered to each member address of the alias, like a mailing list. For an additional address for an account, add it as regular address (see above).'),
 				),
 			),
 		),
