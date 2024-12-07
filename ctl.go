@@ -1335,67 +1335,78 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 	case "retrain":
 		/* protocol:
 		> "retrain"
-		> account
+		> account or empty
 		< "ok" or error
 		*/
 		account := ctl.xread()
-		acc, err := store.OpenAccount(log, account)
-		ctl.xcheck(err, "open account")
-		defer func() {
-			if acc != nil {
-				err := acc.Close()
-				log.Check(err, "closing account after retraining")
-			}
-		}()
 
-		// todo: can we retrain an account without holding a write lock? perhaps by writing a junkfilter to a new location, and staying informed of message changes while we go through all messages in the account?
-
-		acc.WithWLock(func() {
-			conf, _ := acc.Conf()
-			if conf.JunkFilter == nil {
-				ctl.xcheck(store.ErrNoJunkFilter, "looking for junk filter")
-			}
-
-			// Remove existing junk filter files.
-			basePath := mox.DataDirPath("accounts")
-			dbPath := filepath.Join(basePath, acc.Name, "junkfilter.db")
-			bloomPath := filepath.Join(basePath, acc.Name, "junkfilter.bloom")
-			err := os.Remove(dbPath)
-			log.Check(err, "removing old junkfilter database file", slog.String("path", dbPath))
-			err = os.Remove(bloomPath)
-			log.Check(err, "removing old junkfilter bloom filter file", slog.String("path", bloomPath))
-
-			// Open junk filter, this creates new files.
-			jf, _, err := acc.OpenJunkFilter(ctx, log)
-			ctl.xcheck(err, "open new junk filter")
+		xretrain := func(name string) {
+			acc, err := store.OpenAccount(log, name)
+			ctl.xcheck(err, "open account")
 			defer func() {
-				if jf == nil {
-					return
+				if acc != nil {
+					err := acc.Close()
+					log.Check(err, "closing account after retraining")
 				}
-				err := jf.Close()
-				log.Check(err, "closing junk filter during cleanup")
 			}()
 
-			// Read through messages with junk or nonjunk flag set, and train them.
-			var total, trained int
-			q := bstore.QueryDB[store.Message](ctx, acc.DB)
-			q.FilterEqual("Expunged", false)
-			err = q.ForEach(func(m store.Message) error {
-				total++
-				ok, err := acc.TrainMessage(ctx, log, jf, m)
-				if ok {
-					trained++
-				}
-				return err
-			})
-			ctl.xcheck(err, "training messages")
-			log.Info("retrained messages", slog.Int("total", total), slog.Int("trained", trained))
+			// todo: can we retrain an account without holding a write lock? perhaps by writing a junkfilter to a new location, and staying informed of message changes while we go through all messages in the account?
 
-			// Close junk filter, marking success.
-			err = jf.Close()
-			jf = nil
-			ctl.xcheck(err, "closing junk filter")
-		})
+			acc.WithWLock(func() {
+				conf, _ := acc.Conf()
+				if conf.JunkFilter == nil {
+					ctl.xcheck(store.ErrNoJunkFilter, "looking for junk filter")
+				}
+
+				// Remove existing junk filter files.
+				basePath := mox.DataDirPath("accounts")
+				dbPath := filepath.Join(basePath, acc.Name, "junkfilter.db")
+				bloomPath := filepath.Join(basePath, acc.Name, "junkfilter.bloom")
+				err := os.Remove(dbPath)
+				log.Check(err, "removing old junkfilter database file", slog.String("path", dbPath))
+				err = os.Remove(bloomPath)
+				log.Check(err, "removing old junkfilter bloom filter file", slog.String("path", bloomPath))
+
+				// Open junk filter, this creates new files.
+				jf, _, err := acc.OpenJunkFilter(ctx, log)
+				ctl.xcheck(err, "open new junk filter")
+				defer func() {
+					if jf == nil {
+						return
+					}
+					err := jf.Close()
+					log.Check(err, "closing junk filter during cleanup")
+				}()
+
+				// Read through messages with junk or nonjunk flag set, and train them.
+				var total, trained int
+				q := bstore.QueryDB[store.Message](ctx, acc.DB)
+				q.FilterEqual("Expunged", false)
+				err = q.ForEach(func(m store.Message) error {
+					total++
+					ok, err := acc.TrainMessage(ctx, log, jf, m)
+					if ok {
+						trained++
+					}
+					return err
+				})
+				ctl.xcheck(err, "training messages")
+				log.Info("retrained messages", slog.Int("total", total), slog.Int("trained", trained))
+
+				// Close junk filter, marking success.
+				err = jf.Close()
+				jf = nil
+				ctl.xcheck(err, "closing junk filter")
+			})
+		}
+
+		if account == "" {
+			for _, name := range mox.Conf.Accounts() {
+				xretrain(name)
+			}
+		} else {
+			xretrain(account)
+		}
 		ctl.xwriteok()
 
 	case "recalculatemailboxcounts":

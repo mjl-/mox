@@ -2874,19 +2874,23 @@ should be used, and how long the policy can be cached.
 }
 
 func cmdRetrain(c *cmd) {
-	c.params = "accountname"
-	c.help = `Recreate and retrain the junk filter for the account.
+	c.params = "[accountname]"
+	c.help = `Recreate and retrain the junk filter for the account or all accounts.
 
 Useful after having made changes to the junk filter configuration, or if the
 implementation has changed.
 `
 	args := c.Parse()
-	if len(args) != 1 {
+	if len(args) > 1 {
 		c.Usage()
+	}
+	var account string
+	if len(args) == 1 {
+		account = args[0]
 	}
 
 	mustLoadConfig()
-	ctlcmdRetrain(xctl(), args[0])
+	ctlcmdRetrain(xctl(), account)
 }
 
 func ctlcmdRetrain(ctl *ctl, account string) {

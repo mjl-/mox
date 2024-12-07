@@ -105,7 +105,7 @@ any parameters. Followed by the help and usage information for each command.
 	mox dnsbl check zone ip
 	mox dnsbl checkhealth zone
 	mox mtasts lookup domain
-	mox retrain accountname
+	mox retrain [accountname]
 	mox sendmail [-Fname] [ignoredflags] [-t] [<message]
 	mox spf check domain ip
 	mox spf lookup domain
@@ -1390,12 +1390,12 @@ should be used, and how long the policy can be cached.
 
 # mox retrain
 
-Recreate and retrain the junk filter for the account.
+Recreate and retrain the junk filter for the account or all accounts.
 
 Useful after having made changes to the junk filter configuration, or if the
 implementation has changed.
 
-	usage: mox retrain accountname
+	usage: mox retrain [accountname]
 
 # mox sendmail
 
