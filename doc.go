@@ -146,6 +146,8 @@ Quickstart writes configuration files, prints initial admin and account
 passwords, DNS records you should create. If you run it on Linux it writes a
 systemd service file and prints commands to enable and start mox as service.
 
+All output is written to quickstart.log for later reference.
+
 The user or uid is optional, defaults to "mox", and is the user or uid/gid mox
 will run as after initialization.
 

@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/url"
@@ -67,6 +68,8 @@ Quickstart writes configuration files, prints initial admin and account
 passwords, DNS records you should create. If you run it on Linux it writes a
 systemd service file and prints commands to enable and start mox as service.
 
+All output is written to quickstart.log for later reference.
+
 The user or uid is optional, defaults to "mox", and is the user or uid/gid mox
 will run as after initialization.
 
@@ -105,6 +108,35 @@ output of "mox config describe-domains" and see the output of
 		c.Usage()
 	}
 
+	// Write all output to quickstart.log.
+	logfile, err := os.Create("quickstart.log")
+	xcheckf(err, "creating quickstart.log")
+
+	origStdout := os.Stdout
+	origStderr := os.Stderr
+	piper, pipew, err := os.Pipe()
+	xcheckf(err, "creating pipe for logging to logfile")
+	pipec := make(chan struct{})
+	go func() {
+		io.Copy(io.MultiWriter(origStdout, logfile), piper)
+		close(pipec)
+	}()
+	// A single pipe, so writes to stdout and stderr don't get interleaved.
+	os.Stdout = pipew
+	os.Stderr = pipew
+	logClose := func() {
+		pipew.Close()
+		<-pipec
+		os.Stdout = origStdout
+		os.Stderr = origStderr
+		err := logfile.Close()
+		xcheckf(err, "closing quickstart.log")
+	}
+	defer logClose()
+	log.SetOutput(os.Stdout)
+	fmt.Printf("(output is also written to quickstart.log)\n\n")
+	defer fmt.Printf("\n(output is also written to quickstart.log)\n")
+
 	// We take care to cleanup created files when we error out.
 	// We don't want to get a new user into trouble with half of the files
 	// after encountering an error.
@@ -121,7 +153,9 @@ output of "mox config describe-domains" and see the output of
 			}
 		}
 
-		log.Fatalf(format, args...)
+		log.Printf(format, args...)
+		logClose()
+		os.Exit(1)
 	}
 
 	xwritefile := func(path string, data []byte, perm os.FileMode) {
