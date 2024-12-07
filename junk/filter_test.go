@@ -126,7 +126,7 @@ func TestFilter(t *testing.T) {
 	tcheck(t, err, "train spam message")
 	_, err = spamf.Seek(0, 0)
 	tcheck(t, err, "seek spam message")
-	err = f.TrainMessage(ctxbg, spamf, spamsize, true)
+	err = f.TrainMessage(ctxbg, spamf, spamsize, false)
 	tcheck(t, err, "train spam message")
 
 	if !f.modified {
@@ -166,16 +166,16 @@ func TestFilter(t *testing.T) {
 	tcheck(t, err, "untrain ham message")
 	_, err = hamf.Seek(0, 0)
 	tcheck(t, err, "seek ham message")
-	err = f.UntrainMessage(ctxbg, hamf, spamsize, true)
+	err = f.UntrainMessage(ctxbg, hamf, hamsize, true)
 	tcheck(t, err, "untrain ham message")
 
 	_, err = spamf.Seek(0, 0)
 	tcheck(t, err, "seek spam message")
-	err = f.UntrainMessage(ctxbg, spamf, spamsize, true)
+	err = f.UntrainMessage(ctxbg, spamf, spamsize, false)
 	tcheck(t, err, "untrain spam message")
 	_, err = spamf.Seek(0, 0)
 	tcheck(t, err, "seek spam message")
-	err = f.UntrainMessage(ctxbg, spamf, spamsize, true)
+	err = f.UntrainMessage(ctxbg, spamf, spamsize, false)
 	tcheck(t, err, "untrain spam message")
 
 	if !f.modified {

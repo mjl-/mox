@@ -1348,6 +1348,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 			}
 		}()
 
+		// todo: can we retrain an account without holding a write lock? perhaps by writing a junkfilter to a new location, and staying informed of message changes while we go through all messages in the account?
+
 		acc.WithWLock(func() {
 			conf, _ := acc.Conf()
 			if conf.JunkFilter == nil {
