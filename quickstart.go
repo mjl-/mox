@@ -744,12 +744,16 @@ many authentication failures).
 		hostbase := filepath.FromSlash("path/to/" + dnshostname.Name())
 		mtastsbase := filepath.FromSlash("path/to/mta-sts." + domain.Name())
 		autoconfigbase := filepath.FromSlash("path/to/autoconfig." + domain.Name())
+		mailbase := filepath.FromSlash("path/to/mail." + domain.Name())
 		public.TLS = &config.TLS{
 			KeyCerts: []config.KeyCert{
 				{CertFile: hostbase + "-chain.crt.pem", KeyFile: hostbase + ".key.pem"},
 				{CertFile: mtastsbase + "-chain.crt.pem", KeyFile: mtastsbase + ".key.pem"},
 				{CertFile: autoconfigbase + "-chain.crt.pem", KeyFile: autoconfigbase + ".key.pem"},
 			},
+		}
+		if mailbase != hostbase {
+			public.TLS.KeyCerts = append(public.TLS.KeyCerts, config.KeyCert{CertFile: mailbase + "-chain.crt.pem", KeyFile: mailbase + ".key.pem"})
 		}
 
 		fmt.Println(
