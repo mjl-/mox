@@ -46,6 +46,7 @@ import (
 	"github.com/mjl-/mox/dmarcrpt"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dsn"
+	"github.com/mjl-/mox/http"
 	"github.com/mjl-/mox/iprev"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
@@ -201,7 +202,8 @@ func durationDefault(delay *time.Duration, def time.Duration) time.Duration {
 
 // Listen initializes network listeners for incoming SMTP connection.
 // The listeners are stored for a later call to Serve.
-func Listen() {
+func Listen() http.FnALPNHelper {
+	var alpnHelper http.FnALPNHelper
 	names := maps.Keys(mox.Conf.Static.Listeners)
 	sort.Strings(names)
 	for _, name := range names {
@@ -259,8 +261,16 @@ func Listen() {
 			for _, ip := range listener.IPs {
 				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, maxMsgSize, true, true, true, nil, 0)
 			}
+			if listener.Submissions.EnableOnHTTPS && alpnHelper == nil {
+				alpnHelper = func(tc *tls.Config, conn net.Conn) {
+					log := mlog.New("smtp-alpn", nil)
+					resolver := dns.StrictResolver{Log: log.Logger}
+					serve(name, mox.Cid(), hostname, tc, conn, resolver, true, true, maxMsgSize, true, true, true, nil, 0)
+				}
+			}
 		}
 	}
+	return alpnHelper
 }
 
 var servers []func()

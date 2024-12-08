@@ -54,9 +54,9 @@ func shutdown(log mlog.Log) {
 // start initializes all packages, starts all listeners and the switchboard
 // goroutine, then returns.
 func start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec bool) error {
-	smtpserver.Listen()
-	imapserver.Listen()
-	http.Listen()
+	smtpALPNHelper := smtpserver.Listen()
+	imapALPNHelper := imapserver.Listen()
+	http.Listen(smtpALPNHelper, imapALPNHelper)
 
 	if !skipForkExec {
 		// If we were just launched as root, fork and exec as unprivileged user, handing

@@ -24,6 +24,7 @@ import (
 	_ "net/http/pprof"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/net/http2"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -538,22 +539,34 @@ func redirectToTrailingSlash(srv *serve, hostMatch func(dns.IPDomain) bool, name
 
 // Listen binds to sockets for HTTP listeners, including those required for ACME to
 // generate TLS certificates. It stores the listeners so Serve can start serving them.
-func Listen() {
+func Listen(smtpHelper, imapHelper FnALPNHelper) {
 	// Initialize listeners in deterministic order for the same potential error
 	// messages.
 	names := maps.Keys(mox.Conf.Static.Listeners)
 	sort.Strings(names)
 	for _, name := range names {
+		found443 := false
 		l := mox.Conf.Static.Listeners[name]
 		portServe := portServes(l)
 
 		ports := maps.Keys(portServe)
 		sort.Ints(ports)
 		for _, port := range ports {
+			if port == 443 {
+				found443 = true
+			}
 			srv := portServe[port]
 			for _, ip := range l.IPs {
-				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv)
+				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv, smtpHelper, imapHelper)
 			}
+		}
+		if !found443 && (smtpHelper != nil || imapHelper != nil) {
+			pkglog.Warn(
+				"Listener asks for non-HTTP protocols to be available via ALPN on port 443, but does not configure any HTTPS listeners on port 443. Therefore, the EnableOnHTTPS setting has no effect. Configure an HTTPS listener on port 443 to fix this.",
+				slog.String("listenerName", name),
+				slog.Any("SubmissionsEnableOnHTTPS", smtpHelper != nil),
+				slog.Any("IMAPSEnableOnHTTPS", imapHelper != nil),
+			)
 		}
 	}
 }
@@ -886,13 +899,38 @@ var servers []func()
 // the certificate to be given during the first https connection.
 var ensureManagerHosts = map[*autotls.Manager]map[dns.Domain]struct{}{}
 
+type FnALPNHelper = func(*tls.Config, net.Conn)
+type tlsNextProtoMap = map[string]func(*http.Server, *tls.Conn, http.Handler)
+
+func serverTlsSetup(port int, tlsConfig *tls.Config, smtpHelper, imapHelper FnALPNHelper) (*tls.Config, tlsNextProtoMap) {
+	cfg := tlsConfig.Clone()
+	npMap := tlsNextProtoMap{}
+	if port != 443 {
+		return cfg, npMap
+	}
+	doConfig := func(proto string, helperFunc FnALPNHelper) {
+		if helperFunc != nil {
+			cfg.NextProtos = append(cfg.NextProtos, proto)
+			npMap[proto] = func(_ *http.Server, conn *tls.Conn, _ http.Handler) {
+				helperFunc(cfg, conn)
+			}
+			pkglog.Print("Enabled ALPN listener", slog.String("proto", proto), slog.Any("NextProtos", cfg.NextProtos))
+		}
+	}
+	doConfig("smtp", smtpHelper)
+	doConfig("imap", imapHelper)
+	return cfg, npMap
+}
+
 // listen prepares a listener, and adds it to "servers", to be launched (if not running as root) through Serve.
-func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, handler http.Handler) {
+func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, handler http.Handler, smtpHelper, imapHelper FnALPNHelper) {
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 
 	var protocol string
 	var ln net.Listener
 	var err error
+	var updatedTlsConfig *tls.Config
+	var npMap tlsNextProtoMap
 	if tlsConfig == nil {
 		protocol = "http"
 		if os.Getuid() == 0 {
@@ -913,20 +951,30 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 				slog.String("kinds", strings.Join(kinds, ",")),
 				slog.String("address", addr))
 		}
+		updatedTlsConfig, npMap = serverTlsSetup(port, tlsConfig, smtpHelper, imapHelper)
 		ln, err = mox.Listen(mox.Network(ip), addr)
 		if err != nil {
 			pkglog.Fatalx("https: listen", err, slog.String("addr", addr))
 		}
-		ln = tls.NewListener(ln, tlsConfig)
+		ln = tls.NewListener(ln, updatedTlsConfig)
 	}
 
 	server := &http.Server{
 		Handler: handler,
 		// Clone because our multiple Server.Serve calls modify config concurrently leading to data race.
-		TLSConfig:         tlsConfig.Clone(),
+		TLSConfig:         updatedTlsConfig,
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       65 * time.Second, // Chrome closes connections after 60 seconds, firefox after 115 seconds.
 		ErrorLog:          golog.New(mlog.LogWriter(pkglog.With(slog.String("pkg", "net/http")), slog.LevelInfo, protocol+" error"), "", 0),
+		TLSNextProto:      npMap,
+	}
+	// By default, the Go 1.6 and above http.Server includes support for HTTP2.
+	// However, HTTP2 is negotiated via ALPN. Because we are configuring
+	// TLSNextProto above, we have to explicitly enable HTTP2 by importing http2
+	// and calling ConfigureServer.
+	err = http2.ConfigureServer(server, nil)
+	if err != nil {
+		pkglog.Fatalx("https: unable to configure http2", err)
 	}
 	serve := func() {
 		err := server.Serve(ln)

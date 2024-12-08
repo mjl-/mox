@@ -67,6 +67,7 @@ import (
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/config"
+	"github.com/mjl-/mox/http"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
@@ -318,7 +319,8 @@ func (c *conn) xsanity(err error, format string, args ...any) {
 type msgseq uint32
 
 // Listen initializes all imap listeners for the configuration, and stores them for Serve to start them.
-func Listen() {
+func Listen() http.FnALPNHelper {
+	var alpnHelper http.FnALPNHelper
 	names := maps.Keys(mox.Conf.Static.Listeners)
 	sort.Strings(names)
 	for _, name := range names {
@@ -338,11 +340,19 @@ func Listen() {
 
 		if listener.IMAPS.Enabled {
 			port := config.Port(listener.IMAPS.Port, 993)
+			protocol := "imaps"
 			for _, ip := range listener.IPs {
-				listen1("imaps", name, ip, port, tlsConfig, true, false)
+				listen1(protocol, name, ip, port, tlsConfig, true, false)
+			}
+			if listener.IMAPS.EnableOnHTTPS && alpnHelper == nil {
+				alpnHelper = func(tc *tls.Config, conn net.Conn) {
+					metricIMAPConnection.WithLabelValues(protocol).Inc()
+					serve(name, mox.Cid(), tc, conn, true, false)
+				}
 			}
 		}
 	}
+	return alpnHelper
 }
 
 var servers []func()
