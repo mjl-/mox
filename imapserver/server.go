@@ -1167,7 +1167,7 @@ func (c *conn) xsequence(uid store.UID) msgseq {
 func (c *conn) sequenceRemove(seq msgseq, uid store.UID) {
 	i := seq - 1
 	if c.uids[i] != uid {
-		xserverErrorf(fmt.Sprintf("got uid %d at msgseq %d, expected uid %d", uid, seq, c.uids[i]))
+		xserverErrorf("got uid %d at msgseq %d, expected uid %d", uid, seq, c.uids[i])
 	}
 	copy(c.uids[i:], c.uids[i+1:])
 	c.uids = c.uids[:len(c.uids)-1]

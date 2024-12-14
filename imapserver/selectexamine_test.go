@@ -45,28 +45,28 @@ func testSelectExamine(t *testing.T, examine bool) {
 	uuidnext2 := imapclient.UntaggedResult{Status: imapclient.OK, RespText: imapclient.RespText{Code: "UIDNEXT", CodeArg: imapclient.CodeUint{Code: "UIDNEXT", Num: 2}, More: "x"}}
 
 	// Parameter required.
-	tc.transactf("bad", cmd)
+	tc.transactf("bad", "%s", cmd)
 
 	// Mailbox does not exist.
-	tc.transactf("no", cmd+" bogus")
+	tc.transactf("no", "%s bogus", cmd)
 
-	tc.transactf("ok", cmd+" inbox")
+	tc.transactf("ok", "%s inbox", cmd)
 	tc.xuntagged(uflags, upermflags, urecent, uexists0, uuidval1, uuidnext1, ulist)
 	tc.xcode(okcode)
 
-	tc.transactf("ok", cmd+` "inbox"`)
+	tc.transactf("ok", `%s "inbox"`, cmd)
 	tc.xuntagged(uclosed, uflags, upermflags, urecent, uexists0, uuidval1, uuidnext1, ulist)
 	tc.xcode(okcode)
 
 	// Append a message. It will be reported as UNSEEN.
 	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.transactf("ok", cmd+" inbox")
+	tc.transactf("ok", "%s inbox", cmd)
 	tc.xuntagged(uclosed, uflags, upermflags, urecent, uunseen, uexists1, uuidval1, uuidnext2, ulist)
 	tc.xcode(okcode)
 
 	// With imap4rev2, we no longer get untagged RECENT or untagged UNSEEN.
 	tc.client.Enable("imap4rev2")
-	tc.transactf("ok", cmd+" inbox")
+	tc.transactf("ok", "%s inbox", cmd)
 	tc.xuntagged(uclosed, uflags, upermflags, uexists1, uuidval1, uuidnext2, ulist)
 	tc.xcode(okcode)
 }

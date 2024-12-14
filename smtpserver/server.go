@@ -3471,7 +3471,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			code = smtp.C554TransactionFailed
 		}
 		lines = append(lines, "multiple errors")
-		xsmtpErrorf(code, secode, !serverError, strings.Join(lines, "\n"))
+		xsmtpErrorf(code, secode, !serverError, "%s", strings.Join(lines, "\n"))
 	}
 	// Generate one DSN for all failed recipients.
 	if len(deliverErrors) > 0 {
