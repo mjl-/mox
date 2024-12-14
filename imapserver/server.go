@@ -52,6 +52,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+    "reflect"
 	"runtime/debug"
 	"slices"
 	"sort"
@@ -727,7 +728,8 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		}
 	}()
 
-	if xtls {
+    isAlreadyTLS := reflect.TypeOf(nc) == reflect.TypeFor[*tls.Conn]()
+	if xtls && !isAlreadyTLS {
 		// Start TLS on connection. We perform the handshake explicitly, so we can set a
 		// timeout, do client certificate authentication, log TLS details afterwards.
 		c.xtlsHandshakeAndAuthenticate(c.conn)
