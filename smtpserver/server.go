@@ -23,7 +23,6 @@ import (
 	"net"
 	"net/textproto"
 	"os"
-    "reflect"
 	"runtime/debug"
 	"slices"
 	"sort"
@@ -266,7 +265,7 @@ func Listen() http.FnALPNHelper {
 				alpnHelper = func(tc *tls.Config, conn net.Conn) {
 					log := mlog.New("smtpserver", nil)
 					resolver := dns.StrictResolver{Log: log.Logger}
-					serve(name, mox.Cid(), hostname, tc, conn, resolver, true, true, maxMsgSize, true, true, true, nil, 0)
+					serve(name, mox.Cid(), hostname, tc, conn, resolver, true, true, true, maxMsgSize, true, true, true, nil, 0)
 				}
 			}
 		}
@@ -310,7 +309,7 @@ func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig
 
 			// Package is set on the resolver by the dkim/spf/dmarc/etc packages.
 			resolver := dns.StrictResolver{Log: log.Logger}
-			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, requireTLS, dnsBLs, firstTimeSenderDelay)
+			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, false, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, requireTLS, dnsBLs, firstTimeSenderDelay)
 		}
 	}
 
@@ -336,6 +335,7 @@ type conn struct {
 
 	tls                   bool
 	extRequireTLS         bool // Whether to announce and allow the REQUIRETLS extension.
+    viaHTTPS              bool // Whether the connection came in via the HTTPS port (using TLS ALPN).
 	resolver              dns.Resolver
 	r                     *bufio.Reader
 	w                     *bufio.Writer
@@ -810,7 +810,7 @@ func (c *conn) writelinef(format string, args ...any) {
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
-func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, xtls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
+func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, xtls, viaHTTPS bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
 	var localIP, remoteIP net.IP
 	if a, ok := nc.LocalAddr().(*net.TCPAddr); ok {
 		localIP = a.IP
@@ -831,6 +831,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		conn:                  nc,
 		submission:            submission,
 		tls:                   xtls,
+        viaHTTPS:              viaHTTPS,
 		extRequireTLS:         requireTLS,
 		resolver:              resolver,
 		lastlog:               time.Now(),
@@ -894,8 +895,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		}
 	}()
 
-    isAlreadyTLS := reflect.TypeOf(nc) == reflect.TypeFor[*tls.Conn]()
-	if xtls && !isAlreadyTLS {
+	if xtls && !viaHTTPS {
 		// Start TLS on connection. We perform the handshake explicitly, so we can set a
 		// timeout, do client certificate authentication, log TLS details afterwards.
 		c.xtlsHandshakeAndAuthenticate(c.conn)
@@ -1046,10 +1046,14 @@ func command(c *conn) {
 
 // For use in metric labels.
 func (c *conn) kind() string {
+    k := "smtp"
 	if c.submission {
-		return "submission"
+        k = "submission"
 	}
-	return "smtp"
+    if c.viaHTTPS {
+        k = k + "https"
+    }
+	return k
 }
 
 func (c *conn) xneedHello() {
