@@ -783,7 +783,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 				}
 			}
 			if l.TLS.ACME != "" && (len(l.TLS.HostPrivateRSA2048Keys) == 0) != (len(l.TLS.HostPrivateECDSAP256Keys) == 0) {
-				log.Error("warning: uncommon configuration with either only an RSA 2048 or ECDSA P256 host private key for DANE/ACME certificates; this ACME implementation can retrieve certificates for both type of keys, it is recommended to set either both or none; continuing")
+				log.Warn("uncommon configuration with either only an RSA 2048 or ECDSA P256 host private key for DANE/ACME certificates; this ACME implementation can retrieve certificates for both type of keys, it is recommended to set either both or none; continuing")
 			}
 
 			// TLS 1.2 was introduced in 2008. TLS <1.2 was deprecated by ../rfc/8996:31 and ../rfc/8997:66 in 2021.

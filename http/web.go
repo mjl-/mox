@@ -834,32 +834,38 @@ func portServes(l config.Listener) map[int]*serve {
 	}
 
 	if l.TLS != nil && l.TLS.ACME != "" {
-		hosts := map[dns.Domain]struct{}{
-			mox.Conf.Static.HostnameDomain: {},
+		m := mox.Conf.Static.ACME[l.TLS.ACME].Manager
+		if ensureManagerHosts[m] == nil {
+			ensureManagerHosts[m] = map[dns.Domain]struct{}{}
 		}
+		hosts := ensureManagerHosts[m]
+		hosts[mox.Conf.Static.HostnameDomain] = struct{}{}
+
 		if l.HostnameDomain.ASCII != "" {
 			hosts[l.HostnameDomain] = struct{}{}
 		}
-		// All domains are served on all listeners. Gather autoconfig hostnames to ensure
-		// presence of TLS certificates for.
-		for _, name := range mox.Conf.Domains() {
-			if dom, err := dns.ParseDomain(name); err != nil {
-				pkglog.Errorx("parsing domain from config", err)
-			} else if d, _ := mox.Conf.Domain(dom); d.ReportsOnly {
-				// Do not gather autoconfig name if we aren't accepting email for this domain.
-				continue
-			}
 
-			autoconfdom, err := dns.ParseDomain("autoconfig." + name)
-			if err != nil {
-				pkglog.Errorx("parsing domain from config for autoconfig", err)
-			} else {
-				hosts[autoconfdom] = struct{}{}
+		// All domains are served on all listeners. Gather autoconfig hostnames to ensure
+		// presence of TLS certificates. Fetching a certificate on-demand may be too slow
+		// for the timeouts of clients doing autoconfig.
+
+		if l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS {
+			for _, name := range mox.Conf.Domains() {
+				if dom, err := dns.ParseDomain(name); err != nil {
+					pkglog.Errorx("parsing domain from config", err)
+				} else if d, _ := mox.Conf.Domain(dom); d.ReportsOnly {
+					// Do not gather autoconfig name if we aren't accepting email for this domain.
+					continue
+				}
+
+				autoconfdom, err := dns.ParseDomain("autoconfig." + name)
+				if err != nil {
+					pkglog.Errorx("parsing domain from config for autoconfig", err)
+				} else {
+					hosts[autoconfdom] = struct{}{}
+				}
 			}
 		}
-
-		m := mox.Conf.Static.ACME[l.TLS.ACME].Manager
-		ensureManagerHosts[m] = hosts
 	}
 
 	for _, srv := range portServe {

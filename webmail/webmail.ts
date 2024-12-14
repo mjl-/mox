@@ -50,10 +50,6 @@ To simulate slow API calls and SSE events:
 
 	localStorage.setItem('sherpats-debug', JSON.stringify({waitMinMsec: 2000, waitMaxMsec: 4000}))
 
-Show additional headers of messages:
-
-	settingsPut({...settings, showHeaders: ['Delivered-To', 'User-Agent', 'X-Mailer', 'Message-Id', 'List-Id', 'List-Post', 'X-Mox-Reason', 'TLS-Required']})
-
 Enable logging and reload afterwards:
 
 	localStorage.setItem('log', 'yes')
@@ -147,7 +143,6 @@ try {
 let accountSettings: api.Settings
 
 const defaultSettings = {
-	showShortcuts: true, // Whether to briefly show shortcuts in bottom left when a button is clicked that has a keyboard shortcut.
 	mailboxesWidth: 240,
 	layout: 'auto', // Automatic switching between left/right and top/bottom layout, based on screen width.
 	leftWidthPct: 50, // Split in percentage of remaining width for left/right layout.
@@ -160,7 +155,6 @@ const defaultSettings = {
 	ignoreErrorsUntil: 0, // For unhandled javascript errors/rejected promises, we normally show a popup for details, but users can ignore them for a week at a time.
 	mailboxCollapsed: {} as {[mailboxID: number]: boolean}, // Mailboxes that are collapsed.
 	showAllHeaders: false, // Whether to show all message headers.
-	showHeaders: [] as string[], // Additional message headers to show.
 	threading: api.ThreadMode.ThreadOn,
 	checkConsistency: location.hostname === 'localhost', // Enable UI update consistency checks, default only for local development.
 	composeWidth: 0,
@@ -195,13 +189,6 @@ const parseSettings = (): typeof defaultSettings => {
 		if (!mailboxCollapsed || typeof mailboxCollapsed !== 'object') {
 			mailboxCollapsed = def.mailboxCollapsed
 		}
-		const getStringArray = (k: string): string[] => {
-			const v = x[k]
-			if (v && Array.isArray(v) && (v.length === 0 || typeof v[0] === 'string')) {
-				return v
-			}
-			return def[k] as string[]
-		}
 
 		return {
 			refine: getString('refine'),
@@ -214,10 +201,8 @@ const parseSettings = (): typeof defaultSettings => {
 			msglistfromPct: getInt('msglistfromPct'),
 			ignoreErrorsUntil: getInt('ignoreErrorsUntil'),
 			layout: getString('layout', 'auto', 'leftright', 'topbottom'),
-			showShortcuts: getBool('showShortcuts'),
 			mailboxCollapsed: mailboxCollapsed,
 			showAllHeaders: getBool('showAllHeaders'),
-			showHeaders: getStringArray('showHeaders'),
 			threading: getString('threading', api.ThreadMode.ThreadOff, api.ThreadMode.ThreadOn, api.ThreadMode.ThreadUnread) as api.ThreadMode,
 			checkConsistency: getBool('checkConsistency'),
 			composeWidth: getInt('composeWidth'),
@@ -387,7 +372,7 @@ const envelopeIdentity = (l: api.MessageAddress[]): api.MessageAddress | null =>
 let shortcutElem = dom.div(css('shortcutFlash', {fontSize: '2em', position: 'absolute', left: '.25em', bottom: '.25em', backgroundColor: '#888', padding: '0.25em .5em', color: 'white', borderRadius: '.15em'}))
 let shortcutTimer = 0
 const showShortcut = (c: string) => {
-	if (!settings.showShortcuts) {
+	if (accountSettings?.NoShowShortcuts) {
 		return
 	}
 	if (shortcutTimer) {
@@ -1119,6 +1104,8 @@ const cmdSettings = async () => {
 	let quoting: HTMLSelectElement
 	let showAddressSecurity: HTMLInputElement
 	let showHTML: HTMLInputElement
+	let showShortcuts: HTMLInputElement
+	let showHeaders: HTMLTextAreaElement
 
 	if (!accountSettings) {
 		throw new Error('No account settings fetched yet.')
@@ -1137,6 +1124,8 @@ const cmdSettings = async () => {
 					Quoting: quoting.value as api.Quoting,
 					ShowAddressSecurity: showAddressSecurity.checked,
 					ShowHTML: showHTML.checked,
+					NoShowShortcuts: !showShortcuts.checked,
+					ShowHeaders: showHeaders.value.split('\n').map(s => s.trim()).filter(s => !!s),
 				}
 				await withDisabled(fieldset, client.SettingsSave(accSet))
 				accountSettings = accSet
@@ -1171,8 +1160,61 @@ const cmdSettings = async () => {
 				dom.label(
 					style({margin: '1ex 0', display: 'block'}),
 					showHTML=dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []),
-					' Show HTML instead of text version by default',
+					' Show email as HTML instead of text by default for first-time senders',
+					attr.title('Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.'),
 				),
+
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					showShortcuts=dom.input(attr.type('checkbox'), accountSettings.NoShowShortcuts ? [] : attr.checked('')),
+					' Show shortcut keys in bottom left after interaction with mouse',
+				),
+
+				dom.label(
+					style({margin: '1ex 0', display: 'block'}),
+					dom.div('Show additional headers'),
+					showHeaders=dom.textarea(
+						new String((accountSettings.ShowHeaders || []).join('\n')),
+						style({width: '100%'}),
+						attr.rows(''+Math.max(3, 1+(accountSettings.ShowHeaders || []).length)),
+					),
+					dom.div(style({fontStyle: 'italic'}), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...'),
+				),
+
+
+				dom.div(
+					style({marginTop: '2ex'}),
+					'Register "mailto:" links with the browser/operating system to compose a message in webmail.',
+					dom.br(),
+					dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
+						if (!window.navigator.registerProtocolHandler) {
+							window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.')
+							return
+						}
+						try {
+							window.navigator.registerProtocolHandler('mailto', '#compose %s')
+							window.alert('"mailto:"-links have been registered')
+						} catch (err) {
+							window.alert('Error registering "mailto:" protocol handler: '+errmsg(err))
+						}
+					}),
+					' ',
+					dom.clickbutton('Unregister', attr.title('Not all browsers implement unregistering via JavaScript.'), function click() {
+						// Not supported on firefox at the time of writing, and the signature is not in the types.
+						if (!(window.navigator as any).unregisterProtocolHandler) {
+							window.alert('Unregistering a protocol handler ("mailto:") via JavaScript is not supported by your browser. See your browser settings to unregister.')
+							return
+						}
+						try {
+							(window.navigator as any).unregisterProtocolHandler('mailto', '#compose %s')
+						} catch (err) {
+							window.alert('Error unregistering "mailto:" protocol handler: '+errmsg(err))
+							return
+						}
+						window.alert('"mailto:" protocol handler unregistered.')
+					}),
+				),
+
 				dom.br(),
 				dom.div(
 					dom.submitbutton('Save'),
@@ -1184,7 +1226,7 @@ const cmdSettings = async () => {
 
 // Show help popup, with shortcuts and basic explanation.
 const cmdHelp = async () => {
-	const remove = popup(
+	popup(
 		css('popupHelp', {padding: '1em 1em 2em 1em'}),
 		dom.h1('Help and keyboard shortcuts'),
 		dom.div(style({display: 'flex'}),
@@ -1212,7 +1254,12 @@ const cmdHelp = async () => {
 					dom.tr(
 						dom.td('↓', ', j'),
 						dom.td('down one message'),
-						dom.td(attr.rowspan('6'), css('helpSideNote', {color: '#888', borderLeft: '2px solid', borderLeftColor: '#888', paddingLeft: '.5em'}), 'hold ctrl to only move focus', dom.br(), 'hold shift to expand selection'),
+						dom.td(
+							attr.rowspan('6'),
+							css('helpSideNote', {color: '#888', borderLeft: '2px solid', borderLeftColor: '#888', paddingLeft: '.5em'}),
+							dom.div('hold ctrl to only move focus', attr.title('ctrl-l and ctrl-u are left for the browser the handle')),
+							dom.div('hold shift to expand selection'),
+						),
 					),
 					[
 						[['↑', ', k'], 'up one message'],
@@ -1273,7 +1320,7 @@ const cmdHelp = async () => {
 						['O', 'show raw message'],
 						['ctrl p', 'print message'],
 						['I', 'toggle internals'],
-						['ctrl I', 'toggle all headers'],
+						['ctrl i', 'toggle all headers'],
 
 						['alt k, alt ArrowUp', 'scroll up'],
 						['alt j, alt ArrowDown', 'scroll down'],
@@ -1294,51 +1341,6 @@ const cmdHelp = async () => {
 				dom.div(style({marginBottom: '1ex'}), 'Multiple messages can be selected by clicking messages while holding the control and/or shift keys. Dragging messages and dropping them on a mailbox moves the messages to that mailbox.'),
 				dom.div(style({marginBottom: '1ex'}), 'Text that changes ', dom.span(attr.title('Unicode blocks, e.g. from basic latin to cyrillic, or to emoticons.'), '"character groups"'), ' without whitespace has an ', dom.span(dom._class('scriptswitch'), 'orange underline'), ', which can be a sign of an intent to mislead (e.g. phishing).'),
 
-				settings.showShortcuts ?
-					dom.div(style({marginTop: '2ex'}), 'Shortcut keys for mouse operation are shown in the bottom left. ',
-						dom.clickbutton('Disable', function click() {
-							settingsPut({...settings, showShortcuts: false})
-							remove()
-							cmdHelp()
-						})
-					) :
-					dom.div(style({marginTop: '2ex'}), 'Shortcut keys for mouse operation are currently not shown. ',
-						dom.clickbutton('Enable', function click() {
-							settingsPut({...settings, showShortcuts: true})
-							remove()
-							cmdHelp()
-						})
-					),
-				dom.div(
-					style({marginTop: '2ex'}),
-					'To start composing a message when opening a "mailto:" link, register this application with your browser/system. ',
-					dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
-						if (!window.navigator.registerProtocolHandler) {
-							window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.')
-							return
-						}
-						try {
-							window.navigator.registerProtocolHandler('mailto', '#compose %s')
-						} catch (err) {
-							window.alert('Error registering "mailto:" protocol handler: '+errmsg(err))
-						}
-					}),
-					' ',
-					dom.clickbutton('Unregister', attr.title('Not all browsers implement unregistering via JavaScript.'), function click() {
-						// Not supported on firefox at the time of writing, and the signature is not in the types.
-						if (!(window.navigator as any).unregisterProtocolHandler) {
-							window.alert('Unregistering a protocol handler ("mailto:") via JavaScript is not supported by your browser. See your browser settings to unregister.')
-							return
-						}
-						try {
-							(window.navigator as any).unregisterProtocolHandler('mailto', '#compose %s')
-						} catch (err) {
-							window.alert('Error unregistering "mailto:" protocol handler: '+errmsg(err))
-							return
-						}
-						window.alert('"mailto:" protocol handler unregistered.')
-					}),
-				),
 				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version ', moxversion, ', see ', dom.a(attr.href('licenses.txt'), 'licenses'), '.', dom.br(), 'Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new')),
 			),
 		),
@@ -3156,7 +3158,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		v: cmdViewAttachments,
 		t: cmdShowText,
 		T: cmdShowHTMLCycle,
-		'ctrl I': cmdToggleHeaders,
+		'ctrl i': cmdToggleHeaders,
 
 		'alt j': cmdDown,
 		'alt k': cmdUp,
@@ -3251,7 +3253,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	}
 	loadButtons(parsedMessageOpt || null)
 
-	loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword, false)
+	loadMsgheaderView(msgheaderElem, miv.messageitem, accountSettings.ShowHeaders || [], refineKeyword, false)
 
 	const headerTextMildStyle = css('headerTextMild', {textAlign: 'right', color: styles.colorMild})
 
@@ -3510,13 +3512,14 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 	}
 
 	const loadMoreHeaders = (pm: api.ParsedMessage) => {
-		if (settings.showHeaders.length === 0) {
+		const hl = accountSettings.ShowHeaders || []
+		if (hl.length === 0) {
 			return
 		}
-		for (let i = 0; i < settings.showHeaders.length; i++) {
+		for (let i = 0; i < hl.length; i++) {
 			msgheaderElem.children[msgheaderElem.children.length-1].remove()
 		}
-		settings.showHeaders.forEach(k => {
+		hl.forEach(k => {
 			const vl = pm.Headers?.[k]
 			if (!vl || vl.length === 0) {
 				return
@@ -3539,7 +3542,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		updateKeywords: async (modseq: number, keywords: string[]) => {
 			mi.Message.ModSeq = modseq
 			mi.Message.Keywords = keywords
-			loadMsgheaderView(msgheaderElem, miv.messageitem, settings.showHeaders, refineKeyword, false)
+			loadMsgheaderView(msgheaderElem, miv.messageitem, accountSettings.ShowHeaders || [], refineKeyword, false)
 			loadMoreHeaders(await parsedMessagePromise)
 		},
 	}
@@ -4981,6 +4984,12 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 				} else if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') {
 					moveclick(i+1, e.key === 'J')
 				} else if (e.key === 'PageUp' || e.key === 'h' || e.key === 'H' || e.key === 'PageDown' || e.key === 'l' || e.key === 'L') {
+					// Commonly bound to "focus to browser address bar", moving cursor to one page down
+					// without opening isn't useful enough.
+					if (e.key === 'l' && e.ctrlKey) {
+						return
+					}
+
 					if (msgitemViews.length > 0) {
 						let n = Math.max(1, Math.floor(scrollElemHeight()/mlv.itemHeight())-1)
 						if (e.key === 'PageUp' || e.key === 'h' || e.key === 'H') {
@@ -5017,6 +5026,12 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 						moveclick(msgitemViews.indexOf(thrmiv), true)
 					}
 				} else if (e.key === 'u' || e.key === 'U') {
+					// Commonly bound to "view source", moving cursor to next unread message without
+					// opening isn't useful enough.
+					if (e.key === 'u' && e.ctrlKey) {
+						return
+					}
+
 					for (i = i < 0 ? 0 : i+1; i < msgitemViews.length; i += 1) {
 						if (!msgitemViews[i].messageitem.Message.Seen || msgitemViews[i].collapsed && msgitemViews[i].findDescendant(miv => !miv.messageitem.Message.Seen)) {
 							moveclick(i, true)

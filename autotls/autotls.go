@@ -312,12 +312,12 @@ func (m *Manager) SetAllowedHostnames(log mlog.Log, resolver dns.Resolver, hostn
 			for _, h := range added {
 				ips, _, err := resolver.LookupIP(ctx, "ip", h.ASCII+".")
 				if err != nil {
-					log.Errorx("warning: acme tls cert validation for host may fail due to dns lookup error", err, slog.Any("host", h))
+					log.Warnx("acme tls cert validation for host may fail due to dns lookup error", err, slog.Any("host", h))
 					continue
 				}
 				for _, ip := range ips {
 					if _, ok := publicIPstrs[ip.String()]; !ok {
-						log.Error("warning: acme tls cert validation for host is likely to fail because not all its ips are being listened on",
+						log.Warn("acme tls cert validation for host is likely to fail because not all its ips are being listened on",
 							slog.Any("hostname", h),
 							slog.Any("listenedips", publicIPs),
 							slog.Any("hostips", ips),

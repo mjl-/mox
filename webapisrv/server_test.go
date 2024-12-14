@@ -25,7 +25,6 @@ import (
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/webapi"
-	"github.com/mjl-/mox/webhook"
 )
 
 var ctxbg = context.Background()
@@ -418,7 +417,7 @@ func TestServer(t *testing.T) {
 	tcheckf(t, err, "reading raw message")
 	part, err := message.EnsurePart(log.Logger, true, bytes.NewReader(b.Bytes()), int64(b.Len()))
 	tcheckf(t, err, "parsing raw message")
-	structure, err := webhook.PartStructure(log, &part)
+	structure, err := queue.PartStructure(log, &part)
 	tcheckf(t, err, "part structure")
 	tcompare(t, structure, msgRes.Structure)
 

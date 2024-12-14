@@ -21,6 +21,7 @@ import (
 	"net/textproto"
 	"strings"
 	"time"
+	"unicode"
 
 	"golang.org/x/text/encoding/ianaindex"
 
@@ -596,6 +597,38 @@ func (p *Part) IsDSN() bool {
 		len(p.Parts) >= 2 &&
 		p.Parts[1].MediaType == "MESSAGE" &&
 		(p.Parts[1].MediaSubType == "DELIVERY-STATUS" || p.Parts[1].MediaSubType == "GLOBAL-DELIVERY-STATUS")
+}
+
+func hasNonASCII(r io.Reader) (bool, error) {
+	br := bufio.NewReader(r)
+	for {
+		b, err := br.ReadByte()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return false, err
+		}
+		if b > unicode.MaxASCII {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// NeedsSMTPUTF8 returns whether the part needs the SMTPUTF8 extension to be
+// transported, due to non-ascii in message headers.
+func (p *Part) NeedsSMTPUTF8() (bool, error) {
+	if has, err := hasNonASCII(p.HeaderReader()); err != nil {
+		return false, fmt.Errorf("reading header: %w", err)
+	} else if has {
+		return true, nil
+	}
+	for _, pp := range p.Parts {
+		if has, err := pp.NeedsSMTPUTF8(); err != nil || has {
+			return has, err
+		}
+	}
+	return false, nil
 }
 
 var ErrParamEncoding = errors.New("bad header parameter encoding")

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto"
@@ -738,7 +737,7 @@ func ctlcmdConfigDomainRemove(ctl *ctl, d dns.Domain) {
 
 func cmdConfigAliasList(c *cmd) {
 	c.params = "domain"
-	c.help = `List aliases for domain.`
+	c.help = `Show aliases (lists) for domain.`
 	args := c.Parse()
 	if len(args) != 1 {
 		c.Usage()
@@ -757,7 +756,7 @@ func ctlcmdConfigAliasList(ctl *ctl, address string) {
 
 func cmdConfigAliasPrint(c *cmd) {
 	c.params = "alias"
-	c.help = `Print settings and members of alias.`
+	c.help = `Print settings and members of alias (list).`
 	args := c.Parse()
 	if len(args) != 1 {
 		c.Usage()
@@ -776,7 +775,12 @@ func ctlcmdConfigAliasPrint(ctl *ctl, address string) {
 
 func cmdConfigAliasAdd(c *cmd) {
 	c.params = "alias@domain rcpt1@domain ..."
-	c.help = `Add new alias with one or more addresses and public posting enabled.`
+	c.help = `Add new alias (list) with one or more addresses and public posting enabled.
+
+An alias is used for delivering incoming email to multiple recipients. If you
+want to add an address to an account, don't use an alias, just add the address
+to the account.
+`
 	args := c.Parse()
 	if len(args) < 2 {
 		c.Usage()
@@ -797,7 +801,7 @@ func ctlcmdConfigAliasAdd(ctl *ctl, address string, alias config.Alias) {
 
 func cmdConfigAliasUpdate(c *cmd) {
 	c.params = "alias@domain [-postpublic false|true -listmembers false|true -allowmsgfrom false|true]"
-	c.help = `Update alias configuration.`
+	c.help = `Update alias (list) configuration.`
 	var postpublic, listmembers, allowmsgfrom string
 	c.flag.StringVar(&postpublic, "postpublic", "", "whether anyone or only list members can post")
 	c.flag.StringVar(&listmembers, "listmembers", "", "whether list members can list members")
@@ -823,7 +827,7 @@ func ctlcmdConfigAliasUpdate(ctl *ctl, alias, postpublic, listmembers, allowmsgf
 
 func cmdConfigAliasRemove(c *cmd) {
 	c.params = "alias@domain"
-	c.help = "Remove alias."
+	c.help = "Remove alias (list)."
 	args := c.Parse()
 	if len(args) != 1 {
 		c.Usage()
@@ -841,7 +845,7 @@ func ctlcmdConfigAliasRemove(ctl *ctl, alias string) {
 
 func cmdConfigAliasAddaddr(c *cmd) {
 	c.params = "alias@domain rcpt1@domain ..."
-	c.help = `Add addresses to alias.`
+	c.help = `Add addresses to alias (list).`
 	args := c.Parse()
 	if len(args) < 2 {
 		c.Usage()
@@ -860,7 +864,7 @@ func ctlcmdConfigAliasAddaddr(ctl *ctl, alias string, addresses []string) {
 
 func cmdConfigAliasRemoveaddr(c *cmd) {
 	c.params = "alias@domain rcpt1@domain ..."
-	c.help = `Remove addresses from alias.`
+	c.help = `Remove addresses from alias (list).`
 	args := c.Parse()
 	if len(args) < 2 {
 		c.Usage()
@@ -2875,19 +2879,23 @@ should be used, and how long the policy can be cached.
 }
 
 func cmdRetrain(c *cmd) {
-	c.params = "accountname"
-	c.help = `Recreate and retrain the junk filter for the account.
+	c.params = "[accountname]"
+	c.help = `Recreate and retrain the junk filter for the account or all accounts.
 
 Useful after having made changes to the junk filter configuration, or if the
 implementation has changed.
 `
 	args := c.Parse()
-	if len(args) != 1 {
+	if len(args) > 1 {
 		c.Usage()
+	}
+	var account string
+	if len(args) == 1 {
+		account = args[0]
 	}
 
 	mustLoadConfig()
-	ctlcmdRetrain(xctl(), args[0])
+	ctlcmdRetrain(xctl(), account)
 }
 
 func ctlcmdRetrain(ctl *ctl, account string) {
@@ -3519,35 +3527,10 @@ func cmdMessageParse(c *cmd) {
 	err = enc.Encode(part)
 	xcheckf(err, "write")
 
-	hasNonASCII := func(r io.Reader) bool {
-		br := bufio.NewReader(r)
-		for {
-			b, err := br.ReadByte()
-			if err == io.EOF {
-				break
-			}
-			xcheckf(err, "read header")
-			if b > 0x7f {
-				return true
-			}
-		}
-		return false
-	}
-
-	var walk func(p *message.Part) bool
-	walk = func(p *message.Part) bool {
-		if hasNonASCII(p.HeaderReader()) {
-			return true
-		}
-		for _, pp := range p.Parts {
-			if walk(&pp) {
-				return true
-			}
-		}
-		return false
-	}
 	if smtputf8 {
-		fmt.Println("message needs smtputf8:", walk(&part))
+		needs, err := part.NeedsSMTPUTF8()
+		xcheckf(err, "checking if message needs smtputf8")
+		fmt.Println("message needs smtputf8:", needs)
 	}
 }
 

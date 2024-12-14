@@ -117,7 +117,7 @@ func (s *Sig) Header() (string, error) {
 			} else if i == len(s.SignedHeaders)-1 {
 				v += ";"
 			}
-			w.Addf(sep, v)
+			w.Addf(sep, "%s", v)
 		}
 	}
 	if len(s.CopiedHeaders) > 0 {
@@ -139,7 +139,7 @@ func (s *Sig) Header() (string, error) {
 			} else if i == len(s.CopiedHeaders)-1 {
 				v += ";"
 			}
-			w.Addf(sep, v)
+			w.Addf(sep, "%s", v)
 		}
 	}
 

@@ -298,7 +298,7 @@ func (f *Filter) Save() error {
 			} else if err != nil {
 				return err
 			}
-			return tx.Update(&wordscore{w, wc.Ham + ham, wc.Spam + spam})
+			return tx.Update(&wordscore{w, ham, spam})
 		}
 		if err := update("-", f.hams, f.spams); err != nil {
 			return fmt.Errorf("storing total ham/spam message count: %s", err)
@@ -621,10 +621,16 @@ func (f *Filter) Untrain(ctx context.Context, ham bool, words map[string]struct{
 
 	// Modify the message count.
 	f.modified = true
+	var fv *uint32
 	if ham {
-		f.hams--
+		fv = &f.hams
 	} else {
-		f.spams--
+		fv = &f.spams
+	}
+	if *fv == 0 {
+		f.log.Error("attempt to decrease ham/spam message count while already zero", slog.Bool("ham", ham))
+	} else {
+		*fv -= 1
 	}
 
 	// Decrease the word counts.
@@ -633,10 +639,16 @@ func (f *Filter) Untrain(ctx context.Context, ham bool, words map[string]struct{
 		if !ok {
 			continue
 		}
+		var v *uint32
 		if ham {
-			c.Ham--
+			v = &c.Ham
 		} else {
-			c.Spam--
+			v = &c.Spam
+		}
+		if *v == 0 {
+			f.log.Error("attempt to decrease ham/spam word count while already zero", slog.String("word", w), slog.Bool("ham", ham))
+		} else {
+			*v -= 1
 		}
 		f.cache[w] = c
 		f.changed[w] = c
