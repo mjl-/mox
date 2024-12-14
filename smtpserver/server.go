@@ -264,7 +264,7 @@ func Listen() http.FnALPNHelper {
 			}
 			if listener.Submissions.EnableOnHTTPS && alpnHelper == nil {
 				alpnHelper = func(tc *tls.Config, conn net.Conn) {
-					log := mlog.New("smtp-alpn", nil)
+					log := mlog.New("smtpserver", nil)
 					resolver := dns.StrictResolver{Log: log.Logger}
 					serve(name, mox.Cid(), hostname, tc, conn, resolver, true, true, maxMsgSize, true, true, true, nil, 0)
 				}
