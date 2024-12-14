@@ -563,9 +563,9 @@ func Listen(smtpHelper, imapHelper FnALPNHelper) {
 		if !found443 && (smtpHelper != nil || imapHelper != nil) {
 			pkglog.Warn(
 				"Listener asks for non-HTTP protocols to be available via ALPN on port 443, but does not configure any HTTPS listeners on port 443. Therefore, the EnableOnHTTPS setting has no effect. Configure an HTTPS listener on port 443 to fix this.",
-				slog.String("listenerName", name),
-				slog.Any("SubmissionsEnableOnHTTPS", smtpHelper != nil),
-				slog.Any("IMAPSEnableOnHTTPS", imapHelper != nil),
+				slog.String("listener", name),
+				slog.Any("submissionhttps", smtpHelper != nil),
+				slog.Any("imaphttps", imapHelper != nil),
 			)
 		}
 	}
@@ -908,7 +908,7 @@ func serverTlsSetup(port int, tlsConfig *tls.Config, smtpHelper, imapHelper FnAL
 			npMap[proto] = func(_ *http.Server, conn *tls.Conn, _ http.Handler) {
 				helperFunc(cfg, conn)
 			}
-			pkglog.Print("Enabled ALPN listener", slog.String("proto", proto), slog.Any("NextProtos", cfg.NextProtos))
+			pkglog.Print("Enabled ALPN listener", slog.String("proto", proto), slog.Any("nextprotos", cfg.NextProtos))
 		}
 	}
 	doConfig("smtp", smtpHelper)
