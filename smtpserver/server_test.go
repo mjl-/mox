@@ -91,6 +91,7 @@ type testserver struct {
 	auth         func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)
 	user, pass   string
 	immediateTLS bool
+    viaHTTPS     bool
 	serverConfig *tls.Config
 	clientConfig *tls.Config
 	clientCert   *tls.Certificate // Passed to smtpclient for starttls authentication.
@@ -147,6 +148,8 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 	tcheck(t, err, "queue init")
 
 	ts.comm = store.RegisterComm(ts.acc)
+
+    ts.viaHTTPS = false
 
 	return &ts
 }
@@ -229,7 +232,7 @@ func (ts *testserver) runRaw(fn func(clientConn net.Conn)) {
 	defer func() { <-serverdone }()
 
 	go func() {
-		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, ts.serverConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, 100<<20, false, false, ts.requiretls, ts.dnsbls, 0)
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, ts.serverConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, ts.viaHTTPS, 100<<20, false, false, ts.requiretls, ts.dnsbls, 0)
 		close(serverdone)
 	}()
 
@@ -439,7 +442,7 @@ func TestSubmission(t *testing.T) {
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{fakeCert(ts.t, false)},
 		}
-		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, 100<<20, false, false, false, ts.dnsbls, 0)
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, ts.viaHTTPS, 100<<20, false, false, false, ts.dnsbls, 0)
 		close(serverdone)
 	}()
 
@@ -1382,7 +1385,7 @@ func TestNonSMTP(t *testing.T) {
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{fakeCert(ts.t, false)},
 		}
-		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, 100<<20, false, false, false, ts.dnsbls, 0)
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, tlsConfig, serverConn, ts.resolver, ts.submission, false, ts.viaHTTPS, 100<<20, false, false, false, ts.dnsbls, 0)
 		close(serverdone)
 	}()
 
