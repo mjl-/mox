@@ -170,7 +170,7 @@ type conn struct {
 	state             state
 	conn              net.Conn
 	tls               bool               // Whether TLS has been initialized.
-    viaHTTPS          bool               // Whether this connection came in via HTTPS (using TLS ALPN).
+	viaHTTPS          bool               // Whether this connection came in via HTTPS (using TLS ALPN).
 	br                *bufio.Reader      // From remote, with TLS unwrapped in case of TLS.
 	line              chan lineErr       // If set, instead of reading from br, a line is read from this channel. For reading a line in IDLE while also waiting for mailbox/account updates.
 	lastLine          string             // For detecting if syntax error is fatal, i.e. if this ends with a literal. Without crlf.
@@ -347,7 +347,7 @@ func Listen() http.FnALPNHelper {
 			}
 			if listener.IMAPS.EnableOnHTTPS && alpnHelper == nil {
 				alpnHelper = func(tc *tls.Config, conn net.Conn) {
-                    protocol = protocol + "https"
+					protocol = protocol + "https"
 					metricIMAPConnection.WithLabelValues(protocol).Inc()
 					serve(name, mox.Cid(), tc, conn, true, false, true)
 				}
@@ -660,7 +660,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		cid:               cid,
 		conn:              nc,
 		tls:               xtls,
-        viaHTTPS:          viaHTTPS,
+		viaHTTPS:          viaHTTPS,
 		lastlog:           time.Now(),
 		baseTLSConfig:     tlsConfig,
 		remoteIP:          remoteIP,

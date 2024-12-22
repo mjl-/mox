@@ -103,7 +103,7 @@ func FuzzServer(f *testing.F) {
 
 			resolver := dns.MockResolver{}
 			const submission = false
-            const viaHTTPS = false
+			const viaHTTPS = false
 			err := serverConn.SetDeadline(time.Now().Add(time.Second))
 			flog(err, "set server deadline")
 			serve("test", cid, dns.Domain{ASCII: "mox.example"}, nil, serverConn, resolver, submission, false, viaHTTPS, 100<<10, false, false, false, nil, 0)

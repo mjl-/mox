@@ -91,7 +91,7 @@ type testserver struct {
 	auth         func(mechanisms []string, cs *tls.ConnectionState) (sasl.Client, error)
 	user, pass   string
 	immediateTLS bool
-    viaHTTPS     bool
+	viaHTTPS     bool
 	serverConfig *tls.Config
 	clientConfig *tls.Config
 	clientCert   *tls.Certificate // Passed to smtpclient for starttls authentication.
@@ -149,7 +149,7 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 
 	ts.comm = store.RegisterComm(ts.acc)
 
-    ts.viaHTTPS = false
+	ts.viaHTTPS = false
 
 	return &ts
 }

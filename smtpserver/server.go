@@ -335,7 +335,7 @@ type conn struct {
 
 	tls                   bool
 	extRequireTLS         bool // Whether to announce and allow the REQUIRETLS extension.
-    viaHTTPS              bool // Whether the connection came in via the HTTPS port (using TLS ALPN).
+	viaHTTPS              bool // Whether the connection came in via the HTTPS port (using TLS ALPN).
 	resolver              dns.Resolver
 	r                     *bufio.Reader
 	w                     *bufio.Writer
@@ -831,7 +831,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		conn:                  nc,
 		submission:            submission,
 		tls:                   xtls,
-        viaHTTPS:              viaHTTPS,
+		viaHTTPS:              viaHTTPS,
 		extRequireTLS:         requireTLS,
 		resolver:              resolver,
 		lastlog:               time.Now(),
@@ -1046,13 +1046,13 @@ func command(c *conn) {
 
 // For use in metric labels.
 func (c *conn) kind() string {
-    k := "smtp"
+	k := "smtp"
 	if c.submission {
-        k = "submission"
+		k = "submission"
 	}
-    if c.viaHTTPS {
-        k = k + "https"
-    }
+	if c.viaHTTPS {
+		k = k + "https"
+	}
 	return k
 }
 

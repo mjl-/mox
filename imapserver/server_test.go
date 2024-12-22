@@ -350,7 +350,7 @@ func startArgs(t *testing.T, first, immediateTLS bool, allowLoginWithoutTLS, set
 func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientConfig *tls.Config, allowLoginWithoutTLS, noCloseSwitchboard, setPassword bool, accname string, afterInit func() error) *testconn {
 	limitersInit() // Reset rate limiters.
 
-    viaHTTPS := false
+	viaHTTPS := false
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
 	mox.MustLoadConfig(true, false)
