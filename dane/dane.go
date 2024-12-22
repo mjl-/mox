@@ -448,7 +448,8 @@ func verifySingle(log mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowedH
 		// We set roots, so the system defaults don't get used. Verify checks the host name
 		// (set below) and checks for expiration.
 		opts := x509.VerifyOptions{
-			Roots: x509.NewCertPool(),
+			Intermediates: x509.NewCertPool(),
+			Roots:         x509.NewCertPool(),
 		}
 
 		// If the full certificate was included, we must add it to the valid roots, the TLS
@@ -465,11 +466,13 @@ func verifySingle(log mlog.Log, tlsa adns.TLSA, cs tls.ConnectionState, allowedH
 			}
 		}
 
-		for _, cert := range cs.PeerCertificates {
+		for i, cert := range cs.PeerCertificates {
 			if match(cert) {
 				opts.Roots.AddCert(cert)
 				found = true
 				break
+			} else if i > 0 {
+				opts.Intermediates.AddCert(cert)
 			}
 		}
 		if !found {
