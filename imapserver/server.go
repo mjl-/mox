@@ -67,6 +67,7 @@ import (
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/config"
+	"github.com/mjl-/mox/http"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
@@ -169,6 +170,7 @@ type conn struct {
 	state             state
 	conn              net.Conn
 	tls               bool               // Whether TLS has been initialized.
+	viaHTTPS          bool               // Whether this connection came in via HTTPS (using TLS ALPN).
 	br                *bufio.Reader      // From remote, with TLS unwrapped in case of TLS.
 	line              chan lineErr       // If set, instead of reading from br, a line is read from this channel. For reading a line in IDLE while also waiting for mailbox/account updates.
 	lastLine          string             // For detecting if syntax error is fatal, i.e. if this ends with a literal. Without crlf.
@@ -318,7 +320,8 @@ func (c *conn) xsanity(err error, format string, args ...any) {
 type msgseq uint32
 
 // Listen initializes all imap listeners for the configuration, and stores them for Serve to start them.
-func Listen() {
+func Listen() http.FnALPNHelper {
+	var alpnHelper http.FnALPNHelper
 	names := maps.Keys(mox.Conf.Static.Listeners)
 	sort.Strings(names)
 	for _, name := range names {
@@ -338,11 +341,20 @@ func Listen() {
 
 		if listener.IMAPS.Enabled {
 			port := config.Port(listener.IMAPS.Port, 993)
+			protocol := "imaps"
 			for _, ip := range listener.IPs {
-				listen1("imaps", name, ip, port, tlsConfig, true, false)
+				listen1(protocol, name, ip, port, tlsConfig, true, false)
+			}
+			if listener.IMAPS.EnableOnHTTPS && alpnHelper == nil {
+				alpnHelper = func(tc *tls.Config, conn net.Conn) {
+					protocol = protocol + "https"
+					metricIMAPConnection.WithLabelValues(protocol).Inc()
+					serve(name, mox.Cid(), tc, conn, true, false, true)
+				}
 			}
 		}
 	}
+	return alpnHelper
 }
 
 var servers []func()
@@ -380,7 +392,7 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 			}
 
 			metricIMAPConnection.WithLabelValues(protocol).Inc()
-			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noRequireSTARTTLS)
+			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noRequireSTARTTLS, false)
 		}
 	}
 
@@ -635,7 +647,7 @@ func (c *conn) xhighestModSeq(tx *bstore.Tx, mailboxID int64) store.ModSeq {
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
-func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noRequireSTARTTLS bool) {
+func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noRequireSTARTTLS, viaHTTPS bool) {
 	var remoteIP net.IP
 	if a, ok := nc.RemoteAddr().(*net.TCPAddr); ok {
 		remoteIP = a.IP
@@ -648,6 +660,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		cid:               cid,
 		conn:              nc,
 		tls:               xtls,
+		viaHTTPS:          viaHTTPS,
 		lastlog:           time.Now(),
 		baseTLSConfig:     tlsConfig,
 		remoteIP:          remoteIP,
@@ -717,7 +730,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		}
 	}()
 
-	if xtls {
+	if xtls && !viaHTTPS {
 		// Start TLS on connection. We perform the handshake explicitly, so we can set a
 		// timeout, do client certificate authentication, log TLS details afterwards.
 		c.xtlsHandshakeAndAuthenticate(c.conn)
