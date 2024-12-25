@@ -633,10 +633,11 @@ func TestMailbox(t *testing.T) {
 func TestMailboxDeleted(t *testing.T) {
 	tc := start(t)
 	defer tc.close()
-	tc.client.Login("mjl@mox.example", password0)
 
 	tc2 := startNoSwitchboard(t)
 	defer tc2.close()
+
+	tc.client.Login("mjl@mox.example", password0)
 	tc2.client.Login("mjl@mox.example", password0)
 
 	tc.client.Create("testbox")
