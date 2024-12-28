@@ -23,6 +23,7 @@ type ProtocolConfig struct {
 	Host    dns.Domain
 	Port    int
 	TLSMode TLSMode
+    EnabledOnHTTPS bool
 }
 
 type ClientConfig struct {
@@ -52,6 +53,7 @@ func ClientConfigDomain(d dns.Domain) (rconfig ClientConfig, rerr error) {
 			rconfig.IMAP.Host = host
 			rconfig.IMAP.Port = config.Port(l.IMAPS.Port, 993)
 			rconfig.IMAP.TLSMode = TLSModeImmediate
+            rconfig.IMAP.EnabledOnHTTPS = l.IMAPS.EnabledOnHTTPS
 			haveIMAP = true
 		}
 		if !haveIMAP && l.IMAP.Enabled {
@@ -67,6 +69,7 @@ func ClientConfigDomain(d dns.Domain) (rconfig ClientConfig, rerr error) {
 			rconfig.Submission.Host = host
 			rconfig.Submission.Port = config.Port(l.Submissions.Port, 465)
 			rconfig.Submission.TLSMode = TLSModeImmediate
+            rconfig.Submission.EnabledOnHTTPS = l.Submissions.EnabledOnHTTPS
 			haveSubmission = true
 		}
 		if !haveSubmission && l.Submission.Enabled {
