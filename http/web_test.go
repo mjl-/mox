@@ -17,7 +17,7 @@ func TestServeHTTP(t *testing.T) {
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
 
-	portSrvs := portServes(mox.Conf.Static.Listeners["local"])
+	portSrvs := portServes("local", mox.Conf.Static.Listeners["local"])
 	srv := portSrvs[80]
 
 	test := func(method, target string, expCode int, expContent string, expHeaders map[string]string) {

@@ -218,7 +218,7 @@ func expectReadAfter2s(t *testing.T, hostport string, nextproto string, expected
 	}
 }
 
-func expectTlsFail(t *testing.T, hostport string, nextproto string) {
+func expectTLSFail(t *testing.T, hostport string, nextproto string) {
 	tlsConfig := &tls.Config{
 		NextProtos: []string{
 			nextproto,
@@ -238,31 +238,26 @@ func expectTlsFail(t *testing.T, hostport string, nextproto string) {
 }
 
 func TestALPN(t *testing.T) {
-	known_available_http_file := "https://%s/.well-known/mta-sts.txt"
+	alpnhost := "moxacmepebblealpn.mox1.example:443"
+	nonalpnhost := "moxacmepebble.mox1.example:443"
+
 	log := mlog.New("integration", nil)
 	mlog.Logfmt = true
 	// ALPN should work when enabled.
-	alpnhost := "moxacmepebblealpn.mox1.example:443"
 	log.Info("trying IMAP via ALPN (should succeed)", slog.String("host", alpnhost))
 	expectReadAfter2s(t, alpnhost, "imap", "* OK ")
 	log.Info("trying SMTP via ALPN (should succeed)", slog.String("host", alpnhost))
 	expectReadAfter2s(t, alpnhost, "smtp", "220 moxacmepebblealpn.mox1.example ESMTP ")
 	log.Info("trying HTTP (should succeed)", slog.String("host", alpnhost))
-	_, err := http.Get(fmt.Sprintf(known_available_http_file, alpnhost))
-	if err != nil {
-		t.Fatalf("error checking for HTTP response on ALPN host (expected nil): %v", err)
-	}
+	_, err := http.Get("https://" + alpnhost)
+	tcheck(t, err, "get alpn url")
 
 	// ALPN should not work when not enabled.
-	nonalpnhost := "moxacmepebble.mox1.example:443"
 	log.Info("trying IMAP via ALPN (should fail)", slog.String("host", nonalpnhost))
-	expectTlsFail(t, nonalpnhost, "imap")
+	expectTLSFail(t, nonalpnhost, "imap")
 	log.Info("trying SMTP via ALPN (should fail)", slog.String("host", nonalpnhost))
-	expectTlsFail(t, nonalpnhost, "smtp")
+	expectTLSFail(t, nonalpnhost, "smtp")
 	log.Info("trying HTTP (should succeed)", slog.String("host", nonalpnhost))
-	_, err = http.Get(fmt.Sprintf(known_available_http_file, nonalpnhost))
-	if err != nil {
-		t.Fatalf("error checking for HTTP response on non-ALPN host (expected nil): %v", err)
-	}
-
+	_, err = http.Get("https://" + nonalpnhost)
+	tcheck(t, err, "get non-alpn url")
 }

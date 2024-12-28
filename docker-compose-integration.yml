@@ -88,7 +88,7 @@ services:
   # Third mox instance that uses ACME with pebble and has ALPN enabled.
   moxacmepebblealpn:
     hostname: moxacmepebblealpn.mox1.example
-    domainname: mox3.example
+    domainname: mox1.example
     image: mox_integration_moxmail
     environment:
       MOX_UID: "${MOX_UID}"

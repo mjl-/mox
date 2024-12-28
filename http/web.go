@@ -33,9 +33,11 @@ import (
 	"github.com/mjl-/mox/autotls"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/imapserver"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/ratelimit"
+	"github.com/mjl-/mox/smtpserver"
 	"github.com/mjl-/mox/webaccount"
 	"github.com/mjl-/mox/webadmin"
 	"github.com/mjl-/mox/webapisrv"
@@ -385,8 +387,9 @@ type pathHandler struct {
 	Handler   http.Handler
 }
 type serve struct {
-	Kinds     []string // Type of handler and protocol (e.g. acme-tls-alpn-01, account-http, admin-https).
+	Kinds     []string // Type of handler and protocol (e.g. acme-tls-alpn-01, account-http, admin-https, imap-https, smtp-https).
 	TLSConfig *tls.Config
+	NextProto tlsNextProtoMap // For HTTP server, when we do submission/imap with ALPN over the HTTPS port.
 	Favicon   bool
 
 	// SystemHandlers are for MTA-STS, autoconfig, ACME validation. They can't be
@@ -539,39 +542,27 @@ func redirectToTrailingSlash(srv *serve, hostMatch func(dns.IPDomain) bool, name
 
 // Listen binds to sockets for HTTP listeners, including those required for ACME to
 // generate TLS certificates. It stores the listeners so Serve can start serving them.
-func Listen(smtpHelper, imapHelper FnALPNHelper) {
+func Listen() {
 	// Initialize listeners in deterministic order for the same potential error
 	// messages.
 	names := maps.Keys(mox.Conf.Static.Listeners)
 	sort.Strings(names)
 	for _, name := range names {
-		found443 := false
 		l := mox.Conf.Static.Listeners[name]
-		portServe := portServes(l)
+		portServe := portServes(name, l)
 
 		ports := maps.Keys(portServe)
 		sort.Ints(ports)
 		for _, port := range ports {
-			if port == 443 {
-				found443 = true
-			}
 			srv := portServe[port]
 			for _, ip := range l.IPs {
-				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv, smtpHelper, imapHelper)
+				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv, srv.NextProto)
 			}
-		}
-		if !found443 && (smtpHelper != nil || imapHelper != nil) {
-			pkglog.Warn(
-				"Listener asks for non-HTTP protocols to be available via ALPN on port 443, but does not configure any HTTPS listeners on port 443. Therefore, the EnableOnHTTPS setting has no effect. Configure an HTTPS listener on port 443 to fix this.",
-				slog.String("listener", name),
-				slog.Any("submissionhttps", smtpHelper != nil),
-				slog.Any("imaphttps", imapHelper != nil),
-			)
 		}
 	}
 }
 
-func portServes(l config.Listener) map[int]*serve {
+func portServes(name string, l config.Listener) map[int]*serve {
 	portServe := map[int]*serve{}
 
 	// For system/services, we serve on host localhost too, for ssh tunnel scenario's.
@@ -598,7 +589,7 @@ func portServes(l config.Listener) map[int]*serve {
 	ensureServe = func(https bool, port int, kind string, favicon bool) *serve {
 		s := portServe[port]
 		if s == nil {
-			s = &serve{nil, nil, false, nil, false, nil}
+			s = &serve{nil, nil, tlsNextProtoMap{}, false, nil, false, nil}
 			portServe[port] = s
 		}
 		s.Kinds = append(s.Kinds, kind)
@@ -633,7 +624,29 @@ func portServes(l config.Listener) map[int]*serve {
 		port := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
 		ensureServe(true, port, "acme-tls-alpn-01", false)
 	}
+	if l.Submissions.Enabled && l.Submissions.EnabledOnHTTPS {
+		s := ensureServe(true, 443, "smtp-https", false)
+		hostname := mox.Conf.Static.HostnameDomain
+		if l.Hostname != "" {
+			hostname = l.HostnameDomain
+		}
 
+		maxMsgSize := l.SMTPMaxMessageSize
+		if maxMsgSize == 0 {
+			maxMsgSize = config.DefaultMaxMsgSize
+		}
+		requireTLS := !l.SMTP.NoRequireTLS
+
+		s.NextProto["smtp"] = func(_ *http.Server, conn *tls.Conn, _ http.Handler) {
+			smtpserver.ServeTLSConn(name, hostname, conn, s.TLSConfig, true, true, maxMsgSize, requireTLS)
+		}
+	}
+	if l.IMAPS.Enabled && l.IMAPS.EnabledOnHTTPS {
+		s := ensureServe(true, 443, "imap-https", false)
+		s.NextProto["imap"] = func(_ *http.Server, conn *tls.Conn, _ http.Handler) {
+			imapserver.ServeTLSConn(name, conn, s.TLSConfig)
+		}
+	}
 	if l.AccountHTTP.Enabled {
 		port := config.Port(l.AccountHTTP.Port, 80)
 		path := "/"
@@ -817,7 +830,7 @@ func portServes(l config.Listener) map[int]*serve {
 		if _, ok := portServe[port]; ok {
 			pkglog.Fatal("cannot serve pprof on same endpoint as other http services")
 		}
-		srv := &serve{[]string{"pprof-http"}, nil, false, nil, false, nil}
+		srv := &serve{[]string{"pprof-http"}, nil, nil, false, nil, false, nil}
 		portServe[port] = srv
 		srv.SystemHandle("pprof", nil, "/", http.DefaultServeMux)
 	}
@@ -868,6 +881,11 @@ func portServes(l config.Listener) map[int]*serve {
 		}
 	}
 
+	if s := portServe[443]; s != nil && s.TLSConfig != nil && len(s.NextProto) > 0 {
+		s.TLSConfig = s.TLSConfig.Clone()
+		s.TLSConfig.NextProtos = append(s.TLSConfig.NextProtos, maps.Keys(s.NextProto)...)
+	}
+
 	for _, srv := range portServe {
 		sortPathHandlers(srv.SystemHandlers)
 		sortPathHandlers(srv.ServiceHandlers)
@@ -899,38 +917,15 @@ var servers []func()
 // the certificate to be given during the first https connection.
 var ensureManagerHosts = map[*autotls.Manager]map[dns.Domain]struct{}{}
 
-type FnALPNHelper = func(*tls.Config, net.Conn)
 type tlsNextProtoMap = map[string]func(*http.Server, *tls.Conn, http.Handler)
 
-func serverTlsSetup(port int, tlsConfig *tls.Config, smtpHelper, imapHelper FnALPNHelper) (*tls.Config, tlsNextProtoMap) {
-	cfg := tlsConfig.Clone()
-	npMap := tlsNextProtoMap{}
-	if port != 443 {
-		return cfg, npMap
-	}
-	doConfig := func(proto string, helperFunc FnALPNHelper) {
-		if helperFunc != nil {
-			cfg.NextProtos = append(cfg.NextProtos, proto)
-			npMap[proto] = func(_ *http.Server, conn *tls.Conn, _ http.Handler) {
-				helperFunc(cfg, conn)
-			}
-			pkglog.Print("Enabled ALPN listener", slog.String("proto", proto), slog.Any("nextprotos", cfg.NextProtos))
-		}
-	}
-	doConfig("smtp", smtpHelper)
-	doConfig("imap", imapHelper)
-	return cfg, npMap
-}
-
 // listen prepares a listener, and adds it to "servers", to be launched (if not running as root) through Serve.
-func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, handler http.Handler, smtpHelper, imapHelper FnALPNHelper) {
+func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, handler http.Handler, nextProto tlsNextProtoMap) {
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 
 	var protocol string
 	var ln net.Listener
 	var err error
-	var updatedTlsConfig *tls.Config
-	var npMap tlsNextProtoMap
 	if tlsConfig == nil {
 		protocol = "http"
 		if os.Getuid() == 0 {
@@ -951,22 +946,21 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 				slog.String("kinds", strings.Join(kinds, ",")),
 				slog.String("address", addr))
 		}
-		updatedTlsConfig, npMap = serverTlsSetup(port, tlsConfig, smtpHelper, imapHelper)
 		ln, err = mox.Listen(mox.Network(ip), addr)
 		if err != nil {
 			pkglog.Fatalx("https: listen", err, slog.String("addr", addr))
 		}
-		ln = tls.NewListener(ln, updatedTlsConfig)
+		ln = tls.NewListener(ln, tlsConfig)
 	}
 
 	server := &http.Server{
 		Handler: handler,
 		// Clone because our multiple Server.Serve calls modify config concurrently leading to data race.
-		TLSConfig:         updatedTlsConfig,
+		TLSConfig:         tlsConfig.Clone(),
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       65 * time.Second, // Chrome closes connections after 60 seconds, firefox after 115 seconds.
 		ErrorLog:          golog.New(mlog.LogWriter(pkglog.With(slog.String("pkg", "net/http")), slog.LevelInfo, protocol+" error"), "", 0),
-		TLSNextProto:      npMap,
+		TLSNextProto:      nextProto,
 	}
 	// By default, the Go 1.6 and above http.Server includes support for HTTP2.
 	// However, HTTP2 is negotiated via ALPN. Because we are configuring

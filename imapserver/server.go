@@ -67,7 +67,6 @@ import (
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/config"
-	"github.com/mjl-/mox/http"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
@@ -320,8 +319,7 @@ func (c *conn) xsanity(err error, format string, args ...any) {
 type msgseq uint32
 
 // Listen initializes all imap listeners for the configuration, and stores them for Serve to start them.
-func Listen() http.FnALPNHelper {
-	var alpnHelper http.FnALPNHelper
+func Listen() {
 	names := maps.Keys(mox.Conf.Static.Listeners)
 	sort.Strings(names)
 	for _, name := range names {
@@ -341,20 +339,11 @@ func Listen() http.FnALPNHelper {
 
 		if listener.IMAPS.Enabled {
 			port := config.Port(listener.IMAPS.Port, 993)
-			protocol := "imaps"
 			for _, ip := range listener.IPs {
-				listen1(protocol, name, ip, port, tlsConfig, true, false)
-			}
-			if listener.IMAPS.EnableOnHTTPS && alpnHelper == nil {
-				alpnHelper = func(tc *tls.Config, conn net.Conn) {
-					protocol = protocol + "https"
-					metricIMAPConnection.WithLabelValues(protocol).Inc()
-					serve(name, mox.Cid(), tc, conn, true, false, true)
-				}
+				listen1("imaps", name, ip, port, tlsConfig, true, false)
 			}
 		}
 	}
-	return alpnHelper
 }
 
 var servers []func()
@@ -397,6 +386,11 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 	}
 
 	servers = append(servers, serve)
+}
+
+// ServeTLSConn serves IMAP on a TLS connection.
+func ServeTLSConn(listenerName string, conn *tls.Conn, tlsConfig *tls.Config) {
+	serve(listenerName, mox.Cid(), tlsConfig, conn, true, false, true)
 }
 
 // Serve starts serving on all listeners, launching a goroutine per listener.
@@ -693,10 +687,14 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	// Many IMAP connections use IDLE to wait for new incoming messages. We'll enable
 	// keepalive to get a higher chance of the connection staying alive, or otherwise
 	// detecting broken connections early.
-	if tcpconn, ok := c.conn.(*net.TCPConn); ok {
-		if err := tcpconn.SetKeepAlivePeriod(5 * time.Minute); err != nil {
+	tcpconn := c.conn
+	if viaHTTPS {
+		tcpconn = nc.(*tls.Conn).NetConn()
+	}
+	if tc, ok := tcpconn.(*net.TCPConn); ok {
+		if err := tc.SetKeepAlivePeriod(5 * time.Minute); err != nil {
 			c.log.Errorx("setting keepalive period", err)
-		} else if err := tcpconn.SetKeepAlive(true); err != nil {
+		} else if err := tc.SetKeepAlive(true); err != nil {
 			c.log.Errorx("enabling keepalive", err)
 		}
 	}
@@ -705,6 +703,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		slog.Any("remote", c.conn.RemoteAddr()),
 		slog.Any("local", c.conn.LocalAddr()),
 		slog.Bool("tls", xtls),
+		slog.Bool("viahttps", viaHTTPS),
 		slog.String("listener", listenerName))
 
 	defer func() {
@@ -1567,7 +1566,7 @@ func (c *conn) capabilities() string {
 	} else {
 		caps += " LOGINDISABLED"
 	}
-	if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 {
+	if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 && !c.viaHTTPS {
 		caps += " AUTH=EXTERNAL"
 	}
 	return caps

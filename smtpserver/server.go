@@ -46,7 +46,6 @@ import (
 	"github.com/mjl-/mox/dmarcrpt"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/dsn"
-	"github.com/mjl-/mox/http"
 	"github.com/mjl-/mox/iprev"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
@@ -202,8 +201,7 @@ func durationDefault(delay *time.Duration, def time.Duration) time.Duration {
 
 // Listen initializes network listeners for incoming SMTP connection.
 // The listeners are stored for a later call to Serve.
-func Listen() http.FnALPNHelper {
-	var alpnHelper http.FnALPNHelper
+func Listen() {
 	names := maps.Keys(mox.Conf.Static.Listeners)
 	sort.Strings(names)
 	for _, name := range names {
@@ -261,16 +259,8 @@ func Listen() http.FnALPNHelper {
 			for _, ip := range listener.IPs {
 				listen1("submissions", name, ip, port, hostname, tlsConfig, true, true, maxMsgSize, true, true, true, nil, 0)
 			}
-			if listener.Submissions.EnableOnHTTPS && alpnHelper == nil {
-				alpnHelper = func(tc *tls.Config, conn net.Conn) {
-					log := mlog.New("smtpserver", nil)
-					resolver := dns.StrictResolver{Log: log.Logger}
-					serve(name, mox.Cid(), hostname, tc, conn, resolver, true, true, true, maxMsgSize, true, true, true, nil, 0)
-				}
-			}
 		}
 	}
-	return alpnHelper
 }
 
 var servers []func()
@@ -810,6 +800,13 @@ func (c *conn) writelinef(format string, args ...any) {
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
+// ServeTLSConn serves a TLS connection.
+func ServeTLSConn(listenerName string, hostname dns.Domain, conn *tls.Conn, tlsConfig *tls.Config, submission, viaHTTPS bool, maxMsgSize int64, requireTLS bool) {
+	log := mlog.New("smtpserver", nil)
+	resolver := dns.StrictResolver{Log: log.Logger}
+	serve(listenerName, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, true, viaHTTPS, maxMsgSize, true, true, requireTLS, nil, 0)
+}
+
 func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, xtls, viaHTTPS bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
 	var localIP, remoteIP net.IP
 	if a, ok := nc.LocalAddr().(*net.TCPAddr); ok {
@@ -825,9 +822,14 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		remoteIP = net.ParseIP("127.0.0.10")
 	}
 
+	origConn := nc
+	if viaHTTPS {
+		origConn = nc.(*tls.Conn).NetConn()
+	}
+
 	c := &conn{
 		cid:                   cid,
-		origConn:              nc,
+		origConn:              origConn,
 		conn:                  nc,
 		submission:            submission,
 		tls:                   xtls,
@@ -871,6 +873,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		slog.Any("local", c.conn.LocalAddr()),
 		slog.Bool("submission", submission),
 		slog.Bool("tls", xtls),
+		slog.Bool("viahttps", viaHTTPS),
 		slog.String("listener", listenerName))
 
 	defer func() {
@@ -1046,14 +1049,10 @@ func command(c *conn) {
 
 // For use in metric labels.
 func (c *conn) kind() string {
-	k := "smtp"
 	if c.submission {
-		k = "submission"
+		return "submission"
 	}
-	if c.viaHTTPS {
-		k = k + "https"
-	}
-	return k
+	return "smtp"
 }
 
 func (c *conn) xneedHello() {
@@ -1152,7 +1151,7 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 			// case, or it would trigger the mechanism downgrade detection.
 			mechs = "SCRAM-SHA-256-PLUS SCRAM-SHA-256 SCRAM-SHA-1-PLUS SCRAM-SHA-1 CRAM-MD5 PLAIN LOGIN"
 		}
-		if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 {
+		if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 && !c.viaHTTPS {
 			mechs = "EXTERNAL " + mechs
 		}
 		c.bwritelinef("250-AUTH %s", mechs)

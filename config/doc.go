@@ -287,13 +287,13 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# Default 465. (optional)
 				Port: 0
 
-				# Additionally enable this Submissions listener on any active HTTPS listeners for
-				# port 443 via TLS ALPN. TLS Application Layer Protocol Negotiation allows clients
-				# to request a specific protocol from the server as part of the TLS connection
-				# setup. When this setting is enabled and a client requests the 'smtp' protocol
-				# after TLS, it will be able to talk SMTP to Mox on port 443. This is meant to be
-				# useful as a censorship circumvention technique for Delta Chat. (optional)
-				EnableOnHTTPS: false
+				# Additionally enable submission on HTTPS port 443 via TLS ALPN. TLS Application
+				# Layer Protocol Negotiation allows clients to request a specific protocol from
+				# the server as part of the TLS connection setup. When this setting is enabled and
+				# a client requests the 'smtp' protocol after TLS, it will be able to talk SMTP to
+				# Mox on port 443. This is meant to be useful as a censorship circumvention
+				# technique for Delta Chat. (optional)
+				EnabledOnHTTPS: false
 
 			# IMAP for reading email, by email applications. Starts out in plain text, can be
 			# upgraded to TLS with the STARTTLS command. Prefer using IMAPS instead which is
@@ -316,13 +316,13 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# Default 993. (optional)
 				Port: 0
 
-				# Additionally enable this IMAP listener on any active HTTPS listeners for port
-				# 443 via TLS ALPN. TLS Application Layer Protocol Negotiation allows clients to
-				# request a specific protocol from the server as part of the TLS connection setup.
-				# When this setting is enabled and a client requests the 'imap' protocol after
-				# TLS, it will be able to talk IMAP to Mox on port 443. This is meant to be useful
-				# as a censorship circumvention technique for Delta Chat. (optional)
-				EnableOnHTTPS: false
+				# Additionally enable IMAP on HTTPS port 443 via TLS ALPN. TLS Application Layer
+				# Protocol Negotiation allows clients to request a specific protocol from the
+				# server as part of the TLS connection setup. When this setting is enabled and a
+				# client requests the 'imap' protocol after TLS, it will be able to talk IMAP to
+				# Mox on port 443. This is meant to be useful as a censorship circumvention
+				# technique for Delta Chat. (optional)
+				EnabledOnHTTPS: false
 
 			# Account web interface, for email users wanting to change their accounts, e.g.
 			# set new password, set new delivery rulesets. Default path is /. (optional)
