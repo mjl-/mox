@@ -107,49 +107,49 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	// todo: specify SCRAM-SHA-256 once thunderbird and autoconfig supports it. or perhaps that will fall under "password-encrypted" by then.
 	// todo: let user configure they prefer or require tls client auth and specify "TLS-client-cert"
 
-    incoming := incomingServer{
-        "imap",
-        config.IMAP.Host.ASCII,
-        config.IMAP.Port,
-        imapTLS,
-        email,
-        "password-encrypted",
-    }
+	incoming := incomingServer{
+		"imap",
+		config.IMAP.Host.ASCII,
+		config.IMAP.Port,
+		imapTLS,
+		email,
+		"password-encrypted",
+	}
 	resp.EmailProvider.IncomingServers = append(resp.EmailProvider.IncomingServers, incoming)
-    if config.IMAP.EnabledOnHTTPS {
-        tlsMode, _ := socketType(admin.TLSModeImmediate)
-        incomingALPN := incomingServer{
-            "imap",
-            config.IMAP.Host.ASCII,
-            443,
-            tlsMode,
-            email,
-            "password-encrypted",
-        }
-        resp.EmailProvider.IncomingServers = append(resp.EmailProvider.IncomingServers, incomingALPN)
-    }
+	if config.IMAP.EnabledOnHTTPS {
+		tlsMode, _ := socketType(admin.TLSModeImmediate)
+		incomingALPN := incomingServer{
+			"imap",
+			config.IMAP.Host.ASCII,
+			443,
+			tlsMode,
+			email,
+			"password-encrypted",
+		}
+		resp.EmailProvider.IncomingServers = append(resp.EmailProvider.IncomingServers, incomingALPN)
+	}
 
-    outgoing := outgoingServer{
-        "smtp",
-        config.Submission.Host.ASCII,
-        config.Submission.Port,
-        submissionTLS,
-        email,
-        "password-encrypted",
-    }
-    resp.EmailProvider.OutgoingServers = append(resp.EmailProvider.OutgoingServers, outgoing)
-    if config.Submission.EnabledOnHTTPS {
-        tlsMode, _ := socketType(admin.TLSModeImmediate)
-        outgoingALPN := outgoingServer{
-            "smtp",
-            config.IMAP.Host.ASCII,
-            443,
-            tlsMode,
-            email,
-            "password-encrypted",
-        }
-        resp.EmailProvider.OutgoingServers = append(resp.EmailProvider.OutgoingServers, outgoingALPN)
-    }
+	outgoing := outgoingServer{
+		"smtp",
+		config.Submission.Host.ASCII,
+		config.Submission.Port,
+		submissionTLS,
+		email,
+		"password-encrypted",
+	}
+	resp.EmailProvider.OutgoingServers = append(resp.EmailProvider.OutgoingServers, outgoing)
+	if config.Submission.EnabledOnHTTPS {
+		tlsMode, _ := socketType(admin.TLSModeImmediate)
+		outgoingALPN := outgoingServer{
+			"smtp",
+			config.IMAP.Host.ASCII,
+			443,
+			tlsMode,
+			email,
+			"password-encrypted",
+		}
+		resp.EmailProvider.OutgoingServers = append(resp.EmailProvider.OutgoingServers, outgoingALPN)
+	}
 
 	// todo: should we put the email address in the URL?
 	resp.ClientConfigUpdate.URL = fmt.Sprintf("https://autoconfig.%s/mail/config-v1.1.xml", addr.Domain.ASCII)
@@ -286,20 +286,20 @@ func autodiscoverHandle(w http.ResponseWriter, r *http.Request) {
 // https://example.org/.well-known/autoconfig/mail/config-v1.1.xml?emailaddress=user%40example.org
 // https://example.org/autodiscover/autodiscover.xml
 type incomingServer struct {
-    Type           string `xml:"type,attr"`
-    Hostname       string `xml:"hostname"`
-    Port           int    `xml:"port"`
-    SocketType     string `xml:"socketType"`
-    Username       string `xml:"username"`
-    Authentication string `xml:"authentication"`
+	Type           string `xml:"type,attr"`
+	Hostname       string `xml:"hostname"`
+	Port           int    `xml:"port"`
+	SocketType     string `xml:"socketType"`
+	Username       string `xml:"username"`
+	Authentication string `xml:"authentication"`
 }
 type outgoingServer struct {
-    Type           string `xml:"type,attr"`
-    Hostname       string `xml:"hostname"`
-    Port           int    `xml:"port"`
-    SocketType     string `xml:"socketType"`
-    Username       string `xml:"username"`
-    Authentication string `xml:"authentication"`
+	Type           string `xml:"type,attr"`
+	Hostname       string `xml:"hostname"`
+	Port           int    `xml:"port"`
+	SocketType     string `xml:"socketType"`
+	Username       string `xml:"username"`
+	Authentication string `xml:"authentication"`
 }
 type autoconfigResponse struct {
 	XMLName xml.Name `xml:"clientConfig"`
