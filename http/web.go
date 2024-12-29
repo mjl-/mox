@@ -598,14 +598,18 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			s.Favicon = true
 		}
 
+		// We clone TLS configs because we may modify it later on for this server, for
+		// ALPN. And we need copies because multiple listeners on http.Server where the
+		// config is used will try to modify it concurrently.
 		if https && l.TLS.ACME != "" {
-			s.TLSConfig = l.TLS.ACMEConfig
-		} else if https {
-			s.TLSConfig = l.TLS.Config
-			if l.TLS.ACME != "" {
-				tlsport := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
+			s.TLSConfig = l.TLS.ACMEConfig.Clone()
+
+			tlsport := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
+			if portServe[tlsport] == nil || !slices.Contains(portServe[tlsport].Kinds, "acme-tls-alpn-01") {
 				ensureServe(true, tlsport, "acme-tls-alpn-01", false)
 			}
+		} else if https {
+			s.TLSConfig = l.TLS.Config.Clone()
 		}
 		return s
 	}
@@ -883,7 +887,6 @@ func portServes(name string, l config.Listener) map[int]*serve {
 	}
 
 	if s := portServe[443]; s != nil && s.TLSConfig != nil && len(s.NextProto) > 0 {
-		s.TLSConfig = s.TLSConfig.Clone()
 		s.TLSConfig.NextProtos = append(s.TLSConfig.NextProtos, maps.Keys(s.NextProto)...)
 	}
 
@@ -955,9 +958,8 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 	}
 
 	server := &http.Server{
-		Handler: handler,
-		// Clone because our multiple Server.Serve calls modify config concurrently leading to data race.
-		TLSConfig:         tlsConfig.Clone(),
+		Handler:           handler,
+		TLSConfig:         tlsConfig,
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       65 * time.Second, // Chrome closes connections after 60 seconds, firefox after 115 seconds.
 		ErrorLog:          golog.New(mlog.LogWriter(pkglog.With(slog.String("pkg", "net/http")), slog.LevelInfo, protocol+" error"), "", 0),
