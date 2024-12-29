@@ -4847,7 +4847,7 @@ const webserver = async () => {
 							dom.option('Account', attr.value('account')),
 							dom.option('Webmail', attr.value('webmail')),
 							dom.option('Webapi', attr.value('webapi')),
-							attr.value(wi.Service),
+							prop({value: wi.Service}),
 						),
 					),
 				),

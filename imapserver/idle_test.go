@@ -11,10 +11,11 @@ import (
 func TestIdle(t *testing.T) {
 	tc1 := start(t)
 	defer tc1.close()
-	tc1.client.Login("mjl@mox.example", password0)
 
 	tc2 := startNoSwitchboard(t)
 	defer tc2.close()
+
+	tc1.client.Login("mjl@mox.example", password0)
 	tc2.client.Login("mjl@mox.example", password0)
 
 	tc1.transactf("ok", "select inbox")

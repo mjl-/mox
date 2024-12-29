@@ -3841,7 +3841,7 @@ const webserver = async () => {
 			};
 			const root = dom.table(dom.tr(dom.td('Type'), dom.td('Base path', attr.title('Path to use as root of internal service, e.g. /webmail/.')), dom.td('Service')), dom.tr(dom.td(dom.select(attr.required(''), dom.option('Static'), dom.option('Redirect'), dom.option('Forward'), dom.option('Internal', attr.selected('')), function change(e) {
 				makeType(e.target.value);
-			})), dom.td(basePath = dom.input(attr.value(wi.BasePath), attr.required(''), attr.placeholder('/.../'))), dom.td(service = dom.select(dom.option('Admin', attr.value('admin')), dom.option('Account', attr.value('account')), dom.option('Webmail', attr.value('webmail')), dom.option('Webapi', attr.value('webapi')), attr.value(wi.Service)))));
+			})), dom.td(basePath = dom.input(attr.value(wi.BasePath), attr.required(''), attr.placeholder('/.../'))), dom.td(service = dom.select(dom.option('Admin', attr.value('admin')), dom.option('Account', attr.value('account')), dom.option('Webmail', attr.value('webmail')), dom.option('Webapi', attr.value('webapi')), prop({ value: wi.Service })))));
 			view = { root: root, get: get };
 			return view;
 		};

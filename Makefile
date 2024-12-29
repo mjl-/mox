@@ -92,13 +92,15 @@ govendor:
 	./genlicenses.sh
 
 test-integration:
+	-docker-compose -f docker-compose-integration.yml kill
+	-docker-compose -f docker-compose-integration.yml down
 	docker image build --pull --no-cache -f Dockerfile -t mox_integration_moxmail .
 	docker image build --pull --no-cache -f testdata/integration/Dockerfile.test -t mox_integration_test testdata/integration
 	-rm -rf testdata/integration/moxacmepebble/data
 	-rm -rf testdata/integration/moxmail2/data
 	-rm -f testdata/integration/tmp-pebble-ca.pem
 	MOX_UID=$$(id -u) docker-compose -f docker-compose-integration.yml run test
-	docker-compose -f docker-compose-integration.yml down --timeout 1
+	docker-compose -f docker-compose-integration.yml kill
 
 
 imaptest-build:
