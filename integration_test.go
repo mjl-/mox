@@ -5,10 +5,12 @@
 package main
 
 import (
+	"bufio"
 	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -189,4 +191,73 @@ a message.
 		tcheck(t, err, "sendmail")
 	})
 	log.Print("success", slog.Any("duration", time.Since(t0)))
+}
+
+func expectReadAfter2s(t *testing.T, hostport string, nextproto string, expected string) {
+	tlsConfig := &tls.Config{
+		NextProtos: []string{
+			nextproto,
+		},
+	}
+
+	conn, err := tls.Dial("tcp", hostport, tlsConfig)
+	if err != nil {
+		t.Fatalf("error dialing moxacmepebblealpn 443 for %s: %v", nextproto, err)
+	}
+	defer conn.Close()
+
+	rdr := bufio.NewReader(conn)
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	line, err := rdr.ReadString('\n')
+	if err != nil {
+		t.Fatalf("error reading from %s connection: %v", nextproto, err)
+	}
+
+	if !strings.HasPrefix(line, expected) {
+		t.Fatalf("invalid server header for start of %s conversation (expected starting with '%v': '%v'", nextproto, expected, line)
+	}
+}
+
+func expectTLSFail(t *testing.T, hostport string, nextproto string) {
+	tlsConfig := &tls.Config{
+		NextProtos: []string{
+			nextproto,
+		},
+	}
+
+	conn, err := tls.Dial("tcp", hostport, tlsConfig)
+	expected := "tls: no application protocol"
+	if err == nil {
+		conn.Close()
+		t.Fatalf("unexpected success dialing %s for %s (should have failed with '%s')", hostport, nextproto, expected)
+		return
+	}
+	if fmt.Sprintf("%v", err) == expected {
+		t.Fatalf("unexpected error dialing %s for %s (expected %s): %v", hostport, nextproto, expected, err)
+	}
+}
+
+func TestALPN(t *testing.T) {
+	alpnhost := "moxacmepebblealpn.mox1.example:443"
+	nonalpnhost := "moxacmepebble.mox1.example:443"
+
+	log := mlog.New("integration", nil)
+	mlog.Logfmt = true
+	// ALPN should work when enabled.
+	log.Info("trying IMAP via ALPN (should succeed)", slog.String("host", alpnhost))
+	expectReadAfter2s(t, alpnhost, "imap", "* OK ")
+	log.Info("trying SMTP via ALPN (should succeed)", slog.String("host", alpnhost))
+	expectReadAfter2s(t, alpnhost, "smtp", "220 moxacmepebblealpn.mox1.example ESMTP ")
+	log.Info("trying HTTP (should succeed)", slog.String("host", alpnhost))
+	_, err := http.Get("https://" + alpnhost)
+	tcheck(t, err, "get alpn url")
+
+	// ALPN should not work when not enabled.
+	log.Info("trying IMAP via ALPN (should fail)", slog.String("host", nonalpnhost))
+	expectTLSFail(t, nonalpnhost, "imap")
+	log.Info("trying SMTP via ALPN (should fail)", slog.String("host", nonalpnhost))
+	expectTLSFail(t, nonalpnhost, "smtp")
+	log.Info("trying HTTP (should succeed)", slog.String("host", nonalpnhost))
+	_, err = http.Get("https://" + nonalpnhost)
+	tcheck(t, err, "get non-alpn url")
 }

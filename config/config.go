@@ -168,8 +168,9 @@ type Listener struct {
 		NoRequireSTARTTLS bool `sconf:"optional" sconf-doc:"Do not require STARTTLS. Since users must login, this means password may be sent without encryption. Not recommended."`
 	} `sconf:"optional" sconf-doc:"SMTP for submitting email, e.g. by email applications. Starts out in plain text, can be upgraded to TLS with the STARTTLS command. Prefer using Submissions which is always a TLS connection."`
 	Submissions struct {
-		Enabled bool
-		Port    int `sconf:"optional" sconf-doc:"Default 465."`
+		Enabled        bool
+		Port           int  `sconf:"optional" sconf-doc:"Default 465."`
+		EnabledOnHTTPS bool `sconf:"optional" sconf-doc:"Additionally enable submission on HTTPS port 443 via TLS ALPN. TLS Application Layer Protocol Negotiation allows clients to request a specific protocol from the server as part of the TLS connection setup. When this setting is enabled and a client requests the 'smtp' protocol after TLS, it will be able to talk SMTP to Mox on port 443. This is meant to be useful as a censorship circumvention technique for Delta Chat."`
 	} `sconf:"optional" sconf-doc:"SMTP over TLS for submitting email, by email applications. Requires a TLS config."`
 	IMAP struct {
 		Enabled           bool
@@ -177,8 +178,9 @@ type Listener struct {
 		NoRequireSTARTTLS bool `sconf:"optional" sconf-doc:"Enable this only when the connection is otherwise encrypted (e.g. through a VPN)."`
 	} `sconf:"optional" sconf-doc:"IMAP for reading email, by email applications. Starts out in plain text, can be upgraded to TLS with the STARTTLS command. Prefer using IMAPS instead which is always a TLS connection."`
 	IMAPS struct {
-		Enabled bool
-		Port    int `sconf:"optional" sconf-doc:"Default 993."`
+		Enabled        bool
+		Port           int  `sconf:"optional" sconf-doc:"Default 993."`
+		EnabledOnHTTPS bool `sconf:"optional" sconf-doc:"Additionally enable IMAP on HTTPS port 443 via TLS ALPN. TLS Application Layer Protocol Negotiation allows clients to request a specific protocol from the server as part of the TLS connection setup. When this setting is enabled and a client requests the 'imap' protocol after TLS, it will be able to talk IMAP to Mox on port 443. This is meant to be useful as a censorship circumvention technique for Delta Chat."`
 	} `sconf:"optional" sconf-doc:"IMAP over TLS for reading email, by email applications. Requires a TLS config."`
 	AccountHTTP  WebService `sconf:"optional" sconf-doc:"Account web interface, for email users wanting to change their accounts, e.g. set new password, set new delivery rulesets. Default path is /."`
 	AccountHTTPS WebService `sconf:"optional" sconf-doc:"Account web interface listener like AccountHTTP, but for HTTPS. Requires a TLS config."`
