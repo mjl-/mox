@@ -124,7 +124,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 			443,
 			tlsMode,
 			email,
-			"password-encrypted",
+			"password-cleartext",
 		}
 		resp.EmailProvider.IncomingServers = append(resp.EmailProvider.IncomingServers, incomingALPN)
 	}
@@ -146,7 +146,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 			443,
 			tlsMode,
 			email,
-			"password-encrypted",
+			"password-cleartext",
 		}
 		resp.EmailProvider.OutgoingServers = append(resp.EmailProvider.OutgoingServers, outgoingALPN)
 	}
