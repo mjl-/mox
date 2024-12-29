@@ -12,6 +12,7 @@ import (
 	"rsc.io/qr"
 
 	"github.com/mjl-/mox/admin"
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -65,9 +66,18 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	email := r.FormValue("emailaddress")
 	log.Debug("autoconfig request", slog.String("email", email))
 	addr, err := smtp.ParseAddress(email)
+	var domain dns.Domain
 	if err != nil {
-		http.Error(w, "400 - bad request - invalid parameter emailaddress", http.StatusBadRequest)
-		return
+		email = "%EMAILADDRESS%"
+		domain, err = dns.ParseDomain(r.Host)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("400 - bad request - invalid domain: %s", r.Host), http.StatusBadRequest)
+			return
+		}
+		domain.ASCII = strings.TrimPrefix(domain.ASCII, "autoconfig.")
+		domain.Unicode = strings.TrimPrefix(domain.Unicode, "autoconfig.")
+	} else {
+		domain = addr.Domain
 	}
 
 	socketType := func(tlsMode admin.TLSMode) (string, error) {
@@ -84,7 +94,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var imapTLS, submissionTLS string
-	config, err := admin.ClientConfigDomain(addr.Domain)
+	config, err := admin.ClientConfigDomain(domain)
 	if err == nil {
 		imapTLS, err = socketType(config.IMAP.TLSMode)
 	}
@@ -152,7 +162,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// todo: should we put the email address in the URL?
-	resp.ClientConfigUpdate.URL = fmt.Sprintf("https://autoconfig.%s/mail/config-v1.1.xml", addr.Domain.ASCII)
+	resp.ClientConfigUpdate.URL = fmt.Sprintf("https://autoconfig.%s/mail/config-v1.1.xml", domain.ASCII)
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	enc := xml.NewEncoder(w)
