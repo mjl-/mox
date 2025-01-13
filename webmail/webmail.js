@@ -1540,7 +1540,8 @@ const zindexes = {
 };
 // Buttons and input elements.
 ensureCSS('.button', { display: 'inline-block' });
-ensureCSS('button, .button, select', { color: styles.color, backgroundColor: styles.buttonBackground, border: '1px solid', borderColor: styles.buttonBorderColor, borderRadius: '.15em', padding: '0 .15em' });
+ensureCSS('button, .button, select', { backgroundColor: styles.buttonBackground, border: '1px solid', borderColor: styles.buttonBorderColor, borderRadius: '.15em', padding: '0 .15em' });
+ensureCSS('button, .button, select, a.button:visited', { color: styles.color });
 ensureCSS('button.active, .button.active, button.active:hover, .button.active:hover', { backgroundColor: styles.highlightBackground });
 ensureCSS('button:hover:not(:disabled), .button:hover:not(:disabled), select:hover:not(:disabled)', { backgroundColor: styles.buttonHoverBackground });
 ensureCSS('button:disabled, .button:disabled, select:disabled', { opacity: .5 });
