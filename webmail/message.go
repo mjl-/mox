@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"net/textproto"
 	"net/url"
 	"strings"
 
@@ -72,15 +73,31 @@ func tryDecodeParam(log mlog.Log, name string) string {
 
 // todo: mime.FormatMediaType does not wrap long lines. should do it ourselves, and split header into several parts (if commonly supported).
 
-func messageItem(log mlog.Log, m store.Message, state *msgState) (MessageItem, error) {
-	pm, err := parsedMessage(log, m, state, false, true)
+func messageItemMoreHeaders(moreHeaders []string, pm ParsedMessage) (l [][2]string) {
+	for _, k := range moreHeaders {
+		k = textproto.CanonicalMIMEHeaderKey(k)
+		for _, v := range pm.Headers[k] {
+			l = append(l, [2]string{k, v})
+		}
+	}
+	return l
+}
+
+func messageItem(log mlog.Log, m store.Message, state *msgState, moreHeaders []string) (MessageItem, error) {
+	full := len(moreHeaders) > 0
+	pm, err := parsedMessage(log, m, state, full, true)
+	if err != nil && errors.Is(err, message.ErrHeader) && full {
+		log.Debugx("load message item without parsing headers after error", err, slog.Int64("msgid", m.ID))
+		pm, err = parsedMessage(log, m, state, false, true)
+	}
 	if err != nil {
 		return MessageItem{}, fmt.Errorf("parsing message %d for item: %v", m.ID, err)
 	}
 	// Clear largish unused data.
 	m.MsgPrefix = nil
 	m.ParsedBuf = nil
-	return MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, pm.firstLine, true}, nil
+	l := messageItemMoreHeaders(moreHeaders, pm)
+	return MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, pm.firstLine, true, l}, nil
 }
 
 // formatFirstLine returns a line the client can display next to the subject line

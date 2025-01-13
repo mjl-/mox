@@ -2102,6 +2102,15 @@
 					"Typewords": [
 						"bool"
 					]
+				},
+				{
+					"Name": "MoreHeaders",
+					"Docs": "All headers from store.Settings.ShowHeaders that are present.",
+					"Typewords": [
+						"[]",
+						"[]",
+						"string"
+					]
 				}
 			]
 		},

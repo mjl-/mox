@@ -318,7 +318,7 @@ var api;
 		"EventViewErr": { "Name": "EventViewErr", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "RequestID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Err", "Docs": "", "Typewords": ["string"] }] },
 		"EventViewReset": { "Name": "EventViewReset", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "RequestID", "Docs": "", "Typewords": ["int64"] }] },
 		"EventViewMsgs": { "Name": "EventViewMsgs", "Docs": "", "Fields": [{ "Name": "ViewID", "Docs": "", "Typewords": ["int64"] }, { "Name": "RequestID", "Docs": "", "Typewords": ["int64"] }, { "Name": "MessageItems", "Docs": "", "Typewords": ["[]", "[]", "MessageItem"] }, { "Name": "ParsedMessage", "Docs": "", "Typewords": ["nullable", "ParsedMessage"] }, { "Name": "ViewEnd", "Docs": "", "Typewords": ["bool"] }] },
-		"MessageItem": { "Name": "MessageItem", "Docs": "", "Fields": [{ "Name": "Message", "Docs": "", "Typewords": ["Message"] }, { "Name": "Envelope", "Docs": "", "Typewords": ["MessageEnvelope"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "Attachment"] }, { "Name": "IsSigned", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsEncrypted", "Docs": "", "Typewords": ["bool"] }, { "Name": "FirstLine", "Docs": "", "Typewords": ["string"] }, { "Name": "MatchQuery", "Docs": "", "Typewords": ["bool"] }] },
+		"MessageItem": { "Name": "MessageItem", "Docs": "", "Fields": [{ "Name": "Message", "Docs": "", "Typewords": ["Message"] }, { "Name": "Envelope", "Docs": "", "Typewords": ["MessageEnvelope"] }, { "Name": "Attachments", "Docs": "", "Typewords": ["[]", "Attachment"] }, { "Name": "IsSigned", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsEncrypted", "Docs": "", "Typewords": ["bool"] }, { "Name": "FirstLine", "Docs": "", "Typewords": ["string"] }, { "Name": "MatchQuery", "Docs": "", "Typewords": ["bool"] }, { "Name": "MoreHeaders", "Docs": "", "Typewords": ["[]", "[]", "string"] }] },
 		"Message": { "Name": "Message", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "UID", "Docs": "", "Typewords": ["UID"] }, { "Name": "MailboxID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ModSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "CreateSeq", "Docs": "", "Typewords": ["ModSeq"] }, { "Name": "Expunged", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsReject", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "MailboxOrigID", "Docs": "", "Typewords": ["int64"] }, { "Name": "MailboxDestinedID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Received", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "RemoteIP", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIPMasked1", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIPMasked2", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIPMasked3", "Docs": "", "Typewords": ["string"] }, { "Name": "EHLODomain", "Docs": "", "Typewords": ["string"] }, { "Name": "MailFrom", "Docs": "", "Typewords": ["string"] }, { "Name": "MailFromLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "MailFromDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "RcptToLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "RcptToDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromLocalpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "MsgFromDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromOrgDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "EHLOValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "MailFromValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "MsgFromValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "EHLOValidation", "Docs": "", "Typewords": ["Validation"] }, { "Name": "MailFromValidation", "Docs": "", "Typewords": ["Validation"] }, { "Name": "MsgFromValidation", "Docs": "", "Typewords": ["Validation"] }, { "Name": "DKIMDomains", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "OrigEHLODomain", "Docs": "", "Typewords": ["string"] }, { "Name": "OrigDKIMDomains", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }, { "Name": "SubjectBase", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageHash", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ThreadID", "Docs": "", "Typewords": ["int64"] }, { "Name": "ThreadParentIDs", "Docs": "", "Typewords": ["[]", "int64"] }, { "Name": "ThreadMissingLink", "Docs": "", "Typewords": ["bool"] }, { "Name": "ThreadMuted", "Docs": "", "Typewords": ["bool"] }, { "Name": "ThreadCollapsed", "Docs": "", "Typewords": ["bool"] }, { "Name": "IsMailingList", "Docs": "", "Typewords": ["bool"] }, { "Name": "DSN", "Docs": "", "Typewords": ["bool"] }, { "Name": "ReceivedTLSVersion", "Docs": "", "Typewords": ["uint16"] }, { "Name": "ReceivedTLSCipherSuite", "Docs": "", "Typewords": ["uint16"] }, { "Name": "ReceivedRequireTLS", "Docs": "", "Typewords": ["bool"] }, { "Name": "Seen", "Docs": "", "Typewords": ["bool"] }, { "Name": "Answered", "Docs": "", "Typewords": ["bool"] }, { "Name": "Flagged", "Docs": "", "Typewords": ["bool"] }, { "Name": "Forwarded", "Docs": "", "Typewords": ["bool"] }, { "Name": "Junk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Notjunk", "Docs": "", "Typewords": ["bool"] }, { "Name": "Deleted", "Docs": "", "Typewords": ["bool"] }, { "Name": "Draft", "Docs": "", "Typewords": ["bool"] }, { "Name": "Phishing", "Docs": "", "Typewords": ["bool"] }, { "Name": "MDNSent", "Docs": "", "Typewords": ["bool"] }, { "Name": "Keywords", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Size", "Docs": "", "Typewords": ["int64"] }, { "Name": "TrainedJunk", "Docs": "", "Typewords": ["nullable", "bool"] }, { "Name": "MsgPrefix", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "ParsedBuf", "Docs": "", "Typewords": ["nullable", "string"] }] },
 		"MessageEnvelope": { "Name": "MessageEnvelope", "Docs": "", "Fields": [{ "Name": "Date", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Subject", "Docs": "", "Typewords": ["string"] }, { "Name": "From", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "Sender", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "ReplyTo", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "To", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "CC", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "BCC", "Docs": "", "Typewords": ["[]", "MessageAddress"] }, { "Name": "InReplyTo", "Docs": "", "Typewords": ["string"] }, { "Name": "MessageID", "Docs": "", "Typewords": ["string"] }] },
 		"Attachment": { "Name": "Attachment", "Docs": "", "Fields": [{ "Name": "Path", "Docs": "", "Typewords": ["[]", "int32"] }, { "Name": "Filename", "Docs": "", "Typewords": ["string"] }, { "Name": "Part", "Docs": "", "Typewords": ["Part"] }] },
@@ -1434,13 +1434,17 @@ const loadMsgheaderView = (msgheaderelem, mi, moreHeaders, refineKeyword, allAdd
 	const msgenv = mi.Envelope;
 	const received = mi.Message.Received;
 	const receivedlocal = new Date(received.getTime());
+	// Similar to webmail.ts:/headerTextMildStyle
 	const msgHeaderFieldStyle = css('msgHeaderField', { textAlign: 'right', color: styles.colorMild, whiteSpace: 'nowrap' });
 	const msgAttrStyle = css('msgAttr', { padding: '0px 0.15em', fontSize: '.9em' });
 	dom._kids(msgheaderelem, 
 	// todo: make addresses clickable, start search (keep current mailbox if any)
 	dom.tr(dom.td('From:', msgHeaderFieldStyle), dom.td(style({ width: '100%' }), dom.div(css('msgFromReceivedSpread', { display: 'flex', justifyContent: 'space-between' }), dom.div(join((msgenv.From || []).map(a => formatAddressValidated(a, mi.Message, !!msgenv.From && msgenv.From.length === 1)), () => ', ')), dom.div(attr.title('Received: ' + received.toString() + ';\nDate header in message: ' + (msgenv.Date ? msgenv.Date.toString() : '(missing/invalid)')), receivedlocal.toDateString() + ' ' + receivedlocal.toTimeString().split(' ')[0])))), (msgenv.ReplyTo || []).length === 0 ? [] : dom.tr(dom.td('Reply-To:', msgHeaderFieldStyle), dom.td(join((msgenv.ReplyTo || []).map(a => formatAddressElem(a)), () => ', '))), dom.tr(dom.td('To:', msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.To || []))), (msgenv.CC || []).length === 0 ? [] : dom.tr(dom.td('Cc:', msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.CC || []))), (msgenv.BCC || []).length === 0 ? [] : dom.tr(dom.td('Bcc:', msgHeaderFieldStyle), dom.td(addressList(allAddrs, msgenv.BCC || []))), dom.tr(dom.td('Subject:', msgHeaderFieldStyle), dom.td(dom.div(css('msgSubjectAttrsSpread', { display: 'flex', justifyContent: 'space-between' }), dom.div(msgenv.Subject || ''), dom.div(mi.Message.IsForward ? dom.span(msgAttrStyle, 'Forwarded', attr.title('Message came in from a forwarded address. Some message authentication policies, like DMARC, were not evaluated.')) : [], mi.Message.IsMailingList ? dom.span(msgAttrStyle, 'Mailing list', attr.title('Message was received from a mailing list. Some message authentication policies, like DMARC, were not evaluated.')) : [], mi.Message.ReceivedTLSVersion === 1 ? dom.span(msgAttrStyle, css('msgAttrNoTLS', { borderBottom: '1.5px solid', borderBottomColor: styles.underlineRed }), 'Without TLS', attr.title('Message received (last hop) without TLS.')) : [], mi.Message.ReceivedTLSVersion > 1 && !mi.Message.ReceivedRequireTLS ? dom.span(msgAttrStyle, css('msgAttrTLS', { borderBottom: '1.5px solid', borderBottomColor: styles.underlineGreen }), 'With TLS', attr.title('Message received (last hop) with TLS.')) : [], mi.Message.ReceivedRequireTLS ? dom.span(css('msgAttrRequireTLS', { padding: '.1em .3em', fontSize: '.9em', backgroundColor: styles.successBackground, border: '1px solid', borderColor: styles.borderColor, borderRadius: '3px' }), 'With RequireTLS', attr.title('Transported with RequireTLS, ensuring TLS along the entire delivery path from sender to recipient, with TLS certificate verification through MTA-STS and/or DANE.')) : [], mi.IsSigned ? dom.span(msgAttrStyle, css('msgAttrSigned', { backgroundColor: styles.colorMild, color: styles.backgroundColorMild, borderRadius: '.15em' }), 'Message has a signature') : [], mi.IsEncrypted ? dom.span(msgAttrStyle, css('msgAttrEncrypted', { backgroundColor: styles.colorMild, color: styles.backgroundColorMild, borderRadius: '.15em' }), 'Message is encrypted') : [], refineKeyword ? (mi.Message.Keywords || []).map(kw => dom.clickbutton(styleClasses.keyword, dom._class('keywordButton'), kw, async function click() {
 		await refineKeyword(kw);
-	})) : [])))), moreHeaders.map(k => dom.tr(dom.td(k + ':', msgHeaderFieldStyle), dom.td())));
+	})) : [])))), (mi.MoreHeaders || []).map(t => dom.tr(dom.td(t[0] + ':', msgHeaderFieldStyle), dom.td(t[1]))), 
+	// Ensure width of all possible additional headers is taken into account, to
+	// prevent different layout between messages when not all headers are present.
+	dom.tr(dom.td(moreHeaders.map(s => dom.div(s + ':', msgHeaderFieldStyle, style({ visibility: 'hidden', height: 0 })))), dom.td()));
 };
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 /*
@@ -2437,7 +2441,7 @@ const cmdSettings = async () => {
 	if (!accountSettings) {
 		throw new Error('No account settings fetched yet.');
 	}
-	const remove = popup(css('popupSettings', { padding: '1em 1em 2em 1em', minWidth: '30em' }), dom.h1('Settings'), dom.form(async function submit(e) {
+	const remove = popup(css('popupSettings', { minWidth: '30em' }), style({ maxWidth: '50em' }), dom.h1('Settings'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		const accSet = {
@@ -2452,7 +2456,7 @@ const cmdSettings = async () => {
 		await withDisabled(fieldset, client.SettingsSave(accSet));
 		accountSettings = accSet;
 		remove();
-	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showHTML = dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []), ' Show email as HTML instead of text by default for first-time senders', attr.title('Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showShortcuts = dom.input(attr.type('checkbox'), accountSettings.NoShowShortcuts ? [] : attr.checked('')), ' Show shortcut keys in bottom left after interaction with mouse'), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Show additional headers'), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join('\n')), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: 'italic' }), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...')), dom.div(style({ marginTop: '2ex' }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
+	}, fieldset = dom.fieldset(dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Signature'), signature = dom.textarea(new String(accountSettings.Signature), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + accountSettings.Signature.split('\n').length)))), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Reply above/below original'), attr.title('Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top.'), quoting = dom.select(dom.option(attr.value(''), 'Auto'), dom.option(attr.value('bottom'), 'Bottom', accountSettings.Quoting === api.Quoting.Bottom ? attr.selected('') : []), dom.option(attr.value('top'), 'Top', accountSettings.Quoting === api.Quoting.Top ? attr.selected('') : []))), dom.label(style({ margin: '1ex 0', display: 'block' }), showAddressSecurity = dom.input(attr.type('checkbox'), accountSettings.ShowAddressSecurity ? attr.checked('') : []), ' Show address security indications', attr.title('Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showHTML = dom.input(attr.type('checkbox'), accountSettings.ShowHTML ? attr.checked('') : []), ' Show email as HTML instead of text by default for first-time senders', attr.title('Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.')), dom.label(style({ margin: '1ex 0', display: 'block' }), showShortcuts = dom.input(attr.type('checkbox'), accountSettings.NoShowShortcuts ? [] : attr.checked('')), ' Show shortcut keys in bottom left after interaction with mouse'), dom.label(style({ margin: '1ex 0', display: 'block' }), dom.div('Show additional headers'), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join('\n')), style({ width: '100%' }), attr.rows('' + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: 'italic' }), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.')), dom.div(style({ marginTop: '2ex' }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton('Register', attr.title('In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present.'), function click() {
 		if (!window.navigator.registerProtocolHandler) {
 			window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.');
 			return;
@@ -3892,8 +3896,8 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 	};
 	let urlType; // text, html, htmlexternal; for opening in new tab/print
 	let msgbuttonElem, msgheaderElem, msgattachmentElem, msgmodeElem;
-	let msgheaderdetailsElem = null; // When full headers are visible, or some headers are requested through settings.
-	const msgmetaElem = dom.div(css('msgmeta', { backgroundColor: styles.backgroundColorMild, borderBottom: '5px solid', borderBottomColor: ['white', 'black'], maxHeight: '90%', overflowY: 'auto' }), attr.role('region'), attr.arialabel('Buttons and headers for message'), msgbuttonElem = dom.div(), dom.div(attr.arialive('assertive'), msgheaderElem = dom.table(styleClasses.msgHeaders), msgattachmentElem = dom.div(), msgmodeElem = dom.div()), 
+	let msgheaderFullElem; // Full headers, when enabled.
+	const msgmetaElem = dom.div(css('msgmeta', { backgroundColor: styles.backgroundColorMild, borderBottom: '5px solid', borderBottomColor: ['white', 'black'], maxHeight: '90%', overflowY: 'auto' }), attr.role('region'), attr.arialabel('Buttons and headers for message'), msgbuttonElem = dom.div(), dom.div(attr.arialive('assertive'), dom.table(styleClasses.msgHeaders, msgheaderElem = dom.tbody()), msgheaderFullElem = dom.table(), msgattachmentElem = dom.div(), msgmodeElem = dom.div()), 
 	// Explicit separator that separates headers from body, to
 	// prevent HTML messages from faking UI elements.
 	dom.div(css('headerBodySeparator', { height: '2px', backgroundColor: styles.borderColor })));
@@ -3926,17 +3930,13 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 	};
 	loadButtons(parsedMessageOpt || null);
 	loadMsgheaderView(msgheaderElem, miv.messageitem, accountSettings.ShowHeaders || [], refineKeyword, false);
+	// Similar to lib.ts:/msgHeaderFieldStyle
 	const headerTextMildStyle = css('headerTextMild', { textAlign: 'right', color: styles.colorMild });
 	const loadHeaderDetails = (pm) => {
-		if (msgheaderdetailsElem) {
-			msgheaderdetailsElem.remove();
-			msgheaderdetailsElem = null;
-		}
-		if (!settings.showAllHeaders) {
-			return;
-		}
-		msgheaderdetailsElem = dom.table(css('msgHeaderDetails', { marginBottom: '1ex', width: '100%' }), Object.entries(pm.Headers || {}).sort().map(t => (t[1] || []).map(v => dom.tr(dom.td(t[0] + ':', headerTextMildStyle), dom.td(v)))));
-		msgattachmentElem.parentNode.insertBefore(msgheaderdetailsElem, msgattachmentElem);
+		const table = dom.table(css('msgHeaderDetails', { width: '100%' }), !settings.showAllHeaders ? [] :
+			Object.entries(pm.Headers || {}).sort().map(t => (t[1] || []).map(v => dom.tr(dom.td(t[0] + ':', headerTextMildStyle), dom.td(v)))));
+		msgheaderFullElem.replaceWith(table);
+		msgheaderFullElem = table;
 	};
 	const isText = (a) => ['text', 'message'].includes(a.Part.MediaType.toLowerCase());
 	const isPDF = (a) => (a.Part.MediaType + '/' + a.Part.MediaSubType).toLowerCase() === 'application/pdf';
@@ -4057,25 +4057,6 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		dom._kids(msgcontentElem, dom.iframe(attr.tabindex('0'), attr.title('HTML version of message with images inlined and with external resources loaded.'), attr.src('msg/' + m.ID + '/' + urlType), css('msgIframeHTML', { position: 'absolute', width: '100%', height: '100%' })));
 		renderAttachments(); // Rerender opaciy on inline images.
 	};
-	const loadMoreHeaders = (pm) => {
-		const hl = accountSettings.ShowHeaders || [];
-		if (hl.length === 0) {
-			return;
-		}
-		for (let i = 0; i < hl.length; i++) {
-			msgheaderElem.children[msgheaderElem.children.length - 1].remove();
-		}
-		hl.forEach(k => {
-			const vl = pm.Headers?.[k];
-			if (!vl || vl.length === 0) {
-				return;
-			}
-			vl.forEach(v => {
-				const e = dom.tr(dom.td(k + ':', headerTextMildStyle, style({ whiteSpace: 'nowrap' })), dom.td(v));
-				msgheaderElem.appendChild(e);
-			});
-		});
-	};
 	const mv = {
 		root: root,
 		messageitem: mi,
@@ -4085,7 +4066,6 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 			mi.Message.ModSeq = modseq;
 			mi.Message.Keywords = keywords;
 			loadMsgheaderView(msgheaderElem, miv.messageitem, accountSettings.ShowHeaders || [], refineKeyword, false);
-			loadMoreHeaders(await parsedMessagePromise);
 		},
 	};
 	(async () => {
@@ -4112,7 +4092,6 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		}
 		loadButtons(pm);
 		loadHeaderDetails(pm);
-		loadMoreHeaders(pm);
 		const msgHeaderSeparatorStyle = css('msgHeaderSeparator', { borderTop: '1px solid', borderTopColor: styles.borderColor });
 		const msgModeWarningStyle = css('msgModeWarning', { backgroundColor: styles.warningBackgroundColor, padding: '0 .15em' });
 		const htmlNote = 'In the HTML viewer, the following potentially dangerous functionality is disabled: submitting forms, starting a download from a link, navigating away from this page by clicking a link. If a link does not work, try explicitly opening it in a new tab.';
