@@ -596,12 +596,13 @@ func portServes(l config.Listener) map[int]*serve {
 
 		if https && l.TLS.ACME != "" {
 			s.TLSConfig = l.TLS.ACMEConfig
-		} else if https {
-			s.TLSConfig = l.TLS.Config
-			if l.TLS.ACME != "" {
-				tlsport := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
+
+			tlsport := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
+			if portServe[tlsport] == nil || !slices.Contains(portServe[tlsport].Kinds, "acme-tls-alpn-01") {
 				ensureServe(true, tlsport, "acme-tls-alpn-01", false)
 			}
+		} else if https {
+			s.TLSConfig = l.TLS.Config
 		}
 		return s
 	}
