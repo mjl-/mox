@@ -690,7 +690,7 @@ func (c *conn) Write(buf []byte) (int, error) {
 
 			// Make sure we don't take too long, otherwise the remote SMTP client may close the
 			// connection.
-			if time.Until(deadline) < 2*badClientDelay {
+			if time.Until(deadline) < 5*badClientDelay {
 				chunk = len(buf)
 			}
 		}
