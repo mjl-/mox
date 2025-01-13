@@ -548,7 +548,7 @@ func verifySignatureRecord(r *Record, sig *Sig, hash crypto.Hash, canonHeaderSim
 	if r.PublicKey == nil {
 		return StatusPermerror, ErrKeyRevoked
 	} else if rsaKey, ok := r.PublicKey.(*rsa.PublicKey); ok && rsaKey.N.BitLen() < 1024 {
-		// todo: find a reference that supports this.
+		// ../rfc/8301:157
 		return StatusPermerror, ErrWeakKey
 	}
 
