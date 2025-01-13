@@ -36,6 +36,9 @@ test-race:
 	CGO_ENABLED=1 go test -race -shuffle=on -covermode atomic -coverprofile cover.out ./...
 	go tool cover -html=cover.out -o cover.html
 
+test-more:
+	TZ= CGO_ENABLED=0 go test -shuffle=on -count 2 ./...
+
 # note: if testdata/upgradetest.mbox.gz exists, its messages will be imported
 # during tests. helpful for performance/resource consumption tests.
 test-upgrade: build
