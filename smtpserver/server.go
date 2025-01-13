@@ -1756,13 +1756,16 @@ func (c *conn) cmdMail(p *parser) {
 
 	// For submission, check if reverse path is allowed. I.e. authenticated account
 	// must have the rpath configured. We do a check again on rfc5322.from during DATA.
+	// Mail clients may use the alias address as smtp mail from address, so we allow it
+	// for such aliases.
 	rpathAllowed := func() bool {
 		// ../rfc/6409:349
 		if rpath.IsZero() {
 			return true
 		}
-		accName, _, _, _, err := mox.LookupAddress(rpath.Localpart, rpath.IPDomain.Domain, false, false)
-		return err == nil && accName == c.account.Name
+
+		from := smtp.NewAddress(rpath.Localpart, rpath.IPDomain.Domain)
+		return mox.AllowMsgFrom(c.account.Name, from)
 	}
 
 	if !c.submission && !rpath.IPDomain.Domain.IsZero() {
