@@ -1523,7 +1523,7 @@ func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bs
 			// expected to read first, that would be the first unread, which we'll get below
 			// when gathering the thread.
 			found = true
-			xpm, err := parsedMessage(log, m, &state, true, false)
+			xpm, err := parsedMessage(log, m, &state, true, false, false)
 			if err != nil && errors.Is(err, message.ErrHeader) {
 				log.Debug("not returning parsed message due to invalid headers", slog.Int64("msgid", m.ID), slog.Any("err", err))
 			} else if err != nil {
@@ -1653,7 +1653,7 @@ func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m sto
 
 			if tm.ID == destMessageID || destMessageID == 0 && first && (pm == nil || !firstUnread && !tm.Seen) {
 				firstUnread = !tm.Seen
-				xpm, err := parsedMessage(log, tm, &xstate, true, false)
+				xpm, err := parsedMessage(log, tm, &xstate, true, false, false)
 				if err != nil && errors.Is(err, message.ErrHeader) {
 					log.Debug("not returning parsed message due to invalid headers", slog.Int64("msgid", m.ID), slog.Any("err", err))
 				} else if err != nil {
@@ -1674,7 +1674,7 @@ func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m sto
 	if destMessageID == 0 && first && !m.Seen && !firstUnread {
 		xstate := msgState{acc: acc}
 		defer xstate.clear()
-		xpm, err := parsedMessage(log, m, &xstate, true, false)
+		xpm, err := parsedMessage(log, m, &xstate, true, false, false)
 		if err != nil && errors.Is(err, message.ErrHeader) {
 			log.Debug("not returning parsed message due to invalid headers", slog.Int64("msgid", m.ID), slog.Any("err", err))
 		} else if err != nil {
@@ -1855,7 +1855,7 @@ var attachmentExtensions = map[string]AttachmentType{
 func attachmentTypes(log mlog.Log, m store.Message, state *msgState) (map[AttachmentType]bool, error) {
 	types := map[AttachmentType]bool{}
 
-	pm, err := parsedMessage(log, m, state, false, false)
+	pm, err := parsedMessage(log, m, state, false, false, false)
 	if err != nil {
 		return nil, fmt.Errorf("parsing message for attachments: %w", err)
 	}

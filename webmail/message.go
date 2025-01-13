@@ -84,11 +84,11 @@ func messageItemMoreHeaders(moreHeaders []string, pm ParsedMessage) (l [][2]stri
 }
 
 func messageItem(log mlog.Log, m store.Message, state *msgState, moreHeaders []string) (MessageItem, error) {
-	full := len(moreHeaders) > 0
-	pm, err := parsedMessage(log, m, state, full, true)
-	if err != nil && errors.Is(err, message.ErrHeader) && full {
+	headers := len(moreHeaders) > 0
+	pm, err := parsedMessage(log, m, state, false, true, headers)
+	if err != nil && errors.Is(err, message.ErrHeader) && headers {
 		log.Debugx("load message item without parsing headers after error", err, slog.Int64("msgid", m.ID))
-		pm, err = parsedMessage(log, m, state, false, true)
+		pm, err = parsedMessage(log, m, state, false, true, false)
 	}
 	if err != nil {
 		return MessageItem{}, fmt.Errorf("parsing message %d for item: %v", m.ID, err)
@@ -198,7 +198,7 @@ func formatFirstLine(r io.Reader) (string, error) {
 	return result, scanner.Err()
 }
 
-func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem bool) (pm ParsedMessage, rerr error) {
+func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem, msgitemHeaders bool) (pm ParsedMessage, rerr error) {
 	pm.ViewMode = store.ModeText // Valid default, in case this makes it to frontend.
 
 	if full || msgitem {
@@ -247,7 +247,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 		pm.envelope = env
 	}
 
-	if full && state.part.BodyOffset > 0 {
+	if (full || msgitemHeaders) && state.part.BodyOffset > 0 {
 		hdrs, err := state.part.Header()
 		if err != nil {
 			return ParsedMessage{}, fmt.Errorf("parsing headers: %w", err)
