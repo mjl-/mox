@@ -152,7 +152,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 		tlsMode, _ := socketType(admin.TLSModeImmediate)
 		outgoingALPN := outgoingServer{
 			"smtp",
-			config.IMAP.Host.ASCII,
+			config.Submission.Host.ASCII,
 			443,
 			tlsMode,
 			email,
