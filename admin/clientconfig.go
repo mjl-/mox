@@ -154,10 +154,18 @@ func ClientConfigsDomain(d dns.Domain) (ClientConfigs, error) {
 			host = domConf.ClientSettingsDNSDomain
 		}
 		if l.Submissions.Enabled {
-			c.Entries = append(c.Entries, ClientConfigsEntry{"Submission (SMTP)", host, config.Port(l.Submissions.Port, 465), name, "with TLS"})
+			note := "with TLS"
+			if l.Submissions.EnabledOnHTTPS {
+				note += "; also served on port 443 with TLS ALPN \"smtp\""
+			}
+			c.Entries = append(c.Entries, ClientConfigsEntry{"Submission (SMTP)", host, config.Port(l.Submissions.Port, 465), name, note})
 		}
 		if l.IMAPS.Enabled {
-			c.Entries = append(c.Entries, ClientConfigsEntry{"IMAP", host, config.Port(l.IMAPS.Port, 993), name, "with TLS"})
+			note := "with TLS"
+			if l.IMAPS.EnabledOnHTTPS {
+				note += "; also served on port 443 with TLS ALPN \"imap\""
+			}
+			c.Entries = append(c.Entries, ClientConfigsEntry{"IMAP", host, config.Port(l.IMAPS.Port, 993), name, note})
 		}
 		if l.Submission.Enabled {
 			c.Entries = append(c.Entries, ClientConfigsEntry{"Submission (SMTP)", host, config.Port(l.Submission.Port, 587), name, note(l.TLS != nil, !l.Submission.NoRequireSTARTTLS)})
