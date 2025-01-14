@@ -808,7 +808,6 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			return ok && !dc.ReportsOnly
 		}
 		srv.SystemHandle("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", mox.SafeHeaders(http.HandlerFunc(autoconfHandle)))
-		srv.SystemHandle("autoconfig", autoconfigMatch, "/.well-known/autoconfig/mail/config-v1.1.xml", mox.SafeHeaders(http.HandlerFunc(autoconfHandle)))
 		srv.SystemHandle("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", mox.SafeHeaders(http.HandlerFunc(autodiscoverHandle)))
 		srv.SystemHandle("mobileconfig", autoconfigMatch, "/profile.mobileconfig", mox.SafeHeaders(http.HandlerFunc(mobileconfigHandle)))
 		srv.SystemHandle("mobileconfigqrcodepng", autoconfigMatch, "/profile.mobileconfig.qrcode.png", mox.SafeHeaders(http.HandlerFunc(mobileconfigQRCodeHandle)))
