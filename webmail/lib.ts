@@ -443,10 +443,11 @@ const addressList = (allAddrs: boolean, l: api.MessageAddress[]) => {
 // loadMsgheaderView loads the common message headers into msgheaderelem.
 // if refineKeyword is set, labels are shown and a click causes a call to
 // refineKeyword.
-const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, moreHeaders: string[], refineKeyword: null | ((kw: string) => Promise<void>), allAddrs: boolean) => {
+const loadMsgheaderView = (msgheaderelem: HTMLTableSectionElement, mi: api.MessageItem, moreHeaders: string[], refineKeyword: null | ((kw: string) => Promise<void>), allAddrs: boolean) => {
 	const msgenv = mi.Envelope
 	const received = mi.Message.Received
 	const receivedlocal = new Date(received.getTime())
+	// Similar to webmail.ts:/headerTextMildStyle
 	const msgHeaderFieldStyle = css('msgHeaderField', {textAlign: 'right', color: styles.colorMild, whiteSpace: 'nowrap'})
 	const msgAttrStyle = css('msgAttr', {padding: '0px 0.15em', fontSize: '.9em'})
 	dom._kids(msgheaderelem,
@@ -502,11 +503,17 @@ const loadMsgheaderView = (msgheaderelem: HTMLElement, mi: api.MessageItem, more
 				)
 			),
 		),
-		moreHeaders.map(k =>
+		(mi.MoreHeaders || []).map(t =>
 			dom.tr(
-				dom.td(k+':', msgHeaderFieldStyle),
-				dom.td(),
-			)
+				dom.td(t![0]+':', msgHeaderFieldStyle),
+				dom.td(t![1]),
+			),
+		),
+		// Ensure width of all possible additional headers is taken into account, to
+		// prevent different layout between messages when not all headers are present.
+		dom.tr(
+			dom.td(moreHeaders.map(s => dom.div(s+':', msgHeaderFieldStyle, style({visibility: 'hidden', height: 0})))),
+			dom.td(),
 		),
 	)
 }

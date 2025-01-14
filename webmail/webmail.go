@@ -376,7 +376,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 	// Many of the requests need either a message or a parsed part. Make it easy to
 	// fetch/prepare and cleanup. We only do all the work when the request seems legit
 	// (valid HTTP route and method).
-	xprepare := func() (acc *store.Account, m store.Message, msgr *store.MsgReader, p message.Part, cleanup func(), ok bool) {
+	xprepare := func() (acc *store.Account, moreHeaders []string, m store.Message, msgr *store.MsgReader, p message.Part, cleanup func(), ok bool) {
 		if r.Method != "GET" {
 			http.Error(w, "405 - method not allowed - post required", http.StatusMethodNotAllowed)
 			return
@@ -404,7 +404,17 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		xcheckf(ctx, err, "open account")
 
 		m = store.Message{ID: id}
-		err = acc.DB.Get(ctx, &m)
+		err = acc.DB.Read(ctx, func(tx *bstore.Tx) error {
+			if err := tx.Get(&m); err != nil {
+				return err
+			}
+			s := store.Settings{ID: 1}
+			if err := tx.Get(&s); err != nil {
+				return fmt.Errorf("get settings for more headers: %v", err)
+			}
+			moreHeaders = s.ShowHeaders
+			return nil
+		})
 		if err == bstore.ErrAbsent || err == nil && m.Expunged {
 			http.NotFound(w, r)
 			return
@@ -486,7 +496,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 
 	switch {
 	case len(t) == 2 && t[1] == "attachments.zip":
-		acc, m, msgr, p, cleanup, ok := xprepare()
+		acc, _, m, msgr, p, cleanup, ok := xprepare()
 		if !ok {
 			return
 		}
@@ -494,7 +504,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		state := msgState{acc: acc, m: m, msgr: msgr, part: &p}
 		// note: state is cleared by cleanup
 
-		mi, err := messageItem(log, m, &state)
+		mi, err := messageItem(log, m, &state, nil)
 		xcheckf(ctx, err, "parsing message")
 
 		headers(false, false, false, false)
@@ -605,7 +615,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 
 	// Raw display of a message, as text/plain.
 	case len(t) == 2 && t[1] == "raw":
-		_, _, msgr, p, cleanup, ok := xprepare()
+		_, _, _, msgr, p, cleanup, ok := xprepare()
 		if !ok {
 			return
 		}
@@ -631,7 +641,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		// msg.html has a javascript tag with message data, and javascript to render the
 		// message header like the regular webmail.html and to load the message body in a
 		// separate iframe with a separate request with stronger CSP.
-		acc, m, msgr, p, cleanup, ok := xprepare()
+		acc, _, m, msgr, p, cleanup, ok := xprepare()
 		if !ok {
 			return
 		}
@@ -640,7 +650,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		state := msgState{acc: acc, m: m, msgr: msgr, part: &p}
 		// note: state is cleared by cleanup
 
-		pm, err := parsedMessage(log, m, &state, true, true)
+		pm, err := parsedMessage(log, m, &state, true, true, true)
 		xcheckf(ctx, err, "getting parsed message")
 		if t[1] == "msgtext" && len(pm.Texts) == 0 || t[1] != "msgtext" && !pm.HasHTML {
 			http.Error(w, "400 - bad request - no such part", http.StatusBadRequest)
@@ -664,7 +674,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		// This is js with data inside instead so we can load it synchronously, which we do
 		// to get a "loaded" event after the page was actually loaded.
 
-		acc, m, msgr, p, cleanup, ok := xprepare()
+		acc, moreHeaders, m, msgr, p, cleanup, ok := xprepare()
 		if !ok {
 			return
 		}
@@ -672,14 +682,15 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		state := msgState{acc: acc, m: m, msgr: msgr, part: &p}
 		// note: state is cleared by cleanup
 
-		pm, err := parsedMessage(log, m, &state, true, true)
+		pm, err := parsedMessage(log, m, &state, true, true, true)
 		xcheckf(ctx, err, "parsing parsedmessage")
 		pmjson, err := json.Marshal(pm)
 		xcheckf(ctx, err, "marshal parsedmessage")
 
 		m.MsgPrefix = nil
 		m.ParsedBuf = nil
-		mi := MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, pm.firstLine, false}
+		hl := messageItemMoreHeaders(moreHeaders, pm)
+		mi := MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, pm.firstLine, false, hl}
 		mijson, err := json.Marshal(mi)
 		xcheckf(ctx, err, "marshal messageitem")
 
@@ -695,7 +706,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		// renders just the text content with the same code as webmail.html. Used by the
 		// iframe in the msgtext endpoint. Not used by the regular webmail viewer, it
 		// renders the text itself, with the same shared js code.
-		acc, m, msgr, p, cleanup, ok := xprepare()
+		acc, _, m, msgr, p, cleanup, ok := xprepare()
 		if !ok {
 			return
 		}
@@ -704,7 +715,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		state := msgState{acc: acc, m: m, msgr: msgr, part: &p}
 		// note: state is cleared by cleanup
 
-		pm, err := parsedMessage(log, m, &state, true, true)
+		pm, err := parsedMessage(log, m, &state, true, true, true)
 		xcheckf(ctx, err, "parsing parsedmessage")
 
 		if len(pm.Texts) == 0 {
@@ -729,7 +740,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 	case len(t) == 2 && (t[1] == "html" || t[1] == "htmlexternal"):
 		// Returns the first HTML part, with "cid:" URIs replaced with an inlined datauri
 		// if the referenced Content-ID attachment can be found.
-		_, _, _, p, cleanup, ok := xprepare()
+		_, _, _, _, p, cleanup, ok := xprepare()
 		if !ok {
 			return
 		}
@@ -783,7 +794,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		// data with a text/plain content-type so the browser will attempt to display it,
 		// and "download" adds a content-disposition header causing the browser the
 		// download the file.
-		_, _, _, p, cleanup, ok := xprepare()
+		_, _, _, _, p, cleanup, ok := xprepare()
 		if !ok {
 			return
 		}

@@ -172,8 +172,9 @@ type MessageItem struct {
 	Attachments []Attachment
 	IsSigned    bool
 	IsEncrypted bool
-	FirstLine   string // Of message body, for showing as preview.
-	MatchQuery  bool   // If message does not match query, it can still be included because of threading.
+	FirstLine   string      // Of message body, for showing as preview.
+	MatchQuery  bool        // If message does not match query, it can still be included because of threading.
+	MoreHeaders [][2]string // All headers from store.Settings.ShowHeaders that are present.
 }
 
 // ParsedMessage has more parsed/derived information about a message, intended
@@ -486,6 +487,23 @@ func (x *ssetokens) check(token string) (string, string, store.SessionToken, boo
 // ioErr is panicked on i/o errors in serveEvents and handled in a defer.
 type ioErr struct {
 	err error
+}
+
+// ensure we have a non-nil moreHeaders, taking it from Settings.
+func ensureMoreHeaders(tx *bstore.Tx, moreHeaders []string) ([]string, error) {
+	if moreHeaders != nil {
+		return moreHeaders, nil
+	}
+
+	s := store.Settings{ID: 1}
+	if err := tx.Get(&s); err != nil {
+		return nil, fmt.Errorf("get settings: %v", err)
+	}
+	moreHeaders = s.ShowHeaders
+	if moreHeaders == nil {
+		moreHeaders = []string{} // Ensure we won't get Settings again next call.
+	}
+	return moreHeaders, nil
 }
 
 // serveEvents serves an SSE connection. Authentication is done through a query
@@ -824,6 +842,17 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 			return bstore.QueryTx[store.Message](xtx).FilterEqual("Expunged", false).FilterNonzero(store.Message{MailboxID: mailboxID, UID: uid}).Get()
 		}
 
+		// Additional headers from settings to add to MessageItems.
+		var moreHeaders []string
+		xmoreHeaders := func() []string {
+			err := ensureTx()
+			xcheckf(ctx, err, "transaction")
+
+			moreHeaders, err = ensureMoreHeaders(xtx, moreHeaders)
+			xcheckf(ctx, err, "ensuring more headers")
+			return moreHeaders
+		}
+
 		// Return uids that are within range in view. Because the end has been reached, or
 		// because the UID is not after the last message.
 		xchangedUIDs := func(mailboxID int64, uids []store.UID, isRemove bool) (changedUIDs []store.UID) {
@@ -860,8 +889,9 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 				if !ok && !thread {
 					continue
 				}
+
 				state := msgState{acc: acc}
-				mi, err := messageItem(log, m, &state)
+				mi, err := messageItem(log, m, &state, xmoreHeaders())
 				state.clear()
 				xcheckf(ctx, err, "make messageitem")
 				mi.MatchQuery = ok
@@ -870,7 +900,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 				if !thread && req.Query.Threading != ThreadOff {
 					err := ensureTx()
 					xcheckf(ctx, err, "transaction")
-					more, _, err := gatherThread(log, xtx, acc, v, m, 0, false)
+					more, _, err := gatherThread(log, xtx, acc, v, m, 0, false, xmoreHeaders())
 					xcheckf(ctx, err, "gathering thread messages for id %d, thread %d", m.ID, m.ThreadID)
 					mil = append(mil, more...)
 					v.threadIDs[m.ThreadID] = struct{}{}
@@ -1460,6 +1490,8 @@ func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bs
 		q.FilterFn(wordsFilter)
 	}
 
+	var moreHeaders []string // From store.Settings.ShowHeaders
+
 	if query.OrderAsc {
 		q.SortAsc("Received")
 	} else {
@@ -1491,7 +1523,7 @@ func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bs
 			// expected to read first, that would be the first unread, which we'll get below
 			// when gathering the thread.
 			found = true
-			xpm, err := parsedMessage(log, m, &state, true, false)
+			xpm, err := parsedMessage(log, m, &state, true, false, false)
 			if err != nil && errors.Is(err, message.ErrHeader) {
 				log.Debug("not returning parsed message due to invalid headers", slog.Int64("msgid", m.ID), slog.Any("err", err))
 			} else if err != nil {
@@ -1501,13 +1533,19 @@ func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bs
 			}
 		}
 
-		mi, err := messageItem(log, m, &state)
+		var err error
+		moreHeaders, err = ensureMoreHeaders(tx, moreHeaders)
+		if err != nil {
+			return fmt.Errorf("ensuring more headers: %v", err)
+		}
+
+		mi, err := messageItem(log, m, &state, moreHeaders)
 		if err != nil {
 			return fmt.Errorf("making messageitem for message %d: %v", m.ID, err)
 		}
 		mil := []MessageItem{mi}
 		if query.Threading != ThreadOff {
-			more, xpm, err := gatherThread(log, tx, acc, v, m, page.DestMessageID, page.AnchorMessageID == 0 && have == 0)
+			more, xpm, err := gatherThread(log, tx, acc, v, m, page.DestMessageID, page.AnchorMessageID == 0 && have == 0, moreHeaders)
 			if err != nil {
 				return fmt.Errorf("gathering thread messages for id %d, thread %d: %v", m.ID, m.ThreadID, err)
 			}
@@ -1576,7 +1614,7 @@ func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bs
 	}
 }
 
-func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m store.Message, destMessageID int64, first bool) ([]MessageItem, *ParsedMessage, error) {
+func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m store.Message, destMessageID int64, first bool, moreHeaders []string) ([]MessageItem, *ParsedMessage, error) {
 	if m.ThreadID == 0 {
 		// If we would continue, FilterNonzero would fail because there are no non-zero fields.
 		return nil, nil, fmt.Errorf("message has threadid 0, account is probably still being upgraded, try turning threading off until the upgrade is done")
@@ -1601,7 +1639,7 @@ func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m sto
 			xstate := msgState{acc: acc}
 			defer xstate.clear()
 
-			mi, err := messageItem(log, tm, &xstate)
+			mi, err := messageItem(log, tm, &xstate, moreHeaders)
 			if err != nil {
 				return fmt.Errorf("making messageitem for message %d, for thread %d: %v", tm.ID, m.ThreadID, err)
 			}
@@ -1615,7 +1653,7 @@ func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m sto
 
 			if tm.ID == destMessageID || destMessageID == 0 && first && (pm == nil || !firstUnread && !tm.Seen) {
 				firstUnread = !tm.Seen
-				xpm, err := parsedMessage(log, tm, &xstate, true, false)
+				xpm, err := parsedMessage(log, tm, &xstate, true, false, false)
 				if err != nil && errors.Is(err, message.ErrHeader) {
 					log.Debug("not returning parsed message due to invalid headers", slog.Int64("msgid", m.ID), slog.Any("err", err))
 				} else if err != nil {
@@ -1636,7 +1674,7 @@ func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m sto
 	if destMessageID == 0 && first && !m.Seen && !firstUnread {
 		xstate := msgState{acc: acc}
 		defer xstate.clear()
-		xpm, err := parsedMessage(log, m, &xstate, true, false)
+		xpm, err := parsedMessage(log, m, &xstate, true, false, false)
 		if err != nil && errors.Is(err, message.ErrHeader) {
 			log.Debug("not returning parsed message due to invalid headers", slog.Int64("msgid", m.ID), slog.Any("err", err))
 		} else if err != nil {
@@ -1817,7 +1855,7 @@ var attachmentExtensions = map[string]AttachmentType{
 func attachmentTypes(log mlog.Log, m store.Message, state *msgState) (map[AttachmentType]bool, error) {
 	types := map[AttachmentType]bool{}
 
-	pm, err := parsedMessage(log, m, state, false, false)
+	pm, err := parsedMessage(log, m, state, false, false, false)
 	if err != nil {
 		return nil, fmt.Errorf("parsing message for attachments: %w", err)
 	}

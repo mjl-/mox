@@ -22,7 +22,7 @@ const init = () => {
 		)
 	}
 
-	const msgheaderview = dom.table(styleClasses.msgHeaders)
+	const msgheaderview = dom.tbody()
 	loadMsgheaderView(msgheaderview, mi, [], null, true)
 
 	const l = window.location.pathname.split('/')
@@ -45,7 +45,10 @@ const init = () => {
 	const root = dom.div(
 		dom.div(
 			css('msgMeta', {backgroundColor: styles.backgroundColorMild, borderBottom: '1px solid', borderBottomColor: styles.borderColor}),
-			msgheaderview,
+			dom.table(
+				styleClasses.msgHeaders,
+				msgheaderview,
+			),
 			msgattachmentview,
 		),
 		iframe=dom.iframe(

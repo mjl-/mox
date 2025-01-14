@@ -100,7 +100,8 @@ const zindexes = {
 
 // Buttons and input elements.
 ensureCSS('.button', {display: 'inline-block'})
-ensureCSS('button, .button, select', {color: styles.color, backgroundColor: styles.buttonBackground, border: '1px solid', borderColor: styles.buttonBorderColor, borderRadius: '.15em', padding: '0 .15em'})
+ensureCSS('button, .button, select', {backgroundColor: styles.buttonBackground, border: '1px solid', borderColor: styles.buttonBorderColor, borderRadius: '.15em', padding: '0 .15em'})
+ensureCSS('button, .button, select, a.button:visited', {color: styles.color})
 ensureCSS('button.active, .button.active, button.active:hover, .button.active:hover', {backgroundColor: styles.highlightBackground})
 ensureCSS('button:hover:not(:disabled), .button:hover:not(:disabled), select:hover:not(:disabled)', {backgroundColor: styles.buttonHoverBackground})
 ensureCSS('button:disabled, .button:disabled, select:disabled', {opacity: .5})
@@ -1112,7 +1113,8 @@ const cmdSettings = async () => {
 	}
 
 	const remove = popup(
-		css('popupSettings', {padding: '1em 1em 2em 1em', minWidth: '30em'}),
+		css('popupSettings', {minWidth: '30em'}),
+		style({maxWidth: '50em'}),
 		dom.h1('Settings'),
 		dom.form(
 			async function submit(e: SubmitEvent) {
@@ -1178,7 +1180,7 @@ const cmdSettings = async () => {
 						style({width: '100%'}),
 						attr.rows(''+Math.max(3, 1+(accountSettings.ShowHeaders || []).length)),
 					),
-					dom.div(style({fontStyle: 'italic'}), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...'),
+					dom.div(style({fontStyle: 'italic'}), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.'),
 				),
 
 
@@ -3179,8 +3181,8 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 
 	let urlType: string // text, html, htmlexternal; for opening in new tab/print
 
-	let msgbuttonElem: HTMLElement, msgheaderElem: HTMLElement, msgattachmentElem: HTMLElement, msgmodeElem: HTMLElement
-	let msgheaderdetailsElem: HTMLElement | null = null // When full headers are visible, or some headers are requested through settings.
+	let msgbuttonElem: HTMLElement, msgheaderElem: HTMLTableSectionElement, msgattachmentElem: HTMLElement, msgmodeElem: HTMLElement
+	let msgheaderFullElem: HTMLTableElement // Full headers, when enabled.
 
 	const msgmetaElem = dom.div(
 		css('msgmeta', {backgroundColor: styles.backgroundColorMild, borderBottom: '5px solid', borderBottomColor: ['white', 'black'], maxHeight: '90%', overflowY: 'auto'}),
@@ -3188,7 +3190,11 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		msgbuttonElem=dom.div(),
 		dom.div(
 			attr.arialive('assertive'),
-			msgheaderElem=dom.table(styleClasses.msgHeaders),
+			dom.table(
+				styleClasses.msgHeaders,
+				msgheaderElem=dom.tbody(),
+			),
+			msgheaderFullElem=dom.table(),
 			msgattachmentElem=dom.div(),
 			msgmodeElem=dom.div(),
 		),
@@ -3255,28 +3261,23 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 
 	loadMsgheaderView(msgheaderElem, miv.messageitem, accountSettings.ShowHeaders || [], refineKeyword, false)
 
+	// Similar to lib.ts:/msgHeaderFieldStyle
 	const headerTextMildStyle = css('headerTextMild', {textAlign: 'right', color: styles.colorMild})
-
 	const loadHeaderDetails = (pm: api.ParsedMessage) => {
-		if (msgheaderdetailsElem) {
-			msgheaderdetailsElem.remove()
-			msgheaderdetailsElem = null
-		}
-		if (!settings.showAllHeaders) {
-			return
-		}
-		msgheaderdetailsElem = dom.table(
-			css('msgHeaderDetails', {marginBottom: '1ex', width: '100%'}),
-			Object.entries(pm.Headers || {}).sort().map(t =>
-				(t[1] || []).map(v =>
-					dom.tr(
-						dom.td(t[0]+':', headerTextMildStyle),
-						dom.td(v),
+		const table = dom.table(
+			css('msgHeaderDetails', {width: '100%'}),
+			!settings.showAllHeaders ? [] :
+				Object.entries(pm.Headers || {}).sort().map(t =>
+					(t[1] || []).map(v =>
+						dom.tr(
+							dom.td(t[0]+':', headerTextMildStyle),
+							dom.td(v),
+						)
 					)
 				)
-			)
 		)
-		msgattachmentElem.parentNode!.insertBefore(msgheaderdetailsElem, msgattachmentElem)
+		msgheaderFullElem.replaceWith(table)
+		msgheaderFullElem = table
 	}
 
 	const isText = (a: api.Attachment) => ['text', 'message'].includes(a.Part.MediaType.toLowerCase())
@@ -3511,29 +3512,6 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		renderAttachments() // Rerender opaciy on inline images.
 	}
 
-	const loadMoreHeaders = (pm: api.ParsedMessage) => {
-		const hl = accountSettings.ShowHeaders || []
-		if (hl.length === 0) {
-			return
-		}
-		for (let i = 0; i < hl.length; i++) {
-			msgheaderElem.children[msgheaderElem.children.length-1].remove()
-		}
-		hl.forEach(k => {
-			const vl = pm.Headers?.[k]
-			if (!vl || vl.length === 0) {
-				return
-			}
-			vl.forEach(v => {
-				const e = dom.tr(
-					dom.td(k+':', headerTextMildStyle, style({whiteSpace: 'nowrap'})),
-					dom.td(v),
-				)
-				msgheaderElem.appendChild(e)
-			})
-		})
-	}
-
 	const mv: MsgView = {
 		root: root,
 		messageitem: mi,
@@ -3543,7 +3521,6 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 			mi.Message.ModSeq = modseq
 			mi.Message.Keywords = keywords
 			loadMsgheaderView(msgheaderElem, miv.messageitem, accountSettings.ShowHeaders || [], refineKeyword, false)
-			loadMoreHeaders(await parsedMessagePromise)
 		},
 	}
 
@@ -3569,7 +3546,6 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 
 		loadButtons(pm)
 		loadHeaderDetails(pm)
-		loadMoreHeaders(pm)
 
 		const msgHeaderSeparatorStyle = css('msgHeaderSeparator', {borderTop: '1px solid', borderTopColor: styles.borderColor})
 		const msgModeWarningStyle = css('msgModeWarning', {backgroundColor: styles.warningBackgroundColor, padding: '0 .15em'})

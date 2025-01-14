@@ -172,7 +172,7 @@ func (Webmail) ParsedMessage(ctx context.Context, msgID int64) (pm ParsedMessage
 		state := msgState{acc: acc}
 		defer state.clear()
 		var err error
-		pm, err = parsedMessage(log, m, &state, true, false)
+		pm, err = parsedMessage(log, m, &state, true, false, false)
 		xcheckf(ctx, err, "parsing message")
 
 		if len(pm.envelope.From) == 1 {
@@ -1853,7 +1853,7 @@ func (Webmail) RulesetSuggestMove(ctx context.Context, msgID, mbSrcID, mbDstID i
 		// Parse message for List-Id header.
 		state := msgState{acc: acc}
 		defer state.clear()
-		pm, err := parsedMessage(log, m, &state, true, false)
+		pm, err := parsedMessage(log, m, &state, true, false, false)
 		xcheckf(ctx, err, "parsing message")
 
 		// The suggested ruleset. Once all is checked, we'll return it.
