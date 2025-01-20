@@ -27,14 +27,19 @@ See [Features](features/) for the details, including roadmap.
 
 ## Latest release
 
-The latest release is v0.0.13, released on 2024-11-06, see [release
-notes](https://github.com/mjl-/mox/releases/tag/v0.0.13), [download
-binaries](https://beta.gobuilds.org/github.com/mjl-/mox@v0.0.13/linux-amd64-latest/),
+The latest release is v0.0.14, released on 2025-01-20, see [release
+notes](https://github.com/mjl-/mox/releases/tag/v0.0.14), [download
+binaries](https://beta.gobuilds.org/github.com/mjl-/mox@v0.0.14/linux-amd64-latest/),
 or see [all releases](https://github.com/mjl-/mox/releases).
 
 
 ## News
 
+- 2025-01-20, [v0.0.14](https://github.com/mjl-/mox/releases/tag/v0.0.14) released
+- 2025-01-20, There will be another [talk about
+  mox](https://fosdem.org/2025/schedule/event/fosdem-2025-5364-mox-and-simplifying-mail-server-setup-management/)
+  at [FOSDEM 2025](https://fosdem.org/2025/) (Feb 1 & 2) in the ["Modern Email"
+  devroom](https://fosdem.org/2025/schedule/track/modern-email/).
 - 2024-11-06, [v0.0.13](https://github.com/mjl-/mox/releases/tag/v0.0.13) released
 - 2024-10-06, [v0.0.12](https://github.com/mjl-/mox/releases/tag/v0.0.12) released
 - 2024-04-30, [v0.0.11](https://github.com/mjl-/mox/releases/tag/v0.0.11) released
