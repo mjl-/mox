@@ -5157,7 +5157,7 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 					}),
 				),
 				dom.div(
-					dom.clickbutton('Empty mailbox', async function click() {
+					dom.clickbutton('Empty mailbox', attr.title('Remove all messages from the mailbox, but not mailboxes inside this mailbox or their messages.'), async function click() {
 						if (!window.confirm('Are you sure you want to empty this mailbox, permanently removing its messages? Mailboxes inside this mailbox are not affected.')) {
 							return
 						}

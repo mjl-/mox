@@ -1276,8 +1276,12 @@ func (Webmail) MailboxEmpty(ctx context.Context, mailboxID int64) {
 			qm.FilterEqual("Expunged", false)
 			qm.SortAsc("UID")
 			qm.Gather(&expunged)
-			_, err = qm.UpdateNonzero(store.Message{ModSeq: modseq, Expunged: true})
+			n, err := qm.UpdateNonzero(store.Message{ModSeq: modseq, Expunged: true})
 			xcheckf(ctx, err, "deleting messages")
+
+			if n == 0 {
+				xcheckf(ctx, errors.New("no messages in mailbox"), "emptying mailbox")
+			}
 
 			// Remove Recipients.
 			anyIDs := make([]any, len(expunged))

@@ -5486,7 +5486,7 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 			}
 			remove();
 			await withStatus('Deleting mailbox', client.MailboxDelete(mbv.mailbox.ID));
-		})), dom.div(dom.clickbutton('Empty mailbox', async function click() {
+		})), dom.div(dom.clickbutton('Empty mailbox', attr.title('Remove all messages from the mailbox, but not mailboxes inside this mailbox or their messages.'), async function click() {
 			if (!window.confirm('Are you sure you want to empty this mailbox, permanently removing its messages? Mailboxes inside this mailbox are not affected.')) {
 				return;
 			}
