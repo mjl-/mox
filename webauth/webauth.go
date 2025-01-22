@@ -125,7 +125,7 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 	// Cookies are named "webmailsession", "webaccountsession", "webadminsession".
 	cookie, _ := r.Cookie(kind + "session")
 	if cookie == nil {
-		respondAuthError("user:noAuth", "no session")
+		respondAuthError("user:noAuth", fmt.Sprintf("no session for %q web interface", strings.TrimPrefix(kind, "web")))
 		return "", "", "", false
 	}
 
