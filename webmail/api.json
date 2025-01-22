@@ -1000,7 +1000,7 @@
 				},
 				{
 					"Name": "Texts",
-					"Docs": "Text parts, can be empty.",
+					"Docs": "Contents of text parts, can be empty.",
 					"Typewords": [
 						"[]",
 						"string"
@@ -1019,6 +1019,23 @@
 					"Typewords": [
 						"nullable",
 						"MessageAddress"
+					]
+				},
+				{
+					"Name": "TextPaths",
+					"Docs": "Paths to text parts.",
+					"Typewords": [
+						"[]",
+						"[]",
+						"int32"
+					]
+				},
+				{
+					"Name": "HTMLPath",
+					"Docs": "Path to HTML part.",
+					"Typewords": [
+						"[]",
+						"int32"
 					]
 				}
 			]

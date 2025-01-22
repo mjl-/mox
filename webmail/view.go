@@ -186,8 +186,7 @@ type ParsedMessage struct {
 	Headers  map[string][]string
 	ViewMode store.ViewMode
 
-	// Text parts, can be empty.
-	Texts []string
+	Texts []string // Contents of text parts, can be empty.
 
 	// Whether there is an HTML part. The webclient renders HTML message parts through
 	// an iframe and a separate request with strict CSP headers to prevent script
@@ -197,6 +196,9 @@ type ParsedMessage struct {
 	HasHTML bool
 
 	ListReplyAddress *MessageAddress // From List-Post.
+
+	TextPaths [][]int // Paths to text parts.
+	HTMLPath  []int   // Path to HTML part.
 
 	// Information used by MessageItem, not exported in this type.
 	envelope    MessageEnvelope

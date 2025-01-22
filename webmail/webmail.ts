@@ -3036,6 +3036,20 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 	}
 	const cmdOpenRaw = async () => { window.open('msg/'+m.ID+'/raw', '_blank') }
+	const cmdOpenRawPart = async () => {
+		const pm = await parsedMessagePromise
+		let path: number[] | null = null
+		if (urlType === 'text' && pm.TextPaths && pm.TextPaths.length > 0) {
+			path = pm.TextPaths[0]
+		} else if ((urlType === 'html' || urlType === 'htmlexternal') && pm.HTMLPath) {
+			path = pm.HTMLPath
+		}
+		if (!path) {
+			window.alert('Part not found.')
+			return
+		}
+		window.open('msg/'+m.ID+'/viewtext/'+[0, ...path].join('.'), '_blank')
+	}
 	const cmdViewAttachments = async () => {
 		if (attachments.length > 0) {
 			view(attachments[0])
@@ -3249,6 +3263,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 								dom.clickbutton('Unmute thread', clickCmd(msglistView.cmdUnmute, shortcuts)),
 								dom.clickbutton('Open in new tab', clickCmd(cmdOpenNewTab, shortcuts)),
 								dom.clickbutton('Show raw original message in new tab', clickCmd(cmdOpenRaw, shortcuts)),
+								dom.clickbutton('Show currently displayed part as decoded text', clickCmd(cmdOpenRawPart, shortcuts)),
 								dom.clickbutton('Show internals in popup', clickCmd(cmdShowInternals, shortcuts)),
 							].map(b => dom.div(b)),
 						),

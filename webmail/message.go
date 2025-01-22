@@ -313,6 +313,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 					return
 				}
 				pm.Texts = append(pm.Texts, string(buf))
+				pm.TextPaths = append(pm.TextPaths, append([]int{}, path...))
 			}
 			if msgitem && pm.firstLine == "" {
 				pm.firstLine, rerr = formatFirstLine(p.ReaderUTF8OrBinary())
@@ -324,6 +325,9 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 
 		case "TEXT/HTML":
 			pm.HasHTML = true
+			if full && pm.HTMLPath == nil {
+				pm.HTMLPath = append([]int{}, path...)
+			}
 
 		default:
 			// todo: see if there is a common nesting messages that are both signed and encrypted.
@@ -349,6 +353,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 							return
 						}
 						pm.Texts = append(pm.Texts, string(buf))
+						pm.TextPaths = append(pm.TextPaths, append([]int{}, path...))
 					}
 					return
 				}
@@ -360,6 +365,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 							return
 						}
 						pm.Texts = append(pm.Texts, string(buf))
+						pm.TextPaths = append(pm.TextPaths, append([]int{}, path...))
 					}
 					return
 				}
