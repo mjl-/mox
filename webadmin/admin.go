@@ -665,7 +665,7 @@ EOF
 				continue
 			}
 			if len(addrs) != 1 {
-				addf(&r.IPRev.Errors, "Expected exactly 1 name for %s of %s, got %d (%v)", ip, host, len(addrs), addrs)
+				addf(&r.IPRev.Warnings, "Expected exactly 1 name for %s of %s, got %d (%v)", ip, host, len(addrs), addrs)
 			}
 			var match bool
 			for i, a := range addrs {
@@ -679,8 +679,8 @@ EOF
 					match = true
 				}
 			}
-			if !match {
-				addf(&r.IPRev.Errors, "Reverse name(s) %s for ip %s do not match hostname %s, which will cause other mail servers to reject incoming messages from this IP.", strings.Join(addrs, ","), ip, host)
+			if !match && !isNAT && host == mox.Conf.Static.HostnameDomain {
+				addf(&r.IPRev.Warnings, "IP %s with name(s) %s is forward confirmed, but does not match hostname %s.", ip, strings.Join(addrs, ","), host)
 			}
 			r.IPRev.IPNames[ip] = addrs
 		}
