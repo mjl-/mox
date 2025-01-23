@@ -65,10 +65,12 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 
 	email := r.FormValue("emailaddress")
 	log.Debug("autoconfig request", slog.String("email", email))
-	addr, err := smtp.ParseAddress(email)
 	var domain dns.Domain
-	if err != nil {
+	if email == "" {
 		email = "%EMAILADDRESS%"
+		// Declare this here rather than using := to avoid shadowing domain from
+		// the outer scope.
+		var err error
 		domain, err = dns.ParseDomain(r.Host)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("400 - bad request - invalid domain: %s", r.Host), http.StatusBadRequest)
@@ -77,6 +79,11 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 		domain.ASCII = strings.TrimPrefix(domain.ASCII, "autoconfig.")
 		domain.Unicode = strings.TrimPrefix(domain.Unicode, "autoconfig.")
 	} else {
+		addr, err := smtp.ParseAddress(email)
+		if err != nil {
+			http.Error(w, "400 - bad request - invalid parameter emailaddress", http.StatusBadRequest)
+			return
+		}
 		domain = addr.Domain
 	}
 
@@ -109,10 +116,10 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	// Thunderbird doesn't seem to allow U-labels, always return ASCII names.
 	var resp autoconfigResponse
 	resp.Version = "1.1"
-	resp.EmailProvider.ID = addr.Domain.ASCII
-	resp.EmailProvider.Domain = addr.Domain.ASCII
+	resp.EmailProvider.ID = domain.ASCII
+	resp.EmailProvider.Domain = domain.ASCII
 	resp.EmailProvider.DisplayName = email
-	resp.EmailProvider.DisplayShortName = addr.Domain.ASCII
+	resp.EmailProvider.DisplayShortName = domain.ASCII
 
 	// todo: specify SCRAM-SHA-256 once thunderbird and autoconfig supports it. or perhaps that will fall under "password-encrypted" by then.
 	// todo: let user configure they prefer or require tls client auth and specify "TLS-client-cert"
