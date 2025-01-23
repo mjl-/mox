@@ -645,7 +645,7 @@ var ErrParamEncoding = errors.New("bad header parameter encoding")
 func (p *Part) DispositionFilename() (disposition string, filename string, err error) {
 	h, err := p.Header()
 	if err != nil {
-		return "", "", fmt.Errorf("parsing header: %v", err)
+		return "", "", fmt.Errorf("parsing header: %w", err)
 	}
 	var disp string
 	var params map[string]string

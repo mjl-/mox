@@ -1803,7 +1803,7 @@ func (q Query) attachmentFilterFn(log mlog.Log, acc *store.Account, state *msgSt
 	}
 
 	return func(m store.Message) bool {
-		if !state.ensurePart(m, false) {
+		if !state.ensurePart(m, true) {
 			return false
 		}
 		types, err := attachmentTypes(log, m, state)
@@ -1872,7 +1872,7 @@ func attachmentTypes(log mlog.Log, m store.Message, state *msgState) (map[Attach
 			continue
 		}
 		_, filename, err := a.Part.DispositionFilename()
-		if err != nil && errors.Is(err, message.ErrParamEncoding) {
+		if err != nil && (errors.Is(err, message.ErrParamEncoding) || errors.Is(err, message.ErrHeader)) {
 			log.Debugx("parsing disposition/filename", err)
 		} else if err != nil {
 			return nil, fmt.Errorf("reading disposition/filename: %v", err)
