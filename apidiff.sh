@@ -8,7 +8,8 @@ if ! test -d tmp/mox-$prevversion; then
 fi
 (rm -r tmp/apidiff || exit 0)
 mkdir -p tmp/apidiff/$prevversion tmp/apidiff/next
-(rm apidiff/next.txt apidiff/next.txt.new 2>/dev/null || exit 0)
+(rm apidiff/next.txt.new 2>/dev/null || exit 0)
+touch apidiff/next.txt.new
 for p in $(cat apidiff/packages.txt); do
 	if ! test -d tmp/mox-$prevversion/$p; then
 		continue
