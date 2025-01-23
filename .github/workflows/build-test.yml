@@ -29,7 +29,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.runs-on }}
+          name: coverage-${{ matrix.go-version }}
           path: cover.html
 
       # Format code, we check below if nothing changed.
