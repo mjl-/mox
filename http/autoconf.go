@@ -12,6 +12,7 @@ import (
 	"rsc.io/qr"
 
 	"github.com/mjl-/mox/admin"
+	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -64,10 +65,26 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 
 	email := r.FormValue("emailaddress")
 	log.Debug("autoconfig request", slog.String("email", email))
-	addr, err := smtp.ParseAddress(email)
-	if err != nil {
-		http.Error(w, "400 - bad request - invalid parameter emailaddress", http.StatusBadRequest)
-		return
+	var domain dns.Domain
+	if email == "" {
+		email = "%EMAILADDRESS%"
+		// Declare this here rather than using := to avoid shadowing domain from
+		// the outer scope.
+		var err error
+		domain, err = dns.ParseDomain(r.Host)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("400 - bad request - invalid domain: %s", r.Host), http.StatusBadRequest)
+			return
+		}
+		domain.ASCII = strings.TrimPrefix(domain.ASCII, "autoconfig.")
+		domain.Unicode = strings.TrimPrefix(domain.Unicode, "autoconfig.")
+	} else {
+		addr, err := smtp.ParseAddress(email)
+		if err != nil {
+			http.Error(w, "400 - bad request - invalid parameter emailaddress", http.StatusBadRequest)
+			return
+		}
+		domain = addr.Domain
 	}
 
 	socketType := func(tlsMode admin.TLSMode) (string, error) {
@@ -84,7 +101,7 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var imapTLS, submissionTLS string
-	config, err := admin.ClientConfigDomain(addr.Domain)
+	config, err := admin.ClientConfigDomain(domain)
 	if err == nil {
 		imapTLS, err = socketType(config.IMAP.TLSMode)
 	}
@@ -99,30 +116,60 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	// Thunderbird doesn't seem to allow U-labels, always return ASCII names.
 	var resp autoconfigResponse
 	resp.Version = "1.1"
-	resp.EmailProvider.ID = addr.Domain.ASCII
-	resp.EmailProvider.Domain = addr.Domain.ASCII
+	resp.EmailProvider.ID = domain.ASCII
+	resp.EmailProvider.Domain = domain.ASCII
 	resp.EmailProvider.DisplayName = email
-	resp.EmailProvider.DisplayShortName = addr.Domain.ASCII
+	resp.EmailProvider.DisplayShortName = domain.ASCII
 
 	// todo: specify SCRAM-SHA-256 once thunderbird and autoconfig supports it. or perhaps that will fall under "password-encrypted" by then.
 	// todo: let user configure they prefer or require tls client auth and specify "TLS-client-cert"
 
-	resp.EmailProvider.IncomingServer.Type = "imap"
-	resp.EmailProvider.IncomingServer.Hostname = config.IMAP.Host.ASCII
-	resp.EmailProvider.IncomingServer.Port = config.IMAP.Port
-	resp.EmailProvider.IncomingServer.SocketType = imapTLS
-	resp.EmailProvider.IncomingServer.Username = email
-	resp.EmailProvider.IncomingServer.Authentication = "password-encrypted"
+	incoming := incomingServer{
+		"imap",
+		config.IMAP.Host.ASCII,
+		config.IMAP.Port,
+		imapTLS,
+		email,
+		"password-encrypted",
+	}
+	resp.EmailProvider.IncomingServers = append(resp.EmailProvider.IncomingServers, incoming)
+	if config.IMAP.EnabledOnHTTPS {
+		tlsMode, _ := socketType(admin.TLSModeImmediate)
+		incomingALPN := incomingServer{
+			"imap",
+			config.IMAP.Host.ASCII,
+			443,
+			tlsMode,
+			email,
+			"password-cleartext",
+		}
+		resp.EmailProvider.IncomingServers = append(resp.EmailProvider.IncomingServers, incomingALPN)
+	}
 
-	resp.EmailProvider.OutgoingServer.Type = "smtp"
-	resp.EmailProvider.OutgoingServer.Hostname = config.Submission.Host.ASCII
-	resp.EmailProvider.OutgoingServer.Port = config.Submission.Port
-	resp.EmailProvider.OutgoingServer.SocketType = submissionTLS
-	resp.EmailProvider.OutgoingServer.Username = email
-	resp.EmailProvider.OutgoingServer.Authentication = "password-encrypted"
+	outgoing := outgoingServer{
+		"smtp",
+		config.Submission.Host.ASCII,
+		config.Submission.Port,
+		submissionTLS,
+		email,
+		"password-encrypted",
+	}
+	resp.EmailProvider.OutgoingServers = append(resp.EmailProvider.OutgoingServers, outgoing)
+	if config.Submission.EnabledOnHTTPS {
+		tlsMode, _ := socketType(admin.TLSModeImmediate)
+		outgoingALPN := outgoingServer{
+			"smtp",
+			config.Submission.Host.ASCII,
+			443,
+			tlsMode,
+			email,
+			"password-cleartext",
+		}
+		resp.EmailProvider.OutgoingServers = append(resp.EmailProvider.OutgoingServers, outgoingALPN)
+	}
 
 	// todo: should we put the email address in the URL?
-	resp.ClientConfigUpdate.URL = fmt.Sprintf("https://autoconfig.%s/mail/config-v1.1.xml", addr.Domain.ASCII)
+	resp.ClientConfigUpdate.URL = fmt.Sprintf("https://autoconfig.%s/mail/config-v1.1.xml", domain.ASCII)
 
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	enc := xml.NewEncoder(w)
@@ -255,6 +302,22 @@ func autodiscoverHandle(w http.ResponseWriter, r *http.Request) {
 // https://autodiscover.example.org/autodiscover/autodiscover.xml
 // https://example.org/.well-known/autoconfig/mail/config-v1.1.xml?emailaddress=user%40example.org
 // https://example.org/autodiscover/autodiscover.xml
+type incomingServer struct {
+	Type           string `xml:"type,attr"`
+	Hostname       string `xml:"hostname"`
+	Port           int    `xml:"port"`
+	SocketType     string `xml:"socketType"`
+	Username       string `xml:"username"`
+	Authentication string `xml:"authentication"`
+}
+type outgoingServer struct {
+	Type           string `xml:"type,attr"`
+	Hostname       string `xml:"hostname"`
+	Port           int    `xml:"port"`
+	SocketType     string `xml:"socketType"`
+	Username       string `xml:"username"`
+	Authentication string `xml:"authentication"`
+}
 type autoconfigResponse struct {
 	XMLName xml.Name `xml:"clientConfig"`
 	Version string   `xml:"version,attr"`
@@ -265,23 +328,8 @@ type autoconfigResponse struct {
 		DisplayName      string `xml:"displayName"`
 		DisplayShortName string `xml:"displayShortName"`
 
-		IncomingServer struct {
-			Type           string `xml:"type,attr"`
-			Hostname       string `xml:"hostname"`
-			Port           int    `xml:"port"`
-			SocketType     string `xml:"socketType"`
-			Username       string `xml:"username"`
-			Authentication string `xml:"authentication"`
-		} `xml:"incomingServer"`
-
-		OutgoingServer struct {
-			Type           string `xml:"type,attr"`
-			Hostname       string `xml:"hostname"`
-			Port           int    `xml:"port"`
-			SocketType     string `xml:"socketType"`
-			Username       string `xml:"username"`
-			Authentication string `xml:"authentication"`
-		} `xml:"outgoingServer"`
+		IncomingServers []incomingServer `xml:"incomingServer"`
+		OutgoingServers []outgoingServer `xml:"outgoingServer"`
 	} `xml:"emailProvider"`
 
 	ClientConfigUpdate struct {

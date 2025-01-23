@@ -299,7 +299,7 @@ func listen1(protocol, name, ip string, port int, hostname dns.Domain, tlsConfig
 
 			// Package is set on the resolver by the dkim/spf/dmarc/etc packages.
 			resolver := dns.StrictResolver{Log: log.Logger}
-			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, requireTLS, dnsBLs, firstTimeSenderDelay)
+			go serve(name, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, xtls, false, maxMessageSize, requireTLSForAuth, requireTLSForDelivery, requireTLS, dnsBLs, firstTimeSenderDelay)
 		}
 	}
 
@@ -325,6 +325,7 @@ type conn struct {
 
 	tls                   bool
 	extRequireTLS         bool // Whether to announce and allow the REQUIRETLS extension.
+	viaHTTPS              bool // Whether the connection came in via the HTTPS port (using TLS ALPN).
 	resolver              dns.Resolver
 	r                     *bufio.Reader
 	w                     *bufio.Writer
@@ -799,7 +800,14 @@ func (c *conn) writelinef(format string, args ...any) {
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
-func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, xtls bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
+// ServeTLSConn serves a TLS connection.
+func ServeTLSConn(listenerName string, hostname dns.Domain, conn *tls.Conn, tlsConfig *tls.Config, submission, viaHTTPS bool, maxMsgSize int64, requireTLS bool) {
+	log := mlog.New("smtpserver", nil)
+	resolver := dns.StrictResolver{Log: log.Logger}
+	serve(listenerName, mox.Cid(), hostname, tlsConfig, conn, resolver, submission, true, viaHTTPS, maxMsgSize, true, true, requireTLS, nil, 0)
+}
+
+func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.Config, nc net.Conn, resolver dns.Resolver, submission, xtls, viaHTTPS bool, maxMessageSize int64, requireTLSForAuth, requireTLSForDelivery, requireTLS bool, dnsBLs []dns.Domain, firstTimeSenderDelay time.Duration) {
 	var localIP, remoteIP net.IP
 	if a, ok := nc.LocalAddr().(*net.TCPAddr); ok {
 		localIP = a.IP
@@ -814,12 +822,18 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		remoteIP = net.ParseIP("127.0.0.10")
 	}
 
+	origConn := nc
+	if viaHTTPS {
+		origConn = nc.(*tls.Conn).NetConn()
+	}
+
 	c := &conn{
 		cid:                   cid,
-		origConn:              nc,
+		origConn:              origConn,
 		conn:                  nc,
 		submission:            submission,
 		tls:                   xtls,
+		viaHTTPS:              viaHTTPS,
 		extRequireTLS:         requireTLS,
 		resolver:              resolver,
 		lastlog:               time.Now(),
@@ -859,6 +873,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		slog.Any("local", c.conn.LocalAddr()),
 		slog.Bool("submission", submission),
 		slog.Bool("tls", xtls),
+		slog.Bool("viahttps", viaHTTPS),
 		slog.String("listener", listenerName))
 
 	defer func() {
@@ -883,7 +898,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		}
 	}()
 
-	if xtls {
+	if xtls && !viaHTTPS {
 		// Start TLS on connection. We perform the handshake explicitly, so we can set a
 		// timeout, do client certificate authentication, log TLS details afterwards.
 		c.xtlsHandshakeAndAuthenticate(c.conn)
@@ -1136,7 +1151,7 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 			// case, or it would trigger the mechanism downgrade detection.
 			mechs = "SCRAM-SHA-256-PLUS SCRAM-SHA-256 SCRAM-SHA-1-PLUS SCRAM-SHA-1 CRAM-MD5 PLAIN LOGIN"
 		}
-		if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 {
+		if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 && !c.viaHTTPS {
 			mechs = "EXTERNAL " + mechs
 		}
 		c.bwritelinef("250-AUTH %s", mechs)

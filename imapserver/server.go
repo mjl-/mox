@@ -169,6 +169,7 @@ type conn struct {
 	state             state
 	conn              net.Conn
 	tls               bool               // Whether TLS has been initialized.
+	viaHTTPS          bool               // Whether this connection came in via HTTPS (using TLS ALPN).
 	br                *bufio.Reader      // From remote, with TLS unwrapped in case of TLS.
 	line              chan lineErr       // If set, instead of reading from br, a line is read from this channel. For reading a line in IDLE while also waiting for mailbox/account updates.
 	lastLine          string             // For detecting if syntax error is fatal, i.e. if this ends with a literal. Without crlf.
@@ -380,11 +381,16 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 			}
 
 			metricIMAPConnection.WithLabelValues(protocol).Inc()
-			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noRequireSTARTTLS)
+			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noRequireSTARTTLS, false)
 		}
 	}
 
 	servers = append(servers, serve)
+}
+
+// ServeTLSConn serves IMAP on a TLS connection.
+func ServeTLSConn(listenerName string, conn *tls.Conn, tlsConfig *tls.Config) {
+	serve(listenerName, mox.Cid(), tlsConfig, conn, true, false, true)
 }
 
 // Serve starts serving on all listeners, launching a goroutine per listener.
@@ -635,7 +641,7 @@ func (c *conn) xhighestModSeq(tx *bstore.Tx, mailboxID int64) store.ModSeq {
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
-func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noRequireSTARTTLS bool) {
+func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noRequireSTARTTLS, viaHTTPS bool) {
 	var remoteIP net.IP
 	if a, ok := nc.RemoteAddr().(*net.TCPAddr); ok {
 		remoteIP = a.IP
@@ -648,6 +654,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		cid:               cid,
 		conn:              nc,
 		tls:               xtls,
+		viaHTTPS:          viaHTTPS,
 		lastlog:           time.Now(),
 		baseTLSConfig:     tlsConfig,
 		remoteIP:          remoteIP,
@@ -680,10 +687,14 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	// Many IMAP connections use IDLE to wait for new incoming messages. We'll enable
 	// keepalive to get a higher chance of the connection staying alive, or otherwise
 	// detecting broken connections early.
-	if tcpconn, ok := c.conn.(*net.TCPConn); ok {
-		if err := tcpconn.SetKeepAlivePeriod(5 * time.Minute); err != nil {
+	tcpconn := c.conn
+	if viaHTTPS {
+		tcpconn = nc.(*tls.Conn).NetConn()
+	}
+	if tc, ok := tcpconn.(*net.TCPConn); ok {
+		if err := tc.SetKeepAlivePeriod(5 * time.Minute); err != nil {
 			c.log.Errorx("setting keepalive period", err)
-		} else if err := tcpconn.SetKeepAlive(true); err != nil {
+		} else if err := tc.SetKeepAlive(true); err != nil {
 			c.log.Errorx("enabling keepalive", err)
 		}
 	}
@@ -692,6 +703,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		slog.Any("remote", c.conn.RemoteAddr()),
 		slog.Any("local", c.conn.LocalAddr()),
 		slog.Bool("tls", xtls),
+		slog.Bool("viahttps", viaHTTPS),
 		slog.String("listener", listenerName))
 
 	defer func() {
@@ -717,7 +729,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		}
 	}()
 
-	if xtls {
+	if xtls && !viaHTTPS {
 		// Start TLS on connection. We perform the handshake explicitly, so we can set a
 		// timeout, do client certificate authentication, log TLS details afterwards.
 		c.xtlsHandshakeAndAuthenticate(c.conn)
@@ -1554,7 +1566,7 @@ func (c *conn) capabilities() string {
 	} else {
 		caps += " LOGINDISABLED"
 	}
-	if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 {
+	if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 && !c.viaHTTPS {
 		caps += " AUTH=EXTERNAL"
 	}
 	return caps

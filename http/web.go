@@ -24,6 +24,7 @@ import (
 	_ "net/http/pprof"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/net/http2"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -32,9 +33,11 @@ import (
 	"github.com/mjl-/mox/autotls"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/imapserver"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/ratelimit"
+	"github.com/mjl-/mox/smtpserver"
 	"github.com/mjl-/mox/webaccount"
 	"github.com/mjl-/mox/webadmin"
 	"github.com/mjl-/mox/webapisrv"
@@ -384,8 +387,9 @@ type pathHandler struct {
 	Handler   http.Handler
 }
 type serve struct {
-	Kinds     []string // Type of handler and protocol (e.g. acme-tls-alpn-01, account-http, admin-https).
+	Kinds     []string // Type of handler and protocol (e.g. acme-tls-alpn-01, account-http, admin-https, imap-https, smtp-https).
 	TLSConfig *tls.Config
+	NextProto tlsNextProtoMap // For HTTP server, when we do submission/imap with ALPN over the HTTPS port.
 	Favicon   bool
 
 	// SystemHandlers are for MTA-STS, autoconfig, ACME validation. They can't be
@@ -545,20 +549,20 @@ func Listen() {
 	sort.Strings(names)
 	for _, name := range names {
 		l := mox.Conf.Static.Listeners[name]
-		portServe := portServes(l)
+		portServe := portServes(name, l)
 
 		ports := maps.Keys(portServe)
 		sort.Ints(ports)
 		for _, port := range ports {
 			srv := portServe[port]
 			for _, ip := range l.IPs {
-				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv)
+				listen1(ip, port, srv.TLSConfig, name, srv.Kinds, srv, srv.NextProto)
 			}
 		}
 	}
 }
 
-func portServes(l config.Listener) map[int]*serve {
+func portServes(name string, l config.Listener) map[int]*serve {
 	portServe := map[int]*serve{}
 
 	// For system/services, we serve on host localhost too, for ssh tunnel scenario's.
@@ -585,7 +589,7 @@ func portServes(l config.Listener) map[int]*serve {
 	ensureServe = func(https bool, port int, kind string, favicon bool) *serve {
 		s := portServe[port]
 		if s == nil {
-			s = &serve{nil, nil, false, nil, false, nil}
+			s = &serve{nil, nil, tlsNextProtoMap{}, false, nil, false, nil}
 			portServe[port] = s
 		}
 		s.Kinds = append(s.Kinds, kind)
@@ -594,15 +598,18 @@ func portServes(l config.Listener) map[int]*serve {
 			s.Favicon = true
 		}
 
+		// We clone TLS configs because we may modify it later on for this server, for
+		// ALPN. And we need copies because multiple listeners on http.Server where the
+		// config is used will try to modify it concurrently.
 		if https && l.TLS.ACME != "" {
-			s.TLSConfig = l.TLS.ACMEConfig
+			s.TLSConfig = l.TLS.ACMEConfig.Clone()
 
 			tlsport := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
 			if portServe[tlsport] == nil || !slices.Contains(portServe[tlsport].Kinds, "acme-tls-alpn-01") {
 				ensureServe(true, tlsport, "acme-tls-alpn-01", false)
 			}
 		} else if https {
-			s.TLSConfig = l.TLS.Config
+			s.TLSConfig = l.TLS.Config.Clone()
 		}
 		return s
 	}
@@ -621,7 +628,29 @@ func portServes(l config.Listener) map[int]*serve {
 		port := config.Port(mox.Conf.Static.ACME[l.TLS.ACME].Port, 443)
 		ensureServe(true, port, "acme-tls-alpn-01", false)
 	}
+	if l.Submissions.Enabled && l.Submissions.EnabledOnHTTPS {
+		s := ensureServe(true, 443, "smtp-https", false)
+		hostname := mox.Conf.Static.HostnameDomain
+		if l.Hostname != "" {
+			hostname = l.HostnameDomain
+		}
 
+		maxMsgSize := l.SMTPMaxMessageSize
+		if maxMsgSize == 0 {
+			maxMsgSize = config.DefaultMaxMsgSize
+		}
+		requireTLS := !l.SMTP.NoRequireTLS
+
+		s.NextProto["smtp"] = func(_ *http.Server, conn *tls.Conn, _ http.Handler) {
+			smtpserver.ServeTLSConn(name, hostname, conn, s.TLSConfig, true, true, maxMsgSize, requireTLS)
+		}
+	}
+	if l.IMAPS.Enabled && l.IMAPS.EnabledOnHTTPS {
+		s := ensureServe(true, 443, "imap-https", false)
+		s.NextProto["imap"] = func(_ *http.Server, conn *tls.Conn, _ http.Handler) {
+			imapserver.ServeTLSConn(name, conn, s.TLSConfig)
+		}
+	}
 	if l.AccountHTTP.Enabled {
 		port := config.Port(l.AccountHTTP.Port, 80)
 		path := "/"
@@ -805,7 +834,7 @@ func portServes(l config.Listener) map[int]*serve {
 		if _, ok := portServe[port]; ok {
 			pkglog.Fatal("cannot serve pprof on same endpoint as other http services")
 		}
-		srv := &serve{[]string{"pprof-http"}, nil, false, nil, false, nil}
+		srv := &serve{[]string{"pprof-http"}, nil, nil, false, nil, false, nil}
 		portServe[port] = srv
 		srv.SystemHandle("pprof", nil, "/", http.DefaultServeMux)
 	}
@@ -856,6 +885,10 @@ func portServes(l config.Listener) map[int]*serve {
 		}
 	}
 
+	if s := portServe[443]; s != nil && s.TLSConfig != nil && len(s.NextProto) > 0 {
+		s.TLSConfig.NextProtos = append(s.TLSConfig.NextProtos, maps.Keys(s.NextProto)...)
+	}
+
 	for _, srv := range portServe {
 		sortPathHandlers(srv.SystemHandlers)
 		sortPathHandlers(srv.ServiceHandlers)
@@ -887,8 +920,10 @@ var servers []func()
 // the certificate to be given during the first https connection.
 var ensureManagerHosts = map[*autotls.Manager]map[dns.Domain]struct{}{}
 
+type tlsNextProtoMap = map[string]func(*http.Server, *tls.Conn, http.Handler)
+
 // listen prepares a listener, and adds it to "servers", to be launched (if not running as root) through Serve.
-func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, handler http.Handler) {
+func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []string, handler http.Handler, nextProto tlsNextProtoMap) {
 	addr := net.JoinHostPort(ip, fmt.Sprintf("%d", port))
 
 	var protocol string
@@ -922,12 +957,20 @@ func listen1(ip string, port int, tlsConfig *tls.Config, name string, kinds []st
 	}
 
 	server := &http.Server{
-		Handler: handler,
-		// Clone because our multiple Server.Serve calls modify config concurrently leading to data race.
-		TLSConfig:         tlsConfig.Clone(),
+		Handler:           handler,
+		TLSConfig:         tlsConfig,
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       65 * time.Second, // Chrome closes connections after 60 seconds, firefox after 115 seconds.
 		ErrorLog:          golog.New(mlog.LogWriter(pkglog.With(slog.String("pkg", "net/http")), slog.LevelInfo, protocol+" error"), "", 0),
+		TLSNextProto:      nextProto,
+	}
+	// By default, the Go 1.6 and above http.Server includes support for HTTP2.
+	// However, HTTP2 is negotiated via ALPN. Because we are configuring
+	// TLSNextProto above, we have to explicitly enable HTTP2 by importing http2
+	// and calling ConfigureServer.
+	err = http2.ConfigureServer(server, nil)
+	if err != nil {
+		pkglog.Fatalx("https: unable to configure http2", err)
 	}
 	serve := func() {
 		err := server.Serve(ln)

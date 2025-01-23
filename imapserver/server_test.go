@@ -393,7 +393,8 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 	connCounter++
 	cid := connCounter
 	go func() {
-		serve("test", cid, serverConfig, serverConn, immediateTLS, allowLoginWithoutTLS)
+		const viaHTTPS = false
+		serve("test", cid, serverConfig, serverConn, immediateTLS, allowLoginWithoutTLS, viaHTTPS)
 		if !noCloseSwitchboard {
 			switchStop()
 		}
