@@ -78,16 +78,16 @@ func TestFilter(t *testing.T) {
 		return
 	}
 
-	prob, _, _, _, err := f.ClassifyMessagePath(ctxbg, filepath.Join(hamdir, hamfiles[0]))
+	result, err := f.ClassifyMessagePath(ctxbg, filepath.Join(hamdir, hamfiles[0]))
 	tcheck(t, err, "classify ham message")
-	if prob > 0.1 {
-		t.Fatalf("trained ham file has prob %v, expected <= 0.1", prob)
+	if result.Probability > 0.1 {
+		t.Fatalf("trained ham file has prob %v, expected <= 0.1", result.Probability)
 	}
 
-	prob, _, _, _, err = f.ClassifyMessagePath(ctxbg, filepath.Join(spamdir, spamfiles[0]))
+	result, err = f.ClassifyMessagePath(ctxbg, filepath.Join(spamdir, spamfiles[0]))
 	tcheck(t, err, "classify spam message")
-	if prob < 0.9 {
-		t.Fatalf("trained spam file has prob %v, expected > 0.9", prob)
+	if result.Probability < 0.9 {
+		t.Fatalf("trained spam file has prob %v, expected > 0.9", result.Probability)
 	}
 
 	err = f.Close()
@@ -145,18 +145,18 @@ func TestFilter(t *testing.T) {
 	// Classify and verify.
 	_, err = hamf.Seek(0, 0)
 	tcheck(t, err, "seek ham message")
-	prob, _, _, _, err = f.ClassifyMessageReader(ctxbg, hamf, hamsize)
+	result, err = f.ClassifyMessageReader(ctxbg, hamf, hamsize)
 	tcheck(t, err, "classify ham")
-	if prob > 0.1 {
-		t.Fatalf("got prob %v, expected <= 0.1", prob)
+	if result.Probability > 0.1 {
+		t.Fatalf("got prob %v, expected <= 0.1", result.Probability)
 	}
 
 	_, err = spamf.Seek(0, 0)
 	tcheck(t, err, "seek spam message")
-	prob, _, _, _, err = f.ClassifyMessageReader(ctxbg, spamf, spamsize)
+	result, err = f.ClassifyMessageReader(ctxbg, spamf, spamsize)
 	tcheck(t, err, "classify spam")
-	if prob < 0.9 {
-		t.Fatalf("got prob %v, expected >= 0.9", prob)
+	if result.Probability < 0.9 {
+		t.Fatalf("got prob %v, expected >= 0.9", result.Probability)
 	}
 
 	// Untrain ham & spam.
@@ -185,18 +185,18 @@ func TestFilter(t *testing.T) {
 	// Classify again, should be unknown.
 	_, err = hamf.Seek(0, 0)
 	tcheck(t, err, "seek ham message")
-	prob, _, _, _, err = f.ClassifyMessageReader(ctxbg, hamf, hamsize)
+	result, err = f.ClassifyMessageReader(ctxbg, hamf, hamsize)
 	tcheck(t, err, "classify ham")
-	if math.Abs(prob-0.5) > 0.1 {
-		t.Fatalf("got prob %v, expected 0.5 +-0.1", prob)
+	if math.Abs(result.Probability-0.5) > 0.1 {
+		t.Fatalf("got prob %v, expected 0.5 +-0.1", result.Probability)
 	}
 
 	_, err = spamf.Seek(0, 0)
 	tcheck(t, err, "seek spam message")
-	prob, _, _, _, err = f.ClassifyMessageReader(ctxbg, spamf, spamsize)
+	result, err = f.ClassifyMessageReader(ctxbg, spamf, spamsize)
 	tcheck(t, err, "classify spam")
-	if math.Abs(prob-0.5) > 0.1 {
-		t.Fatalf("got prob %v, expected 0.5 +-0.1", prob)
+	if math.Abs(result.Probability-0.5) > 0.1 {
+		t.Fatalf("got prob %v, expected 0.5 +-0.1", result.Probability)
 	}
 
 	err = f.Close()

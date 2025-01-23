@@ -129,10 +129,14 @@ func cmdJunkCheck(c *cmd) {
 		}
 	}()
 
-	prob, _, _, _, err := f.ClassifyMessagePath(context.Background(), args[0])
+	result, err := f.ClassifyMessagePath(context.Background(), args[0])
 	xcheckf(err, "testing mail")
 
-	fmt.Printf("%.6f\n", prob)
+	sig := "significant"
+	if !result.Significant {
+		sig = "not significant"
+	}
+	fmt.Printf("%.6f, %s\n", result.Probability, sig)
 }
 
 func cmdJunkTest(c *cmd) {
@@ -159,21 +163,21 @@ func cmdJunkTest(c *cmd) {
 		xcheckf(err, "readdir %q", dir)
 		for _, fi := range files {
 			path := filepath.Join(dir, fi.Name())
-			prob, _, _, _, err := f.ClassifyMessagePath(context.Background(), path)
+			result, err := f.ClassifyMessagePath(context.Background(), path)
 			if err != nil {
 				log.Printf("classify message %q: %s", path, err)
 				continue
 			}
-			if ham && prob < a.spamThreshold || !ham && prob > a.spamThreshold {
+			if ham && result.Probability < a.spamThreshold || !ham && result.Probability > a.spamThreshold {
 				ok++
 			} else {
 				bad++
 			}
-			if ham && prob > a.spamThreshold {
-				fmt.Printf("ham %q: %.4f\n", path, prob)
+			if ham && result.Probability > a.spamThreshold {
+				fmt.Printf("ham %q: %.4f\n", path, result.Probability)
 			}
-			if !ham && prob < a.spamThreshold {
-				fmt.Printf("spam %q: %.4f\n", path, prob)
+			if !ham && result.Probability < a.spamThreshold {
+				fmt.Printf("spam %q: %.4f\n", path, result.Probability)
 			}
 		}
 		return ok, bad
@@ -251,22 +255,22 @@ messages are shuffled, with optional random seed.`
 	testDir := func(dir string, files []string, ham bool) (ok, bad, malformed int) {
 		for _, name := range files {
 			path := filepath.Join(dir, name)
-			prob, _, _, _, err := f.ClassifyMessagePath(context.Background(), path)
+			result, err := f.ClassifyMessagePath(context.Background(), path)
 			if err != nil {
 				// log.Infof("%s: %s", path, err)
 				malformed++
 				continue
 			}
-			if ham && prob < a.spamThreshold || !ham && prob > a.spamThreshold {
+			if ham && result.Probability < a.spamThreshold || !ham && result.Probability > a.spamThreshold {
 				ok++
 			} else {
 				bad++
 			}
-			if ham && prob > a.spamThreshold {
-				fmt.Printf("ham %q: %.4f\n", path, prob)
+			if ham && result.Probability > a.spamThreshold {
+				fmt.Printf("ham %q: %.4f\n", path, result.Probability)
 			}
-			if !ham && prob < a.spamThreshold {
-				fmt.Printf("spam %q: %.4f\n", path, prob)
+			if !ham && result.Probability < a.spamThreshold {
+				fmt.Printf("spam %q: %.4f\n", path, result.Probability)
 			}
 		}
 		return
@@ -367,21 +371,19 @@ func cmdJunkPlay(c *cmd) {
 		var words map[string]struct{}
 		path := filepath.Join(msg.dir, msg.filename)
 		if !msg.sent {
-			var prob float64
-			var err error
-			prob, words, _, _, err = f.ClassifyMessagePath(context.Background(), path)
+			result, err := f.ClassifyMessagePath(context.Background(), path)
 			if err != nil {
 				nbad++
 				return
 			}
 			if msg.ham {
-				if prob < a.spamThreshold {
+				if result.Probability < a.spamThreshold {
 					nhamok++
 				} else {
 					nhambad++
 				}
 			} else {
-				if prob > a.spamThreshold {
+				if result.Probability > a.spamThreshold {
 					nspamok++
 				} else {
 					nspambad++

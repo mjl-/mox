@@ -351,9 +351,9 @@ type WordScore struct {
 }
 
 // ClassifyWords returns the spam probability for the given words, and number of recognized ham and spam words.
-func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (probability float64, hams, spams []WordScore, rerr error) {
+func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (Result, error) {
 	if f.closed {
-		return 0, nil, nil, errClosed
+		return Result{}, errClosed
 	}
 
 	var hamHigh float64 = 0
@@ -391,7 +391,7 @@ func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (
 	fetched := map[string]word{}
 	if len(lookupWords) > 0 {
 		if err := loadWords(ctx, f.db, lookupWords, fetched); err != nil {
-			return 0, nil, nil, err
+			return Result{}, err
 		}
 		for w, c := range fetched {
 			delete(expect, w)
@@ -486,18 +486,34 @@ func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (
 	f.log.Debug("top words", slog.Any("hams", topHam), slog.Any("spams", topSpam))
 
 	prob := 1 / (1 + math.Pow(math.E, eta))
-	return prob, topHam, topSpam, nil
+
+	// We want at least some positive signals, otherwise a few negative signals can
+	// mark incoming messages as spam too easily. If we have no negative signals, more
+	// messages will be classified as ham and accepted. This is fine, the user will
+	// classify it such, and retrain the filter. We mostly want to avoid rejecting too
+	// much when there isn't enough signal.
+	significant := f.hams >= 50
+
+	return Result{prob, significant, words, topHam, topSpam}, nil
+}
+
+// Result is a successful classification, whether positive or negative.
+type Result struct {
+	Probability float64 // Between 0 (ham) and 1 (spam).
+	Significant bool    // If true, enough classified words are available to base decisions on.
+	Words       map[string]struct{}
+	Hams, Spams []WordScore
 }
 
 // ClassifyMessagePath is a convenience wrapper for calling ClassifyMessage on a file.
-func (f *Filter) ClassifyMessagePath(ctx context.Context, path string) (probability float64, words map[string]struct{}, hams, spams []WordScore, rerr error) {
+func (f *Filter) ClassifyMessagePath(ctx context.Context, path string) (Result, error) {
 	if f.closed {
-		return 0, nil, nil, nil, errClosed
+		return Result{}, errClosed
 	}
 
 	mf, err := os.Open(path)
 	if err != nil {
-		return 0, nil, nil, nil, err
+		return Result{}, err
 	}
 	defer func() {
 		err := mf.Close()
@@ -505,17 +521,17 @@ func (f *Filter) ClassifyMessagePath(ctx context.Context, path string) (probabil
 	}()
 	fi, err := mf.Stat()
 	if err != nil {
-		return 0, nil, nil, nil, err
+		return Result{}, err
 	}
 	return f.ClassifyMessageReader(ctx, mf, fi.Size())
 }
 
-func (f *Filter) ClassifyMessageReader(ctx context.Context, mf io.ReaderAt, size int64) (probability float64, words map[string]struct{}, hams, spams []WordScore, rerr error) {
+func (f *Filter) ClassifyMessageReader(ctx context.Context, mf io.ReaderAt, size int64) (Result, error) {
 	m, err := message.EnsurePart(f.log.Logger, false, mf, size)
 	if err != nil && errors.Is(err, message.ErrBadContentType) {
 		// Invalid content-type header is a sure sign of spam.
 		//f.log.Infox("parsing content", err)
-		return 1, nil, nil, nil, nil
+		return Result{Probability: 1, Significant: true}, nil
 	}
 	return f.ClassifyMessage(ctx, m)
 }
@@ -523,15 +539,12 @@ func (f *Filter) ClassifyMessageReader(ctx context.Context, mf io.ReaderAt, size
 // ClassifyMessage parses the mail message in r and returns the spam probability
 // (between 0 and 1), along with the tokenized words found in the message, and the
 // ham and spam words and their scores used.
-func (f *Filter) ClassifyMessage(ctx context.Context, m message.Part) (probability float64, words map[string]struct{}, hams, spams []WordScore, rerr error) {
-	var err error
-	words, err = f.ParseMessage(m)
+func (f *Filter) ClassifyMessage(ctx context.Context, m message.Part) (Result, error) {
+	words, err := f.ParseMessage(m)
 	if err != nil {
-		return 0, nil, nil, nil, err
+		return Result{}, err
 	}
-
-	probability, hams, spams, err = f.ClassifyWords(ctx, words)
-	return probability, words, hams, spams, err
+	return f.ClassifyWords(ctx, words)
 }
 
 // Train adds the words of a single message to the filter.

@@ -670,6 +670,8 @@ func TestSpam(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		nm := m
 		tinsertmsg(t, ts.acc, "Inbox", &nm, deliverMessage)
+		nm = m
+		tinsertmsg(t, ts.acc, "mjl2", &nm, deliverMessage)
 	}
 
 	// Delivery from sender with bad reputation should fail.
@@ -922,16 +924,22 @@ func TestDMARCSent(t *testing.T) {
 	// Update DNS for an SPF pass, and DMARC pass.
 	resolver.TXT["example.org."] = []string{"v=spf1 ip4:127.0.0.10 -all"}
 
-	// Insert spammy messages not related to the test message.
+	// Insert hammy & spammy messages not related to the test message.
 	m := store.Message{
 		MailFrom:        "remote@test.example",
 		RcptToLocalpart: smtp.Localpart("mjl"),
 		RcptToDomain:    "mox.example",
-		Flags:           store.Flags{Seen: true, Junk: true},
+		Flags:           store.Flags{Seen: true},
 		Size:            int64(len(deliverMessage)),
 	}
-	for i := 0; i < 3; i++ {
+	// We need at least 50 ham messages for the junk filter to become significant. We
+	// offset it with negative messages for mediocre score.
+	for i := 0; i < 50; i++ {
 		nm := m
+		nm.Junk = true
+		tinsertmsg(t, ts.acc, "Archive", &nm, deliverMessage)
+		nm = m
+		nm.Notjunk = true
 		tinsertmsg(t, ts.acc, "Archive", &nm, deliverMessage)
 	}
 	tretrain(t, ts.acc)

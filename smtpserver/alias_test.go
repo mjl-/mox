@@ -230,7 +230,6 @@ test email
 `, "\n", "\r\n")
 
 	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
 		mailFrom := "mjl@mox.example"
 		rcptTo := []string{"private@mox.example", "móx@mox.example"}
 		if err == nil {
@@ -239,11 +238,10 @@ test email
 		}
 		ts.smtpErr(err, nil)
 
-		ts.checkCount("Inbox", 0) // Not receiving for mjl@ due to msgfrom, and not móx@ due to rcpt to.
+		ts.checkCount("Inbox", 1) // Receiving once. For explicit móx@ recipient, not for mjl@ due to msgfrom, and another again for móx@ due to rcpt to.
 	})
 
 	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
 		mailFrom := "mjl@mox.example"
 		rcptTo := "private@mox.example"
 		if err == nil {
@@ -251,7 +249,7 @@ test email
 		}
 		ts.smtpErr(err, nil)
 
-		ts.checkCount("Inbox", 1) // Only receiving for móx@mox.example, not mjl@.
+		ts.checkCount("Inbox", 2) // Only receiving 1 new message compared to previous, for móx@mox.example, not mjl@.
 	})
 
 	msg = strings.ReplaceAll(`From: <private@mox.example>

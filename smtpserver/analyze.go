@@ -528,7 +528,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			err := f.Close()
 			log.Check(err, "closing junkfilter")
 		}()
-		contentProb, _, hams, spams, err := f.ClassifyMessageReader(ctx, store.FileMsgReader(d.m.MsgPrefix, d.dataFile), d.m.Size)
+		result, err := f.ClassifyMessageReader(ctx, store.FileMsgReader(d.m.MsgPrefix, d.dataFile), d.m.Size)
 		if err != nil {
 			log.Errorx("testing for spam", err)
 			addReasonText("classify message error: %v", err)
@@ -587,11 +587,12 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			reason = reasonJunkContentStrict
 			thresholdRemark = " (stricter due to recipient address not in to/cc header)"
 		}
-		accept = contentProb <= threshold
-		junkSubjectpass = contentProb < threshold-0.2
+		accept = result.Probability <= threshold || (!result.Significant && !suspiciousIPrevFail)
+		junkSubjectpass = result.Probability < threshold-0.2
 		log.Info("content analyzed",
 			slog.Bool("accept", accept),
-			slog.Float64("contentprob", contentProb),
+			slog.Float64("contentprob", result.Probability),
+			slog.Bool("contentsignificant", result.Significant),
 			slog.Bool("subjectpass", junkSubjectpass))
 
 		s := "content: "
@@ -600,9 +601,12 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		} else {
 			s += "junk"
 		}
-		s += fmt.Sprintf(", spamscore %.2f, threshold %.2f%s", contentProb, threshold, thresholdRemark)
+		if !result.Significant {
+			s += " (not significant)"
+		}
+		s += fmt.Sprintf(", spamscore %.2f, threshold %.2f%s", result.Probability, threshold, thresholdRemark)
 		s += " (ham words: "
-		for i, w := range hams {
+		for i, w := range result.Hams {
 			if i > 0 {
 				s += ", "
 			}
@@ -613,7 +617,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			s += fmt.Sprintf("%s %.3f", word, w.Score)
 		}
 		s += "), (spam words: "
-		for i, w := range spams {
+		for i, w := range result.Spams {
 			if i > 0 {
 				s += ", "
 			}
