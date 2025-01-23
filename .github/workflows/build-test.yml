@@ -27,8 +27,9 @@ jobs:
       # Need to run tests with a temp dir on same file system for os.Rename to succeed.
       - run: 'mkdir -p tmp && TMPDIR=$PWD/tmp make test'
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: coverage-${{ matrix.runs-on }}
           path: cover.html
 
       # Format code, we check below if nothing changed.
