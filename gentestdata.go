@@ -30,7 +30,7 @@ import (
 
 func cmdGentestdata(c *cmd) {
 	c.unlisted = true
-	c.params = "dest-dir"
+	c.params = "destdir"
 	c.help = `Generate a data directory populated, for testing upgrades.`
 	args := c.Parse()
 	if len(args) != 1 {

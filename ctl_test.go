@@ -43,8 +43,8 @@ func tcheck(t *testing.T, err error, errmsg string) {
 // unhandled errors would cause a panic.
 func TestCtl(t *testing.T) {
 	os.RemoveAll("testdata/ctl/data")
-	mox.ConfigStaticPath = filepath.FromSlash("testdata/ctl/mox.conf")
-	mox.ConfigDynamicPath = filepath.FromSlash("testdata/ctl/domains.conf")
+	mox.ConfigStaticPath = filepath.FromSlash("testdata/ctl/config/mox.conf")
+	mox.ConfigDynamicPath = filepath.FromSlash("testdata/ctl/config/domains.conf")
 	if errs := mox.LoadConfig(ctxbg, pkglog, true, false); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}
@@ -485,16 +485,16 @@ func TestCtl(t *testing.T) {
 	tcheck(t, err, "tlsrptdb init")
 	defer tlsrptdb.Close()
 	testctl(func(ctl *ctl) {
-		os.RemoveAll("testdata/ctl/data/tmp/backup-data")
+		os.RemoveAll("testdata/ctl/data/tmp/backup")
 		err := os.WriteFile("testdata/ctl/data/receivedid.key", make([]byte, 16), 0600)
 		tcheck(t, err, "writing receivedid.key")
-		ctlcmdBackup(ctl, filepath.FromSlash("testdata/ctl/data/tmp/backup-data"), false)
+		ctlcmdBackup(ctl, filepath.FromSlash("testdata/ctl/data/tmp/backup"), false)
 	})
 
 	// Verify the backup.
 	xcmd := cmd{
 		flag:     flag.NewFlagSet("", flag.ExitOnError),
-		flagArgs: []string{filepath.FromSlash("testdata/ctl/data/tmp/backup-data")},
+		flagArgs: []string{filepath.FromSlash("testdata/ctl/data/tmp/backup/data")},
 	}
 	cmdVerifydata(&xcmd)
 }

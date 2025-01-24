@@ -40,7 +40,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	// "src" or "dst" are incomplete paths relative to the source or destination data
 	// directories.
 
-	dstDataDir := ctl.xread()
+	dstDir := ctl.xread()
 	verbose := ctl.xread() == "verbose"
 
 	// Set when an error is encountered. At the end, we warn if set.
@@ -93,8 +93,94 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 	}
 
+	dstConfigDir := filepath.Join(dstDir, "config")
+	dstDataDir := filepath.Join(dstDir, "data")
+
+	// Warn if directories already exist, will likely cause failures when trying to
+	// write files that already exist.
+	if _, err := os.Stat(dstConfigDir); err == nil {
+		xwarnx("destination config directory already exists", nil, slog.String("configdir", dstConfigDir))
+	}
 	if _, err := os.Stat(dstDataDir); err == nil {
-		xwarnx("destination data directory already exists", nil, slog.String("dir", dstDataDir))
+		xwarnx("destination data directory already exists", nil, slog.String("datadir", dstDataDir))
+	}
+
+	os.MkdirAll(dstDir, 0770)
+	os.MkdirAll(dstConfigDir, 0770)
+	os.MkdirAll(dstDataDir, 0770)
+
+	// Copy all files in the config dir.
+	srcConfigDir := filepath.Clean(mox.ConfigDirPath("."))
+	err := filepath.WalkDir(srcConfigDir, func(srcPath string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if srcConfigDir == srcPath {
+			return nil
+		}
+
+		// Trim directory and separator.
+		relPath := srcPath[len(srcConfigDir)+1:]
+
+		destPath := filepath.Join(dstConfigDir, relPath)
+
+		if d.IsDir() {
+			if info, err := os.Stat(srcPath); err != nil {
+				return fmt.Errorf("stat config dir %s: %v", srcPath, err)
+			} else if err := os.Mkdir(destPath, info.Mode()&0777); err != nil {
+				return fmt.Errorf("mkdir %s: %v", destPath, err)
+			}
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			linkDest, err := os.Readlink(srcPath)
+			if err != nil {
+				return fmt.Errorf("reading symlink %s: %v", srcPath, err)
+			}
+			if err := os.Symlink(linkDest, destPath); err != nil {
+				return fmt.Errorf("creating symlink %s: %v", destPath, err)
+			}
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			xwarnx("skipping non-regular/dir/symlink file in config dir", nil, slog.String("path", srcPath))
+			return nil
+		}
+
+		sf, err := os.Open(srcPath)
+		if err != nil {
+			return fmt.Errorf("open config file %s: %v", srcPath, err)
+		}
+		info, err := sf.Stat()
+		if err != nil {
+			return fmt.Errorf("stat config file %s: %v", srcPath, err)
+		}
+		df, err := os.OpenFile(destPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0777&info.Mode())
+		if err != nil {
+			return fmt.Errorf("create destination config file %s: %v", destPath, err)
+		}
+		defer func() {
+			if df != nil {
+				err := df.Close()
+				ctl.log.Check(err, "closing file")
+			}
+		}()
+		defer func() {
+			err := sf.Close()
+			ctl.log.Check(err, "closing file")
+		}()
+		if _, err := io.Copy(df, sf); err != nil {
+			return fmt.Errorf("copying config file %s to %s: %v", srcPath, destPath, err)
+		}
+		if err := df.Close(); err != nil {
+			return fmt.Errorf("closing destination config file %s: %v", srcPath, err)
+		}
+		df = nil
+		return nil
+	})
+	if err != nil {
+		xerrx("storing config directory", err)
 	}
 
 	srcDataDir := filepath.Clean(mox.DataDirPath("."))
@@ -280,8 +366,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 
 	ctl.log.Print("making backup", slog.String("destdir", dstDataDir))
 
-	err := os.MkdirAll(dstDataDir, 0770)
-	if err != nil {
+	if err := os.MkdirAll(dstDataDir, 0770); err != nil {
 		xerrx("creating destination data directory", err)
 	}
 

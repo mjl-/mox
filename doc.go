@@ -55,7 +55,7 @@ any parameters. Followed by the help and usage information for each command.
 	mox export mbox [-single] dst-dir account-path [mailbox]
 	mox localserve
 	mox help [command ...]
-	mox backup dest-dir
+	mox backup destdir
 	mox verifydata data-dir
 	mox licenses
 	mox config test
@@ -819,13 +819,14 @@ If a single command matches, its usage and full help text is printed.
 
 # mox backup
 
-Creates a backup of the data directory.
+Creates a backup of the config and data directory.
 
-Backup creates consistent snapshots of the databases and message files and
-copies other files in the data directory. Empty directories are not copied.
-These files can then be stored elsewhere for long-term storage, or used to fall
-back to should an upgrade fail. Simply copying files in the data directory
-while mox is running can result in unusable database files.
+Backup copies the config directory to <destdir>/config, and creates
+<destdir>/data with a consistent snapshot of the databases and message files
+and copies other files from the data directory. Empty directories are not
+copied. The backup can then be stored elsewhere for long-term storage, or used
+to fall back to should an upgrade fail. Simply copying files in the data
+directory while mox is running can result in unusable database files.
 
 Message files never change (they are read-only, though can be removed) and are
 hard-linked so they don't consume additional space. If hardlinking fails, for
@@ -847,18 +848,19 @@ not print any output, but may print warnings. Use the -verbose flag for
 details, including timing.
 
 To restore a backup, first shut down mox, move away the old data directory and
-move an earlier backed up directory in its place, run "mox verifydata",
-possibly with the "-fix" option, and restart mox. After the restore, you may
-also want to run "mox bumpuidvalidity" for each account for which messages in a
-mailbox changed, to force IMAP clients to synchronize mailbox state.
+move an earlier backed up directory in its place, run "mox verifydata
+<datadir>", possibly with the "-fix" option, and restart mox. After the
+restore, you may also want to run "mox bumpuidvalidity" for each account for
+which messages in a mailbox changed, to force IMAP clients to synchronize
+mailbox state.
 
 Before upgrading, to check if the upgrade will likely succeed, first make a
-backup, then use the new mox binary to run "mox verifydata" on the backup. This
-can change the backup files (e.g. upgrade database files, move away
+backup, then use the new mox binary to run "mox verifydata <backupdir>/data".
+This can change the backup files (e.g. upgrade database files, move away
 unrecognized message files), so you should make a new backup before actually
 upgrading.
 
-	usage: mox backup dest-dir
+	usage: mox backup destdir
 	  -verbose
 	    	print progress
 

@@ -347,15 +347,18 @@ in place and restart. If manual actions are required, the release notes mention
 them. Check the release notes of all version between your current installation
 and the release you're upgrading to.
 
-Before upgrading, make a backup of the data directory with `mox backup
-<destdir>`. This writes consistent snapshots of the database files, and
-duplicates message files from the outgoing queue and accounts.  Using the new
-mox binary, run `mox verifydata <backupdir>` (do NOT use the "live" data
-directory!) for a dry run. If this fails, an upgrade will probably fail too.
-Important: verifydata with the new mox binary can modify the database files (due
-to automatic schema upgrades). So make a fresh backup again before the actual
-upgrade. See the help output of the "backup" and "verifydata" commands for more
-details.
+Before upgrading, make a backup of the config & data directory with `mox backup
+<destdir>`. This copies all files from the config directory to
+`<destdir>/config`, and creates `<destdir>/data` with a consistent snapshots of
+the database files, and message files from the outgoing queue and accounts.
+Using the new mox binary, run `mox verifydata <destdir>/data` (do NOT use the
+"live" data directory!) for a dry run. If this fails, an upgrade will probably
+fail too.
+
+Important: verifydata with the new mox binary can modify the database files
+(due to automatic schema upgrades). So make a fresh backup again before the
+actual upgrade. See the help output of the "backup" and "verifydata" commands
+for more details.
 
 During backup, message files are hardlinked if possible, and copied otherwise.
 Using a destination directory like `data/tmp/backup` increases the odds

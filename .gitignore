@@ -5,7 +5,7 @@
 /local/
 /testdata/check/
 /testdata/*/data/
-/testdata/ctl/dkim/
+/testdata/ctl/config/dkim/
 /testdata/empty/
 /testdata/exportmaildir/
 /testdata/exportmbox/
