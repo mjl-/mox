@@ -663,6 +663,10 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		}
 	}
 	for name, acme := range c.ACME {
+		addAcmeErrorf := func(format string, args ...any) {
+			addErrorf("acme provider %s: %s", name, fmt.Sprintf(format, args...))
+		}
+
 		var eabKeyID string
 		var eabKey []byte
 		if acme.ExternalAccountBinding != nil {
@@ -670,12 +674,12 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 			p := configDirPath(configFile, acme.ExternalAccountBinding.KeyFile)
 			buf, err := os.ReadFile(p)
 			if err != nil {
-				addErrorf("reading external account binding key for acme provider %q: %s", name, err)
+				addAcmeErrorf("reading external account binding key: %s", err)
 			} else {
 				dec := make([]byte, base64.RawURLEncoding.DecodedLen(len(buf)))
 				n, err := base64.RawURLEncoding.Decode(dec, buf)
 				if err != nil {
-					addErrorf("parsing external account binding key as base64 for acme provider %q: %s", name, err)
+					addAcmeErrorf("parsing external account binding key as base64: %s", err)
 				} else {
 					eabKey = dec[:n]
 				}
@@ -690,7 +694,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		os.MkdirAll(acmeDir, 0770)
 		manager, err := autotls.Load(name, acmeDir, acme.ContactEmail, acme.DirectoryURL, eabKeyID, eabKey, makeGetPrivateKey(name), Shutdown.Done())
 		if err != nil {
-			addErrorf("loading ACME identity for %q: %s", name, err)
+			addAcmeErrorf("loading ACME identity: %s", err)
 		}
 		acme.Manager = manager
 
@@ -704,20 +708,24 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 
 	var haveUnspecifiedSMTPListener bool
 	for name, l := range c.Listeners {
+		addListenerErrorf := func(format string, args ...any) {
+			addErrorf("listener %s: %s", name, fmt.Sprintf(format, args...))
+		}
+
 		if l.Hostname != "" {
 			d, err := dns.ParseDomain(l.Hostname)
 			if err != nil {
-				addErrorf("bad listener hostname %q: %s", l.Hostname, err)
+				addListenerErrorf("parsing hostname %q: %s", l.Hostname, err)
 			}
 			l.HostnameDomain = d
 		}
 		if l.TLS != nil {
 			if l.TLS.ACME != "" && len(l.TLS.KeyCerts) != 0 {
-				addErrorf("listener %q: cannot have ACME and static key/certificates", name)
+				addListenerErrorf("cannot have ACME and static key/certificates")
 			} else if l.TLS.ACME != "" {
 				acme, ok := c.ACME[l.TLS.ACME]
 				if !ok {
-					addErrorf("listener %q: unknown ACME provider %q", name, l.TLS.ACME)
+					addListenerErrorf("unknown ACME provider %q", l.TLS.ACME)
 				}
 
 				// If only checking or with missing ACME definition, we don't have an acme manager,
@@ -745,17 +753,17 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 			} else if len(l.TLS.KeyCerts) != 0 {
 				if doLoadTLSKeyCerts {
 					if err := loadTLSKeyCerts(configFile, "listener "+name, l.TLS); err != nil {
-						addErrorf("%w", err)
+						addListenerErrorf("%w", err)
 					}
 				}
 			} else {
-				addErrorf("listener %q: cannot have TLS config without ACME and without static keys/certificates", name)
+				addListenerErrorf("cannot have TLS config without ACME and without static keys/certificates")
 			}
 			for _, privKeyFile := range l.TLS.HostPrivateKeyFiles {
 				keyPath := configDirPath(configFile, privKeyFile)
 				privKey, err := loadPrivateKeyFile(keyPath)
 				if err != nil {
-					addErrorf("listener %q: parsing host private key for DANE and ACME certificates: %v", name, err)
+					addListenerErrorf("parsing host private key for DANE and ACME certificates: %v", err)
 					continue
 				}
 				switch k := privKey.(type) {
@@ -797,7 +805,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 				}
 				v, ok := versions[l.TLS.MinVersion]
 				if !ok {
-					addErrorf("listener %q: unknown TLS mininum version %q", name, l.TLS.MinVersion)
+					addListenerErrorf("unknown TLS mininum version %q", l.TLS.MinVersion)
 				}
 				minVersion = v
 			}
@@ -827,11 +835,11 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 			needtls("MTASTSHTTPS", l.MTASTSHTTPS.Enabled && !l.MTASTSHTTPS.NonTLS)
 			needtls("WebserverHTTPS", l.WebserverHTTPS.Enabled)
 			if len(needsTLS) > 0 {
-				addErrorf("listener %q does not specify tls config, but requires tls for %s", name, strings.Join(needsTLS, ", "))
+				addListenerErrorf("no tls config specified, but requires tls for %s", strings.Join(needsTLS, ", "))
 			}
 		}
 		if l.AutoconfigHTTPS.Enabled && l.MTASTSHTTPS.Enabled && l.AutoconfigHTTPS.Port == l.MTASTSHTTPS.Port && l.AutoconfigHTTPS.NonTLS != l.MTASTSHTTPS.NonTLS {
-			addErrorf("listener %q tries to enable autoconfig and mta-sts enabled on same port but with both http and https", name)
+			addListenerErrorf("autoconfig and mta-sts enabled on same port but with both http and https")
 		}
 		if l.SMTP.Enabled {
 			if len(l.IPs) == 0 {
@@ -840,7 +848,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 			for _, ipstr := range l.IPs {
 				ip := net.ParseIP(ipstr)
 				if ip == nil {
-					addErrorf("listener %q has invalid IP %q", name, ipstr)
+					addListenerErrorf("invalid IP %q", ipstr)
 					continue
 				}
 				if ip.IsUnspecified() {
@@ -859,25 +867,25 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		for _, s := range l.SMTP.DNSBLs {
 			d, err := dns.ParseDomain(s)
 			if err != nil {
-				addErrorf("listener %q has invalid DNSBL zone %q", name, s)
+				addListenerErrorf("parsing DNSBL zone %q: %s", s, err)
 				continue
 			}
 			l.SMTP.DNSBLZones = append(l.SMTP.DNSBLZones, d)
 		}
 		if l.IPsNATed && len(l.NATIPs) > 0 {
-			addErrorf("listener %q has both IPsNATed and NATIPs (remove deprecated IPsNATed)", name)
+			addListenerErrorf("both IPsNATed and NATIPs configued (remove deprecated IPsNATed)")
 		}
 		for _, ipstr := range l.NATIPs {
 			ip := net.ParseIP(ipstr)
 			if ip == nil {
-				addErrorf("listener %q has invalid ip %q", name, ipstr)
+				addListenerErrorf("invalid ip %q", ipstr)
 			} else if ip.IsUnspecified() || ip.IsLoopback() {
-				addErrorf("listener %q has NAT ip that is the unspecified or loopback address %s", name, ipstr)
+				addListenerErrorf("NAT ip that is the unspecified or loopback address %s", ipstr)
 			}
 		}
 		checkPath := func(kind string, enabled bool, path string) {
 			if enabled && path != "" && !strings.HasPrefix(path, "/") {
-				addErrorf("listener %q has %s with path %q that must start with a slash", name, kind, path)
+				addListenerErrorf("%s with path %q that must start with a slash", kind, path)
 			}
 		}
 		checkPath("AccountHTTP", l.AccountHTTP.Enabled, l.AccountHTTP.Path)
@@ -919,17 +927,21 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 	}
 
 	checkTransportSMTP := func(name string, isTLS bool, t *config.TransportSMTP) {
+		addTransportErrorf := func(format string, args ...any) {
+			addErrorf("transport %s: %s", name, fmt.Sprintf(format, args...))
+		}
+
 		var err error
 		t.DNSHost, err = dns.ParseDomain(t.Host)
 		if err != nil {
-			addErrorf("transport %s: bad host %s: %v", name, t.Host, err)
+			addTransportErrorf("bad host %s: %v", t.Host, err)
 		}
 
 		if isTLS && t.STARTTLSInsecureSkipVerify {
-			addErrorf("transport %s: cannot have STARTTLSInsecureSkipVerify with immediate TLS")
+			addTransportErrorf("cannot have STARTTLSInsecureSkipVerify with immediate TLS")
 		}
 		if isTLS && t.NoSTARTTLS {
-			addErrorf("transport %s: cannot have NoSTARTTLS with immediate TLS")
+			addTransportErrorf("cannot have NoSTARTTLS with immediate TLS")
 		}
 
 		if t.Auth == nil {
@@ -938,7 +950,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		seen := map[string]bool{}
 		for _, m := range t.Auth.Mechanisms {
 			if seen[m] {
-				addErrorf("transport %s: duplicate authentication mechanism %s", name, m)
+				addTransportErrorf("duplicate authentication mechanism %s", m)
 			}
 			seen[m] = true
 			switch m {
@@ -949,7 +961,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 			case "CRAM-MD5":
 			case "PLAIN":
 			default:
-				addErrorf("transport %s: unknown authentication mechanism %s", name, m)
+				addTransportErrorf("unknown authentication mechanism %s", m)
 			}
 		}
 
@@ -960,27 +972,35 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 	}
 
 	checkTransportSocks := func(name string, t *config.TransportSocks) {
+		addTransportErrorf := func(format string, args ...any) {
+			addErrorf("transport %s: %s", name, fmt.Sprintf(format, args...))
+		}
+
 		_, _, err := net.SplitHostPort(t.Address)
 		if err != nil {
-			addErrorf("transport %s: bad address %s: %v", name, t.Address, err)
+			addTransportErrorf("bad address %s: %v", t.Address, err)
 		}
 		for _, ipstr := range t.RemoteIPs {
 			ip := net.ParseIP(ipstr)
 			if ip == nil {
-				addErrorf("transport %s: bad ip %s", name, ipstr)
+				addTransportErrorf("bad ip %s", ipstr)
 			} else {
 				t.IPs = append(t.IPs, ip)
 			}
 		}
 		t.Hostname, err = dns.ParseDomain(t.RemoteHostname)
 		if err != nil {
-			addErrorf("transport %s: bad hostname %s: %v", name, t.RemoteHostname, err)
+			addTransportErrorf("bad hostname %s: %v", t.RemoteHostname, err)
 		}
 	}
 
 	checkTransportDirect := func(name string, t *config.TransportDirect) {
+		addTransportErrorf := func(format string, args ...any) {
+			addErrorf("transport %s: %s", name, fmt.Sprintf(format, args...))
+		}
+
 		if t.DisableIPv4 && t.DisableIPv6 {
-			addErrorf("transport %s: both IPv4 and IPv6 are disabled, enable at least one", name)
+			addTransportErrorf("both IPv4 and IPv6 are disabled, enable at least one")
 		}
 		t.IPFamily = "ip"
 		if t.DisableIPv4 {
@@ -992,6 +1012,10 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 	}
 
 	for name, t := range c.Transports {
+		addTransportErrorf := func(format string, args ...any) {
+			addErrorf("transport %s: %s", name, fmt.Sprintf(format, args...))
+		}
+
 		n := 0
 		if t.Submissions != nil {
 			n++
@@ -1014,7 +1038,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 			checkTransportDirect(name, t.Direct)
 		}
 		if n > 1 {
-			addErrorf("transport %s: cannot have multiple methods in a transport", name)
+			addTransportErrorf("cannot have multiple methods in a transport")
 		}
 	}
 
@@ -1075,11 +1099,10 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 	}
 
 	// Check that mailbox is in unicode NFC normalized form.
-	checkMailboxNormf := func(mailbox string, format string, args ...any) {
+	checkMailboxNormf := func(mailbox string, what string, errorf func(format string, args ...any)) {
 		s := norm.NFC.String(mailbox)
 		if mailbox != s {
-			msg := fmt.Sprintf(format, args...)
-			addErrorf("%s: mailbox %q is not in NFC normalized form, should be %q", msg, mailbox, s)
+			errorf("%s: mailbox %q is not in NFC normalized form, should be %q", what, mailbox, s)
 		}
 	}
 
@@ -1087,7 +1110,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 	if _, ok := c.Accounts[static.Postmaster.Account]; !ok {
 		addErrorf("postmaster account %q does not exist", static.Postmaster.Account)
 	}
-	checkMailboxNormf(static.Postmaster.Mailbox, "postmaster mailbox")
+	checkMailboxNormf(static.Postmaster.Mailbox, "postmaster mailbox", addErrorf)
 
 	accDests = map[string]AccountDestination{}
 	aliases = map[string]config.Alias{}
@@ -1097,7 +1120,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		if _, ok := c.Accounts[static.HostTLSRPT.Account]; !ok {
 			addErrorf("host tlsrpt account %q does not exist", static.HostTLSRPT.Account)
 		}
-		checkMailboxNormf(static.HostTLSRPT.Mailbox, "host tlsrpt mailbox")
+		checkMailboxNormf(static.HostTLSRPT.Mailbox, "host tlsrpt mailbox", addErrorf)
 
 		// Localpart has been parsed already.
 
@@ -1157,11 +1180,15 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 	// Validate domains.
 	c.ClientSettingDomains = map[dns.Domain]struct{}{}
 	for d, domain := range c.Domains {
+		addDomainErrorf := func(format string, args ...any) {
+			addErrorf(fmt.Sprintf("domain %v: %s", d, fmt.Sprintf(format, args...)))
+		}
+
 		dnsdomain, err := dns.ParseDomain(d)
 		if err != nil {
-			addErrorf("bad domain %q: %s", d, err)
+			addDomainErrorf("parsing domain: %s", err)
 		} else if dnsdomain.Name() != d {
-			addErrorf("domain %s must be specified in unicode form, %s", d, dnsdomain.Name())
+			addDomainErrorf("must be specified in unicode form, %s", dnsdomain.Name())
 		}
 
 		domain.Domain = dnsdomain
@@ -1169,7 +1196,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		if domain.ClientSettingsDomain != "" {
 			csd, err := dns.ParseDomain(domain.ClientSettingsDomain)
 			if err != nil {
-				addErrorf("bad client settings domain %q: %s", domain.ClientSettingsDomain, err)
+				addDomainErrorf("bad client settings domain %q: %s", domain.ClientSettingsDomain, err)
 			}
 			domain.ClientSettingsDNSDomain = csd
 			c.ClientSettingDomains[csd] = struct{}{}
@@ -1177,22 +1204,26 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 
 		for _, sign := range domain.DKIM.Sign {
 			if _, ok := domain.DKIM.Selectors[sign]; !ok {
-				addErrorf("selector %s for signing is missing in domain %s", sign, d)
+				addDomainErrorf("unknown selector %s for signing", sign)
 			}
 		}
 		for name, sel := range domain.DKIM.Selectors {
+			addSelectorErrorf := func(format string, args ...any) {
+				addDomainErrorf("selector %s: %s", name, fmt.Sprintf(format, args...))
+			}
+
 			seld, err := dns.ParseDomain(name)
 			if err != nil {
-				addErrorf("bad selector %q: %s", name, err)
+				addSelectorErrorf("parsing selector: %s", err)
 			} else if seld.Name() != name {
-				addErrorf("selector %q must be specified in unicode form, %q", name, seld.Name())
+				addSelectorErrorf("must be specified in unicode form, %q", seld.Name())
 			}
 			sel.Domain = seld
 
 			if sel.Expiration != "" {
 				exp, err := time.ParseDuration(sel.Expiration)
 				if err != nil {
-					addErrorf("selector %q has invalid expiration %q: %v", name, sel.Expiration, err)
+					addSelectorErrorf("invalid expiration %q: %v", sel.Expiration, err)
 				} else {
 					sel.ExpirationSeconds = int(exp / time.Second)
 				}
@@ -1206,22 +1237,22 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				log.Error("using sha1 with DKIM is deprecated as not secure enough, switch to sha256")
 			case "sha256":
 			default:
-				addErrorf("unsupported hash %q for selector %q in domain %s", sel.HashEffective, name, d)
+				addSelectorErrorf("unsupported hash %q", sel.HashEffective)
 			}
 
 			pemBuf, err := os.ReadFile(configDirPath(dynamicPath, sel.PrivateKeyFile))
 			if err != nil {
-				addErrorf("reading private key for selector %s in domain %s: %s", name, d, err)
+				addSelectorErrorf("reading private key: %s", err)
 				continue
 			}
 			p, _ := pem.Decode(pemBuf)
 			if p == nil {
-				addErrorf("private key for selector %s in domain %s has no PEM block", name, d)
+				addSelectorErrorf("private key has no PEM block")
 				continue
 			}
 			key, err := x509.ParsePKCS8PrivateKey(p.Bytes)
 			if err != nil {
-				addErrorf("parsing private key for selector %s in domain %s: %s", name, d, err)
+				addSelectorErrorf("parsing private key: %s", err)
 				continue
 			}
 			switch k := key.(type) {
@@ -1229,18 +1260,18 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				if k.N.BitLen() < 1024 {
 					// ../rfc/6376:757
 					// Let's help user do the right thing.
-					addErrorf("rsa keys should be >= 1024 bits")
+					addSelectorErrorf("rsa keys should be >= 1024 bits, is %d bits", k.N.BitLen())
 				}
 				sel.Key = k
 				sel.Algorithm = fmt.Sprintf("rsa-%d", k.N.BitLen())
 			case ed25519.PrivateKey:
 				if sel.HashEffective != "sha256" {
-					addErrorf("hash algorithm %q is not supported with ed25519, only sha256 is", sel.HashEffective)
+					addSelectorErrorf("hash algorithm %q is not supported with ed25519, only sha256 is", sel.HashEffective)
 				}
 				sel.Key = k
 				sel.Algorithm = "ed25519"
 			default:
-				addErrorf("private key type %T not yet supported, at selector %s in domain %s", key, name, d)
+				addSelectorErrorf("private key type %T not yet supported", key)
 			}
 
 			if len(sel.Headers) == 0 {
@@ -1261,7 +1292,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 					}
 				}
 				if !from {
-					addErrorf("From-field must always be DKIM-signed")
+					addSelectorErrorf("From-field must always be DKIM-signed")
 				}
 				sel.HeadersEffective = sel.Headers
 			}
@@ -1271,16 +1302,16 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 
 		if domain.MTASTS != nil {
 			if !haveSTSListener {
-				addErrorf("MTA-STS enabled for domain %q, but there is no listener for MTASTS", d)
+				addDomainErrorf("MTA-STS enabled, but there is no listener for MTASTS", d)
 			}
 			sts := domain.MTASTS
 			if sts.PolicyID == "" {
-				addErrorf("invalid empty MTA-STS PolicyID")
+				addDomainErrorf("invalid empty MTA-STS PolicyID")
 			}
 			switch sts.Mode {
 			case mtasts.ModeNone, mtasts.ModeTesting, mtasts.ModeEnforce:
 			default:
-				addErrorf("invalid mtasts mode %q", sts.Mode)
+				addDomainErrorf("invalid mtasts mode %q", sts.Mode)
 			}
 		}
 
@@ -1294,35 +1325,39 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 
 	// Validate email addresses.
 	for accName, acc := range c.Accounts {
+		addAccountErrorf := func(format string, args ...any) {
+			addErrorf("account %q: %s", accName, fmt.Sprintf(format, args...))
+		}
+
 		var err error
 		acc.DNSDomain, err = dns.ParseDomain(acc.Domain)
 		if err != nil {
-			addErrorf("parsing domain %s for account %q: %s", acc.Domain, accName, err)
+			addAccountErrorf("parsing domain %s: %s", acc.Domain, err)
 		}
 
 		if strings.EqualFold(acc.RejectsMailbox, "Inbox") {
-			addErrorf("account %q: cannot set RejectsMailbox to inbox, messages will be removed automatically from the rejects mailbox", accName)
+			addAccountErrorf("cannot set RejectsMailbox to inbox, messages will be removed automatically from the rejects mailbox")
 		}
-		checkMailboxNormf(acc.RejectsMailbox, "account %q", accName)
+		checkMailboxNormf(acc.RejectsMailbox, "rejects mailbox", addErrorf)
 
 		if acc.AutomaticJunkFlags.JunkMailboxRegexp != "" {
 			r, err := regexp.Compile(acc.AutomaticJunkFlags.JunkMailboxRegexp)
 			if err != nil {
-				addErrorf("invalid JunkMailboxRegexp regular expression: %v", err)
+				addAccountErrorf("invalid JunkMailboxRegexp regular expression: %v", err)
 			}
 			acc.JunkMailbox = r
 		}
 		if acc.AutomaticJunkFlags.NeutralMailboxRegexp != "" {
 			r, err := regexp.Compile(acc.AutomaticJunkFlags.NeutralMailboxRegexp)
 			if err != nil {
-				addErrorf("invalid NeutralMailboxRegexp regular expression: %v", err)
+				addAccountErrorf("invalid NeutralMailboxRegexp regular expression: %v", err)
 			}
 			acc.NeutralMailbox = r
 		}
 		if acc.AutomaticJunkFlags.NotJunkMailboxRegexp != "" {
 			r, err := regexp.Compile(acc.AutomaticJunkFlags.NotJunkMailboxRegexp)
 			if err != nil {
-				addErrorf("invalid NotJunkMailboxRegexp regular expression: %v", err)
+				addAccountErrorf("invalid NotJunkMailboxRegexp regular expression: %v", err)
 			}
 			acc.NotJunkMailbox = r
 		}
@@ -1330,16 +1365,16 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		if acc.JunkFilter != nil {
 			params := acc.JunkFilter.Params
 			if params.MaxPower < 0 || params.MaxPower > 0.5 {
-				addErrorf("junk filter MaxPower must be >= 0 and < 0.5")
+				addAccountErrorf("junk filter MaxPower must be >= 0 and < 0.5")
 			}
 			if params.TopWords < 0 {
-				addErrorf("junk filter TopWords must be >= 0")
+				addAccountErrorf("junk filter TopWords must be >= 0")
 			}
 			if params.IgnoreWords < 0 || params.IgnoreWords > 0.5 {
-				addErrorf("junk filter IgnoreWords must be >= 0 and < 0.5")
+				addAccountErrorf("junk filter IgnoreWords must be >= 0 and < 0.5")
 			}
 			if params.RareWords < 0 {
-				addErrorf("junk filter RareWords must be >= 0")
+				addAccountErrorf("junk filter RareWords must be >= 0")
 			}
 		}
 
@@ -1347,14 +1382,14 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		for i, s := range acc.FromIDLoginAddresses {
 			a, err := smtp.ParseAddress(s)
 			if err != nil {
-				addErrorf("invalid fromid login address %q in account %q: %v", s, accName, err)
+				addAccountErrorf("invalid fromid login address %q: %v", s, err)
 			}
 			// We check later on if address belongs to account.
 			dom, ok := c.Domains[a.Domain.Name()]
 			if !ok {
-				addErrorf("unknown domain in fromid login address %q for account %q", s, accName)
+				addAccountErrorf("unknown domain in fromid login address %q", s)
 			} else if dom.LocalpartCatchallSeparator == "" {
-				addErrorf("localpart catchall separator not configured for domain for fromid login address %q for account %q", s, accName)
+				addAccountErrorf("localpart catchall separator not configured for domain for fromid login address %q", s)
 			}
 			acc.ParsedFromIDLoginAddresses[i] = a
 		}
@@ -1370,14 +1405,14 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				err = errors.New("scheme must be http or https")
 			}
 			if err != nil {
-				addErrorf("parsing outgoing hook url %q in account %q: %v", acc.OutgoingWebhook.URL, accName, err)
+				addAccountErrorf("parsing outgoing hook url %q: %v", acc.OutgoingWebhook.URL, err)
 			}
 
 			// note: outgoing hook events are in ../queue/hooks.go, ../mox-/config.go, ../queue.go and ../webapi/gendoc.sh. keep in sync.
 			outgoingHookEvents := []string{"delivered", "suppressed", "delayed", "failed", "relayed", "expanded", "canceled", "unrecognized"}
 			for _, e := range acc.OutgoingWebhook.Events {
 				if !slices.Contains(outgoingHookEvents, e) {
-					addErrorf("unknown outgoing hook event %q", e)
+					addAccountErrorf("unknown outgoing hook event %q", e)
 				}
 			}
 		}
@@ -1387,7 +1422,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				err = errors.New("scheme must be http or https")
 			}
 			if err != nil {
-				addErrorf("parsing incoming hook url %q in account %q: %v", acc.IncomingWebhook.URL, accName, err)
+				addAccountErrorf("parsing incoming hook url %q: %v", acc.IncomingWebhook.URL, err)
 			}
 		}
 
@@ -1395,10 +1430,18 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		replaceLocalparts := map[string]string{}
 
 		for addrName, dest := range acc.Destinations {
-			checkMailboxNormf(dest.Mailbox, "account %q, destination %q", accName, addrName)
+			addDestErrorf := func(format string, args ...any) {
+				addAccountErrorf("destination %q: %s", addrName, fmt.Sprintf(format, args...))
+			}
+
+			checkMailboxNormf(dest.Mailbox, "destination mailbox", addDestErrorf)
 
 			for i, rs := range dest.Rulesets {
-				checkMailboxNormf(rs.Mailbox, "account %q, destination %q, ruleset %d", accName, addrName, i+1)
+				addRulesetErrorf := func(format string, args ...any) {
+					addDestErrorf("ruleset %d: %s", i+1, fmt.Sprintf(format, args...))
+				}
+
+				checkMailboxNormf(rs.Mailbox, "ruleset mailbox", addRulesetErrorf)
 
 				n := 0
 
@@ -1406,7 +1449,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 					n++
 					r, err := regexp.Compile(rs.SMTPMailFromRegexp)
 					if err != nil {
-						addErrorf("invalid SMTPMailFrom regular expression: %v", err)
+						addRulesetErrorf("invalid SMTPMailFrom regular expression: %v", err)
 					}
 					c.Accounts[accName].Destinations[addrName].Rulesets[i].SMTPMailFromRegexpCompiled = r
 				}
@@ -1414,7 +1457,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 					n++
 					r, err := regexp.Compile(rs.MsgFromRegexp)
 					if err != nil {
-						addErrorf("invalid MsgFrom regular expression: %v", err)
+						addRulesetErrorf("invalid MsgFrom regular expression: %v", err)
 					}
 					c.Accounts[accName].Destinations[addrName].Rulesets[i].MsgFromRegexpCompiled = r
 				}
@@ -1422,7 +1465,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 					n++
 					d, err := dns.ParseDomain(rs.VerifiedDomain)
 					if err != nil {
-						addErrorf("invalid VerifiedDomain: %v", err)
+						addRulesetErrorf("invalid VerifiedDomain: %v", err)
 					}
 					c.Accounts[accName].Destinations[addrName].Rulesets[i].VerifiedDNSDomain = d
 				}
@@ -1431,46 +1474,46 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				for k, v := range rs.HeadersRegexp {
 					n++
 					if strings.ToLower(k) != k {
-						addErrorf("header field %q must only have lower case characters", k)
+						addRulesetErrorf("header field %q must only have lower case characters", k)
 					}
 					if strings.ToLower(v) != v {
-						addErrorf("header value %q must only have lower case characters", v)
+						addRulesetErrorf("header value %q must only have lower case characters", v)
 					}
 					rk, err := regexp.Compile(k)
 					if err != nil {
-						addErrorf("invalid rule header regexp %q: %v", k, err)
+						addRulesetErrorf("invalid rule header regexp %q: %v", k, err)
 					}
 					rv, err := regexp.Compile(v)
 					if err != nil {
-						addErrorf("invalid rule header regexp %q: %v", v, err)
+						addRulesetErrorf("invalid rule header regexp %q: %v", v, err)
 					}
 					hdr = append(hdr, [...]*regexp.Regexp{rk, rv})
 				}
 				c.Accounts[accName].Destinations[addrName].Rulesets[i].HeadersRegexpCompiled = hdr
 
 				if n == 0 {
-					addErrorf("ruleset must have at least one rule")
+					addRulesetErrorf("ruleset must have at least one rule")
 				}
 
 				if rs.IsForward && rs.ListAllowDomain != "" {
-					addErrorf("ruleset cannot have both IsForward and ListAllowDomain")
+					addRulesetErrorf("ruleset cannot have both IsForward and ListAllowDomain")
 				}
 				if rs.IsForward {
 					if rs.SMTPMailFromRegexp == "" || rs.VerifiedDomain == "" {
-						addErrorf("ruleset with IsForward must have both SMTPMailFromRegexp and VerifiedDomain too")
+						addRulesetErrorf("ruleset with IsForward must have both SMTPMailFromRegexp and VerifiedDomain too")
 					}
 				}
 				if rs.ListAllowDomain != "" {
 					d, err := dns.ParseDomain(rs.ListAllowDomain)
 					if err != nil {
-						addErrorf("invalid ListAllowDomain %q: %v", rs.ListAllowDomain, err)
+						addRulesetErrorf("invalid ListAllowDomain %q: %v", rs.ListAllowDomain, err)
 					}
 					c.Accounts[accName].Destinations[addrName].Rulesets[i].ListAllowDNSDomain = d
 				}
 
-				checkMailboxNormf(rs.AcceptRejectsToMailbox, "account %q, destination %q, ruleset %d, rejects mailbox", accName, addrName, i+1)
+				checkMailboxNormf(rs.AcceptRejectsToMailbox, "rejects mailbox", addRulesetErrorf)
 				if strings.EqualFold(rs.AcceptRejectsToMailbox, "inbox") {
-					addErrorf("account %q, destination %q, ruleset %d: AcceptRejectsToMailbox cannot be set to Inbox", accName, addrName, i+1)
+					addRulesetErrorf("AcceptRejectsToMailbox cannot be set to Inbox")
 				}
 			}
 
@@ -1478,16 +1521,16 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			if strings.HasPrefix(addrName, "@") {
 				d, err := dns.ParseDomain(addrName[1:])
 				if err != nil {
-					addErrorf("parsing domain %q in account %q", addrName[1:], accName)
+					addDestErrorf("parsing domain %q", addrName[1:])
 					continue
 				} else if _, ok := c.Domains[d.Name()]; !ok {
-					addErrorf("unknown domain for address %q in account %q", addrName, accName)
+					addDestErrorf("unknown domain for address")
 					continue
 				}
 				domainHasAddress[d.Name()] = true
 				addrFull := "@" + d.Name()
 				if _, ok := accDests[addrFull]; ok {
-					addErrorf("duplicate canonicalized catchall destination address %s", addrFull)
+					addDestErrorf("duplicate canonicalized catchall destination address %s", addrFull)
 				}
 				accDests[addrFull] = AccountDestination{true, "", accName, dest}
 				continue
@@ -1498,20 +1541,20 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			if localpart, err := smtp.ParseLocalpart(addrName); err != nil && errors.Is(err, smtp.ErrBadLocalpart) {
 				address, err = smtp.ParseAddress(addrName)
 				if err != nil {
-					addErrorf("invalid email address %q in account %q", addrName, accName)
+					addDestErrorf("invalid email address")
 					continue
 				} else if _, ok := c.Domains[address.Domain.Name()]; !ok {
-					addErrorf("unknown domain for address %q in account %q", addrName, accName)
+					addDestErrorf("unknown domain for address")
 					continue
 				}
 			} else {
 				if err != nil {
-					addErrorf("invalid localpart %q in account %q", addrName, accName)
+					addDestErrorf("invalid localpart %q", addrName)
 					continue
 				}
 				address = smtp.NewAddress(localpart, acc.DNSDomain)
 				if _, ok := c.Domains[acc.DNSDomain.Name()]; !ok {
-					addErrorf("unknown domain %s for account %q", acc.DNSDomain.Name(), accName)
+					addDestErrorf("unknown domain %s", acc.DNSDomain.Name())
 					continue
 				}
 				replaceLocalparts[addrName] = address.Pack(true)
@@ -1522,13 +1565,13 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			domainHasAddress[address.Domain.Name()] = true
 			lp := CanonicalLocalpart(address.Localpart, dc)
 			if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(address.Localpart), dc.LocalpartCatchallSeparator) {
-				addErrorf("localpart of address %s includes domain catchall separator %s", address, dc.LocalpartCatchallSeparator)
+				addDestErrorf("localpart of address %s includes domain catchall separator %s", address, dc.LocalpartCatchallSeparator)
 			} else {
 				address.Localpart = lp
 			}
 			addrFull := address.Pack(true)
 			if _, ok := accDests[addrFull]; ok {
-				addErrorf("duplicate canonicalized destination address %s", addrFull)
+				addDestErrorf("duplicate canonicalized destination address %s", addrFull)
 			}
 			accDests[addrFull] = AccountDestination{false, origLP, accName, dest}
 		}
@@ -1536,7 +1579,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		for lp, addr := range replaceLocalparts {
 			dest, ok := acc.Destinations[lp]
 			if !ok {
-				addErrorf("could not find localpart %q to replace with address in destinations", lp)
+				addAccountErrorf("could not find localpart %q to replace with address in destinations", lp)
 			} else {
 				log.Warn(`deprecation warning: support for account destination addresses specified as just localpart ("username") instead of full email address will be removed in the future; update domains.conf, for each Account, for each Destination, ensure each key is an email address by appending "@" and the default domain for the account`,
 					slog.Any("localpart", lp),
@@ -1557,7 +1600,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			dc := c.Domains[a.Domain.Name()]
 			a.Localpart = CanonicalLocalpart(a.Localpart, dc)
 			if _, ok := accDests[a.Pack(true)]; !ok {
-				addErrorf("fromid login address %q for account %q does not match its destination addresses", acc.FromIDLoginAddresses[i], accName)
+				addAccountErrorf("fromid login address %q does not match its destination addresses", acc.FromIDLoginAddresses[i])
 			}
 		}
 
@@ -1566,28 +1609,32 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 
 	// Set DMARC destinations.
 	for d, domain := range c.Domains {
+		addDomainErrorf := func(format string, args ...any) {
+			addErrorf("domain %s: %s", d, fmt.Sprintf(format, args...))
+		}
+
 		dmarc := domain.DMARC
 		if dmarc == nil {
 			continue
 		}
 		if _, ok := c.Accounts[dmarc.Account]; !ok {
-			addErrorf("DMARC account %q does not exist", dmarc.Account)
+			addDomainErrorf("DMARC account %q does not exist", dmarc.Account)
 		}
 		lp, err := smtp.ParseLocalpart(dmarc.Localpart)
 		if err != nil {
-			addErrorf("invalid DMARC localpart %q: %s", dmarc.Localpart, err)
+			addDomainErrorf("invalid DMARC localpart %q: %s", dmarc.Localpart, err)
 		}
 		if lp.IsInternational() {
 			// ../rfc/8616:234
-			addErrorf("DMARC localpart %q is an internationalized address, only conventional ascii-only address possible for interopability", lp)
+			addDomainErrorf("DMARC localpart %q is an internationalized address, only conventional ascii-only address possible for interopability", lp)
 		}
 		addrdom := domain.Domain
 		if dmarc.Domain != "" {
 			addrdom, err = dns.ParseDomain(dmarc.Domain)
 			if err != nil {
-				addErrorf("DMARC domain %q: %s", dmarc.Domain, err)
+				addDomainErrorf("DMARC domain %q: %s", dmarc.Domain, err)
 			} else if _, ok := c.Domains[addrdom.Name()]; !ok {
-				addErrorf("unknown domain %q for DMARC address in domain %q", addrdom, d)
+				addDomainErrorf("unknown domain %q for DMARC address", addrdom)
 			}
 		}
 		if addrdom == domain.Domain {
@@ -1602,35 +1649,39 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			Mailbox:      dmarc.Mailbox,
 			DMARCReports: true,
 		}
-		checkMailboxNormf(dmarc.Mailbox, "DMARC mailbox for account %q", dmarc.Account)
+		checkMailboxNormf(dmarc.Mailbox, "DMARC mailbox for account", addDomainErrorf)
 		accDests[addrFull] = AccountDestination{false, lp, dmarc.Account, dest}
 	}
 
 	// Set TLSRPT destinations.
 	for d, domain := range c.Domains {
+		addDomainErrorf := func(format string, args ...any) {
+			addErrorf("domain %s: %s", d, fmt.Sprintf(format, args...))
+		}
+
 		tlsrpt := domain.TLSRPT
 		if tlsrpt == nil {
 			continue
 		}
 		if _, ok := c.Accounts[tlsrpt.Account]; !ok {
-			addErrorf("TLSRPT account %q does not exist", tlsrpt.Account)
+			addDomainErrorf("TLSRPT account %q does not exist", tlsrpt.Account)
 		}
 		lp, err := smtp.ParseLocalpart(tlsrpt.Localpart)
 		if err != nil {
-			addErrorf("invalid TLSRPT localpart %q: %s", tlsrpt.Localpart, err)
+			addDomainErrorf("invalid TLSRPT localpart %q: %s", tlsrpt.Localpart, err)
 		}
 		if lp.IsInternational() {
 			// Does not appear documented in ../rfc/8460, but similar to DMARC it makes sense
 			// to keep this ascii-only addresses.
-			addErrorf("TLSRPT localpart %q is an internationalized address, only conventional ascii-only address allowed for interopability", lp)
+			addDomainErrorf("TLSRPT localpart %q is an internationalized address, only conventional ascii-only address allowed for interopability", lp)
 		}
 		addrdom := domain.Domain
 		if tlsrpt.Domain != "" {
 			addrdom, err = dns.ParseDomain(tlsrpt.Domain)
 			if err != nil {
-				addErrorf("TLSRPT domain %q: %s", tlsrpt.Domain, err)
+				addDomainErrorf("TLSRPT domain %q: %s", tlsrpt.Domain, err)
 			} else if _, ok := c.Domains[addrdom.Name()]; !ok {
-				addErrorf("unknown domain %q for TLSRPT address in domain %q", tlsrpt.Domain, d)
+				addDomainErrorf("unknown domain %q for TLSRPT address", tlsrpt.Domain)
 			}
 		}
 		if addrdom == domain.Domain {
@@ -1645,7 +1696,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			Mailbox:          tlsrpt.Mailbox,
 			DomainTLSReports: true,
 		}
-		checkMailboxNormf(tlsrpt.Mailbox, "TLSRPT mailbox for account %q", tlsrpt.Account)
+		checkMailboxNormf(tlsrpt.Mailbox, "TLSRPT mailbox", addDomainErrorf)
 		accDests[addrFull] = AccountDestination{false, lp, tlsrpt.Account, dest}
 	}
 
@@ -1659,15 +1710,19 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 	// Aliases, per domain. Also add references to accounts.
 	for d, domain := range c.Domains {
 		for lpstr, a := range domain.Aliases {
+			addAliasErrorf := func(format string, args ...any) {
+				addErrorf("domain %s: alias %s: %s", d, lpstr, fmt.Sprintf(format, args...))
+			}
+
 			var err error
 			a.LocalpartStr = lpstr
 			var clp smtp.Localpart
 			lp, err := smtp.ParseLocalpart(lpstr)
 			if err != nil {
-				addErrorf("domain %q: parsing localpart %q for alias: %v", d, lpstr, err)
+				addAliasErrorf("parsing alias: %v", err)
 				continue
 			} else if domain.LocalpartCatchallSeparator != "" && strings.Contains(string(lp), domain.LocalpartCatchallSeparator) {
-				addErrorf("domain %q: alias %q contains localpart catchall separator", d, a.LocalpartStr)
+				addAliasErrorf("alias contains localpart catchall separator")
 				continue
 			} else {
 				clp = CanonicalLocalpart(lp, domain)
@@ -1675,16 +1730,16 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 
 			addr := smtp.NewAddress(clp, domain.Domain).Pack(true)
 			if _, ok := aliases[addr]; ok {
-				addErrorf("domain %q: duplicate alias address %q", d, addr)
+				addAliasErrorf("duplicate alias address %q", addr)
 				continue
 			}
 			if _, ok := accDests[addr]; ok {
-				addErrorf("domain %q: alias %q already present as regular address", d, addr)
+				addAliasErrorf("alias %q already present as regular address", addr)
 				continue
 			}
 			if len(a.Addresses) == 0 {
 				// Not currently possible, Addresses isn't optional.
-				addErrorf("domain %q: alias %q needs at least one destination address", d, addr)
+				addAliasErrorf("alias %q needs at least one destination address", addr)
 				continue
 			}
 			a.ParsedAddresses = make([]config.AliasAddress, 0, len(a.Addresses))
@@ -1692,17 +1747,17 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			for _, destAddr := range a.Addresses {
 				da, err := smtp.ParseAddress(destAddr)
 				if err != nil {
-					addErrorf("domain %q: parsing destination address %q in alias %q: %v", d, destAddr, addr, err)
+					addAliasErrorf("parsing destination address %q: %v", destAddr, err)
 					continue
 				}
 				dastr := da.Pack(true)
 				accDest, ok := accDests[dastr]
 				if !ok {
-					addErrorf("domain %q: alias %q references non-existent address %q", d, addr, destAddr)
+					addAliasErrorf("references non-existent address %q", destAddr)
 					continue
 				}
 				if seen[dastr] {
-					addErrorf("domain %q: alias %q has duplicate address %q", d, addr, destAddr)
+					addAliasErrorf("duplicate address %q", destAddr)
 					continue
 				}
 				seen[dastr] = true
@@ -1743,25 +1798,33 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 
 	c.WebDNSDomainRedirects = map[dns.Domain]dns.Domain{}
 	for from, to := range c.WebDomainRedirects {
+		addRedirectErrorf := func(format string, args ...any) {
+			addErrorf("web redirect %s to %s: %s", from, to, fmt.Sprintf(format, args...))
+		}
+
 		fromdom, err := dns.ParseDomain(from)
 		if err != nil {
-			addErrorf("parsing domain for redirect %s: %v", from, err)
+			addRedirectErrorf("parsing domain for redirect %s: %v", from, err)
 		}
 		todom, err := dns.ParseDomain(to)
 		if err != nil {
-			addErrorf("parsing domain for redirect %s: %v", to, err)
+			addRedirectErrorf("parsing domain for redirect %s: %v", to, err)
 		} else if fromdom == todom {
-			addErrorf("will not redirect domain %s to itself", todom)
+			addRedirectErrorf("will not redirect domain %s to itself", todom)
 		}
 		var zerodom dns.Domain
 		if _, ok := c.WebDNSDomainRedirects[fromdom]; ok && fromdom != zerodom {
-			addErrorf("duplicate redirect domain %s", from)
+			addRedirectErrorf("duplicate redirect domain %s", from)
 		}
 		c.WebDNSDomainRedirects[fromdom] = todom
 	}
 
 	for i := range c.WebHandlers {
 		wh := &c.WebHandlers[i]
+
+		addHandlerErrorf := func(format string, args ...any) {
+			addErrorf("webhandler %s %s: %s", wh.Domain, wh.PathRegexp, fmt.Sprintf(format, args...))
+		}
 
 		if wh.LogName == "" {
 			wh.Name = fmt.Sprintf("%d", i)
@@ -1771,16 +1834,16 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 
 		dom, err := dns.ParseDomain(wh.Domain)
 		if err != nil {
-			addErrorf("webhandler %s %s: parsing domain: %v", wh.Domain, wh.PathRegexp, err)
+			addHandlerErrorf("parsing domain: %v", err)
 		}
 		wh.DNSDomain = dom
 
 		if !strings.HasPrefix(wh.PathRegexp, "^") {
-			addErrorf("webhandler %s %s: path regexp must start with a ^", wh.Domain, wh.PathRegexp)
+			addHandlerErrorf("path regexp must start with a ^")
 		}
 		re, err := regexp.Compile(wh.PathRegexp)
 		if err != nil {
-			addErrorf("webhandler %s %s: compiling regexp: %v", wh.Domain, wh.PathRegexp, err)
+			addHandlerErrorf("compiling regexp: %v", err)
 		}
 		wh.Path = re
 
@@ -1789,13 +1852,13 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			n++
 			ws := wh.WebStatic
 			if ws.StripPrefix != "" && !strings.HasPrefix(ws.StripPrefix, "/") {
-				addErrorf("webstatic %s %s: prefix to strip %s must start with a slash", wh.Domain, wh.PathRegexp, ws.StripPrefix)
+				addHandlerErrorf("static: prefix to strip %s must start with a slash", ws.StripPrefix)
 			}
 			for k := range ws.ResponseHeaders {
 				xk := k
 				k := strings.TrimSpace(xk)
 				if k != xk || k == "" {
-					addErrorf("webstatic %s %s: bad header %q", wh.Domain, wh.PathRegexp, xk)
+					addHandlerErrorf("static: bad header %q", xk)
 				}
 			}
 		}
@@ -1805,29 +1868,29 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			if wr.BaseURL != "" {
 				u, err := url.Parse(wr.BaseURL)
 				if err != nil {
-					addErrorf("webredirect %s %s: parsing redirect url %s: %v", wh.Domain, wh.PathRegexp, wr.BaseURL, err)
+					addHandlerErrorf("redirect: parsing redirect url %s: %v", wr.BaseURL, err)
 				}
 				switch u.Path {
 				case "", "/":
 					u.Path = "/"
 				default:
-					addErrorf("webredirect %s %s: BaseURL must have empty path", wh.Domain, wh.PathRegexp, wr.BaseURL)
+					addHandlerErrorf("redirect: BaseURL must have empty path", wr.BaseURL)
 				}
 				wr.URL = u
 			}
 			if wr.OrigPathRegexp != "" && wr.ReplacePath != "" {
 				re, err := regexp.Compile(wr.OrigPathRegexp)
 				if err != nil {
-					addErrorf("webredirect %s %s: compiling regexp %s: %v", wh.Domain, wh.PathRegexp, wr.OrigPathRegexp, err)
+					addHandlerErrorf("compiling regexp %s: %v", wr.OrigPathRegexp, err)
 				}
 				wr.OrigPath = re
 			} else if wr.OrigPathRegexp != "" || wr.ReplacePath != "" {
-				addErrorf("webredirect %s %s: must have either both OrigPathRegexp and ReplacePath, or neither", wh.Domain, wh.PathRegexp)
+				addHandlerErrorf("redirect: must have either both OrigPathRegexp and ReplacePath, or neither")
 			} else if wr.BaseURL == "" {
-				addErrorf("webredirect %s %s: must at least one of BaseURL and OrigPathRegexp+ReplacePath", wh.Domain, wh.PathRegexp)
+				addHandlerErrorf("must at least one of BaseURL and OrigPathRegexp+ReplacePath")
 			}
 			if wr.StatusCode != 0 && (wr.StatusCode < 300 || wr.StatusCode >= 400) {
-				addErrorf("webredirect %s %s: invalid redirect status code %d", wh.Domain, wh.PathRegexp, wr.StatusCode)
+				addHandlerErrorf("redirect: invalid redirect status code %d", wr.StatusCode)
 			}
 		}
 		if wh.WebForward != nil {
@@ -1835,7 +1898,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			wf := wh.WebForward
 			u, err := url.Parse(wf.URL)
 			if err != nil {
-				addErrorf("webforward %s %s: parsing url %s: %v", wh.Domain, wh.PathRegexp, wf.URL, err)
+				addHandlerErrorf("forward: parsing url %s: %v", wf.URL, err)
 			}
 			wf.TargetURL = u
 
@@ -1843,7 +1906,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				xk := k
 				k := strings.TrimSpace(xk)
 				if k != xk || k == "" {
-					addErrorf("webforward %s %s: bad header %q", wh.Domain, wh.PathRegexp, xk)
+					addHandlerErrorf("forrward: bad header %q", xk)
 				}
 			}
 		}
@@ -1851,7 +1914,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			n++
 			wi := wh.WebInternal
 			if !strings.HasPrefix(wi.BasePath, "/") || !strings.HasSuffix(wi.BasePath, "/") {
-				addErrorf("webinternal %s %s: base path %q must start and end with /", wh.Domain, wh.PathRegexp, wi.BasePath)
+				addHandlerErrorf("internal service: base path %q must start and end with /", wi.BasePath)
 			}
 			// todo: we could make maxMsgSize and accountPath configurable
 			const isForwarded = false
@@ -1866,12 +1929,12 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			case "webapi":
 				wi.Handler = NewWebapiHandler(config.DefaultMaxMsgSize, wi.BasePath, isForwarded)
 			default:
-				addErrorf("webinternal %s %s: unknown service %q", wh.Domain, wh.PathRegexp, wi.Service)
+				addHandlerErrorf("internal service: unknown service %q", wi.Service)
 			}
 			wi.Handler = SafeHeaders(http.StripPrefix(wi.BasePath[:len(wi.BasePath)-1], wi.Handler))
 		}
 		if n != 1 {
-			addErrorf("webhandler %s %s: must have exactly one handler, not %d", wh.Domain, wh.PathRegexp, n)
+			addHandlerErrorf("must have exactly one handler, not %d", n)
 		}
 	}
 
@@ -1879,11 +1942,11 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 	for _, s := range c.MonitorDNSBLs {
 		d, err := dns.ParseDomain(s)
 		if err != nil {
-			addErrorf("invalid monitor dnsbl zone %s: %v", s, err)
+			addErrorf("dnsbl %s: parsing dnsbl zone: %v", s, err)
 			continue
 		}
 		if slices.Contains(c.MonitorDNSBLZones, d) {
-			addErrorf("duplicate zone %s in monitor dnsbl zones", d)
+			addErrorf("dnsbl %s: duplicate zone", s)
 			continue
 		}
 		c.MonitorDNSBLZones = append(c.MonitorDNSBLZones, d)
