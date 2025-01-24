@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -413,13 +414,16 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			}
 		}()
 
-		// Link/copy known message files. Warn if files are missing or unexpected
-		// (though a message file could have been removed just now due to delivery, or a
-		// new message may have been queued).
+		// Link/copy known message files. If a message has been removed while we read the
+		// database, our backup is not consistent and the backup will be marked failed.
 		tmMsgs := time.Now()
 		seen := map[string]struct{}{}
 		var nlinked, ncopied int
+		var maxID int64
 		err = bstore.QueryDB[queue.Msg](ctx, db).ForEach(func(m queue.Msg) error {
+			if m.ID > maxID {
+				maxID = m.ID
+			}
 			mp := store.MessagePath(m.ID)
 			seen[mp] = struct{}{}
 			srcpath := filepath.Join(srcDataDir, "queue", mp)
@@ -442,7 +446,9 @@ func backupctl(ctx context.Context, ctl *ctl) {
 				slog.Duration("duration", time.Since(tmMsgs)))
 		}
 
-		// Read through all files in queue directory and warn about anything we haven't handled yet.
+		// Read through all files in queue directory and warn about anything we haven't
+		// handled yet. Message files that are newer than we expect from our consistent
+		// database snapshot are ignored.
 		tmWalk := time.Now()
 		srcqdir := filepath.Join(srcDataDir, "queue")
 		err = filepath.WalkDir(srcqdir, func(srcqpath string, d fs.DirEntry, err error) error {
@@ -460,6 +466,12 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			if p == "index.db" {
 				return nil
 			}
+			// Skip any messages that were added since we started on our consistent snapshot.
+			// We don't want to cause spurious backup warnings.
+			if id, err := strconv.ParseInt(filepath.Base(p), 10, 64); err == nil && maxID > 0 && id > maxID && p == store.MessagePath(id) {
+				return nil
+			}
+
 			qp := filepath.Join("queue", p)
 			xwarnx("backing up unrecognized file in queue directory", nil, slog.String("path", qp))
 			backupFile(qp)
@@ -520,13 +532,16 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			}
 		}()
 
-		// Link/copy known message files. Warn if files are missing or unexpected (though a
-		// message file could have been added just now due to delivery, or a message have
-		// been removed).
+		// Link/copy known message files. If a message has been removed while we read the
+		// database, our backup is not consistent and the backup will be marked failed.
 		tmMsgs := time.Now()
 		seen := map[string]struct{}{}
+		var maxID int64
 		var nlinked, ncopied int
 		err = bstore.QueryDB[store.Message](ctx, db).FilterEqual("Expunged", false).ForEach(func(m store.Message) error {
+			if m.ID > maxID {
+				maxID = m.ID
+			}
 			mp := store.MessagePath(m.ID)
 			seen[mp] = struct{}{}
 			amp := filepath.Join("accounts", acc.Name, "msg", mp)
@@ -550,7 +565,9 @@ func backupctl(ctx context.Context, ctl *ctl) {
 				slog.Duration("duration", time.Since(tmMsgs)))
 		}
 
-		// Read through all files in account directory and warn about anything we haven't handled yet.
+		// Read through all files in queue directory and warn about anything we haven't
+		// handled yet. Message files that are newer than we expect from our consistent
+		// database snapshot are ignored.
 		tmWalk := time.Now()
 		srcadir := filepath.Join(srcDataDir, "accounts", acc.Name)
 		err = filepath.WalkDir(srcadir, func(srcapath string, d fs.DirEntry, err error) error {
@@ -566,6 +583,12 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			if l[0] == "msg" {
 				mp := filepath.Join(l[1:]...)
 				if _, ok := seen[mp]; ok {
+					return nil
+				}
+
+				// Skip any messages that were added since we started on our consistent snapshot.
+				// We don't want to cause spurious backup warnings.
+				if id, err := strconv.ParseInt(l[len(l)-1], 10, 64); err == nil && id > maxID && mp == store.MessagePath(id) {
 					return nil
 				}
 			}
