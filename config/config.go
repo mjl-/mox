@@ -455,13 +455,18 @@ type JunkFilter struct {
 }
 
 type Destination struct {
-	Mailbox  string    `sconf:"optional" sconf-doc:"Mailbox to deliver to if none of Rulesets match. Default: Inbox."`
-	Rulesets []Ruleset `sconf:"optional" sconf-doc:"Delivery rules based on message and SMTP transaction. You may want to match each mailing list by SMTP MailFrom address, VerifiedDomain and/or List-ID header (typically <listname.example.org> if the list address is listname@example.org), delivering them to their own mailbox."`
-	FullName string    `sconf:"optional" sconf-doc:"Full name to use in message From header when composing messages coming from this address with webmail."`
+	Mailbox   string    `sconf:"optional" sconf-doc:"Mailbox to deliver to if none of Rulesets match. Default: Inbox."`
+	Rulesets  []Ruleset `sconf:"optional" sconf-doc:"Delivery rules based on message and SMTP transaction. You may want to match each mailing list by SMTP MailFrom address, VerifiedDomain and/or List-ID header (typically <listname.example.org> if the list address is listname@example.org), delivering them to their own mailbox."`
+	SMTPError string    `sconf:"optional" sconf-doc:"If non-empty, incoming delivery attempts to this destination will be rejected during SMTP RCPT TO with this error response line. Useful when a catchall address is configured for the domain and messages to some addresses should be rejected. The response line must start with an error code. Currently the following error resonse codes are allowed: 421 (temporary local error), 550 (user not found). If the line consists of only an error code, an appropriate error message is added. Rejecting messages with a 4xx code invites later retries by the remote, while 5xx codes should prevent further delivery attempts."`
+	FullName  string    `sconf:"optional" sconf-doc:"Full name to use in message From header when composing messages coming from this address with webmail."`
 
 	DMARCReports     bool `sconf:"-" json:"-"`
 	HostTLSReports   bool `sconf:"-" json:"-"`
 	DomainTLSReports bool `sconf:"-" json:"-"`
+	// Ready to use in SMTP responses.
+	SMTPErrorCode   int    `sconf:"-" json:"-"`
+	SMTPErrorSecode string `sconf:"-" json:"-"`
+	SMTPErrorMsg    string `sconf:"-" json:"-"`
 }
 
 // Equal returns whether d and o are equal, only looking at their user-changeable fields.

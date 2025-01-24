@@ -1436,6 +1436,44 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 
 			checkMailboxNormf(dest.Mailbox, "destination mailbox", addDestErrorf)
 
+			if dest.SMTPError != "" {
+				if len(dest.SMTPError) > 256 {
+					addDestErrorf("smtp error must be smaller than 256 bytes")
+				}
+				for _, c := range dest.SMTPError {
+					if c < ' ' || c >= 0x7f {
+						addDestErrorf("smtp error cannot contain contain control characters (including newlines) or non-ascii")
+						break
+					}
+				}
+
+				if dest.Mailbox != "" {
+					addDestErrorf("cannot have both SMTPError and Mailbox")
+				}
+				if len(dest.Rulesets) != 0 {
+					addDestErrorf("cannot have both SMTPError and Rulesets")
+				}
+
+				t := strings.SplitN(dest.SMTPError, " ", 2)
+				switch t[0] {
+				default:
+					addDestErrorf("smtp error must be 421 or 550 (with optional message), not %q", dest.SMTPError)
+
+				case "421":
+					dest.SMTPErrorCode = smtp.C451LocalErr
+					dest.SMTPErrorSecode = smtp.SeSys3Other0
+					dest.SMTPErrorMsg = "error processing"
+				case "550":
+					dest.SMTPErrorCode = smtp.C550MailboxUnavail
+					dest.SMTPErrorSecode = smtp.SeAddr1UnknownDestMailbox1
+					dest.SMTPErrorMsg = "no such user(s)"
+				}
+				if len(t) > 1 {
+					dest.SMTPErrorMsg = strings.TrimSpace(t[1])
+				}
+				acc.Destinations[addrName] = dest
+			}
+
 			for i, rs := range dest.Rulesets {
 				addRulesetErrorf := func(format string, args ...any) {
 					addDestErrorf("ruleset %d: %s", i+1, fmt.Sprintf(format, args...))

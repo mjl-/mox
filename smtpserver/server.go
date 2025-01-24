@@ -1919,12 +1919,14 @@ func (c *conn) cmdRcpt(p *parser) {
 			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "not accepting email for ip")
 		}
 		c.recipients = append(c.recipients, recipient{fpath, nil, nil})
-	} else if accountName, alias, canonical, addr, err := mox.LookupAddress(fpath.Localpart, fpath.IPDomain.Domain, true, true); err == nil {
+	} else if accountName, alias, canonical, dest, err := mox.LookupAddress(fpath.Localpart, fpath.IPDomain.Domain, true, true); err == nil {
 		// note: a bare postmaster, without domain, is handled by LookupAddress. ../rfc/5321:735
 		if alias != nil {
 			c.recipients = append(c.recipients, recipient{fpath, nil, &rcptAlias{*alias, canonical}})
+		} else if dest.SMTPError != "" {
+			xsmtpServerErrorf(codes{dest.SMTPErrorCode, dest.SMTPErrorSecode}, dest.SMTPErrorMsg)
 		} else {
-			c.recipients = append(c.recipients, recipient{fpath, &rcptAccount{accountName, addr, canonical}, nil})
+			c.recipients = append(c.recipients, recipient{fpath, &rcptAccount{accountName, dest, canonical}, nil})
 		}
 
 	} else if Localserve {

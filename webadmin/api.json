@@ -3833,6 +3833,13 @@
 					]
 				},
 				{
+					"Name": "SMTPError",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "FullName",
 					"Docs": "",
 					"Typewords": [

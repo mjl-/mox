@@ -1754,6 +1754,7 @@ const destination = async (name: string) => {
 
 	let defaultMailbox: HTMLInputElement
 	let fullName: HTMLInputElement
+	let smtpError: HTMLInputElement
 	let saveButton: HTMLButtonElement
 
 	const addresses = [name, ...Object.keys(acc.Destinations || {}).filter(a => !a.startsWith('@') && a !== name)]
@@ -1773,6 +1774,12 @@ const destination = async (name: string) => {
 			dom.span('Full name', attr.title('Name to use in From header when composing messages. If not set, the account default full name is used.')),
 			dom.br(),
 			fullName=dom.input(attr.value(dest.FullName)),
+		),
+		dom.br(),
+		dom.div(
+			dom.span('Reject deliveries with SMTP Error', attr.title('If non-empty, incoming delivery attempts to this destination will be rejected during SMTP RCPT TO with this error response line. The response line must start with an error code. Currently the following error resonse codes are allowed: 421 (temporary local error), 550 (mailbox not found). If the line consists of only an error code, an appropriate error message is added. Rejecting messages with a 4xx code invites later retries by the remote, while 5xx codes should prevent further delivery attempts.')),
+			dom.br(),
+			smtpError=dom.input(attr.value(dest.SMTPError), attr.placeholder('421 or 550...')),
 		),
 		dom.br(),
 
@@ -1840,6 +1847,7 @@ const destination = async (name: string) => {
 						ListAllowDNSDomain: {ASCII: '', Unicode: ''},
 					}
 				}),
+				SMTPError: smtpError.value,
 			}
 			await check(saveButton, client.DestinationSave(name, dest, newDest))
 			window.location.reload() // todo: only refresh part of ui

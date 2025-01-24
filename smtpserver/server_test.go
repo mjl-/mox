@@ -2086,5 +2086,25 @@ test email
 		_, err = client.DeliverMultiple(ctxbg, mailFrom, rcptTo, int64(len(extraMsg)), strings.NewReader(extraMsg), true, true, false)
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C554TransactionFailed, Secode: smtp.SeProto5TooManyRcpts3})
 	})
+}
 
+// TestDestinationSMTPError checks delivery to a destination with an SMTPError is rejected as configured.
+func TestDestinationSMTPError(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"example.org.": {"127.0.0.10"}, // For mx check.
+		},
+	}
+
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
+	defer ts.close()
+
+	ts.run(func(err error, client *smtpclient.Client) {
+		t.Helper()
+		tcheck(t, err, "init client")
+		mailFrom := "mjl@example.org"
+		rcptTo := "blocked@mox.example"
+		err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
+	})
 }
