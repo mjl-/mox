@@ -1924,7 +1924,7 @@ func (c *conn) cmdRcpt(p *parser) {
 		if alias != nil {
 			c.recipients = append(c.recipients, recipient{fpath, nil, &rcptAlias{*alias, canonical}})
 		} else if dest.SMTPError != "" {
-			xsmtpServerErrorf(codes{dest.SMTPErrorCode, dest.SMTPErrorSecode}, dest.SMTPErrorMsg)
+			xsmtpServerErrorf(codes{dest.SMTPErrorCode, dest.SMTPErrorSecode}, "%s", dest.SMTPErrorMsg)
 		} else {
 			c.recipients = append(c.recipients, recipient{fpath, &rcptAccount{accountName, dest, canonical}, nil})
 		}
