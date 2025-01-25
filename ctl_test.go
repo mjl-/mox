@@ -19,6 +19,7 @@ import (
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dmarcdb"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/imapclient"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/mtastsdb"
@@ -58,6 +59,8 @@ func TestCtl(t *testing.T) {
 	tcheck(t, err, "store init")
 	defer store.Close()
 
+	var cid int64
+
 	testctl := func(fn func(clientctl *ctl)) {
 		t.Helper()
 
@@ -66,7 +69,8 @@ func TestCtl(t *testing.T) {
 		serverctl := ctl{conn: sconn, log: pkglog}
 		done := make(chan struct{})
 		go func() {
-			servectlcmd(ctxbg, &serverctl, func() {})
+			cid++
+			servectlcmd(ctxbg, &serverctl, cid, func() {})
 			close(done)
 		}()
 		fn(&clientctl)
@@ -513,6 +517,19 @@ func TestCtl(t *testing.T) {
 		flagArgs: []string{filepath.FromSlash("testdata/ctl/data/tmp/backup/data")},
 	}
 	cmdVerifydata(&xcmd)
+
+	// IMAP connection.
+	testctl(func(ctl *ctl) {
+		a, b := net.Pipe()
+		go func() {
+			client, err := imapclient.New(a, true)
+			tcheck(t, err, "new imapclient")
+			client.Select("inbox")
+			client.Logout()
+			defer a.Close()
+		}()
+		ctlcmdIMAPServe(ctl, "mjl@mox.example", b, b)
+	})
 }
 
 func fakeCert(t *testing.T) []byte {

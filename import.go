@@ -125,7 +125,7 @@ func xcmdXImport(mbox bool, c *cmd) {
 	cconn, sconn := net.Pipe()
 	clientctl := ctl{conn: cconn, r: bufio.NewReader(cconn), log: c.log}
 	serverctl := ctl{conn: sconn, r: bufio.NewReader(sconn), log: c.log}
-	go servectlcmd(context.Background(), &serverctl, func() {})
+	go servectlcmd(context.Background(), &serverctl, 0, func() {})
 
 	ctlcmdImport(&clientctl, mbox, account, args[1], args[2])
 }

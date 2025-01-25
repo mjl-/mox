@@ -25,6 +25,7 @@ import (
 	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/imapserver"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
@@ -277,7 +278,7 @@ func (s *ctlreader) xcheck(err error, msg string) {
 }
 
 // servectl handles requests on the unix domain socket "ctl", e.g. for graceful shutdown, local mail delivery.
-func servectl(ctx context.Context, log mlog.Log, conn net.Conn, shutdown func()) {
+func servectl(ctx context.Context, cid int64, log mlog.Log, conn net.Conn, shutdown func()) {
 	log.Debug("ctl connection")
 
 	var stop = struct{}{} // Sentinel value for panic and recover.
@@ -296,7 +297,7 @@ func servectl(ctx context.Context, log mlog.Log, conn net.Conn, shutdown func())
 
 	ctl.xwrite("ctlv0")
 	for {
-		servectlcmd(ctx, ctl, shutdown)
+		servectlcmd(ctx, ctl, cid, shutdown)
 	}
 }
 
@@ -307,7 +308,7 @@ func xparseJSON(ctl *ctl, s string, v any) {
 	ctl.xcheck(err, "parsing from ctl as json")
 }
 
-func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
+func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 	log := ctl.log
 	cmd := ctl.xread()
 	ctl.cmd = cmd
@@ -1823,6 +1824,18 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 
 	case "backup":
 		backupctl(ctx, ctl)
+
+	case "imapserve":
+		/* protocol:
+		> "imapserve"
+		> address
+		< "ok or error"
+		imap protocol
+		*/
+		address := ctl.xread()
+		ctl.xwriteok()
+		imapserver.ServeConnPreauth("(imapserve)", cid, ctl.conn, address)
+		ctl.log.Debug("imap connection finished")
 
 	default:
 		log.Info("unrecognized command", slog.String("cmd", cmd))

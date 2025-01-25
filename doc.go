@@ -89,6 +89,7 @@ any parameters. Followed by the help and usage information for each command.
 	mox config printservice >mox.service
 	mox config ensureacmehostprivatekeys
 	mox config example [name]
+	mox admin imapserve preauth-address
 	mox checkupdate
 	mox cid cid
 	mox clientconfig domain
@@ -1203,6 +1204,18 @@ for a domain and create the TLSA DNS records it suggests to enable DANE.
 List available config examples, or print a specific example.
 
 	usage: mox config example [name]
+
+# mox admin imapserve
+
+Initiate a preauthenticated IMAP connection on file descriptor 0.
+
+For use with tools that can do IMAP over tunneled connections, e.g. with SSH
+during migrations. TLS is not possible on the connection, and authentication
+does not require TLS.
+
+	usage: mox admin imapserve preauth-address
+	  -fd0
+	    	write IMAP to file descriptor 0 instead of stdout
 
 # mox checkupdate
 

@@ -171,6 +171,8 @@ var commands = []struct {
 	{"config ensureacmehostprivatekeys", cmdConfigEnsureACMEHostprivatekeys},
 	{"config example", cmdConfigExample},
 
+	{"admin imapserve", cmdIMAPServe},
+
 	{"checkupdate", cmdCheckupdate},
 	{"cid", cmdCid},
 	{"clientconfig", cmdClientConfig},
@@ -3718,6 +3720,58 @@ func ctlcmdReassignthreads(ctl *ctl, account string) {
 	ctl.xwrite(account)
 	ctl.xreadok()
 	ctl.xstreamto(os.Stdout)
+}
+
+func cmdIMAPServe(c *cmd) {
+	c.params = "preauth-address"
+	c.help = `Initiate a preauthenticated IMAP connection on file descriptor 0.
+
+For use with tools that can do IMAP over tunneled connections, e.g. with SSH
+during migrations. TLS is not possible on the connection, and authentication
+does not require TLS.
+`
+	var fd0 bool
+	c.flag.BoolVar(&fd0, "fd0", false, "write IMAP to file descriptor 0 instead of stdout")
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	address := args[0]
+	output := os.Stdout
+	if fd0 {
+		output = os.Stdout
+	}
+	ctlcmdIMAPServe(xctl(), address, os.Stdin, output)
+}
+
+func ctlcmdIMAPServe(ctl *ctl, address string, input io.ReadCloser, output io.WriteCloser) {
+	ctl.xwrite("imapserve")
+	ctl.xwrite(address)
+	ctl.xreadok()
+
+	done := make(chan struct{}, 1)
+	go func() {
+		defer func() {
+			done <- struct{}{}
+		}()
+		_, err := io.Copy(output, ctl.conn)
+		if err == nil {
+			err = io.EOF
+		}
+		log.Printf("reading from imap: %v", err)
+	}()
+	go func() {
+		defer func() {
+			done <- struct{}{}
+		}()
+		_, err := io.Copy(ctl.conn, input)
+		if err == nil {
+			err = io.EOF
+		}
+		log.Printf("writing to imap: %v", err)
+	}()
+	<-done
 }
 
 func cmdReadmessages(c *cmd) {

@@ -381,7 +381,7 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 			}
 
 			metricIMAPConnection.WithLabelValues(protocol).Inc()
-			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noRequireSTARTTLS, false)
+			go serve(listenerName, mox.Cid(), tlsConfig, conn, xtls, noRequireSTARTTLS, false, "")
 		}
 	}
 
@@ -390,7 +390,11 @@ func listen1(protocol, listenerName, ip string, port int, tlsConfig *tls.Config,
 
 // ServeTLSConn serves IMAP on a TLS connection.
 func ServeTLSConn(listenerName string, conn *tls.Conn, tlsConfig *tls.Config) {
-	serve(listenerName, mox.Cid(), tlsConfig, conn, true, false, true)
+	serve(listenerName, mox.Cid(), tlsConfig, conn, true, false, true, "")
+}
+
+func ServeConnPreauth(listenerName string, cid int64, conn net.Conn, preauthAddress string) {
+	serve(listenerName, cid, nil, conn, false, true, false, preauthAddress)
 }
 
 // Serve starts serving on all listeners, launching a goroutine per listener.
@@ -641,12 +645,26 @@ func (c *conn) xhighestModSeq(tx *bstore.Tx, mailboxID int64) store.ModSeq {
 
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
-func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noRequireSTARTTLS, viaHTTPS bool) {
+// serve handles a single IMAP connection on nc.
+//
+// If xtls is set, immediate TLS should be enabled on the connection, unless
+// viaHTTP is set, which indicates TLS is already active with the connection coming
+// from the webserver with IMAP chosen through ALPN. activated. If viaHTTP is set,
+// the TLS config ddid not enable client certificate authentication. If xtls is
+// false and tlsConfig is set, STARTTLS may enable TLS later on.
+//
+// If noRequireSTARTTLS is set, TLS is not required for authentication.
+//
+// If accountAddress is not empty, it is the email address of the account to open
+// preauthenticated.
+//
+// The connection is closed before returning.
+func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, xtls, noRequireSTARTTLS, viaHTTPS bool, preauthAddress string) {
 	var remoteIP net.IP
 	if a, ok := nc.RemoteAddr().(*net.TCPAddr); ok {
 		remoteIP = a.IP
 	} else {
-		// For net.Pipe, during tests.
+		// For net.Pipe, during tests and for imapserve.
 		remoteIP = net.ParseIP("127.0.0.10")
 	}
 
@@ -767,6 +785,18 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	// replaced with a TLS connection later on.
 	mox.Connections.Register(nc, "imap", listenerName)
 	defer mox.Connections.Unregister(nc)
+
+	if preauthAddress != "" {
+		acc, _, err := store.OpenEmail(c.log, preauthAddress, false)
+		if err != nil {
+			c.log.Debugx("open account for preauth address", err, slog.String("address", preauthAddress))
+			c.writelinef("* BYE open account for address: %s", err)
+			return
+		}
+		c.username = preauthAddress
+		c.account = acc
+		c.comm = store.RegisterComm(c.account)
+	}
 
 	if c.account != nil && !c.noPreauth {
 		c.state = stateAuthenticated

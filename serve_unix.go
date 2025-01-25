@@ -382,7 +382,7 @@ Only implemented on unix systems, not Windows.
 			}
 			cid := mox.Cid()
 			ctx := context.WithValue(mox.Context, mlog.CidKey, cid)
-			go servectl(ctx, log.WithCid(cid), conn, func() { shutdown(log) })
+			go servectl(ctx, cid, log.WithCid(cid), conn, func() { shutdown(log) })
 		}
 	}()
 
