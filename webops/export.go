@@ -44,7 +44,7 @@ func Export(log mlog.Log, accName string, w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	acc, err := store.OpenAccount(log, accName)
+	acc, err := store.OpenAccount(log, accName, false)
 	if err != nil {
 		log.Errorx("open account for export", err)
 		http.Error(w, "500 - internal server error", http.StatusInternalServerError)

@@ -73,6 +73,7 @@ var (
 	ErrUnknownCredentials = errors.New("credentials not found")
 	ErrAccountUnknown     = errors.New("no such account")
 	ErrOverQuota          = errors.New("account over quota")
+	ErrLoginDisabled      = errors.New("login disabled for account")
 )
 
 var DefaultInitialMailboxes = config.InitialMailboxes{
@@ -876,7 +877,7 @@ func closeAccount(acc *Account) (rerr error) {
 //
 // No additional data path prefix or ".db" suffix should be added to the name.
 // A single shared account exists per name.
-func OpenAccount(log mlog.Log, name string) (*Account, error) {
+func OpenAccount(log mlog.Log, name string, checkLoginDisabled bool) (*Account, error) {
 	openAccounts.Lock()
 	defer openAccounts.Unlock()
 	if acc, ok := openAccounts.names[name]; ok {
@@ -884,8 +885,10 @@ func OpenAccount(log mlog.Log, name string) (*Account, error) {
 		return acc, nil
 	}
 
-	if _, ok := mox.Conf.Account(name); !ok {
+	if a, ok := mox.Conf.Account(name); !ok {
 		return nil, ErrAccountUnknown
+	} else if checkLoginDisabled && a.LoginDisabled != "" {
+		return nil, fmt.Errorf("%w: %s", ErrLoginDisabled, a.LoginDisabled)
 	}
 
 	acc, err := openAccount(log, name)
@@ -1657,6 +1660,13 @@ func (a *Account) SetPassword(log mlog.Log, password string) error {
 	return err
 }
 
+// SessionsClear invalidates all (web) login sessions for the account.
+func (a *Account) SessionsClear(ctx context.Context, log mlog.Log) error {
+	return a.DB.Write(ctx, func(tx *bstore.Tx) error {
+		return sessionRemoveAll(ctx, log, tx, a.Name)
+	})
+}
+
 // Subjectpass returns the signing key for use with subjectpass for the given
 // email address with canonical localpart.
 func (a *Account) Subjectpass(email string) (key string, err error) {
@@ -2211,13 +2221,15 @@ func manageAuthCache() {
 // OpenEmailAuth opens an account given an email address and password.
 //
 // The email address may contain a catchall separator.
-func OpenEmailAuth(log mlog.Log, email string, password string) (acc *Account, rerr error) {
+func OpenEmailAuth(log mlog.Log, email string, password string, checkLoginDisabled bool) (acc *Account, rerr error) {
 	password, err := precis.OpaqueString.String(password)
 	if err != nil {
 		return nil, ErrUnknownCredentials
 	}
 
-	acc, _, rerr = OpenEmail(log, email)
+	// We check for LoginDisabled after verifying the password. Otherwise users can get
+	// messages about the account being disabled without knowing the password.
+	acc, _, rerr = OpenEmail(log, email, false)
 	if rerr != nil {
 		return
 	}
@@ -2240,34 +2252,40 @@ func OpenEmailAuth(log mlog.Log, email string, password string) (acc *Account, r
 	authCache.Lock()
 	ok := len(password) >= 8 && authCache.success[authKey{email, pw.Hash}] == password
 	authCache.Unlock()
-	if ok {
-		return
+	if !ok {
+		if err := bcrypt.CompareHashAndPassword([]byte(pw.Hash), []byte(password)); err != nil {
+			return acc, ErrUnknownCredentials
+		}
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(pw.Hash), []byte(password)); err != nil {
-		rerr = ErrUnknownCredentials
-	} else {
-		authCache.Lock()
-		authCache.success[authKey{email, pw.Hash}] = password
-		authCache.Unlock()
+	if checkLoginDisabled {
+		conf, aok := acc.Conf()
+		if !aok {
+			return acc, fmt.Errorf("cannot find config for account")
+		} else if conf.LoginDisabled != "" {
+			return acc, fmt.Errorf("%w: %s", ErrLoginDisabled, conf.LoginDisabled)
+		}
 	}
+	authCache.Lock()
+	authCache.success[authKey{email, pw.Hash}] = password
+	authCache.Unlock()
 	return
 }
 
 // OpenEmail opens an account given an email address.
 //
 // The email address may contain a catchall separator.
-func OpenEmail(log mlog.Log, email string) (*Account, config.Destination, error) {
+func OpenEmail(log mlog.Log, email string, checkLoginDisabled bool) (*Account, config.Destination, error) {
 	addr, err := smtp.ParseAddress(email)
 	if err != nil {
 		return nil, config.Destination{}, fmt.Errorf("%w: %v", ErrUnknownCredentials, err)
 	}
-	accountName, _, _, dest, err := mox.LookupAddress(addr.Localpart, addr.Domain, false, false)
+	accountName, _, _, dest, err := mox.LookupAddress(addr.Localpart, addr.Domain, false, false, false)
 	if err != nil && (errors.Is(err, mox.ErrAddressNotFound) || errors.Is(err, mox.ErrDomainNotFound)) {
 		return nil, config.Destination{}, ErrUnknownCredentials
 	} else if err != nil {
 		return nil, config.Destination{}, fmt.Errorf("looking up address: %v", err)
 	}
-	acc, err := OpenAccount(log, accountName)
+	acc, err := OpenAccount(log, accountName, checkLoginDisabled)
 	if err != nil {
 		return nil, config.Destination{}, err
 	}

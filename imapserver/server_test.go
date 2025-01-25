@@ -359,7 +359,7 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 		err := store.Init(ctxbg)
 		tcheck(t, err, "store init")
 	}
-	acc, err := store.OpenAccount(pkglog, accname)
+	acc, err := store.OpenAccount(pkglog, accname, false)
 	tcheck(t, err, "open account")
 	if setPassword {
 		err = acc.SetPassword(pkglog, password0)

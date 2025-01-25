@@ -310,7 +310,7 @@ Only implemented on unix systems, not Windows.
 			}
 			cl += "----"
 
-			a, err := store.OpenAccount(log, mox.Conf.Static.Postmaster.Account)
+			a, err := store.OpenAccount(log, mox.Conf.Static.Postmaster.Account, false)
 			if err != nil {
 				log.Infox("open account for postmaster changelog delivery", err)
 				return next

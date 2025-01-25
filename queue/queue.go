@@ -1391,6 +1391,16 @@ func deliver(log mlog.Log, resolver dns.Resolver, m0 Msg) {
 
 	var remoteMTA dsn.NameIP // Zero value, will not be included in DSN. ../rfc/3464:1027
 
+	// If domain of sender is currently disabled, fail the delivery attempt.
+	if domConf, _ := mox.Conf.Domain(m0.SenderDomain.Domain); domConf.Disabled {
+		failMsgsTx(qlog, xtx, []*Msg{&m0}, m0.DialedIPs, backoff, remoteMTA, fmt.Errorf("domain of sender temporarily disabled"))
+		err = xtx.Commit()
+		qlog.Check(err, "commit processing failure to deliver messages")
+		xtx = nil
+		kick()
+		return
+	}
+
 	// Check if recipient is on suppression list. If so, fail delivery.
 	path := smtp.Path{Localpart: m0.RecipientLocalpart, IPDomain: m0.RecipientDomain}
 	baseAddr := baseAddress(path).XString(true)

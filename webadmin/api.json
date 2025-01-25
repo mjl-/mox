@@ -69,14 +69,14 @@
 		},
 		{
 			"Name": "Domains",
-			"Docs": "Domains returns all configured domain names, in UTF-8 for IDNA domains.",
+			"Docs": "Domains returns all configured domain names.",
 			"Params": [],
 			"Returns": [
 				{
 					"Name": "r0",
 					"Typewords": [
 						"[]",
-						"Domain"
+						"ConfigDomain"
 					]
 				}
 			]
@@ -171,11 +171,18 @@
 		},
 		{
 			"Name": "Accounts",
-			"Docs": "Accounts returns the names of all configured accounts.",
+			"Docs": "Accounts returns the names of all configured and all disabled accounts.",
 			"Params": [],
 			"Returns": [
 				{
-					"Name": "r0",
+					"Name": "all",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
+					"Name": "disabled",
 					"Typewords": [
 						"[]",
 						"string"
@@ -526,6 +533,12 @@
 			"Docs": "DomainAdd adds a new domain and reloads the configuration.",
 			"Params": [
 				{
+					"Name": "disabled",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
 					"Name": "domain",
 					"Typewords": [
 						"string"
@@ -674,6 +687,25 @@
 					"Name": "firstTimeSenderDelay",
 					"Typewords": [
 						"bool"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "AccountLoginDisabledSave",
+			"Docs": "AccountLoginDisabledSave saves the LoginDisabled field of an account.",
+			"Params": [
+				{
+					"Name": "accountName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "loginDisabled",
+					"Typewords": [
+						"string"
 					]
 				}
 			],
@@ -1901,6 +1933,25 @@
 					"Typewords": [
 						"[]",
 						"string"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
+			"Name": "DomainDisabledSave",
+			"Docs": "DomainDisabledSave saves the Disabled field of a domain. A disabled domain\nrejects incoming/outgoing messages involving the domain and does not request new\nTLS certificats with ACME.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "disabled",
+					"Typewords": [
+						"bool"
 					]
 				}
 			],
@@ -3330,6 +3381,13 @@
 			"Docs": "",
 			"Fields": [
 				{
+					"Name": "Disabled",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
 					"Name": "Description",
 					"Docs": "",
 					"Typewords": [
@@ -3972,6 +4030,13 @@
 					"Docs": "",
 					"Typewords": [
 						"int64"
+					]
+				},
+				{
+					"Name": "LoginDisabled",
+					"Docs": "",
+					"Typewords": [
+						"string"
 					]
 				},
 				{

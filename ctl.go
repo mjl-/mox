@@ -328,7 +328,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		*/
 
 		to := ctl.xread()
-		a, addr, err := store.OpenEmail(log, to)
+		a, addr, err := store.OpenEmail(log, to, false)
 		ctl.xcheck(err, "lookup destination address")
 
 		msgFile, err := store.CreateMessageTemp(log, "ctl-deliver")
@@ -367,7 +367,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		account := ctl.xread()
 		pw := ctl.xread()
 
-		acc, err := store.OpenAccount(log, account)
+		acc, err := store.OpenAccount(log, account, false)
 		ctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
@@ -965,17 +965,28 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 	case "domainadd":
 		/* protocol:
 		> "domainadd"
+		> disabled as "true" or "false"
 		> domain
 		> account
 		> localpart
 		< "ok" or error
 		*/
+		var disabled bool
+		switch s := ctl.xread(); s {
+		case "true":
+			disabled = true
+		case "false":
+			disabled = false
+		default:
+			ctl.xcheck(fmt.Errorf("invalid value %q", s), "parsing disabled boolean")
+		}
+
 		domain := ctl.xread()
 		account := ctl.xread()
 		localpart := ctl.xread()
 		d, err := dns.ParseDomain(domain)
 		ctl.xcheck(err, "parsing domain")
-		err = admin.DomainAdd(ctx, d, account, smtp.Localpart(localpart))
+		err = admin.DomainAdd(ctx, disabled, d, account, smtp.Localpart(localpart))
 		ctl.xcheck(err, "adding domain")
 		ctl.xwriteok()
 
@@ -990,6 +1001,30 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		ctl.xcheck(err, "parsing domain")
 		err = admin.DomainRemove(ctx, d)
 		ctl.xcheck(err, "removing domain")
+		ctl.xwriteok()
+
+	case "domaindisabled":
+		/* protocol:
+		> "domaindisabled"
+		> "true" or "false"
+		> domain
+		< "ok" or error
+		*/
+		domain := ctl.xread()
+		var disabled bool
+		switch s := ctl.xread(); s {
+		case "true":
+			disabled = true
+		case "false":
+			disabled = false
+		default:
+			ctl.xerror("bad boolean value")
+		}
+		err := admin.DomainSave(ctx, domain, func(d *config.Domain) error {
+			d.Disabled = disabled
+			return nil
+		})
+		ctl.xcheck(err, "saving domain")
 		ctl.xwriteok()
 
 	case "accountadd":
@@ -1014,6 +1049,46 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		account := ctl.xread()
 		err := admin.AccountRemove(ctx, account)
 		ctl.xcheck(err, "removing account")
+		ctl.xwriteok()
+
+	case "accountdisabled":
+		/* protocol:
+		> "accountdisabled"
+		> account
+		> message (if empty, then enabled)
+		< "ok" or error
+		*/
+		account := ctl.xread()
+		message := ctl.xread()
+
+		acc, err := store.OpenAccount(log, account, false)
+		ctl.xcheck(err, "open account")
+		defer func() {
+			err := acc.Close()
+			log.Check(err, "closing account")
+		}()
+
+		err = admin.AccountSave(ctx, account, func(acc *config.Account) {
+			acc.LoginDisabled = message
+		})
+		ctl.xcheck(err, "saving account")
+
+		err = acc.SessionsClear(ctx, ctl.log)
+		ctl.xcheck(err, "clearing active web sessions")
+
+		ctl.xwriteok()
+
+	case "accountenable":
+		/* protocol:
+		> "accountenable"
+		> account
+		< "ok" or error
+		*/
+		account := ctl.xread()
+		err := admin.AccountSave(ctx, account, func(acc *config.Account) {
+			acc.LoginDisabled = ""
+		})
+		ctl.xcheck(err, "enabling account")
 		ctl.xwriteok()
 
 	case "tlspubkeylist":
@@ -1079,7 +1154,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		if name != "" {
 			tlspubkey.Name = name
 		}
-		acc, _, err := store.OpenEmail(ctl.log, loginAddress)
+		acc, _, err := store.OpenEmail(ctl.log, loginAddress, false)
 		ctl.xcheck(err, "open account for address")
 		defer func() {
 			err := acc.Close()
@@ -1341,7 +1416,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		account := ctl.xread()
 
 		xretrain := func(name string) {
-			acc, err := store.OpenAccount(log, name)
+			acc, err := store.OpenAccount(log, name, false)
 			ctl.xcheck(err, "open account")
 			defer func() {
 				if acc != nil {
@@ -1417,7 +1492,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		< stream
 		*/
 		account := ctl.xread()
-		acc, err := store.OpenAccount(log, account)
+		acc, err := store.OpenAccount(log, account, false)
 		ctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
@@ -1492,7 +1567,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		const batchSize = 10000
 
 		xfixmsgsize := func(accName string) {
-			acc, err := store.OpenAccount(log, accName)
+			acc, err := store.OpenAccount(log, accName, false)
 			ctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
@@ -1627,7 +1702,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		const batchSize = 100
 
 		xreparseAccount := func(accName string) {
-			acc, err := store.OpenAccount(log, accName)
+			acc, err := store.OpenAccount(log, accName, false)
 			ctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
@@ -1703,7 +1778,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, shutdown func()) {
 		w := ctl.writer()
 
 		xreassignThreads := func(accName string) {
-			acc, err := store.OpenAccount(log, accName)
+			acc, err := store.OpenAccount(log, accName, false)
 			ctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()

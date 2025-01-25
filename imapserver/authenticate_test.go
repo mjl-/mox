@@ -81,6 +81,28 @@ func TestAuthenticatePlain(t *testing.T) {
 	tc.readstatus("ok")
 }
 
+func TestLoginDisabled(t *testing.T) {
+	tc := start(t)
+	defer tc.close()
+
+	acc, err := store.OpenAccount(pkglog, "disabled", false)
+	tcheck(t, err, "open account")
+	err = acc.SetPassword(pkglog, "test1234")
+	tcheck(t, err, "set password")
+	err = acc.Close()
+	tcheck(t, err, "close account")
+
+	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000disabled@mox.example\u0000test1234")))
+	tc.xcode("")
+	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000disabled@mox.example\u0000bogus")))
+	tc.xcode("AUTHENTICATIONFAILED")
+
+	tc.transactf("no", "login disabled@mox.example test1234")
+	tc.xcode("")
+	tc.transactf("no", "login disabled@mox.example bogus")
+	tc.xcode("AUTHENTICATIONFAILED")
+}
+
 func TestAuthenticateSCRAMSHA1(t *testing.T) {
 	testAuthenticateSCRAM(t, false, "SCRAM-SHA-1", sha1.New)
 }
@@ -269,7 +291,7 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	tc.close()
 
 	// No preauth, other mechanism must be for same account.
-	acc, err := store.OpenAccount(pkglog, "other")
+	acc, err := store.OpenAccount(pkglog, "other", false)
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(pkglog, "test1234")
 	tcheck(t, err, "set password")

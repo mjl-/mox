@@ -67,7 +67,7 @@ func setup(t *testing.T) (*store.Account, func()) {
 	tcheck(t, err, "mtastsdb init")
 	err = tlsrptdb.Init()
 	tcheck(t, err, "tlsrptdb init")
-	acc, err := store.OpenAccount(log, "mjl")
+	acc, err := store.OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(log, "testtest")
 	tcheck(t, err, "set password")

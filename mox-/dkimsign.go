@@ -54,6 +54,10 @@ func DKIMSign(ctx context.Context, log mlog.Log, from smtp.Path, smtputf8 bool, 
 			continue
 		}
 
+		if confDom.Disabled {
+			return "", ErrDomainDisabled
+		}
+
 		selectors := DKIMSelectors(confDom.DKIM)
 		dkimHeaders, err := dkim.Sign(ctx, log.Logger, from.Localpart, fd, selectors, smtputf8, bytes.NewReader(data))
 		if err != nil {

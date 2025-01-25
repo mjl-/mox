@@ -619,7 +619,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	// account directories when handling "all other files" below.
 	accounts := map[string]struct{}{}
 	for _, accName := range mox.Conf.Accounts() {
-		acc, err := store.OpenAccount(ctl.log, accName)
+		acc, err := store.OpenAccount(ctl.log, accName, false)
 		if err != nil {
 			xerrx("opening account for copying (will try to copy as regular files later)", err, slog.String("account", accName))
 			continue

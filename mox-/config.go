@@ -214,6 +214,18 @@ func (c *Config) Accounts() (l []string) {
 	return
 }
 
+func (c *Config) AccountsDisabled() (all, disabled []string) {
+	c.withDynamicLock(func() {
+		for name, conf := range c.Dynamic.Accounts {
+			all = append(all, name)
+			if conf.LoginDisabled != "" {
+				disabled = append(disabled, name)
+			}
+		}
+	})
+	return
+}
+
 // DomainLocalparts returns a mapping of encoded localparts to account names for a
 // domain, and encoded localparts to aliases. An empty localpart is a catchall
 // destination for a domain.
@@ -243,6 +255,16 @@ func (c *Config) DomainLocalparts(d dns.Domain) (map[string]string, map[string]c
 func (c *Config) Domain(d dns.Domain) (dom config.Domain, ok bool) {
 	c.withDynamicLock(func() {
 		dom, ok = c.Dynamic.Domains[d.Name()]
+	})
+	return
+}
+
+func (c *Config) DomainConfigs() (doms []config.Domain) {
+	c.withDynamicLock(func() {
+		doms = make([]config.Domain, 0, len(c.Dynamic.Domains))
+		for _, d := range c.Dynamic.Domains {
+			doms = append(doms, d)
+		}
 	})
 	return
 }
@@ -306,6 +328,12 @@ func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 			// Do not allow TLS certificates for domains for which we only accept DMARC/TLS
 			// reports as external party.
 			if dom.ReportsOnly {
+				continue
+			}
+
+			// Do not fetch TLS certs for disabled domains. The A/AAAA records may not be
+			// configured or still point to a previous machine before a migration.
+			if dom.Disabled {
 				continue
 			}
 
@@ -1339,6 +1367,16 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			addAccountErrorf("cannot set RejectsMailbox to inbox, messages will be removed automatically from the rejects mailbox")
 		}
 		checkMailboxNormf(acc.RejectsMailbox, "rejects mailbox", addErrorf)
+
+		if len(acc.LoginDisabled) > 256 {
+			addAccountErrorf("message for disabled login must be <256 characters")
+		}
+		for _, c := range acc.LoginDisabled {
+			// For IMAP and SMTP. IMAP only allows UTF8 after "ENABLE IMAPrev2".
+			if c < ' ' || c >= 0x7f {
+				addAccountErrorf("message cannot contain control characters including newlines, and must be ascii-only")
+			}
+		}
 
 		if acc.AutomaticJunkFlags.JunkMailboxRegexp != "" {
 			r, err := regexp.Compile(acc.AutomaticJunkFlags.JunkMailboxRegexp)

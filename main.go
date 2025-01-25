@@ -145,10 +145,14 @@ var commands = []struct {
 	{"config describe-static", cmdConfigDescribeStatic},
 	{"config account add", cmdConfigAccountAdd},
 	{"config account rm", cmdConfigAccountRemove},
+	{"config account disable", cmdConfigAccountDisable},
+	{"config account enable", cmdConfigAccountEnable},
 	{"config address add", cmdConfigAddressAdd},
 	{"config address rm", cmdConfigAddressRemove},
 	{"config domain add", cmdConfigDomainAdd},
 	{"config domain rm", cmdConfigDomainRemove},
+	{"config domain disable", cmdConfigDomainDisable},
+	{"config domain enable", cmdConfigDomainEnable},
 	{"config tlspubkey list", cmdConfigTlspubkeyList},
 	{"config tlspubkey get", cmdConfigTlspubkeyGet},
 	{"config tlspubkey add", cmdConfigTlspubkeyAdd},
@@ -679,13 +683,19 @@ date version.
 }
 
 func cmdConfigDomainAdd(c *cmd) {
-	c.params = "domain account [localpart]"
+	c.params = "[-disabled] domain account [localpart]"
 	c.help = `Adds a new domain to the configuration and reloads the configuration.
 
 The account is used for the postmaster mailboxes the domain, including as DMARC and
 TLS reporting. Localpart is the "username" at the domain for this account. If
 must be set if and only if account does not yet exist.
+
+The domain can be created in disabled mode, preventing automatically requesting
+TLS certificates with ACME, and rejecting incoming/outgoing messages involving
+the domain, but allowing further configuration of the domain.
 `
+	var disabled bool
+	c.flag.BoolVar(&disabled, "disabled", false, "disable the new domain")
 	args := c.Parse()
 	if len(args) != 2 && len(args) != 3 {
 		c.Usage()
@@ -699,11 +709,16 @@ must be set if and only if account does not yet exist.
 		localpart, err = smtp.ParseLocalpart(args[2])
 		xcheckf(err, "parsing localpart")
 	}
-	ctlcmdConfigDomainAdd(xctl(), d, args[1], localpart)
+	ctlcmdConfigDomainAdd(xctl(), disabled, d, args[1], localpart)
 }
 
-func ctlcmdConfigDomainAdd(ctl *ctl, domain dns.Domain, account string, localpart smtp.Localpart) {
+func ctlcmdConfigDomainAdd(ctl *ctl, disabled bool, domain dns.Domain, account string, localpart smtp.Localpart) {
 	ctl.xwrite("domainadd")
+	if disabled {
+		ctl.xwrite("true")
+	} else {
+		ctl.xwrite("false")
+	}
 	ctl.xwrite(domain.Name())
 	ctl.xwrite(account)
 	ctl.xwrite(string(localpart))
@@ -733,6 +748,51 @@ func ctlcmdConfigDomainRemove(ctl *ctl, d dns.Domain) {
 	ctl.xwrite(d.Name())
 	ctl.xreadok()
 	fmt.Printf("domain removed, remember to remove dns records for %s\n", d)
+}
+
+func cmdConfigDomainDisable(c *cmd) {
+	c.params = "domain"
+	c.help = `Disable a domain and reload the configuration.
+
+This is a dangerous operation. Incoming/outgoing messages involving this domain
+will be rejected.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	d := xparseDomain(args[0], "domain")
+	mustLoadConfig()
+	ctlcmdConfigDomainDisabled(xctl(), d, true)
+	fmt.Printf("domain disabled")
+}
+
+func cmdConfigDomainEnable(c *cmd) {
+	c.params = "domain"
+	c.help = `Enable a domain and reload the configuration.
+
+Incoming/outgoing messages involving this domain will be accepted again.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	d := xparseDomain(args[0], "domain")
+	mustLoadConfig()
+	ctlcmdConfigDomainDisabled(xctl(), d, false)
+}
+
+func ctlcmdConfigDomainDisabled(ctl *ctl, d dns.Domain, disabled bool) {
+	ctl.xwrite("domaindisabled")
+	ctl.xwrite(d.Name())
+	if disabled {
+		ctl.xwrite("true")
+	} else {
+		ctl.xwrite("false")
+	}
+	ctl.xreadok()
 }
 
 func cmdConfigAliasList(c *cmd) {
@@ -928,6 +988,52 @@ func ctlcmdConfigAccountRemove(ctl *ctl, account string) {
 	ctl.xwrite(account)
 	ctl.xreadok()
 	fmt.Println("account removed")
+}
+
+func cmdConfigAccountDisable(c *cmd) {
+	c.params = "account message"
+	c.help = `Disable login for an account, showing message to users when they try to login.
+
+Incoming email will still be accepted for the account, and queued email from the
+account will still be delivered. No new login sessions are possible.
+
+Message must be non-empty, ascii-only without control characters including
+newline, and maximum 256 characters because it is used in SMTP/IMAP.
+`
+	args := c.Parse()
+	if len(args) != 2 {
+		c.Usage()
+	}
+	if args[1] == "" {
+		log.Fatalf("message must be non-empty")
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAccountDisabled(xctl(), args[0], args[1])
+	fmt.Println("account disabled")
+}
+
+func cmdConfigAccountEnable(c *cmd) {
+	c.params = "account"
+	c.help = `Enable login again for an account.
+
+Login attempts by the user no long result in an error message.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	mustLoadConfig()
+	ctlcmdConfigAccountDisabled(xctl(), args[0], "")
+	fmt.Println("account enabled")
+}
+
+func ctlcmdConfigAccountDisabled(ctl *ctl, account, loginDisabled string) {
+	ctl.xwrite("accountdisabled")
+	ctl.xwrite(account)
+	ctl.xwrite(loginDisabled)
+	ctl.xreadok()
 }
 
 func cmdConfigTlspubkeyList(c *cmd) {
@@ -3165,7 +3271,7 @@ open, or is not running.
 	}
 
 	mustLoadConfig()
-	a, err := store.OpenAccount(c.log, args[0])
+	a, err := store.OpenAccount(c.log, args[0], false)
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -3223,7 +3329,7 @@ open, or is not running.
 	}
 
 	mustLoadConfig()
-	a, err := store.OpenAccount(c.log, args[0])
+	a, err := store.OpenAccount(c.log, args[0], false)
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -3317,7 +3423,7 @@ open, or is not running.
 	}
 
 	mustLoadConfig()
-	a, err := store.OpenAccount(c.log, args[0])
+	a, err := store.OpenAccount(c.log, args[0], false)
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {
@@ -3438,7 +3544,7 @@ func cmdEnsureParsed(c *cmd) {
 	}
 
 	mustLoadConfig()
-	a, err := store.OpenAccount(c.log, args[0])
+	a, err := store.OpenAccount(c.log, args[0], false)
 	xcheckf(err, "open account")
 	defer func() {
 		if err := a.Close(); err != nil {

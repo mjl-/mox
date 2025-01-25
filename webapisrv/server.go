@@ -54,7 +54,7 @@ var (
 	metricSubmission = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "mox_webapi_submission_total",
-			Help: "Webapi message submission results, known values (those ending with error are server errors): ok, badfrom, messagelimiterror, recipientlimiterror, queueerror, storesenterror.",
+			Help: "Webapi message submission results, known values (those ending with error are server errors): ok, badfrom, messagelimiterror, recipientlimiterror, queueerror, storesenterror, domaindisabled.",
 		},
 		[]string{
 			"result",
@@ -431,15 +431,20 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	var err error
-	acc, err = store.OpenEmailAuth(log, email, password)
+	acc, err = store.OpenEmailAuth(log, email, password, true)
 	if err != nil {
 		mox.LimiterFailedAuth.Add(remoteIP, t0, 1)
-		if errors.Is(err, mox.ErrDomainNotFound) || errors.Is(err, mox.ErrAddressNotFound) || errors.Is(err, store.ErrUnknownCredentials) {
+		if errors.Is(err, mox.ErrDomainNotFound) || errors.Is(err, mox.ErrAddressNotFound) || errors.Is(err, store.ErrUnknownCredentials) || errors.Is(err, store.ErrLoginDisabled) {
 			log.Debug("bad http basic authentication credentials")
 			metricResults.WithLabelValues(fn, "badauth").Inc()
 			authResult = "badcreds"
+			msg := "use http basic auth with email address as username"
+			if errors.Is(err, store.ErrLoginDisabled) {
+				authResult = "logindisabled"
+				msg = "login is disabled for this account"
+			}
 			w.Header().Set("WWW-Authenticate", "Basic realm=webapi")
-			http.Error(w, "401 - unauthorized - use http basic auth with email address as username", http.StatusUnauthorized)
+			http.Error(w, "401 - unauthorized - "+msg, http.StatusUnauthorized)
 			return
 		}
 		writeError(webapi.Error{Code: "server", Message: "error verifying credentials"})
@@ -624,7 +629,10 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 	addresses := append(append(m.To, m.CC...), m.BCC...)
 
 	// Check if from address is allowed for account.
-	if !mox.AllowMsgFrom(acc.Name, from.Address) {
+	if ok, disabled := mox.AllowMsgFrom(acc.Name, from.Address); disabled {
+		metricSubmission.WithLabelValues("domaindisabled").Inc()
+		return resp, webapi.Error{Code: "domainDisabled", Message: "domain of from-address is temporarily disabled"}
+	} else if !ok {
 		metricSubmission.WithLabelValues("badfrom").Inc()
 		return resp, webapi.Error{Code: "badFrom", Message: "from-address not configured for account"}
 	}
@@ -961,6 +969,9 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 	var msgPrefix string
 	fd := from.Address.Domain
 	confDom, _ := mox.Conf.Domain(fd)
+	if confDom.Disabled {
+		xcheckuserf(mox.ErrDomainDisabled, "checking domain")
+	}
 	selectors := mox.DKIMSelectors(confDom.DKIM)
 	if len(selectors) > 0 {
 		dkimHeaders, err := dkim.Sign(ctx, log.Logger, from.Address.Localpart, fd, selectors, smtputf8, dataFile)

@@ -245,7 +245,7 @@ Accounts:
 
 	// Create three accounts.
 	// First account without messages.
-	accTest0, err := store.OpenAccount(c.log, "test0")
+	accTest0, err := store.OpenAccount(c.log, "test0", false)
 	xcheckf(err, "open account test0")
 	err = accTest0.ThreadingWait(c.log)
 	xcheckf(err, "wait for threading to finish")
@@ -253,7 +253,7 @@ Accounts:
 	xcheckf(err, "close account")
 
 	// Second account with one message.
-	accTest1, err := store.OpenAccount(c.log, "test1")
+	accTest1, err := store.OpenAccount(c.log, "test1", false)
 	xcheckf(err, "open account test1")
 	err = accTest1.ThreadingWait(c.log)
 	xcheckf(err, "wait for threading to finish")
@@ -313,7 +313,7 @@ Accounts:
 	xcheckf(err, "close account")
 
 	// Third account with two messages and junkfilter.
-	accTest2, err := store.OpenAccount(c.log, "test2")
+	accTest2, err := store.OpenAccount(c.log, "test2", false)
 	xcheckf(err, "open account test2")
 	err = accTest2.ThreadingWait(c.log)
 	xcheckf(err, "wait for threading to finish")

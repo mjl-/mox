@@ -65,10 +65,14 @@ any parameters. Followed by the help and usage information for each command.
 	mox config describe-static >mox.conf
 	mox config account add account address
 	mox config account rm account
+	mox config account disable account message
+	mox config account enable account
 	mox config address add address account
 	mox config address rm address
-	mox config domain add domain account [localpart]
+	mox config domain add [-disabled] domain account [localpart]
 	mox config domain rm domain
+	mox config domain disable domain
+	mox config domain enable domain
 	mox config tlspubkey list [account]
 	mox config tlspubkey get fingerprint
 	mox config tlspubkey add address [name] < cert.pem
@@ -967,6 +971,26 @@ All data for the account will be removed.
 
 	usage: mox config account rm account
 
+# mox config account disable
+
+Disable login for an account, showing message to users when they try to login.
+
+Incoming email will still be accepted for the account, and queued email from the
+account will still be delivered. No new login sessions are possible.
+
+Message must be non-empty, ascii-only without control characters including
+newline, and maximum 256 characters because it is used in SMTP/IMAP.
+
+	usage: mox config account disable account message
+
+# mox config account enable
+
+Enable login again for an account.
+
+Login attempts by the user no long result in an error message.
+
+	usage: mox config account enable account
+
 # mox config address add
 
 Adds an address to an account and reloads the configuration.
@@ -992,7 +1016,13 @@ The account is used for the postmaster mailboxes the domain, including as DMARC 
 TLS reporting. Localpart is the "username" at the domain for this account. If
 must be set if and only if account does not yet exist.
 
-	usage: mox config domain add domain account [localpart]
+The domain can be created in disabled mode, preventing automatically requesting
+TLS certificates with ACME, and rejecting incoming/outgoing messages involving
+the domain, but allowing further configuration of the domain.
+
+	usage: mox config domain add [-disabled] domain account [localpart]
+	  -disabled
+	    	disable the new domain
 
 # mox config domain rm
 
@@ -1002,6 +1032,23 @@ This is a dangerous operation. Incoming email delivery for this domain will be
 rejected.
 
 	usage: mox config domain rm domain
+
+# mox config domain disable
+
+Disable a domain and reload the configuration.
+
+This is a dangerous operation. Incoming/outgoing messages involving this domain
+will be rejected.
+
+	usage: mox config domain disable domain
+
+# mox config domain enable
+
+Enable a domain and reload the configuration.
+
+Incoming/outgoing messages involving this domain will be accepted again.
+
+	usage: mox config domain enable domain
 
 # mox config tlspubkey list
 

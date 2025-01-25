@@ -256,7 +256,7 @@ func importStart(log mlog.Log, accName string, f *os.File, skipMailboxPrefix str
 		tr = tar.NewReader(gzr)
 	}
 
-	acc, err := store.OpenAccount(log, accName)
+	acc, err := store.OpenAccount(log, accName, false)
 	if err != nil {
 		return "", false, fmt.Errorf("open acount: %v", err)
 	}

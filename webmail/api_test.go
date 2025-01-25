@@ -61,7 +61,7 @@ func TestAPI(t *testing.T) {
 	log := mlog.New("webmail", nil)
 	err := mtastsdb.Init(false)
 	tcheck(t, err, "mtastsdb init")
-	acc, err := store.OpenAccount(log, "mjl")
+	acc, err := store.OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
 	const pw0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
 	const pw1 = "tést    "                      // PRECIS normalized, with NFC.
@@ -141,6 +141,22 @@ func TestAPI(t *testing.T) {
 		testLogin("bad@bad.example", pw0, "user:loginFailed", "user:error")
 	}
 	testLogin("bad@bad.example", pw0, "user:error")
+
+	acc2, err := store.OpenAccount(log, "disabled", false)
+	tcheck(t, err, "open account")
+	err = acc2.SetPassword(log, "test1234")
+	tcheck(t, err, "set password")
+	acc2.Close()
+	tcheck(t, err, "close account")
+
+	mox.LimitersInit()
+	loginReqInfo2 := requestInfo{log, "disabled@mox.example", nil, "", httptest.NewRecorder(), &http.Request{RemoteAddr: "1.1.1.1:1234"}}
+	loginctx2 := context.WithValue(ctxbg, requestInfoCtxKey, loginReqInfo2)
+	loginCookie2 := &http.Cookie{Name: "webmaillogin"}
+	loginCookie2.Value = api.LoginPrep(loginctx2)
+	loginReqInfo2.Request.Header = http.Header{"Cookie": []string{loginCookie2.String()}}
+	tneedErrorCode(t, "user:loginFailed", func() { api.Login(loginctx2, loginCookie2.Value, "disabled@mox.example", "test1234") })
+	tneedErrorCode(t, "user:loginFailed", func() { api.Login(loginctx2, loginCookie2.Value, "disabled@mox.example", "bogus") })
 
 	// Context with different IP, for clear rate limit history.
 	reqInfo := requestInfo{log, "mjl@mox.example", acc, "", nil, &http.Request{RemoteAddr: "127.0.0.1:1234"}}
@@ -422,6 +438,15 @@ func TestAPI(t *testing.T) {
 	tneedError(t, func() {
 		api.MessageSubmit(ctx, SubmitMessage{
 			From:     "mjl@mox.example",
+			TextBody: "test",
+		})
+	})
+
+	// Message from disabled domain.
+	tneedError(t, func() {
+		api.MessageSubmit(ctx, SubmitMessage{
+			From:     "mjl@disabled.example",
+			To:       []string{"mjl@mox.example"},
 			TextBody: "test",
 		})
 	})

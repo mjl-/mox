@@ -19,7 +19,7 @@ func TestThreadingUpgrade(t *testing.T) {
 	os.RemoveAll("../testdata/store/data")
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
-	acc, err := OpenAccount(log, "mjl")
+	acc, err := OpenAccount(log, "mjl", true)
 	tcheck(t, err, "open account")
 	defer func() {
 		err = acc.Close()
@@ -143,7 +143,7 @@ func TestThreadingUpgrade(t *testing.T) {
 	tcheck(t, err, "closing db")
 
 	// Open the account again, that should get the account upgraded. Wait for upgrade to finish.
-	acc, err = OpenAccount(log, "mjl")
+	acc, err = OpenAccount(log, "mjl", true)
 	tcheck(t, err, "open account")
 	err = acc.ThreadingWait(log)
 	tcheck(t, err, "wait for threading")

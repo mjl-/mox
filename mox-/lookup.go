@@ -11,13 +11,15 @@ import (
 
 var (
 	ErrDomainNotFound  = errors.New("domain not found")
+	ErrDomainDisabled  = errors.New("message/transaction involving temporarily disabled domain")
 	ErrAddressNotFound = errors.New("address not found")
 )
 
 // LookupAddress looks up the account for localpart and domain.
 //
-// Can return ErrDomainNotFound and ErrAddressNotFound.
-func LookupAddress(localpart smtp.Localpart, domain dns.Domain, allowPostmaster, allowAlias bool) (accountName string, alias *config.Alias, canonicalAddress string, dest config.Destination, rerr error) {
+// Can return ErrDomainNotFound and ErrAddressNotFound. If checkDomainDisabled is
+// set, returns ErrDomainDisabled if domain is disabled.
+func LookupAddress(localpart smtp.Localpart, domain dns.Domain, allowPostmaster, allowAlias, checkDomainDisabled bool) (accountName string, alias *config.Alias, canonicalAddress string, dest config.Destination, rerr error) {
 	if strings.EqualFold(string(localpart), "postmaster") {
 		localpart = "postmaster"
 	}
@@ -58,6 +60,9 @@ func LookupAddress(localpart smtp.Localpart, domain dns.Domain, allowPostmaster,
 		// considered local/authoritative during delivery.
 		return "", nil, "", config.Destination{}, ErrDomainNotFound
 	}
+	if d.Disabled && checkDomainDisabled {
+		return "", nil, "", config.Destination{}, ErrDomainDisabled
+	}
 
 	localpart = CanonicalLocalpart(localpart, d)
 	canonical := smtp.NewAddress(localpart, domain).String()
@@ -97,18 +102,18 @@ func CanonicalLocalpart(localpart smtp.Localpart, d config.Domain) smtp.Localpar
 // AllowMsgFrom returns whether account is allowed to submit messages with address
 // as message From header, based on configured addresses and membership of aliases
 // that allow using its address.
-func AllowMsgFrom(accountName string, msgFrom smtp.Address) bool {
-	accName, alias, _, _, err := LookupAddress(msgFrom.Localpart, msgFrom.Domain, false, true)
+func AllowMsgFrom(accountName string, msgFrom smtp.Address) (ok, domainDisabled bool) {
+	accName, alias, _, _, err := LookupAddress(msgFrom.Localpart, msgFrom.Domain, false, true, true)
 	if err != nil {
-		return false
+		return false, errors.Is(err, ErrDomainDisabled)
 	}
 	if alias != nil && alias.AllowMsgFrom {
 		for _, aa := range alias.ParsedAddresses {
 			if aa.AccountName == accountName {
-				return true
+				return true, false
 			}
 		}
-		return false
+		return false, false
 	}
-	return accName == accountName
+	return accName == accountName, false
 }

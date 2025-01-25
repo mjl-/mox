@@ -294,7 +294,9 @@ func sendReportDomain(ctx context.Context, log mlog.Log, resolver dns.Resolver, 
 	var confDKIM config.DKIM
 	for {
 		confDom, ok := mox.Conf.Domain(fromDom)
-		if len(confDom.DKIM.Sign) > 0 {
+		if confDom.Disabled {
+			return true, fmt.Errorf("domain is temporarily disabled")
+		} else if len(confDom.DKIM.Sign) > 0 {
 			confDKIM = confDom.DKIM
 			break
 		} else if ok {

@@ -270,7 +270,7 @@ func TestCtl(t *testing.T) {
 
 	// "domainadd"
 	testctl(func(ctl *ctl) {
-		ctlcmdConfigDomainAdd(ctl, dns.Domain{ASCII: "mox2.example"}, "mjl", "")
+		ctlcmdConfigDomainAdd(ctl, false, dns.Domain{ASCII: "mox2.example"}, "mjl", "")
 	})
 
 	// "accountadd"
@@ -297,9 +297,25 @@ func TestCtl(t *testing.T) {
 		ctlcmdConfigAddressRemove(ctl, "mjl3@mox2.example")
 	})
 
+	// "accountdisabled"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAccountDisabled(ctl, "mjl2", "testing")
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigAccountDisabled(ctl, "mjl2", "")
+	})
+
 	// "accountrm"
 	testctl(func(ctl *ctl) {
 		ctlcmdConfigAccountRemove(ctl, "mjl2")
+	})
+
+	// "domaindisabled"
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigDomainDisabled(ctl, dns.Domain{ASCII: "mox2.example"}, true)
+	})
+	testctl(func(ctl *ctl) {
+		ctlcmdConfigDomainDisabled(ctl, dns.Domain{ASCII: "mox2.example"}, false)
 	})
 
 	// "domainrm"
@@ -412,7 +428,7 @@ func TestCtl(t *testing.T) {
 		ctlcmdFixmsgsize(ctl, "mjl")
 	})
 	testctl(func(ctl *ctl) {
-		acc, err := store.OpenAccount(ctl.log, "mjl")
+		acc, err := store.OpenAccount(ctl.log, "mjl", false)
 		tcheck(t, err, "open account")
 		defer func() {
 			acc.Close()

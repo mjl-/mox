@@ -285,7 +285,7 @@ var api;
 		"AutoconfCheckResult": { "Name": "AutoconfCheckResult", "Docs": "", "Fields": [{ "Name": "ClientSettingsDomainIPs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"AutodiscoverCheckResult": { "Name": "AutodiscoverCheckResult", "Docs": "", "Fields": [{ "Name": "Records", "Docs": "", "Typewords": ["[]", "AutodiscoverSRV"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"AutodiscoverSRV": { "Name": "AutodiscoverSRV", "Docs": "", "Fields": [{ "Name": "Target", "Docs": "", "Typewords": ["string"] }, { "Name": "Port", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Priority", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Weight", "Docs": "", "Typewords": ["uint16"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }] },
-		"ConfigDomain": { "Name": "ConfigDomain", "Docs": "", "Fields": [{ "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "ClientSettingsDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }, { "Name": "DKIM", "Docs": "", "Typewords": ["DKIM"] }, { "Name": "DMARC", "Docs": "", "Typewords": ["nullable", "DMARC"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["nullable", "MTASTS"] }, { "Name": "TLSRPT", "Docs": "", "Typewords": ["nullable", "TLSRPT"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["{}", "Alias"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
+		"ConfigDomain": { "Name": "ConfigDomain", "Docs": "", "Fields": [{ "Name": "Disabled", "Docs": "", "Typewords": ["bool"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "ClientSettingsDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }, { "Name": "DKIM", "Docs": "", "Typewords": ["DKIM"] }, { "Name": "DMARC", "Docs": "", "Typewords": ["nullable", "DMARC"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["nullable", "MTASTS"] }, { "Name": "TLSRPT", "Docs": "", "Typewords": ["nullable", "TLSRPT"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["{}", "Alias"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
 		"DKIM": { "Name": "DKIM", "Docs": "", "Fields": [{ "Name": "Selectors", "Docs": "", "Typewords": ["{}", "Selector"] }, { "Name": "Sign", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"Selector": { "Name": "Selector", "Docs": "", "Fields": [{ "Name": "Hash", "Docs": "", "Typewords": ["string"] }, { "Name": "HashEffective", "Docs": "", "Typewords": ["string"] }, { "Name": "Canonicalization", "Docs": "", "Typewords": ["Canonicalization"] }, { "Name": "Headers", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HeadersEffective", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "DontSealHeaders", "Docs": "", "Typewords": ["bool"] }, { "Name": "Expiration", "Docs": "", "Typewords": ["string"] }, { "Name": "PrivateKeyFile", "Docs": "", "Typewords": ["string"] }, { "Name": "Algorithm", "Docs": "", "Typewords": ["string"] }] },
 		"Canonicalization": { "Name": "Canonicalization", "Docs": "", "Fields": [{ "Name": "HeaderRelaxed", "Docs": "", "Typewords": ["bool"] }, { "Name": "BodyRelaxed", "Docs": "", "Typewords": ["bool"] }] },
@@ -298,7 +298,7 @@ var api;
 		"Address": { "Name": "Address", "Docs": "", "Fields": [{ "Name": "Localpart", "Docs": "", "Typewords": ["Localpart"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
 		"Destination": { "Name": "Destination", "Docs": "", "Fields": [{ "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Rulesets", "Docs": "", "Typewords": ["[]", "Ruleset"] }, { "Name": "SMTPError", "Docs": "", "Typewords": ["string"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }] },
 		"Ruleset": { "Name": "Ruleset", "Docs": "", "Fields": [{ "Name": "SMTPMailFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "MsgFromRegexp", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "HeadersRegexp", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "IsForward", "Docs": "", "Typewords": ["bool"] }, { "Name": "ListAllowDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "AcceptRejectsToMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }, { "Name": "VerifiedDNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "ListAllowDNSDomain", "Docs": "", "Typewords": ["Domain"] }] },
-		"Account": { "Name": "Account", "Docs": "", "Fields": [{ "Name": "OutgoingWebhook", "Docs": "", "Typewords": ["nullable", "OutgoingWebhook"] }, { "Name": "IncomingWebhook", "Docs": "", "Typewords": ["nullable", "IncomingWebhook"] }, { "Name": "FromIDLoginAddresses", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "KeepRetiredMessagePeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "KeepRetiredWebhookPeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }, { "Name": "Destinations", "Docs": "", "Typewords": ["{}", "Destination"] }, { "Name": "SubjectPass", "Docs": "", "Typewords": ["SubjectPass"] }, { "Name": "QuotaMessageSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "KeepRejects", "Docs": "", "Typewords": ["bool"] }, { "Name": "AutomaticJunkFlags", "Docs": "", "Typewords": ["AutomaticJunkFlags"] }, { "Name": "JunkFilter", "Docs": "", "Typewords": ["nullable", "JunkFilter"] }, { "Name": "MaxOutgoingMessagesPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxFirstTimeRecipientsPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "NoFirstTimeSenderDelay", "Docs": "", "Typewords": ["bool"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["[]", "AddressAlias"] }] },
+		"Account": { "Name": "Account", "Docs": "", "Fields": [{ "Name": "OutgoingWebhook", "Docs": "", "Typewords": ["nullable", "OutgoingWebhook"] }, { "Name": "IncomingWebhook", "Docs": "", "Typewords": ["nullable", "IncomingWebhook"] }, { "Name": "FromIDLoginAddresses", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "KeepRetiredMessagePeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "KeepRetiredWebhookPeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginDisabled", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }, { "Name": "Destinations", "Docs": "", "Typewords": ["{}", "Destination"] }, { "Name": "SubjectPass", "Docs": "", "Typewords": ["SubjectPass"] }, { "Name": "QuotaMessageSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "KeepRejects", "Docs": "", "Typewords": ["bool"] }, { "Name": "AutomaticJunkFlags", "Docs": "", "Typewords": ["AutomaticJunkFlags"] }, { "Name": "JunkFilter", "Docs": "", "Typewords": ["nullable", "JunkFilter"] }, { "Name": "MaxOutgoingMessagesPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxFirstTimeRecipientsPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "NoFirstTimeSenderDelay", "Docs": "", "Typewords": ["bool"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["[]", "AddressAlias"] }] },
 		"OutgoingWebhook": { "Name": "OutgoingWebhook", "Docs": "", "Fields": [{ "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Authorization", "Docs": "", "Typewords": ["string"] }, { "Name": "Events", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"IncomingWebhook": { "Name": "IncomingWebhook", "Docs": "", "Fields": [{ "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Authorization", "Docs": "", "Typewords": ["string"] }] },
 		"SubjectPass": { "Name": "SubjectPass", "Docs": "", "Fields": [{ "Name": "Period", "Docs": "", "Typewords": ["int64"] }] },
@@ -551,11 +551,11 @@ var api;
 			const params = [domainName];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
-		// Domains returns all configured domain names, in UTF-8 for IDNA domains.
+		// Domains returns all configured domain names.
 		async Domains() {
 			const fn = "Domains";
 			const paramTypes = [];
-			const returnTypes = [["[]", "Domain"]];
+			const returnTypes = [["[]", "ConfigDomain"]];
 			const params = [];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
@@ -591,11 +591,11 @@ var api;
 			const params = [domain];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
-		// Accounts returns the names of all configured accounts.
+		// Accounts returns the names of all configured and all disabled accounts.
 		async Accounts() {
 			const fn = "Accounts";
 			const paramTypes = [];
-			const returnTypes = [["[]", "string"]];
+			const returnTypes = [["[]", "string"], ["[]", "string"]];
 			const params = [];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
@@ -718,11 +718,11 @@ var api;
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// DomainAdd adds a new domain and reloads the configuration.
-		async DomainAdd(domain, accountName, localpart) {
+		async DomainAdd(disabled, domain, accountName, localpart) {
 			const fn = "DomainAdd";
-			const paramTypes = [["string"], ["string"], ["string"]];
+			const paramTypes = [["bool"], ["string"], ["string"], ["string"]];
 			const returnTypes = [];
-			const params = [domain, accountName, localpart];
+			const params = [disabled, domain, accountName, localpart];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// DomainRemove removes an existing domain and reloads the configuration.
@@ -782,6 +782,14 @@ var api;
 			const paramTypes = [["string"], ["int32"], ["int32"], ["int64"], ["bool"]];
 			const returnTypes = [];
 			const params = [accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize, firstTimeSenderDelay];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// AccountLoginDisabledSave saves the LoginDisabled field of an account.
+		async AccountLoginDisabledSave(accountName, loginDisabled) {
+			const fn = "AccountLoginDisabledSave";
+			const paramTypes = [["string"], ["string"]];
+			const returnTypes = [];
+			const params = [accountName, loginDisabled];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// ClientConfigsDomain returns configurations for email clients, IMAP and
@@ -1256,6 +1264,16 @@ var api;
 			const paramTypes = [["string"], ["{}", "Selector"], ["[]", "string"]];
 			const returnTypes = [];
 			const params = [domainName, selectors, sign];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// DomainDisabledSave saves the Disabled field of a domain. A disabled domain
+		// rejects incoming/outgoing messages involving the domain and does not request new
+		// TLS certificats with ACME.
+		async DomainDisabledSave(domainName, disabled) {
+			const fn = "DomainDisabledSave";
+			const paramTypes = [["string"], ["bool"]];
+			const returnTypes = [];
+			const params = [domainName, disabled];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		async AliasAdd(aliaslp, domainName, alias) {
@@ -1916,7 +1934,7 @@ const formatSize = (n) => {
 	return n + ' bytes';
 };
 const index = async () => {
-	const [domains, queueSize, hooksQueueSize, checkUpdatesEnabled, accounts] = await Promise.all([
+	const [domains, queueSize, hooksQueueSize, checkUpdatesEnabled, [accounts, accountsDisabled]] = await Promise.all([
 		client.Domains(),
 		client.QueueSize(),
 		client.HookQueueSize(),
@@ -1924,6 +1942,7 @@ const index = async () => {
 		client.Accounts(),
 	]);
 	let fieldset;
+	let disabled;
 	let domain;
 	let account;
 	let localpart;
@@ -1931,12 +1950,12 @@ const index = async () => {
 	let recvID;
 	let cidElem;
 	return dom.div(crumbs('Mox Admin'), checkUpdatesEnabled ? [] : dom.p(box(yellow, 'Warning: Checking for updates has not been enabled in mox.conf (CheckUpdates: true).', dom.br(), 'Make sure you stay up to date through another mechanism!', dom.br(), 'You have a responsibility to keep the internet-connected software you run up to date and secure!', dom.br(), 'See ', link('https://updates.xmox.nl/changelog'))), dom.p(dom.a('Accounts', attr.href('#accounts')), dom.br(), dom.a('Queue', attr.href('#queue')), ' (' + queueSize + ')', dom.br(), dom.a('Webhook queue', attr.href('#webhookqueue')), ' (' + hooksQueueSize + ')', dom.br()), dom.h2('Domains'), (domains || []).length === 0 ? box(red, 'No domains') :
-		dom.ul((domains || []).map(d => dom.li(dom.a(attr.href('#domains/' + domainName(d)), domainString(d))))), dom.br(), dom.h2('Add domain'), dom.form(async function submit(e) {
+		dom.ul((domains || []).map(d => dom.li(dom.a(attr.href('#domains/' + domainName(d.Domain)), domainString(d.Domain)), d.Disabled ? ' (disabled)' : []))), dom.br(), dom.h2('Add domain'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
-		await check(fieldset, client.DomainAdd(domain.value, account.value, localpart.value));
+		await check(fieldset, client.DomainAdd(disabled.checked, domain.value, account.value, localpart.value));
 		window.location.hash = '#domains/' + domain.value;
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Domain', attr.title('Domain for incoming/outgoing email to add to mox. Can also be a subdomain of a domain already configured.')), dom.br(), domain = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Postmaster/reporting account', attr.title('Account that is considered the owner of this domain. If the account does not yet exist, it will be created and a a localpart is required for the initial email address.')), dom.br(), account = dom.input(attr.required(''), attr.list('accountList')), dom.datalist(attr.id('accountList'), (accounts || []).map(a => dom.option(a)))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Localpart (if new account)', attr.title('Must be set if and only if account does not yet exist. A localpart is the part before the "@"-sign of an email address. An account requires an email address, so creating a new account for a domain requires a localpart to form an initial email address.')), dom.br(), localpart = dom.input()), ' ', dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. Add the required DNS records after adding the domain.')))), dom.br(), dom.h2('Reports'), dom.div(dom.a('DMARC', attr.href('#dmarc/reports'))), dom.div(dom.a('TLS', attr.href('#tlsrpt/reports'))), dom.br(), dom.h2('Operations'), dom.div(dom.a('MTA-STS policies', attr.href('#mtasts'))), dom.div(dom.a('DMARC evaluations', attr.href('#dmarc/evaluations'))), dom.div(dom.a('TLS connection results', attr.href('#tlsrpt/results'))), dom.div(dom.a('DNSBL', attr.href('#dnsbl'))), dom.div(style({ marginTop: '.5ex' }), dom.form(async function submit(e) {
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Domain', attr.title('Domain for incoming/outgoing email to add to mox. Can also be a subdomain of a domain already configured.')), dom.br(), domain = dom.input(attr.required(''))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Postmaster/reporting account', attr.title('Account that is considered the owner of this domain. If the account does not yet exist, it will be created and a a localpart is required for the initial email address.')), dom.br(), account = dom.input(attr.required(''), attr.list('accountList')), dom.datalist(attr.id('accountList'), (accounts || []).map(a => dom.option(attr.value(a), a + (accountsDisabled?.includes(a) ? ' (disabled)' : ''))))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Localpart (if new account)', attr.title('Must be set if and only if account does not yet exist. A localpart is the part before the "@"-sign of an email address. An account requires an email address, so creating a new account for a domain requires a localpart to form an initial email address.')), dom.br(), localpart = dom.input()), ' ', dom.label(disabled = dom.input(attr.type('checkbox')), ' Disabled', attr.title('Disabled domains do fetch new certificates with ACME and do not accept incoming or outgoing messages involving the domain. Accounts and addresses referencing a disabled domain can be created. USeful during/before migrations.')), ' ', dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. Add the required DNS records after adding the domain.')))), dom.br(), dom.h2('Reports'), dom.div(dom.a('DMARC', attr.href('#dmarc/reports'))), dom.div(dom.a('TLS', attr.href('#tlsrpt/reports'))), dom.br(), dom.h2('Operations'), dom.div(dom.a('MTA-STS policies', attr.href('#mtasts'))), dom.div(dom.a('DMARC evaluations', attr.href('#dmarc/evaluations'))), dom.div(dom.a('TLS connection results', attr.href('#tlsrpt/results'))), dom.div(dom.a('DNSBL', attr.href('#dnsbl'))), dom.div(style({ marginTop: '.5ex' }), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		dom._kids(cidElem);
@@ -2000,7 +2019,7 @@ const inlineBox = (color, ...l) => dom.span(style({
 	borderRadius: '3px',
 }), l);
 const accounts = async () => {
-	const [accounts, domains] = await Promise.all([
+	const [[accounts, accountsDisabled], domains] = await Promise.all([
 		client.Accounts(),
 		client.Domains(),
 	]);
@@ -2010,7 +2029,7 @@ const accounts = async () => {
 	let account;
 	let accountModified = false;
 	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Accounts'), dom.h2('Accounts'), (accounts || []).length === 0 ? dom.p('No accounts') :
-		dom.ul((accounts || []).map(s => dom.li(dom.a(s, attr.href('#accounts/' + s))))), dom.br(), dom.h2('Add account'), dom.form(async function submit(e) {
+		dom.ul((accounts || []).map(s => dom.li(dom.a(attr.href('#accounts/' + s), s), accountsDisabled?.includes(s) ? ' (disabled)' : ''))), dom.br(), dom.h2('Add account'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		await check(fieldset, client.AccountAdd(account.value, localpart.value + '@' + domain.value));
@@ -2019,7 +2038,7 @@ const accounts = async () => {
 		if (!accountModified) {
 			account.value = localpart.value;
 		}
-	})), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain', attr.title('The domain of the email address, after the "@".')), dom.br(), domain = dom.select(attr.required(''), (domains || []).map(d => dom.option(domainName(d))))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account name', attr.title('An account has a password, and email address(es) (possibly at different domains). Its messages and the message index database are are stored in the file system in a directory with the name of the account. An account name is not an email address. Use a name like a unix user name, or the localpart (the part before the "@") of the initial address.')), dom.br(), account = dom.input(attr.required(''), function change() {
+	})), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain', attr.title('The domain of the email address, after the "@".')), dom.br(), domain = dom.select(attr.required(''), (domains || []).map(d => dom.option(domainName(d.Domain))))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account name', attr.title('An account has a password, and email address(es) (possibly at different domains). Its messages and the message index database are are stored in the file system in a directory with the name of the account. An account name is not an email address. Use a name like a unix user name, or the localpart (the part before the "@") of the initial address.')), dom.br(), account = dom.input(attr.required(''), function change() {
 		accountModified = true;
 	})), ' ', dom.submitbutton('Add account', attr.title('The account will be added and the config reloaded.')))));
 };
@@ -2144,7 +2163,7 @@ const account = async (name) => {
 		}
 		return v * mult;
 	};
-	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), name), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Action'))), dom.tbody(Object.keys(config.Destinations || {}).length === 0 ? dom.tr(dom.td(attr.colspan('2'), '(None, login disabled)')) : [], Object.keys(config.Destinations || {}).map(k => {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), name), config.LoginDisabled ? dom.p(box(yellow, 'Warning: Login for this account is disabled with message: ' + config.LoginDisabled)) : [], dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Action'))), dom.tbody(Object.keys(config.Destinations || {}).length === 0 ? dom.tr(dom.td(attr.colspan('2'), '(None, login disabled)')) : [], Object.keys(config.Destinations || {}).map(k => {
 		let v = k;
 		const t = k.split('@');
 		if (t.length > 1) {
@@ -2175,7 +2194,7 @@ const account = async (name) => {
 		await check(fieldset, client.AddressAdd(address, name));
 		form.reset();
 		window.location.reload(); // todo: only reload the destinations
-	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an email address. If empty, a catchall address is configured for the domain.')), dom.br(), localpart = dom.input()), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain'), dom.br(), domain = dom.select((domains || []).map(d => dom.option(domainName(d), domainName(d) === config.Domain ? attr.selected('') : [])))), ' ', dom.submitbutton('Add address'))), dom.br(), dom.h2('Alias (list) membership'), dom.table(dom.thead(dom.tr(dom.th('Alias address', attr.title('Messages sent to this address will be delivered to all members of the alias/list. A member does not receive a message if their address is in the message From header.')), dom.th('Subscription address'), dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')), dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')), dom.th('Members visible', attr.title('If enabled, members can see the addresses of other members.')))), (config.Aliases || []).length === 0 ? dom.tr(dom.td(attr.colspan('6'), 'None')) : [], (config.Aliases || []).sort((a, b) => a.Alias.LocalpartStr < b.Alias.LocalpartStr ? -1 : (domainName(a.Alias.Domain) < domainName(b.Alias.Domain) ? -1 : 1)).map(a => dom.tr(dom.td(dom.a(prewrap(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain)), attr.href('#domains/' + domainName(a.Alias.Domain) + '/alias/' + encodeURIComponent(a.Alias.LocalpartStr)))), dom.td(prewrap(a.SubscriptionAddress)), dom.td(a.Alias.PostPublic ? 'Anyone' : 'Members only'), dom.td(a.Alias.AllowMsgFrom ? 'Yes' : 'No'), dom.td(a.Alias.ListMembers ? 'Yes' : 'No'), dom.td(dom.clickbutton('Remove', async function click(e) {
+	}, fieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an email address. If empty, a catchall address is configured for the domain.')), dom.br(), localpart = dom.input()), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain'), dom.br(), domain = dom.select((domains || []).map(d => dom.option(domainName(d.Domain), domainName(d.Domain) === config.Domain ? attr.selected('') : [])))), ' ', dom.submitbutton('Add address'))), dom.br(), dom.h2('Alias (list) membership'), dom.table(dom.thead(dom.tr(dom.th('Alias address', attr.title('Messages sent to this address will be delivered to all members of the alias/list. A member does not receive a message if their address is in the message From header.')), dom.th('Subscription address'), dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')), dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')), dom.th('Members visible', attr.title('If enabled, members can see the addresses of other members.')))), (config.Aliases || []).length === 0 ? dom.tr(dom.td(attr.colspan('6'), 'None')) : [], (config.Aliases || []).sort((a, b) => a.Alias.LocalpartStr < b.Alias.LocalpartStr ? -1 : (domainName(a.Alias.Domain) < domainName(b.Alias.Domain) ? -1 : 1)).map(a => dom.tr(dom.td(dom.a(prewrap(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain)), attr.href('#domains/' + domainName(a.Alias.Domain) + '/alias/' + encodeURIComponent(a.Alias.LocalpartStr)))), dom.td(prewrap(a.SubscriptionAddress)), dom.td(a.Alias.PostPublic ? 'Anyone' : 'Members only'), dom.td(a.Alias.AllowMsgFrom ? 'Yes' : 'No'), dom.td(a.Alias.ListMembers ? 'Yes' : 'No'), dom.td(dom.clickbutton('Remove', async function click(e) {
 		await check(e.target, client.AliasAddressesRemove(a.Alias.LocalpartStr, domainName(a.Alias.Domain), [a.SubscriptionAddress]));
 		window.location.reload(); // todo: reload less
 	}))))), dom.br(), dom.h2('Settings'), dom.form(fieldsetSettings = dom.fieldset(dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum outgoing messages per day', attr.title('Maximum number of outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 1000. MaxOutgoingMessagesPerDay in configuration file.')), dom.br(), maxOutgoingMessagesPerDay = dom.input(attr.type('number'), attr.required(''), attr.value('' + (config.MaxOutgoingMessagesPerDay || 1000)))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Maximum first-time recipients per day', attr.title('Maximum number of first-time recipients in outgoing messages for this account in a 24 hour window. This limits the damage to recipients and the reputation of this mail server in case of account compromise. Default 200. MaxFirstTimeRecipientsPerDay in configuration file.')), dom.br(), maxFirstTimeRecipientsPerDay = dom.input(attr.type('number'), attr.required(''), attr.value('' + (config.MaxFirstTimeRecipientsPerDay || 200)))), dom.label(style({ display: 'block', marginBottom: '.5ex' }), dom.span('Disk usage quota: Maximum total message size ', attr.title('Default maximum total message size in bytes for the account, overriding any globally configured default maximum size if non-zero. A negative value can be used to have no limit in case there is a limit by default. Attempting to add new messages to an account beyond its maximum total size will result in an error. Useful to prevent a single account from filling storage. Use units "k" for kilobytes, or "m", "g", "t".')), dom.br(), quotaMessageSize = dom.input(attr.value(formatQuotaSize(config.QuotaMessageSize))), ' Current usage is ', formatQuotaSize(Math.floor(diskUsage / (1024 * 1024)) * 1024 * 1024), '.'), dom.div(style({ display: 'block', marginBottom: '.5ex' }), dom.label(firstTimeSenderDelay = dom.input(attr.type('checkbox'), config.NoFirstTimeSenderDelay ? [] : attr.checked('')), ' ', dom.span('Delay deliveries from first-time senders.', attr.title('To slow down potential spammers, when the message is misclassified as non-junk. Turning off the delay can be useful when the account processes messages automatically and needs fast responses.')))), dom.submitbutton('Save')), async function submit(e) {
@@ -2207,7 +2226,25 @@ const account = async (name) => {
 	}), dom.br(), dom.h2('TLS public keys', attr.title('For TLS client authentication with certificates, for IMAP and/or submission (SMTP). Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration or constraints are not verified.')), dom.table(dom.thead(dom.tr(dom.th('Login address'), dom.th('Name'), dom.th('Type'), dom.th('No IMAP "preauth"', attr.title('New IMAP immediate TLS connections authenticated with a client certificate are automatically switched to "authenticated" state with an untagged IMAP "preauth" message by default. IMAP connections have a state machine specifying when commands are allowed. Authenticating is not allowed while in the "authenticated" state. Enable this option to work around clients that would try to authenticated anyway.')), dom.th('Fingerprint'))), dom.tbody(tlspubkeys?.length ? [] : dom.tr(dom.td(attr.colspan('5'), 'None')), (tlspubkeys || []).map(tpk => {
 		const row = dom.tr(dom.td(tpk.LoginAddress), dom.td(tpk.Name), dom.td(tpk.Type), dom.td(tpk.NoIMAPPreauth ? 'Enabled' : ''), dom.td(tpk.Fingerprint));
 		return row;
-	}))), dom.br(), RoutesEditor('account-specific', transports, config.Routes || [], async (routes) => await client.AccountRoutesSave(name, routes)), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove account', async function click(e) {
+	}))), dom.br(), RoutesEditor('account-specific', transports, config.Routes || [], async (routes) => await client.AccountRoutesSave(name, routes)), dom.br(), dom.h2('Danger'), dom.div(config.LoginDisabled ? [
+		box(yellow, 'Account login is currently disabled.'),
+		dom.clickbutton('Enable account login', async function click(e) {
+			if (window.confirm('Are you sure you want to enable login to this account?')) {
+				await check(e.target, client.AccountLoginDisabledSave(name, ''));
+				window.location.reload(); // todo: update account and rerender.
+			}
+		})
+	] : dom.clickbutton('Disable account login', function click() {
+		let fieldset;
+		let loginDisabled;
+		const close = popup(dom.h1('Disable account login'), dom.form(async function submit(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			await check(fieldset, client.AccountLoginDisabledSave(name, loginDisabled.value));
+			close();
+			window.location.reload(); // todo: update account and rerender.
+		}, fieldset = dom.fieldset(dom.label(dom.div('Message to user'), loginDisabled = dom.input(attr.required(''), style({ width: '100%' })), dom.p(style({ fontStyle: 'italic' }), 'Will be shown to user on login attempts. Single line, no special and maximum 256 characters since message is used in IMAP/SMTP.')), dom.div(dom.submitbutton('Disable login')))));
+	})), dom.br(), dom.clickbutton('Remove account', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this account? All account data, including messages will be removed.')) {
 			return;
@@ -2272,16 +2309,16 @@ const formatDuration = (v, goDuration) => {
 const domain = async (d) => {
 	const end = new Date();
 	const start = new Date(new Date().getTime() - 30 * 24 * 3600 * 1000);
-	const [dmarcSummaries, tlsrptSummaries, [localpartAccounts, localpartAliases], dnsdomain, clientConfigs, accounts, domainConfig, transports] = await Promise.all([
+	const [dmarcSummaries, tlsrptSummaries, [localpartAccounts, localpartAliases], clientConfigs, [accounts, accountsDisabled], domainConfig, transports] = await Promise.all([
 		client.DMARCSummaries(start, end, d),
 		client.TLSRPTSummaries(start, end, d),
 		client.DomainLocalparts(d),
-		client.ParseDomain(d),
 		client.ClientConfigsDomain(d),
 		client.Accounts(),
 		client.DomainConfig(d),
 		client.Transports(),
 	]);
+	const dnsdomain = domainConfig.Domain;
 	let addrForm;
 	let addrFieldset;
 	let addrLocalpart;
@@ -2352,7 +2389,7 @@ const domain = async (d) => {
 			window.location.reload(); // todo: reload only dkim section
 		}, fieldset = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.div(dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Selector', attr.title('Used in the DKIM-Signature header, and used to form a DNS record under ._domainkey.<domain>.'), dom.div(selector = dom.input(attr.required(''), attr.value(defaultSelector())))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Algorithm', attr.title('For signing messages. RSA is common at the time of writing, not all mail servers recognize ed25519 signature.'), dom.div(algorithm = dom.select(dom.option('rsa'), dom.option('ed25519')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Hash', attr.title("Used in signing messages. Don't use sha1 unless you understand the consequences."), dom.div(hash = dom.select(dom.option('sha256')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Canonicalization - header', attr.title('Canonicalization processes the message headers before signing. Relaxed allows more whitespace changes, making it more likely for DKIM signatures to validate after transit through servers that make whitespace modifications. Simple is more strict.'), dom.div(canonHeader = dom.select(dom.option('relaxed'), dom.option('simple')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Canonicalization - body', attr.title('Like canonicalization for headers, but for the bodies.'), dom.div(canonBody = dom.select(dom.option('relaxed'), dom.option('simple')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Signature lifetime', attr.title('How long a signature remains valid. Should be as long as a message may take to be delivered. The signature must be valid at the time a message is being delivered to the final destination.'), dom.div(lifetime = dom.input(attr.value('3d'), attr.required('')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Seal headers', attr.title("DKIM-signatures cover headers. If headers are not sealed, additional message headers can be added with the same key without invalidating the signature. This may confuse software about which headers are trustworthy. Sealing is the safer option."), dom.div(seal = dom.input(attr.type('checkbox'), attr.checked(''))))), dom.div(dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Headers (optional)', attr.title('Headers to sign. If left empty, a set of standard headers are signed. The (standard set of) headers are most easily edited after creating the selector/key.'), dom.div(headers = dom.textarea(attr.rows('15')))))), dom.div(dom.submitbutton('Add')))));
 	};
-	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Domain ' + domainString(dnsdomain)), dom.ul(dom.li(dom.a('Required DNS records', attr.href('#domains/' + d + '/dnsrecords'))), dom.li(dom.a('Check current actual DNS records and domain configuration', attr.href('#domains/' + d + '/dnscheck')))), dom.br(), dom.h2('Client configuration'), dom.p('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password. ', dom.span('Explicitly configure', attr.title('To prevent authentication mechanism downgrade attempts that may result in clients sending plain text passwords to a MitM.')), ' the first supported authentication mechanism: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5.'), dom.table(dom.thead(dom.tr(dom.th('Protocol'), dom.th('Host'), dom.th('Port'), dom.th('Listener'), dom.th('Note'))), dom.tbody((clientConfigs.Entries || []).map(e => dom.tr(dom.td(e.Protocol), dom.td(domainString(e.Host)), dom.td('' + e.Port), dom.td('' + e.Listener), dom.td('' + e.Note))))), dom.br(), dom.h2('DMARC aggregate reports summary'), renderDMARCSummaries(dmarcSummaries || []), dom.br(), dom.h2('TLS reports summary'), renderTLSRPTSummaries(tlsrptSummaries || []), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th('Action'))), dom.tbody(Object.entries(localpartAccounts).map(t => dom.tr(dom.td(prewrap(t[0]) || '(catchall)'), dom.td(dom.a(t[1], attr.href('#accounts/' + t[1]))), dom.td(dom.clickbutton('Remove', async function click(e) {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Domain ' + domainString(dnsdomain)), domainConfig.Disabled ? dom.p(box(yellow, 'Warning: Domain is disabled. Incoming/outgoing messages involving this domain are rejected and ACME for new TLS certificates is disabled.')) : [], dom.ul(dom.li(dom.a('Required DNS records', attr.href('#domains/' + d + '/dnsrecords'))), dom.li(dom.a('Check current actual DNS records and domain configuration', attr.href('#domains/' + d + '/dnscheck')))), dom.br(), dom.h2('Client configuration'), dom.p('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password. ', dom.span('Explicitly configure', attr.title('To prevent authentication mechanism downgrade attempts that may result in clients sending plain text passwords to a MitM.')), ' the first supported authentication mechanism: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5.'), dom.table(dom.thead(dom.tr(dom.th('Protocol'), dom.th('Host'), dom.th('Port'), dom.th('Listener'), dom.th('Note'))), dom.tbody((clientConfigs.Entries || []).map(e => dom.tr(dom.td(e.Protocol), dom.td(domainString(e.Host)), dom.td('' + e.Port), dom.td('' + e.Listener), dom.td('' + e.Note))))), dom.br(), dom.h2('DMARC aggregate reports summary'), renderDMARCSummaries(dmarcSummaries || []), dom.br(), dom.h2('TLS reports summary'), renderTLSRPTSummaries(tlsrptSummaries || []), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th('Action'))), dom.tbody(Object.entries(localpartAccounts).map(t => dom.tr(dom.td(prewrap(t[0]) || '(catchall)'), dom.td(dom.a(t[1], attr.href('#accounts/' + t[1]))), dom.td(dom.clickbutton('Remove', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this address? If it is a member of an alias, it will be removed from the alias.')) {
 			return;
@@ -2365,7 +2402,7 @@ const domain = async (d) => {
 		await check(addrFieldset, client.AddressAdd(addrLocalpart.value + '@' + d, addrAccount.value));
 		addrForm.reset();
 		window.location.reload(); // todo: only reload the addresses
-	}, addrFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an address. An empty localpart is the catchall destination/address for the domain.')), dom.br(), addrLocalpart = dom.input()), '@', domainName(dnsdomain), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account', attr.title('Account to assign the address to.')), dom.br(), addrAccount = dom.select(attr.required(''), (accounts || []).map(a => dom.option(a)))), ' ', dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')))), dom.br(), dom.h2('Aliases (lists)'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')), dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')), dom.th('Members visible', attr.title('If enabled, members can see the addresses of other members.')))), Object.values(localpartAliases).length === 0 ? dom.tr(dom.td(attr.colspan('4'), 'None')) : [], Object.values(localpartAliases).sort((a, b) => a.LocalpartStr < b.LocalpartStr ? -1 : 1).map(a => {
+	}, addrFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The localpart is the part before the "@"-sign of an address. An empty localpart is the catchall destination/address for the domain.')), dom.br(), addrLocalpart = dom.input()), '@', domainName(dnsdomain), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account', attr.title('Account to assign the address to.')), dom.br(), addrAccount = dom.select(attr.required(''), (accounts || []).map(a => dom.option(attr.value(a), a + (accountsDisabled?.includes(a) ? ' (disabled)' : ''))))), ' ', dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')))), dom.br(), dom.h2('Aliases (lists)'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')), dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')), dom.th('Members visible', attr.title('If enabled, members can see the addresses of other members.')))), Object.values(localpartAliases).length === 0 ? dom.tr(dom.td(attr.colspan('4'), 'None')) : [], Object.values(localpartAliases).sort((a, b) => a.LocalpartStr < b.LocalpartStr ? -1 : 1).map(a => {
 		return dom.tr(dom.td(dom.a(prewrap(a.LocalpartStr), attr.href('#domains/' + d + '/alias/' + encodeURIComponent(a.LocalpartStr)))), dom.td(a.PostPublic ? 'Anyone' : 'Members only'), dom.td(a.AllowMsgFrom ? 'Yes' : 'No'), dom.td(a.ListMembers ? 'Yes' : 'No'));
 	})), dom.br(), dom.h2('Add alias (list)'), dom.form(async function submit(e) {
 		e.preventDefault();
@@ -2415,7 +2452,7 @@ const domain = async (d) => {
 				domainConfig.DMARC = null;
 			}
 		}
-	}, dmarcFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Address-part before the @ that accepts DMARC reports. Must be non-internationalized. Recommended value: dmarc-reports.'), dom.div('Localpart'), dmarcLocalpart = dom.input(attr.value(domainConfig.DMARC?.Localpart || ''))), dom.label(attr.title("Alternative domain for reporting address, for incoming reports. Typically empty, causing this domain to be used. Can be used to receive reports for domains that aren't fully hosted on this server. Configure such a domain as a hosted domain without making all the DNS changes, and configure this field with a domain that is fully hosted on this server, so the localpart and the domain of this field form a reporting address. Then only update the DMARC DNS record for the hosted domain, ensuring the reporting address is specified in its \"rua\" field as shown in the DNS settings for this domain. Unicode name."), dom.div('Alternative domain (optional)'), dmarcDomain = dom.input(attr.value(domainConfig.DMARC?.Domain || ''))), dom.label(attr.title('Account to deliver to.'), dom.div('Account'), dmarcAccount = dom.select(dom.option(''), (accounts || []).map(s => dom.option(s, s === domainConfig.DMARC?.Account ? attr.selected('') : [])))), dom.label(attr.title('Mailbox to deliver to, e.g. DMARC.'), dom.div('Mailbox'), dmarcMailbox = dom.input(attr.value(domainConfig.DMARC?.Mailbox || ''))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.br(), dom.h2('TLS reporting address'), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
+	}, dmarcFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Address-part before the @ that accepts DMARC reports. Must be non-internationalized. Recommended value: dmarc-reports.'), dom.div('Localpart'), dmarcLocalpart = dom.input(attr.value(domainConfig.DMARC?.Localpart || ''))), dom.label(attr.title("Alternative domain for reporting address, for incoming reports. Typically empty, causing this domain to be used. Can be used to receive reports for domains that aren't fully hosted on this server. Configure such a domain as a hosted domain without making all the DNS changes, and configure this field with a domain that is fully hosted on this server, so the localpart and the domain of this field form a reporting address. Then only update the DMARC DNS record for the hosted domain, ensuring the reporting address is specified in its \"rua\" field as shown in the DNS settings for this domain. Unicode name."), dom.div('Alternative domain (optional)'), dmarcDomain = dom.input(attr.value(domainConfig.DMARC?.Domain || ''))), dom.label(attr.title('Account to deliver to.'), dom.div('Account'), dmarcAccount = dom.select(dom.option(''), (accounts || []).map(s => dom.option(attr.value(s), s + (accountsDisabled?.includes(s) ? ' (disabled)' : ''), s === domainConfig.DMARC?.Account ? attr.selected('') : [])))), dom.label(attr.title('Mailbox to deliver to, e.g. DMARC.'), dom.div('Mailbox'), dmarcMailbox = dom.input(attr.value(domainConfig.DMARC?.Mailbox || ''))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.br(), dom.h2('TLS reporting address'), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		if (!tlsrptLocalpart.value) {
@@ -2434,7 +2471,7 @@ const domain = async (d) => {
 				domainConfig.TLSRPT = null;
 			}
 		}
-	}, tlsrptFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Address-part before the @ that accepts TLSRPT reports. Must be non-internationalized. Recommended value: tlsrpt-reports.'), dom.div('Localpart'), tlsrptLocalpart = dom.input(attr.value(domainConfig.TLSRPT?.Localpart || ''))), dom.label(attr.title("Alternative domain for reporting address, for incoming reports. Typically empty, causing the domain wherein this config exists to be used. Can be used to receive reports for domains that aren't fully hosted on this server. Configure such a domain as a hosted domain without making all the DNS changes, and configure this field with a domain that is fully hosted on this server, so the localpart and the domain of this field form a reporting address. Then only update the TLSRPT DNS record for the not fully hosted domain, ensuring the reporting address is specified in its \"rua\" field as shown in the suggested DNS settings. Unicode name."), dom.div('Alternative domain (optional)'), tlsrptDomain = dom.input(attr.value(domainConfig.TLSRPT?.Domain || ''))), dom.label(attr.title('Account to deliver to.'), dom.div('Account'), tlsrptAccount = dom.select(dom.option(''), (accounts || []).map(s => dom.option(s, s === domainConfig.TLSRPT?.Account ? attr.selected('') : [])))), dom.label(attr.title('Mailbox to deliver to, e.g. TLSRPT.'), dom.div('Mailbox'), tlsrptMailbox = dom.input(attr.value(domainConfig.TLSRPT?.Mailbox || ''))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.br(), dom.h2('MTA-STS policy', attr.title("MTA-STS is a mechanism that allows publishing a policy with requirements for WebPKI-verified SMTP STARTTLS connections for email delivered to a domain. Existence of a policy is announced in a DNS TXT record (often unprotected/unverified, MTA-STS's weak spot). If a policy exists, it is fetched with a WebPKI-verified HTTPS request. The policy can indicate that WebPKI-verified SMTP STARTTLS is required, and which MX hosts (optionally with a wildcard pattern) are allowd. MX hosts to deliver to are still taken from DNS (again, not necessarily protected/verified), but messages will only be delivered to domains matching the MX hosts from the published policy. Mail servers look up the MTA-STS policy when first delivering to a domain, then keep a cached copy, periodically checking the DNS record if a new policy is available, and fetching and caching it if so. To update a policy, first serve a new policy with an updated policy ID, then update the DNS record (not the other way around). To remove an enforced policy, publish an updated policy with mode \"none\" for a long enough period so all cached policies have been refreshed (taking DNS TTL and policy max age into account), then remove the policy from DNS, wait for TTL to expire, and stop serving the policy.")), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
+	}, tlsrptFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Address-part before the @ that accepts TLSRPT reports. Must be non-internationalized. Recommended value: tlsrpt-reports.'), dom.div('Localpart'), tlsrptLocalpart = dom.input(attr.value(domainConfig.TLSRPT?.Localpart || ''))), dom.label(attr.title("Alternative domain for reporting address, for incoming reports. Typically empty, causing the domain wherein this config exists to be used. Can be used to receive reports for domains that aren't fully hosted on this server. Configure such a domain as a hosted domain without making all the DNS changes, and configure this field with a domain that is fully hosted on this server, so the localpart and the domain of this field form a reporting address. Then only update the TLSRPT DNS record for the not fully hosted domain, ensuring the reporting address is specified in its \"rua\" field as shown in the suggested DNS settings. Unicode name."), dom.div('Alternative domain (optional)'), tlsrptDomain = dom.input(attr.value(domainConfig.TLSRPT?.Domain || ''))), dom.label(attr.title('Account to deliver to.'), dom.div('Account'), tlsrptAccount = dom.select(dom.option(''), (accounts || []).map(s => dom.option(attr.value(s), s + (accountsDisabled?.includes(s) ? ' (disabled)' : ''), s === domainConfig.TLSRPT?.Account ? attr.selected('') : [])))), dom.label(attr.title('Mailbox to deliver to, e.g. TLSRPT.'), dom.div('Mailbox'), tlsrptMailbox = dom.input(attr.value(domainConfig.TLSRPT?.Mailbox || ''))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.br(), dom.h2('MTA-STS policy', attr.title("MTA-STS is a mechanism that allows publishing a policy with requirements for WebPKI-verified SMTP STARTTLS connections for email delivered to a domain. Existence of a policy is announced in a DNS TXT record (often unprotected/unverified, MTA-STS's weak spot). If a policy exists, it is fetched with a WebPKI-verified HTTPS request. The policy can indicate that WebPKI-verified SMTP STARTTLS is required, and which MX hosts (optionally with a wildcard pattern) are allowd. MX hosts to deliver to are still taken from DNS (again, not necessarily protected/verified), but messages will only be delivered to domains matching the MX hosts from the published policy. Mail servers look up the MTA-STS policy when first delivering to a domain, then keep a cached copy, periodically checking the DNS record if a new policy is available, and fetching and caching it if so. To update a policy, first serve a new policy with an updated policy ID, then update the DNS record (not the other way around). To remove an enforced policy, publish an updated policy with mode \"none\" for a long enough period so all cached policies have been refreshed (taking DNS TTL and policy max age into account), then remove the policy from DNS, wait for TTL to expire, and stop serving the policy.")), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		let mx = [];
@@ -2545,7 +2582,18 @@ const domain = async (d) => {
 		})), dom.tfoot(dom.tr(dom.td(attr.colspan('9'), dom.submitbutton('Save'), ' ', dom.clickbutton('Add key/selector', function click() {
 			popupDKIMAdd();
 		})))))));
-	})(), dom.br(), dom.h2('External checks'), dom.ul(dom.li(link('https://internet.nl/mail/' + dnsdomain.ASCII + '/', 'Check configuration at internet.nl'))), dom.br(), dom.h2('Danger'), dom.clickbutton('Remove domain', async function click(e) {
+	})(), dom.br(), dom.h2('External checks'), dom.ul(dom.li(link('https://internet.nl/mail/' + dnsdomain.ASCII + '/', 'Check configuration at internet.nl'))), dom.br(), dom.h2('Danger'), dom.div(domainConfig.Disabled ? [
+		box(yellow, 'Domain is currently disabled.'),
+		dom.clickbutton('Enable domain', async function click(e) {
+			if (window.confirm('Are you sure you want to enable this domain? Incoming/outgoing messages involving this domain will be accepted, and ACME for new TLS certificates will be enabled.')) {
+				check(e.target, client.DomainDisabledSave(d, false));
+			}
+		})
+	] : dom.clickbutton('Disable domain', async function click(e) {
+		if (window.confirm('Are you sure you want to disable this domain? Incoming/outgoing messages involving this domain will be rejected with a temporary error code, and ACME for new TLS certificates will be disabled.')) {
+			check(e.target, client.DomainDisabledSave(d, true));
+		}
+	})), dom.br(), dom.clickbutton('Remove domain', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this domain?')) {
 			return;

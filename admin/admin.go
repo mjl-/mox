@@ -420,11 +420,12 @@ func DKIMRemove(ctx context.Context, domain, selector dns.Domain) (rerr error) {
 // accountName is used for DMARC/TLS report and potentially for the postmaster address.
 // If the account does not exist, it is created with localpart. Localpart must be
 // set only if the account does not yet exist.
-func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, localpart smtp.Localpart) (rerr error) {
+func DomainAdd(ctx context.Context, disabled bool, domain dns.Domain, accountName string, localpart smtp.Localpart) (rerr error) {
 	log := pkglog.WithContext(ctx)
 	defer func() {
 		if rerr != nil {
 			log.Errorx("adding domain", rerr,
+				slog.Any("disabled", disabled),
 				slog.Any("domain", domain),
 				slog.String("account", accountName),
 				slog.Any("localpart", localpart))
@@ -465,6 +466,7 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 			log.Check(err, "cleaning up file after error", slog.String("path", f))
 		}
 	}()
+	confDomain.Disabled = disabled
 
 	if _, ok := c.Accounts[accountName]; ok && localpart != "" {
 		return fmt.Errorf("%w: account already exists (leave localpart empty when using an existing account)", ErrRequest)
@@ -491,7 +493,7 @@ func DomainAdd(ctx context.Context, domain dns.Domain, accountName string, local
 	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
-	log.Info("domain added", slog.Any("domain", domain))
+	log.Info("domain added", slog.Any("domain", domain), slog.Bool("disabled", disabled))
 	cleanupFiles = nil // All good, don't cleanup.
 	return nil
 }

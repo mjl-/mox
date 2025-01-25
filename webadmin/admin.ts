@@ -331,7 +331,7 @@ const formatSize = (n: number) => {
 }
 
 const index = async () => {
-	const [domains, queueSize, hooksQueueSize, checkUpdatesEnabled, accounts] = await Promise.all([
+	const [domains, queueSize, hooksQueueSize, checkUpdatesEnabled, [accounts, accountsDisabled]] = await Promise.all([
 		client.Domains(),
 		client.QueueSize(),
 		client.HookQueueSize(),
@@ -340,6 +340,7 @@ const index = async () => {
 	])
 
 	let fieldset: HTMLFieldSetElement
+	let disabled: HTMLInputElement
 	let domain: HTMLInputElement
 	let account: HTMLInputElement
 	let localpart: HTMLInputElement
@@ -359,7 +360,7 @@ const index = async () => {
 		dom.h2('Domains'),
 		(domains || []).length === 0 ? box(red, 'No domains') :
 		dom.ul(
-			(domains || []).map(d => dom.li(dom.a(attr.href('#domains/'+domainName(d)), domainString(d)))),
+			(domains || []).map(d => dom.li(dom.a(attr.href('#domains/'+domainName(d.Domain)), domainString(d.Domain)), d.Disabled ? ' (disabled)' : [])),
 		),
 		dom.br(),
 		dom.h2('Add domain'),
@@ -367,7 +368,7 @@ const index = async () => {
 			async function submit(e: SubmitEvent) {
 				e.preventDefault()
 				e.stopPropagation()
-				await check(fieldset, client.DomainAdd(domain.value, account.value, localpart.value))
+				await check(fieldset, client.DomainAdd(disabled.checked, domain.value, account.value, localpart.value))
 				window.location.hash = '#domains/' + domain.value
 			},
 			fieldset=dom.fieldset(
@@ -383,7 +384,7 @@ const index = async () => {
 					dom.span('Postmaster/reporting account', attr.title('Account that is considered the owner of this domain. If the account does not yet exist, it will be created and a a localpart is required for the initial email address.')),
 					dom.br(),
 					account=dom.input(attr.required(''), attr.list('accountList')),
-					dom.datalist(attr.id('accountList'), (accounts || []).map(a => dom.option(a))),
+					dom.datalist(attr.id('accountList'), (accounts || []).map(a => dom.option(attr.value(a), a + (accountsDisabled?.includes(a) ? ' (disabled)' : '')))),
 				),
 				' ',
 				dom.label(
@@ -391,6 +392,12 @@ const index = async () => {
 					dom.span('Localpart (if new account)', attr.title('Must be set if and only if account does not yet exist. A localpart is the part before the "@"-sign of an email address. An account requires an email address, so creating a new account for a domain requires a localpart to form an initial email address.')),
 					dom.br(),
 					localpart=dom.input(),
+				),
+				' ',
+				dom.label(
+					disabled=dom.input(attr.type('checkbox')),
+					' Disabled',
+					attr.title('Disabled domains do fetch new certificates with ACME and do not accept incoming or outgoing messages involving the domain. Accounts and addresses referencing a disabled domain can be created. USeful during/before migrations.'),
 				),
 				' ',
 				dom.submitbutton('Add domain', attr.title('Domain will be added and the config reloaded. Add the required DNS records after adding the domain.')),
@@ -575,7 +582,7 @@ const inlineBox = (color: string, ...l: ElemArg[]) =>
 	)
 
 const accounts = async () => {
-	const [accounts, domains] = await Promise.all([
+	const [[accounts, accountsDisabled], domains] = await Promise.all([
 		client.Accounts(),
 		client.Domains(),
 	])
@@ -594,7 +601,7 @@ const accounts = async () => {
 		dom.h2('Accounts'),
 		(accounts || []).length === 0 ? dom.p('No accounts') :
 		dom.ul(
-			(accounts || []).map(s => dom.li(dom.a(s, attr.href('#accounts/'+s)))),
+			(accounts || []).map(s => dom.li(dom.a(attr.href('#accounts/'+s), s), accountsDisabled?.includes(s) ? ' (disabled)' : '')),
 		),
 		dom.br(),
 		dom.h2('Add account'),
@@ -622,7 +629,7 @@ const accounts = async () => {
 					style({display: 'inline-block'}),
 					dom.span('Domain', attr.title('The domain of the email address, after the "@".')),
 					dom.br(),
-					domain=dom.select(attr.required(''), (domains || []).map(d => dom.option(domainName(d)))),
+					domain=dom.select(attr.required(''), (domains || []).map(d => dom.option(domainName(d.Domain)))),
 				),
 				' ',
 				dom.label(
@@ -812,6 +819,7 @@ const account = async (name: string) => {
 			crumblink('Accounts', '#accounts'),
 			name,
 		),
+		config.LoginDisabled ? dom.p(box(yellow, 'Warning: Login for this account is disabled with message: '+config.LoginDisabled)) : [],
 		dom.h2('Addresses'),
 		dom.table(
 			dom.thead(
@@ -876,7 +884,7 @@ const account = async (name: string) => {
 					style({display: 'inline-block'}),
 					dom.span('Domain'),
 					dom.br(),
-					domain=dom.select((domains || []).map(d => dom.option(domainName(d), domainName(d) === config.Domain ? attr.selected('') : []))),
+					domain=dom.select((domains || []).map(d => dom.option(domainName(d.Domain), domainName(d.Domain) === config.Domain ? attr.selected('') : []))),
 				),
 				' ',
 				dom.submitbutton('Add address'),
@@ -1027,6 +1035,42 @@ const account = async (name: string) => {
 		dom.br(),
 
 		dom.h2('Danger'),
+		dom.div(
+			config.LoginDisabled ? [
+				box(yellow, 'Account login is currently disabled.'),
+				dom.clickbutton('Enable account login', async function click(e: {target: HTMLButtonElement}) {
+					if (window.confirm('Are you sure you want to enable login to this account?')) {
+						await check(e.target, client.AccountLoginDisabledSave(name, ''))
+						window.location.reload() // todo: update account and rerender.
+					}
+				})
+			] : dom.clickbutton('Disable account login', function click() {
+				let fieldset: HTMLFieldSetElement
+				let loginDisabled: HTMLInputElement
+
+				const close = popup(
+					dom.h1('Disable account login'),
+					dom.form(
+						async function submit(e: SubmitEvent) {
+							e.preventDefault()
+							e.stopPropagation()
+							await check(fieldset, client.AccountLoginDisabledSave(name, loginDisabled.value))
+							close()
+							window.location.reload() // todo: update account and rerender.
+						},
+						fieldset=dom.fieldset(
+							dom.label(
+								dom.div('Message to user'),
+								loginDisabled=dom.input(attr.required(''), style({width: '100%'})),
+								dom.p(style({fontStyle: 'italic'}), 'Will be shown to user on login attempts. Single line, no special and maximum 256 characters since message is used in IMAP/SMTP.'),
+							),
+							dom.div(dom.submitbutton('Disable login')),
+						),
+					),
+				)
+			}),
+		),
+		dom.br(),
 		dom.clickbutton('Remove account', async function click(e: MouseEvent) {
 			e.preventDefault()
 			if (!window.confirm('Are you sure you want to remove this account? All account data, including messages will be removed.')) {
@@ -1075,16 +1119,16 @@ const formatDuration = (v: number, goDuration?: boolean) => {
 const domain = async (d: string) => {
 	const end = new Date()
 	const start = new Date(new Date().getTime() - 30*24*3600*1000)
-	const [dmarcSummaries, tlsrptSummaries, [localpartAccounts, localpartAliases], dnsdomain, clientConfigs, accounts, domainConfig, transports] = await Promise.all([
+	const [dmarcSummaries, tlsrptSummaries, [localpartAccounts, localpartAliases], clientConfigs, [accounts, accountsDisabled], domainConfig, transports] = await Promise.all([
 		client.DMARCSummaries(start, end, d),
 		client.TLSRPTSummaries(start, end, d),
 		client.DomainLocalparts(d),
-		client.ParseDomain(d),
 		client.ClientConfigsDomain(d),
 		client.Accounts(),
 		client.DomainConfig(d),
 		client.Transports(),
 	])
+	const dnsdomain = domainConfig.Domain
 
 	let addrForm: HTMLFormElement
 	let addrFieldset: HTMLFieldSetElement
@@ -1255,6 +1299,7 @@ const domain = async (d: string) => {
 			crumblink('Mox Admin', '#'),
 			'Domain ' + domainString(dnsdomain),
 		),
+		domainConfig.Disabled ? dom.p(box(yellow, 'Warning: Domain is disabled. Incoming/outgoing messages involving this domain are rejected and ACME for new TLS certificates is disabled.')) : [],
 		dom.ul(
 			dom.li(dom.a('Required DNS records', attr.href('#domains/' + d + '/dnsrecords'))),
 			dom.li(dom.a('Check current actual DNS records and domain configuration', attr.href('#domains/' + d + '/dnscheck'))),
@@ -1340,7 +1385,7 @@ const domain = async (d: string) => {
 					style({display: 'inline-block'}),
 					dom.span('Account', attr.title('Account to assign the address to.')),
 					dom.br(),
-					addrAccount=dom.select(attr.required(''), (accounts || []).map(a => dom.option(a))),
+					addrAccount=dom.select(attr.required(''), (accounts || []).map(a => dom.option(attr.value(a), a + (accountsDisabled?.includes(a) ? ' (disabled)' : '')))),
 				),
 				' ',
 				dom.submitbutton('Add address', attr.title('Address will be added and the config reloaded.')),
@@ -1510,7 +1555,7 @@ const domain = async (d: string) => {
 					dom.div('Account'),
 					dmarcAccount=dom.select(
 						dom.option(''),
-						(accounts || []).map(s => dom.option(s, s === domainConfig.DMARC?.Account ? attr.selected('') : [])),
+						(accounts || []).map(s => dom.option(attr.value(s), s + (accountsDisabled?.includes(s) ? ' (disabled)' : ''), s === domainConfig.DMARC?.Account ? attr.selected('') : [])),
 					),
 				),
 				dom.label(
@@ -1562,7 +1607,7 @@ const domain = async (d: string) => {
 					dom.div('Account'),
 					tlsrptAccount=dom.select(
 						dom.option(''),
-						(accounts || []).map(s => dom.option(s, s === domainConfig.TLSRPT?.Account ? attr.selected('') : [])),
+						(accounts || []).map(s => dom.option(attr.value(s), s + (accountsDisabled?.includes(s) ? ' (disabled)' : ''), s === domainConfig.TLSRPT?.Account ? attr.selected('') : [])),
 					),
 				),
 				dom.label(
@@ -1801,6 +1846,21 @@ const domain = async (d: string) => {
 		dom.br(),
 
 		dom.h2('Danger'),
+		dom.div(
+			domainConfig.Disabled ? [
+				box(yellow, 'Domain is currently disabled.'),
+				dom.clickbutton('Enable domain', async function click(e: {target: HTMLButtonElement}) {
+					if (window.confirm('Are you sure you want to enable this domain? Incoming/outgoing messages involving this domain will be accepted, and ACME for new TLS certificates will be enabled.')) {
+						check(e.target, client.DomainDisabledSave(d, false))
+					}
+				})
+			] : dom.clickbutton('Disable domain', async function click(e: {target: HTMLButtonElement}) {
+				if (window.confirm('Are you sure you want to disable this domain? Incoming/outgoing messages involving this domain will be rejected with a temporary error code, and ACME for new TLS certificates will be disabled.')) {
+					check(e.target, client.DomainDisabledSave(d, true))
+				}
+			}),
+		),
+		dom.br(),
 		dom.clickbutton('Remove domain', async function click(e: MouseEvent) {
 			e.preventDefault()
 			if (!window.confirm('Are you sure you want to remove this domain?')) {

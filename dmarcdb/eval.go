@@ -1021,7 +1021,7 @@ func dkimSign(ctx context.Context, log mlog.Log, fromAddr smtp.Address, smtputf8
 	for fd != zerodom {
 		confDom, ok := mox.Conf.Domain(fd)
 		selectors := mox.DKIMSelectors(confDom.DKIM)
-		if len(selectors) > 0 {
+		if len(selectors) > 0 && !confDom.Disabled {
 			dkimHeaders, err := dkim.Sign(ctx, log.Logger, fromAddr.Localpart, fd, selectors, smtputf8, mf)
 			if err != nil {
 				log.Errorx("dkim-signing dmarc report, continuing without signature", err)

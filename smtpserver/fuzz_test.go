@@ -37,7 +37,7 @@ func FuzzServer(f *testing.F) {
 	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)
-	acc, err := store.OpenAccount(log, "mjl")
+	acc, err := store.OpenAccount(log, "mjl", false)
 	if err != nil {
 		f.Fatalf("open account: %v", err)
 	}

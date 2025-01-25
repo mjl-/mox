@@ -1532,14 +1532,9 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 	return
 }
 
-// Domains returns all configured domain names, in UTF-8 for IDNA domains.
-func (Admin) Domains(ctx context.Context) []dns.Domain {
-	l := []dns.Domain{}
-	for _, s := range mox.Conf.Domains() {
-		d, _ := dns.ParseDomain(s)
-		l = append(l, d)
-	}
-	return l
+// Domains returns all configured domain names.
+func (Admin) Domains(ctx context.Context) []config.Domain {
+	return mox.Conf.DomainConfigs()
 }
 
 // Domain returns the dns domain for a (potentially unicode as IDNA) domain name.
@@ -1582,20 +1577,20 @@ func (Admin) DomainLocalparts(ctx context.Context, domain string) (localpartAcco
 	return mox.Conf.DomainLocalparts(d)
 }
 
-// Accounts returns the names of all configured accounts.
-func (Admin) Accounts(ctx context.Context) []string {
-	l := mox.Conf.Accounts()
-	sort.Slice(l, func(i, j int) bool {
-		return l[i] < l[j]
+// Accounts returns the names of all configured and all disabled accounts.
+func (Admin) Accounts(ctx context.Context) (all, disabled []string) {
+	all, disabled = mox.Conf.AccountsDisabled()
+	sort.Slice(all, func(i, j int) bool {
+		return all[i] < all[j]
 	})
-	return l
+	return
 }
 
 // Account returns the parsed configuration of an account.
 func (Admin) Account(ctx context.Context, account string) (accountConfig config.Account, diskUsage int64) {
 	log := pkglog.WithContext(ctx)
 
-	acc, err := store.OpenAccount(log, account)
+	acc, err := store.OpenAccount(log, account, false)
 	if err != nil && errors.Is(err, store.ErrAccountUnknown) {
 		xcheckuserf(ctx, err, "looking up account")
 	}
@@ -1951,11 +1946,11 @@ func DomainRecords(ctx context.Context, log mlog.Log, domain string) []string {
 }
 
 // DomainAdd adds a new domain and reloads the configuration.
-func (Admin) DomainAdd(ctx context.Context, domain, accountName, localpart string) {
+func (Admin) DomainAdd(ctx context.Context, disabled bool, domain, accountName, localpart string) {
 	d, err := dns.ParseDomain(domain)
 	xcheckuserf(ctx, err, "parsing domain")
 
-	err = admin.DomainAdd(ctx, d, accountName, smtp.Localpart(norm.NFC.String(localpart)))
+	err = admin.DomainAdd(ctx, disabled, d, accountName, smtp.Localpart(norm.NFC.String(localpart)))
 	xcheckf(ctx, err, "adding domain")
 }
 
@@ -2001,7 +1996,7 @@ func (Admin) SetPassword(ctx context.Context, accountName, password string) {
 	if len(password) < 8 {
 		xusererrorf(ctx, "message must be at least 8 characters")
 	}
-	acc, err := store.OpenAccount(log, accountName)
+	acc, err := store.OpenAccount(log, accountName, false)
 	xcheckf(ctx, err, "open account")
 	defer func() {
 		err := acc.Close()
@@ -2020,6 +2015,26 @@ func (Admin) AccountSettingsSave(ctx context.Context, accountName string, maxOut
 		acc.NoFirstTimeSenderDelay = !firstTimeSenderDelay
 	})
 	xcheckf(ctx, err, "saving account settings")
+}
+
+// AccountLoginDisabledSave saves the LoginDisabled field of an account.
+func (Admin) AccountLoginDisabledSave(ctx context.Context, accountName string, loginDisabled string) {
+	log := pkglog.WithContext(ctx)
+
+	acc, err := store.OpenAccount(log, accountName, false)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+
+	err = admin.AccountSave(ctx, accountName, func(acc *config.Account) {
+		acc.LoginDisabled = loginDisabled
+	})
+	xcheckf(ctx, err, "saving login disabled account")
+
+	err = acc.SessionsClear(ctx, log)
+	xcheckf(ctx, err, "removing current sessions")
 }
 
 // ClientConfigsDomain returns configurations for email clients, IMAP and
@@ -2638,6 +2653,17 @@ func (Admin) DomainDKIMSave(ctx context.Context, domainName string, selectors ma
 		return nil
 	})
 	xcheckf(ctx, err, "saving dkim selector for domain")
+}
+
+// DomainDisabledSave saves the Disabled field of a domain. A disabled domain
+// rejects incoming/outgoing messages involving the domain and does not request new
+// TLS certificats with ACME.
+func (Admin) DomainDisabledSave(ctx context.Context, domainName string, disabled bool) {
+	err := admin.DomainSave(ctx, domainName, func(d *config.Domain) error {
+		d.Disabled = disabled
+		return nil
+	})
+	xcheckf(ctx, err, "saving disabled setting for domain")
 }
 
 func xparseAddress(ctx context.Context, lp, domain string) smtp.Address {

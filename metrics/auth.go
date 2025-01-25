@@ -16,7 +16,7 @@ var (
 			"kind",    // submission, imap, webmail, webapi, webaccount, webadmin (formerly httpaccount, httpadmin)
 			"variant", // login, plain, scram-sha-256, scram-sha-1, cram-md5, weblogin, websessionuse, httpbasic, tlsclientauth.
 			// todo: we currently only use badcreds, but known baduser can be helpful
-			"result", // ok, baduser, badpassword, badcreds, badchanbind, error, aborted
+			"result", // ok, baduser, badpassword, badcreds, badchanbind, error, aborted, badprotocol, logindisabled
 		},
 	)
 

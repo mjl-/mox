@@ -309,7 +309,7 @@ func TestWebmail(t *testing.T) {
 	defer store.Switchboard()()
 
 	log := mlog.New("webmail", nil)
-	acc, err := store.OpenAccount(pkglog, "mjl")
+	acc, err := store.OpenAccount(pkglog, "mjl", false)
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(pkglog, "test1234")
 	tcheck(t, err, "set password")

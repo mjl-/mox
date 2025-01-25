@@ -760,6 +760,19 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 	Domains:
 		x:
 
+			# Disabled domains can be useful during/before migrations. Domains that are
+			# disabled can still be configured like normal, including adding addresses using
+			# the domain to accounts. However, disabled domains: 1. Do not try to fetch ACME
+			# certificates. TLS connections to host names involving the email domain will
+			# fail. A TLS certificate for the hostname (that wil be used as MX) itself will be
+			# requested. 2. Incoming deliveries over SMTP are rejected with a temporary error
+			# '450 4.2.1 recipient domain temporarily disabled'. 3. Submissions over SMTP
+			# using an (envelope) SMTP MAIL FROM address or message 'From' address of a
+			# disabled domain will be rejected with a temporary error '451 4.3.0 sender domain
+			# temporarily disabled'. Note that accounts with addresses at disabled domains can
+			# still log in and read email (unless the account itself is disabled). (optional)
+			Disabled: false
+
 			# Free-form description of domain. (optional)
 			Description:
 
@@ -1027,6 +1040,12 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# Useful for debugging. The time at which to clean up (remove) is calculated at
 			# retire time. E.g. 168h (1 week). (optional)
 			KeepRetiredWebhookPeriod: 0s
+
+			# If non-empty, login attempts on all protocols (e.g. SMTP/IMAP, web interfaces)
+			# is rejected with this error message. Useful during migrations. Incoming
+			# deliveries for addresses of this account are still accepted as normal.
+			# (optional)
+			LoginDisabled:
 
 			# Default domain for account. Deprecated behaviour: If a destination is not a full
 			# address but only a localpart, this domain is added to form a full address.

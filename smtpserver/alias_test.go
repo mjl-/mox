@@ -84,12 +84,12 @@ func TestAliasSubmitMsgFromDenied(t *testing.T) {
 	defer ts.close()
 
 	// Trying to open account by alias should result in proper error.
-	_, _, err := store.OpenEmail(pkglog, "public@mox.example")
+	_, _, err := store.OpenEmail(pkglog, "public@mox.example", false)
 	if err == nil || !errors.Is(err, store.ErrUnknownCredentials) {
 		t.Fatalf("opening alias, got err %v, expected store.ErrUnknownCredentials", err)
 	}
 
-	acc, err := store.OpenAccount(pkglog, "☺")
+	acc, err := store.OpenAccount(pkglog, "☺", false)
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(pkglog, password0)
 	tcheck(t, err, "set password")

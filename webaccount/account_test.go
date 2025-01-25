@@ -98,7 +98,7 @@ func TestAccount(t *testing.T) {
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
 	log := mlog.New("webaccount", nil)
-	acc, err := store.OpenAccount(log, "mjl☺")
+	acc, err := store.OpenAccount(log, "mjl☺", false)
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(log, "test1234")
 	tcheck(t, err, "set password")
@@ -144,6 +144,21 @@ func TestAccount(t *testing.T) {
 	tneedErrorCode(t, "user:loginFailed", func() { api.Login(ctx, loginCookie.Value, "mjl☺@mox.example", "badauth") })
 	tneedErrorCode(t, "user:loginFailed", func() { api.Login(ctx, loginCookie.Value, "baduser@mox.example", "badauth") })
 	tneedErrorCode(t, "user:loginFailed", func() { api.Login(ctx, loginCookie.Value, "baduser@baddomain.example", "badauth") })
+
+	acc2, err := store.OpenAccount(log, "disabled", false)
+	tcheck(t, err, "open account")
+	err = acc2.SetPassword(log, "test1234")
+	tcheck(t, err, "set password")
+	acc2.Close()
+	tcheck(t, err, "close account")
+
+	loginReqInfo2 := requestInfo{"", "", "", httptest.NewRecorder(), &http.Request{RemoteAddr: "1.1.1.1:1234"}}
+	loginctx2 := context.WithValue(ctxbg, requestInfoCtxKey, loginReqInfo2)
+	loginCookie2 := &http.Cookie{Name: "webaccountlogin"}
+	loginCookie2.Value = api.LoginPrep(loginctx2)
+	loginReqInfo2.Request.Header = http.Header{"Cookie": []string{loginCookie2.String()}}
+	tneedErrorCode(t, "user:loginFailed", func() { api.Login(loginctx2, loginCookie2.Value, "disabled@mox.example", "test1234") })
+	tneedErrorCode(t, "user:loginFailed", func() { api.Login(loginctx2, loginCookie2.Value, "disabled@mox.example", "bogus") })
 
 	type httpHeaders [][2]string
 	ctJSON := [2]string{"Content-Type", "application/json; charset=utf-8"}

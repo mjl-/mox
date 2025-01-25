@@ -354,9 +354,9 @@ func deliverDSN(log mlog.Log, m Msg, remoteMTA dsn.NameIP, secodeOpt, errmsg str
 		// senderAccount should already by postmaster, but doesn't hurt to ensure it.
 		senderAccount = mox.Conf.Static.Postmaster.Account
 	}
-	acc, err := store.OpenAccount(log, senderAccount)
+	acc, err := store.OpenAccount(log, senderAccount, false)
 	if err != nil {
-		acc, err = store.OpenAccount(log, mox.Conf.Static.Postmaster.Account)
+		acc, err = store.OpenAccount(log, mox.Conf.Static.Postmaster.Account, false)
 		if err != nil {
 			qlog("looking up postmaster account after sender account was not found", err)
 			return

@@ -378,7 +378,7 @@ func (Account) SetPassword(ctx context.Context, password string) {
 	}
 
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
+	acc, err := store.OpenAccount(log, reqInfo.AccountName, false)
 	xcheckf(ctx, err, "open account")
 	defer func() {
 		err := acc.Close()
@@ -404,7 +404,7 @@ func (Account) Account(ctx context.Context) (account config.Account, storageUsed
 	log := pkglog.WithContext(ctx)
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 
-	acc, err := store.OpenAccount(log, reqInfo.AccountName)
+	acc, err := store.OpenAccount(log, reqInfo.AccountName, false)
 	xcheckf(ctx, err, "open account")
 	defer func() {
 		err := acc.Close()
@@ -731,7 +731,7 @@ func (Account) TLSPublicKeyUpdate(ctx context.Context, pubKey store.TLSPublicKey
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	tpk := xtlspublickey(ctx, reqInfo.AccountName, pubKey.Fingerprint)
 	log := pkglog.WithContext(ctx)
-	acc, _, err := store.OpenEmail(log, pubKey.LoginAddress)
+	acc, _, err := store.OpenEmail(log, pubKey.LoginAddress, false)
 	if err == nil && acc.Name != reqInfo.AccountName {
 		err = store.ErrUnknownCredentials
 	}

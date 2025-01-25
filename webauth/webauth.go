@@ -59,7 +59,9 @@ var BadAuthDelay = time.Second
 // SessionAuth handles login and session storage, used for both account and
 // admin authentication.
 type SessionAuth interface {
-	login(ctx context.Context, log mlog.Log, username, password string) (valid bool, accountName string, rerr error)
+	// Login verifies the password. Valid indicates the attempt was successful. If
+	// disabled is true, the error must be non-nil and contain details.
+	login(ctx context.Context, log mlog.Log, username, password string) (valid bool, disabled bool, accountName string, rerr error)
 
 	// Add a new session for account and login address.
 	add(ctx context.Context, log mlog.Log, accountName string, loginAddress string) (sessionToken store.SessionToken, csrfToken store.CSRFToken, rerr error)
@@ -244,12 +246,15 @@ func Login(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind, coo
 		return "", &sherpa.Error{Code: "user:error", Message: "too many authentication attempts"}
 	}
 
-	valid, accountName, err := sessionAuth.login(ctx, log, username, password)
+	valid, disabled, accountName, err := sessionAuth.login(ctx, log, username, password)
 	var authResult string
 	defer func() {
 		metrics.AuthenticationInc(kind, "weblogin", authResult)
 	}()
-	if err != nil {
+	if disabled {
+		authResult = "logindisabled"
+		return "", &sherpa.Error{Code: "user:loginFailed", Message: err.Error()}
+	} else if err != nil {
 		authResult = "error"
 		return "", fmt.Errorf("evaluating login attempt: %v", err)
 	} else if !valid {

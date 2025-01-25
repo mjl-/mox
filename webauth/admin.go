@@ -39,14 +39,14 @@ type adminSessionAuth struct {
 	sessions map[store.SessionToken]adminSession
 }
 
-func (a *adminSessionAuth) login(ctx context.Context, log mlog.Log, username, password string) (bool, string, error) {
+func (a *adminSessionAuth) login(ctx context.Context, log mlog.Log, username, password string) (valid, disabled bool, name string, rerr error) {
 	a.Lock()
 	defer a.Unlock()
 
 	p := mox.ConfigDirPath(mox.Conf.Static.AdminPasswordFile)
 	buf, err := os.ReadFile(p)
 	if err != nil {
-		return false, "", fmt.Errorf("reading password file: %v", err)
+		return false, false, "", fmt.Errorf("reading password file: %v", err)
 	}
 	passwordhash := strings.TrimSpace(string(buf))
 	// Transform with precis, if valid. ../rfc/8265:679
@@ -55,10 +55,10 @@ func (a *adminSessionAuth) login(ctx context.Context, log mlog.Log, username, pa
 		password = pw
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordhash), []byte(password)); err != nil {
-		return false, "", nil
+		return false, false, "", nil
 	}
 
-	return true, "", nil
+	return true, false, "", nil
 }
 
 func (a *adminSessionAuth) add(ctx context.Context, log mlog.Log, accountName string, loginAddress string) (sessionToken store.SessionToken, csrfToken store.CSRFToken, rerr error) {

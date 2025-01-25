@@ -266,6 +266,7 @@ export interface AutodiscoverSRV {
 }
 
 export interface ConfigDomain {
+	Disabled: boolean
 	Description: string
 	ClientSettingsDomain: string
 	LocalpartCatchallSeparator: string
@@ -384,6 +385,7 @@ export interface Account {
 	FromIDLoginAddresses?: string[] | null
 	KeepRetiredMessagePeriod: number
 	KeepRetiredWebhookPeriod: number
+	LoginDisabled: string
 	Domain: string
 	Description: string
 	FullName: string
@@ -1145,7 +1147,7 @@ export const types: TypenameMap = {
 	"AutoconfCheckResult": {"Name":"AutoconfCheckResult","Docs":"","Fields":[{"Name":"ClientSettingsDomainIPs","Docs":"","Typewords":["[]","string"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]},{"Name":"Warnings","Docs":"","Typewords":["[]","string"]},{"Name":"Instructions","Docs":"","Typewords":["[]","string"]}]},
 	"AutodiscoverCheckResult": {"Name":"AutodiscoverCheckResult","Docs":"","Fields":[{"Name":"Records","Docs":"","Typewords":["[]","AutodiscoverSRV"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]},{"Name":"Warnings","Docs":"","Typewords":["[]","string"]},{"Name":"Instructions","Docs":"","Typewords":["[]","string"]}]},
 	"AutodiscoverSRV": {"Name":"AutodiscoverSRV","Docs":"","Fields":[{"Name":"Target","Docs":"","Typewords":["string"]},{"Name":"Port","Docs":"","Typewords":["uint16"]},{"Name":"Priority","Docs":"","Typewords":["uint16"]},{"Name":"Weight","Docs":"","Typewords":["uint16"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]}]},
-	"ConfigDomain": {"Name":"ConfigDomain","Docs":"","Fields":[{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"ClientSettingsDomain","Docs":"","Typewords":["string"]},{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]},{"Name":"DKIM","Docs":"","Typewords":["DKIM"]},{"Name":"DMARC","Docs":"","Typewords":["nullable","DMARC"]},{"Name":"MTASTS","Docs":"","Typewords":["nullable","MTASTS"]},{"Name":"TLSRPT","Docs":"","Typewords":["nullable","TLSRPT"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"Aliases","Docs":"","Typewords":["{}","Alias"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
+	"ConfigDomain": {"Name":"ConfigDomain","Docs":"","Fields":[{"Name":"Disabled","Docs":"","Typewords":["bool"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"ClientSettingsDomain","Docs":"","Typewords":["string"]},{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]},{"Name":"DKIM","Docs":"","Typewords":["DKIM"]},{"Name":"DMARC","Docs":"","Typewords":["nullable","DMARC"]},{"Name":"MTASTS","Docs":"","Typewords":["nullable","MTASTS"]},{"Name":"TLSRPT","Docs":"","Typewords":["nullable","TLSRPT"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"Aliases","Docs":"","Typewords":["{}","Alias"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
 	"DKIM": {"Name":"DKIM","Docs":"","Fields":[{"Name":"Selectors","Docs":"","Typewords":["{}","Selector"]},{"Name":"Sign","Docs":"","Typewords":["[]","string"]}]},
 	"Selector": {"Name":"Selector","Docs":"","Fields":[{"Name":"Hash","Docs":"","Typewords":["string"]},{"Name":"HashEffective","Docs":"","Typewords":["string"]},{"Name":"Canonicalization","Docs":"","Typewords":["Canonicalization"]},{"Name":"Headers","Docs":"","Typewords":["[]","string"]},{"Name":"HeadersEffective","Docs":"","Typewords":["[]","string"]},{"Name":"DontSealHeaders","Docs":"","Typewords":["bool"]},{"Name":"Expiration","Docs":"","Typewords":["string"]},{"Name":"PrivateKeyFile","Docs":"","Typewords":["string"]},{"Name":"Algorithm","Docs":"","Typewords":["string"]}]},
 	"Canonicalization": {"Name":"Canonicalization","Docs":"","Fields":[{"Name":"HeaderRelaxed","Docs":"","Typewords":["bool"]},{"Name":"BodyRelaxed","Docs":"","Typewords":["bool"]}]},
@@ -1158,7 +1160,7 @@ export const types: TypenameMap = {
 	"Address": {"Name":"Address","Docs":"","Fields":[{"Name":"Localpart","Docs":"","Typewords":["Localpart"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
 	"Destination": {"Name":"Destination","Docs":"","Fields":[{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Rulesets","Docs":"","Typewords":["[]","Ruleset"]},{"Name":"SMTPError","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]}]},
 	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"MsgFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Comment","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
-	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"OutgoingWebhook","Docs":"","Typewords":["nullable","OutgoingWebhook"]},{"Name":"IncomingWebhook","Docs":"","Typewords":["nullable","IncomingWebhook"]},{"Name":"FromIDLoginAddresses","Docs":"","Typewords":["[]","string"]},{"Name":"KeepRetiredMessagePeriod","Docs":"","Typewords":["int64"]},{"Name":"KeepRetiredWebhookPeriod","Docs":"","Typewords":["int64"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"Aliases","Docs":"","Typewords":["[]","AddressAlias"]}]},
+	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"OutgoingWebhook","Docs":"","Typewords":["nullable","OutgoingWebhook"]},{"Name":"IncomingWebhook","Docs":"","Typewords":["nullable","IncomingWebhook"]},{"Name":"FromIDLoginAddresses","Docs":"","Typewords":["[]","string"]},{"Name":"KeepRetiredMessagePeriod","Docs":"","Typewords":["int64"]},{"Name":"KeepRetiredWebhookPeriod","Docs":"","Typewords":["int64"]},{"Name":"LoginDisabled","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"Aliases","Docs":"","Typewords":["[]","AddressAlias"]}]},
 	"OutgoingWebhook": {"Name":"OutgoingWebhook","Docs":"","Fields":[{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["string"]},{"Name":"Events","Docs":"","Typewords":["[]","string"]}]},
 	"IncomingWebhook": {"Name":"IncomingWebhook","Docs":"","Fields":[{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["string"]}]},
 	"SubjectPass": {"Name":"SubjectPass","Docs":"","Fields":[{"Name":"Period","Docs":"","Typewords":["int64"]}]},
@@ -1422,13 +1424,13 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as CheckResult
 	}
 
-	// Domains returns all configured domain names, in UTF-8 for IDNA domains.
-	async Domains(): Promise<Domain[] | null> {
+	// Domains returns all configured domain names.
+	async Domains(): Promise<ConfigDomain[] | null> {
 		const fn: string = "Domains"
 		const paramTypes: string[][] = []
-		const returnTypes: string[][] = [["[]","Domain"]]
+		const returnTypes: string[][] = [["[]","ConfigDomain"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as Domain[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as ConfigDomain[] | null
 	}
 
 	// Domain returns the dns domain for a (potentially unicode as IDNA) domain name.
@@ -1467,13 +1469,13 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [{ [key: string]: string }, { [key: string]: Alias }]
 	}
 
-	// Accounts returns the names of all configured accounts.
-	async Accounts(): Promise<string[] | null> {
+	// Accounts returns the names of all configured and all disabled accounts.
+	async Accounts(): Promise<[string[] | null, string[] | null]> {
 		const fn: string = "Accounts"
 		const paramTypes: string[][] = []
-		const returnTypes: string[][] = [["[]","string"]]
+		const returnTypes: string[][] = [["[]","string"],["[]","string"]]
 		const params: any[] = []
-		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as string[] | null
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string[] | null, string[] | null]
 	}
 
 	// Account returns the parsed configuration of an account.
@@ -1608,11 +1610,11 @@ export class Client {
 	}
 
 	// DomainAdd adds a new domain and reloads the configuration.
-	async DomainAdd(domain: string, accountName: string, localpart: string): Promise<void> {
+	async DomainAdd(disabled: boolean, domain: string, accountName: string, localpart: string): Promise<void> {
 		const fn: string = "DomainAdd"
-		const paramTypes: string[][] = [["string"],["string"],["string"]]
+		const paramTypes: string[][] = [["bool"],["string"],["string"],["string"]]
 		const returnTypes: string[][] = []
-		const params: any[] = [domain, accountName, localpart]
+		const params: any[] = [disabled, domain, accountName, localpart]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
@@ -1679,6 +1681,15 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["int32"],["int32"],["int64"],["bool"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [accountName, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay, maxMsgSize, firstTimeSenderDelay]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// AccountLoginDisabledSave saves the LoginDisabled field of an account.
+	async AccountLoginDisabledSave(accountName: string, loginDisabled: string): Promise<void> {
+		const fn: string = "AccountLoginDisabledSave"
+		const paramTypes: string[][] = [["string"],["string"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [accountName, loginDisabled]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
@@ -2209,6 +2220,17 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["{}","Selector"],["[]","string"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [domainName, selectors, sign]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainDisabledSave saves the Disabled field of a domain. A disabled domain
+	// rejects incoming/outgoing messages involving the domain and does not request new
+	// TLS certificats with ACME.
+	async DomainDisabledSave(domainName: string, disabled: boolean): Promise<void> {
+		const fn: string = "DomainDisabledSave"
+		const paramTypes: string[][] = [["string"],["bool"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, disabled]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 

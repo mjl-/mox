@@ -870,8 +870,8 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			for _, name := range mox.Conf.Domains() {
 				if dom, err := dns.ParseDomain(name); err != nil {
 					pkglog.Errorx("parsing domain from config", err)
-				} else if d, _ := mox.Conf.Domain(dom); d.ReportsOnly {
-					// Do not gather autoconfig name if we aren't accepting email for this domain.
+				} else if d, _ := mox.Conf.Domain(dom); d.ReportsOnly || d.Disabled {
+					// Do not gather autoconfig name if we aren't accepting email for this domain or when it is disabled.
 					continue
 				}
 

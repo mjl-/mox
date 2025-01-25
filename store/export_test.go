@@ -24,7 +24,7 @@ func TestExport(t *testing.T) {
 	os.RemoveAll("../testdata/store/data")
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
-	acc, err := OpenAccount(pkglog, "mjl")
+	acc, err := OpenAccount(pkglog, "mjl", false)
 	tcheck(t, err, "open account")
 	defer func() {
 		err := acc.Close()

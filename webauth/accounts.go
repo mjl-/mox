@@ -14,18 +14,20 @@ var Accounts SessionAuth = accountSessionAuth{}
 
 type accountSessionAuth struct{}
 
-func (accountSessionAuth) login(ctx context.Context, log mlog.Log, username, password string) (bool, string, error) {
-	acc, err := store.OpenEmailAuth(log, username, password)
+func (accountSessionAuth) login(ctx context.Context, log mlog.Log, username, password string) (valid, disabled bool, accName string, rerr error) {
+	acc, err := store.OpenEmailAuth(log, username, password, true)
 	if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
-		return false, "", nil
+		return false, false, "", nil
+	} else if err != nil && errors.Is(err, store.ErrLoginDisabled) {
+		return false, true, "", err // Returning error, for its message.
 	} else if err != nil {
-		return false, "", err
+		return false, false, "", err
 	}
 	defer func() {
 		err := acc.Close()
 		log.Check(err, "closing account")
 	}()
-	return true, acc.Name, nil
+	return true, false, acc.Name, nil
 }
 
 func (accountSessionAuth) add(ctx context.Context, log mlog.Log, accountName string, loginAddress string) (sessionToken store.SessionToken, csrfToken store.CSRFToken, rerr error) {

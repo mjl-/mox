@@ -67,7 +67,7 @@ func TestServer(t *testing.T) {
 	defer queue.Shutdown()
 
 	log := mlog.New("webapisrv", nil)
-	acc, err := store.OpenAccount(log, "mjl")
+	acc, err := store.OpenAccount(log, "mjl", false)
 	tcheckf(t, err, "open account")
 	const pw0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
 	const pw1 = "tést    "                      // PRECIS normalized, with NFC.
@@ -140,6 +140,16 @@ func TestServer(t *testing.T) {
 		testHTTPHdrsBody(s, "POST", "/v0/Send", map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("mjl@mox.example:badpassword"))}, "", expCode, tooMany, "", "")
 	}
 	mox.LimitersInit()
+
+	// Cannot login to disabled account.
+	acc2, err := store.OpenAccount(log, "disabled", false)
+	tcheckf(t, err, "open account")
+	err = acc2.SetPassword(log, "test1234")
+	tcheckf(t, err, "set password")
+	acc2.Close()
+	tcheckf(t, err, "close account")
+	testHTTPHdrsBody(s, "POST", "/v0/Send", map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("disabled@mox.example:test1234"))}, "", http.StatusUnauthorized, false, "", "")
+	testHTTPHdrsBody(s, "POST", "/v0/Send", map[string]string{"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("disabled@mox.example:bogus"))}, "", http.StatusUnauthorized, false, "", "")
 
 	// Request with missing X-Forwarded-For.
 	sfwd := NewServer(100*1024, "/webapi/", true).(server)
@@ -330,6 +340,16 @@ func TestServer(t *testing.T) {
 		},
 	})
 	terrcode(t, err, "malformedMessageID")
+
+	_, err = client.Send(ctxbg, webapi.SendRequest{
+		Message: webapi.Message{
+			From:    []webapi.NameAddress{{Address: "mjl@disabled.example"}},
+			To:      []webapi.NameAddress{{Address: "mjl@mox.example"}},
+			Subject: "test",
+			Text:    "hi",
+		},
+	})
+	terrcode(t, err, "domainDisabled")
 
 	// todo: messageLimitReached, recipientLimitReached
 

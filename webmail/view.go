@@ -626,7 +626,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 	defer writer.close()
 
 	// Fetch initial data.
-	acc, err := store.OpenAccount(log, accName)
+	acc, err := store.OpenAccount(log, accName, true)
 	xcheckf(ctx, err, "open account")
 	defer func() {
 		err := acc.Close()
@@ -639,7 +639,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 	accConf, _ := acc.Conf()
 	loginAddr, err := smtp.ParseAddress(address)
 	xcheckf(ctx, err, "parsing login address")
-	_, _, _, dest, err := mox.LookupAddress(loginAddr.Localpart, loginAddr.Domain, false, false)
+	_, _, _, dest, err := mox.LookupAddress(loginAddr.Localpart, loginAddr.Domain, false, false, false)
 	xcheckf(ctx, err, "looking up destination for login address")
 	loginName := accConf.FullName
 	if dest.FullName != "" {

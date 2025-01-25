@@ -33,7 +33,7 @@ func TestMailbox(t *testing.T) {
 	os.RemoveAll("../testdata/store/data")
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
-	acc, err := OpenAccount(log, "mjl")
+	acc, err := OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
 	defer func() {
 		err = acc.Close()
@@ -224,30 +224,30 @@ func TestMailbox(t *testing.T) {
 
 	// Run the auth tests twice for possible cache effects.
 	for i := 0; i < 2; i++ {
-		_, err := OpenEmailAuth(log, "mjl@mox.example", "bogus")
+		_, err := OpenEmailAuth(log, "mjl@mox.example", "bogus", false)
 		if err != ErrUnknownCredentials {
 			t.Fatalf("got %v, expected ErrUnknownCredentials", err)
 		}
 	}
 
 	for i := 0; i < 2; i++ {
-		acc2, err := OpenEmailAuth(log, "mjl@mox.example", "testtest")
+		acc2, err := OpenEmailAuth(log, "mjl@mox.example", "testtest", false)
 		tcheck(t, err, "open for email with auth")
 		err = acc2.Close()
 		tcheck(t, err, "close account")
 	}
 
-	acc2, err := OpenEmailAuth(log, "other@mox.example", "testtest")
+	acc2, err := OpenEmailAuth(log, "other@mox.example", "testtest", false)
 	tcheck(t, err, "open for email with auth")
 	err = acc2.Close()
 	tcheck(t, err, "close account")
 
-	_, err = OpenEmailAuth(log, "bogus@mox.example", "testtest")
+	_, err = OpenEmailAuth(log, "bogus@mox.example", "testtest", false)
 	if err != ErrUnknownCredentials {
 		t.Fatalf("got %v, expected ErrUnknownCredentials", err)
 	}
 
-	_, err = OpenEmailAuth(log, "mjl@test.example", "testtest")
+	_, err = OpenEmailAuth(log, "mjl@test.example", "testtest", false)
 	if err != ErrUnknownCredentials {
 		t.Fatalf("got %v, expected ErrUnknownCredentials", err)
 	}

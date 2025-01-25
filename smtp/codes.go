@@ -31,6 +31,8 @@ var (
 	C503BadCmdSeq              = 503
 	C504ParamNotImpl           = 504
 	C521HostNoMail             = 521 // ../rfc/7504:179
+	C523EncryptionNeeded       = 523 // ../rfc/5248:361
+	C525AccountDisabled        = 525 // ../rfc/5248:401
 	C530SecurityRequired       = 530 // ../rfc/3207:148 ../rfc/4954:623
 	C534AuthMechWeak           = 534 // ../rfc/4954:593
 	C535AuthBadCreds           = 535 // ../rfc/4954:600

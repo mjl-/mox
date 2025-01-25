@@ -492,8 +492,12 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 		return fmt.Errorf("looking up tls public key with fingerprint %s: %v", fp, err)
 	}
 
-	// Verify account exists and still matches address.
-	acc, _, err := store.OpenEmail(c.log, pubKey.LoginAddress)
+	// Verify account exists and still matches address. We don't check for account
+	// login being disabled if preauth is disabled. In that case, sasl external auth
+	// will be done before credentials can be used, and login disabled will be checked
+	// then, where it will result in a more helpful error message.
+	checkLoginDisabled := !pubKey.NoIMAPPreauth
+	acc, _, err := store.OpenEmail(c.log, pubKey.LoginAddress, checkLoginDisabled)
 	if err != nil {
 		return fmt.Errorf("opening account for address %s for public key %s: %w", pubKey.LoginAddress, fp, err)
 	}
@@ -1073,7 +1077,7 @@ func (c *conn) xneedTLSForDelivery(rcpt smtp.Path) {
 }
 
 func isTLSReportRecipient(rcpt smtp.Path) bool {
-	_, _, _, dest, err := mox.LookupAddress(rcpt.Localpart, rcpt.IPDomain.Domain, false, false)
+	_, _, _, dest, err := mox.LookupAddress(rcpt.Localpart, rcpt.IPDomain.Domain, false, false, false)
 	return err == nil && (dest.HostTLSReports || dest.DomainTLSReports)
 }
 
@@ -1351,7 +1355,7 @@ func (c *conn) cmdAuth(p *parser) {
 		}
 
 		var err error
-		account, err = store.OpenEmailAuth(c.log, username, password)
+		account, err = store.OpenEmailAuth(c.log, username, password, false)
 		if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
 			// ../rfc/4954:274
 			authResult = "badcreds"
@@ -1393,7 +1397,7 @@ func (c *conn) cmdAuth(p *parser) {
 		c.xtrace(mlog.LevelTrace) // Restore.
 
 		var err error
-		account, err = store.OpenEmailAuth(c.log, username, password)
+		account, err = store.OpenEmailAuth(c.log, username, password, false)
 		if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
 			// ../rfc/4954:274
 			authResult = "badcreds"
@@ -1419,8 +1423,9 @@ func (c *conn) cmdAuth(p *parser) {
 		username = norm.NFC.String(t[0])
 		c.log.Debug("cram-md5 auth", slog.String("username", username))
 		var err error
-		account, _, err = store.OpenEmail(c.log, username)
+		account, _, err = store.OpenEmail(c.log, username, false)
 		if err != nil && errors.Is(err, store.ErrUnknownCredentials) {
+			authResult = "badcreds"
 			c.log.Info("failed authentication attempt", slog.String("username", username), slog.Any("remote", c.remoteIP))
 			xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7AuthBadCreds8, "bad user/pass")
 		}
@@ -1494,7 +1499,7 @@ func (c *conn) cmdAuth(p *parser) {
 		}
 		username = norm.NFC.String(ss.Authentication)
 		c.log.Debug("scram auth", slog.String("authentication", username))
-		account, _, err = store.OpenEmail(c.log, username)
+		account, _, err = store.OpenEmail(c.log, username, false)
 		if err != nil {
 			// todo: we could continue scram with a generated salt, deterministically generated
 			// from the username. that way we don't have to store anything but attackers cannot
@@ -1551,6 +1556,7 @@ func (c *conn) cmdAuth(p *parser) {
 				c.log.Warn("bad channel binding during authentication, potential mitm", slog.String("username", username), slog.Any("remote", c.remoteIP))
 				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7MsgIntegrity7, "channel bindings do not match, potential mitm")
 			} else if errors.Is(err, scram.ErrInvalidEncoding) {
+				authResult = "badprotocol"
 				c.log.Infox("bad scram protocol message", err, slog.String("username", username), slog.Any("remote", c.remoteIP))
 				xsmtpUserErrorf(smtp.C535AuthBadCreds, smtp.SePol7Other0, "bad scram protocol message")
 			}
@@ -1580,12 +1586,20 @@ func (c *conn) cmdAuth(p *parser) {
 			username = c.username
 		}
 		var err error
-		account, _, err = store.OpenEmail(c.log, username)
+		account, _, err = store.OpenEmail(c.log, username, false)
 		xcheckf(err, "looking up username from tls client authentication")
 
 	default:
 		// ../rfc/4954:176
 		xsmtpUserErrorf(smtp.C504ParamNotImpl, smtp.SeProto5BadParams4, "mechanism %s not supported", mech)
+	}
+
+	if accConf, ok := account.Conf(); !ok {
+		xcheckf(errors.New("cannot find account"), "get account config")
+	} else if accConf.LoginDisabled != "" {
+		authResult = "logindisabled"
+		c.log.Info("account login disabled", slog.String("username", username))
+		xsmtpUserErrorf(smtp.C525AccountDisabled, smtp.SePol7AccountDisabled13, "%w: %s", store.ErrLoginDisabled, accConf.LoginDisabled)
 	}
 
 	// We may already have TLS credentials. We allow an additional SASL authentication,
@@ -1717,7 +1731,7 @@ func (c *conn) cmdMail(p *parser) {
 		case "REQUIRETLS":
 			// ../rfc/8689:155
 			if !c.tls {
-				xsmtpUserErrorf(smtp.C530SecurityRequired, smtp.SePol7EncNeeded10, "requiretls only allowed on tls-encrypted connections")
+				xsmtpUserErrorf(smtp.C523EncryptionNeeded, smtp.SePol7EncNeeded10, "requiretls only allowed on tls-encrypted connections")
 			} else if !c.extRequireTLS {
 				xsmtpUserErrorf(smtp.C555UnrecognizedAddrParams, smtp.SeSys3NotSupported3, "REQUIRETLS not allowed for this connection")
 			}
@@ -1773,14 +1787,16 @@ func (c *conn) cmdMail(p *parser) {
 	// must have the rpath configured. We do a check again on rfc5322.from during DATA.
 	// Mail clients may use the alias address as smtp mail from address, so we allow it
 	// for such aliases.
-	rpathAllowed := func() bool {
+	rpathAllowed := func(disabled *bool) bool {
 		// ../rfc/6409:349
 		if rpath.IsZero() {
 			return true
 		}
 
 		from := smtp.NewAddress(rpath.Localpart, rpath.IPDomain.Domain)
-		return mox.AllowMsgFrom(c.account.Name, from)
+		ok, dis := mox.AllowMsgFrom(c.account.Name, from)
+		*disabled = dis
+		return ok
 	}
 
 	if !c.submission && !rpath.IPDomain.Domain.IsZero() {
@@ -1800,7 +1816,13 @@ func (c *conn) cmdMail(p *parser) {
 		}
 	}
 
-	if c.submission && (len(rpath.IPDomain.IP) > 0 || !rpathAllowed()) {
+	var disabled bool
+	if c.submission && (len(rpath.IPDomain.IP) > 0 || !rpathAllowed(&disabled)) {
+		if disabled {
+			c.log.Info("submission with smtp mail from of disabled domain", slog.Any("domain", rpath.IPDomain.Domain))
+			xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "domain of smtp mail from is temporarily disabled")
+		}
+
 		// ../rfc/6409:522
 		c.log.Info("submission with unconfigured mailfrom", slog.String("user", c.username), slog.String("mailfrom", rpath.String()))
 		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SePol7DeliveryUnauth1, "must match authenticated user")
@@ -1919,7 +1941,7 @@ func (c *conn) cmdRcpt(p *parser) {
 			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "not accepting email for ip")
 		}
 		c.recipients = append(c.recipients, recipient{fpath, nil, nil})
-	} else if accountName, alias, canonical, dest, err := mox.LookupAddress(fpath.Localpart, fpath.IPDomain.Domain, true, true); err == nil {
+	} else if accountName, alias, canonical, dest, err := mox.LookupAddress(fpath.Localpart, fpath.IPDomain.Domain, true, true, true); err == nil {
 		// note: a bare postmaster, without domain, is handled by LookupAddress. ../rfc/5321:735
 		if alias != nil {
 			c.recipients = append(c.recipients, recipient{fpath, nil, &rcptAlias{*alias, canonical}})
@@ -1937,6 +1959,9 @@ func (c *conn) cmdRcpt(p *parser) {
 		acc, _ := mox.Conf.Account("mox")
 		dest := acc.Destinations["mox@localhost"]
 		c.recipients = append(c.recipients, recipient{fpath, &rcptAccount{"mox", dest, "mox@localhost"}, nil})
+	} else if errors.Is(err, mox.ErrDomainDisabled) {
+		c.log.Info("smtp recipient for temporarily disabled domain", slog.Any("domain", fpath.IPDomain.Domain))
+		xsmtpUserErrorf(smtp.C450MailboxUnavail, smtp.SeMailbox2Disabled1, "recipient domain temporarily disabled")
 	} else if errors.Is(err, mox.ErrDomainNotFound) {
 		if !c.submission {
 			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "not accepting email for domain")
@@ -2248,7 +2273,10 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 		c.log.Infox("parsing message From address", err, slog.String("user", c.username))
 		xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeMsg6Other0, "cannot parse header or From address: %v", err)
 	}
-	if !mox.AllowMsgFrom(c.account.Name, msgFrom) {
+	if ok, disabled := mox.AllowMsgFrom(c.account.Name, msgFrom); disabled {
+		c.log.Info("submission with message from address of disabled domain", slog.Any("domain", msgFrom.Domain))
+		xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "domain of message from header is temporarily disabled")
+	} else if !ok {
 		// ../rfc/6409:522
 		metricSubmission.WithLabelValues("badfrom").Inc()
 		c.log.Infox("verifying message from address", mox.ErrAddressNotFound, slog.String("user", c.username), slog.Any("msgfrom", msgFrom))
@@ -2330,6 +2358,9 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	if !ok {
 		c.log.Error("domain disappeared", slog.Any("domain", msgFrom.Domain))
 		xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "internal error")
+	} else if confDom.Disabled {
+		c.log.Info("submission with message from address of disabled domain", slog.Any("domain", msgFrom.Domain))
+		xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "domain of message from header is temporarily disabled")
 	}
 
 	selectors := mox.DKIMSelectors(confDom.DKIM)
@@ -2947,7 +2978,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	// We call this for all alias destinations, also when we already delivered to that
 	// recipient: It may be the only recipient that would allow the message.
 	messageAnalyze := func(log mlog.Log, smtpRcptTo, deliverTo smtp.Path, accountName string, destination config.Destination, canonicalAddr string) (a *analysis, rerr error) {
-		acc, err := store.OpenAccount(log, accountName)
+		acc, err := store.OpenAccount(log, accountName, false)
 		if err != nil {
 			log.Errorx("open account", err, slog.Any("account", accountName))
 			metricDelivery.WithLabelValues("accounterror", "").Inc()

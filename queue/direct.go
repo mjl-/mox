@@ -765,7 +765,7 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 
 // Update (overwite) last known starttls/requiretls support for recipient domain.
 func updateRecipientDomainTLS(ctx context.Context, log mlog.Log, senderAccount string, rdt store.RecipientDomainTLS) error {
-	acc, err := store.OpenAccount(log, senderAccount)
+	acc, err := store.OpenAccount(log, senderAccount, false)
 	if err != nil {
 		return fmt.Errorf("open account: %w", err)
 	}

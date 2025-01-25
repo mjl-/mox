@@ -137,7 +137,7 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 	err = store.Init(ctxbg)
 	tcheck(t, err, "store init")
 
-	ts.acc, err = store.OpenAccount(log, "mjl")
+	ts.acc, err = store.OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
 	err = ts.acc.SetPassword(log, password0)
 	tcheck(t, err, "set password")
@@ -332,6 +332,13 @@ func TestSubmission(t *testing.T) {
 		})
 	}
 
+	acc, err := store.OpenAccount(pkglog, "disabled", false)
+	tcheck(t, err, "open account")
+	err = acc.SetPassword(pkglog, "test1234")
+	tcheck(t, err, "set password")
+	err = acc.Close()
+	tcheck(t, err, "close account")
+
 	ts.submission = true
 	testAuth(nil, "", "", &smtpclient.Error{Permanent: true, Code: smtp.C530SecurityRequired, Secode: smtp.SePol7Other0})
 	authfns := []func(user, pass string, cs *tls.ConnectionState) sasl.Client{
@@ -360,6 +367,8 @@ func TestSubmission(t *testing.T) {
 		testAuth(fn, "móx@mox.example", password1, nil)
 		testAuth(fn, "mo\u0301x@mox.example", password0, nil)
 		testAuth(fn, "mo\u0301x@mox.example", password1, nil)
+		testAuth(fn, "disabled@mox.example", "test1234", &smtpclient.Error{Code: smtp.C525AccountDisabled, Secode: smtp.SePol7AccountDisabled13})
+		testAuth(fn, "disabled@mox.example", "bogus", &smtpclient.Error{Code: smtp.C535AuthBadCreds, Secode: smtp.SePol7AuthBadCreds8})
 	}
 
 	// Create a certificate, register its public key with account, and make a tls
@@ -465,6 +474,50 @@ func TestSubmission(t *testing.T) {
 	}
 }
 
+func TestDomainDisabled(t *testing.T) {
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), dns.MockResolver{})
+	defer ts.close()
+
+	ts.submission = true
+	ts.user = "mjl@mox.example"
+	ts.pass = password0
+
+	// Submission with SMTP MAIL FROM of disabled domain must fail.
+	ts.run(func(err error, client *smtpclient.Client) {
+		mailFrom := "mjl@disabled.example" // Disabled.
+		rcptTo := "remote@example.org"
+		if err == nil {
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false, false)
+		}
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
+			t.Fatalf("got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
+		}
+		checkEvaluationCount(t, 0)
+	})
+
+	// Message From-address has disabled domain, must fail.
+	var submitMessage2 = strings.ReplaceAll(`From: <mjl@disabled.example>
+To: <remote@example.org>
+Subject: test
+Message-Id: <test@mox.example>
+
+test email
+`, "\n", "\r\n")
+	ts.run(func(err error, client *smtpclient.Client) {
+		mailFrom := "mjl@mox.example"
+		rcptTo := "remote@example.org"
+		if err == nil {
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage2)), strings.NewReader(submitMessage2), false, false, false)
+		}
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C451LocalErr {
+			t.Fatalf("got err %v, expected smtpclient.Error with code %d", err, smtp.C451LocalErr)
+		}
+		checkEvaluationCount(t, 0)
+	})
+}
+
 // Test delivery from external MTA.
 func TestDelivery(t *testing.T) {
 	resolver := dns.MockResolver{
@@ -538,6 +591,19 @@ func TestDelivery(t *testing.T) {
 		var cerr smtpclient.Error
 		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C550MailboxUnavail {
 			t.Fatalf("deliver to omicron @ instead of ascii o @, got err %v, expected smtpclient.Error with code %d", err, smtp.C550MailboxUnavail)
+		}
+	})
+
+	// Deliveries to disabled domain are rejected with temporary error.
+	ts.run(func(err error, client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@disabled.example"
+		if err == nil {
+			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+		}
+		var cerr smtpclient.Error
+		if err == nil || !errors.As(err, &cerr) || cerr.Code != smtp.C450MailboxUnavail {
+			t.Fatalf("deliver to disabled domain, got err %v, expected smtpclient.Error with code %d", err, smtp.C450MailboxUnavail)
 		}
 	})
 
@@ -1514,7 +1580,7 @@ func TestCatchall(t *testing.T) {
 	tcheck(t, err, "checking delivered messages")
 	tcompare(t, n, 3)
 
-	acc, err := store.OpenAccount(pkglog, "catchall")
+	acc, err := store.OpenAccount(pkglog, "catchall", false)
 	tcheck(t, err, "open account")
 	defer func() {
 		acc.Close()

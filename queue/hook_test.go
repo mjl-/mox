@@ -25,7 +25,7 @@ func TestHookIncoming(t *testing.T) {
 	acc, cleanup := setup(t)
 	defer cleanup()
 
-	accret, err := store.OpenAccount(pkglog, "retired")
+	accret, err := store.OpenAccount(pkglog, "retired", false)
 	tcheck(t, err, "open account for retired")
 	defer func() {
 		accret.Close()
@@ -121,7 +121,7 @@ func TestFromIDIncomingDelivery(t *testing.T) {
 	acc, cleanup := setup(t)
 	defer cleanup()
 
-	accret, err := store.OpenAccount(pkglog, "retired")
+	accret, err := store.OpenAccount(pkglog, "retired", false)
 	tcheck(t, err, "open account for retired")
 	defer func() {
 		accret.Close()
@@ -129,7 +129,7 @@ func TestFromIDIncomingDelivery(t *testing.T) {
 	}()
 
 	// Account that only gets webhook calls, but no retired webhooks.
-	acchook, err := store.OpenAccount(pkglog, "hook")
+	acchook, err := store.OpenAccount(pkglog, "hook", false)
 	tcheck(t, err, "open account for hook")
 	defer func() {
 		acchook.Close()

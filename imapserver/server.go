@@ -874,9 +874,14 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 		return fmt.Errorf("looking up tls public key with fingerprint %s: %v", fp, err)
 	}
 
-	// Verify account exists and still matches address.
-	acc, _, err := store.OpenEmail(c.log, pubKey.LoginAddress)
+	// Verify account exists and still matches address. We don't check for account
+	// login being disabled if preauth is disabled. In that case, sasl external auth
+	// will be done before credentials can be used, and login disabled will be checked
+	// then, where it will result in a more helpful error message.
+	checkLoginDisabled := !pubKey.NoIMAPPreauth
+	acc, _, err := store.OpenEmail(c.log, pubKey.LoginAddress, checkLoginDisabled)
 	if err != nil {
+		// note: we cannot send a more helpful error message to the client.
 		return fmt.Errorf("opening account for address %s for public key %s: %w", pubKey.LoginAddress, fp, err)
 	}
 	defer func() {
@@ -1801,7 +1806,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		}
 
 		var err error
-		account, err = store.OpenEmailAuth(c.log, username, password)
+		account, err = store.OpenEmailAuth(c.log, username, password, false)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
 				authResult = "badcreds"
@@ -1829,11 +1834,18 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		username = t[0]
 		c.log.Debug("cram-md5 auth", slog.String("address", username))
 		var err error
-		account, _, err = store.OpenEmail(c.log, username)
+		account, _, err = store.OpenEmail(c.log, username, false)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
+				authResult = "badcreds"
 				c.log.Info("failed authentication attempt", slog.String("username", username), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
+			} else if errors.Is(err, store.ErrLoginDisabled) {
+				authResult = "logindisabled"
+				c.log.Info("account login disabled", slog.String("username", username))
+				// No error code, we don't want to cause prompt for new password
+				// (AUTHENTICATIONFAILED) and don't want to trigger message suppression with ALERT.
+				xuserErrorf("%s", err)
 			}
 			xserverErrorf("looking up address: %v", err)
 		}
@@ -1905,7 +1917,8 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		}
 		username = ss.Authentication
 		c.log.Debug("scram auth", slog.String("authentication", username))
-		account, _, err = store.OpenEmail(c.log, username)
+		// We check for login being disabled when finishing.
+		account, _, err = store.OpenEmail(c.log, username, false)
 		if err != nil {
 			// todo: we could continue scram with a generated salt, deterministically generated
 			// from the username. that way we don't have to store anything but attackers cannot
@@ -1960,6 +1973,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 				c.log.Warn("bad channel binding during authentication, potential mitm", slog.String("username", username), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "channel bindings do not match, potential mitm")
 			} else if errors.Is(err, scram.ErrInvalidEncoding) {
+				authResult = "badprotocol"
 				c.log.Infox("bad scram protocol message", err, slog.String("username", username), slog.Any("remote", c.remoteIP))
 				xuserErrorf("bad scram protocol message: %s", err)
 			}
@@ -1988,11 +2002,20 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			username = c.username
 		}
 		var err error
-		account, _, err = store.OpenEmail(c.log, username)
+		account, _, err = store.OpenEmail(c.log, username, false)
 		xcheckf(err, "looking up username from tls client authentication")
 
 	default:
 		xuserErrorf("method not supported")
+	}
+
+	if accConf, ok := account.Conf(); !ok {
+		xserverErrorf("cannot get account config")
+	} else if accConf.LoginDisabled != "" {
+		authResult = "logindisabled"
+		c.log.Info("account login disabled", slog.String("username", username))
+		// No AUTHENTICATIONFAILED code, clients could prompt users for different password.
+		xuserErrorf("%w: %s", store.ErrLoginDisabled, accConf.LoginDisabled)
 	}
 
 	// We may already have TLS credentials. They won't have been enabled, or we could
@@ -2076,13 +2099,21 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 		}
 	}()
 
-	account, err := store.OpenEmailAuth(c.log, username, password)
+	account, err := store.OpenEmailAuth(c.log, username, password, true)
 	if err != nil {
-		authResult = "badcreds"
 		var code string
 		if errors.Is(err, store.ErrUnknownCredentials) {
+			authResult = "badcreds"
 			code = "AUTHENTICATIONFAILED"
 			c.log.Info("failed authentication attempt", slog.String("username", username), slog.Any("remote", c.remoteIP))
+		} else if errors.Is(err, store.ErrLoginDisabled) {
+			authResult = "logindisabled"
+			c.log.Info("account login disabled", slog.String("username", username))
+			// There is no specific code for "account disabled" in IMAP. AUTHORIZATIONFAILED is
+			// not a good idea, it will prompt users for a password. ALERT seems reasonable,
+			// but may cause email clients to suppress the message since we are not yet
+			// authenticated. So we don't send anything. ../rfc/9051:4940
+			xuserErrorf("%s", err)
 		}
 		xusercodeErrorf(code, "login failed")
 	}

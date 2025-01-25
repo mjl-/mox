@@ -657,7 +657,10 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	}
 
 	// Check if from address is allowed for account.
-	if !mox.AllowMsgFrom(reqInfo.Account.Name, fromAddr.Address) {
+	if ok, disabled := mox.AllowMsgFrom(reqInfo.Account.Name, fromAddr.Address); disabled {
+		metricSubmission.WithLabelValues("domaindisabled").Inc()
+		xcheckuserf(ctx, mox.ErrDomainDisabled, `looking up "from" address for account`)
+	} else if !ok {
 		metricSubmission.WithLabelValues("badfrom").Inc()
 		xcheckuserf(ctx, errors.New("address not found"), `looking up "from" address for account`)
 	}
@@ -941,6 +944,9 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	var msgPrefix string
 	fd := fromAddr.Address.Domain
 	confDom, _ := mox.Conf.Domain(fd)
+	if confDom.Disabled {
+		xcheckuserf(ctx, mox.ErrDomainDisabled, "checking domain")
+	}
 	selectors := mox.DKIMSelectors(confDom.DKIM)
 	if len(selectors) > 0 {
 		dkimHeaders, err := dkim.Sign(ctx, log.Logger, fromAddr.Address.Localpart, fd, selectors, smtputf8, dataFile)

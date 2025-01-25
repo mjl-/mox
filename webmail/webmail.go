@@ -85,7 +85,7 @@ var (
 	metricSubmission = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "mox_webmail_submission_total",
-			Help: "Webmail message submission results, known values (those ending with error are server errors): ok, badfrom, messagelimiterror, recipientlimiterror, queueerror, storesenterror.",
+			Help: "Webmail message submission results, known values (those ending with error are server errors): ok, badfrom, messagelimiterror, recipientlimiterror, queueerror, storesenterror, domaindisabled.",
 		},
 		[]string{
 			"result",
@@ -328,7 +328,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		if accName != "" {
 			log = log.With(slog.String("account", accName))
 			var err error
-			acc, err = store.OpenAccount(log, accName)
+			acc, err = store.OpenAccount(log, accName, true)
 			if err != nil {
 				log.Errorx("open account", err)
 				http.Error(w, "500 - internal server error - error opening account", http.StatusInternalServerError)
@@ -400,7 +400,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 
 		var err error
 
-		acc, err = store.OpenAccount(log, accName)
+		acc, err = store.OpenAccount(log, accName, false)
 		xcheckf(ctx, err, "open account")
 
 		m = store.Message{ID: id}

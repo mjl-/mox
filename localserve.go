@@ -482,7 +482,7 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 	loadLoglevel(log, "info")
 
 	// Set password on account.
-	a, _, err := store.OpenEmail(log, "mox@localhost")
+	a, _, err := store.OpenEmail(log, "mox@localhost", false)
 	xcheck(err, "opening account to set password")
 	password := "moxmoxmox"
 	err = a.SetPassword(log, password)

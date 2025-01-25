@@ -575,6 +575,13 @@
 					]
 				},
 				{
+					"Name": "LoginDisabled",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "Domain",
 					"Docs": "",
 					"Typewords": [

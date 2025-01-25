@@ -38,17 +38,23 @@ var sessions = struct {
 	pendingFlushes: map[string]map[SessionToken]struct{}{},
 }
 
-// Ensure sessions for account are initialized from database. If the sessions were
-// initialized from the database, or when alwaysOpenAccount is true, an open
-// account is returned (assuming no error occurred).
+// Ensure sessions for account are initialized from database. If openAccount is
+// set, an account is returned on success.
 //
 // must be called with sessions lock held.
-func ensureAccountSessions(ctx context.Context, log mlog.Log, accountName string, alwaysOpenAccount bool) (*Account, error) {
-	var acc *Account
+func ensureAccountSessions(ctx context.Context, log mlog.Log, accountName string, openAccount bool) (acc *Account, rerr error) {
+	defer func() {
+		if !openAccount && acc != nil {
+			if err := acc.Close(); err != nil && rerr == nil {
+				rerr = fmt.Errorf("closing account: %v", err)
+			}
+			acc = nil
+		}
+	}()
 	accSessions := sessions.accounts[accountName]
 	if accSessions == nil {
 		var err error
-		acc, err = OpenAccount(log, accountName)
+		acc, err = OpenAccount(log, accountName, openAccount)
 		if err != nil {
 			return nil, err
 		}
@@ -70,10 +76,10 @@ func ensureAccountSessions(ctx context.Context, log mlog.Log, accountName string
 
 		sessions.accounts[accountName] = accSessions
 	}
-	if acc == nil && alwaysOpenAccount {
-		return OpenAccount(log, accountName)
+	if acc == nil && openAccount {
+		acc, rerr = OpenAccount(log, accountName, true)
 	}
-	return acc, nil
+	return
 }
 
 // SessionUse checks if a session is valid. If csrfToken is the empty string, no
@@ -83,13 +89,8 @@ func SessionUse(ctx context.Context, log mlog.Log, accountName string, sessionTo
 	sessions.Lock()
 	defer sessions.Unlock()
 
-	acc, err := ensureAccountSessions(ctx, log, accountName, false)
-	if err != nil {
+	if _, err := ensureAccountSessions(ctx, log, accountName, false); err != nil {
 		return LoginSession{}, err
-	} else if acc != nil {
-		if err := acc.Close(); err != nil {
-			return LoginSession{}, fmt.Errorf("closing account: %w", err)
-		}
 	}
 
 	return sessionUse(ctx, log, accountName, sessionToken, csrfToken)
@@ -149,7 +150,7 @@ func sessionsDelayedFlush(log mlog.Log, accountName string) {
 		return
 	}
 
-	acc, err := OpenAccount(log, accountName)
+	acc, err := OpenAccount(log, accountName, false)
 	if err != nil && errors.Is(err, ErrAccountUnknown) {
 		// Account may have been removed. Nothing to flush.
 		log.Infox("flushing sessions for account", err, slog.String("account", accountName))
@@ -282,7 +283,10 @@ func SessionRemove(ctx context.Context, log mlog.Log, accountName string, sessio
 	if err != nil {
 		return err
 	}
-	defer acc.Close()
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
 
 	ls, ok := sessions.accounts[accountName][sessionToken]
 	if !ok {

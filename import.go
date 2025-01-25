@@ -192,7 +192,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 
 	// Open account, creating a database file if it doesn't exist yet. It must be known
 	// in the configuration file.
-	a, err := store.OpenAccount(ctl.log, account)
+	a, err := store.OpenAccount(ctl.log, account, false)
 	ctl.xcheck(err, "opening account")
 	defer func() {
 		if a != nil {
