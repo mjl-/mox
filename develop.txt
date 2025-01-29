@@ -101,10 +101,10 @@ Large files (images/videos) are in https://github.com/mjl-/mox-website-files to
 keep the repository reasonably sized.
 
 The public website may serve the content from the "website" branch. After a
-release release, the main branch (with latest development code and
-corresponding changes to the website about new features) is merged into the
-website branch.  Commits to the website branch (e.g. for a news item, or any
-other change unrelated to a new release) is merged back into the main branch.
+release, the main branch (with latest development code and corresponding
+changes to the website about new features) is merged into the website branch.
+Commits to the website branch (e.g. for a news item, or any other change
+unrelated to a new release) is merged back into the main branch.
 
 
 # TLS certificates

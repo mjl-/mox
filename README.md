@@ -533,3 +533,13 @@ ensuring they don't become too large.  The message index database file for an
 account is at `data/accounts/<account>/index.db`, accessed with the bstore
 database library, which uses bbolt (formerly BoltDB) for storage, a
 transactional key/value library/file format inspired by LMDB.
+
+## How do I block IPs with authentication failures with fail2ban?
+
+Mox includes a rate limiter for IPs/networks that cause too many authentication
+failures. It automatically unblocks such IPs/networks after a while. So you may
+not need fail2ban. If you want to use fail2ban, you could use this snippet:
+
+	[Definition]
+	failregex = .*failed authentication attempt.*remote=<HOST>
+	ignoreregex =
