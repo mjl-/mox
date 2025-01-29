@@ -30,23 +30,17 @@ Subject: test
 test email
 `, "\n", "\r\n")
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "mjl@mox.example"
 		rcptTo := "public@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, nil)
 	})
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "public@mox.example" // List address as smtp mail from.
 		rcptTo := "public@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, nil)
 	})
 
@@ -57,23 +51,17 @@ Subject: test
 test email
 `, "\n", "\r\n")
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "mjl@mox.example"
 		rcptTo := "private@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7DeliveryUnauth1})
 	})
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "private@mox.example" // List address as smtp mail from.
 		rcptTo := "private@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7DeliveryUnauth1})
 	})
 }
@@ -108,23 +96,17 @@ Subject: test
 test email
 `, "\n", "\r\n")
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "☺@mox.example"
 		rcptTo := "public@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, true, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, true, false)
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7DeliveryUnauth1})
 	})
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "public@mox.example" // List address as message from.
 		rcptTo := "public@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, true, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, true, false)
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7DeliveryUnauth1})
 	})
 }
@@ -148,13 +130,10 @@ To: <private@mox.example>
 test email
 `, "\n", "\r\n")
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "other@example.org"
 		rcptTo := "private@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7ExpnProhibited2})
 	})
 
@@ -164,13 +143,10 @@ To: <private@mox.example>
 test email
 `, "\n", "\r\n")
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "private@example.org"
 		rcptTo := "private@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7ExpnProhibited2})
 	})
 
@@ -181,25 +157,19 @@ Subject: test
 test email
 `, "\n", "\r\n")
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "other@example.org"
 		rcptTo := "public@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, nil)
 
 		ts.checkCount("Inbox", 2) // Receiving for both mjl@ and móx@.
 	})
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "public@example.org" // List address as message from.
 		rcptTo := "public@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, nil)
 
 		ts.checkCount("Inbox", 4) // Receiving for both mjl@ and móx@.
@@ -229,24 +199,20 @@ To: <private@mox.example>
 test email
 `, "\n", "\r\n")
 
-	ts.run(func(err error, client *smtpclient.Client) {
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "mjl@mox.example"
 		rcptTo := []string{"private@mox.example", "móx@mox.example"}
-		if err == nil {
-			_, err = client.DeliverMultiple(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, true, false)
-			// assuming there wasn't a per-recipient error
-		}
+		_, err := client.DeliverMultiple(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), true, true, false)
+		// assuming there wasn't a per-recipient error
 		ts.smtpErr(err, nil)
 
 		ts.checkCount("Inbox", 1) // Receiving once. For explicit móx@ recipient, not for mjl@ due to msgfrom, and another again for móx@ due to rcpt to.
 	})
 
-	ts.run(func(err error, client *smtpclient.Client) {
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "mjl@mox.example"
 		rcptTo := "private@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, nil)
 
 		ts.checkCount("Inbox", 2) // Only receiving 1 new message compared to previous, for móx@mox.example, not mjl@.
@@ -259,13 +225,10 @@ Subject: test
 test email
 `, "\n", "\r\n")
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "other@mox.example"
 		rcptTo := "private@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7ExpnProhibited2})
 	})
 
@@ -276,13 +239,10 @@ Subject: test
 test email
 `, "\n", "\r\n")
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "mjl@mox.example"
 		rcptTo := "public@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, nil)
 	})
 }
@@ -309,13 +269,10 @@ To: <private@mox.example>
 test email
 `, "\n", "\r\n")
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "mjl@mox.example"
 		rcptTo := "private@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, nil)
 
 		ts.checkCount("Inbox", 1) // Only receiving for móx@mox.example, not mjl@.
@@ -327,13 +284,10 @@ test email
 	tcheck(t, err, "mark as junk")
 	tcompare(t, n, 1)
 
-	ts.run(func(err error, client *smtpclient.Client) {
-		t.Helper()
+	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "mjl@mox.example"
 		rcptTo := "private@mox.example"
-		if err == nil {
-			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
-		}
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msg)), strings.NewReader(msg), false, false, false)
 		ts.smtpErr(err, &smtpclient.Error{Code: smtp.C451LocalErr, Secode: smtp.SeSys3Other0})
 	})
 }
