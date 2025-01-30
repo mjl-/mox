@@ -556,6 +556,15 @@ var api;
 			const params = [messageIDs, flaglist];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		// MailboxesMarkRead marks all messages in mailboxes as read. Child mailboxes are
+		// not automatically included, they must explicitly be included in the list of IDs.
+		async MailboxesMarkRead(mailboxIDs) {
+			const fn = "MailboxesMarkRead";
+			const paramTypes = [["[]", "int64"]];
+			const returnTypes = [];
+			const params = [mailboxIDs];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 		// MailboxCreate creates a new mailbox.
 		async MailboxCreate(name) {
 			const fn = "MailboxCreate";

@@ -556,6 +556,15 @@ var api;
 			const params = [messageIDs, flaglist];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		// MailboxesMarkRead marks all messages in mailboxes as read. Child mailboxes are
+		// not automatically included, they must explicitly be included in the list of IDs.
+		async MailboxesMarkRead(mailboxIDs) {
+			const fn = "MailboxesMarkRead";
+			const paramTypes = [["[]", "int64"]];
+			const returnTypes = [];
+			const params = [mailboxIDs];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 		// MailboxCreate creates a new mailbox.
 		async MailboxCreate(name) {
 			const fn = "MailboxCreate";
@@ -5486,7 +5495,11 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 	let actionBtn;
 	const cmdOpenActions = async () => {
 		const trashmb = mailboxlistView.mailboxes().find(mb => mb.Trash);
-		const remove = popover(actionBtn, { transparent: true }, dom.div(style({ display: 'flex', flexDirection: 'column', gap: '.5ex' }), dom.div(dom.clickbutton('Move to trash', attr.title('Move mailbox, its messages and its mailboxes to the trash.'), async function click() {
+		const remove = popover(actionBtn, { transparent: true }, dom.div(style({ display: 'flex', flexDirection: 'column', gap: '.5ex' }), dom.div(dom.clickbutton('Mark as read', attr.title('Mark all messages in the mailbox and its sub mailboxes as read.'), async function click() {
+			remove();
+			const mailboxIDs = [mbv.mailbox.ID, ...mailboxlistView.mailboxes().filter(mb => mb.Name.startsWith(mbv.mailbox.Name + '/')).map(mb => mb.ID)];
+			await withStatus('Marking mailboxes as read', client.MailboxesMarkRead(mailboxIDs));
+		})), dom.div(dom.clickbutton('Move to trash', attr.title('Move mailbox, its messages and its mailboxes to the trash.'), async function click() {
 			if (!trashmb) {
 				window.alert('No mailbox configured for trash yet.');
 				return;

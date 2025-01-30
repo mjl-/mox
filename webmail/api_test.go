@@ -227,6 +227,11 @@ func TestAPI(t *testing.T) {
 	api.MailboxSetSpecialUse(ctx, store.Mailbox{ID: sent.ID, SpecialUse: store.SpecialUse{Sent: true}})                                                          // Sent, for sending mail later.
 	tneedError(t, func() { api.MailboxSetSpecialUse(ctx, store.Mailbox{ID: 0}) })
 
+	// MailboxesMarkRead
+	api.FlagsClear(ctx, []int64{inboxText.ID, inboxMinimal.ID}, []string{`\seen`})
+	api.MailboxesMarkRead(ctx, []int64{inbox.ID, archive.ID, sent.ID})
+	tneedError(t, func() { api.MailboxesMarkRead(ctx, []int64{inbox.ID + 999}) }) // Does not exist.
+
 	// MailboxRename
 	api.MailboxRename(ctx, testbox1.ID, "Testbox2")
 	api.MailboxRename(ctx, testbox1.ID, "Test/A/B/Box1")

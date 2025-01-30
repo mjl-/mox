@@ -248,6 +248,20 @@
 			"Returns": []
 		},
 		{
+			"Name": "MailboxesMarkRead",
+			"Docs": "MailboxesMarkRead marks all messages in mailboxes as read. Child mailboxes are\nnot automatically included, they must explicitly be included in the list of IDs.",
+			"Params": [
+				{
+					"Name": "mailboxIDs",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "MailboxCreate",
 			"Docs": "MailboxCreate creates a new mailbox.",
 			"Params": [

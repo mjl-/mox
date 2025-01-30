@@ -875,6 +875,16 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
+	// MailboxesMarkRead marks all messages in mailboxes as read. Child mailboxes are
+	// not automatically included, they must explicitly be included in the list of IDs.
+	async MailboxesMarkRead(mailboxIDs: number[] | null): Promise<void> {
+		const fn: string = "MailboxesMarkRead"
+		const paramTypes: string[][] = [["[]","int64"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [mailboxIDs]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
 	// MailboxCreate creates a new mailbox.
 	async MailboxCreate(name: string): Promise<void> {
 		const fn: string = "MailboxCreate"

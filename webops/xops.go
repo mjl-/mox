@@ -287,6 +287,62 @@ func (x XOps) MessageFlagsClear(ctx context.Context, log mlog.Log, acc *store.Ac
 	})
 }
 
+// MailboxesMarkRead updates all messages in the referenced mailboxes as seen when
+// they aren't yet. The mailboxes are updated with their unread messages counts,
+// and the changes are propagated.
+func (x XOps) MailboxesMarkRead(ctx context.Context, log mlog.Log, acc *store.Account, mailboxIDs []int64) {
+	acc.WithRLock(func() {
+		var changes []store.Change
+
+		x.DBWrite(ctx, acc, func(tx *bstore.Tx) {
+			var modseq store.ModSeq
+
+			// Note: we don't need to retrain, changing the "seen" flag is not relevant.
+
+			for _, mbID := range mailboxIDs {
+				mb := x.mailboxID(ctx, tx, mbID)
+
+				// Find messages to update.
+				q := bstore.QueryTx[store.Message](tx)
+				q.FilterNonzero(store.Message{MailboxID: mb.ID})
+				q.FilterEqual("Seen", false)
+				q.FilterEqual("Expunged", false)
+				q.SortAsc("UID")
+				var have bool
+				err := q.ForEach(func(m store.Message) error {
+					have = true // We need to update mailbox.
+
+					oflags := m.Flags
+					mb.Sub(m.MailboxCounts())
+					m.Seen = true
+					mb.Add(m.MailboxCounts())
+
+					if modseq == 0 {
+						var err error
+						modseq, err = acc.NextModSeq(tx)
+						x.Checkf(ctx, err, "assigning next modseq")
+					}
+					m.ModSeq = modseq
+					err := tx.Update(&m)
+					x.Checkf(ctx, err, "updating message")
+
+					changes = append(changes, m.ChangeFlags(oflags))
+					return nil
+				})
+				x.Checkf(ctx, err, "listing messages to mark as read")
+
+				if have {
+					err := tx.Update(&mb)
+					x.Checkf(ctx, err, "updating mailbox")
+					changes = append(changes, mb.ChangeCounts())
+				}
+			}
+		})
+
+		store.BroadcastChanges(acc, changes)
+	})
+}
+
 // MessageMove moves messages to the mailbox represented by mailboxName, or to mailboxID if mailboxName is empty.
 func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account, messageIDs []int64, mailboxName string, mailboxID int64) {
 	acc.WithRLock(func() {

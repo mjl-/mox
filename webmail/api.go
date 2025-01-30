@@ -1195,6 +1195,16 @@ func (Webmail) FlagsClear(ctx context.Context, messageIDs []int64, flaglist []st
 	xops.MessageFlagsClear(ctx, log, acc, messageIDs, flaglist)
 }
 
+// MailboxesMarkRead marks all messages in mailboxes as read. Child mailboxes are
+// not automatically included, they must explicitly be included in the list of IDs.
+func (Webmail) MailboxesMarkRead(ctx context.Context, mailboxIDs []int64) {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc := reqInfo.Account
+	log := reqInfo.Log
+
+	xops.MailboxesMarkRead(ctx, log, acc, mailboxIDs)
+}
+
 // MailboxCreate creates a new mailbox.
 func (Webmail) MailboxCreate(ctx context.Context, name string) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
