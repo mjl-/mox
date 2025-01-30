@@ -5157,6 +5157,32 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 					}),
 				),
 				dom.div(
+					dom.clickbutton('Create mailbox', attr.title('Create new mailbox within this mailbox.'), function click(e: MouseEvent) {
+						let fieldset: HTMLFieldSetElement
+						let name: HTMLInputElement
+						const ref = e.target! as HTMLElement
+						const removeCreate = popover(ref, {},
+							dom.form(
+								async function submit(e: SubmitEvent) {
+									e.preventDefault()
+									await withStatus('Creating mailbox', client.MailboxCreate(mbv.mailbox.Name + '/' + name.value), fieldset)
+									removeCreate()
+								},
+								fieldset=dom.fieldset(
+									dom.label(
+										'Name ',
+										name=dom.input(attr.required('yes')),
+									),
+									' ',
+									dom.submitbutton('Create'),
+								),
+							),
+						)
+						remove()
+						name.focus()
+					}),
+				),
+				dom.div(
 					dom.clickbutton('Move to trash', attr.title('Move mailbox, its messages and its mailboxes to the trash.'), async function click() {
 						if (!trashmb) {
 							window.alert('No mailbox configured for trash yet.')

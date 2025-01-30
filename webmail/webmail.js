@@ -5499,6 +5499,17 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 			remove();
 			const mailboxIDs = [mbv.mailbox.ID, ...mailboxlistView.mailboxes().filter(mb => mb.Name.startsWith(mbv.mailbox.Name + '/')).map(mb => mb.ID)];
 			await withStatus('Marking mailboxes as read', client.MailboxesMarkRead(mailboxIDs));
+		})), dom.div(dom.clickbutton('Create mailbox', attr.title('Create new mailbox within this mailbox.'), function click(e) {
+			let fieldset;
+			let name;
+			const ref = e.target;
+			const removeCreate = popover(ref, {}, dom.form(async function submit(e) {
+				e.preventDefault();
+				await withStatus('Creating mailbox', client.MailboxCreate(mbv.mailbox.Name + '/' + name.value), fieldset);
+				removeCreate();
+			}, fieldset = dom.fieldset(dom.label('Name ', name = dom.input(attr.required('yes'))), ' ', dom.submitbutton('Create'))));
+			remove();
+			name.focus();
 		})), dom.div(dom.clickbutton('Move to trash', attr.title('Move mailbox, its messages and its mailboxes to the trash.'), async function click() {
 			if (!trashmb) {
 				window.alert('No mailbox configured for trash yet.');
