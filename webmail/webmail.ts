@@ -486,8 +486,9 @@ const parseSearchDateTime = (s: string, isstart: boolean): string | undefined =>
 		const d = new Date(fixDate(t[0]) + 'T'+t[1])
 		return d ? d.toJSON() : undefined
 	} else if (t.length === 1) {
-		if (isNaN(Date.parse(fixDate(t[0])))) {
-			const d = new Date(fixDate(t[0]))
+		const fds = fixDate(t[0])
+		if (!isNaN(Date.parse(fds))) {
+			const d = new Date(fds)
 			if (!isstart) {
 				d.setDate(d.getDate()+1)
 			}
