@@ -5203,6 +5203,7 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 								),
 							),
 						)
+						name.focus()
 					}),
 				),
 				dom.div(
@@ -5562,6 +5563,7 @@ const newMailboxlistView = (msglistView: MsglistView, requestNewView: requestNew
 											),
 										)
 										remove()
+										name.focus()
 									}),
 								),
 								dom.div(

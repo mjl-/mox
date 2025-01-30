@@ -5516,6 +5516,7 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 				await withStatus('Renaming mailbox', client.MailboxRename(mbv.mailbox.ID, name.value), fieldset);
 				remove2();
 			}, fieldset = dom.fieldset(dom.label('Name ', name = dom.input(attr.required(''), attr.value(mbv.mailbox.Name), prop({ selectionStart: 0, selectionEnd: mbv.mailbox.Name.length }))), ' ', dom.submitbutton('Rename'))));
+			name.focus();
 		})), dom.div(dom.clickbutton('Set role for mailbox...', attr.title('Set a special-use role on the mailbox, making it the designated mailbox for either Archived, Sent, Draft, Trashed or Junk messages.'), async function click() {
 			remove();
 			const setUse = async (set) => {
@@ -5771,6 +5772,7 @@ const newMailboxlistView = (msglistView, requestNewView, updatePageTitle, setLoc
 				removeCreate();
 			}, fieldset = dom.fieldset(dom.label('Name ', name = dom.input(attr.required('yes'), focusPlaceholder('Lists/Go/Nuts'))), ' ', dom.submitbutton('Create'))));
 			remove();
+			name.focus();
 		})), dom.div(dom.clickbutton('Export', function click(e) {
 			const ref = e.target;
 			popoverExport(ref, '');
