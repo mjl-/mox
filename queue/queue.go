@@ -32,6 +32,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/store"
@@ -351,7 +352,7 @@ func Init() error {
 
 	var err error
 	log := mlog.New("queue", nil)
-	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: moxvar.RegisterLogger(qpath, log.Logger)}
 	DB, err = bstore.Open(mox.Shutdown, qpath, &opts, DBTypes...)
 	if err == nil {
 		err = DB.Read(mox.Shutdown, func(tx *bstore.Tx) error {

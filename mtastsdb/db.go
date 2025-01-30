@@ -24,6 +24,7 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/tlsrpt"
 )
@@ -75,7 +76,7 @@ func Init(refresher bool) error {
 
 	p := mox.DataDirPath("mtasts.db")
 	os.MkdirAll(filepath.Dir(p), 0770)
-	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: moxvar.RegisterLogger(p, log.Logger)}
 	var err error
 	DB, err = bstore.Open(mox.Shutdown, p, &opts, DBTypes...)
 	if err != nil {

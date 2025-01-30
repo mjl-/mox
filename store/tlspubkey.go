@@ -18,6 +18,7 @@ import (
 
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -54,7 +55,7 @@ func Init(ctx context.Context) error {
 	pkglog := mlog.New("store", nil)
 	p := mox.DataDirPath("auth.db")
 	os.MkdirAll(filepath.Dir(p), 0770)
-	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: pkglog.Logger}
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: moxvar.RegisterLogger(p, pkglog.Logger)}
 	var err error
 	AuthDB, err = bstore.Open(ctx, p, &opts, AuthDBTypes...)
 	return err

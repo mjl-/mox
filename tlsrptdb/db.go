@@ -11,6 +11,7 @@ import (
 
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/moxvar"
 )
 
 var (
@@ -45,14 +46,14 @@ func Init() error {
 func openReportDB(ctx context.Context, log mlog.Log) (*bstore.DB, error) {
 	p := mox.DataDirPath("tlsrpt.db")
 	os.MkdirAll(filepath.Dir(p), 0770)
-	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: moxvar.RegisterLogger(p, log.Logger)}
 	return bstore.Open(ctx, p, &opts, ReportDBTypes...)
 }
 
 func openResultDB(ctx context.Context, log mlog.Log) (*bstore.DB, error) {
 	p := mox.DataDirPath("tlsrptresult.db")
 	os.MkdirAll(filepath.Dir(p), 0770)
-	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: moxvar.RegisterLogger(p, log.Logger)}
 	return bstore.Open(ctx, p, &opts, ResultDBTypes...)
 }
 

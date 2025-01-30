@@ -26,6 +26,7 @@ import (
 
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/moxvar"
 )
 
 var (
@@ -230,7 +231,7 @@ func newDB(ctx context.Context, log mlog.Log, path string) (db *bstore.DB, rerr 
 		}
 	}()
 
-	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: moxvar.RegisterLogger(path, log.Logger)}
 	db, err := bstore.Open(ctx, path, &opts, DBTypes...)
 	if err != nil {
 		return nil, fmt.Errorf("open new database: %w", err)

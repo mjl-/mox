@@ -21,6 +21,7 @@ import (
 
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/moxvar"
 )
 
 // Init opens the databases.
@@ -64,13 +65,13 @@ func Close() error {
 func openReportsDB(ctx context.Context, log mlog.Log) (*bstore.DB, error) {
 	p := mox.DataDirPath("dmarcrpt.db")
 	os.MkdirAll(filepath.Dir(p), 0770)
-	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: moxvar.RegisterLogger(p, log.Logger)}
 	return bstore.Open(ctx, p, &opts, ReportsDBTypes...)
 }
 
 func openEvalDB(ctx context.Context, log mlog.Log) (*bstore.DB, error) {
 	p := mox.DataDirPath("dmarceval.db")
 	os.MkdirAll(filepath.Dir(p), 0770)
-	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: log.Logger}
+	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: moxvar.RegisterLogger(p, log.Logger)}
 	return bstore.Open(ctx, p, &opts, EvalDBTypes...)
 }
