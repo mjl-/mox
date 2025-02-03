@@ -7,16 +7,16 @@
 //   Makes it easier to look through a DOM, and easier to change the style of all
 //   instances of a class.
 
-// We keep the default/regular styles and dark-mode styles in separate stylesheets.
-const cssStyle = dom.style(attr.type('text/css'))
-document.head.prepend(cssStyle)
-const styleSheet = cssStyle.sheet!
-
 const cssStyleDark = dom.style(attr.type('text/css'))
 document.head.prepend(cssStyleDark)
 const styleSheetDark = cssStyleDark.sheet!
 styleSheetDark.insertRule('@media (prefers-color-scheme: dark) {}')
 const darkModeRule = styleSheetDark.cssRules[0] as CSSMediaRule
+
+// We keep the default/regular styles and dark-mode styles in separate stylesheets.
+const cssStyle = dom.style(attr.type('text/css'))
+document.head.prepend(cssStyle)
+const styleSheet = cssStyle.sheet!
 
 let cssRules: { [selector: string]: string} = {} // For ensuring a selector has a single definition.
 // Ensure a selector has the given style properties. If a style value is an array,

@@ -1062,15 +1062,15 @@ var api;
 // - To use class names for styling, instead of the the many inline styles.
 //   Makes it easier to look through a DOM, and easier to change the style of all
 //   instances of a class.
-// We keep the default/regular styles and dark-mode styles in separate stylesheets.
-const cssStyle = dom.style(attr.type('text/css'));
-document.head.prepend(cssStyle);
-const styleSheet = cssStyle.sheet;
 const cssStyleDark = dom.style(attr.type('text/css'));
 document.head.prepend(cssStyleDark);
 const styleSheetDark = cssStyleDark.sheet;
 styleSheetDark.insertRule('@media (prefers-color-scheme: dark) {}');
 const darkModeRule = styleSheetDark.cssRules[0];
+// We keep the default/regular styles and dark-mode styles in separate stylesheets.
+const cssStyle = dom.style(attr.type('text/css'));
+document.head.prepend(cssStyle);
+const styleSheet = cssStyle.sheet;
 let cssRules = {}; // For ensuring a selector has a single definition.
 // Ensure a selector has the given style properties. If a style value is an array,
 // it must have 2 elements. The first is the default value, the second used for a
