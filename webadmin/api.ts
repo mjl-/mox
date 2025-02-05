@@ -1068,6 +1068,28 @@ export interface TLSPublicKey {
 	LoginAddress: string  // Must belong to account.
 }
 
+// LoginAttempt is a successful or failed login attempt, stored for auditing
+// purposes.
+// 
+// At most 10000 failed attempts are stored per account, to prevent unbounded
+// growth of the database by third parties.
+export interface LoginAttempt {
+	Key?: string | null  // Hash of all fields after "Count" below. We store a single entry per key, updating its Last and Count fields.
+	Last: Date  // Last has an index for efficient removal of entries after 30 days.
+	First: Date
+	Count: number  // Number of login attempts for the combination of fields below.
+	AccountName: string  // Admin logins use "(admin)". If no account is known, "-" is used. AccountName has an index for efficiently removing failed login attempts at the end of the list when there are too many, and for efficiently removing all records for an account.
+	LoginAddress: string  // Empty for attempts to login in as admin.
+	RemoteIP: string
+	LocalIP: string
+	TLS: string  // Empty if no TLS, otherwise contains version, algorithm, properties, etc.
+	TLSPubKeyFingerprint: string
+	Protocol: string  // "submission", "imap", "webmail", "webaccount", "webadmin"
+	UserAgent: string  // From HTTP header, or IMAP ID command.
+	AuthMech: string  // "plain", "login", "cram-md5", "scram-sha-256-plus", "(unrecognized)", etc
+	Result: AuthResult
+}
+
 export type CSRFToken = string
 
 // Policy as used in DMARC DNS record for "p=" or "sp=".
@@ -1112,8 +1134,21 @@ export type Localpart = string
 // be an IPv4 address.
 export type IP = string
 
-export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"Canonicalization":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"ConfigDomain":true,"DANECheckResult":true,"DKIM":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARC":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Dynamic":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"Hook":true,"HookFilter":true,"HookResult":true,"HookRetired":true,"HookRetiredFilter":true,"HookRetiredSort":true,"HookSort":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"IncomingWebhook":true,"JunkFilter":true,"MTASTS":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"MsgResult":true,"MsgRetired":true,"OutgoingWebhook":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"RetiredFilter":true,"RetiredSort":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Selector":true,"Sort":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSPublicKey":true,"TLSRPT":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebInternal":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
-export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"CSRFToken":true,"DMARCPolicy":true,"IP":true,"Localpart":true,"Mode":true,"RUA":true}
+// AuthResult is the result of a login attempt.
+export enum AuthResult {
+	AuthSuccess = "ok",
+	AuthBadUser = "baduser",
+	AuthBadPassword = "badpassword",
+	AuthBadCredentials = "badcreds",
+	AuthBadChannelBinding = "badchanbind",
+	AuthBadProtocol = "badprotocol",
+	AuthLoginDisabled = "logindisabled",
+	AuthError = "error",
+	AuthAborted = "aborted",
+}
+
+export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"Canonicalization":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"ConfigDomain":true,"DANECheckResult":true,"DKIM":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARC":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Dynamic":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"Hook":true,"HookFilter":true,"HookResult":true,"HookRetired":true,"HookRetiredFilter":true,"HookRetiredSort":true,"HookSort":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"IncomingWebhook":true,"JunkFilter":true,"LoginAttempt":true,"MTASTS":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"MsgResult":true,"MsgRetired":true,"OutgoingWebhook":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"RetiredFilter":true,"RetiredSort":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Selector":true,"Sort":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSPublicKey":true,"TLSRPT":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebInternal":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
+export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"AuthResult":true,"CSRFToken":true,"DMARCPolicy":true,"IP":true,"Localpart":true,"Mode":true,"RUA":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
 	"CheckResult": {"Name":"CheckResult","Docs":"","Fields":[{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"DNSSEC","Docs":"","Typewords":["DNSSECResult"]},{"Name":"IPRev","Docs":"","Typewords":["IPRevCheckResult"]},{"Name":"MX","Docs":"","Typewords":["MXCheckResult"]},{"Name":"TLS","Docs":"","Typewords":["TLSCheckResult"]},{"Name":"DANE","Docs":"","Typewords":["DANECheckResult"]},{"Name":"SPF","Docs":"","Typewords":["SPFCheckResult"]},{"Name":"DKIM","Docs":"","Typewords":["DKIMCheckResult"]},{"Name":"DMARC","Docs":"","Typewords":["DMARCCheckResult"]},{"Name":"HostTLSRPT","Docs":"","Typewords":["TLSRPTCheckResult"]},{"Name":"DomainTLSRPT","Docs":"","Typewords":["TLSRPTCheckResult"]},{"Name":"MTASTS","Docs":"","Typewords":["MTASTSCheckResult"]},{"Name":"SRVConf","Docs":"","Typewords":["SRVConfCheckResult"]},{"Name":"Autoconf","Docs":"","Typewords":["AutoconfCheckResult"]},{"Name":"Autodiscover","Docs":"","Typewords":["AutodiscoverCheckResult"]}]},
@@ -1226,6 +1261,7 @@ export const types: TypenameMap = {
 	"TLSRPTSuppressAddress": {"Name":"TLSRPTSuppressAddress","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Inserted","Docs":"","Typewords":["timestamp"]},{"Name":"ReportingAddress","Docs":"","Typewords":["string"]},{"Name":"Until","Docs":"","Typewords":["timestamp"]},{"Name":"Comment","Docs":"","Typewords":["string"]}]},
 	"Dynamic": {"Name":"Dynamic","Docs":"","Fields":[{"Name":"Domains","Docs":"","Typewords":["{}","ConfigDomain"]},{"Name":"Accounts","Docs":"","Typewords":["{}","Account"]},{"Name":"WebDomainRedirects","Docs":"","Typewords":["{}","string"]},{"Name":"WebHandlers","Docs":"","Typewords":["[]","WebHandler"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"MonitorDNSBLs","Docs":"","Typewords":["[]","string"]},{"Name":"MonitorDNSBLZones","Docs":"","Typewords":["[]","Domain"]}]},
 	"TLSPublicKey": {"Name":"TLSPublicKey","Docs":"","Fields":[{"Name":"Fingerprint","Docs":"","Typewords":["string"]},{"Name":"Created","Docs":"","Typewords":["timestamp"]},{"Name":"Type","Docs":"","Typewords":["string"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"NoIMAPPreauth","Docs":"","Typewords":["bool"]},{"Name":"CertDER","Docs":"","Typewords":["nullable","string"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"LoginAddress","Docs":"","Typewords":["string"]}]},
+	"LoginAttempt": {"Name":"LoginAttempt","Docs":"","Fields":[{"Name":"Key","Docs":"","Typewords":["nullable","string"]},{"Name":"Last","Docs":"","Typewords":["timestamp"]},{"Name":"First","Docs":"","Typewords":["timestamp"]},{"Name":"Count","Docs":"","Typewords":["int64"]},{"Name":"AccountName","Docs":"","Typewords":["string"]},{"Name":"LoginAddress","Docs":"","Typewords":["string"]},{"Name":"RemoteIP","Docs":"","Typewords":["string"]},{"Name":"LocalIP","Docs":"","Typewords":["string"]},{"Name":"TLS","Docs":"","Typewords":["string"]},{"Name":"TLSPubKeyFingerprint","Docs":"","Typewords":["string"]},{"Name":"Protocol","Docs":"","Typewords":["string"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"AuthMech","Docs":"","Typewords":["string"]},{"Name":"Result","Docs":"","Typewords":["AuthResult"]}]},
 	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"DMARCPolicy": {"Name":"DMARCPolicy","Docs":"","Values":[{"Name":"PolicyEmpty","Value":"","Docs":""},{"Name":"PolicyNone","Value":"none","Docs":""},{"Name":"PolicyQuarantine","Value":"quarantine","Docs":""},{"Name":"PolicyReject","Value":"reject","Docs":""}]},
 	"Align": {"Name":"Align","Docs":"","Values":[{"Name":"AlignStrict","Value":"s","Docs":""},{"Name":"AlignRelaxed","Value":"r","Docs":""}]},
@@ -1233,6 +1269,7 @@ export const types: TypenameMap = {
 	"Mode": {"Name":"Mode","Docs":"","Values":[{"Name":"ModeEnforce","Value":"enforce","Docs":""},{"Name":"ModeTesting","Value":"testing","Docs":""},{"Name":"ModeNone","Value":"none","Docs":""}]},
 	"Localpart": {"Name":"Localpart","Docs":"","Values":null},
 	"IP": {"Name":"IP","Docs":"","Values":[]},
+	"AuthResult": {"Name":"AuthResult","Docs":"","Values":[{"Name":"AuthSuccess","Value":"ok","Docs":""},{"Name":"AuthBadUser","Value":"baduser","Docs":""},{"Name":"AuthBadPassword","Value":"badpassword","Docs":""},{"Name":"AuthBadCredentials","Value":"badcreds","Docs":""},{"Name":"AuthBadChannelBinding","Value":"badchanbind","Docs":""},{"Name":"AuthBadProtocol","Value":"badprotocol","Docs":""},{"Name":"AuthLoginDisabled","Value":"logindisabled","Docs":""},{"Name":"AuthError","Value":"error","Docs":""},{"Name":"AuthAborted","Value":"aborted","Docs":""}]},
 }
 
 export const parser = {
@@ -1346,6 +1383,7 @@ export const parser = {
 	TLSRPTSuppressAddress: (v: any) => parse("TLSRPTSuppressAddress", v) as TLSRPTSuppressAddress,
 	Dynamic: (v: any) => parse("Dynamic", v) as Dynamic,
 	TLSPublicKey: (v: any) => parse("TLSPublicKey", v) as TLSPublicKey,
+	LoginAttempt: (v: any) => parse("LoginAttempt", v) as LoginAttempt,
 	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 	DMARCPolicy: (v: any) => parse("DMARCPolicy", v) as DMARCPolicy,
 	Align: (v: any) => parse("Align", v) as Align,
@@ -1353,6 +1391,7 @@ export const parser = {
 	Mode: (v: any) => parse("Mode", v) as Mode,
 	Localpart: (v: any) => parse("Localpart", v) as Localpart,
 	IP: (v: any) => parse("IP", v) as IP,
+	AuthResult: (v: any) => parse("AuthResult", v) as AuthResult,
 }
 
 // Admin exports web API functions for the admin web interface. All its methods are
@@ -2280,6 +2319,14 @@ export class Client {
 		const returnTypes: string[][] = [["[]","TLSPublicKey"]]
 		const params: any[] = [accountOpt]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as TLSPublicKey[] | null
+	}
+
+	async LoginAttempts(accountName: string, limit: number): Promise<LoginAttempt[] | null> {
+		const fn: string = "LoginAttempts"
+		const paramTypes: string[][] = [["string"],["int32"]]
+		const returnTypes: string[][] = [["[]","LoginAttempt"]]
+		const params: any[] = [accountName, limit]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as LoginAttempt[] | null
 	}
 }
 

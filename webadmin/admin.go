@@ -2712,3 +2712,9 @@ func (Admin) AliasAddressesRemove(ctx context.Context, aliaslp string, domainNam
 func (Admin) TLSPublicKeys(ctx context.Context, accountOpt string) ([]store.TLSPublicKey, error) {
 	return store.TLSPublicKeyList(ctx, accountOpt)
 }
+
+func (Admin) LoginAttempts(ctx context.Context, accountName string, limit int) []store.LoginAttempt {
+	l, err := store.LoginAttemptList(ctx, accountName, limit)
+	xcheckf(ctx, err, "listing login attempts")
+	return l
+}

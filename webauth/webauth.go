@@ -77,6 +77,23 @@ type SessionAuth interface {
 	remove(ctx context.Context, log mlog.Log, accountName string, sessionToken store.SessionToken) error
 }
 
+// loginAttempt initializes a loginAttempt, for adding to the store after filling in the results and other details.
+func loginAttempt(r *http.Request, protocol, authMech string) store.LoginAttempt {
+	remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if remoteIP == "" {
+		remoteIP = r.RemoteAddr
+	}
+
+	return store.LoginAttempt{
+		RemoteIP:  remoteIP,
+		TLS:       store.LoginAttemptTLS(r.TLS),
+		Protocol:  protocol,
+		AuthMech:  authMech,
+		UserAgent: r.UserAgent(),
+		Result:    store.AuthError, // Replaced by caller.
+	}
+}
+
 // Check authentication for a request based on session token in cookie and matching
 // csrf in case requireCSRF is set (from header, unless formCSRF is set). Also
 // performs rate limiting.
@@ -143,9 +160,9 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 		return
 	}
 
-	authResult := "badcreds"
+	la := loginAttempt(r, kind, "websession")
 	defer func() {
-		metrics.AuthenticationInc(kind, "websession", authResult)
+		store.LoginAttemptAdd(context.Background(), log, la)
 	}()
 
 	// Cookie values are of the form: token SP accountname.
@@ -165,16 +182,19 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 		respondAuthError("user:badAuth", "malformed session account name")
 		return "", "", "", false
 	}
+	la.AccountName = accountName
 
 	loginAddress, err = sessionAuth.use(ctx, log, accountName, sessionToken, csrfToken)
 	if err != nil {
+		la.Result = store.AuthBadCredentials
 		time.Sleep(BadAuthDelay)
 		respondAuthError("user:badAuth", err.Error())
 		return "", "", "", false
 	}
+	la.LoginAddress = loginAddress
 
 	mox.LimiterFailedAuth.Reset(ip, start)
-	authResult = "ok"
+	la.Result = store.AuthSuccess
 
 	// Add to HTTP logging that this is an authenticated request.
 	if lw, ok := w.(interface{ AddAttr(a slog.Attr) }); ok {
@@ -247,26 +267,29 @@ func Login(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind, coo
 	}
 
 	valid, disabled, accountName, err := sessionAuth.login(ctx, log, username, password)
-	var authResult string
+	la := loginAttempt(r, kind, "weblogin")
+	la.LoginAddress = username
+	la.AccountName = accountName
 	defer func() {
-		metrics.AuthenticationInc(kind, "weblogin", authResult)
+		store.LoginAttemptAdd(context.Background(), log, la)
 	}()
 	if disabled {
-		authResult = "logindisabled"
+		la.Result = store.AuthLoginDisabled
 		return "", &sherpa.Error{Code: "user:loginFailed", Message: err.Error()}
 	} else if err != nil {
-		authResult = "error"
+		la.Result = store.AuthError
 		return "", fmt.Errorf("evaluating login attempt: %v", err)
 	} else if !valid {
 		time.Sleep(BadAuthDelay)
-		authResult = "badcreds"
+		la.Result = store.AuthBadCredentials
 		return "", &sherpa.Error{Code: "user:loginFailed", Message: "invalid credentials"}
 	}
-	authResult = "ok"
+	la.Result = store.AuthSuccess
 	mox.LimiterFailedAuth.Reset(ip, start)
 
 	sessionToken, csrfToken, err := sessionAuth.add(ctx, log, accountName, username)
 	if err != nil {
+		la.Result = store.AuthError
 		log.Errorx("adding session after login", err)
 		return "", fmt.Errorf("adding session: %v", err)
 	}

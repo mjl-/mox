@@ -250,8 +250,21 @@ var api;
 		Mode["ModeTesting"] = "testing";
 		Mode["ModeNone"] = "none";
 	})(Mode = api.Mode || (api.Mode = {}));
-	api.structTypes = { "Account": true, "Address": true, "AddressAlias": true, "Alias": true, "AliasAddress": true, "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "AutomaticJunkFlags": true, "Canonicalization": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "ConfigDomain": true, "DANECheckResult": true, "DKIM": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARC": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Destination": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Dynamic": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "Hook": true, "HookFilter": true, "HookResult": true, "HookRetired": true, "HookRetiredFilter": true, "HookRetiredSort": true, "HookSort": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "IncomingWebhook": true, "JunkFilter": true, "MTASTS": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "MsgResult": true, "MsgRetired": true, "OutgoingWebhook": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "RetiredFilter": true, "RetiredSort": true, "Reverse": true, "Route": true, "Row": true, "Ruleset": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Selector": true, "Sort": true, "SubjectPass": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSPublicKey": true, "TLSRPT": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportDirect": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebInternal": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
-	api.stringsTypes = { "Align": true, "CSRFToken": true, "DMARCPolicy": true, "IP": true, "Localpart": true, "Mode": true, "RUA": true };
+	// AuthResult is the result of a login attempt.
+	let AuthResult;
+	(function (AuthResult) {
+		AuthResult["AuthSuccess"] = "ok";
+		AuthResult["AuthBadUser"] = "baduser";
+		AuthResult["AuthBadPassword"] = "badpassword";
+		AuthResult["AuthBadCredentials"] = "badcreds";
+		AuthResult["AuthBadChannelBinding"] = "badchanbind";
+		AuthResult["AuthBadProtocol"] = "badprotocol";
+		AuthResult["AuthLoginDisabled"] = "logindisabled";
+		AuthResult["AuthError"] = "error";
+		AuthResult["AuthAborted"] = "aborted";
+	})(AuthResult = api.AuthResult || (api.AuthResult = {}));
+	api.structTypes = { "Account": true, "Address": true, "AddressAlias": true, "Alias": true, "AliasAddress": true, "AuthResults": true, "AutoconfCheckResult": true, "AutodiscoverCheckResult": true, "AutodiscoverSRV": true, "AutomaticJunkFlags": true, "Canonicalization": true, "CheckResult": true, "ClientConfigs": true, "ClientConfigsEntry": true, "ConfigDomain": true, "DANECheckResult": true, "DKIM": true, "DKIMAuthResult": true, "DKIMCheckResult": true, "DKIMRecord": true, "DMARC": true, "DMARCCheckResult": true, "DMARCRecord": true, "DMARCSummary": true, "DNSSECResult": true, "DateRange": true, "Destination": true, "Directive": true, "Domain": true, "DomainFeedback": true, "Dynamic": true, "Evaluation": true, "EvaluationStat": true, "Extension": true, "FailureDetails": true, "Filter": true, "HoldRule": true, "Hook": true, "HookFilter": true, "HookResult": true, "HookRetired": true, "HookRetiredFilter": true, "HookRetiredSort": true, "HookSort": true, "IPDomain": true, "IPRevCheckResult": true, "Identifiers": true, "IncomingWebhook": true, "JunkFilter": true, "LoginAttempt": true, "MTASTS": true, "MTASTSCheckResult": true, "MTASTSRecord": true, "MX": true, "MXCheckResult": true, "Modifier": true, "Msg": true, "MsgResult": true, "MsgRetired": true, "OutgoingWebhook": true, "Pair": true, "Policy": true, "PolicyEvaluated": true, "PolicyOverrideReason": true, "PolicyPublished": true, "PolicyRecord": true, "Record": true, "Report": true, "ReportMetadata": true, "ReportRecord": true, "Result": true, "ResultPolicy": true, "RetiredFilter": true, "RetiredSort": true, "Reverse": true, "Route": true, "Row": true, "Ruleset": true, "SMTPAuth": true, "SPFAuthResult": true, "SPFCheckResult": true, "SPFRecord": true, "SRV": true, "SRVConfCheckResult": true, "STSMX": true, "Selector": true, "Sort": true, "SubjectPass": true, "Summary": true, "SuppressAddress": true, "TLSCheckResult": true, "TLSPublicKey": true, "TLSRPT": true, "TLSRPTCheckResult": true, "TLSRPTDateRange": true, "TLSRPTRecord": true, "TLSRPTSummary": true, "TLSRPTSuppressAddress": true, "TLSReportRecord": true, "TLSResult": true, "Transport": true, "TransportDirect": true, "TransportSMTP": true, "TransportSocks": true, "URI": true, "WebForward": true, "WebHandler": true, "WebInternal": true, "WebRedirect": true, "WebStatic": true, "WebserverConfig": true };
+	api.stringsTypes = { "Align": true, "AuthResult": true, "CSRFToken": true, "DMARCPolicy": true, "IP": true, "Localpart": true, "Mode": true, "RUA": true };
 	api.intsTypes = {};
 	api.types = {
 		"CheckResult": { "Name": "CheckResult", "Docs": "", "Fields": [{ "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "DNSSEC", "Docs": "", "Typewords": ["DNSSECResult"] }, { "Name": "IPRev", "Docs": "", "Typewords": ["IPRevCheckResult"] }, { "Name": "MX", "Docs": "", "Typewords": ["MXCheckResult"] }, { "Name": "TLS", "Docs": "", "Typewords": ["TLSCheckResult"] }, { "Name": "DANE", "Docs": "", "Typewords": ["DANECheckResult"] }, { "Name": "SPF", "Docs": "", "Typewords": ["SPFCheckResult"] }, { "Name": "DKIM", "Docs": "", "Typewords": ["DKIMCheckResult"] }, { "Name": "DMARC", "Docs": "", "Typewords": ["DMARCCheckResult"] }, { "Name": "HostTLSRPT", "Docs": "", "Typewords": ["TLSRPTCheckResult"] }, { "Name": "DomainTLSRPT", "Docs": "", "Typewords": ["TLSRPTCheckResult"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["MTASTSCheckResult"] }, { "Name": "SRVConf", "Docs": "", "Typewords": ["SRVConfCheckResult"] }, { "Name": "Autoconf", "Docs": "", "Typewords": ["AutoconfCheckResult"] }, { "Name": "Autodiscover", "Docs": "", "Typewords": ["AutodiscoverCheckResult"] }] },
@@ -364,6 +377,7 @@ var api;
 		"TLSRPTSuppressAddress": { "Name": "TLSRPTSuppressAddress", "Docs": "", "Fields": [{ "Name": "ID", "Docs": "", "Typewords": ["int64"] }, { "Name": "Inserted", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "ReportingAddress", "Docs": "", "Typewords": ["string"] }, { "Name": "Until", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Comment", "Docs": "", "Typewords": ["string"] }] },
 		"Dynamic": { "Name": "Dynamic", "Docs": "", "Fields": [{ "Name": "Domains", "Docs": "", "Typewords": ["{}", "ConfigDomain"] }, { "Name": "Accounts", "Docs": "", "Typewords": ["{}", "Account"] }, { "Name": "WebDomainRedirects", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "WebHandlers", "Docs": "", "Typewords": ["[]", "WebHandler"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "MonitorDNSBLs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "MonitorDNSBLZones", "Docs": "", "Typewords": ["[]", "Domain"] }] },
 		"TLSPublicKey": { "Name": "TLSPublicKey", "Docs": "", "Fields": [{ "Name": "Fingerprint", "Docs": "", "Typewords": ["string"] }, { "Name": "Created", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Type", "Docs": "", "Typewords": ["string"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "NoIMAPPreauth", "Docs": "", "Typewords": ["bool"] }, { "Name": "CertDER", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["string"] }] },
+		"LoginAttempt": { "Name": "LoginAttempt", "Docs": "", "Fields": [{ "Name": "Key", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Last", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "First", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Count", "Docs": "", "Typewords": ["int64"] }, { "Name": "AccountName", "Docs": "", "Typewords": ["string"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIP", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalIP", "Docs": "", "Typewords": ["string"] }, { "Name": "TLS", "Docs": "", "Typewords": ["string"] }, { "Name": "TLSPubKeyFingerprint", "Docs": "", "Typewords": ["string"] }, { "Name": "Protocol", "Docs": "", "Typewords": ["string"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "AuthMech", "Docs": "", "Typewords": ["string"] }, { "Name": "Result", "Docs": "", "Typewords": ["AuthResult"] }] },
 		"CSRFToken": { "Name": "CSRFToken", "Docs": "", "Values": null },
 		"DMARCPolicy": { "Name": "DMARCPolicy", "Docs": "", "Values": [{ "Name": "PolicyEmpty", "Value": "", "Docs": "" }, { "Name": "PolicyNone", "Value": "none", "Docs": "" }, { "Name": "PolicyQuarantine", "Value": "quarantine", "Docs": "" }, { "Name": "PolicyReject", "Value": "reject", "Docs": "" }] },
 		"Align": { "Name": "Align", "Docs": "", "Values": [{ "Name": "AlignStrict", "Value": "s", "Docs": "" }, { "Name": "AlignRelaxed", "Value": "r", "Docs": "" }] },
@@ -371,6 +385,7 @@ var api;
 		"Mode": { "Name": "Mode", "Docs": "", "Values": [{ "Name": "ModeEnforce", "Value": "enforce", "Docs": "" }, { "Name": "ModeTesting", "Value": "testing", "Docs": "" }, { "Name": "ModeNone", "Value": "none", "Docs": "" }] },
 		"Localpart": { "Name": "Localpart", "Docs": "", "Values": null },
 		"IP": { "Name": "IP", "Docs": "", "Values": [] },
+		"AuthResult": { "Name": "AuthResult", "Docs": "", "Values": [{ "Name": "AuthSuccess", "Value": "ok", "Docs": "" }, { "Name": "AuthBadUser", "Value": "baduser", "Docs": "" }, { "Name": "AuthBadPassword", "Value": "badpassword", "Docs": "" }, { "Name": "AuthBadCredentials", "Value": "badcreds", "Docs": "" }, { "Name": "AuthBadChannelBinding", "Value": "badchanbind", "Docs": "" }, { "Name": "AuthBadProtocol", "Value": "badprotocol", "Docs": "" }, { "Name": "AuthLoginDisabled", "Value": "logindisabled", "Docs": "" }, { "Name": "AuthError", "Value": "error", "Docs": "" }, { "Name": "AuthAborted", "Value": "aborted", "Docs": "" }] },
 	};
 	api.parser = {
 		CheckResult: (v) => api.parse("CheckResult", v),
@@ -483,6 +498,7 @@ var api;
 		TLSRPTSuppressAddress: (v) => api.parse("TLSRPTSuppressAddress", v),
 		Dynamic: (v) => api.parse("Dynamic", v),
 		TLSPublicKey: (v) => api.parse("TLSPublicKey", v),
+		LoginAttempt: (v) => api.parse("LoginAttempt", v),
 		CSRFToken: (v) => api.parse("CSRFToken", v),
 		DMARCPolicy: (v) => api.parse("DMARCPolicy", v),
 		Align: (v) => api.parse("Align", v),
@@ -490,6 +506,7 @@ var api;
 		Mode: (v) => api.parse("Mode", v),
 		Localpart: (v) => api.parse("Localpart", v),
 		IP: (v) => api.parse("IP", v),
+		AuthResult: (v) => api.parse("AuthResult", v),
 	};
 	// Admin exports web API functions for the admin web interface. All its methods are
 	// exported under api/. Function calls require valid HTTP Authentication
@@ -1318,6 +1335,13 @@ var api;
 			const params = [accountOpt];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		async LoginAttempts(accountName, limit) {
+			const fn = "LoginAttempts";
+			const paramTypes = [["string"], ["int32"]];
+			const returnTypes = [["[]", "LoginAttempt"]];
+			const params = [accountName, limit];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 	}
 	api.Client = Client;
 	api.defaultBaseURL = (function () {
@@ -2005,7 +2029,7 @@ const loglevels = async () => {
 const box = (color, ...l) => [
 	dom.div(style({
 		display: 'inline-block',
-		padding: '.25em .5em',
+		padding: '.125em .25em',
 		backgroundColor: color,
 		borderRadius: '3px',
 		margin: '.5ex 0',
@@ -2019,9 +2043,10 @@ const inlineBox = (color, ...l) => dom.span(style({
 	borderRadius: '3px',
 }), l);
 const accounts = async () => {
-	const [[accounts, accountsDisabled], domains] = await Promise.all([
+	const [[accounts, accountsDisabled], domains, loginAttempts] = await Promise.all([
 		client.Accounts(),
 		client.Domains(),
+		client.LoginAttempts("", 10),
 	]);
 	let fieldset;
 	let localpart;
@@ -2029,18 +2054,31 @@ const accounts = async () => {
 	let account;
 	let accountModified = false;
 	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Accounts'), dom.h2('Accounts'), (accounts || []).length === 0 ? dom.p('No accounts') :
-		dom.ul((accounts || []).map(s => dom.li(dom.a(attr.href('#accounts/' + s), s), accountsDisabled?.includes(s) ? ' (disabled)' : ''))), dom.br(), dom.h2('Add account'), dom.form(async function submit(e) {
+		dom.ul((accounts || []).map(s => dom.li(dom.a(attr.href('#accounts/l/' + s), s), accountsDisabled?.includes(s) ? ' (disabled)' : ''))), dom.br(), dom.h2('Add account'), dom.form(async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		await check(fieldset, client.AccountAdd(account.value, localpart.value + '@' + domain.value));
-		window.location.hash = '#accounts/' + account.value;
+		window.location.hash = '#accounts/l/' + account.value;
 	}, fieldset = dom.fieldset(dom.p('Start with the initial email address for the account. The localpart is the account name too by default, but the account name can be changed.'), dom.label(style({ display: 'inline-block' }), dom.span('Localpart', attr.title('The part before the "@" of an email address. More addresses, also at different domains, can be added after the account has been created.')), dom.br(), localpart = dom.input(attr.required(''), function keyup() {
 		if (!accountModified) {
 			account.value = localpart.value;
 		}
 	})), '@', dom.label(style({ display: 'inline-block' }), dom.span('Domain', attr.title('The domain of the email address, after the "@".')), dom.br(), domain = dom.select(attr.required(''), (domains || []).map(d => dom.option(domainName(d.Domain))))), ' ', dom.label(style({ display: 'inline-block' }), dom.span('Account name', attr.title('An account has a password, and email address(es) (possibly at different domains). Its messages and the message index database are are stored in the file system in a directory with the name of the account. An account name is not an email address. Use a name like a unix user name, or the localpart (the part before the "@") of the initial address.')), dom.br(), account = dom.input(attr.required(''), function change() {
 		accountModified = true;
-	})), ' ', dom.submitbutton('Add account', attr.title('The account will be added and the config reloaded.')))));
+	})), ' ', dom.submitbutton('Add account', attr.title('The account will be added and the config reloaded.')))), dom.br(), dom.h2('Recent login attempts', attr.title('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored per account to prevent unlimited growth of the database.')), renderLoginAttempts(true, loginAttempts || []), dom.br(), loginAttempts && loginAttempts.length >= 10 ? dom.p('See ', dom.a(attr.href('#accounts/loginattempts'), 'all login attempts'), '.') : []);
+};
+const loginattempts = async () => {
+	const loginAttempts = await client.LoginAttempts("", 0);
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), 'Login attempts'), dom.h2('Login attempts'), dom.p('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored per account to prevent unlimited growth of the database.'), renderLoginAttempts(true, loginAttempts || []));
+};
+const accountloginattempts = async (accountName) => {
+	const loginAttempts = await client.LoginAttempts(accountName, 0);
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), crumblink('Accounts', '#accounts'), ['(admin)', '-'].includes(accountName) ? accountName : crumblink(accountName, '#accounts/l/' + accountName), 'Login attempts'), dom.h2('Login attempts'), dom.p('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored per account to prevent unlimited growth of the database.'), renderLoginAttempts(false, loginAttempts || []));
+};
+const renderLoginAttempts = (accountLinks, loginAttempts) => {
+	// todo: pagination and search
+	const nowSecs = new Date().getTime() / 1000;
+	return dom.table(dom.thead(dom.tr(dom.th('Time'), dom.th('Result'), dom.th('Count'), dom.th('Account'), dom.th('Address'), dom.th('Protocol'), dom.th('Mechanism'), dom.th('User Agent'), dom.th('Remote IP'), dom.th('Local IP'), dom.th('TLS'), dom.th('TLS pubkey fingerprint'), dom.th('First seen'))), dom.tbody(loginAttempts.length ? [] : dom.tr(dom.td(attr.colspan('13'), 'No login attempts in past 30 days.')), loginAttempts.map(la => dom.tr(dom.td(age(la.Last, false, nowSecs)), dom.td(la.Result === 'ok' ? la.Result : box(red, la.Result)), dom.td('' + la.Count), dom.td(accountLinks ? dom.a(attr.href('#accounts/l/' + la.AccountName + '/loginattempts'), la.AccountName) : la.AccountName), dom.td(la.LoginAddress), dom.td(la.Protocol), dom.td(la.AuthMech), dom.td(la.UserAgent), dom.td(la.RemoteIP), dom.td(la.LocalIP), dom.td(la.TLS), dom.td(la.TLSPubKeyFingerprint), dom.td(age(la.First, false, nowSecs))))));
 };
 const formatQuotaSize = (v) => {
 	if (v === 0) {
@@ -2119,11 +2157,12 @@ const RoutesEditor = (kind, transports, routes, save) => {
 	return render();
 };
 const account = async (name) => {
-	const [[config, diskUsage], domains, transports, tlspubkeys] = await Promise.all([
+	const [[config, diskUsage], domains, transports, tlspubkeys, loginAttempts] = await Promise.all([
 		client.Account(name),
 		client.Domains(),
 		client.Transports(),
 		client.TLSPublicKeys(name),
+		client.LoginAttempts(name, 10),
 	]);
 	// todo: show suppression list, and buttons to add/remove entries.
 	let form;
@@ -2244,7 +2283,7 @@ const account = async (name) => {
 			close();
 			window.location.reload(); // todo: update account and rerender.
 		}, fieldset = dom.fieldset(dom.label(dom.div('Message to user'), loginDisabled = dom.input(attr.required(''), style({ width: '100%' })), dom.p(style({ fontStyle: 'italic' }), 'Will be shown to user on login attempts. Single line, no special and maximum 256 characters since message is used in IMAP/SMTP.')), dom.div(dom.submitbutton('Disable login')))));
-	})), dom.br(), dom.clickbutton('Remove account', async function click(e) {
+	})), dom.br(), dom.h2('Recent login attempts', attr.title('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored per account to prevent unlimited growth of the database.')), renderLoginAttempts(false, loginAttempts || []), dom.br(), loginAttempts && loginAttempts.length >= 10 ? dom.p('See ', dom.a(attr.href('#accounts/l/' + name + '/loginattempts'), 'all login attempts'), ' for this account.') : [], dom.br(), dom.clickbutton('Remove account', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this account? All account data, including messages will be removed.')) {
 			return;
@@ -2389,7 +2428,7 @@ const domain = async (d) => {
 			window.location.reload(); // todo: reload only dkim section
 		}, fieldset = dom.fieldset(dom.div(style({ display: 'flex', gap: '1em' }), dom.div(dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Selector', attr.title('Used in the DKIM-Signature header, and used to form a DNS record under ._domainkey.<domain>.'), dom.div(selector = dom.input(attr.required(''), attr.value(defaultSelector())))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Algorithm', attr.title('For signing messages. RSA is common at the time of writing, not all mail servers recognize ed25519 signature.'), dom.div(algorithm = dom.select(dom.option('rsa'), dom.option('ed25519')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Hash', attr.title("Used in signing messages. Don't use sha1 unless you understand the consequences."), dom.div(hash = dom.select(dom.option('sha256')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Canonicalization - header', attr.title('Canonicalization processes the message headers before signing. Relaxed allows more whitespace changes, making it more likely for DKIM signatures to validate after transit through servers that make whitespace modifications. Simple is more strict.'), dom.div(canonHeader = dom.select(dom.option('relaxed'), dom.option('simple')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Canonicalization - body', attr.title('Like canonicalization for headers, but for the bodies.'), dom.div(canonBody = dom.select(dom.option('relaxed'), dom.option('simple')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Signature lifetime', attr.title('How long a signature remains valid. Should be as long as a message may take to be delivered. The signature must be valid at the time a message is being delivered to the final destination.'), dom.div(lifetime = dom.input(attr.value('3d'), attr.required('')))), dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Seal headers', attr.title("DKIM-signatures cover headers. If headers are not sealed, additional message headers can be added with the same key without invalidating the signature. This may confuse software about which headers are trustworthy. Sealing is the safer option."), dom.div(seal = dom.input(attr.type('checkbox'), attr.checked(''))))), dom.div(dom.label(style({ display: 'block', marginBottom: '1ex' }), 'Headers (optional)', attr.title('Headers to sign. If left empty, a set of standard headers are signed. The (standard set of) headers are most easily edited after creating the selector/key.'), dom.div(headers = dom.textarea(attr.rows('15')))))), dom.div(dom.submitbutton('Add')))));
 	};
-	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Domain ' + domainString(dnsdomain)), domainConfig.Disabled ? dom.p(box(yellow, 'Warning: Domain is disabled. Incoming/outgoing messages involving this domain are rejected and ACME for new TLS certificates is disabled.')) : [], dom.ul(dom.li(dom.a('Required DNS records', attr.href('#domains/' + d + '/dnsrecords'))), dom.li(dom.a('Check current actual DNS records and domain configuration', attr.href('#domains/' + d + '/dnscheck')))), dom.br(), dom.h2('Client configuration'), dom.p('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password. ', dom.span('Explicitly configure', attr.title('To prevent authentication mechanism downgrade attempts that may result in clients sending plain text passwords to a MitM.')), ' the first supported authentication mechanism: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5.'), dom.table(dom.thead(dom.tr(dom.th('Protocol'), dom.th('Host'), dom.th('Port'), dom.th('Listener'), dom.th('Note'))), dom.tbody((clientConfigs.Entries || []).map(e => dom.tr(dom.td(e.Protocol), dom.td(domainString(e.Host)), dom.td('' + e.Port), dom.td('' + e.Listener), dom.td('' + e.Note))))), dom.br(), dom.h2('DMARC aggregate reports summary'), renderDMARCSummaries(dmarcSummaries || []), dom.br(), dom.h2('TLS reports summary'), renderTLSRPTSummaries(tlsrptSummaries || []), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th('Action'))), dom.tbody(Object.entries(localpartAccounts).map(t => dom.tr(dom.td(prewrap(t[0]) || '(catchall)'), dom.td(dom.a(t[1], attr.href('#accounts/' + t[1]))), dom.td(dom.clickbutton('Remove', async function click(e) {
+	return dom.div(crumbs(crumblink('Mox Admin', '#'), 'Domain ' + domainString(dnsdomain)), domainConfig.Disabled ? dom.p(box(yellow, 'Warning: Domain is disabled. Incoming/outgoing messages involving this domain are rejected and ACME for new TLS certificates is disabled.')) : [], dom.ul(dom.li(dom.a('Required DNS records', attr.href('#domains/' + d + '/dnsrecords'))), dom.li(dom.a('Check current actual DNS records and domain configuration', attr.href('#domains/' + d + '/dnscheck')))), dom.br(), dom.h2('Client configuration'), dom.p('If autoconfig/autodiscover does not work with an email client, use the settings below for this domain. Authenticate with email address and password. ', dom.span('Explicitly configure', attr.title('To prevent authentication mechanism downgrade attempts that may result in clients sending plain text passwords to a MitM.')), ' the first supported authentication mechanism: SCRAM-SHA-256-PLUS, SCRAM-SHA-1-PLUS, SCRAM-SHA-256, SCRAM-SHA-1, CRAM-MD5.'), dom.table(dom.thead(dom.tr(dom.th('Protocol'), dom.th('Host'), dom.th('Port'), dom.th('Listener'), dom.th('Note'))), dom.tbody((clientConfigs.Entries || []).map(e => dom.tr(dom.td(e.Protocol), dom.td(domainString(e.Host)), dom.td('' + e.Port), dom.td('' + e.Listener), dom.td('' + e.Note))))), dom.br(), dom.h2('DMARC aggregate reports summary'), renderDMARCSummaries(dmarcSummaries || []), dom.br(), dom.h2('TLS reports summary'), renderTLSRPTSummaries(tlsrptSummaries || []), dom.br(), dom.h2('Addresses'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th('Action'))), dom.tbody(Object.entries(localpartAccounts).map(t => dom.tr(dom.td(prewrap(t[0]) || '(catchall)'), dom.td(dom.a(t[1], attr.href('#accounts/l/' + t[1]))), dom.td(dom.clickbutton('Remove', async function click(e) {
 		e.preventDefault();
 		if (!window.confirm('Are you sure you want to remove this address? If it is a member of an alias, it will be removed from the alias.')) {
 			return;
@@ -2621,7 +2660,7 @@ const domainAlias = async (d, aliasLocalpart) => {
 		check(aliasFieldset, client.AliasUpdate(aliasLocalpart, d, postPublic.checked, listMembers.checked, allowMsgFrom.checked));
 	}, aliasFieldset = dom.fieldset(style({ display: 'flex', flexDirection: 'column', gap: '.5ex' }), dom.label(postPublic = dom.input(attr.type('checkbox'), alias.PostPublic ? attr.checked('') : []), ' Public, anyone is allowed to send to the alias, instead of only members of the alias', attr.title('Based on address in message From header, which is assumed to be DMARC-like verified. If this setting is disabled and a non-member sends a message to the alias, the message is rejected.')), dom.label(listMembers = dom.input(attr.type('checkbox'), alias.ListMembers ? attr.checked('') : []), ' Members can list other members'), dom.label(allowMsgFrom = dom.input(attr.type('checkbox'), alias.AllowMsgFrom ? attr.checked('') : []), ' Allow messages to use the alias address in the message From header'), dom.div(style({ marginTop: '1ex' }), dom.submitbutton('Save')))), dom.br(), dom.h2('Members'), dom.p('Members receive messages sent to the alias. If a member address is in the message From header, the member will not receive the message.'), dom.table(dom.thead(dom.tr(dom.th('Address'), dom.th('Account'), dom.th())), dom.tbody((alias.Addresses || []).map((address, index) => {
 		const pa = (alias.ParsedAddresses || [])[index];
-		return dom.tr(dom.td(prewrap(address)), dom.td(dom.a(pa.AccountName, attr.href('#accounts/' + pa.AccountName))), dom.td(dom.clickbutton('Remove', async function click(e) {
+		return dom.tr(dom.td(prewrap(address)), dom.td(dom.a(pa.AccountName, attr.href('#accounts/l/' + pa.AccountName))), dom.td(dom.clickbutton('Remove', async function click(e) {
 			await check(e.target, client.AliasAddressesRemove(aliasLocalpart, d, [address]));
 			window.location.reload(); // todo: reload less
 		})));
@@ -4106,8 +4145,14 @@ const init = async () => {
 			else if (h === 'accounts') {
 				root = await accounts();
 			}
-			else if (t[0] === 'accounts' && t.length === 2) {
-				root = await account(t[1]);
+			else if (h === 'accounts/loginattempts') {
+				root = await loginattempts();
+			}
+			else if (t[0] === 'accounts' && t.length === 3 && t[1] === 'l') {
+				root = await account(t[2]);
+			}
+			else if (t[0] === 'accounts' && t.length === 4 && t[1] === 'l' && t[3] === 'loginattempts') {
+				root = await accountloginattempts(t[2]);
 			}
 			else if (t[0] === 'domains' && t.length === 2) {
 				root = await domain(t[1]);

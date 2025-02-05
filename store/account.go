@@ -2222,48 +2222,50 @@ func manageAuthCache() {
 // OpenEmailAuth opens an account given an email address and password.
 //
 // The email address may contain a catchall separator.
-func OpenEmailAuth(log mlog.Log, email string, password string, checkLoginDisabled bool) (acc *Account, rerr error) {
-	password, err := precis.OpaqueString.String(password)
-	if err != nil {
-		return nil, ErrUnknownCredentials
-	}
-
+// For invalid credentials, a nil account is returned, but accName may be
+// non-empty.
+func OpenEmailAuth(log mlog.Log, email string, password string, checkLoginDisabled bool) (acc *Account, accName string, rerr error) {
 	// We check for LoginDisabled after verifying the password. Otherwise users can get
 	// messages about the account being disabled without knowing the password.
-	acc, _, rerr = OpenEmail(log, email, false)
+	acc, accName, _, rerr = OpenEmail(log, email, false)
 	if rerr != nil {
 		return
 	}
 
 	defer func() {
-		if rerr != nil && acc != nil {
+		if rerr != nil {
 			err := acc.Close()
 			log.Check(err, "closing account after open auth failure")
 			acc = nil
 		}
 	}()
 
+	password, err := precis.OpaqueString.String(password)
+	if err != nil {
+		return nil, accName, ErrUnknownCredentials
+	}
+
 	pw, err := bstore.QueryDB[Password](context.TODO(), acc.DB).Get()
 	if err != nil {
 		if err == bstore.ErrAbsent {
-			return acc, ErrUnknownCredentials
+			return acc, accName, ErrUnknownCredentials
 		}
-		return acc, fmt.Errorf("looking up password: %v", err)
+		return acc, accName, fmt.Errorf("looking up password: %v", err)
 	}
 	authCache.Lock()
 	ok := len(password) >= 8 && authCache.success[authKey{email, pw.Hash}] == password
 	authCache.Unlock()
 	if !ok {
 		if err := bcrypt.CompareHashAndPassword([]byte(pw.Hash), []byte(password)); err != nil {
-			return acc, ErrUnknownCredentials
+			return acc, accName, ErrUnknownCredentials
 		}
 	}
 	if checkLoginDisabled {
 		conf, aok := acc.Conf()
 		if !aok {
-			return acc, fmt.Errorf("cannot find config for account")
+			return acc, accName, fmt.Errorf("cannot find config for account")
 		} else if conf.LoginDisabled != "" {
-			return acc, fmt.Errorf("%w: %s", ErrLoginDisabled, conf.LoginDisabled)
+			return acc, accName, fmt.Errorf("%w: %s", ErrLoginDisabled, conf.LoginDisabled)
 		}
 	}
 	authCache.Lock()
@@ -2275,22 +2277,24 @@ func OpenEmailAuth(log mlog.Log, email string, password string, checkLoginDisabl
 // OpenEmail opens an account given an email address.
 //
 // The email address may contain a catchall separator.
-func OpenEmail(log mlog.Log, email string, checkLoginDisabled bool) (*Account, config.Destination, error) {
+//
+// Returns account on success, may return non-empty account name even on error.
+func OpenEmail(log mlog.Log, email string, checkLoginDisabled bool) (*Account, string, config.Destination, error) {
 	addr, err := smtp.ParseAddress(email)
 	if err != nil {
-		return nil, config.Destination{}, fmt.Errorf("%w: %v", ErrUnknownCredentials, err)
+		return nil, "", config.Destination{}, fmt.Errorf("%w: %v", ErrUnknownCredentials, err)
 	}
 	accountName, _, _, dest, err := mox.LookupAddress(addr.Localpart, addr.Domain, false, false, false)
 	if err != nil && (errors.Is(err, mox.ErrAddressNotFound) || errors.Is(err, mox.ErrDomainNotFound)) {
-		return nil, config.Destination{}, ErrUnknownCredentials
+		return nil, accountName, config.Destination{}, ErrUnknownCredentials
 	} else if err != nil {
-		return nil, config.Destination{}, fmt.Errorf("looking up address: %v", err)
+		return nil, accountName, config.Destination{}, fmt.Errorf("looking up address: %v", err)
 	}
 	acc, err := OpenAccount(log, accountName, checkLoginDisabled)
 	if err != nil {
-		return nil, config.Destination{}, err
+		return nil, accountName, config.Destination{}, err
 	}
-	return acc, dest, nil
+	return acc, accountName, dest, nil
 }
 
 // 64 characters, must be power of 2 for MessagePath

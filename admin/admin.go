@@ -740,6 +740,11 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 		return fmt.Errorf("account removed, but removing tls public keys failed: %v", err)
 	}
 
+	if err := store.LoginAttemptRemoveAccount(context.Background(), account); err != nil {
+		log.Errorx("removing historic login attempts for removed account", err)
+		return fmt.Errorf("account removed, but removing historic login attempts failed: %v", err)
+	}
+
 	log.Info("account removed", slog.String("account", account))
 	return nil
 }

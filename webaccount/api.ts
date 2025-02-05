@@ -221,6 +221,28 @@ export interface TLSPublicKey {
 	LoginAddress: string  // Must belong to account.
 }
 
+// LoginAttempt is a successful or failed login attempt, stored for auditing
+// purposes.
+// 
+// At most 10000 failed attempts are stored per account, to prevent unbounded
+// growth of the database by third parties.
+export interface LoginAttempt {
+	Key?: string | null  // Hash of all fields after "Count" below. We store a single entry per key, updating its Last and Count fields.
+	Last: Date  // Last has an index for efficient removal of entries after 30 days.
+	First: Date
+	Count: number  // Number of login attempts for the combination of fields below.
+	AccountName: string  // Admin logins use "(admin)". If no account is known, "-" is used. AccountName has an index for efficiently removing failed login attempts at the end of the list when there are too many, and for efficiently removing all records for an account.
+	LoginAddress: string  // Empty for attempts to login in as admin.
+	RemoteIP: string
+	LocalIP: string
+	TLS: string  // Empty if no TLS, otherwise contains version, algorithm, properties, etc.
+	TLSPubKeyFingerprint: string
+	Protocol: string  // "submission", "imap", "webmail", "webaccount", "webadmin"
+	UserAgent: string  // From HTTP header, or IMAP ID command.
+	AuthMech: string  // "plain", "login", "cram-md5", "scram-sha-256-plus", "(unrecognized)", etc
+	Result: AuthResult
+}
+
 export type CSRFToken = string
 
 // Localpart is a decoded local part of an email address, before the "@".
@@ -255,8 +277,21 @@ export enum OutgoingEvent {
 	EventUnrecognized = "unrecognized",
 }
 
-export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AutomaticJunkFlags":true,"Destination":true,"Domain":true,"ImportProgress":true,"Incoming":true,"IncomingMeta":true,"IncomingWebhook":true,"JunkFilter":true,"NameAddress":true,"Outgoing":true,"OutgoingWebhook":true,"Route":true,"Ruleset":true,"Structure":true,"SubjectPass":true,"Suppression":true,"TLSPublicKey":true}
-export const stringsTypes: {[typename: string]: boolean} = {"CSRFToken":true,"Localpart":true,"OutgoingEvent":true}
+// AuthResult is the result of a login attempt.
+export enum AuthResult {
+	AuthSuccess = "ok",
+	AuthBadUser = "baduser",
+	AuthBadPassword = "badpassword",
+	AuthBadCredentials = "badcreds",
+	AuthBadChannelBinding = "badchanbind",
+	AuthBadProtocol = "badprotocol",
+	AuthLoginDisabled = "logindisabled",
+	AuthError = "error",
+	AuthAborted = "aborted",
+}
+
+export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AutomaticJunkFlags":true,"Destination":true,"Domain":true,"ImportProgress":true,"Incoming":true,"IncomingMeta":true,"IncomingWebhook":true,"JunkFilter":true,"LoginAttempt":true,"NameAddress":true,"Outgoing":true,"OutgoingWebhook":true,"Route":true,"Ruleset":true,"Structure":true,"SubjectPass":true,"Suppression":true,"TLSPublicKey":true}
+export const stringsTypes: {[typename: string]: boolean} = {"AuthResult":true,"CSRFToken":true,"Localpart":true,"OutgoingEvent":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
 	"Account": {"Name":"Account","Docs":"","Fields":[{"Name":"OutgoingWebhook","Docs":"","Typewords":["nullable","OutgoingWebhook"]},{"Name":"IncomingWebhook","Docs":"","Typewords":["nullable","IncomingWebhook"]},{"Name":"FromIDLoginAddresses","Docs":"","Typewords":["[]","string"]},{"Name":"KeepRetiredMessagePeriod","Docs":"","Typewords":["int64"]},{"Name":"KeepRetiredWebhookPeriod","Docs":"","Typewords":["int64"]},{"Name":"LoginDisabled","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"FullName","Docs":"","Typewords":["string"]},{"Name":"Destinations","Docs":"","Typewords":["{}","Destination"]},{"Name":"SubjectPass","Docs":"","Typewords":["SubjectPass"]},{"Name":"QuotaMessageSize","Docs":"","Typewords":["int64"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"KeepRejects","Docs":"","Typewords":["bool"]},{"Name":"AutomaticJunkFlags","Docs":"","Typewords":["AutomaticJunkFlags"]},{"Name":"JunkFilter","Docs":"","Typewords":["nullable","JunkFilter"]},{"Name":"MaxOutgoingMessagesPerDay","Docs":"","Typewords":["int32"]},{"Name":"MaxFirstTimeRecipientsPerDay","Docs":"","Typewords":["int32"]},{"Name":"NoFirstTimeSenderDelay","Docs":"","Typewords":["bool"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"Aliases","Docs":"","Typewords":["[]","AddressAlias"]}]},
@@ -281,9 +316,11 @@ export const types: TypenameMap = {
 	"Structure": {"Name":"Structure","Docs":"","Fields":[{"Name":"ContentType","Docs":"","Typewords":["string"]},{"Name":"ContentTypeParams","Docs":"","Typewords":["{}","string"]},{"Name":"ContentID","Docs":"","Typewords":["string"]},{"Name":"ContentDisposition","Docs":"","Typewords":["string"]},{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"DecodedSize","Docs":"","Typewords":["int64"]},{"Name":"Parts","Docs":"","Typewords":["[]","Structure"]}]},
 	"IncomingMeta": {"Name":"IncomingMeta","Docs":"","Fields":[{"Name":"MsgID","Docs":"","Typewords":["int64"]},{"Name":"MailFrom","Docs":"","Typewords":["string"]},{"Name":"MailFromValidated","Docs":"","Typewords":["bool"]},{"Name":"MsgFromValidated","Docs":"","Typewords":["bool"]},{"Name":"RcptTo","Docs":"","Typewords":["string"]},{"Name":"DKIMVerifiedDomains","Docs":"","Typewords":["[]","string"]},{"Name":"RemoteIP","Docs":"","Typewords":["string"]},{"Name":"Received","Docs":"","Typewords":["timestamp"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Automated","Docs":"","Typewords":["bool"]}]},
 	"TLSPublicKey": {"Name":"TLSPublicKey","Docs":"","Fields":[{"Name":"Fingerprint","Docs":"","Typewords":["string"]},{"Name":"Created","Docs":"","Typewords":["timestamp"]},{"Name":"Type","Docs":"","Typewords":["string"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"NoIMAPPreauth","Docs":"","Typewords":["bool"]},{"Name":"CertDER","Docs":"","Typewords":["nullable","string"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"LoginAddress","Docs":"","Typewords":["string"]}]},
+	"LoginAttempt": {"Name":"LoginAttempt","Docs":"","Fields":[{"Name":"Key","Docs":"","Typewords":["nullable","string"]},{"Name":"Last","Docs":"","Typewords":["timestamp"]},{"Name":"First","Docs":"","Typewords":["timestamp"]},{"Name":"Count","Docs":"","Typewords":["int64"]},{"Name":"AccountName","Docs":"","Typewords":["string"]},{"Name":"LoginAddress","Docs":"","Typewords":["string"]},{"Name":"RemoteIP","Docs":"","Typewords":["string"]},{"Name":"LocalIP","Docs":"","Typewords":["string"]},{"Name":"TLS","Docs":"","Typewords":["string"]},{"Name":"TLSPubKeyFingerprint","Docs":"","Typewords":["string"]},{"Name":"Protocol","Docs":"","Typewords":["string"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"AuthMech","Docs":"","Typewords":["string"]},{"Name":"Result","Docs":"","Typewords":["AuthResult"]}]},
 	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"Localpart": {"Name":"Localpart","Docs":"","Values":null},
 	"OutgoingEvent": {"Name":"OutgoingEvent","Docs":"","Values":[{"Name":"EventDelivered","Value":"delivered","Docs":""},{"Name":"EventSuppressed","Value":"suppressed","Docs":""},{"Name":"EventDelayed","Value":"delayed","Docs":""},{"Name":"EventFailed","Value":"failed","Docs":""},{"Name":"EventRelayed","Value":"relayed","Docs":""},{"Name":"EventExpanded","Value":"expanded","Docs":""},{"Name":"EventCanceled","Value":"canceled","Docs":""},{"Name":"EventUnrecognized","Value":"unrecognized","Docs":""}]},
+	"AuthResult": {"Name":"AuthResult","Docs":"","Values":[{"Name":"AuthSuccess","Value":"ok","Docs":""},{"Name":"AuthBadUser","Value":"baduser","Docs":""},{"Name":"AuthBadPassword","Value":"badpassword","Docs":""},{"Name":"AuthBadCredentials","Value":"badcreds","Docs":""},{"Name":"AuthBadChannelBinding","Value":"badchanbind","Docs":""},{"Name":"AuthBadProtocol","Value":"badprotocol","Docs":""},{"Name":"AuthLoginDisabled","Value":"logindisabled","Docs":""},{"Name":"AuthError","Value":"error","Docs":""},{"Name":"AuthAborted","Value":"aborted","Docs":""}]},
 }
 
 export const parser = {
@@ -309,9 +346,11 @@ export const parser = {
 	Structure: (v: any) => parse("Structure", v) as Structure,
 	IncomingMeta: (v: any) => parse("IncomingMeta", v) as IncomingMeta,
 	TLSPublicKey: (v: any) => parse("TLSPublicKey", v) as TLSPublicKey,
+	LoginAttempt: (v: any) => parse("LoginAttempt", v) as LoginAttempt,
 	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 	Localpart: (v: any) => parse("Localpart", v) as Localpart,
 	OutgoingEvent: (v: any) => parse("OutgoingEvent", v) as OutgoingEvent,
+	AuthResult: (v: any) => parse("AuthResult", v) as AuthResult,
 }
 
 // Account exports web API functions for the account web interface. All its
@@ -585,6 +624,14 @@ export class Client {
 		const returnTypes: string[][] = []
 		const params: any[] = [pubKey]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	async LoginAttempts(limit: number): Promise<LoginAttempt[] | null> {
+		const fn: string = "LoginAttempts"
+		const paramTypes: string[][] = [["int32"]]
+		const returnTypes: string[][] = [["[]","LoginAttempt"]]
+		const params: any[] = [limit]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as LoginAttempt[] | null
 	}
 }
 

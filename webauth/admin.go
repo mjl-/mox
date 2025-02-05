@@ -58,7 +58,7 @@ func (a *adminSessionAuth) login(ctx context.Context, log mlog.Log, username, pa
 		return false, false, "", nil
 	}
 
-	return true, false, "", nil
+	return true, false, "(admin)", nil
 }
 
 func (a *adminSessionAuth) add(ctx context.Context, log mlog.Log, accountName string, loginAddress string) (sessionToken store.SessionToken, csrfToken store.CSRFToken, rerr error) {

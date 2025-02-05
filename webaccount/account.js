@@ -255,8 +255,21 @@ var api;
 		// per-outgoing-message address used for sending.
 		OutgoingEvent["EventUnrecognized"] = "unrecognized";
 	})(OutgoingEvent = api.OutgoingEvent || (api.OutgoingEvent = {}));
-	api.structTypes = { "Account": true, "Address": true, "AddressAlias": true, "Alias": true, "AliasAddress": true, "AutomaticJunkFlags": true, "Destination": true, "Domain": true, "ImportProgress": true, "Incoming": true, "IncomingMeta": true, "IncomingWebhook": true, "JunkFilter": true, "NameAddress": true, "Outgoing": true, "OutgoingWebhook": true, "Route": true, "Ruleset": true, "Structure": true, "SubjectPass": true, "Suppression": true, "TLSPublicKey": true };
-	api.stringsTypes = { "CSRFToken": true, "Localpart": true, "OutgoingEvent": true };
+	// AuthResult is the result of a login attempt.
+	let AuthResult;
+	(function (AuthResult) {
+		AuthResult["AuthSuccess"] = "ok";
+		AuthResult["AuthBadUser"] = "baduser";
+		AuthResult["AuthBadPassword"] = "badpassword";
+		AuthResult["AuthBadCredentials"] = "badcreds";
+		AuthResult["AuthBadChannelBinding"] = "badchanbind";
+		AuthResult["AuthBadProtocol"] = "badprotocol";
+		AuthResult["AuthLoginDisabled"] = "logindisabled";
+		AuthResult["AuthError"] = "error";
+		AuthResult["AuthAborted"] = "aborted";
+	})(AuthResult = api.AuthResult || (api.AuthResult = {}));
+	api.structTypes = { "Account": true, "Address": true, "AddressAlias": true, "Alias": true, "AliasAddress": true, "AutomaticJunkFlags": true, "Destination": true, "Domain": true, "ImportProgress": true, "Incoming": true, "IncomingMeta": true, "IncomingWebhook": true, "JunkFilter": true, "LoginAttempt": true, "NameAddress": true, "Outgoing": true, "OutgoingWebhook": true, "Route": true, "Ruleset": true, "Structure": true, "SubjectPass": true, "Suppression": true, "TLSPublicKey": true };
+	api.stringsTypes = { "AuthResult": true, "CSRFToken": true, "Localpart": true, "OutgoingEvent": true };
 	api.intsTypes = {};
 	api.types = {
 		"Account": { "Name": "Account", "Docs": "", "Fields": [{ "Name": "OutgoingWebhook", "Docs": "", "Typewords": ["nullable", "OutgoingWebhook"] }, { "Name": "IncomingWebhook", "Docs": "", "Typewords": ["nullable", "IncomingWebhook"] }, { "Name": "FromIDLoginAddresses", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "KeepRetiredMessagePeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "KeepRetiredWebhookPeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginDisabled", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }, { "Name": "Destinations", "Docs": "", "Typewords": ["{}", "Destination"] }, { "Name": "SubjectPass", "Docs": "", "Typewords": ["SubjectPass"] }, { "Name": "QuotaMessageSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "KeepRejects", "Docs": "", "Typewords": ["bool"] }, { "Name": "AutomaticJunkFlags", "Docs": "", "Typewords": ["AutomaticJunkFlags"] }, { "Name": "JunkFilter", "Docs": "", "Typewords": ["nullable", "JunkFilter"] }, { "Name": "MaxOutgoingMessagesPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxFirstTimeRecipientsPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "NoFirstTimeSenderDelay", "Docs": "", "Typewords": ["bool"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["[]", "AddressAlias"] }] },
@@ -281,9 +294,11 @@ var api;
 		"Structure": { "Name": "Structure", "Docs": "", "Fields": [{ "Name": "ContentType", "Docs": "", "Typewords": ["string"] }, { "Name": "ContentTypeParams", "Docs": "", "Typewords": ["{}", "string"] }, { "Name": "ContentID", "Docs": "", "Typewords": ["string"] }, { "Name": "ContentDisposition", "Docs": "", "Typewords": ["string"] }, { "Name": "Filename", "Docs": "", "Typewords": ["string"] }, { "Name": "DecodedSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "Parts", "Docs": "", "Typewords": ["[]", "Structure"] }] },
 		"IncomingMeta": { "Name": "IncomingMeta", "Docs": "", "Fields": [{ "Name": "MsgID", "Docs": "", "Typewords": ["int64"] }, { "Name": "MailFrom", "Docs": "", "Typewords": ["string"] }, { "Name": "MailFromValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "MsgFromValidated", "Docs": "", "Typewords": ["bool"] }, { "Name": "RcptTo", "Docs": "", "Typewords": ["string"] }, { "Name": "DKIMVerifiedDomains", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "RemoteIP", "Docs": "", "Typewords": ["string"] }, { "Name": "Received", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "MailboxName", "Docs": "", "Typewords": ["string"] }, { "Name": "Automated", "Docs": "", "Typewords": ["bool"] }] },
 		"TLSPublicKey": { "Name": "TLSPublicKey", "Docs": "", "Fields": [{ "Name": "Fingerprint", "Docs": "", "Typewords": ["string"] }, { "Name": "Created", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Type", "Docs": "", "Typewords": ["string"] }, { "Name": "Name", "Docs": "", "Typewords": ["string"] }, { "Name": "NoIMAPPreauth", "Docs": "", "Typewords": ["bool"] }, { "Name": "CertDER", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Account", "Docs": "", "Typewords": ["string"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["string"] }] },
+		"LoginAttempt": { "Name": "LoginAttempt", "Docs": "", "Fields": [{ "Name": "Key", "Docs": "", "Typewords": ["nullable", "string"] }, { "Name": "Last", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "First", "Docs": "", "Typewords": ["timestamp"] }, { "Name": "Count", "Docs": "", "Typewords": ["int64"] }, { "Name": "AccountName", "Docs": "", "Typewords": ["string"] }, { "Name": "LoginAddress", "Docs": "", "Typewords": ["string"] }, { "Name": "RemoteIP", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalIP", "Docs": "", "Typewords": ["string"] }, { "Name": "TLS", "Docs": "", "Typewords": ["string"] }, { "Name": "TLSPubKeyFingerprint", "Docs": "", "Typewords": ["string"] }, { "Name": "Protocol", "Docs": "", "Typewords": ["string"] }, { "Name": "UserAgent", "Docs": "", "Typewords": ["string"] }, { "Name": "AuthMech", "Docs": "", "Typewords": ["string"] }, { "Name": "Result", "Docs": "", "Typewords": ["AuthResult"] }] },
 		"CSRFToken": { "Name": "CSRFToken", "Docs": "", "Values": null },
 		"Localpart": { "Name": "Localpart", "Docs": "", "Values": null },
 		"OutgoingEvent": { "Name": "OutgoingEvent", "Docs": "", "Values": [{ "Name": "EventDelivered", "Value": "delivered", "Docs": "" }, { "Name": "EventSuppressed", "Value": "suppressed", "Docs": "" }, { "Name": "EventDelayed", "Value": "delayed", "Docs": "" }, { "Name": "EventFailed", "Value": "failed", "Docs": "" }, { "Name": "EventRelayed", "Value": "relayed", "Docs": "" }, { "Name": "EventExpanded", "Value": "expanded", "Docs": "" }, { "Name": "EventCanceled", "Value": "canceled", "Docs": "" }, { "Name": "EventUnrecognized", "Value": "unrecognized", "Docs": "" }] },
+		"AuthResult": { "Name": "AuthResult", "Docs": "", "Values": [{ "Name": "AuthSuccess", "Value": "ok", "Docs": "" }, { "Name": "AuthBadUser", "Value": "baduser", "Docs": "" }, { "Name": "AuthBadPassword", "Value": "badpassword", "Docs": "" }, { "Name": "AuthBadCredentials", "Value": "badcreds", "Docs": "" }, { "Name": "AuthBadChannelBinding", "Value": "badchanbind", "Docs": "" }, { "Name": "AuthBadProtocol", "Value": "badprotocol", "Docs": "" }, { "Name": "AuthLoginDisabled", "Value": "logindisabled", "Docs": "" }, { "Name": "AuthError", "Value": "error", "Docs": "" }, { "Name": "AuthAborted", "Value": "aborted", "Docs": "" }] },
 	};
 	api.parser = {
 		Account: (v) => api.parse("Account", v),
@@ -308,9 +323,11 @@ var api;
 		Structure: (v) => api.parse("Structure", v),
 		IncomingMeta: (v) => api.parse("IncomingMeta", v),
 		TLSPublicKey: (v) => api.parse("TLSPublicKey", v),
+		LoginAttempt: (v) => api.parse("LoginAttempt", v),
 		CSRFToken: (v) => api.parse("CSRFToken", v),
 		Localpart: (v) => api.parse("Localpart", v),
 		OutgoingEvent: (v) => api.parse("OutgoingEvent", v),
+		AuthResult: (v) => api.parse("AuthResult", v),
 	};
 	// Account exports web API functions for the account web interface. All its
 	// methods are exported under api/. Function calls require valid HTTP
@@ -553,6 +570,13 @@ var api;
 			const paramTypes = [["TLSPublicKey"]];
 			const returnTypes = [];
 			const params = [pubKey];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		async LoginAttempts(limit) {
+			const fn = "LoginAttempts";
+			const paramTypes = [["int32"]];
+			const returnTypes = [["[]", "LoginAttempt"]];
+			const params = [limit];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 	}
@@ -1059,7 +1083,7 @@ const domainString = (d) => {
 const box = (color, ...l) => [
 	dom.div(style({
 		display: 'inline-block',
-		padding: '.25em .5em',
+		padding: '.125em .25em',
 		backgroundColor: color,
 		borderRadius: '3px',
 		margin: '.5ex 0',
@@ -1122,9 +1146,10 @@ const formatQuotaSize = (v) => {
 	return '' + v;
 };
 const index = async () => {
-	const [[acc, storageUsed, storageLimit, suppressions], tlspubkeys0] = await Promise.all([
+	const [[acc, storageUsed, storageLimit, suppressions], tlspubkeys0, recentLoginAttempts] = await Promise.all([
 		client.Account(),
 		client.TLSPublicKeys(),
+		client.LoginAttempts(10),
 	]);
 	const tlspubkeys = tlspubkeys0 || [];
 	let fullNameForm;
@@ -1440,7 +1465,7 @@ const index = async () => {
 	}), dom.br(), dom.h2('Addresses'), dom.ul(Object.entries(acc.Destinations || {}).length === 0 ? dom.li('(None, login disabled)') : [], Object.entries(acc.Destinations || {}).sort().map(t => dom.li(dom.a(prewrap(t[0]), attr.href('#destinations/' + encodeURIComponent(t[0]))), t[0].startsWith('@') ? ' (catchall)' : []))), dom.br(), dom.h2('Aliases/lists'), dom.table(dom.thead(dom.tr(dom.th('Alias address', attr.title('Messages sent to this address will be delivered to all members of the alias/list. A member does not receive a message if their address is in the message From header.')), dom.th('Subscription address', attr.title('Address subscribed to the alias/list.')), dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')), dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')), dom.th())), (acc.Aliases || []).length === 0 ? dom.tr(dom.td(attr.colspan('5'), 'None')) : [], (acc.Aliases || []).sort((a, b) => a.Alias.LocalpartStr < b.Alias.LocalpartStr ? -1 : (domainName(a.Alias.Domain) < domainName(b.Alias.Domain) ? -1 : 1)).map(a => dom.tr(dom.td(prewrap(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain))), dom.td(prewrap(a.SubscriptionAddress)), dom.td(a.Alias.PostPublic ? 'Anyone' : 'Members only'), dom.td(a.Alias.AllowMsgFrom ? 'Yes' : 'No'), dom.td((a.MemberAddresses || []).length === 0 ? [] :
 		dom.clickbutton('Show members', function click() {
 			popup(dom.h1('Members of alias ', prewrap(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain))), dom.ul((a.MemberAddresses || []).map(addr => dom.li(prewrap(addr)))));
-		}))))), dom.br(), dom.h2('Change password'), passwordForm = dom.form(passwordFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'New password', dom.br(), password1 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
+		}))))), dom.br(), dom.h2('Recent login attempts', attr.title('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored to prevent unlimited growth of the database.')), renderLoginAttempts(recentLoginAttempts || []), dom.br(), recentLoginAttempts && recentLoginAttempts.length >= 10 ? dom.p('See ', dom.a(attr.href('#loginattempts'), 'all login attempts'), '.') : dom.br(), dom.h2('Change password'), passwordForm = dom.form(passwordFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'New password', dom.br(), password1 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
 		passwordHint.style.display = '';
 	})), ' ', dom.label(style({ display: 'inline-block' }), 'New password repeat', dom.br(), password2 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''))), ' ', dom.submitbutton('Change password')), passwordHint = dom.div(style({ display: 'none', marginTop: '.5ex' }), dom.clickbutton('Generate random password', function click(e) {
 		e.preventDefault();
@@ -1754,6 +1779,14 @@ openssl pkcs12 \\
 	})();
 	return root;
 };
+const renderLoginAttempts = (loginAttempts) => {
+	// todo: pagination and search
+	return dom.table(dom.thead(dom.tr(dom.th('Time'), dom.th('Result'), dom.th('Count'), dom.th('LoginAddress'), dom.th('Protocol'), dom.th('Mechanism'), dom.th('User Agent'), dom.th('Remote IP'), dom.th('Local IP'), dom.th('TLS'), dom.th('TLS pubkey fingerprint'), dom.th('First seen'))), dom.tbody(loginAttempts.length ? [] : dom.tr(dom.td(attr.colspan('11'), 'No login attempts in past 30 days.')), loginAttempts.map(la => dom.tr(dom.td(age(la.Last)), dom.td(la.Result === 'ok' ? la.Result : box(red, la.Result)), dom.td('' + la.Count), dom.td(la.LoginAddress), dom.td(la.Protocol), dom.td(la.AuthMech), dom.td(la.UserAgent), dom.td(la.RemoteIP), dom.td(la.LocalIP), dom.td(la.TLS), dom.td(la.TLSPubKeyFingerprint), dom.td(age(la.First))))));
+};
+const loginattempts = async () => {
+	const loginAttempts = await client.LoginAttempts(0);
+	return dom.div(crumbs(crumblink('Mox Account', '#'), 'Login attempts'), dom.h2('Login attempts'), dom.p('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored to prevent unlimited growth of the database.'), renderLoginAttempts(loginAttempts || []));
+};
 const destination = async (name) => {
 	const [acc] = await client.Account();
 	let dest = (acc.Destinations || {})[name];
@@ -1884,6 +1917,9 @@ const init = async () => {
 			let root;
 			if (h === '') {
 				root = await index();
+			}
+			else if (t[0] === 'loginattempts' && t.length === 1) {
+				root = await loginattempts();
 			}
 			else if (t[0] === 'destinations' && t.length === 2) {
 				root = await destination(t[1]);

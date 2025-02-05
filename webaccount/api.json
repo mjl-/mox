@@ -528,6 +528,27 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "LoginAttempts",
+			"Docs": "",
+			"Params": [
+				{
+					"Name": "limit",
+					"Typewords": [
+						"int32"
+					]
+				}
+			],
+			"Returns": [
+				{
+					"Name": "r0",
+					"Typewords": [
+						"[]",
+						"LoginAttempt"
+					]
+				}
+			]
 		}
 	],
 	"Sections": [],
@@ -1679,6 +1700,111 @@
 					]
 				}
 			]
+		},
+		{
+			"Name": "LoginAttempt",
+			"Docs": "LoginAttempt is a successful or failed login attempt, stored for auditing\npurposes.\n\nAt most 10000 failed attempts are stored per account, to prevent unbounded\ngrowth of the database by third parties.",
+			"Fields": [
+				{
+					"Name": "Key",
+					"Docs": "Hash of all fields after \"Count\" below. We store a single entry per key, updating its Last and Count fields.",
+					"Typewords": [
+						"[]",
+						"uint8"
+					]
+				},
+				{
+					"Name": "Last",
+					"Docs": "Last has an index for efficient removal of entries after 30 days.",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "First",
+					"Docs": "",
+					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "Count",
+					"Docs": "Number of login attempts for the combination of fields below.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
+					"Name": "AccountName",
+					"Docs": "Admin logins use \"(admin)\". If no account is known, \"-\" is used. AccountName has an index for efficiently removing failed login attempts at the end of the list when there are too many, and for efficiently removing all records for an account.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LoginAddress",
+					"Docs": "Empty for attempts to login in as admin.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "RemoteIP",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "LocalIP",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "TLS",
+					"Docs": "Empty if no TLS, otherwise contains version, algorithm, properties, etc.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "TLSPubKeyFingerprint",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Protocol",
+					"Docs": "\"submission\", \"imap\", \"webmail\", \"webaccount\", \"webadmin\"",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "UserAgent",
+					"Docs": "From HTTP header, or IMAP ID command.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "AuthMech",
+					"Docs": "\"plain\", \"login\", \"cram-md5\", \"scram-sha-256-plus\", \"(unrecognized)\", etc",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "Result",
+					"Docs": "",
+					"Typewords": [
+						"AuthResult"
+					]
+				}
+			]
 		}
 	],
 	"Ints": [],
@@ -1736,6 +1862,57 @@
 					"Name": "EventUnrecognized",
 					"Value": "unrecognized",
 					"Docs": "An incoming message was received that was either a DSN with an unknown event\ntype (\"action\"), or an incoming non-DSN-message was received for the unique\nper-outgoing-message address used for sending."
+				}
+			]
+		},
+		{
+			"Name": "AuthResult",
+			"Docs": "AuthResult is the result of a login attempt.",
+			"Values": [
+				{
+					"Name": "AuthSuccess",
+					"Value": "ok",
+					"Docs": ""
+				},
+				{
+					"Name": "AuthBadUser",
+					"Value": "baduser",
+					"Docs": ""
+				},
+				{
+					"Name": "AuthBadPassword",
+					"Value": "badpassword",
+					"Docs": ""
+				},
+				{
+					"Name": "AuthBadCredentials",
+					"Value": "badcreds",
+					"Docs": ""
+				},
+				{
+					"Name": "AuthBadChannelBinding",
+					"Value": "badchanbind",
+					"Docs": ""
+				},
+				{
+					"Name": "AuthBadProtocol",
+					"Value": "badprotocol",
+					"Docs": ""
+				},
+				{
+					"Name": "AuthLoginDisabled",
+					"Value": "logindisabled",
+					"Docs": ""
+				},
+				{
+					"Name": "AuthError",
+					"Value": "error",
+					"Docs": ""
+				},
+				{
+					"Name": "AuthAborted",
+					"Value": "aborted",
+					"Docs": ""
 				}
 			]
 		}

@@ -57,9 +57,15 @@ func TestAPI(t *testing.T) {
 	mox.ConfigDynamicPath = filepath.FromSlash("../testdata/webmail/domains.conf")
 	mox.MustLoadConfig(true, false)
 	defer store.Switchboard()()
+	err := store.Init(ctxbg)
+	tcheck(t, err, "store init")
+	defer func() {
+		err := store.Close()
+		tcheck(t, err, "store close")
+	}()
 
 	log := mlog.New("webmail", nil)
-	err := mtastsdb.Init(false)
+	err = mtastsdb.Init(false)
 	tcheck(t, err, "mtastsdb init")
 	acc, err := store.OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
@@ -113,7 +119,7 @@ func TestAPI(t *testing.T) {
 			x := recover()
 			expErr := len(expErrCodes) > 0
 			if (x != nil) != expErr {
-				t.Fatalf("got %v, expected codes %v, for username %q, password %q", x, expErrCodes, username, password)
+				panic(fmt.Sprintf("got %v, expected codes %v, for username %q, password %q", x, expErrCodes, username, password))
 			}
 			if x == nil {
 				return

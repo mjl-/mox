@@ -731,7 +731,7 @@ func (Account) TLSPublicKeyUpdate(ctx context.Context, pubKey store.TLSPublicKey
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	tpk := xtlspublickey(ctx, reqInfo.AccountName, pubKey.Fingerprint)
 	log := pkglog.WithContext(ctx)
-	acc, _, err := store.OpenEmail(log, pubKey.LoginAddress, false)
+	acc, _, _, err := store.OpenEmail(log, pubKey.LoginAddress, false)
 	if err == nil && acc.Name != reqInfo.AccountName {
 		err = store.ErrUnknownCredentials
 	}
@@ -748,4 +748,11 @@ func (Account) TLSPublicKeyUpdate(ctx context.Context, pubKey store.TLSPublicKey
 	err = store.TLSPublicKeyUpdate(ctx, &tpk)
 	xcheckf(ctx, err, "updating tls public key")
 	return nil
+}
+
+func (Account) LoginAttempts(ctx context.Context, limit int) []store.LoginAttempt {
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	l, err := store.LoginAttemptList(ctx, reqInfo.AccountName, limit)
+	xcheckf(ctx, err, "listing login attempts")
+	return l
 }

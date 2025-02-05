@@ -561,7 +561,7 @@ const box = (color: string, ...l: ElemArg[]) => [
 	dom.div(
 		style({
 			display: 'inline-block',
-			padding: '.25em .5em',
+			padding: '.125em .25em',
 			backgroundColor: color,
 			borderRadius: '3px',
 			margin: '.5ex 0',
@@ -582,9 +582,10 @@ const inlineBox = (color: string, ...l: ElemArg[]) =>
 	)
 
 const accounts = async () => {
-	const [[accounts, accountsDisabled], domains] = await Promise.all([
+	const [[accounts, accountsDisabled], domains, loginAttempts] = await Promise.all([
 		client.Accounts(),
 		client.Domains(),
+		client.LoginAttempts("", 10),
 	])
 
 	let fieldset: HTMLFieldSetElement
@@ -601,7 +602,7 @@ const accounts = async () => {
 		dom.h2('Accounts'),
 		(accounts || []).length === 0 ? dom.p('No accounts') :
 		dom.ul(
-			(accounts || []).map(s => dom.li(dom.a(attr.href('#accounts/'+s), s), accountsDisabled?.includes(s) ? ' (disabled)' : '')),
+			(accounts || []).map(s => dom.li(dom.a(attr.href('#accounts/l/'+s), s), accountsDisabled?.includes(s) ? ' (disabled)' : '')),
 		),
 		dom.br(),
 		dom.h2('Add account'),
@@ -610,7 +611,7 @@ const accounts = async () => {
 				e.preventDefault()
 				e.stopPropagation()
 				await check(fieldset, client.AccountAdd(account.value, localpart.value+'@'+domain.value))
-				window.location.hash = '#accounts/'+account.value
+				window.location.hash = '#accounts/l/'+account.value
 			},
 			fieldset=dom.fieldset(
 				dom.p('Start with the initial email address for the account. The localpart is the account name too by default, but the account name can be changed.'),
@@ -643,7 +644,88 @@ const accounts = async () => {
 				' ',
 				dom.submitbutton('Add account', attr.title('The account will be added and the config reloaded.')),
 			)
-		)
+		),
+		dom.br(),
+		dom.h2('Recent login attempts', attr.title('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored per account to prevent unlimited growth of the database.')),
+		renderLoginAttempts(true, loginAttempts || []),
+		dom.br(),
+		loginAttempts && loginAttempts.length >= 10 ? dom.p('See ', dom.a(attr.href('#accounts/loginattempts'), 'all login attempts'), '.') : [],
+	)
+}
+
+const loginattempts = async () => {
+	const loginAttempts = await client.LoginAttempts("", 0)
+
+	return dom.div(
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			crumblink('Accounts', '#accounts'),
+			'Login attempts',
+		),
+		dom.h2('Login attempts'),
+		dom.p('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored per account to prevent unlimited growth of the database.'),
+		renderLoginAttempts(true, loginAttempts || [])
+	)
+}
+
+const accountloginattempts = async (accountName: string) => {
+	const loginAttempts = await client.LoginAttempts(accountName, 0)
+
+	return dom.div(
+		crumbs(
+			crumblink('Mox Admin', '#'),
+			crumblink('Accounts', '#accounts'),
+			['(admin)', '-'].includes(accountName) ? accountName : crumblink(accountName, '#accounts/l/'+accountName),
+			'Login attempts',
+		),
+		dom.h2('Login attempts'),
+		dom.p('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored per account to prevent unlimited growth of the database.'),
+		renderLoginAttempts(false, loginAttempts || [])
+	)
+}
+
+const renderLoginAttempts = (accountLinks: boolean, loginAttempts: api.LoginAttempt[]) => {
+	// todo: pagination and search
+
+	const nowSecs = new Date().getTime()/1000
+	return dom.table(
+		dom.thead(
+			dom.tr(
+				dom.th('Time'),
+				dom.th('Result'),
+				dom.th('Count'),
+				dom.th('Account'),
+				dom.th('Address'),
+				dom.th('Protocol'),
+				dom.th('Mechanism'),
+				dom.th('User Agent'),
+				dom.th('Remote IP'),
+				dom.th('Local IP'),
+				dom.th('TLS'),
+				dom.th('TLS pubkey fingerprint'),
+				dom.th('First seen'),
+			),
+		),
+		dom.tbody(
+			loginAttempts.length ? [] : dom.tr(dom.td(attr.colspan('13'), 'No login attempts in past 30 days.')),
+			loginAttempts.map(la =>
+				dom.tr(
+					dom.td(age(la.Last, false, nowSecs)),
+					dom.td(la.Result === 'ok' ? la.Result : box(red, la.Result)),
+					dom.td(''+la.Count),
+					dom.td(accountLinks ? dom.a(attr.href('#accounts/l/'+la.AccountName+'/loginattempts'), la.AccountName) : la.AccountName),
+					dom.td(la.LoginAddress),
+					dom.td(la.Protocol),
+					dom.td(la.AuthMech),
+					dom.td(la.UserAgent),
+					dom.td(la.RemoteIP),
+					dom.td(la.LocalIP),
+					dom.td(la.TLS),
+					dom.td(la.TLSPubKeyFingerprint),
+					dom.td(age(la.First, false, nowSecs)),
+				),
+			),
+		),
 	)
 }
 
@@ -766,11 +848,12 @@ const RoutesEditor = (kind: string, transports: { [key: string]: api.Transport }
 }
 
 const account = async (name: string) => {
-	const [[config, diskUsage], domains, transports, tlspubkeys] = await Promise.all([
+	const [[config, diskUsage], domains, transports, tlspubkeys, loginAttempts] = await Promise.all([
 		client.Account(name),
 		client.Domains(),
 		client.Transports(),
 		client.TLSPublicKeys(name),
+		client.LoginAttempts(name, 10),
 	])
 
 	// todo: show suppression list, and buttons to add/remove entries.
@@ -1071,6 +1154,11 @@ const account = async (name: string) => {
 			}),
 		),
 		dom.br(),
+		dom.h2('Recent login attempts', attr.title('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored per account to prevent unlimited growth of the database.')),
+		renderLoginAttempts(false, loginAttempts || []),
+		dom.br(),
+		loginAttempts && loginAttempts.length >= 10 ? dom.p('See ', dom.a(attr.href('#accounts/l/'+name+'/loginattempts'), 'all login attempts'), ' for this account.') : [],
+		dom.br(),
 		dom.clickbutton('Remove account', async function click(e: MouseEvent) {
 			e.preventDefault()
 			if (!window.confirm('Are you sure you want to remove this account? All account data, including messages will be removed.')) {
@@ -1347,7 +1435,7 @@ const domain = async (d: string) => {
 				Object.entries(localpartAccounts).map(t =>
 					dom.tr(
 						dom.td(prewrap(t[0]) || '(catchall)'),
-						dom.td(dom.a(t[1], attr.href('#accounts/'+t[1]))),
+						dom.td(dom.a(t[1], attr.href('#accounts/l/'+t[1]))),
 						dom.td(
 							dom.clickbutton('Remove', async function click(e: MouseEvent) {
 								e.preventDefault()
@@ -1938,7 +2026,7 @@ const domainAlias = async (d: string, aliasLocalpart: string) => {
 					const pa = (alias.ParsedAddresses || [])[index]
 					return dom.tr(
 						dom.td(prewrap(address)),
-						dom.td(dom.a(pa.AccountName, attr.href('#accounts/'+pa.AccountName))),
+						dom.td(dom.a(pa.AccountName, attr.href('#accounts/l/'+pa.AccountName))),
 						dom.td(
 							dom.clickbutton('Remove', async function click(e: MouseEvent) {
 								await check(e.target! as HTMLButtonElement, client.AliasAddressesRemove(aliasLocalpart, d, [address]))
@@ -5227,8 +5315,12 @@ const init = async () => {
 				root = await loglevels()
 			} else if (h === 'accounts') {
 				root = await accounts()
-			} else if (t[0] === 'accounts' && t.length === 2) {
-				root = await account(t[1])
+			} else if (h === 'accounts/loginattempts') {
+				root = await loginattempts()
+			} else if (t[0] === 'accounts' && t.length === 3 && t[1] === 'l') {
+				root = await account(t[2])
+			} else if (t[0] === 'accounts' && t.length === 4 && t[1] === 'l' && t[3] === 'loginattempts') {
+				root = await accountloginattempts(t[2])
 			} else if (t[0] === 'domains' && t.length === 2) {
 				root = await domain(t[1])
 			} else if (t[0] === 'domains' && t.length === 4 && t[2] === 'alias') {

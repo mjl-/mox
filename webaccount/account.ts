@@ -229,7 +229,7 @@ const box = (color: string, ...l: ElemArg[]) => [
 	dom.div(
 		style({
 			display: 'inline-block',
-			padding: '.25em .5em',
+			padding: '.125em .25em',
 			backgroundColor: color,
 			borderRadius: '3px',
 			margin: '.5ex 0',
@@ -298,9 +298,10 @@ const formatQuotaSize = (v: number) => {
 }
 
 const index = async () => {
-	const [[acc, storageUsed, storageLimit, suppressions], tlspubkeys0] = await Promise.all([
+	const [[acc, storageUsed, storageLimit, suppressions], tlspubkeys0, recentLoginAttempts] = await Promise.all([
 		client.Account(),
 		client.TLSPublicKeys(),
+		client.LoginAttempts(10),
 	])
 	const tlspubkeys = tlspubkeys0 || []
 
@@ -820,6 +821,11 @@ const index = async () => {
 			),
 		),
 		dom.br(),
+
+		dom.h2('Recent login attempts', attr.title('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored to prevent unlimited growth of the database.')),
+		renderLoginAttempts(recentLoginAttempts || []),
+		dom.br(),
+		recentLoginAttempts && recentLoginAttempts.length >= 10 ? dom.p('See ', dom.a(attr.href('#loginattempts'), 'all login attempts'), '.') : dom.br(),
 
 		dom.h2('Change password'),
 		passwordForm=dom.form(
@@ -1628,6 +1634,62 @@ openssl pkcs12 \\
 	return root
 }
 
+const renderLoginAttempts = (loginAttempts: api.LoginAttempt[]) => {
+	// todo: pagination and search
+
+	return dom.table(
+		dom.thead(
+			dom.tr(
+				dom.th('Time'),
+				dom.th('Result'),
+				dom.th('Count'),
+				dom.th('LoginAddress'),
+				dom.th('Protocol'),
+				dom.th('Mechanism'),
+				dom.th('User Agent'),
+				dom.th('Remote IP'),
+				dom.th('Local IP'),
+				dom.th('TLS'),
+				dom.th('TLS pubkey fingerprint'),
+				dom.th('First seen'),
+			),
+		),
+		dom.tbody(
+			loginAttempts.length ? [] : dom.tr(dom.td(attr.colspan('11'), 'No login attempts in past 30 days.')),
+			loginAttempts.map(la =>
+				dom.tr(
+					dom.td(age(la.Last)),
+					dom.td(la.Result === 'ok' ? la.Result : box(red, la.Result)),
+					dom.td(''+la.Count),
+					dom.td(la.LoginAddress),
+					dom.td(la.Protocol),
+					dom.td(la.AuthMech),
+					dom.td(la.UserAgent),
+					dom.td(la.RemoteIP),
+					dom.td(la.LocalIP),
+					dom.td(la.TLS),
+					dom.td(la.TLSPubKeyFingerprint),
+					dom.td(age(la.First)),
+				),
+			),
+		),
+	)
+}
+
+const loginattempts = async () => {
+	const loginAttempts = await client.LoginAttempts(0)
+
+	return dom.div(
+		crumbs(
+			crumblink('Mox Account', '#'),
+			'Login attempts',
+		),
+		dom.h2('Login attempts'),
+		dom.p('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored to prevent unlimited growth of the database.'),
+		renderLoginAttempts(loginAttempts || [])
+	)
+}
+
 const destination = async (name: string) => {
 	const [acc] = await client.Account()
 	let dest = (acc.Destinations || {})[name]
@@ -1881,6 +1943,8 @@ const init = async () => {
 			let root: HTMLElement
 			if (h === '') {
 				root = await index()
+			} else if (t[0] === 'loginattempts' && t.length === 1) {
+				root = await loginattempts()
 			} else if (t[0] === 'destinations' && t.length === 2) {
 				root = await destination(t[1])
 			} else {

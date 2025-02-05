@@ -87,6 +87,12 @@ func TestAdminAuth(t *testing.T) {
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webadmin/mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
+	err := store.Init(ctxbg)
+	tcheck(t, err, "store init")
+	defer func() {
+		err := store.Close()
+		tcheck(t, err, "store close")
+	}()
 
 	adminpwhash, err := bcrypt.GenerateFromPassword([]byte("moxtest123"), bcrypt.DefaultCost)
 	tcheck(t, err, "generate bcrypt hash")

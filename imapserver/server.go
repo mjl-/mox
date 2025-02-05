@@ -196,6 +196,11 @@ type conn struct {
 	// ../rfc/5182:13 ../rfc/9051:4040
 	searchResult []store.UID
 
+	// Set during authentication, typically picked up by the ID command that
+	// immediately follows, or will be flushed after any other command after
+	// authentication instead.
+	loginAttempt *store.LoginAttempt
+
 	// Only set when connection has been authenticated. These can be set even when
 	// c.state is stateNotAuthenticated, for TLS client certificate authentication. In
 	// that case, credentials aren't used until the authentication command with the
@@ -787,7 +792,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	defer mox.Connections.Unregister(nc)
 
 	if preauthAddress != "" {
-		acc, _, err := store.OpenEmail(c.log, preauthAddress, false)
+		acc, _, _, err := store.OpenEmail(c.log, preauthAddress, false)
 		if err != nil {
 			c.log.Debugx("open account for preauth address", err, slog.String("address", preauthAddress))
 			c.writelinef("* BYE open account for address: %s", err)
@@ -805,9 +810,31 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		c.writelinef("* OK [CAPABILITY %s] mox imap", c.capabilities())
 	}
 
+	// Ensure any pending loginAttempt is written before we stop.
+	defer func() {
+		if c.loginAttempt != nil {
+			store.LoginAttemptAdd(context.Background(), c.log, *c.loginAttempt)
+			c.loginAttempt = nil
+		}
+	}()
+
+	var storeLoginAttempt bool
 	for {
 		c.command()
 		c.xflush() // For flushing errors, or possibly commands that did not flush explicitly.
+
+		// After an authentication command, we will have a c.loginAttempt. We typically get
+		// an "ID" command with the user-agent immediately after. So we wait for one more
+		// command after seeing a loginAttempt to gather it.
+		if storeLoginAttempt {
+			storeLoginAttempt = false
+			if c.loginAttempt != nil {
+				store.LoginAttemptAdd(context.Background(), c.log, *c.loginAttempt)
+				c.loginAttempt = nil
+			}
+		} else if c.loginAttempt != nil {
+			storeLoginAttempt = true
+		}
 	}
 }
 
@@ -815,6 +842,36 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 // For connection errors, we often want to generate fewer logs.
 func isClosed(err error) bool {
 	return errors.Is(err, errIO) || errors.Is(err, errProtocol) || moxio.IsClosed(err)
+}
+
+// newLoginAttempt initializes a c.loginAttempt, for adding to the store after
+// filling in the results and other details.
+func (c *conn) newLoginAttempt(useTLS bool, authMech string) {
+	if c.loginAttempt != nil {
+		store.LoginAttemptAdd(context.Background(), c.log, *c.loginAttempt)
+		c.loginAttempt = nil
+	}
+
+	var state *tls.ConnectionState
+	if tc, ok := c.conn.(*tls.Conn); ok && useTLS {
+		v := tc.ConnectionState()
+		state = &v
+	}
+
+	localAddr := c.conn.LocalAddr().String()
+	localIP, _, _ := net.SplitHostPort(localAddr)
+	if localIP == "" {
+		localIP = localAddr
+	}
+
+	c.loginAttempt = &store.LoginAttempt{
+		RemoteIP: c.remoteIP.String(),
+		LocalIP:  localIP,
+		TLS:      store.LoginAttemptTLS(state),
+		Protocol: "imap",
+		AuthMech: authMech,
+		Result:   store.AuthError, // Replaced by caller.
+	}
 }
 
 // makeTLSConfig makes a new tls config that is bound to the connection for
@@ -871,10 +928,31 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 		return fmt.Errorf("cannot authenticate with tls client certificate after previous authentication")
 	}
 
-	authResult := "error"
+	// todo: it would be nice to postpone storing the loginattempt for tls pubkey auth until we have the ID command. but delaying is complicated because we can't get the tls information in this function. that's why we store the login attempt in a goroutine below, where it can can get a lock when accessing the tls connection only when this function has returned. we can't access c.loginAttempt (we would turn it into a slice) in a goroutine without adding more locking. for now we'll do without user-agent/id for tls pub key auth.
+	c.newLoginAttempt(false, "tlsclientauth")
 	defer func() {
-		metrics.AuthenticationInc("imap", "tlsclientauth", authResult)
-		if authResult == "ok" {
+		// Get TLS connection state in goroutine because we are called while performing the
+		// TLS handshake, which already has the tls connection locked.
+		conn := c.conn.(*tls.Conn)
+		la := *c.loginAttempt
+		c.loginAttempt = nil
+		go func() {
+			defer func() {
+				// In case of panic don't take the whole program down.
+				x := recover()
+				if x != nil {
+					c.log.Error("recover from panic", slog.Any("panic", x))
+					debug.PrintStack()
+					metrics.PanicInc(metrics.Imapserver)
+				}
+			}()
+
+			state := conn.ConnectionState()
+			la.TLS = store.LoginAttemptTLS(&state)
+			store.LoginAttemptAdd(context.Background(), c.log, la)
+		}()
+
+		if la.Result == store.AuthSuccess {
 			mox.LimiterFailedAuth.Reset(c.remoteIP, time.Now())
 		} else {
 			mox.LimiterFailedAuth.Add(c.remoteIP, time.Now(), 1)
@@ -896,21 +974,27 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 
 	shabuf := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
 	fp := base64.RawURLEncoding.EncodeToString(shabuf[:])
+	c.loginAttempt.TLSPubKeyFingerprint = fp
 	pubKey, err := store.TLSPublicKeyGet(context.TODO(), fp)
 	if err != nil {
 		if err == bstore.ErrAbsent {
-			authResult = "badcreds"
+			c.loginAttempt.Result = store.AuthBadCredentials
 		}
 		return fmt.Errorf("looking up tls public key with fingerprint %s: %v", fp, err)
 	}
+	c.loginAttempt.LoginAddress = pubKey.LoginAddress
 
 	// Verify account exists and still matches address. We don't check for account
 	// login being disabled if preauth is disabled. In that case, sasl external auth
 	// will be done before credentials can be used, and login disabled will be checked
 	// then, where it will result in a more helpful error message.
 	checkLoginDisabled := !pubKey.NoIMAPPreauth
-	acc, _, err := store.OpenEmail(c.log, pubKey.LoginAddress, checkLoginDisabled)
+	acc, accName, _, err := store.OpenEmail(c.log, pubKey.LoginAddress, checkLoginDisabled)
+	c.loginAttempt.AccountName = accName
 	if err != nil {
+		if errors.Is(err, store.ErrLoginDisabled) {
+			c.loginAttempt.Result = store.AuthLoginDisabled
+		}
 		// note: we cannot send a more helpful error message to the client.
 		return fmt.Errorf("opening account for address %s for public key %s: %w", pubKey.LoginAddress, fp, err)
 	}
@@ -920,11 +1004,13 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 			c.xsanity(err, "close account")
 		}
 	}()
+	c.loginAttempt.AccountName = acc.Name
 	if acc.Name != pubKey.Account {
 		return fmt.Errorf("tls client public key %s is for account %s, but email address %s is for account %s", fp, pubKey.Account, pubKey.LoginAddress, acc.Name)
 	}
 
-	authResult = "ok"
+	c.loginAttempt.Result = store.AuthSuccess
+
 	c.authFailed = 0
 	c.noPreauth = pubKey.NoIMAPPreauth
 	c.account = acc
@@ -1646,6 +1732,7 @@ func (c *conn) cmdID(tag, cmd string, p *parser) {
 	// Request syntax: ../rfc/2971:241
 	p.xspace()
 	var params map[string]string
+	var values []string
 	if p.take("(") {
 		params = map[string]string{}
 		for !p.take(")") {
@@ -1659,11 +1746,20 @@ func (c *conn) cmdID(tag, cmd string, p *parser) {
 				xsyntaxErrorf("duplicate key %q", k)
 			}
 			params[k] = v
+			values = append(values, fmt.Sprintf("%s=%q", k, v))
 		}
 	} else {
 		p.xnil()
 	}
 	p.xempty()
+
+	// The ID command is typically sent immediately after authentication. So we've
+	// prepared the LoginAttempt and write it now.
+	if c.loginAttempt != nil {
+		c.loginAttempt.UserAgent = strings.Join(values, " ")
+		store.LoginAttemptAdd(context.Background(), c.log, *c.loginAttempt)
+		c.loginAttempt = nil
+	}
 
 	// We just log the client id.
 	c.log.Info("client id", slog.Any("params", params))
@@ -1744,11 +1840,9 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		}
 	}()
 
-	var authVariant string // Only known strings, used in metrics.
-	authResult := "error"
+	c.newLoginAttempt(true, "")
 	defer func() {
-		metrics.AuthenticationInc("imap", authVariant, authResult)
-		if authResult == "ok" {
+		if c.loginAttempt.Result == store.AuthSuccess {
 			mox.LimiterFailedAuth.Reset(c.remoteIP, time.Now())
 		} else if !missingDerivedSecrets {
 			mox.LimiterFailedAuth.Add(c.remoteIP, time.Now(), 1)
@@ -1775,7 +1869,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		}
 		// ../rfc/9051:1442 ../rfc/3501:1553
 		if line == "*" {
-			authResult = "aborted"
+			c.loginAttempt.Result = store.AuthAborted
 			xsyntaxErrorf("authenticate aborted by client")
 		}
 		buf, err := base64.StdEncoding.DecodeString(line)
@@ -1788,7 +1882,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	xreadContinuation := func() []byte {
 		line := c.readline(false)
 		if line == "*" {
-			authResult = "aborted"
+			c.loginAttempt.Result = store.AuthAborted
 			xsyntaxErrorf("authenticate aborted by client")
 		}
 		buf, err := base64.StdEncoding.DecodeString(line)
@@ -1812,7 +1906,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 
 	switch strings.ToUpper(authType) {
 	case "PLAIN":
-		authVariant = "plain"
+		c.loginAttempt.AuthMech = "plain"
 
 		if !c.noRequireSTARTTLS && !c.tls {
 			// ../rfc/9051:5194
@@ -1830,16 +1924,17 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		authz := string(plain[0])
 		username = string(plain[1])
 		password := string(plain[2])
+		c.loginAttempt.LoginAddress = username
 
 		if authz != "" && authz != username {
 			xusercodeErrorf("AUTHORIZATIONFAILED", "cannot assume role")
 		}
 
 		var err error
-		account, err = store.OpenEmailAuth(c.log, username, password, false)
+		account, c.loginAttempt.AccountName, err = store.OpenEmailAuth(c.log, username, password, false)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
-				authResult = "badcreds"
+				c.loginAttempt.Result = store.AuthBadCredentials
 				c.log.Info("authentication failed", slog.String("username", username))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			}
@@ -1847,7 +1942,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		}
 
 	case "CRAM-MD5":
-		authVariant = strings.ToLower(authType)
+		c.loginAttempt.AuthMech = strings.ToLower(authType)
 
 		// ../rfc/9051:1462
 		p.xempty()
@@ -1862,16 +1957,17 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xsyntaxErrorf("malformed cram-md5 response")
 		}
 		username = t[0]
+		c.loginAttempt.LoginAddress = username
 		c.log.Debug("cram-md5 auth", slog.String("address", username))
 		var err error
-		account, _, err = store.OpenEmail(c.log, username, false)
+		account, c.loginAttempt.AccountName, _, err = store.OpenEmail(c.log, username, false)
 		if err != nil {
 			if errors.Is(err, store.ErrUnknownCredentials) {
-				authResult = "badcreds"
+				c.loginAttempt.Result = store.AuthBadCredentials
 				c.log.Info("failed authentication attempt", slog.String("username", username), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			} else if errors.Is(err, store.ErrLoginDisabled) {
-				authResult = "logindisabled"
+				c.loginAttempt.Result = store.AuthLoginDisabled
 				c.log.Info("account login disabled", slog.String("username", username))
 				// No error code, we don't want to cause prompt for new password
 				// (AUTHENTICATIONFAILED) and don't want to trigger message suppression with ALERT.
@@ -1919,9 +2015,9 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 
 		// No plaintext credentials, we can log these normally.
 
-		authVariant = strings.ToLower(authType)
+		c.loginAttempt.AuthMech = strings.ToLower(authType)
 		var h func() hash.Hash
-		switch authVariant {
+		switch c.loginAttempt.AuthMech {
 		case "scram-sha-1", "scram-sha-1-plus":
 			h = sha1.New
 		case "scram-sha-256", "scram-sha-256-plus":
@@ -1931,7 +2027,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		}
 
 		var cs *tls.ConnectionState
-		requireChannelBinding := strings.HasSuffix(authVariant, "-plus")
+		requireChannelBinding := strings.HasSuffix(c.loginAttempt.AuthMech, "-plus")
 		if requireChannelBinding && !c.tls {
 			xuserErrorf("cannot use plus variant with tls channel binding without tls")
 		}
@@ -1946,9 +2042,10 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xuserErrorf("scram protocol error: %s", err)
 		}
 		username = ss.Authentication
+		c.loginAttempt.LoginAddress = username
 		c.log.Debug("scram auth", slog.String("authentication", username))
 		// We check for login being disabled when finishing.
-		account, _, err = store.OpenEmail(c.log, username, false)
+		account, c.loginAttempt.AccountName, _, err = store.OpenEmail(c.log, username, false)
 		if err != nil {
 			// todo: we could continue scram with a generated salt, deterministically generated
 			// from the username. that way we don't have to store anything but attackers cannot
@@ -1967,7 +2064,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 					xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 				}
 				xcheckf(err, "fetching credentials")
-				switch authVariant {
+				switch c.loginAttempt.AuthMech {
 				case "scram-sha-1", "scram-sha-1-plus":
 					xscram = password.SCRAMSHA1
 				case "scram-sha-256", "scram-sha-256-plus":
@@ -1995,15 +2092,15 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		if err != nil {
 			c.readline(false) // Should be "*" for cancellation.
 			if errors.Is(err, scram.ErrInvalidProof) {
-				authResult = "badcreds"
+				c.loginAttempt.Result = store.AuthBadCredentials
 				c.log.Info("failed authentication attempt", slog.String("username", username), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
 			} else if errors.Is(err, scram.ErrChannelBindingsDontMatch) {
-				authResult = "badchanbind"
+				c.loginAttempt.Result = store.AuthBadChannelBinding
 				c.log.Warn("bad channel binding during authentication, potential mitm", slog.String("username", username), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "channel bindings do not match, potential mitm")
 			} else if errors.Is(err, scram.ErrInvalidEncoding) {
-				authResult = "badprotocol"
+				c.loginAttempt.Result = store.AuthBadProtocol
 				c.log.Infox("bad scram protocol message", err, slog.String("username", username), slog.Any("remote", c.remoteIP))
 				xuserErrorf("bad scram protocol message: %s", err)
 			}
@@ -2015,11 +2112,12 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		xreadContinuation()
 
 	case "EXTERNAL":
-		authVariant = strings.ToLower(authType)
+		c.loginAttempt.AuthMech = "external"
 
 		// ../rfc/4422:1618
 		buf := xreadInitial()
 		username = string(buf)
+		c.loginAttempt.LoginAddress = username
 
 		if !c.tls {
 			xusercodeErrorf("AUTHENTICATIONFAILED", "tls required for tls client certificate authentication")
@@ -2030,19 +2128,21 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 
 		if username == "" {
 			username = c.username
+			c.loginAttempt.LoginAddress = username
 		}
 		var err error
-		account, _, err = store.OpenEmail(c.log, username, false)
+		account, c.loginAttempt.AccountName, _, err = store.OpenEmail(c.log, username, false)
 		xcheckf(err, "looking up username from tls client authentication")
 
 	default:
+		c.loginAttempt.AuthMech = "(unrecognized)"
 		xuserErrorf("method not supported")
 	}
 
 	if accConf, ok := account.Conf(); !ok {
 		xserverErrorf("cannot get account config")
 	} else if accConf.LoginDisabled != "" {
-		authResult = "logindisabled"
+		c.loginAttempt.Result = store.AuthLoginDisabled
 		c.log.Info("account login disabled", slog.String("username", username))
 		// No AUTHENTICATIONFAILED code, clients could prompt users for different password.
 		xuserErrorf("%w: %s", store.ErrLoginDisabled, accConf.LoginDisabled)
@@ -2055,7 +2155,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	if c.account != nil {
 		if account != c.account {
 			c.log.Debug("sasl authentication for different account than tls client authentication, aborting connection",
-				slog.String("saslmechanism", authVariant),
+				slog.String("saslmechanism", c.loginAttempt.AuthMech),
 				slog.String("saslaccount", account.Name),
 				slog.String("tlsaccount", c.account.Name),
 				slog.String("saslusername", username),
@@ -2064,7 +2164,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 			xusercodeErrorf("AUTHENTICATIONFAILED", "authentication failed, tls client certificate public key belongs to another account")
 		} else if username != c.username {
 			c.log.Debug("sasl authentication for different username than tls client certificate authentication, switching to sasl username",
-				slog.String("saslmechanism", authVariant),
+				slog.String("saslmechanism", c.loginAttempt.AuthMech),
 				slog.String("saslusername", username),
 				slog.String("tlsusername", c.username),
 				slog.String("account", c.account.Name),
@@ -2080,7 +2180,9 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	}
 
 	c.setSlow(false)
-	authResult = "ok"
+	c.loginAttempt.AccountName = c.account.Name
+	c.loginAttempt.LoginAddress = c.username
+	c.loginAttempt.Result = store.AuthSuccess
 	c.authFailed = 0
 	c.state = stateAuthenticated
 	c.writeresultf("%s OK [CAPABILITY %s] authenticate done", tag, c.capabilities())
@@ -2092,10 +2194,9 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 	// Command: ../rfc/9051:1597 ../rfc/3501:1663
 
-	authResult := "error"
+	c.newLoginAttempt(true, "login")
 	defer func() {
-		metrics.AuthenticationInc("imap", "login", authResult)
-		if authResult == "ok" {
+		if c.loginAttempt.Result == store.AuthSuccess {
 			mox.LimiterFailedAuth.Reset(c.remoteIP, time.Now())
 		} else {
 			mox.LimiterFailedAuth.Add(c.remoteIP, time.Now(), 1)
@@ -2107,6 +2208,7 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 	// Request syntax: ../rfc/9051:6667 ../rfc/3501:4804
 	p.xspace()
 	username := p.xastring()
+	c.loginAttempt.LoginAddress = username
 	p.xspace()
 	password := p.xastring()
 	p.xempty()
@@ -2129,15 +2231,16 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 		}
 	}()
 
-	account, err := store.OpenEmailAuth(c.log, username, password, true)
+	account, accName, err := store.OpenEmailAuth(c.log, username, password, true)
+	c.loginAttempt.AccountName = accName
 	if err != nil {
 		var code string
 		if errors.Is(err, store.ErrUnknownCredentials) {
-			authResult = "badcreds"
+			c.loginAttempt.Result = store.AuthBadCredentials
 			code = "AUTHENTICATIONFAILED"
 			c.log.Info("failed authentication attempt", slog.String("username", username), slog.Any("remote", c.remoteIP))
 		} else if errors.Is(err, store.ErrLoginDisabled) {
-			authResult = "logindisabled"
+			c.loginAttempt.Result = store.AuthLoginDisabled
 			c.log.Info("account login disabled", slog.String("username", username))
 			// There is no specific code for "account disabled" in IMAP. AUTHORIZATIONFAILED is
 			// not a good idea, it will prompt users for a password. ALERT seems reasonable,
@@ -2184,10 +2287,12 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 	if c.comm == nil {
 		c.comm = store.RegisterComm(c.account)
 	}
+	c.loginAttempt.LoginAddress = c.username
+	c.loginAttempt.AccountName = c.account.Name
+	c.loginAttempt.Result = store.AuthSuccess
 	c.authFailed = 0
 	c.setSlow(false)
 	c.state = stateAuthenticated
-	authResult = "ok"
 	c.writeresultf("%s OK [CAPABILITY %s] login done", tag, c.capabilities())
 }
 

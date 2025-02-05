@@ -957,7 +957,7 @@ and check the admin page for the needed DNS records.`)
 		fatalf("cannot find domain in new config")
 	}
 
-	acc, _, err := store.OpenEmail(c.log, args[0], false)
+	acc, _, _, err := store.OpenEmail(c.log, args[0], false)
 	if err != nil {
 		fatalf("open account: %s", err)
 	}

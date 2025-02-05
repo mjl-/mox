@@ -61,8 +61,14 @@ func TestServer(t *testing.T) {
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webapisrv/mox.conf")
 	mox.MustLoadConfig(true, false)
+	err := store.Init(ctxbg)
+	tcheckf(t, err, "store init")
+	defer func() {
+		err := store.Close()
+		tcheckf(t, err, "store close")
+	}()
 	defer store.Switchboard()()
-	err := queue.Init()
+	err = queue.Init()
 	tcheckf(t, err, "queue init")
 	defer queue.Shutdown()
 

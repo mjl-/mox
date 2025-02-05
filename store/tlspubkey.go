@@ -9,16 +9,11 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/mjl-/bstore"
 
-	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 )
 
@@ -41,34 +36,6 @@ type TLSPublicKey struct {
 	CertDER      []byte `bstore:"nonzero"`
 	Account      string `bstore:"nonzero"` // Key authenticates this account.
 	LoginAddress string `bstore:"nonzero"` // Must belong to account.
-}
-
-// AuthDB and AuthDBTypes are exported for ../backup.go.
-var AuthDB *bstore.DB
-var AuthDBTypes = []any{TLSPublicKey{}}
-
-// Init opens auth.db.
-func Init(ctx context.Context) error {
-	if AuthDB != nil {
-		return fmt.Errorf("already initialized")
-	}
-	pkglog := mlog.New("store", nil)
-	p := mox.DataDirPath("auth.db")
-	os.MkdirAll(filepath.Dir(p), 0770)
-	opts := bstore.Options{Timeout: 5 * time.Second, Perm: 0660, RegisterLogger: moxvar.RegisterLogger(p, pkglog.Logger)}
-	var err error
-	AuthDB, err = bstore.Open(ctx, p, &opts, AuthDBTypes...)
-	return err
-}
-
-// Close closes auth.db.
-func Close() error {
-	if AuthDB == nil {
-		return fmt.Errorf("not open")
-	}
-	err := AuthDB.Close()
-	AuthDB = nil
-	return err
 }
 
 // ParseTLSPublicKeyCert parses a certificate, preparing a TLSPublicKey for

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -25,6 +26,13 @@ func tcheck(t *testing.T, err error, msg string) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("%s: %s", msg, err)
+	}
+}
+
+func tcompare(t *testing.T, got, expect any) {
+	t.Helper()
+	if !reflect.DeepEqual(got, expect) {
+		t.Fatalf("got:\n%#v\nexpected:\n%#v", got, expect)
 	}
 }
 
@@ -224,30 +232,30 @@ func TestMailbox(t *testing.T) {
 
 	// Run the auth tests twice for possible cache effects.
 	for i := 0; i < 2; i++ {
-		_, err := OpenEmailAuth(log, "mjl@mox.example", "bogus", false)
+		_, _, err := OpenEmailAuth(log, "mjl@mox.example", "bogus", false)
 		if err != ErrUnknownCredentials {
 			t.Fatalf("got %v, expected ErrUnknownCredentials", err)
 		}
 	}
 
 	for i := 0; i < 2; i++ {
-		acc2, err := OpenEmailAuth(log, "mjl@mox.example", "testtest", false)
+		acc2, _, err := OpenEmailAuth(log, "mjl@mox.example", "testtest", false)
 		tcheck(t, err, "open for email with auth")
 		err = acc2.Close()
 		tcheck(t, err, "close account")
 	}
 
-	acc2, err := OpenEmailAuth(log, "other@mox.example", "testtest", false)
+	acc2, _, err := OpenEmailAuth(log, "other@mox.example", "testtest", false)
 	tcheck(t, err, "open for email with auth")
 	err = acc2.Close()
 	tcheck(t, err, "close account")
 
-	_, err = OpenEmailAuth(log, "bogus@mox.example", "testtest", false)
+	_, _, err = OpenEmailAuth(log, "bogus@mox.example", "testtest", false)
 	if err != ErrUnknownCredentials {
 		t.Fatalf("got %v, expected ErrUnknownCredentials", err)
 	}
 
-	_, err = OpenEmailAuth(log, "mjl@test.example", "testtest", false)
+	_, _, err = OpenEmailAuth(log, "mjl@test.example", "testtest", false)
 	if err != ErrUnknownCredentials {
 		t.Fatalf("got %v, expected ErrUnknownCredentials", err)
 	}

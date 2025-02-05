@@ -97,6 +97,12 @@ func TestAccount(t *testing.T) {
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/httpaccount/mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
 	mox.MustLoadConfig(true, false)
+	err := store.Init(ctxbg)
+	tcheck(t, err, "store init")
+	defer func() {
+		err := store.Close()
+		tcheck(t, err, "store close")
+	}()
 	log := mlog.New("webaccount", nil)
 	acc, err := store.OpenAccount(log, "mjl☺", false)
 	tcheck(t, err, "open account")
@@ -510,13 +516,6 @@ func TestAccount(t *testing.T) {
 	err = pem.Encode(&b, &pem.Block{Type: "CERTIFICATE", Bytes: certBuf})
 	tcheck(t, err, "encoding certificate as pem")
 	certPEM := b.String()
-
-	err = store.Init(ctx)
-	tcheck(t, err, "store init")
-	defer func() {
-		err := store.Close()
-		tcheck(t, err, "store close")
-	}()
 
 	tpkl, err := api.TLSPublicKeys(ctx)
 	tcheck(t, err, "list tls public keys")

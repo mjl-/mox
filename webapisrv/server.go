@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"mime"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/textproto"
 	"reflect"
@@ -424,23 +425,24 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	authResult := "error"
+	la := loginAttempt(r, "webapi", "httpbasic")
+	la.LoginAddress = email
 	defer func() {
+		store.LoginAttemptAdd(context.Background(), log, la)
 		metricDuration.WithLabelValues(fn).Observe(float64(time.Since(t0)) / float64(time.Second))
-		metrics.AuthenticationInc("webapi", "httpbasic", authResult)
 	}()
 
 	var err error
-	acc, err = store.OpenEmailAuth(log, email, password, true)
+	acc, la.AccountName, err = store.OpenEmailAuth(log, email, password, true)
 	if err != nil {
 		mox.LimiterFailedAuth.Add(remoteIP, t0, 1)
 		if errors.Is(err, mox.ErrDomainNotFound) || errors.Is(err, mox.ErrAddressNotFound) || errors.Is(err, store.ErrUnknownCredentials) || errors.Is(err, store.ErrLoginDisabled) {
 			log.Debug("bad http basic authentication credentials")
 			metricResults.WithLabelValues(fn, "badauth").Inc()
-			authResult = "badcreds"
+			la.Result = store.AuthBadCredentials
 			msg := "use http basic auth with email address as username"
 			if errors.Is(err, store.ErrLoginDisabled) {
-				authResult = "logindisabled"
+				la.Result = store.AuthLoginDisabled
 				msg = "login is disabled for this account"
 			}
 			w.Header().Set("WWW-Authenticate", "Basic realm=webapi")
@@ -450,7 +452,8 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(webapi.Error{Code: "server", Message: "error verifying credentials"})
 		return
 	}
-	authResult = "ok"
+	la.AccountName = acc.Name
+	la.Result = store.AuthSuccess
 	mox.LimiterFailedAuth.Reset(remoteIP, t0)
 
 	ct := r.Header.Get("Content-Type")
@@ -523,6 +526,24 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer rc.Close()
 	if _, err := io.Copy(w, rc); err != nil && !moxio.IsClosed(err) {
 		log.Errorx("writing response to client", err)
+	}
+}
+
+// loginAttempt initializes a store.LoginAttempt, for adding to the store after
+// filling in the results and other details.
+func loginAttempt(r *http.Request, protocol, authMech string) store.LoginAttempt {
+	remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if remoteIP == "" {
+		remoteIP = r.RemoteAddr
+	}
+
+	return store.LoginAttempt{
+		RemoteIP:  remoteIP,
+		TLS:       store.LoginAttemptTLS(r.TLS),
+		Protocol:  protocol,
+		AuthMech:  authMech,
+		UserAgent: r.UserAgent(),
+		Result:    store.AuthError, // Replaced by caller.
 	}
 }
 
