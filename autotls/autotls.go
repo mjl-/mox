@@ -42,6 +42,24 @@ import (
 )
 
 var (
+	metricMissingServerName = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "mox_autotls_missing_servername_total",
+			Help: "Number of failed TLS connection attempts with missing SNI where no fallback hostname was configured.",
+		},
+	)
+	metricUnknownServerName = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "mox_autotls_unknown_servername_total",
+			Help: "Number of failed TLS connection attempts with an unrecognized SNI name where no fallback hostname was configured.",
+		},
+	)
+	metricCertRequestErrors = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "mox_autotls_cert_request_errors_total",
+			Help: "Number of errors trying to retrieve a certificate for a hostname, possibly ACME verification errors.",
+		},
+	)
 	metricCertput = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "mox_autotls_certput_total",
@@ -171,7 +189,7 @@ func Load(name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eab
 	return a, nil
 }
 
-// logigngGetCertificate is a helper to implement crypto/tls.Config.GetCertificate,
+// loggingGetCertificate is a helper to implement crypto/tls.Config.GetCertificate,
 // optionally falling back to a certificate for fallbackHostname in case SNI is
 // absent or for an unknown hostname.
 func (m *Manager) loggingGetCertificate(hello *tls.ClientHelloInfo, fallbackHostname dns.Domain, fallbackNoSNI, fallbackUnknownSNI bool) (*tls.Certificate, error) {
@@ -188,6 +206,7 @@ func (m *Manager) loggingGetCertificate(hello *tls.ClientHelloInfo, fallbackHost
 
 	// Handle missing SNI to prevent logging an error below.
 	if hello.ServerName == "" {
+		metricMissingServerName.Inc()
 		log.Debug("tls request without sni servername, rejecting", slog.Any("localaddr", hello.Conn.LocalAddr()), slog.Any("supportedprotos", hello.SupportedProtos))
 		return nil, nil
 	}
@@ -195,6 +214,7 @@ func (m *Manager) loggingGetCertificate(hello *tls.ClientHelloInfo, fallbackHost
 	cert, err := m.Manager.GetCertificate(hello)
 	if err != nil && errors.Is(err, errHostNotAllowed) {
 		if !fallbackUnknownSNI {
+			metricUnknownServerName.Inc()
 			log.Debugx("requesting certificate", err, slog.String("host", hello.ServerName))
 			return nil, nil
 		}
@@ -203,12 +223,14 @@ func (m *Manager) loggingGetCertificate(hello *tls.ClientHelloInfo, fallbackHost
 		hello.ServerName = fallbackHostname.ASCII
 		cert, err = m.Manager.GetCertificate(hello)
 		if err != nil {
+			metricCertRequestErrors.Inc()
 			log.Errorx("requesting certificate for fallback hostname", err, slog.String("host", hello.ServerName))
 		} else {
-			log.Debugx("requesting certificate for fallback hostname", err, slog.String("host", hello.ServerName))
+			log.Debug("using certificate for fallback hostname", slog.String("host", hello.ServerName))
 		}
 		return cert, err
 	} else if err != nil {
+		metricCertRequestErrors.Inc()
 		log.Errorx("requesting certificate", err, slog.String("host", hello.ServerName))
 	}
 	return cert, err

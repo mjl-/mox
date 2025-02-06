@@ -8,6 +8,11 @@ groups:
     annotations:
       summary: unhandled panic
 
+  - alert: mox-acme-request-cert-errors
+    expr: increase(mox_autotls_cert_request_errors_total[1h]) > 0
+    annotations:
+      summary: errors requesting tls certificates with acme
+
   - alert: mox-ip-on-dns-blocklist
     expr: mox_dnsbl_ips_success < 1
     annotations:
