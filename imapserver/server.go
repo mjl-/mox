@@ -1966,12 +1966,6 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 				c.loginAttempt.Result = store.AuthBadCredentials
 				c.log.Info("failed authentication attempt", slog.String("username", username), slog.Any("remote", c.remoteIP))
 				xusercodeErrorf("AUTHENTICATIONFAILED", "bad credentials")
-			} else if errors.Is(err, store.ErrLoginDisabled) {
-				c.loginAttempt.Result = store.AuthLoginDisabled
-				c.log.Info("account login disabled", slog.String("username", username))
-				// No error code, we don't want to cause prompt for new password
-				// (AUTHENTICATIONFAILED) and don't want to trigger message suppression with ALERT.
-				xuserErrorf("%s", err)
 			}
 			xserverErrorf("looking up address: %v", err)
 		}
