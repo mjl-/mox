@@ -60,6 +60,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/maps"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -1921,8 +1922,8 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		if len(plain) != 3 {
 			xsyntaxErrorf("bad plain auth data, expected 3 nul-separated tokens, got %d tokens", len(plain))
 		}
-		authz := string(plain[0])
-		username = string(plain[1])
+		authz := norm.NFC.String(string(plain[0]))
+		username = norm.NFC.String(string(plain[1]))
 		password := string(plain[2])
 		c.loginAttempt.LoginAddress = username
 
@@ -1956,7 +1957,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		if len(t) != 2 || len(t[1]) != 2*md5.Size {
 			xsyntaxErrorf("malformed cram-md5 response")
 		}
-		username = t[0]
+		username = norm.NFC.String(t[0])
 		c.loginAttempt.LoginAddress = username
 		c.log.Debug("cram-md5 auth", slog.String("address", username))
 		var err error
@@ -2110,7 +2111,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 
 		// ../rfc/4422:1618
 		buf := xreadInitial()
-		username = string(buf)
+		username = norm.NFC.String(string(buf))
 		c.loginAttempt.LoginAddress = username
 
 		if !c.tls {
@@ -2201,7 +2202,7 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 
 	// Request syntax: ../rfc/9051:6667 ../rfc/3501:4804
 	p.xspace()
-	username := p.xastring()
+	username := norm.NFC.String(p.xastring())
 	c.loginAttempt.LoginAddress = username
 	p.xspace()
 	password := p.xastring()

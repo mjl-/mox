@@ -1544,7 +1544,7 @@ func (c *conn) cmdAuth(p *parser) {
 			c.log.Infox("scram protocol error", err, slog.Any("remote", c.remoteIP))
 			xsmtpUserErrorf(smtp.C455BadParams, smtp.SePol7Other0, "scram protocol error: %s", err)
 		}
-		username = norm.NFC.String(ss.Authentication)
+		username = ss.Authentication
 		la.LoginAddress = username
 		c.log.Debug("scram auth", slog.String("authentication", username))
 		account, la.AccountName, _, err = store.OpenEmail(c.log, username, false)
@@ -1620,7 +1620,7 @@ func (c *conn) cmdAuth(p *parser) {
 
 		// ../rfc/4422:1618
 		buf := xreadInitial("")
-		username = string(buf)
+		username = norm.NFC.String(string(buf))
 		la.LoginAddress = username
 
 		if !c.tls {

@@ -45,6 +45,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/unicode/norm"
+
 	"github.com/mjl-/sherpa"
 
 	"github.com/mjl-/mox/metrics"
@@ -266,6 +268,7 @@ func Login(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind, coo
 		return "", &sherpa.Error{Code: "user:error", Message: "too many authentication attempts"}
 	}
 
+	username = norm.NFC.String(username)
 	valid, disabled, accountName, err := sessionAuth.login(ctx, log, username, password)
 	la := loginAttempt(r, kind, "weblogin")
 	la.LoginAddress = username
