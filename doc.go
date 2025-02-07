@@ -110,6 +110,7 @@ any parameters. Followed by the help and usage information for each command.
 	mox dnsbl check zone ip
 	mox dnsbl checkhealth zone
 	mox mtasts lookup domain
+	mox rdap domainage domain
 	mox retrain [accountname]
 	mox sendmail [-Fname] [ignoredflags] [-t] [<message]
 	mox spf check domain ip
@@ -186,7 +187,7 @@ output of "mox config describe-domains" and see the output of
 	  -hostname string
 	    	hostname mox will run on, by default the hostname of the machine quickstart runs on; if specified, the IPs for the hostname are configured for the public listener
 	  -skipdial
-	    	skip check for outgoing smtp (port 25) connectivity
+	    	skip check for outgoing smtp (port 25) connectivity or for domain age with rdap
 
 # mox stop
 
@@ -1455,6 +1456,24 @@ specifies the mode (enforce, testing, none), which MX servers support TLS and
 should be used, and how long the policy can be cached.
 
 	usage: mox mtasts lookup domain
+
+# mox rdap domainage
+
+Lookup the age of domain in RDAP based on latest registration.
+
+RDAP is the registration data access protocol. Registries run RDAP services for
+their top level domains, providing information such as the registration date of
+domains. This command looks up the "age" of a domain by looking at the most
+recent "registration", "reregistration" or "reinstantiation" event.
+
+Email messages from recently registered domains are often treated with
+suspicion, and some mail systems are more likely to classify them as junk.
+
+On each invocation, a bootstrap file with a list of registries (of top-level
+domains) is retrieved, without caching. Do not run this command too often with
+automation.
+
+	usage: mox rdap domainage domain
 
 # mox retrain
 

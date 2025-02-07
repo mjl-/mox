@@ -35,6 +35,8 @@ import (
 	"github.com/mjl-/mox/dnsbl"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/publicsuffix"
+	"github.com/mjl-/mox/rdap"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
 )
@@ -102,7 +104,7 @@ output of "mox config describe-domains" and see the output of
 	var skipDial bool
 	c.flag.BoolVar(&existingWebserver, "existing-webserver", false, "use if a webserver is already running, so mox won't listen on port 80 and 443; you'll have to provide tls certificates/keys, and configure the existing webserver as reverse proxy, forwarding requests to mox.")
 	c.flag.StringVar(&hostname, "hostname", "", "hostname mox will run on, by default the hostname of the machine quickstart runs on; if specified, the IPs for the hostname are configured for the public listener")
-	c.flag.BoolVar(&skipDial, "skipdial", false, "skip check for outgoing smtp (port 25) connectivity")
+	c.flag.BoolVar(&skipDial, "skipdial", false, "skip check for outgoing smtp (port 25) connectivity or for domain age with rdap")
 	args := c.Parse()
 	if len(args) != 1 && len(args) != 2 {
 		c.Usage()
@@ -582,8 +584,8 @@ messages over SMTP.
 		}
 	}
 
-	// Check outgoing SMTP connectivity.
 	if !skipDial {
+		// Check outgoing SMTP connectivity.
 		fmt.Printf("Checking if outgoing smtp connections can be made by connecting to gmail.com mx on port 25...")
 		mxctx, mxcancel := context.WithTimeout(context.Background(), 5*time.Second)
 		mx, _, err := resolver.LookupMX(mxctx, "gmail.com.")
@@ -618,6 +620,41 @@ in mox.conf and use it in "Routes" in domains.conf. See
 "mox config example transport".
 
 `)
+		}
+
+		// Check if domain is recently registered.
+		rdapctx, rdapcancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer rdapcancel()
+		orgdom := publicsuffix.Lookup(rdapctx, c.log.Logger, domain)
+		fmt.Printf("\nChecking if domain %s was registered recently...", orgdom)
+		registration, err := rdap.LookupLastDomainRegistration(rdapctx, orgdom)
+		rdapcancel()
+		if err != nil {
+			fmt.Printf(" error: %s (continuing)\n\n", err)
+		} else {
+			age := time.Since(registration)
+			const day = 24 * time.Hour
+			const year = 365 * day
+			years := age / year
+			days := (age - years*year) / day
+			var s string
+			if years == 1 {
+				s = "1 year, "
+			} else if years > 0 {
+				s = fmt.Sprintf("%d years, ", years)
+			}
+			if days == 1 {
+				s += "1 day"
+			} else {
+				s += fmt.Sprintf("%d days", days)
+			}
+			fmt.Printf(" %s", s)
+			// 6 weeks is a guess, mail servers/service providers will have different policies.
+			if age < 6*7*day {
+				fmt.Printf(" (recent!)\nWARNING: Mail servers may treat messages coming from recently registered domains\n(in the order of weeks to months) with suspicion, with higher probability of\nmessages being classified as junk.\n\n")
+			} else {
+				fmt.Printf(" OK\n\n")
+			}
 		}
 	}
 

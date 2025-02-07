@@ -61,6 +61,7 @@ import (
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/queue"
+	"github.com/mjl-/mox/rdap"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
 	"github.com/mjl-/mox/spf"
@@ -195,6 +196,7 @@ var commands = []struct {
 	{"dnsbl check", cmdDNSBLCheck},
 	{"dnsbl checkhealth", cmdDNSBLCheckhealth},
 	{"mtasts lookup", cmdMTASTSLookup},
+	{"rdap domainage", cmdRDAPDomainage},
 	{"retrain", cmdRetrain},
 	{"sendmail", cmdSendmail},
 	{"spf check", cmdSPFCheck},
@@ -2986,6 +2988,51 @@ should be used, and how long the policy can be cached.
 		fmt.Printf("policy at https://mta-sts.%s/.well-known/mta-sts.txt:\n", domain.ASCII)
 		fmt.Printf("%s", policy.String())
 	}
+}
+
+func cmdRDAPDomainage(c *cmd) {
+	c.params = "domain"
+	c.help = `Lookup the age of domain in RDAP based on latest registration.
+
+RDAP is the registration data access protocol. Registries run RDAP services for
+their top level domains, providing information such as the registration date of
+domains. This command looks up the "age" of a domain by looking at the most
+recent "registration", "reregistration" or "reinstantiation" event.
+
+Email messages from recently registered domains are often treated with
+suspicion, and some mail systems are more likely to classify them as junk.
+
+On each invocation, a bootstrap file with a list of registries (of top-level
+domains) is retrieved, without caching. Do not run this command too often with
+automation.
+`
+	args := c.Parse()
+	if len(args) != 1 {
+		c.Usage()
+	}
+
+	domain := xparseDomain(args[0], "domain")
+
+	registration, err := rdap.LookupLastDomainRegistration(context.Background(), domain)
+	xcheckf(err, "looking up domain in rdap")
+
+	age := time.Since(registration)
+	const day = 24 * time.Hour
+	const year = 365 * day
+	years := age / year
+	days := (age - years*year) / day
+	var s string
+	if years == 1 {
+		s = "1 year, "
+	} else if years > 0 {
+		s = fmt.Sprintf("%d years, ", years)
+	}
+	if days == 1 {
+		s += "1 day"
+	} else {
+		s += fmt.Sprintf("%d days", days)
+	}
+	fmt.Println(s)
 }
 
 func cmdRetrain(c *cmd) {

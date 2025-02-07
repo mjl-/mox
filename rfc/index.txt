@@ -454,3 +454,11 @@ See implementation guide, https://jmap.io/server.html
 9077	-?	-	NSEC and NSEC3: TTLs and Aggressive Use
 9157	-?	-	Revised IANA Considerations for DNSSEC
 9276	-?	-	Guidance for NSEC3 Parameter Settings
+
+# RDAP
+7480	-	-	HTTP Usage in the Registration Data Access Protocol (RDAP)
+7481	-	-	Security Services for the Registration Data Access Protocol (RDAP)
+8056	-	-	Extensible Provisioning Protocol (EPP) and Registration Data Access Protocol (RDAP) Status Mapping
+9082	-	-	Registration Data Access Protocol (RDAP) Query Format
+9083	-	-	JSON Responses for the Registration Data Access Protocol (RDAP)
+9224	-	-	Finding the Authoritative Registration Data Access Protocol (RDAP) Service
