@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto"
@@ -1777,11 +1778,20 @@ pick a random, unguessable password, preferably at least 12 characters.
 
 `)
 	fmt.Printf("password: ")
-	buf := make([]byte, 64)
-	n, err := os.Stdin.Read(buf)
-	xcheckf(err, "reading stdin")
-	pw := string(buf[:n])
-	pw = strings.TrimSuffix(strings.TrimSuffix(pw, "\r\n"), "\n")
+	scanner := bufio.NewScanner(os.Stdin)
+	// The default splitter for scanners is one that splits by lines, so we
+	// don't have to set up another one here.
+
+	// We discard the return value of Scan() since failing to tokenize could
+	// either mean reaching EOF but no newline (which can be legitimate if the
+	// CLI was programatically called to set the password, but with no trailing
+	// newline), or an actual error. We can distinguish between the two by
+	// calling Err() since it will return nil if it were EOF, but the actual
+	// error if not.
+	scanner.Scan()
+	xcheckf(scanner.Err(), "reading stdin")
+	// No need to trim, the scanner does not return the token in the output.
+	pw := scanner.Text()
 	if len(pw) < 8 {
 		log.Fatal("password must be at least 8 characters")
 	}
