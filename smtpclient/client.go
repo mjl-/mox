@@ -48,6 +48,7 @@ import (
 	"github.com/mjl-/mox/dane"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/sasl"
 	"github.com/mjl-/mox/smtp"
@@ -1148,7 +1149,7 @@ func (c *Client) DeliverMultiple(ctx context.Context, mailFrom string, rcptTo []
 		}
 	}
 
-	if !c.ext8bitmime && req8bitmime {
+	if mox.Pedantic && !c.ext8bitmime && req8bitmime {
 		// Temporary error, e.g. OpenBSD spamd does not announce 8bitmime support, but once
 		// you get through, the mail server behind it probably does. Just needs a few
 		// retries.
