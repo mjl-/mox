@@ -728,7 +728,13 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 			rcpts[i] = mr.msg.Recipient().XString(m0.SMTPUTF8)
 		}
 
-		resps, err := sc.DeliverMultiple(ctx, mailFrom, rcpts, size, msg, has8bit, smtputf8, m0.RequireTLS != nil && *m0.RequireTLS)
+		// Only require that remote announces 8bitmime extension when in pedantic mode. All
+		// relevant systems nowadays should accept "8-bit" messages, some unfortunately
+		// don't announce support. In theory we could rewrite the submitted message to be
+		// 7-bit-only, but the trouble likely isn't worth it.
+		req8bit := has8bit && mox.Pedantic
+
+		resps, err := sc.DeliverMultiple(ctx, mailFrom, rcpts, size, msg, req8bit, smtputf8, m0.RequireTLS != nil && *m0.RequireTLS)
 		if err != nil && (len(resps) == 0 && n == len(msgResps) || len(resps) == len(msgResps)) {
 			// If error and it applies to all recipients, return a single error.
 			return deliverResult{err: inspectError(err)}

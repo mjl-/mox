@@ -1095,8 +1095,8 @@ func (c *Client) TLSConnectionState() *tls.ConnectionState {
 // mailFrom must be an email address, or empty in case of a DSN. rcptTo must be
 // an email address.
 //
-// If the message contains bytes with the high bit set, req8bitmime must be true. If
-// set, the remote server must support the 8BITMIME extension or delivery will
+// If the message contains bytes with the high bit set, req8bitmime should be true.
+// If set, the remote server must support the 8BITMIME extension or delivery will
 // fail.
 //
 // If the message is internationalized, e.g. when headers contain non-ASCII
@@ -1149,10 +1149,7 @@ func (c *Client) DeliverMultiple(ctx context.Context, mailFrom string, rcptTo []
 	}
 
 	if !c.ext8bitmime && req8bitmime {
-		// Temporary error, e.g. OpenBSD spamd does not announce 8bitmime support, but once
-		// you get through, the mail server behind it probably does. Just needs a few
-		// retries.
-		c.xerrorf(false, 0, "", "", nil, "%w", Err8bitmimeUnsupported)
+		c.xerrorf(true, 0, "", "", nil, "%w", Err8bitmimeUnsupported)
 	}
 	if !c.extSMTPUTF8 && reqSMTPUTF8 {
 		// ../rfc/6531:313
