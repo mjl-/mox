@@ -2256,7 +2256,7 @@ const account = async (name) => {
 		}
 		password.type = 'text';
 		password.value = s;
-	}), dom.div(dom._class('text'), box(yellow, 'Important: Bots will try to bruteforce your password. Connections with failed authentication attempts will be rate limited but attackers WILL find weak passwords. If your account is compromised, spammers are likely to abuse your system, spamming your address and the wider internet in your name. So please pick a random, unguessable password, preferrably at least 12 characters.'))), async function submit(e) {
+	}), dom.div(dom._class('text'), box(yellow, 'Important: Bots will try to bruteforce your password. Connections with failed authentication attempts will be rate limited but attackers WILL find passwords reused at other services and weak passwords. If your account is compromised, spammers are likely to abuse your system, spamming your address and the wider internet in your name. So please pick a random, unguessable password, preferrably at least 12 characters.'))), async function submit(e) {
 		e.stopPropagation();
 		e.preventDefault();
 		await check(fieldsetPassword, client.SetPassword(name, password.value));

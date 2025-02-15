@@ -1771,10 +1771,11 @@ func xreadpassword() string {
 Type new password. Password WILL echo.
 
 WARNING: Bots will try to bruteforce your password. Connections with failed
-authentication attempts will be rate limited but attackers WILL find weak
-passwords. If your account is compromised, spammers are likely to abuse your
-system, spamming your address and the wider internet in your name. So please
-pick a random, unguessable password, preferably at least 12 characters.
+authentication attempts will be rate limited but attackers WILL find passwords
+reused at other services and weak passwords. If your account is compromised,
+spammers are likely to abuse your system, spamming your address and the wider
+internet in your name. So please pick a random, unguessable password, preferably
+at least 12 characters.
 
 `)
 	fmt.Printf("password: ")
