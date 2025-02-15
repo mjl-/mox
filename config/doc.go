@@ -1150,6 +1150,17 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 					# (optional)
 					SMTPError:
 
+					# If non-empty, an additional DMARC-like message authentication check is done for
+					# incoming messages, validating the domain in the From-header of the message.
+					# Messages without either an aligned SPF or aligned DKIM pass are rejected during
+					# the SMTP DATA command with a permanent error code followed by the message in
+					# this field. The domain in the message 'From' header is matched in relaxed or
+					# strict mode according to the domain's DMARC policy if present, or relaxed mode
+					# (organizational instead of exact domain match) otherwise. Useful for
+					# autoresponders that don't want to accept messages they don't want to send an
+					# automated reply to. (optional)
+					MessageAuthRequiredSMTPError:
+
 					# Full name to use in message From header when composing messages coming from this
 					# address with webmail. (optional)
 					FullName:

@@ -84,6 +84,7 @@ const (
 	reasonSubjectpassError  = "subjectpass-error"
 	reasonIPrev             = "iprev"     // No or mild junk reputation signals, and bad iprev.
 	reasonHighRate          = "high-rate" // Too many messages, not added to rejects.
+	reasonMsgAuthRequired   = "msg-auth-required"
 )
 
 func isListDomain(d delivery, ld dns.Domain) bool {
@@ -394,6 +395,19 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 				tlsReport = &report
 			}
 		}
+	}
+
+	// We may have to reject messages that don't pass a relaxed aligned SPF and/or DKIM
+	// check. Useful for services with autoresponders.
+	if d.destination.MessageAuthRequiredSMTPError != "" && !d.m.MsgFromValidated {
+		code := smtp.C550MailboxUnavail
+		msg := d.destination.MessageAuthRequiredSMTPError
+		if d.dmarcResult.Status == dmarc.StatusTemperror {
+			code = smtp.C451LocalErr
+			msg = "transient verification error: " + msg
+		}
+		addReasonText("message does not pass required aligned spf and/or dkim check required for destination")
+		return reject(code, smtp.SePol7MultiAuthFails26, msg, nil, reasonMsgAuthRequired)
 	}
 
 	// Determine if message is acceptable based on DMARC domain, DKIM identities, or

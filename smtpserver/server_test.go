@@ -2038,3 +2038,36 @@ func TestDestinationSMTPError(t *testing.T) {
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
 	})
 }
+
+// TestDestinationMessageAuthRequiredSMTPError checks delivery to a destination
+// with an MessageAuthRequiredSMTPError is accepted/rejected as configured.
+func TestDestinationMessageAuthRequiredSMTPError(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"example.org.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"example.org."},
+		},
+		TXT: map[string][]string{},
+	}
+
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
+	defer ts.close()
+
+	ts.run(func(client *smtpclient.Client) {
+		mailFrom := "mjl@example.org"
+		rcptTo := "msgauthrequired@mox.example"
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SePol7MultiAuthFails26})
+	})
+
+	// Ensure SPF pass, message should now be accepted.
+	resolver.TXT["example.org."] = []string{"v=spf1 ip4:127.0.0.10 -all"}
+	ts.run(func(client *smtpclient.Client) {
+		mailFrom := "mjl@example.org"
+		rcptTo := "msgauthrequired@mox.example"
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+		ts.smtpErr(err, nil)
+	})
+}

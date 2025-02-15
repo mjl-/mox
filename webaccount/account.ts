@@ -1824,6 +1824,7 @@ const destination = async (name: string) => {
 	let defaultMailbox: HTMLInputElement
 	let fullName: HTMLInputElement
 	let smtpError: HTMLInputElement
+	let msgAuthRequiredSMTPError: HTMLInputElement
 	let saveButton: HTMLButtonElement
 
 	const addresses = [name, ...Object.keys(acc.Destinations || {}).filter(a => !a.startsWith('@') && a !== name)]
@@ -1849,6 +1850,12 @@ const destination = async (name: string) => {
 			dom.span('Reject deliveries with SMTP Error', attr.title('If non-empty, incoming delivery attempts to this destination will be rejected during SMTP RCPT TO with this error response line. The response line must start with an error code. Currently the following error resonse codes are allowed: 421 (temporary local error), 550 (mailbox not found). If the line consists of only an error code, an appropriate error message is added. Rejecting messages with a 4xx code invites later retries by the remote, while 5xx codes should prevent further delivery attempts.')),
 			dom.br(),
 			smtpError=dom.input(attr.value(dest.SMTPError), attr.placeholder('421 or 550...')),
+		),
+		dom.br(),
+		dom.div(
+			dom.span('Reject messages without authenticated domain (aligned SPF/DKIM)', attr.title("If non-empty, an additional DMARC-like message authentication check is done for incoming messages, validating the domain in the From-header of the message. Messages without either an aligned SPF or aligned DKIM pass are rejected during the SMTP DATA command with a permanent error code followed by the message in this field. The domain in the message 'From' header is matched in relaxed or strict mode according to the domain's DMARC policy if present, or relaxed mode (organizational instead of exact domain match) otherwise. Useful for autoresponders that don't want to accept messages they don't want to send an automated reply to.")),
+			dom.br(),
+			msgAuthRequiredSMTPError=dom.input(attr.value(dest.MessageAuthRequiredSMTPError), attr.placeholder('messages must have aligned spf/dkim for domain authentication...')),
 		),
 		dom.br(),
 
@@ -1917,6 +1924,7 @@ const destination = async (name: string) => {
 					}
 				}),
 				SMTPError: smtpError.value,
+				MessageAuthRequiredSMTPError: msgAuthRequiredSMTPError.value,
 			}
 			await check(saveButton, client.DestinationSave(name, dest, newDest))
 			window.location.reload() // todo: only refresh part of ui

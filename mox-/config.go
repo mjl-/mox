@@ -1512,6 +1512,18 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				acc.Destinations[addrName] = dest
 			}
 
+			if dest.MessageAuthRequiredSMTPError != "" {
+				if len(dest.MessageAuthRequiredSMTPError) > 256 {
+					addDestErrorf("message authentication required smtp error must be smaller than 256 bytes")
+				}
+				for _, c := range dest.MessageAuthRequiredSMTPError {
+					if c < ' ' || c >= 0x7f {
+						addDestErrorf("message authentication required smtp error cannot contain contain control characters (including newlines) or non-ascii")
+						break
+					}
+				}
+			}
+
 			for i, rs := range dest.Rulesets {
 				addRulesetErrorf := func(format string, args ...any) {
 					addDestErrorf("ruleset %d: %s", i+1, fmt.Sprintf(format, args...))

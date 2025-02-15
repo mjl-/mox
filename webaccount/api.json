@@ -815,6 +815,13 @@
 					]
 				},
 				{
+					"Name": "MessageAuthRequiredSMTPError",
+					"Docs": "",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "FullName",
 					"Docs": "",
 					"Typewords": [
