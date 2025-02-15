@@ -119,6 +119,7 @@ func MakeAccountConfig(addr smtp.Address) config.Account {
 				RareWords:   2,
 			},
 		},
+		NoCustomPassword: true,
 	}
 	account.AutomaticJunkFlags.Enabled = true
 	account.AutomaticJunkFlags.JunkMailboxRegexp = "^(junk|spam)"

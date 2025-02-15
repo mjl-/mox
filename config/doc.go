@@ -1260,6 +1260,12 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# responses and want instant replies. (optional)
 			NoFirstTimeSenderDelay: false
 
+			# If set, this account cannot set a password of their own choice, but can only set
+			# a new randomly generated password, preventing password reuse across services and
+			# use of weak passwords. Custom account passwords can be set by the admin.
+			# (optional)
+			NoCustomPassword: false
+
 			# Routes for delivering outgoing messages through the queue. Each delivery attempt
 			# evaluates these account routes, domain routes and finally global routes. The
 			# transport of the first matching route is used in the delivery attempt. If no

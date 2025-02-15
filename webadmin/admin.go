@@ -2007,12 +2007,13 @@ func (Admin) SetPassword(ctx context.Context, accountName, password string) {
 }
 
 // AccountSettingsSave set new settings for an account that only an admin can set.
-func (Admin) AccountSettingsSave(ctx context.Context, accountName string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, maxMsgSize int64, firstTimeSenderDelay bool) {
+func (Admin) AccountSettingsSave(ctx context.Context, accountName string, maxOutgoingMessagesPerDay, maxFirstTimeRecipientsPerDay int, maxMsgSize int64, firstTimeSenderDelay, noCustomPassword bool) {
 	err := admin.AccountSave(ctx, accountName, func(acc *config.Account) {
 		acc.MaxOutgoingMessagesPerDay = maxOutgoingMessagesPerDay
 		acc.MaxFirstTimeRecipientsPerDay = maxFirstTimeRecipientsPerDay
 		acc.QuotaMessageSize = maxMsgSize
 		acc.NoFirstTimeSenderDelay = !firstTimeSenderDelay
+		acc.NoCustomPassword = noCustomPassword
 	})
 	xcheckf(ctx, err, "saving account settings")
 }

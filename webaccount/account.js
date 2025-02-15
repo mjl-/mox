@@ -272,7 +272,7 @@ var api;
 	api.stringsTypes = { "AuthResult": true, "CSRFToken": true, "Localpart": true, "OutgoingEvent": true };
 	api.intsTypes = {};
 	api.types = {
-		"Account": { "Name": "Account", "Docs": "", "Fields": [{ "Name": "OutgoingWebhook", "Docs": "", "Typewords": ["nullable", "OutgoingWebhook"] }, { "Name": "IncomingWebhook", "Docs": "", "Typewords": ["nullable", "IncomingWebhook"] }, { "Name": "FromIDLoginAddresses", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "KeepRetiredMessagePeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "KeepRetiredWebhookPeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginDisabled", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }, { "Name": "Destinations", "Docs": "", "Typewords": ["{}", "Destination"] }, { "Name": "SubjectPass", "Docs": "", "Typewords": ["SubjectPass"] }, { "Name": "QuotaMessageSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "KeepRejects", "Docs": "", "Typewords": ["bool"] }, { "Name": "AutomaticJunkFlags", "Docs": "", "Typewords": ["AutomaticJunkFlags"] }, { "Name": "JunkFilter", "Docs": "", "Typewords": ["nullable", "JunkFilter"] }, { "Name": "MaxOutgoingMessagesPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxFirstTimeRecipientsPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "NoFirstTimeSenderDelay", "Docs": "", "Typewords": ["bool"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["[]", "AddressAlias"] }] },
+		"Account": { "Name": "Account", "Docs": "", "Fields": [{ "Name": "OutgoingWebhook", "Docs": "", "Typewords": ["nullable", "OutgoingWebhook"] }, { "Name": "IncomingWebhook", "Docs": "", "Typewords": ["nullable", "IncomingWebhook"] }, { "Name": "FromIDLoginAddresses", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "KeepRetiredMessagePeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "KeepRetiredWebhookPeriod", "Docs": "", "Typewords": ["int64"] }, { "Name": "LoginDisabled", "Docs": "", "Typewords": ["string"] }, { "Name": "Domain", "Docs": "", "Typewords": ["string"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }, { "Name": "Destinations", "Docs": "", "Typewords": ["{}", "Destination"] }, { "Name": "SubjectPass", "Docs": "", "Typewords": ["SubjectPass"] }, { "Name": "QuotaMessageSize", "Docs": "", "Typewords": ["int64"] }, { "Name": "RejectsMailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "KeepRejects", "Docs": "", "Typewords": ["bool"] }, { "Name": "AutomaticJunkFlags", "Docs": "", "Typewords": ["AutomaticJunkFlags"] }, { "Name": "JunkFilter", "Docs": "", "Typewords": ["nullable", "JunkFilter"] }, { "Name": "MaxOutgoingMessagesPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "MaxFirstTimeRecipientsPerDay", "Docs": "", "Typewords": ["int32"] }, { "Name": "NoFirstTimeSenderDelay", "Docs": "", "Typewords": ["bool"] }, { "Name": "NoCustomPassword", "Docs": "", "Typewords": ["bool"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "DNSDomain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["[]", "AddressAlias"] }] },
 		"OutgoingWebhook": { "Name": "OutgoingWebhook", "Docs": "", "Fields": [{ "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Authorization", "Docs": "", "Typewords": ["string"] }, { "Name": "Events", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"IncomingWebhook": { "Name": "IncomingWebhook", "Docs": "", "Fields": [{ "Name": "URL", "Docs": "", "Typewords": ["string"] }, { "Name": "Authorization", "Docs": "", "Typewords": ["string"] }] },
 		"Destination": { "Name": "Destination", "Docs": "", "Fields": [{ "Name": "Mailbox", "Docs": "", "Typewords": ["string"] }, { "Name": "Rulesets", "Docs": "", "Typewords": ["[]", "Ruleset"] }, { "Name": "SMTPError", "Docs": "", "Typewords": ["string"] }, { "Name": "FullName", "Docs": "", "Typewords": ["string"] }] },
@@ -380,14 +380,30 @@ var api;
 			const params = [];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
-		// SetPassword saves a new password for the account, invalidating the previous password.
-		// Sessions are not interrupted, and will keep working. New login attempts must use the new password.
+		// SetPassword saves a new password for the account, invalidating the previous
+		// password.
+		// 
+		// Sessions are not interrupted, and will keep working. New login attempts must use
+		// the new password.
+		// 
 		// Password must be at least 8 characters.
+		// 
+		// Setting a user-supplied password is not allowed if NoCustomPassword is set
+		// for the account.
 		async SetPassword(password) {
 			const fn = "SetPassword";
 			const paramTypes = [["string"]];
 			const returnTypes = [];
 			const params = [password];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
+		// GeneratePassword sets a new randomly generated password for the current account.
+		// Sessions are not interrupted, and will keep working.
+		async GeneratePassword() {
+			const fn = "GeneratePassword";
+			const paramTypes = [];
+			const returnTypes = [["string"]];
+			const params = [];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// Account returns information about the account.
@@ -1465,34 +1481,39 @@ const index = async () => {
 	}), dom.br(), dom.h2('Addresses'), dom.ul(Object.entries(acc.Destinations || {}).length === 0 ? dom.li('(None, login disabled)') : [], Object.entries(acc.Destinations || {}).sort().map(t => dom.li(dom.a(prewrap(t[0]), attr.href('#destinations/' + encodeURIComponent(t[0]))), t[0].startsWith('@') ? ' (catchall)' : []))), dom.br(), dom.h2('Aliases/lists'), dom.table(dom.thead(dom.tr(dom.th('Alias address', attr.title('Messages sent to this address will be delivered to all members of the alias/list. A member does not receive a message if their address is in the message From header.')), dom.th('Subscription address', attr.title('Address subscribed to the alias/list.')), dom.th('Allowed senders', attr.title('Whether only members can send through the alias/list, or anyone.')), dom.th('Send as alias address', attr.title('If enabled, messages can be sent with the alias address in the message "From" header.')), dom.th())), (acc.Aliases || []).length === 0 ? dom.tr(dom.td(attr.colspan('5'), 'None')) : [], (acc.Aliases || []).sort((a, b) => a.Alias.LocalpartStr < b.Alias.LocalpartStr ? -1 : (domainName(a.Alias.Domain) < domainName(b.Alias.Domain) ? -1 : 1)).map(a => dom.tr(dom.td(prewrap(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain))), dom.td(prewrap(a.SubscriptionAddress)), dom.td(a.Alias.PostPublic ? 'Anyone' : 'Members only'), dom.td(a.Alias.AllowMsgFrom ? 'Yes' : 'No'), dom.td((a.MemberAddresses || []).length === 0 ? [] :
 		dom.clickbutton('Show members', function click() {
 			popup(dom.h1('Members of alias ', prewrap(a.Alias.LocalpartStr, '@', domainName(a.Alias.Domain))), dom.ul((a.MemberAddresses || []).map(addr => dom.li(prewrap(addr)))));
-		}))))), dom.br(), dom.h2('Recent login attempts', attr.title('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored to prevent unlimited growth of the database.')), renderLoginAttempts(recentLoginAttempts || []), dom.br(), recentLoginAttempts && recentLoginAttempts.length >= 10 ? dom.p('See ', dom.a(attr.href('#loginattempts'), 'all login attempts'), '.') : dom.br(), dom.h2('Change password'), passwordForm = dom.form(passwordFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'New password', dom.br(), password1 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
-		passwordHint.style.display = '';
-	})), ' ', dom.label(style({ display: 'inline-block' }), 'New password repeat', dom.br(), password2 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''))), ' ', dom.submitbutton('Change password')), passwordHint = dom.div(style({ display: 'none', marginTop: '.5ex' }), dom.clickbutton('Generate random password', function click(e) {
-		e.preventDefault();
-		let b = new Uint8Array(1);
-		let s = '';
-		const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_;:,<.>/';
-		while (s.length < 12) {
-			self.crypto.getRandomValues(b);
-			if (Math.ceil(b[0] / chars.length) * chars.length > 255) {
-				continue; // Prevent bias.
+		}))))), dom.br(), dom.h2('Recent login attempts', attr.title('Login attempts are stored for 30 days. At most 10000 failed login attempts are stored to prevent unlimited growth of the database.')), renderLoginAttempts(recentLoginAttempts || []), dom.br(), recentLoginAttempts && recentLoginAttempts.length >= 10 ? dom.p('See ', dom.a(attr.href('#loginattempts'), 'all login attempts'), '.') : dom.br(), dom.h2('Change password'), acc.NoCustomPassword ?
+		dom.div(dom.clickbutton('Generate and set new password', attr.title('Automatically generate a new password and set it for this account. Custom passwords risk reuse across services and are currently disabled for this account.'), async function click(e) {
+			const password = await check(e.target, client.GeneratePassword());
+			window.alert('New password: ' + password + '\n\nStore it securely, for example in a password manager.');
+		})) :
+		passwordForm = dom.form(passwordFieldset = dom.fieldset(dom.label(style({ display: 'inline-block' }), 'New password', dom.br(), password1 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
+			passwordHint.style.display = '';
+		})), ' ', dom.label(style({ display: 'inline-block' }), 'New password repeat', dom.br(), password2 = dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''))), ' ', dom.submitbutton('Change password')), passwordHint = dom.div(style({ display: 'none', marginTop: '.5ex' }), dom.clickbutton('Generate random password', function click(e) {
+			e.preventDefault();
+			let b = new Uint8Array(1);
+			let s = '';
+			const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_;:,<.>/';
+			while (s.length < 12) {
+				self.crypto.getRandomValues(b);
+				if (Math.ceil(b[0] / chars.length) * chars.length > 255) {
+					continue; // Prevent bias.
+				}
+				s += chars[b[0] % chars.length];
 			}
-			s += chars[b[0] % chars.length];
-		}
-		password1.type = 'text';
-		password2.type = 'text';
-		password1.value = s;
-		password2.value = s;
-	}), dom.div(dom._class('text'), box(yellow, 'Important: Bots will try to bruteforce your password. Connections with failed authentication attempts will be rate limited but attackers WILL find passwords reused at other services and weak passwords. If your account is compromised, spammers are likely to abuse your system, spamming your address and the wider internet in your name. So please pick a random, unguessable password, preferrably at least 12 characters.'))), async function submit(e) {
-		e.stopPropagation();
-		e.preventDefault();
-		if (!password1.value || password1.value !== password2.value) {
-			window.alert('Passwords do not match.');
-			return;
-		}
-		await check(passwordFieldset, client.SetPassword(password1.value));
-		passwordForm.reset();
-	}), dom.br(), dom.h2('TLS public keys'), dom.p('For TLS client authentication with certificates, for IMAP and/or submission (SMTP). Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration or constraints are not verified.'), (() => {
+			password1.type = 'text';
+			password2.type = 'text';
+			password1.value = s;
+			password2.value = s;
+		}), dom.div(dom._class('text'), box(yellow, 'Important: Bots will try to bruteforce your password. Connections with failed authentication attempts will be rate limited but attackers WILL find passwords reused at other services and weak passwords. If your account is compromised, spammers are likely to abuse your system, spamming your address and the wider internet in your name. So please pick a random, unguessable password, preferrably at least 12 characters.'))), async function submit(e) {
+			e.stopPropagation();
+			e.preventDefault();
+			if (!password1.value || password1.value !== password2.value) {
+				window.alert('Passwords do not match.');
+				return;
+			}
+			await check(passwordFieldset, client.SetPassword(password1.value));
+			passwordForm.reset();
+		}), dom.br(), dom.h2('TLS public keys'), dom.p('For TLS client authentication with certificates, for IMAP and/or submission (SMTP). Only the public key of the certificate is used during TLS authentication, to identify this account. Names, expiration or constraints are not verified.'), (() => {
 		let elem = dom.div();
 		const preauthHelp = 'New IMAP immediate TLS connections authenticated with a client certificate are automatically switched to "authenticated" state with an untagged IMAP "preauth" message by default. IMAP connections have a state machine specifying when commands are allowed. Authenticating is not allowed while in the "authenticated" state. Enable this option to work around clients that would try to authenticated anyway.';
 		const render = () => {

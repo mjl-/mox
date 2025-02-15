@@ -44,24 +44,6 @@ import (
 //go:embed mox.service
 var moxService string
 
-func pwgen() string {
-	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_;:,<.>/"
-	s := ""
-	buf := make([]byte, 1)
-	for i := 0; i < 12; i++ {
-		for {
-			cryptorand.Read(buf)
-			i := int(buf[0])
-			if i+len(chars) > 255 {
-				continue // Prevent bias.
-			}
-			s += string(chars[i%len(chars)])
-			break
-		}
-	}
-	return s
-}
-
 func cmdQuickstart(c *cmd) {
 	c.params = "[-skipdial] [-existing-webserver] [-hostname host] user@domain [user | uid]"
 	c.help = `Quickstart generates configuration files and prints instructions to quickly set up a mox instance.
@@ -761,7 +743,7 @@ many authentication failures).
 
 	dataDir := "data" // ../data is relative to config/
 	os.MkdirAll(dataDir, 0770)
-	adminpw := pwgen()
+	adminpw := mox.GeneratePassword()
 	adminpwhash, err := bcrypt.GenerateFromPassword([]byte(adminpw), bcrypt.DefaultCost)
 	if err != nil {
 		fatalf("generating hash for generated admin password: %s", err)
@@ -1000,7 +982,7 @@ and check the admin page for the needed DNS records.`)
 	}
 	cleanupPaths = append(cleanupPaths, dataDir, filepath.Join(dataDir, "accounts"), filepath.Join(dataDir, "accounts", accountName), filepath.Join(dataDir, "accounts", accountName, "index.db"))
 
-	password := pwgen()
+	password := mox.GeneratePassword()
 
 	// Kludge to cause no logging to be printed about setting a new password.
 	loglevel := mox.Conf.Log[""]

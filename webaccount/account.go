@@ -368,9 +368,16 @@ func (w Account) Logout(ctx context.Context) {
 	xcheckf(ctx, err, "logout")
 }
 
-// SetPassword saves a new password for the account, invalidating the previous password.
-// Sessions are not interrupted, and will keep working. New login attempts must use the new password.
+// SetPassword saves a new password for the account, invalidating the previous
+// password.
+//
+// Sessions are not interrupted, and will keep working. New login attempts must use
+// the new password.
+//
 // Password must be at least 8 characters.
+//
+// Setting a user-supplied password is not allowed if NoCustomPassword is set
+// for the account.
 func (Account) SetPassword(ctx context.Context, password string) {
 	log := pkglog.WithContext(ctx)
 	if len(password) < 8 {
@@ -385,6 +392,11 @@ func (Account) SetPassword(ctx context.Context, password string) {
 		log.Check(err, "closing account")
 	}()
 
+	accConf, _ := acc.Conf()
+	if accConf.NoCustomPassword {
+		xcheckuserf(ctx, errors.New("custom password not allowed"), "setting password")
+	}
+
 	// Retrieve session, resetting password invalidates it.
 	ls, err := store.SessionUse(ctx, log, reqInfo.AccountName, reqInfo.SessionToken, "")
 	xcheckf(ctx, err, "get session")
@@ -395,6 +407,35 @@ func (Account) SetPassword(ctx context.Context, password string) {
 	// Session has been invalidated. Add it again.
 	err = store.SessionAddToken(ctx, log, &ls)
 	xcheckf(ctx, err, "restoring session after password reset")
+}
+
+// GeneratePassword sets a new randomly generated password for the current account.
+// Sessions are not interrupted, and will keep working.
+func (Account) GeneratePassword(ctx context.Context) (password string) {
+	log := pkglog.WithContext(ctx)
+
+	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	acc, err := store.OpenAccount(log, reqInfo.AccountName, false)
+	xcheckf(ctx, err, "open account")
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account")
+	}()
+
+	password = mox.GeneratePassword()
+
+	// Retrieve session, resetting password invalidates it.
+	ls, err := store.SessionUse(ctx, log, reqInfo.AccountName, reqInfo.SessionToken, "")
+	xcheckf(ctx, err, "get session")
+
+	err = acc.SetPassword(log, password)
+	xcheckf(ctx, err, "setting password")
+
+	// Session has been invalidated. Add it again.
+	err = store.SessionAddToken(ctx, log, &ls)
+	xcheckf(ctx, err, "restoring session after password reset")
+
+	return
 }
 
 // Account returns information about the account.

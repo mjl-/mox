@@ -828,60 +828,67 @@ const index = async () => {
 		recentLoginAttempts && recentLoginAttempts.length >= 10 ? dom.p('See ', dom.a(attr.href('#loginattempts'), 'all login attempts'), '.') : dom.br(),
 
 		dom.h2('Change password'),
-		passwordForm=dom.form(
-			passwordFieldset=dom.fieldset(
-				dom.label(
-					style({display: 'inline-block'}),
-					'New password',
-					dom.br(),
-					password1=dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
-						passwordHint.style.display = ''
-					}),
-				),
-				' ',
-				dom.label(
-					style({display: 'inline-block'}),
-					'New password repeat',
-					dom.br(),
-					password2=dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required('')),
-				),
-				' ',
-				dom.submitbutton('Change password'),
-			),
-			passwordHint=dom.div(
-				style({display: 'none', marginTop: '.5ex'}),
-				dom.clickbutton('Generate random password', function click(e: MouseEvent) {
-					e.preventDefault()
-					let b = new Uint8Array(1)
-					let s = ''
-					const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_;:,<.>/'
-					while (s.length < 12) {
-						self.crypto.getRandomValues(b)
-						if (Math.ceil(b[0]/chars.length)*chars.length > 255) {
-							continue // Prevent bias.
-						}
-						s += chars[b[0]%chars.length]
-					}
-					password1.type = 'text'
-					password2.type = 'text'
-					password1.value = s
-					password2.value = s
+		acc.NoCustomPassword ?
+			dom.div(
+				dom.clickbutton('Generate and set new password', attr.title('Automatically generate a new password and set it for this account. Custom passwords risk reuse across services and are currently disabled for this account.'), async function click(e: {target: HTMLButtonElement}) {
+					const password = await check(e.target, client.GeneratePassword())
+					window.alert('New password: '+password+'\n\nStore it securely, for example in a password manager.')
 				}),
-				dom.div(dom._class('text'),
-					box(yellow, 'Important: Bots will try to bruteforce your password. Connections with failed authentication attempts will be rate limited but attackers WILL find passwords reused at other services and weak passwords. If your account is compromised, spammers are likely to abuse your system, spamming your address and the wider internet in your name. So please pick a random, unguessable password, preferrably at least 12 characters.'),
+			) :
+			passwordForm=dom.form(
+				passwordFieldset=dom.fieldset(
+					dom.label(
+						style({display: 'inline-block'}),
+						'New password',
+						dom.br(),
+						password1=dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required(''), function focus() {
+							passwordHint.style.display = ''
+						}),
+					),
+					' ',
+					dom.label(
+						style({display: 'inline-block'}),
+						'New password repeat',
+						dom.br(),
+						password2=dom.input(attr.type('password'), attr.autocomplete('new-password'), attr.required('')),
+					),
+					' ',
+					dom.submitbutton('Change password'),
 				),
+				passwordHint=dom.div(
+					style({display: 'none', marginTop: '.5ex'}),
+					dom.clickbutton('Generate random password', function click(e: MouseEvent) {
+						e.preventDefault()
+						let b = new Uint8Array(1)
+						let s = ''
+						const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_;:,<.>/'
+						while (s.length < 12) {
+							self.crypto.getRandomValues(b)
+							if (Math.ceil(b[0]/chars.length)*chars.length > 255) {
+								continue // Prevent bias.
+							}
+							s += chars[b[0]%chars.length]
+						}
+						password1.type = 'text'
+						password2.type = 'text'
+						password1.value = s
+						password2.value = s
+					}),
+					dom.div(dom._class('text'),
+						box(yellow, 'Important: Bots will try to bruteforce your password. Connections with failed authentication attempts will be rate limited but attackers WILL find passwords reused at other services and weak passwords. If your account is compromised, spammers are likely to abuse your system, spamming your address and the wider internet in your name. So please pick a random, unguessable password, preferrably at least 12 characters.'),
+					),
+				),
+				async function submit(e: SubmitEvent) {
+					e.stopPropagation()
+					e.preventDefault()
+					if (!password1.value || password1.value !== password2.value) {
+						window.alert('Passwords do not match.')
+						return
+					}
+					await check(passwordFieldset, client.SetPassword(password1.value))
+					passwordForm.reset()
+				},
 			),
-			async function submit(e: SubmitEvent) {
-				e.stopPropagation()
-				e.preventDefault()
-				if (!password1.value || password1.value !== password2.value) {
-					window.alert('Passwords do not match.')
-					return
-				}
-				await check(passwordFieldset, client.SetPassword(password1.value))
-				passwordForm.reset()
-			},
-		),
 		dom.br(),
 
 		dom.h2('TLS public keys'),

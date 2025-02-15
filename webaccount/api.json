@@ -55,7 +55,7 @@
 		},
 		{
 			"Name": "SetPassword",
-			"Docs": "SetPassword saves a new password for the account, invalidating the previous password.\nSessions are not interrupted, and will keep working. New login attempts must use the new password.\nPassword must be at least 8 characters.",
+			"Docs": "SetPassword saves a new password for the account, invalidating the previous\npassword.\n\nSessions are not interrupted, and will keep working. New login attempts must use\nthe new password.\n\nPassword must be at least 8 characters.\n\nSetting a user-supplied password is not allowed if NoCustomPassword is set\nfor the account.",
 			"Params": [
 				{
 					"Name": "password",
@@ -65,6 +65,19 @@
 				}
 			],
 			"Returns": []
+		},
+		{
+			"Name": "GeneratePassword",
+			"Docs": "GeneratePassword sets a new randomly generated password for the current account.\nSessions are not interrupted, and will keep working.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "password",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
 		},
 		{
 			"Name": "Account",
@@ -690,6 +703,13 @@
 				},
 				{
 					"Name": "NoFirstTimeSenderDelay",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "NoCustomPassword",
 					"Docs": "",
 					"Typewords": [
 						"bool"

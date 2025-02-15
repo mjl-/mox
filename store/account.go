@@ -1593,6 +1593,8 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 
 // SetPassword saves a new password for this account. This password is used for
 // IMAP, SMTP (submission) sessions and the HTTP account web page.
+//
+// Callers are responsible for checking if the account has NoCustomPassword set.
 func (a *Account) SetPassword(log mlog.Log, password string) error {
 	password, err := precis.OpaqueString.String(password)
 	if err != nil {

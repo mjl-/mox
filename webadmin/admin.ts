@@ -868,6 +868,7 @@ const account = async (name: string) => {
 	let maxFirstTimeRecipientsPerDay: HTMLInputElement
 	let quotaMessageSize: HTMLInputElement
 	let firstTimeSenderDelay: HTMLInputElement
+	let noCustomPassword: HTMLInputElement
 
 	let formPassword: HTMLFormElement
 	let fieldsetPassword: HTMLFieldSetElement
@@ -1031,7 +1032,14 @@ const account = async (name: string) => {
 					style({display: 'block', marginBottom: '.5ex'}),
 					dom.label(
 						firstTimeSenderDelay=dom.input(attr.type('checkbox'), config.NoFirstTimeSenderDelay ? [] : attr.checked('')), ' ',
-						dom.span('Delay deliveries from first-time senders.', attr.title('To slow down potential spammers, when the message is misclassified as non-junk. Turning off the delay can be useful when the account processes messages automatically and needs fast responses.')),
+						dom.span('Delay deliveries from first-time senders', attr.title('To slow down potential spammers, when the message is misclassified as non-junk. Turning off the delay can be useful when the account processes messages automatically and needs fast responses.')),
+					),
+				),
+				dom.div(
+					style({display: 'block', marginBottom: '.5ex'}),
+					dom.label(
+						noCustomPassword=dom.input(attr.type('checkbox'), config.NoCustomPassword ? attr.checked('') : []), ' ',
+						dom.span("Don't allow account to set a password of their choice", attr.title('If set, this account cannot set a password of their own choice, but can only set a new randomly generated password, preventing password reuse across services and use of weak passwords.')),
 					),
 				),
 				dom.submitbutton('Save'),
@@ -1039,7 +1047,7 @@ const account = async (name: string) => {
 			async function submit(e: SubmitEvent) {
 				e.stopPropagation()
 				e.preventDefault()
-				await check(fieldsetSettings, (async () => await client.AccountSettingsSave(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value), firstTimeSenderDelay.checked))())
+				await check(fieldsetSettings, (async () => await client.AccountSettingsSave(name, parseInt(maxOutgoingMessagesPerDay.value) || 0, parseInt(maxFirstTimeRecipientsPerDay.value) || 0, xparseSize(quotaMessageSize.value), firstTimeSenderDelay.checked, noCustomPassword.checked))())
 			},
 		),
 		dom.br(),

@@ -688,6 +688,12 @@
 					"Typewords": [
 						"bool"
 					]
+				},
+				{
+					"Name": "noCustomPassword",
+					"Typewords": [
+						"bool"
+					]
 				}
 			],
 			"Returns": []
@@ -4154,6 +4160,13 @@
 				},
 				{
 					"Name": "NoFirstTimeSenderDelay",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "NoCustomPassword",
 					"Docs": "",
 					"Typewords": [
 						"bool"
