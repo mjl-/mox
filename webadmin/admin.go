@@ -664,9 +664,6 @@ EOF
 				addf(&r.IPRev.Errors, "Looking up reverse name for %s of %s: %v", ip, host, err)
 				continue
 			}
-			if len(addrs) != 1 {
-				addf(&r.IPRev.Warnings, "Expected exactly 1 name for %s of %s, got %d (%v)", ip, host, len(addrs), addrs)
-			}
 			var match bool
 			for i, a := range addrs {
 				a = strings.TrimRight(a, ".")
