@@ -462,8 +462,8 @@ func unptr[T any](l []*T) []T {
 func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer, domainName string) (r CheckResult) {
 	log := pkglog.WithContext(ctx)
 
-	domain, err := dns.ParseDomain(domainName)
-	xcheckuserf(ctx, err, "parsing domain")
+	domain, xerr := dns.ParseDomain(domainName)
+	xcheckuserf(ctx, xerr, "parsing domain")
 
 	domConf, ok := mox.Conf.Domain(domain)
 	if !ok {
@@ -1416,6 +1416,13 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 			{name: "_pop3", port: 110, host: "."},
 			{name: "_pop3s", port: 995, host: "."},
 		}
+		// Host "." indicates the service is not available. We suggested in the DNS records
+		// that the port be set to 0, so check for that. ../rfc/6186:242
+		for i := range reqs {
+			if reqs[i].host == "." {
+				reqs[i].port = 0
+			}
+		}
 		var srvwg sync.WaitGroup
 		srvwg.Add(len(reqs))
 		for i := range reqs {
@@ -1436,8 +1443,8 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 			}
 			instr += fmt.Sprintf("\t%s._tcp.%-*s SRV 0 %d %d %s\n", req.name, len("_submissions")-len(req.name)+len(domain.ASCII+"."), domain.ASCII+".", weight, req.port, req.host)
 			r.SRVConf.SRVs[req.name] = unptr(req.srvs)
-			if err != nil {
-				addf(&r.SRVConf.Errors, "Looking up SRV record %q: %s", name, err)
+			if req.err != nil {
+				addf(&r.SRVConf.Errors, "Looking up SRV record %q: %s", name, req.err)
 			} else if len(req.srvs) == 0 {
 				if req.host == "." {
 					addf(&r.SRVConf.Warnings, "Missing optional SRV record %q", name)
