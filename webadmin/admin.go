@@ -1205,7 +1205,7 @@ EOF
 
 		record, txt, err := tlsrpt.Lookup(ctx, log.Logger, resolver, dom)
 		if err != nil {
-			addf(&result.Errors, "Looking up TLSRPT record: %s", err)
+			addf(&result.Errors, "Looking up TLSRPT record for domain %s: %s", dom, err)
 		}
 		result.TXT = txt
 		if record != nil {
@@ -1251,9 +1251,19 @@ Ensure a DNS TXT record like the following exists:
 			}
 
 		} else if isHost {
-			addf(&result.Errors, `Configure a host TLSRPT localpart in static mox.conf config file.`)
+			instr += fmt.Sprintf(`
+
+Ensure the following snippet is present in mox.conf (ensure tabs are used for indenting, not spaces):
+
+HostTLSRPT:
+	Account: %s
+	Mailbox: TLSRPT
+	Localpart: tlsrpt
+
+`, mox.Conf.Static.Postmaster.Account)
+			addf(&result.Errors, `Configure a HostTLSRPT section in the static mox.conf config file, restart mox and check again for instructions for the TLSRPT DNS record.`)
 		} else {
-			addf(&result.Errors, `Configure a domain TLSRPT destination in domains.conf config file.`)
+			addf(&result.Errors, `Configure a TLSRPT destination for the domain (through the admin web interface or by editing the domains.conf config file, adding a TLSRPT section) and check again for instructions for the TLSRPT DNS record.`)
 		}
 		addf(&result.Instructions, instr)
 	}
