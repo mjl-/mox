@@ -1445,7 +1445,11 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 					addf(&r.SRVConf.Errors, "Missing SRV record %q", name)
 				}
 			} else if len(req.srvs) != 1 || req.srvs[0].Target != req.host || req.srvs[0].Port != req.port {
-				addf(&r.SRVConf.Errors, "Unexpected SRV record(s) for %q", name)
+				var srvs []string
+				for _, srv := range req.srvs {
+					srvs = append(srvs, fmt.Sprintf("%d %d %d %s", srv.Priority, srv.Weight, srv.Port, srv.Target))
+				}
+				addf(&r.SRVConf.Errors, "Unexpected SRV record(s) for %q: %s", name, strings.Join(srvs, ", "))
 			}
 		}
 		addf(&r.SRVConf.Instructions, instr)
