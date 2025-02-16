@@ -2943,7 +2943,15 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		body = body.replace(/\r/g, '').replace(/\n\n\n\n*/g, '\n\n').trim()
 		let editOffset = 0
 		if (forward) {
-			body = '\n\n---- Forwarded Message ----\n\n'+body
+			let prefix = `\n\n---- Forwarded Message ----\n`
+			const keys = ['Subject', 'Date', 'From', 'Reply-To', 'To', 'Cc']
+			const padspace = (s: string, size: number) => s + ' '.repeat(size-s.length)
+			for (const k of keys) {
+				for (const v of (pm.Headers?.[k] || [])) {
+					prefix += padspace(k + ':', 10) + v+'\n'
+				}
+			}
+			body = prefix+'\n'+body
 		} else {
 			body = body.split('\n').map(line => '> ' + line).join('\n')
 			let sig = accountSettings?.Signature || ''
