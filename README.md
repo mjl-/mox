@@ -135,20 +135,19 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
+- "mox setup" command, with webapp for interactive setup
+- Automate DNS management, for setup and maintenance, such as DANE/DKIM key rotation.
 - Calendaring with CalDAV/iCal
 - More IMAP extensions (PREVIEW, WITHIN, IMPORTANT, COMPRESS=DEFLATE,
   CREATE-SPECIAL-USE, SAVEDATE, UNAUTHENTICATE, REPLACE, QUOTA, NOTIFY,
   MULTIAPPEND, OBJECTID, MULTISEARCH, THREAD, SORT)
-- SMTP DSN extension
-- "mox setup" command, with webapp for interactive setup
 - Introbox, to which first-time senders are delivered
 - ARC, with forwarded email from trusted source
-- Forwarding (to an external address)
 - Add special IMAP mailbox ("Queue?") that contains queued but
   undelivered messages, updated with IMAP flags/keywords/tags and message headers.
+- Forwarding (to an external address)
 - External addresses in aliases/lists.
 - Autoresponder (out of office/vacation)
-- OAUTH2 support, for single sign on
 - IMAP extensions for "online"/non-syncing/webmail clients (SORT (including
   DISPLAYFROM, DISPLAYTO), THREAD, PARTIAL, CONTEXT=SEARCH CONTEXT=SORT ESORT,
   FILTERS)
@@ -163,6 +162,8 @@ https://nlnet.nl/project/Mox/.
 - Milter support, for integration with external tools
 - IMAP Sieve extension, to run Sieve scripts after message changes (not only
   new deliveries)
+- OAUTH2 support, for single sign on
+- SMTP DSN extension
 
 There are many smaller improvements to make as well, search for "todo" in the code.
 
