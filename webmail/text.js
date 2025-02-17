@@ -573,7 +573,7 @@ var api;
 			const params = [name];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
-		// MailboxDelete deletes a mailbox and all its messages.
+		// MailboxDelete deletes a mailbox and all its messages and annotations.
 		async MailboxDelete(mailboxID) {
 			const fn = "MailboxDelete";
 			const paramTypes = [["int64"]];

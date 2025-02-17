@@ -216,6 +216,27 @@ type Mailbox struct {
 	MailboxCounts      // Statistics about messages, kept up to date whenever a change happens.
 }
 
+// Annotation is a per-mailbox or global (per-account) annotation for the IMAP
+// metadata extension, currently always a private annotation.
+type Annotation struct {
+	ID int64
+
+	// Can be zero, indicates global (per-account) annotation.
+	MailboxID int64 `bstore:"ref Mailbox,unique MailboxID+Key"`
+
+	// "Entry name", always starts with "/private/". Stored lower-case, comparisons
+	// must be done case-insensitively.
+	Key string `bstore:"nonzero"`
+
+	IsString bool // If true, the value is a string instead of bytes.
+	Value    []byte
+}
+
+// Change returns a broadcastable change for the annotation.
+func (a Annotation) Change(mailboxName string) ChangeAnnotation {
+	return ChangeAnnotation{a.MailboxID, mailboxName, a.Key}
+}
+
 // MailboxCounts tracks statistics about messages for a mailbox.
 type MailboxCounts struct {
 	Total   int64 // Total number of messages, excluding \Deleted. For JMAP.
@@ -818,6 +839,7 @@ var DBTypes = []any{
 	RulesetNoListID{},
 	RulesetNoMsgFrom{},
 	RulesetNoMailbox{},
+	Annotation{},
 }
 
 // Account holds the information about a user, includings mailboxes, messages, imap subscriptions.
@@ -2713,8 +2735,8 @@ func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc Mailbox, dst string) (chang
 	return changes, false, false, false, nil
 }
 
-// MailboxDelete deletes a mailbox by ID. If it has children, the return value
-// indicates that and an error is returned.
+// MailboxDelete deletes a mailbox by ID, including its annotations. If it has
+// children, the return value indicates that and an error is returned.
 //
 // Caller should broadcast the changes and remove files for the removed message IDs.
 func (a *Account) MailboxDelete(ctx context.Context, log mlog.Log, tx *bstore.Tx, mailbox Mailbox) (changes []Change, removeMessageIDs []int64, hasChildren bool, rerr error) {
@@ -2784,6 +2806,13 @@ func (a *Account) MailboxDelete(ctx context.Context, log mlog.Log, tx *bstore.Tx
 			return nil, nil, false, fmt.Errorf("untraining deleted messages: %v", err)
 		}
 	}
+
+	// Remove metadata annotations. ../rfc/5464:373
+	if _, err := bstore.QueryTx[Annotation](tx).FilterNonzero(Annotation{MailboxID: mailbox.ID}).Delete(); err != nil {
+		return nil, nil, false, fmt.Errorf("removing annotations for mailbox: %v", err)
+	}
+	// Not sending changes about annotations on this mailbox, since the entire mailbox
+	// is being removed.
 
 	if err := tx.Delete(&Mailbox{ID: mailbox.ID}); err != nil {
 		return nil, nil, false, fmt.Errorf("removing mailbox: %v", err)

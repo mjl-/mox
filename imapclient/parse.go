@@ -427,6 +427,50 @@ func (c *Conn) xuntagged() Untagged {
 		c.xcrlf()
 		return r
 
+	case "METADATA":
+		// ../rfc/5464:807
+		c.xspace()
+		mailbox := c.xastring()
+		c.xspace()
+		if !c.take('(') {
+			// Unsolicited form, with only annotation keys, not values.
+			var keys []string
+			for {
+				key := c.xastring()
+				keys = append(keys, key)
+				if !c.space() {
+					break
+				}
+			}
+			c.xcrlf()
+			return UntaggedMetadataKeys{mailbox, keys}
+		}
+
+		// Form with values, in response to GETMETADATA command.
+		r := UntaggedMetadataAnnotations{Mailbox: mailbox}
+		for {
+			key := c.xastring()
+			c.xspace()
+			var value []byte
+			var isString bool
+			if c.take('~') {
+				value = c.xliteral()
+			} else {
+				value = []byte(c.xstring())
+				isString = true
+				// note: the abnf also allows nstring, but that only makes sense when the
+				// production rule is used in the setmetadata command. ../rfc/5464:831
+			}
+			r.Annotations = append(r.Annotations, Annotation{key, isString, value})
+
+			if c.take(')') {
+				break
+			}
+			c.xspace()
+		}
+		c.xcrlf()
+		return r
+
 	case "NAMESPACE":
 		// ../rfc/9051:6778
 		c.xspace()

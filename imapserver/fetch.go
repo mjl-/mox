@@ -681,7 +681,7 @@ func (cmd *fetchCmd) xbody(a fetchAtt) (string, token) {
 				count = m.Size - offset
 			}
 		}
-		return respField, readerSizeSyncliteral{&moxio.AtReader{R: msgr, Offset: offset}, count}
+		return respField, readerSizeSyncliteral{&moxio.AtReader{R: msgr, Offset: offset}, count, false}
 	}
 
 	sr := cmd.xsection(a.section, part)

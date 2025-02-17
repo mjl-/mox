@@ -201,7 +201,12 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 5258	Yes	-	Internet Message Access Protocol version 4 - LIST Command Extensions
 5259	No	-	Internet Message Access Protocol - CONVERT Extension
 5267	Roadmap	-	Contexts for IMAP4
-5464	Roadmap	-	The IMAP METADATA Extension
+5464	Yes	-	The IMAP METADATA Extension
+5464-eid1691	-	-	errata: fix example entry name
+5464-eid1692	-	-	errata: make text match abnf
+5464-eid2785	-	-	errata: fix GETMETADATA example
+5464-eid2786	-	-	errata: fix GETMETADATA example
+5464-eid3868	-	-	errata: fix GETMETADATA example
 5465	Roadmap	-	The IMAP NOTIFY Extension
 5466	Roadmap	-	IMAP4 Extension for Named Searches (Filters)
 5524	No	-	Extended URLFETCH for Binary and Converted Parts

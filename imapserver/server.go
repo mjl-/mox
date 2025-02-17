@@ -158,12 +158,13 @@ var authFailDelay = time.Second  // After authentication failure.
 // QRESYNC: ../rfc/7162:1323
 // STATUS=SIZE: ../rfc/8438 ../rfc/9051:8024
 // QUOTA QUOTA=RES-STORAGE: ../rfc/9208:111
+// METADATA: ../rfc/5464
 //
 // We always announce support for SCRAM PLUS-variants, also on connections without
 // TLS. The client should not be selecting PLUS variants on non-TLS connections,
 // instead opting to do the bare SCRAM variant without indicating the server claims
 // to support the PLUS variant (skipping the server downgrade detection check).
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE"
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE METADATA"
 
 type conn struct {
 	cid               int64
@@ -227,6 +228,7 @@ const (
 	capUTF8Accept capability = "UTF8=ACCEPT"
 	capCondstore  capability = "CONDSTORE"
 	capQresync    capability = "QRESYNC"
+	capMetadata   capability = "METADATA"
 )
 
 type lineErr struct {
@@ -253,7 +255,7 @@ func stateCommands(cmds ...string) map[string]struct{} {
 var (
 	commandsStateAny              = stateCommands("capability", "noop", "logout", "id")
 	commandsStateNotAuthenticated = stateCommands("starttls", "authenticate", "login")
-	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota")
+	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata")
 	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move")
 )
 
@@ -286,6 +288,8 @@ var commands = map[string]func(c *conn, tag, cmd string, p *parser){
 	"idle":         (*conn).cmdIdle,
 	"getquotaroot": (*conn).cmdGetquotaroot,
 	"getquota":     (*conn).cmdGetquota,
+	"getmetadata":  (*conn).cmdGetmetadata,
+	"setmetadata":  (*conn).cmdSetmetadata,
 
 	// Selected.
 	"check":       (*conn).cmdCheck,
@@ -617,7 +621,7 @@ func (c *conn) readCommand(tag *string) (cmd string, p *parser) {
 	return cmd, newParser(p.remainder(), c)
 }
 
-func (c *conn) xreadliteral(size int64, sync bool) string {
+func (c *conn) xreadliteral(size int64, sync bool) []byte {
 	if sync {
 		c.writelinef("+ ")
 	}
@@ -633,7 +637,7 @@ func (c *conn) xreadliteral(size int64, sync bool) string {
 			panic(fmt.Errorf("reading literal: %s (%w)", err, errIO))
 		}
 	}
-	return string(buf)
+	return buf
 }
 
 func (c *conn) xhighestModSeq(tx *bstore.Tx, mailboxID int64) store.ModSeq {
@@ -1541,6 +1545,14 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 		case store.ChangeRemoveMailbox, store.ChangeAddMailbox, store.ChangeRenameMailbox, store.ChangeAddSubscription:
 			n = append(n, change)
 			continue
+		case store.ChangeAnnotation:
+			// note: annotations may have a mailbox associated with them, but we pass all
+			// changes on.
+			// Only when the metadata capability was enabled. ../rfc/5464:660
+			if c.enabled[capMetadata] {
+				n = append(n, change)
+				continue
+			}
 		case store.ChangeMailboxCounts, store.ChangeMailboxSpecialUse, store.ChangeMailboxKeywords, store.ChangeThread:
 		default:
 			panic(fmt.Errorf("missing case for %#v", change))
@@ -1651,6 +1663,9 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 			c.bwritelinef(`* LIST (%s) "/" %s%s`, strings.Join(ch.Flags, " "), astring(c.encodeMailbox(ch.NewName)).pack(c), oldname)
 		case store.ChangeAddSubscription:
 			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.Flags...), " "), astring(c.encodeMailbox(ch.Name)).pack(c))
+		case store.ChangeAnnotation:
+			// ../rfc/5464:807 ../rfc/5464:788
+			c.bwritelinef(`* METADATA %s %s`, astring(c.encodeMailbox(ch.MailboxName)).pack(c), astring(ch.Key).pack(c))
 		default:
 			panic(fmt.Sprintf("internal error, missing case for %#v", change))
 		}
@@ -2325,6 +2340,9 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 			c.enabled[cap] = true
 			enabled += " " + s
 			qresync = true
+		case capMetadata:
+			c.enabled[cap] = true
+			enabled += " " + s
 		}
 	}
 	// QRESYNC enabled CONDSTORE too ../rfc/7162:1391
@@ -2713,7 +2731,7 @@ func (c *conn) cmdCreate(tag, cmd string, p *parser) {
 	c.ok(tag, cmd)
 }
 
-// Delete removes a mailbox and all its messages.
+// Delete removes a mailbox and all its messages and annotations.
 // Inbox cannot be removed.
 //
 // State: Authenticated and selected.
@@ -2760,7 +2778,8 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 }
 
 // Rename changes the name of a mailbox.
-// Renaming INBOX is special, it moves the inbox messages to a new mailbox, leaving inbox empty.
+// Renaming INBOX is special, it moves the inbox messages to a new mailbox, leaving
+// inbox empty, but copying metadata annotations.
 // Renaming a mailbox with submailboxes also renames all submailboxes.
 // Subscriptions stay with the old name, though newly created missing parent
 // mailboxes for the destination name are automatically subscribed.
@@ -2865,10 +2884,25 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 				if tx.Get(&store.Subscription{Name: dstMB.Name}) == nil {
 					dstFlags = []string{`\Subscribed`}
 				}
+
+				// Copy any annotations. ../rfc/5464:368
+				annotations, err := bstore.QueryTx[store.Annotation](tx).FilterNonzero(store.Annotation{MailboxID: srcMB.ID}).List()
+				xcheckf(err, "get annotations to copy for inbox")
+				for i := range annotations {
+					annotations[i].ID = 0
+					annotations[i].MailboxID = dstMB.ID
+					err := tx.Insert(&annotations[i])
+					xcheckf(err, "copy annotation to destination mailbox")
+				}
+
 				changes[0] = store.ChangeRemoveUIDs{MailboxID: srcMB.ID, UIDs: oldUIDs, ModSeq: modseq}
 				changes[1] = store.ChangeAddMailbox{Mailbox: dstMB, Flags: dstFlags}
 				// changes[2:...] are ChangeAddUIDs
 				changes = append(changes, srcMB.ChangeCounts(), dstMB.ChangeCounts())
+				for _, a := range annotations {
+					changes = append(changes, a.Change(dstMB.Name))
+				}
+
 				return
 			}
 

@@ -1230,7 +1230,7 @@ func (Webmail) MailboxCreate(ctx context.Context, name string) {
 	})
 }
 
-// MailboxDelete deletes a mailbox and all its messages.
+// MailboxDelete deletes a mailbox and all its messages and annotations.
 func (Webmail) MailboxDelete(ctx context.Context, mailboxID int64) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
 	acc := reqInfo.Account

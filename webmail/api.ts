@@ -894,7 +894,7 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
-	// MailboxDelete deletes a mailbox and all its messages.
+	// MailboxDelete deletes a mailbox and all its messages and annotations.
 	async MailboxDelete(mailboxID: number): Promise<void> {
 		const fn: string = "MailboxDelete"
 		const paramTypes: string[][] = [["int64"]]

@@ -305,10 +305,10 @@ func (p *parser) xstring() (r string) {
 		p.xerrorf("missing closing dquote in string")
 	}
 	size, sync := p.xliteralSize(false, true)
-	s := p.conn.xreadliteral(size, sync)
+	buf := p.conn.xreadliteral(size, sync)
 	line := p.conn.readline(false)
 	p.orig, p.upper, p.o = line, toUpper(line), 0
-	return s
+	return string(buf)
 }
 
 func (p *parser) xnil() {
@@ -973,4 +973,54 @@ func (p *parser) xdate() time.Time {
 		p.take(`"`)
 	}
 	return time.Date(year, mon, day, 0, 0, 0, 0, time.UTC)
+}
+
+// Parse and validate a metadata key (entry name), returned as lower-case.
+//
+// ../rfc/5464:190
+func (p *parser) xmetadataKey() string {
+	// ../rfc/5464:772
+	s := p.xastring()
+
+	// ../rfc/5464:192
+	if strings.Contains(s, "//") {
+		p.xerrorf("entry name must not contain two slashes")
+	}
+	// We allow a single slash, so it can be used with option "(depth infinity)" to get
+	// all annotations.
+	if s != "/" && strings.HasSuffix(s, "/") {
+		p.xerrorf("entry name must not end with slash")
+	}
+	// ../rfc/5464:202
+	if strings.Contains(s, "*") || strings.Contains(s, "%") {
+		p.xerrorf("entry name must not contain * or %%")
+	}
+	for _, c := range s {
+		if c < ' ' || c >= 0x7f {
+			p.xerrorf("entry name must only contain non-control ascii characters")
+		}
+	}
+	return strings.ToLower(s)
+}
+
+// ../rfc/5464:776
+func (p *parser) xmetadataKeyValue() (key string, isString bool, value []byte) {
+	key = p.xmetadataKey()
+	p.xspace()
+
+	if p.hasPrefix("~{") {
+		size, sync := p.xliteralSize(true, true)
+		value = p.conn.xreadliteral(size, sync)
+		line := p.conn.readline(false)
+		p.orig, p.upper, p.o = line, toUpper(line), 0
+	} else if p.hasPrefix(`"`) {
+		value = []byte(p.xstring())
+		isString = true
+	} else if p.take("NIL") {
+		value = nil
+	} else {
+		p.xerrorf("expected metadata value")
+	}
+
+	return
 }

@@ -97,6 +97,7 @@ func (t syncliteral) writeTo(c *conn, w io.Writer) {
 type readerSizeSyncliteral struct {
 	r    io.Reader
 	size int64
+	lit8 bool
 }
 
 func (t readerSizeSyncliteral) pack(c *conn) string {
@@ -104,11 +105,19 @@ func (t readerSizeSyncliteral) pack(c *conn) string {
 	if err != nil {
 		panic(err)
 	}
-	return fmt.Sprintf("{%d}\r\n", t.size) + string(buf)
+	var lit string
+	if t.lit8 {
+		lit = "~"
+	}
+	return fmt.Sprintf("%s{%d}\r\n", lit, t.size) + string(buf)
 }
 
 func (t readerSizeSyncliteral) writeTo(c *conn, w io.Writer) {
-	fmt.Fprintf(w, "{%d}\r\n", t.size)
+	var lit string
+	if t.lit8 {
+		lit = "~"
+	}
+	fmt.Fprintf(w, "%s{%d}\r\n", lit, t.size)
 	defer c.xtrace(mlog.LevelTracedata)()
 	if _, err := io.Copy(w, io.LimitReader(t.r, t.size)); err != nil {
 		panic(err)

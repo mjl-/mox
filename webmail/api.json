@@ -276,7 +276,7 @@
 		},
 		{
 			"Name": "MailboxDelete",
-			"Docs": "MailboxDelete deletes a mailbox and all its messages.",
+			"Docs": "MailboxDelete deletes a mailbox and all its messages and annotations.",
 			"Params": [
 				{
 					"Name": "mailboxID",

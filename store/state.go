@@ -105,6 +105,14 @@ type ChangeMailboxKeywords struct {
 	Keywords    []string
 }
 
+// ChangeAnnotation is sent when an annotation is added/updated/removed, either for
+// a mailbox or a global per-account annotation. The value is not included.
+type ChangeAnnotation struct {
+	MailboxID   int64  // Can be zero, meaning global (per-account) annotation.
+	MailboxName string // Empty for global (per-account) annotation.
+	Key         string // Also called "entry name", e.g. "/private/comment".
+}
+
 var switchboardBusy atomic.Bool
 
 // Switchboard distributes changes to accounts to interested listeners. See Comm and Change.
