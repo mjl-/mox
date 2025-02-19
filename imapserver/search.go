@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/textproto"
 	"strings"
+	"time"
 
 	"github.com/mjl-/bstore"
 
@@ -539,6 +540,13 @@ func (s *search) match0(sk searchKey) bool {
 		// mailboxes, but we only have this metadata from the time we implemented this
 		// feature.
 		return s.m.SaveDate != nil
+	case "OLDER":
+		// ../rfc/5032:76
+		seconds := int64(time.Since(s.m.Received) / time.Second)
+		return seconds >= sk.number
+	case "YOUNGER":
+		seconds := int64(time.Since(s.m.Received) / time.Second)
+		return seconds <= sk.number
 	}
 
 	if s.p == nil {

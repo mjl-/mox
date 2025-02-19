@@ -111,6 +111,12 @@ func TestSearch(t *testing.T) {
 	tc.transactf("ok", "search before 1-Jan-2020")
 	tc.xsearch() // Before is about received, not date header of message.
 
+	// WITHIN extension with OLDER & YOUNGER.
+	tc.transactf("ok", "search older 60")
+	tc.xsearch(1, 2, 3)
+	tc.transactf("ok", "search younger 60")
+	tc.xsearch()
+
 	// SAVEDATE extension.
 	tc.transactf("ok", "search savedbefore %s", saveDate.Add(24*time.Hour).Format("2-Jan-2006"))
 	tc.xsearch(1, 2, 3)

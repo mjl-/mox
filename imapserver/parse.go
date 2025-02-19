@@ -793,6 +793,7 @@ var searchKeyWords = []string{
 	"BEFORE", "BODY",
 	"CC", "DELETED", "FLAGGED",
 	"FROM", "KEYWORD",
+	"OLDER", "YOUNGER", // WITHIN extension, ../rfc/5032:72
 	"NEW", "OLD", "ON", "RECENT", "SEEN",
 	"SINCE", "SUBJECT",
 	"TEXT", "TO",
@@ -933,6 +934,9 @@ func (p *parser) xsearchKey() *searchKey {
 		p.xspace()
 		sk.date = p.xdate() // ../rfc/8514:267
 	case "SAVEDATESUPPORTED":
+	case "OLDER", "YOUNGER":
+		p.xspace()
+		sk.number = int64(p.xnznumber())
 	default:
 		p.xerrorf("missing case for op %q", sk.op)
 	}
