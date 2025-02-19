@@ -1631,7 +1631,7 @@
 				},
 				{
 					"Name": "Draft",
-					"Docs": "",
+					"Docs": "\"Drafts\"",
 					"Typewords": [
 						"bool"
 					]
@@ -3120,7 +3120,7 @@
 				},
 				{
 					"Name": "Draft",
-					"Docs": "",
+					"Docs": "\"Drafts\"",
 					"Typewords": [
 						"bool"
 					]

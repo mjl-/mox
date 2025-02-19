@@ -272,7 +272,7 @@ func (mc *MailboxCounts) Sub(delta MailboxCounts) {
 // understand where messages should go.
 type SpecialUse struct {
 	Archive bool
-	Draft   bool
+	Draft   bool // "Drafts"
 	Junk    bool
 	Sent    bool
 	Trash   bool

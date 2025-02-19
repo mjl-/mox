@@ -138,7 +138,7 @@ https://nlnet.nl/project/Mox/.
 - "mox setup" command, with webapp for interactive setup
 - Automate DNS management, for setup and maintenance, such as DANE/DKIM key rotation.
 - Calendaring with CalDAV/iCal
-- More IMAP extensions (PREVIEW, IMPORTANT, COMPRESS=DEFLATE, UNAUTHENTICATE,
+- More IMAP extensions (PREVIEW, COMPRESS=DEFLATE, UNAUTHENTICATE,
   REPLACE, QUOTA, NOTIFY, MULTIAPPEND, OBJECTID, MULTISEARCH, THREAD, SORT)
 - Introbox, to which first-time senders are delivered
 - ARC, with forwarded email from trusted source

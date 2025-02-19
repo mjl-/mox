@@ -229,7 +229,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 8437	Roadmap	-	IMAP UNAUTHENTICATE Extension for Connection Reuse
 8438	Yes	-	IMAP Extension for STATUS=SIZE
 8440	?	-	IMAP4 Extension for Returning MYRIGHTS Information in Extended LIST
-8457	Roadmap	-	IMAP "$Important" Keyword and "\Important" Special-Use Attribute
+8457	No	-	IMAP "$Important" Keyword and "\Important" Special-Use Attribute
 8474	Roadmap	-	IMAP Extension for Object Identifiers
 8508	Roadmap	-	IMAP REPLACE Extension
 8514	Yes	-	Internet Message Access Protocol (IMAP) - SAVEDATE Extension

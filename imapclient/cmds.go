@@ -150,7 +150,7 @@ func (c *Conn) Examine(mailbox string) (untagged []Untagged, result Result, rerr
 
 // Create makes a new mailbox on the server.
 // SpecialUse can only be used on servers that announced the CREATE-SPECIAL-USE
-// capability. Specify flags like \Archive, \Draft, \Junk, \Sent, \Trash, \All.
+// capability. Specify flags like \Archive, \Drafts, \Junk, \Sent, \Trash, \All.
 func (c *Conn) Create(mailbox string, specialUse []string) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
 	if _, ok := c.CapAvailable[CapCreateSpecialUse]; !ok && len(specialUse) > 0 {

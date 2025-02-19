@@ -191,21 +191,17 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 					flags = append(flags, bare(`\Subscribed`))
 				}
 				if info.mailbox != nil {
-					if info.mailbox.Archive {
-						flags = append(flags, bare(`\Archive`))
+					add := func(b bool, v string) {
+						if b {
+							flags = append(flags, bare(v))
+						}
 					}
-					if info.mailbox.Draft {
-						flags = append(flags, bare(`\Drafts`))
-					}
-					if info.mailbox.Junk {
-						flags = append(flags, bare(`\Junk`))
-					}
-					if info.mailbox.Sent {
-						flags = append(flags, bare(`\Sent`))
-					}
-					if info.mailbox.Trash {
-						flags = append(flags, bare(`\Trash`))
-					}
+					mb := info.mailbox
+					add(mb.Archive, `\Archive`)
+					add(mb.Draft, `\Drafts`)
+					add(mb.Junk, `\Junk`)
+					add(mb.Sent, `\Sent`)
+					add(mb.Trash, `\Trash`)
 				}
 
 				var extStr string

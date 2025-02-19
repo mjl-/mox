@@ -192,7 +192,7 @@ export interface Mailbox {
 	UIDValidity: number  // If UIDs are invalidated, e.g. when renaming a mailbox to a previously existing name, UIDValidity must be changed. Used by IMAP for synchronization.
 	UIDNext: UID  // UID likely to be assigned to next message. Used by IMAP to detect messages delivered to a mailbox.
 	Archive: boolean
-	Draft: boolean
+	Draft: boolean  // "Drafts"
 	Junk: boolean
 	Sent: boolean
 	Trash: boolean
@@ -498,7 +498,7 @@ export interface ChangeMailboxSpecialUse {
 // understand where messages should go.
 export interface SpecialUse {
 	Archive: boolean
-	Draft: boolean
+	Draft: boolean  // "Drafts"
 	Junk: boolean
 	Sent: boolean
 	Trash: boolean
