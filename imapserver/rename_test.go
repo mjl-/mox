@@ -26,9 +26,9 @@ func TestRename(t *testing.T) {
 	tc.transactf("no", `rename "Sent" "Trash"`)      // Already exists.
 	tc.xcode("ALREADYEXISTS")
 
-	tc.client.Create("x")
+	tc.client.Create("x", nil)
 	tc.client.Subscribe("sub")
-	tc.client.Create("a/b/c")
+	tc.client.Create("a/b/c", nil)
 	tc.client.Subscribe("x/y/c") // For later rename, but not affected by rename of x.
 	tc2.transactf("ok", "noop")  // Drain.
 
@@ -58,7 +58,7 @@ func TestRename(t *testing.T) {
 	tc2.transactf("ok", "noop")
 	tc2.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "x"}, imapclient.UntaggedList{Separator: '/', Mailbox: "x/y", OldName: "a/b"}, imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "x/y/c", OldName: "a/b/c"})
 
-	tc.client.Create("k/l")
+	tc.client.Create("k/l", nil)
 	tc.transactf("ok", "rename k/l k/l/m") // With "l" renamed, a new "k" will be created.
 	tc.transactf("ok", `list "" "k*" return (subscribed)`)
 	tc.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "k"}, imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "k/l"}, imapclient.UntaggedList{Separator: '/', Mailbox: "k/l/m"})

@@ -96,7 +96,7 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 	err = tc.account.DB.Update(ctxbg, &store.SyncState{ID: 1, LastModSeq: 1})
 	tcheck(t, err, "resetting modseq state")
 
-	tc.client.Create("otherbox")
+	tc.client.Create("otherbox", nil)
 
 	// tc2 is a client without condstore, so no modseq responses.
 	tc2 := startNoSwitchboard(t)

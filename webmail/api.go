@@ -1219,7 +1219,7 @@ func (Webmail) MailboxCreate(ctx context.Context, name string) {
 		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
 			var exists bool
 			var err error
-			changes, _, exists, err = acc.MailboxCreate(tx, name)
+			changes, _, exists, err = acc.MailboxCreate(tx, name, store.SpecialUse{})
 			if exists {
 				xcheckuserf(ctx, errors.New("mailbox already exists"), "creating mailbox")
 			}

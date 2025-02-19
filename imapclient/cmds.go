@@ -149,9 +149,18 @@ func (c *Conn) Examine(mailbox string) (untagged []Untagged, result Result, rerr
 }
 
 // Create makes a new mailbox on the server.
-func (c *Conn) Create(mailbox string) (untagged []Untagged, result Result, rerr error) {
+// SpecialUse can only be used on servers that announced the CREATE-SPECIAL-USE
+// capability. Specify flags like \Archive, \Draft, \Junk, \Sent, \Trash, \All.
+func (c *Conn) Create(mailbox string, specialUse []string) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
-	return c.Transactf("create %s", astring(mailbox))
+	if _, ok := c.CapAvailable[CapCreateSpecialUse]; !ok && len(specialUse) > 0 {
+		c.xerrorf("server does not implement create-special-use extension")
+	}
+	var useStr string
+	if len(specialUse) > 0 {
+		useStr = fmt.Sprintf(" USE (%s)", strings.Join(specialUse, " "))
+	}
+	return c.Transactf("create %s%s", astring(mailbox), useStr)
 }
 
 // Delete removes an entire mailbox and its messages.

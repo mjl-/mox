@@ -34,8 +34,8 @@ type Conn struct {
 
 	Preauth      bool
 	LastTag      string
-	CapAvailable map[Capability]struct{} // Capabilities available at server, from CAPABILITY command or response code.
-	CapEnabled   map[Capability]struct{} // Capabilities enabled through ENABLE command.
+	CapAvailable map[Capability]struct{} // Capabilities available at server, from CAPABILITY command or response code. All uppercase.
+	CapEnabled   map[Capability]struct{} // Capabilities enabled through ENABLE command. All uppercase.
 }
 
 // Error is a parse or other protocol error.

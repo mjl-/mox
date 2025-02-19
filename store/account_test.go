@@ -168,18 +168,18 @@ func TestMailbox(t *testing.T) {
 
 	acc.WithWLock(func() {
 		err := acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
-			_, _, err := acc.MailboxEnsure(tx, "Testbox", true)
+			_, _, err := acc.MailboxEnsure(tx, "Testbox", true, SpecialUse{})
 			return err
 		})
 		tcheck(t, err, "ensure mailbox exists")
 		err = acc.DB.Read(ctxbg, func(tx *bstore.Tx) error {
-			_, _, err := acc.MailboxEnsure(tx, "Testbox", true)
+			_, _, err := acc.MailboxEnsure(tx, "Testbox", true, SpecialUse{})
 			return err
 		})
 		tcheck(t, err, "ensure mailbox exists")
 
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
-			_, _, err := acc.MailboxEnsure(tx, "Testbox2", false)
+			_, _, err := acc.MailboxEnsure(tx, "Testbox2", false, SpecialUse{})
 			tcheck(t, err, "create mailbox")
 
 			exists, err := acc.MailboxExists(tx, "Testbox2")

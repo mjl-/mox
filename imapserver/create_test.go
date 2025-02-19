@@ -72,6 +72,14 @@ func TestCreate(t *testing.T) {
 	tc.transactf("no", `create "#"`) // Leading hash not allowed.
 	tc.transactf("ok", `create "test#"`)
 
+	// Create with flags.
+	tc.transactf("no", `create "newwithflags" (use (\unknown))`)
+	tc.transactf("no", `create "newwithflags" (use (\all))`)
+	tc.transactf("ok", `create "newwithflags" (use (\archive))`)
+	tc.transactf("ok", "noop")
+	tc.xuntagged()
+	tc.transactf("ok", `create "newwithflags2" (use (\archive) use (\drafts \sent))`)
+
 	// UTF-7 checks are only for IMAP4 before rev2 and without UTF8=ACCEPT.
 	tc.transactf("ok", `create "&"`)      // Interpreted as UTF-8, no UTF-7.
 	tc2.transactf("bad", `create "&"`)    // Bad UTF-7.

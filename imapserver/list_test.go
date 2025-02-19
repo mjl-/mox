@@ -35,7 +35,7 @@ func TestListBasic(t *testing.T) {
 	tc.last(tc.client.List("A*"))
 	tc.xuntagged(ulist("Archive", `\Archive`))
 
-	tc.client.Create("Inbox/todo")
+	tc.client.Create("Inbox/todo", nil)
 
 	tc.last(tc.client.List("Inbox*"))
 	tc.xuntagged(ulist("Inbox"), ulist("Inbox/todo"))
@@ -146,7 +146,7 @@ func TestListExtended(t *testing.T) {
 	tc.last(tc.client.ListFull(false, "A*", "Junk"))
 	tc.xuntagged(xlist("Archive", Farchive), ustatus("Archive"), xlist("Junk", Fjunk), ustatus("Junk"))
 
-	tc.client.Create("Inbox/todo")
+	tc.client.Create("Inbox/todo", nil)
 
 	tc.last(tc.client.ListFull(false, "Inbox*"))
 	tc.xuntagged(ulist("Inbox", Fhaschildren, Fsubscribed), ustatus("Inbox"), xlist("Inbox/todo"), ustatus("Inbox/todo"))
@@ -204,7 +204,7 @@ func TestListExtended(t *testing.T) {
 	tc.transactf("ok", `list (remote) "inbox" "a"`)
 	tc.xuntagged()
 
-	tc.client.Create("inbox/a")
+	tc.client.Create("inbox/a", nil)
 	tc.transactf("ok", `list (remote) "inbox" "a"`)
 	tc.xuntagged(ulist("Inbox/a"))
 

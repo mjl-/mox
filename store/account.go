@@ -1729,9 +1729,13 @@ func (a *Account) Subjectpass(email string) (key string, err error) {
 // parents if they aren't present.
 //
 // If subscribe is true, any mailboxes that were created will also be subscribed to.
+//
+// The leaf mailbox is created with special-use flags, taking the flags away from
+// other mailboxes, and reflecting that in the returned changes.
+//
 // Caller must hold account wlock.
 // Caller must propagate changes if any.
-func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool) (mb Mailbox, changes []Change, rerr error) {
+func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool, specialUse SpecialUse) (mb Mailbox, changes []Change, rerr error) {
 	if norm.NFC.String(name) != name {
 		return Mailbox{}, nil, fmt.Errorf("mailbox name not normalized")
 	}
@@ -1757,14 +1761,14 @@ func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool) (mb 
 	}
 
 	p := ""
+	var existed bool
 	for _, elem := range elems {
 		if p != "" {
 			p += "/"
 		}
 		p += elem
-		var ok bool
-		mb, ok = mailboxes[p]
-		if ok {
+		mb, existed = mailboxes[p]
+		if existed {
 			continue
 		}
 		uidval, err := a.NextUIDValidity(tx)
@@ -1793,6 +1797,49 @@ func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool) (mb 
 			flags = []string{`\Subscribed`}
 		}
 		changes = append(changes, ChangeAddMailbox{mb, flags})
+	}
+
+	// Clear any special-use flags from existing mailboxes and assign them to this mailbox.
+	var zeroSpecialUse SpecialUse
+	if !existed && specialUse != zeroSpecialUse {
+		var qerr error
+		clearSpecialUse := func(b bool, fn func(*Mailbox) *bool) {
+			if !b || qerr != nil {
+				return
+			}
+			qs := bstore.QueryTx[Mailbox](tx)
+			qs.FilterFn(func(xmb Mailbox) bool {
+				return *fn(&xmb)
+			})
+			xmb, err := qs.Get()
+			if err == bstore.ErrAbsent {
+				return
+			} else if err != nil {
+				qerr = fmt.Errorf("looking up mailbox with special-use flag: %v", err)
+				return
+			}
+			p := fn(&xmb)
+			*p = false
+			if err := tx.Update(&xmb); err != nil {
+				qerr = fmt.Errorf("clearing special-use flag: %v", err)
+			} else {
+				changes = append(changes, ChangeMailboxSpecialUse{xmb.ID, xmb.Name, xmb.SpecialUse})
+			}
+		}
+		clearSpecialUse(specialUse.Archive, func(xmb *Mailbox) *bool { return &xmb.Archive })
+		clearSpecialUse(specialUse.Draft, func(xmb *Mailbox) *bool { return &xmb.Draft })
+		clearSpecialUse(specialUse.Junk, func(xmb *Mailbox) *bool { return &xmb.Junk })
+		clearSpecialUse(specialUse.Sent, func(xmb *Mailbox) *bool { return &xmb.Sent })
+		clearSpecialUse(specialUse.Trash, func(xmb *Mailbox) *bool { return &xmb.Trash })
+		if qerr != nil {
+			return Mailbox{}, nil, qerr
+		}
+
+		mb.SpecialUse = specialUse
+		if err := tx.Update(&mb); err != nil {
+			return Mailbox{}, nil, fmt.Errorf("setting special-use flag for new mailbox: %v", err)
+		}
+		changes = append(changes, ChangeMailboxSpecialUse{mb.ID, mb.Name, mb.SpecialUse})
 	}
 	return mb, changes, nil
 }
@@ -1968,7 +2015,7 @@ func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFi
 			return ErrOverQuota
 		}
 
-		mb, chl, err := a.MailboxEnsure(tx, mailbox, true)
+		mb, chl, err := a.MailboxEnsure(tx, mailbox, true, SpecialUse{})
 		if err != nil {
 			return fmt.Errorf("ensuring mailbox: %w", err)
 		}
@@ -2601,8 +2648,11 @@ func (a *Account) SendLimitReached(tx *bstore.Tx, recipients []smtp.Path) (msgli
 // the total list of created mailboxes is returned in created. On success, if
 // exists is false and rerr nil, the changes must be broadcasted by the caller.
 //
+// The mailbox is created with special-use flags, with those flags taken away from
+// other mailboxes if they have them, reflected in the returned changes.
+//
 // Name must be in normalized form.
-func (a *Account) MailboxCreate(tx *bstore.Tx, name string) (changes []Change, created []string, exists bool, rerr error) {
+func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUse) (changes []Change, created []string, exists bool, rerr error) {
 	elems := strings.Split(name, "/")
 	var p string
 	for i, elem := range elems {
@@ -2620,9 +2670,9 @@ func (a *Account) MailboxCreate(tx *bstore.Tx, name string) (changes []Change, c
 			}
 			continue
 		}
-		_, nchanges, err := a.MailboxEnsure(tx, p, true)
+		_, nchanges, err := a.MailboxEnsure(tx, p, true, specialUse)
 		if err != nil {
-			return nil, nil, false, fmt.Errorf("ensuring mailbox exists")
+			return nil, nil, false, fmt.Errorf("ensuring mailbox exists: %v", err)
 		}
 		changes = append(changes, nchanges...)
 		created = append(created, p)

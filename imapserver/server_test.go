@@ -513,7 +513,7 @@ func TestLiterals(t *testing.T) {
 	defer tc.close()
 
 	tc.client.Login("mjl@mox.example", password0)
-	tc.client.Create("tmpbox")
+	tc.client.Create("tmpbox", nil)
 
 	tc.transactf("ok", "rename {6+}\r\ntmpbox {7+}\r\nntmpbox")
 
@@ -642,7 +642,7 @@ func TestMailboxDeleted(t *testing.T) {
 	tc.client.Login("mjl@mox.example", password0)
 	tc2.client.Login("mjl@mox.example", password0)
 
-	tc.client.Create("testbox")
+	tc.client.Create("testbox", nil)
 	tc2.client.Select("testbox")
 	tc.client.Delete("testbox")
 
@@ -663,7 +663,7 @@ func TestMailboxDeleted(t *testing.T) {
 
 	tc2.transactf("ok", "unselect")
 
-	tc.client.Create("testbox")
+	tc.client.Create("testbox", nil)
 	tc2.client.Select("testbox")
 	tc.client.Delete("testbox")
 	tc2.transactf("ok", "close")

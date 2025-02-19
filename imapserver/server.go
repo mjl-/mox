@@ -28,7 +28,7 @@ non-ASCII UTF-8. Until that's enabled, we do use UTF-7 for mailbox names. See
 - todo: do not return binary data for a fetch body. at least not for imap4rev1. we should be encoding it as base64?
 - todo: on expunge we currently remove the message even if other sessions still have a reference to the uid. if they try to query the uid, they'll get an error. we could be nicer and only actually remove the message when the last reference has gone. we could add a new flag to store.Message marking the message as expunged, not give new session access to such messages, and make store remove them at startup, and clean them when the last session referencing the session goes. however, it will get much more complicated. renaming messages would need special handling. and should we do the same for removed mailboxes?
 - todo: try to recover from syntax errors when the last command line ends with a }, i.e. a literal. we currently abort the entire connection. we may want to read some amount of literal data and continue with a next command.
-- todo future: more extensions: OBJECTID, MULTISEARCH, REPLACE, NOTIFY, CATENATE, MULTIAPPEND, SORT, THREAD, CREATE-SPECIAL-USE.
+- todo future: more extensions: OBJECTID, MULTISEARCH, REPLACE, NOTIFY, CATENATE, MULTIAPPEND, SORT, THREAD.
 */
 
 import (
@@ -146,7 +146,7 @@ var authFailDelay = time.Second  // After authentication failure.
 // MOVE: ../rfc/6851
 // UTF8=ONLY: ../rfc/6855
 // LIST-EXTENDED: ../rfc/5258
-// SPECIAL-USE: ../rfc/6154
+// SPECIAL-USE CREATE-SPECIAL-USE: ../rfc/6154
 // LIST-STATUS: ../rfc/5819
 // ID: ../rfc/2971
 // AUTH=EXTERNAL: ../rfc/4422:1575
@@ -165,7 +165,7 @@ var authFailDelay = time.Second  // After authentication failure.
 // TLS. The client should not be selecting PLUS variants on non-TLS connections,
 // instead opting to do the bare SCRAM variant without indicating the server claims
 // to support the PLUS variant (skipping the server downgrade detection check).
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE METADATA SAVEDATE"
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE CREATE-SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE METADATA SAVEDATE"
 
 type conn struct {
 	cid               int64
@@ -2710,12 +2710,49 @@ func (c *conn) cmdCreate(tag, cmd string, p *parser) {
 	// Request syntax: ../rfc/9051:6484 ../rfc/6154:468 ../rfc/4466:500 ../rfc/3501:4687
 	p.xspace()
 	name := p.xmailbox()
-	// todo: support CREATE-SPECIAL-USE ../rfc/6154:296
+	// Optional parameters. ../rfc/4466:501 ../rfc/4466:511
+	var useAttrs []string // Special-use attributes without leading \.
+	if p.space() {
+		p.xtake("(")
+		// We only support "USE", and there don't appear to be more types of parameters.
+		for {
+			p.xtake("USE (")
+			for {
+				p.xtake(`\`)
+				useAttrs = append(useAttrs, p.xatom())
+				if !p.space() {
+					break
+				}
+			}
+			p.xtake(")")
+			if !p.space() {
+				break
+			}
+		}
+		p.xtake(")")
+	}
 	p.xempty()
 
 	origName := name
 	name = strings.TrimRight(name, "/") // ../rfc/9051:1930
 	name = xcheckmailboxname(name, false)
+
+	var specialUse store.SpecialUse
+	specialUseBools := map[string]*bool{
+		"archive": &specialUse.Archive,
+		"drafts":  &specialUse.Draft,
+		"junk":    &specialUse.Junk,
+		"sent":    &specialUse.Sent,
+		"trash":   &specialUse.Trash,
+	}
+	for _, s := range useAttrs {
+		p, ok := specialUseBools[strings.ToLower(s)]
+		if !ok {
+			// ../rfc/6154:287
+			xusercodeErrorf("USEATTR", `cannot create mailbox with special-use attribute \%s`, s)
+		}
+		*p = true
+	}
 
 	var changes []store.Change
 	var created []string // Created mailbox names.
@@ -2724,7 +2761,7 @@ func (c *conn) cmdCreate(tag, cmd string, p *parser) {
 		c.xdbwrite(func(tx *bstore.Tx) {
 			var exists bool
 			var err error
-			changes, created, exists, err = c.account.MailboxCreate(tx, name)
+			changes, created, exists, err = c.account.MailboxCreate(tx, name, specialUse)
 			if exists {
 				// ../rfc/9051:1914
 				xuserErrorf("mailbox already exists")

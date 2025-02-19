@@ -181,6 +181,7 @@ func (c *Conn) xrespCode() (string, CodeArg) {
 		}
 		c.CapAvailable = map[Capability]struct{}{}
 		for _, cap := range caps {
+			cap = strings.ToUpper(cap)
 			c.CapAvailable[Capability(cap)] = struct{}{}
 		}
 		codeArg = CodeWords{W, caps}
@@ -343,6 +344,7 @@ func (c *Conn) xuntagged() Untagged {
 		}
 		c.CapAvailable = map[Capability]struct{}{}
 		for _, cap := range caps {
+			cap = strings.ToUpper(cap)
 			c.CapAvailable[Capability(cap)] = struct{}{}
 		}
 		r := UntaggedCapability(caps)
@@ -356,6 +358,7 @@ func (c *Conn) xuntagged() Untagged {
 			caps = append(caps, c.xnonspace())
 		}
 		for _, cap := range caps {
+			cap = strings.ToUpper(cap)
 			c.CapEnabled[Capability(cap)] = struct{}{}
 		}
 		r := UntaggedEnabled(caps)

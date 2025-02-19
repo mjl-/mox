@@ -11,29 +11,31 @@ import (
 type Capability string
 
 const (
-	CapIMAP4rev1      Capability = "IMAP4rev1"
-	CapIMAP4rev2      Capability = "IMAP4rev2"
-	CapLoginDisabled  Capability = "LOGINDISABLED"
-	CapStarttls       Capability = "STARTTLS"
-	CapAuthPlain      Capability = "AUTH=PLAIN"
-	CapLiteralPlus    Capability = "LITERAL+"
-	CapLiteralMinus   Capability = "LITERAL-"
-	CapIdle           Capability = "IDLE"
-	CapNamespace      Capability = "NAMESPACE"
-	CapBinary         Capability = "BINARY"
-	CapUnselect       Capability = "UNSELECT"
-	CapUidplus        Capability = "UIDPLUS"
-	CapEsearch        Capability = "ESEARCH"
-	CapEnable         Capability = "ENABLE"
-	CapSave           Capability = "SAVE"
-	CapListExtended   Capability = "LIST-EXTENDED"
-	CapSpecialUse     Capability = "SPECIAL-USE"
-	CapMove           Capability = "MOVE"
-	CapUTF8Only       Capability = "UTF8=ONLY"
-	CapUTF8Accept     Capability = "UTF8=ACCEPT"
-	CapID             Capability = "ID"              // ../rfc/2971:80
-	CapMetadata       Capability = "METADATA"        // ../rfc/5464:124
-	CapMetadataServer Capability = "METADATA-SERVER" // ../rfc/5464:124
+	CapIMAP4rev1        Capability = "IMAP4rev1"
+	CapIMAP4rev2        Capability = "IMAP4rev2"
+	CapLoginDisabled    Capability = "LOGINDISABLED"
+	CapStarttls         Capability = "STARTTLS"
+	CapAuthPlain        Capability = "AUTH=PLAIN"
+	CapLiteralPlus      Capability = "LITERAL+"
+	CapLiteralMinus     Capability = "LITERAL-"
+	CapIdle             Capability = "IDLE"
+	CapNamespace        Capability = "NAMESPACE"
+	CapBinary           Capability = "BINARY"
+	CapUnselect         Capability = "UNSELECT"
+	CapUidplus          Capability = "UIDPLUS"
+	CapEsearch          Capability = "ESEARCH"
+	CapEnable           Capability = "ENABLE"
+	CapSave             Capability = "SAVE"
+	CapListExtended     Capability = "LIST-EXTENDED"
+	CapSpecialUse       Capability = "SPECIAL-USE"
+	CapMove             Capability = "MOVE"
+	CapUTF8Only         Capability = "UTF8=ONLY"
+	CapUTF8Accept       Capability = "UTF8=ACCEPT"
+	CapID               Capability = "ID"                 // ../rfc/2971:80
+	CapMetadata         Capability = "METADATA"           // ../rfc/5464:124
+	CapMetadataServer   Capability = "METADATA-SERVER"    // ../rfc/5464:124
+	CapSaveDate         Capability = "SAVEDATE"           // ../rfc/8514
+	CapCreateSpecialUse Capability = "CREATE-SPECIAL-USE" // ../rfc/6154:296
 )
 
 // Status is the tagged final result of a command.
