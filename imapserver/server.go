@@ -186,8 +186,8 @@ type conn struct {
 	cmd               string // Currently executing, for deciding to applyChanges and logging.
 	cmdMetric         string // Currently executing, for metrics.
 	cmdStart          time.Time
-	ncmds             int // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
-	log               mlog.Log
+	ncmds             int                 // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
+	log               mlog.Log            // Used for all synchronous logging on this connection, see logbg for logging in a separate goroutine.
 	enabled           map[capability]bool // All upper-case.
 
 	// Set by SEARCH with SAVE. Can be used by commands accepting a sequence-set with
@@ -413,6 +413,18 @@ func Serve() {
 		go serve()
 	}
 	servers = nil
+}
+
+// Logbg returns a logger for logging in the background (in a goroutine), eg for
+// logging LoginAttempts. The regular c.log has a handler that evaluates fields on
+// the connection at time of logging, which may happen at the same time as
+// modifications to those fields.
+func (c *conn) logbg() mlog.Log {
+	log := mlog.New("imapserver", nil).WithCid(c.cid)
+	if c.username != "" {
+		log = log.With(slog.String("username", c.username))
+	}
+	return log
 }
 
 // returns whether this connection accepts utf-8 in strings.
@@ -692,6 +704,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		cmdStart:          time.Now(),
 	}
 	var logmutex sync.Mutex
+	// Also see (and possibly update) c.logbg, for logging in a goroutine.
 	c.log = mlog.New("imapserver", nil).WithFunc(func() []slog.Attr {
 		logmutex.Lock()
 		defer logmutex.Unlock()
@@ -818,7 +831,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	// Ensure any pending loginAttempt is written before we stop.
 	defer func() {
 		if c.loginAttempt != nil {
-			store.LoginAttemptAdd(context.Background(), c.log, *c.loginAttempt)
+			store.LoginAttemptAdd(context.Background(), c.logbg(), *c.loginAttempt)
 			c.loginAttempt = nil
 		}
 	}()
@@ -834,7 +847,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		if storeLoginAttempt {
 			storeLoginAttempt = false
 			if c.loginAttempt != nil {
-				store.LoginAttemptAdd(context.Background(), c.log, *c.loginAttempt)
+				store.LoginAttemptAdd(context.Background(), c.logbg(), *c.loginAttempt)
 				c.loginAttempt = nil
 			}
 		} else if c.loginAttempt != nil {
@@ -853,7 +866,7 @@ func isClosed(err error) bool {
 // filling in the results and other details.
 func (c *conn) newLoginAttempt(useTLS bool, authMech string) {
 	if c.loginAttempt != nil {
-		store.LoginAttemptAdd(context.Background(), c.log, *c.loginAttempt)
+		store.LoginAttemptAdd(context.Background(), c.logbg(), *c.loginAttempt)
 		c.loginAttempt = nil
 	}
 
@@ -941,6 +954,7 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 		conn := c.conn.(*tls.Conn)
 		la := *c.loginAttempt
 		c.loginAttempt = nil
+		logbg := c.logbg() // Evaluate attributes now, can't do it in goroutine.
 		go func() {
 			defer func() {
 				// In case of panic don't take the whole program down.
@@ -954,7 +968,7 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 
 			state := conn.ConnectionState()
 			la.TLS = store.LoginAttemptTLS(&state)
-			store.LoginAttemptAdd(context.Background(), c.log, la)
+			store.LoginAttemptAdd(context.Background(), logbg, la)
 		}()
 
 		if la.Result == store.AuthSuccess {
@@ -1773,7 +1787,7 @@ func (c *conn) cmdID(tag, cmd string, p *parser) {
 	// prepared the LoginAttempt and write it now.
 	if c.loginAttempt != nil {
 		c.loginAttempt.UserAgent = strings.Join(values, " ")
-		store.LoginAttemptAdd(context.Background(), c.log, *c.loginAttempt)
+		store.LoginAttemptAdd(context.Background(), c.logbg(), *c.loginAttempt)
 		c.loginAttempt = nil
 	}
 

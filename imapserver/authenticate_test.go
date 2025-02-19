@@ -353,7 +353,6 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	os.RemoveAll("../testdata/imap/data")
 	err = store.Init(ctxbg)
 	tcheck(t, err, "store init")
-	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
 	mox.MustLoadConfig(true, false)
 	switchStop := store.Switchboard()

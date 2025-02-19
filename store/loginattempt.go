@@ -14,7 +14,6 @@ import (
 
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/mox-"
 )
 
 var loginAttemptsMaxPerAccount = 10 * 1000 // Lower during tests.
@@ -101,16 +100,35 @@ const (
 )
 
 var writeLoginAttempt chan LoginAttempt
-var writeLoginAttemptStopped chan struct{} // For synchronizing with tests.
+var writeLoginAttemptStop chan chan struct{}
 
-func startLoginAttemptWriter(ctx context.Context) {
+func startLoginAttemptWriter() {
 	writeLoginAttempt = make(chan LoginAttempt, 100)
-	writeLoginAttemptStopped = make(chan struct{}, 1)
+	writeLoginAttemptStop = make(chan chan struct{})
+
+	process := func(la *LoginAttempt) {
+		var l []LoginAttempt
+		if la != nil {
+			l = []LoginAttempt{*la}
+		}
+		// Gather all that we can write now.
+	All:
+		for {
+			select {
+			case xla := <-writeLoginAttempt:
+				l = append(l, xla)
+			default:
+				break All
+			}
+		}
+
+		if len(l) > 0 {
+			loginAttemptWrite(l...)
+		}
+	}
 
 	go func() {
 		defer func() {
-			writeLoginAttemptStopped <- struct{}{}
-
 			x := recover()
 			if x == nil {
 				return
@@ -121,26 +139,15 @@ func startLoginAttemptWriter(ctx context.Context) {
 			metrics.PanicInc(metrics.Store)
 		}()
 
-		done := ctx.Done()
 		for {
 			select {
-			case <-done:
+			case stopc := <-writeLoginAttemptStop:
+				process(nil)
+				stopc <- struct{}{}
 				return
 
 			case la := <-writeLoginAttempt:
-				l := []LoginAttempt{la}
-				// Gather all that we can write now.
-			All:
-				for {
-					select {
-					case la = <-writeLoginAttempt:
-						l = append(l, la)
-					default:
-						break All
-					}
-				}
-
-				loginAttemptWrite(l...)
+				process(&la)
 			}
 		}
 	}()
@@ -157,14 +164,8 @@ func LoginAttemptAdd(ctx context.Context, log mlog.Log, a LoginAttempt) {
 	metrics.AuthenticationInc(a.Protocol, a.AuthMech, string(a.Result))
 
 	a.log = log
-	select {
-	case <-mox.Context.Done():
-		// During shutdown, don't return before writing.
-		loginAttemptWrite(a)
-	default:
-		// Send login attempt to writer. Only blocks if there are lots of login attempts.
-		writeLoginAttempt <- a
-	}
+	// Send login attempt to writer. Only blocks if there are lots of login attempts.
+	writeLoginAttempt <- a
 }
 
 func loginAttemptWrite(l ...LoginAttempt) {

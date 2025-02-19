@@ -32,6 +32,8 @@ func init() {
 	// Don't slow down tests.
 	badClientDelay = 0
 	authFailDelay = 0
+
+	mox.Context = ctxbg
 }
 
 func tocrlf(s string) string {
@@ -350,7 +352,6 @@ func startArgs(t *testing.T, first, immediateTLS bool, allowLoginWithoutTLS, set
 func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientConfig *tls.Config, allowLoginWithoutTLS, noCloseSwitchboard, setPassword bool, accname string, afterInit func() error) *testconn {
 	limitersInit() // Reset rate limiters.
 
-	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
 	mox.MustLoadConfig(true, false)
 	if first {

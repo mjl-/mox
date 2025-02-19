@@ -17,12 +17,19 @@ func TestLoginAttempt(t *testing.T) {
 	mox.MustLoadConfig(true, false)
 
 	xctx, xcancel := context.WithCancel(ctxbg)
+	defer xcancel() // Stop clearing of LoginAttempts.
 	err := Init(xctx)
 	tcheck(t, err, "store init")
-	// Stop the background LoginAttempt writer for synchronous tests.
-	xcancel()
-	<-writeLoginAttemptStopped
+	stopc := make(chan struct{})
+	writeLoginAttemptStop <- stopc
+	<-stopc
 	defer func() {
+		// Ensure Close() below finishes
+		go func() {
+			c := <-writeLoginAttemptStop
+			c <- struct{}{}
+		}()
+
 		err := Close()
 		tcheck(t, err, "store close")
 	}()

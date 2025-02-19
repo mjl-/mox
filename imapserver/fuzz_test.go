@@ -60,7 +60,6 @@ func FuzzServer(f *testing.F) {
 	}
 
 	log := mlog.New("imapserver", nil)
-	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imapserverfuzz/mox.conf")
 	mox.MustLoadConfig(true, false)
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)

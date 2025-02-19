@@ -338,7 +338,7 @@ type conn struct {
 	localIP               net.IP
 	remoteIP              net.IP
 	hostname              dns.Domain
-	log                   mlog.Log
+	log                   mlog.Log // Used for all synchronous logging on this connection, see logbg for logging in a separate goroutine.
 	maxMessageSize        int64
 	requireTLSForAuth     bool
 	requireTLSForDelivery bool      // If set, delivery is only allowed with TLS (STARTTLS), except if delivery is to a TLS reporting address.
@@ -399,6 +399,18 @@ type recipient struct {
 
 func isClosed(err error) bool {
 	return errors.Is(err, errIO) || moxio.IsClosed(err)
+}
+
+// Logbg returns a logger for logging in the background (in a goroutine), eg for
+// logging LoginAttempts. The regular c.log has a handler that evaluates fields on
+// the connection at time of logging, which may happen at the same time as
+// modifications to those fields.
+func (c *conn) logbg() mlog.Log {
+	log := mlog.New("smtpserver", nil).WithCid(c.cid)
+	if c.username != "" {
+		log = log.With(slog.String("username", c.username))
+	}
+	return log
 }
 
 // loginAttempt initializes a store.LoginAttempt, for adding to the store after
@@ -483,6 +495,7 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 		// Get TLS connection state in goroutine because we are called while performing the
 		// TLS handshake, which already has the tls connection locked.
 		conn := c.conn.(*tls.Conn)
+		logbg := c.logbg() // Evaluate attributes now, can't do it in goroutine.
 		go func() {
 			defer func() {
 				// In case of panic don't take the whole program down.
@@ -496,7 +509,7 @@ func (c *conn) tlsClientAuthVerifyPeerCertParsed(cert *x509.Certificate) error {
 
 			state := conn.ConnectionState()
 			la.TLS = store.LoginAttemptTLS(&state)
-			store.LoginAttemptAdd(context.Background(), c.log, la)
+			store.LoginAttemptAdd(context.Background(), logbg, la)
 		}()
 
 		if la.Result == store.AuthSuccess {
@@ -896,6 +909,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		firstTimeSenderDelay:  firstTimeSenderDelay,
 	}
 	var logmutex sync.Mutex
+	// Also see (and possibly update) c.logbg, for logging in a goroutine.
 	c.log = mlog.New("smtpserver", nil).WithFunc(func() []slog.Attr {
 		logmutex.Lock()
 		defer logmutex.Unlock()
@@ -1294,7 +1308,7 @@ func (c *conn) cmdAuth(p *parser) {
 
 	la := c.loginAttempt(true, "")
 	defer func() {
-		store.LoginAttemptAdd(context.Background(), c.log, la)
+		store.LoginAttemptAdd(context.Background(), c.logbg(), la)
 		if la.Result == store.AuthSuccess {
 			mox.LimiterFailedAuth.Reset(c.remoteIP, time.Now())
 		} else if !missingDerivedSecrets {

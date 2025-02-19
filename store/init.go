@@ -21,7 +21,7 @@ import (
 var AuthDB *bstore.DB
 var AuthDBTypes = []any{TLSPublicKey{}, LoginAttempt{}, LoginAttemptState{}}
 
-// Init opens auth.db.
+// Init opens auth.db and starts the login writer.
 func Init(ctx context.Context) error {
 	if AuthDB != nil {
 		return fmt.Errorf("already initialized")
@@ -36,7 +36,7 @@ func Init(ctx context.Context) error {
 		return err
 	}
 
-	startLoginAttemptWriter(ctx)
+	startLoginAttemptWriter()
 
 	go func() {
 		defer func() {
@@ -67,12 +67,18 @@ func Init(ctx context.Context) error {
 	return nil
 }
 
-// Close closes auth.db.
+// Close closes auth.db and stops the login writer.
 func Close() error {
 	if AuthDB == nil {
 		return fmt.Errorf("not open")
 	}
+
+	stopc := make(chan struct{})
+	writeLoginAttemptStop <- stopc
+	<-stopc
+
 	err := AuthDB.Close()
 	AuthDB = nil
+
 	return err
 }
