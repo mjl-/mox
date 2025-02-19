@@ -23,7 +23,7 @@ func TestFetch(t *testing.T) {
 	tc.client.Select("inbox")
 
 	uid1 := imapclient.FetchUID(1)
-	date1 := imapclient.FetchInternalDate{received}
+	date1 := imapclient.FetchInternalDate{Date: received}
 	rfcsize1 := imapclient.FetchRFC822Size(len(exampleMsg))
 	env1 := imapclient.FetchEnvelope{
 		Date:      "Mon, 7 Feb 1994 21:52:25 -0800",
