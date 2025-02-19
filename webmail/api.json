@@ -2221,8 +2221,16 @@
 				},
 				{
 					"Name": "Received",
-					"Docs": "",
+					"Docs": "Received indicates time of receival over SMTP, or of IMAP APPEND.",
 					"Typewords": [
+						"timestamp"
+					]
+				},
+				{
+					"Name": "SaveDate",
+					"Docs": "SaveDate is the time of copy/move/save to a mailbox, used with IMAP SAVEDATE extension. Must be updated each time a message is copied/moved to another mailbox. Can be nil for messages from before this functionality was introduced.",
+					"Typewords": [
+						"nullable",
 						"timestamp"
 					]
 				},

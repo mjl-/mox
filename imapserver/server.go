@@ -159,12 +159,13 @@ var authFailDelay = time.Second  // After authentication failure.
 // STATUS=SIZE: ../rfc/8438 ../rfc/9051:8024
 // QUOTA QUOTA=RES-STORAGE: ../rfc/9208:111
 // METADATA: ../rfc/5464
+// SAVEDATE: ../rfc/8514
 //
 // We always announce support for SCRAM PLUS-variants, also on connections without
 // TLS. The client should not be selecting PLUS variants on non-TLS connections,
 // instead opting to do the bare SCRAM variant without indicating the server claims
 // to support the PLUS variant (skipping the server downgrade detection check).
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE METADATA"
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE METADATA SAVEDATE"
 
 type conn struct {
 	cid               int64
@@ -3868,6 +3869,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			conf, _ := c.account.Conf()
 
 			mbKeywords := map[string]struct{}{}
+			now := time.Now()
 
 			// Insert new messages into database.
 			var origMsgIDs, newMsgIDs []int64
@@ -3891,6 +3893,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				}
 				m.TrainedJunk = nil
 				m.JunkFlagsForMailbox(mbDst, conf)
+				m.SaveDate = &now
 				err := tx.Insert(&m)
 				xcheckf(err, "inserting message")
 				msgs[uid] = m
@@ -4033,6 +4036,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 			}
 
 			keywords := map[string]struct{}{}
+			now := time.Now()
 
 			conf, _ := c.account.Conf()
 			for i := range msgs {
@@ -4061,6 +4065,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 				m.UID = uidnext
 				m.ModSeq = modseq
 				m.JunkFlagsForMailbox(mbDst, conf)
+				m.SaveDate = &now
 				uidnext++
 				err := tx.Update(m)
 				xcheckf(err, "updating moved message in database")

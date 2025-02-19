@@ -404,6 +404,17 @@ func (cmd *fetchCmd) xprocessAtt(a fetchAtt) []token {
 		m := cmd.xensureMessage()
 		return []token{bare("INTERNALDATE"), dquote(m.Received.Format("_2-Jan-2006 15:04:05 -0700"))}
 
+	case "SAVEDATE":
+		m := cmd.xensureMessage()
+		// For messages in storage from before we implemented this extension, we don't have
+		// a savedate, and we return nil. This is normally meant to be per mailbox, but
+		// returning it per message should be fine. ../rfc/8514:191
+		var savedate token = nilt
+		if m.SaveDate != nil {
+			savedate = dquote(m.SaveDate.Format("_2-Jan-2006 15:04:05 -0700"))
+		}
+		return []token{bare("SAVEDATE"), savedate}
+
 	case "BODYSTRUCTURE":
 		_, part := cmd.xensureParsed()
 		bs := xbodystructure(part, true)

@@ -575,7 +575,8 @@ func (p *parser) xsectionBinary() (r []uint32) {
 var fetchAttWords = []string{
 	"ENVELOPE", "FLAGS", "INTERNALDATE", "RFC822.SIZE", "BODYSTRUCTURE", "UID", "BODY.PEEK", "BODY", "BINARY.PEEK", "BINARY.SIZE", "BINARY",
 	"RFC822.HEADER", "RFC822.TEXT", "RFC822", // older IMAP
-	"MODSEQ", // CONDSTORE extension.
+	"MODSEQ",   // CONDSTORE extension.
+	"SAVEDATE", // SAVEDATE extension, ../rfc/8514:186
 }
 
 // ../rfc/9051:6557 ../rfc/3501:4751 ../rfc/7162:2483
@@ -803,7 +804,8 @@ var searchKeyWords = []string{
 	"SENTBEFORE", "SENTON",
 	"SENTSINCE", "SMALLER",
 	"UID", "UNDRAFT",
-	"MODSEQ", // CONDSTORE extension.
+	"MODSEQ",                                                    // CONDSTORE extension.
+	"SAVEDBEFORE", "SAVEDON", "SAVEDSINCE", "SAVEDATESUPPORTED", // SAVEDATE extension, ../rfc/8514:203
 }
 
 // ../rfc/9051:6923 ../rfc/3501:4957, MODSEQ ../rfc/7162:2492
@@ -927,6 +929,10 @@ func (p *parser) xsearchKey() *searchKey {
 		sk.clientModseq = &v
 		// MODSEQ is a CONDSTORE-enabling parameter. ../rfc/7162:377
 		p.conn.enabled[capCondstore] = true
+	case "SAVEDBEFORE", "SAVEDON", "SAVEDSINCE":
+		p.xspace()
+		sk.date = p.xdate() // ../rfc/8514:267
+	case "SAVEDATESUPPORTED":
 	default:
 		p.xerrorf("missing case for op %q", sk.op)
 	}

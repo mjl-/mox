@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"time"
 
 	"golang.org/x/exp/maps"
 
@@ -381,6 +382,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 	var mbSrc store.Mailbox
 
 	keywords := map[string]struct{}{}
+	now := time.Now()
 
 	for _, mid := range messageIDs {
 		m := x.messageID(ctx, tx, mid)
@@ -436,6 +438,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 		m.ModSeq = modseq
 		mbDst.UIDNext++
 		m.JunkFlagsForMailbox(mbDst, conf)
+		m.SaveDate = &now
 		err = tx.Update(&m)
 		x.Checkf(ctx, err, "updating moved message in database")
 

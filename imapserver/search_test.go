@@ -65,6 +65,7 @@ func TestSearch(t *testing.T) {
 
 	// Add 5 and delete first 4 messages. So UIDs start at 5.
 	received := time.Date(2020, time.January, 1, 10, 0, 0, 0, time.UTC)
+	saveDate := time.Now()
 	for i := 0; i < 5; i++ {
 		tc.client.Append("inbox", nil, &received, []byte(exampleMsg))
 	}
@@ -109,6 +110,20 @@ func TestSearch(t *testing.T) {
 	tc.xsearch(1, 2, 3)
 	tc.transactf("ok", "search before 1-Jan-2020")
 	tc.xsearch() // Before is about received, not date header of message.
+
+	// SAVEDATE extension.
+	tc.transactf("ok", "search savedbefore %s", saveDate.Add(24*time.Hour).Format("2-Jan-2006"))
+	tc.xsearch(1, 2, 3)
+	tc.transactf("ok", "search savedbefore %s", saveDate.Add(-24*time.Hour).Format("2-Jan-2006"))
+	tc.xsearch()
+	tc.transactf("ok", "search savedon %s", saveDate.Format("2-Jan-2006"))
+	tc.xsearch(1, 2, 3)
+	tc.transactf("ok", "search savedon %s", saveDate.Add(-24*time.Hour).Format("2-Jan-2006"))
+	tc.xsearch()
+	tc.transactf("ok", "search savedsince %s", saveDate.Add(-24*time.Hour).Format("2-Jan-2006"))
+	tc.xsearch(1, 2, 3)
+	tc.transactf("ok", "search savedsince %s", saveDate.Add(24*time.Hour).Format("2-Jan-2006"))
+	tc.xsearch()
 
 	tc.transactf("ok", `search body "Joe"`)
 	tc.xsearch(1)

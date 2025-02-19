@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Capability is a known string for with the ENABLED and CAPABILITY command.
@@ -454,6 +455,13 @@ type Address struct {
 // "INTERNALDATE" fetch response.
 type FetchInternalDate string            // todo: parsed time
 func (f FetchInternalDate) Attr() string { return "INTERNALDATE" }
+
+// "SAVEDATE" fetch response. ../rfc/8514:265
+type FetchSaveDate struct {
+	SaveDate *time.Time // nil means absent for message.
+}
+
+func (f FetchSaveDate) Attr() string { return "SAVEDATE" }
 
 // "RFC822.SIZE" fetch response.
 type FetchRFC822Size int64

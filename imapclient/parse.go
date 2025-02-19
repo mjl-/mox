@@ -5,6 +5,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func (c *Conn) recorded() string {
@@ -685,6 +686,19 @@ func (c *Conn) xmsgatt1() FetchAttr {
 	case "INTERNALDATE":
 		c.xspace()
 		return FetchInternalDate(c.xquoted()) // todo: parsed time
+
+	case "SAVEDATE":
+		c.xspace()
+		var t *time.Time
+		if c.peek('"') {
+			s := c.xquoted()
+			v, err := time.Parse("_2-Jan-2006 15:04:05 -0700", s)
+			c.xcheckf(err, "parsing savedate")
+			t = &v
+		} else {
+			c.xtake("nil")
+		}
+		return FetchSaveDate{t}
 
 	case "RFC822.SIZE":
 		c.xspace()

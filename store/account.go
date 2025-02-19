@@ -424,7 +424,13 @@ type Message struct {
 	MailboxOrigID     int64
 	MailboxDestinedID int64
 
+	// Received indicates time of receival over SMTP, or of IMAP APPEND.
 	Received time.Time `bstore:"default now,index"`
+
+	// SaveDate is the time of copy/move/save to a mailbox, used with IMAP SAVEDATE
+	// extension. Must be updated each time a message is copied/moved to another
+	// mailbox. Can be nil for messages from before this functionality was introduced.
+	SaveDate *time.Time `bstore:"default now"`
 
 	// Full IP address of remote SMTP server. Empty if not delivered over SMTP. The
 	// masked IPs are used to classify incoming messages. They are left empty for

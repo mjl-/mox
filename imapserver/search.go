@@ -514,6 +514,31 @@ func (s *search) match0(sk searchKey) bool {
 	case "MODSEQ":
 		// ../rfc/7162:1045
 		return s.m.ModSeq.Client() >= *sk.clientModseq
+	case "SAVEDBEFORE", "SAVEDON", "SAVEDSINCE":
+		// If we don't have a savedate for this message (for messages received before we
+		// implemented this feature), we use the "internal date" (received timestamp) of
+		// the message. ../rfc/8514:237
+		rt := s.m.Received
+		if s.m.SaveDate != nil {
+			rt = *s.m.SaveDate
+		}
+
+		skdt := sk.date.Format("2006-01-02")
+		rdt := rt.Format("2006-01-02")
+		switch sk.op {
+		case "SAVEDBEFORE":
+			return rdt < skdt
+		case "SAVEDON":
+			return rdt == skdt
+		case "SAVEDSINCE":
+			return rdt >= skdt
+		}
+		panic("missing case")
+	case "SAVEDATESUPPORTED":
+		// We return whether we have a savedate for this message. We support it on all
+		// mailboxes, but we only have this metadata from the time we implemented this
+		// feature.
+		return s.m.SaveDate != nil
 	}
 
 	if s.p == nil {
