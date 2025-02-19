@@ -101,6 +101,7 @@ func (c *conn) cmdGetmetadata(tag, cmd string, p *parser) {
 				q.FilterNonzero(store.Annotation{MailboxID: mb.ID})
 			}
 
+			q.SortAsc("MailboxID", "Key") // For tests.
 			err := q.ForEach(func(a store.Annotation) error {
 				// ../rfc/5464:516
 				switch optDepth {
