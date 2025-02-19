@@ -455,7 +455,10 @@ type Address struct {
 }
 
 // "INTERNALDATE" fetch response.
-type FetchInternalDate string            // todo: parsed time
+type FetchInternalDate struct {
+	Date time.Time
+}
+
 func (f FetchInternalDate) Attr() string { return "INTERNALDATE" }
 
 // "SAVEDATE" fetch response. ../rfc/8514:265

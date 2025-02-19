@@ -688,7 +688,10 @@ func (c *Conn) xmsgatt1() FetchAttr {
 
 	case "INTERNALDATE":
 		c.xspace()
-		return FetchInternalDate(c.xquoted()) // todo: parsed time
+		s := c.xquoted()
+		v, err := time.Parse("_2-Jan-2006 15:04:05 -0700", s)
+		c.xcheckf(err, "parsing internaldate")
+		return FetchInternalDate{v}
 
 	case "SAVEDATE":
 		c.xspace()
