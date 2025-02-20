@@ -575,7 +575,11 @@ func (h *handler) write(l slog.Level, r slog.Record) error {
 			}
 		}
 
-		fmt.Fprint(eb, LevelStrings[r.Level], ": ", r.Message)
+		msg := r.Message
+		if r.Level <= LevelTrace {
+			msg = fmt.Sprintf("%q", msg)
+		}
+		fmt.Fprint(eb, LevelStrings[r.Level], ": ", msg)
 		n := 0
 		r.Attrs(func(a slog.Attr) bool {
 			if n == 0 && a.Key == "err" && h.Group == "" {
