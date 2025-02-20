@@ -66,6 +66,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/mjl-/bstore"
+	"github.com/mjl-/flate"
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/message"
@@ -162,12 +163,13 @@ var authFailDelay = time.Second  // After authentication failure.
 // SAVEDATE: ../rfc/8514
 // WITHIN: ../rfc/5032
 // NAMESPACE: ../rfc/2342
+// COMPRESS=DEFLATE: ../rfc/4978
 //
 // We always announce support for SCRAM PLUS-variants, also on connections without
 // TLS. The client should not be selecting PLUS variants on non-TLS connections,
 // instead opting to do the bare SCRAM variant without indicating the server claims
 // to support the PLUS variant (skipping the server downgrade detection check).
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE CREATE-SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE METADATA SAVEDATE WITHIN NAMESPACE"
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE CREATE-SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE METADATA SAVEDATE WITHIN NAMESPACE COMPRESS=DEFLATE"
 
 type conn struct {
 	cid               int64
@@ -175,10 +177,10 @@ type conn struct {
 	conn              net.Conn
 	tls               bool               // Whether TLS has been initialized.
 	viaHTTPS          bool               // Whether this connection came in via HTTPS (using TLS ALPN).
-	br                *bufio.Reader      // From remote, with TLS unwrapped in case of TLS.
+	br                *bufio.Reader      // From remote, with TLS unwrapped in case of TLS, and possibly wrapping inflate.
 	line              chan lineErr       // If set, instead of reading from br, a line is read from this channel. For reading a line in IDLE while also waiting for mailbox/account updates.
 	lastLine          string             // For detecting if syntax error is fatal, i.e. if this ends with a literal. Without crlf.
-	bw                *bufio.Writer      // To remote, with TLS added in case of TLS.
+	bw                *bufio.Writer      // To remote, with TLS added in case of TLS, and possibly wrapping deflate, see conn.flateWriter.
 	tr                *moxio.TraceReader // Kept to change trace level when reading/writing cmd/auth/data.
 	tw                *moxio.TraceWriter
 	slow              bool        // If set, reads are done with a 1 second sleep, and writes are done 1 byte at a time, to keep spammers busy.
@@ -192,6 +194,9 @@ type conn struct {
 	ncmds             int                 // Number of commands processed. Used to abort connection when first incoming command is unknown/invalid.
 	log               mlog.Log            // Used for all synchronous logging on this connection, see logbg for logging in a separate goroutine.
 	enabled           map[capability]bool // All upper-case.
+	compress          bool                // Whether compression is enabled, via compress command.
+	flateWriter       *flate.Writer       // For flushing output after flushing conn.bw, and for closing.
+	flateBW           *bufio.Writer       // Wraps raw connection writes, flateWriter writes here, also needs flushing.
 
 	// Set by SEARCH with SAVE. Can be used by commands accepting a sequence-set with
 	// value "$". When used, UIDs must be verified to still exist, because they may
@@ -258,7 +263,7 @@ func stateCommands(cmds ...string) map[string]struct{} {
 var (
 	commandsStateAny              = stateCommands("capability", "noop", "logout", "id")
 	commandsStateNotAuthenticated = stateCommands("starttls", "authenticate", "login")
-	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata")
+	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata", "compress")
 	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move")
 )
 
@@ -293,6 +298,7 @@ var commands = map[string]func(c *conn, tag, cmd string, p *parser){
 	"getquota":     (*conn).cmdGetquota,
 	"getmetadata":  (*conn).cmdGetmetadata,
 	"setmetadata":  (*conn).cmdSetmetadata,
+	"compress":     (*conn).cmdCompress,
 
 	// Selected.
 	"check":       (*conn).cmdCheck,
@@ -623,6 +629,19 @@ func (c *conn) bwritelinef(format string, args ...any) {
 func (c *conn) xflush() {
 	err := c.bw.Flush()
 	xcheckf(err, "flush") // Should never happen, the Write caused by the Flush should panic on i/o error.
+
+	// If compression is enabled, we need to flush its stream.
+	if c.compress {
+		// Note: Flush writes a sync message if there is nothing to flush. Ideally we
+		// wouldn't send that, but we would have to keep track of whether data needs to be
+		// flushed.
+		err := c.flateWriter.Flush()
+		xcheckf(err, "flush deflate")
+
+		// The flate writer writes to a bufio.Writer, we must also flush that.
+		err = c.flateBW.Flush()
+		xcheckf(err, "flush deflate writer")
+	}
 }
 
 func (c *conn) readCommand(tag *string) (cmd string, p *parser) {
@@ -689,7 +708,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	if a, ok := nc.RemoteAddr().(*net.TCPAddr); ok {
 		remoteIP = a.IP
 	} else {
-		// For net.Pipe, during tests and for imapserve.
+		// For tests and for imapserve.
 		remoteIP = net.ParseIP("127.0.0.10")
 	}
 
@@ -751,7 +770,10 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		slog.String("listener", listenerName))
 
 	defer func() {
-		c.conn.Close()
+		err := c.conn.Close()
+		if err != nil {
+			c.log.Debugx("closing connection", err)
+		}
 
 		if c.account != nil {
 			c.comm.Unregister()
@@ -842,7 +864,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	var storeLoginAttempt bool
 	for {
 		c.command()
-		c.xflush() // For flushing errors, or possibly commands that did not flush explicitly.
+		c.xflush() // For flushing errors, or commands that did not flush explicitly.
 
 		// After an authentication command, we will have a c.loginAttempt. We typically get
 		// an "ID" command with the user-agent immediately after. So we wait for one more
@@ -1117,6 +1139,16 @@ func (c *conn) command() {
 			c.log.Debug("imap command done", logFields...)
 			result = "ok"
 			if x == cleanClose {
+				// If compression was enabled, we flush & close the deflate stream.
+				if c.compress {
+					// Note: Close and flush can Write and may panic with an i/o error.
+					if err := c.flateWriter.Close(); err != nil {
+						c.log.Debugx("close deflate writer", err)
+					} else if err := c.flateBW.Flush(); err != nil {
+						c.log.Debugx("flush deflate buffer", err)
+					}
+				}
+
 				panic(x)
 			}
 			return
@@ -1803,6 +1835,56 @@ func (c *conn) cmdID(tag, cmd string, p *parser) {
 	c.ok(tag, cmd)
 }
 
+// Compress enables compression on the connection. Deflate is the only algorithm
+// specified. TLS doesn't do compression nowadays, so we don't have to check for that.
+//
+// Status: Authenticated. The RFC doesn't mention this in prose, but the command is
+// added to ABNF production rule "command-auth".
+func (c *conn) cmdCompress(tag, cmd string, p *parser) {
+	// Command: ../rfc/4978:122
+
+	// Request syntax: ../rfc/4978:310
+	p.xspace()
+	alg := p.xatom()
+	p.xempty()
+
+	// Will do compression only once.
+	if c.compress {
+		// ../rfc/4978:143
+		xusercodeErrorf("COMPRESSIONACTIVE", "compression already active with previous compress command")
+	}
+	// ../rfc/4978:134
+	if !strings.EqualFold(alg, "deflate") {
+		xuserErrorf("compression algorithm not supported")
+	}
+
+	// We must flush now, before we initialize flate.
+	c.log.Debug("compression enabled")
+	c.ok(tag, cmd)
+
+	c.flateBW = bufio.NewWriter(c)
+	fw, err := flate.NewWriter(c.flateBW, flate.DefaultCompression)
+	xcheckf(err, "deflate") // Cannot happen.
+
+	c.compress = true
+	c.flateWriter = fw
+	c.tw = moxio.NewTraceWriter(c.log, "S: ", c.flateWriter)
+	c.bw = bufio.NewWriter(c.tw) // The previous c.bw will not have buffered data.
+
+	rc := xprefixConn(c.conn, c.br) // c.br may contain buffered data.
+	// We use the special partial reader. Some clients write commands and flush the
+	// buffer in "partial flush" mode instead of "sync flush" mode. The "sync flush"
+	// mode emits an explicit zero-length data block that triggers the Go stdlib flate
+	// reader to return data to us. It wouldn't for blocks written in "partial flush"
+	// mode, and it would block us indefinitely while trying to read another flate
+	// block. The partial reader returns data earlier, but still eagerly consumes all
+	// blocks in its buffer.
+	// todo: also _write_ in partial mode since it uses fewer bytes than a sync flush (which needs an additional 4 bytes for the zero-length data block). we need a writer that can flush in partial mode first. writing with sync flush will work with clients that themselves write with partial flush.
+	fr := flate.NewReaderPartial(rc)
+	c.tr = moxio.NewTraceReader(c.log, "C: ", fr)
+	c.br = bufio.NewReader(c.tr)
+}
+
 // STARTTLS enables TLS on the connection, after a plain text start.
 // Only allowed if TLS isn't already enabled, either through connecting to a
 // TLS-enabled TCP port, or a previous STARTTLS command.
@@ -1822,13 +1904,7 @@ func (c *conn) cmdStarttls(tag, cmd string, p *parser) {
 		xsyntaxErrorf("starttls not announced")
 	}
 
-	conn := c.conn
-	if n := c.br.Buffered(); n > 0 {
-		buf := make([]byte, n)
-		_, err := io.ReadFull(c.br, buf)
-		xcheckf(err, "reading buffered data for tls handshake")
-		conn = &prefixConn{buf, conn}
-	}
+	conn := xprefixConn(c.conn, c.br)
 	// We add the cid to facilitate debugging in case of TLS connection failure.
 	c.ok(tag, cmd+" ("+mox.ReceivedID(c.cid)+")")
 

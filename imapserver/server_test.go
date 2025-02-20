@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/mjl-/mox/imapclient"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -376,7 +378,23 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 		tcheck(t, err, "after init")
 	}
 
-	serverConn, clientConn := net.Pipe()
+	// We get actual sockets for their buffering behaviour. net.Pipe is synchronous,
+	// and the implementation of the compress extension can write a sync message to an
+	// imap client when that client isn't reading but is trying to write. In the real
+	// world, network buffer will take up those few bytes, so assume the buffer in the
+	// test too.
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
+	tcheck(t, err, "socketpair")
+	xfdconn := func(fd int, name string) net.Conn {
+		f := os.NewFile(uintptr(fd), name)
+		fc, err := net.FileConn(f)
+		tcheck(t, err, "fileconn")
+		err = f.Close()
+		tcheck(t, err, "close file for conn")
+		return fc
+	}
+	serverConn := xfdconn(fds[0], "server")
+	clientConn := xfdconn(fds[1], "client")
 
 	if serverConfig == nil {
 		serverConfig = &tls.Config{
@@ -391,8 +409,8 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 	}
 
 	done := make(chan struct{})
-	connCounter++
-	cid := connCounter
+	connCounter += 2
+	cid := connCounter - 1
 	go func() {
 		const viaHTTPS = false
 		serve("test", cid, serverConfig, serverConn, immediateTLS, allowLoginWithoutTLS, viaHTTPS, "")
@@ -401,7 +419,7 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 		}
 		close(done)
 	}()
-	client, err := imapclient.New(clientConn, true)
+	client, err := imapclient.New(connCounter, clientConn, true)
 	tcheck(t, err, "new client")
 	tc := &testconn{t: t, conn: clientConn, client: client, done: done, serverConn: serverConn, account: acc}
 	if first && noCloseSwitchboard {

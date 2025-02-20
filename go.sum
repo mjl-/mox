@@ -30,6 +30,8 @@ github.com/mjl-/autocert v0.0.0-20231214125928-31b7400acb05 h1:s6ay4bh4tmpPLdxjy
 github.com/mjl-/autocert v0.0.0-20231214125928-31b7400acb05/go.mod h1:taMFU86abMxKLPV4Bynhv8enbYmS67b8LG80qZv2Qus=
 github.com/mjl-/bstore v0.0.6 h1:ntlu9MkfCkpm2XfBY4+Ws4KK9YzXzewr3+lCueFB+9c=
 github.com/mjl-/bstore v0.0.6/go.mod h1:/cD25FNBaDfvL/plFRxI3Ba3E+wcB0XVOS8nJDqndg0=
+github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978 h1:Eg5DfI3/00URzGErujKus6a3O0kyXzF8vjoDZzH/gig=
+github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978/go.mod h1:QBkFtjai3AiQQuUu7pVh6PA06Vd3oa68E+vddf/UBOs=
 github.com/mjl-/sconf v0.0.7 h1:bdBcSFZCDFMm/UdBsgNCsjkYmKrSgYwp7rAOoufwHe4=
 github.com/mjl-/sconf v0.0.7/go.mod h1:uF8OdWtLT8La3i4ln176i1pB0ps9pXGCaABEU55ZkE0=
 github.com/mjl-/sherpa v0.6.7 h1:C5F8XQdV5nCuS4fvB+ye/ziUQrajEhOoj/t2w5T14BY=

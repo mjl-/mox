@@ -120,7 +120,7 @@ func FuzzServer(f *testing.F) {
 
 				err := clientConn.SetDeadline(time.Now().Add(time.Second))
 				flog(err, "set client deadline")
-				client, _ := imapclient.New(clientConn, true)
+				client, _ := imapclient.New(mox.Cid(), clientConn, true)
 
 				for _, cmd := range cmds {
 					client.Commandf("", "%s", cmd)

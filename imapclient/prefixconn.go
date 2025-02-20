@@ -1,7 +1,6 @@
-package imapserver
+package imapclient
 
 import (
-	"bufio"
 	"io"
 	"net"
 )
@@ -29,17 +28,17 @@ func (c *prefixConn) Read(buf []byte) (int, error) {
 	return c.Conn.Read(buf)
 }
 
-// xprefixConn returns either the original net.Conn passed as parameter, or returns
-// a *prefixConn returning the buffered data available in br followed data from the
-// net.Conn passed in.
-func xprefixConn(c net.Conn, br *bufio.Reader) net.Conn {
-	n := br.Buffered()
+// xprefixConn checks if there are any buffered unconsumed reads. If not, it
+// returns c.conn. Otherwise, it returns a *prefixConn from which the buffered data
+// can be read followed by data from c.conn.
+func (c *Conn) xprefixConn() net.Conn {
+	n := c.br.Buffered()
 	if n == 0 {
-		return c
+		return c.conn
 	}
 
 	buf := make([]byte, n)
-	_, err := io.ReadFull(c, buf)
-	xcheckf(err, "get buffered data")
-	return &prefixConn{buf, c}
+	_, err := io.ReadFull(c.br, buf)
+	c.xcheckf(err, "get buffered data")
+	return &prefixConn{buf, c.conn}
 }

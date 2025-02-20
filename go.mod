@@ -6,6 +6,7 @@ require (
 	github.com/mjl-/adns v0.0.0-20240509092456-2dc8715bf4af
 	github.com/mjl-/autocert v0.0.0-20231214125928-31b7400acb05
 	github.com/mjl-/bstore v0.0.6
+	github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978
 	github.com/mjl-/sconf v0.0.7
 	github.com/mjl-/sherpa v0.6.7
 	github.com/mjl-/sherpadoc v0.0.16
@@ -17,6 +18,7 @@ require (
 	golang.org/x/crypto v0.32.0
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
 	golang.org/x/net v0.34.0
+	golang.org/x/sys v0.29.0
 	golang.org/x/text v0.21.0
 	rsc.io/qr v0.2.0
 )
@@ -31,7 +33,6 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 )

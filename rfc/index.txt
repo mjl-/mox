@@ -189,7 +189,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 4551	Yes	Obs	(RFC 7162) IMAP Extension for Conditional STORE Operation or Quick Flag Changes Resynchronization
 4731	Yes	-	IMAP4 Extension to SEARCH Command for Controlling What Kind of Information Is Returned
 4959	Yes	-	IMAP Extension for Simple Authentication and Security Layer (SASL) Initial Client Response
-4978	Roadmap	-	The IMAP COMPRESS Extension
+4978	Yes	-	The IMAP COMPRESS Extension
 5032	Yes	-	WITHIN Search Extension to the IMAP Protocol
 5092	Roadmap	-	IMAP URL Scheme
 5161	Yes	-	The IMAP ENABLE Extension

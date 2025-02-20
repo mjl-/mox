@@ -64,7 +64,7 @@ func TestDeliver(t *testing.T) {
 		tcheck(t, err, "dial imap")
 		defer imapconn.Close()
 
-		imapc, err := imapclient.New(imapconn, false)
+		imapc, err := imapclient.New(mox.Cid(), imapconn, false)
 		tcheck(t, err, "new imapclient")
 
 		_, _, err = imapc.Login(imapuser, imappassword)

@@ -23,7 +23,7 @@ func (c *Conn) recordAdd(buf []byte) {
 
 func (c *Conn) xtake(s string) {
 	buf := make([]byte, len(s))
-	_, err := io.ReadFull(c.r, buf)
+	_, err := io.ReadFull(c.br, buf)
 	c.xcheckf(err, "taking %q", s)
 	if !strings.EqualFold(string(buf), s) {
 		c.xerrorf("got %q, expected %q", buf, s)
@@ -32,7 +32,7 @@ func (c *Conn) xtake(s string) {
 }
 
 func (c *Conn) readbyte() (byte, error) {
-	b, err := c.r.ReadByte()
+	b, err := c.br.ReadByte()
 	if err == nil {
 		c.recordAdd([]byte{b})
 	}
@@ -43,12 +43,12 @@ func (c *Conn) unreadbyte() {
 	if c.record {
 		c.recordBuf = c.recordBuf[:len(c.recordBuf)-1]
 	}
-	err := c.r.UnreadByte()
+	err := c.br.UnreadByte()
 	c.xcheckf(err, "unread byte")
 }
 
 func (c *Conn) readrune() (rune, error) {
-	x, _, err := c.r.ReadRune()
+	x, _, err := c.br.ReadRune()
 	if err == nil {
 		c.recordAdd([]byte(string(x)))
 	}
@@ -126,7 +126,8 @@ func (c *Conn) xrespText() RespText {
 var knownCodes = stringMap(
 	// Without parameters.
 	"ALERT", "PARSE", "READ-ONLY", "READ-WRITE", "TRYCREATE", "UIDNOTSTICKY", "UNAVAILABLE", "AUTHENTICATIONFAILED", "AUTHORIZATIONFAILED", "EXPIRED", "PRIVACYREQUIRED", "CONTACTADMIN", "NOPERM", "INUSE", "EXPUNGEISSUED", "CORRUPTION", "SERVERBUG", "CLIENTBUG", "CANNOT", "LIMIT", "OVERQUOTA", "ALREADYEXISTS", "NONEXISTENT", "NOTSAVED", "HASCHILDREN", "CLOSED", "UNKNOWN-CTE",
-	"OVERQUOTA", // ../rfc/9208:472
+	"OVERQUOTA",         // ../rfc/9208:472
+	"COMPRESSIONACTIVE", // ../rfc/4978:143
 	// With parameters.
 	"BADCHARSET", "CAPABILITY", "PERMANENTFLAGS", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "APPENDUID", "COPYUID",
 	"HIGHESTMODSEQ", "MODIFIED",
@@ -810,7 +811,7 @@ func (c *Conn) xatom() string {
 		b, err := c.readbyte()
 		c.xcheckf(err, "read byte for atom")
 		if b <= ' ' || strings.IndexByte("(){%*\"\\]", b) >= 0 {
-			c.r.UnreadByte()
+			c.br.UnreadByte()
 			if s == "" {
 				c.xerrorf("expected atom")
 			}
@@ -850,11 +851,12 @@ func (c *Conn) xliteral() []byte {
 		c.xerrorf("refusing to read more than 1MB: %d", size)
 	}
 	if sync {
-		_, err := fmt.Fprintf(c.conn, "+ ok\r\n")
+		_, err := fmt.Fprintf(c.bw, "+ ok\r\n")
 		c.xcheckf(err, "write continuation")
+		c.xflush()
 	}
 	buf := make([]byte, int(size))
-	_, err := io.ReadFull(c.r, buf)
+	_, err := io.ReadFull(c.br, buf)
 	c.xcheckf(err, "reading data for literal")
 	return buf
 }

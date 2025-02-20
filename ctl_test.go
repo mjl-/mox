@@ -522,7 +522,7 @@ func TestCtl(t *testing.T) {
 	testctl(func(ctl *ctl) {
 		a, b := net.Pipe()
 		go func() {
-			client, err := imapclient.New(a, true)
+			client, err := imapclient.New(mox.Cid(), a, true)
 			tcheck(t, err, "new imapclient")
 			client.Select("inbox")
 			client.Logout()

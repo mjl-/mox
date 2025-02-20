@@ -36,6 +36,7 @@ const (
 	CapMetadataServer   Capability = "METADATA-SERVER"    // ../rfc/5464:124
 	CapSaveDate         Capability = "SAVEDATE"           // ../rfc/8514
 	CapCreateSpecialUse Capability = "CREATE-SPECIAL-USE" // ../rfc/6154:296
+	CapCompressDeflate  Capability = "COMPRESS=DEFLATE"   // ../rfc/4978:65
 )
 
 // Status is the tagged final result of a command.
@@ -381,7 +382,7 @@ func (ns NumSet) String() string {
 }
 
 func ParseNumSet(s string) (ns NumSet, rerr error) {
-	c := Conn{r: bufio.NewReader(strings.NewReader(s))}
+	c := Conn{br: bufio.NewReader(strings.NewReader(s))}
 	defer c.recover(&rerr)
 	ns = c.xsequenceSet()
 	return

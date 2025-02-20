@@ -9,6 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mjl-/flate"
+
+	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/scram"
 )
 
@@ -39,11 +43,14 @@ func (c *Conn) Starttls(config *tls.Config) (untagged []Untagged, result Result,
 	defer c.recover(&rerr)
 	untagged, result, rerr = c.Transactf("starttls")
 	c.xcheckf(rerr, "starttls command")
-	conn := tls.Client(c.conn, config)
-	err := conn.Handshake()
+
+	conn := c.xprefixConn()
+	tlsConn := tls.Client(conn, config)
+	err := tlsConn.Handshake()
 	c.xcheckf(err, "tls handshake")
-	c.conn = conn
-	c.r = bufio.NewReader(conn)
+	c.conn = tlsConn
+	c.br = bufio.NewReader(moxio.NewTraceReader(c.log, "CR: ", tlsConn))
+	c.bw = bufio.NewWriter(moxio.NewTraceWriter(c.log, "CW: ", c))
 	return untagged, result, nil
 }
 
@@ -114,6 +121,38 @@ func (c *Conn) AuthenticateSCRAM(method string, h func() hash.Hash, username, pa
 	c.xcheckf(err, "scram client end")
 
 	return c.ResponseOK()
+}
+
+// CompressDeflate enables compression with deflate on the connection.
+//
+// Only possible when server has announced the COMPRESS=DEFLATE capability.
+//
+// State: Authenticated or selected.
+func (c *Conn) CompressDeflate() (untagged []Untagged, result Result, rerr error) {
+	defer c.recover(&rerr)
+
+	if _, ok := c.CapAvailable[CapCompressDeflate]; !ok {
+		c.xerrorf("server does not implement capability %s", CapCompressDeflate)
+	}
+
+	untagged, result, rerr = c.Transactf("compress deflate")
+	c.xcheck(rerr)
+
+	c.flateBW = bufio.NewWriter(c)
+	fw, err := flate.NewWriter(c.flateBW, flate.DefaultCompression)
+	c.xcheckf(err, "deflate") // Cannot happen.
+
+	c.compress = true
+	c.flateWriter = fw
+	tw := moxio.NewTraceWriter(mlog.New("imapclient", nil), "CW: ", fw)
+	c.bw = bufio.NewWriter(tw)
+
+	rc := c.xprefixConn()
+	fr := flate.NewReaderPartial(rc)
+	tr := moxio.NewTraceReader(mlog.New("imapclient", nil), "CR: ", fr)
+	c.br = bufio.NewReader(tr)
+
+	return
 }
 
 // Enable enables capabilities for use with the connection, verifying the server has indeed enabled them.
