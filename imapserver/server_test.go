@@ -350,6 +350,17 @@ func startArgs(t *testing.T, first, immediateTLS bool, allowLoginWithoutTLS, set
 	return startArgsMore(t, first, immediateTLS, nil, nil, allowLoginWithoutTLS, false, setPassword, accname, nil)
 }
 
+// namedConn wraps a conn so it can return a RemoteAddr with a non-empty name.
+// The TLS resumption test needs a non-empty name, but on BSDs, the unix domain
+// socket pair has an empty peer name.
+type namedConn struct {
+	net.Conn
+}
+
+func (c namedConn) RemoteAddr() net.Addr {
+	return &net.TCPAddr{IP: net.ParseIP("127.0.0.10"), Port: 1234}
+}
+
 // todo: the parameters and usage are too much now. change to scheme similar to smtpserver, with params in a struct, and a separate method for init and making a connection.
 func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientConfig *tls.Config, allowLoginWithoutTLS, noCloseSwitchboard, setPassword bool, accname string, afterInit func() error) *testconn {
 	limitersInit() // Reset rate limiters.
@@ -391,7 +402,7 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 		tcheck(t, err, "fileconn")
 		err = f.Close()
 		tcheck(t, err, "close file for conn")
-		return fc
+		return namedConn{fc}
 	}
 	serverConn := xfdconn(fds[0], "server")
 	clientConn := xfdconn(fds[1], "client")
