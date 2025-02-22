@@ -1303,7 +1303,7 @@ func (Webmail) MailboxEmpty(ctx context.Context, mailboxID int64) {
 			xcheckf(ctx, err, "deleting messages")
 
 			if n == 0 {
-				xcheckf(ctx, errors.New("no messages in mailbox"), "emptying mailbox")
+				xcheckuserf(ctx, errors.New("no messages in mailbox"), "emptying mailbox")
 			}
 
 			mb.ModSeq = modseq
