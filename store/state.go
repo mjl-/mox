@@ -61,12 +61,14 @@ type ChangeThread struct {
 type ChangeRemoveMailbox struct {
 	MailboxID int64
 	Name      string
+	ModSeq    ModSeq
 }
 
 // ChangeAddMailbox is sent for a newly created mailbox.
 type ChangeAddMailbox struct {
 	Mailbox Mailbox
 	Flags   []string // For flags like \Subscribed.
+	ModSeq  ModSeq
 }
 
 // ChangeRenameMailbox is sent for a rename mailbox.
@@ -75,6 +77,7 @@ type ChangeRenameMailbox struct {
 	OldName   string
 	NewName   string
 	Flags     []string
+	ModSeq    ModSeq
 }
 
 // ChangeAddSubscription is sent for an added subscription to a mailbox.
@@ -95,6 +98,7 @@ type ChangeMailboxSpecialUse struct {
 	MailboxID   int64
 	MailboxName string
 	SpecialUse  SpecialUse
+	ModSeq      ModSeq
 }
 
 // ChangeMailboxKeywords is sent when keywords are changed for a mailbox. For
@@ -111,6 +115,7 @@ type ChangeAnnotation struct {
 	MailboxID   int64  // Can be zero, meaning global (per-account) annotation.
 	MailboxName string // Empty for global (per-account) annotation.
 	Key         string // Also called "entry name", e.g. "/private/comment".
+	ModSeq      ModSeq
 }
 
 var switchboardBusy atomic.Bool

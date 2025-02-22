@@ -232,6 +232,7 @@ func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
 	// Store the annotations, possibly removing/inserting/updating them.
 	c.account.WithWLock(func() {
 		var changes []store.Change
+		var modseq store.ModSeq
 
 		c.xdbwrite(func(tx *bstore.Tx) {
 			var mb store.Mailbox // mb.ID as 0 is used in query below.
@@ -256,7 +257,15 @@ func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
 					continue
 				}
 
+				if modseq == 0 {
+					var err error
+					modseq, err = c.account.NextModSeq(tx)
+					xcheckf(err, "get next modseq")
+				}
+
 				a.MailboxID = mb.ID
+				a.ModSeq = modseq
+				a.CreateSeq = modseq
 
 				oa, err := q.Get()
 				if err == bstore.ErrAbsent {
@@ -266,9 +275,7 @@ func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
 					continue
 				}
 				xcheckf(err, "looking up existing annotation for entry name")
-				if oa.IsString != a.IsString || (oa.Value == nil) != (a.Value == nil) || !bytes.Equal(oa.Value, a.Value) {
-					changes = append(changes, a.Change(mailboxName))
-				}
+				changes = append(changes, a.Change(mailboxName))
 				oa.Value = a.Value
 				err = tx.Update(&oa)
 				xcheckf(err, "updating metadata annotation")
@@ -293,6 +300,13 @@ func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
 				return nil
 			})
 			xcheckf(err, "checking metadata annotation size")
+
+			// ../rfc/7162:1335
+			if mb.ID != 0 && modseq != 0 {
+				mb.ModSeq = modseq
+				err := tx.Update(&mb)
+				xcheckf(err, "updating mailbox with modseq")
+			}
 		})
 
 		c.broadcast(changes)

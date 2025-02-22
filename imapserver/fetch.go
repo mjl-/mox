@@ -238,8 +238,9 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 		}
 
 		var zeromc store.MailboxCounts
-		if cmd.deltaCounts != zeromc {
+		if cmd.deltaCounts != zeromc || cmd.modseq != 0 {
 			mb.Add(cmd.deltaCounts) // Unseen/Unread will be <= 0.
+			mb.ModSeq = cmd.modseq
 			err := tx.Update(&mb)
 			xcheckf(err, "updating mailbox counts")
 			cmd.changes = append(cmd.changes, mb.ChangeCounts())

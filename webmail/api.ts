@@ -197,6 +197,8 @@ export interface Mailbox {
 	Sent: boolean
 	Trash: boolean
 	Keywords?: string[] | null  // Keywords as used in messages. Storing a non-system keyword for a message automatically adds it to this list. Used in the IMAP FLAGS response. Only "atoms" are allowed (IMAP syntax), keywords are case-insensitive, only stored in lower case (for JMAP), sorted.
+	ModSeq: ModSeq  // ModSeq matches that of last message (including deleted), or changes to mailbox such as after metadata changes.
+	CreateSeq: ModSeq
 	HaveCounts: boolean  // Whether MailboxCounts have been initialized.
 	Total: number  // Total number of messages, excluding \Deleted. For JMAP.
 	Deleted: number  // Number of messages with \Deleted flag. Used for IMAP message count that includes messages with \Deleted.
@@ -460,6 +462,7 @@ export interface ChangeMsgThread {
 export interface ChangeMailboxRemove {
 	MailboxID: number
 	Name: string
+	ModSeq: ModSeq
 }
 
 // ChangeMailboxAdd indicates a new mailbox was added, initially without any messages.
@@ -474,6 +477,7 @@ export interface ChangeMailboxRename {
 	OldName: string
 	NewName: string
 	Flags?: string[] | null
+	ModSeq: ModSeq
 }
 
 // ChangeMailboxCounts set new total and unseen message counts for a mailbox.
@@ -492,6 +496,7 @@ export interface ChangeMailboxSpecialUse {
 	MailboxID: number
 	MailboxName: string
 	SpecialUse: SpecialUse
+	ModSeq: ModSeq
 }
 
 // SpecialUse identifies a specific role for a mailbox, used by clients to
@@ -608,7 +613,7 @@ export const types: TypenameMap = {
 	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureRelease","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"ArchiveThread","Docs":"","Typewords":["bool"]},{"Name":"ArchiveReferenceMailboxID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
 	"File": {"Name":"File","Docs":"","Fields":[{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"DataURI","Docs":"","Typewords":["string"]}]},
 	"ForwardAttachments": {"Name":"ForwardAttachments","Docs":"","Fields":[{"Name":"MessageID","Docs":"","Typewords":["int64"]},{"Name":"Paths","Docs":"","Typewords":["[]","[]","int32"]}]},
-	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
+	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"CreateSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
 	"RecipientSecurity": {"Name":"RecipientSecurity","Docs":"","Fields":[{"Name":"STARTTLS","Docs":"","Typewords":["SecurityResult"]},{"Name":"MTASTS","Docs":"","Typewords":["SecurityResult"]},{"Name":"DNSSEC","Docs":"","Typewords":["SecurityResult"]},{"Name":"DANE","Docs":"","Typewords":["SecurityResult"]},{"Name":"RequireTLS","Docs":"","Typewords":["SecurityResult"]}]},
 	"Settings": {"Name":"Settings","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["uint8"]},{"Name":"Signature","Docs":"","Typewords":["string"]},{"Name":"Quoting","Docs":"","Typewords":["Quoting"]},{"Name":"ShowAddressSecurity","Docs":"","Typewords":["bool"]},{"Name":"ShowHTML","Docs":"","Typewords":["bool"]},{"Name":"NoShowShortcuts","Docs":"","Typewords":["bool"]},{"Name":"ShowHeaders","Docs":"","Typewords":["[]","string"]}]},
 	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"MsgFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Comment","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
@@ -627,11 +632,11 @@ export const types: TypenameMap = {
 	"ChangeMsgRemove": {"Name":"ChangeMsgRemove","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UIDs","Docs":"","Typewords":["[]","UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]}]},
 	"ChangeMsgFlags": {"Name":"ChangeMsgFlags","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Mask","Docs":"","Typewords":["Flags"]},{"Name":"Flags","Docs":"","Typewords":["Flags"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]}]},
 	"ChangeMsgThread": {"Name":"ChangeMsgThread","Docs":"","Fields":[{"Name":"MessageIDs","Docs":"","Typewords":["[]","int64"]},{"Name":"Muted","Docs":"","Typewords":["bool"]},{"Name":"Collapsed","Docs":"","Typewords":["bool"]}]},
-	"ChangeMailboxRemove": {"Name":"ChangeMailboxRemove","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]}]},
+	"ChangeMailboxRemove": {"Name":"ChangeMailboxRemove","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]}]},
 	"ChangeMailboxAdd": {"Name":"ChangeMailboxAdd","Docs":"","Fields":[{"Name":"Mailbox","Docs":"","Typewords":["Mailbox"]}]},
-	"ChangeMailboxRename": {"Name":"ChangeMailboxRename","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"OldName","Docs":"","Typewords":["string"]},{"Name":"NewName","Docs":"","Typewords":["string"]},{"Name":"Flags","Docs":"","Typewords":["[]","string"]}]},
+	"ChangeMailboxRename": {"Name":"ChangeMailboxRename","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"OldName","Docs":"","Typewords":["string"]},{"Name":"NewName","Docs":"","Typewords":["string"]},{"Name":"Flags","Docs":"","Typewords":["[]","string"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]}]},
 	"ChangeMailboxCounts": {"Name":"ChangeMailboxCounts","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
-	"ChangeMailboxSpecialUse": {"Name":"ChangeMailboxSpecialUse","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"SpecialUse","Docs":"","Typewords":["SpecialUse"]}]},
+	"ChangeMailboxSpecialUse": {"Name":"ChangeMailboxSpecialUse","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"SpecialUse","Docs":"","Typewords":["SpecialUse"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]}]},
 	"SpecialUse": {"Name":"SpecialUse","Docs":"","Fields":[{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]}]},
 	"ChangeMailboxKeywords": {"Name":"ChangeMailboxKeywords","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]}]},
 	"UID": {"Name":"UID","Docs":"","Values":null},

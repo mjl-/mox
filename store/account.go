@@ -212,6 +212,11 @@ type Mailbox struct {
 	// lower case (for JMAP), sorted.
 	Keywords []string
 
+	// ModSeq matches that of last message (including deleted), or changes
+	// to mailbox such as after metadata changes.
+	ModSeq    ModSeq
+	CreateSeq ModSeq
+
 	HaveCounts    bool // Whether MailboxCounts have been initialized.
 	MailboxCounts      // Statistics about messages, kept up to date whenever a change happens.
 }
@@ -230,11 +235,14 @@ type Annotation struct {
 
 	IsString bool // If true, the value is a string instead of bytes.
 	Value    []byte
+
+	ModSeq    ModSeq
+	CreateSeq ModSeq
 }
 
 // Change returns a broadcastable change for the annotation.
 func (a Annotation) Change(mailboxName string) ChangeAnnotation {
-	return ChangeAnnotation{a.MailboxID, mailboxName, a.Key}
+	return ChangeAnnotation{a.MailboxID, mailboxName, a.Key, a.ModSeq}
 }
 
 // MailboxCounts tracks statistics about messages for a mailbox.
@@ -293,7 +301,7 @@ func (mb *Mailbox) CalculateCounts(tx *bstore.Tx) (mc MailboxCounts, err error) 
 // ChangeSpecialUse returns a change for special-use flags, for broadcasting to
 // other connections.
 func (mb Mailbox) ChangeSpecialUse() ChangeMailboxSpecialUse {
-	return ChangeMailboxSpecialUse{mb.ID, mb.Name, mb.SpecialUse}
+	return ChangeMailboxSpecialUse{mb.ID, mb.Name, mb.SpecialUse, mb.ModSeq}
 }
 
 // ChangeKeywords returns a change with new keywords for a mailbox (e.g. after
@@ -872,8 +880,16 @@ type Account struct {
 }
 
 type Upgrade struct {
-	ID      byte
-	Threads byte // 0: None, 1: Adding MessageID's completed, 2: Adding ThreadID's completed.
+	ID            byte
+	Threads       byte // 0: None, 1: Adding MessageID's completed, 2: Adding ThreadID's completed.
+	MailboxModSeq bool // Whether mailboxes have been assigned modseqs.
+}
+
+// upgradeInit is the value to for new account database, that don't need any upgrading.
+var upgradeInit = Upgrade{
+	ID:            1, // Singleton.
+	Threads:       2,
+	MailboxModSeq: true,
 }
 
 // InitialUIDValidity returns a UIDValidity used for initializing an account.
@@ -1039,6 +1055,56 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 	if err != nil {
 		return nil, fmt.Errorf("checking message threading: %v", err)
 	}
+
+	// Ensure all mailboxes have a modseq based on highest modseq message in each
+	// mailbox, and a creatseq.
+	if !up.MailboxModSeq {
+		log.Debug("upgrade: adding modseq to each mailbox")
+		err := acc.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
+			var modseq ModSeq
+
+			mbl, err := bstore.QueryTx[Mailbox](tx).List()
+			if err != nil {
+				return fmt.Errorf("listing mailboxes: %v", err)
+			}
+			for _, mb := range mbl {
+				// Get current highest modseq of message in account.
+				qms := bstore.QueryTx[Message](tx)
+				qms.FilterNonzero(Message{MailboxID: mb.ID})
+				qms.SortDesc("ModSeq")
+				qms.Limit(1)
+				m, err := qms.Get()
+				if err == nil {
+					mb.ModSeq = ModSeq(m.ModSeq.Client())
+				} else if err == bstore.ErrAbsent {
+					if modseq == 0 {
+						modseq, err = acc.NextModSeq(tx)
+						if err != nil {
+							return fmt.Errorf("get next mod seq for mailbox without messages: %v", err)
+						}
+					}
+					mb.ModSeq = modseq
+				} else {
+					return fmt.Errorf("looking up highest modseq for mailbox: %v", err)
+				}
+				mb.CreateSeq = 1
+				if err := tx.Update(&mb); err != nil {
+					return fmt.Errorf("updating mailbox with modseq: %v", err)
+				}
+			}
+
+			up.MailboxModSeq = true
+			if err := tx.Update(&up); err != nil {
+				return fmt.Errorf("marking upgrade done: %v", err)
+			}
+
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("upgrade: adding modseq to each mailbox: %v", err)
+		}
+	}
+
 	if up.Threads == 2 {
 		close(acc.threadsCompleted)
 		return acc, nil
@@ -1072,7 +1138,7 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 			}
 		}()
 
-		err := upgradeThreads(mox.Shutdown, log, acc, &up)
+		err := upgradeThreads(mox.Shutdown, log, acc, up)
 		if err != nil {
 			a.threadsErr = err
 			log.Errorx("upgrading account for threading, aborted", err, slog.String("account", a.Name))
@@ -1103,7 +1169,7 @@ func initAccount(db *bstore.DB) error {
 	return db.Write(context.TODO(), func(tx *bstore.Tx) error {
 		uidvalidity := InitialUIDValidity()
 
-		if err := tx.Insert(&Upgrade{ID: 1, Threads: 2}); err != nil {
+		if err := tx.Insert(&upgradeInit); err != nil {
 			return err
 		}
 		if err := tx.Insert(&DiskUsage{ID: 1}); err != nil {
@@ -1111,6 +1177,11 @@ func initAccount(db *bstore.DB) error {
 		}
 		if err := tx.Insert(&Settings{ID: 1}); err != nil {
 			return err
+		}
+
+		modseq, err := nextModSeq(tx)
+		if err != nil {
+			return fmt.Errorf("get next modseq: %v", err)
 		}
 
 		if len(mox.Conf.Static.DefaultMailboxes) > 0 {
@@ -1124,7 +1195,7 @@ func initAccount(db *bstore.DB) error {
 				mailboxes = append(mailboxes, name)
 			}
 			for _, name := range mailboxes {
-				mb := Mailbox{Name: name, UIDValidity: uidvalidity, UIDNext: 1, HaveCounts: true}
+				mb := Mailbox{Name: name, UIDValidity: uidvalidity, UIDNext: 1, ModSeq: modseq, CreateSeq: modseq, HaveCounts: true}
 				if strings.HasPrefix(name, "Archive") {
 					mb.Archive = true
 				} else if strings.HasPrefix(name, "Drafts") {
@@ -1151,7 +1222,7 @@ func initAccount(db *bstore.DB) error {
 			}
 
 			add := func(name string, use SpecialUse) error {
-				mb := Mailbox{Name: name, UIDValidity: uidvalidity, UIDNext: 1, SpecialUse: use, HaveCounts: true}
+				mb := Mailbox{Name: name, UIDValidity: uidvalidity, UIDNext: 1, SpecialUse: use, ModSeq: modseq, CreateSeq: modseq, HaveCounts: true}
 				if err := tx.Insert(&mb); err != nil {
 					return fmt.Errorf("creating mailbox: %w", err)
 				}
@@ -1230,8 +1301,10 @@ func (a *Account) Close() error {
 // - Incorrect total message size.
 // - Message with UID >= mailbox uid next.
 // - Mailbox uidvalidity >= account uid validity.
-// - ModSeq > 0, CreateSeq > 0, CreateSeq <= ModSeq.
+// - Mailbox ModSeq > 0, CreateSeq > 0, CreateSeq <= ModSeq, and Modseq >= highest message ModSeq.
+// - Message ModSeq > 0, CreateSeq > 0, CreateSeq <= ModSeq.
 // - All messages have a nonzero ThreadID, and no cycles in ThreadParentID, and parent messages the same ThreadParentIDs tail.
+// - Annotations must have ModSeq > 0, CreateSeq > 0, ModSeq >= CreateSeq.
 func (a *Account) CheckConsistency() error {
 	var uidErrors []string            // With a limit, could be many.
 	var modseqErrors []string         // With limit.
@@ -1256,10 +1329,39 @@ func (a *Account) CheckConsistency() error {
 				errmsg := fmt.Sprintf("mailbox %q (id %d) has uidvalidity %d >= account next uidvalidity %d", mb.Name, mb.ID, mb.UIDValidity, nuv.Next)
 				errors = append(errors, errmsg)
 			}
+
+			if mb.ModSeq == 0 || mb.CreateSeq == 0 || mb.CreateSeq > mb.ModSeq {
+				errmsg := fmt.Sprintf("mailbox %q (id %d) has invalid modseq %d or createseq %d, both must be > 0 and createseq <= modseq", mb.Name, mb.ID, mb.ModSeq, mb.CreateSeq)
+				errors = append(errors, errmsg)
+				return nil
+			}
+			m, err := bstore.QueryTx[Message](tx).FilterNonzero(Message{MailboxID: mb.ID}).SortDesc("ModSeq").Limit(1).Get()
+			if err == bstore.ErrAbsent {
+				return nil
+			} else if err != nil {
+				return fmt.Errorf("get message with highest modseq for mailbox: %v", err)
+			} else if mb.ModSeq < m.ModSeq {
+				errmsg := fmt.Sprintf("mailbox %q (id %d) has modseq %d < highest message modseq is %d", mb.Name, mb.ID, mb.ModSeq, m.ModSeq)
+				errors = append(errors, errmsg)
+			}
 			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("listing mailboxes: %v", err)
+			return fmt.Errorf("checking mailboxes: %v", err)
+		}
+
+		err = bstore.QueryTx[Annotation](tx).ForEach(func(a Annotation) error {
+			if a.ModSeq == 0 || a.CreateSeq == 0 || a.CreateSeq > a.ModSeq {
+				errmsg := fmt.Sprintf("annotation %d in mailbox %q (id %d) has invalid modseq %d or createseq %d, both must be > 0 and modseq >= createseq", a.ID, mailboxes[a.MailboxID].Name, a.MailboxID, a.ModSeq, a.CreateSeq)
+				errors = append(errors, errmsg)
+			} else if a.MailboxID > 0 && mailboxes[a.MailboxID].ModSeq < a.ModSeq {
+				errmsg := fmt.Sprintf("annotation %d in mailbox %q (id %d) has invalid modseq %d > mailbox modseq %d", a.ID, mailboxes[a.MailboxID].Name, a.MailboxID, a.ModSeq, mailboxes[a.MailboxID].ModSeq)
+				errors = append(errors, errmsg)
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("checking mailbox annotations: %v", err)
 		}
 
 		counts := map[int64]MailboxCounts{}
@@ -1379,6 +1481,10 @@ func (a *Account) NextUIDValidity(tx *bstore.Tx) (uint32, error) {
 // NextModSeq returns the next modification sequence, which is global per account,
 // over all types.
 func (a *Account) NextModSeq(tx *bstore.Tx) (ModSeq, error) {
+	return nextModSeq(tx)
+}
+
+func nextModSeq(tx *bstore.Tx) (ModSeq, error) {
 	v := SyncState{ID: 1}
 	if err := tx.Get(&v); err == bstore.ErrAbsent {
 		// We start assigning from modseq 2. Modseq 0 is not usable, so returned as 1, so
@@ -1453,6 +1559,17 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 	}
 	m.UID = mb.UIDNext
 	mb.UIDNext++
+	if m.CreateSeq == 0 || m.ModSeq == 0 {
+		modseq, err := a.NextModSeq(tx)
+		if err != nil {
+			return fmt.Errorf("assigning next modseq: %w", err)
+		}
+		m.CreateSeq = modseq
+		m.ModSeq = modseq
+	} else if m.ModSeq < mb.ModSeq {
+		return fmt.Errorf("cannot deliver message with modseq %d < mailbox modseq %d", m.ModSeq, mb.ModSeq)
+	}
+	mb.ModSeq = m.ModSeq
 	if err := tx.Update(&mb); err != nil {
 		return fmt.Errorf("updating mailbox nextuid: %w", err)
 	}
@@ -1497,14 +1614,6 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 	// If we are delivering to the originally intended mailbox, no need to store the mailbox ID again.
 	if m.MailboxDestinedID != 0 && m.MailboxDestinedID == m.MailboxOrigID {
 		m.MailboxDestinedID = 0
-	}
-	if m.CreateSeq == 0 || m.ModSeq == 0 {
-		modseq, err := a.NextModSeq(tx)
-		if err != nil {
-			return fmt.Errorf("assigning next modseq: %w", err)
-		}
-		m.CreateSeq = modseq
-		m.ModSeq = modseq
 	}
 
 	if part != nil && m.MessageID == "" && m.SubjectBase == "" {
@@ -1733,9 +1842,11 @@ func (a *Account) Subjectpass(email string) (key string, err error) {
 // The leaf mailbox is created with special-use flags, taking the flags away from
 // other mailboxes, and reflecting that in the returned changes.
 //
+// Modseq is used, and initialized if 0, for created mailboxes.
+//
 // Caller must hold account wlock.
 // Caller must propagate changes if any.
-func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool, specialUse SpecialUse) (mb Mailbox, changes []Change, rerr error) {
+func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool, specialUse SpecialUse, modseq *ModSeq) (mb Mailbox, changes []Change, rerr error) {
 	if norm.NFC.String(name) != name {
 		return Mailbox{}, nil, fmt.Errorf("mailbox name not normalized")
 	}
@@ -1775,10 +1886,18 @@ func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool, spec
 		if err != nil {
 			return Mailbox{}, nil, fmt.Errorf("next uid validity: %v", err)
 		}
+		if *modseq == 0 {
+			*modseq, err = a.NextModSeq(tx)
+			if err != nil {
+				return Mailbox{}, nil, fmt.Errorf("next modseq: %v", err)
+			}
+		}
 		mb = Mailbox{
 			Name:        p,
 			UIDValidity: uidval,
 			UIDNext:     1,
+			ModSeq:      *modseq,
+			CreateSeq:   *modseq,
 			HaveCounts:  true,
 		}
 		err = tx.Insert(&mb)
@@ -1796,7 +1915,7 @@ func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool, spec
 			}
 			flags = []string{`\Subscribed`}
 		}
-		changes = append(changes, ChangeAddMailbox{mb, flags})
+		changes = append(changes, ChangeAddMailbox{mb, flags, *modseq})
 	}
 
 	// Clear any special-use flags from existing mailboxes and assign them to this mailbox.
@@ -1820,10 +1939,11 @@ func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool, spec
 			}
 			p := fn(&xmb)
 			*p = false
+			xmb.ModSeq = *modseq
 			if err := tx.Update(&xmb); err != nil {
 				qerr = fmt.Errorf("clearing special-use flag: %v", err)
 			} else {
-				changes = append(changes, ChangeMailboxSpecialUse{xmb.ID, xmb.Name, xmb.SpecialUse})
+				changes = append(changes, xmb.ChangeSpecialUse())
 			}
 		}
 		clearSpecialUse(specialUse.Archive, func(xmb *Mailbox) *bool { return &xmb.Archive })
@@ -1836,10 +1956,11 @@ func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool, spec
 		}
 
 		mb.SpecialUse = specialUse
+		mb.ModSeq = *modseq
 		if err := tx.Update(&mb); err != nil {
 			return Mailbox{}, nil, fmt.Errorf("setting special-use flag for new mailbox: %v", err)
 		}
-		changes = append(changes, ChangeMailboxSpecialUse{mb.ID, mb.Name, mb.SpecialUse})
+		changes = append(changes, mb.ChangeSpecialUse())
 	}
 	return mb, changes, nil
 }
@@ -2015,12 +2136,17 @@ func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFi
 			return ErrOverQuota
 		}
 
-		mb, chl, err := a.MailboxEnsure(tx, mailbox, true, SpecialUse{})
+		modseq := m.ModSeq
+		mb, chl, err := a.MailboxEnsure(tx, mailbox, true, SpecialUse{}, &modseq)
 		if err != nil {
 			return fmt.Errorf("ensuring mailbox: %w", err)
 		}
 		m.MailboxID = mb.ID
 		m.MailboxOrigID = mb.ID
+		if m.ModSeq == 0 && modseq != 0 {
+			m.ModSeq = modseq
+			m.CreateSeq = modseq
+		}
 
 		// Update count early, DeliverMessage will update mb too and we don't want to fetch
 		// it again before updating.
@@ -2136,6 +2262,7 @@ func (a *Account) rejectsRemoveMessages(ctx context.Context, log mlog.Log, tx *b
 	if err != nil {
 		return nil, fmt.Errorf("assign next modseq: %w", err)
 	}
+	mb.ModSeq = modseq
 
 	// Expunge the messages.
 	qx := bstore.QueryTx[Message](tx)
@@ -2655,6 +2782,7 @@ func (a *Account) SendLimitReached(tx *bstore.Tx, recipients []smtp.Path) (msgli
 func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUse) (changes []Change, created []string, exists bool, rerr error) {
 	elems := strings.Split(name, "/")
 	var p string
+	var modseq ModSeq
 	for i, elem := range elems {
 		if i > 0 {
 			p += "/"
@@ -2670,7 +2798,7 @@ func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUs
 			}
 			continue
 		}
-		_, nchanges, err := a.MailboxEnsure(tx, p, true, specialUse)
+		_, nchanges, err := a.MailboxEnsure(tx, p, true, specialUse, &modseq)
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("ensuring mailbox exists: %v", err)
 		}
@@ -2684,7 +2812,7 @@ func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUs
 // destination, and any children of mbsrc and the destination.
 //
 // Names must be normalized and cannot be Inbox.
-func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc Mailbox, dst string) (changes []Change, isInbox, notExists, alreadyExists bool, rerr error) {
+func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc Mailbox, dst string, modseq *ModSeq) (changes []Change, isInbox, notExists, alreadyExists bool, rerr error) {
 	if mbsrc.Name == "Inbox" || dst == "Inbox" {
 		return nil, true, false, false, fmt.Errorf("inbox cannot be renamed")
 	}
@@ -2716,6 +2844,12 @@ func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc Mailbox, dst string) (chang
 	if err != nil {
 		return nil, false, false, false, fmt.Errorf("next uid validity: %v", err)
 	}
+	if *modseq == 0 {
+		*modseq, err = a.NextModSeq(tx)
+		if err != nil {
+			return nil, false, false, false, fmt.Errorf("get next modseq: %v", err)
+		}
+	}
 
 	// Ensure parent mailboxes for the destination paths exist.
 	var parent string
@@ -2730,12 +2864,15 @@ func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc Mailbox, dst string) (chang
 		if ok {
 			continue
 		}
+
 		omb := mb
 		mb = Mailbox{
 			ID:          omb.ID,
 			Name:        parent,
 			UIDValidity: uidval,
 			UIDNext:     1,
+			ModSeq:      *modseq,
+			CreateSeq:   *modseq,
 			HaveCounts:  true,
 		}
 		if err := tx.Insert(&mb); err != nil {
@@ -2746,7 +2883,7 @@ func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc Mailbox, dst string) (chang
 				return nil, false, false, false, fmt.Errorf("creating subscription for %q: %v", parent, err)
 			}
 		}
-		changes = append(changes, ChangeAddMailbox{Mailbox: mb, Flags: []string{`\Subscribed`}})
+		changes = append(changes, ChangeAddMailbox{mb, []string{`\Subscribed`}, *modseq})
 	}
 
 	// Process src mailboxes, renaming them to dst.
@@ -2762,6 +2899,7 @@ func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc Mailbox, dst string) (chang
 
 		srcmb.Name = dstName
 		srcmb.UIDValidity = uidval
+		srcmb.ModSeq = *modseq
 		if err := tx.Update(&srcmb); err != nil {
 			return nil, false, false, false, fmt.Errorf("renaming mailbox: %v", err)
 		}
@@ -2770,7 +2908,7 @@ func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc Mailbox, dst string) (chang
 		if tx.Get(&Subscription{Name: dstName}) == nil {
 			dstFlags = []string{`\Subscribed`}
 		}
-		changes = append(changes, ChangeRenameMailbox{MailboxID: srcmb.ID, OldName: srcName, NewName: dstName, Flags: dstFlags})
+		changes = append(changes, ChangeRenameMailbox{srcmb.ID, srcName, dstName, dstFlags, *modseq})
 	}
 
 	// If we renamed e.g. a/b to a/b/c/d, and a/b/c to a/b/c/d/c, we'll have to recreate a/b and a/b/c.
@@ -2781,6 +2919,8 @@ func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc Mailbox, dst string) (chang
 			UIDValidity: uidval,
 			UIDNext:     1,
 			Name:        xsrc,
+			ModSeq:      *modseq,
+			CreateSeq:   *modseq,
 			HaveCounts:  true,
 		}
 		if err := tx.Insert(&mb); err != nil {
@@ -2810,6 +2950,11 @@ func (a *Account) MailboxDelete(ctx context.Context, log mlog.Log, tx *bstore.Tx
 	}
 
 	// todo jmap: instead of completely deleting a mailbox and its messages, we need to mark them all as expunged.
+
+	modseq, err := a.NextModSeq(tx)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("get next modseq: %v", err)
+	}
 
 	qm := bstore.QueryTx[Message](tx)
 	qm.FilterNonzero(Message{MailboxID: mailbox.ID})
@@ -2873,7 +3018,7 @@ func (a *Account) MailboxDelete(ctx context.Context, log mlog.Log, tx *bstore.Tx
 	if err := tx.Delete(&Mailbox{ID: mailbox.ID}); err != nil {
 		return nil, nil, false, fmt.Errorf("removing mailbox: %v", err)
 	}
-	return []Change{ChangeRemoveMailbox{MailboxID: mailbox.ID, Name: mailbox.Name}}, removeMessageIDs, false, nil
+	return []Change{ChangeRemoveMailbox{mailbox.ID, mailbox.Name, modseq}}, removeMessageIDs, false, nil
 }
 
 // CheckMailboxName checks if name is valid, returning an INBOX-normalized name.

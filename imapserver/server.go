@@ -674,19 +674,6 @@ func (c *conn) xreadliteral(size int64, sync bool) []byte {
 	return buf
 }
 
-func (c *conn) xhighestModSeq(tx *bstore.Tx, mailboxID int64) store.ModSeq {
-	qms := bstore.QueryTx[store.Message](tx)
-	qms.FilterNonzero(store.Message{MailboxID: mailboxID})
-	qms.SortDesc("ModSeq")
-	qms.Limit(1)
-	m, err := qms.Get()
-	if err == bstore.ErrAbsent {
-		return store.ModSeq(0)
-	}
-	xcheckf(err, "looking up highest modseq for mailbox")
-	return m.ModSeq
-}
-
 var cleanClose struct{} // Sentinel value for panic/recover indicating clean close of connection.
 
 // serve handles a single IMAP connection on nc.
@@ -2461,15 +2448,16 @@ func (c *conn) xensureCondstore(tx *bstore.Tx) {
 		if c.mailboxID <= 0 {
 			return
 		}
-		var modseq store.ModSeq
-		if tx != nil {
-			modseq = c.xhighestModSeq(tx, c.mailboxID)
-		} else {
+
+		var mb store.Mailbox
+		if tx == nil {
 			c.xdbread(func(tx *bstore.Tx) {
-				modseq = c.xhighestModSeq(tx, c.mailboxID)
+				mb = c.xmailboxID(tx, c.mailboxID)
 			})
+		} else {
+			mb = c.xmailboxID(tx, c.mailboxID)
 		}
-		c.bwritelinef("* OK [HIGHESTMODSEQ %d] after condstore-enabling command", modseq.Client())
+		c.bwritelinef("* OK [HIGHESTMODSEQ %d] after condstore-enabling command", mb.ModSeq.Client())
 	}
 }
 
@@ -2591,7 +2579,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 
 			// Condstore extension, find the highest modseq.
 			if c.enabled[capCondstore] {
-				highestModSeq = c.xhighestModSeq(tx, mb.ID)
+				highestModSeq = mb.ModSeq
 			}
 			// For QRESYNC, we need to know the highest modset of deleted expunged records to
 			// maintain synchronization.
@@ -2935,6 +2923,8 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 		c.xdbwrite(func(tx *bstore.Tx) {
 			srcMB := c.xmailbox(tx, src, "NONEXISTENT")
 
+			var modseq store.ModSeq
+
 			// Inbox is very special. Unlike other mailboxes, its children are not moved. And
 			// unlike a regular move, its messages are moved to a newly created mailbox. We do
 			// indeed create a new destination mailbox and actually move the messages.
@@ -2952,18 +2942,20 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 				uidval, err := c.account.NextUIDValidity(tx)
 				xcheckf(err, "next uid validity")
 
+				modseq, err = c.account.NextModSeq(tx)
+				xcheckf(err, "assigning next modseq")
+
 				dstMB := store.Mailbox{
 					Name:        dst,
 					UIDValidity: uidval,
 					UIDNext:     1,
 					Keywords:    srcMB.Keywords,
+					ModSeq:      modseq,
+					CreateSeq:   modseq,
 					HaveCounts:  true,
 				}
 				err = tx.Insert(&dstMB)
 				xcheckf(err, "create new destination mailbox")
-
-				modseq, err := c.account.NextModSeq(tx)
-				xcheckf(err, "assigning next modseq")
 
 				changes = make([]store.Change, 2) // Placeholders filled in below.
 
@@ -3007,6 +2999,7 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 				err = tx.Update(&dstMB)
 				xcheckf(err, "updating uidnext and counts in destination mailbox")
 
+				srcMB.ModSeq = modseq
 				err = tx.Update(&srcMB)
 				xcheckf(err, "updating counts for inbox")
 
@@ -3021,12 +3014,14 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 				for i := range annotations {
 					annotations[i].ID = 0
 					annotations[i].MailboxID = dstMB.ID
+					annotations[i].ModSeq = modseq
+					annotations[i].CreateSeq = modseq
 					err := tx.Insert(&annotations[i])
 					xcheckf(err, "copy annotation to destination mailbox")
 				}
 
 				changes[0] = store.ChangeRemoveUIDs{MailboxID: srcMB.ID, UIDs: oldUIDs, ModSeq: modseq}
-				changes[1] = store.ChangeAddMailbox{Mailbox: dstMB, Flags: dstFlags}
+				changes[1] = store.ChangeAddMailbox{Mailbox: dstMB, Flags: dstFlags, ModSeq: modseq}
 				// changes[2:...] are ChangeAddUIDs
 				changes = append(changes, srcMB.ChangeCounts(), dstMB.ChangeCounts())
 				for _, a := range annotations {
@@ -3038,7 +3033,7 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 
 			var notExists, alreadyExists bool
 			var err error
-			changes, _, notExists, alreadyExists, err = c.account.MailboxRename(tx, srcMB, dst)
+			changes, _, notExists, alreadyExists, err = c.account.MailboxRename(tx, srcMB, dst, &modseq)
 			if notExists {
 				// ../rfc/9051:5140
 				xusercodeErrorf("NONEXISTENT", "%s", err)
@@ -3265,7 +3260,7 @@ func (c *conn) xstatusLine(tx *bstore.Tx, mb store.Mailbox, attrs []string) stri
 			status = append(status, A, "NIL")
 		case "HIGHESTMODSEQ":
 			// ../rfc/7162:366
-			status = append(status, A, fmt.Sprintf("%d", c.xhighestModSeq(tx, mb.ID).Client()))
+			status = append(status, A, fmt.Sprintf("%d", mb.ModSeq.Client()))
 		case "DELETED-STORAGE":
 			// ../rfc/9208:394
 			// How much storage space could be reclaimed by expunging messages with the
@@ -3660,7 +3655,7 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 			xcheckf(err, "listing messages to delete")
 
 			if len(remove) == 0 {
-				highestModSeq = c.xhighestModSeq(tx, c.mailboxID)
+				highestModSeq = mb.ModSeq
 				return
 			}
 
@@ -3668,6 +3663,7 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 			modseq, err = c.account.NextModSeq(tx)
 			xcheckf(err, "assigning next modseq")
 			highestModSeq = modseq
+			mb.ModSeq = modseq
 
 			removeIDs := make([]int64, len(remove))
 			anyIDs := make([]any, len(remove))
@@ -3944,6 +3940,11 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			var err error
 			modseq, err = c.account.NextModSeq(tx)
 			xcheckf(err, "assigning next modseq")
+			mbSrc.ModSeq = modseq
+			mbDst.ModSeq = modseq
+
+			err = tx.Update(&mbSrc)
+			xcheckf(err, "updating source mailbox for modseq")
 
 			// Reserve the uids in the destination mailbox.
 			uidFirst := mbDst.UIDNext
@@ -4133,6 +4134,8 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 			var err error
 			modseq, err = c.account.NextModSeq(tx)
 			xcheckf(err, "assigning next modseq")
+			mbSrc.ModSeq = modseq
+			mbDst.ModSeq = modseq
 
 			// Update existing record with new UID and MailboxID in database for messages. We
 			// add a new but expunged record again in the original/source mailbox, for qresync.
@@ -4202,7 +4205,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 			}
 
 			err = tx.Update(&mbSrc)
-			xcheckf(err, "updating source mailbox counts")
+			xcheckf(err, "updating source mailbox counts and modseq")
 
 			err = tx.Update(&mbDst)
 			xcheckf(err, "updating destination mailbox for uids, keywords and counts")
@@ -4416,7 +4419,8 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 			})
 			xcheckf(err, "storing flags in messages")
 
-			if mb.MailboxCounts != origmb.MailboxCounts {
+			if mb.MailboxCounts != origmb.MailboxCounts || modseq != 0 {
+				mb.ModSeq = modseq
 				err := tx.Update(&mb)
 				xcheckf(err, "updating mailbox counts")
 

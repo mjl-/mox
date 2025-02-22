@@ -121,7 +121,7 @@ func assignParent(m *Message, pm Message, updateSeen bool) {
 // are made in transactions of batchSize changes. The total number of updated
 // messages is returned.
 //
-// ModSeq is not changed. Calles should bump the uid validity of the mailboxes
+// ModSeq is not changed. Callers should bump the uid validity of the mailboxes
 // to propagate the changes to IMAP clients.
 func (a *Account) ResetThreading(ctx context.Context, log mlog.Log, batchSize int, clearIDs bool) (int, error) {
 	// todo: should this send Change events for ThreadMuted and ThreadCollapsed? worth it?
@@ -725,7 +725,7 @@ func lookupThreadMessageSubject(tx *bstore.Tx, m Message, subjectBase string) (*
 	return &tm, nil
 }
 
-func upgradeThreads(ctx context.Context, log mlog.Log, acc *Account, up *Upgrade) error {
+func upgradeThreads(ctx context.Context, log mlog.Log, acc *Account, up Upgrade) error {
 	log = log.With(slog.String("account", acc.Name))
 
 	if up.Threads == 0 {
@@ -742,9 +742,16 @@ func upgradeThreads(ctx context.Context, log mlog.Log, acc *Account, up *Upgrade
 			return fmt.Errorf("resetting message threading fields: %v", err)
 		}
 
-		up.Threads = 1
-		if err := acc.DB.Update(ctx, up); err != nil {
-			up.Threads = 0
+		// Must refresh up, it may have been modified by another upgrade progress.
+		err = acc.DB.Write(ctx, func(tx *bstore.Tx) error {
+			up = Upgrade{ID: up.ID}
+			if err := tx.Get(&up); err != nil {
+				return err
+			}
+			up.Threads = 1
+			return tx.Update(&up)
+		})
+		if err != nil {
 			return fmt.Errorf("saving upgrade process while upgrading account to threads storage, step 1/2: %w", err)
 		}
 		log.Info("upgrading account for threading, step 1/2: completed", slog.Duration("duration", time.Since(t0)), slog.Int("messages", total))
@@ -762,11 +769,20 @@ func upgradeThreads(ctx context.Context, log mlog.Log, acc *Account, up *Upgrade
 		if err := acc.AssignThreads(ctx, log, nil, 1, batchSize, io.Discard); err != nil {
 			return fmt.Errorf("upgrading to threads storage, step 2/2: %w", err)
 		}
-		up.Threads = 2
-		if err := acc.DB.Update(ctx, up); err != nil {
-			up.Threads = 1
+
+		// Must refresh up, it may have been modified by another upgrade progress.
+		err := acc.DB.Write(ctx, func(tx *bstore.Tx) error {
+			up = Upgrade{ID: up.ID}
+			if err := tx.Get(&up); err != nil {
+				return err
+			}
+			up.Threads = 2
+			return tx.Update(&up)
+		})
+		if err != nil {
 			return fmt.Errorf("saving upgrade process for thread storage, step 2/2: %w", err)
 		}
+
 		log.Info("upgrading account for threading, step 2/2: completed", slog.Duration("duration", time.Since(t0)))
 	}
 

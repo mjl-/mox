@@ -385,7 +385,7 @@ func TestView(t *testing.T) {
 	var chmbrename ChangeMailboxRename
 	getChanges(&chmbrename)
 	tcompare(t, chmbrename, ChangeMailboxRename{
-		ChangeRenameMailbox: store.ChangeRenameMailbox{MailboxID: chmbadd.Mailbox.ID, OldName: "Newbox", NewName: "Newbox2", Flags: nil},
+		ChangeRenameMailbox: store.ChangeRenameMailbox{MailboxID: chmbadd.Mailbox.ID, OldName: "Newbox", NewName: "Newbox2", Flags: nil, ModSeq: 13},
 	})
 
 	// ChangeMailboxSpecialUse
@@ -393,10 +393,10 @@ func TestView(t *testing.T) {
 	var chmbspecialuseOld, chmbspecialuseNew ChangeMailboxSpecialUse
 	getChanges(&chmbspecialuseOld, &chmbspecialuseNew)
 	tcompare(t, chmbspecialuseOld, ChangeMailboxSpecialUse{
-		ChangeMailboxSpecialUse: store.ChangeMailboxSpecialUse{MailboxID: archive.ID, MailboxName: "Archive", SpecialUse: store.SpecialUse{}},
+		ChangeMailboxSpecialUse: store.ChangeMailboxSpecialUse{MailboxID: archive.ID, MailboxName: "Archive", SpecialUse: store.SpecialUse{}, ModSeq: 14},
 	})
 	tcompare(t, chmbspecialuseNew, ChangeMailboxSpecialUse{
-		ChangeMailboxSpecialUse: store.ChangeMailboxSpecialUse{MailboxID: chmbadd.Mailbox.ID, MailboxName: "Newbox2", SpecialUse: store.SpecialUse{Archive: true}},
+		ChangeMailboxSpecialUse: store.ChangeMailboxSpecialUse{MailboxID: chmbadd.Mailbox.ID, MailboxName: "Newbox2", SpecialUse: store.SpecialUse{Archive: true}, ModSeq: 14},
 	})
 
 	// ChangeMailboxRemove
@@ -404,7 +404,7 @@ func TestView(t *testing.T) {
 	var chmbremove ChangeMailboxRemove
 	getChanges(&chmbremove)
 	tcompare(t, chmbremove, ChangeMailboxRemove{
-		ChangeRemoveMailbox: store.ChangeRemoveMailbox{MailboxID: chmbadd.Mailbox.ID, Name: "Newbox2"},
+		ChangeRemoveMailbox: store.ChangeRemoveMailbox{MailboxID: chmbadd.Mailbox.ID, Name: "Newbox2", ModSeq: 15},
 	})
 
 	// ChangeMsgAdd

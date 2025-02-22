@@ -298,7 +298,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	a.WithWLock(func() {
 		// Ensure mailbox exists.
 		var mb store.Mailbox
-		mb, changes, err = a.MailboxEnsure(tx, mailbox, true, store.SpecialUse{})
+		mb, changes, err = a.MailboxEnsure(tx, mailbox, true, store.SpecialUse{}, &modseq)
 		ctl.xcheck(err, "ensuring mailbox exists")
 
 		// We ensure keywords in messages make it to the mailbox as well.

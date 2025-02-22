@@ -72,7 +72,6 @@ func TestMailbox(t *testing.T) {
 	m.ThreadMuted = true
 	m.ThreadCollapsed = true
 	var mbsent Mailbox
-	mbrejects := Mailbox{Name: "Rejects", UIDValidity: 1, UIDNext: 1, HaveCounts: true}
 	mreject := m
 	mconsumed := Message{
 		Received:  m.Received,
@@ -102,6 +101,9 @@ func TestMailbox(t *testing.T) {
 			err = tx.Update(&mbsent)
 			tcheck(t, err, "update mbsent")
 
+			modseq, err := acc.NextModSeq(tx)
+			tcheck(t, err, "get next modseq")
+			mbrejects := Mailbox{Name: "Rejects", UIDValidity: 1, UIDNext: 1, ModSeq: modseq, CreateSeq: modseq, HaveCounts: true}
 			err = tx.Insert(&mbrejects)
 			tcheck(t, err, "insert rejects mailbox")
 			mreject.MailboxID = mbrejects.ID
@@ -166,20 +168,21 @@ func TestMailbox(t *testing.T) {
 		t.Fatalf("same key for different address")
 	}
 
+	var modseq ModSeq
 	acc.WithWLock(func() {
 		err := acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
-			_, _, err := acc.MailboxEnsure(tx, "Testbox", true, SpecialUse{})
+			_, _, err := acc.MailboxEnsure(tx, "Testbox", true, SpecialUse{}, &modseq)
 			return err
 		})
 		tcheck(t, err, "ensure mailbox exists")
 		err = acc.DB.Read(ctxbg, func(tx *bstore.Tx) error {
-			_, _, err := acc.MailboxEnsure(tx, "Testbox", true, SpecialUse{})
+			_, _, err := acc.MailboxEnsure(tx, "Testbox", true, SpecialUse{}, &modseq)
 			return err
 		})
 		tcheck(t, err, "ensure mailbox exists")
 
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
-			_, _, err := acc.MailboxEnsure(tx, "Testbox2", false, SpecialUse{})
+			_, _, err := acc.MailboxEnsure(tx, "Testbox2", false, SpecialUse{}, &modseq)
 			tcheck(t, err, "create mailbox")
 
 			exists, err := acc.MailboxExists(tx, "Testbox2")

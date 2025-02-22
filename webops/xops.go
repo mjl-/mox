@@ -61,7 +61,8 @@ func (x XOps) MessageDelete(ctx context.Context, log mlog.Log, acc *store.Accoun
 		var changes []store.Change
 
 		x.DBWrite(ctx, acc, func(tx *bstore.Tx) {
-			_, changes = x.MessageDeleteTx(ctx, log, tx, acc, messageIDs, 0)
+			var modseq store.ModSeq
+			changes = x.MessageDeleteTx(ctx, log, tx, acc, messageIDs, &modseq)
 		})
 
 		store.BroadcastChanges(acc, changes)
@@ -74,7 +75,7 @@ func (x XOps) MessageDelete(ctx context.Context, log mlog.Log, acc *store.Accoun
 	}
 }
 
-func (x XOps) MessageDeleteTx(ctx context.Context, log mlog.Log, tx *bstore.Tx, acc *store.Account, messageIDs []int64, modseq store.ModSeq) (store.ModSeq, []store.Change) {
+func (x XOps) MessageDeleteTx(ctx context.Context, log mlog.Log, tx *bstore.Tx, acc *store.Account, messageIDs []int64, modseq *store.ModSeq) []store.Change {
 	removeChanges := map[int64]store.ChangeRemoveUIDs{}
 	changes := make([]store.Change, 0, len(messageIDs)+1) // n remove, 1 mailbox counts
 
@@ -86,8 +87,15 @@ func (x XOps) MessageDeleteTx(ctx context.Context, log mlog.Log, tx *bstore.Tx, 
 		m := x.messageID(ctx, tx, mid)
 		totalSize += m.Size
 
+		if *modseq == 0 {
+			var err error
+			*modseq, err = acc.NextModSeq(tx)
+			x.Checkf(ctx, err, "assigning next modseq")
+		}
+
 		if m.MailboxID != mb.ID {
 			if mb.ID != 0 {
+				mb.ModSeq = *modseq
 				err := tx.Update(&mb)
 				x.Checkf(ctx, err, "updating mailbox counts")
 				changes = append(changes, mb.ChangeCounts())
@@ -102,24 +110,21 @@ func (x XOps) MessageDeleteTx(ctx context.Context, log mlog.Log, tx *bstore.Tx, 
 
 		mb.Sub(m.MailboxCounts())
 
-		if modseq == 0 {
-			modseq, err = acc.NextModSeq(tx)
-			x.Checkf(ctx, err, "assigning next modseq")
-		}
 		m.Expunged = true
-		m.ModSeq = modseq
+		m.ModSeq = *modseq
 		err = tx.Update(&m)
 		x.Checkf(ctx, err, "marking message as expunged")
 
 		ch := removeChanges[m.MailboxID]
 		ch.UIDs = append(ch.UIDs, m.UID)
 		ch.MailboxID = m.MailboxID
-		ch.ModSeq = modseq
+		ch.ModSeq = *modseq
 		removeChanges[m.MailboxID] = ch
 		remove = append(remove, m)
 	}
 
 	if mb.ID != 0 {
+		mb.ModSeq = *modseq
 		err := tx.Update(&mb)
 		x.Checkf(ctx, err, "updating count in mailbox")
 		changes = append(changes, mb.ChangeCounts())
@@ -144,7 +149,7 @@ func (x XOps) MessageDeleteTx(ctx context.Context, log mlog.Log, tx *bstore.Tx, 
 		changes = append(changes, ch)
 	}
 
-	return modseq, changes
+	return changes
 }
 
 func (x XOps) MessageFlagsAdd(ctx context.Context, log mlog.Log, acc *store.Account, messageIDs []int64, flaglist []string) {
@@ -162,8 +167,14 @@ func (x XOps) MessageFlagsAdd(ctx context.Context, log mlog.Log, acc *store.Acco
 			for _, mid := range messageIDs {
 				m := x.messageID(ctx, tx, mid)
 
+				if modseq == 0 {
+					modseq, err = acc.NextModSeq(tx)
+					x.Checkf(ctx, err, "assigning next modseq")
+				}
+
 				if mb.ID != m.MailboxID {
 					if mb.ID != 0 {
+						mb.ModSeq = modseq
 						err := tx.Update(&mb)
 						x.Checkf(ctx, err, "updating mailbox")
 						if mb.MailboxCounts != origmb.MailboxCounts {
@@ -189,10 +200,6 @@ func (x XOps) MessageFlagsAdd(ctx context.Context, log mlog.Log, acc *store.Acco
 					continue
 				}
 
-				if modseq == 0 {
-					modseq, err = acc.NextModSeq(tx)
-					x.Checkf(ctx, err, "assigning next modseq")
-				}
 				m.ModSeq = modseq
 				err = tx.Update(&m)
 				x.Checkf(ctx, err, "updating message")
@@ -202,6 +209,7 @@ func (x XOps) MessageFlagsAdd(ctx context.Context, log mlog.Log, acc *store.Acco
 			}
 
 			if mb.ID != 0 {
+				mb.ModSeq = modseq
 				err := tx.Update(&mb)
 				x.Checkf(ctx, err, "updating mailbox")
 				if mb.MailboxCounts != origmb.MailboxCounts {
@@ -235,8 +243,14 @@ func (x XOps) MessageFlagsClear(ctx context.Context, log mlog.Log, acc *store.Ac
 			for _, mid := range messageIDs {
 				m := x.messageID(ctx, tx, mid)
 
+				if modseq == 0 {
+					modseq, err = acc.NextModSeq(tx)
+					x.Checkf(ctx, err, "assigning next modseq")
+				}
+
 				if mb.ID != m.MailboxID {
 					if mb.ID != 0 {
+						mb.ModSeq = modseq
 						err := tx.Update(&mb)
 						x.Checkf(ctx, err, "updating counts for mailbox")
 						if mb.MailboxCounts != origmb.MailboxCounts {
@@ -259,10 +273,6 @@ func (x XOps) MessageFlagsClear(ctx context.Context, log mlog.Log, acc *store.Ac
 					continue
 				}
 
-				if modseq == 0 {
-					modseq, err = acc.NextModSeq(tx)
-					x.Checkf(ctx, err, "assigning next modseq")
-				}
 				m.ModSeq = modseq
 				err = tx.Update(&m)
 				x.Checkf(ctx, err, "updating message")
@@ -272,6 +282,7 @@ func (x XOps) MessageFlagsClear(ctx context.Context, log mlog.Log, acc *store.Ac
 			}
 
 			if mb.ID != 0 {
+				mb.ModSeq = modseq
 				err := tx.Update(&mb)
 				x.Checkf(ctx, err, "updating keywords in mailbox")
 				if mb.MailboxCounts != origmb.MailboxCounts {
@@ -333,6 +344,7 @@ func (x XOps) MailboxesMarkRead(ctx context.Context, log mlog.Log, acc *store.Ac
 				x.Checkf(ctx, err, "listing messages to mark as read")
 
 				if have {
+					mb.ModSeq = modseq
 					err := tx.Update(&mb)
 					x.Checkf(ctx, err, "updating mailbox")
 					changes = append(changes, mb.ChangeCounts())
@@ -366,14 +378,15 @@ func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account,
 				return
 			}
 
-			_, changes = x.MessageMoveTx(ctx, log, acc, tx, messageIDs, mbDst, 0)
+			var modseq store.ModSeq
+			changes = x.MessageMoveTx(ctx, log, acc, tx, messageIDs, mbDst, &modseq)
 		})
 
 		store.BroadcastChanges(acc, changes)
 	})
 }
 
-func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, messageIDs []int64, mbDst store.Mailbox, modseq store.ModSeq) (store.ModSeq, []store.Change) {
+func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, messageIDs []int64, mbDst store.Mailbox, modseq *store.ModSeq) []store.Change {
 	retrain := make([]store.Message, 0, len(messageIDs))
 	removeChanges := map[int64]store.ChangeRemoveUIDs{}
 	// n adds, 1 remove, 2 mailboxcounts, optimistic and at least for a single message.
@@ -384,12 +397,19 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 	keywords := map[string]struct{}{}
 	now := time.Now()
 
+	var err error
+	if *modseq == 0 {
+		*modseq, err = acc.NextModSeq(tx)
+		x.Checkf(ctx, err, "assigning next modseq")
+	}
+
 	for _, mid := range messageIDs {
 		m := x.messageID(ctx, tx, mid)
 
 		// We may have loaded this mailbox in the previous iteration of this loop.
 		if m.MailboxID != mbSrc.ID {
 			if mbSrc.ID != 0 {
+				mbSrc.ModSeq = *modseq
 				err := tx.Update(&mbSrc)
 				x.Checkf(ctx, err, "updating source mailbox counts")
 				changes = append(changes, mbSrc.ChangeCounts())
@@ -402,15 +422,9 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 			x.Checkuserf(ctx, errors.New("already in destination mailbox"), "moving message")
 		}
 
-		var err error
-		if modseq == 0 {
-			modseq, err = acc.NextModSeq(tx)
-			x.Checkf(ctx, err, "assigning next modseq")
-		}
-
 		ch := removeChanges[m.MailboxID]
 		ch.UIDs = append(ch.UIDs, m.UID)
-		ch.ModSeq = modseq
+		ch.ModSeq = *modseq
 		ch.MailboxID = m.MailboxID
 		removeChanges[m.MailboxID] = ch
 
@@ -418,7 +432,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 		om := m
 		om.PrepareExpunge()
 		om.ID = 0 // Assign new ID.
-		om.ModSeq = modseq
+		om.ModSeq = *modseq
 
 		mbSrc.Sub(m.MailboxCounts())
 
@@ -435,7 +449,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 			m.Seen = false
 		}
 		m.UID = mbDst.UIDNext
-		m.ModSeq = modseq
+		m.ModSeq = *modseq
 		mbDst.UIDNext++
 		m.JunkFlagsForMailbox(mbDst, conf)
 		m.SaveDate = &now
@@ -456,8 +470,9 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 		}
 	}
 
-	err := tx.Update(&mbSrc)
-	x.Checkf(ctx, err, "updating source mailbox counts")
+	mbSrc.ModSeq = *modseq
+	err = tx.Update(&mbSrc)
+	x.Checkf(ctx, err, "updating source mailbox counts and modseq")
 
 	changes = append(changes, mbSrc.ChangeCounts(), mbDst.ChangeCounts())
 
@@ -468,8 +483,9 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 		changes = append(changes, mbDst.ChangeKeywords())
 	}
 
+	mbDst.ModSeq = *modseq
 	err = tx.Update(&mbDst)
-	x.Checkf(ctx, err, "updating mailbox with uidnext")
+	x.Checkf(ctx, err, "updating destination mailbox with uidnext and modseq")
 
 	err = acc.RetrainMessages(ctx, log, tx, retrain, false)
 	x.Checkf(ctx, err, "retraining messages after move")
@@ -484,7 +500,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 		changes = append(changes, ch)
 	}
 
-	return modseq, changes
+	return changes
 }
 
 func isText(p message.Part) bool {

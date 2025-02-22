@@ -1666,6 +1666,20 @@
 					]
 				},
 				{
+					"Name": "ModSeq",
+					"Docs": "ModSeq matches that of last message (including deleted), or changes to mailbox such as after metadata changes.",
+					"Typewords": [
+						"ModSeq"
+					]
+				},
+				{
+					"Name": "CreateSeq",
+					"Docs": "",
+					"Typewords": [
+						"ModSeq"
+					]
+				},
+				{
 					"Name": "HaveCounts",
 					"Docs": "Whether MailboxCounts have been initialized.",
 					"Typewords": [
@@ -2974,6 +2988,13 @@
 					"Typewords": [
 						"string"
 					]
+				},
+				{
+					"Name": "ModSeq",
+					"Docs": "",
+					"Typewords": [
+						"ModSeq"
+					]
 				}
 			]
 		},
@@ -3021,6 +3042,13 @@
 					"Typewords": [
 						"[]",
 						"string"
+					]
+				},
+				{
+					"Name": "ModSeq",
+					"Docs": "",
+					"Typewords": [
+						"ModSeq"
 					]
 				}
 			]
@@ -3103,6 +3131,13 @@
 					"Docs": "",
 					"Typewords": [
 						"SpecialUse"
+					]
+				},
+				{
+					"Name": "ModSeq",
+					"Docs": "",
+					"Typewords": [
+						"ModSeq"
 					]
 				}
 			]

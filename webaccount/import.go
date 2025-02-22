@@ -463,10 +463,19 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 			if err == bstore.ErrAbsent {
 				uidvalidity, err := acc.NextUIDValidity(tx)
 				ximportcheckf(err, "finding next uid validity")
+
+				if modseq == 0 {
+					var err error
+					modseq, err = acc.NextModSeq(tx)
+					ximportcheckf(err, "assigning next modseq")
+				}
+
 				mb = store.Mailbox{
 					Name:        p,
 					UIDValidity: uidvalidity,
 					UIDNext:     1,
+					ModSeq:      modseq,
+					CreateSeq:   modseq,
 					HaveCounts:  true,
 					// Do not assign special-use flags. This existing account probably already has such mailboxes.
 				}
@@ -477,7 +486,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 					err := tx.Insert(&store.Subscription{Name: p})
 					ximportcheckf(err, "subscribing to imported mailbox")
 				}
-				changes = append(changes, store.ChangeAddMailbox{Mailbox: mb, Flags: []string{`\Subscribed`}})
+				changes = append(changes, store.ChangeAddMailbox{Mailbox: mb, Flags: []string{`\Subscribed`}, ModSeq: modseq})
 			} else if err != nil {
 				ximportcheckf(err, "creating mailbox %s (aborting)", p)
 			}

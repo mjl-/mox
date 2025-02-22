@@ -3404,7 +3404,7 @@ open, or is not running.
 		// Reassign UIDs, going per mailbox. We assign starting at 1, only changing the
 		// message if it isn't already at the intended UID. Doing it in this order ensures
 		// we don't get into trouble with duplicate UIDs for a mailbox. We assign a new
-		// modseq. Not strictly needed, for doesn't hurt.
+		// modseq. Not strictly needed, but doesn't hurt.
 		modseq, err := a.NextModSeq(tx)
 		xcheckf(err, "assigning next modseq")
 
@@ -3429,7 +3429,7 @@ open, or is not running.
 			return fmt.Errorf("reading through messages: %v", err)
 		}
 
-		// Now update the uidnext and uidvalidity for each mailbox.
+		// Now update the uidnext, uidvalidity and modseq for each mailbox.
 		err = bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
 			// Assign each mailbox a completely new uidvalidity.
 			uidvalidity, err := a.NextUIDValidity(tx)
@@ -3449,6 +3449,7 @@ open, or is not running.
 				mb.UIDValidity = uidvalidity
 			}
 			mb.UIDNext = uidlasts[mb.ID] + 1
+			mb.ModSeq = modseq
 			if err := tx.Update(&mb); err != nil {
 				return fmt.Errorf("updating uidvalidity and uidnext for mailbox: %v", err)
 			}

@@ -424,8 +424,7 @@ func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID
 			var modseq store.ModSeq // Only set if needed.
 
 			if m.DraftMessageID > 0 {
-				var nchanges []store.Change
-				modseq, nchanges = xops.MessageDeleteTx(ctx, log, tx, acc, []int64{m.DraftMessageID}, modseq)
+				nchanges := xops.MessageDeleteTx(ctx, log, tx, acc, []int64{m.DraftMessageID}, &modseq)
 				changes = append(changes, nchanges...)
 				// On-disk file is removed after lock.
 			}
@@ -1030,8 +1029,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		}()
 		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
 			if m.DraftMessageID > 0 {
-				var nchanges []store.Change
-				modseq, nchanges = xops.MessageDeleteTx(ctx, log, tx, acc, []int64{m.DraftMessageID}, modseq)
+				nchanges := xops.MessageDeleteTx(ctx, log, tx, acc, []int64{m.DraftMessageID}, &modseq)
 				changes = append(changes, nchanges...)
 				// On-disk file is removed after lock.
 			}
@@ -1048,12 +1046,22 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					rm.Notjunk = true
 				}
 				if rm.Flags != oflags {
-					modseq, err = acc.NextModSeq(tx)
-					xcheckf(ctx, err, "next modseq")
+					if modseq == 0 {
+						modseq, err = acc.NextModSeq(tx)
+						xcheckf(ctx, err, "next modseq")
+					}
 					rm.ModSeq = modseq
 					err := tx.Update(&rm)
 					xcheckf(ctx, err, "updating flags of replied/forwarded message")
 					changes = append(changes, rm.ChangeFlags(oflags))
+
+					// Update modseq of mailbox of replied/forwarded message.
+					rmb := store.Mailbox{ID: rm.MailboxID}
+					err = tx.Get(&rmb)
+					xcheckf(ctx, err, "get mailbox of replied/forwarded message for modseq update")
+					rmb.ModSeq = modseq
+					err = tx.Update(&rmb)
+					xcheckf(ctx, err, "update modseqo of mailbox of replied/forwarded message")
 
 					err = acc.RetrainMessages(ctx, log, tx, []store.Message{rm}, false)
 					xcheckf(ctx, err, "retraining messages after reply/forward")
@@ -1075,8 +1083,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					err = q.IDs(&msgIDs)
 					xcheckf(ctx, err, "listing messages in thread to archive")
 					if len(msgIDs) > 0 {
-						var nchanges []store.Change
-						modseq, nchanges = xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, modseq)
+						nchanges := xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, &modseq)
 						changes = append(changes, nchanges...)
 					}
 				}
@@ -1299,6 +1306,8 @@ func (Webmail) MailboxEmpty(ctx context.Context, mailboxID int64) {
 				xcheckf(ctx, errors.New("no messages in mailbox"), "emptying mailbox")
 			}
 
+			mb.ModSeq = modseq
+
 			// Remove Recipients.
 			anyIDs := make([]any, len(expunged))
 			for i, m := range expunged {
@@ -1364,7 +1373,8 @@ func (Webmail) MailboxRename(ctx context.Context, mailboxID int64, newName strin
 			mbsrc := xmailboxID(ctx, tx, mailboxID)
 			var err error
 			var isInbox, notExists, alreadyExists bool
-			changes, isInbox, notExists, alreadyExists, err = acc.MailboxRename(tx, mbsrc, newName)
+			var modseq store.ModSeq
+			changes, isInbox, notExists, alreadyExists, err = acc.MailboxRename(tx, mbsrc, newName, &modseq)
 			if isInbox || notExists || alreadyExists {
 				xcheckuserf(ctx, err, "renaming mailbox")
 			}
@@ -1485,6 +1495,9 @@ func (Webmail) MailboxSetSpecialUse(ctx context.Context, mb store.Mailbox) {
 		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
 			xmb := xmailboxID(ctx, tx, mb.ID)
 
+			modseq, err := acc.NextModSeq(tx)
+			xcheckf(ctx, err, "get next modseq")
+
 			// We only allow a single mailbox for each flag (JMAP requirement). So for any flag
 			// we set, we clear it for the mailbox(es) that had it, if any.
 			clearPrevious := func(clear bool, specialUse string) {
@@ -1496,7 +1509,7 @@ func (Webmail) MailboxSetSpecialUse(ctx context.Context, mb store.Mailbox) {
 				q.FilterNotEqual("ID", mb.ID)
 				q.FilterEqual(specialUse, true)
 				q.Gather(&ombl)
-				_, err := q.UpdateField(specialUse, false)
+				_, err := q.UpdateFields(map[string]any{specialUse: false, "ModSeq": modseq})
 				xcheckf(ctx, err, "updating previous special-use mailboxes")
 
 				for _, omb := range ombl {
@@ -1510,7 +1523,8 @@ func (Webmail) MailboxSetSpecialUse(ctx context.Context, mb store.Mailbox) {
 			clearPrevious(mb.Trash, "Trash")
 
 			xmb.SpecialUse = mb.SpecialUse
-			err := tx.Update(&xmb)
+			xmb.ModSeq = modseq
+			err = tx.Update(&xmb)
 			xcheckf(ctx, err, "updating special-use flags for mailbox")
 			changes = append(changes, xmb.ChangeSpecialUse())
 		})
