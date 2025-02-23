@@ -1952,11 +1952,8 @@ sharing most of its code.
 		c.Usage()
 	}
 
-	ehloDomain, err := dns.ParseDomain(ehloHostname)
-	xcheckf(err, "parsing ehlo hostname")
-
-	origNextHop, err := dns.ParseDomain(args[0])
-	xcheckf(err, "parse domain")
+	ehloDomain := xparseDomain(ehloHostname, "ehlo host name")
+	origNextHop := xparseDomain(args[0], "domain")
 
 	ctxbg := context.Background()
 
@@ -1967,6 +1964,7 @@ sharing most of its code.
 	var hosts []dns.IPDomain
 	if len(args) == 1 {
 		var permanent bool
+		var err error
 		haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, permanent, err = smtpclient.GatherDestinations(ctxbg, c.log.Logger, resolver, dns.IPDomain{Domain: origNextHop})
 		status := "temporary"
 		if permanent {
@@ -1996,10 +1994,7 @@ sharing most of its code.
 		}
 		log.Printf("destinations: %s", strings.Join(l, ", "))
 	} else {
-		d, err := dns.ParseDomain(args[1])
-		if err != nil {
-			log.Fatalf("parsing destination host: %v", err)
-		}
+		d := xparseDomain(args[1], "destination host")
 		log.Printf("skipping domain mx/cname lookups, assuming domain is dnssec-protected")
 
 		origNextHopAuthentic = true
@@ -2538,8 +2533,7 @@ headers prepended.
 	}
 	localpart, err := smtp.ParseLocalpart(p.Envelope.From[0].User)
 	xcheckf(err, "parsing localpart of address in from-header")
-	dom, err := dns.ParseDomain(p.Envelope.From[0].Host)
-	xcheckf(err, "parsing domain of address in from-header")
+	dom := xparseDomain(p.Envelope.From[0].Host, "domain of address in from-header")
 
 	mustLoadConfig()
 
