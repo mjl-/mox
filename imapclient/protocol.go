@@ -37,6 +37,7 @@ const (
 	CapSaveDate         Capability = "SAVEDATE"           // ../rfc/8514
 	CapCreateSpecialUse Capability = "CREATE-SPECIAL-USE" // ../rfc/6154:296
 	CapCompressDeflate  Capability = "COMPRESS=DEFLATE"   // ../rfc/4978:65
+	CapListMetadata     Capability = "LIST-METADTA"       // ../rfc/9590:73
 )
 
 // Status is the tagged final result of a command.
@@ -242,8 +243,10 @@ type UntaggedMetadataKeys struct {
 	Keys []string
 }
 
+// Annotation is a metadata server of mailbox annotation.
 type Annotation struct {
 	Key      string
+	// Nil is represented by IsString false and a nil Value.
 	IsString bool
 	Value    []byte
 }

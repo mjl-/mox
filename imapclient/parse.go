@@ -460,11 +460,14 @@ func (c *Conn) xuntagged() Untagged {
 			var isString bool
 			if c.take('~') {
 				value = c.xliteral()
-			} else {
+			} else if c.peek('"') {
 				value = []byte(c.xstring())
 				isString = true
 				// note: the abnf also allows nstring, but that only makes sense when the
 				// production rule is used in the setmetadata command. ../rfc/5464:831
+			} else {
+				// For response to extended list.
+				c.xtake("nil")
 			}
 			r.Annotations = append(r.Annotations, Annotation{key, isString, value})
 

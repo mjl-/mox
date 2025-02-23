@@ -176,6 +176,29 @@ func (t listspace) writeTo(c *conn, w io.Writer) {
 	fmt.Fprint(w, ")")
 }
 
+// concatenate tokens space-separated
+type concatspace []token
+
+func (t concatspace) pack(c *conn) string {
+	var s string
+	for i, e := range t {
+		if i > 0 {
+			s += " "
+		}
+		s += e.pack(c)
+	}
+	return s
+}
+
+func (t concatspace) writeTo(c *conn, w io.Writer) {
+	for i, e := range t {
+		if i > 0 {
+			fmt.Fprint(w, " ")
+		}
+		e.writeTo(c, w)
+	}
+}
+
 // Concatenated tokens, no spaces or list syntax.
 type concat []token
 
@@ -212,6 +235,21 @@ next:
 }
 
 func (t astring) writeTo(c *conn, w io.Writer) {
+	w.Write([]byte(t.pack(c)))
+}
+
+// mailbox with utf7 encoding if connection requires it, or utf8 otherwise.
+type mailboxt string
+
+func (t mailboxt) pack(c *conn) string {
+	s := string(t)
+	if !c.utf8strings() {
+		s = utf7encode(s)
+	}
+	return astring(s).pack(c)
+}
+
+func (t mailboxt) writeTo(c *conn, w io.Writer) {
 	w.Write([]byte(t.pack(c)))
 }
 

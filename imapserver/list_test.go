@@ -216,4 +216,21 @@ func TestListExtended(t *testing.T) {
 	tc.transactf("bad", `list (recursivematch remote) "" "*"`) // "remote" is not a base selection option.
 	tc.transactf("bad", `list (unknown) "" "*"`)               // Unknown selection options must result in BAD.
 	tc.transactf("bad", `list () "" "*" return (unknown)`)     // Unknown return options must result in BAD.
+
+	// Return metadata.
+	tc.transactf("ok", `setmetadata inbox (/private/comment "y")`)
+	tc.transactf("ok", `list () "" ("inbox") return (metadata (/private/comment /shared/comment))`)
+	tc.xuntagged(
+		ulist("Inbox"),
+		imapclient.UntaggedMetadataAnnotations{
+			Mailbox: "Inbox",
+			Annotations: []imapclient.Annotation{
+				{Key: "/private/comment", IsString: true, Value: []byte("y")},
+				{Key: "/shared/comment"},
+			},
+		},
+	)
+
+	tc.transactf("bad", `list () "" ("inbox") return (metadata ())`)                                    // Metadata list must be non-empty.
+	tc.transactf("bad", `list () "" ("inbox") return (metadata (/shared/comment "/private/comment" ))`) // Extra space.
 }
