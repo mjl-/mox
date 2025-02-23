@@ -31,16 +31,18 @@ func TestMetadata(t *testing.T) {
 		},
 	})
 
+	tc.transactf("ok", `setmetadata Inbox (/shared/comment "share")`)
+
 	tc.transactf("ok", `getmetadata inbox (/private/comment /private/unknown /shared/comment)`)
 	tc.xuntagged(imapclient.UntaggedMetadataAnnotations{
 		Mailbox: "Inbox",
 		Annotations: []imapclient.Annotation{
 			{Key: "/private/comment", IsString: true, Value: []byte("mailbox value")},
+			{Key: "/shared/comment", IsString: true, Value: []byte("share")},
 		},
 	})
 
 	tc.transactf("no", `setmetadata doesnotexist (/private/comment "test")`) // Bad mailbox.
-	tc.transactf("no", `setmetadata Inbox (/shared/comment "")`)             // /shared/ not implemented.
 	tc.transactf("no", `setmetadata Inbox (/badprefix/comment "")`)
 	tc.transactf("no", `setmetadata Inbox (/private/vendor "")`)          // /*/vendor must have more components.
 	tc.transactf("no", `setmetadata Inbox (/private/vendor/stillbad "")`) // /*/vendor must have more components.
@@ -131,7 +133,7 @@ func TestMetadata(t *testing.T) {
 		},
 	})
 	// Same as previous, but ask for everything below /.
-	tc.transactf("ok", `getmetadata (depth infinity) inbox (/)`)
+	tc.transactf("ok", `getmetadata (depth infinity) inbox ("")`)
 	tc.xuntagged(imapclient.UntaggedMetadataAnnotations{
 		Mailbox: "Inbox",
 		Annotations: []imapclient.Annotation{
@@ -142,6 +144,7 @@ func TestMetadata(t *testing.T) {
 			{Key: "/private/another", IsString: true, Value: []byte("longer")},
 			{Key: "/private/comment", IsString: false, Value: []byte("test")},
 			{Key: "/private/vendor/a/b", IsString: true, Value: []byte("")},
+			{Key: "/shared/comment", IsString: true, Value: []byte("share")},
 		},
 	})
 

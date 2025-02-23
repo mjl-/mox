@@ -229,8 +229,8 @@ type Annotation struct {
 	// Can be zero, indicates global (per-account) annotation.
 	MailboxID int64 `bstore:"ref Mailbox,unique MailboxID+Key"`
 
-	// "Entry name", always starts with "/private/". Stored lower-case, comparisons
-	// must be done case-insensitively.
+	// "Entry name", always starts with "/private/" or "/shared/". Stored lower-case,
+	// comparisons must be done case-insensitively.
 	Key string `bstore:"nonzero"`
 
 	IsString bool // If true, the value is a string instead of bytes.

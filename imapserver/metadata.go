@@ -181,8 +181,8 @@ func (c *conn) cmdGetmetadata(tag, cmd string, p *parser) {
 
 // Set metadata annotation, per mailbox or globally.
 //
-// We only implement private annotations, not shared annotations. We don't
-// currently have a mechanism for determining if the user should have access.
+// We allow both /private/* and /shared/*, we store them in the same way since we
+// don't have ACL extension support yet or another mechanism for access control.
 //
 // State: Authenticated and selected.
 func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
@@ -211,20 +211,22 @@ func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
 
 	// Additional checks on entry names.
 	for _, a := range l {
-		// We only allow /private/* entry names, so check early and fail if we see anything
-		// else (the only other option is /shared/* at this moment).
 		// ../rfc/5464:217
-		if !strings.HasPrefix(a.Key, "/private/") {
+		if !strings.HasPrefix(a.Key, "/private/") && !strings.HasPrefix(a.Key, "/shared/") {
 			// ../rfc/5464:346
-			xuserErrorf("only /private/* entry names allowed")
+			xuserErrorf("only /private/* and /shared/* entry names allowed")
 		}
 
 		// We also enforce that /private/vendor/ is followed by at least 2 elements.
 		// ../rfc/5464:234
-		if a.Key == "/private/vendor" || strings.HasPrefix(a.Key, "/private/vendor/") {
+		switch {
+		case a.Key == "/private/vendor",
+			strings.HasPrefix(a.Key, "/private/vendor/"),
+			a.Key == "/shared/vendor", strings.HasPrefix(a.Key, "/shared/vendor/"):
+
 			t := strings.SplitN(a.Key[1:], "/", 4)
 			if len(t) < 4 {
-				xuserErrorf("entry names starting with /private/vendor must have at least 4 components")
+				xuserErrorf("entry names starting with /private/vendor or /shared/vendor must have at least 4 components")
 			}
 		}
 	}
