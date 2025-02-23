@@ -20,6 +20,7 @@ var (
 	errTrailingDot = errors.New("dns name has trailing dot")
 	errUnderscore  = errors.New("domain name with underscore")
 	errIDNA        = errors.New("idna")
+	errIPNotName   = errors.New("ip address while name required")
 )
 
 // Domain is a domain name, with one or more labels, with at least an ASCII
@@ -94,6 +95,12 @@ func (d Domain) IsZero() bool {
 func ParseDomain(s string) (Domain, error) {
 	if strings.HasSuffix(s, ".") {
 		return Domain{}, errTrailingDot
+	}
+
+	// IPv4 addresses would be accepted by idna lookups. TLDs cannot be all numerical,
+	// so IP addresses are not valid DNS names.
+	if net.ParseIP(s) != nil {
+		return Domain{}, errIPNotName
 	}
 
 	ascii, err := idna.Lookup.ToASCII(s)

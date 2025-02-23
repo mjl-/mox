@@ -530,7 +530,14 @@ func TestDelivery(t *testing.T) {
 
 	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "remote@example.org"
-		rcptTo := "mjl@127.0.0.10"
+		rcptTo := "mjl@[127.0.0.10]"
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
+	})
+
+	ts.run(func(client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@[IPv6:::1]"
 		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
 		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
 	})
