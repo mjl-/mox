@@ -135,34 +135,38 @@ https://nlnet.nl/project/Mox/.
 
 ## Roadmap
 
-- "mox setup" command, with webapp for interactive setup
-- Automate DNS management, for setup and maintenance, such as DANE/DKIM key rotation.
+- "mox setup" command, using admin web interface for interactive setup
+- Automate DNS management, for setup and maintenance, such as DANE/DKIM key rotation
+- Config options for "transactional email domains", for which mox will only
+  send messages
+- More IMAP extensions (UNAUTHENTICATE, REPLACE, NOTIFY, MULTIAPPEND, OBJECTID, UIDONLY)
+- Encrypted storage of files (email messages, TLS keys), also with per account keys
+- Recognize common deliverability issues and help postmasters solve them
 - Calendaring with CalDAV/iCal
-- More IMAP extensions (PREVIEW, COMPRESS=DEFLATE, UNAUTHENTICATE,
-  REPLACE, QUOTA, NOTIFY, MULTIAPPEND, OBJECTID, MULTISEARCH, THREAD, SORT)
 - Introbox, to which first-time senders are delivered
-- ARC, with forwarded email from trusted source
 - Add special IMAP mailbox ("Queue?") that contains queued but
   undelivered messages, updated with IMAP flags/keywords/tags and message headers.
-- Forwarding (to an external address)
 - External addresses in aliases/lists.
 - Autoresponder (out of office/vacation)
-- IMAP extensions for "online"/non-syncing/webmail clients (SORT (including
+- Mailing list manager
+- IMAP extensions for "online"/non-syncing/webmail clients (MULTISEARCH, SORT (including
   DISPLAYFROM, DISPLAYTO), THREAD, PARTIAL, CONTEXT=SEARCH CONTEXT=SORT ESORT,
-  FILTERS)
+  FILTERS, PREVIEW)
+- IMAP ACL support, for account sharing (interacts with many extensions and code)
 - Improve support for mobile clients with extensions: IMAP URLAUTH, SMTP
   CHUNKING and BINARYMIME, IMAP CATENATE
-- Mailing list manager
 - Privilege separation, isolating parts of the application to more restricted
   sandbox (e.g. new unauthenticated connections)
 - Using mox as backup MX
 - JMAP
 - Sieve for filtering (for now see Rulesets in the account config)
+- ARC, with forwarded email from trusted source
 - Milter support, for integration with external tools
+- SMTP DSN extension
 - IMAP Sieve extension, to run Sieve scripts after message changes (not only
   new deliveries)
 - OAUTH2 support, for single sign on
-- SMTP DSN extension
+- Forwarding (to an external address)
 
 There are many smaller improvements to make as well, search for "todo" in the code.
 
@@ -175,8 +179,6 @@ change in the future.
 - POP3
 - Delivery to (unix) OS system users
 - Support for pluggable delivery mechanisms
-- iOS Mail push notifications (with XAPPLEPUSHSERVICE undocumented imap
-  extension and hard to get APNS certificate)
 
 
 # FAQ - Frequently Asked Questions
