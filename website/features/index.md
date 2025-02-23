@@ -399,7 +399,8 @@ submission, with MTA-STS and with autoconfiguration needs three more
 PKIX/WebPKI TLS certificates. Manually preventing your email infrastructure
 from automatic periodic expiration is cumbersome, but [an
 option](../config/#cfg-mox-conf-Listeners-x-TLS-KeyCerts). With ACME, TLS
-certificates are retrieved and refreshed automatically.
+certificates are retrieved and refreshed automatically. The tls-alpn-01 and
+http-01 ACME challenge types are implemented, dns-01 not yet.
 
 The quickstart sets mox up with ACME using Let's Encrypt. Other ACME providers
 can be [defined](../config/#cfg-mox-conf-ACME-x) and
