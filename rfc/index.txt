@@ -365,9 +365,11 @@ See implementation guide, https://jmap.io/server.html
 8616	Yes	-	Email Authentication for Internationalized Mail
 
 # TLS
+4366	-	Obs	(RFC 6066) Transport Layer Security (TLS) Extensions
 5056	Yes	-	On the Use of Channel Bindings to Secure Channels
 5705	Yes	-	Keying Material Exporters for Transport Layer Security (TLS)
 5929	Yes	-	Channel Bindings for TLS
+6066	-	-	Transport Layer Security (TLS) Extensions: Extension Definitions
 6125	-?	-	Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)
 7250	-No	-	Using Raw Public Keys in Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
 7525	-?	-	Recommendations for Secure Use of Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
@@ -377,6 +379,7 @@ See implementation guide, https://jmap.io/server.html
 8996	Yes	-	Deprecating TLS 1.0 and TLS 1.1
 8997	Yes	-	Deprecation of TLS 1.1 for Email Submission and Access
 9266	Yes	-	Channel Bindings for TLS 1.3
+9325	-?	-	Recommendations for Secure Use of Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)
 
 # ACME
 8555	Yes	-	Automatic Certificate Management Environment (ACME)

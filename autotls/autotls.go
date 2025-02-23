@@ -193,21 +193,41 @@ func Load(name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eab
 // optionally falling back to a certificate for fallbackHostname in case SNI is
 // absent or for an unknown hostname.
 func (m *Manager) loggingGetCertificate(hello *tls.ClientHelloInfo, fallbackHostname dns.Domain, fallbackNoSNI, fallbackUnknownSNI bool) (*tls.Certificate, error) {
-	log := mlog.New("autotls", nil).WithContext(hello.Context())
+	log := mlog.New("autotls", nil).WithContext(hello.Context()).With(
+		slog.Any("localaddr", hello.Conn.LocalAddr()),
+		slog.Any("supportedprotos", hello.SupportedProtos),
+		slog.String("servername", hello.ServerName),
+	)
 
 	// If we can't find a certificate (depending on fallback parameters), we return a
 	// nil certificate and nil error, which crypto/tls turns into a TLS alert
 	// "unrecognized name", which can be interpreted by clients as a hint that they are
-	// using the wrong hostname, or a certificate is missing.
+	// using the wrong hostname, or a certificate is missing. ../rfc/9325:578
+
+	// IP addresses for ServerName are not allowed, but happen in practice. If we
+	// should be lenient (fallbackUnknownSNI), we switch to the fallback hostname,
+	// otherwise we return an error. We don't want to pass IP addresses to
+	// GetCertificate because it will return an error for IPv6 addresses.
+	// ../rfc/6066:367 ../rfc/4366:535
+	if net.ParseIP(hello.ServerName) != nil {
+		if fallbackUnknownSNI {
+			hello.ServerName = fallbackHostname.ASCII
+			log = log.With(slog.String("servername", hello.ServerName))
+		} else {
+			log.Debug("tls request with ip for server name, rejecting")
+			return nil, fmt.Errorf("invalid ip address for sni server name")
+		}
+	}
 
 	if hello.ServerName == "" && fallbackNoSNI {
 		hello.ServerName = fallbackHostname.ASCII
+		log = log.With(slog.String("servername", hello.ServerName))
 	}
 
 	// Handle missing SNI to prevent logging an error below.
 	if hello.ServerName == "" {
 		metricMissingServerName.Inc()
-		log.Debug("tls request without sni servername, rejecting", slog.Any("localaddr", hello.Conn.LocalAddr()), slog.Any("supportedprotos", hello.SupportedProtos))
+		log.Debug("tls request without sni server name, rejecting")
 		return nil, nil
 	}
 
@@ -215,23 +235,29 @@ func (m *Manager) loggingGetCertificate(hello *tls.ClientHelloInfo, fallbackHost
 	if err != nil && errors.Is(err, errHostNotAllowed) {
 		if !fallbackUnknownSNI {
 			metricUnknownServerName.Inc()
-			log.Debugx("requesting certificate", err, slog.String("host", hello.ServerName))
+			log.Debugx("requesting certificate", err)
 			return nil, nil
 		}
 
-		log.Debug("certificate for unknown hostname, using fallback hostname", slog.String("host", hello.ServerName))
+		// Some legitimate email deliveries over SMTP use an unknown SNI, e.g. a bare
+		// domain instead of the MX hostname. We "should" return an error, but that would
+		// break email delivery, so we use the fallback name if it is configured.
+		// ../rfc/9325:589
+
+		log = log.With(slog.String("servername", hello.ServerName))
+		log.Debug("certificate for unknown hostname, using fallback hostname")
 		hello.ServerName = fallbackHostname.ASCII
 		cert, err = m.Manager.GetCertificate(hello)
 		if err != nil {
 			metricCertRequestErrors.Inc()
-			log.Errorx("requesting certificate for fallback hostname", err, slog.String("host", hello.ServerName))
+			log.Errorx("requesting certificate for fallback hostname", err)
 		} else {
-			log.Debug("using certificate for fallback hostname", slog.String("host", hello.ServerName))
+			log.Debug("using certificate for fallback hostname")
 		}
 		return cert, err
 	} else if err != nil {
 		metricCertRequestErrors.Inc()
-		log.Errorx("requesting certificate", err, slog.String("host", hello.ServerName))
+		log.Errorx("requesting certificate", err)
 	}
 	return cert, err
 }
