@@ -245,7 +245,7 @@ type UntaggedMetadataKeys struct {
 
 // Annotation is a metadata server of mailbox annotation.
 type Annotation struct {
-	Key      string
+	Key string
 	// Nil is represented by IsString false and a nil Value.
 	IsString bool
 	Value    []byte
