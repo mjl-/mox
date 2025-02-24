@@ -1532,10 +1532,10 @@ func (a *Account) WithRLock(fn func()) {
 //
 // If the destination mailbox has the Sent special-use flag, the message is parsed
 // for its recipients (to/cc/bcc). Their domains are added to Recipients for use in
-// dmarc reputation.
+// reputation classification.
 //
-// If sync is true, the message file and its directory are synced. Should be true
-// for regular mail delivery, but can be false when importing many messages.
+// If sync is true, the message file and its directory will be synced. Should be
+// true for regular mail delivery, but can be false when importing many messages.
 //
 // If updateDiskUsage is true, the account total message size (for quota) is
 // updated. Callers must check if a message can be added within quota before

@@ -333,6 +333,14 @@ func xparseNumSet(s string) imapclient.NumSet {
 	return ns
 }
 
+func xparseUIDRange(s string) imapclient.NumRange {
+	nr, err := imapclient.ParseUIDRange(s)
+	if err != nil {
+		panic(fmt.Sprintf("parsing uid range %s: %s", s, err))
+	}
+	return nr
+}
+
 var connCounter int64
 
 func start(t *testing.T) *testconn {

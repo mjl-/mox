@@ -205,8 +205,8 @@ func (c *Conn) xrespCode() (string, CodeArg) {
 		c.xspace()
 		destUIDValidity := c.xnzuint32()
 		c.xspace()
-		uid := c.xnzuint32()
-		codeArg = CodeAppendUID{destUIDValidity, uid}
+		uids := c.xuidrange()
+		codeArg = CodeAppendUID{destUIDValidity, uids}
 	case "COPYUID":
 		c.xspace()
 		destUIDValidity := c.xnzuint32()

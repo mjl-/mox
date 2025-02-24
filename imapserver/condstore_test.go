@@ -120,19 +120,19 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 	// The ones we insert below will start with modseq 3. So we'll have messages with modseq 1 and 3-6.
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.xuntagged(imapclient.UntaggedExists(4))
-	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UID: 4})
+	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("4")})
 
 	tc.transactf("ok", "Append otherbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.xuntagged()
-	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 2, UID: 1})
+	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 2, UIDs: xparseUIDRange("1")})
 
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.xuntagged(imapclient.UntaggedExists(5))
-	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UID: 5})
+	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("5")})
 
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.xuntagged(imapclient.UntaggedExists(6))
-	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UID: 6})
+	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 1, UIDs: xparseUIDRange("6")})
 
 	tc2.transactf("ok", "Noop")
 	noflags := imapclient.FetchFlags(nil)

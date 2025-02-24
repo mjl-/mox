@@ -176,7 +176,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 2683	Yes	-	IMAP4 Implementation Recommendations
 2971	Yes	-	IMAP4 ID extension
 3348	Yes	Obs	(RFC 5258) The Internet Message Action Protocol (IMAP4) Child Mailbox Extension
-3502	Roadmap	-	Internet Message Access Protocol (IMAP) - MULTIAPPEND Extension
+3502	Yes	-	Internet Message Access Protocol (IMAP) - MULTIAPPEND Extension
 3503	?	-	Message Disposition Notification (MDN) profile for Internet Message Access Protocol (IMAP)
 3516	Yes	-	IMAP4 Binary Content Extension
 3691	Yes	-	Internet Message Access Protocol (IMAP) UNSELECT command

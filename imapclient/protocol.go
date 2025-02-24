@@ -38,6 +38,7 @@ const (
 	CapCreateSpecialUse Capability = "CREATE-SPECIAL-USE" // ../rfc/6154:296
 	CapCompressDeflate  Capability = "COMPRESS=DEFLATE"   // ../rfc/4978:65
 	CapListMetadata     Capability = "LIST-METADTA"       // ../rfc/9590:73
+	CapMultiAppend      Capability = "MULTIAPPEND"        // ../rfc/3502:33
 )
 
 // Status is the tagged final result of a command.
@@ -111,11 +112,11 @@ func (c CodeUint) CodeString() string {
 // "APPENDUID" response code.
 type CodeAppendUID struct {
 	UIDValidity uint32
-	UID         uint32
+	UIDs        NumRange
 }
 
 func (c CodeAppendUID) CodeString() string {
-	return fmt.Sprintf("APPENDUID %d %d", c.UIDValidity, c.UID)
+	return fmt.Sprintf("APPENDUID %d %s", c.UIDValidity, c.UIDs.String())
 }
 
 // "COPYUID" response code.
@@ -388,6 +389,13 @@ func ParseNumSet(s string) (ns NumSet, rerr error) {
 	c := Conn{br: bufio.NewReader(strings.NewReader(s))}
 	defer c.recover(&rerr)
 	ns = c.xsequenceSet()
+	return
+}
+
+func ParseUIDRange(s string) (nr NumRange, rerr error) {
+	c := Conn{br: bufio.NewReader(strings.NewReader(s))}
+	defer c.recover(&rerr)
+	nr = c.xuidrange()
 	return
 }
 

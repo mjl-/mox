@@ -196,7 +196,8 @@ func (c *Conn) TLSConnectionState() *tls.ConnectionState {
 	return nil
 }
 
-// Commandf writes a free-form IMAP command to the server.
+// Commandf writes a free-form IMAP command to the server. An ending \r\n is
+// written too.
 // If tag is empty, a next unique tag is assigned.
 func (c *Conn) Commandf(tag string, format string, args ...any) (rerr error) {
 	defer c.recover(&rerr)

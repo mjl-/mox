@@ -139,7 +139,7 @@ https://nlnet.nl/project/Mox/.
 - Automate DNS management, for setup and maintenance, such as DANE/DKIM key rotation
 - Config options for "transactional email domains", for which mox will only
   send messages
-- More IMAP extensions (UNAUTHENTICATE, REPLACE, NOTIFY, MULTIAPPEND, OBJECTID, UIDONLY)
+- More IMAP extensions (UNAUTHENTICATE, REPLACE, NOTIFY, OBJECTID, UIDONLY)
 - Encrypted storage of files (email messages, TLS keys), also with per account keys
 - Recognize common deliverability issues and help postmasters solve them
 - Calendaring with CalDAV/iCal
