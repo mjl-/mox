@@ -207,10 +207,13 @@ type conn struct {
 	// ../rfc/5182:13 ../rfc/9051:4040
 	searchResult []store.UID
 
-	// Set during authentication, typically picked up by the ID command that
-	// immediately follows, or will be flushed after any other command after
-	// authentication instead.
-	loginAttempt *store.LoginAttempt
+	// userAgent is set by the ID command, which can happen at any time (before or
+	// after the authentication attempt we want to log it with).
+	userAgent string
+	// loginAttempt is set during authentication, typically picked up by the ID command
+	// that soon follows, or it will be flushed within 1s, or on connection teardown.
+	loginAttempt     *store.LoginAttempt
+	loginAttemptTime time.Time
 
 	// Only set when connection has been authenticated. These can be set even when
 	// c.state is stateNotAuthenticated, for TLS client certificate authentication. In
@@ -839,25 +842,20 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		if c.loginAttempt != nil {
 			store.LoginAttemptAdd(context.Background(), c.logbg(), *c.loginAttempt)
 			c.loginAttempt = nil
+			c.loginAttemptTime = time.Time{}
 		}
 	}()
 
-	var storeLoginAttempt bool
 	for {
 		c.command()
 		c.xflush() // For flushing errors, or commands that did not flush explicitly.
 
-		// After an authentication command, we will have a c.loginAttempt. We typically get
-		// an "ID" command with the user-agent immediately after. So we wait for one more
-		// command after seeing a loginAttempt to gather it.
-		if storeLoginAttempt {
-			storeLoginAttempt = false
-			if c.loginAttempt != nil {
-				store.LoginAttemptAdd(context.Background(), c.logbg(), *c.loginAttempt)
-				c.loginAttempt = nil
-			}
-		} else if c.loginAttempt != nil {
-			storeLoginAttempt = true
+		// Flush login attempt if it hasn't already been flushed by an ID command within 1s
+		// after authentication.
+		if c.loginAttempt != nil && (c.loginAttempt.UserAgent != "" || time.Since(c.loginAttemptTime) >= time.Second) {
+			store.LoginAttemptAdd(context.Background(), c.logbg(), *c.loginAttempt)
+			c.loginAttempt = nil
+			c.loginAttemptTime = time.Time{}
 		}
 	}
 }
@@ -875,6 +873,7 @@ func (c *conn) newLoginAttempt(useTLS bool, authMech string) {
 		store.LoginAttemptAdd(context.Background(), c.logbg(), *c.loginAttempt)
 		c.loginAttempt = nil
 	}
+	c.loginAttemptTime = time.Now()
 
 	var state *tls.ConnectionState
 	if tc, ok := c.conn.(*tls.Conn); ok && useTLS {
@@ -889,12 +888,13 @@ func (c *conn) newLoginAttempt(useTLS bool, authMech string) {
 	}
 
 	c.loginAttempt = &store.LoginAttempt{
-		RemoteIP: c.remoteIP.String(),
-		LocalIP:  localIP,
-		TLS:      store.LoginAttemptTLS(state),
-		Protocol: "imap",
-		AuthMech: authMech,
-		Result:   store.AuthError, // Replaced by caller.
+		RemoteIP:  c.remoteIP.String(),
+		LocalIP:   localIP,
+		TLS:       store.LoginAttemptTLS(state),
+		Protocol:  "imap",
+		UserAgent: c.userAgent, // May still be empty, to be filled in later.
+		AuthMech:  authMech,
+		Result:    store.AuthError, // Replaced by caller.
 	}
 }
 
@@ -1799,12 +1799,15 @@ func (c *conn) cmdID(tag, cmd string, p *parser) {
 	}
 	p.xempty()
 
-	// The ID command is typically sent immediately after authentication. So we've
-	// prepared the LoginAttempt and write it now.
+	c.userAgent = strings.Join(values, " ")
+
+	// The ID command is typically sent soon after authentication. So we've prepared
+	// the LoginAttempt and write it now.
 	if c.loginAttempt != nil {
-		c.loginAttempt.UserAgent = strings.Join(values, " ")
+		c.loginAttempt.UserAgent = c.userAgent
 		store.LoginAttemptAdd(context.Background(), c.logbg(), *c.loginAttempt)
 		c.loginAttempt = nil
+		c.loginAttemptTime = time.Time{}
 	}
 
 	// We just log the client id.
