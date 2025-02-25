@@ -3303,7 +3303,7 @@ func flaglist(fl store.Flags, keywords []string) listspace {
 //
 // State: Authenticated and selected.
 func (c *conn) cmdAppend(tag, cmd string, p *parser) {
-	// Command: ../rfc/9051:3406 ../rfc/6855:204 ../rfc/3501:2527 ../rfc/3502:95
+	// Command: ../rfc/9051:3406 ../rfc/6855:204 ../rfc/4466:427 ../rfc/3501:2527 ../rfc/3502:95
 	// Examples: ../rfc/9051:3482 ../rfc/3501:2589 ../rfc/3502:175
 
 	// A message that we've (partially) read from the client, and will be delivering to
@@ -3385,7 +3385,12 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		// todo: this is only relevant if we also support the CATENATE extension?
 		// ../rfc/6855:204
 		utf8 := p.take("UTF8 (")
-		size, synclit := p.xliteralSize(utf8, false)
+		if utf8 {
+			p.xtake("~")
+		}
+		// Always allow literal8, for binary extension. ../rfc/4466:486
+		// For utf8, we already consumed the required ~ above.
+		size, synclit := p.xliteralSize(!utf8, false)
 
 		if !quotaUnlimited && !overQuota {
 			quotaAvail -= size
