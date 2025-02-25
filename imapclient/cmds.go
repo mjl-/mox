@@ -394,3 +394,44 @@ func (c *Conn) UIDMove(uidSet NumSet, dstMailbox string) (untagged []Untagged, r
 	defer c.recover(&rerr)
 	return c.Transactf("uid move %s %s", uidSet.String(), astring(dstMailbox))
 }
+
+// Replace replaces a message from the currently selected mailbox with a
+// new/different version of the message in the named mailbox, which may be the
+// same or different than the currently selected mailbox.
+//
+// Num is a message sequence number. "*" references the last message.
+//
+// Servers must have announced the REPLACE capability.
+func (c *Conn) Replace(msgseq string, mailbox string, msg Append) (untagged []Untagged, result Result, rerr error) {
+	// todo: parse msgseq, must be nznumber, with a known msgseq. or "*" with at least one message.
+	return c.replace("replace", msgseq, mailbox, msg)
+}
+
+// UIDReplace is like Replace, but operates on a UID instead of message
+// sequence number.
+func (c *Conn) UIDReplace(uid string, mailbox string, msg Append) (untagged []Untagged, result Result, rerr error) {
+	// todo: parse uid, must be nznumber, with a known uid. or "*" with at least one message.
+	return c.replace("uid replace", uid, mailbox, msg)
+}
+
+func (c *Conn) replace(cmd string, num string, mailbox string, msg Append) (untagged []Untagged, result Result, rerr error) {
+	defer c.recover(&rerr)
+
+	// todo: use synchronizing literal for larger messages.
+
+	var date string
+	if msg.Received != nil {
+		date = ` "` + msg.Received.Format("_2-Jan-2006 15:04:05 -0700") + `"`
+	}
+	// todo: only use literal8 if needed, possibly with "UTF8()"
+	// todo: encode mailbox
+	c.Commandf("", "%s %s %s (%s)%s ~{%d+}", cmd, num, astring(mailbox), strings.Join(msg.Flags, " "), date, msg.Size)
+
+	_, err := io.Copy(c, msg.Data)
+	c.xcheckf(err, "write message data")
+
+	fmt.Fprintf(c.bw, "\r\n")
+	c.xflush()
+
+	return c.Response()
+}

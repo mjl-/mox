@@ -165,12 +165,13 @@ var authFailDelay = time.Second  // After authentication failure.
 // COMPRESS=DEFLATE: ../rfc/4978
 // LIST-METADATA: ../rfc/9590
 // MULTIAPPEND: ../rfc/3502
+// REPLACE: ../rfc/8508
 //
 // We always announce support for SCRAM PLUS-variants, also on connections without
 // TLS. The client should not be selecting PLUS variants on non-TLS connections,
 // instead opting to do the bare SCRAM variant without indicating the server claims
 // to support the PLUS variant (skipping the server downgrade detection check).
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE CREATE-SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE METADATA SAVEDATE WITHIN NAMESPACE COMPRESS=DEFLATE LIST-METADATA MULTIAPPEND"
+const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE CREATE-SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE METADATA SAVEDATE WITHIN NAMESPACE COMPRESS=DEFLATE LIST-METADATA MULTIAPPEND REPLACE"
 
 type conn struct {
 	cid               int64
@@ -268,7 +269,7 @@ var (
 	commandsStateAny              = stateCommands("capability", "noop", "logout", "id")
 	commandsStateNotAuthenticated = stateCommands("starttls", "authenticate", "login")
 	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata", "compress")
-	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move")
+	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move", "replace", "uid replace")
 )
 
 var commands = map[string]func(c *conn, tag, cmd string, p *parser){
@@ -320,6 +321,9 @@ var commands = map[string]func(c *conn, tag, cmd string, p *parser){
 	"uid copy":    (*conn).cmdUIDCopy,
 	"move":        (*conn).cmdMove,
 	"uid move":    (*conn).cmdUIDMove,
+	// ../rfc/8508:289
+	"replace":     (*conn).cmdReplace,
+	"uid replace": (*conn).cmdUIDReplace,
 }
 
 var errIO = errors.New("io error")             // For read/write errors and errors that should close the connection.
@@ -3999,6 +4003,16 @@ func (c *conn) cmdMove(tag, cmd string, p *parser) {
 // State: Selected
 func (c *conn) cmdUIDMove(tag, cmd string, p *parser) {
 	c.cmdxMove(true, tag, cmd, p)
+}
+
+// State: Selected
+func (c *conn) cmdReplace(tag, cmd string, p *parser) {
+	c.cmdxReplace(false, tag, cmd, p)
+}
+
+// State: Selected
+func (c *conn) cmdUIDReplace(tag, cmd string, p *parser) {
+	c.cmdxReplace(true, tag, cmd, p)
 }
 
 func (c *conn) gatherCopyMoveUIDs(isUID bool, nums numSet) ([]store.UID, []any) {

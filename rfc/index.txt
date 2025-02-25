@@ -231,7 +231,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 8440	?	-	IMAP4 Extension for Returning MYRIGHTS Information in Extended LIST
 8457	No	-	IMAP "$Important" Keyword and "\Important" Special-Use Attribute
 8474	Roadmap	-	IMAP Extension for Object Identifiers
-8508	Roadmap	-	IMAP REPLACE Extension
+8508	Yes	-	IMAP REPLACE Extension
 8514	Yes	-	Internet Message Access Protocol (IMAP) - SAVEDATE Extension
 8970	Roadmap	-	IMAP4 Extension: Message Preview Generation
 9208	Partial	-	IMAP QUOTA Extension
