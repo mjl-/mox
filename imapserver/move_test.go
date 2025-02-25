@@ -31,12 +31,12 @@ func TestMove(t *testing.T) {
 	tc.transactf("bad", "move 1 inbox ") // Leftover.
 
 	// Seqs 1,2 and UIDs 3,4.
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.client.StoreFlagsSet("1:2", true, `\Deleted`)
 	tc.client.Expunge()
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 
 	tc.client.Unselect()
 	tc.client.Examine("inbox")
@@ -69,8 +69,8 @@ func TestMove(t *testing.T) {
 	tc3.xuntagged(imapclient.UntaggedExpunge(1), imapclient.UntaggedExpunge(1))
 
 	// UIDs 5,6
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc2.transactf("ok", "noop") // Drain.
 	tc3.transactf("ok", "noop") // Drain.
 

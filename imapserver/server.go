@@ -2340,7 +2340,7 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 	defer func() {
 		if account != nil {
 			err := account.Close()
-			c.log.Check(err, "close account")
+			c.xsanity(err, "close account")
 		}
 	}()
 
@@ -2886,7 +2886,7 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 	for _, mID := range removeMessageIDs {
 		p := c.account.MessagePath(mID)
 		err := os.Remove(p)
-		c.log.Check(err, "removing message file for mailbox delete", slog.String("path", p))
+		c.xsanity(err, "removing message file %q for mailbox delete", p)
 	}
 
 	c.ok(tag, cmd)
@@ -3562,7 +3562,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		for _, a := range appends {
 			c.uidAppend(a.m.UID)
 		}
-		// todo spec: with condstore/qresync, is there a mechanism to the client know the modseq for the appended uid? in theory an untagged fetch with the modseq after the OK APPENDUID could make sense, but this probably isn't allowed.
+		// todo spec: with condstore/qresync, is there a mechanism to let the client know the modseq for the appended uid? in theory an untagged fetch with the modseq after the OK APPENDUID could make sense, but this probably isn't allowed.
 		c.bwritelinef("* %d EXISTS", len(c.uids))
 	}
 
@@ -4382,7 +4382,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 		}
 	}
 
-	if c.enabled[capQresync] {
+	if qresync {
 		// ../rfc/9051:6744 ../rfc/7162:1334
 		c.writeresultf("%s OK [HIGHESTMODSEQ %d] move", tag, modseq.Client())
 	} else {

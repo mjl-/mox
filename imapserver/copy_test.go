@@ -25,12 +25,12 @@ func TestCopy(t *testing.T) {
 	tc.transactf("bad", "copy 1 inbox ") // Leftover.
 
 	// Seqs 1,2 and UIDs 3,4.
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.client.StoreFlagsSet("1:2", true, `\Deleted`)
 	tc.client.Expunge()
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 
 	tc.transactf("no", "copy 1 nonexistent")
 	tc.xcode("TRYCREATE")

@@ -341,6 +341,14 @@ func xparseUIDRange(s string) imapclient.NumRange {
 	return nr
 }
 
+func makeAppend(msg string) imapclient.Append {
+	return imapclient.Append{Size: int64(len(msg)), Data: strings.NewReader(msg)}
+}
+
+func makeAppendTime(msg string, tm time.Time) imapclient.Append {
+	return imapclient.Append{Received: &tm, Size: int64(len(msg)), Data: strings.NewReader(msg)}
+}
+
 var connCounter int64
 
 func start(t *testing.T) *testconn {
@@ -732,8 +740,8 @@ func TestSequence(t *testing.T) {
 	tc.transactf("ok", "uid fetch 1 all") // non-existing messages are OK for uids.
 	tc.transactf("ok", "uid fetch * all") // * is like uidnext, a non-existing message.
 
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.transactf("ok", "fetch 2:1,1 uid") // We reorder 2:1 to 1:2, but we don't deduplicate numbers.
 	tc.xuntagged(
 		imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(1)}},
@@ -753,7 +761,7 @@ func DisabledTestReference(t *testing.T) {
 	defer tc.close()
 	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 
 	tc2 := startNoSwitchboard(t)
 	defer tc2.close()

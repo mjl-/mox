@@ -59,7 +59,7 @@ func testSelectExamine(t *testing.T, examine bool) {
 	tc.xcode(okcode)
 
 	// Append a message. It will be reported as UNSEEN.
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.transactf("ok", "%s inbox", cmd)
 	tc.xuntagged(uclosed, uflags, upermflags, urecent, uunseen, uexists1, uuidval1, uuidnext2, ulist)
 	tc.xcode(okcode)

@@ -342,7 +342,7 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	tc.client.Enable("imap4rev2")
 	received, err := time.Parse(time.RFC3339, "2022-11-16T10:01:00+01:00")
 	tc.check(err, "parse time")
-	tc.client.Append("inbox", nil, &received, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppendTime(exampleMsg, received))
 	tc.client.Select("inbox")
 	tc.close()
 

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"hash"
+	"io"
 	"strings"
 	"time"
 
@@ -265,14 +266,50 @@ func (c *Conn) Status(mailbox string, attrs ...StatusAttr) (untagged []Untagged,
 	return c.Transactf("status %s (%s)", astring(mailbox), strings.Join(l, " "))
 }
 
+// Append represents a parameter to the APPEND or REPLACE commands.
+type Append struct {
+	Flags    []string
+	Received *time.Time
+	Size     int64
+	Data     io.Reader // Must return Size bytes.
+}
+
 // Append adds message to mailbox with flags and optional receive time.
-func (c *Conn) Append(mailbox string, flags []string, received *time.Time, message []byte) (untagged []Untagged, result Result, rerr error) {
+//
+// Multiple messages are only possible when the server has announced the
+// MULTIAPPEND capability.
+func (c *Conn) Append(mailbox string, message Append, more ...Append) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
-	var date string
-	if received != nil {
-		date = ` "` + received.Format("_2-Jan-2006 15:04:05 -0700") + `"`
+
+	if _, ok := c.CapAvailable[CapMultiAppend]; !ok && len(more) > 0 {
+		c.xerrorf("can only append multiple messages when server has announced MULTIAPPEND capability")
 	}
-	return c.Transactf("append %s (%s)%s {%d+}\r\n%s", astring(mailbox), strings.Join(flags, " "), date, len(message), message)
+
+	tag := c.nextTag()
+	c.LastTag = tag
+
+	_, err := fmt.Fprintf(c.bw, "%s append %s", tag, astring(mailbox))
+	c.xcheckf(err, "write command")
+
+	msgs := append([]Append{message}, more...)
+	for _, m := range msgs {
+		var date string
+		if m.Received != nil {
+			date = ` "` + m.Received.Format("_2-Jan-2006 15:04:05 -0700") + `"`
+		}
+
+		// todo: use literal8 if needed, with "UTF8()" if required.
+		// todo: for larger messages, use a synchronizing literal.
+
+		fmt.Fprintf(c.bw, " (%s)%s {%d+}\r\n", strings.Join(m.Flags, " "), date, m.Size)
+		c.xflush()
+		_, err := io.Copy(c, m.Data)
+		c.xcheckf(err, "write message data")
+	}
+
+	fmt.Fprintf(c.bw, "\r\n")
+	c.xflush()
+	return c.Response()
 }
 
 // note: No idle command. Idle is better implemented by writing the request and reading and handling the responses as they come in.

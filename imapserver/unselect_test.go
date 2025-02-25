@@ -18,7 +18,7 @@ func TestUnselect(t *testing.T) {
 	tc.transactf("no", "fetch 1 all") // Invalid when not selected.
 
 	tc.client.Select("inbox")
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.client.StoreFlagsAdd("1", true, `\Deleted`)
 	tc.transactf("ok", "unselect")
 	tc.transactf("ok", "status inbox (messages)")

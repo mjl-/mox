@@ -14,7 +14,7 @@ func TestStore(t *testing.T) {
 	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Enable("imap4rev2")
 
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.client.Select("inbox")
 
 	uid1 := imapclient.FetchUID(1)

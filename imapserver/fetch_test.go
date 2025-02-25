@@ -19,7 +19,7 @@ func TestFetch(t *testing.T) {
 	tc.client.Enable("imap4rev2")
 	received, err := time.Parse(time.RFC3339, "2022-11-16T10:01:00+01:00")
 	tc.check(err, "parse time")
-	tc.client.Append("inbox", nil, &received, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppendTime(exampleMsg, received))
 	tc.client.Select("inbox")
 
 	uid1 := imapclient.FetchUID(1)
@@ -288,7 +288,7 @@ func TestFetch(t *testing.T) {
 			Ext:          &imapclient.BodyExtensionMpart{Params: [][2]string{{"boundary", "unique-boundary-1"}}},
 		},
 	}
-	tc.client.Append("inbox", nil, &received, []byte(nestedMessage))
+	tc.client.Append("inbox", makeAppendTime(nestedMessage, received))
 	tc.transactf("ok", "fetch 2 bodystructure")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{uid2, bodystructure2}})
 

@@ -31,9 +31,9 @@ func TestExpunge(t *testing.T) {
 
 	tc.client.Unselect()
 	tc.client.Select("inbox")
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 	tc.transactf("ok", "expunge") // Still nothing to remove.
 	tc.xuntagged()
 
@@ -51,9 +51,9 @@ func TestExpunge(t *testing.T) {
 	tc.xuntagged()
 
 	// Only UID 2 is still left. We'll add 3 more. Getting us to UIDs 2,4,5,6.
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
-	tc.client.Append("inbox", nil, nil, []byte(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
+	tc.client.Append("inbox", makeAppend(exampleMsg))
 
 	tc.transactf("bad", "uid expunge")            // Missing uid set.
 	tc.transactf("bad", "uid expunge 1 leftover") // Leftover data.

@@ -54,7 +54,7 @@ func TestDelete(t *testing.T) {
 
 	// Let's try again with a message present.
 	tc.client.Create("msgs", nil)
-	tc.client.Append("msgs", nil, nil, []byte(exampleMsg))
+	tc.client.Append("msgs", makeAppend(exampleMsg))
 	tc.transactf("ok", "delete msgs")
 
 	// Delete for inbox/* is allowed.

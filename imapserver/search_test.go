@@ -67,13 +67,13 @@ func TestSearch(t *testing.T) {
 	received := time.Date(2020, time.January, 1, 10, 0, 0, 0, time.UTC)
 	saveDate := time.Now()
 	for i := 0; i < 5; i++ {
-		tc.client.Append("inbox", nil, &received, []byte(exampleMsg))
+		tc.client.Append("inbox", makeAppendTime(exampleMsg, received))
 	}
 	tc.client.StoreFlagsSet("1:4", true, `\Deleted`)
 	tc.client.Expunge()
 
 	received = time.Date(2022, time.January, 1, 9, 0, 0, 0, time.UTC)
-	tc.client.Append("inbox", nil, &received, []byte(searchMsg))
+	tc.client.Append("inbox", makeAppendTime(searchMsg, received))
 
 	received = time.Date(2022, time.January, 1, 9, 0, 0, 0, time.UTC)
 	mostFlags := []string{
@@ -90,7 +90,7 @@ func TestSearch(t *testing.T) {
 		`custom1`,
 		`Custom2`,
 	}
-	tc.client.Append("inbox", mostFlags, &received, []byte(searchMsg))
+	tc.client.Append("inbox", imapclient.Append{Flags: mostFlags, Received: &received, Size: int64(len(searchMsg)), Data: strings.NewReader(searchMsg)})
 
 	// We now have sequence numbers 1,2,3 and UIDs 5,6,7.
 
