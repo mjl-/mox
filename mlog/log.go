@@ -301,14 +301,20 @@ func (l Log) Trace(level slog.Level, prefix string, data []byte) {
 	}
 
 	var msg string
+	size := -1
 	if hideData, hideAuth := traceLevel(filterLevel, level); hideData {
 		msg = prefix + "..."
+		size = len(data)
 	} else if hideAuth {
 		msg = prefix + "***"
 	} else {
 		msg = prefix + string(data)
+		size = len(data)
 	}
 	r := slog.NewRecord(time.Time{}, level, msg, 0)
+	if size >= 0 {
+		r.AddAttrs(slog.Int("size", size))
+	}
 	ph.write(filterLevel, r)
 }
 
