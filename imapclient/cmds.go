@@ -140,8 +140,9 @@ func (c *Conn) CompressDeflate() (untagged []Untagged, result Result, rerr error
 	c.xcheck(rerr)
 
 	c.flateBW = bufio.NewWriter(c)
-	fw, err := flate.NewWriter(c.flateBW, flate.DefaultCompression)
+	fw0, err := flate.NewWriter(c.flateBW, flate.DefaultCompression)
 	c.xcheckf(err, "deflate") // Cannot happen.
+	fw := moxio.NewFlateWriter(fw0)
 
 	c.compress = true
 	c.flateWriter = fw

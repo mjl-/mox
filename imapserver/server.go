@@ -56,6 +56,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/exp/maps"
@@ -101,6 +102,8 @@ var (
 		},
 	)
 )
+
+var unhandledPanics atomic.Int64 // For tests.
 
 var limiterConnectionrate, limiterConnections *ratelimit.Limiter
 
@@ -177,6 +180,7 @@ type conn struct {
 	cid               int64
 	state             state
 	conn              net.Conn
+	connBroken        bool               // Once broken, we won't flush any more data.
 	tls               bool               // Whether TLS has been initialized.
 	viaHTTPS          bool               // Whether this connection came in via HTTPS (using TLS ALPN).
 	br                *bufio.Reader      // From remote, with TLS unwrapped in case of TLS, and possibly wrapping inflate.
@@ -197,7 +201,7 @@ type conn struct {
 	log               mlog.Log            // Used for all synchronous logging on this connection, see logbg for logging in a separate goroutine.
 	enabled           map[capability]bool // All upper-case.
 	compress          bool                // Whether compression is enabled, via compress command.
-	flateWriter       *flate.Writer       // For flushing output after flushing conn.bw, and for closing.
+	flateWriter       *moxio.FlateWriter  // For flushing output after flushing conn.bw, and for closing.
 	flateBW           *bufio.Writer       // Wraps raw connection writes, flateWriter writes here, also needs flushing.
 
 	// Set by SEARCH with SAVE. Can be used by commands accepting a sequence-set with
@@ -341,6 +345,11 @@ func (c *conn) xsanity(err error, format string, args ...any) {
 		panic(fmt.Errorf("%s: %s", fmt.Sprintf(format, args...), err))
 	}
 	c.log.Errorx(fmt.Sprintf(format, args...), err)
+}
+
+func (c *conn) xbrokenf(format string, args ...any) {
+	c.connBroken = true
+	panic(fmt.Errorf(format, args...))
 }
 
 type msgseq uint32
@@ -499,7 +508,7 @@ func (c *conn) Write(buf []byte) (int, error) {
 
 		nn, err := c.conn.Write(buf[:chunk])
 		if err != nil {
-			panic(fmt.Errorf("write: %s (%w)", err, errIO))
+			c.xbrokenf("write: %s (%w)", err, errIO)
 		}
 		n += nn
 		buf = buf[chunk:]
@@ -542,6 +551,7 @@ func (c *conn) readline0() (string, error) {
 	if err != nil && errors.Is(err, moxio.ErrLineTooLong) {
 		return "", fmt.Errorf("%s (%w)", err, errProtocol)
 	} else if err != nil {
+		c.connBroken = true
 		return "", fmt.Errorf("%s (%w)", err, errIO)
 	}
 	return line, nil
@@ -576,7 +586,7 @@ func (c *conn) readline(readCmd bool) string {
 			c.writelinef("* BYE inactive")
 		}
 		if !errors.Is(err, errIO) && !errors.Is(err, errProtocol) {
-			err = fmt.Errorf("%s (%w)", err, errIO)
+			c.xbrokenf("%s (%w)", err, errIO)
 		}
 		panic(err)
 	}
@@ -628,6 +638,11 @@ func (c *conn) bwritelinef(format string, args ...any) {
 }
 
 func (c *conn) xflush() {
+	// If the connection is already broken, we're not going to write more.
+	if c.connBroken {
+		return
+	}
+
 	err := c.bw.Flush()
 	xcheckf(err, "flush") // Should never happen, the Write caused by the Flush should panic on i/o error.
 
@@ -668,8 +683,7 @@ func (c *conn) xreadliteral(size int64, sync bool) []byte {
 
 		_, err := io.ReadFull(c.br, buf)
 		if err != nil {
-			// Cannot use xcheckf due to %w handling of errIO.
-			panic(fmt.Errorf("reading literal: %s (%w)", err, errIO))
+			c.xbrokenf("reading literal: %s (%w)", err, errIO)
 		}
 	}
 	return buf
@@ -780,6 +794,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 			c.log.Error("unhandled panic", slog.Any("err", x))
 			debug.PrintStack()
 			metrics.PanicInc(metrics.Imapserver)
+			unhandledPanics.Add(1) // For tests.
 		}
 	}()
 
@@ -1067,7 +1082,7 @@ func (c *conn) xtlsHandshakeAndAuthenticate(conn net.Conn) {
 	defer cancel()
 	c.log.Debug("starting tls server handshake")
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
-		panic(fmt.Errorf("tls handshake: %s (%w)", err, errIO))
+		c.xbrokenf("tls handshake: %s (%w)", err, errIO)
 	}
 	cancel()
 
@@ -1076,8 +1091,8 @@ func (c *conn) xtlsHandshakeAndAuthenticate(conn net.Conn) {
 		// Verify client after session resumption.
 		err := c.tlsClientAuthVerifyPeerCertParsed(cs.PeerCertificates[0])
 		if err != nil {
-			c.bwritelinef("* BYE [ALERT] Error verifying client certificate after TLS session resumption: %s", err)
-			panic(fmt.Errorf("tls verify client certificate after resumption: %s (%w)", err, errIO))
+			c.writelinef("* BYE [ALERT] Error verifying client certificate after TLS session resumption: %s", err)
+			c.xbrokenf("tls verify client certificate after resumption: %s (%w)", err, errIO)
 		}
 	}
 
@@ -1162,7 +1177,7 @@ func (c *conn) command() {
 				// stop processing because there is a good chance whatever they sent has multiple
 				// lines.
 				c.writelinef("* BYE please try again speaking imap")
-				panic(errIO)
+				c.xbrokenf("not speaking imap (%w)", errIO)
 			}
 			c.log.Debugx("imap command syntax error", sxerr.err, logFields...)
 			c.log.Info("imap syntax error", slog.String("lastline", c.lastLine))
@@ -1215,7 +1230,7 @@ func (c *conn) command() {
 	case <-mox.Shutdown.Done():
 		// ../rfc/9051:5375
 		c.writelinef("* BYE shutting down")
-		panic(errIO)
+		c.xbrokenf("shutting down (%w)", errIO)
 	default:
 	}
 
@@ -1851,8 +1866,9 @@ func (c *conn) cmdCompress(tag, cmd string, p *parser) {
 	c.ok(tag, cmd)
 
 	c.flateBW = bufio.NewWriter(c)
-	fw, err := flate.NewWriter(c.flateBW, flate.DefaultCompression)
+	fw0, err := flate.NewWriter(c.flateBW, flate.DefaultCompression)
 	xcheckf(err, "deflate") // Cannot happen.
+	fw := moxio.NewFlateWriter(fw0)
 
 	c.compress = true
 	c.flateWriter = fw
@@ -3452,10 +3468,10 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		c.xtrace(mlog.LevelTrace) // Restore.
 		if err != nil {
 			// Cannot use xcheckf due to %w handling of errIO.
-			panic(fmt.Errorf("reading literal message: %s (%w)", err, errIO))
+			c.xbrokenf("reading literal message: %s (%w)", err, errIO)
 		}
 		if msize != size {
-			xserverErrorf("read %d bytes for message, expected %d (%w)", msize, size, errIO)
+			c.xbrokenf("read %d bytes for message, expected %d (%w)", msize, size, errIO)
 		}
 		totalSize += msize
 
@@ -3610,7 +3626,7 @@ wait:
 		case <-mox.Shutdown.Done():
 			// ../rfc/9051:5375
 			c.writelinef("* BYE shutting down")
-			panic(errIO)
+			c.xbrokenf("shutting down (%w)", errIO)
 		}
 	}
 
@@ -3621,7 +3637,7 @@ wait:
 
 	if strings.ToUpper(line) != "DONE" {
 		// We just close the connection because our protocols are out of sync.
-		panic(fmt.Errorf("%w: in IDLE, expected DONE", errIO))
+		c.xbrokenf("%w: in IDLE, expected DONE", errIO)
 	}
 
 	c.ok(tag, cmd)

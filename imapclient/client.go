@@ -22,8 +22,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/mjl-/flate"
-
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
 )
@@ -34,10 +32,11 @@ type Conn struct {
 	// writes through c.bw. It wraps a tracing reading/writer and may wrap flate
 	// compression.
 	conn        net.Conn
+	connBroken  bool // If connection is broken, we won't flush (and write) again.
 	br          *bufio.Reader
 	bw          *bufio.Writer
 	compress    bool // If compression is enabled, we must flush flateWriter and its target original bufio writer.
-	flateWriter *flate.Writer
+	flateWriter *moxio.FlateWriter
 	flateBW     *bufio.Writer
 
 	log       mlog.Log
@@ -146,11 +145,19 @@ func (c *Conn) Write(buf []byte) (n int, rerr error) {
 	defer c.recover(&rerr)
 
 	n, rerr = c.conn.Write(buf)
+	if rerr != nil {
+		c.connBroken = true
+	}
 	c.xcheckf(rerr, "write")
 	return n, nil
 }
 
 func (c *Conn) xflush() {
+	// Not writing any more when connection is broken.
+	if c.connBroken {
+		return
+	}
+
 	err := c.bw.Flush()
 	c.xcheckf(err, "flush")
 
@@ -173,7 +180,7 @@ func (c *Conn) Close() (rerr error) {
 	if c.conn == nil {
 		return nil
 	}
-	if c.flateWriter != nil {
+	if !c.connBroken && c.flateWriter != nil {
 		err := c.flateWriter.Close()
 		c.xcheckf(err, "close deflate writer")
 		err = c.flateBW.Flush()

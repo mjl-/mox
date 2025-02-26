@@ -309,6 +309,12 @@ func (tc *testconn) waitDone() {
 }
 
 func (tc *testconn) close() {
+	defer func() {
+		if unhandledPanics.Swap(0) > 0 {
+			tc.t.Fatalf("handled panic in server")
+		}
+	}()
+
 	if tc.account == nil {
 		// Already closed, we are not strict about closing multiple times.
 		return
@@ -317,7 +323,9 @@ func (tc *testconn) close() {
 	tc.check(err, "close account")
 	// no account.CheckClosed(), the tests open accounts multiple times.
 	tc.account = nil
-	tc.client.Close()
+	if tc.client != nil {
+		tc.client.Close()
+	}
 	tc.serverConn.Close()
 	tc.waitDone()
 	if tc.switchStop != nil {
@@ -381,9 +389,9 @@ func (c namedConn) RemoteAddr() net.Addr {
 func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientConfig *tls.Config, allowLoginWithoutTLS, noCloseSwitchboard, setPassword bool, accname string, afterInit func() error) *testconn {
 	limitersInit() // Reset rate limiters.
 
-	mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
-	mox.MustLoadConfig(true, false)
 	if first {
+		mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
+		mox.MustLoadConfig(true, false)
 		store.Close() // May not be open, we ignore error.
 		os.RemoveAll("../testdata/imap/data")
 		err := store.Init(ctxbg)
@@ -418,7 +426,15 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 		tcheck(t, err, "fileconn")
 		err = f.Close()
 		tcheck(t, err, "close file for conn")
-		return namedConn{fc}
+
+		// Small read/write buffers, for detecting closed/broken connections quickly.
+		uc := fc.(*net.UnixConn)
+		err = uc.SetReadBuffer(512)
+		tcheck(t, err, "set read buffer")
+		uc.SetWriteBuffer(512)
+		tcheck(t, err, "set write buffer")
+
+		return namedConn{uc}
 	}
 	serverConn := xfdconn(fds[0], "server")
 	clientConn := xfdconn(fds[1], "client")

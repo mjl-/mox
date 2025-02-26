@@ -211,10 +211,10 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 	c.xtrace(mlog.LevelTrace) // Restore.
 	if err != nil {
 		// Cannot use xcheckf due to %w handling of errIO.
-		xserverErrorf("reading literal message: %s (%w)", err, errIO)
+		c.xbrokenf("reading literal message: %s (%w)", err, errIO)
 	}
 	if msize != size {
-		xserverErrorf("read %d bytes for message, expected %d (%w)", msize, size, errIO)
+		c.xbrokenf("read %d bytes for message, expected %d (%w)", msize, size, errIO)
 	}
 
 	// Finish reading the command.
