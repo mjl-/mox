@@ -50,24 +50,42 @@ func (c *Conn) Starttls(config *tls.Config) (untagged []Untagged, result Result,
 	err := tlsConn.Handshake()
 	c.xcheckf(err, "tls handshake")
 	c.conn = tlsConn
-	c.br = bufio.NewReader(moxio.NewTraceReader(c.log, "CR: ", tlsConn))
-	c.bw = bufio.NewWriter(moxio.NewTraceWriter(c.log, "CW: ", c))
 	return untagged, result, nil
 }
 
 // Login authenticates with username and password
 func (c *Conn) Login(username, password string) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
-	return c.Transactf("login %s %s", astring(username), astring(password))
+
+	c.LastTag = c.nextTag()
+	fmt.Fprintf(c.bw, "%s login %s ", c.LastTag, astring(username))
+	defer c.xtrace(mlog.LevelTraceauth)()
+	fmt.Fprintf(c.bw, "%s\r\n", astring(password))
+	c.xtrace(mlog.LevelTrace) // Restore.
+	return c.Response()
 }
 
 // Authenticate with plaintext password using AUTHENTICATE PLAIN.
 func (c *Conn) AuthenticatePlain(username, password string) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
 
-	untagged, result, rerr = c.Transactf("authenticate plain %s", base64.StdEncoding.EncodeToString(fmt.Appendf(nil, "\u0000%s\u0000%s", username, password)))
-	return
+	c.Commandf("", "authenticate plain")
+	_, untagged, result, rerr = c.ReadContinuation()
+	c.xcheckf(rerr, "reading continuation")
+	if result.Status != "" {
+		c.xerrorf("got result status %q, expected continuation", result.Status)
+	}
+	defer c.xtrace(mlog.LevelTraceauth)()
+	xw := base64.NewEncoder(base64.StdEncoding, c.bw)
+	fmt.Fprintf(xw, "\u0000%s\u0000%s", username, password)
+	xw.Close()
+	c.xtrace(mlog.LevelTrace) // Restore.
+	fmt.Fprintf(c.bw, "\r\n")
+	c.xflush()
+	return c.Response()
 }
+
+// todo: implement cram-md5, write its credentials as traceauth.
 
 // Authenticate with SCRAM-SHA-256(-PLUS) or SCRAM-SHA-1(-PLUS). With SCRAM, the
 // password is not exchanged in plaintext form, but only derived hashes are
@@ -100,7 +118,7 @@ func (c *Conn) AuthenticateSCRAM(method string, h func() hash.Hash, username, pa
 		line, untagged, result, rerr = c.ReadContinuation()
 		c.xcheckf(err, "read continuation")
 		if result.Status != "" {
-			c.xerrorf("unexpected status %q", result.Status)
+			c.xerrorf("got result status %q, expected continuation", result.Status)
 		}
 		buf, err := base64.StdEncoding.DecodeString(line)
 		c.xcheckf(err, "parsing base64 from remote")
@@ -146,13 +164,13 @@ func (c *Conn) CompressDeflate() (untagged []Untagged, result Result, rerr error
 
 	c.compress = true
 	c.flateWriter = fw
-	tw := moxio.NewTraceWriter(mlog.New("imapclient", nil), "CW: ", fw)
-	c.bw = bufio.NewWriter(tw)
+	c.tw = moxio.NewTraceWriter(mlog.New("imapclient", nil), "CW: ", fw)
+	c.bw = bufio.NewWriter(c.tw)
 
 	rc := c.xprefixConn()
 	fr := flate.NewReaderPartial(rc)
-	tr := moxio.NewTraceReader(mlog.New("imapclient", nil), "CR: ", fr)
-	c.br = bufio.NewReader(tr)
+	c.tr = moxio.NewTraceReader(mlog.New("imapclient", nil), "CR: ", fr)
+	c.br = bufio.NewReader(c.tr)
 
 	return
 }
@@ -303,9 +321,10 @@ func (c *Conn) Append(mailbox string, message Append, more ...Append) (untagged 
 		// todo: for larger messages, use a synchronizing literal.
 
 		fmt.Fprintf(c.bw, " (%s)%s {%d+}\r\n", strings.Join(m.Flags, " "), date, m.Size)
-		c.xflush()
-		_, err := io.Copy(c, m.Data)
+		defer c.xtrace(mlog.LevelTracedata)()
+		_, err := io.Copy(c.bw, m.Data)
 		c.xcheckf(err, "write message data")
+		c.xtrace(mlog.LevelTrace) // Restore
 	}
 
 	fmt.Fprintf(c.bw, "\r\n")
@@ -428,8 +447,10 @@ func (c *Conn) replace(cmd string, num string, mailbox string, msg Append) (unta
 	// todo: encode mailbox
 	c.Commandf("", "%s %s %s (%s)%s ~{%d+}", cmd, num, astring(mailbox), strings.Join(msg.Flags, " "), date, msg.Size)
 
-	_, err := io.Copy(c, msg.Data)
+	defer c.xtrace(mlog.LevelTracedata)()
+	_, err := io.Copy(c.bw, msg.Data)
 	c.xcheckf(err, "write message data")
+	c.xtrace(mlog.LevelTrace)
 
 	fmt.Fprintf(c.bw, "\r\n")
 	c.xflush()

@@ -135,8 +135,7 @@ func testAuthenticateSCRAM(t *testing.T, tls bool, method string, h func() hash.
 		tc.writelinef("%s authenticate %s %s", tc.client.LastTag, method, base64.StdEncoding.EncodeToString([]byte(clientFirst)))
 
 		xreadContinuation := func() []byte {
-			line, _, result, rerr := tc.client.ReadContinuation()
-			tc.check(rerr, "read continuation")
+			line, _, result, _ := tc.client.ReadContinuation()
 			if result.Status != "" {
 				tc.t.Fatalf("expected continuation")
 			}
@@ -200,8 +199,7 @@ func TestAuthenticateCRAMMD5(t *testing.T) {
 		tc.writelinef("%s authenticate CRAM-MD5", tc.client.LastTag)
 
 		xreadContinuation := func() []byte {
-			line, _, result, rerr := tc.client.ReadContinuation()
-			tc.check(rerr, "read continuation")
+			line, _, result, _ := tc.client.ReadContinuation()
 			if result.Status != "" {
 				tc.t.Fatalf("expected continuation")
 			}

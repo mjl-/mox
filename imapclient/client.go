@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"fmt"
+	"log/slog"
 	"net"
 	"reflect"
 	"strings"
@@ -38,6 +39,8 @@ type Conn struct {
 	compress    bool // If compression is enabled, we must flush flateWriter and its target original bufio writer.
 	flateWriter *moxio.FlateWriter
 	flateBW     *bufio.Writer
+	tr          *moxio.TraceReader
+	tw          *moxio.TraceWriter
 
 	log       mlog.Log
 	panic     bool
@@ -74,14 +77,17 @@ func New(cid int64, conn net.Conn, xpanic bool) (client *Conn, rerr error) {
 	log := mlog.New("imapclient", nil).WithCid(cid)
 	c := Conn{
 		conn:         conn,
-		br:           bufio.NewReader(moxio.NewTraceReader(log, "CR: ", conn)),
 		log:          log,
 		panic:        xpanic,
 		CapAvailable: map[Capability]struct{}{},
 		CapEnabled:   map[Capability]struct{}{},
 	}
+	c.tr = moxio.NewTraceReader(log, "CR: ", &c)
+	c.br = bufio.NewReader(c.tr)
+
 	// Writes are buffered and write to Conn, which may panic.
-	c.bw = bufio.NewWriter(moxio.NewTraceWriter(log, "CW: ", &c))
+	c.tw = moxio.NewTraceWriter(log, "CW: ", &c)
+	c.bw = bufio.NewWriter(c.tw)
 
 	defer c.recover(&rerr)
 	tag := c.xnonspace()
@@ -139,8 +145,9 @@ func (c *Conn) xcheck(err error) {
 	}
 }
 
-// Write writes directly to the connection. Write errors do take the connection's
-// panic mode into account, i.e. Write can panic.
+// Write writes directly to underlying connection (TCP, TLS). For internal use
+// only, to implement io.Writer. Write errors do take the connection's panic mode
+// into account, i.e. Write can panic.
 func (c *Conn) Write(buf []byte) (n int, rerr error) {
 	defer c.recover(&rerr)
 
@@ -150,6 +157,12 @@ func (c *Conn) Write(buf []byte) (n int, rerr error) {
 	}
 	c.xcheckf(rerr, "write")
 	return n, nil
+}
+
+// Read reads directly from the underlying connection (TCP, TLS). For internal use
+// only, to implement io.Reader.
+func (c *Conn) Read(buf []byte) (n int, err error) {
+	return c.conn.Read(buf)
 }
 
 func (c *Conn) xflush() {
@@ -167,6 +180,17 @@ func (c *Conn) xflush() {
 		c.xcheckf(err, "flush deflate")
 		err = c.flateBW.Flush()
 		c.xcheckf(err, "flush deflate buffer")
+	}
+}
+
+func (c *Conn) xtrace(level slog.Level) func() {
+	c.xflush()
+	c.tr.SetTrace(level)
+	c.tw.SetTrace(level)
+	return func() {
+		c.xflush()
+		c.tr.SetTrace(mlog.LevelTrace)
+		c.tw.SetTrace(mlog.LevelTrace)
 	}
 }
 
@@ -291,10 +315,14 @@ func (c *Conn) Readline() (line string, rerr error) {
 // Callers should check rerr and result.Status being empty to check if a
 // continuation was read.
 func (c *Conn) ReadContinuation() (line string, untagged []Untagged, result Result, rerr error) {
+	defer c.recover(&rerr)
+
 	if !c.peek('+') {
 		untagged, result, rerr = c.Response()
-		c.xcheckf(rerr, "reading non-continuation response")
-		c.xerrorf("response status %q, expected OK", result.Status)
+		if result.Status == OK {
+			c.xerrorf("unexpected OK instead of continuation")
+		}
+		return
 	}
 	c.xtake("+ ")
 	line, err := c.Readline()

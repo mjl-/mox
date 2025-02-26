@@ -850,6 +850,7 @@ func (c *Conn) xliteral() []byte {
 	sync := c.take('+')
 	c.xtake("}")
 	c.xcrlf()
+	// todo: for some literals, read as tracedata
 	if size > 1<<20 {
 		c.xerrorf("refusing to read more than 1MB: %d", size)
 	}
