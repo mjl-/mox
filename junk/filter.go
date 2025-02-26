@@ -288,16 +288,27 @@ func (f *Filter) Save() error {
 	}
 	err := f.db.Write(context.Background(), func(tx *bstore.Tx) error {
 		update := func(w string, ham, spam uint32) error {
+			zeroword := w != "-" && ham == 0 && spam == 0
+
 			if f.isNew {
+				if zeroword {
+					return nil
+				}
 				return tx.Insert(&Wordscore{w, ham, spam})
 			}
 
 			wc := Wordscore{w, 0, 0}
 			err := tx.Get(&wc)
 			if err == bstore.ErrAbsent {
+				if zeroword {
+					return nil
+				}
 				return tx.Insert(&Wordscore{w, ham, spam})
 			} else if err != nil {
 				return err
+			}
+			if zeroword {
+				return tx.Delete(&Wordscore{w, 0, 0})
 			}
 			return tx.Update(&Wordscore{w, ham, spam})
 		}
@@ -334,6 +345,8 @@ func loadWords(ctx context.Context, db *bstore.DB, l []string, dst map[string]wo
 			wc := Wordscore{Word: w}
 			if err := tx.Get(&wc); err == nil {
 				dst[w] = word{wc.Ham, wc.Spam}
+			} else if err != bstore.ErrAbsent {
+				return fmt.Errorf("get word: %v", err)
 			}
 		}
 		return nil
