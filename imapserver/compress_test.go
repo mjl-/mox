@@ -40,6 +40,11 @@ func TestCompressStartTLS(t *testing.T) {
 	tc.transactf("ok", "append inbox (\\seen) {%d+}\r\n%s", len(exampleMsg), exampleMsg)
 	tc.transactf("ok", "noop")
 	tc.transactf("ok", "fetch 1 body.peek[1]")
+
+	// Prevent client.Close from failing the test. The client first closes the
+	// compression stream, which causes the server to close the connection, after which
+	// the messages to close the TLS connection are written to a closed socket.
+	tc.client.SetPanic(false)
 }
 
 func TestCompressBreak(t *testing.T) {

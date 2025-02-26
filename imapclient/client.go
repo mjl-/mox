@@ -170,10 +170,20 @@ func (c *Conn) xflush() {
 	}
 }
 
+// SetPanic sets whether errors cause a panic instead of returning errors.
+func (c *Conn) SetPanic(panic bool) {
+	c.panic = panic
+}
+
 // Close closes the connection, flushing and closing any compression and TLS layer.
 //
 // You may want to call Logout first. Closing a connection with a mailbox with
 // deleted messages not yet expunged will not expunge those messages.
+//
+// Closing a TLS connection that is logged out, or closing a TLS connection with
+// compression enabled (i.e. two layered streams), may cause spurious errors
+// because the server may immediate close the underlying connection when it sees
+// the connection is being closed.
 func (c *Conn) Close() (rerr error) {
 	defer c.recover(&rerr)
 
