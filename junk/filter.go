@@ -39,8 +39,8 @@ type word struct {
 	Spam uint32
 }
 
-type wordscore struct {
-	Word string
+type Wordscore struct {
+	Word string `bstore:"typename wordscore"`
 	Ham  uint32
 	Spam uint32
 }
@@ -57,7 +57,7 @@ type Params struct {
 	RareWords   int     `sconf:"optional" sconf-doc:"Occurrences in word database until a word is considered rare and its influence in calculating probability reduced. E.g. 1 or 2."`
 }
 
-var DBTypes = []any{wordscore{}} // Stored in DB.
+var DBTypes = []any{Wordscore{}} // Stored in DB.
 
 type Filter struct {
 	Params
@@ -142,7 +142,7 @@ func OpenFilter(ctx context.Context, log mlog.Log, params Params, dbPath, bloomP
 		bloom:     bloom,
 	}
 	err = f.db.Read(ctx, func(tx *bstore.Tx) error {
-		wc := wordscore{Word: "-"}
+		wc := Wordscore{Word: "-"}
 		err := tx.Get(&wc)
 		f.hams = wc.Ham
 		f.spams = wc.Spam
@@ -277,11 +277,11 @@ func (f *Filter) Save() error {
 	f.log.Debug("inserting words in junkfilter db", slog.Any("words", len(f.changed)))
 	// start := time.Now()
 	if f.isNew {
-		if err := f.db.HintAppend(true, wordscore{}); err != nil {
+		if err := f.db.HintAppend(true, Wordscore{}); err != nil {
 			f.log.Errorx("hint appendonly", err)
 		} else {
 			defer func() {
-				err := f.db.HintAppend(false, wordscore{})
+				err := f.db.HintAppend(false, Wordscore{})
 				f.log.Check(err, "restoring append hint")
 			}()
 		}
@@ -289,17 +289,17 @@ func (f *Filter) Save() error {
 	err := f.db.Write(context.Background(), func(tx *bstore.Tx) error {
 		update := func(w string, ham, spam uint32) error {
 			if f.isNew {
-				return tx.Insert(&wordscore{w, ham, spam})
+				return tx.Insert(&Wordscore{w, ham, spam})
 			}
 
-			wc := wordscore{w, 0, 0}
+			wc := Wordscore{w, 0, 0}
 			err := tx.Get(&wc)
 			if err == bstore.ErrAbsent {
-				return tx.Insert(&wordscore{w, ham, spam})
+				return tx.Insert(&Wordscore{w, ham, spam})
 			} else if err != nil {
 				return err
 			}
-			return tx.Update(&wordscore{w, ham, spam})
+			return tx.Update(&Wordscore{w, ham, spam})
 		}
 		if err := update("-", f.hams, f.spams); err != nil {
 			return fmt.Errorf("storing total ham/spam message count: %s", err)
@@ -331,7 +331,7 @@ func loadWords(ctx context.Context, db *bstore.DB, l []string, dst map[string]wo
 
 	err := db.Read(ctx, func(tx *bstore.Tx) error {
 		for _, w := range l {
-			wc := wordscore{Word: w}
+			wc := Wordscore{Word: w}
 			if err := tx.Get(&wc); err == nil {
 				dst[w] = word{wc.Ham, wc.Spam}
 			}

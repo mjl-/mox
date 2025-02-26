@@ -90,7 +90,7 @@ func (a *Account) RetrainMessages(ctx context.Context, log mlog.Log, tx *bstore.
 func (a *Account) RetrainMessage(ctx context.Context, log mlog.Log, tx *bstore.Tx, jf *junk.Filter, m *Message, absentOK bool) error {
 	untrain := m.TrainedJunk != nil
 	untrainJunk := untrain && *m.TrainedJunk
-	train := m.Junk || m.Notjunk && !(m.Junk && m.Notjunk)
+	train := m.Junk != m.Notjunk
 	trainJunk := m.Junk
 
 	if !untrain && !train || (untrain && train && untrainJunk == trainJunk) {
@@ -144,7 +144,7 @@ func (a *Account) RetrainMessage(ctx context.Context, log mlog.Log, tx *bstore.T
 // TrainMessage trains the junk filter based on the current m.Junk/m.Notjunk flags,
 // disregarding m.TrainedJunk and not updating that field.
 func (a *Account) TrainMessage(ctx context.Context, log mlog.Log, jf *junk.Filter, m Message) (bool, error) {
-	if !m.Junk && !m.Notjunk || (m.Junk && m.Notjunk) {
+	if m.Junk == m.Notjunk {
 		return false, nil
 	}
 

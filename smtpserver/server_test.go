@@ -39,6 +39,7 @@ import (
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/subjectpass"
 	"github.com/mjl-/mox/tlsrptdb"
+	"github.com/mjl-/mox/webops"
 )
 
 var ctxbg = context.Background()
@@ -99,6 +100,7 @@ type testserver struct {
 	dnsbls       []dns.Domain
 	tlsmode      smtpclient.TLSMode
 	tlspkix      bool
+	xops         webops.XOps
 }
 
 const password0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
@@ -109,6 +111,21 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 
 	log := mlog.New("smtpserver", nil)
 
+	checkf := func(ctx context.Context, err error, format string, args ...any) {
+		tcheck(t, err, fmt.Sprintf(format, args...))
+	}
+	xops := webops.XOps{
+		DBWrite: func(ctx context.Context, acc *store.Account, fn func(tx *bstore.Tx)) {
+			err := acc.DB.Write(ctx, func(tx *bstore.Tx) error {
+				fn(tx)
+				return nil
+			})
+			tcheck(t, err, "db write")
+		},
+		Checkf:     checkf,
+		Checkuserf: checkf,
+	}
+
 	ts := testserver{
 		t:        t,
 		cid:      1,
@@ -117,6 +134,7 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 		serverConfig: &tls.Config{
 			Certificates: []tls.Certificate{fakeCert(t, false)},
 		},
+		xops: xops,
 	}
 
 	// Ensure session keys, for tests that check resume and authentication.
@@ -622,7 +640,7 @@ func TestDelivery(t *testing.T) {
 }
 
 func tinsertmsg(t *testing.T, acc *store.Account, mailbox string, m *store.Message, msg string) {
-	mf, err := store.CreateMessageTemp(pkglog, "queue-dsn")
+	mf, err := store.CreateMessageTemp(pkglog, "insertmsg")
 	tcheck(t, err, "temp message")
 	defer os.Remove(mf.Name())
 	defer mf.Close()
@@ -651,7 +669,7 @@ func tretrain(t *testing.T, acc *store.Account) {
 	q := bstore.QueryDB[store.Message](ctxbg, acc.DB)
 	q.FilterEqual("Expunged", false)
 	q.FilterFn(func(m store.Message) bool {
-		return m.Flags.Junk || m.Flags.Notjunk
+		return m.Flags.Junk != m.Flags.Notjunk
 	})
 	msgs, err := q.List()
 	tcheck(t, err, "fetch messages")
@@ -739,10 +757,14 @@ func TestSpam(t *testing.T) {
 	})
 
 	// Mark the messages as having good reputation.
-	q := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
-	q.FilterEqual("Expunged", false)
-	_, err := q.UpdateFields(map[string]any{"Junk": false, "Notjunk": true})
-	tcheck(t, err, "update junkiness")
+	var ids []int64
+	err := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).FilterEqual("Expunged", false).ForEach(func(m store.Message) error {
+		ids = append(ids, m.ID)
+		return nil
+	})
+	tcheck(t, err, "get message ids")
+	ts.xops.MessageFlagsClear(ctxbg, pkglog, ts.acc, ids, []string{"$Junk"})
+	ts.xops.MessageFlagsAdd(ctxbg, pkglog, ts.acc, ids, []string{"$NotJunk"})
 
 	// Message should now be accepted.
 	ts.run(func(client *smtpclient.Client) {
@@ -760,7 +782,7 @@ func TestSpam(t *testing.T) {
 
 	// Undo dmarc pass, mark messages as junk, and train the filter.
 	resolver.TXT = nil
-	q = bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
+	q := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
 	q.FilterEqual("Expunged", false)
 	_, err = q.UpdateFields(map[string]any{"Junk": true, "Notjunk": false})
 	tcheck(t, err, "update junkiness")
@@ -853,6 +875,7 @@ happens to come from forwarding mail server.
 			n, err := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).UpdateFields(map[string]any{"Junk": true, "MsgFromValidated": true})
 			tcheck(t, err, "marking messages as junk")
 			tcompare(t, n, 10)
+			tretrain(t, ts.acc)
 
 			// Next delivery will fail, with negative "message From" signal.
 			err = client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgBad)), strings.NewReader(msgBad), false, false, false)
@@ -946,6 +969,7 @@ func TestDMARCSent(t *testing.T) {
 		nm := m
 		nm.Junk = true
 		tinsertmsg(t, ts.acc, "Archive", &nm, deliverMessage)
+
 		nm = m
 		nm.Notjunk = true
 		tinsertmsg(t, ts.acc, "Archive", &nm, deliverMessage)

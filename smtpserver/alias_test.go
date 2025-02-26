@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mjl-/bstore"
-
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/smtpclient"
@@ -279,10 +277,7 @@ test email
 	})
 
 	// Mark message as junk.
-	q := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
-	n, err := q.UpdateFields(map[string]any{"Junk": true})
-	tcheck(t, err, "mark as junk")
-	tcompare(t, n, 1)
+	ts.xops.MessageFlagsAdd(ctxbg, pkglog, ts.acc, []int64{1}, []string{"$Junk"})
 
 	ts.run(func(client *smtpclient.Client) {
 		mailFrom := "mjl@mox.example"
