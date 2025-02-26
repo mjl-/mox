@@ -3752,22 +3752,9 @@ func (c *conn) cmdClose(tag, cmd string, p *parser) {
 	// Request syntax: ../rfc/9051:6476 ../rfc/3501:4679
 	p.xempty()
 
-	if c.readonly {
-		c.unselect()
-		c.ok(tag, cmd)
-		return
+	if !c.readonly {
+		c.xexpunge(nil, true)
 	}
-
-	remove, _ := c.xexpunge(nil, true)
-
-	defer func() {
-		for _, m := range remove {
-			p := c.account.MessagePath(m.ID)
-			err := os.Remove(p)
-			c.xsanity(err, "removing message file for expunge for close")
-		}
-	}()
-
 	c.unselect()
 	c.ok(tag, cmd)
 }
@@ -3775,13 +3762,13 @@ func (c *conn) cmdClose(tag, cmd string, p *parser) {
 // expunge messages marked for deletion in currently selected/active mailbox.
 // if uidSet is not nil, only messages matching the set are deleted.
 //
-// messages that have been marked expunged from the database are returned, but the
-// corresponding files still have to be removed.
+// messages that have been marked expunged from the database are returned and
+// have already been removed.
 //
 // the highest modseq in the mailbox is returned, typically associated with the
 // removal of the messages, but if no messages were expunged the current latest max
 // modseq for the mailbox is returned.
-func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.Message, highestModSeq store.ModSeq) {
+func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (removed []store.Message, highestModSeq store.ModSeq) {
 	var modseq store.ModSeq
 
 	c.account.WithWLock(func() {
@@ -3806,10 +3793,10 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 				return uidSearch(c.uids, m.UID) > 0 && (uidSet == nil || uidSet.containsUID(m.UID, c.uids, c.searchResult))
 			})
 			qm.SortAsc("UID")
-			remove, err = qm.List()
+			removed, err = qm.List()
 			xcheckf(err, "listing messages to delete")
 
-			if len(remove) == 0 {
+			if len(removed) == 0 {
 				highestModSeq = mb.ModSeq
 				return
 			}
@@ -3820,17 +3807,17 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 			highestModSeq = modseq
 			mb.ModSeq = modseq
 
-			removeIDs := make([]int64, len(remove))
-			anyIDs := make([]any, len(remove))
+			removeIDs := make([]int64, len(removed))
+			anyIDs := make([]any, len(removed))
 			var totalSize int64
-			for i, m := range remove {
+			for i, m := range removed {
 				removeIDs[i] = m.ID
 				anyIDs[i] = m.ID
 				mb.Sub(m.MailboxCounts())
 				totalSize += m.Size
 				// Update "remove", because RetrainMessage below will save the message.
-				remove[i].Expunged = true
-				remove[i].ModSeq = modseq
+				removed[i].Expunged = true
+				removed[i].ModSeq = modseq
 			}
 			qmr := bstore.QueryTx[store.Recipient](tx)
 			qmr.FilterEqual("MessageID", anyIDs...)
@@ -3853,19 +3840,19 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 
 			// Mark expunged messages as not needing training, then retrain them, so if they
 			// were trained, they get untrained.
-			for i := range remove {
-				remove[i].Junk = false
-				remove[i].Notjunk = false
+			for i := range removed {
+				removed[i].Junk = false
+				removed[i].Notjunk = false
 			}
-			err = c.account.RetrainMessages(context.TODO(), c.log, tx, remove, true)
+			err = c.account.RetrainMessages(context.TODO(), c.log, tx, removed, true)
 			xcheckf(err, "untraining expunged messages")
 		})
 
 		// Broadcast changes to other connections. We may not have actually removed any
 		// messages, so take care not to send an empty update.
-		if len(remove) > 0 {
-			ouids := make([]store.UID, len(remove))
-			for i, m := range remove {
+		if len(removed) > 0 {
+			ouids := make([]store.UID, len(removed))
+			for i, m := range removed {
 				ouids[i] = m.UID
 			}
 			changes := []store.Change{
@@ -3874,8 +3861,14 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (remove []store.M
 			}
 			c.broadcast(changes)
 		}
+
+		for _, m := range removed {
+			p := c.account.MessagePath(m.ID)
+			err := os.Remove(p)
+			c.xsanity(err, "removing message file for expunge")
+		}
 	})
-	return remove, highestModSeq
+	return removed, highestModSeq
 }
 
 // Unselect is similar to close in that it closes the currently active mailbox, but
@@ -3935,20 +3928,12 @@ func (c *conn) cmdUIDExpunge(tag, cmd string, p *parser) {
 func (c *conn) cmdxExpunge(tag, cmd string, uidSet *numSet) {
 	// Command: ../rfc/9051:3687 ../rfc/3501:2695
 
-	remove, highestModSeq := c.xexpunge(uidSet, false)
-
-	defer func() {
-		for _, m := range remove {
-			p := c.account.MessagePath(m.ID)
-			err := os.Remove(p)
-			c.xsanity(err, "removing message file for expunge")
-		}
-	}()
+	removed, highestModSeq := c.xexpunge(uidSet, false)
 
 	// Response syntax: ../rfc/9051:6742 ../rfc/3501:4864
 	var vanishedUIDs numSet
 	qresync := c.enabled[capQresync]
-	for _, m := range remove {
+	for _, m := range removed {
 		seq := c.xsequence(m.UID)
 		c.sequenceRemove(seq, m.UID)
 		if qresync {
