@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -1294,7 +1295,7 @@ func (a *Account) Close() error {
 // CheckConsistency checks the consistency of the database and returns a non-nil
 // error for these cases:
 //
-// - Missing on-disk file for message.
+// - Missing or unexpected on-disk message files.
 // - Mismatch between message size and length of MsgPrefix and on-disk file.
 // - Missing HaveCounts.
 // - Incorrect mailbox counts.
@@ -1312,7 +1313,7 @@ func (a *Account) CheckConsistency() error {
 	var threadidErrors []string       // With limit.
 	var threadParentErrors []string   // With limit.
 	var threadAncestorErrors []string // With limit.
-	var errors []string
+	var errmsgs []string
 
 	err := a.DB.Read(context.Background(), func(tx *bstore.Tx) error {
 		nuv := NextUIDValidity{ID: 1}
@@ -1321,18 +1322,21 @@ func (a *Account) CheckConsistency() error {
 			return fmt.Errorf("fetching next uid validity: %v", err)
 		}
 
+		// All message id's from database. For checking for unexpected files afterwards.
+		messageIDs := map[int64]struct{}{}
+
 		mailboxes := map[int64]Mailbox{}
 		err = bstore.QueryTx[Mailbox](tx).ForEach(func(mb Mailbox) error {
 			mailboxes[mb.ID] = mb
 
 			if mb.UIDValidity >= nuv.Next {
 				errmsg := fmt.Sprintf("mailbox %q (id %d) has uidvalidity %d >= account next uidvalidity %d", mb.Name, mb.ID, mb.UIDValidity, nuv.Next)
-				errors = append(errors, errmsg)
+				errmsgs = append(errmsgs, errmsg)
 			}
 
 			if mb.ModSeq == 0 || mb.CreateSeq == 0 || mb.CreateSeq > mb.ModSeq {
 				errmsg := fmt.Sprintf("mailbox %q (id %d) has invalid modseq %d or createseq %d, both must be > 0 and createseq <= modseq", mb.Name, mb.ID, mb.ModSeq, mb.CreateSeq)
-				errors = append(errors, errmsg)
+				errmsgs = append(errmsgs, errmsg)
 				return nil
 			}
 			m, err := bstore.QueryTx[Message](tx).FilterNonzero(Message{MailboxID: mb.ID}).SortDesc("ModSeq").Limit(1).Get()
@@ -1342,7 +1346,7 @@ func (a *Account) CheckConsistency() error {
 				return fmt.Errorf("get message with highest modseq for mailbox: %v", err)
 			} else if mb.ModSeq < m.ModSeq {
 				errmsg := fmt.Sprintf("mailbox %q (id %d) has modseq %d < highest message modseq is %d", mb.Name, mb.ID, mb.ModSeq, m.ModSeq)
-				errors = append(errors, errmsg)
+				errmsgs = append(errmsgs, errmsg)
 			}
 			return nil
 		})
@@ -1353,10 +1357,10 @@ func (a *Account) CheckConsistency() error {
 		err = bstore.QueryTx[Annotation](tx).ForEach(func(a Annotation) error {
 			if a.ModSeq == 0 || a.CreateSeq == 0 || a.CreateSeq > a.ModSeq {
 				errmsg := fmt.Sprintf("annotation %d in mailbox %q (id %d) has invalid modseq %d or createseq %d, both must be > 0 and modseq >= createseq", a.ID, mailboxes[a.MailboxID].Name, a.MailboxID, a.ModSeq, a.CreateSeq)
-				errors = append(errors, errmsg)
+				errmsgs = append(errmsgs, errmsg)
 			} else if a.MailboxID > 0 && mailboxes[a.MailboxID].ModSeq < a.ModSeq {
 				errmsg := fmt.Sprintf("annotation %d in mailbox %q (id %d) has invalid modseq %d > mailbox modseq %d", a.ID, mailboxes[a.MailboxID].Name, a.MailboxID, a.ModSeq, mailboxes[a.MailboxID].ModSeq)
-				errors = append(errors, errmsg)
+				errmsgs = append(errmsgs, errmsg)
 			}
 			return nil
 		})
@@ -1383,6 +1387,7 @@ func (a *Account) CheckConsistency() error {
 			if m.Expunged {
 				return nil
 			}
+			messageIDs[m.ID] = struct{}{}
 			p := a.MessagePath(m.ID)
 			st, err := os.Stat(p)
 			if err != nil {
@@ -1420,15 +1425,39 @@ func (a *Account) CheckConsistency() error {
 			return fmt.Errorf("reading messages: %v", err)
 		}
 
+		msgdir := filepath.Join(a.Dir, "msg")
+		err = filepath.Walk(msgdir, func(path string, info fs.FileInfo, err error) error {
+			if err != nil {
+				if path == msgdir && errors.Is(err, fs.ErrNotExist) {
+					return nil
+				}
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			id, err := strconv.ParseInt(filepath.Base(path), 10, 64)
+			if err != nil {
+				return fmt.Errorf("parsing message id from path %q: %v", path, err)
+			}
+			if _, ok := messageIDs[id]; !ok {
+				return fmt.Errorf("unexpected message file %q", path)
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("walking message dir: %v", err)
+		}
+
 		var totalSize int64
 		for _, mb := range mailboxes {
 			totalSize += mb.Size
 			if !mb.HaveCounts {
 				errmsg := fmt.Sprintf("mailbox %q (id %d) does not have counts, should be %#v", mb.Name, mb.ID, counts[mb.ID])
-				errors = append(errors, errmsg)
+				errmsgs = append(errmsgs, errmsg)
 			} else if mb.MailboxCounts != counts[mb.ID] {
 				mbcounterr := fmt.Sprintf("mailbox %q (id %d) has wrong counts %s, should be %s", mb.Name, mb.ID, mb.MailboxCounts, counts[mb.ID])
-				errors = append(errors, mbcounterr)
+				errmsgs = append(errmsgs, mbcounterr)
 			}
 		}
 
@@ -1438,7 +1467,7 @@ func (a *Account) CheckConsistency() error {
 		}
 		if du.MessageSize != totalSize {
 			errmsg := fmt.Sprintf("total message size in database is %d, sum of mailbox message sizes is %d", du.MessageSize, totalSize)
-			errors = append(errors, errmsg)
+			errmsgs = append(errmsgs, errmsg)
 		}
 
 		return nil
@@ -1446,14 +1475,14 @@ func (a *Account) CheckConsistency() error {
 	if err != nil {
 		return err
 	}
-	errors = append(errors, uidErrors...)
-	errors = append(errors, modseqErrors...)
-	errors = append(errors, fileErrors...)
-	errors = append(errors, threadidErrors...)
-	errors = append(errors, threadParentErrors...)
-	errors = append(errors, threadAncestorErrors...)
-	if len(errors) > 0 {
-		return fmt.Errorf("%s", strings.Join(errors, "; "))
+	errmsgs = append(errmsgs, uidErrors...)
+	errmsgs = append(errmsgs, modseqErrors...)
+	errmsgs = append(errmsgs, fileErrors...)
+	errmsgs = append(errmsgs, threadidErrors...)
+	errmsgs = append(errmsgs, threadParentErrors...)
+	errmsgs = append(errmsgs, threadAncestorErrors...)
+	if len(errmsgs) > 0 {
+		return fmt.Errorf("%s", strings.Join(errmsgs, "; "))
 	}
 	return nil
 }
