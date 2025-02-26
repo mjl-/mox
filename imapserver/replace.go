@@ -69,6 +69,10 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 	// function aborts handling this command.
 	var uidOld store.UID
 	checkMessage := func(tx *bstore.Tx) func() {
+		if c.readonly {
+			return func() { xuserErrorf("mailbox open in read-only mode") }
+		}
+
 		mb, err := c.account.MailboxFind(tx, name)
 		if err != nil {
 			return func() { xserverErrorf("finding mailbox: %v", err) }
