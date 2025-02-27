@@ -3565,9 +3565,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		committed = true
 
 		// Fetch pending changes, possibly with new UIDs, so we can apply them before adding our own new UID.
-		if c.comm != nil {
-			pendingChanges = c.comm.Get()
-		}
+		pendingChanges = c.comm.Get()
 
 		// Broadcast the change to other connections.
 		for _, a := range appends {

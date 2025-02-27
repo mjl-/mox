@@ -98,26 +98,37 @@ func TestFetch(t *testing.T) {
 
 	// Should be returned unmodified, because there is no content-transfer-encoding.
 	tc.transactf("ok", "fetch 1 binary[]")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binary1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binary1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	tc.transactf("ok", "fetch 1 binary[1]")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binarypart1}}) // Seen flag not changed.
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
-	tc.transactf("ok", "fetch 1 binary[]<1.1>")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binarypartial1, flagsSeen}})
+	tc.transactf("ok", "uid fetch 1 binary[]<1.1>")
+	tc.xuntagged(
+		imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binarypartial1, noflags}},
+		imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}}, // For UID FETCH, we get the flags during the command.
+	)
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 binary[1]<1.1>")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binarypartpartial1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binarypartpartial1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 binary[]<10000.10001>")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binaryend1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binaryend1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 binary[1]<10000.10001>")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binarypartend1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binarypartend1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 binary.size[]")
@@ -128,29 +139,43 @@ func TestFetch(t *testing.T) {
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 body[]")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, body1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, body1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 	tc.transactf("ok", "fetch 1 body[]<1.2>")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, bodyoff1}}) // Already seen.
+	tc.transactf("ok", "noop")
+	tc.xuntagged() // Already seen.
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 body[1]")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, bodypart1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, bodypart1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 body[1]<1.2>")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, body1off1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, body1off1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 body[1]<100000.100000>")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, bodyend1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, bodyend1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 body[header]")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, bodyheader1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, bodyheader1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 body[text]")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, bodytext1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, bodytext1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	// equivalent to body.peek[header], ../rfc/3501:3183
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
@@ -160,12 +185,16 @@ func TestFetch(t *testing.T) {
 	// equivalent to body[text], ../rfc/3501:3199
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 rfc822.text")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, rfctext1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, rfctext1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	// equivalent to body[], ../rfc/3501:3179
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
 	tc.transactf("ok", "fetch 1 rfc822")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, rfc1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, rfc1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	// With PEEK, we should not get the \Seen flag.
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
@@ -194,7 +223,9 @@ func TestFetch(t *testing.T) {
 	tc.transactf("bad", "fetch 2 body[]")
 
 	tc.transactf("ok", "fetch 1:1 body[]")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, body1, flagsSeen}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, body1, noflags}})
+	tc.transactf("ok", "noop")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, flagsSeen}})
 
 	// UID fetch
 	tc.transactf("ok", "uid fetch 1 body[]")

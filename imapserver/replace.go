@@ -337,9 +337,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 		})
 
 		// Fetch pending changes, possibly with new UIDs, so we can apply them before adding our own new UID.
-		if c.comm != nil {
-			pendingChanges = c.comm.Get()
-		}
+		pendingChanges = c.comm.Get()
 
 		if oldMsgExpunged {
 			return
