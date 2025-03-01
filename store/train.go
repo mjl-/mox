@@ -24,7 +24,7 @@ var ErrNoJunkFilter = errors.New("junkfilter: not configured")
 // Do not forget to save the filter after modifying, and to always close the filter when done.
 // An empty filter is initialized on first access of the filter.
 func (a *Account) OpenJunkFilter(ctx context.Context, log mlog.Log) (*junk.Filter, *config.JunkFilter, error) {
-	conf, ok := mox.Conf.Account(a.Name)
+	conf, ok := a.Conf()
 	if !ok {
 		return nil, nil, ErrAccountUnknown
 	}

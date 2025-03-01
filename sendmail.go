@@ -167,7 +167,6 @@ binary should be setgid that group:
 		for {
 			block, rest := pem.Decode(pemBuf)
 			if block == nil && len(rest) != 0 {
-				log.Printf("xxx, leftover data %q", rest)
 				log.Fatalf("leftover data in pem file")
 			} else if block == nil {
 				break

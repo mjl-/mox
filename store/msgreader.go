@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-// MsgReader provides access to a message. Reads return the "msg_prefix" in the
+// MsgReader provides access to a message. Reads return the "MsgPrefix" in the
 // database (typically received headers), followed by the on-disk msg file
 // contents. MsgReader is an io.Reader, io.ReaderAt and io.Closer.
 type MsgReader struct {
