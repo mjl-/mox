@@ -1695,9 +1695,9 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 	conf, _ := a.Conf()
 	m.JunkFlagsForMailbox(mb, conf)
 
-	mr := FileMsgReader(m.MsgPrefix, msgFile) // We don't close, it would close the msgFile.
 	var part *message.Part
 	if m.ParsedBuf == nil {
+		mr := FileMsgReader(m.MsgPrefix, msgFile) // We don't close, it would close the msgFile.
 		p, err := message.EnsurePart(log.Logger, false, mr, m.Size)
 		if err != nil {
 			log.Infox("parsing delivered message", err, slog.String("parse", ""), slog.Int64("message", m.ID))
@@ -1709,13 +1709,24 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 			return fmt.Errorf("marshal parsed message: %w", err)
 		}
 		m.ParsedBuf = buf
-	} else {
+	}
+
+	var partTried bool
+	getPart := func() *message.Part {
+		if part != nil {
+			return part
+		}
+		if partTried {
+			return nil
+		}
+		partTried = true
 		var p message.Part
 		if err := json.Unmarshal(m.ParsedBuf, &p); err != nil {
 			log.Errorx("unmarshal parsed message, continuing", err, slog.String("parse", ""))
 		} else {
 			part = &p
 		}
+		return part
 	}
 
 	// If we are delivering to the originally intended mailbox, no need to store the mailbox ID again.
@@ -1723,13 +1734,13 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 		m.MailboxDestinedID = 0
 	}
 
-	if part != nil && m.MessageID == "" && m.SubjectBase == "" {
+	if m.MessageID == "" && m.SubjectBase == "" && getPart() != nil {
 		m.PrepareThreading(log, part)
 	}
 
 	// Assign to thread (if upgrade has completed).
 	noThreadID := nothreads
-	if m.ThreadID == 0 && !nothreads && part != nil {
+	if m.ThreadID == 0 && !nothreads && getPart() != nil {
 		select {
 		case <-a.threadsCompleted:
 			if a.threadsErr != nil {
@@ -1760,7 +1771,7 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 	}
 
 	// todo: perhaps we should match the recipients based on smtp submission and a matching message-id? we now miss the addresses in bcc's if the mail client doesn't save a message that includes the bcc header in the sent mailbox.
-	if mb.Sent && part != nil && part.Envelope != nil {
+	if mb.Sent && getPart() != nil && part.Envelope != nil {
 		e := part.Envelope
 		sent := e.Date
 		if sent.IsZero() {
