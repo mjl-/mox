@@ -1450,7 +1450,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 					if jf == nil {
 						return
 					}
-					err := jf.Close()
+					err := jf.CloseDiscard()
 					log.Check(err, "closing junk filter during cleanup")
 				}()
 

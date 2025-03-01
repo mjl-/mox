@@ -1099,23 +1099,17 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 					MsgPrefix:     []byte(msgPrefix),
 				}
 
-				if ok, maxSize, err := acc.CanAddMessageSize(tx, sentm.Size); err != nil {
-					xcheckf(err, "checking quota")
-				} else if !ok {
-					panic(webapi.Error{Code: "sentOverQuota", Message: fmt.Sprintf("message was sent, but not stored in sent mailbox due to quota of total %d bytes reached", maxSize)})
-				}
-
-				// Update mailbox before delivery, which changes uidnext.
-				sentmb.Add(sentm.MailboxCounts())
-				err = tx.Update(&sentmb)
-				xcheckf(err, "updating sent mailbox for counts")
-
-				err = acc.DeliverMessage(log, tx, &sentm, dataFile, true, false, false, true)
-				if err != nil {
+				err = acc.MessageAdd(log, tx, &sentmb, &sentm, dataFile, store.AddOpts{})
+				if err != nil && errors.Is(err, store.ErrOverQuota) {
+					panic(webapi.Error{Code: "sentOverQuota", Message: fmt.Sprintf("message was sent, but not stored in sent mailbox: %v", err)})
+				} else if err != nil {
 					metricSubmission.WithLabelValues("storesenterror").Inc()
 					metricked = true
 				}
 				xcheckf(err, "message submitted to queue, appending message to Sent mailbox")
+
+				err = tx.Update(&sentmb)
+				xcheckf(err, "updating mailbox")
 
 				changes = append(changes, sentm.ChangeAddUID(), sentmb.ChangeCounts())
 			})

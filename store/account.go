@@ -883,8 +883,16 @@ type Account struct {
 	// directory when delivering.
 	lastMsgDir string
 
-	// Write lock must be held for account/mailbox modifications including message delivery.
-	// Read lock for reading mailboxes/messages.
+	// Write lock must be held when modifying account/mailbox/message/flags/annotations
+	// if the change needs to be synchronized with client connections by broadcasting
+	// the changes. Changes that are not protocol-visible do not require a lock, the
+	// database transactions isolate activity, though locking may be necessary to
+	// protect in-memory-only access.
+	//
+	// Read lock for reading mailboxes/messages as a consistent snapsnot (i.e. not
+	// concurrent changes). For longer transactions, e.g. when reading many messages,
+	// the lock can be released while continuing to read from the transaction.
+	//
 	// When making changes to mailboxes/messages, changes must be broadcasted before
 	// releasing the lock to ensure proper UID ordering.
 	sync.RWMutex
@@ -1641,69 +1649,116 @@ func (a *Account) WithRLock(fn func()) {
 	fn()
 }
 
-// DeliverMessage delivers a mail message to the account.
+// AddOpts influence which work MessageAdd does. Some callers can batch
+// checks/operations efficiently. For convenience and safety, a zero AddOpts does
+// all the checks and work.
+type AddOpts struct {
+	SkipCheckQuota bool
+
+	// If set, the message size is not added to the disk usage. Caller must do that,
+	// e.g. for many messages at once. If used together with SkipCheckQuota, the
+	// DiskUsage is not read for database when adding a message.
+	SkipUpdateDiskUsage bool
+
+	// Do not fsync the delivered message file. Useful when copying message files from
+	// another mailbox. The hardlink created during delivery only needs a directory
+	// fsync.
+	SkipSourceFileSync bool
+
+	// The directory in which the message file is delivered, typically with a hard
+	// link, is not fsynced. Useful when delivering many files. A single or few
+	// directory fsyncs are more efficient.
+	SkipDirSync bool
+
+	// Do not assign thread information to a message. Useful when importing many
+	// messages and assigning threads efficiently after importing messages.
+	SkipThreads bool
+
+	// If JunkFilter is set, it is used for training. If not set, and the filter must
+	// be trained for a message, the junk filter is opened, modified and saved to disk.
+	JunkFilter *junk.Filter
+
+	SkipTraining bool
+}
+
+// MessageAdd delivers a mail message to the account.
 //
 // The message, with msg.MsgPrefix and msgFile combined, must have a header
 // section. The caller is responsible for adding a header separator to
 // msg.MsgPrefix if missing from an incoming message.
 //
+// If UID is not set, it is assigned automatically.
+//
+// If the message ModSeq is zero, it is assigned automatically. If the message
+// CreateSeq is zero, it is set to ModSeq. The mailbox ModSeq is set to the message
+// ModSeq.
+//
+// If the message does not fit in the quota, an error with ErrOverQuota is returned
+// and the mailbox and message are unchanged and the transaction can continue. For
+// other errors, the caller must abort the transaction.
+//
 // If the destination mailbox has the Sent special-use flag, the message is parsed
 // for its recipients (to/cc/bcc). Their domains are added to Recipients for use in
 // reputation classification.
 //
-// If sync is true, the message file and its directory will be synced. Should be
-// true for regular mail delivery, but can be false when importing many messages.
+// Must be called with account write lock held.
 //
-// If updateDiskUsage is true, the account total message size (for quota) is
-// updated. Callers must check if a message can be added within quota before
-// calling DeliverMessage.
-//
-// If CreateSeq/ModSeq is not set, it is assigned automatically.
-//
-// Must be called with account rlock or wlock.
-//
-// Caller must broadcast new message.
-//
-// Caller must update mailbox counts.
-func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, sync, notrain, nothreads, updateDiskUsage bool) (rerr error) {
+// Caller must save the mailbox after MessageAdd returns, and broadcast changes for
+// new the message, updated mailbox counts and possibly new mailbox keywords.
+func (a *Account) MessageAdd(log mlog.Log, tx *bstore.Tx, mb *Mailbox, m *Message, msgFile *os.File, opts AddOpts) (rerr error) {
 	if m.Expunged {
 		return fmt.Errorf("cannot deliver expunged message")
 	}
 
-	mb := Mailbox{ID: m.MailboxID}
-	if err := tx.Get(&mb); err != nil {
-		return fmt.Errorf("get mailbox: %w", err)
-	}
-	m.UID = mb.UIDNext
-	mb.UIDNext++
-	if m.CreateSeq == 0 || m.ModSeq == 0 {
-		modseq, err := a.NextModSeq(tx)
-		if err != nil {
-			return fmt.Errorf("assigning next modseq: %w", err)
-		}
-		m.CreateSeq = modseq
-		m.ModSeq = modseq
-	} else if m.ModSeq < mb.ModSeq {
-		return fmt.Errorf("cannot deliver message with modseq %d < mailbox modseq %d", m.ModSeq, mb.ModSeq)
-	}
-	mb.ModSeq = m.ModSeq
-	if err := tx.Update(&mb); err != nil {
-		return fmt.Errorf("updating mailbox nextuid: %w", err)
-	}
-
-	if updateDiskUsage {
+	if !opts.SkipUpdateDiskUsage || !opts.SkipCheckQuota {
 		du := DiskUsage{ID: 1}
 		if err := tx.Get(&du); err != nil {
 			return fmt.Errorf("get disk usage: %v", err)
 		}
-		du.MessageSize += m.Size
-		if err := tx.Update(&du); err != nil {
-			return fmt.Errorf("update disk usage: %v", err)
+
+		if !opts.SkipCheckQuota {
+			maxSize := a.QuotaMessageSize()
+			if maxSize > 0 && m.Size > maxSize-du.MessageSize {
+				return fmt.Errorf("%w: max size %d bytes", ErrOverQuota, maxSize)
+			}
+		}
+
+		if !opts.SkipUpdateDiskUsage {
+			du.MessageSize += m.Size
+			if err := tx.Update(&du); err != nil {
+				return fmt.Errorf("update disk usage: %v", err)
+			}
 		}
 	}
 
+	m.MailboxID = mb.ID
+	if m.MailboxOrigID == 0 {
+		m.MailboxOrigID = mb.ID
+	}
+	if m.UID == 0 {
+		m.UID = mb.UIDNext
+		mb.UIDNext++
+	}
+	if m.ModSeq == 0 {
+		modseq, err := a.NextModSeq(tx)
+		if err != nil {
+			return fmt.Errorf("assigning next modseq: %w", err)
+		}
+		m.ModSeq = modseq
+	} else if m.ModSeq < mb.ModSeq {
+		return fmt.Errorf("cannot deliver message with modseq %d < mailbox modseq %d", m.ModSeq, mb.ModSeq)
+	}
+	if m.CreateSeq == 0 {
+		m.CreateSeq = m.ModSeq
+	}
+	mb.ModSeq = m.ModSeq
+
+	if len(m.Keywords) > 0 {
+		mb.Keywords, _ = MergeKeywords(mb.Keywords, m.Keywords)
+	}
+
 	conf, _ := a.Conf()
-	m.JunkFlagsForMailbox(mb, conf)
+	m.JunkFlagsForMailbox(*mb, conf)
 
 	var part *message.Part
 	if m.ParsedBuf == nil {
@@ -1749,8 +1804,8 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 	}
 
 	// Assign to thread (if upgrade has completed).
-	noThreadID := nothreads
-	if m.ThreadID == 0 && !nothreads && getPart() != nil {
+	noThreadID := opts.SkipThreads
+	if m.ThreadID == 0 && !opts.SkipThreads && getPart() != nil {
 		select {
 		case <-a.threadsCompleted:
 			if a.threadsErr != nil {
@@ -1831,7 +1886,7 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 	}
 
 	// Sync file data to disk.
-	if sync {
+	if !opts.SkipSourceFileSync {
 		if err := msgFile.Sync(); err != nil {
 			return fmt.Errorf("fsync message file: %w", err)
 		}
@@ -1848,19 +1903,40 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 		}
 	}()
 
-	if sync {
+	if !opts.SkipDirSync {
 		if err := moxio.SyncDir(log, msgDir); err != nil {
 			return fmt.Errorf("sync directory: %w", err)
 		}
 	}
 
-	if !notrain && m.NeedsTraining() {
-		l := []Message{*m}
-		if err := a.RetrainMessages(context.TODO(), log, tx, l); err != nil {
+	if !opts.SkipTraining && m.NeedsTraining() && a.HasJunkFilter() {
+		jf, opened, err := a.ensureJunkFilter(context.TODO(), log, opts.JunkFilter)
+		if err != nil {
+			return fmt.Errorf("open junk filter: %v", err)
+		}
+		defer func() {
+			if jf != nil && opened {
+				err := jf.CloseDiscard()
+				log.Check(err, "closing junk filter without saving")
+			}
+		}()
+
+		// todo optimize: should let us do the tx.Update of m if needed. we should at least merge it with the common case of setting a thread id. and we should try to merge that with the insert by expliciting getting the next id from bstore.
+
+		if err := a.RetrainMessage(context.TODO(), log, tx, jf, m); err != nil {
 			return fmt.Errorf("training junkfilter: %w", err)
 		}
-		*m = l[0]
+
+		if opened {
+			err := jf.Close()
+			jf = nil
+			if err != nil {
+				return fmt.Errorf("close junk filter: %w", err)
+			}
+		}
 	}
+
+	mb.MailboxCounts.Add(m.MailboxCounts())
 
 	return nil
 }
@@ -2277,37 +2353,29 @@ func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFi
 	}()
 
 	err := a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
-		if ok, _, err := a.CanAddMessageSize(tx, m.Size); err != nil {
-			return err
-		} else if !ok {
-			return ErrOverQuota
-		}
-
-		modseq := m.ModSeq
-		mb, chl, err := a.MailboxEnsure(tx, mailbox, true, SpecialUse{}, &modseq)
+		mb, chl, err := a.MailboxEnsure(tx, mailbox, true, SpecialUse{}, &m.ModSeq)
 		if err != nil {
 			return fmt.Errorf("ensuring mailbox: %w", err)
 		}
-		m.MailboxID = mb.ID
-		m.MailboxOrigID = mb.ID
-		if m.ModSeq == 0 && modseq != 0 {
-			m.ModSeq = modseq
-			m.CreateSeq = modseq
+		if m.CreateSeq == 0 {
+			m.CreateSeq = m.ModSeq
 		}
 
-		// Update count early, DeliverMessage will update mb too and we don't want to fetch
-		// it again before updating.
-		mb.MailboxCounts.Add(m.MailboxCounts())
+		nmbkeywords := len(mb.Keywords)
+
+		if err := a.MessageAdd(log, tx, &mb, m, msgFile, AddOpts{}); err != nil {
+			return err
+		}
+
 		if err := tx.Update(&mb); err != nil {
 			return fmt.Errorf("updating mailbox for delivery: %w", err)
 		}
 
-		if err := a.DeliverMessage(log, tx, m, msgFile, true, false, false, true); err != nil {
-			return err
-		}
-
 		changes = append(changes, chl...)
 		changes = append(changes, m.ChangeAddUID(), mb.ChangeCounts())
+		if nmbkeywords != len(mb.Keywords) {
+			changes = append(changes, mb.ChangeKeywords())
+		}
 		return nil
 	})
 	if err != nil {
@@ -2925,7 +2993,7 @@ func (a *Account) SendLimitReached(tx *bstore.Tx, recipients []smtp.Path) (msgli
 // other mailboxes if they have them, reflected in the returned changes.
 //
 // Name must be in normalized form.
-func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUse) (changes []Change, created []string, exists bool, rerr error) {
+func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUse) (nmb Mailbox, changes []Change, created []string, exists bool, rerr error) {
 	elems := strings.Split(name, "/")
 	var p string
 	var modseq ModSeq
@@ -2936,22 +3004,23 @@ func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUs
 		p += elem
 		exists, err := a.MailboxExists(tx, p)
 		if err != nil {
-			return nil, nil, false, fmt.Errorf("checking if mailbox exists")
+			return Mailbox{}, nil, nil, false, fmt.Errorf("checking if mailbox exists")
 		}
 		if exists {
 			if i == len(elems)-1 {
-				return nil, nil, true, fmt.Errorf("mailbox already exists")
+				return Mailbox{}, nil, nil, true, fmt.Errorf("mailbox already exists")
 			}
 			continue
 		}
-		_, nchanges, err := a.MailboxEnsure(tx, p, true, specialUse, &modseq)
+		mb, nchanges, err := a.MailboxEnsure(tx, p, true, specialUse, &modseq)
 		if err != nil {
-			return nil, nil, false, fmt.Errorf("ensuring mailbox exists: %v", err)
+			return Mailbox{}, nil, nil, false, fmt.Errorf("ensuring mailbox exists: %v", err)
 		}
+		nmb = mb
 		changes = append(changes, nchanges...)
 		created = append(created, p)
 	}
-	return changes, created, false, nil
+	return nmb, changes, created, false, nil
 }
 
 // MailboxRename renames mailbox mbsrc to dst, and any missing parents for the

@@ -451,19 +451,14 @@ func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID
 				Size:          xc.Size,
 			}
 
-			if ok, maxSize, err := acc.CanAddMessageSize(tx, nm.Size); err != nil {
-				xcheckf(ctx, err, "checking quota")
-			} else if !ok {
-				xcheckuserf(ctx, fmt.Errorf("account over maximum total message size %d", maxSize), "checking quota")
+			err = acc.MessageAdd(log, tx, &mb, &nm, dataFile, store.AddOpts{})
+			if err != nil && errors.Is(err, store.ErrOverQuota) {
+				xcheckuserf(ctx, err, "checking quota")
 			}
+			xcheckf(ctx, err, "storing message in mailbox")
 
-			// Update mailbox before delivery, which changes uidnext.
-			mb.Add(nm.MailboxCounts())
 			err = tx.Update(&mb)
 			xcheckf(ctx, err, "updating sent mailbox for counts")
-
-			err = acc.DeliverMessage(log, tx, &nm, dataFile, true, false, false, true)
-			xcheckf(ctx, err, "storing message in mailbox")
 
 			changes = append(changes, nm.ChangeAddUID(), mb.ChangeCounts())
 		})
@@ -1027,6 +1022,16 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 				panic(x)
 			}
 		}()
+
+		var deliveredIDs []int64
+		defer func() {
+			for _, id := range deliveredIDs {
+				p := acc.MessagePath(id)
+				err := os.Remove(p)
+				log.Check(err, "removing delivered message on error", slog.String("path", p))
+			}
+		}()
+
 		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
 			if m.DraftMessageID > 0 {
 				nchanges := xops.MessageDeleteTx(ctx, log, tx, acc, []int64{m.DraftMessageID}, &modseq)
@@ -1122,26 +1127,22 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 				MsgPrefix:     []byte(msgPrefix),
 			}
 
-			if ok, maxSize, err := acc.CanAddMessageSize(tx, sentm.Size); err != nil {
-				xcheckf(ctx, err, "checking quota")
-			} else if !ok {
-				xcheckuserf(ctx, fmt.Errorf("account over maximum total message size %d", maxSize), "checking quota")
-			}
-
-			// Update mailbox before delivery, which changes uidnext.
-			sentmb.Add(sentm.MailboxCounts())
-			err = tx.Update(&sentmb)
-			xcheckf(ctx, err, "updating sent mailbox for counts")
-
-			err = acc.DeliverMessage(log, tx, &sentm, dataFile, true, false, false, true)
-			if err != nil {
+			err = acc.MessageAdd(log, tx, &sentmb, &sentm, dataFile, store.AddOpts{})
+			if err != nil && errors.Is(err, store.ErrOverQuota) {
+				xcheckuserf(ctx, err, "checking quota")
+			} else if err != nil {
 				metricSubmission.WithLabelValues("storesenterror").Inc()
 				metricked = true
 			}
 			xcheckf(ctx, err, "message submitted to queue, appending message to Sent mailbox")
+			deliveredIDs = append(deliveredIDs, sentm.ID)
+
+			err = tx.Update(&sentmb)
+			xcheckf(ctx, err, "updating sent mailbox for counts")
 
 			changes = append(changes, sentm.ChangeAddUID(), sentmb.ChangeCounts())
 		})
+		deliveredIDs = nil
 
 		store.BroadcastChanges(acc, changes)
 	})
@@ -1226,7 +1227,7 @@ func (Webmail) MailboxCreate(ctx context.Context, name string) {
 		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
 			var exists bool
 			var err error
-			changes, _, exists, err = acc.MailboxCreate(tx, name, store.SpecialUse{})
+			_, changes, _, exists, err = acc.MailboxCreate(tx, name, store.SpecialUse{})
 			if exists {
 				xcheckuserf(ctx, errors.New("mailbox already exists"), "creating mailbox")
 			}

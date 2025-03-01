@@ -89,15 +89,11 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "sent mailbox")
 			msent.MailboxID = mbsent.ID
 			msent.MailboxOrigID = mbsent.ID
-			err = acc.DeliverMessage(pkglog, tx, &msent, msgFile, true, false, false, true)
+			err = acc.MessageAdd(pkglog, tx, &mbsent, &msent, msgFile, AddOpts{SkipSourceFileSync: true, SkipDirSync: true})
 			tcheck(t, err, "deliver message")
 			if !msent.ThreadMuted || !msent.ThreadCollapsed {
 				t.Fatalf("thread muted & collapsed should have been copied from parent (duplicate message-id) m")
 			}
-
-			err = tx.Get(&mbsent)
-			tcheck(t, err, "get mbsent")
-			mbsent.Add(msent.MailboxCounts())
 			err = tx.Update(&mbsent)
 			tcheck(t, err, "update mbsent")
 
@@ -108,12 +104,8 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "insert rejects mailbox")
 			mreject.MailboxID = mbrejects.ID
 			mreject.MailboxOrigID = mbrejects.ID
-			err = acc.DeliverMessage(pkglog, tx, &mreject, msgFile, true, false, false, true)
+			err = acc.MessageAdd(pkglog, tx, &mbrejects, &mreject, msgFile, AddOpts{SkipSourceFileSync: true, SkipDirSync: true})
 			tcheck(t, err, "deliver message")
-
-			err = tx.Get(&mbrejects)
-			tcheck(t, err, "get mbrejects")
-			mbrejects.Add(mreject.MailboxCounts())
 			err = tx.Update(&mbrejects)
 			tcheck(t, err, "update mbrejects")
 
@@ -223,7 +215,7 @@ func TestMailbox(t *testing.T) {
 		})
 		tcheck(t, err, "write tx")
 
-		// todo: check that messages are removed and changes sent.
+		// todo: check that messages are removed.
 		hasSpace, err := acc.TidyRejectsMailbox(log, "Rejects")
 		tcheck(t, err, "tidy rejects mailbox")
 		if !hasSpace {

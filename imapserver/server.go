@@ -2844,7 +2844,7 @@ func (c *conn) cmdCreate(tag, cmd string, p *parser) {
 		c.xdbwrite(func(tx *bstore.Tx) {
 			var exists bool
 			var err error
-			changes, created, exists, err = c.account.MailboxCreate(tx, name, specialUse)
+			_, changes, created, exists, err = c.account.MailboxCreate(tx, name, specialUse)
 			if exists {
 				// ../rfc/9051:1914
 				xuserErrorf("mailbox already exists")
@@ -3341,7 +3341,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 	}
 
 	var appends []*appendMsg
-	var committed bool
+	var commit bool
 	defer func() {
 		for _, a := range appends {
 			if a.file != nil {
@@ -3349,7 +3349,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				c.xsanity(err, "closing APPEND temporary file")
 			}
 
-			if !committed && a.path != "" {
+			if !commit && a.path != "" {
 				err := os.Remove(a.path)
 				c.xsanity(err, "removing APPEND temporary file")
 			}
@@ -3511,6 +3511,8 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		c.xdbwrite(func(tx *bstore.Tx) {
 			mb = c.xmailbox(tx, name, "TRYCREATE")
 
+			nkeywords := len(mb.Keywords)
+
 			// Check quota for all messages at once.
 			ok, maxSize, err := c.account.CanAddMessageSize(tx, totalSize)
 			xcheckf(err, "checking quota")
@@ -3522,17 +3524,9 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			modseq, err := c.account.NextModSeq(tx)
 			xcheckf(err, "get next mod seq")
 
-			var mbKwChanged bool
-			for _, a := range appends {
-				// Ensure keywords are stored in mailbox.
-				var kwch bool
-				mb.Keywords, kwch = store.MergeKeywords(mb.Keywords, a.keywords)
-				mbKwChanged = mbKwChanged || kwch
-			}
-			if mbKwChanged {
-				changes = append(changes, mb.ChangeKeywords())
-			}
+			mb.ModSeq = modseq
 
+			msgDirs := map[string]struct{}{}
 			for _, a := range appends {
 				a.m = store.Message{
 					MailboxID:     mb.ID,
@@ -3544,34 +3538,39 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 					ModSeq:        modseq,
 					CreateSeq:     modseq,
 				}
-				mb.Add(a.m.MailboxCounts())
-			}
 
-			// Update mailbox before delivering, which updates uidnext which we mustn't overwrite.
-			mb.ModSeq = modseq
-			err = tx.Update(&mb)
-			xcheckf(err, "updating mailbox counts")
-
-			for _, a := range appends {
-				err = c.account.DeliverMessage(c.log, tx, &a.m, a.file, true, false, false, true)
+				// todo: do a single junk training
+				err = c.account.MessageAdd(c.log, tx, &mb, &a.m, a.file, store.AddOpts{SkipDirSync: true})
 				xcheckf(err, "delivering message")
+
+				changes = append(changes, a.m.ChangeAddUID())
 
 				// Update path to what is stored in the account. We may still have to clean it up on errors.
 				a.path = c.account.MessagePath(a.m.ID)
+
+				msgDirs[filepath.Dir(a.path)] = struct{}{}
+			}
+
+			changes = append(changes, mb.ChangeCounts())
+			if nkeywords != len(mb.Keywords) {
+				changes = append(changes, mb.ChangeKeywords())
+			}
+
+			err = tx.Update(&mb)
+			xcheckf(err, "updating mailbox counts")
+
+			for dir := range msgDirs {
+				err := moxio.SyncDir(c.log, dir)
+				xcheckf(err, "sync dir")
 			}
 		})
 
-		// Success, make sure messages aren't cleaned up anymore.
-		committed = true
+		commit = true
 
 		// Fetch pending changes, possibly with new UIDs, so we can apply them before adding our own new UID.
 		pendingChanges = c.comm.Get()
 
 		// Broadcast the change to other connections.
-		for _, a := range appends {
-			changes = append(changes, a.m.ChangeAddUID())
-		}
-		changes = append(changes, mb.ChangeCounts())
 		c.broadcast(changes)
 	})
 
@@ -4061,13 +4060,13 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 	}()
 
 	var mbDst store.Mailbox
+	var nkeywords int
 	var origUIDs, newUIDs []store.UID
 	var flags []store.Flags
 	var keywords [][]string
 	var modseq store.ModSeq // For messages in new mailbox, assigned when first message is copied.
 
 	c.account.WithWLock(func() {
-		var mbKwChanged bool
 
 		c.xdbwrite(func(tx *bstore.Tx) {
 			mbSrc := c.xmailboxID(tx, c.mailboxID) // Validate.
@@ -4079,6 +4078,8 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			if len(uidargs) == 0 {
 				xuserErrorf("no matching messages to copy")
 			}
+
+			nkeywords = len(mbDst.Keywords)
 
 			var err error
 			modseq, err = c.account.NextModSeq(tx)
@@ -4180,7 +4181,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				mbDst.Add(m.MailboxCounts())
 			}
 
-			mbDst.Keywords, mbKwChanged = store.MergeKeywords(mbDst.Keywords, maps.Keys(mbKeywords))
+			mbDst.Keywords, _ = store.MergeKeywords(mbDst.Keywords, maps.Keys(mbKeywords))
 
 			err = tx.Update(&mbDst)
 			xcheckf(err, "updating destination mailbox for uids, keywords and counts")
@@ -4218,7 +4219,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				changes = append(changes, store.ChangeAddUID{MailboxID: mbDst.ID, UID: uid, ModSeq: modseq, Flags: flags[i], Keywords: keywords[i]})
 			}
 			changes = append(changes, mbDst.ChangeCounts())
-			if mbKwChanged {
+			if nkeywords != len(mbDst.Keywords) {
 				changes = append(changes, mbDst.ChangeKeywords())
 			}
 			c.broadcast(changes)
@@ -4550,6 +4551,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 					var err error
 					modseq, err = c.account.NextModSeq(tx)
 					xcheckf(err, "next modseq")
+					mb.ModSeq = modseq
 				}
 				m.ModSeq = modseq
 				modified[m.ID] = true
@@ -4562,10 +4564,10 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 			xcheckf(err, "storing flags in messages")
 
 			if mb.MailboxCounts != origmb.MailboxCounts || modseq != 0 {
-				mb.ModSeq = modseq
 				err := tx.Update(&mb)
 				xcheckf(err, "updating mailbox counts")
-
+			}
+			if mb.MailboxCounts != origmb.MailboxCounts {
 				changes = append(changes, mb.ChangeCounts())
 			}
 			if mbKwChanged {

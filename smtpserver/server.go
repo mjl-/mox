@@ -3413,15 +3413,45 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					}
 					if err != nil {
 						log.Errorx("tidying rejects mailbox", err)
-					} else if hasSpace {
-						if err := a.d.acc.DeliverMailbox(log, conf.RejectsMailbox, a.d.m, dataFile); err != nil {
-							log.Errorx("delivering spammy mail to rejects mailbox", err)
-						} else {
-							log.Info("delivered spammy mail to rejects mailbox")
-						}
-					} else {
+					} else if !hasSpace {
 						log.Info("not storing spammy mail to full rejects mailbox")
+						return
 					}
+
+					var changes []store.Change
+					var stored bool
+					err = a.d.acc.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
+						mbrej, err := a.d.acc.MailboxFind(tx, conf.RejectsMailbox)
+						if err != nil {
+							return fmt.Errorf("finding rejects mailbox: %v", err)
+						}
+						if mbrej == nil {
+							nmb, chl, _, _, err := a.d.acc.MailboxCreate(tx, conf.RejectsMailbox, store.SpecialUse{})
+							if err != nil {
+								return fmt.Errorf("creating rejects mailbox: %v", err)
+							}
+							changes = append(changes, chl...)
+
+							mbrej = &nmb
+						}
+						a.d.m.MailboxID = mbrej.ID
+						if err := a.d.acc.MessageAdd(log, tx, mbrej, a.d.m, dataFile, store.AddOpts{}); err != nil {
+							return fmt.Errorf("delivering spammy mail to rejects mailbox: %v", err)
+						}
+						if err := tx.Update(mbrej); err != nil {
+							return fmt.Errorf("updating rejects mailbox: %v", err)
+						}
+						changes = append(changes, a.d.m.ChangeAddUID(), mbrej.ChangeCounts())
+						stored = true
+						return nil
+					})
+					if err != nil {
+						log.Errorx("delivering to rejects mailbox", err)
+						return
+					} else if stored {
+						log.Info("stored spammy mail in rejects mailbox")
+					}
+					store.BroadcastChanges(a.d.acc, changes)
 				})
 			}
 

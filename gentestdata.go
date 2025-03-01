@@ -263,7 +263,6 @@ Accounts:
 		m := store.Message{
 			MailboxID:          inbox.ID,
 			MailboxOrigID:      inbox.ID,
-			MailboxDestinedID:  inbox.ID,
 			RemoteIP:           "1.2.3.4",
 			RemoteIPMasked1:    "1.2.3.4",
 			RemoteIPMasked2:    "1.2.3.0",
@@ -291,11 +290,10 @@ Accounts:
 		defer store.CloseRemoveTempFile(c.log, mf, "test message")
 		_, err = fmt.Fprint(mf, msg)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest1.DeliverMessage(c.log, tx, &m, mf, false, true, false, true)
 
-		err = tx.Get(&inbox)
-		xcheckf(err, "get inbox")
-		inbox.Add(m.MailboxCounts())
+		err = accTest1.MessageAdd(c.log, tx, &inbox, &m, mf, store.AddOpts{})
+		xcheckf(err, "deliver message")
+
 		err = tx.Update(&inbox)
 		xcheckf(err, "update inbox")
 
@@ -317,7 +315,6 @@ Accounts:
 		m0 := store.Message{
 			MailboxID:          inbox.ID,
 			MailboxOrigID:      inbox.ID,
-			MailboxDestinedID:  inbox.ID,
 			RemoteIP:           "::1",
 			RemoteIPMasked1:    "::",
 			RemoteIPMasked2:    "::",
@@ -345,12 +342,8 @@ Accounts:
 		defer store.CloseRemoveTempFile(c.log, mf0, "test message")
 		_, err = fmt.Fprint(mf0, msg0)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(c.log, tx, &m0, mf0, false, false, false, true)
+		err = accTest2.MessageAdd(c.log, tx, &inbox, &m0, mf0, store.AddOpts{})
 		xcheckf(err, "add message to account test2")
-
-		err = tx.Get(&inbox)
-		xcheckf(err, "get inbox")
-		inbox.Add(m0.MailboxCounts())
 		err = tx.Update(&inbox)
 		xcheckf(err, "update inbox")
 
@@ -359,24 +352,19 @@ Accounts:
 		const prefix1 = "Extra: test\r\n"
 		const msg1 = "From: <other@remote.example>\r\nTo: <☹@xn--74h.example>\r\nSubject: test\r\n\r\nthe message...\r\n"
 		m1 := store.Message{
-			MailboxID:         sent.ID,
-			MailboxOrigID:     sent.ID,
-			MailboxDestinedID: sent.ID,
-			Flags:             store.Flags{Seen: true, Junk: true},
-			Size:              int64(len(prefix1) + len(msg1)),
-			MsgPrefix:         []byte(prefix1),
+			MailboxID:     sent.ID,
+			MailboxOrigID: sent.ID,
+			Flags:         store.Flags{Seen: true, Junk: true},
+			Size:          int64(len(prefix1) + len(msg1)),
+			MsgPrefix:     []byte(prefix1),
 		}
 		mf1 := tempfile()
 		xcheckf(err, "creating temp file for delivery")
 		defer store.CloseRemoveTempFile(c.log, mf1, "test message")
 		_, err = fmt.Fprint(mf1, msg1)
 		xcheckf(err, "writing deliver message to file")
-		err = accTest2.DeliverMessage(c.log, tx, &m1, mf1, false, false, false, true)
+		err = accTest2.MessageAdd(c.log, tx, &sent, &m1, mf1, store.AddOpts{})
 		xcheckf(err, "add message to account test2")
-
-		err = tx.Get(&sent)
-		xcheckf(err, "get sent")
-		sent.Add(m1.MailboxCounts())
 		err = tx.Update(&sent)
 		xcheckf(err, "update sent")
 

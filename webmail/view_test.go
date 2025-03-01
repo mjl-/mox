@@ -434,7 +434,7 @@ func TestView(t *testing.T) {
 		ChangeMailboxKeywords: store.ChangeMailboxKeywords{
 			MailboxID:   inbox.ID,
 			MailboxName: inbox.Name,
-			Keywords:    []string{`aaa`, `changelabel`},
+			Keywords:    []string{`aaa`, `changelabel`, `testlabel`},
 		},
 	})
 	chmbcounts.Size = 0

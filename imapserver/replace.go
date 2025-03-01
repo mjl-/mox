@@ -297,16 +297,10 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 			err = tx.Update(&mbSrc)
 			xcheckf(err, "updating source mailbox counts")
 
-			// The destination mailbox may be the same as source (currently selected), but
-			// doesn't have to be.
 			mbDst = c.xmailbox(tx, name, "TRYCREATE")
+			mbDst.ModSeq = modseq
 
-			// Ensure keywords of message are present in destination mailbox.
-			var mbKwChanged bool
-			mbDst.Keywords, mbKwChanged = store.MergeKeywords(mbDst.Keywords, keywords)
-			if mbKwChanged {
-				changes = append(changes, mbDst.ChangeKeywords())
-			}
+			nkeywords := len(mbDst.Keywords)
 
 			// Make new message to deliver.
 			nm = store.Message{
@@ -320,16 +314,20 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 				CreateSeq:     modseq,
 			}
 
-			// Add counts about new message to mailbox.
-			mbDst.Add(nm.MailboxCounts())
-
-			// Update mailbox before delivering, which updates uidnext which we mustn't overwrite.
-			mbDst.ModSeq = modseq
-			err = tx.Update(&mbDst)
-			xcheckf(err, "updating destination mailbox counts")
-
-			err = c.account.DeliverMessage(c.log, tx, &nm, file, true, false, false, true)
+			err = c.account.MessageAdd(c.log, tx, &mbDst, &nm, file, store.AddOpts{})
 			xcheckf(err, "delivering message")
+
+			changes = append(changes,
+				store.ChangeRemoveUIDs{MailboxID: om.MailboxID, UIDs: []store.UID{om.UID}, ModSeq: om.ModSeq},
+				nm.ChangeAddUID(),
+				mbDst.ChangeCounts(),
+			)
+			if nkeywords != len(mbDst.Keywords) {
+				changes = append(changes, mbDst.ChangeKeywords())
+			}
+
+			err = tx.Update(&mbDst)
+			xcheckf(err, "updating destination mailbox")
 
 			// Update path to what is stored in the account. We may still have to clean it up on errors.
 			newMsgPath = c.account.MessagePath(nm.ID)
@@ -347,11 +345,6 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 		committed = true
 
 		// Broadcast the change to other connections.
-		changes = append(changes,
-			store.ChangeRemoveUIDs{MailboxID: om.MailboxID, UIDs: []store.UID{om.UID}, ModSeq: om.ModSeq},
-			nm.ChangeAddUID(),
-			mbDst.ChangeCounts(),
-		)
 		if mbSrc.ID != mbDst.ID {
 			changes = append(changes, mbSrc.ChangeCounts())
 		}

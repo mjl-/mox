@@ -374,7 +374,9 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	}()
 
 	// Mailboxes we imported, and message counts.
-	mailboxes := map[string]store.Mailbox{}
+	mailboxNames := map[string]*store.Mailbox{}
+	mailboxIDs := map[int64]*store.Mailbox{}
+	mailboxKeywordCounts := map[int64]int{}
 	messages := map[string]int{}
 
 	maxSize := acc.QuotaMessageSize()
@@ -389,10 +391,6 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	// available, we'll fix up the flags for the unknown messages
 	mailboxKeywords := map[string]map[rune]string{}                // Mailbox to 'a'-'z' to flag name.
 	mailboxMissingKeywordMessages := map[string]map[int64]string{} // Mailbox to message id to string consisting of the unrecognized flags.
-
-	// We keep the mailboxes we deliver to up to date with count and keywords (non-system flags).
-	destMailboxCounts := map[int64]store.MailboxCounts{}
-	destMailboxKeywords := map[int64]map[string]bool{}
 
 	// Previous mailbox an event was sent for. We send an event for new mailboxes, when
 	// another 100 messages were added, when adding a message to another mailbox, and
@@ -434,32 +432,31 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		trainMessage(m, p, fmt.Sprintf("message id %d", m.ID))
 	}
 
-	xensureMailbox := func(name string) store.Mailbox {
+	xensureMailbox := func(name string) *store.Mailbox {
 		name = norm.NFC.String(name)
 		if strings.ToLower(name) == "inbox" {
 			name = "Inbox"
 		}
 
-		if mb, ok := mailboxes[name]; ok {
+		if mb, ok := mailboxNames[name]; ok {
 			return mb
 		}
 
 		var p string
-		var mb store.Mailbox
+		var mb *store.Mailbox
 		for i, e := range strings.Split(name, "/") {
 			if i == 0 {
 				p = e
 			} else {
 				p = path.Join(p, e)
 			}
-			if _, ok := mailboxes[p]; ok {
+			if _, ok := mailboxNames[p]; ok {
 				continue
 			}
 
 			q := bstore.QueryTx[store.Mailbox](tx)
 			q.FilterNonzero(store.Mailbox{Name: p})
-			var err error
-			mb, err = q.Get()
+			xmb, err := q.Get()
 			if err == bstore.ErrAbsent {
 				uidvalidity, err := acc.NextUIDValidity(tx)
 				ximportcheckf(err, "finding next uid validity")
@@ -470,7 +467,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 					ximportcheckf(err, "assigning next modseq")
 				}
 
-				mb = store.Mailbox{
+				mb = &store.Mailbox{
 					Name:        p,
 					UIDValidity: uidvalidity,
 					UIDNext:     1,
@@ -479,28 +476,32 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 					HaveCounts:  true,
 					// Do not assign special-use flags. This existing account probably already has such mailboxes.
 				}
-				err = tx.Insert(&mb)
+				err = tx.Insert(mb)
 				ximportcheckf(err, "inserting mailbox in database")
 
 				if tx.Get(&store.Subscription{Name: p}) != nil {
 					err := tx.Insert(&store.Subscription{Name: p})
 					ximportcheckf(err, "subscribing to imported mailbox")
 				}
-				changes = append(changes, store.ChangeAddMailbox{Mailbox: mb, Flags: []string{`\Subscribed`}, ModSeq: modseq})
+				changes = append(changes, store.ChangeAddMailbox{Mailbox: *mb, Flags: []string{`\Subscribed`}, ModSeq: modseq})
 			} else if err != nil {
 				ximportcheckf(err, "creating mailbox %s (aborting)", p)
+			} else {
+				mb = &xmb
 			}
 			if prevMailbox != "" && mb.Name != prevMailbox {
 				sendEvent("count", importCount{prevMailbox, messages[prevMailbox]})
 			}
-			mailboxes[mb.Name] = mb
+			mailboxKeywordCounts[mb.ID] = len(mb.Keywords)
+			mailboxNames[mb.Name] = mb
+			mailboxIDs[mb.ID] = mb
 			sendEvent("count", importCount{mb.Name, 0})
 			prevMailbox = mb.Name
 		}
 		return mb
 	}
 
-	xdeliver := func(mb store.Mailbox, m *store.Message, f *os.File, pos string) {
+	xdeliver := func(mb *store.Mailbox, m *store.Message, f *os.File, pos string) {
 		defer store.CloseRemoveTempFile(log, f, "message file for import")
 		m.MailboxID = mb.ID
 		m.MailboxOrigID = mb.ID
@@ -518,19 +519,6 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		m.CreateSeq = modseq
 		m.ModSeq = modseq
 
-		mc := destMailboxCounts[mb.ID]
-		mc.Add(m.MailboxCounts())
-		destMailboxCounts[mb.ID] = mc
-
-		if len(m.Keywords) > 0 {
-			if destMailboxKeywords[mb.ID] == nil {
-				destMailboxKeywords[mb.ID] = map[string]bool{}
-			}
-			for _, k := range m.Keywords {
-				destMailboxKeywords[mb.ID][k] = true
-			}
-		}
-
 		// Parse message and store parsed information for later fast retrieval.
 		p, err := message.EnsurePart(log.Logger, false, f, m.Size)
 		if err != nil {
@@ -539,7 +527,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		m.ParsedBuf, err = json.Marshal(p)
 		ximportcheckf(err, "marshal parsed message structure")
 
-		// Set fields needed for future threading. By doing it now, DeliverMessage won't
+		// Set fields needed for future threading. By doing it now, MessageAdd won't
 		// have to parse the Part again.
 		p.SetReaderAt(store.FileMsgReader(m.MsgPrefix, f))
 		m.PrepareThreading(log, &p)
@@ -555,16 +543,19 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		// We set the flags that Deliver would set now and train ourselves. This prevents
 		// Deliver from training, which would open the junk filter, change it, and write it
 		// back to disk, for each message (slow).
-		m.JunkFlagsForMailbox(mb, conf)
+		m.JunkFlagsForMailbox(*mb, conf)
 		if jf != nil && m.NeedsTraining() {
 			trainMessage(m, p, pos)
 		}
 
-		const sync = false
-		const notrain = true
-		const nothreads = true
-		const updateDiskUsage = false
-		if err := acc.DeliverMessage(log, tx, m, f, sync, notrain, nothreads, updateDiskUsage); err != nil {
+		opts := store.AddOpts{
+			SkipDirSync:         true,
+			SkipTraining:        true,
+			SkipThreads:         true,
+			SkipUpdateDiskUsage: true,
+			SkipCheckQuota:      true,
+		}
+		if err := acc.MessageAdd(log, tx, mb, m, f, opts); err != nil {
 			problemf("delivering message %s: %s (continuing)", pos, err)
 			return
 		}
@@ -754,25 +745,17 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 					err := tx.Get(&m)
 					ximportcheckf(err, "get imported message for flag update")
 
-					mc := destMailboxCounts[m.MailboxID]
-					mc.Sub(m.MailboxCounts())
+					mb := mailboxIDs[m.MailboxID]
+					mb.Sub(m.MailboxCounts())
 
 					oflags := m.Flags
 					m.Flags = m.Flags.Set(flags, flags)
 					m.Keywords = maps.Keys(keywords)
 					sort.Strings(m.Keywords)
 
-					mc.Add(m.MailboxCounts())
-					destMailboxCounts[m.MailboxID] = mc
+					mb.Add(m.MailboxCounts())
 
-					if len(m.Keywords) > 0 {
-						if destMailboxKeywords[m.MailboxID] == nil {
-							destMailboxKeywords[m.MailboxID] = map[string]bool{}
-						}
-						for _, k := range m.Keywords {
-							destMailboxKeywords[m.MailboxID][k] = true
-						}
-					}
+					mb.Keywords, _ = store.MergeKeywords(mb.Keywords, m.Keywords)
 
 					// We train before updating, training may set m.TrainedJunk.
 					if jf != nil && m.NeedsTraining() {
@@ -838,23 +821,12 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	}
 
 	// Update mailboxes with counts and keywords.
-	for mbID, mc := range destMailboxCounts {
-		mb := store.Mailbox{ID: mbID}
-		err := tx.Get(&mb)
-		ximportcheckf(err, "loading mailbox for counts and keywords")
-
-		if mb.MailboxCounts != mc {
-			mb.MailboxCounts = mc
-			changes = append(changes, mb.ChangeCounts())
-		}
-
-		keywords := destMailboxKeywords[mb.ID]
-		var mbKwChanged bool
-		mb.Keywords, mbKwChanged = store.MergeKeywords(mb.Keywords, maps.Keys(keywords))
-
-		err = tx.Update(&mb)
+	for _, mb := range mailboxIDs {
+		err = tx.Update(mb)
 		ximportcheckf(err, "updating mailbox count and keywords")
-		if mbKwChanged {
+
+		changes = append(changes, mb.ChangeCounts())
+		if len(mb.Keywords) != mailboxKeywordCounts[mb.ID] {
 			changes = append(changes, mb.ChangeKeywords())
 		}
 	}

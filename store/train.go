@@ -50,6 +50,18 @@ func (a *Account) OpenJunkFilter(ctx context.Context, log mlog.Log) (*junk.Filte
 	return f, jf, err
 }
 
+func (a *Account) ensureJunkFilter(ctx context.Context, log mlog.Log, jfOpt *junk.Filter) (jf *junk.Filter, opened bool, err error) {
+	if jfOpt != nil {
+		return jfOpt, false, nil
+	}
+
+	jf, _, err = a.OpenJunkFilter(ctx, log)
+	if err != nil {
+		return nil, false, fmt.Errorf("open junk filter: %v", err)
+	}
+	return jf, true, nil
+}
+
 // RetrainMessages (un)trains messages, if relevant given their flags. Updates
 // m.TrainedJunk after retraining.
 func (a *Account) RetrainMessages(ctx context.Context, log mlog.Log, tx *bstore.Tx, msgs []Message) (rerr error) {
@@ -75,11 +87,11 @@ func (a *Account) RetrainMessages(ctx context.Context, log mlog.Log, tx *bstore.
 				return fmt.Errorf("open junk filter: %v", err)
 			}
 			defer func() {
-				if jf != nil {
-					err := jf.Close()
-					if rerr == nil {
-						rerr = err
-					}
+				if rerr != nil {
+					err := jf.CloseDiscard()
+					log.Check(err, "close junk filter without saving")
+				} else {
+					rerr = jf.Close()
 				}
 			}()
 		}
