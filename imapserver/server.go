@@ -3921,17 +3921,17 @@ func (c *conn) cmdUIDExpunge(tag, cmd string, p *parser) {
 }
 
 // Permanently delete messages for the currently selected/active mailbox. If uidset
-// is not nil, only those UIDs are removed.
+// is not nil, only those UIDs are expunged.
 // State: Selected
 func (c *conn) cmdxExpunge(tag, cmd string, uidSet *numSet) {
 	// Command: ../rfc/9051:3687 ../rfc/3501:2695
 
-	removed, highestModSeq := c.xexpunge(uidSet, false)
+	expunged, highestModSeq := c.xexpunge(uidSet, false)
 
 	// Response syntax: ../rfc/9051:6742 ../rfc/3501:4864
 	var vanishedUIDs numSet
 	qresync := c.enabled[capQresync]
-	for _, m := range removed {
+	for _, m := range expunged {
 		seq := c.xsequence(m.UID)
 		c.sequenceRemove(seq, m.UID)
 		if qresync {
@@ -4053,16 +4053,11 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 	// Files that were created during the copy. Remove them if the operation fails.
 	var createdIDs []int64
 	defer func() {
-		x := recover()
-		if x == nil {
-			return
-		}
 		for _, id := range createdIDs {
 			p := c.account.MessagePath(id)
 			err := os.Remove(p)
 			c.xsanity(err, "cleaning up created file")
 		}
-		panic(x)
 	}()
 
 	var mbDst store.Mailbox
@@ -4214,6 +4209,8 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			xcheckf(err, "train copied messages")
 		})
 
+		createdIDs = nil
+
 		// Broadcast changes to other connections.
 		if len(newUIDs) > 0 {
 			changes := make([]store.Change, 0, len(newUIDs)+2)
@@ -4227,9 +4224,6 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			c.broadcast(changes)
 		}
 	})
-
-	// All good, prevent defer above from cleaning up copied files.
-	createdIDs = nil
 
 	// ../rfc/9051:6881 ../rfc/4315:183
 	c.writeresultf("%s OK [COPYUID %d %s %s] copied", tag, mbDst.UIDValidity, compactUIDSet(origUIDs).String(), compactUIDSet(newUIDs).String())
