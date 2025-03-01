@@ -21,6 +21,8 @@ import (
 var AuthDB *bstore.DB
 var AuthDBTypes = []any{TLSPublicKey{}, LoginAttempt{}, LoginAttemptState{}}
 
+var loginAttemptCleanerStop chan chan struct{}
+
 // Init opens auth.db and starts the login writer.
 func Init(ctx context.Context) error {
 	if AuthDB != nil {
@@ -37,6 +39,7 @@ func Init(ctx context.Context) error {
 	}
 
 	startLoginAttemptWriter()
+	loginAttemptCleanerStop = make(chan chan struct{})
 
 	go func() {
 		defer func() {
@@ -57,6 +60,9 @@ func Init(ctx context.Context) error {
 			pkglog.Check(err, "cleaning up old historic login attempts")
 
 			select {
+			case c := <-loginAttemptCleanerStop:
+				c <- struct{}{}
+				return
 			case <-t.C:
 			case <-ctx.Done():
 				return
@@ -75,6 +81,10 @@ func Close() error {
 
 	stopc := make(chan struct{})
 	writeLoginAttemptStop <- stopc
+	<-stopc
+
+	stopc = make(chan struct{})
+	loginAttemptCleanerStop <- stopc
 	<-stopc
 
 	err := AuthDB.Close()
