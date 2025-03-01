@@ -873,6 +873,10 @@ type Account struct {
 	// delivery, or aborting when importing.
 	threadsErr error
 
+	// Message directory of last delivery. Used to check we don't have to make that
+	// directory when delivering.
+	lastMsgDir string
+
 	// Write lock must be held for account/mailbox modifications including message delivery.
 	// Read lock for reading mailboxes/messages.
 	// When making changes to mailboxes/messages, changes must be broadcasted before
@@ -1655,7 +1659,7 @@ func (a *Account) WithRLock(fn func()) {
 // Caller must broadcast new message.
 //
 // Caller must update mailbox counts.
-func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, sync, notrain, nothreads, updateDiskUsage bool) error {
+func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFile *os.File, sync, notrain, nothreads, updateDiskUsage bool) (rerr error) {
 	if m.Expunged {
 		return fmt.Errorf("cannot deliver expunged message")
 	}
@@ -1812,7 +1816,13 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 
 	msgPath := a.MessagePath(m.ID)
 	msgDir := filepath.Dir(msgPath)
-	os.MkdirAll(msgDir, 0770)
+	if a.lastMsgDir != msgDir {
+		os.MkdirAll(msgDir, 0770)
+		if err := moxio.SyncDir(log, msgDir); err != nil {
+			return fmt.Errorf("sync message dir: %v", err)
+		}
+		a.lastMsgDir = msgDir
+	}
 
 	// Sync file data to disk.
 	if sync {
@@ -1825,10 +1835,15 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 		return fmt.Errorf("linking/copying message to new file: %w", err)
 	}
 
+	defer func() {
+		if rerr != nil {
+			err := os.Remove(msgPath)
+			log.Check(err, "removing delivered message file", slog.String("path", msgPath))
+		}
+	}()
+
 	if sync {
 		if err := moxio.SyncDir(log, msgDir); err != nil {
-			xerr := os.Remove(msgPath)
-			log.Check(xerr, "removing message after syncdir error", slog.String("path", msgPath))
 			return fmt.Errorf("sync directory: %w", err)
 		}
 	}
@@ -1836,8 +1851,6 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 	if !notrain && m.NeedsTraining() {
 		l := []Message{*m}
 		if err := a.RetrainMessages(context.TODO(), log, tx, l, false); err != nil {
-			xerr := os.Remove(msgPath)
-			log.Check(xerr, "removing message after syncdir error", slog.String("path", msgPath))
 			return fmt.Errorf("training junkfilter: %w", err)
 		}
 		*m = l[0]
