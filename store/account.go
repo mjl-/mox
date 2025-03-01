@@ -2264,8 +2264,18 @@ func (a *Account) DeliverDestination(log mlog.Log, dest config.Destination, m *M
 // Caller must hold account wlock (mailbox may be created).
 // Message delivery, possible mailbox creation, and updated mailbox counts are
 // broadcasted.
-func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFile *os.File) error {
+func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFile *os.File) (rerr error) {
 	var changes []Change
+
+	var commit bool
+	defer func() {
+		if !commit && m.ID != 0 {
+			p := a.MessagePath(m.ID)
+			err := os.Remove(p)
+			log.Check(err, "remove delivered message file", slog.String("path", p))
+		}
+	}()
+
 	err := a.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
 		if ok, _, err := a.CanAddMessageSize(tx, m.Size); err != nil {
 			return err
@@ -2300,11 +2310,10 @@ func (a *Account) DeliverMailbox(log mlog.Log, mailbox string, m *Message, msgFi
 		changes = append(changes, m.ChangeAddUID(), mb.ChangeCounts())
 		return nil
 	})
-	// todo: if rename succeeded but transaction failed, we should remove the file.
 	if err != nil {
 		return err
 	}
-
+	commit = true
 	BroadcastChanges(a, changes)
 	return nil
 }
