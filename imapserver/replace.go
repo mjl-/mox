@@ -283,7 +283,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 			// Undo any junk filter training for the old message.
 			om.Junk = false
 			om.Notjunk = false
-			err = c.account.RetrainMessages(context.TODO(), c.log, tx, []store.Message{om}, false)
+			err = c.account.RetrainMessages(context.TODO(), c.log, tx, []store.Message{om})
 			xcheckf(err, "untraining expunged messages")
 
 			// Mark old message expunged.

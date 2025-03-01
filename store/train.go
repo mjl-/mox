@@ -19,6 +19,11 @@ import (
 // ErrNoJunkFilter indicates user did not configure/enable a junk filter.
 var ErrNoJunkFilter = errors.New("junkfilter: not configured")
 
+func (a *Account) HasJunkFilter() bool {
+	conf, _ := a.Conf()
+	return conf.JunkFilter != nil
+}
+
 // OpenJunkFilter returns an opened junk filter for the account.
 // If the account does not have a junk filter enabled, ErrNotConfigured is returned.
 // Do not forget to save the filter after modifying, and to always close the filter when done.
@@ -47,7 +52,7 @@ func (a *Account) OpenJunkFilter(ctx context.Context, log mlog.Log) (*junk.Filte
 
 // RetrainMessages (un)trains messages, if relevant given their flags. Updates
 // m.TrainedJunk after retraining.
-func (a *Account) RetrainMessages(ctx context.Context, log mlog.Log, tx *bstore.Tx, msgs []Message, absentOK bool) (rerr error) {
+func (a *Account) RetrainMessages(ctx context.Context, log mlog.Log, tx *bstore.Tx, msgs []Message) (rerr error) {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -78,7 +83,7 @@ func (a *Account) RetrainMessages(ctx context.Context, log mlog.Log, tx *bstore.
 				}
 			}()
 		}
-		if err := a.RetrainMessage(ctx, log, tx, jf, &msgs[i], absentOK); err != nil {
+		if err := a.RetrainMessage(ctx, log, tx, jf, &msgs[i]); err != nil {
 			return err
 		}
 	}
@@ -87,16 +92,11 @@ func (a *Account) RetrainMessages(ctx context.Context, log mlog.Log, tx *bstore.
 
 // RetrainMessage untrains and/or trains a message, if relevant given m.TrainedJunk
 // and m.Junk/m.Notjunk. Updates m.TrainedJunk after retraining.
-func (a *Account) RetrainMessage(ctx context.Context, log mlog.Log, tx *bstore.Tx, jf *junk.Filter, m *Message, absentOK bool) error {
-	untrain := m.TrainedJunk != nil
-	untrainJunk := untrain && *m.TrainedJunk
-	train := m.Junk != m.Notjunk
-	trainJunk := m.Junk
-
-	if !untrain && !train || (untrain && train && untrainJunk == trainJunk) {
+func (a *Account) RetrainMessage(ctx context.Context, log mlog.Log, tx *bstore.Tx, jf *junk.Filter, m *Message) error {
+	need, untrain, untrainJunk, train, trainJunk := m.needsTraining()
+	if !need {
 		return nil
 	}
-
 	log.Debug("updating junk filter",
 		slog.Bool("untrain", untrain),
 		slog.Bool("untrainjunk", untrainJunk),
@@ -135,7 +135,7 @@ func (a *Account) RetrainMessage(ctx context.Context, log mlog.Log, tx *bstore.T
 		}
 		m.TrainedJunk = &trainJunk
 	}
-	if err := tx.Update(m); err != nil && (!absentOK || err != bstore.ErrAbsent) {
+	if err := tx.Update(m); err != nil {
 		return err
 	}
 	return nil

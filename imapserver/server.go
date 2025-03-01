@@ -3842,7 +3842,7 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (removed []store.
 				removed[i].Junk = false
 				removed[i].Notjunk = false
 			}
-			err = c.account.RetrainMessages(context.TODO(), c.log, tx, removed, true)
+			err = c.account.RetrainMessages(context.TODO(), c.log, tx, removed)
 			xcheckf(err, "untraining expunged messages")
 		})
 
@@ -4210,7 +4210,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				xcheckf(err, "sync directory")
 			}
 
-			err = c.account.RetrainMessages(context.TODO(), c.log, tx, nmsgs, false)
+			err = c.account.RetrainMessages(context.TODO(), c.log, tx, nmsgs)
 			xcheckf(err, "train copied messages")
 		})
 
@@ -4358,7 +4358,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 			err = tx.Update(&mbDst)
 			xcheckf(err, "updating destination mailbox for uids, keywords and counts")
 
-			err = c.account.RetrainMessages(context.TODO(), c.log, tx, msgs, false)
+			err = c.account.RetrainMessages(context.TODO(), c.log, tx, msgs)
 			xcheckf(err, "retraining messages after move")
 
 			// Prepare broadcast changes to other connections.
@@ -4578,7 +4578,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 				changes = append(changes, mb.ChangeKeywords())
 			}
 
-			err = c.account.RetrainMessages(context.TODO(), c.log, tx, updated, false)
+			err = c.account.RetrainMessages(context.TODO(), c.log, tx, updated)
 			xcheckf(err, "training messages")
 		})
 

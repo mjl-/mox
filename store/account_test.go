@@ -127,7 +127,7 @@ func TestMailbox(t *testing.T) {
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 			m.Junk = true
 			l := []Message{m}
-			err = acc.RetrainMessages(ctxbg, log, tx, l, false)
+			err = acc.RetrainMessages(ctxbg, log, tx, l)
 			tcheck(t, err, "train as junk")
 			m = l[0]
 			return nil
@@ -140,7 +140,7 @@ func TestMailbox(t *testing.T) {
 	jf, _, err := acc.OpenJunkFilter(ctxbg, log)
 	tcheck(t, err, "open junk filter")
 	err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
-		return acc.RetrainMessage(ctxbg, log, tx, jf, &m, false)
+		return acc.RetrainMessage(ctxbg, log, tx, jf, &m)
 	})
 	tcheck(t, err, "retraining as non-junk")
 	err = jf.Close()
@@ -148,7 +148,7 @@ func TestMailbox(t *testing.T) {
 
 	m.Notjunk = false
 	err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
-		return acc.RetrainMessages(ctxbg, log, tx, []Message{m}, false)
+		return acc.RetrainMessages(ctxbg, log, tx, []Message{m})
 	})
 	tcheck(t, err, "untraining non-junk")
 

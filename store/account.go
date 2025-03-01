@@ -654,11 +654,17 @@ func (m Message) LoadPart(r io.ReaderAt) (message.Part, error) {
 // NeedsTraining returns whether message needs a training update, based on
 // TrainedJunk (current training status) and new Junk/Notjunk flags.
 func (m Message) NeedsTraining() bool {
-	untrain := m.TrainedJunk != nil
-	untrainJunk := untrain && *m.TrainedJunk
-	train := m.Junk != m.Notjunk
-	trainJunk := m.Junk
-	return untrain != train || untrain && train && untrainJunk != trainJunk
+	needs, _, _, _, _ := m.needsTraining()
+	return needs
+}
+
+func (m Message) needsTraining() (needs, untrain, untrainJunk, train, trainJunk bool) {
+	untrain = m.TrainedJunk != nil
+	untrainJunk = untrain && *m.TrainedJunk
+	train = m.Junk != m.Notjunk
+	trainJunk = m.Junk
+	needs = untrain != train || untrain && train && untrainJunk != trainJunk
+	return
 }
 
 // JunkFlagsForMailbox sets Junk and Notjunk flags based on mailbox name if configured. Often
@@ -1850,7 +1856,7 @@ func (a *Account) DeliverMessage(log mlog.Log, tx *bstore.Tx, m *Message, msgFil
 
 	if !notrain && m.NeedsTraining() {
 		l := []Message{*m}
-		if err := a.RetrainMessages(context.TODO(), log, tx, l, false); err != nil {
+		if err := a.RetrainMessages(context.TODO(), log, tx, l); err != nil {
 			return fmt.Errorf("training junkfilter: %w", err)
 		}
 		*m = l[0]
@@ -2422,7 +2428,7 @@ func (a *Account) rejectsRemoveMessages(ctx context.Context, log mlog.Log, tx *b
 		expunged[i].Junk = false
 		expunged[i].Notjunk = false
 	}
-	if err := a.RetrainMessages(ctx, log, tx, expunged, true); err != nil {
+	if err := a.RetrainMessages(ctx, log, tx, expunged); err != nil {
 		return nil, fmt.Errorf("retraining expunged messages: %w", err)
 	}
 
@@ -3134,7 +3140,7 @@ func (a *Account) MailboxDelete(ctx context.Context, log mlog.Log, tx *bstore.Tx
 			}
 		}
 		remove = remove[:n]
-		if err := a.RetrainMessages(ctx, log, tx, remove, true); err != nil {
+		if err := a.RetrainMessages(ctx, log, tx, remove); err != nil {
 			return nil, nil, false, fmt.Errorf("untraining deleted messages: %v", err)
 		}
 	}

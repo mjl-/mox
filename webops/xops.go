@@ -139,7 +139,7 @@ func (x XOps) MessageDeleteTx(ctx context.Context, log mlog.Log, tx *bstore.Tx, 
 		remove[i].Junk = false
 		remove[i].Notjunk = false
 	}
-	err = acc.RetrainMessages(ctx, log, tx, remove, true)
+	err = acc.RetrainMessages(ctx, log, tx, remove)
 	x.Checkf(ctx, err, "untraining deleted messages")
 
 	for _, ch := range removeChanges {
@@ -220,7 +220,7 @@ func (x XOps) MessageFlagsAdd(ctx context.Context, log mlog.Log, acc *store.Acco
 				}
 			}
 
-			err = acc.RetrainMessages(ctx, log, tx, retrain, false)
+			err = acc.RetrainMessages(ctx, log, tx, retrain)
 			x.Checkf(ctx, err, "retraining messages")
 		})
 
@@ -291,7 +291,7 @@ func (x XOps) MessageFlagsClear(ctx context.Context, log mlog.Log, acc *store.Ac
 				// note: cannot remove keywords from mailbox by removing keywords from message.
 			}
 
-			err = acc.RetrainMessages(ctx, log, tx, retrain, false)
+			err = acc.RetrainMessages(ctx, log, tx, retrain)
 			x.Checkf(ctx, err, "retraining messages")
 		})
 
@@ -487,7 +487,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 	err = tx.Update(&mbDst)
 	x.Checkf(ctx, err, "updating destination mailbox with uidnext and modseq")
 
-	err = acc.RetrainMessages(ctx, log, tx, retrain, false)
+	err = acc.RetrainMessages(ctx, log, tx, retrain)
 	x.Checkf(ctx, err, "retraining messages after move")
 
 	// Ensure UIDs of the removed message are in increasing order. It is quite common

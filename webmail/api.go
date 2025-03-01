@@ -1063,7 +1063,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					err = tx.Update(&rmb)
 					xcheckf(ctx, err, "update modseqo of mailbox of replied/forwarded message")
 
-					err = acc.RetrainMessages(ctx, log, tx, []store.Message{rm}, false)
+					err = acc.RetrainMessages(ctx, log, tx, []store.Message{rm})
 					xcheckf(ctx, err, "retraining messages after reply/forward")
 				}
 
@@ -1337,7 +1337,7 @@ func (Webmail) MailboxEmpty(ctx context.Context, mailboxID int64) {
 			err = acc.AddMessageSize(log, tx, -totalSize)
 			xcheckf(ctx, err, "updating disk usage")
 
-			err = acc.RetrainMessages(ctx, log, tx, expunged, true)
+			err = acc.RetrainMessages(ctx, log, tx, expunged)
 			xcheckf(ctx, err, "retraining expunged messages")
 
 			chremove := store.ChangeRemoveUIDs{MailboxID: mb.ID, UIDs: uids, ModSeq: modseq}
