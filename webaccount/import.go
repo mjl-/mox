@@ -385,7 +385,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 
 	// For maildirs, we are likely to get a possible dovecot-keywords file after having
 	// imported the messages. Once we see the keywords, we use them. But before that
-	// time we remember which messages miss a keywords. Once the keywords become
+	// time we remember which messages miss keywords. Once the keywords become
 	// available, we'll fix up the flags for the unknown messages
 	mailboxKeywords := map[string]map[rune]string{}                // Mailbox to 'a'-'z' to flag name.
 	mailboxMissingKeywordMessages := map[string]map[int64]string{} // Mailbox to message id to string consisting of the unrecognized flags.
@@ -501,13 +501,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	}
 
 	xdeliver := func(mb store.Mailbox, m *store.Message, f *os.File, pos string) {
-		defer func() {
-			name := f.Name()
-			err = f.Close()
-			log.Check(err, "closing temporary message file for delivery")
-			err := os.Remove(name)
-			log.Check(err, "removing temporary message file for delivery")
-		}()
+		defer store.CloseRemoveTempFile(log, f, "message file for import")
 		m.MailboxID = mb.ID
 		m.MailboxOrigID = mb.ID
 

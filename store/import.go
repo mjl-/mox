@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -270,11 +269,7 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 	}
 	defer func() {
 		if f != nil {
-			name := f.Name()
-			err := f.Close()
-			mr.log.Check(err, "closing temporary message file after maildir read error")
-			err = os.Remove(name)
-			mr.log.Check(err, "removing temporary message file after maildir read error", slog.String("path", name))
+			CloseRemoveTempFile(mr.log, f, "maildir temp message file")
 		}
 	}()
 
