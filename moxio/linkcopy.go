@@ -11,11 +11,13 @@ import (
 
 // LinkOrCopy attempts to make a hardlink dst. If that fails, it will try to do a
 // regular file copy. If srcReaderOpt is not nil, it will be used for reading. If
-// sync is true and the file is copied, Sync is called on the file after writing to
-// ensure the file is written on disk. Callers should also sync the directory of
-// the destination file, but may want to do that after linking/copying multiple
-// files. If dst was created and an error occurred, it is removed.
-func LinkOrCopy(log mlog.Log, dst, src string, srcReaderOpt io.Reader, sync bool) (rerr error) {
+// fileSync is true and the file is copied instead of hardlinked, fsync is called
+// on the file after writing to ensure the file is flushed to disk. Callers should
+// also sync the directory of the destination file, but may want to do that after
+// linking/copying multiple files. If dst was created and an error occurred, it is
+// removed.
+func LinkOrCopy(log mlog.Log, dst, src string, srcReaderOpt io.Reader, fileSync bool) (rerr error) {
+
 	// Try hardlink first.
 	err := os.Link(src, dst)
 	if err == nil {
@@ -48,6 +50,8 @@ func LinkOrCopy(log mlog.Log, dst, src string, srcReaderOpt io.Reader, sync bool
 		if df != nil {
 			err := df.Close()
 			log.Check(err, "closing partial destination file")
+		}
+		if rerr != nil {
 			err = os.Remove(dst)
 			log.Check(err, "removing partial destination file", slog.String("path", dst))
 		}
@@ -56,17 +60,14 @@ func LinkOrCopy(log mlog.Log, dst, src string, srcReaderOpt io.Reader, sync bool
 	if _, err := io.Copy(df, srcReaderOpt); err != nil {
 		return fmt.Errorf("copy: %w", err)
 	}
-	if sync {
+	if fileSync {
 		if err := df.Sync(); err != nil {
 			return fmt.Errorf("sync destination: %w", err)
 		}
 	}
-	err = df.Close()
-	df = nil
-	if err != nil {
-		err := os.Remove(dst)
-		log.Check(err, "removing partial destination file", slog.String("path", dst))
-		return err
+	if err := df.Close(); err != nil {
+		return fmt.Errorf("flush and close destination file: %w", err)
 	}
+	df = nil
 	return nil
 }
