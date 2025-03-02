@@ -3037,6 +3037,8 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 					xcheckf(err, "copy annotation to destination mailbox")
 				}
 
+				c.xcheckMetadataSize(tx)
+
 				changes[0] = store.ChangeRemoveUIDs{MailboxID: srcMB.ID, UIDs: oldUIDs, ModSeq: modseq}
 				changes[1] = store.ChangeAddMailbox{Mailbox: dstMB, Flags: dstFlags, ModSeq: modseq}
 				// changes[2:...] are ChangeAddUIDs

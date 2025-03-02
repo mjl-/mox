@@ -283,25 +283,7 @@ func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
 				xcheckf(err, "updating metadata annotation")
 			}
 
-			// Check for total size. We allow a total of 1000 entries, with total capacity of 1MB.
-			// ../rfc/5464:383
-			var n int
-			var size int
-			err := bstore.QueryTx[store.Annotation](tx).ForEach(func(a store.Annotation) error {
-				n++
-				if n > metadataMaxKeys {
-					// ../rfc/5464:590
-					xusercodeErrorf("METADATA TOOMANY", "too many metadata entries, 1000 allowed in total")
-				}
-				size += len(a.Key) + len(a.Value)
-				if size > metadataMaxSize {
-					// ../rfc/5464:585 We only have a max total size limit, not per entry. We'll
-					// mention the max total size.
-					xusercodeErrorf(fmt.Sprintf("METADATA MAXSIZE %d", metadataMaxSize), "metadata entry values too large, total maximum size is 1MB")
-				}
-				return nil
-			})
-			xcheckf(err, "checking metadata annotation size")
+			c.xcheckMetadataSize(tx)
 
 			// ../rfc/7162:1335
 			if mb.ID != 0 && modseq != 0 {
@@ -315,4 +297,26 @@ func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
 	})
 
 	c.ok(tag, cmd)
+}
+
+func (c *conn) xcheckMetadataSize(tx *bstore.Tx) {
+	// Check for total size. We allow a total of 1000 entries, with total capacity of 1MB.
+	// ../rfc/5464:383
+	var n int
+	var size int
+	err := bstore.QueryTx[store.Annotation](tx).ForEach(func(a store.Annotation) error {
+		n++
+		if n > metadataMaxKeys {
+			// ../rfc/5464:590
+			xusercodeErrorf("METADATA TOOMANY", "too many metadata entries, 1000 allowed in total")
+		}
+		size += len(a.Key) + len(a.Value)
+		if size > metadataMaxSize {
+			// ../rfc/5464:585 We only have a max total size limit, not per entry. We'll
+			// mention the max total size.
+			xusercodeErrorf(fmt.Sprintf("METADATA MAXSIZE %d", metadataMaxSize), "metadata entry values too large, total maximum size is 1MB")
+		}
+		return nil
+	})
+	xcheckf(err, "checking metadata annotation size")
 }
