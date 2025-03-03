@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"sync/atomic"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -72,6 +74,9 @@ func init() {
 	}
 }
 
+var Panics atomic.Int64
+
 func PanicInc(name Panic) {
+	Panics.Add(1)
 	metricPanic.WithLabelValues(string(name)).Inc()
 }
