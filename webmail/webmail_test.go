@@ -264,28 +264,30 @@ type testmsg struct {
 }
 
 func tdeliver(t *testing.T, acc *store.Account, tm *testmsg) {
-	msgFile, err := store.CreateMessageTemp(pkglog, "webmail-test")
-	tcheck(t, err, "create message temp")
-	defer os.Remove(msgFile.Name())
-	defer msgFile.Close()
-	size, err := msgFile.Write(tm.msg.Marshal(t))
-	tcheck(t, err, "write message temp")
-	m := store.Message{
-		Flags:            tm.Flags,
-		RcptToLocalpart:  "mox",
-		RcptToDomain:     "other.example",
-		MsgFromLocalpart: "mjl",
-		MsgFromDomain:    "mox.example",
-		DKIMDomains:      []string{"mox.example"},
-		Keywords:         tm.Keywords,
-		Size:             int64(size),
-	}
-	err = acc.DeliverMailbox(pkglog, tm.Mailbox, &m, msgFile)
-	tcheck(t, err, "deliver test message")
-	err = msgFile.Close()
-	tcheck(t, err, "closing test message")
-	tm.m = m
-	tm.ID = m.ID
+	acc.WithWLock(func() {
+		msgFile, err := store.CreateMessageTemp(pkglog, "webmail-test")
+		tcheck(t, err, "create message temp")
+		defer os.Remove(msgFile.Name())
+		defer msgFile.Close()
+		size, err := msgFile.Write(tm.msg.Marshal(t))
+		tcheck(t, err, "write message temp")
+		m := store.Message{
+			Flags:            tm.Flags,
+			RcptToLocalpart:  "mox",
+			RcptToDomain:     "other.example",
+			MsgFromLocalpart: "mjl",
+			MsgFromDomain:    "mox.example",
+			DKIMDomains:      []string{"mox.example"},
+			Keywords:         tm.Keywords,
+			Size:             int64(size),
+		}
+		err = acc.DeliverMailbox(pkglog, tm.Mailbox, &m, msgFile)
+		tcheck(t, err, "deliver test message")
+		err = msgFile.Close()
+		tcheck(t, err, "closing test message")
+		tm.m = m
+		tm.ID = m.ID
+	})
 }
 
 func readBody(r io.Reader) string {

@@ -450,8 +450,11 @@ func TestCtl(t *testing.T) {
 			defer msgf.Close()
 			_, err = msgf.Write(content)
 			tcheck(t, err, "write message file")
-			err = acc.DeliverMailbox(ctl.log, "Inbox", m, msgf)
-			tcheck(t, err, "deliver message")
+
+			acc.WithWLock(func() {
+				err = acc.DeliverMailbox(ctl.log, "Inbox", m, msgf)
+				tcheck(t, err, "deliver message")
+			})
 		}
 
 		var msgBadSize store.Message

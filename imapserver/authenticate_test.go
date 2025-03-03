@@ -293,6 +293,8 @@ func TestAuthenticateTLSClientCert(t *testing.T) {
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(pkglog, "test1234")
 	tcheck(t, err, "set password")
+	err = acc.Close()
+	tcheck(t, err, "close account")
 	tc = startArgsMore(t, true, true, nil, &clientConfig, false, true, true, "mjl", addClientCert)
 	tc.transactf("no", "authenticate plain %s", base64.StdEncoding.EncodeToString([]byte("\u0000other@mox.example\u0000test1234")))
 	tc.close()

@@ -42,8 +42,11 @@ func TestThreadingUpgrade(t *testing.T) {
 			MsgPrefix: []byte(s),
 			Received:  recv,
 		}
-		err = acc.DeliverMailbox(log, "Inbox", &m, f)
-		tcheck(t, err, "deliver")
+		acc.WithWLock(func() {
+			err = acc.DeliverMailbox(log, "Inbox", &m, f)
+			tcheck(t, err, "deliver")
+		})
+
 		if expThreadID == 0 {
 			expThreadID = m.ID
 		}

@@ -358,7 +358,7 @@ func (x XOps) MailboxesMarkRead(ctx context.Context, log mlog.Log, acc *store.Ac
 
 // MessageMove moves messages to the mailbox represented by mailboxName, or to mailboxID if mailboxName is empty.
 func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account, messageIDs []int64, mailboxName string, mailboxID int64) {
-	acc.WithRLock(func() {
+	acc.WithWLock(func() {
 		var changes []store.Change
 
 		x.DBWrite(ctx, acc, func(tx *bstore.Tx) {

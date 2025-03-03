@@ -41,13 +41,15 @@ func TestExport(t *testing.T) {
 	_, err = msgFile.Write([]byte(msg))
 	tcheck(t, err, "write message")
 
-	m := Message{Received: time.Now(), Size: int64(len(msg))}
-	err = acc.DeliverMailbox(pkglog, "Inbox", &m, msgFile)
-	tcheck(t, err, "deliver")
+	acc.WithWLock(func() {
+		m := Message{Received: time.Now(), Size: int64(len(msg))}
+		err = acc.DeliverMailbox(pkglog, "Inbox", &m, msgFile)
+		tcheck(t, err, "deliver")
 
-	m = Message{Received: time.Now(), Size: int64(len(msg))}
-	err = acc.DeliverMailbox(pkglog, "Trash", &m, msgFile)
-	tcheck(t, err, "deliver")
+		m = Message{Received: time.Now(), Size: int64(len(msg))}
+		err = acc.DeliverMailbox(pkglog, "Trash", &m, msgFile)
+		tcheck(t, err, "deliver")
+	})
 
 	var maildirZip, maildirTar, mboxZip, mboxTar bytes.Buffer
 

@@ -646,10 +646,11 @@ func tinsertmsg(t *testing.T, acc *store.Account, mailbox string, m *store.Messa
 	defer mf.Close()
 	_, err = mf.Write([]byte(msg))
 	tcheck(t, err, "write message")
-	err = acc.DeliverMailbox(pkglog, mailbox, m, mf)
-	tcheck(t, err, "deliver message")
-	err = mf.Close()
-	tcheck(t, err, "close message")
+
+	acc.WithWLock(func() {
+		err = acc.DeliverMailbox(pkglog, mailbox, m, mf)
+		tcheck(t, err, "deliver message")
+	})
 }
 
 func tretrain(t *testing.T, acc *store.Account) {
