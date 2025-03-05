@@ -35,8 +35,14 @@ func FuzzServer(f *testing.F) {
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/smtpserverfuzz/mox.conf")
 	mox.MustLoadConfig(true, false)
+	store.Close() // May not be open, we ignore error.
 	dataDir := mox.ConfigDirPath(mox.Conf.Static.DataDir)
 	os.RemoveAll(dataDir)
+	err := store.Init(ctxbg)
+	if err != nil {
+		f.Fatalf("store init: %v", err)
+	}
+
 	acc, err := store.OpenAccount(log, "mjl", false)
 	if err != nil {
 		f.Fatalf("open account: %v", err)
