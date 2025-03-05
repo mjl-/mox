@@ -2941,14 +2941,14 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 		var changes []store.Change
 
 		c.xdbwrite(func(tx *bstore.Tx) {
-			srcMB := c.xmailbox(tx, src, "NONEXISTENT")
+			mbSrc := c.xmailbox(tx, src, "NONEXISTENT")
 
 			// Handle common/simple case first.
 			if src != "Inbox" {
 				var modseq store.ModSeq
 				var alreadyExists bool
 				var err error
-				changes, _, alreadyExists, err = c.account.MailboxRename(tx, &srcMB, dst, &modseq)
+				changes, _, alreadyExists, err = c.account.MailboxRename(tx, &mbSrc, dst, &modseq)
 				if alreadyExists {
 					xusercodeErrorf("ALREADYEXISTS", "%s", err)
 				}
@@ -2970,34 +2970,34 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 			}
 
 			var modseq store.ModSeq
-			dstMB, chl, err := c.account.MailboxEnsure(tx, dst, false, store.SpecialUse{}, &modseq)
+			mbDst, chl, err := c.account.MailboxEnsure(tx, dst, false, store.SpecialUse{}, &modseq)
 			xcheckf(err, "creating destination mailbox")
 			changes = chl
 
 			// Copy mailbox annotations. ../rfc/5464:368
 			qa := bstore.QueryTx[store.Annotation](tx)
-			qa.FilterNonzero(store.Annotation{MailboxID: srcMB.ID})
+			qa.FilterNonzero(store.Annotation{MailboxID: mbSrc.ID})
 			qa.FilterEqual("Expunged", false)
 			annotations, err := qa.List()
 			xcheckf(err, "get annotations to copy for inbox")
 			for _, a := range annotations {
 				a.ID = 0
-				a.MailboxID = dstMB.ID
+				a.MailboxID = mbDst.ID
 				a.ModSeq = modseq
 				a.CreateSeq = modseq
 				err := tx.Insert(&a)
 				xcheckf(err, "copy annotation to destination mailbox")
-				changes = append(changes, a.Change(dstMB.Name))
+				changes = append(changes, a.Change(mbDst.Name))
 			}
 			c.xcheckMetadataSize(tx)
 
 			// Build query that selects messages to move.
 			q := bstore.QueryTx[store.Message](tx)
-			q.FilterNonzero(store.Message{MailboxID: srcMB.ID})
+			q.FilterNonzero(store.Message{MailboxID: mbSrc.ID})
 			q.FilterEqual("Expunged", false)
 			q.SortAsc("UID")
 
-			newIDs, chl := c.xmoveMessages(tx, q, 0, modseq, &srcMB, &dstMB)
+			newIDs, chl := c.xmoveMessages(tx, q, 0, modseq, &mbSrc, &mbDst)
 			changes = append(changes, chl...)
 			cleanupIDs = newIDs
 		})
