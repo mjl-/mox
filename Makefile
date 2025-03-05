@@ -23,15 +23,15 @@ race: build0
 	go build -race
 
 test:
-	CGO_ENABLED=0 go test -shuffle=on -coverprofile cover.out ./...
+	CGO_ENABLED=0 go test -fullpath -shuffle=on -coverprofile cover.out ./...
 	go tool cover -html=cover.out -o cover.html
 
 test-race:
-	CGO_ENABLED=1 go test -race -shuffle=on -covermode atomic -coverprofile cover.out ./...
+	CGO_ENABLED=1 go test -fullpath -race -shuffle=on -covermode atomic -coverprofile cover.out ./...
 	go tool cover -html=cover.out -o cover.html
 
 test-more:
-	TZ= CGO_ENABLED=0 go test -shuffle=on -count 2 ./...
+	TZ= CGO_ENABLED=0 go test -fullpath -shuffle=on -count 2 ./...
 
 # note: if testdata/upgradetest.mbox.gz exists, its messages will be imported
 # during tests. helpful for performance/resource consumption tests.
@@ -70,19 +70,19 @@ check-shadow:
 	CGO_ENABLED=0 go vet -tags xr -vettool=$$(which shadow) rfc/xr.go 2>&1 | grep -v '"err"'
 
 fuzz:
-	go test -fuzz FuzzParseSignature -fuzztime 5m ./dkim
-	go test -fuzz FuzzParseRecord -fuzztime 5m ./dkim
-	go test -fuzz . -fuzztime 5m ./dmarc
-	go test -fuzz . -fuzztime 5m ./dmarcrpt
-	go test -fuzz . -parallel 1 -fuzztime 5m ./imapserver
-	go test -fuzz . -parallel 1 -fuzztime 5m ./junk
-	go test -fuzz FuzzParseRecord -fuzztime 5m ./mtasts
-	go test -fuzz FuzzParsePolicy -fuzztime 5m ./mtasts
-	go test -fuzz . -fuzztime 5m ./smtp
-	go test -fuzz . -parallel 1 -fuzztime 5m ./smtpserver
-	go test -fuzz . -fuzztime 5m ./spf
-	go test -fuzz FuzzParseRecord -fuzztime 5m ./tlsrpt
-	go test -fuzz FuzzParseMessage -fuzztime 5m ./tlsrpt
+	go test -fullpath -fuzz FuzzParseSignature -fuzztime 5m ./dkim
+	go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./dkim
+	go test -fullpath -fuzz . -fuzztime 5m ./dmarc
+	go test -fullpath -fuzz . -fuzztime 5m ./dmarcrpt
+	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./imapserver
+	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./junk
+	go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./mtasts
+	go test -fullpath -fuzz FuzzParsePolicy -fuzztime 5m ./mtasts
+	go test -fullpath -fuzz . -fuzztime 5m ./smtp
+	go test -fullpath -fuzz . -parallel 1 -fuzztime 5m ./smtpserver
+	go test -fullpath -fuzz . -fuzztime 5m ./spf
+	go test -fullpath -fuzz FuzzParseRecord -fuzztime 5m ./tlsrpt
+	go test -fullpath -fuzz FuzzParseMessage -fuzztime 5m ./tlsrpt
 
 govendor:
 	go mod tidy
