@@ -19,12 +19,22 @@ func TestCreate(t *testing.T) {
 	tc.transactf("no", "create inbox") // Already exists and not allowed. ../rfc/9051:1913
 	tc.transactf("no", "create Inbox") // Idem.
 
+	// Don't allow names that can cause trouble when exporting to directories.
+	tc.transactf("no", "create .")
+	tc.transactf("no", "create ..")
+	tc.transactf("no", "create legit/..")
+	tc.transactf("ok", "create ...") // No special meaning.
+
 	// ../rfc/9051:1937
 	tc.transactf("ok", "create inbox/a/c")
 	tc.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "Inbox/a"}, imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "Inbox/a/c"})
 
 	tc2.transactf("ok", "noop")
-	tc2.xuntagged(imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "Inbox/a"}, imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "Inbox/a/c"})
+	tc2.xuntagged(
+		imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "..."},
+		imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "Inbox/a"},
+		imapclient.UntaggedList{Flags: []string{`\Subscribed`}, Separator: '/', Mailbox: "Inbox/a/c"},
+	)
 
 	tc.transactf("no", "create inbox/a/c") // Exists.
 

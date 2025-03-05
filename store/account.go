@@ -2355,6 +2355,8 @@ func (a *Account) Subjectpass(email string) (key string, err error) {
 //
 // Modseq is used, and initialized if 0, for created mailboxes.
 //
+// Name must be in normalized form, see CheckMailboxName.
+//
 // Caller must hold account wlock.
 // Caller must propagate changes if any.
 func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool, specialUse SpecialUse, modseq *ModSeq) (mb Mailbox, changes []Change, rerr error) {
@@ -3341,7 +3343,7 @@ func MailboxID(tx *bstore.Tx, id int64) (Mailbox, error) {
 // The mailbox is created with special-use flags, with those flags taken away from
 // other mailboxes if they have them, reflected in the returned changes.
 //
-// Name must be in normalized form.
+// Name must be in normalized form, see CheckMailboxName.
 func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUse) (nmb Mailbox, changes []Change, created []string, exists bool, rerr error) {
 	elems := strings.Split(name, "/")
 	var p string
@@ -3375,7 +3377,7 @@ func (a *Account) MailboxCreate(tx *bstore.Tx, name string, specialUse SpecialUs
 // MailboxRename renames mailbox mbsrc to dst, including children of mbsrc, and
 // adds missing parents for dst.
 //
-// Names must be in normalized form and cannot be Inbox.
+// Name must be in normalized form, see CheckMailboxName, and cannot be Inbox.
 func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc *Mailbox, dst string, modseq *ModSeq) (changes []Change, isInbox, alreadyExists bool, rerr error) {
 	if mbsrc.Name == "Inbox" || dst == "Inbox" {
 		return nil, true, false, fmt.Errorf("inbox cannot be renamed")
@@ -3576,8 +3578,8 @@ func (a *Account) MailboxDelete(ctx context.Context, log mlog.Log, tx *bstore.Tx
 // If name is the inbox, and allowInbox is false, this is indicated with the isInbox return parameter.
 // For that case, and for other invalid names, an error is returned.
 func CheckMailboxName(name string, allowInbox bool) (normalizedName string, isInbox bool, rerr error) {
-	first := strings.SplitN(name, "/", 2)[0]
-	if strings.EqualFold(first, "inbox") {
+	t := strings.Split(name, "/")
+	if strings.EqualFold(t[0], "inbox") {
 		if len(name) == len("inbox") && !allowInbox {
 			return "", true, fmt.Errorf("special mailbox name Inbox not allowed")
 		}
@@ -3588,8 +3590,15 @@ func CheckMailboxName(name string, allowInbox bool) (normalizedName string, isIn
 		return "", false, errors.New("non-unicode-normalized mailbox names not allowed")
 	}
 
-	if name == "" {
-		return "", false, errors.New("empty mailbox name")
+	for _, e := range t {
+		switch e {
+		case "":
+			return "", false, errors.New("empty mailbox name")
+		case ".":
+			return "", false, errors.New(`"." not allowed`)
+		case "..":
+			return "", false, errors.New(`".." not allowed`)
+		}
 	}
 	if strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.Contains(name, "//") {
 		return "", false, errors.New("bad slashes in mailbox name")

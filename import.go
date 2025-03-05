@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/unicode/norm"
+
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
@@ -188,6 +190,11 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	var mboxf *os.File
 	var mdnewf, mdcurf *os.File
 	var msgreader store.MsgSource
+
+	// Ensure normalized form.
+	mailbox = norm.NFC.String(mailbox)
+	mailbox, _, err = store.CheckMailboxName(mailbox, true)
+	ctl.xcheck(err, "checking mailbox name")
 
 	// Open account, creating a database file if it doesn't exist yet. It must be known
 	// in the configuration file.

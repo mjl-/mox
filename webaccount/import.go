@@ -433,10 +433,10 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	}
 
 	xensureMailbox := func(name string) *store.Mailbox {
+		// Ensure name is normalized.
 		name = norm.NFC.String(name)
-		if strings.ToLower(name) == "inbox" {
-			name = "Inbox"
-		}
+		name, _, err := store.CheckMailboxName(name, true)
+		ximportcheckf(err, "checking mailbox name")
 
 		if mb, ok := mailboxNames[name]; ok {
 			return mb
