@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
-	"strings"
 	"time"
 
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/moxio"
 )
 
 var loginAttemptsMaxPerAccount = 10 * 1000 // Lower during tests.
@@ -353,9 +353,10 @@ func LoginAttemptTLS(state *tls.ConnectionState) string {
 		return ""
 	}
 
+	version, ciphersuite := moxio.TLSInfo(*state)
 	return fmt.Sprintf("version=%s ciphersuite=%s sni=%s resumed=%v alpn=%s",
-		strings.ReplaceAll(strings.ToLower(tls.VersionName(state.Version)), " ", ""), // e.g. tls1.3
-		strings.ToLower(tls.CipherSuiteName(state.CipherSuite)),
+		version,
+		ciphersuite,
 		state.ServerName,
 		state.DidResume,
 		state.NegotiatedProtocol)

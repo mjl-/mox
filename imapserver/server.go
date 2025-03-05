@@ -1096,9 +1096,10 @@ func (c *conn) xtlsHandshakeAndAuthenticate(conn net.Conn) {
 		}
 	}
 
+	version, ciphersuite := moxio.TLSInfo(cs)
 	attrs := []slog.Attr{
-		slog.Any("version", tlsVersion(cs.Version)),
-		slog.String("ciphersuite", tls.CipherSuiteName(cs.CipherSuite)),
+		slog.String("version", version),
+		slog.String("ciphersuite", ciphersuite),
 		slog.String("sni", cs.ServerName),
 		slog.Bool("resumed", cs.DidResume),
 		slog.Int("clientcerts", len(cs.PeerCertificates)),
@@ -1110,12 +1111,6 @@ func (c *conn) xtlsHandshakeAndAuthenticate(conn net.Conn) {
 		)
 	}
 	c.log.Debug("tls handshake completed", attrs...)
-}
-
-type tlsVersion uint16
-
-func (v tlsVersion) String() string {
-	return strings.ReplaceAll(strings.ToLower(tls.VersionName(uint16(v))), " ", "-")
 }
 
 func (c *conn) command() {

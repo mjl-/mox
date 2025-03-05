@@ -311,9 +311,9 @@ func New(ctx context.Context, elog *slog.Logger, conn net.Conn, tlsMode TLSMode,
 		c.firstReadAfterHandshake = true
 		c.tlsResultAdd(1, 0, nil)
 		c.conn = tlsconn
-		tlsversion, ciphersuite := moxio.TLSInfo(tlsconn)
+		version, ciphersuite := moxio.TLSInfo(tlsconn.ConnectionState())
 		c.log.Debug("tls client handshake done",
-			slog.String("tls", tlsversion),
+			slog.String("version", version),
 			slog.String("ciphersuite", ciphersuite),
 			slog.Any("servername", remoteHostname))
 		c.tls = true
@@ -828,13 +828,13 @@ func (c *Client) hello(ctx context.Context, tlsMode TLSMode, ehloHostname dns.Do
 		c.r = bufio.NewReader(c.tr)
 		c.w = bufio.NewWriter(c.tw)
 
-		tlsversion, ciphersuite := moxio.TLSInfo(nconn)
+		version, ciphersuite := moxio.TLSInfo(nconn.ConnectionState())
 		c.log.Debug("starttls client handshake done",
 			slog.Any("tlsmode", tlsMode),
 			slog.Bool("verifypkix", c.tlsVerifyPKIX),
 			slog.Bool("verifydane", c.daneRecords != nil),
 			slog.Bool("ignoretlsverifyerrors", c.ignoreTLSVerifyErrors),
-			slog.String("tls", tlsversion),
+			slog.String("version", version),
 			slog.String("ciphersuite", ciphersuite),
 			slog.Any("servername", c.remoteHostname),
 			slog.Any("danerecord", c.daneVerifiedRecord))

@@ -2,28 +2,19 @@ package moxio
 
 import (
 	"crypto/tls"
-	"fmt"
+	"strings"
 )
 
 // TLSInfo returns human-readable strings about the TLS connection, for use in
 // logging.
-func TLSInfo(conn *tls.Conn) (version, ciphersuite string) {
-	st := conn.ConnectionState()
+func TLSInfo(cs tls.ConnectionState) (version, ciphersuite string) {
+	// e.g. tls1.3, instead of "TLS 1.3"
+	version = tls.VersionName(cs.Version)
+	version = strings.ToLower(version)
+	version = strings.ReplaceAll(version, " ", "")
 
-	versions := map[uint16]string{
-		tls.VersionTLS10: "TLS1.0",
-		tls.VersionTLS11: "TLS1.1",
-		tls.VersionTLS12: "TLS1.2",
-		tls.VersionTLS13: "TLS1.3",
-	}
+	ciphersuite = tls.CipherSuiteName(cs.CipherSuite)
+	ciphersuite = strings.ToLower(ciphersuite)
 
-	v, ok := versions[st.Version]
-	if ok {
-		version = v
-	} else {
-		version = fmt.Sprintf("TLS %x", st.Version)
-	}
-
-	ciphersuite = tls.CipherSuiteName(st.CipherSuite)
 	return
 }
