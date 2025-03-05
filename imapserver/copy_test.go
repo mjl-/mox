@@ -12,7 +12,7 @@ func TestCopy(t *testing.T) {
 	defer tc.close()
 
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 
 	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
@@ -33,6 +33,8 @@ func TestCopy(t *testing.T) {
 	tc.client.Append("inbox", makeAppend(exampleMsg))
 
 	tc.transactf("no", "copy 1 nonexistent")
+	tc.xcode("TRYCREATE")
+	tc.transactf("no", "copy 1 expungebox")
 	tc.xcode("TRYCREATE")
 
 	tc.transactf("no", "copy 1 inbox") // Cannot copy to same mailbox.

@@ -18,6 +18,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/mjl-/bstore"
+
 	"github.com/mjl-/mox/imapclient"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -309,6 +311,14 @@ func (tc *testconn) waitDone() {
 }
 
 func (tc *testconn) close() {
+	tc.close0(true)
+}
+
+func (tc *testconn) closeNoWait() {
+	tc.close0(false)
+}
+
+func (tc *testconn) close0(waitclose bool) {
 	defer func() {
 		if unhandledPanics.Swap(0) > 0 {
 			tc.t.Fatalf("handled panic in server")
@@ -319,13 +329,16 @@ func (tc *testconn) close() {
 		// Already closed, we are not strict about closing multiple times.
 		return
 	}
-	err := tc.account.Close()
-	tc.check(err, "close account")
-	// no account.CheckClosed(), the tests open accounts multiple times.
-	tc.account = nil
 	if tc.client != nil {
 		tc.client.Close()
 	}
+	err := tc.account.Close()
+	tc.check(err, "close account")
+	if waitclose {
+		tc.account.WaitClosed()
+	}
+	// no account.CheckClosed(), the tests open accounts multiple times.
+	tc.account = nil
 	tc.serverConn.Close()
 	tc.waitDone()
 	if tc.switchStop != nil {
@@ -406,6 +419,22 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 	switchStop := func() {}
 	if first {
 		switchStop = store.Switchboard()
+
+		// Add a deleted mailbox, may excercise some code paths.
+		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
+			// todo: add a message to inbox and remove it again. need to change all uids in the tests.
+			// todo: add tests for operating on an expunged mailbox. it should say it doesn't exist.
+
+			mb, _, _, _, err := acc.MailboxCreate(tx, "expungebox", store.SpecialUse{})
+			if err != nil {
+				return fmt.Errorf("create mailbox: %v", err)
+			}
+			if _, _, err := acc.MailboxDelete(ctxbg, pkglog, tx, &mb); err != nil {
+				return fmt.Errorf("delete mailbox: %v", err)
+			}
+			return nil
+		})
+		tcheck(t, err, "add expunged mailbox")
 	}
 
 	if afterInit != nil {
@@ -698,7 +727,7 @@ func TestMailboxDeleted(t *testing.T) {
 	defer tc.close()
 
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 
 	tc.client.Login("mjl@mox.example", password0)
 	tc2.client.Login("mjl@mox.example", password0)

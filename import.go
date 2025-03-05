@@ -254,7 +254,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		ctl.xwriteok()
 
 		// We will be delivering messages. If we fail halfway, we need to remove the created msg files.
-		var deliveredIDs []int64
+		var newIDs []int64
 		defer func() {
 			x := recover()
 			if x == nil {
@@ -269,12 +269,12 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 				ctl.log.Error("import error")
 			}
 
-			for _, id := range deliveredIDs {
+			for _, id := range newIDs {
 				p := a.MessagePath(id)
 				err := os.Remove(p)
 				ctl.log.Check(err, "closing message file after import error", slog.String("path", p))
 			}
-			deliveredIDs = nil
+			newIDs = nil
 
 			ctl.xerror(fmt.Sprintf("import error: %v", x))
 		}()
@@ -371,7 +371,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			}
 			err = a.MessageAdd(ctl.log, tx, &mb, m, msgf, opts)
 			ctl.xcheck(err, "delivering message")
-			deliveredIDs = append(deliveredIDs, m.ID)
+			newIDs = append(newIDs, m.ID)
 			changes = append(changes, m.ChangeAddUID())
 
 			msgDirs[filepath.Dir(a.MessagePath(m.ID))] = struct{}{}
@@ -393,8 +393,8 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		}
 
 		// Match threads.
-		if len(deliveredIDs) > 0 {
-			err = a.AssignThreads(ctx, ctl.log, tx, deliveredIDs[0], 0, io.Discard)
+		if len(newIDs) > 0 {
+			err = a.AssignThreads(ctx, ctl.log, tx, newIDs[0], 0, io.Discard)
 			ctl.xcheck(err, "assigning messages to threads")
 		}
 
@@ -423,8 +423,8 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		err = tx.Commit()
 		ctl.xcheck(err, "commit")
 		tx = nil
-		ctl.log.Info("delivered messages through import", slog.Int("count", len(deliveredIDs)))
-		deliveredIDs = nil
+		ctl.log.Info("delivered messages through import", slog.Int("count", len(newIDs)))
+		newIDs = nil
 
 		store.BroadcastChanges(a, changes)
 	})

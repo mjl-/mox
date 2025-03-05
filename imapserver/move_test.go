@@ -12,10 +12,10 @@ func TestMove(t *testing.T) {
 	defer tc.close()
 
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 
 	tc3 := startNoSwitchboard(t)
-	defer tc3.close()
+	defer tc3.closeNoWait()
 
 	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
@@ -45,6 +45,9 @@ func TestMove(t *testing.T) {
 	tc.client.Select("inbox")
 
 	tc.transactf("no", "move 1 nonexistent")
+	tc.xcode("TRYCREATE")
+
+	tc.transactf("no", "move 1 expungebox")
 	tc.xcode("TRYCREATE")
 
 	tc.transactf("no", "move 1 inbox") // Cannot move to same mailbox.

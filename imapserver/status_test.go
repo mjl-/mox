@@ -19,6 +19,8 @@ func TestStatus(t *testing.T) {
 	tc.transactf("bad", "status inbox (uidvalidity) ") // Leftover data.
 	tc.transactf("bad", "status inbox (unknown)")      // Unknown attribute.
 
+	tc.transactf("no", "status expungebox (messages)") // No longer exists.
+
 	tc.transactf("ok", "status inbox (messages uidnext uidvalidity unseen deleted size recent appendlimit)")
 	tc.xuntagged(imapclient.UntaggedStatus{
 		Mailbox: "Inbox",

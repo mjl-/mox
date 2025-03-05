@@ -13,7 +13,7 @@ func TestIdle(t *testing.T) {
 	defer tc1.close()
 
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 
 	tc1.client.Login("mjl@mox.example", password0)
 	tc2.client.Login("mjl@mox.example", password0)

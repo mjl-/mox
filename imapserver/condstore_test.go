@@ -85,6 +85,8 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 	// unmodified. Those messages have modseq 0 in the database. We use append for
 	// convenience, then adjust the records in the database.
 	// We have a workaround below to prevent triggering the consistency checker.
+	tc.account.SetSkipMessageModSeqZeroCheck(true)
+	defer tc.account.SetSkipMessageModSeqZeroCheck(false)
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
@@ -100,13 +102,13 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 
 	// tc2 is a client without condstore, so no modseq responses.
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	// tc3 is a client with condstore, so with modseq responses.
 	tc3 := startNoSwitchboard(t)
-	defer tc3.close()
+	defer tc3.closeNoWait()
 	tc3.client.Login("mjl@mox.example", password0)
 	tc3.client.Enable(capability)
 	tc3.client.Select("inbox")
@@ -124,7 +126,7 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 
 	tc.transactf("ok", "Append otherbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.xuntagged()
-	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 2, UIDs: xparseUIDRange("1")})
+	tc.xcodeArg(imapclient.CodeAppendUID{UIDValidity: 3, UIDs: xparseUIDRange("1")})
 
 	tc.transactf("ok", "Append inbox () \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")
 	tc.xuntagged(imapclient.UntaggedExists(5))
@@ -353,11 +355,7 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 		xtc := startNoSwitchboard(t)
 		// We have modified modseq & createseq to 0 above for testing that case. Don't
 		// trigger the consistency checker.
-		store.CheckConsistencyOnClose = false
-		defer func() {
-			xtc.close()
-			store.CheckConsistencyOnClose = true
-		}()
+		defer xtc.closeNoWait()
 		xtc.client.Login("mjl@mox.example", password0)
 		fn(xtc)
 		tagcount++
@@ -444,13 +442,13 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 	// and untagged fetch with modseq in destination mailbox.
 	// tc2o is a client without condstore, so no modseq responses.
 	tc2o := startNoSwitchboard(t)
-	defer tc2o.close()
+	defer tc2o.closeNoWait()
 	tc2o.client.Login("mjl@mox.example", password0)
 	tc2o.client.Select("otherbox")
 
 	// tc3o is a client with condstore, so with modseq responses.
 	tc3o := startNoSwitchboard(t)
-	defer tc3o.close()
+	defer tc3o.closeNoWait()
 	tc3o.client.Login("mjl@mox.example", password0)
 	tc3o.client.Enable(capability)
 	tc3o.client.Select("otherbox")
@@ -484,14 +482,9 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 		imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(2), noflags, imapclient.FetchModSeq(clientModseq)}},
 	)
 
-	// Restore valid modseq/createseq for the consistency checker.
-	_, err = bstore.QueryDB[store.Message](ctxbg, tc.account.DB).FilterEqual("CreateSeq", int64(0)).UpdateNonzero(store.Message{CreateSeq: 2})
-	tcheck(t, err, "updating modseq/createseq to valid values")
-	_, err = bstore.QueryDB[store.Message](ctxbg, tc.account.DB).FilterEqual("ModSeq", int64(0)).UpdateNonzero(store.Message{ModSeq: 2})
-	tcheck(t, err, "updating modseq/createseq to valid values")
-	tc2o.close()
+	tc2o.closeNoWait()
 	tc2o = nil
-	tc3o.close()
+	tc3o.closeNoWait()
 	tc3o = nil
 
 	// Then we rename inbox, which is special because it moves messages away instead of
@@ -533,10 +526,7 @@ func testQresync(t *testing.T, tc *testconn, clientModseq int64) {
 	xtc.client.Login("mjl@mox.example", password0)
 	xtc.transactf("ok", "Select inbox (Condstore)")
 	xtc.transactf("bad", "Uid Fetch 1:* (Flags) (Changedsince 1 Vanished)")
-	// Prevent triggering the consistency checker, we still have modseq/createseq at 0.
-	store.CheckConsistencyOnClose = false
-	xtc.close()
-	store.CheckConsistencyOnClose = true
+	xtc.closeNoWait()
 	xtc = nil
 
 	// Check that we get proper vanished responses.
@@ -557,9 +547,7 @@ func testQresync(t *testing.T, tc *testconn, clientModseq int64) {
 	xtc.client.Login("mjl@mox.example", password0)
 	xtc.transactf("bad", "Select inbox (Qresync 1 0)")
 	// Prevent triggering the consistency checker, we still have modseq/createseq at 0.
-	store.CheckConsistencyOnClose = false
-	xtc.close()
-	store.CheckConsistencyOnClose = true
+	xtc.closeNoWait()
 	xtc = nil
 
 	tc.transactf("bad", "Select inbox (Qresync (0 1))")               // Both args must be > 0.

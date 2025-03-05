@@ -285,6 +285,9 @@ possibly making them potentially no longer readable by the previous version.
 				if m.Expunged {
 					return nil
 				}
+				if mb.Expunged {
+					checkf(errors.New("mailbox is expunged but message is not"), dbpath, "message id %d is in expunged mailbox %q (id %d)", m.ID, mb.Name, mb.ID)
+				}
 				totalSize += m.Size
 
 				mp := store.MessagePath(m.ID)

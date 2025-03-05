@@ -13,10 +13,10 @@ func TestAppend(t *testing.T) {
 	defer tc.close()
 
 	tc2 := startNoSwitchboard(t) // note: without switchboard because this connection will break during tests.
-	defer tc2.close()
+	defer tc2.closeNoWait()
 
 	tc3 := startNoSwitchboard(t)
-	defer tc3.close()
+	defer tc3.closeNoWait()
 
 	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
@@ -31,17 +31,20 @@ func TestAppend(t *testing.T) {
 	// Syntax error for line ending in literal causes connection abort.
 	tc2.transactf("bad", "append inbox (\\Badflag) {1+}\r\nx") // Unknown flag.
 	tc2 = startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	tc2.transactf("bad", "append inbox () \"bad time\" {1+}\r\nx") // Bad time.
 	tc2 = startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 
 	tc2.transactf("no", "append nobox (\\Seen) \" 1-Jan-2022 10:10:00 +0100\" {1}")
+	tc2.xcode("TRYCREATE")
+
+	tc2.transactf("no", "append expungebox (\\Seen) {1}")
 	tc2.xcode("TRYCREATE")
 
 	tc2.transactf("ok", "append inbox (\\Seen Label1 $label2) \" 1-Jan-2022 10:10:00 +0100\" {1+}\r\nx")

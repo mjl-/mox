@@ -75,7 +75,7 @@ func setup(t *testing.T) (*store.Account, func()) {
 	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 	return acc, func() {
 		acc.Close()
-		acc.CheckClosed()
+		acc.WaitClosed()
 		mox.ShutdownCancel()
 		mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 		Shutdown()

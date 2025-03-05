@@ -43,7 +43,7 @@ func FuzzServer(f *testing.F) {
 	}
 	defer func() {
 		acc.Close()
-		acc.CheckClosed()
+		acc.WaitClosed()
 	}()
 	err = acc.SetPassword(log, "testtest")
 	if err != nil {

@@ -6,16 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+	"slices"
 	"sort"
 	"time"
 
-	"golang.org/x/exp/maps"
-
 	"github.com/mjl-/bstore"
 
+	"github.com/mjl-/mox/junk"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/store"
 )
 
@@ -31,9 +33,8 @@ func (x XOps) mailboxID(ctx context.Context, tx *bstore.Tx, mailboxID int64) sto
 	if mailboxID == 0 {
 		x.Checkuserf(ctx, errors.New("invalid zero mailbox ID"), "getting mailbox")
 	}
-	mb := store.Mailbox{ID: mailboxID}
-	err := tx.Get(&mb)
-	if err == bstore.ErrAbsent {
+	mb, err := store.MailboxID(tx, mailboxID)
+	if err == bstore.ErrAbsent || err == store.ErrMailboxExpunged {
 		x.Checkuserf(ctx, err, "getting mailbox")
 	}
 	x.Checkf(ctx, err, "getting mailbox")
@@ -67,25 +68,32 @@ func (x XOps) MessageDelete(ctx context.Context, log mlog.Log, acc *store.Accoun
 
 		store.BroadcastChanges(acc, changes)
 	})
-
-	for _, mID := range messageIDs {
-		p := acc.MessagePath(mID)
-		err := os.Remove(p)
-		log.Check(err, "removing message file for expunge")
-	}
 }
 
 func (x XOps) MessageDeleteTx(ctx context.Context, log mlog.Log, tx *bstore.Tx, acc *store.Account, messageIDs []int64, modseq *store.ModSeq) []store.Change {
-	removeChanges := map[int64]store.ChangeRemoveUIDs{}
-	changes := make([]store.Change, 0, len(messageIDs)+1) // n remove, 1 mailbox counts
+	changes := make([]store.Change, 0, 1+1) // 1 remove, 1 mailbox counts, optimistic that all messages are in 1 mailbox.
+
+	var jf *junk.Filter
+	defer func() {
+		if jf != nil {
+			err := jf.CloseDiscard()
+			log.Check(err, "close junk filter")
+		}
+	}()
+
+	conf, _ := acc.Conf()
 
 	var mb store.Mailbox
-	remove := make([]store.Message, 0, len(messageIDs))
+	var changeRemoveUIDs store.ChangeRemoveUIDs
+	xflushMailbox := func() {
+		err := tx.Update(&mb)
+		x.Checkf(ctx, err, "updating mailbox counts")
+		slices.Sort(changeRemoveUIDs.UIDs)
+		changes = append(changes, mb.ChangeCounts(), changeRemoveUIDs)
+	}
 
-	var totalSize int64
-	for _, mid := range messageIDs {
-		m := x.messageID(ctx, tx, mid)
-		totalSize += m.Size
+	for _, id := range messageIDs {
+		m := x.messageID(ctx, tx, id)
 
 		if *modseq == 0 {
 			var err error
@@ -95,58 +103,33 @@ func (x XOps) MessageDeleteTx(ctx context.Context, log mlog.Log, tx *bstore.Tx, 
 
 		if m.MailboxID != mb.ID {
 			if mb.ID != 0 {
-				mb.ModSeq = *modseq
-				err := tx.Update(&mb)
-				x.Checkf(ctx, err, "updating mailbox counts")
-				changes = append(changes, mb.ChangeCounts())
+				xflushMailbox()
 			}
 			mb = x.mailboxID(ctx, tx, m.MailboxID)
+			mb.ModSeq = *modseq
+			changeRemoveUIDs = store.ChangeRemoveUIDs{MailboxID: mb.ID, ModSeq: *modseq}
 		}
 
-		qmr := bstore.QueryTx[store.Recipient](tx)
-		qmr.FilterEqual("MessageID", m.ID)
-		_, err := qmr.Delete()
-		x.Checkf(ctx, err, "removing message recipients")
+		if m.Junk != m.Notjunk && jf == nil && conf.JunkFilter != nil {
+			var err error
+			jf, _, err = acc.OpenJunkFilter(ctx, log)
+			x.Checkf(ctx, err, "open junk filter")
+		}
 
-		mb.Sub(m.MailboxCounts())
+		opts := store.RemoveOpts{JunkFilter: jf}
+		_, _, err := acc.MessageRemove(log, tx, *modseq, &mb, opts, m)
+		x.Checkf(ctx, err, "expunge message")
 
-		m.Expunged = true
-		m.ModSeq = *modseq
-		err = tx.Update(&m)
-		x.Checkf(ctx, err, "marking message as expunged")
-
-		ch := removeChanges[m.MailboxID]
-		ch.UIDs = append(ch.UIDs, m.UID)
-		ch.MailboxID = m.MailboxID
-		ch.ModSeq = *modseq
-		removeChanges[m.MailboxID] = ch
-		remove = append(remove, m)
+		changeRemoveUIDs.UIDs = append(changeRemoveUIDs.UIDs, m.UID)
+		changeRemoveUIDs.MsgIDs = append(changeRemoveUIDs.MsgIDs, m.ID)
 	}
 
-	if mb.ID != 0 {
-		mb.ModSeq = *modseq
-		err := tx.Update(&mb)
-		x.Checkf(ctx, err, "updating count in mailbox")
-		changes = append(changes, mb.ChangeCounts())
-	}
+	xflushMailbox()
 
-	err := acc.AddMessageSize(log, tx, -totalSize)
-	x.Checkf(ctx, err, "updating disk usage")
-
-	// Mark removed messages as not needing training, then retrain them, so if they
-	// were trained, they get untrained.
-	for i := range remove {
-		remove[i].Junk = false
-		remove[i].Notjunk = false
-	}
-	err = acc.RetrainMessages(ctx, log, tx, remove)
-	x.Checkf(ctx, err, "untraining deleted messages")
-
-	for _, ch := range removeChanges {
-		sort.Slice(ch.UIDs, func(i, j int) bool {
-			return ch.UIDs[i] < ch.UIDs[j]
-		})
-		changes = append(changes, ch)
+	if jf != nil {
+		err := jf.Close()
+		jf = nil
+		x.Checkf(ctx, err, "close junk filter")
 	}
 
 	return changes
@@ -361,6 +344,15 @@ func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account,
 	acc.WithWLock(func() {
 		var changes []store.Change
 
+		var newIDs []int64
+		defer func() {
+			for _, id := range newIDs {
+				p := acc.MessagePath(id)
+				err := os.Remove(p)
+				log.Check(err, "removing delivered message after failure", slog.String("path", p))
+			}
+		}()
+
 		x.DBWrite(ctx, acc, func(tx *bstore.Tx) {
 			if mailboxName != "" {
 				mb, err := acc.MailboxFind(tx, mailboxName)
@@ -379,23 +371,37 @@ func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account,
 			}
 
 			var modseq store.ModSeq
-			changes = x.MessageMoveTx(ctx, log, acc, tx, messageIDs, mbDst, &modseq)
+			newIDs, changes = x.MessageMoveTx(ctx, log, acc, tx, messageIDs, mbDst, &modseq)
 		})
+		newIDs = nil
 
 		store.BroadcastChanges(acc, changes)
 	})
 }
 
-func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, messageIDs []int64, mbDst store.Mailbox, modseq *store.ModSeq) []store.Change {
-	retrain := make([]store.Message, 0, len(messageIDs))
-	removeChanges := map[int64]store.ChangeRemoveUIDs{}
-	// n adds, 1 remove, 2 mailboxcounts, optimistic and at least for a single message.
-	changes := make([]store.Change, 0, len(messageIDs)+3)
+// MessageMoveTx moves message to a new mailbox, which must be different than their
+// current mailbox. Moving a message is done by changing the MailboxID and
+// assigning an appriorate new UID, and then inserting a replacement Message record
+// with new ID that is marked expunged in the original mailbox, along with a
+// MessageErase record so the message gets erased when all sessions stopped
+// referencing the message.
+func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, messageIDs []int64, mbDst store.Mailbox, modseq *store.ModSeq) ([]int64, []store.Change) {
+	var newIDs []int64
+	var commit bool
+	defer func() {
+		if commit {
+			return
+		}
+		for _, id := range newIDs {
+			p := acc.MessagePath(id)
+			err := os.Remove(p)
+			log.Check(err, "removing delivered message after failure", slog.String("path", p))
+		}
+		newIDs = nil
+	}()
 
-	var mbSrc store.Mailbox
-
-	keywords := map[string]struct{}{}
-	now := time.Now()
+	// n adds, 1 remove, 2 mailboxcounts, 1 mailboxkeywords, optimistic that messages are in a single source mailbox.
+	changes := make([]store.Change, 0, len(messageIDs)+4)
 
 	var err error
 	if *modseq == 0 {
@@ -403,104 +409,135 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 		x.Checkf(ctx, err, "assigning next modseq")
 	}
 
-	for _, mid := range messageIDs {
-		m := x.messageID(ctx, tx, mid)
+	mbDst.ModSeq = *modseq
 
-		// We may have loaded this mailbox in the previous iteration of this loop.
-		if m.MailboxID != mbSrc.ID {
-			if mbSrc.ID != 0 {
-				mbSrc.ModSeq = *modseq
-				err := tx.Update(&mbSrc)
-				x.Checkf(ctx, err, "updating source mailbox counts")
-				changes = append(changes, mbSrc.ChangeCounts())
-			}
-			mbSrc = x.mailboxID(ctx, tx, m.MailboxID)
-		}
-
-		if mbSrc.ID == mbDst.ID {
+	// Get messages. group them by mailbox.
+	l := make([]store.Message, len(messageIDs))
+	for i, id := range messageIDs {
+		l[i] = x.messageID(ctx, tx, id)
+		if l[i].MailboxID == mbDst.ID {
 			// Client should filter out messages that are already in mailbox.
-			x.Checkuserf(ctx, errors.New("already in destination mailbox"), "moving message")
-		}
-
-		ch := removeChanges[m.MailboxID]
-		ch.UIDs = append(ch.UIDs, m.UID)
-		ch.ModSeq = *modseq
-		ch.MailboxID = m.MailboxID
-		removeChanges[m.MailboxID] = ch
-
-		// Copy of message record that we'll insert when UID is freed up.
-		om := m
-		om.PrepareExpunge()
-		om.ID = 0 // Assign new ID.
-		om.ModSeq = *modseq
-
-		mbSrc.Sub(m.MailboxCounts())
-
-		if mbDst.Trash {
-			m.Seen = true
-		}
-		conf, _ := acc.Conf()
-		m.MailboxID = mbDst.ID
-		if m.IsReject && m.MailboxDestinedID != 0 {
-			// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
-			// is used for reputation calculation during future deliveries.
-			m.MailboxOrigID = m.MailboxDestinedID
-			m.IsReject = false
-			m.Seen = false
-		}
-		m.UID = mbDst.UIDNext
-		m.ModSeq = *modseq
-		mbDst.UIDNext++
-		m.JunkFlagsForMailbox(mbDst, conf)
-		m.SaveDate = &now
-		err = tx.Update(&m)
-		x.Checkf(ctx, err, "updating moved message in database")
-
-		// Now that UID is unused, we can insert the old record again.
-		err = tx.Insert(&om)
-		x.Checkf(ctx, err, "inserting record for expunge after moving message")
-
-		mbDst.Add(m.MailboxCounts())
-
-		changes = append(changes, m.ChangeAddUID())
-		retrain = append(retrain, m)
-
-		for _, kw := range m.Keywords {
-			keywords[kw] = struct{}{}
+			x.Checkuserf(ctx, fmt.Errorf("message %d already in destination mailbox", l[i].ID), "moving message")
 		}
 	}
 
-	mbSrc.ModSeq = *modseq
-	err = tx.Update(&mbSrc)
-	x.Checkf(ctx, err, "updating source mailbox counts and modseq")
+	// Sort (group) by mailbox, sort by UID.
+	sort.Slice(l, func(i, j int) bool {
+		if l[i].MailboxID != l[j].MailboxID {
+			return l[i].MailboxID < l[j].MailboxID
+		}
+		return l[i].UID < l[j].UID
+	})
 
-	changes = append(changes, mbSrc.ChangeCounts(), mbDst.ChangeCounts())
+	var jf *junk.Filter
+	defer func() {
+		if jf != nil {
+			err := jf.CloseDiscard()
+			log.Check(err, "close junk filter")
+		}
+	}()
 
-	// Ensure destination mailbox has keywords of the moved messages.
-	var mbKwChanged bool
-	mbDst.Keywords, mbKwChanged = store.MergeKeywords(mbDst.Keywords, maps.Keys(keywords))
-	if mbKwChanged {
+	accConf, _ := acc.Conf()
+
+	var mbSrc store.Mailbox
+	var changeRemoveUIDs store.ChangeRemoveUIDs
+	xflushMailbox := func() {
+		changes = append(changes, changeRemoveUIDs, mbSrc.ChangeCounts())
+
+		err = tx.Update(&mbSrc)
+		x.Checkf(ctx, err, "updating source mailbox counts")
+	}
+
+	nkeywords := len(mbDst.Keywords)
+	now := time.Now()
+
+	for _, om := range l {
+		if om.MailboxID != mbSrc.ID {
+			if mbSrc.ID != 0 {
+				xflushMailbox()
+			}
+			mbSrc = x.mailboxID(ctx, tx, om.MailboxID)
+			mbSrc.ModSeq = *modseq
+			changeRemoveUIDs = store.ChangeRemoveUIDs{MailboxID: mbSrc.ID, ModSeq: *modseq}
+		}
+
+		nm := om
+		nm.MailboxID = mbDst.ID
+		nm.UID = mbDst.UIDNext
+		mbDst.UIDNext++
+		nm.ModSeq = *modseq
+		nm.CreateSeq = *modseq
+		nm.SaveDate = &now
+		if nm.IsReject && nm.MailboxDestinedID != 0 {
+			// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
+			// is used for reputation calculation during future deliveries.
+			nm.MailboxOrigID = nm.MailboxDestinedID
+			nm.IsReject = false
+			nm.Seen = false
+		}
+		if mbDst.Trash {
+			nm.Seen = true
+		}
+
+		nm.JunkFlagsForMailbox(mbDst, accConf)
+
+		err := tx.Update(&nm)
+		x.Checkf(ctx, err, "updating message with new mailbox")
+
+		mbDst.Add(nm.MailboxCounts())
+
+		mbSrc.Sub(om.MailboxCounts())
+		om.ID = 0
+		om.Expunged = true
+		om.ModSeq = *modseq
+		om.TrainedJunk = nil
+		err = tx.Insert(&om)
+		x.Checkf(ctx, err, "inserting expunged message in old mailbox")
+
+		err = moxio.LinkOrCopy(log, acc.MessagePath(om.ID), acc.MessagePath(nm.ID), nil, false)
+		x.Checkf(ctx, err, "duplicating message in old mailbox for current sessions")
+		newIDs = append(newIDs, nm.ID)
+		// We don't sync the directory. In case of a crash and files disappearing, the
+		// eraser will simply not find the file at next startup.
+
+		err = tx.Insert(&store.MessageErase{ID: om.ID, SkipUpdateDiskUsage: true})
+		x.Checkf(ctx, err, "insert message erase")
+
+		mbDst.Keywords, _ = store.MergeKeywords(mbDst.Keywords, nm.Keywords)
+
+		if accConf.JunkFilter != nil && nm.NeedsTraining() {
+			// Lazily open junk filter.
+			if jf == nil {
+				jf, _, err = acc.OpenJunkFilter(ctx, log)
+				x.Checkf(ctx, err, "open junk filter")
+			}
+			err := acc.RetrainMessage(ctx, log, tx, jf, &nm)
+			x.Checkf(ctx, err, "retrain message after moving")
+		}
+
+		changeRemoveUIDs.UIDs = append(changeRemoveUIDs.UIDs, om.UID)
+		changeRemoveUIDs.MsgIDs = append(changeRemoveUIDs.MsgIDs, om.ID)
+		changes = append(changes, nm.ChangeAddUID())
+	}
+
+	xflushMailbox()
+
+	changes = append(changes, mbDst.ChangeCounts())
+	if nkeywords > len(mbDst.Keywords) {
 		changes = append(changes, mbDst.ChangeKeywords())
 	}
 
-	mbDst.ModSeq = *modseq
 	err = tx.Update(&mbDst)
 	x.Checkf(ctx, err, "updating destination mailbox with uidnext and modseq")
 
-	err = acc.RetrainMessages(ctx, log, tx, retrain)
-	x.Checkf(ctx, err, "retraining messages after move")
-
-	// Ensure UIDs of the removed message are in increasing order. It is quite common
-	// for all messages to be from a single source mailbox, meaning this is just one
-	// change, for which we preallocated space.
-	for _, ch := range removeChanges {
-		sort.Slice(ch.UIDs, func(i, j int) bool {
-			return ch.UIDs[i] < ch.UIDs[j]
-		})
-		changes = append(changes, ch)
+	if jf != nil {
+		err := jf.Close()
+		x.Checkf(ctx, err, "saving junk filter")
+		jf = nil
 	}
 
-	return changes
+	commit = true
+	return newIDs, changes
 }
 
 func isText(p message.Part) bool {

@@ -14,10 +14,12 @@ func TestUnsubscribe(t *testing.T) {
 	tc.transactf("bad", "unsubscribe ")      // Missing param.
 	tc.transactf("bad", "unsubscribe fine ") // Leftover data.
 
-	tc.transactf("no", "unsubscribe a/b") // Does not exist and is not subscribed.
+	tc.transactf("no", "unsubscribe a/b")        // Does not exist and is not subscribed.
+	tc.transactf("ok", "unsubscribe expungebox") // Does not exist anymore but is still subscribed.
+	tc.transactf("no", "unsubscribe expungebox") // Not subscribed.
 	tc.transactf("ok", "create a/b")
 	tc.transactf("ok", "unsubscribe a/b")
-	tc.transactf("ok", "unsubscribe a/b") // Can unsubscribe even if it does not exist.
+	tc.transactf("ok", "unsubscribe a/b") // Can unsubscribe even if there is no subscription.
 	tc.transactf("ok", "subscribe a/b")
 	tc.transactf("ok", "unsubscribe a/b")
 }

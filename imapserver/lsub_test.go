@@ -19,6 +19,9 @@ func TestLsub(t *testing.T) {
 	tc.transactf("ok", `lsub "" x*`)
 	tc.xuntagged()
 
+	tc.transactf("ok", `lsub "" expungebox`)
+	tc.xuntagged(imapclient.UntaggedLsub{Separator: '/', Mailbox: "expungebox"})
+
 	tc.transactf("ok", "create a/b/c")
 	tc.transactf("ok", `lsub "" a/*`)
 	tc.xuntagged(imapclient.UntaggedLsub{Separator: '/', Mailbox: "a/b"}, imapclient.UntaggedLsub{Separator: '/', Mailbox: "a/b/c"})

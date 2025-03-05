@@ -12,7 +12,7 @@ func TestExpunge(t *testing.T) {
 	defer tc.close()
 
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 
 	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")

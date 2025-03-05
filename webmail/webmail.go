@@ -407,6 +407,8 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		err = acc.DB.Read(ctx, func(tx *bstore.Tx) error {
 			if err := tx.Get(&m); err != nil {
 				return err
+			} else if m.Expunged {
+				return fmt.Errorf("message was removed")
 			}
 			s := store.Settings{ID: 1}
 			if err := tx.Get(&s); err != nil {

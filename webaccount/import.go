@@ -291,7 +291,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	var changes []store.Change
 
 	// ID's of delivered messages. If we have to rollback, we have to remove this files.
-	var deliveredIDs []int64
+	var newIDs []int64
 
 	sendEvent := func(kind string, v any) {
 		buf, err := json.Marshal(v)
@@ -321,7 +321,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	defer func() {
 		store.CloseRemoveTempFile(log, f, "uploaded messages")
 
-		for _, id := range deliveredIDs {
+		for _, id := range newIDs {
 			p := acc.MessagePath(id)
 			err := os.Remove(p)
 			log.Check(err, "closing message file after import error", slog.String("path", p))
@@ -444,6 +444,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 
 		var p string
 		var mb *store.Mailbox
+		var parent store.Mailbox
 		for i, e := range strings.Split(name, "/") {
 			if i == 0 {
 				p = e
@@ -454,10 +455,9 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 				continue
 			}
 
-			q := bstore.QueryTx[store.Mailbox](tx)
-			q.FilterNonzero(store.Mailbox{Name: p})
-			xmb, err := q.Get()
-			if err == bstore.ErrAbsent {
+			mb, err = acc.MailboxFind(tx, p)
+			ximportcheckf(err, "looking up mailbox %s to import to (aborting)", p)
+			if mb == nil {
 				uidvalidity, err := acc.NextUIDValidity(tx)
 				ximportcheckf(err, "finding next uid validity")
 
@@ -468,26 +468,24 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 				}
 
 				mb = &store.Mailbox{
+					CreateSeq:   modseq,
+					ModSeq:      modseq,
+					ParentID:    parent.ID,
 					Name:        p,
 					UIDValidity: uidvalidity,
 					UIDNext:     1,
-					ModSeq:      modseq,
-					CreateSeq:   modseq,
 					HaveCounts:  true,
 					// Do not assign special-use flags. This existing account probably already has such mailboxes.
 				}
 				err = tx.Insert(mb)
 				ximportcheckf(err, "inserting mailbox in database")
+				parent = *mb
 
 				if tx.Get(&store.Subscription{Name: p}) != nil {
 					err := tx.Insert(&store.Subscription{Name: p})
 					ximportcheckf(err, "subscribing to imported mailbox")
 				}
 				changes = append(changes, store.ChangeAddMailbox{Mailbox: *mb, Flags: []string{`\Subscribed`}, ModSeq: modseq})
-			} else if err != nil {
-				ximportcheckf(err, "creating mailbox %s (aborting)", p)
-			} else {
-				mb = &xmb
 			}
 			if prevMailbox != "" && mb.Name != prevMailbox {
 				sendEvent("count", importCount{prevMailbox, messages[prevMailbox]})
@@ -559,7 +557,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 			problemf("delivering message %s: %s (continuing)", pos, err)
 			return
 		}
-		deliveredIDs = append(deliveredIDs, m.ID)
+		newIDs = append(newIDs, m.ID)
 		changes = append(changes, m.ChangeAddUID())
 		messages[mb.Name]++
 		if messages[mb.Name]%100 == 0 || prevMailbox != mb.Name {
@@ -814,9 +812,9 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	}
 
 	// Match threads.
-	if len(deliveredIDs) > 0 {
+	if len(newIDs) > 0 {
 		sendEvent("step", importStep{"matching messages with threads"})
-		err = acc.AssignThreads(ctx, log, tx, deliveredIDs[0], 0, io.Discard)
+		err = acc.AssignThreads(ctx, log, tx, newIDs[0], 0, io.Discard)
 		ximportcheckf(err, "assigning messages to threads")
 	}
 
@@ -837,7 +835,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 	err = tx.Commit()
 	tx = nil
 	ximportcheckf(err, "commit")
-	deliveredIDs = nil
+	newIDs = nil
 
 	if jf != nil {
 		if err := jf.Close(); err != nil {

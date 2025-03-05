@@ -1602,8 +1602,36 @@
 					]
 				},
 				{
+					"Name": "CreateSeq",
+					"Docs": "",
+					"Typewords": [
+						"ModSeq"
+					]
+				},
+				{
+					"Name": "ModSeq",
+					"Docs": "Of last change, or when deleted.",
+					"Typewords": [
+						"ModSeq"
+					]
+				},
+				{
+					"Name": "Expunged",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "ParentID",
+					"Docs": "Zero for top-level mailbox.",
+					"Typewords": [
+						"int64"
+					]
+				},
+				{
 					"Name": "Name",
-					"Docs": "\"Inbox\" is the name for the special IMAP \"INBOX\". Slash separated for hierarchy.",
+					"Docs": "\"Inbox\" is the name for the special IMAP \"INBOX\". Slash separated for hierarchy. Names must be unique for mailboxes that are not expunged.",
 					"Typewords": [
 						"string"
 					]
@@ -1663,20 +1691,6 @@
 					"Typewords": [
 						"[]",
 						"string"
-					]
-				},
-				{
-					"Name": "ModSeq",
-					"Docs": "ModSeq matches that of last message (including deleted), or changes to mailbox such as after metadata changes.",
-					"Typewords": [
-						"ModSeq"
-					]
-				},
-				{
-					"Name": "CreateSeq",
-					"Docs": "",
-					"Typewords": [
-						"ModSeq"
 					]
 				},
 				{
@@ -2165,14 +2179,14 @@
 			"Fields": [
 				{
 					"Name": "ID",
-					"Docs": "ID, unchanged over lifetime, determines path to on-disk msg file. Set during deliver.",
+					"Docs": "ID of the message, determines path to on-disk message file. Set when adding to a mailbox. When a message is moved to another mailbox, the mailbox ID is changed, but for synchronization purposes, a new Message record is inserted (which gets a new ID) with the Expunged field set and the MailboxID and UID copied.",
 					"Typewords": [
 						"int64"
 					]
 				},
 				{
 					"Name": "UID",
-					"Docs": "UID, for IMAP. Set during deliver.",
+					"Docs": "UID, for IMAP. Set when adding to mailbox. Strictly increasing values, per mailbox. The UID of a message can never change (though messages can be copied), and the contents of a message/UID also never changes.",
 					"Typewords": [
 						"UID"
 					]
@@ -2435,7 +2449,7 @@
 				},
 				{
 					"Name": "ThreadParentIDs",
-					"Docs": "IDs of parent messages, from closest parent to the root message. Parent messages may be in a different mailbox, or may no longer exist. ThreadParentIDs must never contain the message id itself (a cycle), and parent messages must reference the same ancestors.",
+					"Docs": "IDs of parent messages, from closest parent to the root message. Parent messages may be in a different mailbox, or may no longer exist. ThreadParentIDs must never contain the message id itself (a cycle), and parent messages must reference the same ancestors. Moving a message to another mailbox keeps the message ID and changes the MailboxID (and UID) of the message, leaving threading parent ids intact.",
 					"Typewords": [
 						"[]",
 						"int64"
@@ -2891,6 +2905,14 @@
 					"Typewords": [
 						"ModSeq"
 					]
+				},
+				{
+					"Name": "MsgIDs",
+					"Docs": "Message.ID, for erasing, order does not necessarily correspond with UIDs!",
+					"Typewords": [
+						"[]",
+						"int64"
+					]
 				}
 			]
 		},
@@ -3214,13 +3236,13 @@
 	],
 	"Ints": [
 		{
-			"Name": "UID",
-			"Docs": "IMAP UID.",
+			"Name": "ModSeq",
+			"Docs": "ModSeq represents a modseq as stored in the database. ModSeq 0 in the\ndatabase is sent to the client as 1, because modseq 0 is special in IMAP.\nModSeq coming from the client are of type int64.",
 			"Values": null
 		},
 		{
-			"Name": "ModSeq",
-			"Docs": "ModSeq represents a modseq as stored in the database. ModSeq 0 in the\ndatabase is sent to the client as 1, because modseq 0 is special in IMAP.\nModSeq coming from the client are of type int64.",
+			"Name": "UID",
+			"Docs": "IMAP UID.",
 			"Values": null
 		},
 		{

@@ -184,7 +184,7 @@ func (ts *testserver) close() {
 	ts.switchStop()
 	err = ts.acc.Close()
 	tcheck(ts.t, err, "closing account")
-	ts.acc.CheckClosed()
+	ts.acc.WaitClosed()
 	ts.acc = nil
 }
 
@@ -193,6 +193,7 @@ func (ts *testserver) checkCount(mailboxName string, expect int) {
 	t.Helper()
 	q := bstore.QueryDB[store.Mailbox](ctxbg, ts.acc.DB)
 	q.FilterNonzero(store.Mailbox{Name: mailboxName})
+	q.FilterEqual("Expunged", false)
 	mb, err := q.Get()
 	tcheck(t, err, "get mailbox")
 	qm := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)

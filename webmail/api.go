@@ -245,7 +245,10 @@ func (Webmail) MessageFindMessageID(ctx context.Context, messageID string) (id i
 	}
 
 	xdbread(ctx, acc, func(tx *bstore.Tx) {
-		m, err := bstore.QueryTx[store.Message](tx).FilterNonzero(store.Message{MessageID: messageID}).Get()
+		q := bstore.QueryTx[store.Message](tx)
+		q.FilterEqual("Expunged", false)
+		q.FilterNonzero(store.Message{MessageID: messageID})
+		m, err := q.Get()
 		if err == bstore.ErrAbsent {
 			return
 		}
@@ -417,8 +420,17 @@ func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID
 	var nm store.Message
 
 	// Remove previous draft message, append message to destination mailbox.
-	acc.WithRLock(func() {
+	acc.WithWLock(func() {
 		var changes []store.Change
+
+		var newIDs []int64
+		defer func() {
+			for _, id := range newIDs {
+				p := acc.MessagePath(id)
+				err := os.Remove(p)
+				log.Check(err, "removing added message aftr error", slog.String("path", p))
+			}
+		}()
 
 		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
 			var modseq store.ModSeq // Only set if needed.
@@ -426,15 +438,9 @@ func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID
 			if m.DraftMessageID > 0 {
 				nchanges := xops.MessageDeleteTx(ctx, log, tx, acc, []int64{m.DraftMessageID}, &modseq)
 				changes = append(changes, nchanges...)
-				// On-disk file is removed after lock.
 			}
 
-			// Find mailbox to write to.
-			mb := store.Mailbox{ID: mailboxID}
-			err := tx.Get(&mb)
-			if err == bstore.ErrAbsent {
-				xcheckuserf(ctx, err, "looking up mailbox")
-			}
+			mb, err := store.MailboxID(tx, mailboxID)
 			xcheckf(ctx, err, "looking up mailbox")
 
 			if modseq == 0 {
@@ -456,22 +462,17 @@ func (w Webmail) MessageCompose(ctx context.Context, m ComposeMessage, mailboxID
 				xcheckuserf(ctx, err, "checking quota")
 			}
 			xcheckf(ctx, err, "storing message in mailbox")
+			newIDs = append(newIDs, nm.ID)
 
 			err = tx.Update(&mb)
 			xcheckf(ctx, err, "updating sent mailbox for counts")
 
 			changes = append(changes, nm.ChangeAddUID(), mb.ChangeCounts())
 		})
+		newIDs = nil
 
 		store.BroadcastChanges(acc, changes)
 	})
-
-	// Remove on-disk file for removed draft message.
-	if m.DraftMessageID > 0 {
-		p := acc.MessagePath(m.DraftMessageID)
-		err := os.Remove(p)
-		log.Check(err, "removing draft message file")
-	}
 
 	return nm.ID
 }
@@ -545,9 +546,8 @@ func xmailboxID(ctx context.Context, tx *bstore.Tx, mailboxID int64) store.Mailb
 	if mailboxID == 0 {
 		xcheckuserf(ctx, errors.New("invalid zero mailbox ID"), "getting mailbox")
 	}
-	mb := store.Mailbox{ID: mailboxID}
-	err := tx.Get(&mb)
-	if err == bstore.ErrAbsent {
+	mb, err := store.MailboxID(tx, mailboxID)
+	if err == bstore.ErrAbsent || err == store.ErrMailboxExpunged {
 		xcheckuserf(ctx, err, "getting mailbox")
 	}
 	xcheckf(ctx, err, "getting mailbox")
@@ -1010,7 +1010,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 	// Append message to Sent mailbox, mark original messages as answered/forwarded,
 	// remove any draft message.
-	acc.WithRLock(func() {
+	acc.WithWLock(func() {
 		var changes []store.Change
 
 		metricked := false
@@ -1023,9 +1023,9 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			}
 		}()
 
-		var deliveredIDs []int64
+		var newIDs []int64
 		defer func() {
-			for _, id := range deliveredIDs {
+			for _, id := range newIDs {
 				p := acc.MessagePath(id)
 				err := os.Remove(p)
 				log.Check(err, "removing delivered message on error", slog.String("path", p))
@@ -1036,7 +1036,6 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			if m.DraftMessageID > 0 {
 				nchanges := xops.MessageDeleteTx(ctx, log, tx, acc, []int64{m.DraftMessageID}, &modseq)
 				changes = append(changes, nchanges...)
-				// On-disk file is removed after lock.
 			}
 
 			if m.ResponseMessageID > 0 {
@@ -1061,12 +1060,11 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					changes = append(changes, rm.ChangeFlags(oflags))
 
 					// Update modseq of mailbox of replied/forwarded message.
-					rmb := store.Mailbox{ID: rm.MailboxID}
-					err = tx.Get(&rmb)
+					rmb, err := store.MailboxID(tx, rm.MailboxID)
 					xcheckf(ctx, err, "get mailbox of replied/forwarded message for modseq update")
 					rmb.ModSeq = modseq
 					err = tx.Update(&rmb)
-					xcheckf(ctx, err, "update modseqo of mailbox of replied/forwarded message")
+					xcheckf(ctx, err, "update modseq of mailbox of replied/forwarded message")
 
 					err = acc.RetrainMessages(ctx, log, tx, []store.Message{rm})
 					xcheckf(ctx, err, "retraining messages after reply/forward")
@@ -1075,8 +1073,8 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 				// Move messages from this thread still in this mailbox to the designated Archive
 				// mailbox.
 				if m.ArchiveThread {
-					mbArchive, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Archive", true).Get()
-					if err == bstore.ErrAbsent {
+					mbArchive, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).FilterEqual("Archive", true).Get()
+					if err == bstore.ErrAbsent || err == store.ErrMailboxExpunged {
 						xcheckuserf(ctx, errors.New("not configured"), "looking up designated archive mailbox")
 					}
 					xcheckf(ctx, err, "looking up designated archive mailbox")
@@ -1088,14 +1086,15 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					err = q.IDs(&msgIDs)
 					xcheckf(ctx, err, "listing messages in thread to archive")
 					if len(msgIDs) > 0 {
-						nchanges := xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, &modseq)
+						ids, nchanges := xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, &modseq)
+						newIDs = append(newIDs, ids...)
 						changes = append(changes, nchanges...)
 					}
 				}
 			}
 
-			sentmb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Sent", true).Get()
-			if err == bstore.ErrAbsent {
+			sentmb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).FilterEqual("Sent", true).Get()
+			if err == bstore.ErrAbsent || err == store.ErrMailboxExpunged {
 				// There is no mailbox designated as Sent mailbox, so we're done.
 				return
 			}
@@ -1135,24 +1134,17 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 				metricked = true
 			}
 			xcheckf(ctx, err, "message submitted to queue, appending message to Sent mailbox")
-			deliveredIDs = append(deliveredIDs, sentm.ID)
+			newIDs = append(newIDs, sentm.ID)
 
 			err = tx.Update(&sentmb)
 			xcheckf(ctx, err, "updating sent mailbox for counts")
 
 			changes = append(changes, sentm.ChangeAddUID(), sentmb.ChangeCounts())
 		})
-		deliveredIDs = nil
+		newIDs = nil
 
 		store.BroadcastChanges(acc, changes)
 	})
-
-	// Remove on-disk file for removed draft message.
-	if m.DraftMessageID > 0 {
-		p := acc.MessagePath(m.DraftMessageID)
-		err := os.Remove(p)
-		log.Check(err, "removing draft message file")
-	}
 }
 
 // MessageMove moves messages to another mailbox. If the message is already in
@@ -1244,9 +1236,6 @@ func (Webmail) MailboxDelete(ctx context.Context, mailboxID int64) {
 	acc := reqInfo.Account
 	log := reqInfo.Log
 
-	// Messages to remove after having broadcasted the removal of messages.
-	var removeMessageIDs []int64
-
 	acc.WithWLock(func() {
 		var changes []store.Change
 
@@ -1259,7 +1248,7 @@ func (Webmail) MailboxDelete(ctx context.Context, mailboxID int64) {
 
 			var hasChildren bool
 			var err error
-			changes, removeMessageIDs, hasChildren, err = acc.MailboxDelete(ctx, log, tx, mb)
+			changes, hasChildren, err = acc.MailboxDelete(ctx, log, tx, &mb)
 			if hasChildren {
 				xcheckuserf(ctx, errors.New("mailbox has children"), "deleting mailbox")
 			}
@@ -1268,12 +1257,6 @@ func (Webmail) MailboxDelete(ctx context.Context, mailboxID int64) {
 
 		store.BroadcastChanges(acc, changes)
 	})
-
-	for _, mID := range removeMessageIDs {
-		p := acc.MessagePath(mID)
-		err := os.Remove(p)
-		log.Check(err, "removing message file for mailbox delete", slog.String("path", p))
-	}
 }
 
 // MailboxEmpty empties a mailbox, removing all messages from the mailbox, but not
@@ -1283,76 +1266,36 @@ func (Webmail) MailboxEmpty(ctx context.Context, mailboxID int64) {
 	acc := reqInfo.Account
 	log := reqInfo.Log
 
-	var expunged []store.Message
-
 	acc.WithWLock(func() {
 		var changes []store.Change
 
 		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
 			mb := xmailboxID(ctx, tx, mailboxID)
 
-			modseq, err := acc.NextModSeq(tx)
-			xcheckf(ctx, err, "next modseq")
-
-			// Mark messages as expunged.
 			qm := bstore.QueryTx[store.Message](tx)
 			qm.FilterNonzero(store.Message{MailboxID: mb.ID})
 			qm.FilterEqual("Expunged", false)
 			qm.SortAsc("UID")
-			qm.Gather(&expunged)
-			n, err := qm.UpdateNonzero(store.Message{ModSeq: modseq, Expunged: true})
-			xcheckf(ctx, err, "deleting messages")
+			l, err := qm.List()
+			xcheckf(ctx, err, "listing messages to remove")
 
-			if n == 0 {
+			if len(l) == 0 {
 				xcheckuserf(ctx, errors.New("no messages in mailbox"), "emptying mailbox")
 			}
 
-			mb.ModSeq = modseq
+			modseq, err := acc.NextModSeq(tx)
+			xcheckf(ctx, err, "next modseq")
 
-			// Remove Recipients.
-			anyIDs := make([]any, len(expunged))
-			for i, m := range expunged {
-				anyIDs[i] = m.ID
-			}
-			qmr := bstore.QueryTx[store.Recipient](tx)
-			qmr.FilterEqual("MessageID", anyIDs...)
-			_, err = qmr.Delete()
-			xcheckf(ctx, err, "removing message recipients")
-
-			// Adjust mailbox counts, gather UIDs for broadcasted change, prepare for untraining.
-			var totalSize int64
-			uids := make([]store.UID, len(expunged))
-			for i, m := range expunged {
-				m.Expunged = false // Gather returns updated values.
-				mb.Sub(m.MailboxCounts())
-				totalSize += m.Size
-				uids[i] = m.UID
-
-				expunged[i].Junk = false
-				expunged[i].Notjunk = false
-			}
+			chrem, chmbcounts, err := acc.MessageRemove(log, tx, modseq, &mb, store.RemoveOpts{}, l...)
+			xcheckf(ctx, err, "expunge messages")
+			changes = append(changes, chrem, chmbcounts)
 
 			err = tx.Update(&mb)
 			xcheckf(ctx, err, "updating mailbox for counts")
-
-			err = acc.AddMessageSize(log, tx, -totalSize)
-			xcheckf(ctx, err, "updating disk usage")
-
-			err = acc.RetrainMessages(ctx, log, tx, expunged)
-			xcheckf(ctx, err, "retraining expunged messages")
-
-			chremove := store.ChangeRemoveUIDs{MailboxID: mb.ID, UIDs: uids, ModSeq: modseq}
-			changes = []store.Change{chremove, mb.ChangeCounts()}
 		})
 
 		store.BroadcastChanges(acc, changes)
 	})
-
-	for _, m := range expunged {
-		p := acc.MessagePath(m.ID)
-		err := os.Remove(p)
-		log.Check(err, "removing message file after emptying mailbox", slog.String("path", p))
-	}
 }
 
 // MailboxRename renames a mailbox, possibly moving it to a new parent. The mailbox
@@ -1373,10 +1316,10 @@ func (Webmail) MailboxRename(ctx context.Context, mailboxID int64, newName strin
 		xdbwrite(ctx, acc, func(tx *bstore.Tx) {
 			mbsrc := xmailboxID(ctx, tx, mailboxID)
 			var err error
-			var isInbox, notExists, alreadyExists bool
+			var isInbox, alreadyExists bool
 			var modseq store.ModSeq
-			changes, isInbox, notExists, alreadyExists, err = acc.MailboxRename(tx, mbsrc, newName, &modseq)
-			if isInbox || notExists || alreadyExists {
+			changes, isInbox, alreadyExists, err = acc.MailboxRename(tx, &mbsrc, newName, &modseq)
+			if isInbox || alreadyExists {
 				xcheckuserf(ctx, err, "renaming mailbox")
 			}
 			xcheckf(ctx, err, "renaming mailbox")
@@ -1555,8 +1498,8 @@ func (Webmail) ThreadCollapse(ctx context.Context, messageIDs []int64, collapse 
 			for _, id := range messageIDs {
 				m := store.Message{ID: id}
 				err := tx.Get(&m)
-				if err == bstore.ErrAbsent {
-					xcheckuserf(ctx, err, "get message")
+				if err == bstore.ErrAbsent || err == nil && m.Expunged {
+					xcheckuserf(ctx, bstore.ErrAbsent, "get message")
 				}
 				xcheckf(ctx, err, "get message")
 				threadIDs[m.ThreadID] = struct{}{}
@@ -1565,6 +1508,7 @@ func (Webmail) ThreadCollapse(ctx context.Context, messageIDs []int64, collapse 
 
 			var updated []store.Message
 			q := bstore.QueryTx[store.Message](tx)
+			q.FilterEqual("Expunged", false)
 			q.FilterEqual("ThreadID", slicesAny(maps.Keys(threadIDs))...)
 			q.FilterNotEqual("ThreadCollapsed", collapse)
 			q.FilterFn(func(tm store.Message) bool {
@@ -1607,8 +1551,8 @@ func (Webmail) ThreadMute(ctx context.Context, messageIDs []int64, mute bool) {
 			for _, id := range messageIDs {
 				m := store.Message{ID: id}
 				err := tx.Get(&m)
-				if err == bstore.ErrAbsent {
-					xcheckuserf(ctx, err, "get message")
+				if err == bstore.ErrAbsent || err == nil && m.Expunged {
+					xcheckuserf(ctx, bstore.ErrAbsent, "get message")
 				}
 				xcheckf(ctx, err, "get message")
 				threadIDs[m.ThreadID] = struct{}{}
@@ -1618,6 +1562,7 @@ func (Webmail) ThreadMute(ctx context.Context, messageIDs []int64, mute bool) {
 			var updated []store.Message
 
 			q := bstore.QueryTx[store.Message](tx)
+			q.FilterEqual("Expunged", false)
 			q.FilterEqual("ThreadID", slicesAny(maps.Keys(threadIDs))...)
 			q.FilterFn(func(tm store.Message) bool {
 				if tm.ThreadMuted == mute && (!mute || tm.ThreadCollapsed) {

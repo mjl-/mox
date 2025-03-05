@@ -543,8 +543,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 
 	# Mailboxes to create for new accounts. Inbox is always created. Mailboxes can be
 	# given a 'special-use' role, which are understood by most mail clients. If
-	# absent/empty, the following mailboxes are created: Sent, Archive, Trash, Drafts
-	# and Junk. (optional)
+	# absent/empty, the following additional mailboxes are created: Sent, Archive,
+	# Trash, Drafts and Junk. (optional)
 	InitialMailboxes:
 
 		# Special-use roles to mailbox to create. (optional)

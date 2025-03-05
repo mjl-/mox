@@ -436,7 +436,7 @@ func TestCtl(t *testing.T) {
 		tcheck(t, err, "open account")
 		defer func() {
 			acc.Close()
-			acc.CheckClosed()
+			acc.WaitClosed()
 		}()
 
 		content := []byte("Subject: hi\r\n\r\nbody\r\n")

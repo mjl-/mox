@@ -82,7 +82,7 @@ func TestServer(t *testing.T) {
 	defer func() {
 		err := acc.Close()
 		log.Check(err, "closing account")
-		acc.CheckClosed()
+		acc.WaitClosed()
 	}()
 
 	s := NewServer(100*1024, "/webapi/", false).(server)

@@ -1,7 +1,6 @@
 package imapserver
 
 import (
-	"context"
 	"errors"
 	"io"
 	"os"
@@ -116,7 +115,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 		q := bstore.QueryTx[store.Message](tx)
 		q.FilterNonzero(store.Message{MailboxID: c.mailboxID, UID: uidOld})
 		q.FilterEqual("Expunged", false)
-		om, err := q.Get()
+		_, err = q.Get()
 		if err == bstore.ErrAbsent {
 			return nil
 		}
@@ -124,8 +123,8 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 			return func() { xserverErrorf("get message to replace: %v", err) }
 		}
 
-		delta := size - om.Size
-		ok, maxSize, err := c.account.CanAddMessageSize(tx, delta)
+		// Check if we can add size bytes. We can't necessarily remove the current message yet.
+		ok, maxSize, err := c.account.CanAddMessageSize(tx, size)
 		if err != nil {
 			return func() { xserverErrorf("check quota: %v", err) }
 		}
@@ -169,9 +168,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 	var file *os.File
 	var newMsgPath string
 	var f io.Writer
-	var committed bool
-
-	var oldMsgPath string // To remove on success.
+	var commit bool
 
 	if errfn != nil {
 		// We got a non-sync literal, we will consume some data, but abort if there's too
@@ -197,13 +194,9 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 				err := file.Close()
 				c.xsanity(err, "close temporary file for replace")
 			}
-			if newMsgPath != "" && !committed {
+			if newMsgPath != "" && !commit {
 				err := os.Remove(newMsgPath)
 				c.xsanity(err, "remove temporary file for replace")
-			}
-			if committed {
-				err := os.Remove(oldMsgPath)
-				c.xsanity(err, "remove old message")
 			}
 		}()
 	}
@@ -258,8 +251,8 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 				return
 			}
 
-			// Check quota. Even if the delta is negative, the quota may have changed.
-			ok, maxSize, err := c.account.CanAddMessageSize(tx, mw.Size-om.Size)
+			// Check quota for addition of new message. We can't necessarily yet remove the old message.
+			ok, maxSize, err := c.account.CanAddMessageSize(tx, mw.Size)
 			xcheckf(err, "checking quota")
 			if !ok {
 				// ../rfc/9208:472
@@ -269,31 +262,11 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 			modseq, err := c.account.NextModSeq(tx)
 			xcheckf(err, "get next mod seq")
 
-			// Subtract counts for message from source mailbox.
-			mbSrc.Sub(om.MailboxCounts())
+			chremuids, _, err := c.account.MessageRemove(c.log, tx, modseq, &mbSrc, store.RemoveOpts{}, om)
+			xcheckf(err, "expunge old message")
+			changes = append(changes, chremuids)
+			// Note: we only add a mbSrc counts change later on, if it is not equal to mbDst.
 
-			// Remove message recipients for old message.
-			_, err = bstore.QueryTx[store.Recipient](tx).FilterNonzero(store.Recipient{MessageID: om.ID}).Delete()
-			xcheckf(err, "removing message recipients")
-
-			// Subtract size of old message from account.
-			err = c.account.AddMessageSize(c.log, tx, -om.Size)
-			xcheckf(err, "updating disk usage")
-
-			// Undo any junk filter training for the old message.
-			om.Junk = false
-			om.Notjunk = false
-			err = c.account.RetrainMessages(context.TODO(), c.log, tx, []store.Message{om})
-			xcheckf(err, "untraining expunged messages")
-
-			// Mark old message expunged.
-			om.ModSeq = modseq
-			om.PrepareExpunge()
-			err = tx.Update(&om)
-			xcheckf(err, "mark old message as expunged")
-
-			// Update source mailbox.
-			mbSrc.ModSeq = modseq
 			err = tx.Update(&mbSrc)
 			xcheckf(err, "updating source mailbox counts")
 
@@ -316,22 +289,16 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 
 			err = c.account.MessageAdd(c.log, tx, &mbDst, &nm, file, store.AddOpts{})
 			xcheckf(err, "delivering message")
+			// Update path to what is stored in the account. We may still have to clean it up on errors.
+			newMsgPath = c.account.MessagePath(nm.ID)
 
-			changes = append(changes,
-				store.ChangeRemoveUIDs{MailboxID: om.MailboxID, UIDs: []store.UID{om.UID}, ModSeq: om.ModSeq},
-				nm.ChangeAddUID(),
-				mbDst.ChangeCounts(),
-			)
+			changes = append(changes, nm.ChangeAddUID(), mbDst.ChangeCounts())
 			if nkeywords != len(mbDst.Keywords) {
 				changes = append(changes, mbDst.ChangeKeywords())
 			}
 
 			err = tx.Update(&mbDst)
 			xcheckf(err, "updating destination mailbox")
-
-			// Update path to what is stored in the account. We may still have to clean it up on errors.
-			newMsgPath = c.account.MessagePath(nm.ID)
-			oldMsgPath = c.account.MessagePath(om.ID)
 		})
 
 		// Fetch pending changes, possibly with new UIDs, so we can apply them before adding our own new UID.
@@ -342,7 +309,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 		}
 
 		// Success, make sure messages aren't cleaned up anymore.
-		committed = true
+		commit = true
 
 		// Broadcast the change to other connections.
 		if mbSrc.ID != mbDst.ID {

@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"net/textproto"
+	"os"
 	"reflect"
 	"runtime/debug"
 	"slices"
@@ -1058,8 +1059,15 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		acc.WithRLock(func() {
 			var changes []store.Change
 
+			var sentID int64
 			metricked := false
 			defer func() {
+				if sentID != 0 {
+					p := acc.MessagePath(sentID)
+					err := os.Remove(p)
+					log.Check(err, "removing sent message file after error", slog.String("path", p))
+				}
+
 				if x := recover(); x != nil {
 					if !metricked {
 						metricServerErrors.WithLabelValues("submit").Inc()
@@ -1068,7 +1076,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 				}
 			}()
 			xdbwrite(ctx, reqInfo.Account, func(tx *bstore.Tx) {
-				sentmb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Sent", true).Get()
+				sentmb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).FilterEqual("Sent", true).Get()
 				if err == bstore.ErrAbsent {
 					// There is no mailbox designated as Sent mailbox, so we're done.
 					return
@@ -1107,12 +1115,14 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 					metricked = true
 				}
 				xcheckf(err, "message submitted to queue, appending message to Sent mailbox")
+				sentID = sentm.ID
 
 				err = tx.Update(&sentmb)
 				xcheckf(err, "updating mailbox")
 
 				changes = append(changes, sentm.ChangeAddUID(), sentmb.ChangeCounts())
 			})
+			sentID = 0 // Commit.
 
 			store.BroadcastChanges(acc, changes)
 		})
@@ -1190,8 +1200,12 @@ func xmessageGet(ctx context.Context, acc *store.Account, msgID int64) (store.Me
 		if err := tx.Get(&m); err == bstore.ErrAbsent || err == nil && m.Expunged {
 			panic(webapi.Error{Code: "messageNotFound", Message: "message not found"})
 		}
-		mb = store.Mailbox{ID: m.MailboxID}
-		return tx.Get(&mb)
+		var err error
+		mb, err = store.MailboxID(tx, m.MailboxID)
+		if err != nil {
+			return fmt.Errorf("get mailbox: %v", err)
+		}
+		return nil
 	})
 	xcheckf(err, "get message")
 	return m, mb

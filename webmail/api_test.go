@@ -78,7 +78,7 @@ func TestAPI(t *testing.T) {
 		tcheck(t, err, "mtastsdb close")
 		err = acc.Close()
 		pkglog.Check(err, "closing account")
-		acc.CheckClosed()
+		acc.WaitClosed()
 	}()
 
 	var zerom store.Message
@@ -206,7 +206,7 @@ func TestAPI(t *testing.T) {
 	var inbox, archive, sent, drafts, testbox1 store.Mailbox
 	err = acc.DB.Read(ctx, func(tx *bstore.Tx) error {
 		get := func(k string, v any) store.Mailbox {
-			mb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual(k, v).Get()
+			mb, err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).FilterEqual(k, v).Get()
 			tcheck(t, err, "get special-use mailbox")
 			return mb
 		}
@@ -276,7 +276,7 @@ func TestAPI(t *testing.T) {
 	tneedError(t, func() { api.ParsedMessage(ctx, testbox1Alt.ID) }) // Message was removed and no longer exists.
 
 	api.MailboxCreate(ctx, "Testbox1")
-	testbox1, err = bstore.QueryDB[store.Mailbox](ctx, acc.DB).FilterEqual("Name", "Testbox1").Get()
+	testbox1, err = bstore.QueryDB[store.Mailbox](ctx, acc.DB).FilterEqual("Expunged", false).FilterEqual("Name", "Testbox1").Get()
 	tcheck(t, err, "get testbox1")
 	tdeliver(t, acc, testbox1Alt)
 

@@ -46,14 +46,11 @@ func rejectPresent(log mlog.Log, acc *store.Account, rejectsMailbox string, m *s
 	var err error
 	acc.WithRLock(func() {
 		err = acc.DB.Read(context.TODO(), func(tx *bstore.Tx) error {
-			mbq := bstore.QueryTx[store.Mailbox](tx)
-			mbq.FilterNonzero(store.Mailbox{Name: rejectsMailbox})
-			mb, err := mbq.Get()
-			if err == bstore.ErrAbsent {
-				return nil
-			}
+			mb, err := acc.MailboxFind(tx, rejectsMailbox)
 			if err != nil {
 				return fmt.Errorf("looking for rejects mailbox: %w", err)
+			} else if mb == nil {
+				return nil
 			}
 
 			q := bstore.QueryTx[store.Message](tx)

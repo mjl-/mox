@@ -444,6 +444,16 @@ Content-Transfer-Encoding: Quoted-printable
 	tc.client.Unselect()
 	tc.client.Examine("inbox")
 
+	// Start a second session. Use it to remove the message. First session should still
+	// be able to access the messages.
+	tc2 := startNoSwitchboard(t)
+	defer tc2.closeNoWait()
+	tc2.client.Login("mjl@mox.example", password0)
+	tc2.client.Select("inbox")
+	tc2.client.StoreFlagsSet("1", true, `\Deleted`)
+	tc2.client.Expunge()
+	tc2.client.Logout()
+
 	tc.transactf("ok", "fetch 1 binary[]")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, binary1}})
 

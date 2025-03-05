@@ -23,6 +23,15 @@ func TestMetadata(t *testing.T) {
 	tc.transactf("ok", `setmetadata "" (/PRIVATE/COMMENT "global value")`)
 	tc.transactf("ok", `setmetadata inbox (/private/comment "mailbox value")`)
 
+	tc.transactf("ok", `create metabox`)
+	tc.transactf("ok", `setmetadata metabox (/private/comment "mailbox value")`)
+	tc.transactf("ok", `setmetadata metabox (/shared/comment "mailbox value")`)
+	tc.transactf("ok", `setmetadata metabox (/shared/comment nil)`) // Remove.
+	tc.transactf("ok", `delete metabox`)                            // Delete mailbox with live and expunged metadata.
+
+	tc.transactf("no", `setmetadata expungebox (/private/comment "mailbox value")`)
+	tc.xcode("TRYCREATE")
+
 	tc.transactf("ok", `getmetadata "" ("/private/comment")`)
 	tc.xuntagged(imapclient.UntaggedMetadataAnnotations{
 		Mailbox: "",
@@ -176,7 +185,7 @@ func TestMetadata(t *testing.T) {
 
 	// Broadcast should not happen when metadata capability is not enabled.
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 

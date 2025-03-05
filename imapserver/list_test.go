@@ -26,6 +26,9 @@ func TestListBasic(t *testing.T) {
 	tc.last(tc.client.List("Inbox"))
 	tc.xuntagged(ulist("Inbox"))
 
+	tc.last(tc.client.List("expungebox"))
+	tc.xuntagged()
+
 	tc.last(tc.client.List("%"))
 	tc.xuntagged(ulist("Archive", `\Archive`), ulist("Drafts", `\Drafts`), ulist("Inbox"), ulist("Junk", `\Junk`), ulist("Sent", `\Sent`), ulist("Trash", `\Trash`))
 
@@ -78,7 +81,7 @@ func TestListExtended(t *testing.T) {
 	for _, name := range store.DefaultInitialMailboxes.Regular {
 		uidvals[name] = 1
 	}
-	var uidvalnext uint32 = 2
+	var uidvalnext uint32 = 3
 	uidval := func(name string) uint32 {
 		v, ok := uidvals[name]
 		if !ok {

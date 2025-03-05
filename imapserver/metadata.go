@@ -100,7 +100,7 @@ func (c *conn) cmdGetmetadata(tag, cmd string, p *parser) {
 				mb := c.xmailbox(tx, mailboxName, "TRYCREATE")
 				q.FilterNonzero(store.Annotation{MailboxID: mb.ID})
 			}
-
+			q.FilterEqual("Expunged", false)
 			q.SortAsc("MailboxID", "Key") // For tests.
 			err := q.ForEach(func(a store.Annotation) error {
 				// ../rfc/5464:516
@@ -246,41 +246,35 @@ func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
 				q := bstore.QueryTx[store.Annotation](tx)
 				q.FilterNonzero(store.Annotation{Key: a.Key})
 				q.FilterEqual("MailboxID", mb.ID) // Can be zero.
-
+				q.FilterEqual("Expunged", false)
+				oa, err := q.Get()
 				// Nil means remove. ../rfc/5464:579
-				if a.Value == nil {
-					var deleted []store.Annotation
-					q.Gather(&deleted)
-					_, err := q.Delete()
-					xcheckf(err, "deleting annotation")
-					for _, oa := range deleted {
-						changes = append(changes, oa.Change(mailboxName))
-					}
+				if err == bstore.ErrAbsent && a.Value == nil {
 					continue
 				}
-
 				if modseq == 0 {
 					var err error
 					modseq, err = c.account.NextModSeq(tx)
 					xcheckf(err, "get next modseq")
 				}
-
-				a.MailboxID = mb.ID
-				a.ModSeq = modseq
-				a.CreateSeq = modseq
-
-				oa, err := q.Get()
 				if err == bstore.ErrAbsent {
+					a.MailboxID = mb.ID
+					a.CreateSeq = modseq
+					a.ModSeq = modseq
 					err = tx.Insert(&a)
 					xcheckf(err, "inserting annotation")
-					changes = append(changes, a.Change(mailboxName))
-					continue
+				} else {
+					xcheckf(err, "get metadata")
+					oa.ModSeq = modseq
+					if a.Value == nil {
+						oa.Expunged = true
+					}
+					oa.IsString = a.IsString
+					oa.Value = a.Value
+					err = tx.Update(&oa)
+					xcheckf(err, "updating metdata")
 				}
-				xcheckf(err, "looking up existing annotation for entry name")
 				changes = append(changes, a.Change(mailboxName))
-				oa.Value = a.Value
-				err = tx.Update(&oa)
-				xcheckf(err, "updating metadata annotation")
 			}
 
 			c.xcheckMetadataSize(tx)
@@ -304,7 +298,7 @@ func (c *conn) xcheckMetadataSize(tx *bstore.Tx) {
 	// ../rfc/5464:383
 	var n int
 	var size int
-	err := bstore.QueryTx[store.Annotation](tx).ForEach(func(a store.Annotation) error {
+	err := bstore.QueryTx[store.Annotation](tx).FilterEqual("Expunged", false).ForEach(func(a store.Annotation) error {
 		n++
 		if n > metadataMaxKeys {
 			// ../rfc/5464:590

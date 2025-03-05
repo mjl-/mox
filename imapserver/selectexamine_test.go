@@ -49,6 +49,7 @@ func testSelectExamine(t *testing.T, examine bool) {
 
 	// Mailbox does not exist.
 	tc.transactf("no", "%s bogus", cmd)
+	tc.transactf("no", "%s expungebox", cmd)
 
 	tc.transactf("ok", "%s inbox", cmd)
 	tc.xuntagged(uflags, upermflags, urecent, uexists0, uuidval1, uuidnext1, ulist)

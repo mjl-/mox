@@ -357,6 +357,8 @@ func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore
 			m := Message{ID: mi.ID}
 			if err := tx.Get(&m); err != nil {
 				return fmt.Errorf("get message %d for resolving pending thread for message-id %s, %d: %w", mi.ID, tm.MessageID, tm.ID, err)
+			} else if m.Expunged {
+				return fmt.Errorf("message %d marked as expunged", mi.ID)
 			}
 			if m.ThreadID != 0 {
 				// ThreadID already set because this is a cyclic message. If we would assign a

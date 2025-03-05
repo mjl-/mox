@@ -708,7 +708,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 		qtx, err = acc.DB.Begin(reqctx, false)
 		xcheckf(ctx, err, "begin transaction")
 
-		mbl, err = bstore.QueryTx[store.Mailbox](qtx).List()
+		mbl, err = bstore.QueryTx[store.Mailbox](qtx).FilterEqual("Expunged", false).List()
 		xcheckf(ctx, err, "list mailboxes")
 
 		err = qtx.Get(&settings)
@@ -916,6 +916,8 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 				}
 
 			case store.ChangeRemoveUIDs:
+				comm.RemovalSeen(c)
+
 				// We may send changes for uids the client doesn't know, that's fine.
 				changedUIDs := xchangedUIDs(c.MailboxID, c.UIDs, true)
 				if len(changedUIDs) == 0 {
@@ -1126,7 +1128,7 @@ func xprepareMailboxIDs(ctx context.Context, tx *bstore.Tx, f Filter, rejectsMai
 	if f.MailboxID == -1 {
 		matchMailboxes = false
 		// Add the trash, junk and account rejects mailbox.
-		err := bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
+		err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).ForEach(func(mb store.Mailbox) error {
 			if mb.Trash || mb.Junk || mb.Name == rejectsMailbox {
 				mailboxPrefixes = append(mailboxPrefixes, mb.Name+"/")
 				mailboxIDs[mb.ID] = true
@@ -1135,8 +1137,7 @@ func xprepareMailboxIDs(ctx context.Context, tx *bstore.Tx, f Filter, rejectsMai
 		})
 		xcheckf(ctx, err, "finding trash/junk/rejects mailbox")
 	} else if f.MailboxID > 0 {
-		mb := store.Mailbox{ID: f.MailboxID}
-		err := tx.Get(&mb)
+		mb, err := store.MailboxID(tx, f.MailboxID)
 		xcheckf(ctx, err, "get mailbox")
 		mailboxIDs[f.MailboxID] = true
 		mailboxPrefixes = []string{mb.Name + "/"}
@@ -1151,7 +1152,7 @@ func xgatherMailboxIDs(ctx context.Context, tx *bstore.Tx, mailboxIDs map[int64]
 	if len(mailboxPrefixes) == 0 {
 		return
 	}
-	err := bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
+	err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).ForEach(func(mb store.Mailbox) error {
 		for _, p := range mailboxPrefixes {
 			if strings.HasPrefix(mb.Name, p) {
 				mailboxIDs[mb.ID] = true

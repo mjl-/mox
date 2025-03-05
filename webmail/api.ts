@@ -188,7 +188,11 @@ export interface ForwardAttachments {
 // Mailbox is collection of messages, e.g. Inbox or Sent.
 export interface Mailbox {
 	ID: number
-	Name: string  // "Inbox" is the name for the special IMAP "INBOX". Slash separated for hierarchy.
+	CreateSeq: ModSeq
+	ModSeq: ModSeq  // Of last change, or when deleted.
+	Expunged: boolean
+	ParentID: number  // Zero for top-level mailbox.
+	Name: string  // "Inbox" is the name for the special IMAP "INBOX". Slash separated for hierarchy. Names must be unique for mailboxes that are not expunged.
 	UIDValidity: number  // If UIDs are invalidated, e.g. when renaming a mailbox to a previously existing name, UIDValidity must be changed. Used by IMAP for synchronization.
 	UIDNext: UID  // UID likely to be assigned to next message. Used by IMAP to detect messages delivered to a mailbox.
 	Archive: boolean
@@ -197,8 +201,6 @@ export interface Mailbox {
 	Sent: boolean
 	Trash: boolean
 	Keywords?: string[] | null  // Keywords as used in messages. Storing a non-system keyword for a message automatically adds it to this list. Used in the IMAP FLAGS response. Only "atoms" are allowed (IMAP syntax), keywords are case-insensitive, only stored in lower case (for JMAP), sorted.
-	ModSeq: ModSeq  // ModSeq matches that of last message (including deleted), or changes to mailbox such as after metadata changes.
-	CreateSeq: ModSeq
 	HaveCounts: boolean  // Whether MailboxCounts have been initialized.
 	Total: number  // Total number of messages, excluding \Deleted. For JMAP.
 	Deleted: number  // Number of messages with \Deleted flag. Used for IMAP message count that includes messages with \Deleted.
@@ -315,8 +317,8 @@ export interface MessageItem {
 // Messages always have a header section, even if empty. Incoming messages without
 // header section must get an empty header section added before inserting.
 export interface Message {
-	ID: number  // ID, unchanged over lifetime, determines path to on-disk msg file. Set during deliver.
-	UID: UID  // UID, for IMAP. Set during deliver.
+	ID: number  // ID of the message, determines path to on-disk message file. Set when adding to a mailbox. When a message is moved to another mailbox, the mailbox ID is changed, but for synchronization purposes, a new Message record is inserted (which gets a new ID) with the Expunged field set and the MailboxID and UID copied.
+	UID: UID  // UID, for IMAP. Set when adding to mailbox. Strictly increasing values, per mailbox. The UID of a message can never change (though messages can be copied), and the contents of a message/UID also never changes.
 	MailboxID: number
 	ModSeq: ModSeq  // Modification sequence, for faster syncing with IMAP QRESYNC and JMAP. ModSeq is the last modification. CreateSeq is the Seq the message was inserted, always <= ModSeq. If Expunged is set, the message has been removed and should not be returned to the user. In this case, ModSeq is the Seq where the message is removed, and will never be changed again. We have an index on both ModSeq (for JMAP that synchronizes per account) and MailboxID+ModSeq (for IMAP that synchronizes per mailbox). The index on CreateSeq helps efficiently finding created messages for JMAP. The value of ModSeq is special for IMAP. Messages that existed before ModSeq was added have 0 as value. But modseq 0 in IMAP is special, so we return it as 1. If we get modseq 1 from a client, the IMAP server will translate it to 0. When we return modseq to clients, we turn 0 into 1.
 	CreateSeq: ModSeq
@@ -353,7 +355,7 @@ export interface Message {
 	SubjectBase: string  // For matching threads in case there is no References/In-Reply-To header. It is lower-cased, white-space collapsed, mailing list tags and re/fwd tags removed.
 	MessageHash?: string | null  // Hash of message. For rejects delivery in case there is no Message-ID, only set when delivered as reject.
 	ThreadID: number  // ID of message starting this thread.
-	ThreadParentIDs?: number[] | null  // IDs of parent messages, from closest parent to the root message. Parent messages may be in a different mailbox, or may no longer exist. ThreadParentIDs must never contain the message id itself (a cycle), and parent messages must reference the same ancestors.
+	ThreadParentIDs?: number[] | null  // IDs of parent messages, from closest parent to the root message. Parent messages may be in a different mailbox, or may no longer exist. ThreadParentIDs must never contain the message id itself (a cycle), and parent messages must reference the same ancestors. Moving a message to another mailbox keeps the message ID and changes the MailboxID (and UID) of the message, leaving threading parent ids intact.
 	ThreadMissingLink: boolean  // ThreadMissingLink is true if there is no match with a direct parent. E.g. first ID in ThreadParentIDs is not the direct ancestor (an intermediate message may have been deleted), or subject-based matching was done.
 	ThreadMuted: boolean  // If set, newly delivered child messages are automatically marked as read. This field is copied to new child messages. Changes are propagated to the webmail client.
 	ThreadCollapsed: boolean  // If set, this (sub)thread is collapsed in the webmail client, for threading mode "on" (mode "unread" ignores it). This field is copied to new child message. Changes are propagated to the webmail client.
@@ -439,6 +441,7 @@ export interface ChangeMsgRemove {
 	MailboxID: number
 	UIDs?: UID[] | null  // Must be in increasing UID order, for IMAP.
 	ModSeq: ModSeq
+	MsgIDs?: number[] | null  // Message.ID, for erasing, order does not necessarily correspond with UIDs!
 }
 
 // ChangeMsgFlags updates flags for one message.
@@ -517,13 +520,13 @@ export interface ChangeMailboxKeywords {
 	Keywords?: string[] | null
 }
 
-// IMAP UID.
-export type UID = number
-
 // ModSeq represents a modseq as stored in the database. ModSeq 0 in the
 // database is sent to the client as 1, because modseq 0 is special in IMAP.
 // ModSeq coming from the client are of type int64.
 export type ModSeq = number
+
+// IMAP UID.
+export type UID = number
 
 // Validation of "message From" domain.
 export enum Validation {
@@ -613,7 +616,7 @@ export const types: TypenameMap = {
 	"SubmitMessage": {"Name":"SubmitMessage","Docs":"","Fields":[{"Name":"From","Docs":"","Typewords":["string"]},{"Name":"To","Docs":"","Typewords":["[]","string"]},{"Name":"Cc","Docs":"","Typewords":["[]","string"]},{"Name":"Bcc","Docs":"","Typewords":["[]","string"]},{"Name":"ReplyTo","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"TextBody","Docs":"","Typewords":["string"]},{"Name":"Attachments","Docs":"","Typewords":["[]","File"]},{"Name":"ForwardAttachments","Docs":"","Typewords":["ForwardAttachments"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ResponseMessageID","Docs":"","Typewords":["int64"]},{"Name":"UserAgent","Docs":"","Typewords":["string"]},{"Name":"RequireTLS","Docs":"","Typewords":["nullable","bool"]},{"Name":"FutureRelease","Docs":"","Typewords":["nullable","timestamp"]},{"Name":"ArchiveThread","Docs":"","Typewords":["bool"]},{"Name":"ArchiveReferenceMailboxID","Docs":"","Typewords":["int64"]},{"Name":"DraftMessageID","Docs":"","Typewords":["int64"]}]},
 	"File": {"Name":"File","Docs":"","Fields":[{"Name":"Filename","Docs":"","Typewords":["string"]},{"Name":"DataURI","Docs":"","Typewords":["string"]}]},
 	"ForwardAttachments": {"Name":"ForwardAttachments","Docs":"","Fields":[{"Name":"MessageID","Docs":"","Typewords":["int64"]},{"Name":"Paths","Docs":"","Typewords":["[]","[]","int32"]}]},
-	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"CreateSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
+	"Mailbox": {"Name":"Mailbox","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"CreateSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Expunged","Docs":"","Typewords":["bool"]},{"Name":"ParentID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"UIDValidity","Docs":"","Typewords":["uint32"]},{"Name":"UIDNext","Docs":"","Typewords":["UID"]},{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"HaveCounts","Docs":"","Typewords":["bool"]},{"Name":"Total","Docs":"","Typewords":["int64"]},{"Name":"Deleted","Docs":"","Typewords":["int64"]},{"Name":"Unread","Docs":"","Typewords":["int64"]},{"Name":"Unseen","Docs":"","Typewords":["int64"]},{"Name":"Size","Docs":"","Typewords":["int64"]}]},
 	"RecipientSecurity": {"Name":"RecipientSecurity","Docs":"","Fields":[{"Name":"STARTTLS","Docs":"","Typewords":["SecurityResult"]},{"Name":"MTASTS","Docs":"","Typewords":["SecurityResult"]},{"Name":"DNSSEC","Docs":"","Typewords":["SecurityResult"]},{"Name":"DANE","Docs":"","Typewords":["SecurityResult"]},{"Name":"RequireTLS","Docs":"","Typewords":["SecurityResult"]}]},
 	"Settings": {"Name":"Settings","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["uint8"]},{"Name":"Signature","Docs":"","Typewords":["string"]},{"Name":"Quoting","Docs":"","Typewords":["Quoting"]},{"Name":"ShowAddressSecurity","Docs":"","Typewords":["bool"]},{"Name":"ShowHTML","Docs":"","Typewords":["bool"]},{"Name":"NoShowShortcuts","Docs":"","Typewords":["bool"]},{"Name":"ShowHeaders","Docs":"","Typewords":["[]","string"]}]},
 	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"MsgFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Comment","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
@@ -629,7 +632,7 @@ export const types: TypenameMap = {
 	"EventViewChanges": {"Name":"EventViewChanges","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"Changes","Docs":"","Typewords":["[]","[]","any"]}]},
 	"ChangeMsgAdd": {"Name":"ChangeMsgAdd","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Flags","Docs":"","Typewords":["Flags"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]},{"Name":"MessageItems","Docs":"","Typewords":["[]","MessageItem"]}]},
 	"Flags": {"Name":"Flags","Docs":"","Fields":[{"Name":"Seen","Docs":"","Typewords":["bool"]},{"Name":"Answered","Docs":"","Typewords":["bool"]},{"Name":"Flagged","Docs":"","Typewords":["bool"]},{"Name":"Forwarded","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Notjunk","Docs":"","Typewords":["bool"]},{"Name":"Deleted","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Phishing","Docs":"","Typewords":["bool"]},{"Name":"MDNSent","Docs":"","Typewords":["bool"]}]},
-	"ChangeMsgRemove": {"Name":"ChangeMsgRemove","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UIDs","Docs":"","Typewords":["[]","UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]}]},
+	"ChangeMsgRemove": {"Name":"ChangeMsgRemove","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UIDs","Docs":"","Typewords":["[]","UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"MsgIDs","Docs":"","Typewords":["[]","int64"]}]},
 	"ChangeMsgFlags": {"Name":"ChangeMsgFlags","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"UID","Docs":"","Typewords":["UID"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]},{"Name":"Mask","Docs":"","Typewords":["Flags"]},{"Name":"Flags","Docs":"","Typewords":["Flags"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]}]},
 	"ChangeMsgThread": {"Name":"ChangeMsgThread","Docs":"","Fields":[{"Name":"MessageIDs","Docs":"","Typewords":["[]","int64"]},{"Name":"Muted","Docs":"","Typewords":["bool"]},{"Name":"Collapsed","Docs":"","Typewords":["bool"]}]},
 	"ChangeMailboxRemove": {"Name":"ChangeMailboxRemove","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]}]},
@@ -639,8 +642,8 @@ export const types: TypenameMap = {
 	"ChangeMailboxSpecialUse": {"Name":"ChangeMailboxSpecialUse","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"SpecialUse","Docs":"","Typewords":["SpecialUse"]},{"Name":"ModSeq","Docs":"","Typewords":["ModSeq"]}]},
 	"SpecialUse": {"Name":"SpecialUse","Docs":"","Fields":[{"Name":"Archive","Docs":"","Typewords":["bool"]},{"Name":"Draft","Docs":"","Typewords":["bool"]},{"Name":"Junk","Docs":"","Typewords":["bool"]},{"Name":"Sent","Docs":"","Typewords":["bool"]},{"Name":"Trash","Docs":"","Typewords":["bool"]}]},
 	"ChangeMailboxKeywords": {"Name":"ChangeMailboxKeywords","Docs":"","Fields":[{"Name":"MailboxID","Docs":"","Typewords":["int64"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Keywords","Docs":"","Typewords":["[]","string"]}]},
-	"UID": {"Name":"UID","Docs":"","Values":null},
 	"ModSeq": {"Name":"ModSeq","Docs":"","Values":null},
+	"UID": {"Name":"UID","Docs":"","Values":null},
 	"Validation": {"Name":"Validation","Docs":"","Values":[{"Name":"ValidationUnknown","Value":0,"Docs":""},{"Name":"ValidationStrict","Value":1,"Docs":""},{"Name":"ValidationDMARC","Value":2,"Docs":""},{"Name":"ValidationRelaxed","Value":3,"Docs":""},{"Name":"ValidationPass","Value":4,"Docs":""},{"Name":"ValidationNeutral","Value":5,"Docs":""},{"Name":"ValidationTemperror","Value":6,"Docs":""},{"Name":"ValidationPermerror","Value":7,"Docs":""},{"Name":"ValidationFail","Value":8,"Docs":""},{"Name":"ValidationSoftfail","Value":9,"Docs":""},{"Name":"ValidationNone","Value":10,"Docs":""}]},
 	"CSRFToken": {"Name":"CSRFToken","Docs":"","Values":null},
 	"ThreadMode": {"Name":"ThreadMode","Docs":"","Values":[{"Name":"ThreadOff","Value":"off","Docs":""},{"Name":"ThreadOn","Value":"on","Docs":""},{"Name":"ThreadUnread","Value":"unread","Docs":""}]},
@@ -694,8 +697,8 @@ export const parser = {
 	ChangeMailboxSpecialUse: (v: any) => parse("ChangeMailboxSpecialUse", v) as ChangeMailboxSpecialUse,
 	SpecialUse: (v: any) => parse("SpecialUse", v) as SpecialUse,
 	ChangeMailboxKeywords: (v: any) => parse("ChangeMailboxKeywords", v) as ChangeMailboxKeywords,
-	UID: (v: any) => parse("UID", v) as UID,
 	ModSeq: (v: any) => parse("ModSeq", v) as ModSeq,
+	UID: (v: any) => parse("UID", v) as UID,
 	Validation: (v: any) => parse("Validation", v) as Validation,
 	CSRFToken: (v: any) => parse("CSRFToken", v) as CSRFToken,
 	ThreadMode: (v: any) => parse("ThreadMode", v) as ThreadMode,

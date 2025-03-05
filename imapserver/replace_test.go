@@ -13,7 +13,7 @@ func TestReplace(t *testing.T) {
 	defer tc.close()
 
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 
 	tc.client.Login("mjl@mox.example", password0)
 	tc.client.Select("inbox")
@@ -22,6 +22,9 @@ func TestReplace(t *testing.T) {
 	tc.client.Append("inbox", makeAppend(exampleMsg), makeAppend(exampleMsg), makeAppend(exampleMsg))
 	tc.client.StoreFlagsSet("1", true, `\deleted`)
 	tc.client.Expunge()
+
+	tc.transactf("no", "replace 2 expungebox {1}") // Mailbox no longer exists.
+	tc.xcode("TRYCREATE")
 
 	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
@@ -34,7 +37,7 @@ func TestReplace(t *testing.T) {
 		imapclient.UntaggedExists(3),
 		imapclient.UntaggedExpunge(2),
 	)
-	tc.xcodeArg(imapclient.CodeHighestModSeq(6))
+	tc.xcodeArg(imapclient.CodeHighestModSeq(8))
 
 	// Check that other client sees Exists and Expunge.
 	tc2.transactf("ok", "noop")
@@ -53,7 +56,7 @@ func TestReplace(t *testing.T) {
 		imapclient.UntaggedExists(3),
 		imapclient.UntaggedVanished{UIDs: xparseNumSet("2")},
 	)
-	tc.xcodeArg(imapclient.CodeHighestModSeq(7))
+	tc.xcodeArg(imapclient.CodeHighestModSeq(9))
 
 	// Leftover data.
 	tc.transactf("bad", "replace 1 inbox () {6+}\r\ntest\r\n ")
@@ -125,7 +128,7 @@ func TestReplaceExpunged(t *testing.T) {
 
 	// Get in with second client and remove the message we are replacing.
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 	tc2.client.Login("mjl@mox.example", password0)
 	tc2.client.Select("inbox")
 	tc2.client.StoreFlagsSet("1", true, `\Deleted`)

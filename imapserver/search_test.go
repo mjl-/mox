@@ -406,7 +406,6 @@ func TestSearch(t *testing.T) {
 		writeTextLit(1, true)
 	}
 	writeTextLit(1, false)
-
 }
 
 // esearchall makes an UntaggedEsearch response with All set, for comparisons.

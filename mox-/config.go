@@ -933,12 +933,20 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 	// DefaultMailboxes is deprecated.
 	for _, mb := range c.DefaultMailboxes {
 		checkMailboxNormf(mb, "default mailbox")
+		// We don't create parent mailboxes for default mailboxes.
+		if ParentMailboxName(mb) != "" {
+			addErrorf("default mailbox cannot be a child mailbox")
+		}
 	}
 	checkSpecialUseMailbox := func(nameOpt string) {
 		if nameOpt != "" {
 			checkMailboxNormf(nameOpt, "special-use initial mailbox")
 			if strings.EqualFold(nameOpt, "inbox") {
 				addErrorf("initial mailbox cannot be set to Inbox (Inbox is always created)")
+			}
+			// We don't currently create parent mailboxes for initial mailboxes.
+			if ParentMailboxName(nameOpt) != "" {
+				addErrorf("initial mailboxes cannot be child mailboxes")
 			}
 		}
 	}
@@ -951,6 +959,9 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		checkMailboxNormf(name, "regular initial mailbox")
 		if strings.EqualFold(name, "inbox") {
 			addErrorf("initial regular mailbox cannot be set to Inbox (Inbox is always created)")
+		}
+		if ParentMailboxName(name) != "" {
+			addErrorf("initial mailboxes cannot be child mailboxes")
 		}
 	}
 

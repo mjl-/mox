@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/mox-"
 )
 
 // Archiver can archive multiple mailboxes and their messages.
@@ -158,9 +158,10 @@ func ExportMessages(ctx context.Context, log mlog.Log, db *bstore.DB, accountDir
 	var trimPrefix string
 	if mailboxOpt != "" {
 		// If exporting a specific mailbox, trim its parent path from stored file names.
-		trimPrefix = path.Dir(mailboxOpt) + "/"
+		trimPrefix = mox.ParentMailboxName(mailboxOpt) + "/"
 	}
 	q := bstore.QueryTx[Mailbox](tx)
+	q.FilterEqual("Expunged", false)
 	q.FilterFn(func(mb Mailbox) bool {
 		return mailboxOpt == "" || mb.Name == mailboxOpt || recursive && strings.HasPrefix(mb.Name, prefix)
 	})

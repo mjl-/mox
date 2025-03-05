@@ -532,8 +532,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			}
 		}()
 
-		// Link/copy known message files. If a message has been removed while we read the
-		// database, our backup is not consistent and the backup will be marked failed.
+		// Link/copy known message files.
 		tmMsgs := time.Now()
 		seen := map[string]struct{}{}
 		var maxID int64
@@ -565,6 +564,15 @@ func backupctl(ctx context.Context, ctl *ctl) {
 				slog.Duration("duration", time.Since(tmMsgs)))
 		}
 
+		eraseIDs := map[int64]struct{}{}
+		err = bstore.QueryDB[store.MessageErase](ctx, db).ForEach(func(me store.MessageErase) error {
+			eraseIDs[me.ID] = struct{}{}
+			return nil
+		})
+		if err != nil {
+			xerrx("listing erased messages", err)
+		}
+
 		// Read through all files in queue directory and warn about anything we haven't
 		// handled yet. Message files that are newer than we expect from our consistent
 		// database snapshot are ignored.
@@ -586,9 +594,13 @@ func backupctl(ctx context.Context, ctl *ctl) {
 					return nil
 				}
 
-				// Skip any messages that were added since we started on our consistent snapshot.
-				// We don't want to cause spurious backup warnings.
-				if id, err := strconv.ParseInt(l[len(l)-1], 10, 64); err == nil && id > maxID && mp == store.MessagePath(id) {
+				// Skip any messages that were added since we started on our consistent snapshot,
+				// or messages that will be erased. We don't want to cause spurious backup
+				// warnings.
+				id, err := strconv.ParseInt(l[len(l)-1], 10, 64)
+				if err == nil && id > maxID && mp == store.MessagePath(id) {
+					return nil
+				} else if _, ok := eraseIDs[id]; err == nil && ok {
 					return nil
 				}
 			}

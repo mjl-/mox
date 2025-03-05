@@ -3,11 +3,12 @@ package imapserver
 import (
 	"bytes"
 	"fmt"
-	"path"
 	"sort"
 	"strings"
 
 	"github.com/mjl-/bstore"
+
+	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/store"
 )
 
@@ -145,10 +146,11 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 			var nameList []string
 
 			q := bstore.QueryTx[store.Mailbox](tx)
+			q.FilterEqual("Expunged", false)
 			err := q.ForEach(func(mb store.Mailbox) error {
 				names[mb.Name] = info{mailbox: &mb}
 				nameList = append(nameList, mb.Name)
-				for p := path.Dir(mb.Name); p != "."; p = path.Dir(p) {
+				for p := mox.ParentMailboxName(mb.Name); p != ""; p = mox.ParentMailboxName(p) {
 					hasChild[p] = true
 				}
 				return nil
@@ -163,7 +165,7 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 				if !ok {
 					nameList = append(nameList, sub.Name)
 				}
-				for p := path.Dir(sub.Name); p != "."; p = path.Dir(p) {
+				for p := mox.ParentMailboxName(sub.Name); p != ""; p = mox.ParentMailboxName(p) {
 					hasSubscribedChild[p] = true
 				}
 				return nil
@@ -234,7 +236,10 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 				if info.mailbox != nil && len(retMetadata) > 0 {
 					var meta listspace
 					for _, k := range retMetadata {
-						a, err := bstore.QueryTx[store.Annotation](tx).FilterNonzero(store.Annotation{MailboxID: info.mailbox.ID, Key: k}).Get()
+						q := bstore.QueryTx[store.Annotation](tx)
+						q.FilterNonzero(store.Annotation{MailboxID: info.mailbox.ID, Key: k})
+						q.FilterEqual("Expunged", false)
+						a, err := q.Get()
 						var v token
 						if err == bstore.ErrAbsent {
 							v = nilt

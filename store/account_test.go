@@ -46,7 +46,7 @@ func TestMailbox(t *testing.T) {
 	defer func() {
 		err = acc.Close()
 		tcheck(t, err, "closing account")
-		acc.CheckClosed()
+		acc.WaitClosed()
 	}()
 	defer Switchboard()()
 
@@ -162,6 +162,8 @@ func TestMailbox(t *testing.T) {
 
 	var modseq ModSeq
 	acc.WithWLock(func() {
+		var changes []Change
+
 		err := acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 			_, _, err := acc.MailboxEnsure(tx, "Testbox", true, SpecialUse{}, &modseq)
 			return err
@@ -200,27 +202,33 @@ func TestMailbox(t *testing.T) {
 				t.Fatalf("did not find Testbox2")
 			}
 
-			changes, err := acc.SubscriptionEnsure(tx, "Testbox2")
+			nchanges, err := acc.SubscriptionEnsure(tx, "Testbox2")
 			tcheck(t, err, "ensuring new subscription")
-			if len(changes) == 0 {
+			if len(nchanges) == 0 {
 				t.Fatalf("new subscription did not result in changes")
 			}
-			changes, err = acc.SubscriptionEnsure(tx, "Testbox2")
+			changes = append(changes, nchanges...)
+			nchanges, err = acc.SubscriptionEnsure(tx, "Testbox2")
 			tcheck(t, err, "ensuring already present subscription")
-			if len(changes) != 0 {
+			if len(nchanges) != 0 {
 				t.Fatalf("already present subscription resulted in changes")
+			}
+
+			// todo: check that messages are removed.
+			mbRej, err := bstore.QueryTx[Mailbox](tx).FilterNonzero(Mailbox{Name: "Rejects"}).Get()
+			tcheck(t, err, "get rejects mailbox")
+			nchanges, hasSpace, err := acc.TidyRejectsMailbox(log, tx, &mbRej)
+			tcheck(t, err, "tidy rejects mailbox")
+			changes = append(changes, nchanges...)
+			if !hasSpace {
+				t.Fatalf("no space for more rejects")
 			}
 
 			return nil
 		})
 		tcheck(t, err, "write tx")
 
-		// todo: check that messages are removed.
-		hasSpace, err := acc.TidyRejectsMailbox(log, "Rejects")
-		tcheck(t, err, "tidy rejects mailbox")
-		if !hasSpace {
-			t.Fatalf("no space for more rejects")
-		}
+		BroadcastChanges(acc, changes)
 
 		acc.RejectsRemove(log, "Rejects", "m01@mox.example")
 	})

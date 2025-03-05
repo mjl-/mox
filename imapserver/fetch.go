@@ -5,7 +5,6 @@ package imapserver
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -26,11 +25,11 @@ import (
 // functions to handle fetch attribute requests are defined on fetchCmd.
 type fetchCmd struct {
 	conn            *conn
-	isUID           bool       // If this is a UID FETCH command.
-	rtx             *bstore.Tx // Read-only transaction, kept open while processing all messages.
-	updateSeen      []int64    // IDs of messages to mark as seen, after processing all messages.
-	hasChangedSince bool       // Whether CHANGEDSINCE was set. Enables MODSEQ in response.
-	expungeIssued   bool       // Set if any message cannot be read. Can happen for expunged messages.
+	isUID           bool        // If this is a UID FETCH command.
+	rtx             *bstore.Tx  // Read-only transaction, kept open while processing all messages.
+	updateSeen      []store.UID // To mark as seen after processing all messages. UID instead of message ID since moved messages keep their ID and insert a new ID in the original mailbox.
+	hasChangedSince bool        // Whether CHANGEDSINCE was set. Enables MODSEQ in response.
+	expungeIssued   bool        // Set if any message has been expunged. Can happen for expunged messages.
 
 	uid        store.UID // UID currently processing.
 	markSeen   bool
@@ -271,15 +270,16 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 			changes := make([]store.Change, 0, len(cmd.updateSeen)+1)
 
 			c.xdbwrite(func(wtx *bstore.Tx) {
-				mb := store.Mailbox{ID: c.mailboxID}
-				err = wtx.Get(&mb)
+				mb, err := store.MailboxID(wtx, c.mailboxID)
+				if err == store.ErrMailboxExpunged {
+					xusercodeErrorf("NONEXISTENT", "mailbox has been expunged")
+				}
 				xcheckf(err, "get mailbox for updating counts after marking as seen")
 
 				var modseq store.ModSeq
 
-				for _, id := range cmd.updateSeen {
-					m := store.Message{ID: id}
-					err := wtx.Get(&m)
+				for _, uid := range cmd.updateSeen {
+					m, err := bstore.QueryTx[store.Message](wtx).FilterNonzero(store.Message{MailboxID: c.mailboxID, UID: uid}).Get()
 					xcheckf(err, "get message")
 					if m.Expunged {
 						// Message has been deleted in the mean time.
@@ -322,7 +322,8 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 
 	if cmd.expungeIssued {
 		// ../rfc/2180:343
-		c.writeresultf("%s NO [EXPUNGEISSUED] at least one message was expunged", tag)
+		// ../rfc/9051:5102
+		c.writeresultf("%s OK [EXPUNGEISSUED] at least one message was expunged", tag)
 	} else {
 		c.ok(tag, cmdstr)
 	}
@@ -333,12 +334,16 @@ func (cmd *fetchCmd) xensureMessage() *store.Message {
 		return cmd.m
 	}
 
+	// We do not filter by Expunged, the message may have been deleted in other
+	// sessions, but not in ours.
 	q := bstore.QueryTx[store.Message](cmd.rtx)
 	q.FilterNonzero(store.Message{MailboxID: cmd.conn.mailboxID, UID: cmd.uid})
-	q.FilterEqual("Expunged", false)
 	m, err := q.Get()
 	cmd.xcheckf(err, "get message for uid %d", cmd.uid)
 	cmd.m = &m
+	if m.Expunged {
+		cmd.expungeIssued = true
+	}
 	return cmd.m
 }
 
@@ -382,10 +387,6 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 		if !ok {
 			panic(x)
 		}
-		if errors.Is(err, bstore.ErrAbsent) {
-			cmd.expungeIssued = true
-			return
-		}
 		cmd.conn.log.Infox("processing fetch attribute", err, slog.Any("uid", cmd.uid))
 		xuserErrorf("processing fetch attribute: %v", err)
 	}()
@@ -401,8 +402,7 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 	}
 
 	if cmd.markSeen {
-		m := cmd.xensureMessage()
-		cmd.updateSeen = append(cmd.updateSeen, m.ID)
+		cmd.updateSeen = append(cmd.updateSeen, cmd.uid)
 	}
 
 	if cmd.needFlags {

@@ -29,7 +29,7 @@ func TestHookIncoming(t *testing.T) {
 	tcheck(t, err, "open account for retired")
 	defer func() {
 		accret.Close()
-		accret.CheckClosed()
+		accret.WaitClosed()
 	}()
 
 	testIncoming := func(a *store.Account, expIn bool) {
@@ -125,7 +125,7 @@ func TestFromIDIncomingDelivery(t *testing.T) {
 	tcheck(t, err, "open account for retired")
 	defer func() {
 		accret.Close()
-		accret.CheckClosed()
+		accret.WaitClosed()
 	}()
 
 	// Account that only gets webhook calls, but no retired webhooks.
@@ -133,7 +133,7 @@ func TestFromIDIncomingDelivery(t *testing.T) {
 	tcheck(t, err, "open account for hook")
 	defer func() {
 		acchook.Close()
-		acchook.CheckClosed()
+		acchook.WaitClosed()
 	}()
 
 	addr, err := smtp.ParseAddress("mjl@mox.example")

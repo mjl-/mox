@@ -11,10 +11,10 @@ func TestDelete(t *testing.T) {
 	defer tc.close()
 
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 
 	tc3 := startNoSwitchboard(t)
-	defer tc3.close()
+	defer tc3.closeNoWait()
 
 	tc.client.Login("mjl@mox.example", password0)
 	tc2.client.Login("mjl@mox.example", password0)
@@ -24,6 +24,7 @@ func TestDelete(t *testing.T) {
 	tc.transactf("no", "delete inbox")         // Cannot delete inbox.
 	tc.transactf("no", "delete nonexistent")   // Cannot delete mailbox that does not exist.
 	tc.transactf("no", `delete "nonexistent"`) // Again, with quoted string syntax.
+	tc.transactf("no", `delete "expungebox"`)  // Already removed.
 
 	tc.client.Subscribe("x")
 	tc.transactf("no", "delete x") // Subscription does not mean there is a mailbox that can be deleted.

@@ -1454,17 +1454,28 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 					log.Check(err, "closing junk filter during cleanup")
 				}()
 
-				// Read through messages with junk or nonjunk flag set, and train them.
+				// Read through messages with either junk or nonjunk flag set, and train them.
 				var total, trained int
-				q := bstore.QueryDB[store.Message](ctx, acc.DB)
-				q.FilterEqual("Expunged", false)
-				err = q.ForEach(func(m store.Message) error {
-					total++
-					ok, err := acc.TrainMessage(ctx, log, jf, m)
-					if ok {
-						trained++
-					}
-					return err
+				err = acc.DB.Write(ctx, func(tx *bstore.Tx) error {
+					q := bstore.QueryTx[store.Message](tx)
+					q.FilterEqual("Expunged", false)
+					return q.ForEach(func(m store.Message) error {
+						total++
+						if m.Junk == m.Notjunk {
+							return nil
+						}
+						ok, err := acc.TrainMessage(ctx, log, jf, m.Notjunk, m)
+						if ok {
+							trained++
+						}
+						if m.TrainedJunk == nil || *m.TrainedJunk != m.Junk {
+							m.TrainedJunk = &m.Junk
+							if err := tx.Update(&m); err != nil {
+								return fmt.Errorf("marking message as trained: %v", err)
+							}
+						}
+						return err
+					})
 				})
 				ctl.xcheck(err, "training messages")
 				log.Info("retrained messages", slog.Int("total", total), slog.Int("trained", trained))
@@ -1509,7 +1520,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 			var changes []store.Change
 			err = acc.DB.Write(ctx, func(tx *bstore.Tx) error {
 				var totalSize int64
-				err := bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
+				err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).ForEach(func(mb store.Mailbox) error {
 					mc, err := mb.CalculateCounts(tx)
 					if err != nil {
 						return fmt.Errorf("calculating counts for mailbox %q: %w", mb.Name, err)
@@ -1618,6 +1629,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 							if err := tx.Get(&mb); err != nil {
 								_, werr := fmt.Fprintf(w, "get mailbox id %d for message with file size mismatch: %v\n", mb.ID, err)
 								ctl.xcheck(werr, "write")
+								return nil
+							}
+							if mb.Expunged {
+								_, err := fmt.Fprintf(w, "message %d is in expunged mailbox %q (id %d) (continuing)\n", m.ID, mb.Name, mb.ID)
+								ctl.xcheck(err, "write")
 							}
 							_, err = fmt.Fprintf(w, "fixing message %d in mailbox %q (id %d) with incorrect size %d, should be %d (len msg prefix %d + on-disk file %s size %d)\n", m.ID, mb.Name, mb.ID, m.Size, correctSize, len(m.MsgPrefix), p, filesize)
 							ctl.xcheck(err, "write")
@@ -1650,7 +1666,6 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 							}
 							return nil
 						})
-
 					})
 					ctl.xcheck(err, "find and fix wrong message sizes")
 

@@ -26,7 +26,6 @@ non-ASCII UTF-8. Until that's enabled, we do use UTF-7 for mailbox names. See
 
 /*
 - todo: do not return binary data for a fetch body. at least not for imap4rev1. we should be encoding it as base64?
-- todo: on expunge we currently remove the message even if other sessions still have a reference to the uid. if they try to query the uid, they'll get an error. we could be nicer and only actually remove the message when the last reference has gone. we could add a new flag to store.Message marking the message as expunged, not give new session access to such messages, and make store remove them at startup, and clean them when the last session referencing the session goes. however, it will get much more complicated. renaming messages would need special handling. and should we do the same for removed mailboxes?
 - todo: try to recover from syntax errors when the last command line ends with a }, i.e. a literal. we currently abort the entire connection. we may want to read some amount of literal data and continue with a next command.
 */
 
@@ -69,6 +68,7 @@ import (
 	"github.com/mjl-/flate"
 
 	"github.com/mjl-/mox/config"
+	"github.com/mjl-/mox/junk"
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
@@ -1557,10 +1557,12 @@ func (c *conn) xmailbox(tx *bstore.Tx, name string, missingErrCode string) store
 // If the mailbox does not exist, panic is called with a user error.
 // Must be called with account rlock held.
 func (c *conn) xmailboxID(tx *bstore.Tx, id int64) store.Mailbox {
-	mb := store.Mailbox{ID: id}
-	err := tx.Get(&mb)
+	mb, err := store.MailboxID(tx, id)
 	if err == bstore.ErrAbsent {
 		xuserErrorf("%w", store.ErrUnknownMailbox)
+	} else if err == store.ErrMailboxExpunged {
+		// ../rfc/9051:5140
+		xusercodeErrorf("NONEXISTENT", "mailbox has been deleted")
 	}
 	return mb
 }
@@ -1589,6 +1591,7 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 			mbID = ch.MailboxID
 		case store.ChangeRemoveUIDs:
 			mbID = ch.MailboxID
+			c.comm.RemovalSeen(ch)
 		case store.ChangeFlags:
 			mbID = ch.MailboxID
 		case store.ChangeRemoveMailbox, store.ChangeAddMailbox, store.ChangeRenameMailbox, store.ChangeAddSubscription:
@@ -2881,9 +2884,6 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 
 	name = xcheckmailboxname(name, false)
 
-	// Messages to remove after having broadcasted the removal of messages.
-	var removeMessageIDs []int64
-
 	c.account.WithWLock(func() {
 		var mb store.Mailbox
 		var changes []store.Change
@@ -2893,7 +2893,7 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 
 			var hasChildren bool
 			var err error
-			changes, removeMessageIDs, hasChildren, err = c.account.MailboxDelete(context.TODO(), c.log, tx, mb)
+			changes, hasChildren, err = c.account.MailboxDelete(context.TODO(), c.log, tx, &mb)
 			if hasChildren {
 				xusercodeErrorf("HASCHILDREN", "mailbox has a child, only leaf mailboxes can be deleted")
 			}
@@ -2902,12 +2902,6 @@ func (c *conn) cmdDelete(tag, cmd string, p *parser) {
 
 		c.broadcast(changes)
 	})
-
-	for _, mID := range removeMessageIDs {
-		p := c.account.MessagePath(mID)
-		err := os.Remove(p)
-		c.xsanity(err, "removing message file %q for mailbox delete", p)
-	}
 
 	c.ok(tag, cmd)
 }
@@ -2934,13 +2928,20 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 	src = xcheckmailboxname(src, true)
 	dst = xcheckmailboxname(dst, false)
 
+	var cleanupIDs []int64
+	defer func() {
+		for _, id := range cleanupIDs {
+			p := c.account.MessagePath(id)
+			err := os.Remove(p)
+			c.xsanity(err, "cleaning up message")
+		}
+	}()
+
 	c.account.WithWLock(func() {
 		var changes []store.Change
 
 		c.xdbwrite(func(tx *bstore.Tx) {
 			srcMB := c.xmailbox(tx, src, "NONEXISTENT")
-
-			var modseq store.ModSeq
 
 			// Inbox is very special. Unlike other mailboxes, its children are not moved. And
 			// unlike a regular move, its messages are moved to a newly created mailbox. We do
@@ -2956,111 +2957,53 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 					xuserErrorf("cannot move inbox to itself")
 				}
 
-				uidval, err := c.account.NextUIDValidity(tx)
-				xcheckf(err, "next uid validity")
+				var modseq store.ModSeq
+				dstMB, chl, err := c.account.MailboxEnsure(tx, dst, false, store.SpecialUse{}, &modseq)
+				xcheckf(err, "creating destination mailbox")
+				changes = chl
 
-				modseq, err = c.account.NextModSeq(tx)
-				xcheckf(err, "assigning next modseq")
-
-				dstMB := store.Mailbox{
-					Name:        dst,
-					UIDValidity: uidval,
-					UIDNext:     1,
-					Keywords:    srcMB.Keywords,
-					ModSeq:      modseq,
-					CreateSeq:   modseq,
-					HaveCounts:  true,
+				// Copy mailbox annotations. ../rfc/5464:368
+				qa := bstore.QueryTx[store.Annotation](tx)
+				qa.FilterNonzero(store.Annotation{MailboxID: srcMB.ID})
+				qa.FilterEqual("Expunged", false)
+				annotations, err := qa.List()
+				xcheckf(err, "get annotations to copy for inbox")
+				for _, a := range annotations {
+					a.ID = 0
+					a.MailboxID = dstMB.ID
+					a.ModSeq = modseq
+					a.CreateSeq = modseq
+					err := tx.Insert(&a)
+					xcheckf(err, "copy annotation to destination mailbox")
+					changes = append(changes, a.Change(dstMB.Name))
 				}
-				err = tx.Insert(&dstMB)
-				xcheckf(err, "create new destination mailbox")
+				c.xcheckMetadataSize(tx)
 
-				changes = make([]store.Change, 2) // Placeholders filled in below.
-
-				// Move existing messages, with their ID's and on-disk files intact, to the new
-				// mailbox. We keep the expunged messages, the destination mailbox doesn't care
-				// about them.
-				var oldUIDs []store.UID
+				// Build query that selects messages to move.
 				q := bstore.QueryTx[store.Message](tx)
 				q.FilterNonzero(store.Message{MailboxID: srcMB.ID})
 				q.FilterEqual("Expunged", false)
 				q.SortAsc("UID")
-				err = q.ForEach(func(m store.Message) error {
-					om := m
-					om.ID = 0
-					om.ModSeq = modseq
-					om.PrepareExpunge()
-					oldUIDs = append(oldUIDs, om.UID)
 
-					mc := m.MailboxCounts()
-					srcMB.Sub(mc)
-					dstMB.Add(mc)
-
-					m.MailboxID = dstMB.ID
-					m.UID = dstMB.UIDNext
-					dstMB.UIDNext++
-					m.CreateSeq = modseq
-					m.ModSeq = modseq
-					if err := tx.Update(&m); err != nil {
-						return fmt.Errorf("updating message to move to new mailbox: %w", err)
-					}
-
-					changes = append(changes, m.ChangeAddUID())
-
-					if err := tx.Insert(&om); err != nil {
-						return fmt.Errorf("adding empty expunge message record to inbox: %w", err)
-					}
-					return nil
-				})
-				xcheckf(err, "moving messages from inbox to destination mailbox")
-
-				err = tx.Update(&dstMB)
-				xcheckf(err, "updating uidnext and counts in destination mailbox")
-
-				srcMB.ModSeq = modseq
-				err = tx.Update(&srcMB)
-				xcheckf(err, "updating counts for inbox")
-
-				var dstFlags []string
-				if tx.Get(&store.Subscription{Name: dstMB.Name}) == nil {
-					dstFlags = []string{`\Subscribed`}
-				}
-
-				// Copy any annotations. ../rfc/5464:368
-				annotations, err := bstore.QueryTx[store.Annotation](tx).FilterNonzero(store.Annotation{MailboxID: srcMB.ID}).List()
-				xcheckf(err, "get annotations to copy for inbox")
-				for i := range annotations {
-					annotations[i].ID = 0
-					annotations[i].MailboxID = dstMB.ID
-					annotations[i].ModSeq = modseq
-					annotations[i].CreateSeq = modseq
-					err := tx.Insert(&annotations[i])
-					xcheckf(err, "copy annotation to destination mailbox")
-				}
-
-				c.xcheckMetadataSize(tx)
-
-				changes[0] = store.ChangeRemoveUIDs{MailboxID: srcMB.ID, UIDs: oldUIDs, ModSeq: modseq}
-				changes[1] = store.ChangeAddMailbox{Mailbox: dstMB, Flags: dstFlags, ModSeq: modseq}
-				// changes[2:...] are ChangeAddUIDs
-				changes = append(changes, srcMB.ChangeCounts(), dstMB.ChangeCounts())
-				for _, a := range annotations {
-					changes = append(changes, a.Change(dstMB.Name))
-				}
+				newIDs, chl := c.xmoveMessages(tx, q, 0, modseq, &srcMB, &dstMB)
+				changes = append(changes, chl...)
+				cleanupIDs = newIDs
 
 				return
 			}
 
-			var notExists, alreadyExists bool
+			var modseq store.ModSeq
+			var alreadyExists bool
 			var err error
-			changes, _, notExists, alreadyExists, err = c.account.MailboxRename(tx, srcMB, dst, &modseq)
-			if notExists {
-				// ../rfc/9051:5140
-				xusercodeErrorf("NONEXISTENT", "%s", err)
-			} else if alreadyExists {
+			changes, _, alreadyExists, err = c.account.MailboxRename(tx, &srcMB, dst, &modseq)
+			if alreadyExists {
 				xusercodeErrorf("ALREADYEXISTS", "%s", err)
 			}
 			xcheckf(err, "renaming mailbox")
 		})
+
+		cleanupIDs = nil
+
 		c.broadcast(changes)
 	})
 
@@ -3163,7 +3106,7 @@ func (c *conn) cmdLsub(tag, cmd string, p *parser) {
 		for _, sub := range subscriptions {
 			name := sub.Name
 			if ispercent {
-				for p := path.Dir(name); p != "."; p = path.Dir(p) {
+				for p := mox.ParentMailboxName(name); p != ""; p = mox.ParentMailboxName(p) {
 					subscribedKids[p] = true
 				}
 			}
@@ -3181,6 +3124,7 @@ func (c *conn) cmdLsub(tag, cmd string, p *parser) {
 			return
 		}
 		qmb := bstore.QueryTx[store.Mailbox](tx)
+		qmb.FilterEqual("Expunged", false)
 		qmb.SortAsc("Name")
 		err = qmb.ForEach(func(mb store.Mailbox) error {
 			if have[mb.Name] || !subscribedKids[mb.Name] || !re.MatchString(mb.Name) {
@@ -3544,11 +3488,10 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				// todo: do a single junk training
 				err = c.account.MessageAdd(c.log, tx, &mb, &a.m, a.file, store.AddOpts{SkipDirSync: true})
 				xcheckf(err, "delivering message")
-
-				changes = append(changes, a.m.ChangeAddUID())
-
 				// Update path to what is stored in the account. We may still have to clean it up on errors.
 				a.path = c.account.MessagePath(a.m.ID)
+
+				changes = append(changes, a.m.ChangeAddUID())
 
 				msgDirs[filepath.Dir(a.path)] = struct{}{}
 			}
@@ -3759,29 +3702,29 @@ func (c *conn) cmdClose(tag, cmd string, p *parser) {
 }
 
 // expunge messages marked for deletion in currently selected/active mailbox.
-// if uidSet is not nil, only messages matching the set are deleted.
+// if uidSet is not nil, only messages matching the set are expunged.
 //
-// messages that have been marked expunged from the database are returned and
-// have already been removed.
+// Messages that have been marked expunged from the database are returned. While
+// other sessions still reference the message, it is not cleared from the database
+// yet, and the message file is not yet removed.
 //
-// the highest modseq in the mailbox is returned, typically associated with the
+// The highest modseq in the mailbox is returned, typically associated with the
 // removal of the messages, but if no messages were expunged the current latest max
 // modseq for the mailbox is returned.
-func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (removed []store.Message, highestModSeq store.ModSeq) {
-	var modseq store.ModSeq
-
+func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (expunged []store.Message, highestModSeq store.ModSeq) {
 	c.account.WithWLock(func() {
-		var mb store.Mailbox
+		var changes []store.Change
 
 		c.xdbwrite(func(tx *bstore.Tx) {
-			mb = store.Mailbox{ID: c.mailboxID}
-			err := tx.Get(&mb)
-			if err == bstore.ErrAbsent {
+			mb, err := store.MailboxID(tx, c.mailboxID)
+			if err == bstore.ErrAbsent || err == store.ErrMailboxExpunged {
 				if missingMailboxOK {
 					return
 				}
-				xuserErrorf("%w", store.ErrUnknownMailbox)
+				// ../rfc/9051:5140
+				xusercodeErrorf("NONEXISTENT", "%w", store.ErrUnknownMailbox)
 			}
+			xcheckf(err, "get mailbox")
 
 			qm := bstore.QueryTx[store.Message](tx)
 			qm.FilterNonzero(store.Message{MailboxID: c.mailboxID})
@@ -3792,82 +3735,32 @@ func (c *conn) xexpunge(uidSet *numSet, missingMailboxOK bool) (removed []store.
 				return uidSearch(c.uids, m.UID) > 0 && (uidSet == nil || uidSet.containsUID(m.UID, c.uids, c.searchResult))
 			})
 			qm.SortAsc("UID")
-			removed, err = qm.List()
-			xcheckf(err, "listing messages to delete")
+			expunged, err = qm.List()
+			xcheckf(err, "listing messages to expunge")
 
-			if len(removed) == 0 {
+			if len(expunged) == 0 {
 				highestModSeq = mb.ModSeq
 				return
 			}
 
 			// Assign new modseq.
-			modseq, err = c.account.NextModSeq(tx)
+			modseq, err := c.account.NextModSeq(tx)
 			xcheckf(err, "assigning next modseq")
 			highestModSeq = modseq
 			mb.ModSeq = modseq
 
-			removeIDs := make([]int64, len(removed))
-			anyIDs := make([]any, len(removed))
-			var totalSize int64
-			for i, m := range removed {
-				removeIDs[i] = m.ID
-				anyIDs[i] = m.ID
-				mb.Sub(m.MailboxCounts())
-				totalSize += m.Size
-				// Update "remove", because RetrainMessage below will save the message.
-				removed[i].Expunged = true
-				removed[i].ModSeq = modseq
-			}
-			qmr := bstore.QueryTx[store.Recipient](tx)
-			qmr.FilterEqual("MessageID", anyIDs...)
-			_, err = qmr.Delete()
-			xcheckf(err, "removing message recipients")
-
-			qm = bstore.QueryTx[store.Message](tx)
-			qm.FilterIDs(removeIDs)
-			n, err := qm.UpdateNonzero(store.Message{Expunged: true, ModSeq: modseq})
-			if err == nil && n != len(removeIDs) {
-				err = fmt.Errorf("only %d messages set to expunged, expected %d", n, len(removeIDs))
-			}
-			xcheckf(err, "marking messages marked for deleted as expunged")
+			chremuids, chmbcounts, err := c.account.MessageRemove(c.log, tx, modseq, &mb, store.RemoveOpts{}, expunged...)
+			xcheckf(err, "expunging messages")
+			changes = append(changes, chremuids, chmbcounts)
 
 			err = tx.Update(&mb)
-			xcheckf(err, "updating mailbox counts")
-
-			err = c.account.AddMessageSize(c.log, tx, -totalSize)
-			xcheckf(err, "updating disk usage")
-
-			// Mark expunged messages as not needing training, then retrain them, so if they
-			// were trained, they get untrained.
-			for i := range removed {
-				removed[i].Junk = false
-				removed[i].Notjunk = false
-			}
-			err = c.account.RetrainMessages(context.TODO(), c.log, tx, removed)
-			xcheckf(err, "untraining expunged messages")
+			xcheckf(err, "update mailbox")
 		})
 
-		// Broadcast changes to other connections. We may not have actually removed any
-		// messages, so take care not to send an empty update.
-		if len(removed) > 0 {
-			ouids := make([]store.UID, len(removed))
-			for i, m := range removed {
-				ouids[i] = m.UID
-			}
-			changes := []store.Change{
-				store.ChangeRemoveUIDs{MailboxID: c.mailboxID, UIDs: ouids, ModSeq: modseq},
-				mb.ChangeCounts(),
-			}
-			c.broadcast(changes)
-		}
-
-		for _, m := range removed {
-			p := c.account.MessagePath(m.ID)
-			err := os.Remove(p)
-			c.xsanity(err, "removing message file for expunge")
-		}
+		c.broadcast(changes)
 	})
-	return removed, highestModSeq
+
+	return expunged, highestModSeq
 }
 
 // Unselect is similar to close in that it closes the currently active mailbox, but
@@ -4052,9 +3945,9 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 	uids, uidargs := c.gatherCopyMoveUIDs(isUID, nums)
 
 	// Files that were created during the copy. Remove them if the operation fails.
-	var createdIDs []int64
+	var newIDs []int64
 	defer func() {
-		for _, id := range createdIDs {
+		for _, id := range newIDs {
 			p := c.account.MessagePath(id)
 			err := os.Remove(p)
 			c.xsanity(err, "cleaning up created file")
@@ -4200,7 +4093,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				}
 				err := moxio.LinkOrCopy(c.log, dst, src, nil, true)
 				xcheckf(err, "link or copy file %q to %q", src, dst)
-				createdIDs = append(createdIDs, newMsgIDs[i])
+				newIDs = append(newIDs, newMsgIDs[i])
 			}
 
 			for dir := range syncDirs {
@@ -4212,7 +4105,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 			xcheckf(err, "train copied messages")
 		})
 
-		createdIDs = nil
+		newIDs = nil
 
 		// Broadcast changes to other connections.
 		if len(newUIDs) > 0 {
@@ -4253,127 +4146,61 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 
 	uids, uidargs := c.gatherCopyMoveUIDs(isUID, nums)
 
-	var mbSrc, mbDst store.Mailbox
-	var changes []store.Change
-	var newUIDs []store.UID
+	var mbDst store.Mailbox
+	var uidFirst store.UID
 	var modseq store.ModSeq
 
+	var cleanupIDs []int64
+	defer func() {
+		for _, id := range cleanupIDs {
+			p := c.account.MessagePath(id)
+			err := os.Remove(p)
+			c.xsanity(err, "removing destination message file %v", p)
+		}
+	}()
+
 	c.account.WithWLock(func() {
+		var changes []store.Change
+
 		c.xdbwrite(func(tx *bstore.Tx) {
-			mbSrc = c.xmailboxID(tx, c.mailboxID) // Validate.
+			mbSrc := c.xmailboxID(tx, c.mailboxID) // Validate.
 			mbDst = c.xmailbox(tx, name, "TRYCREATE")
 			if mbDst.ID == c.mailboxID {
 				xuserErrorf("cannot move to currently selected mailbox")
 			}
 
-			if len(uidargs) == 0 {
+			if len(uids) == 0 {
 				xuserErrorf("no matching messages to move")
 			}
 
-			// Reserve the uids in the destination mailbox.
-			uidFirst := mbDst.UIDNext
-			uidnext := uidFirst
-			mbDst.UIDNext += store.UID(len(uids))
+			uidFirst = mbDst.UIDNext
 
 			// Assign a new modseq, for the new records and for the expunged records.
 			var err error
 			modseq, err = c.account.NextModSeq(tx)
 			xcheckf(err, "assigning next modseq")
-			mbSrc.ModSeq = modseq
-			mbDst.ModSeq = modseq
 
-			// Update existing record with new UID and MailboxID in database for messages. We
-			// add a new but expunged record again in the original/source mailbox, for qresync.
-			// Keeping the original ID for the live message means we don't have to move the
-			// on-disk message contents file.
+			// Make query selecting messages to move.
 			q := bstore.QueryTx[store.Message](tx)
-			q.FilterNonzero(store.Message{MailboxID: c.mailboxID})
+			q.FilterNonzero(store.Message{MailboxID: mbSrc.ID})
 			q.FilterEqual("UID", uidargs...)
 			q.FilterEqual("Expunged", false)
 			q.SortAsc("UID")
-			msgs, err := q.List()
-			xcheckf(err, "listing messages to move")
 
-			if len(msgs) != len(uidargs) {
-				xserverErrorf("uid and message mismatch")
-			}
-
-			keywords := map[string]struct{}{}
-			now := time.Now()
-
-			conf, _ := c.account.Conf()
-			for i := range msgs {
-				m := &msgs[i]
-				if m.UID != uids[i] {
-					xserverErrorf("internal error: got uid %d, expected %d, for index %d", m.UID, uids[i], i)
-				}
-
-				mbSrc.Sub(m.MailboxCounts())
-
-				// Copy of message record that we'll insert when UID is freed up.
-				om := *m
-				om.PrepareExpunge()
-				om.ID = 0 // Assign new ID.
-				om.ModSeq = modseq
-
-				m.MailboxID = mbDst.ID
-				if m.IsReject && m.MailboxDestinedID != 0 {
-					// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
-					// is used for reputation calculation during future deliveries.
-					m.MailboxOrigID = m.MailboxDestinedID
-					m.IsReject = false
-					m.Seen = false
-				}
-				mbDst.Add(m.MailboxCounts())
-				m.UID = uidnext
-				m.ModSeq = modseq
-				m.JunkFlagsForMailbox(mbDst, conf)
-				m.SaveDate = &now
-				uidnext++
-				err := tx.Update(m)
-				xcheckf(err, "updating moved message in database")
-
-				// Now that UID is unused, we can insert the old record again.
-				err = tx.Insert(&om)
-				xcheckf(err, "inserting record for expunge after moving message")
-
-				for _, kw := range m.Keywords {
-					keywords[kw] = struct{}{}
-				}
-			}
-
-			// Ensure destination mailbox has keywords of the moved messages.
-			var mbKwChanged bool
-			mbDst.Keywords, mbKwChanged = store.MergeKeywords(mbDst.Keywords, maps.Keys(keywords))
-			if mbKwChanged {
-				changes = append(changes, mbDst.ChangeKeywords())
-			}
-
-			err = tx.Update(&mbSrc)
-			xcheckf(err, "updating source mailbox counts and modseq")
-
-			err = tx.Update(&mbDst)
-			xcheckf(err, "updating destination mailbox for uids, keywords and counts")
-
-			err = c.account.RetrainMessages(context.TODO(), c.log, tx, msgs)
-			xcheckf(err, "retraining messages after move")
-
-			// Prepare broadcast changes to other connections.
-			changes = make([]store.Change, 0, 1+len(msgs)+2)
-			changes = append(changes, store.ChangeRemoveUIDs{MailboxID: c.mailboxID, UIDs: uids, ModSeq: modseq})
-			for _, m := range msgs {
-				newUIDs = append(newUIDs, m.UID)
-				changes = append(changes, m.ChangeAddUID())
-			}
-			changes = append(changes, mbSrc.ChangeCounts(), mbDst.ChangeCounts())
+			newIDs, chl := c.xmoveMessages(tx, q, len(uidargs), modseq, &mbSrc, &mbDst)
+			changes = append(changes, chl...)
+			cleanupIDs = newIDs
 		})
+
+		cleanupIDs = nil
 
 		c.broadcast(changes)
 	})
 
 	// ../rfc/9051:4708 ../rfc/6851:254
 	// ../rfc/9051:4713
-	c.bwritelinef("* OK [COPYUID %d %s %s] moved", mbDst.UIDValidity, compactUIDSet(uids).String(), compactUIDSet(newUIDs).String())
+	newUIDs := numSet{ranges: []numRange{{setNumber{number: uint32(uidFirst)}, &setNumber{number: uint32(mbDst.UIDNext - 1)}}}}
+	c.bwritelinef("* OK [COPYUID %d %s %s] moved", mbDst.UIDValidity, compactUIDSet(uids).String(), newUIDs.String())
 	qresync := c.enabled[capQresync]
 	var vanishedUIDs numSet
 	for i := 0; i < len(uids); i++ {
@@ -4398,6 +4225,132 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 	} else {
 		c.ok(tag, cmd)
 	}
+}
+
+// q must yield messages from a single mailbox.
+func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expectCount int, modseq store.ModSeq, mbSrc, mbDst *store.Mailbox) (newIDs []int64, changes []store.Change) {
+	newIDs = make([]int64, 0, expectCount)
+	var commit bool
+	defer func() {
+		if commit {
+			return
+		}
+		for _, id := range newIDs {
+			p := c.account.MessagePath(id)
+			err := os.Remove(p)
+			c.xsanity(err, "removing added message file %v", p)
+		}
+		newIDs = nil
+	}()
+
+	mbSrc.ModSeq = modseq
+	mbDst.ModSeq = modseq
+
+	var jf *junk.Filter
+	defer func() {
+		if jf != nil {
+			err := jf.CloseDiscard()
+			c.log.Check(err, "closing junk filter after error")
+		}
+	}()
+
+	accConf, _ := c.account.Conf()
+
+	changeRemoveUIDs := store.ChangeRemoveUIDs{
+		MailboxID: mbSrc.ID,
+		ModSeq:    modseq,
+	}
+	changes = make([]store.Change, 0, expectCount+4) // mbsrc removeuids, mbsrc counts, mbdst counts, mbdst keywords
+
+	nkeywords := len(mbDst.Keywords)
+	now := time.Now()
+
+	l, err := q.List()
+	xcheckf(err, "listing messages to move")
+
+	if expectCount > 0 && len(l) != expectCount {
+		xcheckf(fmt.Errorf("moved %d messages, expected %d", len(l), expectCount), "move messages")
+	}
+
+	for _, om := range l {
+		nm := om
+		nm.MailboxID = mbDst.ID
+		nm.UID = mbDst.UIDNext
+		mbDst.UIDNext++
+		nm.ModSeq = modseq
+		nm.CreateSeq = modseq
+		nm.SaveDate = &now
+		if nm.IsReject && nm.MailboxDestinedID != 0 {
+			// Incorrectly delivered to Rejects mailbox. Adjust MailboxOrigID so this message
+			// is used for reputation calculation during future deliveries.
+			nm.MailboxOrigID = nm.MailboxDestinedID
+			nm.IsReject = false
+			nm.Seen = false
+		}
+
+		nm.JunkFlagsForMailbox(*mbDst, accConf)
+
+		err := tx.Update(&nm)
+		xcheckf(err, "updating message with new mailbox")
+
+		mbDst.Add(nm.MailboxCounts())
+
+		mbSrc.Sub(om.MailboxCounts())
+		om.ID = 0
+		om.Expunged = true
+		om.ModSeq = modseq
+		om.TrainedJunk = nil
+		err = tx.Insert(&om)
+		xcheckf(err, "inserting expunged message in old mailbox")
+
+		err = moxio.LinkOrCopy(c.log, c.account.MessagePath(om.ID), c.account.MessagePath(nm.ID), nil, false)
+		xcheckf(err, "duplicating message in old mailbox for current sessions")
+		newIDs = append(newIDs, nm.ID)
+		// We don't sync the directory. In case of a crash and files disappearing, the
+		// eraser will simply not find the file at next startup.
+
+		err = tx.Insert(&store.MessageErase{ID: om.ID, SkipUpdateDiskUsage: true})
+		xcheckf(err, "insert message erase")
+
+		mbDst.Keywords, _ = store.MergeKeywords(mbDst.Keywords, nm.Keywords)
+
+		if accConf.JunkFilter != nil && nm.NeedsTraining() {
+			// Lazily open junk filter.
+			if jf == nil {
+				jf, _, err = c.account.OpenJunkFilter(context.TODO(), c.log)
+				xcheckf(err, "open junk filter")
+			}
+			err := c.account.RetrainMessage(context.TODO(), c.log, tx, jf, &nm)
+			xcheckf(err, "retrain message after moving")
+		}
+
+		changeRemoveUIDs.UIDs = append(changeRemoveUIDs.UIDs, om.UID)
+		changeRemoveUIDs.MsgIDs = append(changeRemoveUIDs.MsgIDs, om.ID)
+		changes = append(changes, nm.ChangeAddUID())
+	}
+	xcheckf(err, "move messages")
+
+	changes = append(changes, changeRemoveUIDs, mbSrc.ChangeCounts())
+
+	err = tx.Update(mbSrc)
+	xcheckf(err, "updating counts for inbox")
+
+	changes = append(changes, mbDst.ChangeCounts())
+	if len(mbDst.Keywords) > nkeywords {
+		changes = append(changes, mbDst.ChangeKeywords())
+	}
+
+	err = tx.Update(mbDst)
+	xcheckf(err, "updating uidnext and counts in destination mailbox")
+
+	if jf != nil {
+		err := jf.Close()
+		jf = nil
+		xcheckf(err, "saving junk filter")
+	}
+
+	commit = true
+	return
 }
 
 // Store sets a full set of flags, or adds/removes specific flags.

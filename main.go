@@ -3340,6 +3340,7 @@ open, or is not running.
 		}
 
 		q := bstore.QueryTx[store.Mailbox](tx)
+		q.FilterEqual("Expunged", false)
 		if len(args) == 2 {
 			q.FilterEqual("Name", args[1])
 		}
@@ -3398,7 +3399,8 @@ open, or is not running.
 		// Reassign UIDs, going per mailbox. We assign starting at 1, only changing the
 		// message if it isn't already at the intended UID. Doing it in this order ensures
 		// we don't get into trouble with duplicate UIDs for a mailbox. We assign a new
-		// modseq. Not strictly needed, but doesn't hurt.
+		// modseq. Not strictly needed, but doesn't hurt. It's also why we assign a UID to
+		// expunged messages.
 		modseq, err := a.NextModSeq(tx)
 		xcheckf(err, "assigning next modseq")
 
@@ -3424,7 +3426,7 @@ open, or is not running.
 		}
 
 		// Now update the uidnext, uidvalidity and modseq for each mailbox.
-		err = bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
+		err = bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).ForEach(func(mb store.Mailbox) error {
 			// Assign each mailbox a completely new uidvalidity.
 			uidvalidity, err := a.NextUIDValidity(tx)
 			if err != nil {
@@ -3491,7 +3493,7 @@ open, or is not running.
 	err = a.DB.Write(context.Background(), func(tx *bstore.Tx) error {
 		// We look at each mailbox, retrieve its max UID and compare against the mailbox
 		// UIDNEXT.
-		err := bstore.QueryTx[store.Mailbox](tx).ForEach(func(mb store.Mailbox) error {
+		err := bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).ForEach(func(mb store.Mailbox) error {
 			if mb.UIDValidity > maxUIDValidity {
 				maxUIDValidity = mb.UIDValidity
 			}

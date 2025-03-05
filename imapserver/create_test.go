@@ -11,7 +11,7 @@ func TestCreate(t *testing.T) {
 	defer tc.close()
 
 	tc2 := startNoSwitchboard(t)
-	defer tc2.close()
+	defer tc2.closeNoWait()
 
 	tc.client.Login("mjl@mox.example", password0)
 	tc2.client.Login("mjl@mox.example", password0)
@@ -84,4 +84,7 @@ func TestCreate(t *testing.T) {
 	tc.transactf("ok", `create "&"`)      // Interpreted as UTF-8, no UTF-7.
 	tc2.transactf("bad", `create "&"`)    // Bad UTF-7.
 	tc2.transactf("ok", `create "&Jjo-"`) // ☺, valid UTF-7.
+
+	tc.transactf("ok", "create expungebox") // Existed in past.
+	tc.transactf("ok", "delete expungebox") // Gone again.
 }

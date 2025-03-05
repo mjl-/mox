@@ -3272,6 +3272,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					// See if we received a non-junk message from this organizational domain.
 					q := bstore.QueryTx[store.Message](tx)
 					q.FilterNonzero(store.Message{MsgFromOrgDomain: a0.d.m.MsgFromOrgDomain})
+					q.FilterEqual("Expunged", false)
 					q.FilterEqual("Notjunk", true)
 					q.FilterEqual("IsReject", false)
 					exists, err := q.Exists()
@@ -3406,24 +3407,36 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 				// due to reputation for later delivery attempts.
 				a.d.m.MessageHash = messagehash
 				a.d.acc.WithWLock(func() {
-					hasSpace := true
-					var err error
-					if !conf.KeepRejects {
-						hasSpace, err = a.d.acc.TidyRejectsMailbox(c.log, conf.RejectsMailbox)
-					}
-					if err != nil {
-						log.Errorx("tidying rejects mailbox", err)
-					} else if !hasSpace {
-						log.Info("not storing spammy mail to full rejects mailbox")
-						return
-					}
-
 					var changes []store.Change
 					var stored bool
-					err = a.d.acc.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
+
+					var newID int64
+					defer func() {
+						if newID != 0 {
+							p := a.d.acc.MessagePath(newID)
+							err := os.Remove(p)
+							c.log.Check(err, "remove message after error delivering to rejects", slog.String("path", p))
+						}
+					}()
+
+					err := a.d.acc.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
 						mbrej, err := a.d.acc.MailboxFind(tx, conf.RejectsMailbox)
 						if err != nil {
 							return fmt.Errorf("finding rejects mailbox: %v", err)
+						}
+
+						hasSpace := true
+						if !conf.KeepRejects && mbrej != nil {
+							var chl []store.Change
+							chl, hasSpace, err = a.d.acc.TidyRejectsMailbox(c.log, tx, mbrej)
+							if err != nil {
+								return fmt.Errorf("tidying rejects mailbox: %v", err)
+							}
+							if !hasSpace {
+								log.Info("not storing spammy mail to full rejects mailbox")
+								return nil
+							}
+							changes = append(changes, chl...)
 						}
 						if mbrej == nil {
 							nmb, chl, _, _, err := a.d.acc.MailboxCreate(tx, conf.RejectsMailbox, store.SpecialUse{})
@@ -3438,6 +3451,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 						if err := a.d.acc.MessageAdd(log, tx, mbrej, a.d.m, dataFile, store.AddOpts{}); err != nil {
 							return fmt.Errorf("delivering spammy mail to rejects mailbox: %v", err)
 						}
+						newID = a.d.m.ID
+
 						if err := tx.Update(mbrej); err != nil {
 							return fmt.Errorf("updating rejects mailbox: %v", err)
 						}
@@ -3451,6 +3466,8 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 					} else if stored {
 						log.Info("stored spammy mail in rejects mailbox")
 					}
+					newID = 0
+
 					store.BroadcastChanges(a.d.acc, changes)
 				})
 			}

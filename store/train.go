@@ -155,11 +155,7 @@ func (a *Account) RetrainMessage(ctx context.Context, log mlog.Log, tx *bstore.T
 
 // TrainMessage trains the junk filter based on the current m.Junk/m.Notjunk flags,
 // disregarding m.TrainedJunk and not updating that field.
-func (a *Account) TrainMessage(ctx context.Context, log mlog.Log, jf *junk.Filter, m Message) (bool, error) {
-	if m.Junk == m.Notjunk {
-		return false, nil
-	}
-
+func (a *Account) TrainMessage(ctx context.Context, log mlog.Log, jf *junk.Filter, ham bool, m Message) (bool, error) {
 	mr := a.MessageReader(m)
 	defer func() {
 		err := mr.Close()
@@ -178,5 +174,5 @@ func (a *Account) TrainMessage(ctx context.Context, log mlog.Log, jf *junk.Filte
 		return false, nil
 	}
 
-	return true, jf.Train(ctx, m.Notjunk, words)
+	return true, jf.Train(ctx, ham, words)
 }
