@@ -215,6 +215,9 @@ func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *
 			}
 			http.NotFound(w, r)
 			return true
+		} else if errors.Is(err, syscall.ENAMETOOLONG) {
+			http.NotFound(w, r)
+			return true
 		} else if os.IsPermission(err) {
 			// If we tried opening a directory, we may not have permission to read it, but
 			// still access files inside it (execute bit), such as index.html. So try to serve it.
