@@ -2943,63 +2943,63 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 		c.xdbwrite(func(tx *bstore.Tx) {
 			srcMB := c.xmailbox(tx, src, "NONEXISTENT")
 
+			// Handle common/simple case first.
+			if src != "Inbox" {
+				var modseq store.ModSeq
+				var alreadyExists bool
+				var err error
+				changes, _, alreadyExists, err = c.account.MailboxRename(tx, &srcMB, dst, &modseq)
+				if alreadyExists {
+					xusercodeErrorf("ALREADYEXISTS", "%s", err)
+				}
+				xcheckf(err, "renaming mailbox")
+				return
+			}
+
 			// Inbox is very special. Unlike other mailboxes, its children are not moved. And
 			// unlike a regular move, its messages are moved to a newly created mailbox. We do
 			// indeed create a new destination mailbox and actually move the messages.
 			// ../rfc/9051:2101
-			if src == "Inbox" {
-				exists, err := c.account.MailboxExists(tx, dst)
-				xcheckf(err, "checking if destination mailbox exists")
-				if exists {
-					xusercodeErrorf("ALREADYEXISTS", "destination mailbox %q already exists", dst)
-				}
-				if dst == src {
-					xuserErrorf("cannot move inbox to itself")
-				}
-
-				var modseq store.ModSeq
-				dstMB, chl, err := c.account.MailboxEnsure(tx, dst, false, store.SpecialUse{}, &modseq)
-				xcheckf(err, "creating destination mailbox")
-				changes = chl
-
-				// Copy mailbox annotations. ../rfc/5464:368
-				qa := bstore.QueryTx[store.Annotation](tx)
-				qa.FilterNonzero(store.Annotation{MailboxID: srcMB.ID})
-				qa.FilterEqual("Expunged", false)
-				annotations, err := qa.List()
-				xcheckf(err, "get annotations to copy for inbox")
-				for _, a := range annotations {
-					a.ID = 0
-					a.MailboxID = dstMB.ID
-					a.ModSeq = modseq
-					a.CreateSeq = modseq
-					err := tx.Insert(&a)
-					xcheckf(err, "copy annotation to destination mailbox")
-					changes = append(changes, a.Change(dstMB.Name))
-				}
-				c.xcheckMetadataSize(tx)
-
-				// Build query that selects messages to move.
-				q := bstore.QueryTx[store.Message](tx)
-				q.FilterNonzero(store.Message{MailboxID: srcMB.ID})
-				q.FilterEqual("Expunged", false)
-				q.SortAsc("UID")
-
-				newIDs, chl := c.xmoveMessages(tx, q, 0, modseq, &srcMB, &dstMB)
-				changes = append(changes, chl...)
-				cleanupIDs = newIDs
-
-				return
+			exists, err := c.account.MailboxExists(tx, dst)
+			xcheckf(err, "checking if destination mailbox exists")
+			if exists {
+				xusercodeErrorf("ALREADYEXISTS", "destination mailbox %q already exists", dst)
+			}
+			if dst == src {
+				xuserErrorf("cannot move inbox to itself")
 			}
 
 			var modseq store.ModSeq
-			var alreadyExists bool
-			var err error
-			changes, _, alreadyExists, err = c.account.MailboxRename(tx, &srcMB, dst, &modseq)
-			if alreadyExists {
-				xusercodeErrorf("ALREADYEXISTS", "%s", err)
+			dstMB, chl, err := c.account.MailboxEnsure(tx, dst, false, store.SpecialUse{}, &modseq)
+			xcheckf(err, "creating destination mailbox")
+			changes = chl
+
+			// Copy mailbox annotations. ../rfc/5464:368
+			qa := bstore.QueryTx[store.Annotation](tx)
+			qa.FilterNonzero(store.Annotation{MailboxID: srcMB.ID})
+			qa.FilterEqual("Expunged", false)
+			annotations, err := qa.List()
+			xcheckf(err, "get annotations to copy for inbox")
+			for _, a := range annotations {
+				a.ID = 0
+				a.MailboxID = dstMB.ID
+				a.ModSeq = modseq
+				a.CreateSeq = modseq
+				err := tx.Insert(&a)
+				xcheckf(err, "copy annotation to destination mailbox")
+				changes = append(changes, a.Change(dstMB.Name))
 			}
-			xcheckf(err, "renaming mailbox")
+			c.xcheckMetadataSize(tx)
+
+			// Build query that selects messages to move.
+			q := bstore.QueryTx[store.Message](tx)
+			q.FilterNonzero(store.Message{MailboxID: srcMB.ID})
+			q.FilterEqual("Expunged", false)
+			q.SortAsc("UID")
+
+			newIDs, chl := c.xmoveMessages(tx, q, 0, modseq, &srcMB, &dstMB)
+			changes = append(changes, chl...)
+			cleanupIDs = newIDs
 		})
 
 		cleanupIDs = nil

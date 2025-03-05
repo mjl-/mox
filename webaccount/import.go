@@ -713,61 +713,64 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		case "new", "cur", "tmp":
 			mailbox := path.Dir(dir)
 			ximportMaildir(mailbox, origName, r)
-		default:
-			if path.Base(name) == "dovecot-keywords" {
-				mailbox := path.Dir(name)
-				dovecotKeywords := map[rune]string{}
-				words, err := store.ParseDovecotKeywordsFlags(r, log)
-				log.Check(err, "parsing dovecot keywords for mailbox", slog.String("mailbox", mailbox))
-				for i, kw := range words {
-					dovecotKeywords['a'+rune(i)] = kw
-				}
-				mailboxKeywords[mailbox] = dovecotKeywords
-
-				for id, chars := range mailboxMissingKeywordMessages[mailbox] {
-					var flags, zeroflags store.Flags
-					keywords := map[string]bool{}
-					for _, c := range chars {
-						kw, ok := dovecotKeywords[c]
-						if !ok {
-							problemf("unspecified dovecot message flag %c for message id %d (continuing)", c, id)
-							continue
-						}
-						flagSet(&flags, keywords, kw)
-					}
-					if flags == zeroflags && len(keywords) == 0 {
-						continue
-					}
-
-					m := store.Message{ID: id}
-					err := tx.Get(&m)
-					ximportcheckf(err, "get imported message for flag update")
-
-					mb := mailboxIDs[m.MailboxID]
-					mb.Sub(m.MailboxCounts())
-
-					oflags := m.Flags
-					m.Flags = m.Flags.Set(flags, flags)
-					m.Keywords = maps.Keys(keywords)
-					sort.Strings(m.Keywords)
-
-					mb.Add(m.MailboxCounts())
-
-					mb.Keywords, _ = store.MergeKeywords(mb.Keywords, m.Keywords)
-
-					// We train before updating, training may set m.TrainedJunk.
-					if jf != nil && m.NeedsTraining() {
-						openTrainMessage(&m)
-					}
-					err = tx.Update(&m)
-					ximportcheckf(err, "updating message after flag update")
-					changes = append(changes, m.ChangeFlags(oflags))
-				}
-				delete(mailboxMissingKeywordMessages, mailbox)
-			} else {
-				problemf("unrecognized file %s (skipping)", origName)
-			}
+			return
 		}
+
+		if path.Base(name) != "dovecot-keywords" {
+			problemf("unrecognized file %s (skipping)", origName)
+			return
+		}
+
+		// Handle dovecot-keywords.
+		mailbox := path.Dir(name)
+		dovecotKeywords := map[rune]string{}
+		words, err := store.ParseDovecotKeywordsFlags(r, log)
+		log.Check(err, "parsing dovecot keywords for mailbox", slog.String("mailbox", mailbox))
+		for i, kw := range words {
+			dovecotKeywords['a'+rune(i)] = kw
+		}
+		mailboxKeywords[mailbox] = dovecotKeywords
+
+		for id, chars := range mailboxMissingKeywordMessages[mailbox] {
+			var flags, zeroflags store.Flags
+			keywords := map[string]bool{}
+			for _, c := range chars {
+				kw, ok := dovecotKeywords[c]
+				if !ok {
+					problemf("unspecified dovecot message flag %c for message id %d (continuing)", c, id)
+					continue
+				}
+				flagSet(&flags, keywords, kw)
+			}
+			if flags == zeroflags && len(keywords) == 0 {
+				continue
+			}
+
+			m := store.Message{ID: id}
+			err := tx.Get(&m)
+			ximportcheckf(err, "get imported message for flag update")
+
+			mb := mailboxIDs[m.MailboxID]
+			mb.Sub(m.MailboxCounts())
+
+			oflags := m.Flags
+			m.Flags = m.Flags.Set(flags, flags)
+			m.Keywords = maps.Keys(keywords)
+			sort.Strings(m.Keywords)
+
+			mb.Add(m.MailboxCounts())
+
+			mb.Keywords, _ = store.MergeKeywords(mb.Keywords, m.Keywords)
+
+			// We train before updating, training may set m.TrainedJunk.
+			if jf != nil && m.NeedsTraining() {
+				openTrainMessage(&m)
+			}
+			err = tx.Update(&m)
+			ximportcheckf(err, "updating message after flag update")
+			changes = append(changes, m.ChangeFlags(oflags))
+		}
+		delete(mailboxMissingKeywordMessages, mailbox)
 	}
 
 	if zr != nil {
