@@ -78,6 +78,7 @@ fuzz:
 	go test -fuzz . -parallel 1 -fuzztime 5m ./junk
 	go test -fuzz FuzzParseRecord -fuzztime 5m ./mtasts
 	go test -fuzz FuzzParsePolicy -fuzztime 5m ./mtasts
+	go test -fuzz . -fuzztime 5m ./smtp
 	go test -fuzz . -parallel 1 -fuzztime 5m ./smtpserver
 	go test -fuzz . -fuzztime 5m ./spf
 	go test -fuzz FuzzParseRecord -fuzztime 5m ./tlsrpt
