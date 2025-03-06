@@ -85,5 +85,8 @@ single easy to use and maintain application.
 
 ## Sponsors
 
-Mox development is sponsored from August 2023 to August 2024 through NLnet/EU's
-NGI0 Entrust, see https://nlnet.nl/project/Mox/.
+Mox will receiving funding in 2024 and 2025 through NLnet/EU's NGI0 Zero Core,
+see https://nlnet.nl/project/Mox-Automation/.
+
+Mox received funding in 2023 and 2024 through NLnet/EU's NGI0 Entrust, see
+https://nlnet.nl/project/Mox/.
