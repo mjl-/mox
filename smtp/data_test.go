@@ -153,3 +153,9 @@ func (r *oneReader) Read(buf []byte) (int, error) {
 	r.buf = r.buf[1:]
 	return 1, nil
 }
+
+func FuzzReader(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data string) {
+		io.ReadAll(NewDataReader(bufio.NewReader(strings.NewReader(data))))
+	})
+}

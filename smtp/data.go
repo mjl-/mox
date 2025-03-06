@@ -135,7 +135,7 @@ func (r *DataReader) Read(p []byte) (int, error) {
 		if len(r.buf) > 0 {
 			// Reject bare \r.
 			for i, c := range r.buf {
-				if c == '\r' && (i == len(r.buf) || r.buf[i+1] != '\n') {
+				if c == '\r' && (i == len(r.buf)-1 || r.buf[i+1] != '\n') {
 					r.badcrlf = true
 				}
 			}
