@@ -150,10 +150,6 @@ func (c *Conn) AuthenticateSCRAM(method string, h func() hash.Hash, username, pa
 func (c *Conn) CompressDeflate() (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
 
-	if _, ok := c.CapAvailable[CapCompressDeflate]; !ok {
-		c.xerrorf("server does not implement capability %s", CapCompressDeflate)
-	}
-
 	untagged, result, rerr = c.Transactf("compress deflate")
 	c.xcheck(rerr)
 
