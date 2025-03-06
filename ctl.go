@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +33,7 @@ import (
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/webapi"
+	"slices"
 )
 
 // ctl represents a connection to the ctl unix domain socket of a running mox instance.
@@ -242,10 +242,7 @@ func (s *ctlreader) Read(buf []byte) (N int, Err error) {
 		}
 		s.npending = int(n)
 	}
-	rn := len(buf)
-	if rn > s.npending {
-		rn = s.npending
-	}
+	rn := min(len(buf), s.npending)
 	n, err := s.r.Read(buf[:rn])
 	s.xcheck(err, "read from ctl")
 	s.npending -= n
@@ -1375,9 +1372,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		for k := range l {
 			keys = append(keys, k)
 		}
-		sort.Slice(keys, func(i, j int) bool {
-			return keys[i] < keys[j]
-		})
+		slices.Sort(keys)
 		s := ""
 		for _, k := range keys {
 			ks := k

@@ -54,7 +54,7 @@ func (b *Bufpool) put(log mlog.Log, buf []byte, n int) {
 		return
 	}
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		buf[i] = 0
 	}
 	select {

@@ -20,6 +20,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/store"
+	"slices"
 )
 
 // functions to handle fetch attribute requests are defined on fetchCmd.
@@ -203,9 +204,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 		}
 
 		// First sort the uids we already found, for fast lookup.
-		sort.Slice(vanishedUIDs, func(i, j int) bool {
-			return vanishedUIDs[i] < vanishedUIDs[j]
-		})
+		slices.Sort(vanishedUIDs)
 
 		// We'll be gathering any more vanished uids in more.
 		more := map[store.UID]struct{}{}
@@ -239,9 +238,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 	if len(vanishedUIDs) > 0 {
 		// Mention all vanished UIDs in compact numset form.
 		// ../rfc/7162:1985
-		sort.Slice(vanishedUIDs, func(i, j int) bool {
-			return vanishedUIDs[i] < vanishedUIDs[j]
-		})
+		slices.Sort(vanishedUIDs)
 		// No hard limit on response sizes, but clients are recommended to not send more
 		// than 8k. We send a more conservative max 4k.
 		for _, s := range compactUIDSet(vanishedUIDs).Strings(4*1024 - 32) {
@@ -734,10 +731,7 @@ func (cmd *fetchCmd) xbody(a fetchAtt) (string, token) {
 		var offset int64
 		count := m.Size
 		if a.partial != nil {
-			offset = int64(a.partial.offset)
-			if offset > m.Size {
-				offset = m.Size
-			}
+			offset = min(int64(a.partial.offset), m.Size)
 			count = int64(a.partial.count)
 			if offset+count > m.Size {
 				count = m.Size - offset

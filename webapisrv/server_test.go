@@ -132,11 +132,11 @@ func TestServer(t *testing.T) {
 	testHTTP("PUT", "/v0/Send", http.StatusMethodNotAllowed, "")
 	testHTTP("POST", "/v0/Send", http.StatusUnauthorized, "")
 
-	for i := 0; i < 11; i++ {
+	for range 11 {
 		// Missing auth doesn't trigger auth rate limiter.
 		testHTTP("POST", "/v0/Send", http.StatusUnauthorized, "")
 	}
-	for i := 0; i < 21; i++ {
+	for i := range 21 {
 		// Bad auth does.
 		expCode := http.StatusUnauthorized
 		tooMany := i >= 10

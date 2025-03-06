@@ -9,10 +9,7 @@ func TXTStrings(s string) string {
 
 	r := "(\n"
 	for len(s) > 0 {
-		n := len(s)
-		if n > 100 {
-			n = 100
-		}
+		n := min(len(s), 100)
 		if r != "" {
 			r += " "
 		}

@@ -1971,7 +1971,7 @@ func (q Query) envFilterFn(log mlog.Log, state *msgState) func(m store.Message) 
 			return false
 		}
 		if len(filterTo) > 0 || len(notFilterTo) > 0 {
-			to := append(append(append([]message.Address{}, env.To...), env.CC...), env.BCC...)
+			to := slices.Concat(env.To, env.CC, env.BCC)
 			if len(filterTo) > 0 && !contains(filterTo, to, true) {
 				return false
 			}

@@ -8,7 +8,7 @@ func GeneratePassword() string {
 	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*-_;:,<.>/"
 	s := ""
 	buf := make([]byte, 1)
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		for {
 			cryptorand.Read(buf)
 			i := int(buf[0])

@@ -164,10 +164,7 @@ func (r *DataReader) Read(p []byte) (int, error) {
 				// Reject "[^\r]\n.\n" and "[^\r]\n.\r\n"
 				r.badcrlf = true
 			}
-			n := len(r.buf)
-			if n > len(p) {
-				n = len(p)
-			}
+			n := min(len(r.buf), len(p))
 			copy(p, r.buf[:n])
 			if n == 1 {
 				r.plast, r.last = r.last, r.buf[0]

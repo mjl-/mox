@@ -234,14 +234,14 @@ func TestMailbox(t *testing.T) {
 	})
 
 	// Run the auth tests twice for possible cache effects.
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_, _, err := OpenEmailAuth(log, "mjl@mox.example", "bogus", false)
 		if err != ErrUnknownCredentials {
 			t.Fatalf("got %v, expected ErrUnknownCredentials", err)
 		}
 	}
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		acc2, _, err := OpenEmailAuth(log, "mjl@mox.example", "testtest", false)
 		tcheck(t, err, "open for email with auth")
 		err = acc2.Close()

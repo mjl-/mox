@@ -696,7 +696,7 @@ func composeMessage(ctx context.Context, log mlog.Log, mf *os.File, policyDomain
 	selectors := mox.DKIMSelectors(confDKIM)
 	for i, sel := range selectors {
 		// Also sign the TLS-Report headers. ../rfc/8460:940
-		sel.Headers = append(append([]string{}, sel.Headers...), "TLS-Report-Domain", "TLS-Report-Submitter")
+		sel.Headers = append(slices.Clone(sel.Headers), "TLS-Report-Domain", "TLS-Report-Submitter")
 		selectors[i] = sel
 	}
 

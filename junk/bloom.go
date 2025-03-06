@@ -70,14 +70,14 @@ func NewBloom(data []byte, k int) (*Bloom, error) {
 
 func (b *Bloom) Add(s string) {
 	h := hash([]byte(s), b.w)
-	for i := 0; i < b.k; i++ {
+	for range b.k {
 		b.set(h.nextPos())
 	}
 }
 
 func (b *Bloom) Has(s string) bool {
 	h := hash([]byte(s), b.w)
-	for i := 0; i < b.k; i++ {
+	for range b.k {
 		if !b.has(h.nextPos()) {
 			return false
 		}
@@ -96,7 +96,7 @@ func (b *Bloom) Modified() bool {
 // Ones returns the number of ones.
 func (b *Bloom) Ones() (n int) {
 	for _, d := range b.data {
-		for i := 0; i < 8; i++ {
+		for range 8 {
 			if d&1 != 0 {
 				n++
 			}

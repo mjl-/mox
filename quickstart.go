@@ -39,6 +39,7 @@ import (
 	"github.com/mjl-/mox/rdap"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
+	"slices"
 )
 
 //go:embed mox.service
@@ -344,9 +345,7 @@ Troubleshooting hints:
 			for k := range names {
 				nameList = append(nameList, strings.TrimRight(k, "."))
 			}
-			sort.Slice(nameList, func(i, j int) bool {
-				return nameList[i] < nameList[j]
-			})
+			slices.Sort(nameList)
 			if len(nameList) == 0 {
 				dnshostname, err = dns.ParseDomain(hostnameStr + "." + domain.Name())
 				if err != nil {
@@ -534,7 +533,7 @@ messages over SMTP.
 			fmt.Printf("\nWARNING: %s", fmt.Sprintf(format, args...))
 			warned = true
 		}
-		for i := 0; i < len(ips); i++ {
+		for range ips {
 			r := <-results
 			if r.Err != nil {
 				warnf("looking up reverse name for %s: %v", r.IP, r.Err)

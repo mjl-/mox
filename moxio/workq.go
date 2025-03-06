@@ -50,7 +50,7 @@ func NewWorkQueue[T, R any](procs, size int, preparer func(in, out chan Work[T, 
 	}
 
 	wq.wg.Add(procs)
-	for i := 0; i < procs; i++ {
+	for range procs {
 		go func() {
 			defer wq.wg.Done()
 			preparer(wq.work, wq.done)

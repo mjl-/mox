@@ -143,7 +143,7 @@ func TestAPI(t *testing.T) {
 		testLogin("bad@bad.example", pw0, "user:loginFailed")
 	}
 	// Ensure rate limiter is triggered, also for slow tests.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		testLogin("bad@bad.example", pw0, "user:loginFailed", "user:error")
 	}
 	testLogin("bad@bad.example", pw0, "user:error")

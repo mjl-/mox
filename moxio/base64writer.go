@@ -39,10 +39,7 @@ type lineWrapper struct {
 func (lw *lineWrapper) Write(buf []byte) (int, error) {
 	wrote := 0
 	for len(buf) > 0 {
-		n := 78 - lw.n
-		if n > len(buf) {
-			n = len(buf)
-		}
+		n := min(78-lw.n, len(buf))
 		nn, err := lw.w.Write(buf[:n])
 		if nn > 0 {
 			wrote += nn

@@ -429,7 +429,7 @@ func TestFromIDIncomingDelivery(t *testing.T) {
 	tcheck(t, err, "get added hook")
 	h.URL = hs.URL
 	handler = handleError
-	for i := 0; i < len(hookIntervals); i++ {
+	for i := range hookIntervals {
 		hookDeliver(pkglog, h)
 		<-hookDeliveryResults
 		err := DB.Get(ctxbg, &h)
@@ -557,7 +557,7 @@ func TestHookListFilterSort(t *testing.T) {
 	// Descending by submitted,id.
 	l, err = HookList(ctxbg, HookFilter{}, HookSort{Field: "Submitted"})
 	tcheck(t, err, "list")
-	ll := append(append([]Hook{}, hlrev[1:]...), hl[5])
+	ll := append(slices.Clone(hlrev[1:]), hl[5])
 	tcompare(t, l, ll)
 
 	// Filter by all fields to get a single.

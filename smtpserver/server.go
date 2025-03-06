@@ -3203,7 +3203,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 			rcptDMARCMethod.Comment += "override " + strings.Join(dmarcOverrides, ",")
 		}
 		rcptAuthResults := authResults
-		rcptAuthResults.Methods = append([]message.AuthMethod{}, authResults.Methods...)
+		rcptAuthResults.Methods = slices.Clone(authResults.Methods)
 		rcptAuthResults.Methods = append(rcptAuthResults.Methods, rcptDMARCMethod)
 
 		// Prepend reason as message header, for easy viewing in mail clients.

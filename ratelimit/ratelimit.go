@@ -55,7 +55,7 @@ func (l *Limiter) checkAdd(add bool, ip net.IP, tm time.Time, n int64) bool {
 			l.WindowLimits[i].Counts = pl.Counts
 		}
 
-		for j := 0; j < 3; j++ {
+		for j := range 3 {
 			if i == 0 {
 				l.ipmasked[j] = l.maskIP(j, ip)
 			}
@@ -74,7 +74,7 @@ func (l *Limiter) checkAdd(add bool, ip net.IP, tm time.Time, n int64) bool {
 	}
 	// Finally record.
 	for _, pl := range l.WindowLimits {
-		for j := 0; j < 3; j++ {
+		for j := range 3 {
 			pl.Counts[struct {
 				Index    uint8
 				IPMasked [16]byte
@@ -90,7 +90,7 @@ func (l *Limiter) Reset(ip net.IP, tm time.Time) {
 	defer l.Unlock()
 
 	// Prepare masked ip's.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		l.ipmasked[i] = l.maskIP(i, ip)
 	}
 
@@ -100,7 +100,7 @@ func (l *Limiter) Reset(ip net.IP, tm time.Time) {
 			continue
 		}
 		var n int64
-		for j := 0; j < 3; j++ {
+		for j := range 3 {
 			k := struct {
 				Index    uint8
 				IPMasked [16]byte

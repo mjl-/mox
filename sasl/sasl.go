@@ -77,7 +77,7 @@ func (a *clientPlain) Next(fromServer []byte) (toServer []byte, last bool, rerr 
 	defer func() { a.step++ }()
 	switch a.step {
 	case 0:
-		return []byte(fmt.Sprintf("\u0000%s\u0000%s", a.Username, a.Password)), true, nil
+		return fmt.Appendf(nil, "\u0000%s\u0000%s", a.Username, a.Password), true, nil
 	default:
 		return nil, false, fmt.Errorf("invalid step %d", a.step)
 	}
@@ -189,7 +189,7 @@ func (a *clientCRAMMD5) Next(fromServer []byte) (toServer []byte, last bool, rer
 		opadh.Write(ipadh.Sum(nil))
 
 		// ../rfc/2195:88
-		return []byte(fmt.Sprintf("%s %x", a.Username, opadh.Sum(nil))), true, nil
+		return fmt.Appendf(nil, "%s %x", a.Username, opadh.Sum(nil)), true, nil
 
 	default:
 		return nil, false, fmt.Errorf("invalid step %d", a.step)

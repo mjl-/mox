@@ -27,6 +27,7 @@ import (
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxvar"
+	"slices"
 )
 
 var (
@@ -270,9 +271,7 @@ func (f *Filter) Save() error {
 		words[i] = w
 		i++
 	}
-	sort.Slice(words, func(i, j int) bool {
-		return words[i] < words[j]
-	})
+	slices.Sort(words)
 
 	f.log.Debug("inserting words in junkfilter db", slog.Any("words", len(f.changed)))
 	// start := time.Now()
@@ -336,9 +335,7 @@ func (f *Filter) Save() error {
 }
 
 func loadWords(ctx context.Context, db *bstore.DB, l []string, dst map[string]word) error {
-	sort.Slice(l, func(i, j int) bool {
-		return l[i] < l[j]
-	})
+	slices.Sort(l)
 
 	err := db.Read(ctx, func(tx *bstore.Tx) error {
 		for _, w := range l {
@@ -478,14 +475,8 @@ func (f *Filter) ClassifyWords(ctx context.Context, words map[string]struct{}) (
 		return a.Score > b.Score
 	})
 
-	nham := f.TopWords
-	if nham > len(topHam) {
-		nham = len(topHam)
-	}
-	nspam := f.TopWords
-	if nspam > len(topSpam) {
-		nspam = len(topSpam)
-	}
+	nham := min(f.TopWords, len(topHam))
+	nspam := min(f.TopWords, len(topSpam))
 	topHam = topHam[:nham]
 	topSpam = topSpam[:nspam]
 

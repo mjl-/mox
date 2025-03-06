@@ -1372,7 +1372,7 @@ func deliver(log mlog.Log, resolver dns.Resolver, m0 Msg) {
 		}
 
 		backoff = time.Duration(7*60+30+jitter.IntN(10)-5) * time.Second
-		for i := 0; i < m0.Attempts; i++ {
+		for range m0.Attempts {
 			backoff *= time.Duration(2)
 		}
 		m0.Attempts++

@@ -56,10 +56,7 @@ func (w *Writer) Write(buf []byte) (int, error) {
 	// Update w.tail after having written. Regardless of error, writers can't expect
 	// subsequent writes to work again properly anyway.
 	defer func() {
-		n := len(buf)
-		if n > 3 {
-			n = 3
-		}
+		n := min(len(buf), 3)
 		copy(w.tail[:], w.tail[n:])
 		copy(w.tail[3-n:], buf[len(buf)-n:])
 	}()

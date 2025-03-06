@@ -727,7 +727,7 @@ func TestSpam(t *testing.T) {
 		Flags:             store.Flags{Seen: true, Junk: true},
 		Size:              int64(len(deliverMessage)),
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		nm := m
 		tinsertmsg(t, ts.acc, "Inbox", &nm, deliverMessage)
 		nm = m
@@ -868,7 +868,7 @@ happens to come from forwarding mail server.
 				mailFrom = "remote@bad.example"
 			}
 
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(msgBad)), strings.NewReader(msgBad), false, false, false)
 				tcheck(t, err, "deliver message")
 			}
@@ -967,7 +967,7 @@ func TestDMARCSent(t *testing.T) {
 	}
 	// We need at least 50 ham messages for the junk filter to become significant. We
 	// offset it with negative messages for mediocre score.
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		nm := m
 		nm.Junk = true
 		tinsertmsg(t, ts.acc, "Archive", &nm, deliverMessage)

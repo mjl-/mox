@@ -31,6 +31,7 @@ import (
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/stub"
+	"slices"
 )
 
 // If set, signatures for top-level domain "localhost" are accepted.
@@ -173,7 +174,7 @@ func Sign(ctx context.Context, elog *slog.Logger, localpart smtp.Localpart, doma
 		sig.Domain = domain
 		sig.Selector = sel.Domain
 		sig.Identity = &Identity{&localpart, domain}
-		sig.SignedHeaders = append([]string{}, sel.Headers...)
+		sig.SignedHeaders = slices.Clone(sel.Headers)
 		if sel.SealHeaders {
 			// ../rfc/6376:2156
 			// Each time a header name is added to the signature, the next unused value is
@@ -839,8 +840,8 @@ func parseHeaders(br *bufio.Reader) ([]header, int, error) {
 			return nil, 0, fmt.Errorf("empty header key")
 		}
 		lkey = strings.ToLower(key)
-		value = append([]byte{}, t[1]...)
-		raw = append([]byte{}, line...)
+		value = slices.Clone(t[1])
+		raw = slices.Clone(line)
 	}
 	if key != "" {
 		l = append(l, header{key, lkey, value, raw})

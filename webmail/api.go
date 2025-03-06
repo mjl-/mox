@@ -826,10 +826,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 			for len(base64Data) > 0 {
 				line := base64Data
-				n := len(line)
-				if n > 78 {
-					n = 78
-				}
+				n := min(len(line), 78)
 				line, base64Data = base64Data[:n], base64Data[n:]
 				_, err := ap.Write(line)
 				xcheckf(ctx, err, "writing attachment")

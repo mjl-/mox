@@ -20,6 +20,7 @@ import (
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
+	"slices"
 )
 
 // todo: we should have all needed information for messageItem in store.Message (perhaps some data in message.Part) for fast access, not having to parse the on-disk message file.
@@ -139,12 +140,7 @@ func formatFirstLine(r io.Reader) (string, error) {
 		if len(l) >= 5 {
 			return false
 		}
-		for _, line := range l {
-			if line == "" {
-				return false
-			}
-		}
-		return true
+		return !slices.Contains(l, "")
 	}
 
 	result := ""
@@ -287,7 +283,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 			if mt == "MULTIPART/SIGNED" && i >= 1 {
 				continue
 			}
-			usePart(sp, i, &p, append(append([]int{}, path...), i), newParentMixed)
+			usePart(sp, i, &p, append(slices.Clone(path), i), newParentMixed)
 		}
 		switch mt {
 		case "TEXT/PLAIN", "/":
@@ -313,7 +309,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 					return
 				}
 				pm.Texts = append(pm.Texts, string(buf))
-				pm.TextPaths = append(pm.TextPaths, append([]int{}, path...))
+				pm.TextPaths = append(pm.TextPaths, slices.Clone(path))
 			}
 			if msgitem && pm.firstLine == "" {
 				pm.firstLine, rerr = formatFirstLine(p.ReaderUTF8OrBinary())
@@ -326,7 +322,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 		case "TEXT/HTML":
 			pm.HasHTML = true
 			if full && pm.HTMLPath == nil {
-				pm.HTMLPath = append([]int{}, path...)
+				pm.HTMLPath = slices.Clone(path)
 			}
 
 		default:
@@ -353,7 +349,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 							return
 						}
 						pm.Texts = append(pm.Texts, string(buf))
-						pm.TextPaths = append(pm.TextPaths, append([]int{}, path...))
+						pm.TextPaths = append(pm.TextPaths, slices.Clone(path))
 					}
 					return
 				}
@@ -365,7 +361,7 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 							return
 						}
 						pm.Texts = append(pm.Texts, string(buf))
-						pm.TextPaths = append(pm.TextPaths, append([]int{}, path...))
+						pm.TextPaths = append(pm.TextPaths, slices.Clone(path))
 					}
 					return
 				}

@@ -64,7 +64,7 @@ func (m dict) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
 		case int:
 			tokens = []xml.Token{
 				xml.StartElement{Name: xml.Name{Local: "integer"}},
-				xml.CharData([]byte(fmt.Sprintf("%d", v))),
+				xml.CharData(fmt.Appendf(nil, "%d", v)),
 				xml.EndElement{Name: xml.Name{Local: "integer"}},
 			}
 		case bool:

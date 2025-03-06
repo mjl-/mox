@@ -1223,7 +1223,7 @@ error too, for reference.
 
 	xwriteFile(prefix+".ed25519privatekey.pkcs8.pem", privKeyBufPEM, "private key")
 	xwriteFile(prefix+".certificate.pem", certBufPEM, "certificate")
-	combinedPEM := append(append([]byte{}, privKeyBufPEM...), certBufPEM...)
+	combinedPEM := slices.Concat(privKeyBufPEM, certBufPEM)
 	xwriteFile(prefix+".ed25519privatekey-certificate.pem", combinedPEM, "combined private key and certificate")
 
 	shabuf := sha256.Sum256(tlsCert.Leaf.RawSubjectPublicKeyInfo)
@@ -3229,7 +3229,7 @@ func cmdWebapi(c *cmd) {
 	t := reflect.TypeFor[webapi.Methods]()
 	methods := map[string]reflect.Type{}
 	var ml []string
-	for i := 0; i < t.NumMethod(); i++ {
+	for i := range t.NumMethod() {
 		mt := t.Method(i)
 		methods[mt.Name] = mt.Type
 		ml = append(ml, mt.Name)
@@ -3999,7 +3999,7 @@ For testing the pagination. Operates directly on queue database.
 		xcheckf(err, "removing temporary webhook after forwarding autoincrement sequence")
 		fh.ID -= int64(n)
 
-		for i := 0; i < n; i++ {
+		for i := range n {
 			t0 := now.Add(-time.Duration(i) * time.Second)
 			last := now.Add(-time.Duration(i/10) * time.Second)
 			mr := queue.MsgRetired{
@@ -4037,7 +4037,7 @@ For testing the pagination. Operates directly on queue database.
 			xcheckf(err, "inserting retired message")
 		}
 
-		for i := 0; i < n; i++ {
+		for i := range n {
 			t0 := now.Add(-time.Duration(i) * time.Second)
 			last := now.Add(-time.Duration(i/10) * time.Second)
 			var event string

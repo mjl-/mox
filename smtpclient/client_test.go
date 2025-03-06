@@ -273,7 +273,7 @@ func TestClient(t *testing.T) {
 				if n == 0 {
 					n = 1
 				}
-				for i := 0; i < n; i++ {
+				for i := range n {
 					readline("RCPT TO:")
 					resp := "250 ok"
 					if i < len(opts.resps) {
@@ -293,7 +293,7 @@ func TestClient(t *testing.T) {
 
 					readline("MAIL FROM:")
 					writeline("250 ok")
-					for i := 0; i < n; i++ {
+					for i := range n {
 						readline("RCPT TO:")
 						resp := "250 ok"
 						if i < len(opts.resps) {
@@ -366,7 +366,7 @@ func TestClient(t *testing.T) {
 		}()
 
 		var errs []error
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			err := <-result
 			if err != nil {
 				errs = append(errs, err)
@@ -907,7 +907,7 @@ func run(t *testing.T, server func(s xserver), client func(conn net.Conn)) {
 		client(clientConn)
 	}()
 	var errs []error
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		err := <-result
 		if err != nil {
 			errs = append(errs, err)

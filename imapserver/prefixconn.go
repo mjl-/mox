@@ -15,10 +15,7 @@ type prefixConn struct {
 
 func (c *prefixConn) Read(buf []byte) (int, error) {
 	if len(c.prefix) > 0 {
-		n := len(buf)
-		if n > len(c.prefix) {
-			n = len(c.prefix)
-		}
+		n := min(len(buf), len(c.prefix))
 		copy(buf[:n], c.prefix[:n])
 		c.prefix = c.prefix[n:]
 		if len(c.prefix) == 0 {

@@ -19,6 +19,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/queue"
+	"slices"
 )
 
 func tcheckf(t *testing.T, err error, format string, args ...any) {
@@ -301,7 +302,7 @@ func TestSendReports(t *testing.T) {
 			// Read message file. Also write copy to disk for inspection.
 			buf, err := io.ReadAll(&moxio.AtReader{R: msgFile})
 			tcheckf(t, err, "read report message")
-			err = os.WriteFile("../testdata/dmarcdb/data/report.eml", append(append([]byte{}, qm.MsgPrefix...), buf...), 0600)
+			err = os.WriteFile("../testdata/dmarcdb/data/report.eml", slices.Concat(qm.MsgPrefix, buf), 0600)
 			tcheckf(t, err, "write report message")
 
 			var feedback *dmarcrpt.Feedback

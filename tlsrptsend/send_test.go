@@ -20,6 +20,7 @@ import (
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/tlsrpt"
 	"github.com/mjl-/mox/tlsrptdb"
+	"slices"
 )
 
 var ctxbg = context.Background()
@@ -423,7 +424,7 @@ func TestSendReports(t *testing.T) {
 			tcheckf(t, err, "read report message")
 			p := fmt.Sprintf("../testdata/tlsrptsend/data/report%d.eml", index)
 			index++
-			err = os.WriteFile(p, append(append([]byte{}, qml[0].MsgPrefix...), buf...), 0600)
+			err = os.WriteFile(p, slices.Concat(qml[0].MsgPrefix, buf), 0600)
 			tcheckf(t, err, "write report message")
 
 			reportJSON, err := tlsrpt.ParseMessage(log.Logger, msgFile)

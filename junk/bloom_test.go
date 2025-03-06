@@ -62,26 +62,26 @@ func TestBloom(t *testing.T) {
 
 func TestBits(t *testing.T) {
 	b := &bits{width: 1, buf: []byte{0xff, 0xff}}
-	for i := 0; i < 16; i++ {
+	for range 16 {
 		if b.nextPos() != 1 {
 			t.Fatalf("pos not 1")
 		}
 	}
 	b = &bits{width: 2, buf: []byte{0xff, 0xff}}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		if b.nextPos() != 0b11 {
 			t.Fatalf("pos not 0b11")
 		}
 	}
 
 	b = &bits{width: 1, buf: []byte{0b10101010, 0b10101010}}
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		if b.nextPos() != ((i + 1) % 2) {
 			t.Fatalf("bad pos")
 		}
 	}
 	b = &bits{width: 2, buf: []byte{0b10101010, 0b10101010}}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		if b.nextPos() != 0b10 {
 			t.Fatalf("pos not 0b10")
 		}
@@ -97,7 +97,7 @@ func TestSet(t *testing.T) {
 			0b01010101,
 		},
 	}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		v := b.has(i)
 		if v != (i%2 == 0) {
 			t.Fatalf("bad has")

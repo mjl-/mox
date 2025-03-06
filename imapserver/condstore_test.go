@@ -10,6 +10,7 @@ import (
 	"github.com/mjl-/mox/imapclient"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/store"
+	"slices"
 )
 
 func TestCondstore(t *testing.T) {
@@ -577,7 +578,7 @@ func testQresync(t *testing.T, tc *testconn, clientModseq int64) {
 	}
 
 	makeUntagged := func(l ...imapclient.Untagged) []imapclient.Untagged {
-		return append(append([]imapclient.Untagged{}, baseUntagged...), l...)
+		return slices.Concat(baseUntagged, l)
 	}
 
 	// uidvalidity 1, highest known modseq 1, sends full current state.

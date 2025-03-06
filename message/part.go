@@ -27,6 +27,7 @@ import (
 
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
+	"slices"
 )
 
 // Pedantic enables stricter parsing.
@@ -848,10 +849,8 @@ func (b *bufAt) maxLineLength() int {
 
 // ensure makes sure b.nbuf is up to maxLineLength, unless eof is encountered.
 func (b *bufAt) ensure() error {
-	for _, c := range b.buf[:b.nbuf] {
-		if c == '\n' {
-			return nil
-		}
+	if slices.Contains(b.buf[:b.nbuf], '\n') {
+		return nil
 	}
 	if b.scratch == nil {
 		b.scratch = make([]byte, b.maxLineLength())
@@ -1014,10 +1013,7 @@ func (b *boundReader) Read(buf []byte) (count int, rerr error) {
 	for {
 		// Read data from earlier line.
 		if b.nbuf > 0 {
-			n := b.nbuf
-			if n > len(buf) {
-				n = len(buf)
-			}
+			n := min(b.nbuf, len(buf))
 			copy(buf, b.buf[:n])
 			copy(b.buf, b.buf[n:])
 			buf = buf[n:]
@@ -1046,10 +1042,7 @@ func (b *boundReader) Read(buf []byte) (count int, rerr error) {
 			return count, err
 		}
 		if len(b.crlf) > 0 {
-			n := len(b.crlf)
-			if n > len(buf) {
-				n = len(buf)
-			}
+			n := min(len(b.crlf), len(buf))
 			copy(buf, b.crlf[:n])
 			count += n
 			buf = buf[n:]

@@ -657,7 +657,7 @@ EOF
 			}
 		}
 		r.IPRev.IPNames = map[string][]string{}
-		for i := 0; i < n; i++ {
+		for range n {
 			lr := <-results
 			host, addrs, ip, err := lr.Host, lr.Addrs, lr.IP, lr.Err
 			if err != nil {
@@ -1598,9 +1598,7 @@ func (Admin) DomainLocalparts(ctx context.Context, domain string) (localpartAcco
 // Accounts returns the names of all configured and all disabled accounts.
 func (Admin) Accounts(ctx context.Context) (all, disabled []string) {
 	all, disabled = mox.Conf.AccountsDisabled()
-	sort.Slice(all, func(i, j int) bool {
-		return all[i] < all[j]
-	})
+	slices.Sort(all)
 	return
 }
 
@@ -1862,7 +1860,7 @@ func (Admin) DNSBLStatus(ctx context.Context) (results map[string]map[string]str
 func dnsblsStatus(ctx context.Context, log mlog.Log, resolver dns.Resolver) (results map[string]map[string]string, using, monitoring []dns.Domain) {
 	// todo: check health before using dnsbl?
 	using = mox.Conf.Static.Listeners["public"].SMTP.DNSBLZones
-	zones := append([]dns.Domain{}, using...)
+	zones := slices.Clone(using)
 	conf := mox.Conf.DynamicConfig()
 	for _, zone := range conf.MonitorDNSBLZones {
 		if !slices.Contains(zones, zone) {

@@ -202,7 +202,7 @@ func init() {
 	var methods []string
 	mt := reflect.TypeFor[webapi.Methods]()
 	n := mt.NumMethod()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		methods = append(methods, mt.Method(i).Name)
 	}
 	docsIndexTmpl := htmltemplate.Must(htmltemplate.New("index").Parse(`<!doctype html>
@@ -877,10 +877,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 
 		for len(base64Data) > 0 {
 			line := base64Data
-			n := len(line)
-			if n > 78 {
-				n = 78
-			}
+			n := min(len(line), 78)
 			line, base64Data = base64Data[:n], base64Data[n:]
 			_, err := p.Write([]byte(line))
 			xcheckf(err, "writing attachment")

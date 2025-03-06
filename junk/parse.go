@@ -253,10 +253,7 @@ func (r *htmlTextReader) Read(buf []byte) (n int, err error) {
 	// todo: deal with inline elements? they shouldn't cause a word break.
 
 	give := func(nbuf []byte) (int, error) {
-		n := len(buf)
-		if n > len(nbuf) {
-			n = len(nbuf)
-		}
+		n := min(len(buf), len(nbuf))
 		copy(buf, nbuf[:n])
 		nbuf = nbuf[n:]
 		if len(nbuf) < cap(r.buf) {

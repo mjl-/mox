@@ -3198,7 +3198,7 @@ func RemoveKeywords(l, remove []string) ([]string, bool) {
 	for _, k := range remove {
 		if i := slices.Index(l, k); i >= 0 {
 			if !copied {
-				l = append([]string{}, l...)
+				l = slices.Clone(l)
 				copied = true
 			}
 			copy(l[i:], l[i+1:])
@@ -3219,7 +3219,7 @@ func MergeKeywords(l, add []string) ([]string, bool) {
 	for _, k := range add {
 		if !slices.Contains(l, k) {
 			if !copied {
-				l = append([]string{}, l...)
+				l = slices.Clone(l)
 				copied = true
 			}
 			l = append(l, k)

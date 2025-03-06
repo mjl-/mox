@@ -14,6 +14,7 @@ import (
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/smtp"
+	"slices"
 )
 
 // Parse reads a DSN message.
@@ -217,15 +218,9 @@ func parseRecipientHeader(mr *textproto.Reader, utf8 bool) (Recipient, error) {
 		case "Action":
 			a := Action(strings.ToLower(v))
 			actions := []Action{Failed, Delayed, Delivered, Relayed, Expanded}
-			var ok bool
-			for _, x := range actions {
-				if a == x {
-					ok = true
-					r.Action = a
-					break
-				}
-			}
-			if !ok {
+			if slices.Contains(actions, a) {
+				r.Action = a
+			} else {
 				err = fmt.Errorf("unrecognized action %q", v)
 			}
 		case "Status":

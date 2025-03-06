@@ -1243,7 +1243,7 @@ func (c *Client) DeliverMultiple(ctx context.Context, mailFrom string, rcptTo []
 		// Read responses to RCPT TO.
 		rcptResps = make([]Response, len(rcptTo))
 		nok := 0
-		for i := 0; i < len(rcptTo); i++ {
+		for i := range rcptTo {
 			code, secode, firstLine, moreLines, err := c.read()
 			// 552 should be treated as temporary historically, ../rfc/5321:3576
 			permanent := code/100 == 5 && code != smtp.C552MailboxFull

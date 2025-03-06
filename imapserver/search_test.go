@@ -66,7 +66,7 @@ func TestSearch(t *testing.T) {
 	// Add 5 and delete first 4 messages. So UIDs start at 5.
 	received := time.Date(2020, time.January, 1, 10, 0, 0, 0, time.UTC)
 	saveDate := time.Now()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		tc.client.Append("inbox", makeAppendTime(exampleMsg, received))
 	}
 	tc.client.StoreFlagsSet("1:4", true, `\Deleted`)
@@ -394,7 +394,7 @@ func TestSearch(t *testing.T) {
 	// More than 1mb total for literals.
 	_, err = fmt.Fprintf(tc.client, "x0 uid search")
 	tcheck(t, err, "write start of uit search")
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		writeTextLit(100*1024, true)
 	}
 	writeTextLit(1, false)
@@ -402,7 +402,7 @@ func TestSearch(t *testing.T) {
 	// More than 1000 literals.
 	_, err = fmt.Fprintf(tc.client, "x0 uid search")
 	tcheck(t, err, "write start of uit search")
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		writeTextLit(1, true)
 	}
 	writeTextLit(1, false)

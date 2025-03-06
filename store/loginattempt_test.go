@@ -99,7 +99,7 @@ func TestLoginAttempt(t *testing.T) {
 
 	// Insert 3 failing entries. Then add another and see we still have 3.
 	loginAttemptsMaxPerAccount = 3
-	for i := 0; i < loginAttemptsMaxPerAccount; i++ {
+	for i := range loginAttemptsMaxPerAccount {
 		a := a2
 		a.UserAgent = fmt.Sprintf("%d", i)
 		LoginAttemptAdd(ctxbg, pkglog, a)

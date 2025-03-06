@@ -28,6 +28,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"slices"
 )
 
 var noctx = context.Background()
@@ -452,7 +453,7 @@ func stringValue(iscid, nested bool, v any) string {
 		}
 		b := &strings.Builder{}
 		b.WriteString("[")
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if i > 0 {
 				b.WriteString(";")
 			}
@@ -469,10 +470,10 @@ func stringValue(iscid, nested bool, v any) string {
 	// We first try making a string without recursing into structs/pointers/interfaces,
 	// but will try again with those fields if we otherwise would otherwise log an
 	// empty string.
-	for j := 0; j < 2; j++ {
+	for j := range 2 {
 		first := true
 		b := &strings.Builder{}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			fv := rv.Field(i)
 			if !t.Field(i).IsExported() {
 				continue
@@ -636,7 +637,7 @@ func (w *errWriter) Write(buf []byte) (int, error) {
 func (h *handler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	nh := *h
 	if h.Attrs != nil {
-		nh.Attrs = append([]slog.Attr{}, h.Attrs...)
+		nh.Attrs = slices.Clone(h.Attrs)
 	}
 	nh.Attrs = append(nh.Attrs, attrs...)
 	return &nh
@@ -654,7 +655,7 @@ func (h *handler) WithGroup(name string) slog.Handler {
 func (h *handler) WithPkg(pkg string) *handler {
 	nh := *h
 	if nh.Pkgs != nil {
-		nh.Pkgs = append([]string{}, nh.Pkgs...)
+		nh.Pkgs = slices.Clone(nh.Pkgs)
 	}
 	nh.Pkgs = append(nh.Pkgs, pkg)
 	return &nh

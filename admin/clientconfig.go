@@ -9,6 +9,7 @@ import (
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mox-"
+	"slices"
 )
 
 type TLSMode uint8
@@ -130,9 +131,7 @@ func ClientConfigsDomain(d dns.Domain) (ClientConfigs, error) {
 	for name := range mox.Conf.Static.Listeners {
 		listeners = append(listeners, name)
 	}
-	sort.Slice(listeners, func(i, j int) bool {
-		return listeners[i] < listeners[j]
-	})
+	slices.Sort(listeners)
 
 	note := func(tls bool, requiretls bool) string {
 		if !tls {

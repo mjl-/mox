@@ -104,7 +104,7 @@ func TestGatherDestinations(t *testing.T) {
 
 	var zerodom dns.Domain
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		authic := i == 1
 		resolver.AllAuthentic = authic
 		// Basic with simple MX.
@@ -187,7 +187,7 @@ func TestGatherIPs(t *testing.T) {
 		return r
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		authic := i == 1
 		resolver.AllAuthentic = authic
 

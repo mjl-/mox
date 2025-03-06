@@ -9,7 +9,7 @@ import (
 func FillNil(rv reflect.Value) (nv reflect.Value, changed bool) {
 	switch rv.Kind() {
 	case reflect.Struct:
-		for i := 0; i < rv.NumField(); i++ {
+		for i := range rv.NumField() {
 			if !rv.Type().Field(i).IsExported() {
 				continue
 			}
@@ -18,7 +18,7 @@ func FillNil(rv reflect.Value) (nv reflect.Value, changed bool) {
 			if ch && !rv.CanSet() {
 				// Make struct settable.
 				nrv := reflect.New(rv.Type()).Elem()
-				for j := 0; j < rv.NumField(); j++ {
+				for j := range rv.NumField() {
 					nrv.Field(j).Set(rv.Field(j))
 				}
 				rv = nrv
@@ -34,7 +34,7 @@ func FillNil(rv reflect.Value) (nv reflect.Value, changed bool) {
 			return reflect.MakeSlice(rv.Type(), 0, 0), true
 		}
 		n := rv.Len()
-		for i := 0; i < n; i++ {
+		for i := range n {
 			rve := rv.Index(i)
 			nrv, ch := FillNil(rve)
 			if ch {
@@ -90,7 +90,7 @@ func FillExample(seen []reflect.Type, rv reflect.Value) reflect.Value {
 
 	switch rv.Kind() {
 	case reflect.Struct:
-		for i := 0; i < rv.NumField(); i++ {
+		for i := range rv.NumField() {
 			if !rvt.Field(i).IsExported() {
 				continue
 			}

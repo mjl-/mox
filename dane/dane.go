@@ -65,6 +65,7 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/stub"
+	"slices"
 )
 
 var (
@@ -214,12 +215,9 @@ func Dial(ctx context.Context, elog *slog.Logger, resolver dns.Resolver, network
 	if allowedUsages != nil {
 		o := 0
 		for _, r := range records {
-			for _, usage := range allowedUsages {
-				if r.Usage == usage {
-					records[o] = r
-					o++
-					break
-				}
+			if slices.Contains(allowedUsages, r.Usage) {
+				records[o] = r
+				o++
 			}
 		}
 		records = records[:o]

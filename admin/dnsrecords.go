@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net/url"
-	"sort"
 	"strings"
 
 	"github.com/mjl-/adns"
@@ -21,6 +20,7 @@ import (
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/spf"
 	"github.com/mjl-/mox/tlsrpt"
+	"slices"
 )
 
 // todo: find a way to automatically create the dns records as it would greatly simplify setting up email for a domain. we could also dynamically make changes, e.g. providing grace periods after disabling a dkim key, only automatically removing the dkim dns key after a few days. but this requires some kind of api and authentication to the dns server. there doesn't appear to be a single commonly used api for dns management. each of the numerous cloud providers have their own APIs and rather large SKDs to use them. we don't want to link all of them in.
@@ -135,9 +135,7 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 	for name := range domConf.DKIM.Selectors {
 		selectors = append(selectors, name)
 	}
-	sort.Slice(selectors, func(i, j int) bool {
-		return selectors[i] < selectors[j]
-	})
+	slices.Sort(selectors)
 	for _, name := range selectors {
 		sel := domConf.DKIM.Selectors[name]
 		dkimr := dkim.Record{

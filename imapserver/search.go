@@ -11,6 +11,7 @@ import (
 
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/store"
+	"slices"
 )
 
 // Search returns messages matching criteria specified in parameters.
@@ -454,12 +455,7 @@ func (s *search) match0(sk searchKey) bool {
 		case "$mdnsent":
 			return s.m.MDNSent
 		default:
-			for _, k := range s.m.Keywords {
-				if k == kw {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(s.m.Keywords, kw)
 		}
 	case "SEEN":
 		return s.m.Seen
@@ -483,12 +479,7 @@ func (s *search) match0(sk searchKey) bool {
 		case "$mdnsent":
 			return !s.m.MDNSent
 		default:
-			for _, k := range s.m.Keywords {
-				if k == kw {
-					return false
-				}
-			}
-			return true
+			return !slices.Contains(s.m.Keywords, kw)
 		}
 	case "UNSEEN":
 		return !s.m.Seen

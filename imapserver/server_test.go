@@ -25,6 +25,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/store"
+	"slices"
 )
 
 var ctxbg = context.Background()
@@ -210,7 +211,7 @@ func (tc *testconn) xuntagged(exps ...imapclient.Untagged) {
 
 func (tc *testconn) xuntaggedOpt(all bool, exps ...imapclient.Untagged) {
 	tc.t.Helper()
-	last := append([]imapclient.Untagged{}, tc.lastUntagged...)
+	last := slices.Clone(tc.lastUntagged)
 	var mismatch any
 next:
 	for ei, exp := range exps {
@@ -572,13 +573,13 @@ func TestState(t *testing.T) {
 	defer tc.close()
 
 	// Not authenticated, lots of commands not allowed.
-	for _, cmd := range append(append([]string{}, authenticatedOrSelected...), selected...) {
+	for _, cmd := range slices.Concat(authenticatedOrSelected, selected) {
 		tc.transactf("no", "%s", cmd)
 	}
 
 	// Some commands not allowed when authenticated.
 	tc.transactf("ok", `login mjl@mox.example "%s"`, password0)
-	for _, cmd := range append(append([]string{}, notAuthenticated...), selected...) {
+	for _, cmd := range slices.Concat(notAuthenticated, selected) {
 		tc.transactf("no", "%s", cmd)
 	}
 

@@ -15,7 +15,7 @@ func TestBufpool(t *testing.T) {
 	bp := NewBufpool(1, 8)
 	a := bp.get()
 	b := bp.get()
-	for i := 0; i < len(a); i++ {
+	for i := range a {
 		a[i] = 1
 	}
 	log := mlog.New("moxio", nil)

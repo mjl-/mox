@@ -806,7 +806,7 @@ func expandDomainSpec(ctx context.Context, resolver dns.Resolver, domainSpec str
 			if reverse {
 				nt := len(t)
 				h := nt / 2
-				for i := 0; i < h; i++ {
+				for i := range h {
 					t[i], t[nt-1-i] = t[nt-1-i], t[i]
 				}
 			}

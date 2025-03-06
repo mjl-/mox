@@ -310,10 +310,10 @@ func TestQueue(t *testing.T) {
 			writeline("250-" + ext)
 		}
 		writeline("250 pipelining")
-		for tx := 0; tx < ntx; tx++ {
+		for range ntx {
 			readline("mail")
 			writeline("250 ok")
-			for i := 0; i < rcpts; i++ {
+			for i := range rcpts {
 				readline("rcpt")
 				if onercpt && i > 0 {
 					writeline("552 ok")
@@ -462,7 +462,7 @@ func TestQueue(t *testing.T) {
 		fmt.Fprintf(server, "235 2.7.0 auth ok\r\n")
 		br.ReadString('\n') // Should be MAIL FROM.
 		fmt.Fprintf(server, "250 ok\r\n")
-		for i := 0; i < nrcpt; i++ {
+		for range nrcpt {
 			br.ReadString('\n') // Should be RCPT TO.
 			fmt.Fprintf(server, "250 ok\r\n")
 		}
@@ -520,7 +520,7 @@ func TestQueue(t *testing.T) {
 
 		// Wait for all results.
 		timer.Reset(time.Second)
-		for i := 0; i < nresults; i++ {
+		for range nresults {
 			select {
 			case <-deliveryResults:
 			case <-timer.C:
@@ -1331,7 +1331,7 @@ func TestListFilterSort(t *testing.T) {
 	// Descending by queued,id.
 	l, err = List(ctxbg, Filter{}, Sort{Field: "Queued"})
 	tcheck(t, err, "list messages")
-	ql := append(append([]Msg{}, qmlrev[1:]...), qml[5])
+	ql := append(slices.Clone(qmlrev[1:]), qml[5])
 	tcompare(t, l, ql)
 
 	// Filter by all fields to get a single.

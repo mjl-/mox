@@ -2760,9 +2760,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 		// Now that we have all vanished UIDs, send them over compactly.
 		if len(vanishedUIDs) > 0 {
 			l := maps.Keys(vanishedUIDs)
-			sort.Slice(l, func(i, j int) bool {
-				return l[i] < l[j]
-			})
+			slices.Sort(l)
 			// ../rfc/7162:1985
 			for _, s := range compactUIDSet(l).Strings(4*1024 - 32) {
 				c.bwritelinef("* VANISHED (EARLIER) %s", s)
@@ -3913,9 +3911,7 @@ func (c *conn) gatherCopyMoveUIDs(isUID bool, nums numSet) ([]store.UID, []any) 
 	// response and interpret it differently than we intended.
 	// ../rfc/9051:5072
 	uids := c.xnumSetUIDs(isUID, nums)
-	sort.Slice(uids, func(i, j int) bool {
-		return uids[i] < uids[j]
-	})
+	slices.Sort(uids)
 	uidargs := make([]any, len(uids))
 	for i, uid := range uids {
 		uidargs[i] = uid
@@ -4200,7 +4196,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 	c.bwritelinef("* OK [COPYUID %d %s %s] moved", mbDst.UIDValidity, compactUIDSet(uids).String(), newUIDs.String())
 	qresync := c.enabled[capQresync]
 	var vanishedUIDs numSet
-	for i := 0; i < len(uids); i++ {
+	for i := range uids {
 		seq := c.xsequence(uids[i])
 		c.sequenceRemove(seq, uids[i])
 		if qresync {
@@ -4452,7 +4448,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 
 				origFlags := m.Flags
 				m.Flags = m.Flags.Set(mask, flags)
-				oldKeywords := append([]string{}, m.Keywords...)
+				oldKeywords := slices.Clone(m.Keywords)
 				if minus {
 					m.Keywords, _ = store.RemoveKeywords(m.Keywords, keywords)
 				} else if plus {
@@ -4463,7 +4459,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 
 				keywordsChanged := func() bool {
 					sort.Strings(oldKeywords)
-					n := append([]string{}, m.Keywords...)
+					n := slices.Clone(m.Keywords)
 					sort.Strings(n)
 					return !slices.Equal(oldKeywords, n)
 				}
@@ -4581,9 +4577,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 		}
 	}
 
-	sort.Slice(mnums, func(i, j int) bool {
-		return mnums[i] < mnums[j]
-	})
+	slices.Sort(mnums)
 	set := compactUIDSet(mnums)
 	// ../rfc/7162:2506
 	c.writeresultf("%s OK [MODIFIED %s] conditional store did not modify all", tag, set.String())

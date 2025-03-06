@@ -99,7 +99,7 @@ func TestView(t *testing.T) {
 
 	// Token
 	tokens := []string{}
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		tokens = append(tokens, api.Token(ctx))
 	}
 	// Only last 10 tokens are still valid and around, checked below.

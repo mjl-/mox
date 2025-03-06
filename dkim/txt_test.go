@@ -32,7 +32,7 @@ func TestParseRecord(t *testing.T) {
 		}
 		if r != nil {
 			pk := r.Pubkey
-			for i := 0; i < 2; i++ {
+			for range 2 {
 				ntxt, err := r.Record()
 				if err != nil {
 					t.Fatalf("making record: %v", err)

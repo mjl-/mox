@@ -25,7 +25,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -199,9 +198,7 @@ func (c *Config) Domains() (l []string) {
 			l = append(l, name)
 		}
 	})
-	sort.Slice(l, func(i, j int) bool {
-		return l[i] < l[j]
-	})
+	slices.Sort(l)
 	return l
 }
 
