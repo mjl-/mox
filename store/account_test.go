@@ -312,3 +312,90 @@ test
 
 	// todo: test the SMTPMailFrom and VerifiedDomains rule.
 }
+
+// Check that opening an account forwards the Message.ID used for new additions if
+// message files already exist in the file system.
+func TestNextMessageID(t *testing.T) {
+	log := mlog.New("store", nil)
+	os.RemoveAll("../testdata/store/data")
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
+	mox.MustLoadConfig(true, false)
+
+	// Ensure account exists.
+	acc, err := OpenAccount(log, "mjl", false)
+	tcheck(t, err, "open account")
+	err = acc.Close()
+	tcheck(t, err, "closing account")
+	acc = nil
+
+	// Create file on disk to occupy the first Message.ID that would otherwise be used for deliveries..
+	msgData := []byte("a: b\r\n\r\ntest\r\n")
+	msgDir := filepath.FromSlash("../testdata/store/data/accounts/mjl/msg")
+	os.MkdirAll(filepath.Join(msgDir, "a"), 0700)
+	msgPath := filepath.Join(msgDir, "a", "1")
+	err = os.WriteFile(msgPath, msgData, 0700)
+	tcheck(t, err, "write message file")
+
+	msgPathBogus := filepath.Join(msgDir, "a", "bogus")
+	err = os.WriteFile(msgPathBogus, []byte("test"), 0700)
+	msgPathBadID := filepath.Join(msgDir, "a", "10000") // Out of range.
+	err = os.WriteFile(msgPathBadID, []byte("test"), 0700)
+
+	// Open account. This should increase the next message ID.
+	acc, err = OpenAccount(log, "mjl", false)
+	tcheck(t, err, "open account")
+	defer Switchboard()()
+
+	// Deliver a message. It should get ID 2.
+	mf, err := CreateMessageTemp(log, "account-test")
+	tcheck(t, err, "creating temp message file")
+	_, err = mf.Write(msgData)
+	tcheck(t, err, "write file")
+	defer CloseRemoveTempFile(log, mf, "temp message file")
+	m := Message{
+		Size: int64(len(msgData)),
+	}
+	err = acc.DeliverMailbox(log, "Inbox", &m, mf)
+	tcheck(t, err, "deliver mailbox")
+	if m.ID != 2 {
+		t.Fatalf("got message id %d, expected 2", m.ID)
+	}
+
+	// Ensure account consistency check won't complain.
+	err = os.Remove(msgPath)
+	tcheck(t, err, "removing message path")
+	err = os.Remove(msgPathBogus)
+	tcheck(t, err, "removing message path")
+	err = os.Remove(msgPathBadID)
+	tcheck(t, err, "removing message path")
+
+	err = acc.Close()
+	tcheck(t, err, "closing account")
+
+	// Try again, but also create next message directory, but no file.
+	os.MkdirAll(filepath.Join(msgDir, "b"), 0700)
+	os.MkdirAll(filepath.Join(msgDir, "d"), 0700) // Not used.
+
+	// Open account again, increasing next message ID.
+	acc, err = OpenAccount(log, "mjl", false)
+	tcheck(t, err, "open account")
+
+	// Deliver a message. It should get ID 8*1024+1.
+	mf, err = CreateMessageTemp(log, "account-test")
+	tcheck(t, err, "creating temp message file")
+	_, err = mf.Write(msgData)
+	tcheck(t, err, "write file")
+	defer CloseRemoveTempFile(log, mf, "temp message file")
+	m = Message{
+		Size: int64(len(msgData)),
+	}
+	err = acc.DeliverMailbox(log, "Inbox", &m, mf)
+	tcheck(t, err, "deliver mailbox")
+	if m.ID != 8*1024+1 {
+		t.Fatalf("got message id %d, expected 8*1024+1", m.ID)
+	}
+
+	err = acc.Close()
+	tcheck(t, err, "closing account")
+	acc.WaitClosed()
+}

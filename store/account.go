@@ -1081,7 +1081,9 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 	}
 
 	// Ensure singletons are present. Mailbox counts and total message size, Settings.
-	// Process pending MessageErase records.
+	// Process pending MessageErase records. Check that next the message ID assigned by
+	// the database does not already have a file on disk, or increase the sequence so
+	// it doesn't.
 	var mentioned bool
 	err = db.Write(context.TODO(), func(tx *bstore.Tx) error {
 		if tx.Get(&Settings{ID: 1}) == bstore.ErrAbsent {
@@ -1163,6 +1165,77 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 			if err := tx.Update(&du); err != nil {
 				return fmt.Errorf("saving disk usage after erasing messages: %w", err)
 			}
+		}
+
+		// Ensure the message directories don't have a higher message ID than occurs in our
+		// database. If so, increase the next ID used for inserting a message to prevent
+		// clash during delivery.
+		last, err := bstore.QueryTx[Message](tx).SortDesc("ID").Limit(1).Get()
+		if err != nil && err != bstore.ErrAbsent {
+			return fmt.Errorf("querying last message: %v", err)
+		}
+
+		// We look in the directory where the message is stored (the id can be 0, which is fine).
+		maxDBID := last.ID
+		p := acc.MessagePath(maxDBID)
+		dir := filepath.Dir(p)
+		maxFSID := maxDBID
+		// We also try looking for the next directories that would be created for messages,
+		// until one doesn't exist anymore. We never delete these directories.
+		for {
+			np := acc.MessagePath(maxFSID + msgFilesPerDir)
+			ndir := filepath.Dir(np)
+			if _, err := os.Stat(ndir); err == nil {
+				maxFSID = (maxFSID + msgFilesPerDir) &^ (msgFilesPerDir - 1) // First ID for dir.
+				dir = ndir
+			} else if errors.Is(err, fs.ErrNotExist) {
+				break
+			} else {
+				return fmt.Errorf("stat next message directory %q: %v", ndir, err)
+			}
+		}
+		// Find highest numbered file within the directory.
+		entries, err := os.ReadDir(dir)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("read message directory %q: %v", dir, err)
+		}
+		dirFirstID := maxFSID &^ (msgFilesPerDir - 1)
+		for _, e := range entries {
+			id, err := strconv.ParseInt(e.Name(), 10, 64)
+			if err == nil && (id < dirFirstID || id >= dirFirstID+msgFilesPerDir) {
+				err = fmt.Errorf("directory %s has message id %d outside of range [%d - %d), ignoring", dir, id, dirFirstID, dirFirstID+msgFilesPerDir)
+			}
+			if err != nil {
+				p := filepath.Join(dir, e.Name())
+				log.Errorx("unrecognized file in message directory, parsing filename as number", err, slog.String("path", p))
+				maxFSID = max(maxFSID, id)
+			}
+		}
+		// Warn if we need to increase the message ID in the database.
+		var mailboxID int64
+		if maxFSID > maxDBID {
+			log.Warn("unexpected message file with higher message id than highest id in database, moving database id sequence forward to prevent clashes during future deliveries", slog.Int64("maxdbmsgid", maxDBID), slog.Int64("maxfilemsgid", maxFSID))
+
+			mb, err := bstore.QueryTx[Mailbox](tx).Limit(1).Get()
+			if err != nil {
+				return fmt.Errorf("get a mailbox: %v", err)
+			}
+			mailboxID = mb.ID
+		}
+		for maxFSID > maxDBID {
+			// Set fields that must be non-zero.
+			m := Message{
+				UID:       ^UID(0),
+				MailboxID: mailboxID,
+			}
+			// Insert and delete to increase the sequence, silly but effective.
+			if err := tx.Insert(&m); err != nil {
+				return fmt.Errorf("inserting message to increase id: %v", err)
+			}
+			if err := tx.Delete(&m); err != nil {
+				return fmt.Errorf("deleting message after increasing id: %v", err)
+			}
+			maxDBID = m.ID
 		}
 
 		return nil
@@ -3053,6 +3126,7 @@ func OpenEmail(log mlog.Log, email string, checkLoginDisabled bool) (*Account, s
 
 // 64 characters, must be power of 2 for MessagePath
 const msgDirChars = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-_"
+const msgFilesPerDir = 8 * 1024
 
 // MessagePath returns the filename of the on-disk filename, relative to the
 // containing directory such as <account>/msg or queue.
