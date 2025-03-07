@@ -3052,12 +3052,12 @@ func manageAuthCache() {
 // The email address may contain a catchall separator.
 // For invalid credentials, a nil account is returned, but accName may be
 // non-empty.
-func OpenEmailAuth(log mlog.Log, email string, password string, checkLoginDisabled bool) (acc *Account, accName string, rerr error) {
+func OpenEmailAuth(log mlog.Log, email string, password string, checkLoginDisabled bool) (racc *Account, raccName string, rerr error) {
 	// We check for LoginDisabled after verifying the password. Otherwise users can get
 	// messages about the account being disabled without knowing the password.
-	acc, accName, _, rerr = OpenEmail(log, email, false)
-	if rerr != nil {
-		return
+	acc, accName, _, err := OpenEmail(log, email, false)
+	if err != nil {
+		return nil, "", err
 	}
 
 	defer func() {
@@ -3068,38 +3068,38 @@ func OpenEmailAuth(log mlog.Log, email string, password string, checkLoginDisabl
 		}
 	}()
 
-	password, err := precis.OpaqueString.String(password)
+	password, err = precis.OpaqueString.String(password)
 	if err != nil {
-		return nil, accName, ErrUnknownCredentials
+		return nil, "", ErrUnknownCredentials
 	}
 
 	pw, err := bstore.QueryDB[Password](context.TODO(), acc.DB).Get()
 	if err != nil {
 		if err == bstore.ErrAbsent {
-			return acc, accName, ErrUnknownCredentials
+			return nil, "", ErrUnknownCredentials
 		}
-		return acc, accName, fmt.Errorf("looking up password: %v", err)
+		return nil, "", fmt.Errorf("looking up password: %v", err)
 	}
 	authCache.Lock()
 	ok := len(password) >= 8 && authCache.success[authKey{email, pw.Hash}] == password
 	authCache.Unlock()
 	if !ok {
 		if err := bcrypt.CompareHashAndPassword([]byte(pw.Hash), []byte(password)); err != nil {
-			return acc, accName, ErrUnknownCredentials
+			return nil, "", ErrUnknownCredentials
 		}
 	}
 	if checkLoginDisabled {
 		conf, aok := acc.Conf()
 		if !aok {
-			return acc, accName, fmt.Errorf("cannot find config for account")
+			return nil, "", fmt.Errorf("cannot find config for account")
 		} else if conf.LoginDisabled != "" {
-			return acc, accName, fmt.Errorf("%w: %s", ErrLoginDisabled, conf.LoginDisabled)
+			return nil, "", fmt.Errorf("%w: %s", ErrLoginDisabled, conf.LoginDisabled)
 		}
 	}
 	authCache.Lock()
 	authCache.success[authKey{email, pw.Hash}] = password
 	authCache.Unlock()
-	return
+	return acc, accName, nil
 }
 
 // OpenEmail opens an account given an email address.
