@@ -298,7 +298,7 @@ var api;
 		"AutoconfCheckResult": { "Name": "AutoconfCheckResult", "Docs": "", "Fields": [{ "Name": "ClientSettingsDomainIPs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"AutodiscoverCheckResult": { "Name": "AutodiscoverCheckResult", "Docs": "", "Fields": [{ "Name": "Records", "Docs": "", "Typewords": ["[]", "AutodiscoverSRV"] }, { "Name": "Errors", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Warnings", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "Instructions", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"AutodiscoverSRV": { "Name": "AutodiscoverSRV", "Docs": "", "Fields": [{ "Name": "Target", "Docs": "", "Typewords": ["string"] }, { "Name": "Port", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Priority", "Docs": "", "Typewords": ["uint16"] }, { "Name": "Weight", "Docs": "", "Typewords": ["uint16"] }, { "Name": "IPs", "Docs": "", "Typewords": ["[]", "string"] }] },
-		"ConfigDomain": { "Name": "ConfigDomain", "Docs": "", "Fields": [{ "Name": "Disabled", "Docs": "", "Typewords": ["bool"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "ClientSettingsDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }, { "Name": "DKIM", "Docs": "", "Typewords": ["DKIM"] }, { "Name": "DMARC", "Docs": "", "Typewords": ["nullable", "DMARC"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["nullable", "MTASTS"] }, { "Name": "TLSRPT", "Docs": "", "Typewords": ["nullable", "TLSRPT"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["{}", "Alias"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }] },
+		"ConfigDomain": { "Name": "ConfigDomain", "Docs": "", "Fields": [{ "Name": "Disabled", "Docs": "", "Typewords": ["bool"] }, { "Name": "Description", "Docs": "", "Typewords": ["string"] }, { "Name": "ClientSettingsDomain", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparator", "Docs": "", "Typewords": ["string"] }, { "Name": "LocalpartCatchallSeparators", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "LocalpartCaseSensitive", "Docs": "", "Typewords": ["bool"] }, { "Name": "DKIM", "Docs": "", "Typewords": ["DKIM"] }, { "Name": "DMARC", "Docs": "", "Typewords": ["nullable", "DMARC"] }, { "Name": "MTASTS", "Docs": "", "Typewords": ["nullable", "MTASTS"] }, { "Name": "TLSRPT", "Docs": "", "Typewords": ["nullable", "TLSRPT"] }, { "Name": "Routes", "Docs": "", "Typewords": ["[]", "Route"] }, { "Name": "Aliases", "Docs": "", "Typewords": ["{}", "Alias"] }, { "Name": "Domain", "Docs": "", "Typewords": ["Domain"] }, { "Name": "LocalpartCatchallSeparatorsEffective", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"DKIM": { "Name": "DKIM", "Docs": "", "Fields": [{ "Name": "Selectors", "Docs": "", "Typewords": ["{}", "Selector"] }, { "Name": "Sign", "Docs": "", "Typewords": ["[]", "string"] }] },
 		"Selector": { "Name": "Selector", "Docs": "", "Fields": [{ "Name": "Hash", "Docs": "", "Typewords": ["string"] }, { "Name": "HashEffective", "Docs": "", "Typewords": ["string"] }, { "Name": "Canonicalization", "Docs": "", "Typewords": ["Canonicalization"] }, { "Name": "Headers", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "HeadersEffective", "Docs": "", "Typewords": ["[]", "string"] }, { "Name": "DontSealHeaders", "Docs": "", "Typewords": ["bool"] }, { "Name": "Expiration", "Docs": "", "Typewords": ["string"] }, { "Name": "PrivateKeyFile", "Docs": "", "Typewords": ["string"] }, { "Name": "Algorithm", "Docs": "", "Typewords": ["string"] }] },
 		"Canonicalization": { "Name": "Canonicalization", "Docs": "", "Fields": [{ "Name": "HeaderRelaxed", "Docs": "", "Typewords": ["bool"] }, { "Name": "BodyRelaxed", "Docs": "", "Typewords": ["bool"] }] },
@@ -1220,11 +1220,11 @@ var api;
 		}
 		// DomainLocalpartConfigSave saves the localpart catchall and case-sensitive
 		// settings for a domain.
-		async DomainLocalpartConfigSave(domainName, localpartCatchallSeparator, localpartCaseSensitive) {
+		async DomainLocalpartConfigSave(domainName, localpartCatchallSeparators, localpartCaseSensitive) {
 			const fn = "DomainLocalpartConfigSave";
-			const paramTypes = [["string"], ["string"], ["bool"]];
+			const paramTypes = [["string"], ["[]", "string"], ["bool"]];
 			const returnTypes = [];
-			const params = [domainName, localpartCatchallSeparator, localpartCaseSensitive];
+			const params = [domainName, localpartCatchallSeparators, localpartCaseSensitive];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
 		// DomainDMARCAddressSave saves the DMARC reporting address/processing
@@ -2372,7 +2372,6 @@ const domain = async (d) => {
 	let clientSettingsDomainFieldset;
 	let clientSettingsDomain;
 	let localpartFieldset;
-	let localpartCatchallSeparator;
 	let localpartCaseSensitive;
 	let dmarcFieldset;
 	let dmarcLocalpart;
@@ -2469,11 +2468,39 @@ const domain = async (d) => {
 		e.preventDefault();
 		e.stopPropagation();
 		await check(clientSettingsDomainFieldset, client.DomainClientSettingsDomainSave(d, clientSettingsDomain.value));
-	}, clientSettingsDomainFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Hostname for client settings instead of the mail server hostname. E.g. mail.<domain>. For future migration to another mail operator without requiring all clients to update their settings, it is convenient to have client settings that reference a subdomain of the hosted domain instead of the hostname of the server where the mail is currently hosted. If empty, the hostname of the mail server is used for client configurations. Unicode name.'), dom.div('Client settings domain'), clientSettingsDomain = dom.input(attr.value(domainConfig.ClientSettingsDomain), style({ width: '30em' }))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
-		e.preventDefault();
-		e.stopPropagation();
-		await check(localpartFieldset, client.DomainLocalpartConfigSave(d, localpartCatchallSeparator.value, localpartCaseSensitive.checked));
-	}, localpartFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('If set, upper/lower case is relevant for email delivery.'), dom.div('Localpart case sensitive'), localpartCaseSensitive = dom.input(attr.type('checkbox'), domainConfig.LocalpartCaseSensitive ? attr.checked('') : [])), dom.label(attr.title('If not empty, only the string before the separator is used to for email delivery decisions. For example, if set to \"+\", you+anything@example.com will be delivered to you@example.com.'), dom.div('Localpart catchall separator'), localpartCatchallSeparator = dom.input(attr.value(domainConfig.LocalpartCatchallSeparator))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), dom.br(), dom.h2('DMARC reporting address'), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
+	}, clientSettingsDomainFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('Hostname for client settings instead of the mail server hostname. E.g. mail.<domain>. For future migration to another mail operator without requiring all clients to update their settings, it is convenient to have client settings that reference a subdomain of the hosted domain instead of the hostname of the server where the mail is currently hosted. If empty, the hostname of the mail server is used for client configurations. Unicode name.'), dom.div('Client settings domain'), clientSettingsDomain = dom.input(attr.value(domainConfig.ClientSettingsDomain), style({ width: '30em' }))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))))), (() => {
+		let separatorViews = [];
+		let separatorsBox;
+		const addSeparatorView = (s) => {
+			const separator = dom.input(attr.required(''), attr.value(s), style({ width: '2em' }));
+			const v = {
+				separator: separator,
+				root: dom.div(separator, ' ', dom.clickbutton('Remove', function click() {
+					separatorViews.splice(separatorViews.indexOf(v), 1);
+					v.root.remove();
+					if (separatorViews.length === 0) {
+						separatorsBox.append(dom.div('(None)'));
+					}
+				})),
+			};
+			if (separatorViews.length === 0) {
+				dom._kids(separatorsBox);
+			}
+			separatorViews.push(v);
+			separatorsBox.appendChild(v.root);
+		};
+		const elem = dom.form(style({ marginTop: '1ex' }), async function submit(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			await check(localpartFieldset, client.DomainLocalpartConfigSave(d, separatorViews.map(v => v.separator.value), localpartCaseSensitive.checked));
+		}, localpartFieldset = dom.fieldset(style({ display: 'flex', gap: '1em' }), dom.label(attr.title('If set, upper/lower case is relevant for email delivery.'), dom.div('Localpart case sensitive'), localpartCaseSensitive = dom.input(attr.type('checkbox'), domainConfig.LocalpartCaseSensitive ? attr.checked('') : [])), dom.div(dom.label(attr.title('If not empty, only the string before the separator is used for email delivery decisions. For example, if set to \"+\", you+anything@example.com will be delivered to you@example.com.'), 'Localpart catchall separators'), ' ', dom.clickbutton('Add', function click() {
+			addSeparatorView('');
+		}), separatorsBox = dom.div(style({ display: 'flex', flexDirection: 'column', gap: '.25em' }), dom.div('(None)'))), dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save')))));
+		for (const sep of (domainConfig.LocalpartCatchallSeparatorsEffective || [])) {
+			addSeparatorView(sep);
+		}
+		return elem;
+	})(), dom.br(), dom.h2('DMARC reporting address'), dom.form(style({ marginTop: '1ex' }), async function submit(e) {
 		e.preventDefault();
 		e.stopPropagation();
 		if (!dmarcLocalpart.value) {

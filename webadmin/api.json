@@ -1710,8 +1710,9 @@
 					]
 				},
 				{
-					"Name": "localpartCatchallSeparator",
+					"Name": "localpartCatchallSeparators",
 					"Typewords": [
+						"[]",
 						"string"
 					]
 				},
@@ -3442,6 +3443,14 @@
 					]
 				},
 				{
+					"Name": "LocalpartCatchallSeparators",
+					"Docs": "",
+					"Typewords": [
+						"[]",
+						"string"
+					]
+				},
+				{
 					"Name": "LocalpartCaseSensitive",
 					"Docs": "",
 					"Typewords": [
@@ -3500,6 +3509,14 @@
 					"Docs": "",
 					"Typewords": [
 						"Domain"
+					]
+				},
+				{
+					"Name": "LocalpartCatchallSeparatorsEffective",
+					"Docs": "Either LocalpartCatchallSeparators, the value of LocalpartCatchallSeparator, or empty.",
+					"Typewords": [
+						"[]",
+						"string"
 					]
 				}
 			]

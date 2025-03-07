@@ -2527,9 +2527,19 @@ func (Admin) DomainClientSettingsDomainSave(ctx context.Context, domainName, cli
 
 // DomainLocalpartConfigSave saves the localpart catchall and case-sensitive
 // settings for a domain.
-func (Admin) DomainLocalpartConfigSave(ctx context.Context, domainName, localpartCatchallSeparator string, localpartCaseSensitive bool) {
+func (Admin) DomainLocalpartConfigSave(ctx context.Context, domainName string, localpartCatchallSeparators []string, localpartCaseSensitive bool) {
 	err := admin.DomainSave(ctx, domainName, func(domain *config.Domain) error {
-		domain.LocalpartCatchallSeparator = localpartCatchallSeparator
+		domain.LocalpartCatchallSeparatorsEffective = localpartCatchallSeparators
+		// If there is a single separator, we prefer the non-list form, it's easier to
+		// read/edit and should suffice for most setups.
+		domain.LocalpartCatchallSeparator = ""
+		domain.LocalpartCatchallSeparators = nil
+		if len(localpartCatchallSeparators) == 1 {
+			domain.LocalpartCatchallSeparator = localpartCatchallSeparators[0]
+		} else {
+			domain.LocalpartCatchallSeparators = localpartCatchallSeparators
+		}
+
 		domain.LocalpartCaseSensitive = localpartCaseSensitive
 		return nil
 	})

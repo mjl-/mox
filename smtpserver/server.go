@@ -2469,7 +2469,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	var genFromID bool
 	if useFromID {
 		// With submission, user can bring their own fromid.
-		t := strings.SplitN(string(c.mailFrom.Localpart), confDom.LocalpartCatchallSeparator, 2)
+		t := strings.SplitN(string(c.mailFrom.Localpart), confDom.LocalpartCatchallSeparatorsEffective[0], 2)
 		localpartBase = t[0]
 		if len(t) == 2 {
 			fromID = t[1]
@@ -2500,7 +2500,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 			if genFromID {
 				fromID = xrandomID(16)
 			}
-			fp.Localpart = smtp.Localpart(localpartBase + confDom.LocalpartCatchallSeparator + fromID)
+			fp.Localpart = smtp.Localpart(localpartBase + confDom.LocalpartCatchallSeparatorsEffective[0] + fromID)
 		}
 
 		// For multiple recipients, we don't make each message prefix unique, leaving out

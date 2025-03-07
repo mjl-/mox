@@ -264,7 +264,7 @@ export interface EventStart {
 // the webmail client can decide if an address matches the addresses of the
 // account.
 export interface DomainAddressConfig {
-	LocalpartCatchallSeparator: string  // Can be empty.
+	LocalpartCatchallSeparators?: string[] | null  // Can be empty.
 	LocalpartCaseSensitive: boolean
 }
 
@@ -621,7 +621,7 @@ export const types: TypenameMap = {
 	"Settings": {"Name":"Settings","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["uint8"]},{"Name":"Signature","Docs":"","Typewords":["string"]},{"Name":"Quoting","Docs":"","Typewords":["Quoting"]},{"Name":"ShowAddressSecurity","Docs":"","Typewords":["bool"]},{"Name":"ShowHTML","Docs":"","Typewords":["bool"]},{"Name":"NoShowShortcuts","Docs":"","Typewords":["bool"]},{"Name":"ShowHeaders","Docs":"","Typewords":["[]","string"]}]},
 	"Ruleset": {"Name":"Ruleset","Docs":"","Fields":[{"Name":"SMTPMailFromRegexp","Docs":"","Typewords":["string"]},{"Name":"MsgFromRegexp","Docs":"","Typewords":["string"]},{"Name":"VerifiedDomain","Docs":"","Typewords":["string"]},{"Name":"HeadersRegexp","Docs":"","Typewords":["{}","string"]},{"Name":"IsForward","Docs":"","Typewords":["bool"]},{"Name":"ListAllowDomain","Docs":"","Typewords":["string"]},{"Name":"AcceptRejectsToMailbox","Docs":"","Typewords":["string"]},{"Name":"Mailbox","Docs":"","Typewords":["string"]},{"Name":"Comment","Docs":"","Typewords":["string"]},{"Name":"VerifiedDNSDomain","Docs":"","Typewords":["Domain"]},{"Name":"ListAllowDNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"EventStart": {"Name":"EventStart","Docs":"","Fields":[{"Name":"SSEID","Docs":"","Typewords":["int64"]},{"Name":"LoginAddress","Docs":"","Typewords":["MessageAddress"]},{"Name":"Addresses","Docs":"","Typewords":["[]","MessageAddress"]},{"Name":"DomainAddressConfigs","Docs":"","Typewords":["{}","DomainAddressConfig"]},{"Name":"MailboxName","Docs":"","Typewords":["string"]},{"Name":"Mailboxes","Docs":"","Typewords":["[]","Mailbox"]},{"Name":"RejectsMailbox","Docs":"","Typewords":["string"]},{"Name":"Settings","Docs":"","Typewords":["Settings"]},{"Name":"AccountPath","Docs":"","Typewords":["string"]},{"Name":"Version","Docs":"","Typewords":["string"]}]},
-	"DomainAddressConfig": {"Name":"DomainAddressConfig","Docs":"","Fields":[{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]}]},
+	"DomainAddressConfig": {"Name":"DomainAddressConfig","Docs":"","Fields":[{"Name":"LocalpartCatchallSeparators","Docs":"","Typewords":["[]","string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]}]},
 	"EventViewErr": {"Name":"EventViewErr","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]},{"Name":"Err","Docs":"","Typewords":["string"]}]},
 	"EventViewReset": {"Name":"EventViewReset","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]}]},
 	"EventViewMsgs": {"Name":"EventViewMsgs","Docs":"","Fields":[{"Name":"ViewID","Docs":"","Typewords":["int64"]},{"Name":"RequestID","Docs":"","Typewords":["int64"]},{"Name":"MessageItems","Docs":"","Typewords":["[]","[]","MessageItem"]},{"Name":"ParsedMessage","Docs":"","Typewords":["nullable","ParsedMessage"]},{"Name":"ViewEnd","Docs":"","Typewords":["bool"]}]},

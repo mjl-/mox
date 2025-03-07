@@ -737,7 +737,7 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 }
 
 // checkAddressAvailable checks that the address after canonicalization is not
-// already configured, and that its localpart does not contain the catchall
+// already configured, and that its localpart does not contain a catchall
 // localpart separator.
 //
 // Must be called with config lock held.
@@ -749,9 +749,13 @@ func checkAddressAvailable(addr smtp.Address) error {
 	lp := mox.CanonicalLocalpart(addr.Localpart, dc)
 	if _, ok := mox.Conf.AccountDestinationsLocked[smtp.NewAddress(lp, addr.Domain).String()]; ok {
 		return fmt.Errorf("canonicalized address %s already configured", smtp.NewAddress(lp, addr.Domain))
-	} else if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(addr.Localpart), dc.LocalpartCatchallSeparator) {
-		return fmt.Errorf("localpart cannot include domain catchall separator %s", dc.LocalpartCatchallSeparator)
-	} else if _, ok := dc.Aliases[lp.String()]; ok {
+	}
+	for _, sep := range dc.LocalpartCatchallSeparatorsEffective {
+		if strings.Contains(string(addr.Localpart), sep) {
+			return fmt.Errorf("localpart cannot include domain catchall separator %s", sep)
+		}
+	}
+	if _, ok := dc.Aliases[lp.String()]; ok {
 		return fmt.Errorf("address in use as alias")
 	}
 	return nil

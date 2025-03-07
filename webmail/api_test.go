@@ -355,6 +355,18 @@ func TestAPI(t *testing.T) {
 	})
 	// todo: check delivery of 6 messages to inbox, 1 to sent
 
+	api.MessageSubmit(ctx, SubmitMessage{
+		From:      "mjl-altcatchall@mox.example",
+		To:        []string{"mjl-to@mox.example", "mjl to2 <mjl+to2@mox.example>"},
+		Cc:        []string{"mjl-cc@mox.example", "mjl cc2 <mjl+cc2@mox.example>"},
+		Bcc:       []string{"mjl-bcc@mox.example", "mjl bcc2 <mjl+bcc2@mox.example>"},
+		Subject:   "test email",
+		TextBody:  "this is the content\n\ncheers,\nmox",
+		ReplyTo:   "mjl replyto <mjl-replyto@mox.example>",
+		UserAgent: "moxwebmail/dev",
+	})
+	// todo: check delivery of 6 messages to inbox, 1 to sent
+
 	// Reply with attachments.
 	api.MessageSubmit(ctx, SubmitMessage{
 		From:     "mjl@mox.example",

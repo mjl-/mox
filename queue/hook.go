@@ -650,8 +650,8 @@ func Incoming(ctx context.Context, log mlog.Log, acc *store.Account, messageID s
 		log.Debugx("parsing recipient domain in incoming message", err)
 	} else {
 		domconf, _ := mox.Conf.Domain(dom)
-		if domconf.LocalpartCatchallSeparator != "" {
-			t := strings.SplitN(string(m.RcptToLocalpart), domconf.LocalpartCatchallSeparator, 2)
+		if len(domconf.LocalpartCatchallSeparatorsEffective) > 0 {
+			t := strings.SplitN(string(m.RcptToLocalpart), domconf.LocalpartCatchallSeparatorsEffective[0], 2)
 			if len(t) == 2 {
 				fromID = t[1]
 			}

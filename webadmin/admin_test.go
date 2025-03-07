@@ -277,9 +277,9 @@ func TestAdmin(t *testing.T) {
 	tneedErrorCode(t, "user:error", func() { api.DomainClientSettingsDomainSave(ctxbg, "bogus.example", "unknown.example") })
 	api.DomainClientSettingsDomainSave(ctxbg, "mox.example", "") // Restore.
 
-	api.DomainLocalpartConfigSave(ctxbg, "mox.example", "-", true)
-	tneedErrorCode(t, "user:error", func() { api.DomainLocalpartConfigSave(ctxbg, "bogus.example", "", false) })
-	api.DomainLocalpartConfigSave(ctxbg, "mox.example", "", false) // Restore.
+	api.DomainLocalpartConfigSave(ctxbg, "mox.example", []string{"-"}, true)
+	tneedErrorCode(t, "user:error", func() { api.DomainLocalpartConfigSave(ctxbg, "bogus.example", nil, false) })
+	api.DomainLocalpartConfigSave(ctxbg, "mox.example", nil, false) // Restore.
 
 	api.DomainDMARCAddressSave(ctxbg, "mox.example", "dmarc-reports", "", "mjl", "DMARC")
 	tneedErrorCode(t, "user:error", func() { api.DomainDMARCAddressSave(ctxbg, "bogus.example", "dmarc-reports", "", "mjl", "DMARC") })

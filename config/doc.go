@@ -789,6 +789,14 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 			# delivered to you@example.com. (optional)
 			LocalpartCatchallSeparator:
 
+			# Similar to LocalpartCatchallSeparator, but in case multiple are needed. For
+			# example both "+" and "-". Only of one LocalpartCatchallSeparator or
+			# LocalpartCatchallSeparators can be set. If set, the first separator is used to
+			# make unique addresses for outgoing SMTP connections with FromIDLoginAddresses.
+			# (optional)
+			LocalpartCatchallSeparators:
+				-
+
 			# If set, upper/lower case is relevant for email delivery. (optional)
 			LocalpartCaseSensitive: false
 

@@ -1494,11 +1494,12 @@ func TestCatchall(t *testing.T) {
 	testDeliver("mjl@mox.example", nil)      // Exact match.
 	testDeliver("mjl+test@mox.example", nil) // Domain localpart catchall separator.
 	testDeliver("MJL+TEST@mox.example", nil) // Again, and case insensitive.
-	testDeliver("unknown@mox.example", nil)  // Catchall address, to account catchall.
 
 	n, err := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).Count()
 	tcheck(t, err, "checking delivered messages")
 	tcompare(t, n, 3)
+
+	testDeliver("unknown@mox.example", nil) // Catchall address, to account catchall.
 
 	acc, err := store.OpenAccount(pkglog, "catchall", false)
 	tcheck(t, err, "open account")
@@ -1509,6 +1510,13 @@ func TestCatchall(t *testing.T) {
 	n, err = bstore.QueryDB[store.Message](ctxbg, acc.DB).Count()
 	tcheck(t, err, "checking delivered messages to catchall account")
 	tcompare(t, n, 1)
+
+	testDeliver("mjl-test@mox2.example", nil)      // Second catchall separator.
+	testDeliver("mjl-test+test@mox2.example", nil) // Silly, both separators in address.
+	testDeliver("mjl+test-test@mox2.example", nil)
+	n, err = bstore.QueryDB[store.Message](ctxbg, ts.acc.DB).Count()
+	tcheck(t, err, "checking delivered messages")
+	tcompare(t, n, 6)
 }
 
 // Test DKIM signing for outgoing messages.

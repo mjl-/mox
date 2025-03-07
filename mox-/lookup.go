@@ -86,10 +86,10 @@ func LookupAddress(localpart smtp.Localpart, domain dns.Domain, allowPostmaster,
 }
 
 // CanonicalLocalpart returns the canonical localpart, removing optional catchall
-// separator, and optionally lower-casing the string.
+// separators, and optionally lower-casing the string.
 func CanonicalLocalpart(localpart smtp.Localpart, d config.Domain) smtp.Localpart {
-	if d.LocalpartCatchallSeparator != "" {
-		t := strings.SplitN(string(localpart), d.LocalpartCatchallSeparator, 2)
+	for _, sep := range d.LocalpartCatchallSeparatorsEffective {
+		t := strings.SplitN(string(localpart), sep, 2)
 		localpart = smtp.Localpart(t[0])
 	}
 

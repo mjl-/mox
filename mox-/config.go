@@ -1238,6 +1238,21 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			c.ClientSettingDomains[csd] = struct{}{}
 		}
 
+		if domain.LocalpartCatchallSeparator != "" && len(domain.LocalpartCatchallSeparators) != 0 {
+			addDomainErrorf("cannot have both LocalpartCatchallSeparator and LocalpartCatchallSeparators")
+		}
+		domain.LocalpartCatchallSeparatorsEffective = domain.LocalpartCatchallSeparators
+		if domain.LocalpartCatchallSeparator != "" {
+			domain.LocalpartCatchallSeparatorsEffective = append(domain.LocalpartCatchallSeparatorsEffective, domain.LocalpartCatchallSeparator)
+		}
+		sepSeen := map[string]bool{}
+		for _, sep := range domain.LocalpartCatchallSeparatorsEffective {
+			if sepSeen[sep] {
+				addDomainErrorf("duplicate localpart catchall separator %q", sep)
+			}
+			sepSeen[sep] = true
+		}
+
 		for _, sign := range domain.DKIM.Sign {
 			if _, ok := domain.DKIM.Selectors[sign]; !ok {
 				addDomainErrorf("unknown selector %s for signing", sign)
@@ -1434,7 +1449,7 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			dom, ok := c.Domains[a.Domain.Name()]
 			if !ok {
 				addAccountErrorf("unknown domain in fromid login address %q", s)
-			} else if dom.LocalpartCatchallSeparator == "" {
+			} else if len(dom.LocalpartCatchallSeparatorsEffective) == 0 {
 				addAccountErrorf("localpart catchall separator not configured for domain for fromid login address %q", s)
 			}
 			acc.ParsedFromIDLoginAddresses[i] = a
@@ -1660,9 +1675,14 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			dc := c.Domains[address.Domain.Name()]
 			domainHasAddress[address.Domain.Name()] = true
 			lp := CanonicalLocalpart(address.Localpart, dc)
-			if dc.LocalpartCatchallSeparator != "" && strings.Contains(string(address.Localpart), dc.LocalpartCatchallSeparator) {
-				addDestErrorf("localpart of address %s includes domain catchall separator %s", address, dc.LocalpartCatchallSeparator)
-			} else {
+			var hasSep bool
+			for _, sep := range dc.LocalpartCatchallSeparatorsEffective {
+				if strings.Contains(string(address.Localpart), sep) {
+					hasSep = true
+					addDestErrorf("localpart of address %s includes domain catchall separator %s", address, sep)
+				}
+			}
+			if !hasSep {
 				address.Localpart = lp
 			}
 			addrFull := address.Pack(true)
@@ -1817,10 +1837,17 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			if err != nil {
 				addAliasErrorf("parsing alias: %v", err)
 				continue
-			} else if domain.LocalpartCatchallSeparator != "" && strings.Contains(string(lp), domain.LocalpartCatchallSeparator) {
-				addAliasErrorf("alias contains localpart catchall separator")
-				continue
 			} else {
+				var hasSep bool
+				for _, sep := range domain.LocalpartCatchallSeparatorsEffective {
+					if strings.Contains(string(lp), sep) {
+						addAliasErrorf("alias contains localpart catchall separator")
+						hasSep = true
+					}
+				}
+				if hasSep {
+					continue
+				}
 				clp = CanonicalLocalpart(lp, domain)
 			}
 

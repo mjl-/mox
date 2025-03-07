@@ -1887,9 +1887,8 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 	const normalizeUser = (a: api.MessageAddress) => {
 		let user = a.User
 		const domconf = domainAddressConfigs[a.Domain.ASCII]
-		const localpartCatchallSeparator = domconf.LocalpartCatchallSeparator
-		if (localpartCatchallSeparator) {
-			user = user.split(localpartCatchallSeparator)[0]
+		for (const sep of (domconf.LocalpartCatchallSeparators || [])) {
+			user = user.split(sep)[0]
 		}
 		const localpartCaseSensitive = domconf.LocalpartCaseSensitive
 		if (!localpartCaseSensitive) {

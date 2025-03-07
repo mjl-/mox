@@ -2002,9 +2002,10 @@
 			"Docs": "DomainAddressConfig has the address (localpart) configuration for a domain, so\nthe webmail client can decide if an address matches the addresses of the\naccount.",
 			"Fields": [
 				{
-					"Name": "LocalpartCatchallSeparator",
+					"Name": "LocalpartCatchallSeparators",
 					"Docs": "Can be empty.",
 					"Typewords": [
+						"[]",
 						"string"
 					]
 				},

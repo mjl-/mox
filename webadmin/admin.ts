@@ -1243,7 +1243,6 @@ const domain = async (d: string) => {
 	let clientSettingsDomain: HTMLInputElement
 
 	let localpartFieldset: HTMLFieldSetElement
-	let localpartCatchallSeparator: HTMLInputElement
 	let localpartCaseSensitive: HTMLInputElement
 
 	let dmarcFieldset: HTMLFieldSetElement
@@ -1588,28 +1587,68 @@ const domain = async (d: string) => {
 				dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))),
 			),
 		),
-		dom.form(
-			style({marginTop: '1ex'}),
-			async function submit(e: SubmitEvent) {
-				e.preventDefault()
-				e.stopPropagation()
-				await check(localpartFieldset, client.DomainLocalpartConfigSave(d, localpartCatchallSeparator.value, localpartCaseSensitive.checked))
-			},
-			localpartFieldset=dom.fieldset(
-				style({display: 'flex', gap: '1em'}),
-				dom.label(
-					attr.title('If set, upper/lower case is relevant for email delivery.'),
-					dom.div('Localpart case sensitive'),
-					localpartCaseSensitive=dom.input(attr.type('checkbox'), domainConfig.LocalpartCaseSensitive ? attr.checked('') : []),
+		(() => {
+			interface SeparatorView {
+				root: HTMLElement
+				separator: HTMLInputElement
+			}
+			let separatorViews: SeparatorView[] = []
+			let separatorsBox: HTMLDivElement
+
+			const addSeparatorView = (s: string) => {
+				const separator = dom.input(attr.required(''), attr.value(s), style({width: '2em'}))
+				const v = {
+					separator: separator,
+					root: dom.div(
+						separator, ' ',
+						dom.clickbutton('Remove', function click() {
+							separatorViews.splice(separatorViews.indexOf(v), 1)
+							v.root.remove()
+							if (separatorViews.length === 0) {
+								separatorsBox.append(dom.div('(None)'))
+							}
+						}),
+					),
+				}
+				if (separatorViews.length === 0) {
+					dom._kids(separatorsBox)
+				}
+				separatorViews.push(v)
+				separatorsBox.appendChild(v.root)
+			}
+
+			const elem = dom.form(
+				style({marginTop: '1ex'}),
+				async function submit(e: SubmitEvent) {
+					e.preventDefault()
+					e.stopPropagation()
+					await check(localpartFieldset, client.DomainLocalpartConfigSave(d, separatorViews.map(v => v.separator.value), localpartCaseSensitive.checked))
+				},
+				localpartFieldset=dom.fieldset(
+					style({display: 'flex', gap: '1em'}),
+					dom.label(
+						attr.title('If set, upper/lower case is relevant for email delivery.'),
+						dom.div('Localpart case sensitive'),
+						localpartCaseSensitive=dom.input(attr.type('checkbox'), domainConfig.LocalpartCaseSensitive ? attr.checked('') : []),
+					),
+					dom.div(
+						dom.label(
+							attr.title('If not empty, only the string before the separator is used for email delivery decisions. For example, if set to \"+\", you+anything@example.com will be delivered to you@example.com.'),
+							'Localpart catchall separators',
+						), ' ',
+						dom.clickbutton('Add', function click() {
+							addSeparatorView('')
+						}),
+						separatorsBox=dom.div(style({display: 'flex', flexDirection: 'column', gap: '.25em'}), dom.div('(None)')),
+					),
+					dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))),
 				),
-				dom.label(
-					attr.title('If not empty, only the string before the separator is used to for email delivery decisions. For example, if set to \"+\", you+anything@example.com will be delivered to you@example.com.'),
-					dom.div('Localpart catchall separator'),
-					localpartCatchallSeparator=dom.input(attr.value(domainConfig.LocalpartCatchallSeparator)),
-				),
-				dom.div(dom.span('\u00a0'), dom.div(dom.submitbutton('Save'))),
-			),
-		),
+			)
+			for (const sep of (domainConfig.LocalpartCatchallSeparatorsEffective || [])) {
+				addSeparatorView(sep)
+			}
+			return elem
+		})(),
 		dom.br(),
 
 		dom.h2('DMARC reporting address'),

@@ -270,6 +270,7 @@ export interface ConfigDomain {
 	Description: string
 	ClientSettingsDomain: string
 	LocalpartCatchallSeparator: string
+	LocalpartCatchallSeparators?: string[] | null
 	LocalpartCaseSensitive: boolean
 	DKIM: DKIM
 	DMARC?: DMARC | null
@@ -278,6 +279,7 @@ export interface ConfigDomain {
 	Routes?: Route[] | null
 	Aliases?: { [key: string]: Alias }
 	Domain: Domain
+	LocalpartCatchallSeparatorsEffective?: string[] | null  // Either LocalpartCatchallSeparators, the value of LocalpartCatchallSeparator, or empty.
 }
 
 export interface DKIM {
@@ -1184,7 +1186,7 @@ export const types: TypenameMap = {
 	"AutoconfCheckResult": {"Name":"AutoconfCheckResult","Docs":"","Fields":[{"Name":"ClientSettingsDomainIPs","Docs":"","Typewords":["[]","string"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]},{"Name":"Warnings","Docs":"","Typewords":["[]","string"]},{"Name":"Instructions","Docs":"","Typewords":["[]","string"]}]},
 	"AutodiscoverCheckResult": {"Name":"AutodiscoverCheckResult","Docs":"","Fields":[{"Name":"Records","Docs":"","Typewords":["[]","AutodiscoverSRV"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]},{"Name":"Warnings","Docs":"","Typewords":["[]","string"]},{"Name":"Instructions","Docs":"","Typewords":["[]","string"]}]},
 	"AutodiscoverSRV": {"Name":"AutodiscoverSRV","Docs":"","Fields":[{"Name":"Target","Docs":"","Typewords":["string"]},{"Name":"Port","Docs":"","Typewords":["uint16"]},{"Name":"Priority","Docs":"","Typewords":["uint16"]},{"Name":"Weight","Docs":"","Typewords":["uint16"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]}]},
-	"ConfigDomain": {"Name":"ConfigDomain","Docs":"","Fields":[{"Name":"Disabled","Docs":"","Typewords":["bool"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"ClientSettingsDomain","Docs":"","Typewords":["string"]},{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]},{"Name":"DKIM","Docs":"","Typewords":["DKIM"]},{"Name":"DMARC","Docs":"","Typewords":["nullable","DMARC"]},{"Name":"MTASTS","Docs":"","Typewords":["nullable","MTASTS"]},{"Name":"TLSRPT","Docs":"","Typewords":["nullable","TLSRPT"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"Aliases","Docs":"","Typewords":["{}","Alias"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]}]},
+	"ConfigDomain": {"Name":"ConfigDomain","Docs":"","Fields":[{"Name":"Disabled","Docs":"","Typewords":["bool"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"ClientSettingsDomain","Docs":"","Typewords":["string"]},{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCatchallSeparators","Docs":"","Typewords":["[]","string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]},{"Name":"DKIM","Docs":"","Typewords":["DKIM"]},{"Name":"DMARC","Docs":"","Typewords":["nullable","DMARC"]},{"Name":"MTASTS","Docs":"","Typewords":["nullable","MTASTS"]},{"Name":"TLSRPT","Docs":"","Typewords":["nullable","TLSRPT"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"Aliases","Docs":"","Typewords":["{}","Alias"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]},{"Name":"LocalpartCatchallSeparatorsEffective","Docs":"","Typewords":["[]","string"]}]},
 	"DKIM": {"Name":"DKIM","Docs":"","Fields":[{"Name":"Selectors","Docs":"","Typewords":["{}","Selector"]},{"Name":"Sign","Docs":"","Typewords":["[]","string"]}]},
 	"Selector": {"Name":"Selector","Docs":"","Fields":[{"Name":"Hash","Docs":"","Typewords":["string"]},{"Name":"HashEffective","Docs":"","Typewords":["string"]},{"Name":"Canonicalization","Docs":"","Typewords":["Canonicalization"]},{"Name":"Headers","Docs":"","Typewords":["[]","string"]},{"Name":"HeadersEffective","Docs":"","Typewords":["[]","string"]},{"Name":"DontSealHeaders","Docs":"","Typewords":["bool"]},{"Name":"Expiration","Docs":"","Typewords":["string"]},{"Name":"PrivateKeyFile","Docs":"","Typewords":["string"]},{"Name":"Algorithm","Docs":"","Typewords":["string"]}]},
 	"Canonicalization": {"Name":"Canonicalization","Docs":"","Fields":[{"Name":"HeaderRelaxed","Docs":"","Typewords":["bool"]},{"Name":"BodyRelaxed","Docs":"","Typewords":["bool"]}]},
@@ -2194,11 +2196,11 @@ export class Client {
 
 	// DomainLocalpartConfigSave saves the localpart catchall and case-sensitive
 	// settings for a domain.
-	async DomainLocalpartConfigSave(domainName: string, localpartCatchallSeparator: string, localpartCaseSensitive: boolean): Promise<void> {
+	async DomainLocalpartConfigSave(domainName: string, localpartCatchallSeparators: string[] | null, localpartCaseSensitive: boolean): Promise<void> {
 		const fn: string = "DomainLocalpartConfigSave"
-		const paramTypes: string[][] = [["string"],["string"],["bool"]]
+		const paramTypes: string[][] = [["string"],["[]","string"],["bool"]]
 		const returnTypes: string[][] = []
-		const params: any[] = [domainName, localpartCatchallSeparator, localpartCaseSensitive]
+		const params: any[] = [domainName, localpartCatchallSeparators, localpartCaseSensitive]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 

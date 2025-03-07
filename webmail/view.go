@@ -228,8 +228,8 @@ type EventStart struct {
 // the webmail client can decide if an address matches the addresses of the
 // account.
 type DomainAddressConfig struct {
-	LocalpartCatchallSeparator string // Can be empty.
-	LocalpartCaseSensitive     bool
+	LocalpartCatchallSeparators []string // Can be empty.
+	LocalpartCaseSensitive      bool
 }
 
 // EventViewMsgs contains messages for a view, possibly a continuation of an
@@ -764,7 +764,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 	domainAddressConfigs := map[string]DomainAddressConfig{}
 	for _, a := range addresses {
 		dom, _ := mox.Conf.Domain(a.Domain)
-		domainAddressConfigs[a.Domain.ASCII] = DomainAddressConfig{dom.LocalpartCatchallSeparator, dom.LocalpartCaseSensitive}
+		domainAddressConfigs[a.Domain.ASCII] = DomainAddressConfig{dom.LocalpartCatchallSeparatorsEffective, dom.LocalpartCaseSensitive}
 	}
 
 	// Write first event, allowing client to fill its UI with mailboxes.

@@ -1007,10 +1007,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 	useFromID := slices.Contains(accConf.ParsedFromIDLoginAddresses, loginAddr)
 	var localpartBase string
 	if useFromID {
-		if confDom.LocalpartCatchallSeparator == "" {
-			xcheckuserf(errors.New(`localpart catchall separator must be configured for domain`), `composing unique "from" address`)
-		}
-		localpartBase = strings.SplitN(string(fromPath.Localpart), confDom.LocalpartCatchallSeparator, 2)[0]
+		localpartBase = strings.SplitN(string(fromPath.Localpart), confDom.LocalpartCatchallSeparatorsEffective[0], 2)[0]
 	}
 	fromIDs := make([]string, len(recipients))
 	qml := make([]queue.Msg, len(recipients))
@@ -1019,7 +1016,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		fp := fromPath
 		if useFromID {
 			fromIDs[i] = xrandomID(16)
-			fp.Localpart = smtp.Localpart(localpartBase + confDom.LocalpartCatchallSeparator + fromIDs[i])
+			fp.Localpart = smtp.Localpart(localpartBase + confDom.LocalpartCatchallSeparatorsEffective[0] + fromIDs[i])
 		}
 
 		// Don't use per-recipient unique message prefix when multiple recipients are

@@ -956,7 +956,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	fromPath := fromAddr.Address.Path()
 	var localpartBase string
 	if useFromID {
-		localpartBase = strings.SplitN(string(fromPath.Localpart), confDom.LocalpartCatchallSeparator, 2)[0]
+		localpartBase = strings.SplitN(string(fromPath.Localpart), confDom.LocalpartCatchallSeparatorsEffective[0], 2)[0]
 	}
 	qml := make([]queue.Msg, len(recipients))
 	now := time.Now()
@@ -965,7 +965,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 		var fromID string
 		if useFromID {
 			fromID = xrandomID(ctx, 16)
-			fp.Localpart = smtp.Localpart(localpartBase + confDom.LocalpartCatchallSeparator + fromID)
+			fp.Localpart = smtp.Localpart(localpartBase + confDom.LocalpartCatchallSeparatorsEffective[0] + fromID)
 		}
 
 		// Don't use per-recipient unique message prefix when multiple recipients are
