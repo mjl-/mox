@@ -1208,6 +1208,7 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 			if err != nil {
 				p := filepath.Join(dir, e.Name())
 				log.Errorx("unrecognized file in message directory, parsing filename as number", err, slog.String("path", p))
+			} else {
 				maxFSID = max(maxFSID, id)
 			}
 		}

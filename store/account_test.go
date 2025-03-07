@@ -51,15 +51,11 @@ func TestMailbox(t *testing.T) {
 	defer Switchboard()()
 
 	msgFile, err := CreateMessageTemp(log, "account-test")
-	if err != nil {
-		t.Fatalf("creating temp msg file: %s", err)
-	}
-	defer os.Remove(msgFile.Name())
-	defer msgFile.Close()
+	tcheck(t, err, "create temp message file")
+	defer CloseRemoveTempFile(log, msgFile, "temp message file")
 	msgWriter := message.NewWriter(msgFile)
-	if _, err := msgWriter.Write([]byte(" message")); err != nil {
-		t.Fatalf("writing to temp message: %s", err)
-	}
+	_, err = msgWriter.Write([]byte(" message"))
+	tcheck(t, err, "write message")
 
 	msgPrefix := []byte("From: <mjl@mox.example\r\nTo: <mjl@mox.example>\r\nCc: <mjl@mox.example>Subject: test\r\nMessage-Id: <m01@mox.example>\r\n\r\n")
 	msgPrefixCatchall := []byte("Subject: catchall\r\n\r\n")
@@ -89,7 +85,7 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "sent mailbox")
 			msent.MailboxID = mbsent.ID
 			msent.MailboxOrigID = mbsent.ID
-			err = acc.MessageAdd(pkglog, tx, &mbsent, &msent, msgFile, AddOpts{SkipSourceFileSync: true, SkipDirSync: true})
+			err = acc.MessageAdd(log, tx, &mbsent, &msent, msgFile, AddOpts{SkipSourceFileSync: true, SkipDirSync: true})
 			tcheck(t, err, "deliver message")
 			if !msent.ThreadMuted || !msent.ThreadCollapsed {
 				t.Fatalf("thread muted & collapsed should have been copied from parent (duplicate message-id) m")
@@ -104,7 +100,7 @@ func TestMailbox(t *testing.T) {
 			tcheck(t, err, "insert rejects mailbox")
 			mreject.MailboxID = mbrejects.ID
 			mreject.MailboxOrigID = mbrejects.ID
-			err = acc.MessageAdd(pkglog, tx, &mbrejects, &mreject, msgFile, AddOpts{SkipSourceFileSync: true, SkipDirSync: true})
+			err = acc.MessageAdd(log, tx, &mbrejects, &mreject, msgFile, AddOpts{SkipSourceFileSync: true, SkipDirSync: true})
 			tcheck(t, err, "deliver message")
 			err = tx.Update(&mbrejects)
 			tcheck(t, err, "update mbrejects")
@@ -113,7 +109,7 @@ func TestMailbox(t *testing.T) {
 		})
 		tcheck(t, err, "deliver as sent and rejects")
 
-		err = acc.DeliverDestination(pkglog, conf.Destinations["mjl"], &mconsumed, msgFile)
+		err = acc.DeliverDestination(log, conf.Destinations["mjl"], &mconsumed, msgFile)
 		tcheck(t, err, "deliver with consume")
 
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
@@ -265,10 +261,10 @@ func TestMailbox(t *testing.T) {
 }
 
 func TestMessageRuleset(t *testing.T) {
-	f, err := CreateMessageTemp(pkglog, "msgruleset")
+	log := mlog.New("store", nil)
+	f, err := CreateMessageTemp(log, "msgruleset")
 	tcheck(t, err, "creating temp msg file")
-	defer os.Remove(f.Name())
-	defer f.Close()
+	defer CloseRemoveTempFile(log, f, "temp message file")
 
 	msgBuf := []byte(strings.ReplaceAll(`List-ID:  <test.mox.example>
 
@@ -296,7 +292,7 @@ Rulesets:
 	}
 	dest.Rulesets[0].HeadersRegexpCompiled = hdrs
 
-	c := MessageRuleset(pkglog, dest, &Message{}, msgBuf, f)
+	c := MessageRuleset(log, dest, &Message{}, msgBuf, f)
 	if c == nil {
 		t.Fatalf("expected ruleset match")
 	}
@@ -305,7 +301,7 @@ Rulesets:
 
 test
 `, "\n", "\r\n"))
-	c = MessageRuleset(pkglog, dest, &Message{}, msg2Buf, f)
+	c = MessageRuleset(log, dest, &Message{}, msg2Buf, f)
 	if c != nil {
 		t.Fatalf("expected no ruleset match")
 	}
@@ -338,8 +334,10 @@ func TestNextMessageID(t *testing.T) {
 
 	msgPathBogus := filepath.Join(msgDir, "a", "bogus")
 	err = os.WriteFile(msgPathBogus, []byte("test"), 0700)
+	tcheck(t, err, "create message file")
 	msgPathBadID := filepath.Join(msgDir, "a", "10000") // Out of range.
 	err = os.WriteFile(msgPathBadID, []byte("test"), 0700)
+	tcheck(t, err, "create message file")
 
 	// Open account. This should increase the next message ID.
 	acc, err = OpenAccount(log, "mjl", false)
