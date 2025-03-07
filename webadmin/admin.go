@@ -1046,12 +1046,7 @@ EOF
 		defer wg.Done()
 
 		var missing []string
-		var haveEd25519 bool
 		for sel, selc := range domConf.DKIM.Selectors {
-			if _, ok := selc.Key.(ed25519.PrivateKey); ok {
-				haveEd25519 = true
-			}
-
 			_, record, txt, _, err := dkim.Lookup(ctx, log.Logger, resolver, selc.Domain, domain)
 			if err != nil {
 				missing = append(missing, sel)
@@ -1090,8 +1085,6 @@ EOF
 		}
 		if len(domConf.DKIM.Selectors) == 0 {
 			addf(&r.DKIM.Errors, "No DKIM configuration, add a key to the configuration file, and instructions for DNS records will appear here.")
-		} else if !haveEd25519 {
-			addf(&r.DKIM.Warnings, "Consider adding an ed25519 key: the keys are smaller, the cryptography faster and more modern.")
 		}
 		instr := ""
 		for _, sel := range missing {

@@ -192,14 +192,6 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 		return nil
 	}
 
-	addEd25519 := func(name string) error {
-		key, err := MakeDKIMEd25519Key(dns.Domain{ASCII: name}, domain)
-		if err != nil {
-			return fmt.Errorf("making dkim ed25519 private key: %s", err)
-		}
-		return addSelector("ed25519", name, key)
-	}
-
 	addRSA := func(name string) error {
 		key, err := MakeDKIMRSAKey(dns.Domain{ASCII: name}, domain)
 		if err != nil {
@@ -208,23 +200,17 @@ func MakeDomainConfig(ctx context.Context, domain, hostname dns.Domain, accountN
 		return addSelector("rsa2048", name, key)
 	}
 
-	if err := addEd25519(year + "a"); err != nil {
+	if err := addRSA(year + "a"); err != nil {
 		return config.Domain{}, nil, err
 	}
 	if err := addRSA(year + "b"); err != nil {
-		return config.Domain{}, nil, err
-	}
-	if err := addEd25519(year + "c"); err != nil {
-		return config.Domain{}, nil, err
-	}
-	if err := addRSA(year + "d"); err != nil {
 		return config.Domain{}, nil, err
 	}
 
 	// We sign with the first two. In case they are misused, the switch to the other
 	// keys is easy, just change the config. Operators should make the public key field
 	// of the misused keys empty in the DNS records to disable the misused keys.
-	confDKIM.Sign = []string{year + "a", year + "b"}
+	confDKIM.Sign = []string{year + "a"}
 
 	confDomain := config.Domain{
 		ClientSettingsDomain:       "mail." + domain.Name(),
