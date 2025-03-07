@@ -1417,12 +1417,28 @@ func addressString(a message.Address, smtputf8 bool) string {
 			host = dom.ASCII
 		}
 	}
-	s := "<" + a.User + "@" + host + ">"
-	if a.Name != "" {
-		// todo: properly encoded/escaped name
-		s = a.Name + " " + s
+	if a.Name == "" {
+		return "<" + a.User + "@" + host + ">"
 	}
-	return s
+	// We only quote the name if we have to. ../rfc/5322:679
+	const atom = "!#$%&'*+-/=?^_`{|}~"
+	name := a.Name
+	for _, c := range a.Name {
+		if c == '\t' || c == ' ' || c >= 0x80 || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsAny(string(c), atom) {
+			continue
+		}
+		// We need to quote.
+		q := `"`
+		for _, c := range a.Name {
+			if c == '\\' || c == '"' {
+				q += `\`
+			}
+			q += string(c)
+		}
+		q += `"`
+		name = q
+	}
+	return name + " <" + a.User + "@" + host + ">"
 }
 
 // MailboxSetSpecialUse sets the special use flags of a mailbox.
