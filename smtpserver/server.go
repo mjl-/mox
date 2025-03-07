@@ -1872,7 +1872,11 @@ func (c *conn) cmdMail(p *parser) {
 		if err != nil {
 			c.log.Infox("temporary reject for temporary mx lookup error", err)
 			xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeNet4Other0}, "cannot verify mx records for mailfrom domain")
-		} else if !valid {
+		} else if !valid && !(Localserve && rpath.IPDomain.Domain.ASCII == "localhost") {
+			// We don't reject for "localhost" in Localserve mode because we only resolve
+			// through DNS, not an /etc/hosts file, and localhost may not resolve through DNS,
+			// depending on network environment.
+
 			c.log.Info("permanent reject because mailfrom domain does not accept mail")
 			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SePol7SenderHasNullMX27, "mailfrom domain not configured for mail")
 		}
