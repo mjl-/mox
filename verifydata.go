@@ -310,7 +310,7 @@ possibly making them potentially no longer readable by the previous version.
 				}
 				for i, pid := range m.ThreadParentIDs {
 					am := store.Message{ID: pid}
-					if err := db.Get(ctxbg, &am); err == bstore.ErrAbsent {
+					if err := db.Get(ctxbg, &am); err == bstore.ErrAbsent || err == nil && am.Expunged {
 						continue
 					} else if err != nil {
 						return fmt.Errorf("get ancestor message: %v", err)
