@@ -2043,6 +2043,11 @@ type AddOpts struct {
 
 // MessageAdd delivers a mail message to the account.
 //
+// The file is hardlinked or copied, the caller must clean up the original file. If
+// this call succeeds, but the database transaction with the change can't be
+// committed, the caller must clean up the delivered message file identified by
+// m.ID.
+//
 // If the message does not fit in the quota, an error with ErrOverQuota is returned
 // and the mailbox and message are unchanged and the transaction can continue. For
 // other errors, the caller must abort the transaction.

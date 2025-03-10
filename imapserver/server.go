@@ -3275,24 +3275,19 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		time       time.Time
 
 		file *os.File // Message file we are appending. Can be nil if we are writing to a nopWriteCloser due to being over quota.
-		path string   // Path if an actual file, either a temporary file, or of the message file stored in the account.
 
 		mw *message.Writer
-		m  store.Message
+		m  store.Message // New message. Delivered file for m.ID is removed on error.
 	}
 
 	var appends []*appendMsg
 	var commit bool
 	defer func() {
 		for _, a := range appends {
-			if a.file != nil {
-				err := a.file.Close()
-				c.xsanity(err, "closing APPEND temporary file")
-			}
-
-			if !commit && a.path != "" {
-				err := os.Remove(a.path)
-				c.xsanity(err, "removing APPEND temporary file")
+			if !commit && a.m.ID != 0 {
+				p := c.account.MessagePath(a.m.ID)
+				err := os.Remove(p)
+				c.xsanity(err, "cleaning up temporary append file after error")
 			}
 		}
 	}()
@@ -3385,7 +3380,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			var err error
 			a.file, err = store.CreateMessageTemp(c.log, "imap-append")
 			xcheckf(err, "creating temp file for message")
-			a.path = a.file.Name()
+			defer store.CloseRemoveTempFile(c.log, a.file, "temporary message file")
 			f = a.file
 
 			c.writelinef("+ ")
@@ -3398,7 +3393,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				var err error
 				a.file, err = store.CreateMessageTemp(c.log, "imap-append")
 				xcheckf(err, "creating temp file for message")
-				a.path = a.file.Name()
+				defer store.CloseRemoveTempFile(c.log, a.file, "temporary message file")
 				f = a.file
 			}
 		}
@@ -3483,12 +3478,10 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 				// todo: do a single junk training
 				err = c.account.MessageAdd(c.log, tx, &mb, &a.m, a.file, store.AddOpts{SkipDirSync: true})
 				xcheckf(err, "delivering message")
-				// Update path to what is stored in the account. We may still have to clean it up on errors.
-				a.path = c.account.MessagePath(a.m.ID)
 
 				changes = append(changes, a.m.ChangeAddUID())
 
-				msgDirs[filepath.Dir(a.path)] = struct{}{}
+				msgDirs[filepath.Dir(c.account.MessagePath(a.m.ID))] = struct{}{}
 			}
 
 			changes = append(changes, mb.ChangeCounts())

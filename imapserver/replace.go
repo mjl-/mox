@@ -166,7 +166,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 	}
 
 	var file *os.File
-	var newMsgPath string
+	var newID int64 // Delivered message ID, file removed on error.
 	var f io.Writer
 	var commit bool
 
@@ -186,17 +186,14 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 		var err error
 		file, err = store.CreateMessageTemp(c.log, "imap-replace")
 		xcheckf(err, "creating temp file for message")
-		newMsgPath = file.Name()
+		defer store.CloseRemoveTempFile(c.log, file, "temporary message file")
 		f = file
 
 		defer func() {
-			if file != nil {
-				err := file.Close()
-				c.xsanity(err, "close temporary file for replace")
-			}
-			if newMsgPath != "" && !commit {
-				err := os.Remove(newMsgPath)
-				c.xsanity(err, "remove temporary file for replace")
+			if !commit && newID != 0 {
+				p := c.account.MessagePath(newID)
+				err := os.Remove(p)
+				c.xsanity(err, "remove message file for replace after error")
 			}
 		}()
 	}
@@ -289,8 +286,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 
 			err = c.account.MessageAdd(c.log, tx, &mbDst, &nm, file, store.AddOpts{})
 			xcheckf(err, "delivering message")
-			// Update path to what is stored in the account. We may still have to clean it up on errors.
-			newMsgPath = c.account.MessagePath(nm.ID)
+			newID = nm.ID
 
 			changes = append(changes, nm.ChangeAddUID(), mbDst.ChangeCounts())
 			if nkeywords != len(mbDst.Keywords) {
