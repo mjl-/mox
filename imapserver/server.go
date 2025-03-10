@@ -136,47 +136,52 @@ func limitersInit() {
 var badClientDelay = time.Second // Before reads and after 1-byte writes for probably spammers.
 var authFailDelay = time.Second  // After authentication failure.
 
-// Capabilities (extensions) the server supports. Connections will add a few more, e.g. STARTTLS, LOGINDISABLED, AUTH=PLAIN.
-// ENABLE: ../rfc/5161
-// LITERAL+: ../rfc/7888
-// IDLE: ../rfc/2177
-// SASL-IR: ../rfc/4959
-// BINARY: ../rfc/3516
-// UNSELECT: ../rfc/3691
-// UIDPLUS: ../rfc/4315
-// ESEARCH: ../rfc/4731
-// SEARCHRES: ../rfc/5182
-// MOVE: ../rfc/6851
-// UTF8=ONLY: ../rfc/6855
-// LIST-EXTENDED: ../rfc/5258
-// SPECIAL-USE CREATE-SPECIAL-USE: ../rfc/6154
-// LIST-STATUS: ../rfc/5819
-// ID: ../rfc/2971
-// AUTH=EXTERNAL: ../rfc/4422:1575
-// AUTH=SCRAM-SHA-256-PLUS and AUTH=SCRAM-SHA-256: ../rfc/7677 ../rfc/5802
-// AUTH=SCRAM-SHA-1-PLUS and AUTH=SCRAM-SHA-1: ../rfc/5802
-// AUTH=CRAM-MD5: ../rfc/2195
-// APPENDLIMIT, we support the max possible size, 1<<63 - 1: ../rfc/7889:129
-// CONDSTORE: ../rfc/7162:411
-// QRESYNC: ../rfc/7162:1323
-// STATUS=SIZE: ../rfc/8438 ../rfc/9051:8024
-// QUOTA QUOTA=RES-STORAGE: ../rfc/9208:111
-// METADATA: ../rfc/5464
-// SAVEDATE: ../rfc/8514
-// WITHIN: ../rfc/5032
-// NAMESPACE: ../rfc/2342
-// COMPRESS=DEFLATE: ../rfc/4978
-// LIST-METADATA: ../rfc/9590
-// MULTIAPPEND: ../rfc/3502
-// REPLACE: ../rfc/8508
+// Capabilities (extensions) the server supports. Connections will add a few more,
+// e.g. STARTTLS, LOGINDISABLED, AUTH=PLAIN.
 //
 // We always announce support for SCRAM PLUS-variants, also on connections without
 // TLS. The client should not be selecting PLUS variants on non-TLS connections,
 // instead opting to do the bare SCRAM variant without indicating the server claims
 // to support the PLUS variant (skipping the server downgrade detection check).
-const serverCapabilities = "IMAP4rev2 IMAP4rev1 ENABLE LITERAL+ IDLE SASL-IR BINARY UNSELECT UIDPLUS ESEARCH SEARCHRES MOVE UTF8=ACCEPT LIST-EXTENDED SPECIAL-USE CREATE-SPECIAL-USE LIST-STATUS AUTH=SCRAM-SHA-256-PLUS AUTH=SCRAM-SHA-256 AUTH=SCRAM-SHA-1-PLUS AUTH=SCRAM-SHA-1 AUTH=CRAM-MD5 ID APPENDLIMIT=9223372036854775807 CONDSTORE QRESYNC STATUS=SIZE QUOTA QUOTA=RES-STORAGE METADATA SAVEDATE WITHIN NAMESPACE LIST-METADATA MULTIAPPEND REPLACE"
-
-// disabled: COMPRESS=DEFLATE, has interoperability issues. The flate reader (inflate) still blocks on partial flushes, preventing progress.
+var serverCapabilities = strings.Join([]string{
+	"IMAP4rev2",                       // ../rfc/9051
+	"IMAP4rev1",                       // ../rfc/3501
+	"ENABLE",                          // ../rfc/5161
+	"LITERAL+",                        // ../rfc/7888
+	"IDLE",                            // ../rfc/2177
+	"SASL-IR",                         // ../rfc/4959
+	"BINARY",                          // ../rfc/3516
+	"UNSELECT",                        // ../rfc/3691
+	"UIDPLUS",                         // ../rfc/4315
+	"ESEARCH",                         // ../rfc/4731
+	"SEARCHRES",                       // ../rfc/5182
+	"MOVE",                            // ../rfc/6851
+	"UTF8=ACCEPT",                     // ../rfc/6855
+	"LIST-EXTENDED",                   // ../rfc/5258
+	"SPECIAL-USE",                     // ../rfc/6154
+	"CREATE-SPECIAL-USE",              //
+	"LIST-STATUS",                     // ../rfc/5819
+	"AUTH=SCRAM-SHA-256-PLUS",         // ../rfc/7677 ../rfc/5802
+	"AUTH=SCRAM-SHA-256",              //
+	"AUTH=SCRAM-SHA-1-PLUS",           // ../rfc/5802
+	"AUTH=SCRAM-SHA-1",                //
+	"AUTH=CRAM-MD5",                   // ../rfc/2195
+	"ID",                              // ../rfc/2971
+	"APPENDLIMIT=9223372036854775807", // ../rfc/7889:129, we support the max possible size, 1<<63 - 1
+	"CONDSTORE",                       // ../rfc/7162:411
+	"QRESYNC",                         // ../rfc/7162:1323
+	"STATUS=SIZE",                     // ../rfc/8438 ../rfc/9051:8024
+	"QUOTA",                           // ../rfc/9208:111
+	"QUOTA=RES-STORAGE",               //
+	"METADATA",                        // ../rfc/5464
+	"SAVEDATE",                        // ../rfc/8514
+	"WITHIN",                          // ../rfc/5032
+	"NAMESPACE",                       // ../rfc/2342
+	"LIST-METADATA",                   // ../rfc/9590
+	"MULTIAPPEND",                     // ../rfc/3502
+	"REPLACE",                         // ../rfc/8508
+	// "COMPRESS=DEFLATE", // ../rfc/4978, disabled for interoperability issues: The flate reader (inflate) still blocks on partial flushes, preventing progress.
+}, " ")
 
 type conn struct {
 	cid               int64
