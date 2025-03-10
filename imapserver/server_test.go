@@ -232,9 +232,9 @@ next:
 		}
 		var next string
 		if len(tc.lastUntagged) > 0 {
-			next = fmt.Sprintf(", next %#v", tc.lastUntagged[0])
+			next = fmt.Sprintf(", next:\n%#v", tc.lastUntagged[0])
 		}
-		tc.t.Fatalf("did not find untagged response %#v %T (%d) in %v%s", exp, exp, ei, tc.lastUntagged, next)
+		tc.t.Fatalf("did not find untagged response:\n%#v %T (%d)\nin %v%s", exp, exp, ei, tc.lastUntagged, next)
 	}
 	if len(last) > 0 && all {
 		tc.t.Fatalf("leftover untagged responses %v", last)
