@@ -226,7 +226,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 7377	Roadmap	-	IMAP4 Multimailbox SEARCH Extension
 7888	Yes	-	IMAP4 Non-synchronizing Literals
 7889	Yes	-	The IMAP APPENDLIMIT Extension
-8437	Roadmap	-	IMAP UNAUTHENTICATE Extension for Connection Reuse
+8437	No	-	IMAP UNAUTHENTICATE Extension for Connection Reuse
 8438	Yes	-	IMAP Extension for STATUS=SIZE
 8440	?	-	IMAP4 Extension for Returning MYRIGHTS Information in Extended LIST
 8457	No	-	IMAP "$Important" Keyword and "\Important" Special-Use Attribute
