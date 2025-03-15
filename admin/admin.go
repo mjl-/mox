@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -661,6 +662,15 @@ func AccountAdd(ctx context.Context, account, address string) (rerr error) {
 		return fmt.Errorf("%w: account already present", ErrRequest)
 	}
 
+	// Ensure the directory does not exist, e.g. due to pending account removal, or an
+	// otherwise failed cleanup.
+	accountDir := filepath.Join(mox.DataDirPath("accounts"), account)
+	if _, err := os.Stat(accountDir); err == nil {
+		return fmt.Errorf("%w: account directory %q already/still exists", ErrRequest, accountDir)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf(`%w: stat account directory %q, expected "does not exist": %v`, ErrRequest, accountDir, err)
+	}
+
 	if err := checkAddressAvailable(addr); err != nil {
 		return fmt.Errorf("%w: address not available: %v", ErrRequest, err)
 	}
@@ -690,12 +700,20 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 		}
 	}()
 
+	// Open account now. The deferred Close MUST happen after the dynamic unlock,
+	// because during tests the consistency checker takes the same lock.
+	acc, err := store.OpenAccount(log, account, false)
+	if err != nil {
+		return fmt.Errorf("%w: open account: %v", ErrRequest, err)
+	}
+	defer func() {
+		err := acc.Close()
+		log.Check(err, "closing account after error")
+	}()
+
 	defer mox.Conf.DynamicLockUnlock()()
 
 	c := mox.Conf.Dynamic
-	if _, ok := c.Accounts[account]; !ok {
-		return fmt.Errorf("%w: account does not exist", ErrRequest)
-	}
 
 	// Compose new config without modifying existing data structures. If we fail, we
 	// leave no trace.
@@ -711,28 +729,11 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 
-	odir := filepath.Join(mox.DataDirPath("accounts"), account)
-	tmpdir := filepath.Join(mox.DataDirPath("tmp"), "oldaccount-"+account)
-	if err := os.Rename(odir, tmpdir); err != nil {
-		log.Errorx("moving old account data directory out of the way", err, slog.String("account", account))
-		return fmt.Errorf("account removed, but account data directory %q could not be moved out of the way: %v", odir, err)
-	}
-	if err := os.RemoveAll(tmpdir); err != nil {
-		log.Errorx("removing old account data directory", err, slog.String("account", account))
-		return fmt.Errorf("account removed, its data directory moved to %q, but removing failed: %v", odir, err)
+	if err := acc.Remove(context.Background()); err != nil {
+		return fmt.Errorf("account removed from configuration file, but scheduling account directory for removal failed: %v", err)
 	}
 
-	if err := store.TLSPublicKeyRemoveForAccount(context.Background(), account); err != nil {
-		log.Errorx("removing tls public keys for removed account", err)
-		return fmt.Errorf("account removed, but removing tls public keys failed: %v", err)
-	}
-
-	if err := store.LoginAttemptRemoveAccount(context.Background(), account); err != nil {
-		log.Errorx("removing historic login attempts for removed account", err)
-		return fmt.Errorf("account removed, but removing historic login attempts failed: %v", err)
-	}
-
-	log.Info("account removed", slog.String("account", account))
+	log.Info("account marked for removal", slog.String("account", account))
 	return nil
 }
 

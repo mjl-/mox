@@ -127,9 +127,9 @@ func TLSPublicKeyRemove(ctx context.Context, fingerprint string) error {
 	return AuthDB.Delete(ctx, &k)
 }
 
-// TLSPublicKeyRemoveForAccount removes all tls public keys for an account.
-func TLSPublicKeyRemoveForAccount(ctx context.Context, account string) error {
-	q := bstore.QueryDB[TLSPublicKey](ctx, AuthDB)
+// tlsPublicKeyRemoveForAccount removes all tls public keys for an account.
+func tlsPublicKeyRemoveForAccount(tx *bstore.Tx, account string) error {
+	q := bstore.QueryTx[TLSPublicKey](tx)
 	q.FilterNonzero(TLSPublicKey{Account: account})
 	_, err := q.Delete()
 	return err

@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -410,4 +412,73 @@ func TestNextMessageID(t *testing.T) {
 	err = acc.Close()
 	tcheck(t, err, "closing account")
 	acc.WaitClosed()
+}
+
+func TestRemove(t *testing.T) {
+	log := mlog.New("store", nil)
+	os.RemoveAll("../testdata/store/data")
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
+	mox.MustLoadConfig(true, false)
+	err := Init(ctxbg)
+	tcheck(t, err, "init")
+	defer func() {
+		err := Close()
+		tcheck(t, err, "close")
+	}()
+	defer Switchboard()()
+
+	// Note: we are not removing the account from the config file. Nothing currently
+	// has a problem with that.
+
+	// Ensure account exists.
+	acc, err := OpenAccount(log, "mjl", false)
+	tcheck(t, err, "open account")
+
+	// Mark account removed. It will only be removed when we close the account.
+	err = acc.Remove(context.Background())
+	tcheck(t, err, "remove account")
+
+	p := filepath.Join(mox.DataDirPath("accounts"), "mjl")
+	_, err = os.Stat(p)
+	tcheck(t, err, "stat account dir")
+
+	err = acc.Close()
+	tcheck(t, err, "closing account")
+	acc.WaitClosed()
+	acc = nil
+
+	if _, err := os.Stat(p); err == nil || !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf(`got stat err %v for account directory, expected "does not exist"`, err)
+	}
+
+	// Recreate files and directories. We will reinitialize store/ without closing our
+	// account reference. This will apply the account removal. We only drop our (now
+	// broken) account reference when done.
+	acc, err = OpenAccount(log, "mjl", false)
+	tcheck(t, err, "open account")
+	defer func() {
+		acc.Close() // Ignore errors.
+		acc.WaitClosed()
+		CheckConsistencyOnClose = true
+	}()
+
+	// Init below will remove the directory, we are no longer consistent.
+	CheckConsistencyOnClose = false
+
+	err = acc.Remove(context.Background())
+	tcheck(t, err, "remove account")
+
+	_, err = os.Stat(p)
+	tcheck(t, err, "stat account dir")
+
+	err = Close()
+	tcheck(t, err, "close store")
+	err = Init(ctxbg)
+	tcheck(t, err, "init store")
+	if _, err := os.Stat(p); err == nil || !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf(`got stat err %v for account directory, expected "does not exist"`, err)
+	}
+	exists, err := bstore.QueryDB[AccountRemove](ctxbg, AuthDB).Exists()
+	tcheck(t, err, "checking for account removals")
+	tcompare(t, exists, false)
 }

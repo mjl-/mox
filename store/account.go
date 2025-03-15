@@ -939,8 +939,9 @@ type Account struct {
 
 	// Reference count, while >0, this account is alive and shared. Protected by
 	// openAccounts, not by account wlock.
-	nused  int
-	closed chan struct{} // Closed when last reference is gone.
+	nused   int
+	removed bool          // Marked for removal. Last close removes the account directory.
+	closed  chan struct{} // Closed when last reference is gone.
 }
 
 type Upgrade struct {
@@ -972,20 +973,34 @@ var openAccounts = struct {
 }
 
 func closeAccount(acc *Account) (rerr error) {
+	// If we need to remove the account files, we do so without the accounts lock.
+	remove := false
+	defer func() {
+		if remove {
+			log := mlog.New("store", nil)
+			err := removeAccount(log, acc.Name)
+			if rerr == nil {
+				rerr = err
+			}
+			close(acc.closed)
+		}
+	}()
+
 	openAccounts.Lock()
 	defer openAccounts.Unlock()
 	acc.nused--
 	if acc.nused > 0 {
 		return
 	}
-
-	// threadsCompleted must be closed now because it increased nused.
+	remove = acc.removed
 
 	defer func() {
 		err := acc.DB.Close()
 		acc.DB = nil
 		delete(openAccounts.names, acc.Name)
-		close(acc.closed)
+		if !remove {
+			close(acc.closed)
+		}
 
 		if rerr == nil {
 			rerr = err
@@ -999,7 +1014,49 @@ func closeAccount(acc *Account) (rerr error) {
 	} else if len(l) > 0 {
 		return fmt.Errorf("messageerase records still present after last account reference is gone: %v", l)
 	}
+
 	return nil
+}
+
+// removeAccount moves the account directory for an account away and removes
+// all files, and removes the AccountRemove struct from the database.
+func removeAccount(log mlog.Log, accountName string) error {
+	log = log.With(slog.String("account", accountName))
+	log.Info("removing account directory and files")
+
+	// First move the account directory away.
+	odir := filepath.Join(mox.DataDirPath("accounts"), accountName)
+	tmpdir := filepath.Join(mox.DataDirPath("tmp"), "oldaccount-"+accountName)
+	if err := os.Rename(odir, tmpdir); err != nil {
+		return fmt.Errorf("moving account data directory %q out of the way to %q (account not removed): %v", odir, tmpdir, err)
+	}
+
+	var errs []error
+
+	// Commit removal to database.
+	err := AuthDB.Write(context.Background(), func(tx *bstore.Tx) error {
+		if err := tx.Delete(&AccountRemove{accountName}); err != nil {
+			return fmt.Errorf("deleting account removal request: %v", err)
+		}
+		if err := tlsPublicKeyRemoveForAccount(tx, accountName); err != nil {
+			return fmt.Errorf("removing tls public keys for account: %v", err)
+		}
+
+		if err := loginAttemptRemoveAccount(tx, accountName); err != nil {
+			return fmt.Errorf("removing historic login attempts for account: %v", err)
+		}
+		return nil
+	})
+	if err != nil {
+		errs = append(errs, fmt.Errorf("remove account from database: %w", err))
+	}
+
+	// Remove the account directory and its message and other files.
+	if err := os.RemoveAll(tmpdir); err != nil {
+		errs = append(errs, fmt.Errorf("removing account data directory %q that was moved to %q: %v", odir, tmpdir, err))
+	}
+
+	return errors.Join(errs...)
 }
 
 // OpenAccount opens an account by name.
@@ -1010,6 +1067,10 @@ func OpenAccount(log mlog.Log, name string, checkLoginDisabled bool) (*Account, 
 	openAccounts.Lock()
 	defer openAccounts.Unlock()
 	if acc, ok := openAccounts.names[name]; ok {
+		if acc.removed {
+			return nil, fmt.Errorf("account has been removed")
+		}
+
 		acc.nused++
 		return acc, nil
 	}
@@ -1077,6 +1138,7 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		if err := initAccount(db); err != nil {
 			return nil, fmt.Errorf("initializing account: %v", err)
 		}
+
 		close(acc.threadsCompleted)
 		return acc, nil
 	}
@@ -1574,6 +1636,20 @@ func initAccount(db *bstore.DB) error {
 		}
 		return nil
 	})
+}
+
+// Remove schedules an account for removal. New opens will fail. When the last
+// reference is closed, the account files are removed.
+func (a *Account) Remove(ctx context.Context) error {
+	openAccounts.Lock()
+	defer openAccounts.Unlock()
+
+	if err := AuthDB.Insert(ctx, &AccountRemove{AccountName: a.Name}); err != nil {
+		return fmt.Errorf("inserting account removal: %w", err)
+	}
+	a.removed = true
+
+	return nil
 }
 
 // WaitClosed waits until the last reference to this account is gone and the

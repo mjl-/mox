@@ -313,15 +313,13 @@ func LoginAttemptCleanup(ctx context.Context) error {
 	})
 }
 
-// LoginAttemptRemoveAccount removes all LoginAttempt records for an account
+// loginAttemptRemoveAccount removes all LoginAttempt records for an account
 // (value must be non-empty).
-func LoginAttemptRemoveAccount(ctx context.Context, accountName string) error {
-	return AuthDB.Write(ctx, func(tx *bstore.Tx) error {
-		q := bstore.QueryTx[LoginAttempt](tx)
-		q.FilterNonzero(LoginAttempt{AccountName: accountName})
-		_, err := q.Delete()
-		return err
-	})
+func loginAttemptRemoveAccount(tx *bstore.Tx, accountName string) error {
+	q := bstore.QueryTx[LoginAttempt](tx)
+	q.FilterNonzero(LoginAttempt{AccountName: accountName})
+	_, err := q.Delete()
+	return err
 }
 
 // LoginAttemptList returns LoginAttempt records for the accountName. If

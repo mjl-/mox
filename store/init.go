@@ -17,9 +17,15 @@ import (
 	"github.com/mjl-/mox/moxvar"
 )
 
+// AccountRemove represents the scheduled removal of an account, when its last
+// reference goes away.
+type AccountRemove struct {
+	AccountName string
+}
+
 // AuthDB and AuthDBTypes are exported for ../backup.go.
 var AuthDB *bstore.DB
-var AuthDBTypes = []any{TLSPublicKey{}, LoginAttempt{}, LoginAttemptState{}}
+var AuthDBTypes = []any{TLSPublicKey{}, LoginAttempt{}, LoginAttemptState{}, AccountRemove{}}
 
 var loginAttemptCleanerStop chan chan struct{}
 
@@ -36,6 +42,18 @@ func Init(ctx context.Context) error {
 	AuthDB, err = bstore.Open(ctx, p, &opts, AuthDBTypes...)
 	if err != nil {
 		return err
+	}
+
+	// List pending account removals, and process them one by one, committing each
+	// individually.
+	removals, err := bstore.QueryDB[AccountRemove](ctx, AuthDB).List()
+	if err != nil {
+		return fmt.Errorf("listing scheduled account removals: %v", err)
+	}
+	for _, removal := range removals {
+		if err := removeAccount(pkglog, removal.AccountName); err != nil {
+			pkglog.Errorx("removing old account", err, slog.String("account", removal.AccountName))
+		}
 	}
 
 	startLoginAttemptWriter()
