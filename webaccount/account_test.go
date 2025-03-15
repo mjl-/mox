@@ -93,6 +93,7 @@ func tcompare(t *testing.T, got, expect any) {
 }
 
 func TestAccount(t *testing.T) {
+	log := mlog.New("webaccount", nil)
 	os.RemoveAll("../testdata/httpaccount/data")
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/httpaccount/mox.conf")
 	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
@@ -103,7 +104,8 @@ func TestAccount(t *testing.T) {
 		err := store.Close()
 		tcheck(t, err, "store close")
 	}()
-	log := mlog.New("webaccount", nil)
+	defer store.Switchboard()()
+
 	acc, err := store.OpenAccount(log, "mjl☺", false)
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(log, "test1234")
@@ -113,7 +115,6 @@ func TestAccount(t *testing.T) {
 		tcheck(t, err, "closing account")
 		acc.WaitClosed()
 	}()
-	defer store.Switchboard()()
 
 	api := Account{cookiePath: "/account/"}
 	apiHandler, err := makeSherpaHandler(api.cookiePath, false)

@@ -61,18 +61,20 @@ func setup(t *testing.T) (*store.Account, func()) {
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/queue/mox.conf")
 	mox.MustLoadConfig(true, false)
+	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
 	err := Init()
 	tcheck(t, err, "queue init")
 	err = mtastsdb.Init(false)
 	tcheck(t, err, "mtastsdb init")
 	err = tlsrptdb.Init()
 	tcheck(t, err, "tlsrptdb init")
+	switchStop := store.Switchboard()
+
 	acc, err := store.OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
 	err = acc.SetPassword(log, "testtest")
 	tcheck(t, err, "set password")
-	switchStop := store.Switchboard()
-	mox.Shutdown, mox.ShutdownCancel = context.WithCancel(ctxbg)
+
 	return acc, func() {
 		acc.Close()
 		acc.WaitClosed()

@@ -42,6 +42,7 @@ func FuzzServer(f *testing.F) {
 	if err != nil {
 		f.Fatalf("store init: %v", err)
 	}
+	defer store.Switchboard()()
 
 	acc, err := store.OpenAccount(log, "mjl", false)
 	if err != nil {
@@ -55,7 +56,7 @@ func FuzzServer(f *testing.F) {
 	if err != nil {
 		f.Fatalf("set password: %v", err)
 	}
-	defer store.Switchboard()()
+
 	err = queue.Init()
 	if err != nil {
 		f.Fatalf("queue init: %v", err)

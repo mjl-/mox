@@ -308,13 +308,13 @@ func TestWebmail(t *testing.T) {
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webmail/mox.conf")
 	mox.MustLoadConfig(true, false)
-	defer store.Switchboard()()
 	err := store.Init(ctxbg)
 	tcheck(t, err, "store init")
 	defer func() {
 		err := store.Close()
 		tcheck(t, err, "store close")
 	}()
+	defer store.Switchboard()()
 
 	log := mlog.New("webmail", nil)
 	acc, err := store.OpenAccount(pkglog, "mjl", false)
@@ -324,7 +324,7 @@ func TestWebmail(t *testing.T) {
 	defer func() {
 		err := acc.Close()
 		pkglog.Check(err, "closing account")
-		acc.CheckClosed()
+		acc.WaitClosed()
 	}()
 
 	api := Webmail{maxMessageSize: 1024 * 1024, cookiePath: "/webmail/"}

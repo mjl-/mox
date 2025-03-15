@@ -69,6 +69,8 @@ func FuzzServer(f *testing.F) {
 	if err != nil {
 		f.Fatalf("store init: %v", err)
 	}
+	defer store.Switchboard()()
+
 	acc, err := store.OpenAccount(log, "mjl", false)
 	if err != nil {
 		f.Fatalf("open account: %v", err)
@@ -81,7 +83,6 @@ func FuzzServer(f *testing.F) {
 	if err != nil {
 		f.Fatalf("set password: %v", err)
 	}
-	defer store.Switchboard()()
 
 	comm := store.RegisterComm(acc)
 	defer comm.Unregister()

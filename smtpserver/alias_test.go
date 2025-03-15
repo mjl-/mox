@@ -81,7 +81,7 @@ func TestAliasSubmitMsgFromDenied(t *testing.T) {
 	tcheck(t, err, "set password")
 	err = acc.Close()
 	tcheck(t, err, "close account")
-	acc.CheckClosed()
+	acc.WaitClosed()
 
 	ts.submission = true
 	ts.user = "☺@mox.example"

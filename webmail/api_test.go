@@ -56,13 +56,13 @@ func TestAPI(t *testing.T) {
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webmail/mox.conf")
 	mox.ConfigDynamicPath = filepath.FromSlash("../testdata/webmail/domains.conf")
 	mox.MustLoadConfig(true, false)
-	defer store.Switchboard()()
 	err := store.Init(ctxbg)
 	tcheck(t, err, "store init")
 	defer func() {
 		err := store.Close()
 		tcheck(t, err, "store close")
 	}()
+	defer store.Switchboard()()
 
 	log := mlog.New("webmail", nil)
 	err = mtastsdb.Init(false)

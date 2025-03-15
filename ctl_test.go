@@ -49,15 +49,14 @@ func TestCtl(t *testing.T) {
 	if errs := mox.LoadConfig(ctxbg, pkglog, true, false); len(errs) > 0 {
 		t.Fatalf("loading mox config: %v", errs)
 	}
-	defer store.Switchboard()()
-
-	err := queue.Init()
-	tcheck(t, err, "queue init")
-	defer queue.Shutdown()
-
-	err = store.Init(ctxbg)
+	err := store.Init(ctxbg)
 	tcheck(t, err, "store init")
 	defer store.Close()
+	defer store.Switchboard()()
+
+	err = queue.Init()
+	tcheck(t, err, "queue init")
+	defer queue.Shutdown()
 
 	var cid int64
 

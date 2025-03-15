@@ -965,8 +965,8 @@ var InitialUIDValidity = func() uint32 {
 }
 
 var openAccounts = struct {
-	names map[string]*Account
 	sync.Mutex
+	names map[string]*Account
 }{
 	names: map[string]*Account{},
 }
@@ -1029,6 +1029,7 @@ func OpenAccount(log mlog.Log, name string, checkLoginDisabled bool) (*Account, 
 }
 
 // openAccount opens an existing account, or creates it if it is missing.
+// Called with openAccounts lock held.
 func openAccount(log mlog.Log, name string) (a *Account, rerr error) {
 	dir := filepath.Join(mox.DataDirPath("accounts"), name)
 	return OpenAccountDB(log, dir, name)
@@ -1580,15 +1581,6 @@ func initAccount(db *bstore.DB) error {
 // expunged messages have been erased.
 func (a *Account) WaitClosed() {
 	<-a.closed
-}
-
-// CheckClosed asserts that the account has a zero reference count. For use in tests.
-func (a *Account) CheckClosed() {
-	openAccounts.Lock()
-	defer openAccounts.Unlock()
-	if a.nused != 0 {
-		panic(fmt.Sprintf("account still in use, %d refs", a.nused))
-	}
 }
 
 // Close reduces the reference count, and closes the database connection when

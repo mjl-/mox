@@ -41,6 +41,13 @@ func TestMailbox(t *testing.T) {
 	os.RemoveAll("../testdata/store/data")
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
+	err := Init(ctxbg)
+	tcheck(t, err, "init")
+	defer func() {
+		err := Close()
+		tcheck(t, err, "close")
+	}()
+	defer Switchboard()()
 	acc, err := OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
 	defer func() {
@@ -48,7 +55,6 @@ func TestMailbox(t *testing.T) {
 		tcheck(t, err, "closing account")
 		acc.WaitClosed()
 	}()
-	defer Switchboard()()
 
 	msgFile, err := CreateMessageTemp(log, "account-test")
 	tcheck(t, err, "create temp message file")
@@ -316,12 +322,20 @@ func TestNextMessageID(t *testing.T) {
 	os.RemoveAll("../testdata/store/data")
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/store/mox.conf")
 	mox.MustLoadConfig(true, false)
+	err := Init(ctxbg)
+	tcheck(t, err, "init")
+	defer func() {
+		err := Close()
+		tcheck(t, err, "close")
+	}()
+	defer Switchboard()()
 
 	// Ensure account exists.
 	acc, err := OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
 	err = acc.Close()
 	tcheck(t, err, "closing account")
+	acc.WaitClosed()
 	acc = nil
 
 	// Create file on disk to occupy the first Message.ID that would otherwise be used for deliveries..
@@ -342,7 +356,6 @@ func TestNextMessageID(t *testing.T) {
 	// Open account. This should increase the next message ID.
 	acc, err = OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
-	defer Switchboard()()
 
 	// Deliver a message. It should get ID 2.
 	mf, err := CreateMessageTemp(log, "account-test")
@@ -369,6 +382,7 @@ func TestNextMessageID(t *testing.T) {
 
 	err = acc.Close()
 	tcheck(t, err, "closing account")
+	acc.WaitClosed()
 
 	// Try again, but also create next message directory, but no file.
 	os.MkdirAll(filepath.Join(msgDir, "b"), 0700)

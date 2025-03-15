@@ -29,13 +29,13 @@ func TestView(t *testing.T) {
 	mox.Context = ctxbg
 	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webmail/mox.conf")
 	mox.MustLoadConfig(true, false)
-	defer store.Switchboard()()
 	err := store.Init(ctxbg)
 	tcheck(t, err, "store init")
 	defer func() {
 		err := store.Close()
 		tcheck(t, err, "store close")
 	}()
+	defer store.Switchboard()()
 
 	log := mlog.New("webmail", nil)
 	acc, err := store.OpenAccount(log, "mjl", false)

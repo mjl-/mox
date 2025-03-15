@@ -155,14 +155,14 @@ func newTestServer(t *testing.T, configPath string, resolver dns.Resolver) *test
 	err = store.Init(ctxbg)
 	tcheck(t, err, "store init")
 
+	ts.switchStop = store.Switchboard()
+	err = queue.Init()
+	tcheck(t, err, "queue init")
+
 	ts.acc, err = store.OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
 	err = ts.acc.SetPassword(log, password0)
 	tcheck(t, err, "set password")
-
-	ts.switchStop = store.Switchboard()
-	err = queue.Init()
-	tcheck(t, err, "queue init")
 
 	ts.comm = store.RegisterComm(ts.acc)
 
@@ -177,15 +177,15 @@ func (ts *testserver) close() {
 	tcheck(ts.t, err, "dmarcdb close")
 	err = tlsrptdb.Close()
 	tcheck(ts.t, err, "tlsrptdb close")
-	err = store.Close()
-	tcheck(ts.t, err, "store close")
 	ts.comm.Unregister()
 	queue.Shutdown()
-	ts.switchStop()
 	err = ts.acc.Close()
 	tcheck(ts.t, err, "closing account")
 	ts.acc.WaitClosed()
 	ts.acc = nil
+	ts.switchStop()
+	err = store.Close()
+	tcheck(ts.t, err, "store close")
 }
 
 func (ts *testserver) checkCount(mailboxName string, expect int) {
@@ -1505,7 +1505,7 @@ func TestCatchall(t *testing.T) {
 	tcheck(t, err, "open account")
 	defer func() {
 		acc.Close()
-		acc.CheckClosed()
+		acc.WaitClosed()
 	}()
 	n, err = bstore.QueryDB[store.Message](ctxbg, acc.DB).Count()
 	tcheck(t, err, "checking delivered messages to catchall account")

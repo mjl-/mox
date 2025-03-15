@@ -338,7 +338,6 @@ func (tc *testconn) close0(waitclose bool) {
 	if waitclose {
 		tc.account.WaitClosed()
 	}
-	// no account.CheckClosed(), the tests open accounts multiple times.
 	tc.account = nil
 	tc.serverConn.Close()
 	tc.waitDone()
@@ -385,7 +384,7 @@ const password0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spa
 const password1 = "tést    "                      // PRECIS normalized, with NFC.
 
 func startArgs(t *testing.T, first, immediateTLS bool, allowLoginWithoutTLS, setPassword bool, accname string) *testconn {
-	return startArgsMore(t, first, immediateTLS, nil, nil, allowLoginWithoutTLS, false, setPassword, accname, nil)
+	return startArgsMore(t, first, immediateTLS, nil, nil, allowLoginWithoutTLS, setPassword, accname, nil)
 }
 
 // namedConn wraps a conn so it can return a RemoteAddr with a non-empty name.
@@ -400,9 +399,10 @@ func (c namedConn) RemoteAddr() net.Addr {
 }
 
 // todo: the parameters and usage are too much now. change to scheme similar to smtpserver, with params in a struct, and a separate method for init and making a connection.
-func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientConfig *tls.Config, allowLoginWithoutTLS, noCloseSwitchboard, setPassword bool, accname string, afterInit func() error) *testconn {
+func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientConfig *tls.Config, allowLoginWithoutTLS, setPassword bool, accname string, afterInit func() error) *testconn {
 	limitersInit() // Reset rate limiters.
 
+	switchStop := func() {}
 	if first {
 		mox.ConfigStaticPath = filepath.FromSlash("../testdata/imap/mox.conf")
 		mox.MustLoadConfig(true, false)
@@ -410,17 +410,16 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 		os.RemoveAll("../testdata/imap/data")
 		err := store.Init(ctxbg)
 		tcheck(t, err, "store init")
+		switchStop = store.Switchboard()
 	}
+
 	acc, err := store.OpenAccount(pkglog, accname, false)
 	tcheck(t, err, "open account")
 	if setPassword {
 		err = acc.SetPassword(pkglog, password0)
 		tcheck(t, err, "set password")
 	}
-	switchStop := func() {}
 	if first {
-		switchStop = store.Switchboard()
-
 		// Add a deleted mailbox, may excercise some code paths.
 		err = acc.DB.Write(ctxbg, func(tx *bstore.Tx) error {
 			// todo: add a message to inbox and remove it again. need to change all uids in the tests.
@@ -487,15 +486,12 @@ func startArgsMore(t *testing.T, first, immediateTLS bool, serverConfig, clientC
 	go func() {
 		const viaHTTPS = false
 		serve("test", cid, serverConfig, serverConn, immediateTLS, allowLoginWithoutTLS, viaHTTPS, "")
-		if !noCloseSwitchboard {
-			switchStop()
-		}
 		close(done)
 	}()
 	client, err := imapclient.New(connCounter, clientConn, true)
 	tcheck(t, err, "new client")
 	tc := &testconn{t: t, conn: clientConn, client: client, done: done, serverConn: serverConn, account: acc}
-	if first && noCloseSwitchboard {
+	if first {
 		tc.switchStop = switchStop
 	}
 	return tc
