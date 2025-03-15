@@ -3578,7 +3578,7 @@ func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc *Mailbox, dst string, modse
 
 	// If we were moved from a/b to a/b/x, we mention the creation of a/b after we mentioned the rename.
 	if strings.HasPrefix(dst, origName+"/") {
-		changes = append(changes, parentChanges)
+		changes = append(changes, parentChanges...)
 	} else {
 		changes = slices.Concat(parentChanges, changes)
 	}

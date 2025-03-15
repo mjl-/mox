@@ -37,7 +37,9 @@ type UID uint32 // IMAP UID.
 
 // Change to mailboxes/subscriptions/messages in an account. One of the Change*
 // types in this package.
-type Change any
+type Change interface {
+	ChangeModSeq() ModSeq // returns -1 for "modseq not applicable"
+}
 
 // ChangeAddUID is sent for a new message in a mailbox.
 type ChangeAddUID struct {
@@ -48,6 +50,8 @@ type ChangeAddUID struct {
 	Keywords  []string // Other flags.
 }
 
+func (c ChangeAddUID) ChangeModSeq() ModSeq { return c.ModSeq }
+
 // ChangeRemoveUIDs is sent for removal of one or more messages from a mailbox.
 type ChangeRemoveUIDs struct {
 	MailboxID int64
@@ -55,6 +59,8 @@ type ChangeRemoveUIDs struct {
 	ModSeq    ModSeq
 	MsgIDs    []int64 // Message.ID, for erasing, order does not necessarily correspond with UIDs!
 }
+
+func (c ChangeRemoveUIDs) ChangeModSeq() ModSeq { return c.ModSeq }
 
 // ChangeFlags is sent for an update to flags for a message, e.g. "Seen".
 type ChangeFlags struct {
@@ -66,12 +72,16 @@ type ChangeFlags struct {
 	Keywords  []string // Non-system/well-known flags/keywords/labels.
 }
 
+func (c ChangeFlags) ChangeModSeq() ModSeq { return c.ModSeq }
+
 // ChangeThread is sent when muted/collapsed changes.
 type ChangeThread struct {
 	MessageIDs []int64
 	Muted      bool
 	Collapsed  bool
 }
+
+func (c ChangeThread) ChangeModSeq() ModSeq { return -1 }
 
 // ChangeRemoveMailbox is sent for a removed mailbox.
 type ChangeRemoveMailbox struct {
@@ -80,12 +90,16 @@ type ChangeRemoveMailbox struct {
 	ModSeq    ModSeq
 }
 
+func (c ChangeRemoveMailbox) ChangeModSeq() ModSeq { return c.ModSeq }
+
 // ChangeAddMailbox is sent for a newly created mailbox.
 type ChangeAddMailbox struct {
 	Mailbox Mailbox
 	Flags   []string // For flags like \Subscribed.
 	ModSeq  ModSeq
 }
+
+func (c ChangeAddMailbox) ChangeModSeq() ModSeq { return c.ModSeq }
 
 // ChangeRenameMailbox is sent for a rename mailbox.
 type ChangeRenameMailbox struct {
@@ -96,11 +110,15 @@ type ChangeRenameMailbox struct {
 	ModSeq    ModSeq
 }
 
+func (c ChangeRenameMailbox) ChangeModSeq() ModSeq { return c.ModSeq }
+
 // ChangeAddSubscription is sent for an added subscription to a mailbox.
 type ChangeAddSubscription struct {
 	Name  string
 	Flags []string // For additional IMAP flags like \NonExistent.
 }
+
+func (c ChangeAddSubscription) ChangeModSeq() ModSeq { return -1 }
 
 // ChangeMailboxCounts is sent when the number of total/deleted/unseen/unread messages changes.
 type ChangeMailboxCounts struct {
@@ -108,6 +126,8 @@ type ChangeMailboxCounts struct {
 	MailboxName string
 	MailboxCounts
 }
+
+func (c ChangeMailboxCounts) ChangeModSeq() ModSeq { return -1 }
 
 // ChangeMailboxSpecialUse is sent when a special-use flag changes.
 type ChangeMailboxSpecialUse struct {
@@ -117,6 +137,8 @@ type ChangeMailboxSpecialUse struct {
 	ModSeq      ModSeq
 }
 
+func (c ChangeMailboxSpecialUse) ChangeModSeq() ModSeq { return c.ModSeq }
+
 // ChangeMailboxKeywords is sent when keywords are changed for a mailbox. For
 // example, when a message is added with a previously unseen keyword.
 type ChangeMailboxKeywords struct {
@@ -124,6 +146,8 @@ type ChangeMailboxKeywords struct {
 	MailboxName string
 	Keywords    []string
 }
+
+func (c ChangeMailboxKeywords) ChangeModSeq() ModSeq { return -1 }
 
 // ChangeAnnotation is sent when an annotation is added/updated/removed, either for
 // a mailbox or a global per-account annotation. The value is not included.
@@ -133,6 +157,8 @@ type ChangeAnnotation struct {
 	Key         string // Also called "entry name", e.g. "/private/comment".
 	ModSeq      ModSeq
 }
+
+func (c ChangeAnnotation) ChangeModSeq() ModSeq { return c.ModSeq }
 
 func messageEraser(donec chan struct{}, cleanc chan map[*Account][]int64) {
 	log := mlog.New("store", nil)
