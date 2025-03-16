@@ -962,6 +962,9 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 			case store.ChangeAddSubscription:
 				// Webmail does not care about subscriptions.
 
+			case store.ChangeAnnotation:
+				// Nothing.
+
 			default:
 				panic(fmt.Sprintf("missing case for change %T", c))
 			}
