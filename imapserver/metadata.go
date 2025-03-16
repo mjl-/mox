@@ -263,6 +263,7 @@ func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
 					a.ModSeq = modseq
 					err = tx.Insert(&a)
 					xcheckf(err, "inserting annotation")
+					changes = append(changes, a.Change(mailboxName))
 				} else {
 					xcheckf(err, "get metadata")
 					oa.ModSeq = modseq
@@ -273,8 +274,8 @@ func (c *conn) cmdSetmetadata(tag, cmd string, p *parser) {
 					oa.Value = a.Value
 					err = tx.Update(&oa)
 					xcheckf(err, "updating metdata")
+					changes = append(changes, oa.Change(mailboxName))
 				}
-				changes = append(changes, a.Change(mailboxName))
 			}
 
 			c.xcheckMetadataSize(tx)
