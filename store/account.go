@@ -317,7 +317,7 @@ func (mb Mailbox) ChangeKeywords() ChangeMailboxKeywords {
 }
 
 func (mb Mailbox) ChangeAddMailbox(flags []string) ChangeAddMailbox {
-	return ChangeAddMailbox{Mailbox: mb, Flags: flags, ModSeq: mb.ModSeq}
+	return ChangeAddMailbox{Mailbox: mb, Flags: flags}
 }
 
 func (mb Mailbox) ChangeRemoveMailbox() ChangeRemoveMailbox {
@@ -2587,7 +2587,7 @@ func (a *Account) MailboxEnsure(tx *bstore.Tx, name string, subscribe bool, spec
 			return Mailbox{}, nil, fmt.Errorf("looking up subscription for %q: %v", p, err)
 		}
 
-		changes = append(changes, ChangeAddMailbox{mb, flags, *modseq})
+		changes = append(changes, ChangeAddMailbox{mb, flags})
 	}
 
 	// Clear any special-use flags from existing mailboxes and assign them to this mailbox.
@@ -3636,7 +3636,7 @@ func (a *Account) MailboxRename(tx *bstore.Tx, mbsrc *Mailbox, dst string, modse
 		} else if err != bstore.ErrAbsent {
 			return nil, false, false, fmt.Errorf("look up subscription for new parent %q: %v", parent.Name, err)
 		}
-		parentChanges = append(parentChanges, ChangeAddMailbox{parent, flags, *modseq})
+		parentChanges = append(parentChanges, ChangeAddMailbox{parent, flags})
 	}
 
 	mbsrc.ParentID = parent.ID

@@ -94,9 +94,8 @@ func (c ChangeRemoveMailbox) ChangeModSeq() ModSeq { return c.ModSeq }
 
 // ChangeAddMailbox is sent for a newly created mailbox.
 type ChangeAddMailbox struct {
-	Mailbox Mailbox
-	Flags   []string // For flags like \Subscribed.
-	ModSeq  ModSeq
+	Mailbox
+	Flags []string // For flags like \Subscribed.
 }
 
 func (c ChangeAddMailbox) ChangeModSeq() ModSeq { return c.ModSeq }

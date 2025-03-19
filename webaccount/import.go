@@ -485,7 +485,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 					err := tx.Insert(&store.Subscription{Name: p})
 					ximportcheckf(err, "subscribing to imported mailbox")
 				}
-				changes = append(changes, store.ChangeAddMailbox{Mailbox: *mb, Flags: []string{`\Subscribed`}, ModSeq: modseq})
+				changes = append(changes, store.ChangeAddMailbox{Mailbox: *mb, Flags: []string{`\Subscribed`}})
 			}
 			if prevMailbox != "" && mb.Name != prevMailbox {
 				sendEvent("count", importCount{prevMailbox, messages[prevMailbox]})
