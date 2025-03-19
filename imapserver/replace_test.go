@@ -58,6 +58,9 @@ func TestReplace(t *testing.T) {
 	)
 	tc.xcodeArg(imapclient.CodeHighestModSeq(9))
 
+	// Non-existent mailbox with non-synchronizing literal should consume the literal.
+	tc.transactf("no", "replace 1 bogusbox {1+}\r\nx")
+
 	// Leftover data.
 	tc.transactf("bad", "replace 1 inbox () {6+}\r\ntest\r\n ")
 }

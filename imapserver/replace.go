@@ -77,7 +77,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 			return func() { xserverErrorf("finding mailbox: %v", err) }
 		}
 		if mb == nil {
-			xusercodeErrorf("TRYCREATE", "%w", store.ErrUnknownMailbox)
+			return func() { xusercodeErrorf("TRYCREATE", "%w", store.ErrUnknownMailbox) }
 		}
 
 		// Resolve "*" for UID or message sequence.
