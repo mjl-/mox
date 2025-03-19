@@ -393,6 +393,8 @@ func formatString(s string) string {
 	return s
 }
 
+var typeTime = reflect.TypeFor[time.Time]()
+
 func stringValue(iscid, nested bool, v any) string {
 	// Handle some common types first.
 	if v == nil {
@@ -478,7 +480,8 @@ func stringValue(iscid, nested bool, v any) string {
 			if !t.Field(i).IsExported() {
 				continue
 			}
-			if j == 0 && (fv.Kind() == reflect.Struct || fv.Kind() == reflect.Ptr || fv.Kind() == reflect.Interface) {
+			// todo: decide on better approach about which fields to include while preventing recursion
+			if j == 0 && (fv.Kind() == reflect.Struct || fv.Kind() == reflect.Ptr || fv.Kind() == reflect.Interface) && fv.Type() != typeTime {
 				// Don't recurse.
 				continue
 			}
