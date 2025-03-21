@@ -2781,10 +2781,10 @@ const compose = (opts, listMailboxes) => {
 	const cmdSendArchive = async () => {
 		await withStatus('Sending email and archive', submit(true), fieldset);
 	};
-	const cmdAddTo = async () => { newAddrView('', true, toViews, toBtn, toCell, toRow); };
-	const cmdAddCc = async () => { newAddrView('', true, ccViews, ccBtn, ccCell, ccRow); };
-	const cmdAddBcc = async () => { newAddrView('', true, bccViews, bccBtn, bccCell, bccRow); };
-	const cmdReplyTo = async () => { newAddrView('', false, replytoViews, replyToBtn, replyToCell, replyToRow, true); };
+	const cmdAddTo = async () => { newAddrView('', true, true, toViews, toBtn, toCell, toRow); };
+	const cmdAddCc = async () => { newAddrView('', true, false, ccViews, ccBtn, ccCell, ccRow); };
+	const cmdAddBcc = async () => { newAddrView('', true, false, bccViews, bccBtn, bccCell, bccRow); };
+	const cmdReplyTo = async () => { newAddrView('', false, false, replytoViews, replyToBtn, replyToCell, replyToRow, true); };
 	const cmdCustomFrom = async () => {
 		if (customFrom) {
 			return;
@@ -2805,7 +2805,7 @@ const compose = (opts, listMailboxes) => {
 		'ctrl S': cmdClose,
 		// ctrl Backspace and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
 	};
-	const newAddrView = (addr, isRecipient, views, btn, cell, row, single) => {
+	const newAddrView = (addr, isRecipient, isTo, views, btn, cell, row, single) => {
 		if (single && views.length !== 0) {
 			return;
 		}
@@ -2901,11 +2901,12 @@ const compose = (opts, listMailboxes) => {
 		};
 		const recipientSecurityTitle = 'Description of security mechanisms recipient domains may implement:\n1. STARTTLS: Opportunistic (unverified) TLS with STARTTLS, successfully negotiated during the most recent delivery attempt.\n2. MTA-STS: For PKIX/WebPKI-verified TLS.\n3. DNSSEC: MX DNS records are DNSSEC-signed.\n4. DANE: First delivery destination host implements DANE for verified TLS.\n5. RequireTLS: SMTP extension for verified TLS delivery into recipient mailbox, support detected during the most recent delivery attempt.\n\nChecks STARTTLS, DANE and RequireTLS cover the most recently used delivery path, not necessarily all possible delivery paths.\n\nThe bars below the input field indicate implementation status by the recipient domain:\n- Red, not implemented/unsupported\n- Green, implemented/supported\n- Gray, error while determining\n- Absent/white, unknown or skipped (e.g. no previous delivery attempt, or DANE check skipped due to DNSSEC-lookup error)';
 		const root = dom.span(autosizeElem = dom.span(dom._class('autosize'), inputElem = dom.input(focusPlaceholder('Jane <jane@example.org>'), style({ width: 'auto' }), attr.value(addr), newAddressComplete(), accountSettings?.ShowAddressSecurity ? attr.title(recipientSecurityTitle) : [], function keydown(e) {
-			if (e.key === 'Backspace' && e.ctrlKey && inputElem.value === '') {
+			// Backspace removes address except when it's the only To address left.
+			if (e.key === 'Backspace' && e.ctrlKey && inputElem.value === '' && !(isTo && views.length === 1)) {
 				remove();
 			}
 			else if (e.key === '=' && e.ctrlKey) {
-				newAddrView('', isRecipient, views, btn, cell, row, single);
+				newAddrView('', isRecipient, isTo, views, btn, cell, row, single);
 			}
 			else {
 				return;
@@ -2930,7 +2931,7 @@ const compose = (opts, listMailboxes) => {
 			autosizeElem.dataset.value = inputElem.value = split[0];
 			let last;
 			for (const rest of split.splice(1)) {
-				last = newAddrView(rest.trim(), isRecipient, views, btn, cell, row, single);
+				last = newAddrView(rest.trim(), isRecipient, isTo, views, btn, cell, row, single);
 			}
 			last.input.focus();
 			e.preventDefault();
@@ -3157,11 +3158,11 @@ const compose = (opts, listMailboxes) => {
 		shortcutCmd(cmdSend, shortcuts);
 	}));
 	subjectAutosize.dataset.value = subject.value;
-	(opts.to && opts.to.length > 0 ? opts.to : ['']).forEach(s => newAddrView(s, true, toViews, toBtn, toCell, toRow));
-	(opts.cc || []).forEach(s => newAddrView(s, true, ccViews, ccBtn, ccCell, ccRow));
-	(opts.bcc || []).forEach(s => newAddrView(s, true, bccViews, bccBtn, bccCell, bccRow));
+	(opts.to && opts.to.length > 0 ? opts.to : ['']).forEach(s => newAddrView(s, true, true, toViews, toBtn, toCell, toRow));
+	(opts.cc || []).forEach(s => newAddrView(s, true, false, ccViews, ccBtn, ccCell, ccRow));
+	(opts.bcc || []).forEach(s => newAddrView(s, true, false, bccViews, bccBtn, bccCell, bccRow));
 	if (opts.replyto) {
-		newAddrView(opts.replyto, false, replytoViews, replyToBtn, replyToCell, replyToRow, true);
+		newAddrView(opts.replyto, false, false, replytoViews, replyToBtn, replyToCell, replyToRow, true);
 	}
 	if (!opts.cc || !opts.cc.length) {
 		ccRow.style.display = 'none';

@@ -1642,10 +1642,10 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		await withStatus('Sending email and archive', submit(true), fieldset)
 	}
 
-	const cmdAddTo = async () => { newAddrView('', true, toViews, toBtn, toCell, toRow) }
-	const cmdAddCc = async () => { newAddrView('', true, ccViews, ccBtn, ccCell, ccRow) }
-	const cmdAddBcc = async () => { newAddrView('', true, bccViews, bccBtn, bccCell, bccRow) }
-	const cmdReplyTo = async () => { newAddrView('', false, replytoViews, replyToBtn, replyToCell, replyToRow, true) }
+	const cmdAddTo = async () => { newAddrView('', true, true, toViews, toBtn, toCell, toRow) }
+	const cmdAddCc = async () => { newAddrView('', true, false, ccViews, ccBtn, ccCell, ccRow) }
+	const cmdAddBcc = async () => { newAddrView('', true, false, bccViews, bccBtn, bccCell, bccRow) }
+	const cmdReplyTo = async () => { newAddrView('', false, false, replytoViews, replyToBtn, replyToCell, replyToRow, true) }
 	const cmdCustomFrom = async () => {
 		if (customFrom) {
 			return
@@ -1668,7 +1668,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 		// ctrl Backspace and ctrl = (+) not included, they are handled by keydown handlers on in the inputs they remove/add.
 	}
 
-	const newAddrView = (addr: string, isRecipient: boolean, views: AddrView[], btn: HTMLButtonElement, cell: HTMLElement, row: HTMLElement, single?: boolean) => {
+	const newAddrView = (addr: string, isRecipient: boolean, isTo: boolean, views: AddrView[], btn: HTMLButtonElement, cell: HTMLElement, row: HTMLElement, single?: boolean) => {
 		if (single && views.length !== 0) {
 			return
 		}
@@ -1780,10 +1780,11 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 					newAddressComplete(),
 					accountSettings?.ShowAddressSecurity ? attr.title(recipientSecurityTitle) : [],
 					function keydown(e: KeyboardEvent) {
-						if (e.key === 'Backspace' && e.ctrlKey && inputElem.value === '') {
+						// Backspace removes address except when it's the only To address left.
+						if (e.key === 'Backspace' && e.ctrlKey && inputElem.value === '' && !(isTo && views.length === 1)) {
 							remove()
 						} else if (e.key === '=' && e.ctrlKey) {
-							newAddrView('', isRecipient, views, btn, cell, row, single)
+							newAddrView('', isRecipient, isTo, views, btn, cell, row, single)
 						} else {
 							return
 						}
@@ -1810,7 +1811,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 						autosizeElem.dataset.value = inputElem.value = split[0]
 						let last
 						for (const rest of split.splice(1)) {
-							last = newAddrView(rest.trim(), isRecipient, views, btn, cell, row, single)
+							last = newAddrView(rest.trim(), isRecipient, isTo, views, btn, cell, row, single)
 						}
 						last!!.input.focus()
 						e.preventDefault()
@@ -2186,11 +2187,11 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes) => {
 
 	subjectAutosize.dataset.value = subject.value
 
-	;(opts.to && opts.to.length > 0 ? opts.to : ['']).forEach(s => newAddrView(s, true, toViews, toBtn, toCell, toRow))
-	;(opts.cc || []).forEach(s => newAddrView(s,true,  ccViews, ccBtn, ccCell, ccRow))
-	;(opts.bcc || []).forEach(s => newAddrView(s, true, bccViews, bccBtn, bccCell, bccRow))
+	;(opts.to && opts.to.length > 0 ? opts.to : ['']).forEach(s => newAddrView(s, true, true, toViews, toBtn, toCell, toRow))
+	;(opts.cc || []).forEach(s => newAddrView(s, true,  false, ccViews, ccBtn, ccCell, ccRow))
+	;(opts.bcc || []).forEach(s => newAddrView(s, true, false, bccViews, bccBtn, bccCell, bccRow))
 	if (opts.replyto) {
-		newAddrView(opts.replyto, false, replytoViews, replyToBtn, replyToCell, replyToRow, true)
+		newAddrView(opts.replyto, false, false, replytoViews, replyToBtn, replyToCell, replyToRow, true)
 	}
 	if (!opts.cc || !opts.cc.length) {
 		ccRow.style.display = 'none'
