@@ -4,7 +4,7 @@ go 1.22.0
 
 require (
 	github.com/mjl-/adns v0.0.0-20250321173553-ab04b05bdfea
-	github.com/mjl-/autocert v0.0.0-20231214125928-31b7400acb05
+	github.com/mjl-/autocert v0.0.0-20250321204043-abab2b936e31
 	github.com/mjl-/bstore v0.0.6
 	github.com/mjl-/flate v0.0.0-20250221133712-6372d09eb978
 	github.com/mjl-/sconf v0.0.7
