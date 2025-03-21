@@ -7,6 +7,7 @@ package adns
 import (
 	"context"
 	"errors"
+	"net"
 )
 
 // Various errors contained in OpError.
@@ -39,14 +40,25 @@ func mapErr(err error) error {
 	}
 }
 
-type timeout interface {
-	Timeout() bool
-}
-
 // Various errors contained in DNSError.
 var (
-	errNoSuchHost = errors.New("no such host")
+	errNoSuchHost  = &notFoundError{"no such host"}
+	errUnknownPort = &notFoundError{"unknown port"}
 )
+
+// notFoundError is a special error understood by the newDNSError function,
+// which causes a creation of a DNSError with IsNotFound field set to true.
+type notFoundError struct{ s string }
+
+func (e *notFoundError) Error() string { return e.s }
+
+// temporaryError is an error type that implements the [Error] interface.
+// It returns true from the Temporary method.
+type temporaryError struct{ s string }
+
+func (e *temporaryError) Error() string   { return e.s }
+func (e *temporaryError) Temporary() bool { return true }
+func (e *temporaryError) Timeout() bool   { return false }
 
 // errTimeout exists to return the historical "i/o timeout" string
 // for context.DeadlineExceeded. See mapErr.
@@ -73,7 +85,7 @@ func (e *timeoutError) Is(err error) bool {
 
 // DNSError represents a DNS lookup error.
 type DNSError struct {
-	Underlying  error  // Underlying error, could be an ExtendedError.
+	UnwrapErr   error  // error returned by the [DNSError.Unwrap] method, might be nil
 	Err         string // description of the error
 	Name        string // name looked for
 	Server      string // server used
@@ -86,10 +98,45 @@ type DNSError struct {
 	IsNotFound bool
 }
 
-// Unwrap returns the underlying error, which could be an ExtendedError.
-func (e *DNSError) Unwrap() error {
-	return e.Underlying
+// newDNSError creates a new *DNSError.
+// Based on the err, it sets the UnwrapErr, IsTimeout, IsTemporary, IsNotFound fields.
+func newDNSError(err error, name, server string) *DNSError {
+	var (
+		isTimeout   bool
+		isTemporary bool
+		unwrapErr   error
+	)
+
+	if err, ok := err.(net.Error); ok {
+		isTimeout = err.Timeout()
+		isTemporary = err.Temporary()
+	}
+
+	// At this time, the only errors we wrap are context errors, to allow
+	// users to check for canceled/timed out requests.
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		unwrapErr = err
+	} else if edeErr, ok := err.(ExtendedError); ok {
+		unwrapErr = edeErr
+		if edeErr.IsTemporary() {
+			isTemporary = true
+		}
+	}
+
+	_, isNotFound := err.(*notFoundError)
+	return &DNSError{
+		UnwrapErr:   unwrapErr,
+		Err:         err.Error(),
+		Name:        name,
+		Server:      server,
+		IsTimeout:   isTimeout,
+		IsTemporary: isTemporary,
+		IsNotFound:  isNotFound,
+	}
 }
+
+// Unwrap returns e.UnwrapErr.
+func (e *DNSError) Unwrap() error { return e.UnwrapErr }
 
 func (e *DNSError) Error() string {
 	if e == nil {

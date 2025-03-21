@@ -106,7 +106,7 @@ func lookupPortMapWithNetwork(network, errNetwork, service string) (port int, er
 		if port, ok := m[string(lowerService[:n])]; ok && n == len(service) {
 			return port, nil
 		}
-		return 0, &DNSError{Err: "unknown port", Name: errNetwork + "/" + service, IsNotFound: true}
+		return 0, newDNSError(errUnknownPort, errNetwork+"/"+service, "")
 	}
 	return 0, &DNSError{Err: "unknown network", Name: errNetwork + "/" + service}
 }
@@ -193,7 +193,7 @@ func LookupHost(host string) (addrs []string, result Result, err error) {
 func (r *Resolver) LookupHost(ctx context.Context, host string) (addrs []string, result Result, err error) {
 	// Make sure that no matter what we do later, host=="" is rejected.
 	if host == "" {
-		return nil, result, &DNSError{Err: errNoSuchHost.Error(), Name: host, IsNotFound: true}
+		return nil, result, newDNSError(errNoSuchHost, host, "")
 	}
 	if _, err := netip.ParseAddr(host); err == nil {
 		return []string{host}, result, nil
@@ -237,7 +237,7 @@ func (r *Resolver) LookupIP(ctx context.Context, network, host string) ([]net.IP
 	}
 
 	if host == "" {
-		return nil, Result{}, &DNSError{Err: errNoSuchHost.Error(), Name: host, IsNotFound: true}
+		return nil, Result{}, newDNSError(errNoSuchHost, host, "")
 	}
 	addrs, result, err := r.internetAddrList(ctx, afnet, host)
 	if err != nil {
@@ -305,7 +305,7 @@ func withUnexpiredValuesPreserved(lookupCtx context.Context) context.Context {
 func (r *Resolver) lookupIPAddr(ctx context.Context, network, host string) ([]net.IPAddr, Result, error) {
 	// Make sure that no matter what we do later, host=="" is rejected.
 	if host == "" {
-		return nil, Result{}, &DNSError{Err: errNoSuchHost.Error(), Name: host, IsNotFound: true}
+		return nil, Result{}, newDNSError(errNoSuchHost, host, "")
 	}
 	if ip, err := netip.ParseAddr(host); err == nil {
 		return []net.IPAddr{{IP: net.IP(ip.AsSlice()).To16(), Zone: ip.Zone()}}, Result{}, nil
@@ -354,12 +354,7 @@ func (r *Resolver) lookupIPAddr(ctx context.Context, network, host string) ([]ne
 		} else {
 			go dnsWaitGroupDone(ch, lookupGroupCancel)
 		}
-		ctxErr := ctx.Err()
-		err := &DNSError{
-			Err:       mapErr(ctxErr).Error(),
-			Name:      host,
-			IsTimeout: ctxErr == context.DeadlineExceeded,
-		}
+		err := newDNSError(mapErr(ctx.Err()), host, "")
 		return nil, Result{}, err
 	case r := <-ch:
 		dnsWaitGroup.Done()
@@ -367,17 +362,7 @@ func (r *Resolver) lookupIPAddr(ctx context.Context, network, host string) ([]ne
 		err := r.Err
 		if err != nil {
 			if _, ok := err.(*DNSError); !ok {
-				isTimeout := false
-				if err == context.DeadlineExceeded {
-					isTimeout = true
-				} else if terr, ok := err.(timeout); ok {
-					isTimeout = terr.Timeout()
-				}
-				err = &DNSError{
-					Err:       err.Error(),
-					Name:      host,
-					IsTimeout: isTimeout,
-				}
+				err = newDNSError(mapErr(err), host, "")
 			}
 		}
 		tuple := r.Val.(Tuple)
@@ -614,6 +599,9 @@ func (r *Resolver) LookupNS(ctx context.Context, name string) ([]*net.NS, Result
 
 // LookupTXT returns the DNS TXT records for the given domain name.
 //
+// If a DNS TXT record holds multiple strings, they are concatenated as a
+// single string.
+//
 // LookupTXT uses context.Background internally; to specify the context, use
 // Resolver.LookupTXT.
 func LookupTXT(name string) ([]string, Result, error) {
@@ -621,6 +609,9 @@ func LookupTXT(name string) ([]string, Result, error) {
 }
 
 // LookupTXT returns the DNS TXT records for the given domain name.
+//
+// If a DNS TXT record holds multiple strings, they are concatenated as a
+// single string.
 func (r *Resolver) LookupTXT(ctx context.Context, name string) ([]string, Result, error) {
 	return r.lookupTXT(ctx, name)
 }

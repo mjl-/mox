@@ -8,7 +8,8 @@ test:
 
 check:
 	GOARCH=386 go vet
-	staticcheck ./...
+	# don't warn about using deprecated functions like net.Temporary
+	staticcheck -checks inherit,-SA1019 ./...
 
 # having "err" shadowed is common, best to not have others
 check-shadow:

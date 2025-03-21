@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -54,7 +55,7 @@ var (
 	// errServerTemporarilyMisbehaving is like errServerMisbehaving, except
 	// that when it gets translated to a DNSError, the IsTemporary field
 	// gets set to true.
-	errServerTemporarilyMisbehaving = errors.New("server misbehaving")
+	errServerTemporarilyMisbehaving = &temporaryError{"server misbehaving"}
 )
 
 func newRequest(q dnsmessage.Question, ad bool) (id uint16, udpReq, tcpReq []byte, err error) {
@@ -346,7 +347,7 @@ func (r *Resolver) tryOneName(ctx context.Context, cfg *dnsConfig, name string, 
 
 	n, err := dnsmessage.NewName(name)
 	if err != nil {
-		return dnsmessage.Parser{}, "", Result{}, errCannotMarshalDNSMessage
+		return dnsmessage.Parser{}, "", Result{}, &DNSError{Err: errCannotMarshalDNSMessage.Error(), Name: name}
 	}
 	q := dnsmessage.Question{
 		Name:  n,
@@ -360,14 +361,7 @@ func (r *Resolver) tryOneName(ctx context.Context, cfg *dnsConfig, name string, 
 
 			p, h, err := r.exchange(ctx, server, q, cfg.timeout, cfg.useTCP, cfg.trustAD)
 			if err != nil {
-				dnsErr := &DNSError{
-					Err:    err.Error(),
-					Name:   name,
-					Server: server,
-				}
-				if nerr, ok := err.(net.Error); ok && nerr.Timeout() {
-					dnsErr.IsTimeout = true
-				}
+				dnsErr := newDNSError(err, name, server)
 				// Set IsTemporary for socket-level errors. Note that this flag
 				// may also be used to indicate a SERVFAIL response.
 				if _, ok := err.(*net.OpError); ok {
@@ -381,49 +375,27 @@ func (r *Resolver) tryOneName(ctx context.Context, cfg *dnsConfig, name string, 
 			result := Result{Authentic: cfg.trustAD && h.AuthenticData && useAD}
 
 			if err := checkHeader(&p, h); err != nil {
-				dnsErr := &DNSError{
-					Underlying: err,
-					Err:        err.Error(),
-					Name:       name,
-					Server:     server,
-				}
-				if err == errServerTemporarilyMisbehaving {
-					dnsErr.IsTemporary = true
-				} else if edeErr, isEDE := err.(ExtendedError); isEDE && edeErr.IsTemporary() {
-					dnsErr.IsTemporary = true
-				} else if isEDE {
-					// Something wrong with the zone, no point asking another server or retrying.
-					return p, server, result, dnsErr
-				}
 				if err == errNoSuchHost {
 					// The name does not exist, so trying
 					// another server won't help.
-
-					dnsErr.IsNotFound = true
-					return p, server, result, dnsErr
+					return p, server, result, newDNSError(errNoSuchHost, name, server)
 				}
-				lastErr = dnsErr
+				lastErr = newDNSError(err, name, server)
 				lastResult = result
 				continue
 			}
 
-			err = skipToAnswer(&p, qtype)
-			if err == nil {
-				return p, server, result, nil
+			if err := skipToAnswer(&p, qtype); err != nil {
+				if err == errNoSuchHost {
+					// The name does not exist, so trying
+					// another server won't help.
+					return p, server, result, newDNSError(errNoSuchHost, name, server)
+				}
+				lastErr = newDNSError(err, name, server)
+				lastResult = result
+				continue
 			}
-			lastErr = &DNSError{
-				Err:    err.Error(),
-				Name:   name,
-				Server: server,
-			}
-			lastResult = result
-			if err == errNoSuchHost {
-				// The name does not exist, so trying another
-				// server won't help.
-
-				lastErr.(*DNSError).IsNotFound = true
-				return p, server, lastResult, lastErr
-			}
+			return p, server, result, nil
 		}
 	}
 	return dnsmessage.Parser{}, "", lastResult, lastErr
@@ -523,7 +495,7 @@ func (r *Resolver) lookup(ctx context.Context, name string, qtype dnsmessage.Typ
 		// Other lookups might allow broader name syntax
 		// (for example Multicast DNS allows UTF-8; see RFC 6762).
 		// For consistency with libc resolvers, report no such host.
-		return dnsmessage.Parser{}, "", Result{}, &DNSError{Err: errNoSuchHost.Error(), Name: name, IsNotFound: true}
+		return dnsmessage.Parser{}, "", Result{}, newDNSError(errNoSuchHost, name, "")
 	}
 
 	if conf == nil {
@@ -568,9 +540,7 @@ func avoidDNS(name string) bool {
 	if name == "" {
 		return true
 	}
-	if name[len(name)-1] == '.' {
-		name = name[:len(name)-1]
-	}
+	name = strings.TrimSuffix(name, ".")
 	return stringsHasSuffixFold(name, ".onion")
 }
 
@@ -653,7 +623,7 @@ func (r *Resolver) goLookupHostOrder(ctx context.Context, name string, order hos
 		}
 
 		if order == hostLookupFiles {
-			return nil, result, &DNSError{Err: errNoSuchHost.Error(), Name: name, IsNotFound: true}
+			return nil, result, newDNSError(errNoSuchHost, name, "")
 		}
 	}
 	ips, _, result, err := r.goLookupIPCNAMEOrder(ctx, "ip", name, order, conf)
@@ -704,13 +674,13 @@ func (r *Resolver) goLookupIPCNAMEOrder(ctx context.Context, network, name strin
 		}
 
 		if order == hostLookupFiles {
-			return nil, dnsmessage.Name{}, result, &DNSError{Err: errNoSuchHost.Error(), Name: name, IsNotFound: true}
+			return nil, dnsmessage.Name{}, result, newDNSError(errNoSuchHost, name, "")
 		}
 	}
 
 	if !isDomainName(name) {
 		// See comment in func lookup above about use of errNoSuchHost.
-		return nil, dnsmessage.Name{}, result, &DNSError{Err: errNoSuchHost.Error(), Name: name, IsNotFound: true}
+		return nil, dnsmessage.Name{}, result, newDNSError(errNoSuchHost, name, "")
 	}
 	type result0 struct {
 		p      dnsmessage.Parser
@@ -920,7 +890,7 @@ func (r *Resolver) goLookupPTR(ctx context.Context, addr string, order hostLooku
 		}
 
 		if order == hostLookupFiles {
-			return nil, Result{}, &DNSError{Err: errNoSuchHost.Error(), Name: addr, IsNotFound: true}
+			return nil, Result{}, newDNSError(errNoSuchHost, addr, "")
 		}
 	}
 
