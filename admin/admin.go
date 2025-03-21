@@ -26,6 +26,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/mtasts"
+	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
 )
@@ -707,9 +708,46 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 		return fmt.Errorf("%w: open account: %v", ErrRequest, err)
 	}
 	defer func() {
-		err := acc.Close()
+		err := acc.SessionsClear(context.Background(), log)
+		log.Check(err, "clearing account login sessions")
+
+		err = acc.Close()
 		log.Check(err, "closing account after error")
 	}()
+
+	// Fail message and webhook deliveries from the queue for this account.
+	// Must be before the dynamic lock, since failing a message delivers a DSN to the
+	// account. We fail instead of drop because an error can still occur causing us to
+	// abort.
+	nfailed, err := queue.Fail(ctx, log, queue.Filter{Account: account})
+	if nfailed > 0 {
+		log.Info("failing queued messages for removed account", slog.Int("count", nfailed))
+	}
+	if err != nil {
+		return fmt.Errorf("failing queued messages for account before removing: %v", err)
+	}
+	ncanceled, err := queue.HookCancel(ctx, log, queue.HookFilter{Account: account})
+	if ncanceled > 0 {
+		log.Info("canceling queued webhooks for removed account", slog.Int("count", ncanceled))
+	}
+	if err != nil {
+		return fmt.Errorf("canceling queued webhooks for account before removing: %v", err)
+	}
+
+	// Cleanup suppressed addresses for account.
+	suppressions, err := queue.SuppressionList(ctx, account)
+	if err != nil {
+		return fmt.Errorf("listing suppressed addresses for account: %v", err)
+	}
+	for _, sup := range suppressions {
+		addr, err := smtp.ParseAddress(sup.BaseAddress)
+		if err != nil {
+			return fmt.Errorf("parsing suppressed address %q: %v", sup.BaseAddress, err)
+		}
+		if err := queue.SuppressionRemove(ctx, account, addr.Path()); err != nil {
+			return fmt.Errorf("removing suppression %q for account: %v", sup.BaseAddress, err)
+		}
+	}
 
 	defer mox.Conf.DynamicLockUnlock()()
 
@@ -725,10 +763,12 @@ func AccountRemove(ctx context.Context, account string) (rerr error) {
 		}
 	}
 
+	// Write new config file.
 	if err := mox.WriteDynamicLocked(ctx, log, nc); err != nil {
 		return fmt.Errorf("writing domains.conf: %w", err)
 	}
 
+	// Mark files for account for removal as soon as all references have gone.
 	if err := acc.Remove(context.Background()); err != nil {
 		return fmt.Errorf("account removed from configuration file, but scheduling account directory for removal failed: %v", err)
 	}
@@ -953,6 +993,34 @@ func AddressRemove(ctx context.Context, address string) (rerr error) {
 		domains[aa.Alias.Domain.Name()] = dom
 	}
 	na.Aliases = nil // Filled when parsing config.
+
+	// Check that no message in the queue is for this address. The new account config
+	// must still match this address.
+	msgs, err := queue.List(ctx, queue.Filter{Account: ad.Account}, queue.Sort{})
+	if err != nil {
+		return fmt.Errorf("listing messages in queue for account: %v", err)
+	}
+	for _, m := range msgs {
+		dc, ok := mox.Conf.Dynamic.Domains[m.SenderDomainStr]
+		if !ok {
+			return fmt.Errorf("%w: unknown sender domain %q in queued message", ErrRequest, m.SenderDomainStr)
+		}
+		lp := mox.CanonicalLocalpart(m.SenderLocalpart, dc)
+		sa := smtp.NewAddress(lp, m.SenderDomain.Domain).String()
+		if strings.HasPrefix(address, "@") {
+			// We are removing the catchall address. The queued message sender address must be
+			// configured explicitly to still belong to the account.
+			if xad, ok := mox.Conf.AccountDestinationsLocked[sa]; !ok || xad.Account != ad.Account {
+				return fmt.Errorf("%w: message delivery queue contains message with sender address %q that depends on the catchall address, drop message from queue first", ErrRequest, sa)
+			}
+		} else {
+			// We are removing a regular address. If the queued message matches the address,
+			// the catchall address must be configured for this account.
+			if xad, ok := mox.Conf.AccountDestinationsLocked["@"+m.SenderDomainStr]; (!ok || xad.Account != ad.Account) && sa == address {
+				return fmt.Errorf("%w: message delivery queue contains message with sender address %q and no catchall address is configured, drop message from queue first", ErrRequest, sa)
+			}
+		}
+	}
 
 	nc := mox.Conf.Dynamic
 	nc.Accounts = map[string]config.Account{}
