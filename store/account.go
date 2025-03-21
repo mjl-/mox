@@ -3198,9 +3198,19 @@ func OpenEmail(log mlog.Log, email string, checkLoginDisabled bool) (*Account, s
 	return acc, accountName, dest, nil
 }
 
+// We store max 1<<shift files in each subdir of an account "msg" directory.
+// Defaults to 1 for easy use in tests. Set to 13, for 8k message files, in main
+// for normal operation.
+var msgFilesPerDirShift = 1
+var msgFilesPerDir int64 = 1 << msgFilesPerDirShift
+
+func MsgFilesPerDirShiftSet(shift int) {
+	msgFilesPerDirShift = shift
+	msgFilesPerDir = 1 << shift
+}
+
 // 64 characters, must be power of 2 for MessagePath
 const msgDirChars = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-_"
-const msgFilesPerDir = 8 * 1024
 
 // MessagePath returns the filename of the on-disk filename, relative to the
 // containing directory such as <account>/msg or queue.
@@ -3212,7 +3222,7 @@ func MessagePath(messageID int64) string {
 // messagePathElems returns the elems, for a single join without intermediate
 // string allocations.
 func messagePathElems(messageID int64) []string {
-	v := messageID >> 13 // 8k files per directory.
+	v := messageID >> msgFilesPerDirShift
 	dir := ""
 	for {
 		dir += string(msgDirChars[int(v)&(len(msgDirChars)-1)])

@@ -459,6 +459,7 @@ func main() {
 	// mox server should never use it. But integration tests enable it again with a
 	// flag.
 	store.CheckConsistencyOnClose = false
+	store.MsgFilesPerDirShiftSet(13) // For 1<<13 = 8k message files per directory.
 
 	ctxbg := context.Background()
 	mox.Shutdown = ctxbg

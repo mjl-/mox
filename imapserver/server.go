@@ -4263,6 +4263,9 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 		xcheckf(fmt.Errorf("moved %d messages, expected %d", len(l), expectCount), "move messages")
 	}
 
+	// For newly created message directories that we sync after hardlinking/copying files.
+	syncDirs := map[string]struct{}{}
+
 	for _, om := range l {
 		nm := om
 		nm.MailboxID = mbDst.ID
@@ -4294,7 +4297,14 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 		err = tx.Insert(&om)
 		xcheckf(err, "inserting expunged message in old mailbox")
 
-		err = moxio.LinkOrCopy(c.log, c.account.MessagePath(om.ID), c.account.MessagePath(nm.ID), nil, false)
+		dstPath := c.account.MessagePath(om.ID)
+		dstDir := filepath.Dir(dstPath)
+		if _, ok := syncDirs[dstDir]; !ok {
+			os.MkdirAll(dstDir, 0770)
+			syncDirs[dstDir] = struct{}{}
+		}
+
+		err = moxio.LinkOrCopy(c.log, dstPath, c.account.MessagePath(nm.ID), nil, false)
 		xcheckf(err, "duplicating message in old mailbox for current sessions")
 		newIDs = append(newIDs, nm.ID)
 		// We don't sync the directory. In case of a crash and files disappearing, the
@@ -4320,6 +4330,11 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 		changes = append(changes, nm.ChangeAddUID())
 	}
 	xcheckf(err, "move messages")
+
+	for dir := range syncDirs {
+		err := moxio.SyncDir(c.log, dir)
+		xcheckf(err, "sync directory")
+	}
 
 	changes = append(changes, changeRemoveUIDs, mbSrc.ChangeCounts())
 

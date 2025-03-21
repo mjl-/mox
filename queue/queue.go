@@ -713,14 +713,25 @@ func Add(ctx context.Context, log mlog.Log, senderAccount string, msgFile *os.Fi
 		}
 	}()
 
+	syncDirs := map[string]struct{}{}
+
 	for _, qm := range qml {
 		dst := qm.MessagePath()
 		paths = append(paths, dst)
+
 		dstDir := filepath.Dir(dst)
-		os.MkdirAll(dstDir, 0770)
+		if _, ok := syncDirs[dstDir]; !ok {
+			os.MkdirAll(dstDir, 0770)
+			syncDirs[dstDir] = struct{}{}
+		}
+
 		if err := moxio.LinkOrCopy(log, dst, msgFile.Name(), nil, true); err != nil {
 			return fmt.Errorf("linking/copying message to new file: %s", err)
-		} else if err := moxio.SyncDir(log, dstDir); err != nil {
+		}
+	}
+
+	for dir := range syncDirs {
+		if err := moxio.SyncDir(log, dir); err != nil {
 			return fmt.Errorf("sync directory: %v", err)
 		}
 	}

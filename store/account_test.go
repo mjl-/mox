@@ -394,7 +394,7 @@ func TestNextMessageID(t *testing.T) {
 	acc, err = OpenAccount(log, "mjl", false)
 	tcheck(t, err, "open account")
 
-	// Deliver a message. It should get ID 8*1024+1.
+	// Deliver a message. It should get ID $msgFilesPerDir+1.
 	mf, err = CreateMessageTemp(log, "account-test")
 	tcheck(t, err, "creating temp message file")
 	_, err = mf.Write(msgData)
@@ -405,8 +405,8 @@ func TestNextMessageID(t *testing.T) {
 	}
 	err = acc.DeliverMailbox(log, "Inbox", &m, mf)
 	tcheck(t, err, "deliver mailbox")
-	if m.ID != 8*1024+1 {
-		t.Fatalf("got message id %d, expected 8*1024+1", m.ID)
+	if m.ID != msgFilesPerDir+1 {
+		t.Fatalf("got message id %d, expected $msgFilesPerDir+1", m.ID)
 	}
 
 	err = acc.Close()

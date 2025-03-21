@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"time"
@@ -451,6 +452,8 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 	nkeywords := len(mbDst.Keywords)
 	now := time.Now()
 
+	syncDirs := map[string]struct{}{}
+
 	for _, om := range l {
 		if om.MailboxID != mbSrc.ID {
 			if mbSrc.ID != 0 {
@@ -494,7 +497,14 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 		err = tx.Insert(&om)
 		x.Checkf(ctx, err, "inserting expunged message in old mailbox")
 
-		err = moxio.LinkOrCopy(log, acc.MessagePath(om.ID), acc.MessagePath(nm.ID), nil, false)
+		dstPath := acc.MessagePath(om.ID)
+		dstDir := filepath.Dir(dstPath)
+		if _, ok := syncDirs[dstDir]; !ok {
+			os.MkdirAll(dstDir, 0770)
+			syncDirs[dstDir] = struct{}{}
+		}
+
+		err = moxio.LinkOrCopy(log, dstPath, acc.MessagePath(nm.ID), nil, false)
 		x.Checkf(ctx, err, "duplicating message in old mailbox for current sessions")
 		newIDs = append(newIDs, nm.ID)
 		// We don't sync the directory. In case of a crash and files disappearing, the
@@ -518,6 +528,11 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 		changeRemoveUIDs.UIDs = append(changeRemoveUIDs.UIDs, om.UID)
 		changeRemoveUIDs.MsgIDs = append(changeRemoveUIDs.MsgIDs, om.ID)
 		changes = append(changes, nm.ChangeAddUID())
+	}
+
+	for dir := range syncDirs {
+		err := moxio.SyncDir(log, dir)
+		x.Checkf(ctx, err, "sync directory")
 	}
 
 	xflushMailbox()
