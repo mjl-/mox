@@ -400,6 +400,7 @@ func exportMailbox(log mlog.Log, tx *bstore.Tx, accountDir string, mailboxID int
 		if m.MailFrom != "" {
 			mailfrom = m.MailFrom
 		}
+		// ../rfc/4155:80
 		if _, err := fmt.Fprintf(mboxwriter, "From %s %s\n", mailfrom, m.Received.Format(time.ANSIC)); err != nil {
 			return fmt.Errorf("write message line to mbox temp file: %v", err)
 		}
@@ -450,6 +451,8 @@ func exportMailbox(log mlog.Log, tx *bstore.Tx, accountDir string, mailboxID int
 			}
 		}
 
+		// ../rfc/4155:365 todo: rewrite messages to be 7-bit. still useful nowadays?
+
 		header := true
 		r := bufio.NewReader(mr)
 		for {
@@ -458,6 +461,7 @@ func exportMailbox(log mlog.Log, tx *bstore.Tx, accountDir string, mailboxID int
 				return fmt.Errorf("reading message: %v", rerr)
 			}
 			if len(line) > 0 {
+				// ../rfc/4155:354
 				if bytes.HasSuffix(line, []byte("\r\n")) {
 					line = line[:len(line)-1]
 					line[len(line)-1] = '\n'
@@ -473,6 +477,7 @@ func exportMailbox(log mlog.Log, tx *bstore.Tx, accountDir string, mailboxID int
 						continue
 					}
 				}
+				// ../rfc/4155:119
 				if bytes.HasPrefix(bytes.TrimLeft(line, ">"), []byte("From ")) {
 					if _, err := fmt.Fprint(mboxwriter, ">"); err != nil {
 						return fmt.Errorf("writing escaping >: %v", err)
@@ -486,6 +491,7 @@ func exportMailbox(log mlog.Log, tx *bstore.Tx, accountDir string, mailboxID int
 				break
 			}
 		}
+		// ../rfc/4155:75
 		if _, err := fmt.Fprint(mboxwriter, "\n"); err != nil {
 			return fmt.Errorf("writing end of message newline: %v", err)
 		}

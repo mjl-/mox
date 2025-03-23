@@ -100,7 +100,7 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 		}
 		if len(line) > 0 {
 			mr.line++
-			// We store data with crlf, adjust any imported messages with bare newlines.
+			// We store data with crlf, adjust any imported messages with bare newlines. ../rfc/4155:354
 			if !bytes.HasSuffix(line, []byte("\r\n")) {
 				line = append(line[:len(line)-1], "\r\n"...)
 			}
@@ -156,12 +156,13 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 				mr.header = false
 			}
 
-			// Next mail message starts at bare From word.
+			// Next mail message starts at bare From word. ../rfc/4155:71
 			if mr.prevempty && bytes.HasPrefix(line, from) {
 				mr.fromLine = strings.TrimSpace(string(line))
 				mr.header = true
 				break
 			}
+			// ../rfc/4155:119
 			if bytes.HasPrefix(line, []byte(">")) && bytes.HasPrefix(bytes.TrimLeft(line, ">"), []byte("From ")) {
 				line = line[1:]
 			}

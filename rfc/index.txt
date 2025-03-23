@@ -32,6 +32,7 @@ Also see IANA assignments, https://www.iana.org/protocols
 2231	Yes	-	MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
 3629	-	-	UTF-8, a transformation format of ISO 10646
 3676	No	-	The Text/Plain Format and DelSp Parameters
+4155	-	-	The application/mbox Media Type
 5234	-	-	Augmented BNF for Syntax Specifications: ABNF
 5322	Yes	-	Internet Message Format
 5598	-	-	Internet Mail Architecture
