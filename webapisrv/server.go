@@ -1048,6 +1048,9 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 	xcheckf(err, "adding messages to the delivery queue")
 	metricSubmission.WithLabelValues("ok").Inc()
 
+	// Message has been added to the queue. Ensure we finish the work.
+	ctx = context.WithoutCancel(ctx)
+
 	if req.SaveSent {
 		// Append message to Sent mailbox and mark original messages as answered/forwarded.
 		acc.WithRLock(func() {

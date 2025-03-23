@@ -1005,6 +1005,10 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 
 	var modseq store.ModSeq // Only set if needed.
 
+	// We have committed to sending the message. We want to follow through
+	// with appending to Sent and removing the draft message.
+	ctx = context.WithoutCancel(ctx)
+
 	// Append message to Sent mailbox, mark original messages as answered/forwarded,
 	// remove any draft message.
 	acc.WithWLock(func() {
