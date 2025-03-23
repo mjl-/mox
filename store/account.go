@@ -221,7 +221,7 @@ type Mailbox struct {
 	// lower case (for JMAP), sorted.
 	Keywords []string
 
-	HaveCounts    bool // Whether MailboxCounts have been initialized.
+	HaveCounts    bool // Deprecated. Covered by Upgrade.MailboxCounts. No longer read.
 	MailboxCounts      // Statistics about messages, kept up to date whenever a change happens.
 }
 
@@ -949,6 +949,7 @@ type Upgrade struct {
 	Threads         byte // 0: None, 1: Adding MessageID's completed, 2: Adding ThreadID's completed.
 	MailboxModSeq   bool // Whether mailboxes have been assigned modseqs.
 	MailboxParentID bool // Setting ParentID on mailboxes.
+	MailboxCounts   bool // Global flag about whether we have mailbox flags. Instead of previous per-mailbox boolean.
 }
 
 // upgradeInit is the value to for new account database, that don't need any upgrading.
@@ -957,6 +958,7 @@ var upgradeInit = Upgrade{
 	Threads:         2,
 	MailboxModSeq:   true,
 	MailboxParentID: true,
+	MailboxCounts:   true,
 }
 
 // InitialUIDValidity returns a UIDValidity used for initializing an account.
@@ -1143,33 +1145,15 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		return acc, nil
 	}
 
-	// Ensure singletons are present. Mailbox counts and total message size, Settings.
+	// Ensure singletons are present, like DiskUsage and Settings.
 	// Process pending MessageErase records. Check that next the message ID assigned by
 	// the database does not already have a file on disk, or increase the sequence so
 	// it doesn't.
-	var mentioned bool
 	err = db.Write(context.TODO(), func(tx *bstore.Tx) error {
 		if tx.Get(&Settings{ID: 1}) == bstore.ErrAbsent {
 			if err := tx.Insert(&Settings{ID: 1, ShowAddressSecurity: true}); err != nil {
 				return err
 			}
-		}
-
-		err := bstore.QueryTx[Mailbox](tx).FilterEqual("HaveCounts", false).ForEach(func(mb Mailbox) error {
-			if !mentioned {
-				mentioned = true
-				log.Info("first calculation of mailbox counts for account", slog.String("account", accountName))
-			}
-			mc, err := mb.CalculateCounts(tx)
-			if err != nil {
-				return err
-			}
-			mb.HaveCounts = true
-			mb.MailboxCounts = mc
-			return tx.Update(&mb)
-		})
-		if err != nil {
-			return err
 		}
 
 		du := DiskUsage{ID: 1}
@@ -1308,7 +1292,6 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		return nil, fmt.Errorf("calculating counts for mailbox, inserting settings, expunging messages: %v", err)
 	}
 
-	// Start adding threading if needed.
 	up := Upgrade{ID: 1}
 	err = db.Write(context.TODO(), func(tx *bstore.Tx) error {
 		err := tx.Get(&up)
@@ -1455,6 +1438,34 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 		})
 		if err != nil {
 			return nil, fmt.Errorf("upgrade: setting parentid on each mailbox: %w", err)
+		}
+	}
+
+	if !up.MailboxCounts {
+		log.Debug("upgrade: ensuring all mailboxes have message counts")
+
+		err := acc.DB.Write(context.TODO(), func(tx *bstore.Tx) error {
+			err := bstore.QueryTx[Mailbox](tx).FilterEqual("HaveCounts", false).ForEach(func(mb Mailbox) error {
+				mc, err := mb.CalculateCounts(tx)
+				if err != nil {
+					return err
+				}
+				mb.HaveCounts = true
+				mb.MailboxCounts = mc
+				return tx.Update(&mb)
+			})
+			if err != nil {
+				return err
+			}
+
+			up.MailboxCounts = true
+			if err := tx.Update(&up); err != nil {
+				return fmt.Errorf("marking upgrade done: %w", err)
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("upgrade: ensuring message counts on all mailboxes")
 		}
 	}
 
@@ -1686,7 +1697,6 @@ func (a *Account) SetSkipMessageModSeqZeroCheck(skip bool) {
 //
 // - Missing or unexpected on-disk message files.
 // - Mismatch between message size and length of MsgPrefix and on-disk file.
-// - Missing HaveCounts.
 // - Incorrect mailbox counts.
 // - Incorrect total message size.
 // - Message with UID >= mailbox uid next.
@@ -1935,10 +1945,7 @@ func (a *Account) CheckConsistency() error {
 		var totalMailboxSize int64
 		for _, mb := range mailboxNames {
 			totalMailboxSize += mb.Size
-			if !mb.HaveCounts {
-				errmsg := fmt.Sprintf("mailbox %q (id %d) does not have counts, should be %#v", mb.Name, mb.ID, counts[mb.ID])
-				errmsgs = append(errmsgs, errmsg)
-			} else if mb.MailboxCounts != counts[mb.ID] {
+			if mb.MailboxCounts != counts[mb.ID] {
 				mbcounterr := fmt.Sprintf("mailbox %q (id %d) has wrong counts %s, should be %s", mb.Name, mb.ID, mb.MailboxCounts, counts[mb.ID])
 				errmsgs = append(errmsgs, mbcounterr)
 			}

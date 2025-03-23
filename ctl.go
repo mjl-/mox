@@ -1522,7 +1522,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 					}
 					totalSize += mc.Size
 
-					if !mb.HaveCounts || mc != mb.MailboxCounts {
+					if mc != mb.MailboxCounts {
 						_, err := fmt.Fprintf(w, "for %s setting new counts %s (was %s)\n", mb.Name, mc, mb.MailboxCounts)
 						ctl.xcheck(err, "write")
 						mb.HaveCounts = true

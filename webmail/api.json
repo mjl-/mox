@@ -1695,7 +1695,7 @@
 				},
 				{
 					"Name": "HaveCounts",
-					"Docs": "Whether MailboxCounts have been initialized.",
+					"Docs": "Deprecated. Covered by Upgrade.MailboxCounts. No longer read.",
 					"Typewords": [
 						"bool"
 					]

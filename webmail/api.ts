@@ -201,7 +201,7 @@ export interface Mailbox {
 	Sent: boolean
 	Trash: boolean
 	Keywords?: string[] | null  // Keywords as used in messages. Storing a non-system keyword for a message automatically adds it to this list. Used in the IMAP FLAGS response. Only "atoms" are allowed (IMAP syntax), keywords are case-insensitive, only stored in lower case (for JMAP), sorted.
-	HaveCounts: boolean  // Whether MailboxCounts have been initialized.
+	HaveCounts: boolean  // Deprecated. Covered by Upgrade.MailboxCounts. No longer read.
 	Total: number  // Total number of messages, excluding \Deleted. For JMAP.
 	Deleted: number  // Number of messages with \Deleted flag. Used for IMAP message count that includes messages with \Deleted.
 	Unread: number  // Messages without \Seen, excluding those with \Deleted, for JMAP.
