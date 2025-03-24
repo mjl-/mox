@@ -27,7 +27,7 @@ import (
 	"github.com/mjl-/mox/tlsrptdb"
 )
 
-func backupctl(ctx context.Context, ctl *ctl) {
+func xbackupctl(ctx context.Context, xctl *ctl) {
 	/* protocol:
 	> "backup"
 	> destdir
@@ -41,14 +41,14 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	// "src" or "dst" are incomplete paths relative to the source or destination data
 	// directories.
 
-	dstDir := ctl.xread()
-	verbose := ctl.xread() == "verbose"
+	dstDir := xctl.xread()
+	verbose := xctl.xread() == "verbose"
 
 	// Set when an error is encountered. At the end, we warn if set.
 	var incomplete bool
 
 	// We'll be writing output, and logging both to mox and the ctl stream.
-	writer := ctl.writer()
+	xwriter := xctl.writer()
 
 	// Format easily readable output for the user.
 	formatLog := func(prefix, text string, err error, attrs ...slog.Attr) []byte {
@@ -67,10 +67,8 @@ func backupctl(ctx context.Context, ctl *ctl) {
 
 	// Log an error to both the mox service as the user running "mox backup".
 	pkglogx := func(prefix, text string, err error, attrs ...slog.Attr) {
-		ctl.log.Errorx(text, err, attrs...)
-
-		_, werr := writer.Write(formatLog(prefix, text, err, attrs...))
-		ctl.xcheck(werr, "write to ctl")
+		xctl.log.Errorx(text, err, attrs...)
+		xwriter.Write(formatLog(prefix, text, err, attrs...))
 	}
 
 	// Log an error but don't mark backup as failed.
@@ -87,10 +85,9 @@ func backupctl(ctx context.Context, ctl *ctl) {
 
 	// If verbose is enabled, log to the cli command. Always log as info level.
 	xvlog := func(text string, attrs ...slog.Attr) {
-		ctl.log.Info(text, attrs...)
+		xctl.log.Info(text, attrs...)
 		if verbose {
-			_, werr := writer.Write(formatLog("", text, nil, attrs...))
-			ctl.xcheck(werr, "write to ctl")
+			xwriter.Write(formatLog("", text, nil, attrs...))
 		}
 	}
 
@@ -164,12 +161,12 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		defer func() {
 			if df != nil {
 				err := df.Close()
-				ctl.log.Check(err, "closing file")
+				xctl.log.Check(err, "closing file")
 			}
 		}()
 		defer func() {
 			err := sf.Close()
-			ctl.log.Check(err, "closing file")
+			xctl.log.Check(err, "closing file")
 		}()
 		if _, err := io.Copy(df, sf); err != nil {
 			return fmt.Errorf("copying config file %s to %s: %v", srcPath, destPath, err)
@@ -213,7 +210,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 		defer func() {
 			err := sf.Close()
-			ctl.log.Check(err, "closing source file")
+			xctl.log.Check(err, "closing source file")
 		}()
 
 		ensureDestDir(dstpath)
@@ -225,7 +222,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		defer func() {
 			if df != nil {
 				err := df.Close()
-				ctl.log.Check(err, "closing destination file")
+				xctl.log.Check(err, "closing destination file")
 			}
 		}()
 		if _, err := io.Copy(df, sf); err != nil {
@@ -279,7 +276,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		defer func() {
 			if df != nil {
 				err := df.Close()
-				ctl.log.Check(err, "closing destination database file")
+				xctl.log.Check(err, "closing destination database file")
 			}
 		}()
 		err = db.Read(ctx, func(tx *bstore.Tx) error {
@@ -344,7 +341,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 		defer func() {
 			err := sf.Close()
-			ctl.log.Check(err, "closing copied source file")
+			xctl.log.Check(err, "closing copied source file")
 		}()
 
 		df, err := os.OpenFile(dstpath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0660)
@@ -354,7 +351,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		defer func() {
 			if df != nil {
 				err := df.Close()
-				ctl.log.Check(err, "closing partial destination file")
+				xctl.log.Check(err, "closing partial destination file")
 			}
 		}()
 		if _, err := io.Copy(df, sf); err != nil {
@@ -371,7 +368,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	// Start making the backup.
 	tmStart := time.Now()
 
-	ctl.log.Print("making backup", slog.String("destdir", dstDataDir))
+	xctl.log.Print("making backup", slog.String("destdir", dstDataDir))
 
 	if err := os.MkdirAll(dstDataDir, 0770); err != nil {
 		xerrx("creating destination data directory", err)
@@ -405,7 +402,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 
 		dstdbpath := filepath.Join(dstDataDir, path)
-		opts := bstore.Options{MustExist: true, RegisterLogger: ctl.log.Logger}
+		opts := bstore.Options{MustExist: true, RegisterLogger: xctl.log.Logger}
 		db, err := bstore.Open(ctx, dstdbpath, &opts, queue.DBTypes...)
 		if err != nil {
 			xerrx("open copied queue database", err, slog.String("dstpath", dstdbpath), slog.Duration("duration", time.Since(tmQueue)))
@@ -415,7 +412,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		defer func() {
 			if db != nil {
 				err := db.Close()
-				ctl.log.Check(err, "closing new queue db")
+				xctl.log.Check(err, "closing new queue db")
 			}
 		}()
 
@@ -495,7 +492,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	backupAccount := func(acc *store.Account) {
 		defer func() {
 			err := acc.Close()
-			ctl.log.Check(err, "closing account")
+			xctl.log.Check(err, "closing account")
 		}()
 
 		tmAccount := time.Now()
@@ -507,7 +504,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		// todo: should document/check not taking a rlock on account.
 
 		// Copy junkfilter files, if configured.
-		if jf, _, err := acc.OpenJunkFilter(ctx, ctl.log); err != nil {
+		if jf, _, err := acc.OpenJunkFilter(ctx, xctl.log); err != nil {
 			if !errors.Is(err, store.ErrNoJunkFilter) {
 				xerrx("opening junk filter for account (not backed up)", err)
 			}
@@ -518,11 +515,11 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			bloompath := filepath.Join("accounts", acc.Name, "junkfilter.bloom")
 			backupFile(bloompath)
 			err := jf.Close()
-			ctl.log.Check(err, "closing junkfilter")
+			xctl.log.Check(err, "closing junkfilter")
 		}
 
 		dstdbpath := filepath.Join(dstDataDir, dbpath)
-		opts := bstore.Options{MustExist: true, RegisterLogger: ctl.log.Logger}
+		opts := bstore.Options{MustExist: true, RegisterLogger: xctl.log.Logger}
 		db, err := bstore.Open(ctx, dstdbpath, &opts, store.DBTypes...)
 		if err != nil {
 			xerrx("open copied account database", err, slog.String("dstpath", dstdbpath), slog.Duration("duration", time.Since(tmAccount)))
@@ -532,7 +529,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		defer func() {
 			if db != nil {
 				err := db.Close()
-				ctl.log.Check(err, "close account database")
+				xctl.log.Check(err, "close account database")
 			}
 		}()
 
@@ -635,7 +632,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	// account directories when handling "all other files" below.
 	accounts := map[string]struct{}{}
 	for _, accName := range mox.Conf.Accounts() {
-		acc, err := store.OpenAccount(ctl.log, accName, false)
+		acc, err := store.OpenAccount(xctl.log, accName, false)
 		if err != nil {
 			xerrx("opening account for copying (will try to copy as regular files later)", err, slog.String("account", accName))
 			continue
@@ -691,11 +688,11 @@ func backupctl(ctx context.Context, ctl *ctl) {
 
 	xvlog("backup finished", slog.Duration("duration", time.Since(tmStart)))
 
-	writer.xclose()
+	xwriter.xclose()
 
 	if incomplete {
-		ctl.xwrite("errors were encountered during backup")
+		xctl.xwrite("errors were encountered during backup")
 	} else {
-		ctl.xwriteok()
+		xctl.xwriteok()
 	}
 }

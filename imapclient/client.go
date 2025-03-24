@@ -30,17 +30,19 @@ import (
 // Conn is an IMAP connection to a server.
 type Conn struct {
 	// Connection, may be original TCP or TLS connection. Reads go through c.br, and
-	// writes through c.bw. It wraps a tracing reading/writer and may wrap flate
-	// compression.
-	conn        net.Conn
-	connBroken  bool // If connection is broken, we won't flush (and write) again.
-	br          *bufio.Reader
-	bw          *bufio.Writer
-	compress    bool // If compression is enabled, we must flush flateWriter and its target original bufio writer.
-	flateWriter *moxio.FlateWriter
-	flateBW     *bufio.Writer
-	tr          *moxio.TraceReader
-	tw          *moxio.TraceWriter
+	// writes through c.xbw. The "x" for the writes indicate that failed writes cause
+	// an i/o panic, which is either turned into a returned error, or passed on (see
+	// boolean panic). The reader and writer wrap a tracing reading/writer and may wrap
+	// flate compression.
+	conn         net.Conn
+	connBroken   bool // If connection is broken, we won't flush (and write) again.
+	br           *bufio.Reader
+	tr           *moxio.TraceReader
+	xbw          *bufio.Writer
+	compress     bool // If compression is enabled, we must flush flateWriter and its target original bufio writer.
+	xflateWriter *moxio.FlateWriter
+	xflateBW     *bufio.Writer
+	xtw          *moxio.TraceWriter
 
 	log       mlog.Log
 	panic     bool
@@ -86,8 +88,8 @@ func New(cid int64, conn net.Conn, xpanic bool) (client *Conn, rerr error) {
 	c.br = bufio.NewReader(c.tr)
 
 	// Writes are buffered and write to Conn, which may panic.
-	c.tw = moxio.NewTraceWriter(log, "CW: ", &c)
-	c.bw = bufio.NewWriter(c.tw)
+	c.xtw = moxio.NewTraceWriter(log, "CW: ", &c)
+	c.xbw = bufio.NewWriter(c.xtw)
 
 	defer c.recover(&rerr)
 	tag := c.xnonspace()
@@ -171,14 +173,14 @@ func (c *Conn) xflush() {
 		return
 	}
 
-	err := c.bw.Flush()
+	err := c.xbw.Flush()
 	c.xcheckf(err, "flush")
 
 	// If compression is active, we need to flush the deflate stream.
 	if c.compress {
-		err := c.flateWriter.Flush()
+		err := c.xflateWriter.Flush()
 		c.xcheckf(err, "flush deflate")
-		err = c.flateBW.Flush()
+		err = c.xflateBW.Flush()
 		c.xcheckf(err, "flush deflate buffer")
 	}
 }
@@ -186,11 +188,11 @@ func (c *Conn) xflush() {
 func (c *Conn) xtrace(level slog.Level) func() {
 	c.xflush()
 	c.tr.SetTrace(level)
-	c.tw.SetTrace(level)
+	c.xtw.SetTrace(level)
 	return func() {
 		c.xflush()
 		c.tr.SetTrace(mlog.LevelTrace)
-		c.tw.SetTrace(mlog.LevelTrace)
+		c.xtw.SetTrace(mlog.LevelTrace)
 	}
 }
 
@@ -214,13 +216,13 @@ func (c *Conn) Close() (rerr error) {
 	if c.conn == nil {
 		return nil
 	}
-	if !c.connBroken && c.flateWriter != nil {
-		err := c.flateWriter.Close()
+	if !c.connBroken && c.xflateWriter != nil {
+		err := c.xflateWriter.Close()
 		c.xcheckf(err, "close deflate writer")
-		err = c.flateBW.Flush()
+		err = c.xflateBW.Flush()
 		c.xcheckf(err, "flush deflate buffer")
-		c.flateWriter = nil
-		c.flateBW = nil
+		c.xflateWriter = nil
+		c.xflateBW = nil
 	}
 	err := c.conn.Close()
 	c.xcheckf(err, "close connection")
@@ -248,8 +250,7 @@ func (c *Conn) Commandf(tag string, format string, args ...any) (rerr error) {
 	}
 	c.LastTag = tag
 
-	_, err := fmt.Fprintf(c.bw, "%s %s\r\n", tag, fmt.Sprintf(format, args...))
-	c.xcheckf(err, "write command")
+	fmt.Fprintf(c.xbw, "%s %s\r\n", tag, fmt.Sprintf(format, args...))
 	c.xflush()
 	return
 }
@@ -337,8 +338,7 @@ func (c *Conn) Writelinef(format string, args ...any) (rerr error) {
 	defer c.recover(&rerr)
 
 	s := fmt.Sprintf(format, args...)
-	_, err := fmt.Fprintf(c.bw, "%s\r\n", s)
-	c.xcheckf(err, "writeline")
+	fmt.Fprintf(c.xbw, "%s\r\n", s)
 	c.xflush()
 	return nil
 }
@@ -348,8 +348,7 @@ func (c *Conn) Writelinef(format string, args ...any) (rerr error) {
 func (c *Conn) WriteSyncLiteral(s string) (untagged []Untagged, rerr error) {
 	defer c.recover(&rerr)
 
-	_, err := fmt.Fprintf(c.bw, "{%d}\r\n", len(s))
-	c.xcheckf(err, "write sync literal size")
+	fmt.Fprintf(c.xbw, "{%d}\r\n", len(s))
 	c.xflush()
 
 	plus, err := c.br.Peek(1)
@@ -358,7 +357,7 @@ func (c *Conn) WriteSyncLiteral(s string) (untagged []Untagged, rerr error) {
 		_, err = c.Readline()
 		c.xcheckf(err, "read continuation line")
 
-		_, err = c.bw.Write([]byte(s))
+		_, err = c.xbw.Write([]byte(s))
 		c.xcheckf(err, "write literal data")
 		c.xflush()
 		return nil, nil

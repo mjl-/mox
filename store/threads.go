@@ -231,7 +231,7 @@ func (a *Account) ResetThreading(ctx context.Context, log mlog.Log, batchSize in
 // Does not set Seen flag for muted threads.
 //
 // Progress is written to progressWriter, every 100k messages.
-func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore.Tx, startMessageID int64, batchSize int, progressWriter io.Writer) error {
+func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore.Tx, startMessageID int64, batchSize int, xprogressWriter io.Writer) error {
 	// We use a more basic version of the thread-matching algorithm describe in:
 	// ../rfc/5256:443
 	// The algorithm assumes you'll select messages, then group into threads. We normally do
@@ -239,6 +239,9 @@ func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore
 	// as we can, but will queue messages that reference known ancestors and resolve as
 	// soon as we process them. We can handle large number of messages, but not very
 	// quickly because we make lots of database queries.
+
+	// xprogressWriter can call panic on write errors, when assigning threads through a
+	// ctl command.
 
 	type childMsg struct {
 		ID                int64  // This message will be fetched and updated with the threading fields once the parent is resolved.
@@ -533,18 +536,18 @@ func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore
 		nassigned += n
 		if nassigned%100000 == 0 {
 			log.Debug("assigning threads, progress", slog.Int("count", nassigned), slog.Int("unresolved", len(pending)))
-			if _, err := fmt.Fprintf(progressWriter, "assigning threads, progress: %d messages\n", nassigned); err != nil {
+			if _, err := fmt.Fprintf(xprogressWriter, "assigning threads, progress: %d messages\n", nassigned); err != nil {
 				return fmt.Errorf("writing progress: %v", err)
 			}
 		}
 	}
-	if _, err := fmt.Fprintf(progressWriter, "assigning threads, done: %d messages\n", nassigned); err != nil {
+	if _, err := fmt.Fprintf(xprogressWriter, "assigning threads, done: %d messages\n", nassigned); err != nil {
 		return fmt.Errorf("writing progress: %v", err)
 	}
 
 	log.Debug("assigning threads, mostly done, finishing with resolving of cyclic messages", slog.Int("count", nassigned), slog.Int("unresolved", len(pending)))
 
-	if _, err := fmt.Fprintf(progressWriter, "assigning threads, resolving %d cyclic pending message-ids\n", len(pending)); err != nil {
+	if _, err := fmt.Fprintf(xprogressWriter, "assigning threads, resolving %d cyclic pending message-ids\n", len(pending)); err != nil {
 		return fmt.Errorf("writing progress: %v", err)
 	}
 

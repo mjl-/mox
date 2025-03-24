@@ -323,14 +323,16 @@ type conn struct {
 	origConn net.Conn
 	conn     net.Conn
 
-	tls                   bool
-	extRequireTLS         bool // Whether to announce and allow the REQUIRETLS extension.
-	viaHTTPS              bool // Whether the connection came in via the HTTPS port (using TLS ALPN).
-	resolver              dns.Resolver
-	r                     *bufio.Reader
-	w                     *bufio.Writer
-	tr                    *moxio.TraceReader // Kept for changing trace level during cmd/auth/data.
-	tw                    *moxio.TraceWriter
+	tls           bool
+	extRequireTLS bool // Whether to announce and allow the REQUIRETLS extension.
+	viaHTTPS      bool // Whether the connection came in via the HTTPS port (using TLS ALPN).
+	resolver      dns.Resolver
+	// The "x" in the readers and writes indicate Read and Write errors use panic to
+	// propagate the error.
+	xbr                   *bufio.Reader
+	xbw                   *bufio.Writer
+	xtr                   *moxio.TraceReader // Kept for changing trace level during cmd/auth/data.
+	xtw                   *moxio.TraceWriter
 	slow                  bool      // If set, reads are done with a 1 second sleep, and writes are done 1 byte at a time, to keep spammers busy.
 	lastlog               time.Time // Used for printing the delta time since the previous logging for this connection.
 	submission            bool      // ../rfc/6409:19 applies
@@ -692,12 +694,12 @@ func (c *conn) xcheckAuth() {
 
 func (c *conn) xtrace(level slog.Level) func() {
 	c.xflush()
-	c.tr.SetTrace(level)
-	c.tw.SetTrace(level)
+	c.xtr.SetTrace(level)
+	c.xtw.SetTrace(level)
 	return func() {
 		c.xflush()
-		c.tr.SetTrace(mlog.LevelTrace)
-		c.tw.SetTrace(mlog.LevelTrace)
+		c.xtr.SetTrace(mlog.LevelTrace)
+		c.xtw.SetTrace(mlog.LevelTrace)
 	}
 }
 
@@ -780,7 +782,7 @@ func (c *conn) Read(buf []byte) (int, error) {
 var bufpool = moxio.NewBufpool(8, 2*1024)
 
 func (c *conn) readline() string {
-	line, err := bufpool.Readline(c.log, c.r)
+	line, err := bufpool.Readline(c.log, c.xbr)
 	if err != nil && errors.Is(err, moxio.ErrLineTooLong) {
 		c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Other0, "line too long, smtp max is 512, we reached 2048", nil)
 		panic(fmt.Errorf("%s (%w)", err, errIO))
@@ -834,12 +836,12 @@ func (c *conn) bwritecodeline(code int, secode string, msg string, err error) {
 // Buffered-write a formatted response line to connection.
 func (c *conn) bwritelinef(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprint(c.w, msg+"\r\n")
+	fmt.Fprint(c.xbw, msg+"\r\n")
 }
 
 // Flush pending buffered writes to connection.
 func (c *conn) xflush() {
-	c.w.Flush() // Errors will have caused a panic in Write.
+	c.xbw.Flush() // Errors will have caused a panic in Write.
 }
 
 // Write (with flush) a response line with codes and message. err is not written, used for logging and can be nil.
@@ -919,10 +921,10 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		}
 		return l
 	})
-	c.tr = moxio.NewTraceReader(c.log, "RC: ", c)
-	c.r = bufio.NewReader(c.tr)
-	c.tw = moxio.NewTraceWriter(c.log, "LS: ", c)
-	c.w = bufio.NewWriter(c.tw)
+	c.xtr = moxio.NewTraceReader(c.log, "RC: ", c)
+	c.xbr = bufio.NewReader(c.xtr)
+	c.xtw = moxio.NewTraceWriter(c.log, "LS: ", c)
+	c.xbw = bufio.NewWriter(c.xtw)
 
 	metricConnection.WithLabelValues(c.kind()).Inc()
 	c.log.Info("new connection",
@@ -1007,9 +1009,9 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 
 		// If another command is present, don't flush our buffered response yet. Holding
 		// off will cause us to respond with a single packet.
-		n := c.r.Buffered()
+		n := c.xbr.Buffered()
 		if n > 0 {
-			buf, err := c.r.Peek(n)
+			buf, err := c.xbr.Peek(n)
 			if err == nil && bytes.IndexByte(buf, '\n') >= 0 {
 				continue
 			}
@@ -1246,9 +1248,9 @@ func (c *conn) cmdStarttls(p *parser) {
 	// but make sure any bytes already read and in the buffer are used for the TLS
 	// handshake.
 	conn := c.conn
-	if n := c.r.Buffered(); n > 0 {
+	if n := c.xbr.Buffered(); n > 0 {
 		conn = &moxio.PrefixConn{
-			PrefixReader: io.LimitReader(c.r, int64(n)),
+			PrefixReader: io.LimitReader(c.xbr, int64(n)),
 			Conn:         conn,
 		}
 	}
@@ -2121,7 +2123,7 @@ func (c *conn) cmdData(p *parser) {
 	}
 	defer store.CloseRemoveTempFile(c.log, dataFile, "smtpserver delivered message")
 	msgWriter := message.NewWriter(dataFile)
-	dr := smtp.NewDataReader(c.r)
+	dr := smtp.NewDataReader(c.xbr)
 	n, err := io.Copy(&limitWriter{maxSize: c.maxMessageSize, w: msgWriter}, dr)
 	c.xtrace(mlog.LevelTrace) // Restore.
 	if err != nil {

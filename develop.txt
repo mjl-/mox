@@ -47,6 +47,18 @@ instructions below.
   standard slog package for logging, not our mlog package. Packages not intended
   for reuse do use mlog as it is more convenient. Internally, we always use
   mlog.Log to do the logging, wrapping an slog.Logger.
+- The code uses panic for error handling in quite a few places, including
+  smtpserver, imapserver and web API calls. Functions/methods, variables, struct
+  fields and types that begin with an "x" indicate they can panic on errors. Both
+  for i/o errors that are fatal for a connection, and also often for user-induced
+  errors, for example bad IMAP commands or invalid web API requests. These panics
+  are caught again at the top of a command or top of the connection. Write code
+  that is panic-safe, using defer to clean up and release resources.
+- Try to check all errors, at the minimum using mlog.Log.Check() to log an error
+  at the appropriate level. Also when just closing a file. Log messages sometimes
+  unexpectedly point out latent issues. Only when there is no point in logging,
+  for example when previous writes to stderr failed, can error logging be skipped.
+  Test code is less strict about checking errors.
 
 
 # Reusable packages

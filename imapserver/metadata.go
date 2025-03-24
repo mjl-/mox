@@ -155,18 +155,18 @@ func (c *conn) cmdGetmetadata(tag, cmd string, p *parser) {
 	// Response syntax: ../rfc/5464:807 ../rfc/5464:778
 	// We can only send untagged responses when we have any matches.
 	if len(annotations) > 0 {
-		fmt.Fprintf(c.bw, "* METADATA %s (", mailboxt(mailboxName).pack(c))
+		fmt.Fprintf(c.xbw, "* METADATA %s (", mailboxt(mailboxName).pack(c))
 		for i, a := range annotations {
 			if i > 0 {
-				fmt.Fprint(c.bw, " ")
+				fmt.Fprint(c.xbw, " ")
 			}
-			astring(a.Key).writeTo(c, c.bw)
-			fmt.Fprint(c.bw, " ")
+			astring(a.Key).writeTo(c, c.xbw)
+			fmt.Fprint(c.xbw, " ")
 			if a.IsString {
-				string0(string(a.Value)).writeTo(c, c.bw)
+				string0(string(a.Value)).writeTo(c, c.xbw)
 			} else {
 				v := readerSizeSyncliteral{bytes.NewReader(a.Value), int64(len(a.Value)), true}
-				v.writeTo(c, c.bw)
+				v.writeTo(c, c.xbw)
 			}
 		}
 		c.bwritelinef(")")

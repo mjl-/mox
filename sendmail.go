@@ -313,7 +313,7 @@ binary should be setgid that group:
 		homedir, err := os.UserHomeDir()
 		xcheckf(err, "finding homedir for storing message after failed delivery")
 		maildir := filepath.Join(homedir, "moxsubmit.failures")
-		os.Mkdir(maildir, 0700)
+		os.Mkdir(maildir, 0700) // Exists is no problem, failure is found during create.
 		f, err := os.CreateTemp(maildir, "newmsg.")
 		xcheckf(err, "creating temp file for storing message after failed delivery")
 		// note: not removing the partial file if writing/closing below fails.

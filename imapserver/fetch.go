@@ -428,9 +428,9 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 	}
 
 	// Write errors are turned into panics because we write through c.
-	fmt.Fprintf(cmd.conn.bw, "* %d FETCH ", cmd.conn.xsequence(cmd.uid))
-	data.writeTo(cmd.conn, cmd.conn.bw)
-	cmd.conn.bw.Write([]byte("\r\n"))
+	fmt.Fprintf(cmd.conn.xbw, "* %d FETCH ", cmd.conn.xsequence(cmd.uid))
+	data.writeTo(cmd.conn, cmd.conn.xbw)
+	cmd.conn.xbw.Write([]byte("\r\n"))
 }
 
 // result for one attribute. if processing fails, e.g. because data was requested

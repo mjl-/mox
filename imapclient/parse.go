@@ -856,8 +856,7 @@ func (c *Conn) xliteral() []byte {
 		c.xerrorf("refusing to read more than 1MB: %d", size)
 	}
 	if sync {
-		_, err := fmt.Fprintf(c.bw, "+ ok\r\n")
-		c.xcheckf(err, "write continuation")
+		fmt.Fprintf(c.xbw, "+ ok\r\n")
 		c.xflush()
 	}
 	buf := make([]byte, int(size))

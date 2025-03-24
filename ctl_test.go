@@ -60,54 +60,54 @@ func TestCtl(t *testing.T) {
 
 	var cid int64
 
-	testctl := func(fn func(clientctl *ctl)) {
+	testctl := func(fn func(clientxctl *ctl)) {
 		t.Helper()
 
 		cconn, sconn := net.Pipe()
-		clientctl := ctl{conn: cconn, log: pkglog}
-		serverctl := ctl{conn: sconn, log: pkglog}
+		clientxctl := ctl{conn: cconn, log: pkglog}
+		serverxctl := ctl{conn: sconn, log: pkglog}
 		done := make(chan struct{})
 		go func() {
 			cid++
-			servectlcmd(ctxbg, &serverctl, cid, func() {})
+			servectlcmd(ctxbg, &serverxctl, cid, func() {})
 			close(done)
 		}()
-		fn(&clientctl)
+		fn(&clientxctl)
 		cconn.Close()
 		<-done
 		sconn.Close()
 	}
 
 	// "deliver"
-	testctl(func(ctl *ctl) {
-		ctlcmdDeliver(ctl, "mjl@mox.example")
+	testctl(func(xctl *ctl) {
+		ctlcmdDeliver(xctl, "mjl@mox.example")
 	})
 
 	// "setaccountpassword"
-	testctl(func(ctl *ctl) {
-		ctlcmdSetaccountpassword(ctl, "mjl", "test4321")
+	testctl(func(xctl *ctl) {
+		ctlcmdSetaccountpassword(xctl, "mjl", "test4321")
 	})
 
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesList(ctl)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesList(xctl)
 	})
 
 	// All messages.
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesAdd(ctl, "", "", "")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(xctl, "", "", "")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesAdd(ctl, "mjl", "", "")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(xctl, "mjl", "", "")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesAdd(ctl, "", "☺.mox.example", "")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(xctl, "", "☺.mox.example", "")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesAdd(ctl, "mox", "☺.mox.example", "example.com")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(xctl, "mox", "☺.mox.example", "example.com")
 	})
 
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesRemove(ctl, 1)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesRemove(xctl, 1)
 	})
 
 	// Queue a message to list/change/dump.
@@ -127,252 +127,252 @@ func TestCtl(t *testing.T) {
 	qmid := qml[0].ID
 
 	// Has entries now.
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesList(ctl)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesList(xctl)
 	})
 
 	// "queuelist"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueList(ctl, queue.Filter{}, queue.Sort{})
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueList(xctl, queue.Filter{}, queue.Sort{})
 	})
 
 	// "queueholdset"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldSet(ctl, queue.Filter{}, true)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldSet(xctl, queue.Filter{}, true)
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldSet(ctl, queue.Filter{}, false)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldSet(xctl, queue.Filter{}, false)
 	})
 
 	// "queueschedule"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueSchedule(ctl, queue.Filter{}, true, time.Minute)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueSchedule(xctl, queue.Filter{}, true, time.Minute)
 	})
 
 	// "queuetransport"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueTransport(ctl, queue.Filter{}, "socks")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueTransport(xctl, queue.Filter{}, "socks")
 	})
 
 	// "queuerequiretls"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueRequireTLS(ctl, queue.Filter{}, nil)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueRequireTLS(xctl, queue.Filter{}, nil)
 	})
 
 	// "queuedump"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueDump(ctl, fmt.Sprintf("%d", qmid))
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueDump(xctl, fmt.Sprintf("%d", qmid))
 	})
 
 	// "queuefail"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueFail(ctl, queue.Filter{})
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueFail(xctl, queue.Filter{})
 	})
 
 	// "queuedrop"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueDrop(ctl, queue.Filter{})
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueDrop(xctl, queue.Filter{})
 	})
 
 	// "queueholdruleslist"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesList(ctl)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesList(xctl)
 	})
 
 	// "queueholdrulesadd"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesAdd(ctl, "mjl", "", "")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(xctl, "mjl", "", "")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesAdd(ctl, "mjl", "localhost", "")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesAdd(xctl, "mjl", "localhost", "")
 	})
 
 	// "queueholdrulesremove"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesRemove(ctl, 2)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesRemove(xctl, 2)
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHoldrulesList(ctl)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHoldrulesList(xctl)
 	})
 
 	// "queuesuppresslist"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueSuppressList(ctl, "mjl")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueSuppressList(xctl, "mjl")
 	})
 
 	// "queuesuppressadd"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueSuppressAdd(ctl, "mjl", "base@localhost")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueSuppressAdd(xctl, "mjl", "base@localhost")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueSuppressAdd(ctl, "mjl", "other@localhost")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueSuppressAdd(xctl, "mjl", "other@localhost")
 	})
 
 	// "queuesuppresslookup"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueSuppressLookup(ctl, "mjl", "base@localhost")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueSuppressLookup(xctl, "mjl", "base@localhost")
 	})
 
 	// "queuesuppressremove"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueSuppressRemove(ctl, "mjl", "base@localhost")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueSuppressRemove(xctl, "mjl", "base@localhost")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueSuppressList(ctl, "mjl")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueSuppressList(xctl, "mjl")
 	})
 
 	// "queueretiredlist"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueRetiredList(ctl, queue.RetiredFilter{}, queue.RetiredSort{})
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueRetiredList(xctl, queue.RetiredFilter{}, queue.RetiredSort{})
 	})
 
 	// "queueretiredprint"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueRetiredPrint(ctl, "1")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueRetiredPrint(xctl, "1")
 	})
 
 	// "queuehooklist"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHookList(ctl, queue.HookFilter{}, queue.HookSort{})
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHookList(xctl, queue.HookFilter{}, queue.HookSort{})
 	})
 
 	// "queuehookschedule"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHookSchedule(ctl, queue.HookFilter{}, true, time.Minute)
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHookSchedule(xctl, queue.HookFilter{}, true, time.Minute)
 	})
 
 	// "queuehookprint"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHookPrint(ctl, "1")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHookPrint(xctl, "1")
 	})
 
 	// "queuehookcancel"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHookCancel(ctl, queue.HookFilter{})
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHookCancel(xctl, queue.HookFilter{})
 	})
 
 	// "queuehookretiredlist"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHookRetiredList(ctl, queue.HookRetiredFilter{}, queue.HookRetiredSort{})
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHookRetiredList(xctl, queue.HookRetiredFilter{}, queue.HookRetiredSort{})
 	})
 
 	// "queuehookretiredprint"
-	testctl(func(ctl *ctl) {
-		ctlcmdQueueHookRetiredPrint(ctl, "1")
+	testctl(func(xctl *ctl) {
+		ctlcmdQueueHookRetiredPrint(xctl, "1")
 	})
 
 	// "importmbox"
-	testctl(func(ctl *ctl) {
-		ctlcmdImport(ctl, true, "mjl", "inbox", "testdata/importtest.mbox")
+	testctl(func(xctl *ctl) {
+		ctlcmdImport(xctl, true, "mjl", "inbox", "testdata/importtest.mbox")
 	})
 
 	// "importmaildir"
-	testctl(func(ctl *ctl) {
-		ctlcmdImport(ctl, false, "mjl", "inbox", "testdata/importtest.maildir")
+	testctl(func(xctl *ctl) {
+		ctlcmdImport(xctl, false, "mjl", "inbox", "testdata/importtest.maildir")
 	})
 
 	// "domainadd"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigDomainAdd(ctl, false, dns.Domain{ASCII: "mox2.example"}, "mjl", "")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigDomainAdd(xctl, false, dns.Domain{ASCII: "mox2.example"}, "mjl", "")
 	})
 
 	// "accountadd"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAccountAdd(ctl, "mjl2", "mjl2@mox2.example")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAccountAdd(xctl, "mjl2", "mjl2@mox2.example")
 	})
 
 	// "addressadd"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAddressAdd(ctl, "mjl3@mox2.example", "mjl2")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAddressAdd(xctl, "mjl3@mox2.example", "mjl2")
 	})
 
 	// Add a message.
-	testctl(func(ctl *ctl) {
-		ctlcmdDeliver(ctl, "mjl3@mox2.example")
+	testctl(func(xctl *ctl) {
+		ctlcmdDeliver(xctl, "mjl3@mox2.example")
 	})
 	// "retrain", retrain junk filter.
-	testctl(func(ctl *ctl) {
-		ctlcmdRetrain(ctl, "mjl2")
+	testctl(func(xctl *ctl) {
+		ctlcmdRetrain(xctl, "mjl2")
 	})
 
 	// "addressrm"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAddressRemove(ctl, "mjl3@mox2.example")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAddressRemove(xctl, "mjl3@mox2.example")
 	})
 
 	// "accountdisabled"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAccountDisabled(ctl, "mjl2", "testing")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAccountDisabled(xctl, "mjl2", "testing")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAccountDisabled(ctl, "mjl2", "")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAccountDisabled(xctl, "mjl2", "")
 	})
 
 	// "accountrm"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAccountRemove(ctl, "mjl2")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAccountRemove(xctl, "mjl2")
 	})
 
 	// "domaindisabled"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigDomainDisabled(ctl, dns.Domain{ASCII: "mox2.example"}, true)
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigDomainDisabled(xctl, dns.Domain{ASCII: "mox2.example"}, true)
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigDomainDisabled(ctl, dns.Domain{ASCII: "mox2.example"}, false)
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigDomainDisabled(xctl, dns.Domain{ASCII: "mox2.example"}, false)
 	})
 
 	// "domainrm"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigDomainRemove(ctl, dns.Domain{ASCII: "mox2.example"})
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigDomainRemove(xctl, dns.Domain{ASCII: "mox2.example"})
 	})
 
 	// "aliasadd"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAliasAdd(ctl, "support@mox.example", config.Alias{Addresses: []string{"mjl@mox.example"}})
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAliasAdd(xctl, "support@mox.example", config.Alias{Addresses: []string{"mjl@mox.example"}})
 	})
 
 	// "aliaslist"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAliasList(ctl, "mox.example")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAliasList(xctl, "mox.example")
 	})
 
 	// "aliasprint"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAliasPrint(ctl, "support@mox.example")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAliasPrint(xctl, "support@mox.example")
 	})
 
 	// "aliasupdate"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAliasUpdate(ctl, "support@mox.example", "true", "true", "true")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAliasUpdate(xctl, "support@mox.example", "true", "true", "true")
 	})
 
 	// "aliasaddaddr"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAliasAddaddr(ctl, "support@mox.example", []string{"mjl2@mox.example"})
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAliasAddaddr(xctl, "support@mox.example", []string{"mjl2@mox.example"})
 	})
 
 	// "aliasrmaddr"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAliasRmaddr(ctl, "support@mox.example", []string{"mjl2@mox.example"})
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAliasRmaddr(xctl, "support@mox.example", []string{"mjl2@mox.example"})
 	})
 
 	// "aliasrm"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigAliasRemove(ctl, "support@mox.example")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigAliasRemove(xctl, "support@mox.example")
 	})
 
 	// accounttlspubkeyadd
 	certDER := fakeCert(t)
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigTlspubkeyAdd(ctl, "mjl@mox.example", "testkey", false, certDER)
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigTlspubkeyAdd(xctl, "mjl@mox.example", "testkey", false, certDER)
 	})
 
 	// "accounttlspubkeylist"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigTlspubkeyList(ctl, "")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigTlspubkeyList(xctl, "")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigTlspubkeyList(ctl, "mjl")
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigTlspubkeyList(xctl, "mjl")
 	})
 
 	tpkl, err := store.TLSPublicKeyList(ctxbg, "")
@@ -383,13 +383,13 @@ func TestCtl(t *testing.T) {
 	fingerprint := tpkl[0].Fingerprint
 
 	// "accounttlspubkeyget"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigTlspubkeyGet(ctl, fingerprint)
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigTlspubkeyGet(xctl, fingerprint)
 	})
 
 	// "accounttlspubkeyrm"
-	testctl(func(ctl *ctl) {
-		ctlcmdConfigTlspubkeyRemove(ctl, fingerprint)
+	testctl(func(xctl *ctl) {
+		ctlcmdConfigTlspubkeyRemove(xctl, fingerprint)
 	})
 
 	tpkl, err = store.TLSPublicKeyList(ctxbg, "")
@@ -399,39 +399,39 @@ func TestCtl(t *testing.T) {
 	}
 
 	// "loglevels"
-	testctl(func(ctl *ctl) {
-		ctlcmdLoglevels(ctl)
+	testctl(func(xctl *ctl) {
+		ctlcmdLoglevels(xctl)
 	})
 
 	// "setloglevels"
-	testctl(func(ctl *ctl) {
-		ctlcmdSetLoglevels(ctl, "", "debug")
+	testctl(func(xctl *ctl) {
+		ctlcmdSetLoglevels(xctl, "", "debug")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdSetLoglevels(ctl, "smtpserver", "debug")
+	testctl(func(xctl *ctl) {
+		ctlcmdSetLoglevels(xctl, "smtpserver", "debug")
 	})
 
 	// Export data, import it again
 	xcmdExport(true, false, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, &cmd{log: pkglog})
 	xcmdExport(false, false, []string{filepath.FromSlash("testdata/ctl/data/tmp/export/maildir/"), filepath.FromSlash("testdata/ctl/data/accounts/mjl")}, &cmd{log: pkglog})
-	testctl(func(ctl *ctl) {
-		ctlcmdImport(ctl, true, "mjl", "inbox", filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/Inbox.mbox"))
+	testctl(func(xctl *ctl) {
+		ctlcmdImport(xctl, true, "mjl", "inbox", filepath.FromSlash("testdata/ctl/data/tmp/export/mbox/Inbox.mbox"))
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdImport(ctl, false, "mjl", "inbox", filepath.FromSlash("testdata/ctl/data/tmp/export/maildir/Inbox"))
+	testctl(func(xctl *ctl) {
+		ctlcmdImport(xctl, false, "mjl", "inbox", filepath.FromSlash("testdata/ctl/data/tmp/export/maildir/Inbox"))
 	})
 
 	// "recalculatemailboxcounts"
-	testctl(func(ctl *ctl) {
-		ctlcmdRecalculateMailboxCounts(ctl, "mjl")
+	testctl(func(xctl *ctl) {
+		ctlcmdRecalculateMailboxCounts(xctl, "mjl")
 	})
 
 	// "fixmsgsize"
-	testctl(func(ctl *ctl) {
-		ctlcmdFixmsgsize(ctl, "mjl")
+	testctl(func(xctl *ctl) {
+		ctlcmdFixmsgsize(xctl, "mjl")
 	})
-	testctl(func(ctl *ctl) {
-		acc, err := store.OpenAccount(ctl.log, "mjl", false)
+	testctl(func(xctl *ctl) {
+		acc, err := store.OpenAccount(xctl.log, "mjl", false)
 		tcheck(t, err, "open account")
 		defer func() {
 			acc.Close()
@@ -443,7 +443,7 @@ func TestCtl(t *testing.T) {
 		deliver := func(m *store.Message) {
 			t.Helper()
 			m.Size = int64(len(content))
-			msgf, err := store.CreateMessageTemp(ctl.log, "ctltest")
+			msgf, err := store.CreateMessageTemp(xctl.log, "ctltest")
 			tcheck(t, err, "create temp file")
 			defer os.Remove(msgf.Name())
 			defer msgf.Close()
@@ -451,7 +451,7 @@ func TestCtl(t *testing.T) {
 			tcheck(t, err, "write message file")
 
 			acc.WithWLock(func() {
-				err = acc.DeliverMailbox(ctl.log, "Inbox", m, msgf)
+				err = acc.DeliverMailbox(xctl.log, "Inbox", m, msgf)
 				tcheck(t, err, "deliver message")
 			})
 		}
@@ -471,7 +471,7 @@ func TestCtl(t *testing.T) {
 		tcheck(t, err, "update mailbox size")
 
 		// Fix up the size.
-		ctlcmdFixmsgsize(ctl, "")
+		ctlcmdFixmsgsize(xctl, "")
 
 		err = acc.DB.Get(ctxbg, &msgBadSize)
 		tcheck(t, err, "get message")
@@ -481,19 +481,19 @@ func TestCtl(t *testing.T) {
 	})
 
 	// "reparse"
-	testctl(func(ctl *ctl) {
-		ctlcmdReparse(ctl, "mjl")
+	testctl(func(xctl *ctl) {
+		ctlcmdReparse(xctl, "mjl")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdReparse(ctl, "")
+	testctl(func(xctl *ctl) {
+		ctlcmdReparse(xctl, "")
 	})
 
 	// "reassignthreads"
-	testctl(func(ctl *ctl) {
-		ctlcmdReassignthreads(ctl, "mjl")
+	testctl(func(xctl *ctl) {
+		ctlcmdReassignthreads(xctl, "mjl")
 	})
-	testctl(func(ctl *ctl) {
-		ctlcmdReassignthreads(ctl, "")
+	testctl(func(xctl *ctl) {
+		ctlcmdReassignthreads(xctl, "")
 	})
 
 	// "backup", backup account.
@@ -506,11 +506,11 @@ func TestCtl(t *testing.T) {
 	err = tlsrptdb.Init()
 	tcheck(t, err, "tlsrptdb init")
 	defer tlsrptdb.Close()
-	testctl(func(ctl *ctl) {
+	testctl(func(xctl *ctl) {
 		os.RemoveAll("testdata/ctl/data/tmp/backup")
 		err := os.WriteFile("testdata/ctl/data/receivedid.key", make([]byte, 16), 0600)
 		tcheck(t, err, "writing receivedid.key")
-		ctlcmdBackup(ctl, filepath.FromSlash("testdata/ctl/data/tmp/backup"), false)
+		ctlcmdBackup(xctl, filepath.FromSlash("testdata/ctl/data/tmp/backup"), false)
 	})
 
 	// Verify the backup.
@@ -521,7 +521,7 @@ func TestCtl(t *testing.T) {
 	cmdVerifydata(&xcmd)
 
 	// IMAP connection.
-	testctl(func(ctl *ctl) {
+	testctl(func(xctl *ctl) {
 		a, b := net.Pipe()
 		go func() {
 			client, err := imapclient.New(mox.Cid(), a, true)
@@ -530,7 +530,7 @@ func TestCtl(t *testing.T) {
 			client.Logout()
 			defer a.Close()
 		}()
-		ctlcmdIMAPServe(ctl, "mjl@mox.example", b, b)
+		ctlcmdIMAPServe(xctl, "mjl@mox.example", b, b)
 	})
 }
 

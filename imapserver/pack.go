@@ -9,7 +9,7 @@ import (
 
 type token interface {
 	pack(c *conn) string
-	writeTo(c *conn, w io.Writer)
+	writeTo(c *conn, xw io.Writer) // Writes to xw panic on error.
 }
 
 type bare string
@@ -18,8 +18,8 @@ func (t bare) pack(c *conn) string {
 	return string(t)
 }
 
-func (t bare) writeTo(c *conn, w io.Writer) {
-	w.Write([]byte(t.pack(c)))
+func (t bare) writeTo(c *conn, xw io.Writer) {
+	xw.Write([]byte(t.pack(c)))
 }
 
 type niltoken struct{}
@@ -30,8 +30,8 @@ func (t niltoken) pack(c *conn) string {
 	return "NIL"
 }
 
-func (t niltoken) writeTo(c *conn, w io.Writer) {
-	w.Write([]byte(t.pack(c)))
+func (t niltoken) writeTo(c *conn, xw io.Writer) {
+	xw.Write([]byte(t.pack(c)))
 }
 
 func nilOrString(s string) token {
@@ -60,8 +60,8 @@ func (t string0) pack(c *conn) string {
 	return r
 }
 
-func (t string0) writeTo(c *conn, w io.Writer) {
-	w.Write([]byte(t.pack(c)))
+func (t string0) writeTo(c *conn, xw io.Writer) {
+	xw.Write([]byte(t.pack(c)))
 }
 
 type dquote string
@@ -78,8 +78,8 @@ func (t dquote) pack(c *conn) string {
 	return r
 }
 
-func (t dquote) writeTo(c *conn, w io.Writer) {
-	w.Write([]byte(t.pack(c)))
+func (t dquote) writeTo(c *conn, xw io.Writer) {
+	xw.Write([]byte(t.pack(c)))
 }
 
 type syncliteral string
@@ -88,9 +88,9 @@ func (t syncliteral) pack(c *conn) string {
 	return fmt.Sprintf("{%d}\r\n", len(t)) + string(t)
 }
 
-func (t syncliteral) writeTo(c *conn, w io.Writer) {
-	fmt.Fprintf(w, "{%d}\r\n", len(t))
-	w.Write([]byte(t))
+func (t syncliteral) writeTo(c *conn, xw io.Writer) {
+	fmt.Fprintf(xw, "{%d}\r\n", len(t))
+	xw.Write([]byte(t))
 }
 
 // data from reader with known size.
@@ -112,14 +112,14 @@ func (t readerSizeSyncliteral) pack(c *conn) string {
 	return fmt.Sprintf("%s{%d}\r\n", lit, t.size) + string(buf)
 }
 
-func (t readerSizeSyncliteral) writeTo(c *conn, w io.Writer) {
+func (t readerSizeSyncliteral) writeTo(c *conn, xw io.Writer) {
 	var lit string
 	if t.lit8 {
 		lit = "~"
 	}
-	fmt.Fprintf(w, "%s{%d}\r\n", lit, t.size)
+	fmt.Fprintf(xw, "%s{%d}\r\n", lit, t.size)
 	defer c.xtrace(mlog.LevelTracedata)()
-	if _, err := io.Copy(w, io.LimitReader(t.r, t.size)); err != nil {
+	if _, err := io.Copy(xw, io.LimitReader(t.r, t.size)); err != nil {
 		panic(err)
 	}
 }
@@ -137,17 +137,14 @@ func (t readerSyncliteral) pack(c *conn) string {
 	return fmt.Sprintf("{%d}\r\n", len(buf)) + string(buf)
 }
 
-func (t readerSyncliteral) writeTo(c *conn, w io.Writer) {
+func (t readerSyncliteral) writeTo(c *conn, xw io.Writer) {
 	buf, err := io.ReadAll(t.r)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Fprintf(w, "{%d}\r\n", len(buf))
+	fmt.Fprintf(xw, "{%d}\r\n", len(buf))
 	defer c.xtrace(mlog.LevelTracedata)()
-	_, err = w.Write(buf)
-	if err != nil {
-		panic(err)
-	}
+	xw.Write(buf)
 }
 
 // list with tokens space-separated
@@ -165,15 +162,15 @@ func (t listspace) pack(c *conn) string {
 	return s
 }
 
-func (t listspace) writeTo(c *conn, w io.Writer) {
-	fmt.Fprint(w, "(")
+func (t listspace) writeTo(c *conn, xw io.Writer) {
+	fmt.Fprint(xw, "(")
 	for i, e := range t {
 		if i > 0 {
-			fmt.Fprint(w, " ")
+			fmt.Fprint(xw, " ")
 		}
-		e.writeTo(c, w)
+		e.writeTo(c, xw)
 	}
-	fmt.Fprint(w, ")")
+	fmt.Fprint(xw, ")")
 }
 
 // concatenate tokens space-separated
@@ -190,12 +187,12 @@ func (t concatspace) pack(c *conn) string {
 	return s
 }
 
-func (t concatspace) writeTo(c *conn, w io.Writer) {
+func (t concatspace) writeTo(c *conn, xw io.Writer) {
 	for i, e := range t {
 		if i > 0 {
-			fmt.Fprint(w, " ")
+			fmt.Fprint(xw, " ")
 		}
-		e.writeTo(c, w)
+		e.writeTo(c, xw)
 	}
 }
 
@@ -210,9 +207,9 @@ func (t concat) pack(c *conn) string {
 	return s
 }
 
-func (t concat) writeTo(c *conn, w io.Writer) {
+func (t concat) writeTo(c *conn, xw io.Writer) {
 	for _, e := range t {
-		e.writeTo(c, w)
+		e.writeTo(c, xw)
 	}
 }
 
@@ -234,8 +231,8 @@ next:
 	return string(t)
 }
 
-func (t astring) writeTo(c *conn, w io.Writer) {
-	w.Write([]byte(t.pack(c)))
+func (t astring) writeTo(c *conn, xw io.Writer) {
+	xw.Write([]byte(t.pack(c)))
 }
 
 // mailbox with utf7 encoding if connection requires it, or utf8 otherwise.
@@ -249,8 +246,8 @@ func (t mailboxt) pack(c *conn) string {
 	return astring(s).pack(c)
 }
 
-func (t mailboxt) writeTo(c *conn, w io.Writer) {
-	w.Write([]byte(t.pack(c)))
+func (t mailboxt) writeTo(c *conn, xw io.Writer) {
+	xw.Write([]byte(t.pack(c)))
 }
 
 type number uint32
@@ -259,6 +256,6 @@ func (t number) pack(c *conn) string {
 	return fmt.Sprintf("%d", t)
 }
 
-func (t number) writeTo(c *conn, w io.Writer) {
-	w.Write([]byte(t.pack(c)))
+func (t number) writeTo(c *conn, xw io.Writer) {
+	xw.Write([]byte(t.pack(c)))
 }

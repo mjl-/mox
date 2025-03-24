@@ -131,22 +131,22 @@ func xcmdXImport(mbox bool, c *cmd) {
 	ctlcmdImport(&clientctl, mbox, account, args[1], args[2])
 }
 
-func ctlcmdImport(ctl *ctl, mbox bool, account, mailbox, src string) {
+func ctlcmdImport(xctl *ctl, mbox bool, account, mailbox, src string) {
 	if mbox {
-		ctl.xwrite("importmbox")
+		xctl.xwrite("importmbox")
 	} else {
-		ctl.xwrite("importmaildir")
+		xctl.xwrite("importmaildir")
 	}
-	ctl.xwrite(account)
+	xctl.xwrite(account)
 	if strings.EqualFold(mailbox, "Inbox") {
 		mailbox = "Inbox"
 	}
-	ctl.xwrite(mailbox)
-	ctl.xwrite(src)
-	ctl.xreadok()
+	xctl.xwrite(mailbox)
+	xctl.xwrite(src)
+	xctl.xreadok()
 	fmt.Fprintln(os.Stderr, "importing...")
 	for {
-		line := ctl.xread()
+		line := xctl.xread()
 		if strings.HasPrefix(line, "progress ") {
 			n := line[len("progress "):]
 			fmt.Fprintf(os.Stderr, "%s...\n", n)
@@ -157,11 +157,11 @@ func ctlcmdImport(ctl *ctl, mbox bool, account, mailbox, src string) {
 		}
 		break
 	}
-	count := ctl.xread()
+	count := xctl.xread()
 	fmt.Fprintf(os.Stderr, "%s imported\n", count)
 }
 
-func importctl(ctx context.Context, ctl *ctl, mbox bool) {
+func ximportctl(ctx context.Context, xctl *ctl, mbox bool) {
 	/* protocol:
 	> "importmaildir" or "importmbox"
 	> account
@@ -172,15 +172,15 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	< "ok" when done, or error
 	< count (of total imported messages, only if not error)
 	*/
-	account := ctl.xread()
-	mailbox := ctl.xread()
-	src := ctl.xread()
+	account := xctl.xread()
+	mailbox := xctl.xread()
+	src := xctl.xread()
 
 	kind := "maildir"
 	if mbox {
 		kind = "mbox"
 	}
-	ctl.log.Info("importing messages",
+	xctl.log.Info("importing messages",
 		slog.String("kind", kind),
 		slog.String("account", account),
 		slog.String("mailbox", mailbox),
@@ -194,34 +194,34 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	// Ensure normalized form.
 	mailbox = norm.NFC.String(mailbox)
 	mailbox, _, err = store.CheckMailboxName(mailbox, true)
-	ctl.xcheck(err, "checking mailbox name")
+	xctl.xcheck(err, "checking mailbox name")
 
 	// Open account, creating a database file if it doesn't exist yet. It must be known
 	// in the configuration file.
-	a, err := store.OpenAccount(ctl.log, account, false)
-	ctl.xcheck(err, "opening account")
+	a, err := store.OpenAccount(xctl.log, account, false)
+	xctl.xcheck(err, "opening account")
 	defer func() {
 		if a != nil {
 			err := a.Close()
-			ctl.log.Check(err, "closing account after import")
+			xctl.log.Check(err, "closing account after import")
 		}
 	}()
 
-	err = a.ThreadingWait(ctl.log)
-	ctl.xcheck(err, "waiting for account thread upgrade")
+	err = a.ThreadingWait(xctl.log)
+	xctl.xcheck(err, "waiting for account thread upgrade")
 
 	defer func() {
 		if mboxf != nil {
 			err := mboxf.Close()
-			ctl.log.Check(err, "closing mbox file after import")
+			xctl.log.Check(err, "closing mbox file after import")
 		}
 		if mdnewf != nil {
 			err := mdnewf.Close()
-			ctl.log.Check(err, "closing maildir new after import")
+			xctl.log.Check(err, "closing maildir new after import")
 		}
 		if mdcurf != nil {
 			err := mdcurf.Close()
-			ctl.log.Check(err, "closing maildir cur after import")
+			xctl.log.Check(err, "closing maildir cur after import")
 		}
 	}()
 
@@ -233,14 +233,14 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 	// may be a different user who can access the files.
 	if mbox {
 		mboxf, err = os.Open(src)
-		ctl.xcheck(err, "open mbox file")
-		msgreader = store.NewMboxReader(ctl.log, store.CreateMessageTemp, src, mboxf)
+		xctl.xcheck(err, "open mbox file")
+		msgreader = store.NewMboxReader(xctl.log, store.CreateMessageTemp, src, mboxf)
 	} else {
 		mdnewf, err = os.Open(filepath.Join(src, "new"))
-		ctl.xcheck(err, "open subdir new of maildir")
+		xctl.xcheck(err, "open subdir new of maildir")
 		mdcurf, err = os.Open(filepath.Join(src, "cur"))
-		ctl.xcheck(err, "open subdir cur of maildir")
-		msgreader = store.NewMaildirReader(ctl.log, store.CreateMessageTemp, mdnewf, mdcurf)
+		xctl.xcheck(err, "open subdir cur of maildir")
+		msgreader = store.NewMaildirReader(xctl.log, store.CreateMessageTemp, mdnewf, mdcurf)
 	}
 
 	// todo: one goroutine for reading messages, one for parsing the message, one adding to database, one for junk filter training.
@@ -249,16 +249,16 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		var changes []store.Change
 
 		tx, err := a.DB.Begin(ctx, true)
-		ctl.xcheck(err, "begin transaction")
+		xctl.xcheck(err, "begin transaction")
 		defer func() {
 			if tx != nil {
 				err := tx.Rollback()
-				ctl.log.Check(err, "rolling back transaction")
+				xctl.log.Check(err, "rolling back transaction")
 			}
 		}()
 
 		// All preparations done. Good to go.
-		ctl.xwriteok()
+		xctl.xwriteok()
 
 		// We will be delivering messages. If we fail halfway, we need to remove the created msg files.
 		var newIDs []int64
@@ -268,22 +268,22 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 				return
 			}
 
-			if x != ctl.x {
-				ctl.log.Error("import error", slog.String("panic", fmt.Sprintf("%v", x)))
+			if x != xctl.x {
+				xctl.log.Error("import error", slog.String("panic", fmt.Sprintf("%v", x)))
 				debug.PrintStack()
 				metrics.PanicInc(metrics.Import)
 			} else {
-				ctl.log.Error("import error")
+				xctl.log.Error("import error")
 			}
 
 			for _, id := range newIDs {
 				p := a.MessagePath(id)
 				err := os.Remove(p)
-				ctl.log.Check(err, "closing message file after import error", slog.String("path", p))
+				xctl.log.Check(err, "closing message file after import error", slog.String("path", p))
 			}
 			newIDs = nil
 
-			ctl.xerror(fmt.Sprintf("import error: %v", x))
+			xctl.xerror(fmt.Sprintf("import error: %v", x))
 		}()
 
 		var modseq store.ModSeq // Assigned on first delivered messages, used for all messages.
@@ -291,18 +291,18 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		// Ensure mailbox exists.
 		var mb store.Mailbox
 		mb, changes, err = a.MailboxEnsure(tx, mailbox, true, store.SpecialUse{}, &modseq)
-		ctl.xcheck(err, "ensuring mailbox exists")
+		xctl.xcheck(err, "ensuring mailbox exists")
 
 		nkeywords := len(mb.Keywords)
 
-		jf, _, err := a.OpenJunkFilter(ctx, ctl.log)
+		jf, _, err := a.OpenJunkFilter(ctx, xctl.log)
 		if err != nil && !errors.Is(err, store.ErrNoJunkFilter) {
-			ctl.xcheck(err, "open junk filter")
+			xctl.xcheck(err, "open junk filter")
 		}
 		defer func() {
 			if jf != nil {
 				err = jf.CloseDiscard()
-				ctl.xcheck(err, "close junk filter")
+				xctl.xcheck(err, "close junk filter")
 			}
 		}()
 
@@ -312,30 +312,30 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		var addSize int64
 		du := store.DiskUsage{ID: 1}
 		err = tx.Get(&du)
-		ctl.xcheck(err, "get disk usage")
+		xctl.xcheck(err, "get disk usage")
 
 		msgDirs := map[string]struct{}{}
 
 		process := func(m *store.Message, msgf *os.File, origPath string) {
-			defer store.CloseRemoveTempFile(ctl.log, msgf, "message to import")
+			defer store.CloseRemoveTempFile(xctl.log, msgf, "message to import")
 
 			addSize += m.Size
 			if maxSize > 0 && du.MessageSize+addSize > maxSize {
-				ctl.xcheck(fmt.Errorf("account over maximum total message size %d", maxSize), "checking quota")
+				xctl.xcheck(fmt.Errorf("account over maximum total message size %d", maxSize), "checking quota")
 			}
 
 			// Parse message and store parsed information for later fast retrieval.
-			p, err := message.EnsurePart(ctl.log.Logger, false, msgf, m.Size)
+			p, err := message.EnsurePart(xctl.log.Logger, false, msgf, m.Size)
 			if err != nil {
-				ctl.log.Infox("parsing message, continuing", err, slog.String("path", origPath))
+				xctl.log.Infox("parsing message, continuing", err, slog.String("path", origPath))
 			}
 			m.ParsedBuf, err = json.Marshal(p)
-			ctl.xcheck(err, "marshal parsed message structure")
+			xctl.xcheck(err, "marshal parsed message structure")
 
 			// Set fields needed for future threading. By doing it now, MessageAdd won't
 			// have to parse the Part again.
 			p.SetReaderAt(store.FileMsgReader(m.MsgPrefix, msgf))
-			m.PrepareThreading(ctl.log, &p)
+			m.PrepareThreading(xctl.log, &p)
 
 			if m.Received.IsZero() {
 				if p.Envelope != nil && !p.Envelope.Date.IsZero() {
@@ -348,10 +348,10 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			m.JunkFlagsForMailbox(mb, conf)
 			if jf != nil && m.NeedsTraining() {
 				if words, err := jf.ParseMessage(p); err != nil {
-					ctl.log.Infox("parsing message for updating junk filter", err, slog.String("parse", ""), slog.String("path", origPath))
+					xctl.log.Infox("parsing message for updating junk filter", err, slog.String("parse", ""), slog.String("path", origPath))
 				} else {
 					err = jf.Train(ctx, !m.Junk, words)
-					ctl.xcheck(err, "training junk filter")
+					xctl.xcheck(err, "training junk filter")
 					m.TrainedJunk = &m.Junk
 				}
 			}
@@ -359,7 +359,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			if modseq == 0 {
 				var err error
 				modseq, err = a.NextModSeq(tx)
-				ctl.xcheck(err, "assigning next modseq")
+				xctl.xcheck(err, "assigning next modseq")
 				mb.ModSeq = modseq
 			}
 
@@ -376,8 +376,8 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 				SkipUpdateDiskUsage: true, // We do this once at the end.
 				SkipCheckQuota:      true, // We check before.
 			}
-			err = a.MessageAdd(ctl.log, tx, &mb, m, msgf, opts)
-			ctl.xcheck(err, "delivering message")
+			err = a.MessageAdd(xctl.log, tx, &mb, m, msgf, opts)
+			xctl.xcheck(err, "delivering message")
 			newIDs = append(newIDs, m.ID)
 			changes = append(changes, m.ChangeAddUID())
 
@@ -385,7 +385,7 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 
 			n++
 			if n%1000 == 0 {
-				ctl.xwrite(fmt.Sprintf("progress %d", n))
+				xctl.xwrite(fmt.Sprintf("progress %d", n))
 			}
 		}
 
@@ -394,15 +394,15 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 			if err == io.EOF {
 				break
 			}
-			ctl.xcheck(err, "reading next message")
+			xctl.xcheck(err, "reading next message")
 
 			process(m, msgf, origPath)
 		}
 
 		// Match threads.
 		if len(newIDs) > 0 {
-			err = a.AssignThreads(ctx, ctl.log, tx, newIDs[0], 0, io.Discard)
-			ctl.xcheck(err, "assigning messages to threads")
+			err = a.AssignThreads(ctx, xctl.log, tx, newIDs[0], 0, io.Discard)
+			xctl.xcheck(err, "assigning messages to threads")
 		}
 
 		changes = append(changes, mb.ChangeCounts())
@@ -411,35 +411,35 @@ func importctl(ctx context.Context, ctl *ctl, mbox bool) {
 		}
 
 		err = tx.Update(&mb)
-		ctl.xcheck(err, "updating message counts and keywords in mailbox")
+		xctl.xcheck(err, "updating message counts and keywords in mailbox")
 
-		err = a.AddMessageSize(ctl.log, tx, addSize)
-		ctl.xcheck(err, "updating total message size")
+		err = a.AddMessageSize(xctl.log, tx, addSize)
+		xctl.xcheck(err, "updating total message size")
 
 		for msgDir := range msgDirs {
-			err := moxio.SyncDir(ctl.log, msgDir)
-			ctl.xcheck(err, "sync dir")
+			err := moxio.SyncDir(xctl.log, msgDir)
+			xctl.xcheck(err, "sync dir")
 		}
 
 		if jf != nil {
 			err := jf.Close()
-			ctl.log.Check(err, "close junk filter")
+			xctl.log.Check(err, "close junk filter")
 			jf = nil
 		}
 
 		err = tx.Commit()
-		ctl.xcheck(err, "commit")
+		xctl.xcheck(err, "commit")
 		tx = nil
-		ctl.log.Info("delivered messages through import", slog.Int("count", len(newIDs)))
+		xctl.log.Info("delivered messages through import", slog.Int("count", len(newIDs)))
 		newIDs = nil
 
 		store.BroadcastChanges(a, changes)
 	})
 
 	err = a.Close()
-	ctl.xcheck(err, "closing account")
+	xctl.xcheck(err, "closing account")
 	a = nil
 
-	ctl.xwriteok()
-	ctl.xwrite(fmt.Sprintf("%d", n))
+	xctl.xwriteok()
+	xctl.xwrite(fmt.Sprintf("%d", n))
 }

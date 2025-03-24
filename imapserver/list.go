@@ -264,7 +264,7 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 		c.bwritelinef("%s", line)
 	}
 	for _, meta := range respMetadata {
-		meta.writeTo(c, c.bw)
+		meta.writeTo(c, c.xbw)
 		c.bwritelinef("")
 	}
 	c.ok(tag, cmd)

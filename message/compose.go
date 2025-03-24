@@ -44,20 +44,20 @@ func NewComposer(w io.Writer, maxSize int64, smtputf8 bool) *Composer {
 
 // Write implements io.Writer, but calls panic (that is handled higher up) on
 // i/o errors.
-func (c *Composer) Write(buf []byte) (int, error) {
-	if c.maxSize > 0 && c.Size+int64(len(buf)) > c.maxSize {
-		c.Checkf(ErrMessageSize, "writing message")
+func (xc *Composer) Write(buf []byte) (int, error) {
+	if xc.maxSize > 0 && xc.Size+int64(len(buf)) > xc.maxSize {
+		xc.Checkf(ErrMessageSize, "writing message")
 	}
-	n, err := c.bw.Write(buf)
+	n, err := xc.bw.Write(buf)
 	if n > 0 {
-		c.Size += int64(n)
+		xc.Size += int64(n)
 	}
-	c.Checkf(err, "write")
+	xc.Checkf(err, "write")
 	return n, nil
 }
 
 // Checkf checks err, panicing with sentinel error value.
-func (c *Composer) Checkf(err error, format string, args ...any) {
+func (xc *Composer) Checkf(err error, format string, args ...any) {
 	if err != nil {
 		// We expose the original error too, needed at least for ErrMessageSize.
 		panic(fmt.Errorf("%w: %w: %v", ErrCompose, err, fmt.Sprintf(format, args...)))
@@ -65,14 +65,14 @@ func (c *Composer) Checkf(err error, format string, args ...any) {
 }
 
 // Flush writes any buffered output.
-func (c *Composer) Flush() {
-	err := c.bw.Flush()
-	c.Checkf(err, "flush")
+func (xc *Composer) Flush() {
+	err := xc.bw.Flush()
+	xc.Checkf(err, "flush")
 }
 
 // Header writes a message header.
-func (c *Composer) Header(k, v string) {
-	fmt.Fprintf(c, "%s: %s\r\n", k, v)
+func (xc *Composer) Header(k, v string) {
+	fmt.Fprintf(xc, "%s: %s\r\n", k, v)
 }
 
 // NameAddress holds both an address display name, and an SMTP path address.
@@ -82,7 +82,7 @@ type NameAddress struct {
 }
 
 // HeaderAddrs writes a message header with addresses.
-func (c *Composer) HeaderAddrs(k string, l []NameAddress) {
+func (xc *Composer) HeaderAddrs(k string, l []NameAddress) {
 	if len(l) == 0 {
 		return
 	}
@@ -93,7 +93,7 @@ func (c *Composer) HeaderAddrs(k string, l []NameAddress) {
 			v += ","
 			linelen++
 		}
-		addr := mail.Address{Name: a.DisplayName, Address: a.Address.Pack(c.SMTPUTF8)}
+		addr := mail.Address{Name: a.DisplayName, Address: a.Address.Pack(xc.SMTPUTF8)}
 		s := addr.String()
 		if v != "" && linelen+1+len(s) > 77 {
 			v += "\r\n\t"
@@ -105,16 +105,16 @@ func (c *Composer) HeaderAddrs(k string, l []NameAddress) {
 		v += s
 		linelen += len(s)
 	}
-	fmt.Fprintf(c, "%s: %s\r\n", k, v)
+	fmt.Fprintf(xc, "%s: %s\r\n", k, v)
 }
 
 // Subject writes a subject message header.
-func (c *Composer) Subject(subject string) {
+func (xc *Composer) Subject(subject string) {
 	var subjectValue string
 	subjectLineLen := len("Subject: ")
 	subjectWord := false
 	for i, word := range strings.Split(subject, " ") {
-		if !c.SMTPUTF8 && !isASCII(word) {
+		if !xc.SMTPUTF8 && !isASCII(word) {
 			word = mime.QEncoding.Encode("utf-8", word)
 		}
 		if i > 0 {
@@ -129,19 +129,19 @@ func (c *Composer) Subject(subject string) {
 		subjectLineLen += len(word)
 		subjectWord = true
 	}
-	c.Header("Subject", subjectValue)
+	xc.Header("Subject", subjectValue)
 }
 
 // Line writes an empty line.
-func (c *Composer) Line() {
-	_, _ = c.Write([]byte("\r\n"))
+func (xc *Composer) Line() {
+	_, _ = xc.Write([]byte("\r\n"))
 }
 
 // TextPart prepares a text part to be added. Text should contain lines terminated
 // with newlines (lf), which are replaced with crlf. The returned text may be
 // quotedprintable, if needed. The returned ct and cte headers are for use with
 // Content-Type and Content-Transfer-Encoding headers.
-func (c *Composer) TextPart(subtype, text string) (textBody []byte, ct, cte string) {
+func (xc *Composer) TextPart(subtype, text string) (textBody []byte, ct, cte string) {
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
@@ -153,10 +153,10 @@ func (c *Composer) TextPart(subtype, text string) (textBody []byte, ct, cte stri
 	if NeedsQuotedPrintable(text) {
 		var sb strings.Builder
 		_, err := io.Copy(quotedprintable.NewWriter(&sb), strings.NewReader(text))
-		c.Checkf(err, "converting text to quoted printable")
+		xc.Checkf(err, "converting text to quoted printable")
 		text = sb.String()
 		cte = "quoted-printable"
-	} else if c.Has8bit || charset == "utf-8" {
+	} else if xc.Has8bit || charset == "utf-8" {
 		cte = "8bit"
 	} else {
 		cte = "7bit"

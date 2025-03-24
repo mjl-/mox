@@ -58,9 +58,9 @@ func (c *Conn) Login(username, password string) (untagged []Untagged, result Res
 	defer c.recover(&rerr)
 
 	c.LastTag = c.nextTag()
-	fmt.Fprintf(c.bw, "%s login %s ", c.LastTag, astring(username))
+	fmt.Fprintf(c.xbw, "%s login %s ", c.LastTag, astring(username))
 	defer c.xtrace(mlog.LevelTraceauth)()
-	fmt.Fprintf(c.bw, "%s\r\n", astring(password))
+	fmt.Fprintf(c.xbw, "%s\r\n", astring(password))
 	c.xtrace(mlog.LevelTrace) // Restore.
 	return c.Response()
 }
@@ -69,18 +69,19 @@ func (c *Conn) Login(username, password string) (untagged []Untagged, result Res
 func (c *Conn) AuthenticatePlain(username, password string) (untagged []Untagged, result Result, rerr error) {
 	defer c.recover(&rerr)
 
-	c.Commandf("", "authenticate plain")
+	err := c.Commandf("", "authenticate plain")
+	c.xcheckf(err, "writing authenticate command")
 	_, untagged, result, rerr = c.ReadContinuation()
 	c.xcheckf(rerr, "reading continuation")
 	if result.Status != "" {
 		c.xerrorf("got result status %q, expected continuation", result.Status)
 	}
 	defer c.xtrace(mlog.LevelTraceauth)()
-	xw := base64.NewEncoder(base64.StdEncoding, c.bw)
+	xw := base64.NewEncoder(base64.StdEncoding, c.xbw)
 	fmt.Fprintf(xw, "\u0000%s\u0000%s", username, password)
 	xw.Close()
 	c.xtrace(mlog.LevelTrace) // Restore.
-	fmt.Fprintf(c.bw, "\r\n")
+	fmt.Fprintf(c.xbw, "\r\n")
 	c.xflush()
 	return c.Response()
 }
@@ -153,15 +154,15 @@ func (c *Conn) CompressDeflate() (untagged []Untagged, result Result, rerr error
 	untagged, result, rerr = c.Transactf("compress deflate")
 	c.xcheck(rerr)
 
-	c.flateBW = bufio.NewWriter(c)
-	fw0, err := flate.NewWriter(c.flateBW, flate.DefaultCompression)
+	c.xflateBW = bufio.NewWriter(c)
+	fw0, err := flate.NewWriter(c.xflateBW, flate.DefaultCompression)
 	c.xcheckf(err, "deflate") // Cannot happen.
 	fw := moxio.NewFlateWriter(fw0)
 
 	c.compress = true
-	c.flateWriter = fw
-	c.tw = moxio.NewTraceWriter(mlog.New("imapclient", nil), "CW: ", fw)
-	c.bw = bufio.NewWriter(c.tw)
+	c.xflateWriter = fw
+	c.xtw = moxio.NewTraceWriter(mlog.New("imapclient", nil), "CW: ", fw)
+	c.xbw = bufio.NewWriter(c.xtw)
 
 	rc := c.xprefixConn()
 	fr := flate.NewReaderPartial(rc)
@@ -303,8 +304,7 @@ func (c *Conn) Append(mailbox string, message Append, more ...Append) (untagged 
 	tag := c.nextTag()
 	c.LastTag = tag
 
-	_, err := fmt.Fprintf(c.bw, "%s append %s", tag, astring(mailbox))
-	c.xcheckf(err, "write command")
+	fmt.Fprintf(c.xbw, "%s append %s", tag, astring(mailbox))
 
 	msgs := append([]Append{message}, more...)
 	for _, m := range msgs {
@@ -316,14 +316,14 @@ func (c *Conn) Append(mailbox string, message Append, more ...Append) (untagged 
 		// todo: use literal8 if needed, with "UTF8()" if required.
 		// todo: for larger messages, use a synchronizing literal.
 
-		fmt.Fprintf(c.bw, " (%s)%s {%d+}\r\n", strings.Join(m.Flags, " "), date, m.Size)
+		fmt.Fprintf(c.xbw, " (%s)%s {%d+}\r\n", strings.Join(m.Flags, " "), date, m.Size)
 		defer c.xtrace(mlog.LevelTracedata)()
-		_, err := io.Copy(c.bw, m.Data)
+		_, err := io.Copy(c.xbw, m.Data)
 		c.xcheckf(err, "write message data")
 		c.xtrace(mlog.LevelTrace) // Restore
 	}
 
-	fmt.Fprintf(c.bw, "\r\n")
+	fmt.Fprintf(c.xbw, "\r\n")
 	c.xflush()
 	return c.Response()
 }
@@ -441,14 +441,15 @@ func (c *Conn) replace(cmd string, num string, mailbox string, msg Append) (unta
 	}
 	// todo: only use literal8 if needed, possibly with "UTF8()"
 	// todo: encode mailbox
-	c.Commandf("", "%s %s %s (%s)%s ~{%d+}", cmd, num, astring(mailbox), strings.Join(msg.Flags, " "), date, msg.Size)
+	err := c.Commandf("", "%s %s %s (%s)%s ~{%d+}", cmd, num, astring(mailbox), strings.Join(msg.Flags, " "), date, msg.Size)
+	c.xcheckf(err, "writing replace command")
 
 	defer c.xtrace(mlog.LevelTracedata)()
-	_, err := io.Copy(c.bw, msg.Data)
+	_, err = io.Copy(c.xbw, msg.Data)
 	c.xcheckf(err, "write message data")
 	c.xtrace(mlog.LevelTrace)
 
-	fmt.Fprintf(c.bw, "\r\n")
+	fmt.Fprintf(c.xbw, "\r\n")
 	c.xflush()
 
 	return c.Response()

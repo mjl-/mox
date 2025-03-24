@@ -1661,11 +1661,11 @@ new mail deliveries.
 	}
 	mustLoadConfig()
 
-	ctl := xctl()
-	ctl.xwrite("stop")
+	xctl := xctl()
+	xctl.xwrite("stop")
 	// Read will hang until remote has shut down.
 	buf := make([]byte, 128)
-	n, err := ctl.conn.Read(buf)
+	n, err := xctl.conn.Read(buf)
 	if err == nil {
 		log.Fatalf("expected eof after graceful shutdown, got data %q", buf[:n])
 	} else if err != io.EOF {

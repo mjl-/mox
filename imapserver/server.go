@@ -191,14 +191,16 @@ type conn struct {
 	tls               bool               // Whether TLS has been initialized.
 	viaHTTPS          bool               // Whether this connection came in via HTTPS (using TLS ALPN).
 	br                *bufio.Reader      // From remote, with TLS unwrapped in case of TLS, and possibly wrapping inflate.
+	tr                *moxio.TraceReader // Kept to change trace level when reading/writing cmd/auth/data.
 	line              chan lineErr       // If set, instead of reading from br, a line is read from this channel. For reading a line in IDLE while also waiting for mailbox/account updates.
 	lastLine          string             // For detecting if syntax error is fatal, i.e. if this ends with a literal. Without crlf.
-	bw                *bufio.Writer      // To remote, with TLS added in case of TLS, and possibly wrapping deflate, see conn.flateWriter.
-	tr                *moxio.TraceReader // Kept to change trace level when reading/writing cmd/auth/data.
-	tw                *moxio.TraceWriter
-	slow              bool        // If set, reads are done with a 1 second sleep, and writes are done 1 byte at a time, to keep spammers busy.
-	lastlog           time.Time   // For printing time since previous log line.
-	baseTLSConfig     *tls.Config // Base TLS config to use for handshake.
+	xbw               *bufio.Writer      // To remote, with TLS added in case of TLS, and possibly wrapping deflate, see conn.xflateWriter. Writes go through xtw to conn.Write, which panics on errors, hence the "x".
+	xtw               *moxio.TraceWriter
+	xflateWriter      *moxio.FlateWriter // For flushing output after flushing conn.xbw, and for closing.
+	xflateBW          *bufio.Writer      // Wraps raw connection writes, xflateWriter writes here, also needs flushing.
+	slow              bool               // If set, reads are done with a 1 second sleep, and writes are done 1 byte at a time, to keep spammers busy.
+	lastlog           time.Time          // For printing time since previous log line.
+	baseTLSConfig     *tls.Config        // Base TLS config to use for handshake.
 	remoteIP          net.IP
 	noRequireSTARTTLS bool
 	cmd               string // Currently executing, for deciding to applyChanges and logging.
@@ -208,8 +210,6 @@ type conn struct {
 	log               mlog.Log            // Used for all synchronous logging on this connection, see logbg for logging in a separate goroutine.
 	enabled           map[capability]bool // All upper-case.
 	compress          bool                // Whether compression is enabled, via compress command.
-	flateWriter       *moxio.FlateWriter  // For flushing output after flushing conn.bw, and for closing.
-	flateBW           *bufio.Writer       // Wraps raw connection writes, flateWriter writes here, also needs flushing.
 
 	// Set by SEARCH with SAVE. Can be used by commands accepting a sequence-set with
 	// value "$". When used, UIDs must be verified to still exist, because they may
@@ -529,11 +529,11 @@ func (c *conn) Write(buf []byte) (int, error) {
 func (c *conn) xtrace(level slog.Level) func() {
 	c.xflush()
 	c.tr.SetTrace(level)
-	c.tw.SetTrace(level)
+	c.xtw.SetTrace(level)
 	return func() {
 		c.xflush()
 		c.tr.SetTrace(mlog.LevelTrace)
-		c.tw.SetTrace(mlog.LevelTrace)
+		c.xtw.SetTrace(mlog.LevelTrace)
 	}
 }
 
@@ -641,7 +641,7 @@ func (c *conn) writelinef(format string, args ...any) {
 // Buffer line for write.
 func (c *conn) bwritelinef(format string, args ...any) {
 	format += "\r\n"
-	fmt.Fprintf(c.bw, format, args...)
+	fmt.Fprintf(c.xbw, format, args...)
 }
 
 func (c *conn) xflush() {
@@ -650,7 +650,7 @@ func (c *conn) xflush() {
 		return
 	}
 
-	err := c.bw.Flush()
+	err := c.xbw.Flush()
 	xcheckf(err, "flush") // Should never happen, the Write caused by the Flush should panic on i/o error.
 
 	// If compression is enabled, we need to flush its stream.
@@ -658,11 +658,11 @@ func (c *conn) xflush() {
 		// Note: Flush writes a sync message if there is nothing to flush. Ideally we
 		// wouldn't send that, but we would have to keep track of whether data needs to be
 		// flushed.
-		err := c.flateWriter.Flush()
+		err := c.xflateWriter.Flush()
 		xcheckf(err, "flush deflate")
 
 		// The flate writer writes to a bufio.Writer, we must also flush that.
-		err = c.flateBW.Flush()
+		err = c.xflateBW.Flush()
 		xcheckf(err, "flush deflate writer")
 	}
 }
@@ -753,8 +753,8 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	c.tr = moxio.NewTraceReader(c.log, "C: ", c.conn)
 	// todo: tracing should be done on whatever comes out of c.br. the remote connection write a command plus data, and bufio can read it in one read, causing a command parser that sets the tracing level to data to have no effect. we are now typically logging sent messages, when mail clients append to the Sent mailbox.
 	c.br = bufio.NewReader(c.tr)
-	c.tw = moxio.NewTraceWriter(c.log, "S: ", c)
-	c.bw = bufio.NewWriter(c.tw)
+	c.xtw = moxio.NewTraceWriter(c.log, "S: ", c)
+	c.xbw = bufio.NewWriter(c.xtw)
 
 	// Many IMAP connections use IDLE to wait for new incoming messages. We'll enable
 	// keepalive to get a higher chance of the connection staying alive, or otherwise
@@ -1144,9 +1144,9 @@ func (c *conn) command() {
 				// If compression was enabled, we flush & close the deflate stream.
 				if c.compress {
 					// Note: Close and flush can Write and may panic with an i/o error.
-					if err := c.flateWriter.Close(); err != nil {
+					if err := c.xflateWriter.Close(); err != nil {
 						c.log.Debugx("close deflate writer", err)
-					} else if err := c.flateBW.Flush(); err != nil {
+					} else if err := c.xflateBW.Flush(); err != nil {
 						c.log.Debugx("flush deflate buffer", err)
 					}
 				}
@@ -1870,15 +1870,15 @@ func (c *conn) cmdCompress(tag, cmd string, p *parser) {
 	c.log.Debug("compression enabled")
 	c.ok(tag, cmd)
 
-	c.flateBW = bufio.NewWriter(c)
-	fw0, err := flate.NewWriter(c.flateBW, flate.DefaultCompression)
+	c.xflateBW = bufio.NewWriter(c)
+	fw0, err := flate.NewWriter(c.xflateBW, flate.DefaultCompression)
 	xcheckf(err, "deflate") // Cannot happen.
-	fw := moxio.NewFlateWriter(fw0)
+	xfw := moxio.NewFlateWriter(fw0)
 
 	c.compress = true
-	c.flateWriter = fw
-	c.tw = moxio.NewTraceWriter(c.log, "S: ", c.flateWriter)
-	c.bw = bufio.NewWriter(c.tw) // The previous c.bw will not have buffered data.
+	c.xflateWriter = xfw
+	c.xtw = moxio.NewTraceWriter(c.log, "S: ", c.xflateWriter)
+	c.xbw = bufio.NewWriter(c.xtw) // The previous c.xbw will not have buffered data.
 
 	rc := xprefixConn(c.conn, c.br) // c.br may contain buffered data.
 	// We use the special partial reader. Some clients write commands and flush the

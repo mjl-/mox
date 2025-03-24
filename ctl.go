@@ -124,10 +124,10 @@ func (c *ctl) xstreamto(dst io.Writer) {
 
 // Copy data from src to a stream to ctl.
 func (c *ctl) xstreamfrom(src io.Reader) {
-	w := c.writer()
-	_, err := io.Copy(w, src)
+	xw := c.writer()
+	_, err := io.Copy(xw, src)
 	c.xcheck(err, "copying")
-	w.xclose()
+	xw.xclose()
 }
 
 // Writer returns an io.Writer for a data stream to ctl.
@@ -171,6 +171,8 @@ type ctlwriter struct {
 	log  mlog.Log
 }
 
+// Write implements io.Writer. Errors other than EOF are handled through behaviour
+// for s.x, either a panic or log.Fatal.
 func (s *ctlwriter) Write(buf []byte) (int, error) {
 	_, err := fmt.Fprintf(s.conn, "%d\n", len(buf))
 	s.xcheck(err, "write count")
@@ -224,6 +226,8 @@ type ctlreader struct {
 	log      mlog.Log      // If x is set, logging goes to log.
 }
 
+// Read implements io.Reader. Errors other than EOF are handled through behaviour
+// for s.x, either a panic or log.Fatal.
 func (s *ctlreader) Read(buf []byte) (N int, Err error) {
 	if s.err != nil {
 		return 0, s.err
@@ -279,13 +283,13 @@ func servectl(ctx context.Context, cid int64, log mlog.Log, conn net.Conn, shutd
 	log.Debug("ctl connection")
 
 	var stop = struct{}{} // Sentinel value for panic and recover.
-	ctl := &ctl{conn: conn, x: stop, log: log}
+	xctl := &ctl{conn: conn, x: stop, log: log}
 	defer func() {
 		x := recover()
 		if x == nil || x == stop {
 			return
 		}
-		log.Error("servectl panic", slog.Any("err", x), slog.String("cmd", ctl.cmd))
+		log.Error("servectl panic", slog.Any("err", x), slog.String("cmd", xctl.cmd))
 		debug.PrintStack()
 		metrics.PanicInc(metrics.Ctl)
 	}()
@@ -295,23 +299,23 @@ func servectl(ctx context.Context, cid int64, log mlog.Log, conn net.Conn, shutd
 		log.Check(err, "close ctl connection")
 	}()
 
-	ctl.xwrite("ctlv0")
+	xctl.xwrite("ctlv0")
 	for {
-		servectlcmd(ctx, ctl, cid, shutdown)
+		servectlcmd(ctx, xctl, cid, shutdown)
 	}
 }
 
-func xparseJSON(ctl *ctl, s string, v any) {
+func xparseJSON(xctl *ctl, s string, v any) {
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.DisallowUnknownFields()
 	err := dec.Decode(v)
-	ctl.xcheck(err, "parsing from ctl as json")
+	xctl.xcheck(err, "parsing from ctl as json")
 }
 
-func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
-	log := ctl.log
-	cmd := ctl.xread()
-	ctl.cmd = cmd
+func servectlcmd(ctx context.Context, xctl *ctl, cid int64, shutdown func()) {
+	log := xctl.log
+	cmd := xctl.xread()
+	xctl.cmd = cmd
 	log.Info("ctl command", slog.String("cmd", cmd))
 	switch cmd {
 	case "stop":
@@ -328,19 +332,19 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok"
 		*/
 
-		to := ctl.xread()
+		to := xctl.xread()
 		a, _, addr, err := store.OpenEmail(log, to, false)
-		ctl.xcheck(err, "lookup destination address")
+		xctl.xcheck(err, "lookup destination address")
 
 		msgFile, err := store.CreateMessageTemp(log, "ctl-deliver")
-		ctl.xcheck(err, "creating temporary message file")
+		xctl.xcheck(err, "creating temporary message file")
 		defer store.CloseRemoveTempFile(log, msgFile, "deliver message")
 		mw := message.NewWriter(msgFile)
-		ctl.xwriteok()
+		xctl.xwriteok()
 
-		ctl.xstreamto(mw)
+		xctl.xstreamto(mw)
 		err = msgFile.Sync()
-		ctl.xcheck(err, "syncing message to storage")
+		xctl.xcheck(err, "syncing message to storage")
 
 		m := store.Message{
 			Received: time.Now(),
@@ -349,13 +353,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 
 		a.WithWLock(func() {
 			err := a.DeliverDestination(log, addr, &m, msgFile)
-			ctl.xcheck(err, "delivering message")
+			xctl.xcheck(err, "delivering message")
 			log.Info("message delivered through ctl", slog.Any("to", to))
 		})
 
 		err = a.Close()
-		ctl.xcheck(err, "closing account")
-		ctl.xwriteok()
+		xctl.xcheck(err, "closing account")
+		xctl.xwriteok()
 
 	case "setaccountpassword":
 		/* protocol:
@@ -365,11 +369,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok" or error
 		*/
 
-		account := ctl.xread()
-		pw := ctl.xread()
+		account := xctl.xread()
+		pw := xctl.xread()
 
 		acc, err := store.OpenAccount(log, account, false)
-		ctl.xcheck(err, "open account")
+		xctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
 				err := acc.Close()
@@ -378,11 +382,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		}()
 
 		err = acc.SetPassword(log, pw)
-		ctl.xcheck(err, "setting password")
+		xctl.xcheck(err, "setting password")
 		err = acc.Close()
-		ctl.xcheck(err, "closing account")
+		xctl.xcheck(err, "closing account")
 		acc = nil
-		ctl.xwriteok()
+		xctl.xwriteok()
 
 	case "queueholdruleslist":
 		/* protocol:
@@ -391,9 +395,9 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< stream
 		*/
 		l, err := queue.HoldRuleList(ctx)
-		ctl.xcheck(err, "listing hold rules")
-		ctl.xwriteok()
-		xw := ctl.writer()
+		xctl.xcheck(err, "listing hold rules")
+		xctl.xwriteok()
+		xw := xctl.writer()
 		fmt.Fprintln(xw, "hold rules:")
 		for _, hr := range l {
 			var elems []string
@@ -427,17 +431,17 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok" or error
 		*/
 		var hr queue.HoldRule
-		hr.Account = ctl.xread()
-		senderdomstr := ctl.xread()
-		rcptdomstr := ctl.xread()
+		hr.Account = xctl.xread()
+		senderdomstr := xctl.xread()
+		rcptdomstr := xctl.xread()
 		var err error
 		hr.SenderDomain, err = dns.ParseDomain(senderdomstr)
-		ctl.xcheck(err, "parsing sender domain")
+		xctl.xcheck(err, "parsing sender domain")
 		hr.RecipientDomain, err = dns.ParseDomain(rcptdomstr)
-		ctl.xcheck(err, "parsing recipient domain")
+		xctl.xcheck(err, "parsing recipient domain")
 		hr, err = queue.HoldRuleAdd(ctx, log, hr)
-		ctl.xcheck(err, "add hold rule")
-		ctl.xwriteok()
+		xctl.xcheck(err, "add hold rule")
+		xctl.xwriteok()
 
 	case "queueholdrulesremove":
 		/* protocol:
@@ -445,12 +449,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> id
 		< "ok" or error
 		*/
-		idstr := ctl.xread()
+		idstr := xctl.xread()
 		id, err := strconv.ParseInt(idstr, 10, 64)
-		ctl.xcheck(err, "parsing id")
+		xctl.xcheck(err, "parsing id")
 		err = queue.HoldRuleRemove(ctx, log, id)
-		ctl.xcheck(err, "remove hold rule")
-		ctl.xwriteok()
+		xctl.xcheck(err, "remove hold rule")
+		xctl.xwriteok()
 
 	case "queuelist":
 		/* protocol:
@@ -460,17 +464,17 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok"
 		< stream
 		*/
-		filterline := ctl.xread()
-		sortline := ctl.xread()
+		filterline := xctl.xread()
+		sortline := xctl.xread()
 		var f queue.Filter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		var s queue.Sort
-		xparseJSON(ctl, sortline, &s)
+		xparseJSON(xctl, sortline, &s)
 		qmsgs, err := queue.List(ctx, f, s)
-		ctl.xcheck(err, "listing queue")
-		ctl.xwriteok()
+		xctl.xcheck(err, "listing queue")
+		xctl.xwriteok()
 
-		xw := ctl.writer()
+		xw := xctl.writer()
 		fmt.Fprintln(xw, "messages:")
 		for _, qm := range qmsgs {
 			var lastAttempt string
@@ -493,14 +497,14 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< count
 		*/
 
-		filterline := ctl.xread()
-		hold := ctl.xread() == "true"
+		filterline := xctl.xread()
+		hold := xctl.xread() == "true"
 		var f queue.Filter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		count, err := queue.HoldSet(ctx, f, hold)
-		ctl.xcheck(err, "setting on hold status for messages")
-		ctl.xwriteok()
-		ctl.xwrite(fmt.Sprintf("%d", count))
+		xctl.xcheck(err, "setting on hold status for messages")
+		xctl.xwriteok()
+		xctl.xwrite(fmt.Sprintf("%d", count))
 
 	case "queueschedule":
 		/* protocol:
@@ -512,22 +516,22 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< count
 		*/
 
-		filterline := ctl.xread()
-		relnow := ctl.xread()
-		duration := ctl.xread()
+		filterline := xctl.xread()
+		relnow := xctl.xread()
+		duration := xctl.xread()
 		var f queue.Filter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		d, err := time.ParseDuration(duration)
-		ctl.xcheck(err, "parsing duration for next delivery attempt")
+		xctl.xcheck(err, "parsing duration for next delivery attempt")
 		var count int
 		if relnow == "" {
 			count, err = queue.NextAttemptAdd(ctx, f, d)
 		} else {
 			count, err = queue.NextAttemptSet(ctx, f, time.Now().Add(d))
 		}
-		ctl.xcheck(err, "setting next delivery attempts in queue")
-		ctl.xwriteok()
-		ctl.xwrite(fmt.Sprintf("%d", count))
+		xctl.xcheck(err, "setting next delivery attempts in queue")
+		xctl.xwriteok()
+		xctl.xwrite(fmt.Sprintf("%d", count))
 
 	case "queuetransport":
 		/* protocol:
@@ -538,14 +542,14 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< count
 		*/
 
-		filterline := ctl.xread()
-		transport := ctl.xread()
+		filterline := xctl.xread()
+		transport := xctl.xread()
 		var f queue.Filter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		count, err := queue.TransportSet(ctx, f, transport)
-		ctl.xcheck(err, "adding to next delivery attempts in queue")
-		ctl.xwriteok()
-		ctl.xwrite(fmt.Sprintf("%d", count))
+		xctl.xcheck(err, "adding to next delivery attempts in queue")
+		xctl.xwriteok()
+		xctl.xwrite(fmt.Sprintf("%d", count))
 
 	case "queuerequiretls":
 		/* protocol:
@@ -556,8 +560,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< count
 		*/
 
-		filterline := ctl.xread()
-		reqtls := ctl.xread()
+		filterline := xctl.xread()
+		reqtls := xctl.xread()
 		var req *bool
 		switch reqtls {
 		case "":
@@ -568,14 +572,14 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 			v := false
 			req = &v
 		default:
-			ctl.xcheck(fmt.Errorf("unknown value %q", reqtls), "parsing value")
+			xctl.xcheck(fmt.Errorf("unknown value %q", reqtls), "parsing value")
 		}
 		var f queue.Filter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		count, err := queue.RequireTLSSet(ctx, f, req)
-		ctl.xcheck(err, "setting tls requirements on messages in queue")
-		ctl.xwriteok()
-		ctl.xwrite(fmt.Sprintf("%d", count))
+		xctl.xcheck(err, "setting tls requirements on messages in queue")
+		xctl.xwriteok()
+		xctl.xwrite(fmt.Sprintf("%d", count))
 
 	case "queuefail":
 		/* protocol:
@@ -585,13 +589,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< count
 		*/
 
-		filterline := ctl.xread()
+		filterline := xctl.xread()
 		var f queue.Filter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		count, err := queue.Fail(ctx, log, f)
-		ctl.xcheck(err, "marking messages from queue as failed")
-		ctl.xwriteok()
-		ctl.xwrite(fmt.Sprintf("%d", count))
+		xctl.xcheck(err, "marking messages from queue as failed")
+		xctl.xwriteok()
+		xctl.xwrite(fmt.Sprintf("%d", count))
 
 	case "queuedrop":
 		/* protocol:
@@ -601,13 +605,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< count
 		*/
 
-		filterline := ctl.xread()
+		filterline := xctl.xread()
 		var f queue.Filter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		count, err := queue.Drop(ctx, log, f)
-		ctl.xcheck(err, "dropping messages from queue")
-		ctl.xwriteok()
-		ctl.xwrite(fmt.Sprintf("%d", count))
+		xctl.xcheck(err, "dropping messages from queue")
+		xctl.xwriteok()
+		xctl.xwrite(fmt.Sprintf("%d", count))
 
 	case "queuedump":
 		/* protocol:
@@ -617,19 +621,19 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< stream
 		*/
 
-		idstr := ctl.xread()
+		idstr := xctl.xread()
 		id, err := strconv.ParseInt(idstr, 10, 64)
 		if err != nil {
-			ctl.xcheck(err, "parsing id")
+			xctl.xcheck(err, "parsing id")
 		}
 		mr, err := queue.OpenMessage(ctx, id)
-		ctl.xcheck(err, "opening message")
+		xctl.xcheck(err, "opening message")
 		defer func() {
 			err := mr.Close()
 			log.Check(err, "closing message from queue")
 		}()
-		ctl.xwriteok()
-		ctl.xstreamfrom(mr)
+		xctl.xwriteok()
+		xctl.xstreamfrom(mr)
 
 	case "queueretiredlist":
 		/* protocol:
@@ -639,17 +643,17 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok"
 		< stream
 		*/
-		filterline := ctl.xread()
-		sortline := ctl.xread()
+		filterline := xctl.xread()
+		sortline := xctl.xread()
 		var f queue.RetiredFilter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		var s queue.RetiredSort
-		xparseJSON(ctl, sortline, &s)
+		xparseJSON(xctl, sortline, &s)
 		qmsgs, err := queue.RetiredList(ctx, f, s)
-		ctl.xcheck(err, "listing retired queue")
-		ctl.xwriteok()
+		xctl.xcheck(err, "listing retired queue")
+		xctl.xwriteok()
 
-		xw := ctl.writer()
+		xw := xctl.writer()
 		fmt.Fprintln(xw, "retired messages:")
 		for _, qm := range qmsgs {
 			var lastAttempt string
@@ -676,23 +680,23 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok"
 		< stream
 		*/
-		idstr := ctl.xread()
+		idstr := xctl.xread()
 		id, err := strconv.ParseInt(idstr, 10, 64)
 		if err != nil {
-			ctl.xcheck(err, "parsing id")
+			xctl.xcheck(err, "parsing id")
 		}
 		l, err := queue.RetiredList(ctx, queue.RetiredFilter{IDs: []int64{id}}, queue.RetiredSort{})
-		ctl.xcheck(err, "getting retired messages")
+		xctl.xcheck(err, "getting retired messages")
 		if len(l) == 0 {
-			ctl.xcheck(errors.New("not found"), "getting retired message")
+			xctl.xcheck(errors.New("not found"), "getting retired message")
 		}
 		m := l[0]
-		ctl.xwriteok()
-		xw := ctl.writer()
+		xctl.xwriteok()
+		xw := xctl.writer()
 		enc := json.NewEncoder(xw)
 		enc.SetIndent("", "\t")
 		err = enc.Encode(m)
-		ctl.xcheck(err, "encode retired message")
+		xctl.xcheck(err, "encode retired message")
 		xw.xclose()
 
 	case "queuehooklist":
@@ -703,17 +707,17 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok"
 		< stream
 		*/
-		filterline := ctl.xread()
-		sortline := ctl.xread()
+		filterline := xctl.xread()
+		sortline := xctl.xread()
 		var f queue.HookFilter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		var s queue.HookSort
-		xparseJSON(ctl, sortline, &s)
+		xparseJSON(xctl, sortline, &s)
 		hooks, err := queue.HookList(ctx, f, s)
-		ctl.xcheck(err, "listing webhooks")
-		ctl.xwriteok()
+		xctl.xcheck(err, "listing webhooks")
+		xctl.xwriteok()
 
-		xw := ctl.writer()
+		xw := xctl.writer()
 		fmt.Fprintln(xw, "webhooks:")
 		for _, h := range hooks {
 			var lastAttempt string
@@ -737,22 +741,22 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< count
 		*/
 
-		filterline := ctl.xread()
-		relnow := ctl.xread()
-		duration := ctl.xread()
+		filterline := xctl.xread()
+		relnow := xctl.xread()
+		duration := xctl.xread()
 		var f queue.HookFilter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		d, err := time.ParseDuration(duration)
-		ctl.xcheck(err, "parsing duration for next delivery attempt")
+		xctl.xcheck(err, "parsing duration for next delivery attempt")
 		var count int
 		if relnow == "" {
 			count, err = queue.HookNextAttemptAdd(ctx, f, d)
 		} else {
 			count, err = queue.HookNextAttemptSet(ctx, f, time.Now().Add(d))
 		}
-		ctl.xcheck(err, "setting next delivery attempts in queue")
-		ctl.xwriteok()
-		ctl.xwrite(fmt.Sprintf("%d", count))
+		xctl.xcheck(err, "setting next delivery attempts in queue")
+		xctl.xwriteok()
+		xctl.xwrite(fmt.Sprintf("%d", count))
 
 	case "queuehookcancel":
 		/* protocol:
@@ -762,13 +766,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< count
 		*/
 
-		filterline := ctl.xread()
+		filterline := xctl.xread()
 		var f queue.HookFilter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		count, err := queue.HookCancel(ctx, log, f)
-		ctl.xcheck(err, "canceling webhooks in queue")
-		ctl.xwriteok()
-		ctl.xwrite(fmt.Sprintf("%d", count))
+		xctl.xcheck(err, "canceling webhooks in queue")
+		xctl.xwriteok()
+		xctl.xwrite(fmt.Sprintf("%d", count))
 
 	case "queuehookprint":
 		/* protocol:
@@ -777,23 +781,23 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok"
 		< stream
 		*/
-		idstr := ctl.xread()
+		idstr := xctl.xread()
 		id, err := strconv.ParseInt(idstr, 10, 64)
 		if err != nil {
-			ctl.xcheck(err, "parsing id")
+			xctl.xcheck(err, "parsing id")
 		}
 		l, err := queue.HookList(ctx, queue.HookFilter{IDs: []int64{id}}, queue.HookSort{})
-		ctl.xcheck(err, "getting webhooks")
+		xctl.xcheck(err, "getting webhooks")
 		if len(l) == 0 {
-			ctl.xcheck(errors.New("not found"), "getting webhook")
+			xctl.xcheck(errors.New("not found"), "getting webhook")
 		}
 		h := l[0]
-		ctl.xwriteok()
-		xw := ctl.writer()
+		xctl.xwriteok()
+		xw := xctl.writer()
 		enc := json.NewEncoder(xw)
 		enc.SetIndent("", "\t")
 		err = enc.Encode(h)
-		ctl.xcheck(err, "encode webhook")
+		xctl.xcheck(err, "encode webhook")
 		xw.xclose()
 
 	case "queuehookretiredlist":
@@ -804,17 +808,17 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok"
 		< stream
 		*/
-		filterline := ctl.xread()
-		sortline := ctl.xread()
+		filterline := xctl.xread()
+		sortline := xctl.xread()
 		var f queue.HookRetiredFilter
-		xparseJSON(ctl, filterline, &f)
+		xparseJSON(xctl, filterline, &f)
 		var s queue.HookRetiredSort
-		xparseJSON(ctl, sortline, &s)
+		xparseJSON(xctl, sortline, &s)
 		l, err := queue.HookRetiredList(ctx, f, s)
-		ctl.xcheck(err, "listing retired webhooks")
-		ctl.xwriteok()
+		xctl.xcheck(err, "listing retired webhooks")
+		xctl.xwriteok()
 
-		xw := ctl.writer()
+		xw := xctl.writer()
 		fmt.Fprintln(xw, "retired webhooks:")
 		for _, h := range l {
 			var lastAttempt string
@@ -839,23 +843,23 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok"
 		< stream
 		*/
-		idstr := ctl.xread()
+		idstr := xctl.xread()
 		id, err := strconv.ParseInt(idstr, 10, 64)
 		if err != nil {
-			ctl.xcheck(err, "parsing id")
+			xctl.xcheck(err, "parsing id")
 		}
 		l, err := queue.HookRetiredList(ctx, queue.HookRetiredFilter{IDs: []int64{id}}, queue.HookRetiredSort{})
-		ctl.xcheck(err, "getting retired webhooks")
+		xctl.xcheck(err, "getting retired webhooks")
 		if len(l) == 0 {
-			ctl.xcheck(errors.New("not found"), "getting retired webhook")
+			xctl.xcheck(errors.New("not found"), "getting retired webhook")
 		}
 		h := l[0]
-		ctl.xwriteok()
-		xw := ctl.writer()
+		xctl.xwriteok()
+		xw := xctl.writer()
 		enc := json.NewEncoder(xw)
 		enc.SetIndent("", "\t")
 		err = enc.Encode(h)
-		ctl.xcheck(err, "encode retired webhook")
+		xctl.xcheck(err, "encode retired webhook")
 		xw.xclose()
 
 	case "queuesuppresslist":
@@ -866,11 +870,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< stream
 		*/
 
-		account := ctl.xread()
+		account := xctl.xread()
 		l, err := queue.SuppressionList(ctx, account)
-		ctl.xcheck(err, "listing suppressions")
-		ctl.xwriteok()
-		xw := ctl.writer()
+		xctl.xcheck(err, "listing suppressions")
+		xctl.xwriteok()
+		xw := xctl.writer()
 		fmt.Fprintln(xw, "suppressions (account, address, manual, time added, base adddress, reason):")
 		for _, sup := range l {
 			manual := "No"
@@ -892,22 +896,22 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok" or error
 		*/
 
-		account := ctl.xread()
-		address := ctl.xread()
+		account := xctl.xread()
+		address := xctl.xread()
 		_, ok := mox.Conf.Account(account)
 		if !ok {
-			ctl.xcheck(errors.New("unknown account"), "looking up account")
+			xctl.xcheck(errors.New("unknown account"), "looking up account")
 		}
 		addr, err := smtp.ParseAddress(address)
-		ctl.xcheck(err, "parsing address")
+		xctl.xcheck(err, "parsing address")
 		sup := webapi.Suppression{
 			Account: account,
 			Manual:  true,
 			Reason:  "added through mox cli",
 		}
 		err = queue.SuppressionAdd(ctx, addr.Path(), &sup)
-		ctl.xcheck(err, "adding suppression")
-		ctl.xwriteok()
+		xctl.xcheck(err, "adding suppression")
+		xctl.xwriteok()
 
 	case "queuesuppressremove":
 		/* protocol:
@@ -917,13 +921,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok" or error
 		*/
 
-		account := ctl.xread()
-		address := ctl.xread()
+		account := xctl.xread()
+		address := xctl.xread()
 		addr, err := smtp.ParseAddress(address)
-		ctl.xcheck(err, "parsing address")
+		xctl.xcheck(err, "parsing address")
 		err = queue.SuppressionRemove(ctx, account, addr.Path())
-		ctl.xcheck(err, "removing suppression")
-		ctl.xwriteok()
+		xctl.xcheck(err, "removing suppression")
+		xctl.xwriteok()
 
 	case "queuesuppresslookup":
 		/* protocol:
@@ -934,20 +938,20 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< stream
 		*/
 
-		account := ctl.xread()
-		address := ctl.xread()
+		account := xctl.xread()
+		address := xctl.xread()
 		if account != "" {
 			_, ok := mox.Conf.Account(account)
 			if !ok {
-				ctl.xcheck(errors.New("unknown account"), "looking up account")
+				xctl.xcheck(errors.New("unknown account"), "looking up account")
 			}
 		}
 		addr, err := smtp.ParseAddress(address)
-		ctl.xcheck(err, "parsing address")
+		xctl.xcheck(err, "parsing address")
 		sup, err := queue.SuppressionLookup(ctx, account, addr.Path())
-		ctl.xcheck(err, "looking up suppression")
-		ctl.xwriteok()
-		xw := ctl.writer()
+		xctl.xcheck(err, "looking up suppression")
+		xctl.xwriteok()
+		xw := xctl.writer()
 		if sup == nil {
 			fmt.Fprintln(xw, "not present")
 		} else {
@@ -961,7 +965,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 
 	case "importmaildir", "importmbox":
 		mbox := cmd == "importmbox"
-		importctl(ctx, ctl, mbox)
+		ximportctl(ctx, xctl, mbox)
 
 	case "domainadd":
 		/* protocol:
@@ -973,23 +977,23 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok" or error
 		*/
 		var disabled bool
-		switch s := ctl.xread(); s {
+		switch s := xctl.xread(); s {
 		case "true":
 			disabled = true
 		case "false":
 			disabled = false
 		default:
-			ctl.xcheck(fmt.Errorf("invalid value %q", s), "parsing disabled boolean")
+			xctl.xcheck(fmt.Errorf("invalid value %q", s), "parsing disabled boolean")
 		}
 
-		domain := ctl.xread()
-		account := ctl.xread()
-		localpart := ctl.xread()
+		domain := xctl.xread()
+		account := xctl.xread()
+		localpart := xctl.xread()
 		d, err := dns.ParseDomain(domain)
-		ctl.xcheck(err, "parsing domain")
+		xctl.xcheck(err, "parsing domain")
 		err = admin.DomainAdd(ctx, disabled, d, account, smtp.Localpart(localpart))
-		ctl.xcheck(err, "adding domain")
-		ctl.xwriteok()
+		xctl.xcheck(err, "adding domain")
+		xctl.xwriteok()
 
 	case "domainrm":
 		/* protocol:
@@ -997,12 +1001,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> domain
 		< "ok" or error
 		*/
-		domain := ctl.xread()
+		domain := xctl.xread()
 		d, err := dns.ParseDomain(domain)
-		ctl.xcheck(err, "parsing domain")
+		xctl.xcheck(err, "parsing domain")
 		err = admin.DomainRemove(ctx, d)
-		ctl.xcheck(err, "removing domain")
-		ctl.xwriteok()
+		xctl.xcheck(err, "removing domain")
+		xctl.xwriteok()
 
 	case "domaindisabled":
 		/* protocol:
@@ -1011,22 +1015,22 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> domain
 		< "ok" or error
 		*/
-		domain := ctl.xread()
+		domain := xctl.xread()
 		var disabled bool
-		switch s := ctl.xread(); s {
+		switch s := xctl.xread(); s {
 		case "true":
 			disabled = true
 		case "false":
 			disabled = false
 		default:
-			ctl.xerror("bad boolean value")
+			xctl.xerror("bad boolean value")
 		}
 		err := admin.DomainSave(ctx, domain, func(d *config.Domain) error {
 			d.Disabled = disabled
 			return nil
 		})
-		ctl.xcheck(err, "saving domain")
-		ctl.xwriteok()
+		xctl.xcheck(err, "saving domain")
+		xctl.xwriteok()
 
 	case "accountadd":
 		/* protocol:
@@ -1035,11 +1039,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> address
 		< "ok" or error
 		*/
-		account := ctl.xread()
-		address := ctl.xread()
+		account := xctl.xread()
+		address := xctl.xread()
 		err := admin.AccountAdd(ctx, account, address)
-		ctl.xcheck(err, "adding account")
-		ctl.xwriteok()
+		xctl.xcheck(err, "adding account")
+		xctl.xwriteok()
 
 	case "accountrm":
 		/* protocol:
@@ -1047,10 +1051,10 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> account
 		< "ok" or error
 		*/
-		account := ctl.xread()
+		account := xctl.xread()
 		err := admin.AccountRemove(ctx, account)
-		ctl.xcheck(err, "removing account")
-		ctl.xwriteok()
+		xctl.xcheck(err, "removing account")
+		xctl.xwriteok()
 
 	case "accountdisabled":
 		/* protocol:
@@ -1059,11 +1063,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> message (if empty, then enabled)
 		< "ok" or error
 		*/
-		account := ctl.xread()
-		message := ctl.xread()
+		account := xctl.xread()
+		message := xctl.xread()
 
 		acc, err := store.OpenAccount(log, account, false)
-		ctl.xcheck(err, "open account")
+		xctl.xcheck(err, "open account")
 		defer func() {
 			err := acc.Close()
 			log.Check(err, "closing account")
@@ -1072,12 +1076,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		err = admin.AccountSave(ctx, account, func(acc *config.Account) {
 			acc.LoginDisabled = message
 		})
-		ctl.xcheck(err, "saving account")
+		xctl.xcheck(err, "saving account")
 
-		err = acc.SessionsClear(ctx, ctl.log)
-		ctl.xcheck(err, "clearing active web sessions")
+		err = acc.SessionsClear(ctx, xctl.log)
+		xctl.xcheck(err, "clearing active web sessions")
 
-		ctl.xwriteok()
+		xctl.xwriteok()
 
 	case "accountenable":
 		/* protocol:
@@ -1085,12 +1089,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> account
 		< "ok" or error
 		*/
-		account := ctl.xread()
+		account := xctl.xread()
 		err := admin.AccountSave(ctx, account, func(acc *config.Account) {
 			acc.LoginDisabled = ""
 		})
-		ctl.xcheck(err, "enabling account")
-		ctl.xwriteok()
+		xctl.xcheck(err, "enabling account")
+		xctl.xwriteok()
 
 	case "tlspubkeylist":
 		/* protocol:
@@ -1099,11 +1103,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok" or error
 		< stream
 		*/
-		accountOpt := ctl.xread()
+		accountOpt := xctl.xread()
 		tlspubkeys, err := store.TLSPublicKeyList(ctx, accountOpt)
-		ctl.xcheck(err, "list tls public keys")
-		ctl.xwriteok()
-		xw := ctl.writer()
+		xctl.xcheck(err, "list tls public keys")
+		xctl.xwriteok()
+		xw := xctl.writer()
 		fmt.Fprintf(xw, "# fingerprint, type, name, account, login address, no imap preauth (%d)\n", len(tlspubkeys))
 		for _, k := range tlspubkeys {
 			fmt.Fprintf(xw, "%s\t%s\t%q\t%s\t%s\t%v\n", k.Fingerprint, k.Type, k.Name, k.Account, k.LoginAddress, k.NoIMAPPreauth)
@@ -1122,16 +1126,16 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< noimappreauth (true/false)
 		< stream (certder)
 		*/
-		fp := ctl.xread()
+		fp := xctl.xread()
 		tlspubkey, err := store.TLSPublicKeyGet(ctx, fp)
-		ctl.xcheck(err, "looking tls public key")
-		ctl.xwriteok()
-		ctl.xwrite(tlspubkey.Type)
-		ctl.xwrite(tlspubkey.Name)
-		ctl.xwrite(tlspubkey.Account)
-		ctl.xwrite(tlspubkey.LoginAddress)
-		ctl.xwrite(fmt.Sprintf("%v", tlspubkey.NoIMAPPreauth))
-		ctl.xstreamfrom(bytes.NewReader(tlspubkey.CertDER))
+		xctl.xcheck(err, "looking tls public key")
+		xctl.xwriteok()
+		xctl.xwrite(tlspubkey.Type)
+		xctl.xwrite(tlspubkey.Name)
+		xctl.xwrite(tlspubkey.Account)
+		xctl.xwrite(tlspubkey.LoginAddress)
+		xctl.xwrite(fmt.Sprintf("%v", tlspubkey.NoIMAPPreauth))
+		xctl.xstreamfrom(bytes.NewReader(tlspubkey.CertDER))
 
 	case "tlspubkeyadd":
 		/* protocol:
@@ -1142,32 +1146,32 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> stream (certder)
 		< "ok" or error
 		*/
-		loginAddress := ctl.xread()
-		name := ctl.xread()
-		noimappreauth := ctl.xread()
+		loginAddress := xctl.xread()
+		name := xctl.xread()
+		noimappreauth := xctl.xread()
 		if noimappreauth != "true" && noimappreauth != "false" {
-			ctl.xcheck(fmt.Errorf("bad value %q", noimappreauth), "parsing noimappreauth")
+			xctl.xcheck(fmt.Errorf("bad value %q", noimappreauth), "parsing noimappreauth")
 		}
 		var b bytes.Buffer
-		ctl.xstreamto(&b)
+		xctl.xstreamto(&b)
 		tlspubkey, err := store.ParseTLSPublicKeyCert(b.Bytes())
-		ctl.xcheck(err, "parsing certificate")
+		xctl.xcheck(err, "parsing certificate")
 		if name != "" {
 			tlspubkey.Name = name
 		}
-		acc, _, _, err := store.OpenEmail(ctl.log, loginAddress, false)
-		ctl.xcheck(err, "open account for address")
+		acc, _, _, err := store.OpenEmail(xctl.log, loginAddress, false)
+		xctl.xcheck(err, "open account for address")
 		defer func() {
 			err := acc.Close()
-			ctl.log.Check(err, "close account")
+			xctl.log.Check(err, "close account")
 		}()
 		tlspubkey.Account = acc.Name
 		tlspubkey.LoginAddress = loginAddress
 		tlspubkey.NoIMAPPreauth = noimappreauth == "true"
 
 		err = store.TLSPublicKeyAdd(ctx, &tlspubkey)
-		ctl.xcheck(err, "adding tls public key")
-		ctl.xwriteok()
+		xctl.xcheck(err, "adding tls public key")
+		xctl.xwriteok()
 
 	case "tlspubkeyrm":
 		/* protocol:
@@ -1175,10 +1179,10 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> fingerprint
 		< "ok" or error
 		*/
-		fp := ctl.xread()
+		fp := xctl.xread()
 		err := store.TLSPublicKeyRemove(ctx, fp)
-		ctl.xcheck(err, "removing tls public key")
-		ctl.xwriteok()
+		xctl.xcheck(err, "removing tls public key")
+		xctl.xwriteok()
 
 	case "addressadd":
 		/* protocol:
@@ -1187,11 +1191,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> account
 		< "ok" or error
 		*/
-		address := ctl.xread()
-		account := ctl.xread()
+		address := xctl.xread()
+		account := xctl.xread()
 		err := admin.AddressAdd(ctx, address, account)
-		ctl.xcheck(err, "adding address")
-		ctl.xwriteok()
+		xctl.xcheck(err, "adding address")
+		xctl.xwriteok()
 
 	case "addressrm":
 		/* protocol:
@@ -1199,10 +1203,10 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> address
 		< "ok" or error
 		*/
-		address := ctl.xread()
+		address := xctl.xread()
 		err := admin.AddressRemove(ctx, address)
-		ctl.xcheck(err, "removing address")
-		ctl.xwriteok()
+		xctl.xcheck(err, "removing address")
+		xctl.xwriteok()
 
 	case "aliaslist":
 		/* protocol:
@@ -1211,21 +1215,21 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok" or error
 		< stream
 		*/
-		domain := ctl.xread()
+		domain := xctl.xread()
 		d, err := dns.ParseDomain(domain)
-		ctl.xcheck(err, "parsing domain")
+		xctl.xcheck(err, "parsing domain")
 		dc, ok := mox.Conf.Domain(d)
 		if !ok {
-			ctl.xcheck(errors.New("no such domain"), "listing aliases")
+			xctl.xcheck(errors.New("no such domain"), "listing aliases")
 		}
-		ctl.xwriteok()
-		w := ctl.writer()
+		xctl.xwriteok()
+		xw := xctl.writer()
 		for _, a := range dc.Aliases {
 			lp, err := smtp.ParseLocalpart(a.LocalpartStr)
-			ctl.xcheck(err, "parsing alias localpart")
-			fmt.Fprintln(w, smtp.NewAddress(lp, a.Domain).Pack(true))
+			xctl.xcheck(err, "parsing alias localpart")
+			fmt.Fprintln(xw, smtp.NewAddress(lp, a.Domain).Pack(true))
 		}
-		w.xclose()
+		xw.xclose()
 
 	case "aliasprint":
 		/* protocol:
@@ -1234,23 +1238,23 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok" or error
 		< stream
 		*/
-		address := ctl.xread()
+		address := xctl.xread()
 		_, alias, ok := mox.Conf.AccountDestination(address)
 		if !ok {
-			ctl.xcheck(errors.New("no such address"), "looking up alias")
+			xctl.xcheck(errors.New("no such address"), "looking up alias")
 		} else if alias == nil {
-			ctl.xcheck(errors.New("address not an alias"), "looking up alias")
+			xctl.xcheck(errors.New("address not an alias"), "looking up alias")
 		}
-		ctl.xwriteok()
-		w := ctl.writer()
-		fmt.Fprintf(w, "# postpublic %v\n", alias.PostPublic)
-		fmt.Fprintf(w, "# listmembers %v\n", alias.ListMembers)
-		fmt.Fprintf(w, "# allowmsgfrom %v\n", alias.AllowMsgFrom)
-		fmt.Fprintln(w, "# members:")
+		xctl.xwriteok()
+		xw := xctl.writer()
+		fmt.Fprintf(xw, "# postpublic %v\n", alias.PostPublic)
+		fmt.Fprintf(xw, "# listmembers %v\n", alias.ListMembers)
+		fmt.Fprintf(xw, "# allowmsgfrom %v\n", alias.AllowMsgFrom)
+		fmt.Fprintln(xw, "# members:")
 		for _, a := range alias.Addresses {
-			fmt.Fprintln(w, a)
+			fmt.Fprintln(xw, a)
 		}
-		w.xclose()
+		xw.xclose()
 
 	case "aliasadd":
 		/* protocol:
@@ -1259,15 +1263,15 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> json alias
 		< "ok" or error
 		*/
-		address := ctl.xread()
-		line := ctl.xread()
+		address := xctl.xread()
+		line := xctl.xread()
 		addr, err := smtp.ParseAddress(address)
-		ctl.xcheck(err, "parsing address")
+		xctl.xcheck(err, "parsing address")
 		var alias config.Alias
-		xparseJSON(ctl, line, &alias)
+		xparseJSON(xctl, line, &alias)
 		err = admin.AliasAdd(ctx, addr, alias)
-		ctl.xcheck(err, "adding alias")
-		ctl.xwriteok()
+		xctl.xcheck(err, "adding alias")
+		xctl.xwriteok()
 
 	case "aliasupdate":
 		/* protocol:
@@ -1278,12 +1282,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> "true" or "false" for allowmsgfrom
 		< "ok" or error
 		*/
-		address := ctl.xread()
-		postpublic := ctl.xread()
-		listmembers := ctl.xread()
-		allowmsgfrom := ctl.xread()
+		address := xctl.xread()
+		postpublic := xctl.xread()
+		listmembers := xctl.xread()
+		allowmsgfrom := xctl.xread()
 		addr, err := smtp.ParseAddress(address)
-		ctl.xcheck(err, "parsing address")
+		xctl.xcheck(err, "parsing address")
 		err = admin.DomainSave(ctx, addr.Domain.Name(), func(d *config.Domain) error {
 			a, ok := d.Aliases[addr.Localpart.String()]
 			if !ok {
@@ -1313,8 +1317,8 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 			d.Aliases[addr.Localpart.String()] = a
 			return nil
 		})
-		ctl.xcheck(err, "saving alias")
-		ctl.xwriteok()
+		xctl.xcheck(err, "saving alias")
+		xctl.xwriteok()
 
 	case "aliasrm":
 		/* protocol:
@@ -1322,12 +1326,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> alias
 		< "ok" or error
 		*/
-		address := ctl.xread()
+		address := xctl.xread()
 		addr, err := smtp.ParseAddress(address)
-		ctl.xcheck(err, "parsing address")
+		xctl.xcheck(err, "parsing address")
 		err = admin.AliasRemove(ctx, addr)
-		ctl.xcheck(err, "removing alias")
-		ctl.xwriteok()
+		xctl.xcheck(err, "removing alias")
+		xctl.xwriteok()
 
 	case "aliasaddaddr":
 		/* protocol:
@@ -1336,15 +1340,15 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> addresses as json
 		< "ok" or error
 		*/
-		address := ctl.xread()
-		line := ctl.xread()
+		address := xctl.xread()
+		line := xctl.xread()
 		addr, err := smtp.ParseAddress(address)
-		ctl.xcheck(err, "parsing address")
+		xctl.xcheck(err, "parsing address")
 		var addresses []string
-		xparseJSON(ctl, line, &addresses)
+		xparseJSON(xctl, line, &addresses)
 		err = admin.AliasAddressesAdd(ctx, addr, addresses)
-		ctl.xcheck(err, "adding addresses to alias")
-		ctl.xwriteok()
+		xctl.xcheck(err, "adding addresses to alias")
+		xctl.xwriteok()
 
 	case "aliasrmaddr":
 		/* protocol:
@@ -1353,15 +1357,15 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> addresses as json
 		< "ok" or error
 		*/
-		address := ctl.xread()
-		line := ctl.xread()
+		address := xctl.xread()
+		line := xctl.xread()
 		addr, err := smtp.ParseAddress(address)
-		ctl.xcheck(err, "parsing address")
+		xctl.xcheck(err, "parsing address")
 		var addresses []string
-		xparseJSON(ctl, line, &addresses)
+		xparseJSON(xctl, line, &addresses)
 		err = admin.AliasAddressesRemove(ctx, addr, addresses)
-		ctl.xcheck(err, "removing addresses to alias")
-		ctl.xwriteok()
+		xctl.xcheck(err, "removing addresses to alias")
+		xctl.xwriteok()
 
 	case "loglevels":
 		/* protocol:
@@ -1369,7 +1373,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok"
 		< stream
 		*/
-		ctl.xwriteok()
+		xctl.xwriteok()
 		l := mox.Conf.LogLevels()
 		keys := []string{}
 		for k := range l {
@@ -1384,7 +1388,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 			}
 			s += ks + ": " + mlog.LevelStrings[l[k]] + "\n"
 		}
-		ctl.xstreamfrom(strings.NewReader(s))
+		xctl.xstreamfrom(strings.NewReader(s))
 
 	case "setloglevels":
 		/* protocol:
@@ -1393,18 +1397,18 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> level (if empty, log level for pkg will be unset)
 		< "ok" or error
 		*/
-		pkg := ctl.xread()
-		levelstr := ctl.xread()
+		pkg := xctl.xread()
+		levelstr := xctl.xread()
 		if levelstr == "" {
 			mox.Conf.LogLevelRemove(log, pkg)
 		} else {
 			level, ok := mlog.Levels[levelstr]
 			if !ok {
-				ctl.xerror("bad level")
+				xctl.xerror("bad level")
 			}
 			mox.Conf.LogLevelSet(log, pkg, level)
 		}
-		ctl.xwriteok()
+		xctl.xwriteok()
 
 	case "retrain":
 		/* protocol:
@@ -1412,11 +1416,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		> account or empty
 		< "ok" or error
 		*/
-		account := ctl.xread()
+		account := xctl.xread()
 
 		xretrain := func(name string) {
 			acc, err := store.OpenAccount(log, name, false)
-			ctl.xcheck(err, "open account")
+			xctl.xcheck(err, "open account")
 			defer func() {
 				if acc != nil {
 					err := acc.Close()
@@ -1429,7 +1433,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 			acc.WithWLock(func() {
 				conf, _ := acc.Conf()
 				if conf.JunkFilter == nil {
-					ctl.xcheck(store.ErrNoJunkFilter, "looking for junk filter")
+					xctl.xcheck(store.ErrNoJunkFilter, "looking for junk filter")
 				}
 
 				// Remove existing junk filter files.
@@ -1443,7 +1447,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 
 				// Open junk filter, this creates new files.
 				jf, _, err := acc.OpenJunkFilter(ctx, log)
-				ctl.xcheck(err, "open new junk filter")
+				xctl.xcheck(err, "open new junk filter")
 				defer func() {
 					if jf == nil {
 						return
@@ -1475,13 +1479,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 						return err
 					})
 				})
-				ctl.xcheck(err, "training messages")
+				xctl.xcheck(err, "training messages")
 				log.Info("retrained messages", slog.Int("total", total), slog.Int("trained", trained))
 
 				// Close junk filter, marking success.
 				err = jf.Close()
 				jf = nil
-				ctl.xcheck(err, "closing junk filter")
+				xctl.xcheck(err, "closing junk filter")
 			})
 		}
 
@@ -1492,7 +1496,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		} else {
 			xretrain(account)
 		}
-		ctl.xwriteok()
+		xctl.xwriteok()
 
 	case "recalculatemailboxcounts":
 		/* protocol:
@@ -1501,18 +1505,18 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok" or error
 		< stream
 		*/
-		account := ctl.xread()
+		account := xctl.xread()
 		acc, err := store.OpenAccount(log, account, false)
-		ctl.xcheck(err, "open account")
+		xctl.xcheck(err, "open account")
 		defer func() {
 			if acc != nil {
 				err := acc.Close()
 				log.Check(err, "closing account after recalculating mailbox counts")
 			}
 		}()
-		ctl.xwriteok()
+		xctl.xwriteok()
 
-		w := ctl.writer()
+		xw := xctl.writer()
 
 		acc.WithWLock(func() {
 			var changes []store.Change
@@ -1526,8 +1530,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 					totalSize += mc.Size
 
 					if mc != mb.MailboxCounts {
-						_, err := fmt.Fprintf(w, "for %s setting new counts %s (was %s)\n", mb.Name, mc, mb.MailboxCounts)
-						ctl.xcheck(err, "write")
+						fmt.Fprintf(xw, "for %s setting new counts %s (was %s)\n", mb.Name, mc, mb.MailboxCounts)
 						mb.HaveCounts = true
 						mb.MailboxCounts = mc
 						if err := tx.Update(&mb); err != nil {
@@ -1546,8 +1549,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 					return fmt.Errorf("get disk usage: %v", err)
 				}
 				if du.MessageSize != totalSize {
-					_, err := fmt.Fprintf(w, "setting new total message size %d (was %d)\n", totalSize, du.MessageSize)
-					ctl.xcheck(err, "write")
+					fmt.Fprintf(xw, "setting new total message size %d (was %d)\n", totalSize, du.MessageSize)
 					du.MessageSize = totalSize
 					if err := tx.Update(&du); err != nil {
 						return fmt.Errorf("update disk usage: %v", err)
@@ -1555,11 +1557,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 				}
 				return nil
 			})
-			ctl.xcheck(err, "write transaction for mailbox counts")
+			xctl.xcheck(err, "write transaction for mailbox counts")
 
 			store.BroadcastChanges(acc, changes)
 		})
-		w.xclose()
+		xw.xclose()
 
 	case "fixmsgsize":
 		/* protocol:
@@ -1569,16 +1571,16 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< stream
 		*/
 
-		accountOpt := ctl.xread()
-		ctl.xwriteok()
-		w := ctl.writer()
+		accountOpt := xctl.xread()
+		xctl.xwriteok()
+		xw := xctl.writer()
 
 		var foundProblem bool
 		const batchSize = 10000
 
 		xfixmsgsize := func(accName string) {
 			acc, err := store.OpenAccount(log, accName, false)
-			ctl.xcheck(err, "open account")
+			xctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
 				log.Check(err, "closing account after fixing message sizes")
@@ -1608,11 +1610,9 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 							if err != nil {
 								mb := store.Mailbox{ID: m.MailboxID}
 								if xerr := tx.Get(&mb); xerr != nil {
-									_, werr := fmt.Fprintf(w, "get mailbox id %d for message with file error: %v\n", mb.ID, xerr)
-									ctl.xcheck(werr, "write")
+									fmt.Fprintf(xw, "get mailbox id %d for message with file error: %v\n", mb.ID, xerr)
 								}
-								_, werr := fmt.Fprintf(w, "checking file %s for message %d in mailbox %q (id %d): %v (continuing)\n", p, m.ID, mb.Name, mb.ID, err)
-								ctl.xcheck(werr, "write")
+								fmt.Fprintf(xw, "checking file %s for message %d in mailbox %q (id %d): %v (continuing)\n", p, m.ID, mb.Name, mb.ID, err)
 								return nil
 							}
 							filesize := st.Size()
@@ -1625,16 +1625,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 
 							mb := store.Mailbox{ID: m.MailboxID}
 							if err := tx.Get(&mb); err != nil {
-								_, werr := fmt.Fprintf(w, "get mailbox id %d for message with file size mismatch: %v\n", mb.ID, err)
-								ctl.xcheck(werr, "write")
+								fmt.Fprintf(xw, "get mailbox id %d for message with file size mismatch: %v\n", mb.ID, err)
 								return nil
 							}
 							if mb.Expunged {
-								_, err := fmt.Fprintf(w, "message %d is in expunged mailbox %q (id %d) (continuing)\n", m.ID, mb.Name, mb.ID)
-								ctl.xcheck(err, "write")
+								fmt.Fprintf(xw, "message %d is in expunged mailbox %q (id %d) (continuing)\n", m.ID, mb.Name, mb.ID)
 							}
-							_, err = fmt.Fprintf(w, "fixing message %d in mailbox %q (id %d) with incorrect size %d, should be %d (len msg prefix %d + on-disk file %s size %d)\n", m.ID, mb.Name, mb.ID, m.Size, correctSize, len(m.MsgPrefix), p, filesize)
-							ctl.xcheck(err, "write")
+							fmt.Fprintf(xw, "fixing message %d in mailbox %q (id %d) with incorrect size %d, should be %d (len msg prefix %d + on-disk file %s size %d)\n", m.ID, mb.Name, mb.ID, m.Size, correctSize, len(m.MsgPrefix), p, filesize)
 
 							// We assume that the original message size was accounted as stored in the mailbox
 							// total size. If this isn't correct, the user can always run
@@ -1651,8 +1648,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 							mr := acc.MessageReader(m)
 							part, err := message.EnsurePart(log.Logger, false, mr, m.Size)
 							if err != nil {
-								_, werr := fmt.Fprintf(w, "parsing message %d again: %v (continuing)\n", m.ID, err)
-								ctl.xcheck(werr, "write")
+								fmt.Fprintf(xw, "parsing message %d again: %v (continuing)\n", m.ID, err)
 							}
 							m.ParsedBuf, err = json.Marshal(part)
 							if err != nil {
@@ -1665,7 +1661,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 							return nil
 						})
 					})
-					ctl.xcheck(err, "find and fix wrong message sizes")
+					xctl.xcheck(err, "find and fix wrong message sizes")
 
 					var changes []store.Change
 					for _, mb := range mailboxCounts {
@@ -1677,8 +1673,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 					break
 				}
 			}
-			_, err = fmt.Fprintf(w, "%d message size(s) fixed for account %s\n", total, accName)
-			ctl.xcheck(err, "write")
+			fmt.Fprintf(xw, "%d message size(s) fixed for account %s\n", total, accName)
 		}
 
 		if accountOpt != "" {
@@ -1689,17 +1684,15 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 				if i > 0 {
 					line = "\n"
 				}
-				_, err := fmt.Fprintf(w, "%sFixing message sizes in account %s...\n", line, accName)
-				ctl.xcheck(err, "write")
+				fmt.Fprintf(xw, "%sFixing message sizes in account %s...\n", line, accName)
 				xfixmsgsize(accName)
 			}
 		}
 		if foundProblem {
-			_, err := fmt.Fprintf(w, "\nProblems were found and fixed. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n")
-			ctl.xcheck(err, "write")
+			fmt.Fprintf(xw, "\nProblems were found and fixed. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n")
 		}
 
-		w.xclose()
+		xw.xclose()
 
 	case "reparse":
 		/* protocol:
@@ -1709,15 +1702,15 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< stream
 		*/
 
-		accountOpt := ctl.xread()
-		ctl.xwriteok()
-		w := ctl.writer()
+		accountOpt := xctl.xread()
+		xctl.xwriteok()
+		xw := xctl.writer()
 
 		const batchSize = 100
 
 		xreparseAccount := func(accName string) {
 			acc, err := store.OpenAccount(log, accName, false)
-			ctl.xcheck(err, "open account")
+			xctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
 				log.Check(err, "closing account after reparsing messages")
@@ -1739,8 +1732,7 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 						mr := acc.MessageReader(m)
 						p, err := message.EnsurePart(log.Logger, false, mr, m.Size)
 						if err != nil {
-							_, err := fmt.Fprintf(w, "parsing message %d: %v (continuing)\n", m.ID, err)
-							ctl.xcheck(err, "write")
+							fmt.Fprintf(xw, "parsing message %d: %v (continuing)\n", m.ID, err)
 						}
 						m.ParsedBuf, err = json.Marshal(p)
 						if err != nil {
@@ -1755,13 +1747,12 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 					})
 
 				})
-				ctl.xcheck(err, "update messages with parsed mime structure")
+				xctl.xcheck(err, "update messages with parsed mime structure")
 				if n < batchSize {
 					break
 				}
 			}
-			_, err = fmt.Fprintf(w, "%d message(s) reparsed for account %s\n", total, accName)
-			ctl.xcheck(err, "write")
+			fmt.Fprintf(xw, "%d message(s) reparsed for account %s\n", total, accName)
 		}
 
 		if accountOpt != "" {
@@ -1772,12 +1763,11 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 				if i > 0 {
 					line = "\n"
 				}
-				_, err := fmt.Fprintf(w, "%sReparsing account %s...\n", line, accName)
-				ctl.xcheck(err, "write")
+				fmt.Fprintf(xw, "%sReparsing account %s...\n", line, accName)
 				xreparseAccount(accName)
 			}
 		}
-		w.xclose()
+		xw.xclose()
 
 	case "reassignthreads":
 		/* protocol:
@@ -1787,13 +1777,13 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< stream
 		*/
 
-		accountOpt := ctl.xread()
-		ctl.xwriteok()
-		w := ctl.writer()
+		accountOpt := xctl.xread()
+		xctl.xwriteok()
+		xw := xctl.writer()
 
 		xreassignThreads := func(accName string) {
 			acc, err := store.OpenAccount(log, accName, false)
-			ctl.xcheck(err, "open account")
+			xctl.xcheck(err, "open account")
 			defer func() {
 				err := acc.Close()
 				log.Check(err, "closing account after reassigning threads")
@@ -1801,23 +1791,21 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 
 			// We don't want to step on an existing upgrade process.
 			err = acc.ThreadingWait(log)
-			ctl.xcheck(err, "waiting for threading upgrade to finish")
+			xctl.xcheck(err, "waiting for threading upgrade to finish")
 			// todo: should we try to continue if the threading upgrade failed? only if there is a chance it will succeed this time...
 
 			// todo: reassigning isn't atomic (in a single transaction), ideally it would be (bstore would need to be able to handle large updates).
 			const batchSize = 50000
 			total, err := acc.ResetThreading(ctx, log, batchSize, true)
-			ctl.xcheck(err, "resetting threading fields")
-			_, err = fmt.Fprintf(w, "New thread base subject assigned to %d message(s), starting to reassign threads...\n", total)
-			ctl.xcheck(err, "write")
+			xctl.xcheck(err, "resetting threading fields")
+			fmt.Fprintf(xw, "New thread base subject assigned to %d message(s), starting to reassign threads...\n", total)
 
 			// Assign threads again. Ideally we would do this in a single transaction, but
 			// bstore/boltdb cannot handle so many pending changes, so we set a high batchsize.
-			err = acc.AssignThreads(ctx, log, nil, 0, 50000, w)
-			ctl.xcheck(err, "reassign threads")
+			err = acc.AssignThreads(ctx, log, nil, 0, 50000, xw)
+			xctl.xcheck(err, "reassign threads")
 
-			_, err = fmt.Fprintf(w, "Threads reassigned. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n")
-			ctl.xcheck(err, "write")
+			fmt.Fprintf(xw, "Threads reassigned. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n")
 		}
 
 		if accountOpt != "" {
@@ -1828,15 +1816,14 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 				if i > 0 {
 					line = "\n"
 				}
-				_, err := fmt.Fprintf(w, "%sReassigning threads for account %s...\n", line, accName)
-				ctl.xcheck(err, "write")
+				fmt.Fprintf(xw, "%sReassigning threads for account %s...\n", line, accName)
 				xreassignThreads(accName)
 			}
 		}
-		w.xclose()
+		xw.xclose()
 
 	case "backup":
-		backupctl(ctx, ctl)
+		xbackupctl(ctx, xctl)
 
 	case "imapserve":
 		/* protocol:
@@ -1845,14 +1832,14 @@ func servectlcmd(ctx context.Context, ctl *ctl, cid int64, shutdown func()) {
 		< "ok or error"
 		imap protocol
 		*/
-		address := ctl.xread()
-		ctl.xwriteok()
-		imapserver.ServeConnPreauth("(imapserve)", cid, ctl.conn, address)
-		ctl.log.Debug("imap connection finished")
+		address := xctl.xread()
+		xctl.xwriteok()
+		imapserver.ServeConnPreauth("(imapserve)", cid, xctl.conn, address)
+		xctl.log.Debug("imap connection finished")
 
 	default:
 		log.Info("unrecognized command", slog.String("cmd", cmd))
-		ctl.xwrite("unrecognized command")
+		xctl.xwrite("unrecognized command")
 		return
 	}
 }
