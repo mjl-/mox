@@ -80,7 +80,7 @@ func (f *Filter) ensureBloom() error {
 		return nil
 	}
 	var err error
-	f.bloom, err = openBloom(f.bloomPath)
+	f.bloom, err = openBloom(f.log, f.bloomPath)
 	return err
 }
 
@@ -105,7 +105,8 @@ func (f *Filter) Close() error {
 		err = f.Save()
 	}
 	if err != nil {
-		f.db.Close()
+		xerr := f.db.Close()
+		f.log.Check(xerr, "closing junk filter after error")
 	} else {
 		err = f.db.Close()
 	}
@@ -117,7 +118,7 @@ func OpenFilter(ctx context.Context, log mlog.Log, params Params, dbPath, bloomP
 	var bloom *Bloom
 	if loadBloom {
 		var err error
-		bloom, err = openBloom(bloomPath)
+		bloom, err = openBloom(log, bloomPath)
 		if err != nil {
 			return nil, err
 		}
@@ -213,12 +214,12 @@ func NewFilter(ctx context.Context, log mlog.Log, params Params, dbPath, bloomPa
 
 const bloomK = 10
 
-func openBloom(path string) (*Bloom, error) {
+func openBloom(log mlog.Log, path string) (*Bloom, error) {
 	buf, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading bloom file: %w", err)
 	}
-	return NewBloom(buf, bloomK)
+	return NewBloom(log, buf, bloomK)
 }
 
 func newDB(ctx context.Context, log mlog.Log, path string) (db *bstore.DB, rerr error) {

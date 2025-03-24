@@ -414,7 +414,7 @@ func TLSFailureDetails(err error) (ResultType, string) {
 	var reasonCode string
 	if errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 		reasonCode = "io-timeout-during-handshake"
-	} else if moxio.IsClosed(err) || errors.Is(err, io.ErrClosedPipe) {
+	} else if mlog.IsClosed(err) || errors.Is(err, io.ErrClosedPipe) {
 		reasonCode = "connection-closed-during-handshake"
 	} else {
 		// Attempt to get a local, outgoing TLS alert.

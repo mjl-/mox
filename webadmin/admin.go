@@ -521,7 +521,8 @@ func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer,
 			if err != nil {
 				addf(errors, "TLS connection to hostname %q, IP %q: %s", host, ip, err)
 			} else {
-				conn.Close()
+				err := conn.Close()
+				log.Check(err, "closing tcp connection")
 			}
 		}
 	}
@@ -749,7 +750,8 @@ EOF
 			}
 			defer func() {
 				if conn != nil {
-					conn.Close()
+					err := conn.Close()
+					log.Check(err, "closing tcp connection")
 				}
 			}()
 
@@ -799,7 +801,8 @@ EOF
 				return fmt.Errorf("TLS handshake after SMTP STARTTLS: %s", err)
 			}
 			cancel()
-			conn.Close()
+			err = conn.Close()
+			log.Check(err, "closing smtp connection")
 			conn = nil
 			return nil
 		}

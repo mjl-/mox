@@ -150,7 +150,10 @@ func FetchChangelog(ctx context.Context, elog *slog.Logger, baseURL string, base
 	if err != nil {
 		return nil, fmt.Errorf("%w: making http request: %s", ErrChangelogFetch, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		log.Check(err, "closing http response body")
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%w: http status: %s", ErrChangelogFetch, resp.Status)
 	}

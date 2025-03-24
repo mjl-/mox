@@ -25,7 +25,7 @@ func TestAutotls(t *testing.T) {
 	getPrivateKey := func(host string, keyType autocert.KeyType) (crypto.Signer, error) {
 		return nil, fmt.Errorf("not used")
 	}
-	m, err := Load("test", "../testdata/autotls", "mox@localhost", "https://localhost/", "", nil, getPrivateKey, shutdown)
+	m, err := Load(log, "test", "../testdata/autotls", "mox@localhost", "https://localhost/", "", nil, getPrivateKey, shutdown)
 	if err != nil {
 		t.Fatalf("load manager: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestAutotls(t *testing.T) {
 
 	key0 := m.Manager.Client.Key
 
-	m, err = Load("test", "../testdata/autotls", "mox@localhost", "https://localhost/", "", nil, getPrivateKey, shutdown)
+	m, err = Load(log, "test", "../testdata/autotls", "mox@localhost", "https://localhost/", "", nil, getPrivateKey, shutdown)
 	if err != nil {
 		t.Fatalf("load manager again: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestAutotls(t *testing.T) {
 		t.Fatalf("hostpolicy, got err %v, expected no error", err)
 	}
 
-	m2, err := Load("test2", "../testdata/autotls", "mox@localhost", "https://localhost/", "", nil, nil, shutdown)
+	m2, err := Load(log, "test2", "../testdata/autotls", "mox@localhost", "https://localhost/", "", nil, nil, shutdown)
 	if err != nil {
 		t.Fatalf("load another manager: %v", err)
 	}

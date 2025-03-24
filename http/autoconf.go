@@ -175,9 +175,8 @@ func autoconfHandle(w http.ResponseWriter, r *http.Request) {
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "\t")
 	fmt.Fprint(w, xml.Header)
-	if err := enc.Encode(resp); err != nil {
-		log.Errorx("marshal autoconfig response", err)
-	}
+	err = enc.Encode(resp)
+	log.Check(err, "write autoconfig xml response")
 }
 
 // Autodiscover from Microsoft, also used by Thunderbird.
@@ -292,9 +291,8 @@ func autodiscoverHandle(w http.ResponseWriter, r *http.Request) {
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "\t")
 	fmt.Fprint(w, xml.Header)
-	if err := enc.Encode(resp); err != nil {
-		log.Errorx("marshal autodiscover response", err)
-	}
+	err = enc.Encode(resp)
+	log.Check(err, "marshal autodiscover xml response")
 }
 
 // Thunderbird requests these URLs for autoconfig/autodiscover:
@@ -375,6 +373,8 @@ type autodiscoverProtocol struct {
 // Serve a .mobileconfig file. This endpoint is not a standard place where Apple
 // devices look. We point to it from the account page.
 func mobileconfigHandle(w http.ResponseWriter, r *http.Request) {
+	log := pkglog.WithContext(r.Context())
+
 	if r.Method != "GET" {
 		http.Error(w, "405 - method not allowed - get required", http.StatusMethodNotAllowed)
 		return
@@ -400,12 +400,15 @@ func mobileconfigHandle(w http.ResponseWriter, r *http.Request) {
 	filename = strings.ReplaceAll(filename, "@", "-at-")
 	filename = "email-account-" + filename + ".mobileconfig"
 	h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-	w.Write(buf)
+	_, err = w.Write(buf)
+	log.Check(err, "writing mobileconfig response")
 }
 
 // Serve a png file with qrcode with the link to the .mobileconfig file, should be
 // helpful for mobile devices.
 func mobileconfigQRCodeHandle(w http.ResponseWriter, r *http.Request) {
+	log := pkglog.WithContext(r.Context())
+
 	if r.Method != "GET" {
 		http.Error(w, "405 - method not allowed - get required", http.StatusMethodNotAllowed)
 		return
@@ -432,5 +435,6 @@ func mobileconfigQRCodeHandle(w http.ResponseWriter, r *http.Request) {
 	}
 	h := w.Header()
 	h.Set("Content-Type", "image/png")
-	w.Write(code.PNG())
+	_, err = w.Write(code.PNG())
+	log.Check(err, "writing mobileconfig qr code")
 }

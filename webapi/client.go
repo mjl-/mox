@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -17,6 +18,7 @@ type Client struct {
 	Username   string // Added as HTTP basic authentication if not empty.
 	Password   string
 	HTTPClient *http.Client // Optional, defaults to http.DefaultClient.
+	Logger     *slog.Logger // Optional, defaults to slog.Default().
 }
 
 var _ Methods = Client{}
@@ -28,12 +30,24 @@ func (c Client) httpClient() *http.Client {
 	return http.DefaultClient
 }
 
+func (c Client) log(ctx context.Context) *slog.Logger {
+	if c.Logger != nil {
+		return c.Logger
+	}
+	return slog.Default()
+}
+
 func transact[T any](ctx context.Context, c Client, fn string, req any) (resp T, rerr error) {
 	hresp, err := httpDo(ctx, c, fn, req)
 	if err != nil {
 		return resp, err
 	}
-	defer hresp.Body.Close()
+	defer func() {
+		err := hresp.Body.Close()
+		if err != nil {
+			c.log(ctx).Debug("closing http response body", slog.Any("err", err))
+		}
+	}()
 
 	if hresp.StatusCode == http.StatusOK {
 		// Text and HTML of a message can each be 1MB. Another MB for other data would be a
@@ -52,7 +66,10 @@ func transactReadCloser(ctx context.Context, c Client, fn string, req any) (resp
 	body := hresp.Body
 	defer func() {
 		if body != nil {
-			body.Close()
+			err := body.Close()
+			if err != nil {
+				c.log(ctx).Debug("closing http response body", slog.Any("err", err))
+			}
 		}
 	}()
 	if hresp.StatusCode == http.StatusOK {

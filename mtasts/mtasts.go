@@ -286,7 +286,10 @@ func FetchPolicy(ctx context.Context, elog *slog.Logger, domain dns.Domain) (pol
 		return nil, "", fmt.Errorf("%w: http get: %w", ErrPolicyFetch, err)
 	}
 	HTTPClientObserve(ctx, log.Logger, "mtasts", req.Method, resp.StatusCode, err, start)
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		log.Check(err, "close body response")
+	}()
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, "", ErrNoPolicy
 	}

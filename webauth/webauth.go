@@ -121,7 +121,8 @@ func Check(ctx context.Context, log mlog.Log, sessionAuth SessionAuth, kind stri
 			}{
 				sherpa.Error{Code: code, Message: msg},
 			}
-			json.NewEncoder(w).Encode(result)
+			err := json.NewEncoder(w).Encode(result)
+			log.Check(err, "writing error response")
 		} else {
 			http.Error(w, "403 - forbidden - "+msg, http.StatusForbidden)
 		}

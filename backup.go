@@ -211,7 +211,10 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			xerrx("open source file (not backed up)", err, slog.String("srcpath", srcpath), slog.String("dstpath", dstpath))
 			return
 		}
-		defer sf.Close()
+		defer func() {
+			err := sf.Close()
+			ctl.log.Check(err, "closing source file")
+		}()
 
 		ensureDestDir(dstpath)
 		df, err := os.OpenFile(dstpath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0660)
@@ -221,7 +224,8 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 		defer func() {
 			if df != nil {
-				df.Close()
+				err := df.Close()
+				ctl.log.Check(err, "closing destination file")
 			}
 		}()
 		if _, err := io.Copy(df, sf); err != nil {
@@ -263,18 +267,9 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		xvlog("backed up directory", slog.String("dir", dir), slog.Duration("duration", time.Since(tmDir)))
 	}
 
-	// Backup a database by copying it in a readonly transaction.
-	// Always logs on error, so caller doesn't have to, but also returns the error so
-	// callers can see result.
-	backupDB := func(db *bstore.DB, path string) (rerr error) {
-		defer func() {
-			if rerr != nil {
-				xerrx("backing up database", rerr, slog.String("path", path))
-			}
-		}()
-
-		tmDB := time.Now()
-
+	// Backup a database by copying it in a readonly transaction. Wrapped by backupDB
+	// which logs and returns just a bool.
+	backupDB0 := func(db *bstore.DB, path string) error {
 		dstpath := filepath.Join(dstDataDir, path)
 		ensureDestDir(dstpath)
 		df, err := os.OpenFile(dstpath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0660)
@@ -283,7 +278,8 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		}
 		defer func() {
 			if df != nil {
-				df.Close()
+				err := df.Close()
+				ctl.log.Check(err, "closing destination database file")
 			}
 		}()
 		err = db.Read(ctx, func(tx *bstore.Tx) error {
@@ -308,8 +304,18 @@ func backupctl(ctx context.Context, ctl *ctl) {
 		if err != nil {
 			return fmt.Errorf("closing destination database after copy: %v", err)
 		}
-		xvlog("backed up database file", slog.String("path", path), slog.Duration("duration", time.Since(tmDB)))
 		return nil
+	}
+
+	backupDB := func(db *bstore.DB, path string) bool {
+		start := time.Now()
+		err := backupDB0(db, path)
+		if err != nil {
+			xerrx("backing up database", err, slog.String("path", path), slog.Duration("duration", time.Since(start)))
+			return false
+		}
+		xvlog("backed up database file", slog.String("path", path), slog.Duration("duration", time.Since(start)))
+		return true
 	}
 
 	// Try to create a hardlink. Fall back to copying the file (e.g. when on different file system).
@@ -394,8 +400,7 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	backupQueue := func(path string) {
 		tmQueue := time.Now()
 
-		if err := backupDB(queue.DB, path); err != nil {
-			xerrx("queue not backed up", err, slog.String("path", path), slog.Duration("duration", time.Since(tmQueue)))
+		if !backupDB(queue.DB, path) {
 			return
 		}
 
@@ -488,16 +493,16 @@ func backupctl(ctx context.Context, ctl *ctl) {
 	backupQueue(filepath.FromSlash("queue/index.db"))
 
 	backupAccount := func(acc *store.Account) {
-		defer acc.Close()
+		defer func() {
+			err := acc.Close()
+			ctl.log.Check(err, "closing account")
+		}()
 
 		tmAccount := time.Now()
 
 		// Copy database file.
 		dbpath := filepath.Join("accounts", acc.Name, "index.db")
-		err := backupDB(acc.DB, dbpath)
-		if err != nil {
-			xerrx("copying account database", err, slog.String("path", dbpath), slog.Duration("duration", time.Since(tmAccount)))
-		}
+		backupDB(acc.DB, dbpath)
 
 		// todo: should document/check not taking a rlock on account.
 

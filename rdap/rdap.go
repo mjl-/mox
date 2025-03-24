@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mjl-/mox/dns"
+	"github.com/mjl-/mox/mlog"
 )
 
 var ErrNoRegistration = errors.New("registration date not found")
@@ -43,7 +44,7 @@ type Bootstrap struct {
 // domain through RDAP.
 //
 // Not all TLDs have RDAP services yet at the time of writing.
-func LookupLastDomainRegistration(ctx context.Context, dom dns.Domain) (time.Time, error) {
+func LookupLastDomainRegistration(ctx context.Context, log mlog.Log, dom dns.Domain) (time.Time, error) {
 	// ../rfc/9224:434 Against advice, we do not cache the bootstrap data. This is
 	// currently used by the quickstart, which is run once, or run from the cli without
 	// a place to keep state.
@@ -57,7 +58,10 @@ func LookupLastDomainRegistration(ctx context.Context, dom dns.Domain) (time.Tim
 	if err != nil {
 		return time.Time{}, fmt.Errorf("http get of iana dns bootstrap data: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		log.Check(err, "closing http response body")
+	}()
 	if resp.StatusCode/100 != 2 {
 		return time.Time{}, fmt.Errorf("http get resulted in status %q, expected 200 ok", resp.Status)
 	}
@@ -94,7 +98,7 @@ func LookupLastDomainRegistration(ctx context.Context, dom dns.Domain) (time.Tim
 	var lastErr error
 	for _, u := range urls {
 		var reg time.Time
-		reg, lastErr = rdapDomainRequest(ctx, u, dom)
+		reg, lastErr = rdapDomainRequest(ctx, log, u, dom)
 		if lastErr == nil {
 			return reg, nil
 		}
@@ -126,7 +130,7 @@ type Event struct {
 
 // rdapDomainRequest looks up a the most recent registration time of a at an RDAP
 // service base URL.
-func rdapDomainRequest(ctx context.Context, rdapURL string, dom dns.Domain) (time.Time, error) {
+func rdapDomainRequest(ctx context.Context, log mlog.Log, rdapURL string, dom dns.Domain) (time.Time, error) {
 	// ../rfc/9082:316
 	// ../rfc/9224:177 base URLs have a trailing slash.
 	rdapURL += "domain/" + dom.ASCII
@@ -141,7 +145,10 @@ func rdapDomainRequest(ctx context.Context, rdapURL string, dom dns.Domain) (tim
 	if err != nil {
 		return time.Time{}, fmt.Errorf("http domain rdap get request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		log.Check(err, "closing http response body")
+	}()
 
 	switch {
 	case resp.StatusCode == http.StatusNotFound:

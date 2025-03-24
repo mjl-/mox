@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -199,11 +200,21 @@ func (l Log) WithFunc(fn func() []slog.Attr) Log {
 }
 
 // Check logs an error if err is not nil. Intended for logging errors that are good
-// to know, but would not influence program flow.
+// to know, but would not influence program flow. Context deadline/cancelation
+// errors and timeouts are logged at "info" level. Closed remote connections are
+// logged at "debug" level. Other errors at "error" level.
 func (l Log) Check(err error, msg string, attrs ...slog.Attr) {
-	if err != nil {
-		l.Errorx(msg, err, attrs...)
+	if err == nil {
+		return
 	}
+	level := LevelError
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, os.ErrDeadlineExceeded) {
+		level = LevelInfo
+	} else if IsClosed(err) {
+		level = LevelDebug
+	}
+	attrs = append([]slog.Attr{errAttr(err)}, attrs...)
+	l.Logger.LogAttrs(noctx, level, msg, attrs...)
 }
 
 func errAttr(err error) slog.Attr {

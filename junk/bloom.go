@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"golang.org/x/crypto/blake2b"
+
+	"github.com/mjl-/mox/mlog"
 )
 
 // see https://en.wikipedia.org/wiki/Bloom_filter
@@ -18,6 +20,8 @@ type Bloom struct {
 	k        int // Number of bits we store/lookup in the bloom filter per value.
 	w        int // Number of bits needed to address a single bit position.
 	modified bool
+
+	log mlog.Log // For cid logging.
 }
 
 func bloomWidth(fileSize int) int {
@@ -55,7 +59,7 @@ func bloomValid(fileSize, k int) (int, error) {
 // For each value stored/looked up, a hash over the value is calculated. The hash
 // is split into "k" values that are "width" bits wide, each used to lookup a bit.
 // K * width must not exceed 256.
-func NewBloom(data []byte, k int) (*Bloom, error) {
+func NewBloom(log mlog.Log, data []byte, k int) (*Bloom, error) {
 	w, err := bloomValid(len(data), k)
 	if err != nil {
 		return nil, err
@@ -65,6 +69,7 @@ func NewBloom(data []byte, k int) (*Bloom, error) {
 		data: data,
 		k:    k,
 		w:    w,
+		log:  log,
 	}, nil
 }
 
@@ -112,7 +117,8 @@ func (b *Bloom) Write(path string) error {
 		return err
 	}
 	if _, err := f.Write(b.data); err != nil {
-		f.Close()
+		xerr := f.Close()
+		b.log.Check(xerr, "closing bloom file after write failed")
 		return err
 	}
 	if err := f.Close(); err != nil {

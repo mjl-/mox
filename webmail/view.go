@@ -29,7 +29,6 @@ import (
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
-	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
@@ -892,7 +891,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 					continue
 				}
 
-				state := msgState{acc: acc}
+				state := msgState{acc: acc, log: log}
 				mi, err := messageItem(log, m, &state, xmoreHeaders())
 				state.clear()
 				xcheckf(ctx, err, "make messageitem")
@@ -1000,6 +999,9 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 
 		case <-timer.C:
 			_, err := fmt.Fprintf(out, ": keepalive\n\n")
+			if err == nil {
+				err = out.Flush()
+			}
 			if err != nil {
 				log.Errorx("write keepalive", err)
 				// Work around go vet, it doesn't see defer cancelDrain.
@@ -1008,7 +1010,6 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 				}
 				return
 			}
-			out.Flush()
 			writer.wrote = true
 
 		case vm := <-viewMsgsc:
@@ -1027,7 +1028,7 @@ func serveEvents(ctx context.Context, log mlog.Log, accountPath string, w http.R
 			if ve.RequestID != v.Request.ID || ve.ViewID != v.Request.ViewID {
 				panic(fmt.Sprintf("received err for view,request id %d,%d instead of %d,%d", ve.ViewID, ve.RequestID, v.Request.ViewID, v.Request.ID))
 			}
-			if errors.Is(ve.err, context.Canceled) || moxio.IsClosed(ve.err) {
+			if errors.Is(ve.err, context.Canceled) || mlog.IsClosed(ve.err) {
 				// Work around go vet, it doesn't see defer cancelDrain.
 				if reqctxcancel != nil {
 					reqctxcancel()
@@ -1221,7 +1222,7 @@ func (v view) matches(log mlog.Log, acc *store.Account, checkRange bool, message
 		return false, rerr
 	}
 
-	state := msgState{acc: acc}
+	state := msgState{acc: acc, log: log}
 	defer func() {
 		if rerr == nil && state.err != nil {
 			rerr = state.err
@@ -1452,7 +1453,7 @@ func queryMessages(ctx context.Context, log mlog.Log, acc *store.Account, tx *bs
 	// implement reporting errors, or anything else, just a bool. So when making the
 	// filter functions, we give them a place to store parsed message state, and an
 	// error. We check the error during and after query execution.
-	state := msgState{acc: acc}
+	state := msgState{acc: acc, log: log}
 	defer state.clear()
 
 	flagfilter := query.flagFilterFn()
@@ -1642,7 +1643,7 @@ func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m sto
 	var firstUnread bool
 	for _, tm := range tml {
 		err := func() error {
-			xstate := msgState{acc: acc}
+			xstate := msgState{acc: acc, log: log}
 			defer xstate.clear()
 
 			mi, err := messageItem(log, tm, &xstate, moreHeaders)
@@ -1678,7 +1679,7 @@ func gatherThread(log mlog.Log, tx *bstore.Tx, acc *store.Account, v view, m sto
 	// Finally, the message that caused us to gather this thread (which is likely the
 	// most recent message in the thread) could be the only unread message.
 	if destMessageID == 0 && first && !m.Seen && !firstUnread {
-		xstate := msgState{acc: acc}
+		xstate := msgState{acc: acc, log: log}
 		defer xstate.clear()
 		xpm, err := parsedMessage(log, m, &xstate, true, false, false)
 		if err != nil && errors.Is(err, message.ErrHeader) {
@@ -1704,14 +1705,16 @@ type msgState struct {
 	m    store.Message
 	part *message.Part // Will be without Reader when msgr is nil.
 	msgr *store.MsgReader
+	log  mlog.Log
 }
 
 func (ms *msgState) clear() {
 	if ms.msgr != nil {
-		ms.msgr.Close()
+		err := ms.msgr.Close()
+		ms.log.Check(err, "closing message reader from state")
 		ms.msgr = nil
 	}
-	*ms = msgState{acc: ms.acc, err: ms.err}
+	*ms = msgState{acc: ms.acc, err: ms.err, log: ms.log}
 }
 
 func (ms *msgState) ensureMsg(m store.Message) {

@@ -105,12 +105,17 @@ output of "mox config describe-domains" and see the output of
 	go func() {
 		io.Copy(io.MultiWriter(origStdout, logfile), piper)
 		close(pipec)
+		if err := piper.Close(); err != nil {
+			log.Printf("close pipe: %v", err)
+		}
 	}()
 	// A single pipe, so writes to stdout and stderr don't get interleaved.
 	os.Stdout = pipew
 	os.Stderr = pipew
 	logClose := func() {
-		pipew.Close()
+		if err := pipew.Close(); err != nil {
+			log.Printf("close pipe: %v", err)
+		}
 		<-pipec
 		os.Stdout = origStdout
 		os.Stderr = origStderr
@@ -586,7 +591,9 @@ messages over SMTP.
 			if err != nil {
 				fmt.Printf("\n\nERROR: connecting to %s: %s\n", addr, err)
 			} else {
-				conn.Close()
+				if err := conn.Close(); err != nil {
+					log.Printf("closing smtp connection: %v", err)
+				}
 				fmt.Printf(" OK\n")
 				ok = true
 			}
@@ -608,7 +615,7 @@ in mox.conf and use it in "Routes" in domains.conf. See
 		defer rdapcancel()
 		orgdom := publicsuffix.Lookup(rdapctx, c.log.Logger, domain)
 		fmt.Printf("\nChecking if domain %s was registered recently...", orgdom)
-		registration, err := rdap.LookupLastDomainRegistration(rdapctx, orgdom)
+		registration, err := rdap.LookupLastDomainRegistration(rdapctx, c.log, orgdom)
 		rdapcancel()
 		if err != nil {
 			fmt.Printf(" error: %s (continuing)\n\n", err)

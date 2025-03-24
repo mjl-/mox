@@ -3,6 +3,8 @@ package junk
 import (
 	"fmt"
 	"testing"
+
+	"github.com/mjl-/mox/mlog"
 )
 
 func TestBloom(t *testing.T) {
@@ -10,12 +12,13 @@ func TestBloom(t *testing.T) {
 		t.Fatalf("missing error for invalid bloom filter size")
 	}
 
-	_, err := NewBloom(make([]byte, 3), 10)
+	log := mlog.New("junk", nil)
+	_, err := NewBloom(log, make([]byte, 3), 10)
 	if err == nil {
 		t.Fatalf("missing error for invalid bloom filter size")
 	}
 
-	b, err := NewBloom(make([]byte, 256), 5)
+	b, err := NewBloom(log, make([]byte, 256), 5)
 	if err != nil {
 		t.Fatalf("newbloom: %s", err)
 	}

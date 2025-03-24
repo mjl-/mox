@@ -30,7 +30,6 @@ import (
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
-	"github.com/mjl-/mox/moxio"
 )
 
 func recvid(r *http.Request) string {
@@ -222,27 +221,34 @@ func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *
 			// If we tried opening a directory, we may not have permission to read it, but
 			// still access files inside it (execute bit), such as index.html. So try to serve it.
 			index, err := os.Open(filepath.Join(fspath, "index.html"))
-			if err == nil {
-				defer index.Close()
-				var ifi os.FileInfo
-				ifi, err = index.Stat()
-				if err != nil {
-					log().Errorx("stat index.html in directory we cannot list", err, slog.Any("url", r.URL), slog.String("fspath", fspath))
-					http.Error(w, "500 - internal server error"+recvid(r), http.StatusInternalServerError)
-					return true
-				}
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				serveFile("index.html", ifi, index)
+			if err != nil {
+				http.Error(w, "403 - permission denied", http.StatusForbidden)
 				return true
 			}
-			http.Error(w, "403 - permission denied", http.StatusForbidden)
+			defer func() {
+				err := index.Close()
+				log().Check(err, "closing index file for serving")
+			}()
+			var ifi os.FileInfo
+			ifi, err = index.Stat()
+			if err != nil {
+				log().Errorx("stat index.html in directory we cannot list", err, slog.Any("url", r.URL), slog.String("fspath", fspath))
+				http.Error(w, "500 - internal server error"+recvid(r), http.StatusInternalServerError)
+				return true
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			serveFile("index.html", ifi, index)
 			return true
 		}
 		log().Errorx("open file for static file serving", err, slog.Any("url", r.URL), slog.String("fspath", fspath))
 		http.Error(w, "500 - internal server error"+recvid(r), http.StatusInternalServerError)
 		return true
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log().Check(err, "closing file for static file serving")
+		}
+	}()
 
 	fi, err := f.Stat()
 	if err != nil {
@@ -274,7 +280,12 @@ func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *
 			http.Error(w, "403 - permission denied", http.StatusForbidden)
 			return true
 		} else if err == nil {
-			defer index.Close()
+			defer func() {
+				if err := index.Close(); err != nil {
+					log().Check(err, "closing index file for serving")
+				}
+			}()
+
 			var ifi os.FileInfo
 			ifi, err = index.Stat()
 			if err == nil {
@@ -341,8 +352,8 @@ func HandleStatic(h *config.WebStatic, compress bool, w http.ResponseWriter, r *
 			}
 		}
 		err = lsTemplate.Execute(w, map[string]any{"Files": files})
-		if err != nil && !moxio.IsClosed(err) {
-			log().Errorx("executing directory listing template", err)
+		if err != nil {
+			log().Check(err, "executing directory listing template")
 		}
 		return true
 	}
@@ -595,7 +606,9 @@ func forwardWebsocket(h *config.WebForward, w http.ResponseWriter, r *http.Reque
 	}
 	defer func() {
 		if beconn != nil {
-			beconn.Close()
+			if err := beconn.Close(); err != nil {
+				log().Check(err, "closing backend websocket connection")
+			}
 		}
 	}()
 
@@ -611,7 +624,9 @@ func forwardWebsocket(h *config.WebForward, w http.ResponseWriter, r *http.Reque
 	}
 	defer func() {
 		if cconn != nil {
-			cconn.Close()
+			if err := cconn.Close(); err != nil {
+				log().Check(err, "closing client websocket connection")
+			}
 		}
 	}()
 
@@ -664,8 +679,12 @@ func forwardWebsocket(h *config.WebForward, w http.ResponseWriter, r *http.Reque
 	// connection whose closing was already announced with a websocket frame.
 	lw.error(<-errc)
 	// Close connections so other goroutine stops as well.
-	cconn.Close()
-	beconn.Close()
+	if err := cconn.Close(); err != nil {
+		log().Check(err, "closing client websocket connection")
+	}
+	if err := beconn.Close(); err != nil {
+		log().Check(err, "closing backend websocket connection")
+	}
 	// Wait for goroutine so it has updated the logWriter.Size*Client fields before we
 	// continue with logging.
 	<-errc
@@ -718,7 +737,9 @@ func websocketTransact(ctx context.Context, targetURL *url.URL, r *http.Request)
 	}
 	defer func() {
 		if rerr != nil {
-			conn.Close()
+			if xerr := conn.Close(); xerr != nil {
+				log().Check(xerr, "cleaning up websocket connection")
+			}
 		}
 	}()
 
@@ -745,7 +766,9 @@ func websocketTransact(ctx context.Context, targetURL *url.URL, r *http.Request)
 	}
 	defer func() {
 		if rerr != nil {
-			resp.Body.Close()
+			if xerr := resp.Body.Close(); xerr != nil {
+				log().Check(xerr, "closing response body after error")
+			}
 		}
 	}()
 	if err := conn.SetDeadline(time.Time{}); err != nil {

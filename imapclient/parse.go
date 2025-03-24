@@ -814,7 +814,8 @@ func (c *Conn) xatom() string {
 		b, err := c.readbyte()
 		c.xcheckf(err, "read byte for atom")
 		if b <= ' ' || strings.IndexByte("(){%*\"\\]", b) >= 0 {
-			c.br.UnreadByte()
+			err := c.br.UnreadByte()
+			c.xcheckf(err, "unreadbyte")
 			if s == "" {
 				c.xerrorf("expected atom")
 			}

@@ -1106,7 +1106,9 @@ func ctlcmdConfigTlspubkeyGet(ctl *ctl, fingerprint string) {
 	fmt.Printf("type: %s\nname: %s\naccount: %s\naddress: %s\nno imap preauth: %s\n", typ, name, account, address, noimappreauth)
 	if block != nil {
 		fmt.Printf("certificate:\n\n")
-		pem.Encode(os.Stdout, block)
+		if err := pem.Encode(os.Stdout, block); err != nil {
+			log.Fatalf("pem encode: %v", err)
+		}
 	}
 }
 
@@ -1918,7 +1920,8 @@ connection.
 	go func() {
 		_, err := io.Copy(os.Stdout, conn)
 		xcheckf(err, "copy from connection to stdout")
-		conn.Close()
+		err = conn.Close()
+		c.log.Check(err, "closing connection")
 	}()
 	_, err = io.Copy(conn, os.Stdin)
 	xcheckf(err, "copy from stdin to connection")
@@ -2079,7 +2082,9 @@ sharing most of its code.
 		sc, err := smtpclient.New(ctxbg, c.log.Logger, conn, tlsMode, tlsPKIX, ehloDomain, tlsHostnames[0], opts)
 		if err != nil {
 			log.Printf("setting up smtp session: %v, skipping", err)
-			conn.Close()
+			if xerr := conn.Close(); xerr != nil {
+				log.Printf("closing connection: %v", xerr)
+			}
 			continue
 		}
 
@@ -2093,7 +2098,9 @@ sharing most of its code.
 		go func() {
 			_, err := io.Copy(os.Stdout, smtpConn)
 			xcheckf(err, "copy from connection to stdout")
-			smtpConn.Close()
+			if err := smtpConn.Close(); err != nil {
+				log.Printf("closing smtp connection: %v", err)
+			}
 		}()
 		_, err = io.Copy(smtpConn, os.Stdin)
 		xcheckf(err, "copy from stdin to connection")
@@ -2524,7 +2531,11 @@ headers prepended.
 
 	msgf, err := os.Open(args[0])
 	xcheckf(err, "open message")
-	defer msgf.Close()
+	defer func() {
+		if err := msgf.Close(); err != nil {
+			log.Printf("closing message file: %v", err)
+		}
+	}()
 
 	p, err := message.Parse(c.log.Logger, true, msgf)
 	xcheckf(err, "parsing message")
@@ -3019,7 +3030,7 @@ automation.
 
 	domain := xparseDomain(args[0], "domain")
 
-	registration, err := rdap.LookupLastDomainRegistration(context.Background(), domain)
+	registration, err := rdap.LookupLastDomainRegistration(context.Background(), c.log, domain)
 	xcheckf(err, "looking up domain in rdap")
 
 	age := time.Since(registration)
@@ -3278,7 +3289,11 @@ func cmdWebapi(c *cmd) {
 
 	resp, err := http.PostForm(args[1]+args[0], url.Values{"request": []string{string(request)}})
 	xcheckf(err, "http post")
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("closing http response body: %v", err)
+		}
+	}()
 	if resp.StatusCode == http.StatusBadRequest {
 		buf, err := io.ReadAll(&moxio.LimitReader{R: resp.Body, Limit: 10 * 1024})
 		xcheckf(err, "reading response for 400 bad request error")
@@ -3681,7 +3696,11 @@ func cmdMessageParse(c *cmd) {
 
 	f, err := os.Open(args[0])
 	xcheckf(err, "open")
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("closing message file: %v", err)
+		}
+	}()
 
 	part, err := message.Parse(c.log.Logger, false, f)
 	xcheckf(err, "parsing message")
@@ -3892,7 +3911,11 @@ Opens database files directly, not going through a running mox instance.
 						buf := headerbuf[:int(size)]
 						err := func() error {
 							mr := a.MessageReader(m)
-							defer mr.Close()
+							defer func() {
+								if err := mr.Close(); err != nil {
+									log.Printf("closing message reader: %v", err)
+								}
+							}()
 
 							// ReadAt returns whole buffer or error. Single read should be fast.
 							n, err := mr.ReadAt(buf, partialPart.HeaderOffset)

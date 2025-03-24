@@ -290,7 +290,10 @@ func servectl(ctx context.Context, cid int64, log mlog.Log, conn net.Conn, shutd
 		metrics.PanicInc(metrics.Ctl)
 	}()
 
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		log.Check(err, "close ctl connection")
+	}()
 
 	ctl.xwrite("ctlv0")
 	for {

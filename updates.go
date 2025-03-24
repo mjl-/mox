@@ -14,7 +14,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/updates"
 )
 
@@ -29,7 +29,10 @@ func cmdUpdatesAddSigned(c *cmd) {
 
 	f, err := os.Open(args[0])
 	xcheckf(err, "open private key file")
-	defer f.Close()
+	defer func() {
+		err := f.Close()
+		c.log.Check(err, "closing private key file")
+	}()
 	seed, err := io.ReadAll(base64.NewDecoder(base64.StdEncoding, f))
 	xcheckf(err, "read private key file")
 	if len(seed) != ed25519.SeedSize {
@@ -179,7 +182,10 @@ func cmdUpdatesServe(c *cmd) {
 		if err != nil {
 			return nil, err
 		}
-		defer f.Close()
+		defer func() {
+			err := f.Close()
+			c.log.Check(err, "closing changelog file")
+		}()
 		var cl updates.Changelog
 		if err := json.NewDecoder(f).Decode(&cl); err != nil {
 			return nil, err
@@ -261,12 +267,12 @@ func cmdUpdatesServe(c *cmd) {
 				"FromVersion": fromVersion,
 				"Changes":     cl.Changes,
 			})
-			if err != nil && !moxio.IsClosed(err) {
+			if err != nil && !mlog.IsClosed(err) {
 				log.Printf("writing changelog html: %v", err)
 			}
 		} else {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			if err := json.NewEncoder(w).Encode(cl); err != nil && !moxio.IsClosed(err) {
+			if err := json.NewEncoder(w).Encode(cl); err != nil && !mlog.IsClosed(err) {
 				log.Printf("writing changelog json: %v", err)
 			}
 		}

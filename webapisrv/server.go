@@ -407,9 +407,7 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		enc := json.NewEncoder(w)
 		enc.SetEscapeHTML(false)
 		werr := enc.Encode(err)
-		if werr != nil && !moxio.IsClosed(werr) {
-			log.Infox("writing error response", werr)
-		}
+		log.Check(werr, "writing error response")
 	}
 
 	// Called for all successful JSON responses, not non-JSON responses.
@@ -421,9 +419,7 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		enc := json.NewEncoder(w)
 		enc.SetEscapeHTML(false)
 		werr := enc.Encode(resp)
-		if werr != nil && !moxio.IsClosed(werr) {
-			log.Infox("writing error response", werr)
-		}
+		log.Check(werr, "writing error response")
 	}
 
 	la := loginAttempt(r, "webapi", "httpbasic")
@@ -524,10 +520,12 @@ func (s server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	closeAccount()
 	log.Debug("webapi call result", slog.String("resultcode", "ok"))
 	metricResults.WithLabelValues(fn, "ok").Inc()
-	defer rc.Close()
-	if _, err := io.Copy(w, rc); err != nil && !moxio.IsClosed(err) {
-		log.Errorx("writing response to client", err)
-	}
+	defer func() {
+		err := rc.Close()
+		log.Check(err, "closing readcloser")
+	}()
+	_, err = io.Copy(w, rc)
+	log.Check(err, "writing response to client")
 }
 
 // loginAttempt initializes a store.LoginAttempt, for adding to the store after
@@ -955,7 +953,8 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		}
 	}
 	if alternative != nil {
-		alternative.Close()
+		err := alternative.Close()
+		xcheckf(err, "closing alternative part")
 		alternative = nil
 	}
 
@@ -967,7 +966,8 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		}
 	}
 	if related != nil {
-		related.Close()
+		err := related.Close()
+		xcheckf(err, "closing related part")
 		related = nil
 	}
 	cur = mixed
@@ -978,7 +978,8 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		}
 	}
 	if mixed != nil {
-		mixed.Close()
+		err := mixed.Close()
+		xcheckf(err, "closing mixed part")
 		mixed = nil
 	}
 	cur = nil
@@ -1222,7 +1223,8 @@ func (s server) MessageGet(ctx context.Context, req webapi.MessageGetRequest) (r
 	})
 	defer func() {
 		if err != nil {
-			msgr.Close()
+			err := msgr.Close()
+			log.Check(err, "cleaning up message reader")
 		}
 	}()
 
@@ -1327,6 +1329,7 @@ func (s server) MessageRawGet(ctx context.Context, req webapi.MessageRawGetReque
 
 func (s server) MessagePartGet(ctx context.Context, req webapi.MessagePartGetRequest) (resp io.ReadCloser, err error) {
 	reqInfo := ctx.Value(requestInfoCtxKey).(requestInfo)
+	log := reqInfo.Log
 	acc := reqInfo.Account
 
 	var m store.Message
@@ -1337,7 +1340,8 @@ func (s server) MessagePartGet(ctx context.Context, req webapi.MessagePartGetReq
 	})
 	defer func() {
 		if err != nil {
-			msgr.Close()
+			err := msgr.Close()
+			log.Check(err, "cleaning up message reader")
 		}
 	}()
 

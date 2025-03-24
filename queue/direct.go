@@ -647,9 +647,11 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 	sc, err := smtpclient.New(ctx, log.Logger, conn, tlsMode, tlsPKIX, ourHostname, firstHost, opts)
 	defer func() {
 		if sc == nil {
-			conn.Close()
+			err := conn.Close()
+			log.Check(err, "closing smtp tcp connection")
 		} else {
-			sc.Close()
+			err := sc.Close()
+			log.Check(err, "closing smtp connection")
 		}
 		mox.Connections.Unregister(conn)
 	}()

@@ -197,7 +197,10 @@ func serveContentFallback(log mlog.Log, w http.ResponseWriter, r *http.Request, 
 
 	f, err := os.Open(path)
 	if err == nil {
-		defer f.Close()
+		defer func() {
+			err := f.Close()
+			log.Check(err, "closing serve file")
+		}()
 		st, err := f.Stat()
 		if err == nil {
 			serve(st.ModTime(), f)
@@ -841,9 +844,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		}
 
 		_, err := io.Copy(w, ap.Reader())
-		if err != nil && !moxio.IsClosed(err) {
-			log.Errorx("copying attachment", err)
-		}
+		log.Check(err, "copying attachment")
 	default:
 		http.NotFound(w, r)
 	}

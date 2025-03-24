@@ -889,7 +889,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 // isClosed returns whether i/o failed, typically because the connection is closed.
 // For connection errors, we often want to generate fewer logs.
 func isClosed(err error) bool {
-	return errors.Is(err, errIO) || errors.Is(err, errProtocol) || moxio.IsClosed(err)
+	return errors.Is(err, errIO) || errors.Is(err, errProtocol) || mlog.IsClosed(err)
 }
 
 // newLoginAttempt initializes a c.loginAttempt, for adding to the store after

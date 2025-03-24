@@ -118,7 +118,9 @@ possibly making them potentially no longer readable by the previous version.
 			return nil
 		})
 		checkf(err, path, "reading bolt database")
-		bdb.Close()
+		if err := bdb.Close(); err != nil {
+			log.Printf("closing database file: %v", err)
+		}
 
 		opts := bstore.Options{RegisterLogger: c.log.Logger}
 		db, err := bstore.Open(ctxbg, path, &opts, types...)
@@ -126,7 +128,11 @@ possibly making them potentially no longer readable by the previous version.
 		if err != nil {
 			return
 		}
-		defer db.Close()
+		defer func() {
+			if err := db.Close(); err != nil {
+				log.Printf("closing database file: %v", err)
+			}
+		}()
 
 		err = db.Read(ctxbg, func(tx *bstore.Tx) error {
 			// Check bstore consistency, if it can export all records for all types. This is a

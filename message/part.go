@@ -755,10 +755,12 @@ func (tr *textReader) Read(buf []byte) (int, error) {
 			return o, err
 		}
 		if c == '\n' && !tr.prevcr {
+			if err := tr.r.UnreadByte(); err != nil {
+				return o, err
+			}
 			buf[o] = '\r'
 			o++
 			tr.prevcr = true
-			tr.r.UnreadByte()
 			continue
 		}
 		buf[o] = c

@@ -209,7 +209,9 @@ func (f *Filter) tokenizeText(r io.Reader, words map[string]struct{}) error {
 
 	peekLetter := func() bool {
 		c, _, err := br.ReadRune()
-		br.UnreadRune()
+		if err == nil {
+			err = br.UnreadRune()
+		}
 		return err == nil && unicode.IsLetter(c)
 	}
 

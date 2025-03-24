@@ -52,7 +52,7 @@ func parseMessageReport(log mlog.Log, p message.Part) (*Feedback, error) {
 	// content of the message.
 
 	if p.MediaType != "MULTIPART" {
-		return parseReport(p)
+		return parseReport(log, p)
 	}
 
 	for {
@@ -72,7 +72,7 @@ func parseMessageReport(log mlog.Log, p message.Part) (*Feedback, error) {
 	}
 }
 
-func parseReport(p message.Part) (*Feedback, error) {
+func parseReport(log mlog.Log, p message.Part) (*Feedback, error) {
 	ct := strings.ToLower(p.MediaType + "/" + p.MediaSubType)
 	r := p.Reader()
 
@@ -93,7 +93,7 @@ func parseReport(p message.Part) (*Feedback, error) {
 	switch ct {
 	case "application/zip":
 		// Google sends messages with direct application/zip content-type.
-		return parseZip(r)
+		return parseZip(log, r)
 	case "application/gzip", "application/x-gzip":
 		gzr, err := gzip.NewReader(r)
 		if err != nil {
@@ -106,7 +106,7 @@ func parseReport(p message.Part) (*Feedback, error) {
 	return nil, ErrNoReport
 }
 
-func parseZip(r io.Reader) (*Feedback, error) {
+func parseZip(log mlog.Log, r io.Reader) (*Feedback, error) {
 	buf, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("reading feedback: %s", err)
@@ -122,6 +122,9 @@ func parseZip(r io.Reader) (*Feedback, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening file in zip: %s", err)
 	}
-	defer f.Close()
+	defer func() {
+		err := f.Close()
+		log.Check(err, "closing report file in zip file")
+	}()
 	return ParseReport(f)
 }

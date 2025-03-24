@@ -423,7 +423,10 @@ func (a *Account) AssignThreads(ctx context.Context, log mlog.Log, txOpt *bstore
 					buf := headerbuf[:int(size)]
 					err := func() error {
 						mr := a.MessageReader(m)
-						defer mr.Close()
+						defer func() {
+							err := mr.Close()
+							log.Check(err, "closing message reader")
+						}()
 
 						// ReadAt returns whole buffer or error. Single read should be fast.
 						n, err := mr.ReadAt(buf, partialPart.HeaderOffset)

@@ -1262,7 +1262,10 @@ func HookPost(ctx context.Context, log mlog.Log, hookID int64, attempt int, url,
 		log.Debugx("webhook http transaction", err)
 		return 0, "", fmt.Errorf("http transact: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		log.Check(err, "closing response body")
+	}()
 
 	// Use full http status code for known codes, and a generic "<major>xx" for others.
 	result := fmt.Sprintf("%d", resp.StatusCode)

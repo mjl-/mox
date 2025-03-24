@@ -94,7 +94,7 @@ type Manager struct {
 // host, or a newly generated key.
 //
 // When shutdown is closed, no new TLS connections can be created.
-func Load(name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eabKey []byte, getPrivateKey func(host string, keyType autocert.KeyType) (crypto.Signer, error), shutdown <-chan struct{}) (*Manager, error) {
+func Load(log mlog.Log, name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eabKey []byte, getPrivateKey func(host string, keyType autocert.KeyType) (crypto.Signer, error), shutdown <-chan struct{}) (*Manager, error) {
 	if directoryURL == "" {
 		return nil, fmt.Errorf("empty ACME directory URL")
 	}
@@ -107,7 +107,10 @@ func Load(name, acmeDir, contactEmail, directoryURL string, eabKeyID string, eab
 	var key crypto.Signer
 	f, err := os.Open(p)
 	if f != nil {
-		defer f.Close()
+		defer func() {
+			err := f.Close()
+			log.Check(err, "closing identify key file")
+		}()
 	}
 	if err != nil && os.IsNotExist(err) {
 		key, err = ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)

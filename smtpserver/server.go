@@ -398,7 +398,7 @@ type recipient struct {
 }
 
 func isClosed(err error) bool {
-	return errors.Is(err, errIO) || moxio.IsClosed(err)
+	return errors.Is(err, errIO) || mlog.IsClosed(err)
 }
 
 // Logbg returns a logger for logging in the background (in a goroutine), eg for
@@ -934,8 +934,9 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 		slog.String("listener", listenerName))
 
 	defer func() {
-		c.origConn.Close() // Close actual TCP socket, regardless of TLS on top.
-		c.conn.Close()     // If TLS, will try to write alert notification to already closed socket, returning error quickly.
+		err := c.origConn.Close() // Close actual TCP socket, regardless of TLS on top.
+		c.log.Check(err, "closing tcp connection")
+		c.conn.Close() // If TLS, will try to write alert notification to already closed socket, returning error quickly.
 
 		if c.account != nil {
 			err := c.account.Close()

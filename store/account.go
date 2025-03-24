@@ -1119,9 +1119,11 @@ func OpenAccountDB(log mlog.Log, accountDir, accountName string) (a *Account, re
 
 	defer func() {
 		if rerr != nil {
-			db.Close()
+			err := db.Close()
+			log.Check(err, "closing database file after error")
 			if isNew {
-				os.Remove(dbpath)
+				err := os.Remove(dbpath)
+				log.Check(err, "removing new database file after error")
 			}
 		}
 	}()
@@ -1820,17 +1822,26 @@ func (a *Account) CheckConsistency() error {
 		conf, _ := a.Conf()
 		if conf.JunkFilter != nil {
 			random := make([]byte, 16)
-			cryptorand.Read(random)
+			if _, err := cryptorand.Read(random); err != nil {
+				return fmt.Errorf("reading random: %v", err)
+			}
 			dbpath := filepath.Join(mox.DataDirPath("tmp"), fmt.Sprintf("junkfilter-check-%x.db", random))
 			bloompath := filepath.Join(mox.DataDirPath("tmp"), fmt.Sprintf("junkfilter-check-%x.bloom", random))
 			os.MkdirAll(filepath.Dir(dbpath), 0700)
-			defer os.Remove(dbpath)
-			defer os.Remove(bloompath)
+			defer func() {
+				err := os.Remove(bloompath)
+				log.Check(err, "removing temp bloom file")
+				err = os.Remove(dbpath)
+				log.Check(err, "removing temp junk filter database file")
+			}()
 			jf, err = junk.NewFilter(ctx, log, conf.JunkFilter.Params, dbpath, bloompath)
 			if err != nil {
 				return fmt.Errorf("new junk filter: %v", err)
 			}
-			defer jf.Close()
+			defer func() {
+				err := jf.Close()
+				log.Check(err, "closing junk filter")
+			}()
 		}
 		var ntrained int
 
@@ -1987,7 +1998,10 @@ func (a *Account) CheckConsistency() error {
 			if err != nil {
 				return fmt.Errorf("open account junk filter: %v", err)
 			}
-			defer ajf.Close()
+			defer func() {
+				err := ajf.Close()
+				log.Check(err, "closing junk filter")
+			}()
 			wordsGot, err := load(ajf)
 			if err != nil {
 				return fmt.Errorf("read account junk filter: %v", err)

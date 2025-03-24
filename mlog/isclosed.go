@@ -1,4 +1,4 @@
-package moxio
+package mlog
 
 import (
 	"errors"

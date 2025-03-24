@@ -717,7 +717,7 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 
 		acmeDir := dataDirPath(configFile, c.DataDir, "acme")
 		os.MkdirAll(acmeDir, 0770)
-		manager, err := autotls.Load(name, acmeDir, acme.ContactEmail, acme.DirectoryURL, eabKeyID, eabKey, makeGetPrivateKey(name), Shutdown.Done())
+		manager, err := autotls.Load(log, name, acmeDir, acme.ContactEmail, acme.DirectoryURL, eabKeyID, eabKey, makeGetPrivateKey(name), Shutdown.Done())
 		if err != nil {
 			addAcmeErrorf("loading ACME identity: %s", err)
 		}

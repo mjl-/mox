@@ -361,7 +361,8 @@ func Init() error {
 	}
 	if err != nil {
 		if isNew {
-			os.Remove(qpath)
+			err := os.Remove(qpath)
+			log.Check(err, "removing new queue database file after error")
 		}
 		return fmt.Errorf("open queue database: %s", err)
 	}
