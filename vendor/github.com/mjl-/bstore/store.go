@@ -75,7 +75,16 @@ type Tx struct {
 
 	bucketCache map[bucketKey]*bolt.Bucket
 
+	// We need to keep track of queries to set reseek on their execs when updating
+	// (put/delete) the record/index bucket for their cursors.
+	queries []bucketReseeker
+
 	stats Stats
+}
+
+type bucketReseeker interface {
+	// bucketReseek is called on queries when a bucket changed (put/delete).
+	bucketReseek(b *bolt.Bucket)
 }
 
 // bucketKey represents a subbucket for a type.

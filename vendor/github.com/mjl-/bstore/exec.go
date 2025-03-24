@@ -37,8 +37,16 @@ type exec[T any] struct {
 	ib *bolt.Bucket
 	rb *bolt.Bucket
 
-	// Of last element in data. For finding end of group through prefix-match during
-	// partial index ordering for remaining in-memory sort.
+	// For index or record bucket, for full/index scans.
+	cursor *bolt.Cursor
+
+	// Whether to reseek the cursor. Set after changes to the ib or rb.
+	reseek bool
+
+	// Last cursor key we read, for reseeking after changes to the bucket.
+	lastck []byte
+
+	// Last index key used to collect pairs in data.
 	lastik []byte
 
 	// If not nil, row that was scanned previously, to use instead of calling forward.
@@ -250,6 +258,14 @@ func (e *exec[T]) nextKey(write, value bool) ([]byte, T, error) {
 	// wouldn't do this, a query that doesn't return any matches won't get canceled
 	// until it is finished.
 	keysSeen := 0
+
+	var statsKV *StatsKV
+	if e.plan.idx == nil {
+		statsKV = &q.stats.Records
+	} else {
+		statsKV = &q.stats.Index
+	}
+
 	for {
 		var xk, xv []byte
 		keysSeen++
@@ -266,15 +282,12 @@ func (e *exec[T]) nextKey(write, value bool) ([]byte, T, error) {
 		if e.forward == nil {
 			// First time we are in this loop, we set up a cursor and e.forward.
 
-			var c *bolt.Cursor
-			var statsKV *StatsKV
 			if e.plan.idx == nil {
-				c = e.rb.Cursor()
-				statsKV = &q.stats.Records
+				e.cursor = e.rb.Cursor()
 			} else {
-				c = e.ib.Cursor()
-				statsKV = &q.stats.Index
+				e.cursor = e.ib.Cursor()
 			}
+			c := e.cursor
 			if !e.plan.desc {
 				e.forward = c.Next
 				if e.plan.start != nil {
@@ -321,12 +334,47 @@ func (e *exec[T]) nextKey(write, value bool) ([]byte, T, error) {
 			// Resume with previously seen key/value.
 			xk, xv = e.stowedbk, e.stowedbv
 			e.stowedbk, e.stowedbv = nil, nil
-		} else {
-			if e.plan.idx == nil {
-				q.stats.Records.Cursor++
-			} else {
-				q.stats.Index.Cursor++
+
+			if e.reseek {
+				e.reseek = false
+				q.stats.Reseek++
+				statsKV.Cursor++
+				// We haven't processed xk yet. It may still exist, or may be gone which causes us to end up at the key after it.
+				xk, xv = e.cursor.Seek(xk)
+				if e.plan.desc && xk == nil {
+					// Our key is gone, the cursor advanced, but there is no more key left. So start
+					// again at the end. If there is still anything, the check below will match and
+					// we'll move.
+					statsKV.Cursor++
+					xk, _ = e.cursor.Last()
+				}
+				// If we have a key, and we operate descending, we may have seeked to a key we've
+				// already handled when collecting data previously.
+				if xk != nil && e.plan.desc && bytes.Compare(xk, e.lastik) >= 0 {
+					statsKV.Cursor++
+					xk, xv = e.forward()
+				}
 			}
+		} else if e.reseek {
+			e.reseek = false
+			q.stats.Reseek++
+			statsKV.Cursor++
+			xk, xv = e.cursor.Seek(e.lastck)
+			// We may have seeked to the end, beyond our starting point in case of descending
+			// order. So start again at the end. If there is any key left, the check below will
+			// match and we'll move.
+			if e.plan.desc && xk == nil {
+				statsKV.Cursor++
+				xk, _ = e.cursor.Last()
+			}
+			// If xk is the same as e.lastck, we already handled it. Also, the Last() above may
+			// have seeked to beyond what we've already handled.
+			if xk != nil && (bytes.Equal(xk, e.lastck) || e.plan.desc && bytes.Compare(xk, e.lastck) > 0) {
+				statsKV.Cursor++
+				xk, xv = e.forward()
+			}
+		} else {
+			statsKV.Cursor++
 			xk, xv = e.forward()
 			// log.Printf("forwarded, %x %x", xk, xv)
 		}
@@ -334,6 +382,8 @@ func (e *exec[T]) nextKey(write, value bool) ([]byte, T, error) {
 		if xk == nil {
 			break
 		}
+
+		e.lastck = xk
 
 		if e.plan.start != nil && !e.plan.startInclusive && bytes.HasPrefix(xk, e.plan.start) {
 			continue

@@ -108,6 +108,7 @@ func (tx *Tx) updateIndices(tv *typeVersion, pk []byte, ov, v reflect.Value) err
 		if err != nil {
 			return err
 		}
+		var modified bool
 		if remove {
 			ikl, err := idx.packKey(ov, pk)
 			if err != nil {
@@ -121,6 +122,7 @@ func (tx *Tx) updateIndices(tv *typeVersion, pk []byte, ov, v reflect.Value) err
 						return fmt.Errorf("%w: key missing from index", ErrStore)
 					}
 				}
+				modified = true
 				if err := ib.Delete(ik.full); err != nil {
 					return fmt.Errorf("%w: removing from index: %s", ErrStore, err)
 				}
@@ -140,10 +142,14 @@ func (tx *Tx) updateIndices(tv *typeVersion, pk []byte, ov, v reflect.Value) err
 				}
 
 				tx.stats.Index.Put++
+				modified = true
 				if err := ib.Put(ik.full, []byte{}); err != nil {
 					return fmt.Errorf("inserting into index: %w", err)
 				}
 			}
+		}
+		if modified {
+			tx.bucketReseek(ib)
 		}
 	}
 	return nil
@@ -286,6 +292,7 @@ func (tx *Tx) delete(rb *bolt.Bucket, st storeType, k []byte, rov reflect.Value)
 	}
 
 	tx.stats.Records.Delete++
+	tx.bucketReseek(rb)
 	return rb.Delete(k)
 }
 
@@ -403,6 +410,7 @@ func (tx *Tx) insert(rb *bolt.Bucket, st storeType, rv, krv reflect.Value, k []b
 		return fmt.Errorf("updating indices for inserted value: %w", err)
 	}
 	tx.stats.Records.Put++
+	tx.bucketReseek(rb)
 	if err := rb.Put(k, v); err != nil {
 		return err
 	}
@@ -427,7 +435,16 @@ func (tx *Tx) update(rb *bolt.Bucket, st storeType, rv, rov reflect.Value, k []b
 		return fmt.Errorf("updating indices for updated record: %w", err)
 	}
 	tx.stats.Records.Put++
+	tx.bucketReseek(rb)
 	return rb.Put(k, v)
+}
+
+// bucketReseek marks queries as needing a reseek on their cursor due to changes to
+// the bucket.
+func (tx *Tx) bucketReseek(b *bolt.Bucket) {
+	for _, q := range tx.queries {
+		q.bucketReseek(b)
+	}
 }
 
 // Begin starts a transaction.

@@ -36,6 +36,7 @@ type Stats struct {
 	LastIndex     string // Last index for LastType used for a query, or empty.
 	LastOrdered   bool   // Whether last scan (PK or index) use was ordered, e.g. for sorting or because of a comparison filter.
 	LastAsc       bool   // If ordered, whether last index scan was ascending.
+	Reseek        uint   // Number of cursor reseeks due to updates during queries.
 }
 
 func (skv *StatsKV) add(n StatsKV) {
@@ -77,6 +78,7 @@ func (st *Stats) add(n Stats) {
 	st.LastIndex = n.LastIndex
 	st.LastOrdered = n.LastOrdered
 	st.LastAsc = n.LastAsc
+	st.Reseek += n.Reseek
 }
 
 // Sub returns st with the counters from o subtracted.
@@ -100,6 +102,7 @@ func (st Stats) Sub(o Stats) Stats {
 	st.PlanPKScan -= o.PlanPKScan
 	st.PlanIndexScan -= o.PlanIndexScan
 	st.Sort -= o.Sort
+	st.Reseek -= o.Reseek
 
 	return st
 }
