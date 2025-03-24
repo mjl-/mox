@@ -42,6 +42,9 @@ test-upgrade: build
 install-staticcheck:
 	CGO_ENABLED=0 go install honnef.co/go/tools/cmd/staticcheck@latest
 
+install-ineffassign:
+	CGO_ENABLED=0 go install github.com/gordonklaus/ineffassign@v0.1.0
+
 check:
 	CGO_ENABLED=0 go vet -tags integration
 	CGO_ENABLED=0 go vet -tags website website/website.go
@@ -55,6 +58,7 @@ check:
 	CGO_ENABLED=0 staticcheck -tags link rfc/link.go
 	CGO_ENABLED=0 staticcheck -tags errata rfc/errata.go
 	CGO_ENABLED=0 staticcheck -tags xr rfc/xr.go
+	CGO_ENABLED=0 ineffassign ./...
 
 # needed for check-shadow
 install-shadow:

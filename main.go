@@ -1960,11 +1960,12 @@ sharing most of its code.
 
 	resolver := dns.StrictResolver{}
 	var haveMX bool
-	var origNextHopAuthentic, expandedNextHopAuthentic bool
+	var expandedNextHopAuthentic bool
 	var expandedNextHop dns.Domain
 	var hosts []dns.IPDomain
 	if len(args) == 1 {
 		var permanent bool
+		var origNextHopAuthentic bool
 		var err error
 		haveMX, origNextHopAuthentic, expandedNextHopAuthentic, expandedNextHop, hosts, permanent, err = smtpclient.GatherDestinations(ctxbg, c.log.Logger, resolver, dns.IPDomain{Domain: origNextHop})
 		status := "temporary"
@@ -1998,7 +1999,6 @@ sharing most of its code.
 		d := xparseDomain(args[1], "destination host")
 		log.Printf("skipping domain mx/cname lookups, assuming domain is dnssec-protected")
 
-		origNextHopAuthentic = true
 		expandedNextHopAuthentic = true
 		expandedNextHop = d
 		hosts = []dns.IPDomain{{Domain: d}}

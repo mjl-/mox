@@ -13,11 +13,12 @@ code paths are reachable/testable with mox localserve, but some use cases will
 require a full setup.
 
 Before committing, run at least "make fmt" and "make check" (which requires
-staticcheck, run "make install-staticcheck" once). Also run "make check-shadow"
-and fix any shadowed variables other than "err" (which are filtered out, but
-causes the command to always exit with an error code; run "make install-shadow"
-once to install the shadow command). If you've updated RFC references, run
-"make" in rfc/, it verifies the referenced files exist.
+staticcheck and ineffassign, run "make install-staticcheck install-ineffassign"
+once). Also run "make check-shadow" and fix any shadowed variables other than
+"err" (which are filtered out, but causes the command to always exit with an
+error code; run "make install-shadow" once to install the shadow command). If
+you've updated RFC references, run "make" in rfc/, it verifies the referenced
+files exist.
 
 When making changes to the public API of a package listed in
 apidiff/packages.txt, run "make genapidiff" to update the list of changes in

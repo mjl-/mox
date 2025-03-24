@@ -1435,7 +1435,6 @@ func TestListFilterSort(t *testing.T) {
 	var lr []MsgRetired
 	lastID = 0
 	last = ""
-	l = nil
 	for {
 		nl, err := RetiredList(ctxbg, RetiredFilter{Max: 1}, RetiredSort{LastID: lastID, Last: last})
 		tcheck(t, err, "list paginated")

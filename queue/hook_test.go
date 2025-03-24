@@ -656,7 +656,6 @@ func TestHookListFilterSort(t *testing.T) {
 	var lr []HookRetired
 	lastID = 0
 	last = ""
-	l = nil
 	for {
 		nl, err := HookRetiredList(ctxbg, HookRetiredFilter{Max: 1}, HookRetiredSort{LastID: lastID, Last: last})
 		tcheck(t, err, "list paginated")

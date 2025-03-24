@@ -187,7 +187,7 @@ func toLower(buf []byte) []byte {
 			copied = true
 			nr := make([]byte, len(r), len(r)+nsize+len(buf)-i)
 			copy(nr, r)
-			nr = r
+			r = nr
 		}
 		r = utf8.AppendRune(r, nc)
 	}

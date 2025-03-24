@@ -3424,18 +3424,16 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 							return fmt.Errorf("finding rejects mailbox: %v", err)
 						}
 
-						hasSpace := true
 						if !conf.KeepRejects && mbrej != nil {
-							var chl []store.Change
-							chl, hasSpace, err = a.d.acc.TidyRejectsMailbox(c.log, tx, mbrej)
+							chl, hasSpace, err := a.d.acc.TidyRejectsMailbox(c.log, tx, mbrej)
 							if err != nil {
 								return fmt.Errorf("tidying rejects mailbox: %v", err)
 							}
+							changes = append(changes, chl...)
 							if !hasSpace {
 								log.Info("not storing spammy mail to full rejects mailbox")
 								return nil
 							}
-							changes = append(changes, chl...)
 						}
 						if mbrej == nil {
 							nmb, chl, _, _, err := a.d.acc.MailboxCreate(tx, conf.RejectsMailbox, store.SpecialUse{})

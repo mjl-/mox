@@ -512,7 +512,6 @@ func backupctl(ctx context.Context, ctl *ctl) {
 			backupDB(db, jfpath)
 			bloompath := filepath.Join("accounts", acc.Name, "junkfilter.bloom")
 			backupFile(bloompath)
-			db = nil
 			err := jf.Close()
 			ctl.log.Check(err, "closing junkfilter")
 		}
