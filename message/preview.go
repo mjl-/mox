@@ -310,9 +310,16 @@ func previewHTML(r io.Reader) (string, error) {
 				if quoteLevel > 0 {
 					q := strings.Repeat("> ", quoteLevel)
 					var sb strings.Builder
-					for line := range strings.Lines(s) {
+					for s != "" {
+						o := strings.IndexByte(s, '\n')
+						if o < 0 {
+							o = len(s)
+						} else {
+							o++
+						}
 						sb.WriteString(q)
-						sb.WriteString(line)
+						sb.WriteString(s[:o])
+						s = s[o:]
 					}
 					s = sb.String()
 				}
