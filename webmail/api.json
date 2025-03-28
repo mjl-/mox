@@ -2115,7 +2115,7 @@
 			"Fields": [
 				{
 					"Name": "Message",
-					"Docs": "Without ParsedBuf and MsgPrefix, for size. With Preview, even with value not yet stored in the database.",
+					"Docs": "Without ParsedBuf and MsgPrefix, for size. With Preview, even if it isn't stored yet in the database.",
 					"Typewords": [
 						"Message"
 					]

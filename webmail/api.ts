@@ -299,7 +299,7 @@ export interface EventViewMsgs {
 // message.Part, made for the needs of the message items in the message list.
 // messages.
 export interface MessageItem {
-	Message: Message  // Without ParsedBuf and MsgPrefix, for size. With Preview, even with value not yet stored in the database.
+	Message: Message  // Without ParsedBuf and MsgPrefix, for size. With Preview, even if it isn't stored yet in the database.
 	Envelope: MessageEnvelope
 	Attachments?: Attachment[] | null
 	IsSigned: boolean
