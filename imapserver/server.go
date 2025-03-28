@@ -1837,8 +1837,12 @@ func (c *conn) cmdID(tag, cmd string, p *parser) {
 	c.log.Info("client id", slog.Any("params", params))
 
 	// Response syntax: ../rfc/2971:243
-	// We send our name and version. ../rfc/2971:193
-	c.bwritelinef(`* ID ("name" "mox" "version" %s)`, string0(moxvar.Version).pack(c))
+	// We send our name, and only the version for authenticated users. ../rfc/2971:193
+	if c.state == stateAuthenticated || c.state == stateSelected {
+		c.bwritelinef(`* ID ("name" "mox" "version" %s)`, string0(moxvar.Version).pack(c))
+	} else {
+		c.bwritelinef(`* ID ("name" "mox")`)
+	}
 	c.ok(tag, cmd)
 }
 

@@ -52,7 +52,6 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
-	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/ratelimit"
@@ -1001,7 +1000,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 	// We include the string ESMTP. https://cr.yp.to/smtp/greeting.html recommends it.
 	// Should not be too relevant nowadays, but does not hurt and default blackbox
 	// exporter SMTP health check expects it.
-	c.writelinef("%d %s ESMTP mox %s", smtp.C220ServiceReady, c.hostname.ASCII, moxvar.Version)
+	c.writelinef("%d %s ESMTP mox", smtp.C220ServiceReady, c.hostname.ASCII)
 
 	for {
 		command(c)
