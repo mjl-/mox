@@ -551,6 +551,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 			SkipThreads:         true,
 			SkipUpdateDiskUsage: true,
 			SkipCheckQuota:      true,
+			SkipPreview:         true,
 		}
 		if err := acc.MessageAdd(log, tx, mb, m, f, opts); err != nil {
 			problemf("delivering message %s: %s (continuing)", pos, err)

@@ -560,6 +560,18 @@ type Message struct {
 	TrainedJunk *bool  // If nil, no training done yet. Otherwise, true is trained as junk, false trained as nonjunk.
 	MsgPrefix   []byte // Typically holds received headers and/or header separator.
 
+	// If non-nil, a preview of the message based on text and/or html parts of the
+	// message. Used in the webmail and IMAP PREVIEW extension. If non-nil, it is empty
+	// if no preview could be created, or the message has not textual content or
+	// couldn't be parsed.
+	// Previews are typically created when delivering a message, but not when importing
+	// messages, for speed. Previews are generated on first request (in the webmail, or
+	// through the IMAP fetch attribute "PREVIEW" (without "LAZY")), and stored with
+	// the message at that time.
+	// The preview is at most 256 characters (can be more bytes), with detected quoted
+	// text replaced with "[..."].
+	Preview *string
+
 	// ParsedBuf message structure. Currently saved as JSON of message.Part because bstore
 	// cannot yet store recursive types. Created when first needed, and saved in the
 	// database.
@@ -2126,6 +2138,9 @@ type AddOpts struct {
 	JunkFilter *junk.Filter
 
 	SkipTraining bool
+
+	// If true, a preview will be generated if the Message doesn't already have one.
+	SkipPreview bool
 }
 
 // todo optimization: when moving files, we open the original, call MessageAdd() which hardlinks it and close the file gain. when passing the filename, we could just use os.Link, saves 2 syscalls.
@@ -2255,6 +2270,8 @@ func (a *Account) MessageAdd(log mlog.Log, tx *bstore.Tx, mb *Mailbox, m *Messag
 		if err := json.Unmarshal(m.ParsedBuf, &p); err != nil {
 			log.Errorx("unmarshal parsed message, continuing", err, slog.String("parse", ""))
 		} else {
+			mr := FileMsgReader(m.MsgPrefix, msgFile)
+			p.SetReaderAt(mr)
 			part = &p
 		}
 		return part
@@ -2267,6 +2284,16 @@ func (a *Account) MessageAdd(log mlog.Log, tx *bstore.Tx, mb *Mailbox, m *Messag
 
 	if m.MessageID == "" && m.SubjectBase == "" && getPart() != nil {
 		m.PrepareThreading(log, part)
+	}
+
+	if !opts.SkipPreview && m.Preview == nil {
+		if p := getPart(); p != nil {
+			s, err := p.Preview(log)
+			if err != nil {
+				return fmt.Errorf("generating preview: %v", err)
+			}
+			m.Preview = &s
+		}
 	}
 
 	// Assign to thread (if upgrade has completed).

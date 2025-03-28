@@ -31,10 +31,11 @@ type fetchCmd struct {
 	hasChangedSince bool        // Whether CHANGEDSINCE was set. Enables MODSEQ in response.
 	expungeIssued   bool        // Set if any message has been expunged. Can happen for expunged messages.
 
-	uid        store.UID // UID currently processing.
-	markSeen   bool
-	needFlags  bool
-	needModseq bool // Whether untagged responses needs modseq.
+	uid         store.UID // UID currently processing.
+	markSeen    bool
+	needFlags   bool
+	needModseq  bool                 // Whether untagged responses needs modseq.
+	newPreviews map[store.UID]string // Save with messages when done.
 
 	// Loaded when first needed, closed when message was processed.
 	m    *store.Message // Message currently being processed.
@@ -261,7 +262,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 
 	// ../rfc/9051:4432 We mark all messages that need it as seen at the end of the
 	// command, in a single transaction.
-	if len(cmd.updateSeen) > 0 {
+	if len(cmd.updateSeen) > 0 || len(cmd.newPreviews) > 0 {
 		c.account.WithWLock(func() {
 			changes := make([]store.Change, 0, len(cmd.updateSeen)+1)
 
@@ -305,9 +306,27 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 
 				changes = append(changes, mb.ChangeCounts())
 
-				mb.ModSeq = modseq
-				err = wtx.Update(&mb)
-				xcheckf(err, "update mailbox with counts and modseq")
+				for uid, s := range cmd.newPreviews {
+					m, err := bstore.QueryTx[store.Message](wtx).FilterNonzero(store.Message{MailboxID: c.mailboxID, UID: uid}).Get()
+					xcheckf(err, "get message")
+					if m.Expunged {
+						// Message has been deleted in the mean time.
+						cmd.expungeIssued = true
+						continue
+					}
+
+					// note: we are not updating modseq.
+
+					m.Preview = &s
+					err = wtx.Update(&m)
+					xcheckf(err, "saving preview with message")
+				}
+
+				if modseq > 0 {
+					mb.ModSeq = modseq
+					err = wtx.Update(&mb)
+					xcheckf(err, "update mailbox with counts and modseq")
+				}
 			})
 
 			// Broadcast these changes also to ourselves, so we'll send the updated flags, but
@@ -544,6 +563,37 @@ func (cmd *fetchCmd) xprocessAtt(a fetchAtt) []token {
 
 	case "MODSEQ":
 		cmd.needModseq = true
+
+	case "PREVIEW":
+		m := cmd.xensureMessage()
+		preview := m.Preview
+		// We ignore "lazy", generating the preview is fast enough.
+		if preview == nil {
+			// Get the preview. We'll save all generated previews in a single transaction at
+			// the end.
+			_, p := cmd.xensureParsed()
+			s, err := p.Preview(cmd.conn.log)
+			cmd.xcheckf(err, "generating preview")
+			preview = &s
+			cmd.newPreviews[m.UID] = s
+		}
+		var t token = nilt
+		if preview != nil {
+			s := *preview
+
+			// Limit to 200 characters (not bytes). ../rfc/8970:206
+			var n, o int
+			for o = range s {
+				n++
+				if n > 200 {
+					s = s[:o]
+					break
+				}
+			}
+			s = strings.TrimSpace(s)
+			t = string0(s)
+		}
+		return []token{bare(a.field), t}
 
 	default:
 		xserverErrorf("field %q not yet implemented", a.field)

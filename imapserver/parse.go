@@ -577,6 +577,7 @@ var fetchAttWords = []string{
 	"RFC822.HEADER", "RFC822.TEXT", "RFC822", // older IMAP
 	"MODSEQ",   // CONDSTORE extension.
 	"SAVEDATE", // SAVEDATE extension, ../rfc/8514:186
+	"PREVIEW",  // ../rfc/8970:345
 }
 
 // ../rfc/9051:6557 ../rfc/3501:4751 ../rfc/7162:2483
@@ -608,6 +609,8 @@ func (p *parser) xfetchAtt(isUID bool) (r fetchAtt) {
 		// The wording about when to respond with a MODSEQ attribute could be more clear. ../rfc/7162:923 ../rfc/7162:388
 		// MODSEQ attribute is a CONDSTORE-enabling parameter. ../rfc/7162:377
 		p.conn.xensureCondstore(nil)
+	case "PREVIEW":
+		r.previewLazy = p.take(" (LAZY)")
 	}
 	return
 }

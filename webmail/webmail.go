@@ -655,7 +655,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		state := msgState{acc: acc, m: m, msgr: msgr, part: &p}
 		// note: state is cleared by cleanup
 
-		pm, err := parsedMessage(log, m, &state, true, true, true)
+		pm, err := parsedMessage(log, &m, &state, true, true, true)
 		xcheckf(ctx, err, "getting parsed message")
 		if t[1] == "msgtext" && len(pm.Texts) == 0 || t[1] != "msgtext" && !pm.HasHTML {
 			http.Error(w, "400 - bad request - no such part", http.StatusBadRequest)
@@ -687,7 +687,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		state := msgState{acc: acc, m: m, msgr: msgr, part: &p}
 		// note: state is cleared by cleanup
 
-		pm, err := parsedMessage(log, m, &state, true, true, true)
+		pm, err := parsedMessage(log, &m, &state, true, true, true)
 		xcheckf(ctx, err, "parsing parsedmessage")
 		pmjson, err := json.Marshal(pm)
 		xcheckf(ctx, err, "marshal parsedmessage")
@@ -695,7 +695,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		m.MsgPrefix = nil
 		m.ParsedBuf = nil
 		hl := messageItemMoreHeaders(moreHeaders, pm)
-		mi := MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, pm.firstLine, false, hl}
+		mi := MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, false, hl}
 		mijson, err := json.Marshal(mi)
 		xcheckf(ctx, err, "marshal messageitem")
 
@@ -720,7 +720,7 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		state := msgState{acc: acc, m: m, msgr: msgr, part: &p}
 		// note: state is cleared by cleanup
 
-		pm, err := parsedMessage(log, m, &state, true, true, true)
+		pm, err := parsedMessage(log, &m, &state, true, true, true)
 		xcheckf(ctx, err, "parsing parsedmessage")
 
 		if len(pm.Texts) == 0 {

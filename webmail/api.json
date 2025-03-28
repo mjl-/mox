@@ -2115,7 +2115,7 @@
 			"Fields": [
 				{
 					"Name": "Message",
-					"Docs": "Without ParsedBuf and MsgPrefix, for size.",
+					"Docs": "Without ParsedBuf and MsgPrefix, for size. With Preview, even with value not yet stored in the database.",
 					"Typewords": [
 						"Message"
 					]
@@ -2147,13 +2147,6 @@
 					"Docs": "",
 					"Typewords": [
 						"bool"
-					]
-				},
-				{
-					"Name": "FirstLine",
-					"Docs": "Of message body, for showing as preview.",
-					"Typewords": [
-						"string"
 					]
 				},
 				{
@@ -2611,6 +2604,14 @@
 					"Typewords": [
 						"[]",
 						"uint8"
+					]
+				},
+				{
+					"Name": "Preview",
+					"Docs": "If non-nil, a preview of the message based on text and/or html parts of the message. Used in the webmail and IMAP PREVIEW extension. If non-nil, it is empty if no preview could be created, or the message has not textual content or couldn't be parsed. Previews are typically created when delivering a message, but not when importing messages, for speed. Previews are generated on first request (in the webmail, or through the IMAP fetch attribute \"PREVIEW\" (without \"LAZY\")), and stored with the message at that time. The preview is at most 256 characters (can be more bytes), with detected quoted text replaced with \"[...\"].",
+					"Typewords": [
+						"nullable",
+						"string"
 					]
 				},
 				{

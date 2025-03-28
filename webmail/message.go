@@ -1,7 +1,6 @@
 package webmail
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -86,10 +85,10 @@ func messageItemMoreHeaders(moreHeaders []string, pm ParsedMessage) (l [][2]stri
 
 func messageItem(log mlog.Log, m store.Message, state *msgState, moreHeaders []string) (MessageItem, error) {
 	headers := len(moreHeaders) > 0
-	pm, err := parsedMessage(log, m, state, false, true, headers)
+	pm, err := parsedMessage(log, &m, state, false, true, headers)
 	if err != nil && errors.Is(err, message.ErrHeader) && headers {
 		log.Debugx("load message item without parsing headers after error", err, slog.Int64("msgid", m.ID))
-		pm, err = parsedMessage(log, m, state, false, true, false)
+		pm, err = parsedMessage(log, &m, state, false, true, false)
 	}
 	if err != nil {
 		return MessageItem{}, fmt.Errorf("parsing message %d for item: %v", m.ID, err)
@@ -98,116 +97,32 @@ func messageItem(log mlog.Log, m store.Message, state *msgState, moreHeaders []s
 	m.MsgPrefix = nil
 	m.ParsedBuf = nil
 	l := messageItemMoreHeaders(moreHeaders, pm)
-	return MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, pm.firstLine, true, l}, nil
+	return MessageItem{m, pm.envelope, pm.attachments, pm.isSigned, pm.isEncrypted, true, l}, nil
 }
 
-// formatFirstLine returns a line the client can display next to the subject line
-// in a mailbox. It will replace quoted text, and any prefixing "On ... write:"
-// line with "[...]" so only new and useful information will be displayed.
-// Trailing signatures are not included.
-func formatFirstLine(r io.Reader) (string, error) {
-	// We look quite a bit of lines ahead for trailing signatures with trailing empty lines.
-	var lines []string
-	scanner := bufio.NewScanner(r)
-	ensureLines := func() {
-		for len(lines) < 10 && scanner.Scan() {
-			lines = append(lines, strings.TrimSpace(scanner.Text()))
-		}
-	}
-	ensureLines()
-
-	isSnipped := func(s string) bool {
-		return s == "[...]" || s == "[…]" || s == "..."
-	}
-
-	nextLineQuoted := func(i int) bool {
-		if i+1 < len(lines) && lines[i+1] == "" {
-			i++
-		}
-		return i+1 < len(lines) && (strings.HasPrefix(lines[i+1], ">") || isSnipped(lines[i+1]))
-	}
-
-	// Remainder is signature if we see a line with only and minimum 2 dashes, and
-	// there are no more empty lines, and there aren't more than 5 lines left.
-	isSignature := func() bool {
-		if len(lines) == 0 || !strings.HasPrefix(lines[0], "--") || strings.Trim(strings.TrimSpace(lines[0]), "-") != "" {
-			return false
-		}
-		l := lines[1:]
-		for len(l) > 0 && l[len(l)-1] == "" {
-			l = l[:len(l)-1]
-		}
-		if len(l) >= 5 {
-			return false
-		}
-		return !slices.Contains(l, "")
-	}
-
-	result := ""
-
-	resultSnipped := func() bool {
-		return strings.HasSuffix(result, "[...]\n") || strings.HasSuffix(result, "[…]")
-	}
-
-	// Quick check for initial wrapped "On ... wrote:" line.
-	if len(lines) > 3 && strings.HasPrefix(lines[0], "On ") && !strings.HasSuffix(lines[0], "wrote:") && strings.HasSuffix(lines[1], ":") && nextLineQuoted(1) {
-		result = "[...]\n"
-		lines = lines[3:]
-		ensureLines()
-	}
-
-	for ; len(lines) > 0 && !isSignature(); ensureLines() {
-		line := lines[0]
-		if strings.HasPrefix(line, ">") {
-			if !resultSnipped() {
-				result += "[...]\n"
-			}
-			lines = lines[1:]
-			continue
-		}
-		if line == "" {
-			lines = lines[1:]
-			continue
-		}
-		// Check for a "On <date>, <person> wrote:", we require digits before a quoted
-		// line, with an optional empty line in between. If we don't have any text yet, we
-		// don't require the digits.
-		if strings.HasSuffix(line, ":") && (strings.ContainsAny(line, "0123456789") || result == "") && nextLineQuoted(0) {
-			if !resultSnipped() {
-				result += "[...]\n"
-			}
-			lines = lines[1:]
-			continue
-		}
-		// Skip possibly duplicate snipping by author.
-		if !isSnipped(line) || !resultSnipped() {
-			result += line + "\n"
-		}
-		lines = lines[1:]
-		if len(result) > 250 {
-			break
-		}
-	}
-	if len(result) > 250 {
-		result = result[:230] + "..."
-	}
-	return result, scanner.Err()
-}
-
-func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem, msgitemHeaders bool) (pm ParsedMessage, rerr error) {
+func parsedMessage(log mlog.Log, m *store.Message, state *msgState, full, msgitem, msgitemHeaders bool) (pm ParsedMessage, rerr error) {
 	pm.ViewMode = store.ModeText // Valid default, in case this makes it to frontend.
 
-	if full || msgitem {
-		if !state.ensurePart(m, true) {
+	if full || msgitem || state.newPreviews != nil && m.Preview == nil {
+		if !state.ensurePart(*m, true) {
 			return pm, state.err
 		}
 		if full {
 			pm.Part = *state.part
 		}
 	} else {
-		if !state.ensurePart(m, false) {
+		if !state.ensurePart(*m, false) {
 			return pm, state.err
 		}
+	}
+	if state.newPreviews != nil && m.Preview == nil {
+		s, err := state.part.Preview(log)
+		if err != nil {
+			log.Infox("generating preview", err, slog.Int64("msgid", m.ID))
+		}
+		// Set preview on m now, and let it be saved later on.
+		m.Preview = &s
+		state.newPreviews[m.ID] = s
 	}
 
 	// todo: we should store this form in message.Part, requires a data structure update.
@@ -310,13 +225,6 @@ func parsedMessage(log mlog.Log, m store.Message, state *msgState, full, msgitem
 				}
 				pm.Texts = append(pm.Texts, string(buf))
 				pm.TextPaths = append(pm.TextPaths, slices.Clone(path))
-			}
-			if msgitem && pm.firstLine == "" {
-				pm.firstLine, rerr = formatFirstLine(p.ReaderUTF8OrBinary())
-				if rerr != nil {
-					rerr = fmt.Errorf("reading text for first line snippet: %v", rerr)
-					return
-				}
 			}
 
 		case "TEXT/HTML":

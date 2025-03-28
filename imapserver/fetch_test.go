@@ -466,5 +466,15 @@ Content-Transfer-Encoding: Quoted-printable
 	tc.transactf("ok", "fetch 1 rfc822")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, rfc1}})
 
+	// Preview
+	preview := "Hello Joe, do you think we can meet at 3:30 tomorrow?"
+	tc.transactf("ok", "fetch 1 preview")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchPreview{Preview: &preview}}})
+
+	tc.transactf("ok", "fetch 1 preview (lazy)")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchPreview{Preview: &preview}}})
+
+	tc.transactf("bad", "fetch 1 preview (bogus)")
+
 	tc.client.Logout()
 }

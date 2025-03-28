@@ -307,6 +307,7 @@ type fetchAtt struct {
 	section       *sectionSpec
 	sectionBinary []uint32
 	partial       *partial
+	previewLazy   bool // Not regular "PREVIEW", but "PREVIEW (LAZY)".
 }
 
 type searchKey struct {

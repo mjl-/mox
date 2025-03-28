@@ -375,6 +375,7 @@ func ximportctl(ctx context.Context, xctl *ctl, mbox bool) {
 				SkipThreads:         true, // We do this efficiently when we have all messages.
 				SkipUpdateDiskUsage: true, // We do this once at the end.
 				SkipCheckQuota:      true, // We check before.
+				SkipPreview:         true, // We'll do this on-demand when messages are requested. Saves time.
 			}
 			err = a.MessageAdd(xctl.log, tx, &mb, m, msgf, opts)
 			xctl.xcheck(err, "delivering message")

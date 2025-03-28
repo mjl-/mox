@@ -2809,7 +2809,7 @@ const newMsgitemView = (mi: api.MessageItem, msglistView: MsglistView, otherMail
 						css('msgItemSubjectText', {whiteSpace: 'nowrap', overflow: 'hidden'}),
 						threadIndent > 0 ? dom.span(threadChar, style({paddingLeft: (threadIndent/2)+'em'}), css('msgItemThreadChar', {opacity: '.75', fontWeight: 'normal'}), threadCharTitle ? attr.title(threadCharTitle) : []) : [],
 						msgitemView.parent ? [] : mi.Envelope.Subject || '(no subject)',
-						dom.span(css('msgItemSubjectSnippet', {fontWeight: 'normal', color: styles.colorMilder}), ' '+mi.FirstLine),
+						dom.span(css('msgItemSubjectSnippet', {fontWeight: 'normal', color: styles.colorMilder}), ' '+(mi.Message.Preview || '')),
 					),
 					dom.div(
 						keywords,

@@ -776,6 +776,18 @@ func (c *Conn) xmsgatt1() FetchAttr {
 		modseq := c.xint64()
 		c.xtake(")")
 		return FetchModSeq(modseq)
+
+	case "PREVIEW":
+		// ../rfc/8970:348
+		c.xspace()
+		var preview *string
+		if c.peek('n') || c.peek('N') {
+			c.xtake("nil")
+		} else {
+			s := c.xstring()
+			preview = &s
+		}
+		return FetchPreview{preview}
 	}
 	c.xerrorf("unknown fetch attribute %q", f)
 	panic("not reached")

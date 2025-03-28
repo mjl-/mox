@@ -234,7 +234,7 @@ https://www.iana.org/assignments/message-headers/message-headers.xhtml
 8474	Roadmap	-	IMAP Extension for Object Identifiers
 8508	Yes	-	IMAP REPLACE Extension
 8514	Yes	-	Internet Message Access Protocol (IMAP) - SAVEDATE Extension
-8970	Roadmap	-	IMAP4 Extension: Message Preview Generation
+8970	Yes	-	IMAP4 Extension: Message Preview Generation
 9208	Partial	-	IMAP QUOTA Extension
 9394	Roadmap	-	IMAP PARTIAL Extension for Paged SEARCH and FETCH
 9585	?	-	IMAP Response Code for Command Progress Notifications

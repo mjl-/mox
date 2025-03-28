@@ -627,3 +627,12 @@ func (f FetchUID) Attr() string { return "UID" }
 type FetchModSeq int64
 
 func (f FetchModSeq) Attr() string { return "MODSEQ" }
+
+// "PREVIEW" fetch response.
+type FetchPreview struct {
+	Preview *string
+}
+
+// ../rfc/8970:146
+
+func (f FetchPreview) Attr() string { return "PREVIEW" }
