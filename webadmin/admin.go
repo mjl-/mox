@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -35,7 +36,6 @@ import (
 
 	_ "embed"
 
-	"golang.org/x/exp/maps"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/mjl-/adns"
@@ -895,7 +895,7 @@ EOF
 				tlsal, tlsaResult, err := resolver.LookupTLSA(ctx, 25, "tcp", mx.Host+".")
 				if dns.IsNotFound(err) {
 					if len(expect) > 0 {
-						addf(&r.DANE.Errors, "No DANE records for MX host %s, expected: %s.", mx.Host, strings.Join(maps.Keys(expect), "; "))
+						addf(&r.DANE.Errors, "No DANE records for MX host %s, expected: %s.", mx.Host, strings.Join(slices.Collect(maps.Keys(expect)), "; "))
 					}
 					continue
 				} else if err != nil {
@@ -915,13 +915,11 @@ EOF
 					}
 				}
 				if len(expect) > 0 {
-					l := maps.Keys(expect)
-					sort.Strings(l)
+					l := slices.Sorted(maps.Keys(expect))
 					addf(&r.DANE.Errors, "Missing DANE records of type TLSA for MX host _25._tcp.%s: %s", mx.Host, strings.Join(l, "; "))
 				}
 				if len(extra) > 0 {
-					l := maps.Keys(extra)
-					sort.Strings(l)
+					l := slices.Sorted(maps.Keys(extra))
 					addf(&r.DANE.Errors, "Unexpected DANE records of type TLSA for MX host _25._tcp.%s: %s", mx.Host, strings.Join(l, "; "))
 				}
 			}
@@ -932,8 +930,7 @@ EOF
 		if pubDom.ASCII == "" {
 			pubDom = mox.Conf.Static.HostnameDomain
 		}
-		records := maps.Keys(daneRecords(public))
-		sort.Strings(records)
+		records := slices.Sorted(maps.Keys(daneRecords(public)))
 		if len(records) > 0 {
 			instr := "Ensure the DNS records below exist. These records are for the whole machine, not per domain, so create them only once. Make sure DNSSEC is enabled, otherwise the records have no effect. The records indicate that a remote mail server trying to deliver email with SMTP (TCP port 25) must verify the TLS certificate with DANE-EE (3), based on the certificate public key (\"SPKI\", 1) that is SHA2-256-hashed (1) to the hexadecimal hash. DANE-EE verification means only the certificate or public key is verified, not whether the certificate is signed by a (centralized) certificate authority (CA), is expired, or matches the host name.\n\n"
 			for _, r := range records {

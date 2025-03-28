@@ -44,6 +44,7 @@ import (
 	"hash"
 	"io"
 	"log/slog"
+	"maps"
 	"math"
 	"net"
 	"os"
@@ -58,7 +59,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/exp/maps"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -363,8 +363,7 @@ type msgseq uint32
 
 // Listen initializes all imap listeners for the configuration, and stores them for Serve to start them.
 func Listen() {
-	names := maps.Keys(mox.Conf.Static.Listeners)
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(mox.Conf.Static.Listeners))
 	for _, name := range names {
 		listener := mox.Conf.Static.Listeners[name]
 
@@ -2764,8 +2763,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 
 		// Now that we have all vanished UIDs, send them over compactly.
 		if len(vanishedUIDs) > 0 {
-			l := maps.Keys(vanishedUIDs)
-			slices.Sort(l)
+			l := slices.Sorted(maps.Keys(vanishedUIDs))
 			// ../rfc/7162:1985
 			for _, s := range compactUIDSet(l).Strings(4*1024 - 32) {
 				c.bwritelinef("* VANISHED (EARLIER) %s", s)
@@ -4067,7 +4065,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 				mbDst.Add(m.MailboxCounts())
 			}
 
-			mbDst.Keywords, _ = store.MergeKeywords(mbDst.Keywords, maps.Keys(mbKeywords))
+			mbDst.Keywords, _ = store.MergeKeywords(mbDst.Keywords, slices.Sorted(maps.Keys(mbKeywords)))
 
 			err = tx.Update(&mbDst)
 			xcheckf(err, "updating destination mailbox for uids, keywords and counts")

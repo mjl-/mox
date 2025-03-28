@@ -1,6 +1,6 @@
 module github.com/mjl-/mox
 
-go 1.22.0
+go 1.23.0
 
 require (
 	github.com/mjl-/adns v0.0.0-20250321173553-ab04b05bdfea
@@ -16,7 +16,6 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0
 	go.etcd.io/bbolt v1.3.11
 	golang.org/x/crypto v0.32.0
-	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
 	golang.org/x/net v0.34.0
 	golang.org/x/sys v0.29.0
 	golang.org/x/text v0.21.0

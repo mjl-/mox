@@ -11,6 +11,7 @@ import (
 	"io"
 	golog "log"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -23,7 +24,6 @@ import (
 	_ "embed"
 	_ "net/http/pprof"
 
-	"golang.org/x/exp/maps"
 	"golang.org/x/net/http2"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -545,14 +545,12 @@ func redirectToTrailingSlash(srv *serve, hostMatch func(dns.IPDomain) bool, name
 func Listen() {
 	// Initialize listeners in deterministic order for the same potential error
 	// messages.
-	names := maps.Keys(mox.Conf.Static.Listeners)
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(mox.Conf.Static.Listeners))
 	for _, name := range names {
 		l := mox.Conf.Static.Listeners[name]
 		portServe := portServes(name, l)
 
-		ports := maps.Keys(portServe)
-		sort.Ints(ports)
+		ports := slices.Sorted(maps.Keys(portServe))
 		for _, port := range ports {
 			srv := portServe[port]
 			for _, ip := range l.IPs {
@@ -886,7 +884,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 	}
 
 	if s := portServe[443]; s != nil && s.TLSConfig != nil && len(s.NextProto) > 0 {
-		s.TLSConfig.NextProtos = append(s.TLSConfig.NextProtos, maps.Keys(s.NextProto)...)
+		s.TLSConfig.NextProtos = append(s.TLSConfig.NextProtos, slices.Collect(maps.Keys(s.NextProto))...)
 	}
 
 	for _, srv := range portServe {

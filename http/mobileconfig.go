@@ -6,11 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/xml"
 	"fmt"
+	"maps"
 	"slices"
-	"sort"
 	"strings"
-
-	"golang.org/x/exp/maps"
 
 	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/smtp"
@@ -39,8 +37,7 @@ func (m dict) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
 	if err := e.EncodeToken(xml.StartElement{Name: xml.Name{Local: "dict"}}); err != nil {
 		return err
 	}
-	l := maps.Keys(m)
-	sort.Strings(l)
+	l := slices.Sorted(maps.Keys(m))
 	for _, k := range l {
 		tokens := []xml.Token{
 			xml.StartElement{Name: xml.Name{Local: "key"}},

@@ -19,6 +19,7 @@ import (
 	"hash"
 	"io"
 	"log/slog"
+	"maps"
 	"math"
 	"net"
 	"net/textproto"
@@ -31,7 +32,6 @@ import (
 	"time"
 	"unicode"
 
-	"golang.org/x/exp/maps"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -202,8 +202,7 @@ func durationDefault(delay *time.Duration, def time.Duration) time.Duration {
 // Listen initializes network listeners for incoming SMTP connection.
 // The listeners are stored for a later call to Serve.
 func Listen() {
-	names := maps.Keys(mox.Conf.Static.Listeners)
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(mox.Conf.Static.Listeners))
 	for _, name := range names {
 		listener := mox.Conf.Static.Listeners[name]
 

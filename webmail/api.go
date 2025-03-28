@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"mime"
 	"mime/multipart"
 	"net"
@@ -25,8 +26,6 @@ import (
 	"time"
 
 	_ "embed"
-
-	"golang.org/x/exp/maps"
 
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
@@ -1526,7 +1525,7 @@ func (Webmail) ThreadCollapse(ctx context.Context, messageIDs []int64, collapse 
 			var updated []store.Message
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterEqual("Expunged", false)
-			q.FilterEqual("ThreadID", slicesAny(maps.Keys(threadIDs))...)
+			q.FilterEqual("ThreadID", slicesAny(slices.Sorted(maps.Keys(threadIDs)))...)
 			q.FilterNotEqual("ThreadCollapsed", collapse)
 			q.FilterFn(func(tm store.Message) bool {
 				for _, id := range tm.ThreadParentIDs {
@@ -1580,7 +1579,7 @@ func (Webmail) ThreadMute(ctx context.Context, messageIDs []int64, mute bool) {
 
 			q := bstore.QueryTx[store.Message](tx)
 			q.FilterEqual("Expunged", false)
-			q.FilterEqual("ThreadID", slicesAny(maps.Keys(threadIDs))...)
+			q.FilterEqual("ThreadID", slicesAny(slices.Sorted(maps.Keys(threadIDs)))...)
 			q.FilterFn(func(tm store.Message) bool {
 				if tm.ThreadMuted == mute && (!mute || tm.ThreadCollapsed) {
 					return false

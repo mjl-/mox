@@ -13,15 +13,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path"
 	"runtime/debug"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/exp/maps"
 
 	"golang.org/x/text/unicode/norm"
 
@@ -669,7 +668,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 		m := store.Message{
 			Received: received,
 			Flags:    flags,
-			Keywords: maps.Keys(keywords),
+			Keywords: slices.Sorted(maps.Keys(keywords)),
 			Size:     size,
 		}
 		xdeliver(mb, &m, f, filename)
@@ -755,8 +754,7 @@ func importMessages(ctx context.Context, log mlog.Log, token string, acc *store.
 
 			oflags := m.Flags
 			m.Flags = m.Flags.Set(flags, flags)
-			m.Keywords = maps.Keys(keywords)
-			sort.Strings(m.Keywords)
+			m.Keywords = slices.Sorted(maps.Keys(keywords))
 
 			mb.Add(m.MailboxCounts())
 

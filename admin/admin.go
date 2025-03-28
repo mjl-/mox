@@ -12,13 +12,12 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
-
-	"golang.org/x/exp/maps"
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"

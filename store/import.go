@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/exp/maps"
 
 	"github.com/mjl-/mox/mlog"
 )
@@ -182,7 +182,7 @@ func (mr *MboxReader) Next() (*Message, *os.File, string, error) {
 		return nil, nil, mr.Position(), fmt.Errorf("flush: %v", err)
 	}
 
-	m := &Message{Flags: flags, Keywords: maps.Keys(keywords), Size: size}
+	m := &Message{Flags: flags, Keywords: slices.Sorted(maps.Keys(keywords)), Size: size}
 
 	if t := strings.SplitN(fromLine, " ", 3); len(t) == 3 {
 		layouts := []string{time.ANSIC, time.UnixDate, time.RubyDate}
@@ -357,7 +357,7 @@ func (mr *MaildirReader) Next() (*Message, *os.File, string, error) {
 		}
 	}
 
-	m := &Message{Received: received, Flags: flags, Keywords: maps.Keys(keywords), Size: size}
+	m := &Message{Received: received, Flags: flags, Keywords: slices.Sorted(maps.Keys(keywords)), Size: size}
 
 	// Prevent cleanup by defer.
 	mf := f

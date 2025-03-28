@@ -2,14 +2,12 @@ package admin
 
 import (
 	"fmt"
-	"sort"
-
-	"golang.org/x/exp/maps"
+	"maps"
+	"slices"
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mox-"
-	"slices"
 )
 
 type TLSMode uint8
@@ -92,8 +90,7 @@ func ClientConfigDomain(d dns.Domain) (rconfig ClientConfig, rerr error) {
 		}
 	}
 	// Go through the other listeners in consistent order.
-	names := maps.Keys(mox.Conf.Static.Listeners)
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(mox.Conf.Static.Listeners))
 	for _, name := range names {
 		if gather(mox.Conf.Static.Listeners[name]) {
 			return

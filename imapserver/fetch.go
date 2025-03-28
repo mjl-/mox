@@ -8,11 +8,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/textproto"
 	"sort"
 	"strings"
-
-	"golang.org/x/exp/maps"
 
 	"github.com/mjl-/bstore"
 
@@ -230,7 +229,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 				checkVanished(store.UID(num))
 			}
 		}
-		vanishedUIDs = append(vanishedUIDs, maps.Keys(more)...)
+		vanishedUIDs = slices.AppendSeq(vanishedUIDs, maps.Keys(more))
 	})
 	// We are continuing without a lock, working off our snapshot of uids to process.
 

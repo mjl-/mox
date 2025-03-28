@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"mime"
 	"mime/multipart"
 	"net/textproto"
@@ -17,12 +18,9 @@ import (
 	"os"
 	"runtime/debug"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/exp/maps"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -689,9 +687,7 @@ func sendReportDomain(ctx context.Context, log mlog.Log, resolver dns.Resolver, 
 	report.PolicyPublished = last.PolicyPublished
 
 	// Process records in-order for testable results.
-	recstrs := maps.Keys(counts)
-	sort.Strings(recstrs)
-	for _, recstr := range recstrs {
+	for _, recstr := range slices.Sorted(maps.Keys(counts)) {
 		rc := counts[recstr]
 		rc.ReportRecord.Row.Count = rc.count
 		report.Records = append(report.Records, rc.ReportRecord)

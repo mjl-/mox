@@ -17,8 +17,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"golang.org/x/exp/maps"
 )
 
 var destdir string
@@ -69,8 +67,6 @@ func main() {
 	for _, files := range srcdirs {
 		sort.Strings(files)
 	}
-	dirs := maps.Keys(srcdirs)
-	sort.Strings(dirs)
 	var codeBuf bytes.Buffer
 	err := codeTemplate.Execute(&codeBuf, map[string]any{
 		"Dirs": srcdirs,
