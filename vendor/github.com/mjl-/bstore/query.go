@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"reflect"
 	"slices"
 
@@ -1232,4 +1233,28 @@ func (q *Query[T]) ForEach(fn func(value T) error) (rerr error) {
 	return q.foreachKey(false, true, func(bk []byte, v T) error {
 		return fn(v)
 	})
+}
+
+// All returns an iterator over all selected records.
+//
+// All automatically respositions the cursor when data is changed while iterating.
+// Changes to data aren't necessarily reflected in the yielded values. This can
+// happen when a sort order isn't executed using an index: All gathers and sorts (a
+// subset of) values before yielding them and does not reapply filtering and does
+// not necessarily yield the updated values.
+func (q *Query[T]) All() iter.Seq2[T, error] {
+	return func(yield func(T, error) bool) {
+		var stopped bool
+		err := q.ForEach(func(v T) error {
+			if !yield(v, nil) {
+				stopped = true
+				return StopForEach
+			}
+			return nil
+		})
+		if !stopped && err != nil {
+			var zero T
+			yield(zero, err)
+		}
+	}
 }
