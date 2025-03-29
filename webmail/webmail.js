@@ -3806,6 +3806,7 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 		}
 		window.open('msg/' + m.ID + '/viewtext/' + [0, ...path].join('.'), '_blank');
 	};
+	const cmdDownloadRaw = async () => { window.open('msg/' + m.ID + '/rawdl', '_blank'); };
 	const cmdViewAttachments = async () => {
 		if (attachments.length > 0) {
 			view(attachments[0]);
@@ -3956,6 +3957,10 @@ const newMsgView = (miv, msglistView, listMailboxes, possibleLabels, messageLoad
 				dom.clickbutton('Mute thread', clickCmd(msglistView.cmdMute, shortcuts)),
 				dom.clickbutton('Unmute thread', clickCmd(msglistView.cmdUnmute, shortcuts)),
 				dom.clickbutton('Open in new tab', clickCmd(cmdOpenNewTab, shortcuts)),
+				dom.clickbutton('Download raw original message', clickCmd(cmdDownloadRaw, shortcuts)),
+				dom.clickbutton('Export as ...', function click(e) {
+					popoverExport(e.target, '', [m.ID]);
+				}),
 				dom.clickbutton('Show raw original message in new tab', clickCmd(cmdOpenRaw, shortcuts)),
 				dom.clickbutton('Show currently displayed part as decoded text', clickCmd(cmdOpenRawPart, shortcuts)),
 				dom.clickbutton('Show internals in popup', clickCmd(cmdShowInternals, shortcuts)),
@@ -4538,7 +4543,9 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 				movePopover(e, listMailboxes(), effselected.map(miv => miv.messageitem.Message).filter(m => effselected.length === 1 || !sentMailboxID || m.MailboxID !== sentMailboxID || !otherMailbox(sentMailboxID)));
 			}), ' ', dom.clickbutton('Labels...', attr.title('Add/remove labels ...'), function click(e) {
 				labelsPopover(e, effselected.map(miv => miv.messageitem.Message), possibleLabels);
-			}), ' ', dom.clickbutton('Mark Not Junk', attr.title('Mark as not junk, causing this message to be used in spam classification of new incoming messages.'), clickCmd(cmdMarkNotJunk, shortcuts)), ' ', dom.clickbutton('Mark Read', clickCmd(cmdMarkRead, shortcuts)), ' ', dom.clickbutton('Mark Unread', clickCmd(cmdMarkUnread, shortcuts)), ' ', dom.clickbutton('Mute thread', clickCmd(cmdMute, shortcuts)), ' ', dom.clickbutton('Unmute thread', clickCmd(cmdUnmute, shortcuts))))));
+			}), ' ', dom.clickbutton('Mark Not Junk', attr.title('Mark as not junk, causing this message to be used in spam classification of new incoming messages.'), clickCmd(cmdMarkNotJunk, shortcuts)), ' ', dom.clickbutton('Mark Read', clickCmd(cmdMarkRead, shortcuts)), ' ', dom.clickbutton('Mark Unread', clickCmd(cmdMarkUnread, shortcuts)), ' ', dom.clickbutton('Mute thread', clickCmd(cmdMute, shortcuts)), ' ', dom.clickbutton('Unmute thread', clickCmd(cmdUnmute, shortcuts)), ' ', dom.clickbutton('Export as...', function click(e) {
+				popoverExport(e.target, '', effselected.map(miv => miv.messageitem.Message.ID));
+			})))));
 		}
 		setLocationHash();
 	};
@@ -5471,11 +5478,37 @@ const newMsglistView = (msgElem, activeMailbox, listMailboxes, setLocationHash, 
 	};
 	return mlv;
 };
-const popoverExport = (reference, mailboxName) => {
-	const removeExport = popover(reference, {}, dom.h1('Export ', mailboxName || 'all mailboxes'), dom.form(function submit() {
+// Export messages to maildir/mbox in tar/tgz/zip/no container. Either all
+// messages, messages in from 1 mailbox, or explicit message ids.
+const popoverExport = (reference, mailboxName, messageIDs) => {
+	let format;
+	let archive;
+	let mboxbtn;
+	const removeExport = popover(reference, {}, dom.h1('Export'), dom.form(function submit() {
 		// If we would remove the popup immediately, the form would be deleted too and never submitted.
 		window.setTimeout(() => removeExport(), 100);
-	}, attr.target('_blank'), attr.method('POST'), attr.action('export'), dom.input(attr.type('hidden'), attr.name('csrf'), attr.value(localStorageGet('webmailcsrftoken') || '')), dom.input(attr.type('hidden'), attr.name('mailbox'), attr.value(mailboxName)), dom.div(css('exportFields', { display: 'flex', flexDirection: 'column', gap: '.5ex' }), dom.div(dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('maildir'), attr.checked('')), ' Maildir'), ' ', dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('mbox')), ' Mbox')), dom.div(dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('tar')), ' Tar'), ' ', dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('tgz'), attr.checked('')), ' Tgz'), ' ', dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('zip')), ' Zip'), ' ', dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('none')), ' None')), dom.div(dom.label(dom.input(attr.type('checkbox'), attr.checked(''), attr.name('recursive'), attr.value('on')), ' Recursive')), dom.div(style({ marginTop: '1ex' }), dom.submitbutton('Export')))));
+	}, attr.target('_blank'), attr.method('POST'), attr.action('export'), dom.input(attr.type('hidden'), attr.name('csrf'), attr.value(localStorageGet('webmailcsrftoken') || '')), dom.input(attr.type('hidden'), attr.name('mailbox'), attr.value(mailboxName)), dom.input(attr.type('hidden'), attr.name('messageids'), attr.value((messageIDs || []).join(','))), format = dom.input(attr.type('hidden'), attr.name('format')), archive = dom.input(attr.type('hidden'), attr.name('archive')), dom.div(css('exportFields', { display: 'flex', flexDirection: 'column', gap: '.5ex' }), mailboxName ? dom.div(dom.label(dom.input(attr.type('checkbox'), attr.name('recursive'), attr.value('on'), function change(e) { mboxbtn.disabled = e.target.checked; }), ' Recursive')) : [], dom.div(!mailboxName && !messageIDs ? 'Mbox ' : mboxbtn = dom.submitbutton('Mbox', attr.title('Export as mbox file, not wrapped in an archive.'), function click() {
+		format.value = 'mbox';
+		archive.value = 'none';
+	}), ' ', dom.submitbutton('zip', function click() {
+		format.value = 'mbox';
+		archive.value = 'zip';
+	}), ' ', dom.submitbutton('tgz', function click() {
+		format.value = 'mbox';
+		archive.value = 'tgz';
+	}), ' ', dom.submitbutton('tar', function click() {
+		format.value = 'mbox';
+		archive.value = 'tar';
+	})), dom.div('Maildir ', dom.submitbutton('zip', function click() {
+		format.value = 'maildir';
+		archive.value = 'zip';
+	}), ' ', dom.submitbutton('tgz', function click() {
+		format.value = 'maildir';
+		archive.value = 'tgz';
+	}), ' ', dom.submitbutton('tar', function click() {
+		format.value = 'maildir';
+		archive.value = 'tar';
+	})))));
 };
 const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 	const plusbox = '⊞';
@@ -5559,8 +5592,8 @@ const newMailboxView = (xmb, mailboxlistView, otherMailbox) => {
 				await withStatus('Marking mailbox as special use', client.MailboxSetSpecialUse(mb));
 			};
 			popover(actionBtn, { transparent: true }, dom.div(style({ display: 'flex', flexDirection: 'column', gap: '.5ex' }), dom.div(dom.clickbutton('Archive', async function click() { await setUse((mb) => { mb.Archive = true; }); })), dom.div(dom.clickbutton('Draft', async function click() { await setUse((mb) => { mb.Draft = true; }); })), dom.div(dom.clickbutton('Junk', async function click() { await setUse((mb) => { mb.Junk = true; }); })), dom.div(dom.clickbutton('Sent', async function click() { await setUse((mb) => { mb.Sent = true; }); })), dom.div(dom.clickbutton('Trash', async function click() { await setUse((mb) => { mb.Trash = true; }); }))));
-		})), dom.div(dom.clickbutton('Export', function click() {
-			popoverExport(actionBtn, mbv.mailbox.Name);
+		})), dom.div(dom.clickbutton('Export as...', function click() {
+			popoverExport(actionBtn, mbv.mailbox.Name, null);
 			remove();
 		}))));
 	};
@@ -5806,9 +5839,9 @@ const newMailboxlistView = (msglistView, requestNewView, updatePageTitle, setLoc
 			}, fieldset = dom.fieldset(dom.label('Name ', name = dom.input(attr.required('yes'), focusPlaceholder('Lists/Go/Nuts'))), ' ', dom.submitbutton('Create'))));
 			remove();
 			name.focus();
-		})), dom.div(dom.clickbutton('Export', function click(e) {
+		})), dom.div(dom.clickbutton('Export as...', function click(e) {
 			const ref = e.target;
-			popoverExport(ref, '');
+			popoverExport(ref, '', null);
 			remove();
 		}))));
 	})), mailboxesElem));

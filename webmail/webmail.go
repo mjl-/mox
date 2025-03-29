@@ -618,25 +618,42 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 		err = zw.Close()
 		log.Check(err, "final write to zip file")
 
-	// Raw display of a message, as text/plain.
-	case len(t) == 2 && t[1] == "raw":
-		_, _, _, msgr, p, cleanup, ok := xprepare()
+	// Raw display or download of a message, as text/plain.
+	case len(t) == 2 && (t[1] == "raw" || t[1] == "rawdl"):
+		_, _, m, msgr, p, cleanup, ok := xprepare()
 		if !ok {
 			return
 		}
 		defer cleanup()
 
+		headers(false, false, false, false)
+
 		// We intentially use text/plain. We certainly don't want to return a format that
 		// browsers or users would think of executing. We do set the charset if available
 		// on the outer part. If present, we assume it may be relevant for other parts. If
 		// not, there is not much we could do better...
-		headers(false, false, false, false)
 		ct := "text/plain"
 		params := map[string]string{}
-		if charset := p.ContentTypeParams["charset"]; charset != "" {
+
+		if t[1] == "rawdl" {
+			ct = "message/rfc822"
+			if smtputf8, err := p.NeedsSMTPUTF8(); err != nil {
+				log.Errorx("checking for smtputf8 for content-type", err, slog.Int64("msgid", m.ID))
+				http.Error(w, "500 - server error - checking message for content-type: "+err.Error(), http.StatusInternalServerError)
+				return
+			} else if smtputf8 {
+				ct = "message/global"
+				params["charset"] = "utf-8"
+			}
+		} else if charset := p.ContentTypeParams["charset"]; charset != "" {
 			params["charset"] = charset
 		}
 		h.Set("Content-Type", mime.FormatMediaType(ct, params))
+		if t[1] == "rawdl" {
+			filename := fmt.Sprintf("email-%d-%s.eml", m.ID, m.Received.Format("20060102-150405"))
+			cd := mime.FormatMediaType("attachment", map[string]string{"filename": filename})
+			h.Set("Content-Disposition", cd)
+		}
 		h.Set("Cache-Control", "no-store, max-age=0")
 
 		_, err := io.Copy(w, &moxio.AtReader{R: msgr})

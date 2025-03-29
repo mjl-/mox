@@ -185,7 +185,7 @@ var (
 	msgText = Message{
 		From:    "mjl <mjl@mox.example>",
 		To:      "mox <mox@other.example>",
-		Subject: "text message",
+		Subject: "text message ☺",
 		Part:    Part{Type: "text/plain; charset=utf-8", Content: "the body"},
 	}
 	msgHTML = Message{
@@ -383,6 +383,8 @@ func TestWebmail(t *testing.T) {
 	ctTextNoCharset := [2]string{"Content-Type", "text/plain"}
 	ctJS := [2]string{"Content-Type", "application/javascript; charset=utf-8"}
 	ctJSON := [2]string{"Content-Type", "application/json; charset=utf-8"}
+	ctMessageRFC822 := [2]string{"Content-Type", "message/rfc822"}
+	ctMessageGlobal := [2]string{"Content-Type", "message/global; charset=utf-8"}
 
 	cookieOK := &http.Cookie{Name: "webmailsession", Value: sessionCookie.Value}
 	cookieBad := &http.Cookie{Name: "webmailsession", Value: "AAAAAAAAAAAAAAAAAAAAAA mjl"}
@@ -602,6 +604,10 @@ func TestWebmail(t *testing.T) {
 	testHTTP("GET", pathInboxAltRel+"/raw", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
 	testHTTPAuthREST("GET", pathInboxAltRel+"/raw", http.StatusOK, httpHeaders{ctTextNoCharset}, nil)
 	testHTTPAuthREST("GET", pathInboxText+"/raw", http.StatusOK, httpHeaders{ctText}, nil)
+	testHTTP("GET", pathInboxAltRel+"/rawdl", httpHeaders{}, http.StatusForbidden, nil, nil)
+	testHTTP("GET", pathInboxAltRel+"/rawdl", httpHeaders{hdrSessionBad}, http.StatusForbidden, nil, nil)
+	testHTTPAuthREST("GET", pathInboxAltRel+"/rawdl", http.StatusOK, httpHeaders{ctMessageRFC822}, nil)
+	testHTTPAuthREST("GET", pathInboxText+"/rawdl", http.StatusOK, httpHeaders{ctMessageGlobal}, nil)
 
 	// HTTP message: parsedmessage.js
 	testHTTP("GET", pathInboxMinimal+"/parsedmessage.js", httpHeaders{}, http.StatusForbidden, nil, nil)

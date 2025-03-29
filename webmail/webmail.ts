@@ -3059,6 +3059,7 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 		}
 		window.open('msg/'+m.ID+'/viewtext/'+[0, ...path].join('.'), '_blank')
 	}
+	const cmdDownloadRaw = async () => { window.open('msg/'+m.ID+'/rawdl', '_blank') }
 	const cmdViewAttachments = async () => {
 		if (attachments.length > 0) {
 			view(attachments[0])
@@ -3271,6 +3272,10 @@ const newMsgView = (miv: MsgitemView, msglistView: MsglistView, listMailboxes: l
 								dom.clickbutton('Mute thread', clickCmd(msglistView.cmdMute, shortcuts)),
 								dom.clickbutton('Unmute thread', clickCmd(msglistView.cmdUnmute, shortcuts)),
 								dom.clickbutton('Open in new tab', clickCmd(cmdOpenNewTab, shortcuts)),
+								dom.clickbutton('Download raw original message', clickCmd(cmdDownloadRaw, shortcuts)),
+								dom.clickbutton('Export as ...', function click(e: {target: HTMLElement}) {
+									popoverExport(e.target, '', [m.ID])
+								}),
 								dom.clickbutton('Show raw original message in new tab', clickCmd(cmdOpenRaw, shortcuts)),
 								dom.clickbutton('Show currently displayed part as decoded text', clickCmd(cmdOpenRawPart, shortcuts)),
 								dom.clickbutton('Show internals in popup', clickCmd(cmdShowInternals, shortcuts)),
@@ -4111,7 +4116,11 @@ const newMsglistView = (msgElem: HTMLElement, activeMailbox: () => api.Mailbox |
 							dom.clickbutton('Mark Read', clickCmd(cmdMarkRead, shortcuts)), ' ',
 							dom.clickbutton('Mark Unread', clickCmd(cmdMarkUnread, shortcuts)), ' ',
 							dom.clickbutton('Mute thread', clickCmd(cmdMute, shortcuts)), ' ',
-							dom.clickbutton('Unmute thread', clickCmd(cmdUnmute, shortcuts)),
+							dom.clickbutton('Unmute thread', clickCmd(cmdUnmute, shortcuts)), ' ',
+							dom.clickbutton('Export as...', function click(e: {target: HTMLElement}) {
+								popoverExport(e.target, '', effselected.map(miv => miv.messageitem.Message.ID))
+							}),
+
 						),
 					),
 				),
@@ -5096,9 +5105,14 @@ interface MailboxView {
 	setKeywords: (keywords: string[]) => void
 }
 
-const popoverExport = (reference: HTMLElement, mailboxName: string) => {
-	const removeExport=popover(reference, {},
-		dom.h1('Export ', mailboxName || 'all mailboxes'),
+// Export messages to maildir/mbox in tar/tgz/zip/no container. Either all
+// messages, messages in from 1 mailbox, or explicit message ids.
+const popoverExport = (reference: HTMLElement, mailboxName: string, messageIDs: number[] | null) => {
+	let format: HTMLInputElement
+	let archive: HTMLInputElement
+	let mboxbtn: HTMLButtonElement
+	const removeExport = popover(reference, {},
+		dom.h1('Export'),
 		dom.form(
 			function submit() {
 				// If we would remove the popup immediately, the form would be deleted too and never submitted.
@@ -5107,20 +5121,45 @@ const popoverExport = (reference: HTMLElement, mailboxName: string) => {
 			attr.target('_blank'), attr.method('POST'), attr.action('export'),
 			dom.input(attr.type('hidden'), attr.name('csrf'), attr.value(localStorageGet('webmailcsrftoken') || '')),
 			dom.input(attr.type('hidden'), attr.name('mailbox'), attr.value(mailboxName)),
+			dom.input(attr.type('hidden'), attr.name('messageids'), attr.value((messageIDs || []).join(','))),
+			format=dom.input(attr.type('hidden'), attr.name('format')),
+			archive=dom.input(attr.type('hidden'), attr.name('archive')),
 
 			dom.div(css('exportFields', {display: 'flex', flexDirection: 'column', gap: '.5ex'}),
+				mailboxName ? dom.div(dom.label(dom.input(attr.type('checkbox'), attr.name('recursive'), attr.value('on'), function change(e: {target: HTMLInputElement}) { mboxbtn.disabled = e.target.checked }), ' Recursive')) : [],
 				dom.div(
-					dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('maildir'), attr.checked('')), ' Maildir'), ' ',
-					dom.label(dom.input(attr.type('radio'), attr.name('format'), attr.value('mbox')), ' Mbox'),
+					!mailboxName && !messageIDs ? 'Mbox ' : mboxbtn=dom.submitbutton('Mbox', attr.title('Export as mbox file, not wrapped in an archive.'), function click() {
+						format.value = 'mbox'
+						archive.value = 'none'
+					}), ' ',
+					dom.submitbutton('zip', function click() {
+						format.value = 'mbox'
+						archive.value = 'zip'
+					}), ' ',
+					dom.submitbutton('tgz', function click() {
+						format.value = 'mbox'
+						archive.value = 'tgz'
+					}), ' ',
+					dom.submitbutton('tar', function click() {
+						format.value = 'mbox'
+						archive.value = 'tar'
+					}),
 				),
 				dom.div(
-					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('tar')), ' Tar'), ' ',
-					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('tgz'), attr.checked('')), ' Tgz'), ' ',
-					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('zip')), ' Zip'), ' ',
-					dom.label(dom.input(attr.type('radio'), attr.name('archive'), attr.value('none')), ' None'),
+					'Maildir ',
+					dom.submitbutton('zip', function click() {
+						format.value = 'maildir'
+						archive.value = 'zip'
+					}), ' ',
+					dom.submitbutton('tgz', function click() {
+						format.value = 'maildir'
+						archive.value = 'tgz'
+					}), ' ',
+					dom.submitbutton('tar', function click() {
+						format.value = 'maildir'
+						archive.value = 'tar'
+					}),
 				),
-				dom.div(dom.label(dom.input(attr.type('checkbox'), attr.checked(''), attr.name('recursive'), attr.value('on')), ' Recursive')),
-				dom.div(style({marginTop: '1ex'}), dom.submitbutton('Export')),
 			),
 		),
 	)
@@ -5270,8 +5309,8 @@ const newMailboxView = (xmb: api.Mailbox, mailboxlistView: MailboxlistView, othe
 					}),
 				),
 				dom.div(
-					dom.clickbutton('Export', function click() {
-						popoverExport(actionBtn, mbv.mailbox.Name)
+					dom.clickbutton('Export as...', function click() {
+						popoverExport(actionBtn, mbv.mailbox.Name, null)
 						remove()
 					}),
 				),
@@ -5609,9 +5648,9 @@ const newMailboxlistView = (msglistView: MsglistView, requestNewView: requestNew
 									}),
 								),
 								dom.div(
-									dom.clickbutton('Export', function click(e: MouseEvent) {
+									dom.clickbutton('Export as...', function click(e: MouseEvent) {
 										const ref = e.target! as HTMLElement
-										popoverExport(ref, '')
+										popoverExport(ref, '', null)
 										remove()
 									}),
 								),

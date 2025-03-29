@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +24,25 @@ func Export(log mlog.Log, accName string, w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// We
 	mailbox := r.FormValue("mailbox") // Empty means all.
+	messageIDstr := r.FormValue("messageids")
+	var messageIDs []int64
+	if messageIDstr != "" {
+		for _, s := range strings.Split(messageIDstr, ",") {
+			id, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("400 - bad request - bad message id %q: %v", s, err), http.StatusBadRequest)
+				return
+			}
+			messageIDs = append(messageIDs, id)
+		}
+	}
+	if mailbox != "" && len(messageIDs) > 0 {
+		http.Error(w, "400 - bad request - cannot specify both mailbox and message ids", http.StatusBadRequest)
+		return
+	}
+
 	format := r.FormValue("format")
 	archive := r.FormValue("archive")
 	recursive := r.FormValue("recursive") != ""
@@ -43,6 +62,10 @@ func Export(log mlog.Log, accName string, w http.ResponseWriter, r *http.Request
 		http.Error(w, "400 - bad request - archive none can only be used with non-recursive mbox", http.StatusBadRequest)
 		return
 	}
+	if len(messageIDs) > 0 && recursive {
+		http.Error(w, "400 - bad request - cannot export message ids recursively", http.StatusBadRequest)
+		return
+	}
 
 	acc, err := store.OpenAccount(log, accName, false)
 	if err != nil {
@@ -55,11 +78,15 @@ func Export(log mlog.Log, accName string, w http.ResponseWriter, r *http.Request
 		log.Check(err, "closing account")
 	}()
 
-	name := strings.ReplaceAll(mailbox, "/", "-")
-	if name == "" {
-		name = "all"
+	var name string
+	if mailbox != "" {
+		name = "-" + strings.ReplaceAll(mailbox, "/", "-")
+	} else if len(messageIDs) > 1 {
+		name = "-selection"
+	} else if len(messageIDs) == 0 {
+		name = "-all"
 	}
-	filename := fmt.Sprintf("mailexport-%s-%s", name, time.Now().Format("20060102-150405"))
+	filename := fmt.Sprintf("mailexport%s-%s", name, time.Now().Format("20060102-150405"))
 	filename += "." + format
 	var archiver store.Archiver
 	if archive == "none" {
@@ -90,7 +117,7 @@ func Export(log mlog.Log, accName string, w http.ResponseWriter, r *http.Request
 		log.Check(err, "exporting mail close")
 	}()
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
-	if err := store.ExportMessages(r.Context(), log, acc.DB, acc.Dir, archiver, format == "maildir", mailbox, recursive); err != nil {
+	if err := store.ExportMessages(r.Context(), log, acc.DB, acc.Dir, archiver, format == "maildir", mailbox, messageIDs, recursive); err != nil {
 		log.Errorx("exporting mail", err)
 	}
 }

@@ -41,8 +41,9 @@ func TestExport(t *testing.T) {
 	_, err = msgFile.Write([]byte(msg))
 	tcheck(t, err, "write message")
 
+	var m Message
 	acc.WithWLock(func() {
-		m := Message{Received: time.Now(), Size: int64(len(msg))}
+		m = Message{Received: time.Now(), Size: int64(len(msg))}
 		err = acc.DeliverMailbox(pkglog, "Inbox", &m, msgFile)
 		tcheck(t, err, "deliver")
 
@@ -53,9 +54,9 @@ func TestExport(t *testing.T) {
 
 	var maildirZip, maildirTar, mboxZip, mboxTar bytes.Buffer
 
-	archive := func(archiver Archiver, maildir bool) {
+	archive := func(archiver Archiver, mailbox string, messageIDs []int64, maildir bool) {
 		t.Helper()
-		err = ExportMessages(ctxbg, log, acc.DB, acc.Dir, archiver, maildir, "", true)
+		err = ExportMessages(ctxbg, log, acc.DB, acc.Dir, archiver, maildir, mailbox, messageIDs, true)
 		tcheck(t, err, "export messages")
 		err = archiver.Close()
 		tcheck(t, err, "archiver close")
@@ -64,12 +65,14 @@ func TestExport(t *testing.T) {
 	os.RemoveAll("../testdata/exportmaildir")
 	os.RemoveAll("../testdata/exportmbox")
 
-	archive(ZipArchiver{zip.NewWriter(&maildirZip)}, true)
-	archive(ZipArchiver{zip.NewWriter(&mboxZip)}, false)
-	archive(TarArchiver{tar.NewWriter(&maildirTar)}, true)
-	archive(TarArchiver{tar.NewWriter(&mboxTar)}, false)
-	archive(DirArchiver{filepath.FromSlash("../testdata/exportmaildir")}, true)
-	archive(DirArchiver{filepath.FromSlash("../testdata/exportmbox")}, false)
+	archive(ZipArchiver{zip.NewWriter(&maildirZip)}, "", nil, true)
+	archive(ZipArchiver{zip.NewWriter(&mboxZip)}, "", nil, false)
+	archive(TarArchiver{tar.NewWriter(&maildirTar)}, "", nil, true)
+	archive(TarArchiver{tar.NewWriter(&mboxTar)}, "", nil, false)
+	archive(TarArchiver{tar.NewWriter(&mboxTar)}, "Inbox", nil, false)
+	archive(TarArchiver{tar.NewWriter(&mboxTar)}, "", []int64{m.ID}, false)
+	archive(DirArchiver{filepath.FromSlash("../testdata/exportmaildir")}, "", nil, true)
+	archive(DirArchiver{filepath.FromSlash("../testdata/exportmbox")}, "", nil, false)
 
 	const defaultMailboxes = 6 // Inbox, Drafts, etc
 	if r, err := zip.NewReader(bytes.NewReader(maildirZip.Bytes()), int64(maildirZip.Len())); err != nil {

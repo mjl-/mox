@@ -72,7 +72,7 @@ func xcmdExport(mbox, single bool, args []string, c *cmd) {
 	}()
 
 	a := store.DirArchiver{Dir: dst}
-	err = store.ExportMessages(context.Background(), c.log, db, accountDir, a, !mbox, mailbox, !single)
+	err = store.ExportMessages(context.Background(), c.log, db, accountDir, a, !mbox, mailbox, nil, !single)
 	xcheckf(err, "exporting messages")
 	err = a.Close()
 	xcheckf(err, "closing archiver")

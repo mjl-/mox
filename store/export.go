@@ -122,15 +122,21 @@ func (a *MboxArchiver) Close() error {
 	return nil
 }
 
-// ExportMessages writes messages to archiver. Either in maildir format, or otherwise in
-// mbox. If mailboxOpt is empty, all mailboxes are exported, otherwise only the
-// named mailbox.
+// ExportMessages writes messages to archiver. Either in maildir format, or
+// otherwise in mbox. If mailboxOpt is non-empty, all messages from that mailbox
+// are exported. If messageIDsOpt is non-empty, only those message IDs are exported.
+// If both are empty, all mailboxes and all messages are exported. mailboxOpt
+// and messageIDsOpt cannot both be non-empty.
 //
 // Some errors are not fatal and result in skipped messages. In that happens, a
 // file "errors.txt" is added to the archive describing the errors. The goal is to
 // let users export (hopefully) most messages even in the face of errors.
-func ExportMessages(ctx context.Context, log mlog.Log, db *bstore.DB, accountDir string, archiver Archiver, maildir bool, mailboxOpt string, recursive bool) error {
+func ExportMessages(ctx context.Context, log mlog.Log, db *bstore.DB, accountDir string, archiver Archiver, maildir bool, mailboxOpt string, messageIDsOpt []int64, recursive bool) error {
 	// todo optimize: should prepare next file to add to archive (can be an mbox with many messages) while writing a file to the archive (which typically compresses, which takes time).
+
+	if mailboxOpt != "" && len(messageIDsOpt) != 0 {
+		return fmt.Errorf("cannot have both mailbox and message ids")
+	}
 
 	// Start transaction without closure, we are going to close it early, but don't
 	// want to deal with declaring many variables now to be able to assign them in a
@@ -153,33 +159,41 @@ func ExportMessages(ctx context.Context, log mlog.Log, db *bstore.DB, accountDir
 	// continue with useless work.
 	var errors string
 
-	// Process mailboxes sorted by name, so submaildirs come after their parent.
-	prefix := mailboxOpt + "/"
-	var trimPrefix string
-	if mailboxOpt != "" {
-		// If exporting a specific mailbox, trim its parent path from stored file names.
-		trimPrefix = mox.ParentMailboxName(mailboxOpt) + "/"
-	}
-	q := bstore.QueryTx[Mailbox](tx)
-	q.FilterEqual("Expunged", false)
-	q.FilterFn(func(mb Mailbox) bool {
-		return mailboxOpt == "" || mb.Name == mailboxOpt || recursive && strings.HasPrefix(mb.Name, prefix)
-	})
-	q.SortAsc("Name")
-	err = q.ForEach(func(mb Mailbox) error {
-		mailboxName := mb.Name
-		if trimPrefix != "" {
-			mailboxName = strings.TrimPrefix(mailboxName, trimPrefix)
-		}
-		errmsgs, err := exportMailbox(log, tx, accountDir, mb.ID, mailboxName, archiver, maildir, start)
+	if messageIDsOpt != nil {
+		var err error
+		errors, err = exportMessages(log, tx, accountDir, messageIDsOpt, archiver, maildir, start)
 		if err != nil {
-			return err
+			return fmt.Errorf("exporting messages: %v", err)
 		}
-		errors += errmsgs
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("query mailboxes: %w", err)
+	} else {
+		// Process mailboxes sorted by name, so submaildirs come after their parent.
+		prefix := mailboxOpt + "/"
+		var trimPrefix string
+		if mailboxOpt != "" {
+			// If exporting a specific mailbox, trim its parent path from stored file names.
+			trimPrefix = mox.ParentMailboxName(mailboxOpt) + "/"
+		}
+		q := bstore.QueryTx[Mailbox](tx)
+		q.FilterEqual("Expunged", false)
+		q.FilterFn(func(mb Mailbox) bool {
+			return mailboxOpt == "" || mb.Name == mailboxOpt || recursive && strings.HasPrefix(mb.Name, prefix)
+		})
+		q.SortAsc("Name")
+		err = q.ForEach(func(mb Mailbox) error {
+			mailboxName := mb.Name
+			if trimPrefix != "" {
+				mailboxName = strings.TrimPrefix(mailboxName, trimPrefix)
+			}
+			errmsgs, err := exportMailbox(log, tx, accountDir, mb.ID, mailboxName, archiver, maildir, start)
+			if err != nil {
+				return err
+			}
+			errors += errmsgs
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("query mailboxes: %w", err)
+		}
 	}
 
 	if errors != "" {
@@ -201,337 +215,395 @@ func ExportMessages(ctx context.Context, log mlog.Log, db *bstore.DB, accountDir
 	return nil
 }
 
+func exportMessages(log mlog.Log, tx *bstore.Tx, accountDir string, messageIDs []int64, archiver Archiver, maildir bool, start time.Time) (string, error) {
+	mbe, err := newMailboxExport(log, "Export", accountDir, archiver, start, maildir)
+	if err != nil {
+		return "", err
+	}
+	defer mbe.Cleanup()
+
+	for _, id := range messageIDs {
+		m := Message{ID: id}
+		if err := tx.Get(&m); err != nil {
+			mbe.errors += fmt.Sprintf("get message with id %d: %v\n", id, err)
+			continue
+		} else if m.Expunged {
+			mbe.errors += fmt.Sprintf("message with id %d is expunged\n", id)
+			continue
+		}
+		if err := mbe.ExportMessage(m); err != nil {
+			return mbe.errors, err
+		}
+	}
+	err = mbe.Finish()
+	return mbe.errors, err
+}
+
 func exportMailbox(log mlog.Log, tx *bstore.Tx, accountDir string, mailboxID int64, mailboxName string, archiver Archiver, maildir bool, start time.Time) (string, error) {
-	var errors string
-
-	var mboxtmp *os.File
-	var mboxwriter *bufio.Writer
-	defer func() {
-		if mboxtmp != nil {
-			CloseRemoveTempFile(log, mboxtmp, "mbox")
-		}
-	}()
-
-	// For dovecot-keyword-style flags not in standard maildir.
-	maildirFlags := map[string]int{}
-	var maildirFlaglist []string
-	maildirFlag := func(flag string) string {
-		i, ok := maildirFlags[flag]
-		if !ok {
-			if len(maildirFlags) >= 26 {
-				// Max 26 flag characters.
-				return ""
-			}
-			i = len(maildirFlags)
-			maildirFlags[flag] = i
-			maildirFlaglist = append(maildirFlaglist, flag)
-		}
-		return string(rune('a' + i))
+	mbe, err := newMailboxExport(log, mailboxName, accountDir, archiver, start, maildir)
+	if err != nil {
+		return "", err
 	}
-
-	finishMailbox := func() error {
-		if maildir {
-			if len(maildirFlags) == 0 {
-				return nil
-			}
-
-			var b bytes.Buffer
-			for i, flag := range maildirFlaglist {
-				if _, err := fmt.Fprintf(&b, "%d %s\n", i, flag); err != nil {
-					return err
-				}
-			}
-			w, err := archiver.Create(mailboxName+"/dovecot-keywords", int64(b.Len()), start)
-			if err != nil {
-				return fmt.Errorf("adding dovecot-keywords: %v", err)
-			}
-			if _, err := w.Write(b.Bytes()); err != nil {
-				xerr := w.Close()
-				log.Check(xerr, "closing dovecot-keywords file after closing")
-				return fmt.Errorf("writing dovecot-keywords: %v", err)
-			}
-			maildirFlags = map[string]int{}
-			maildirFlaglist = nil
-			return w.Close()
-		}
-
-		if err := mboxwriter.Flush(); err != nil {
-			return fmt.Errorf("flush mbox writer: %v", err)
-		}
-		fi, err := mboxtmp.Stat()
-		if err != nil {
-			return fmt.Errorf("stat temporary mbox file: %v", err)
-		}
-		if _, err := mboxtmp.Seek(0, 0); err != nil {
-			return fmt.Errorf("seek to start of temporary mbox file")
-		}
-		w, err := archiver.Create(mailboxName+".mbox", fi.Size(), fi.ModTime())
-		if err != nil {
-			return fmt.Errorf("add mbox to archive: %v", err)
-		}
-		if _, err := io.Copy(w, mboxtmp); err != nil {
-			xerr := w.Close()
-			log.Check(xerr, "closing mbox message file after error")
-			return fmt.Errorf("copying temp mbox file to archive: %v", err)
-		}
-		if err := w.Close(); err != nil {
-			return fmt.Errorf("closing message file: %v", err)
-		}
-		name := mboxtmp.Name()
-		err = mboxtmp.Close()
-		log.Check(err, "closing temporary mbox file")
-		err = os.Remove(name)
-		log.Check(err, "removing temporary mbox file", slog.String("path", name))
-		mboxwriter = nil
-		mboxtmp = nil
-		return nil
-	}
-
-	exportMessage := func(m Message) error {
-		mp := filepath.Join(accountDir, "msg", MessagePath(m.ID))
-		var mr io.ReadCloser
-		if m.Size == int64(len(m.MsgPrefix)) {
-			mr = io.NopCloser(bytes.NewReader(m.MsgPrefix))
-		} else {
-			mf, err := os.Open(mp)
-			if err != nil {
-				errors += fmt.Sprintf("open message file for id %d, path %s: %v (message skipped)\n", m.ID, mp, err)
-				return nil
-			}
-			defer func() {
-				err := mf.Close()
-				log.Check(err, "closing message file after export")
-			}()
-			st, err := mf.Stat()
-			if err != nil {
-				errors += fmt.Sprintf("stat message file for id %d, path %s: %v (message skipped)\n", m.ID, mp, err)
-				return nil
-			}
-			size := st.Size() + int64(len(m.MsgPrefix))
-			if size != m.Size {
-				errors += fmt.Sprintf("message size mismatch for message id %d, database has %d, size is %d+%d=%d, using calculated size\n", m.ID, m.Size, len(m.MsgPrefix), st.Size(), size)
-			}
-			mr = FileMsgReader(m.MsgPrefix, mf)
-		}
-
-		if maildir {
-			p := mailboxName
-			if m.Flags.Seen {
-				p = filepath.Join(p, "cur")
-			} else {
-				p = filepath.Join(p, "new")
-			}
-			name := fmt.Sprintf("%d.%d.mox:2,", m.Received.Unix(), m.ID)
-
-			// Standard flags. May need to be sorted.
-			if m.Flags.Draft {
-				name += "D"
-			}
-			if m.Flags.Flagged {
-				name += "F"
-			}
-			if m.Flags.Answered {
-				name += "R"
-			}
-			if m.Flags.Seen {
-				name += "S"
-			}
-			if m.Flags.Deleted {
-				name += "T"
-			}
-
-			// Non-standard flag. We set them with a dovecot-keywords file.
-			if m.Flags.Forwarded {
-				name += maildirFlag("$Forwarded")
-			}
-			if m.Flags.Junk {
-				name += maildirFlag("$Junk")
-			}
-			if m.Flags.Notjunk {
-				name += maildirFlag("$NotJunk")
-			}
-			if m.Flags.Phishing {
-				name += maildirFlag("$Phishing")
-			}
-			if m.Flags.MDNSent {
-				name += maildirFlag("$MDNSent")
-			}
-
-			p = filepath.Join(p, name)
-
-			// We store messages with \r\n, maildir needs without. But we need to know the
-			// final size. So first convert, then create file with size, and write from buffer.
-			// todo: for large messages, we should go through a temporary file instead of memory.
-			var dst bytes.Buffer
-			r := bufio.NewReader(mr)
-			for {
-				line, rerr := r.ReadBytes('\n')
-				if rerr != io.EOF && rerr != nil {
-					errors += fmt.Sprintf("reading from message for id %d: %v (message skipped)\n", m.ID, rerr)
-					return nil
-				}
-				if len(line) > 0 {
-					if bytes.HasSuffix(line, []byte("\r\n")) {
-						line = line[:len(line)-1]
-						line[len(line)-1] = '\n'
-					}
-					if _, err := dst.Write(line); err != nil {
-						return fmt.Errorf("writing message: %v", err)
-					}
-				}
-				if rerr == io.EOF {
-					break
-				}
-			}
-			size := int64(dst.Len())
-			w, err := archiver.Create(p, size, m.Received)
-			if err != nil {
-				return fmt.Errorf("adding message to archive: %v", err)
-			}
-			if _, err := io.Copy(w, &dst); err != nil {
-				xerr := w.Close()
-				log.Check(xerr, "closing message")
-				return fmt.Errorf("copying message to archive: %v", err)
-			}
-			return w.Close()
-		}
-
-		mailfrom := "mox"
-		if m.MailFrom != "" {
-			mailfrom = m.MailFrom
-		}
-		// ../rfc/4155:80
-		if _, err := fmt.Fprintf(mboxwriter, "From %s %s\n", mailfrom, m.Received.Format(time.ANSIC)); err != nil {
-			return fmt.Errorf("write message line to mbox temp file: %v", err)
-		}
-
-		// Write message flags in the three headers that mbox consumers may (or may not) understand.
-		if m.Seen {
-			if _, err := fmt.Fprintf(mboxwriter, "Status: R\n"); err != nil {
-				return fmt.Errorf("writing status header: %v", err)
-			}
-		}
-		xstatus := ""
-		if m.Answered {
-			xstatus += "A"
-		}
-		if m.Flagged {
-			xstatus += "F"
-		}
-		if m.Draft {
-			xstatus += "T"
-		}
-		if m.Deleted {
-			xstatus += "D"
-		}
-		if xstatus != "" {
-			if _, err := fmt.Fprintf(mboxwriter, "X-Status: %s\n", xstatus); err != nil {
-				return fmt.Errorf("writing x-status header: %v", err)
-			}
-		}
-		var xkeywords []string
-		if m.Forwarded {
-			xkeywords = append(xkeywords, "$Forwarded")
-		}
-		if m.Junk && !m.Notjunk {
-			xkeywords = append(xkeywords, "$Junk")
-		}
-		if m.Notjunk && !m.Junk {
-			xkeywords = append(xkeywords, "$NotJunk")
-		}
-		if m.Phishing {
-			xkeywords = append(xkeywords, "$Phishing")
-		}
-		if m.MDNSent {
-			xkeywords = append(xkeywords, "$MDNSent")
-		}
-		if len(xkeywords) > 0 {
-			if _, err := fmt.Fprintf(mboxwriter, "X-Keywords: %s\n", strings.Join(xkeywords, ",")); err != nil {
-				return fmt.Errorf("writing x-keywords header: %v", err)
-			}
-		}
-
-		// ../rfc/4155:365 todo: rewrite messages to be 7-bit. still useful nowadays?
-
-		header := true
-		r := bufio.NewReader(mr)
-		for {
-			line, rerr := r.ReadBytes('\n')
-			if rerr != io.EOF && rerr != nil {
-				return fmt.Errorf("reading message: %v", rerr)
-			}
-			if len(line) > 0 {
-				// ../rfc/4155:354
-				if bytes.HasSuffix(line, []byte("\r\n")) {
-					line = line[:len(line)-1]
-					line[len(line)-1] = '\n'
-				}
-				if header && len(line) == 1 {
-					header = false
-				}
-				if header {
-					// Skip any previously stored flag-holding or now incorrect content-length headers.
-					// This assumes these headers are just a single line.
-					switch strings.ToLower(string(bytes.SplitN(line, []byte(":"), 2)[0])) {
-					case "status", "x-status", "x-keywords", "content-length":
-						continue
-					}
-				}
-				// ../rfc/4155:119
-				if bytes.HasPrefix(bytes.TrimLeft(line, ">"), []byte("From ")) {
-					if _, err := fmt.Fprint(mboxwriter, ">"); err != nil {
-						return fmt.Errorf("writing escaping >: %v", err)
-					}
-				}
-				if _, err := mboxwriter.Write(line); err != nil {
-					return fmt.Errorf("writing line: %v", err)
-				}
-			}
-			if rerr == io.EOF {
-				break
-			}
-		}
-		// ../rfc/4155:75
-		if _, err := fmt.Fprint(mboxwriter, "\n"); err != nil {
-			return fmt.Errorf("writing end of message newline: %v", err)
-		}
-		return nil
-	}
-
-	if maildir {
-		// Create the directories that show this is a maildir.
-		if _, err := archiver.Create(mailboxName+"/new/", 0, start); err != nil {
-			return errors, fmt.Errorf("adding maildir new directory: %v", err)
-		}
-		if _, err := archiver.Create(mailboxName+"/cur/", 0, start); err != nil {
-			return errors, fmt.Errorf("adding maildir cur directory: %v", err)
-		}
-		if _, err := archiver.Create(mailboxName+"/tmp/", 0, start); err != nil {
-			return errors, fmt.Errorf("adding maildir tmp directory: %v", err)
-		}
-	} else {
-		var err error
-		mboxtmp, err = os.CreateTemp("", "mox-mail-export-mbox")
-		if err != nil {
-			return errors, fmt.Errorf("creating temp mbox file: %v", err)
-		}
-		mboxwriter = bufio.NewWriter(mboxtmp)
-	}
+	defer mbe.Cleanup()
 
 	// Fetch all messages for mailbox.
 	q := bstore.QueryTx[Message](tx)
 	q.FilterNonzero(Message{MailboxID: mailboxID})
 	q.FilterEqual("Expunged", false)
 	q.SortAsc("Received", "ID")
-	err := q.ForEach(func(m Message) error {
-		return exportMessage(m)
+	err = q.ForEach(func(m Message) error {
+		return mbe.ExportMessage(m)
 	})
 	if err != nil {
-		return errors, err
+		return mbe.errors, err
 	}
-	if err := finishMailbox(); err != nil {
-		return errors, err
+	err = mbe.Finish()
+	return mbe.errors, err
+}
+
+// For dovecot-keyword-style flags not in standard maildir.
+type maildirFlags struct {
+	Map  map[string]int
+	List []string
+}
+
+func newMaildirFlags() *maildirFlags {
+	return &maildirFlags{map[string]int{}, nil}
+}
+
+func (f *maildirFlags) Flag(flag string) string {
+	i, ok := f.Map[flag]
+	if !ok {
+		if len(f.Map) >= 26 {
+			// Max 26 flag characters.
+			return ""
+		}
+		i = len(f.Map)
+		f.Map[flag] = i
+		f.List = append(f.List, flag)
+	}
+	return string(rune('a' + i))
+}
+
+func (f *maildirFlags) Empty() bool {
+	return len(f.Map) == 0
+}
+
+type mailboxExport struct {
+	log          mlog.Log
+	mailboxName  string
+	accountDir   string
+	archiver     Archiver
+	start        time.Time
+	maildir      bool
+	maildirFlags *maildirFlags
+	mboxtmp      *os.File
+	mboxwriter   *bufio.Writer
+	errors       string
+}
+
+func (e *mailboxExport) Cleanup() {
+	if e.mboxtmp != nil {
+		CloseRemoveTempFile(e.log, e.mboxtmp, "mbox")
+	}
+}
+
+func newMailboxExport(log mlog.Log, mailboxName, accountDir string, archiver Archiver, start time.Time, maildir bool) (*mailboxExport, error) {
+	mbe := mailboxExport{
+		log:         log,
+		mailboxName: mailboxName,
+		accountDir:  accountDir,
+		archiver:    archiver,
+		start:       start,
+		maildir:     maildir,
+	}
+	if maildir {
+		// Create the directories that show this is a maildir.
+		mbe.maildirFlags = newMaildirFlags()
+		if _, err := archiver.Create(mailboxName+"/new/", 0, start); err != nil {
+			return nil, fmt.Errorf("adding maildir new directory: %v", err)
+		}
+		if _, err := archiver.Create(mailboxName+"/cur/", 0, start); err != nil {
+			return nil, fmt.Errorf("adding maildir cur directory: %v", err)
+		}
+		if _, err := archiver.Create(mailboxName+"/tmp/", 0, start); err != nil {
+			return nil, fmt.Errorf("adding maildir tmp directory: %v", err)
+		}
+	} else {
+		var err error
+		mbe.mboxtmp, err = os.CreateTemp("", "mox-mail-export-mbox")
+		if err != nil {
+			return nil, fmt.Errorf("creating temp mbox file: %v", err)
+		}
+		mbe.mboxwriter = bufio.NewWriter(mbe.mboxtmp)
 	}
 
-	return errors, nil
+	return &mbe, nil
+}
+
+func (e *mailboxExport) ExportMessage(m Message) error {
+	mp := filepath.Join(e.accountDir, "msg", MessagePath(m.ID))
+	var mr io.ReadCloser
+	if m.Size == int64(len(m.MsgPrefix)) {
+		mr = io.NopCloser(bytes.NewReader(m.MsgPrefix))
+	} else {
+		mf, err := os.Open(mp)
+		if err != nil {
+			e.errors += fmt.Sprintf("open message file for id %d, path %s: %v (message skipped)\n", m.ID, mp, err)
+			return nil
+		}
+		defer func() {
+			err := mf.Close()
+			e.log.Check(err, "closing message file after export")
+		}()
+		st, err := mf.Stat()
+		if err != nil {
+			e.errors += fmt.Sprintf("stat message file for id %d, path %s: %v (message skipped)\n", m.ID, mp, err)
+			return nil
+		}
+		size := st.Size() + int64(len(m.MsgPrefix))
+		if size != m.Size {
+			e.errors += fmt.Sprintf("message size mismatch for message id %d, database has %d, size is %d+%d=%d, using calculated size\n", m.ID, m.Size, len(m.MsgPrefix), st.Size(), size)
+		}
+		mr = FileMsgReader(m.MsgPrefix, mf)
+	}
+
+	if e.maildir {
+		p := e.mailboxName
+		if m.Flags.Seen {
+			p = filepath.Join(p, "cur")
+		} else {
+			p = filepath.Join(p, "new")
+		}
+		name := fmt.Sprintf("%d.%d.mox:2,", m.Received.Unix(), m.ID)
+
+		// Standard flags. May need to be sorted.
+		if m.Flags.Draft {
+			name += "D"
+		}
+		if m.Flags.Flagged {
+			name += "F"
+		}
+		if m.Flags.Answered {
+			name += "R"
+		}
+		if m.Flags.Seen {
+			name += "S"
+		}
+		if m.Flags.Deleted {
+			name += "T"
+		}
+
+		// Non-standard flag. We set them with a dovecot-keywords file.
+		if m.Flags.Forwarded {
+			name += e.maildirFlags.Flag("$Forwarded")
+		}
+		if m.Flags.Junk {
+			name += e.maildirFlags.Flag("$Junk")
+		}
+		if m.Flags.Notjunk {
+			name += e.maildirFlags.Flag("$NotJunk")
+		}
+		if m.Flags.Phishing {
+			name += e.maildirFlags.Flag("$Phishing")
+		}
+		if m.Flags.MDNSent {
+			name += e.maildirFlags.Flag("$MDNSent")
+		}
+
+		p = filepath.Join(p, name)
+
+		// We store messages with \r\n, maildir needs without. But we need to know the
+		// final size. So first convert, then create file with size, and write from buffer.
+		// todo: for large messages, we should go through a temporary file instead of memory.
+		var dst bytes.Buffer
+		r := bufio.NewReader(mr)
+		for {
+			line, rerr := r.ReadBytes('\n')
+			if rerr != io.EOF && rerr != nil {
+				e.errors += fmt.Sprintf("reading from message for id %d: %v (message skipped)\n", m.ID, rerr)
+				return nil
+			}
+			if len(line) > 0 {
+				if bytes.HasSuffix(line, []byte("\r\n")) {
+					line = line[:len(line)-1]
+					line[len(line)-1] = '\n'
+				}
+				if _, err := dst.Write(line); err != nil {
+					return fmt.Errorf("writing message: %v", err)
+				}
+			}
+			if rerr == io.EOF {
+				break
+			}
+		}
+		size := int64(dst.Len())
+		w, err := e.archiver.Create(p, size, m.Received)
+		if err != nil {
+			return fmt.Errorf("adding message to archive: %v", err)
+		}
+		if _, err := io.Copy(w, &dst); err != nil {
+			xerr := w.Close()
+			e.log.Check(xerr, "closing message")
+			return fmt.Errorf("copying message to archive: %v", err)
+		}
+		return w.Close()
+	}
+
+	mailfrom := "mox"
+	if m.MailFrom != "" {
+		mailfrom = m.MailFrom
+	}
+	// ../rfc/4155:80
+	if _, err := fmt.Fprintf(e.mboxwriter, "From %s %s\n", mailfrom, m.Received.Format(time.ANSIC)); err != nil {
+		return fmt.Errorf("write message line to mbox temp file: %v", err)
+	}
+
+	// Write message flags in the three headers that mbox consumers may (or may not) understand.
+	if m.Seen {
+		if _, err := fmt.Fprintf(e.mboxwriter, "Status: R\n"); err != nil {
+			return fmt.Errorf("writing status header: %v", err)
+		}
+	}
+	xstatus := ""
+	if m.Answered {
+		xstatus += "A"
+	}
+	if m.Flagged {
+		xstatus += "F"
+	}
+	if m.Draft {
+		xstatus += "T"
+	}
+	if m.Deleted {
+		xstatus += "D"
+	}
+	if xstatus != "" {
+		if _, err := fmt.Fprintf(e.mboxwriter, "X-Status: %s\n", xstatus); err != nil {
+			return fmt.Errorf("writing x-status header: %v", err)
+		}
+	}
+	var xkeywords []string
+	if m.Forwarded {
+		xkeywords = append(xkeywords, "$Forwarded")
+	}
+	if m.Junk && !m.Notjunk {
+		xkeywords = append(xkeywords, "$Junk")
+	}
+	if m.Notjunk && !m.Junk {
+		xkeywords = append(xkeywords, "$NotJunk")
+	}
+	if m.Phishing {
+		xkeywords = append(xkeywords, "$Phishing")
+	}
+	if m.MDNSent {
+		xkeywords = append(xkeywords, "$MDNSent")
+	}
+	if len(xkeywords) > 0 {
+		if _, err := fmt.Fprintf(e.mboxwriter, "X-Keywords: %s\n", strings.Join(xkeywords, ",")); err != nil {
+			return fmt.Errorf("writing x-keywords header: %v", err)
+		}
+	}
+
+	// ../rfc/4155:365 todo: rewrite messages to be 7-bit. still useful nowadays?
+
+	header := true
+	r := bufio.NewReader(mr)
+	for {
+		line, rerr := r.ReadBytes('\n')
+		if rerr != io.EOF && rerr != nil {
+			return fmt.Errorf("reading message: %v", rerr)
+		}
+		if len(line) > 0 {
+			// ../rfc/4155:354
+			if bytes.HasSuffix(line, []byte("\r\n")) {
+				line = line[:len(line)-1]
+				line[len(line)-1] = '\n'
+			}
+			if header && len(line) == 1 {
+				header = false
+			}
+			if header {
+				// Skip any previously stored flag-holding or now incorrect content-length headers.
+				// This assumes these headers are just a single line.
+				switch strings.ToLower(string(bytes.SplitN(line, []byte(":"), 2)[0])) {
+				case "status", "x-status", "x-keywords", "content-length":
+					continue
+				}
+			}
+			// ../rfc/4155:119
+			if bytes.HasPrefix(bytes.TrimLeft(line, ">"), []byte("From ")) {
+				if _, err := fmt.Fprint(e.mboxwriter, ">"); err != nil {
+					return fmt.Errorf("writing escaping >: %v", err)
+				}
+			}
+			if _, err := e.mboxwriter.Write(line); err != nil {
+				return fmt.Errorf("writing line: %v", err)
+			}
+		}
+		if rerr == io.EOF {
+			break
+		}
+	}
+	// ../rfc/4155:75
+	if _, err := fmt.Fprint(e.mboxwriter, "\n"); err != nil {
+		return fmt.Errorf("writing end of message newline: %v", err)
+	}
+	return nil
+}
+
+func (e *mailboxExport) Finish() error {
+	if e.maildir {
+		if e.maildirFlags.Empty() {
+			return nil
+		}
+
+		var b bytes.Buffer
+		for i, flag := range e.maildirFlags.List {
+			if _, err := fmt.Fprintf(&b, "%d %s\n", i, flag); err != nil {
+				return err
+			}
+		}
+		w, err := e.archiver.Create(e.mailboxName+"/dovecot-keywords", int64(b.Len()), e.start)
+		if err != nil {
+			return fmt.Errorf("adding dovecot-keywords: %v", err)
+		}
+		if _, err := w.Write(b.Bytes()); err != nil {
+			xerr := w.Close()
+			e.log.Check(xerr, "closing dovecot-keywords file after closing")
+			return fmt.Errorf("writing dovecot-keywords: %v", err)
+		}
+		return w.Close()
+	}
+
+	if err := e.mboxwriter.Flush(); err != nil {
+		return fmt.Errorf("flush mbox writer: %v", err)
+	}
+	fi, err := e.mboxtmp.Stat()
+	if err != nil {
+		return fmt.Errorf("stat temporary mbox file: %v", err)
+	}
+	if _, err := e.mboxtmp.Seek(0, 0); err != nil {
+		return fmt.Errorf("seek to start of temporary mbox file")
+	}
+	w, err := e.archiver.Create(e.mailboxName+".mbox", fi.Size(), fi.ModTime())
+	if err != nil {
+		return fmt.Errorf("add mbox to archive: %v", err)
+	}
+	if _, err := io.Copy(w, e.mboxtmp); err != nil {
+		xerr := w.Close()
+		e.log.Check(xerr, "closing mbox message file after error")
+		return fmt.Errorf("copying temp mbox file to archive: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("closing message file: %v", err)
+	}
+	name := e.mboxtmp.Name()
+	err = e.mboxtmp.Close()
+	e.log.Check(err, "closing temporary mbox file")
+	err = os.Remove(name)
+	e.log.Check(err, "removing temporary mbox file", slog.String("path", name))
+	e.mboxwriter = nil
+	e.mboxtmp = nil
+	return nil
 }
