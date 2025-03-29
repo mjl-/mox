@@ -444,6 +444,42 @@ Content-Transfer-Encoding: Quoted-printable
 	tc.client.Unselect()
 	tc.client.Examine("inbox")
 
+	// Preview
+	preview := "Hello Joe, do you think we can meet at 3:30 tomorrow?"
+	tc.transactf("ok", "fetch 1 preview")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchPreview{Preview: &preview}}})
+
+	tc.transactf("ok", "fetch 1 preview (lazy)")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchPreview{Preview: &preview}}})
+
+	// On-demand preview and saving on first request.
+	err = tc.account.DB.Write(ctxbg, func(tx *bstore.Tx) error {
+		m := store.Message{ID: 1}
+		err := tx.Get(&m)
+		tcheck(t, err, "get message")
+		if m.UID != 1 {
+			t.Fatalf("uid %d instead of 1", m.UID)
+		}
+		m.Preview = nil
+		err = tx.Update(&m)
+		tcheck(t, err, "remove preview from message")
+		return nil
+	})
+	tcheck(t, err, "remove preview from database")
+
+	tc.transactf("ok", "fetch 1 preview")
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchPreview{Preview: &preview}}})
+	m := store.Message{ID: 1}
+	err = tc.account.DB.Get(ctxbg, &m)
+	tcheck(t, err, "get message")
+	if m.Preview == nil {
+		t.Fatalf("preview missing")
+	} else if *m.Preview != preview+"\n" {
+		t.Fatalf("got preview %q, expected %q", *m.Preview, preview+"\n")
+	}
+
+	tc.transactf("bad", "fetch 1 preview (bogus)")
+
 	// Start a second session. Use it to remove the message. First session should still
 	// be able to access the messages.
 	tc2 := startNoSwitchboard(t)
@@ -465,16 +501,6 @@ Content-Transfer-Encoding: Quoted-printable
 
 	tc.transactf("ok", "fetch 1 rfc822")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, rfc1}})
-
-	// Preview
-	preview := "Hello Joe, do you think we can meet at 3:30 tomorrow?"
-	tc.transactf("ok", "fetch 1 preview")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchPreview{Preview: &preview}}})
-
-	tc.transactf("ok", "fetch 1 preview (lazy)")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, imapclient.FetchPreview{Preview: &preview}}})
-
-	tc.transactf("bad", "fetch 1 preview (bogus)")
 
 	tc.client.Logout()
 }

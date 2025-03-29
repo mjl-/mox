@@ -143,7 +143,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 	var uids []store.UID
 	var vanishedUIDs []store.UID
 
-	cmd := &fetchCmd{conn: c, isUID: isUID, hasChangedSince: haveChangedSince}
+	cmd := &fetchCmd{conn: c, isUID: isUID, hasChangedSince: haveChangedSince, newPreviews: map[store.UID]string{}}
 
 	defer func() {
 		if cmd.rtx == nil {

@@ -569,7 +569,8 @@ type Message struct {
 	// through the IMAP fetch attribute "PREVIEW" (without "LAZY")), and stored with
 	// the message at that time.
 	// The preview is at most 256 characters (can be more bytes), with detected quoted
-	// text replaced with "[..."].
+	// text replaced with "[...]". Previews typically end with a newline, callers may
+	// want to strip whitespace.
 	Preview *string
 
 	// ParsedBuf message structure. Currently saved as JSON of message.Part because bstore
