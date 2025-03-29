@@ -333,7 +333,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# matching behaviour. (optional)
 				Port: 0
 
-				# Path to serve requests on. (optional)
+				# Path to serve requests on. Should end with a slash, related to cookie paths.
+				# (optional)
 				Path:
 
 				# If set, X-Forwarded-* headers are used for the remote IP address for rate
@@ -349,7 +350,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# matching behaviour. (optional)
 				Port: 0
 
-				# Path to serve requests on. (optional)
+				# Path to serve requests on. Should end with a slash, related to cookie paths.
+				# (optional)
 				Path:
 
 				# If set, X-Forwarded-* headers are used for the remote IP address for rate
@@ -368,7 +370,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# matching behaviour. (optional)
 				Port: 0
 
-				# Path to serve requests on. (optional)
+				# Path to serve requests on. Should end with a slash, related to cookie paths.
+				# (optional)
 				Path:
 
 				# If set, X-Forwarded-* headers are used for the remote IP address for rate
@@ -384,7 +387,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# matching behaviour. (optional)
 				Port: 0
 
-				# Path to serve requests on. (optional)
+				# Path to serve requests on. Should end with a slash, related to cookie paths.
+				# (optional)
 				Path:
 
 				# If set, X-Forwarded-* headers are used for the remote IP address for rate
@@ -399,7 +403,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# matching behaviour. (optional)
 				Port: 0
 
-				# Path to serve requests on. (optional)
+				# Path to serve requests on. Should end with a slash, related to cookie paths.
+				# (optional)
 				Path:
 
 				# If set, X-Forwarded-* headers are used for the remote IP address for rate
@@ -415,7 +420,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# matching behaviour. (optional)
 				Port: 0
 
-				# Path to serve requests on. (optional)
+				# Path to serve requests on. Should end with a slash, related to cookie paths.
+				# (optional)
 				Path:
 
 				# If set, X-Forwarded-* headers are used for the remote IP address for rate
@@ -430,7 +436,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# matching behaviour. (optional)
 				Port: 0
 
-				# Path to serve requests on. (optional)
+				# Path to serve requests on. Should end with a slash, related to cookie paths.
+				# (optional)
 				Path:
 
 				# If set, X-Forwarded-* headers are used for the remote IP address for rate
@@ -446,7 +453,8 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# matching behaviour. (optional)
 				Port: 0
 
-				# Path to serve requests on. (optional)
+				# Path to serve requests on. Should end with a slash, related to cookie paths.
+				# (optional)
 				Path:
 
 				# If set, X-Forwarded-* headers are used for the remote IP address for rate

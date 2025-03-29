@@ -222,7 +222,7 @@ type Listener struct {
 type WebService struct {
 	Enabled   bool
 	Port      int    `sconf:"optional" sconf-doc:"Default 80 for HTTP and 443 for HTTPS. See Hostname at Listener for hostname matching behaviour."`
-	Path      string `sconf:"optional" sconf-doc:"Path to serve requests on."`
+	Path      string `sconf:"optional" sconf-doc:"Path to serve requests on. Should end with a slash, related to cookie paths."`
 	Forwarded bool   `sconf:"optional" sconf-doc:"If set, X-Forwarded-* headers are used for the remote IP address for rate limiting and for the \"secure\" status of cookies."`
 }
 

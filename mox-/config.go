@@ -908,15 +908,26 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 				addListenerErrorf("NAT ip that is the unspecified or loopback address %s", ipstr)
 			}
 		}
-		checkPath := func(kind string, enabled bool, path string) {
-			if enabled && path != "" && !strings.HasPrefix(path, "/") {
-				addListenerErrorf("%s with path %q that must start with a slash", kind, path)
+		cleanPath := func(kind string, enabled bool, path string) string {
+			if !enabled {
+				return path
 			}
+			if path != "" && !strings.HasPrefix(path, "/") {
+				addListenerErrorf("%s with path %q that must start with a slash", kind, path)
+			} else if path != "" && !strings.HasSuffix(path, "/") {
+				log.Warn("http service path should end with a slash, using effective path with slash", slog.String("kind", kind), slog.String("path", path), slog.String("effectivepath", path+"/"))
+				path += "/"
+			}
+			return path
 		}
-		checkPath("AccountHTTP", l.AccountHTTP.Enabled, l.AccountHTTP.Path)
-		checkPath("AccountHTTPS", l.AccountHTTPS.Enabled, l.AccountHTTPS.Path)
-		checkPath("AdminHTTP", l.AdminHTTP.Enabled, l.AdminHTTP.Path)
-		checkPath("AdminHTTPS", l.AdminHTTPS.Enabled, l.AdminHTTPS.Path)
+		l.AccountHTTP.Path = cleanPath("AccountHTTP", l.AccountHTTP.Enabled, l.AccountHTTP.Path)
+		l.AccountHTTPS.Path = cleanPath("AccountHTTPS", l.AccountHTTPS.Enabled, l.AccountHTTPS.Path)
+		l.AdminHTTP.Path = cleanPath("AdminHTTP", l.AdminHTTP.Enabled, l.AdminHTTP.Path)
+		l.AdminHTTPS.Path = cleanPath("AdminHTTPS", l.AdminHTTPS.Enabled, l.AdminHTTPS.Path)
+		l.WebmailHTTP.Path = cleanPath("WebmailHTTP", l.WebmailHTTP.Enabled, l.WebmailHTTP.Path)
+		l.WebmailHTTPS.Path = cleanPath("WebmailHTTPS", l.WebmailHTTPS.Enabled, l.WebmailHTTPS.Path)
+		l.WebAPIHTTP.Path = cleanPath("WebAPIHTTP", l.WebAPIHTTP.Enabled, l.WebAPIHTTP.Path)
+		l.WebAPIHTTPS.Path = cleanPath("WebAPIHTTPS", l.WebAPIHTTPS.Enabled, l.WebAPIHTTPS.Path)
 		c.Listeners[name] = l
 	}
 	if haveUnspecifiedSMTPListener {

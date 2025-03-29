@@ -536,7 +536,7 @@ func redirectToTrailingSlash(srv *serve, hostMatch func(dns.IPDomain) bool, name
 		handler := mox.SafeHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, path, http.StatusSeeOther)
 		}))
-		srv.ServiceHandle(name, hostMatch, path[:len(path)-1], handler)
+		srv.ServiceHandle(name, hostMatch, strings.TrimRight(path, "/"), handler)
 	}
 }
 
@@ -656,7 +656,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			path = l.AccountHTTP.Path
 		}
 		srv := ensureServe(false, port, "account-http at "+path, true)
-		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handler(path, l.AccountHTTP.Forwarded))))
+		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), http.HandlerFunc(webaccount.Handler(path, l.AccountHTTP.Forwarded))))
 		srv.ServiceHandle("account", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "account", path)
 		ensureACMEHTTP01(srv)
@@ -668,7 +668,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			path = l.AccountHTTPS.Path
 		}
 		srv := ensureServe(true, port, "account-https at "+path, true)
-		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webaccount.Handler(path, l.AccountHTTPS.Forwarded))))
+		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), http.HandlerFunc(webaccount.Handler(path, l.AccountHTTPS.Forwarded))))
 		srv.ServiceHandle("account", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "account", path)
 	}
@@ -680,7 +680,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			path = l.AdminHTTP.Path
 		}
 		srv := ensureServe(false, port, "admin-http at "+path, true)
-		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handler(path, l.AdminHTTP.Forwarded))))
+		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), http.HandlerFunc(webadmin.Handler(path, l.AdminHTTP.Forwarded))))
 		srv.ServiceHandle("admin", listenerHostMatch, path, handler)
 		redirectToTrailingSlash(srv, listenerHostMatch, "admin", path)
 		ensureACMEHTTP01(srv)
@@ -692,7 +692,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			path = l.AdminHTTPS.Path
 		}
 		srv := ensureServe(true, port, "admin-https at "+path, true)
-		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webadmin.Handler(path, l.AdminHTTPS.Forwarded))))
+		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), http.HandlerFunc(webadmin.Handler(path, l.AdminHTTPS.Forwarded))))
 		srv.ServiceHandle("admin", listenerHostMatch, path, handler)
 		redirectToTrailingSlash(srv, listenerHostMatch, "admin", path)
 	}
@@ -709,7 +709,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			path = l.WebAPIHTTP.Path
 		}
 		srv := ensureServe(false, port, "webapi-http at "+path, true)
-		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTP.Forwarded)))
+		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTP.Forwarded)))
 		srv.ServiceHandle("webapi", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "webapi", path)
 		ensureACMEHTTP01(srv)
@@ -721,7 +721,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			path = l.WebAPIHTTPS.Path
 		}
 		srv := ensureServe(true, port, "webapi-https at "+path, true)
-		handler := mox.SafeHeaders(http.StripPrefix(path[:len(path)-1], webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTPS.Forwarded)))
+		handler := mox.SafeHeaders(http.StripPrefix(strings.TrimRight(path, "/"), webapisrv.NewServer(maxMsgSize, path, l.WebAPIHTTPS.Forwarded)))
 		srv.ServiceHandle("webapi", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "webapi", path)
 	}
@@ -740,7 +740,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 				accountPath = l.AccountHTTP.Path
 			}
 		}
-		handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTP.Forwarded, accountPath)))
+		handler := http.StripPrefix(strings.TrimRight(path, "/"), http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTP.Forwarded, accountPath)))
 		srv.ServiceHandle("webmail", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "webmail", path)
 		ensureACMEHTTP01(srv)
@@ -759,7 +759,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 				accountPath = l.AccountHTTPS.Path
 			}
 		}
-		handler := http.StripPrefix(path[:len(path)-1], http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTPS.Forwarded, accountPath)))
+		handler := http.StripPrefix(strings.TrimRight(path, "/"), http.HandlerFunc(webmail.Handler(maxMsgSize, path, l.WebmailHTTPS.Forwarded, accountPath)))
 		srv.ServiceHandle("webmail", accountHostMatch, path, handler)
 		redirectToTrailingSlash(srv, accountHostMatch, "webmail", path)
 	}
