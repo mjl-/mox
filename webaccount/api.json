@@ -54,6 +54,31 @@
 			"Returns": []
 		},
 		{
+			"Name": "Version",
+			"Docs": "Version returns the version, goos and goarch.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "version",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "goos",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "goarch",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
 			"Name": "SetPassword",
 			"Docs": "SetPassword saves a new password for the account, invalidating the previous\npassword.\n\nSessions are not interrupted, and will keep working. New login attempts must use\nthe new password.\n\nPassword must be at least 8 characters.\n\nSetting a user-supplied password is not allowed if NoCustomPassword is set\nfor the account.",
 			"Params": [

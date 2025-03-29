@@ -765,6 +765,15 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
+	// Version returns the version, goos and goarch.
+	async Version(): Promise<[string, string, string]> {
+		const fn: string = "Version"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["string"],["string"],["string"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, string, string]
+	}
+
 	// Token returns a single-use token to use for an SSE connection. A token can only
 	// be used for a single SSE connection. Tokens are stored in memory for a maximum
 	// of 1 minute, with at most 10 unused tokens (the most recently created) per

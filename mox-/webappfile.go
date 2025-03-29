@@ -11,13 +11,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/mjl-/mox/mlog"
-	"github.com/mjl-/mox/moxvar"
 )
 
 // WebappFile serves a merged HTML and JS webapp as a single compressed, cacheable
@@ -182,7 +180,7 @@ func (a *WebappFile) Serve(ctx context.Context, log mlog.Log, w http.ResponseWri
 			b.Write(html[cssi+len(cssp) : jsi])
 			fmt.Fprintf(&b, "// Custom JS by admin from $configdir/%s.js:\n", a.CustomStem)
 			b.Write(customJS)
-			fmt.Fprintf(&b, "\n// Javascript is generated from typescript, don't modify the javascript because changes will be lost.\nconst moxversion = \"%s\";\nconst moxgoos = \"%s\";\nconst moxgoarch = \"%s\";\n", moxvar.Version, runtime.GOOS, runtime.GOARCH)
+			fmt.Fprintf(&b, "\n// Javascript is generated from typescript, don't modify the javascript because changes will be lost.\n")
 			b.Write(js)
 			b.Write(html[jsi+len(jsp):])
 			out = b.Bytes()

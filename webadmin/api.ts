@@ -1457,6 +1457,15 @@ export class Client {
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 
+	// Version returns the version, goos and goarch.
+	async Version(): Promise<[string, string, string]> {
+		const fn: string = "Version"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["string"],["string"],["string"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as [string, string, string]
+	}
+
 	// CheckDomain checks the configuration for the domain, such as MX, SMTP STARTTLS,
 	// SPF, DKIM, DMARC, TLSRPT, MTASTS, autoconfig, autodiscover.
 	async CheckDomain(domainName: string): Promise<CheckResult> {

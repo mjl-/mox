@@ -48,6 +48,31 @@
 			"Returns": []
 		},
 		{
+			"Name": "Version",
+			"Docs": "Version returns the version, goos and goarch.",
+			"Params": [],
+			"Returns": [
+				{
+					"Name": "version",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "goos",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "goarch",
+					"Typewords": [
+						"string"
+					]
+				}
+			]
+		},
+		{
 			"Name": "CheckDomain",
 			"Docs": "CheckDomain checks the configuration for the domain, such as MX, SMTP STARTTLS,\nSPF, DKIM, DMARC, TLSRPT, MTASTS, autoconfig, autodiscover.",
 			"Params": [

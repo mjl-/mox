@@ -559,6 +559,14 @@ var api;
 			const params = [];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		// Version returns the version, goos and goarch.
+		async Version() {
+			const fn = "Version";
+			const paramTypes = [];
+			const returnTypes = [["string"], ["string"], ["string"]];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 		// CheckDomain checks the configuration for the domain, such as MX, SMTP STARTTLS,
 		// SPF, DKIM, DMARC, TLSRPT, MTASTS, autoconfig, autodiscover.
 		async CheckDomain(domainName) {
@@ -1694,6 +1702,9 @@ var api;
 	};
 })(api || (api = {}));
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
+let moxversion;
+let moxgoos;
+let moxgoarch;
 const login = async (reason) => {
 	return new Promise((resolve, _) => {
 		const origFocus = document.activeElement;
@@ -1833,7 +1844,7 @@ const crumbs = (...l) => {
 	];
 };
 const errmsg = (err) => '' + (err.message || '(no error message)');
-const footer = dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion, ' ', moxgoos, '/', moxgoarch, ', ', dom.a(attr.href('licenses.txt'), 'licenses'));
+const footer = () => dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion, ' ', moxgoos, '/', moxgoarch, ', ', dom.a(attr.href('licenses.txt'), 'licenses'));
 const age = (date, future, nowSecs) => {
 	if (!nowSecs) {
 		nowSecs = new Date().getTime() / 1000;
@@ -1987,7 +1998,7 @@ const index = async () => {
 		dom._kids(cidElem, cid);
 	}, recvIDFieldset = dom.fieldset(dom.label('Received ID', attr.title('The ID in the Received header that was added during incoming delivery.')), ' ', recvID = dom.input(attr.required('')), ' ', dom.submitbutton('Lookup cid', attr.title('Logging about an incoming message includes an attribute "cid", a counter identifying the transaction related to delivery of the message. The ID in the received header is an encrypted cid, which this form decrypts, after which you can look it up in the logging.')), ' ', cidElem = dom.span()))), 
 	// todo: routing, globally, per domain and per account
-	dom.br(), dom.h2('Configuration'), dom.div(dom.a('Routes', attr.href('#routes'))), dom.div(dom.a('Webserver', attr.href('#webserver'))), dom.div(dom.a('Files', attr.href('#config'))), dom.div(dom.a('Log levels', attr.href('#loglevels'))), footer);
+	dom.br(), dom.h2('Configuration'), dom.div(dom.a('Routes', attr.href('#routes'))), dom.div(dom.a('Webserver', attr.href('#webserver'))), dom.div(dom.a('Files', attr.href('#config'))), dom.div(dom.a('Log levels', attr.href('#loglevels'))), footer());
 };
 const globalRoutes = async () => {
 	const [transports, config] = await Promise.all([
@@ -4149,6 +4160,7 @@ const webserver = async () => {
 };
 const init = async () => {
 	let curhash;
+	[moxversion, moxgoos, moxgoarch] = await client.Version();
 	const hashChange = async () => {
 		if (curhash === window.location.hash) {
 			return;

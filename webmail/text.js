@@ -448,6 +448,14 @@ var api;
 			const params = [];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		// Version returns the version, goos and goarch.
+		async Version() {
+			const fn = "Version";
+			const paramTypes = [];
+			const returnTypes = [["string"], ["string"], ["string"]];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 		// Token returns a single-use token to use for an SSE connection. A token can only
 		// be used for a single SSE connection. Tokens are stored in memory for a maximum
 		// of 1 minute, with at most 10 unused tokens (the most recently created) per

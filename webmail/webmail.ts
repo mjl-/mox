@@ -127,11 +127,12 @@ ensureCSS('.autosize::after', {content: 'attr(data-value)', marginRight: '1em', 
 
 // From HTML.
 declare let page: HTMLElement
-declare let moxversion: string
-declare let moxgoos: string
-declare let moxgoarch: string
 // From customization script.
 declare let moxBeforeDisplay: (root: HTMLElement) => void
+
+let moxversion: string
+let moxgoos: string
+let moxgoarch: string
 
 // All logging goes through log() instead of console.log, except "should not happen" logging.
 let log: (...args: any[]) => void = () => {}
@@ -6341,6 +6342,8 @@ const init = async () => {
 	let requestFilter = newFilter()
 	let requestNotFilter = newNotFilter()
 	let requestMsgID = 0 // If > 0, we are still expecting a parsed message for the view, coming from the query. Either we get it and set msgitemViewActive and clear this, or we get to the end of the data and clear it.
+
+	;[moxversion, moxgoos, moxgoarch] = await client.Version()
 
 	const updatePageTitle = () => {
 		const mb = mailboxlistView && mailboxlistView.activeMailbox()

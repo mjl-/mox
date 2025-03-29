@@ -380,6 +380,14 @@ var api;
 			const params = [];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		// Version returns the version, goos and goarch.
+		async Version() {
+			const fn = "Version";
+			const paramTypes = [];
+			const returnTypes = [["string"], ["string"], ["string"]];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 		// SetPassword saves a new password for the account, invalidating the previous
 		// password.
 		// 
@@ -947,6 +955,9 @@ var api;
 	};
 })(api || (api = {}));
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
+let moxversion;
+let moxgoos;
+let moxgoarch;
 const login = async (reason) => {
 	return new Promise((resolve, _) => {
 		const origFocus = document.activeElement;
@@ -1086,7 +1097,7 @@ const crumbs = (...l) => {
 	];
 };
 const errmsg = (err) => '' + (err.message || '(no error message)');
-const footer = dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion, ', ', dom.a(attr.href('licenses.txt'), 'licenses'));
+const footer = () => dom.div(style({ marginTop: '6ex', opacity: 0.75 }), link('https://www.xmox.nl', 'mox'), ' ', moxversion, ', ', dom.a(attr.href('licenses.txt'), 'licenses'));
 const domainName = (d) => {
 	return d.Unicode || d.ASCII;
 };
@@ -1768,7 +1779,7 @@ openssl pkcs12 \\
 	})), mailboxFileHint = dom.p(style({ display: 'none', fontStyle: 'italic', marginTop: '.5ex' }), 'This file must either be a zip file or a gzipped tar file with mbox and/or maildir mailboxes. For maildirs, an optional file "dovecot-keywords" is read additional keywords, like Forwarded/Junk/NotJunk. If an imported mailbox already exists by name, messages are added to the existing mailbox. If a mailbox does not yet exist it will be created. Messages are not deduplicated, importing them twice will result in duplicates.')), dom.div(style({ marginBottom: '1ex' }), dom.label(dom.div(style({ marginBottom: '.5ex' }), 'Skip mailbox prefix (optional)'), dom.input(attr.name('skipMailboxPrefix'), function focus() {
 		mailboxPrefixHint.style.display = '';
 	})), mailboxPrefixHint = dom.p(style({ display: 'none', fontStyle: 'italic', marginTop: '.5ex' }), 'If set, any mbox/maildir path with this prefix will have it stripped before importing. For example, if all mailboxes are in a directory "Takeout", specify that path in the field above so mailboxes like "Takeout/Inbox.mbox" are imported into a mailbox called "Inbox" instead of "Takeout/Inbox".')), dom.div(dom.submitbutton('Upload and import'), dom.p(style({ fontStyle: 'italic', marginTop: '.5ex' }), 'The file is uploaded first, then its messages are imported, finally messages are matched for threading. Importing is done in a transaction, you can abort the entire import before it is finished.')))), importAbortBox = dom.div(), // Outside fieldset because it gets disabled, above progress because may be scrolling it down quickly with problems.
-	importProgress = dom.div(style({ display: 'none' })), dom.br(), footer);
+	importProgress = dom.div(style({ display: 'none' })), dom.br(), footer());
 	(async () => {
 		// Try to show the progress of an earlier import session. The user may have just
 		// refreshed the browser.
@@ -1926,6 +1937,7 @@ const destination = async (name) => {
 };
 const init = async () => {
 	let curhash;
+	[moxversion, moxgoos, moxgoarch] = await client.Version();
 	const hashChange = async () => {
 		if (curhash === window.location.hash) {
 			return;

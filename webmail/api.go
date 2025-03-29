@@ -18,6 +18,7 @@ import (
 	"net/textproto"
 	"os"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"sort"
@@ -128,6 +129,11 @@ func (w Webmail) Logout(ctx context.Context) {
 
 	err := webauth.Logout(ctx, log, webauth.Accounts, "webmail", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, reqInfo.Account.Name, reqInfo.SessionToken)
 	xcheckf(ctx, err, "logout")
+}
+
+// Version returns the version, goos and goarch.
+func (w Webmail) Version(ctx context.Context) (version, goos, goarch string) {
+	return moxvar.Version, runtime.GOOS, runtime.GOARCH
 }
 
 // Token returns a single-use token to use for an SSE connection. A token can only

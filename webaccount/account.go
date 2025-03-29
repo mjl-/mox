@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -366,6 +367,11 @@ func (w Account) Logout(ctx context.Context) {
 
 	err := webauth.Logout(ctx, log, webauth.Accounts, "webaccount", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, reqInfo.AccountName, reqInfo.SessionToken)
 	xcheckf(ctx, err, "logout")
+}
+
+// Version returns the version, goos and goarch.
+func (Account) Version(ctx context.Context) (version, goos, goarch string) {
+	return moxvar.Version, runtime.GOOS, runtime.GOARCH
 }
 
 // SetPassword saves a new password for the account, invalidating the previous

@@ -448,6 +448,14 @@ var api;
 			const params = [];
 			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
 		}
+		// Version returns the version, goos and goarch.
+		async Version() {
+			const fn = "Version";
+			const paramTypes = [];
+			const returnTypes = [["string"], ["string"], ["string"]];
+			const params = [];
+			return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params);
+		}
 		// Token returns a single-use token to use for an SSE connection. A token can only
 		// be used for a single SSE connection. Tokens are stored in memory for a maximum
 		// of 1 minute, with at most 10 unused tokens (the most recently created) per
@@ -1571,6 +1579,9 @@ const yscrollAutoStyle = css('yscrollAuto', { overflowY: 'auto', position: 'abso
 const autosizeStyle = css('autosize', { display: 'inline-grid', maxWidth: '90vw' });
 ensureCSS('.autosize.input', { gridArea: '1 / 2' });
 ensureCSS('.autosize::after', { content: 'attr(data-value)', marginRight: '1em', lineHeight: 0, visibility: 'hidden', whiteSpace: 'pre-wrap', overflowX: 'hidden' });
+let moxversion;
+let moxgoos;
+let moxgoarch;
 // All logging goes through log() instead of console.log, except "should not happen" logging.
 let log = () => { };
 try {
@@ -6329,7 +6340,9 @@ const init = async () => {
 	let requestViewEnd = false; // If true, there is no more data to fetch, no more page needed for this view.
 	let requestFilter = newFilter();
 	let requestNotFilter = newNotFilter();
-	let requestMsgID = 0; // If > 0, we are still expecting a parsed message for the view, coming from the query. Either we get it and set msgitemViewActive and clear this, or we get to the end of the data and clear it.
+	let requestMsgID = 0 // If > 0, we are still expecting a parsed message for the view, coming from the query. Either we get it and set msgitemViewActive and clear this, or we get to the end of the data and clear it.
+	;
+	[moxversion, moxgoos, moxgoarch] = await client.Version();
 	const updatePageTitle = () => {
 		const mb = mailboxlistView && mailboxlistView.activeMailbox();
 		const addr = loginAddress ? loginAddress.User + '@' + formatDomain(loginAddress.Domain) : '';

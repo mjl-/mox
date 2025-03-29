@@ -27,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"sort"
@@ -277,6 +278,11 @@ func (w Admin) Logout(ctx context.Context) {
 
 	err := webauth.Logout(ctx, log, webauth.Admin, "webadmin", w.cookiePath, w.isForwarded, reqInfo.Response, reqInfo.Request, "", reqInfo.SessionToken)
 	xcheckf(ctx, err, "logout")
+}
+
+// Version returns the version, goos and goarch.
+func (w Admin) Version(ctx context.Context) (version, goos, goarch string) {
+	return moxvar.Version, runtime.GOOS, runtime.GOARCH
 }
 
 type Result struct {

@@ -2,11 +2,12 @@
 
 // From HTML.
 declare let page: HTMLElement
-declare let moxversion: string
-declare let moxgoos: string
-declare let moxgoarch: string
 // From customization script.
 declare let moxBeforeDisplay: (webmailroot: HTMLElement) => void
+
+let moxversion: string
+let moxgoos: string
+let moxgoarch: string
 
 const login = async (reason: string) => {
 	return new Promise<string>((resolve: (v: string) => void, _) => {
@@ -206,13 +207,14 @@ const crumbs = (...l: ({text: string, path: string} | string)[]) => {
 
 const errmsg = (err: unknown) => ''+((err as any).message || '(no error message)')
 
-const footer = dom.div(
-	style({marginTop: '6ex', opacity: 0.75}),
-	link('https://www.xmox.nl', 'mox'),
-	' ',
-	moxversion,
-	', ', dom.a(attr.href('licenses.txt'), 'licenses')
-)
+const footer = () =>
+	dom.div(
+		style({marginTop: '6ex', opacity: 0.75}),
+		link('https://www.xmox.nl', 'mox'),
+		' ',
+		moxversion,
+		', ', dom.a(attr.href('licenses.txt'), 'licenses')
+	)
 
 const domainName = (d: api.Domain) => {
 	return d.Unicode || d.ASCII
@@ -1602,7 +1604,7 @@ openssl pkcs12 \\
 		),
 		dom.br(),
 
-		footer,
+		footer(),
 	)
 
 	;(async () => {
@@ -1943,6 +1945,8 @@ const destination = async (name: string) => {
 
 const init = async () => {
 	let curhash: string | undefined
+
+	[moxversion, moxgoos, moxgoarch] = await client.Version()
 
 	const hashChange = async () => {
 		if (curhash === window.location.hash) {
