@@ -40,6 +40,7 @@ const (
 	CapListMetadata     Capability = "LIST-METADTA"       // ../rfc/9590:73
 	CapMultiAppend      Capability = "MULTIAPPEND"        // ../rfc/3502:33
 	CapReplace          Capability = "REPLACE"            // ../rfc/8508:155
+	CapPreview          Capability = "PREVIEW"            // ../rfc/8970:114
 )
 
 // Status is the tagged final result of a command.
