@@ -2608,7 +2608,7 @@
 				},
 				{
 					"Name": "Preview",
-					"Docs": "If non-nil, a preview of the message based on text and/or html parts of the message. Used in the webmail and IMAP PREVIEW extension. If non-nil, it is empty if no preview could be created, or the message has not textual content or couldn't be parsed. Previews are typically created when delivering a message, but not when importing messages, for speed. Previews are generated on first request (in the webmail, or through the IMAP fetch attribute \"PREVIEW\" (without \"LAZY\")), and stored with the message at that time. The preview is at most 256 characters (can be more bytes), with detected quoted text replaced with \"[...]\".",
+					"Docs": "If non-nil, a preview of the message based on text and/or html parts of the message. Used in the webmail and IMAP PREVIEW extension. If non-nil, it is empty if no preview could be created, or the message has not textual content or couldn't be parsed. Previews are typically created when delivering a message, but not when importing messages, for speed. Previews are generated on first request (in the webmail, or through the IMAP fetch attribute \"PREVIEW\" (without \"LAZY\")), and stored with the message at that time. The preview is at most 256 characters (can be more bytes), with detected quoted text replaced with \"[...]\". Previews typically end with a newline, callers may want to strip whitespace.",
 					"Typewords": [
 						"nullable",
 						"string"
