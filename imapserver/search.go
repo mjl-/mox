@@ -14,6 +14,10 @@ import (
 	"slices"
 )
 
+// If last search output was this long ago, we write an untagged inprogress
+// response. Changed during tests. ../rfc/9585:109
+var inProgressPeriod = time.Duration(10 * time.Second)
+
 // Search returns messages matching criteria specified in parameters.
 //
 // State: Selected
@@ -138,17 +142,38 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 	var expungeIssued bool
 	var maxModSeq store.ModSeq
 
+	// We periodically send an untagged OK with INPROGRESS code while searching, to let
+	// clients doing slow searches know we're still working.
+	inProgressLast := time.Now()
+	// Only respond with tag if it can't be confused as end of response code. ../rfc/9585:122
+	inProgressTag := "nil"
+	if !strings.Contains(tag, "]") {
+		inProgressTag = dquote(tag).pack(c)
+	}
+
 	var uids []store.UID
 	c.xdbread(func(tx *bstore.Tx) {
 		c.xmailboxID(tx, c.mailboxID) // Validate.
 		runlock()
 		runlock = func() {}
 
-		// Normal forward search when we don't have MAX only.
+		// Normal forward search when we don't have MAX only. We only send an "inprogress"
+		// goal if we know how many messages we have to check.
+		forward := eargs == nil || max == 0 || len(eargs) != 1
+		reverse := max == 1 && (len(eargs) == 1 || min+max == len(eargs))
+		goal := "nil"
+		if len(c.uids) > 0 && forward != reverse {
+			goal = fmt.Sprintf("%d", len(c.uids))
+		}
+
 		var lastIndex = -1
-		if eargs == nil || max == 0 || len(eargs) != 1 {
+		if forward {
 			for i, uid := range c.uids {
 				lastIndex = i
+				if time.Since(inProgressLast) > inProgressPeriod {
+					c.writelinef("* OK [INPROGRESS (%s %d %s)] still searching", inProgressTag, i, goal)
+					inProgressLast = time.Now()
+				}
 				if match, modseq := c.searchMatch(tx, msgseq(i+1), uid, *sk, bodySearch, textSearch, &expungeIssued); match {
 					uids = append(uids, uid)
 					if modseq > maxModSeq {
@@ -161,8 +186,12 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 			}
 		}
 		// And reverse search for MAX if we have only MAX or MAX combined with MIN.
-		if max == 1 && (len(eargs) == 1 || min+max == len(eargs)) {
+		if reverse {
 			for i := len(c.uids) - 1; i > lastIndex; i-- {
+				if time.Since(inProgressLast) > inProgressPeriod {
+					c.writelinef("* OK [INPROGRESS (%s %d %s)] still searching", inProgressTag, len(c.uids)-1-i, goal)
+					inProgressLast = time.Now()
+				}
 				if match, modseq := c.searchMatch(tx, msgseq(i+1), c.uids[i], *sk, bodySearch, textSearch, &expungeIssued); match {
 					uids = append(uids, c.uids[i])
 					if modseq > maxModSeq {

@@ -159,6 +159,32 @@ func (c CodeHighestModSeq) CodeString() string {
 	return fmt.Sprintf("HIGHESTMODSEQ %d", c)
 }
 
+// "INPROGRESS" response code.
+type CodeInProgress struct {
+	Tag     string // Nil is empty string.
+	Current *uint32
+	Goal    *uint32
+}
+
+func (c CodeInProgress) CodeString() string {
+	// ABNF allows inprogress-tag/state with all nil values. Doesn't seem useful enough
+	// to keep track of.
+	if c.Tag == "" && c.Current == nil && c.Goal == nil {
+		return "INPROGRESS"
+	}
+
+	// todo: quote tag properly
+	current := "nil"
+	goal := "nil"
+	if c.Current != nil {
+		current = fmt.Sprintf("%d", *c.Current)
+	}
+	if c.Goal != nil {
+		goal = fmt.Sprintf("%d", *c.Goal)
+	}
+	return fmt.Sprintf("INPROGRESS (%q %s %s)", c.Tag, current, goal)
+}
+
 // RespText represents a response line minus the leading tag.
 type RespText struct {
 	Code    string  // The first word between [] after the status.

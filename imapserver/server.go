@@ -181,6 +181,7 @@ var serverCapabilities = strings.Join([]string{
 	"MULTIAPPEND",                     // ../rfc/3502
 	"REPLACE",                         // ../rfc/8508
 	"PREVIEW",                         // ../rfc/8970:114
+	"INPROGRESS",                      // ../rfc/9585:101
 	// "COMPRESS=DEFLATE", // ../rfc/4978, disabled for interoperability issues: The flate reader (inflate) still blocks on partial flushes, preventing progress.
 }, " ")
 

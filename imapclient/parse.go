@@ -131,6 +131,7 @@ var knownCodes = stringMap(
 	// With parameters.
 	"BADCHARSET", "CAPABILITY", "PERMANENTFLAGS", "UIDNEXT", "UIDVALIDITY", "UNSEEN", "APPENDUID", "COPYUID",
 	"HIGHESTMODSEQ", "MODIFIED",
+	"INPROGRESS", // ../rfc/9585:104
 )
 
 func stringMap(l ...string) map[string]struct{} {
@@ -222,6 +223,30 @@ func (c *Conn) xrespCode() (string, CodeArg) {
 		c.xspace()
 		modified := c.xuidset()
 		codeArg = CodeModified(NumSet{Ranges: modified})
+	case "INPROGRESS":
+		// ../rfc/9585:238
+		var tag string
+		var current, goal *uint32
+		if c.space() {
+			c.xtake("(")
+			tag = c.xquoted()
+			c.xspace()
+			if c.peek('n') || c.peek('N') {
+				c.xtake("nil")
+			} else {
+				v := c.xuint32()
+				current = &v
+			}
+			c.xspace()
+			if c.peek('n') || c.peek('N') {
+				c.xtake("nil")
+			} else {
+				v := c.xnzuint32()
+				goal = &v
+			}
+			c.xtake(")")
+		}
+		codeArg = CodeInProgress{tag, current, goal}
 	}
 	return W, codeArg
 }

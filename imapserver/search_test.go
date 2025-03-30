@@ -260,6 +260,31 @@ func TestSearch(t *testing.T) {
 	tc.transactf("ok", `search charset utf-8 text "mox"`)
 	tc.xsearch(2, 3)
 
+	// Check for properly formed INPROGRESS response code.
+	orig := inProgressPeriod
+	inProgressPeriod = 0
+	tc.cmdf("tag1", "search undraft")
+	tc.response("ok")
+
+	inprogress := func(cur, goal uint32) imapclient.UntaggedResult {
+		return imapclient.UntaggedResult{
+			Status: "OK",
+			RespText: imapclient.RespText{
+				Code:    "INPROGRESS",
+				CodeArg: imapclient.CodeInProgress{Tag: "tag1", Current: &cur, Goal: &goal},
+				More:    "still searching",
+			},
+		}
+	}
+	tc.xuntagged(
+		imapclient.UntaggedSearch([]uint32{1, 2}),
+		// Due to inProgressPeriod 0, we get an inprogress response for each message in the mailbox.
+		inprogress(0, 3),
+		inprogress(1, 3),
+		inprogress(2, 3),
+	)
+	inProgressPeriod = orig
+
 	esearchall := func(ss string) imapclient.UntaggedEsearch {
 		return imapclient.UntaggedEsearch{All: esearchall0(ss)}
 	}
