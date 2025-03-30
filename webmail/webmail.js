@@ -7005,7 +7005,6 @@ const init = async () => {
 		connectionElem.classList.toggle('loading', true);
 		dom._kids(connectionElem);
 		connectionElem.classList.toggle('loading', false);
-		// We'll clear noreconnect when we've held a connection for 10 mins.
 		noreconnect = isreconnect;
 		connecting = true;
 		let token;
@@ -7194,10 +7193,13 @@ const init = async () => {
 			}
 			dom._kids(queryactivityElem, 'loading...');
 			msglistscrollElem.appendChild(listloadingElem);
+			// We'll clear noreconnect when we've held a connection for 5 seconds. Firefox
+			// disconnects often, on any network change including with docker container starts,
+			// such as for integration tests.
 			noreconnectTimer = setTimeout(() => {
 				noreconnect = false;
 				noreconnectTimer = 0;
-			}, 10 * 60 * 1000);
+			}, 5 * 1000);
 		});
 		eventSource.addEventListener('viewErr', async (e) => {
 			const viewErr = checkParse(() => api.parser.EventViewErr(JSON.parse(e.data)));
