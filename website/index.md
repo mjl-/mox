@@ -4,7 +4,7 @@
 Complete email solution
 : For sending and receiving email. With support for IMAP4, SMTP, SPF, DKIM,
 DMARC, MTA-STS, DANE and DNSSEC, reputation-based
-and content-based junk filtering, Internationalization (IDNA), automatic TLS
+and content-based junk filtering, Internationalization (EIA/IDNA), automatic TLS
 with ACME and Let's Encrypt, account autoconfiguration, webmail.
 
 Quick & easy

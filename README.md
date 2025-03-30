@@ -19,7 +19,7 @@ See Quickstart below to get started.
   (similar to greylisting). Rejected emails are stored in a mailbox called Rejects
   for a short period, helping with misclassified legitimate synchronous
   signup/login/transactional emails.
-- Internationalized email, with unicode in email address usernames
+- Internationalized email (EIA), with unicode in email address usernames
   ("localparts"), and in domain names (IDNA).
 - Automatic TLS with ACME, for use with Let's Encrypt and other CA's.
 - DANE and MTA-STS for inbound and outbound delivery over SMTP with STARTTLS,

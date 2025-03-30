@@ -340,10 +340,12 @@ lets you call the method.
 
 Originally, email addresses were ASCII-only. An email address consists of a
 "localpart", an "@" and a domain name. Only ASCII was allowed in message
-headers. With internationalized email, localparts can be in UTF-8, domains can
-use internationalized domain names (IDN/IDNA: unicode names with both an UTF-8
-encoding, and an ASCII encoding for use in DNS with domains starting with
-"xn--"), and message headers are allowed to contain UTF-8 as well.
+headers. With internationalized email (EIA), localparts can be in UTF-8, domains
+can use internationalized domain names (IDN/IDNA: unicode names with both an
+UTF-8 encoding, and an ASCII encoding for use in DNS with domains starting with
+"xn--"), and message headers are allowed to contain UTF-8 as well. The SMTPUTF8
+extension allows transferring internationalized messages. The IMAP UTF8=ACCEPT
+extension provides access to the messages.
 
 With internationalized email, users of scripts not representable in ASCII can
 use their native scripts for their email addresses.
