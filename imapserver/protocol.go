@@ -32,17 +32,25 @@ func (ss numSet) containsSeq(seq msgseq, uids []store.UID, searchResult []store.
 		uid := uids[int(seq)-1]
 		return uidSearch(searchResult, uid) > 0 && uidSearch(uids, uid) > 0
 	}
+	return ss.containsSeqCount(seq, uint32(len(uids)))
+}
+
+// containsSeqCount returns whether seq is contained in ss, which must not be a searchResult, assuming the message count.
+func (ss numSet) containsSeqCount(seq msgseq, msgCount uint32) bool {
+	if msgCount == 0 {
+		return false
+	}
 	for _, r := range ss.ranges {
 		first := r.first.number
-		if r.first.star || first > uint32(len(uids)) {
-			first = uint32(len(uids))
+		if r.first.star || first > msgCount {
+			first = msgCount
 		}
 
 		last := first
 		if r.last != nil {
 			last = r.last.number
-			if r.last.star || last > uint32(len(uids)) {
-				last = uint32(len(uids))
+			if r.last.star || last > msgCount {
+				last = msgCount
 			}
 		}
 		if first > last {
@@ -85,6 +93,56 @@ func (ss numSet) containsUID(uid store.UID, uids []store.UID, searchResult []sto
 		}
 	}
 	return false
+}
+
+// containsKnownUID returns whether uid, which is known to exist, matches the numSet.
+// highestUID must return the highest/last UID in the mailbox, or an error. A last UID must
+// exist, otherwise this method wouldn't have been called with a known uid.
+// highestUID is needed for interpreting UID sets like "<num>:*" where num is
+// higher than the uid to check.
+func (ss numSet) containsKnownUID(uid store.UID, searchResult []store.UID, highestUID func() (store.UID, error)) (bool, error) {
+	if ss.searchResult {
+		return uidSearch(searchResult, uid) > 0, nil
+	}
+
+	for _, r := range ss.ranges {
+		a := store.UID(r.first.number)
+		// Num in <num>:* can be larger than last, but it still matches the last...
+		// Similar for *:<num>. ../rfc/9051:4814
+		if r.first.star {
+			if r.last != nil && uid >= store.UID(r.last.number) {
+				return true, nil
+			}
+
+			var err error
+			a, err = highestUID()
+			if err != nil {
+				return false, err
+			}
+		}
+		b := a
+		if r.last != nil {
+			b = store.UID(r.last.number)
+			if r.last.star {
+				if uid >= a {
+					return true, nil
+				}
+
+				var err error
+				b, err = highestUID()
+				if err != nil {
+					return false, err
+				}
+			}
+		}
+		if a > b {
+			a, b = b, a
+		}
+		if uid >= a && uid <= b {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // contains returns whether the numset contains the number.
@@ -312,9 +370,10 @@ type fetchAtt struct {
 
 type searchKey struct {
 	// Only one of searchKeys, seqSet and op can be non-nil/non-empty.
-	searchKeys   []searchKey // In case of nested/multiple keys. Also for the top-level command.
-	seqSet       *numSet     // In case of bare sequence set. For op UID, field uidSet contains the parameter.
-	op           string      // Determines which of the fields below are set.
+	searchKeys []searchKey // In case of nested/multiple keys. Also for the top-level command.
+	seqSet     *numSet     // In case of bare sequence set. For op UID, field uidSet contains the parameter.
+	op         string      // Determines which of the fields below are set.
+
 	headerField  string
 	astring      string
 	date         time.Time

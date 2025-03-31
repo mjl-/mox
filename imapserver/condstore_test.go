@@ -264,9 +264,6 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 	tc.transactf("ok", "Search Return (Min Max All) 1:* Modseq %d", clientModseq)
 	tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 1, All: esearchall0("1"), ModSeq: clientModseq})
 
-	uint32ptr := func(v uint32) *uint32 {
-		return &v
-	}
 	tc.transactf("ok", "Search Return (Count) 1:* Modseq 0")
 	tc.xesearch(imapclient.UntaggedEsearch{Count: uint32ptr(6), ModSeq: clientModseq})
 
@@ -331,7 +328,7 @@ func testCondstoreQresync(t *testing.T, qresync bool) {
 	tc.transactf("ok", "Search Return (Min Max All) 1:* Modseq 8")
 	tc.xesearch(imapclient.UntaggedEsearch{Min: 1, Max: 1, All: esearchall0("1"), ModSeq: 8})
 	tc.transactf("ok", "Search Return (Min Max All) 1:* Modseq 9")
-	tc.xuntagged(imapclient.UntaggedEsearch{Correlator: tc.client.LastTag})
+	tc.xuntagged(imapclient.UntaggedEsearch{Tag: tc.client.LastTag})
 
 	// store, cannot modify expunged messages.
 	tc.transactf("ok", `Uid Store 3,4 (Unchangedsince %d) +Flags (label2)`, clientModseq)

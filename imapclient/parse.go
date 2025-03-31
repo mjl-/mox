@@ -1414,15 +1414,54 @@ func (c *Conn) xneedDisabled(msg string, caps ...Capability) {
 // ../rfc/9051:6546
 // Already consumed: "ESEARCH"
 func (c *Conn) xesearchResponse() (r UntaggedEsearch) {
-
 	if !c.space() {
 		return
 	}
+
 	if c.take('(') {
-		// ../rfc/9051:6921
-		c.xtake("TAG")
-		c.xspace()
-		r.Correlator = c.xastring()
+		// ../rfc/9051:6921 ../rfc/7377:465
+		seen := map[string]bool{}
+		for {
+			var kind string
+			if c.peek('t') || c.peek('T') {
+				kind = "TAG"
+				c.xtake(kind)
+				c.xspace()
+				r.Tag = c.xastring()
+			} else if c.peek('m') || c.peek('M') {
+				kind = "MAILBOX"
+				c.xtake(kind)
+				c.xspace()
+				r.Mailbox = c.xastring()
+				if r.Mailbox == "" {
+					c.xerrorf("invalid empty mailbox in search correlator")
+				}
+			} else if c.peek('u') || c.peek('U') {
+				kind = "UIDVALIDITY"
+				c.xtake(kind)
+				c.xspace()
+				r.UIDValidity = c.xnzuint32()
+			} else {
+				c.xerrorf("expected tag/correlator, mailbox or uidvalidity")
+			}
+
+			if seen[kind] {
+				c.xerrorf("duplicate search correlator %q", kind)
+			}
+			seen[kind] = true
+
+			if !c.take(' ') {
+				break
+			}
+		}
+
+		if r.Tag == "" {
+			c.xerrorf("missing tag search correlator")
+		}
+		if (r.Mailbox != "") != (r.UIDValidity != 0) {
+			c.xerrorf("mailbox and uidvalidity correlators must both be absent or both be present")
+		}
+
 		c.xtake(")")
 	}
 	if !c.space() {

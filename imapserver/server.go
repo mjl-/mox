@@ -182,6 +182,7 @@ var serverCapabilities = strings.Join([]string{
 	"REPLACE",                         // ../rfc/8508
 	"PREVIEW",                         // ../rfc/8970:114
 	"INPROGRESS",                      // ../rfc/9585:101
+	"MULTISEARCH",                     // ../rfc/7377:187
 	// "COMPRESS=DEFLATE", // ../rfc/4978, disabled for interoperability issues: The flate reader (inflate) still blocks on partial flushes, preventing progress.
 }, " ")
 
@@ -281,8 +282,8 @@ func stateCommands(cmds ...string) map[string]struct{} {
 var (
 	commandsStateAny              = stateCommands("capability", "noop", "logout", "id")
 	commandsStateNotAuthenticated = stateCommands("starttls", "authenticate", "login")
-	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata", "compress")
-	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move", "replace", "uid replace")
+	commandsStateAuthenticated    = stateCommands("enable", "select", "examine", "create", "delete", "rename", "subscribe", "unsubscribe", "list", "namespace", "status", "append", "idle", "lsub", "getquotaroot", "getquota", "getmetadata", "setmetadata", "compress", "esearch")
+	commandsStateSelected         = stateCommands("close", "unselect", "expunge", "search", "fetch", "store", "copy", "move", "uid expunge", "uid search", "uid fetch", "uid store", "uid copy", "uid move", "replace", "uid replace", "esearch")
 )
 
 var commands = map[string]func(c *conn, tag, cmd string, p *parser){
@@ -317,6 +318,7 @@ var commands = map[string]func(c *conn, tag, cmd string, p *parser){
 	"getmetadata":  (*conn).cmdGetmetadata,
 	"setmetadata":  (*conn).cmdSetmetadata,
 	"compress":     (*conn).cmdCompress,
+	"esearch":      (*conn).cmdEsearch,
 
 	// Selected.
 	"check":       (*conn).cmdCheck,
@@ -3847,12 +3849,12 @@ func (c *conn) cmdxExpunge(tag, cmd string, uidSet *numSet) {
 
 // State: Selected
 func (c *conn) cmdSearch(tag, cmd string, p *parser) {
-	c.cmdxSearch(false, tag, cmd, p)
+	c.cmdxSearch(false, false, tag, cmd, p)
 }
 
 // State: Selected
 func (c *conn) cmdUIDSearch(tag, cmd string, p *parser) {
-	c.cmdxSearch(true, tag, cmd, p)
+	c.cmdxSearch(true, false, tag, cmd, p)
 }
 
 // State: Selected

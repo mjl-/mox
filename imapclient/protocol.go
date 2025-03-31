@@ -41,6 +41,7 @@ const (
 	CapMultiAppend      Capability = "MULTIAPPEND"        // ../rfc/3502:33
 	CapReplace          Capability = "REPLACE"            // ../rfc/8508:155
 	CapPreview          Capability = "PREVIEW"            // ../rfc/8970:114
+	CapMultiSearch      Capability = "MULTISEARCH"        // ../rfc/7377:187
 )
 
 // Status is the tagged final result of a command.
@@ -314,15 +315,17 @@ type UntaggedLsub struct {
 
 // Fields are optional and zero if absent.
 type UntaggedEsearch struct {
-	// ../rfc/9051:6546
-	Correlator string
-	UID        bool
-	Min        uint32
-	Max        uint32
-	All        NumSet
-	Count      *uint32
-	ModSeq     int64
-	Exts       []EsearchDataExt
+	Tag         string // ../rfc/9051:6546
+	Mailbox     string // For MULTISEARCH. ../rfc/7377:437
+	UIDValidity uint32 // For MULTISEARCH, ../rfc/7377:438
+
+	UID    bool
+	Min    uint32
+	Max    uint32
+	All    NumSet
+	Count  *uint32
+	ModSeq int64
+	Exts   []EsearchDataExt
 }
 
 // UntaggedVanished is used in QRESYNC to send UIDs that have been removed.

@@ -1,9 +1,12 @@
 package imapserver
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/textproto"
+	"slices"
 	"strings"
 	"time"
 
@@ -11,28 +14,75 @@ import (
 
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/store"
-	"slices"
 )
 
 // If last search output was this long ago, we write an untagged inprogress
 // response. Changed during tests. ../rfc/9585:109
 var inProgressPeriod = time.Duration(10 * time.Second)
 
+// ESEARCH allows searching multiple mailboxes, referenced through mailbox filters
+// borrowed from the NOTIFY extension. Unlike the regular extended SEARCH/UID
+// SEARCH command that always returns an ESEARCH response, the ESEARCH command only
+// returns ESEARCH responses when there were matches in a mailbox.
+//
+// ../rfc/7377:159
+func (c *conn) cmdEsearch(tag, cmd string, p *parser) {
+	c.cmdxSearch(true, true, tag, cmd, p)
+}
+
 // Search returns messages matching criteria specified in parameters.
 //
-// State: Selected
-func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
-	// Command: ../rfc/9051:3716 ../rfc/4731:31 ../rfc/4466:354 ../rfc/3501:2723
-	// Examples: ../rfc/9051:3986 ../rfc/4731:153 ../rfc/3501:2975
-	// Syntax: ../rfc/9051:6918 ../rfc/4466:611 ../rfc/3501:4954
+// State: Selected for SEARCH and UID SEARCH, Authenticated or selectd for ESEARCH.
+func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
+	// Command: ../rfc/9051:3716 ../rfc/7377:159 ../rfc/6237:142 ../rfc/4731:31 ../rfc/4466:354 ../rfc/3501:2723
+	// Examples: ../rfc/9051:3986 ../rfc/7377:385 ../rfc/6237:323 ../rfc/4731:153 ../rfc/3501:2975
+	// Syntax: ../rfc/9051:6918 ../rfc/7377:462 ../rfc/6237:403 ../rfc/4466:611 ../rfc/3501:4954
 
-	// We will respond with ESEARCH instead of SEARCH if "RETURN" is present or for IMAP4rev2.
+	// We will respond with ESEARCH instead of SEARCH if "RETURN" is present or for IMAP4rev2 or for isE (ESEARCH command).
 	var eargs map[string]bool // Options except SAVE. Nil means old-style SEARCH response.
 	var save bool             // For SAVE option. Kept separately for easier handling of MIN/MAX later.
 
-	// IMAP4rev2 always returns ESEARCH, even with absent RETURN.
-	if c.enabled[capIMAP4rev2] {
+	if c.enabled[capIMAP4rev2] || isE {
 		eargs = map[string]bool{}
+	}
+
+	// The ESEARCH command has various ways to specify which mailboxes are to be
+	// searched. We parse and gather the request first, and evaluate them to mailboxes
+	// after parsing, when we start and have a DB transaction.
+	type mailboxSpec struct {
+		Kind string
+		Args []string
+	}
+	var mailboxSpecs []mailboxSpec
+
+	// ../rfc/7377:468
+	if isE && p.take(" IN (") {
+		for {
+			mbs := mailboxSpec{}
+			mbs.Kind = p.xtakelist("SELECTED", "INBOXES", "PERSONAL", "SUBSCRIBED", "SUBTREE-ONE", "SUBTREE", "MAILBOXES")
+			switch mbs.Kind {
+			case "SUBTREE", "SUBTREE-ONE", "MAILBOXES":
+				p.xtake(" ")
+				if p.take("(") {
+					for {
+						mbs.Args = append(mbs.Args, p.xmailbox())
+						if !p.take(" ") {
+							break
+						}
+					}
+					p.xtake(")")
+				} else {
+					mbs.Args = []string{p.xmailbox()}
+				}
+			}
+			mailboxSpecs = append(mailboxSpecs, mbs)
+
+			if !p.take(" ") {
+				break
+			}
+		}
+		p.xtake(")")
+		// We are not parsing the scope-options since there aren't any defined yet. ../rfc/7377:469
 	}
 	// ../rfc/9051:6967
 	if p.take(" RETURN (") {
@@ -131,16 +181,22 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 
 	// If we only have a MIN and/or MAX, we can stop processing as soon as we
 	// have those matches.
-	var min, max int
+	var min1, max1 int
 	if eargs["MIN"] {
-		min = 1
+		min1 = 1
 	}
 	if eargs["MAX"] {
-		max = 1
+		max1 = 1
 	}
 
-	var expungeIssued bool
-	var maxModSeq store.ModSeq
+	// We'll have one Result per mailbox we are searching. For regular (UID) SEARCH
+	// commands, we'll have just one, for the selected mailbox.
+	type Result struct {
+		Mailbox   store.Mailbox
+		MaxModSeq store.ModSeq
+		UIDs      []store.UID
+	}
+	var results []Result
 
 	// We periodically send an untagged OK with INPROGRESS code while searching, to let
 	// clients doing slow searches know we're still working.
@@ -151,73 +207,308 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 		inProgressTag = dquote(tag).pack(c)
 	}
 
-	var uids []store.UID
 	c.xdbread(func(tx *bstore.Tx) {
-		c.xmailboxID(tx, c.mailboxID) // Validate.
+		// Gather mailboxes to operate on. Usually just the selected mailbox. But with the
+		// ESEARCH command, we may be searching multiple.
+		var mailboxes []store.Mailbox
+		if len(mailboxSpecs) > 0 {
+			// While gathering, we deduplicate mailboxes. ../rfc/7377:312
+			m := map[int64]store.Mailbox{}
+			for _, mbs := range mailboxSpecs {
+				switch mbs.Kind {
+				case "SELECTED":
+					// ../rfc/7377:306
+					if c.state != stateSelected {
+						xsyntaxErrorf("cannot use ESEARCH with selected when state is not selected")
+					}
+
+					mb := c.xmailboxID(tx, c.mailboxID) // Validate.
+					m[mb.ID] = mb
+
+				case "INBOXES":
+					// Inbox and everything below. And we look at destinations and rulesets. We all
+					// mailboxes from the destinations, and all from the rulesets except when
+					// ListAllowDomain is non-empty.
+					// ../rfc/5465:822
+					q := bstore.QueryTx[store.Mailbox](tx)
+					q.FilterEqual("Expunged", false)
+					q.FilterGreaterEqual("Name", "Inbox")
+					q.SortAsc("Name")
+					for mb, err := range q.All() {
+						xcheckf(err, "list mailboxes")
+						if mb.Name != "Inbox" && !strings.HasPrefix(mb.Name, "Inbox/") {
+							break
+						}
+						m[mb.ID] = mb
+					}
+
+					conf, _ := c.account.Conf()
+					for _, dest := range conf.Destinations {
+						if dest.Mailbox != "" && dest.Mailbox != "Inbox" {
+							mb, err := c.account.MailboxFind(tx, dest.Mailbox)
+							xcheckf(err, "find mailbox from destination")
+							if mb != nil {
+								m[mb.ID] = *mb
+							}
+						}
+
+						for _, rs := range dest.Rulesets {
+							if rs.ListAllowDomain != "" || rs.Mailbox == "" {
+								continue
+							}
+
+							mb, err := c.account.MailboxFind(tx, rs.Mailbox)
+							xcheckf(err, "find mailbox from ruleset")
+							if mb != nil {
+								m[mb.ID] = *mb
+							}
+						}
+					}
+
+				case "PERSONAL":
+					// All mailboxes in the personal namespace. Which is all mailboxes for us.
+					// ../rfc/5465:817
+					for mb, err := range bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).All() {
+						xcheckf(err, "list mailboxes")
+						m[mb.ID] = mb
+					}
+
+				case "SUBSCRIBED":
+					// Mailboxes that are subscribed. Will typically be same as personal, since we
+					// subscribe to all mailboxes. But user can manage subscriptions differently.
+					// ../rfc/5465:831
+					for mb, err := range bstore.QueryTx[store.Mailbox](tx).FilterEqual("Expunged", false).All() {
+						xcheckf(err, "list mailboxes")
+						if err := tx.Get(&store.Subscription{Name: mb.Name}); err == nil {
+							m[mb.ID] = mb
+						} else if err != bstore.ErrAbsent {
+							xcheckf(err, "lookup subscription for mailbox")
+						}
+					}
+
+				case "SUBTREE", "SUBTREE-ONE":
+					// The mailbox name itself, and children. ../rfc/5465:847
+					// SUBTREE is arbitrarily deep, SUBTREE-ONE is one level deeper than requested
+					// mailbox. The mailbox itself is included too ../rfc/7377:274
+
+					// We don't have to worry about loops. Mailboxes are not in the file system.
+					// ../rfc/7377:291
+
+					for _, name := range mbs.Args {
+						name = xcheckmailboxname(name, true)
+
+						one := mbs.Kind == "SUBTREE-ONE"
+						var ntoken int
+						if one {
+							ntoken = len(strings.Split(name, "/"))
+						}
+
+						q := bstore.QueryTx[store.Mailbox](tx)
+						q.FilterEqual("Expunged", false)
+						q.FilterGreaterEqual("Name", name)
+						q.SortAsc("Name")
+						for mb, err := range q.All() {
+							xcheckf(err, "list mailboxes")
+							if mb.Name != name && !strings.HasPrefix(mb.Name, name+"/") {
+								break
+							}
+							if !one || mb.Name == name || len(strings.Split(mb.Name, "/")) == ntoken+1 {
+								m[mb.ID] = mb
+							}
+						}
+					}
+
+				case "MAILBOXES":
+					// Just the specified mailboxes. ../rfc/5465:853
+					for _, name := range mbs.Args {
+						name = xcheckmailboxname(name, true)
+
+						// If a mailbox doesn't exist, we don't treat it as an error. Seems reasonable
+						// giving we are searching. Messages may not exist. And likewise for the mailbox.
+						// Just results in no hits.
+						mb, err := c.account.MailboxFind(tx, name)
+						xcheckf(err, "looking up mailbox")
+						if mb != nil {
+							m[mb.ID] = *mb
+						}
+					}
+
+				default:
+					panic("missing case")
+				}
+			}
+			mailboxes = slices.Collect(maps.Values(m))
+			slices.SortFunc(mailboxes, func(a, b store.Mailbox) int {
+				return cmp.Compare(a.Name, b.Name)
+			})
+
+			// If no source mailboxes were specified (no mailboxSpecs), the selected mailbox is
+			// used below. ../rfc/7377:298
+		} else {
+			mb := c.xmailboxID(tx, c.mailboxID) // Validate.
+			mailboxes = []store.Mailbox{mb}
+		}
+
+		if save && !(len(mailboxes) == 1 && mailboxes[0].ID == c.mailboxID) {
+			// ../rfc/7377:319
+			xsyntaxErrorf("can only use SAVE on selected mailbox")
+		}
+
 		runlock()
 		runlock = func() {}
 
-		// Normal forward search when we don't have MAX only. We only send an "inprogress"
-		// goal if we know how many messages we have to check.
-		forward := eargs == nil || max == 0 || len(eargs) != 1
-		reverse := max == 1 && (len(eargs) == 1 || min+max == len(eargs))
+		// Determine if search has a sequence set without search results. If so, we need
+		// sequence numbers for matching, and we must always go through the messages in
+		// forward order. No reverse search for MAX only.
+		needSeq := (len(mailboxes) > 1 || len(mailboxes) == 1 && mailboxes[0].ID != c.mailboxID) && sk.needSeq()
+
+		forward := eargs == nil || max1 == 0 || len(eargs) != 1 || needSeq
+		reverse := max1 == 1 && (len(eargs) == 1 || min1+max1 == len(eargs)) && !needSeq
+
+		// We set a worst-case "goal" of having gone through all messages in all mailboxes.
+		// Sometimes, we can be faster, when we only do a MIN and/or MAX query and we can
+		// stop early. We'll account for that as we go. For the selected mailbox, we'll
+		// only look at those the session has already seen.
 		goal := "nil"
-		if len(c.uids) > 0 && forward != reverse {
-			goal = fmt.Sprintf("%d", len(c.uids))
+		var total uint32
+		for _, mb := range mailboxes {
+			if mb.ID == c.mailboxID {
+				total += uint32(len(c.uids))
+			} else {
+				total += uint32(mb.Total + mb.Deleted)
+			}
+		}
+		if total > 0 {
+			// Goal is always non-zero. ../rfc/9585:232
+			goal = fmt.Sprintf("%d", total)
 		}
 
-		var lastIndex = -1
-		if forward {
-			for i, uid := range c.uids {
-				lastIndex = i
-				if time.Since(inProgressLast) > inProgressPeriod {
-					c.writelinef("* OK [INPROGRESS (%s %d %s)] still searching", inProgressTag, i, goal)
-					inProgressLast = time.Now()
+		var progress uint32
+		for _, mb := range mailboxes {
+			var lastUID store.UID
+
+			result := Result{Mailbox: mb}
+
+			msgCount := uint32(mb.MailboxCounts.Total + mb.MailboxCounts.Deleted)
+			if mb.ID == c.mailboxID {
+				msgCount = uint32(len(c.uids))
+			}
+
+			// Used for interpreting UID sets with a star, like "1:*" and "10:*". Only called
+			// for UIDs that are higher than the number, since "10:*" evaluates to "10:5" if 5
+			// is the highest UID, and UID 5-10 would all match.
+			var cachedHighestUID store.UID
+			highestUID := func() (store.UID, error) {
+				if cachedHighestUID > 0 {
+					return cachedHighestUID, nil
 				}
-				if match, modseq := c.searchMatch(tx, msgseq(i+1), uid, *sk, bodySearch, textSearch, &expungeIssued); match {
-					uids = append(uids, uid)
-					if modseq > maxModSeq {
-						maxModSeq = modseq
+
+				q := bstore.QueryTx[store.Message](tx)
+				q.FilterNonzero(store.Message{MailboxID: mb.ID})
+				q.FilterEqual("Expunged", false)
+				q.SortDesc("UID")
+				q.Limit(1)
+				m, err := q.Get()
+				cachedHighestUID = m.UID
+				return cachedHighestUID, err
+			}
+
+			progressOrig := progress
+
+			if forward {
+				// We track this for non-selected mailboxes. searchMatch will look the message
+				// sequence number for this session up if we are searching the selected mailbox.
+				var seq msgseq = 1
+
+				q := bstore.QueryTx[store.Message](tx)
+				q.FilterNonzero(store.Message{MailboxID: mb.ID})
+				q.FilterEqual("Expunged", false)
+				q.SortAsc("UID")
+				for m, err := range q.All() {
+					xcheckf(err, "list messages in mailbox")
+
+					// We track this for the "reverse" case, we'll stop before seeing lastUID.
+					lastUID = m.UID
+
+					if time.Since(inProgressLast) > inProgressPeriod {
+						c.writelinef("* OK [INPROGRESS (%s %d %s)] still searching", inProgressTag, progress, goal)
+						inProgressLast = time.Now()
 					}
-					if min == 1 && min+max == len(eargs) {
+					progress++
+
+					if c.searchMatch(tx, msgCount, seq, m, *sk, bodySearch, textSearch, highestUID) {
+						result.UIDs = append(result.UIDs, m.UID)
+						result.MaxModSeq = max(result.MaxModSeq, m.ModSeq)
+						if min1 == 1 && min1+max1 == len(eargs) {
+							if !needSeq {
+								break
+							}
+							// We only need a MIN and a MAX, but we also need sequence numbers so we are
+							// walking through and collecting all UIDs. Correct for that, keeping only the MIN
+							// (first)
+							// and MAX (second).
+							if len(result.UIDs) == 3 {
+								result.UIDs[1] = result.UIDs[2]
+								result.UIDs = result.UIDs[:2]
+							}
+						}
+					}
+					seq++
+				}
+			}
+			// And reverse search for MAX if we have only MAX or MAX combined with MIN, and
+			// don't need sequence numbers. We just need a single match, then we stop.
+			if reverse {
+				q := bstore.QueryTx[store.Message](tx)
+				q.FilterNonzero(store.Message{MailboxID: mb.ID})
+				q.FilterEqual("Expunged", false)
+				q.FilterGreater("UID", lastUID)
+				q.SortDesc("UID")
+				for m, err := range q.All() {
+					xcheckf(err, "list messages in mailbox")
+
+					if time.Since(inProgressLast) > inProgressPeriod {
+						c.writelinef("* OK [INPROGRESS (%s %d %s)] still searching", inProgressTag, progress, goal)
+						inProgressLast = time.Now()
+					}
+					progress++
+
+					var seq msgseq // Filled in by searchMatch for messages in selected mailbox.
+					if c.searchMatch(tx, msgCount, seq, m, *sk, bodySearch, textSearch, highestUID) {
+						result.UIDs = append(result.UIDs, m.UID)
+						result.MaxModSeq = max(result.MaxModSeq, m.ModSeq)
 						break
 					}
 				}
 			}
-		}
-		// And reverse search for MAX if we have only MAX or MAX combined with MIN.
-		if reverse {
-			for i := len(c.uids) - 1; i > lastIndex; i-- {
-				if time.Since(inProgressLast) > inProgressPeriod {
-					c.writelinef("* OK [INPROGRESS (%s %d %s)] still searching", inProgressTag, len(c.uids)-1-i, goal)
-					inProgressLast = time.Now()
-				}
-				if match, modseq := c.searchMatch(tx, msgseq(i+1), c.uids[i], *sk, bodySearch, textSearch, &expungeIssued); match {
-					uids = append(uids, c.uids[i])
-					if modseq > maxModSeq {
-						maxModSeq = modseq
-					}
-					break
-				}
-			}
+
+			// We could have finished searching the mailbox with fewer
+			mailboxProcessed := progress - progressOrig
+			mailboxTotal := uint32(mb.MailboxCounts.Total + mb.MailboxCounts.Deleted)
+			progress += max(0, mailboxTotal-mailboxProcessed)
+
+			results = append(results, result)
 		}
 	})
 
 	if eargs == nil {
+		// We'll only have a result for the one selected mailbox.
+		result := results[0]
+
 		// In IMAP4rev1, an untagged SEARCH response is required. ../rfc/3501:2728
-		if len(uids) == 0 {
+		if len(result.UIDs) == 0 {
 			c.bwritelinef("* SEARCH")
 		}
 
 		// Old-style SEARCH response. We must spell out each number. So we may be splitting
 		// into multiple responses. ../rfc/9051:6809 ../rfc/3501:4833
-		for len(uids) > 0 {
-			n := len(uids)
+		for len(result.UIDs) > 0 {
+			n := len(result.UIDs)
 			if n > 100 {
 				n = 100
 			}
 			s := ""
-			for _, v := range uids[:n] {
+			for _, v := range result.UIDs[:n] {
 				if !isUID {
 					v = store.UID(c.xsequence(v))
 				}
@@ -233,18 +524,18 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 			var modseq string
 			if sk.hasModseq() {
 				// ../rfc/7162:2557
-				modseq = fmt.Sprintf(" (MODSEQ %d)", maxModSeq.Client())
+				modseq = fmt.Sprintf(" (MODSEQ %d)", result.MaxModSeq.Client())
 			}
 
 			c.bwritelinef("* SEARCH%s%s", s, modseq)
-			uids = uids[n:]
+			result.UIDs = result.UIDs[n:]
 		}
 	} else {
 		// New-style ESEARCH response syntax: ../rfc/9051:6546 ../rfc/4466:522
 
 		if save {
 			// ../rfc/9051:3784 ../rfc/5182:13
-			c.searchResult = uids
+			c.searchResult = results[0].UIDs
 			if sanityChecks {
 				checkUIDs(c.searchResult)
 			}
@@ -252,72 +543,88 @@ func (c *conn) cmdxSearch(isUID bool, tag, cmd string, p *parser) {
 
 		// No untagged ESEARCH response if nothing was requested. ../rfc/9051:4160
 		if len(eargs) > 0 {
-			// The tag was originally a string, became an astring in IMAP4rev2, better stick to
-			// string. ../rfc/4466:707 ../rfc/5259:1163 ../rfc/9051:7087
-			resp := fmt.Sprintf(`* ESEARCH (TAG "%s")`, tag)
-			if isUID {
-				resp += " UID"
-			}
-
-			// NOTE: we are converting UIDs to msgseq in the uids slice (if needed) while
-			// keeping the "uids" name!
-			if !isUID {
-				// If searchResult is hanging on to the slice, we need to work on a copy.
-				if save {
-					nuids := make([]store.UID, len(uids))
-					copy(nuids, uids)
-					uids = nuids
+			for _, result := range results {
+				// For the ESEARCH command, we must not return a response if there were no matching
+				// messages. This is unlike the later IMAP4rev2, where an ESEARCH response must be
+				// sent if there were no matches. ../rfc/7377:243 ../rfc/9051:3775
+				if isE && len(result.UIDs) == 0 {
+					continue
 				}
-				for i, uid := range uids {
-					uids[i] = store.UID(c.xsequence(uid))
+
+				// The tag was originally a string, became an astring in IMAP4rev2, better stick to
+				// string. ../rfc/4466:707 ../rfc/5259:1163 ../rfc/9051:7087
+				if isE {
+					fmt.Fprintf(c.xbw, `* ESEARCH (TAG "%s" MAILBOX %s UIDVALIDITY %d)`, tag, result.Mailbox.Name, result.Mailbox.UIDValidity)
+				} else {
+					fmt.Fprintf(c.xbw, `* ESEARCH (TAG "%s")`, tag)
 				}
-			}
+				if isUID {
+					fmt.Fprintf(c.xbw, " UID")
+				}
 
-			// If no matches, then no MIN/MAX response. ../rfc/4731:98 ../rfc/9051:3758
-			if eargs["MIN"] && len(uids) > 0 {
-				resp += fmt.Sprintf(" MIN %d", uids[0])
-			}
-			if eargs["MAX"] && len(uids) > 0 {
-				resp += fmt.Sprintf(" MAX %d", uids[len(uids)-1])
-			}
-			if eargs["COUNT"] {
-				resp += fmt.Sprintf(" COUNT %d", len(uids))
-			}
-			if eargs["ALL"] && len(uids) > 0 {
-				resp += fmt.Sprintf(" ALL %s", compactUIDSet(uids).String())
-			}
+				// NOTE: we are potentially converting UIDs to msgseq, but keep the store.UID type
+				// for convenience.
+				nums := result.UIDs
+				if !isUID {
+					// If searchResult is hanging on to the slice, we need to work on a copy.
+					if save {
+						nums = slices.Clone(nums)
+					}
+					for i, uid := range nums {
+						nums[i] = store.UID(c.xsequence(uid))
+					}
+				}
 
-			// Interaction between ESEARCH and CONDSTORE: ../rfc/7162:1211 ../rfc/4731:273
-			// Summary: send the highest modseq of the returned messages.
-			if sk.hasModseq() && len(uids) > 0 {
-				resp += fmt.Sprintf(" MODSEQ %d", maxModSeq.Client())
-			}
+				// If no matches, then no MIN/MAX response. ../rfc/4731:98 ../rfc/9051:3758
+				if eargs["MIN"] && len(nums) > 0 {
+					fmt.Fprintf(c.xbw, " MIN %d", nums[0])
+				}
+				if eargs["MAX"] && len(result.UIDs) > 0 {
+					fmt.Fprintf(c.xbw, " MAX %d", nums[len(nums)-1])
+				}
+				if eargs["COUNT"] {
+					fmt.Fprintf(c.xbw, " COUNT %d", len(nums))
+				}
+				if eargs["ALL"] && len(nums) > 0 {
+					fmt.Fprintf(c.xbw, " ALL %s", compactUIDSet(nums).String())
+				}
 
-			c.bwritelinef("%s", resp)
+				// Interaction between ESEARCH and CONDSTORE: ../rfc/7162:1211 ../rfc/4731:273
+				// Summary: send the highest modseq of the returned messages.
+				if sk.hasModseq() && len(nums) > 0 {
+					fmt.Fprintf(c.xbw, " MODSEQ %d", result.MaxModSeq.Client())
+				}
+
+				c.bwritelinef("")
+			}
 		}
 	}
-	if expungeIssued {
-		// ../rfc/9051:5102
-		c.writeresultf("%s OK [EXPUNGEISSUED] done", tag)
-	} else {
-		c.ok(tag, cmd)
-	}
+
+	c.ok(tag, cmd)
 }
 
 type search struct {
-	c             *conn
-	tx            *bstore.Tx
-	seq           msgseq
-	uid           store.UID
-	mr            *store.MsgReader
-	m             store.Message
-	p             *message.Part
-	expungeIssued *bool
-	hasModseq     bool
+	c          *conn
+	tx         *bstore.Tx
+	msgCount   uint32 // Number of messages in mailbox (or session when selected).
+	seq        msgseq // Can be 0, for other mailboxes than selected in case of MAX.
+	m          store.Message
+	mr         *store.MsgReader
+	p          *message.Part
+	highestUID func() (store.UID, error)
 }
 
-func (c *conn) searchMatch(tx *bstore.Tx, seq msgseq, uid store.UID, sk searchKey, bodySearch, textSearch *store.WordSearch, expungeIssued *bool) (bool, store.ModSeq) {
-	s := search{c: c, tx: tx, seq: seq, uid: uid, expungeIssued: expungeIssued, hasModseq: sk.hasModseq()}
+func (c *conn) searchMatch(tx *bstore.Tx, msgCount uint32, seq msgseq, m store.Message, sk searchKey, bodySearch, textSearch *store.WordSearch, highestUID func() (store.UID, error)) bool {
+	if m.MailboxID == c.mailboxID {
+		seq = c.sequence(m.UID)
+		if seq == 0 {
+			// Session has not yet seen this message, and is not expecting to get a result that
+			// includes it.
+			return false
+		}
+	}
+
+	s := search{c: c, tx: tx, msgCount: msgCount, seq: seq, m: m, highestUID: highestUID}
 	defer func() {
 		if s.mr != nil {
 			err := s.mr.Close()
@@ -328,18 +635,7 @@ func (c *conn) searchMatch(tx *bstore.Tx, seq msgseq, uid store.UID, sk searchKe
 	return s.match(sk, bodySearch, textSearch)
 }
 
-func (s *search) match(sk searchKey, bodySearch, textSearch *store.WordSearch) (match bool, modseq store.ModSeq) {
-	// Instead of littering all the cases in match0 with calls to get modseq, we do it once
-	// here in case of a match.
-	defer func() {
-		if match && s.hasModseq {
-			if s.m.ID == 0 {
-				match = s.xensureMessage()
-			}
-			modseq = s.m.ModSeq
-		}
-	}()
-
+func (s *search) match(sk searchKey, bodySearch, textSearch *store.WordSearch) (match bool) {
 	match = s.match0(sk)
 	if match && bodySearch != nil {
 		if !s.xensurePart() {
@@ -362,33 +658,11 @@ func (s *search) match(sk searchKey, bodySearch, textSearch *store.WordSearch) (
 	return
 }
 
-func (s *search) xensureMessage() bool {
-	if s.m.ID > 0 {
-		return true
-	}
-
-	q := bstore.QueryTx[store.Message](s.tx)
-	q.FilterNonzero(store.Message{MailboxID: s.c.mailboxID, UID: s.uid})
-	m, err := q.Get()
-	if err == bstore.ErrAbsent || err == nil && m.Expunged {
-		// ../rfc/2180:607
-		*s.expungeIssued = true
-		return false
-	}
-	xcheckf(err, "get message")
-	s.m = m
-	return true
-}
-
 // ensure message, reader and part are loaded. returns whether that was
 // successful.
 func (s *search) xensurePart() bool {
 	if s.mr != nil {
 		return s.p != nil
-	}
-
-	if !s.xensureMessage() {
-		return false
 	}
 
 	// Closed by searchMatch after all (recursive) search.match calls are finished.
@@ -417,14 +691,23 @@ func (s *search) match0(sk searchKey) bool {
 		}
 		return true
 	} else if sk.seqSet != nil {
-		return sk.seqSet.containsSeq(s.seq, c.uids, c.searchResult)
+		if sk.seqSet.searchResult {
+			// Interpreting search results on a mailbox that isn't selected during multisearch
+			// is likely a mistake. No mention about it in the RFC. ../rfc/7377:257
+			if s.m.MailboxID != c.mailboxID {
+				xuserErrorf("can only use search result with the selected mailbox")
+			}
+			return uidSearch(c.searchResult, s.m.UID) > 0
+		}
+		// For multisearch, we have arranged to have a seq for non-selected mailboxes too.
+		return sk.seqSet.containsSeqCount(s.seq, s.msgCount)
 	}
 
 	filterHeader := func(field, value string) bool {
 		lower := strings.ToLower(value)
 		h, err := s.p.Header()
 		if err != nil {
-			c.log.Debugx("parsing message header", err, slog.Any("uid", s.uid))
+			c.log.Debugx("parsing message header", err, slog.Any("uid", s.m.UID), slog.Int64("msgid", s.m.ID))
 			return false
 		}
 		for _, v := range h.Values(field) {
@@ -454,7 +737,14 @@ func (s *search) match0(sk searchKey) bool {
 	case "OR":
 		return s.match0(*sk.searchKey) || s.match0(*sk.searchKey2)
 	case "UID":
-		return sk.uidSet.containsUID(s.uid, c.uids, c.searchResult)
+		if sk.uidSet.searchResult && s.m.MailboxID != c.mailboxID {
+			// Interpreting search results on a mailbox that isn't selected during multisearch
+			// is likely a mistake. No mention about it in the RFC. ../rfc/7377:257
+			xuserErrorf("cannot use search result from another mailbox")
+		}
+		match, err := sk.uidSet.containsKnownUID(s.m.UID, c.searchResult, s.highestUID)
+		xcheckf(err, "checking for presence in uid set")
+		return match
 	}
 
 	// Parsed part.
@@ -570,7 +860,7 @@ func (s *search) match0(sk searchKey) bool {
 	}
 
 	if s.p == nil {
-		c.log.Info("missing parsed message, not matching", slog.Any("uid", s.uid))
+		c.log.Info("missing parsed message, not matching", slog.Any("uid", s.m.UID), slog.Int64("msgid", s.m.ID))
 		return false
 	}
 
@@ -599,7 +889,7 @@ func (s *search) match0(sk searchKey) bool {
 		lower := strings.ToLower(sk.astring)
 		h, err := s.p.Header()
 		if err != nil {
-			c.log.Errorx("parsing header for search", err, slog.Any("uid", s.uid))
+			c.log.Errorx("parsing header for search", err, slog.Any("uid", s.m.UID), slog.Int64("msgid", s.m.ID))
 			return false
 		}
 		k := textproto.CanonicalMIMEHeaderKey(sk.headerField)

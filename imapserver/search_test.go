@@ -34,6 +34,10 @@ this is html.
 --x--
 `, "\n", "\r\n")
 
+func uint32ptr(v uint32) *uint32 {
+	return &v
+}
+
 func (tc *testconn) xsearch(nums ...uint32) {
 	tc.t.Helper()
 
@@ -53,7 +57,7 @@ func (tc *testconn) xsearchmodseq(modseq int64, nums ...uint32) {
 func (tc *testconn) xesearch(exp imapclient.UntaggedEsearch) {
 	tc.t.Helper()
 
-	exp.Correlator = tc.client.LastTag
+	exp.Tag = tc.client.LastTag
 	tc.xuntagged(exp)
 }
 
@@ -93,6 +97,11 @@ func TestSearch(t *testing.T) {
 	tc.client.Append("inbox", imapclient.Append{Flags: mostFlags, Received: &received, Size: int64(len(searchMsg)), Data: strings.NewReader(searchMsg)})
 
 	// We now have sequence numbers 1,2,3 and UIDs 5,6,7.
+
+	// We need to be selected. Not the case for ESEARCH command.
+	tc.client.Unselect()
+	tc.transactf("no", "search all")
+	tc.client.Select("inbox")
 
 	tc.transactf("ok", "search all")
 	tc.xsearch(1, 2, 3)
@@ -289,10 +298,6 @@ func TestSearch(t *testing.T) {
 		return imapclient.UntaggedEsearch{All: esearchall0(ss)}
 	}
 
-	uint32ptr := func(v uint32) *uint32 {
-		return &v
-	}
-
 	// Do new-style ESEARCH requests with RETURN. We should get an ESEARCH response.
 	tc.transactf("ok", "search return () all")
 	tc.xesearch(esearchall("1:3")) // Without any options, "ALL" is implicit.
@@ -463,4 +468,362 @@ func esearchall0(ss string) imapclient.NumSet {
 		seqset.Ranges = append(seqset.Ranges, imapclient.NumRange{First: first, Last: last})
 	}
 	return seqset
+}
+
+// Test the MULTISEARCH extension. Where we don't need to have a mailbox selected,
+// operating without messag sequence numbers, and return untagged esearch responses
+// that include the mailbox and uidvalidity.
+func TestSearchMulti(t *testing.T) {
+	testSearchMulti(t, false)
+	testSearchMulti(t, true)
+}
+
+// Run multisearch tests with or without a mailbox selected.
+func testSearchMulti(t *testing.T, selected bool) {
+	defer mockUIDValidity()()
+
+	tc := start(t)
+	defer tc.close()
+	tc.client.Login("mjl@mox.example", password0)
+	tc.client.Select("inbox")
+
+	// Add 5 messages to Inbox and delete first 4 messages. So UIDs start at 5.
+	received := time.Date(2020, time.January, 1, 10, 0, 0, 0, time.UTC)
+	for range 6 {
+		tc.client.Append("inbox", makeAppendTime(exampleMsg, received))
+	}
+	tc.client.StoreFlagsSet("1:4", true, `\Deleted`)
+	tc.client.Expunge()
+
+	// Unselecting mailbox, esearch works in authenticated state.
+	if !selected {
+		tc.client.Unselect()
+	}
+
+	received = time.Date(2022, time.January, 1, 9, 0, 0, 0, time.UTC)
+	tc.client.Append("inbox", makeAppendTime(searchMsg, received))
+
+	received = time.Date(2022, time.January, 1, 9, 0, 0, 0, time.UTC)
+	mostFlags := []string{
+		`\Deleted`,
+		`\Seen`,
+		`\Answered`,
+		`\Flagged`,
+		`\Draft`,
+		`$Forwarded`,
+		`$Junk`,
+		`$Notjunk`,
+		`$Phishing`,
+		`$MDNSent`,
+		`custom1`,
+		`Custom2`,
+	}
+	tc.client.Append("Archive", imapclient.Append{Flags: mostFlags, Received: &received, Size: int64(len(searchMsg)), Data: strings.NewReader(searchMsg)})
+
+	// We now have sequence numbers 1,2,3 and UIDs 5,6,7 in Inbox, and UID 1 in Archive.
+
+	// Basic esearch with mailboxes.
+	tc.cmdf("Tag1", `Esearch In (Personal) Return () All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5:7")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Archive", UIDValidity: 1, UID: true, All: esearchall0("1")},
+	)
+
+	// Again, but with progress information.
+	orig := inProgressPeriod
+	inProgressPeriod = 0
+	inprogress := func(cur, goal uint32) imapclient.UntaggedResult {
+		return imapclient.UntaggedResult{
+			Status: "OK",
+			RespText: imapclient.RespText{
+				Code:    "INPROGRESS",
+				CodeArg: imapclient.CodeInProgress{Tag: "Tag1", Current: &cur, Goal: &goal},
+				More:    "still searching",
+			},
+		}
+	}
+	tc.cmdf("Tag1", `Esearch In (Personal) Return () All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5:7")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Archive", UIDValidity: 1, UID: true, All: esearchall0("1")},
+		inprogress(0, 4),
+		inprogress(1, 4),
+		inprogress(2, 4),
+		inprogress(3, 4),
+	)
+	inProgressPeriod = orig
+
+	// Explicit mailboxes listed, including non-existent one that is ignored,
+	// duplicates are ignored as well.
+	tc.cmdf("Tag1", `Esearch In (Mailboxes (INBOX Archive Archive)) Return (Min Max Count All) All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 5, Max: 7, Count: uint32ptr(3), All: esearchall0("5:7")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Archive", UIDValidity: 1, UID: true, Min: 1, Max: 1, Count: uint32ptr(1), All: esearchall0("1")},
+	)
+
+	// No response if none of the mailboxes exist.
+	tc.cmdf("Tag1", `Esearch In (Mailboxes bogus Mailboxes (nonexistent)) Return (Min Max Count All) All`)
+	tc.response("ok")
+	tc.xuntagged()
+
+	// Inboxes evaluates to just inbox on new account. We'll add more mailboxes
+	// matching "inboxes" later on.
+	tc.cmdf("Tag1", `Esearch In (Inboxes) Return () All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5:7")},
+	)
+
+	// Subscribed is set for created mailboxes by default.
+	tc.cmdf("Tag1", `Esearch In (Subscribed) Return (Max) All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Max: 7},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Archive", UIDValidity: 1, UID: true, Max: 1},
+	)
+
+	// Asking for max does a reverse search.
+	tc.cmdf("Tag1", `Esearch In (Personal) Return (Max) All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Max: 7},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Archive", UIDValidity: 1, UID: true, Max: 1},
+	)
+
+	// Min stops early.
+	tc.cmdf("Tag1", `Esearch In (Personal) Return (Min) All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 5},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Archive", UIDValidity: 1, UID: true, Min: 1},
+	)
+
+	// Min and max do forward and reverse search, stopping early.
+	tc.cmdf("Tag1", `Esearch In (Personal) Return (Min Max) All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 5, Max: 7},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Archive", UIDValidity: 1, UID: true, Min: 1, Max: 1},
+	)
+
+	if selected {
+		// With only 1 inbox, we can use SAVE with Inboxes. Can't anymore when we have multiple.
+		tc.transactf("ok", `Esearch In (Inboxes) Return (Save) All`)
+		tc.xuntagged()
+
+		// Using search result ($) works with selected mailbox.
+		tc.cmdf("Tag1", `Esearch In (Selected) Return () $`)
+		tc.response("ok")
+		tc.xuntagged(
+			imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5:7")},
+		)
+	} else {
+		// Cannot use "selected" if we are not in selected state.
+		tc.transactf("bad", `Esearch In (Selected) Return () All`)
+	}
+
+	// Add more "inboxes", and other mailboxes for testing "subtree" and "subtree-one".
+	more := []string{
+		"Inbox/Sub1",
+		"Inbox/Sub2",
+		"Inbox/Sub2/SubA",
+		"Inbox/Sub2/SubB",
+		"Other",
+		"Other/Sub1", // sub1@mox.example in config.
+		"Other/Sub2",
+		"Other/Sub2/SubA", // ruleset for sub2@mox.example in config.
+		"Other/Sub2/SubB",
+		"List", // ruleset for a mailing list
+	}
+	for _, name := range more {
+		tc.client.Create(name, nil)
+		tc.client.Append(name, makeAppendTime(exampleMsg, received))
+	}
+
+	// Cannot use SAVE with multiple mailboxes that match.
+	tc.transactf("bad", `Esearch In (Inboxes) Return (Save) All`)
+
+	// "inboxes" includes everything below Inbox, and also anything that we might
+	// deliver to based on account addresses and rulesets, but not mailing lists.
+	tc.cmdf("Tag1", `Esearch In (Inboxes) Return () All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5:7")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox/Sub1", UIDValidity: 3, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox/Sub2", UIDValidity: 4, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox/Sub2/SubA", UIDValidity: 5, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox/Sub2/SubB", UIDValidity: 6, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Other/Sub1", UIDValidity: 8, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Other/Sub2/SubA", UIDValidity: 10, UID: true, All: esearchall0("1")},
+	)
+
+	// subtree
+	tc.cmdf("Tag1", `Esearch In (Subtree Other) Return () All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Other", UIDValidity: 7, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Other/Sub1", UIDValidity: 8, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Other/Sub2", UIDValidity: 9, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Other/Sub2/SubA", UIDValidity: 10, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Other/Sub2/SubB", UIDValidity: 11, UID: true, All: esearchall0("1")},
+	)
+
+	// subtree-one
+	tc.cmdf("Tag1", `Esearch In (Subtree-One Other) Return () All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Other", UIDValidity: 7, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Other/Sub1", UIDValidity: 8, UID: true, All: esearchall0("1")},
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Other/Sub2", UIDValidity: 9, UID: true, All: esearchall0("1")},
+	)
+
+	// Search with sequence set also for non-selected mailboxes(!). The min/max would
+	// get the first and last message, but the message sequence set forces a scan.
+	tc.cmdf("Tag1", `Esearch In (Mailboxes Inbox) Return (Min Max) 1:*`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 5, Max: 7},
+	)
+
+	// Search with uid set with "$highnum:*" forces getting highest uid.
+	tc.cmdf("Tag1", `Esearch In (Mailboxes Inbox) Return (Min Max) Uid *:100`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 7, Max: 7},
+	)
+	tc.cmdf("Tag1", `Esearch In (Mailboxes Inbox) Return (Min Max) Uid 100:*`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 7, Max: 7},
+	)
+	tc.cmdf("Tag1", `Esearch In (Mailboxes Inbox) Return (Min Max) Uid 1:*`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 5, Max: 7},
+	)
+
+	// We use another session to add a new message to Inbox and to Archive. Searching
+	// with Inbox selected will not return the new message since it isn't available in
+	// the session yet. The message in Archive is returned, since there is no session
+	// limitation.
+	tc2 := startNoSwitchboard(t)
+	defer tc2.closeNoWait()
+	tc2.client.Login("mjl@mox.example", password0)
+	tc2.client.Append("inbox", makeAppendTime(searchMsg, received))
+	tc2.client.Append("Archive", makeAppendTime(searchMsg, received))
+
+	tc.cmdf("Tag1", `Esearch In (Mailboxes (Inbox Archive)) Return (Count) All`)
+	tc.response("ok")
+	if selected {
+		tc.xuntagged(
+			imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Count: uint32ptr(3)},
+			imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Archive", UIDValidity: 1, UID: true, Count: uint32ptr(2)},
+			imapclient.UntaggedExists(4),
+			imapclient.UntaggedFetch{Seq: 4, Attrs: []imapclient.FetchAttr{imapclient.FetchUID(8), imapclient.FetchFlags(nil)}},
+		)
+	} else {
+		tc.xuntagged(
+			imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Count: uint32ptr(4)},
+			imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Archive", UIDValidity: 1, UID: true, Count: uint32ptr(2)},
+		)
+	}
+
+	if selected {
+		// Saving a search result, and then using it with another mailbox results in error.
+		tc.transactf("ok", `Esearch In (Mailboxes Inbox) Return (Save) All`)
+		tc.transactf("no", `Esearch In (Mailboxes Archive) Return () $`)
+	} else {
+		tc.transactf("bad", `Esearch In (Inboxes) Return (Save) All`) // Need a selected mailbox with SAVE.
+		tc.transactf("no", `Esearch In (Inboxes) Return () $`)        // Cannot use saved result with non-selected mailbox.
+	}
+
+	tc.transactf("bad", `Esearch In () Return () All`)                    // Missing values for "IN"-list.
+	tc.transactf("bad", `Esearch In (Bogus) Return () All`)               // Bogus word for "IN".
+	tc.transactf("bad", `Esearch In ("Selected") Return () All`)          // IN-words can't be quoted.
+	tc.transactf("bad", `Esearch In (Selected-Delayed) Return () All`)    // From NOTIFY, not in ESEARCH.
+	tc.transactf("bad", `Esearch In (Subtree-One) Return () All`)         // After subtree-one we need a list.
+	tc.transactf("bad", `Esearch In (Subtree-One ) Return () All`)        // After subtree-one we need a list.
+	tc.transactf("bad", `Esearch In (Subtree-One (Test) ) Return () All`) // Bogus space.
+
+	if !selected {
+		return
+	}
+	// From now on, we are in selected state.
+
+	tc.cmdf("Tag1", `Esearch In (Selected) Return () All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5:8")},
+	)
+
+	// Testing combinations of SAVE with MIN/MAX/others ../rfc/9051:4100
+	tc.transactf("ok", `Esearch In (Selected) Return (Save) All`)
+	tc.xuntagged()
+
+	tc.cmdf("Tag1", `Esearch In (Selected) Return () $`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5:8")},
+	)
+
+	// Inbox happens to be the selected mailbox, so OK.
+	tc.cmdf("Tag1", `Esearch In (Mailboxes Inbox) Return () $`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5:8")},
+	)
+
+	// Non-selected mailboxes aren't allowed to use the saved result.
+	tc.transactf("no", `Esearch In (Mailboxes Archive) Return () $`)
+	tc.transactf("no", `Esearch In (Mailboxes Archive) Return () uid $`)
+
+	tc.cmdf("Tag1", `Esearch In (Selected) Return (Save Min Max) All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 5, Max: 8},
+	)
+	tc.cmdf("Tag1", `Esearch In (Selected) Return () $`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5,8")},
+	)
+
+	tc.cmdf("Tag1", `Esearch In (Selected) Return (Save Min) All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 5},
+	)
+
+	tc.cmdf("Tag1", `Esearch In (Selected) Return () $`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5")},
+	)
+
+	tc.cmdf("Tag1", `Esearch In (Selected) Return (Save Max) All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Max: 8},
+	)
+
+	tc.cmdf("Tag1", `Esearch In (Selected) Return () $`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("8")},
+	)
+
+	tc.cmdf("Tag1", `Esearch In (Selected) Return (Save Min Max Count) All`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, Min: 5, Max: 8, Count: uint32ptr(4)},
+	)
+
+	tc.cmdf("Tag1", `Esearch In (Selected) Return () $`)
+	tc.response("ok")
+	tc.xuntagged(
+		imapclient.UntaggedEsearch{Tag: "Tag1", Mailbox: "Inbox", UIDValidity: 1, UID: true, All: esearchall0("5:8")},
+	)
 }

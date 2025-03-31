@@ -152,9 +152,9 @@ https://nlnet.nl/project/Mox/.
 - External addresses in aliases/lists.
 - Autoresponder (out of office/vacation)
 - Mailing list manager
-- IMAP extensions for "online"/non-syncing/webmail clients (MULTISEARCH, SORT (including
+- IMAP extensions for "online"/non-syncing/webmail clients (SORT (including
   DISPLAYFROM, DISPLAYTO), THREAD, PARTIAL, CONTEXT=SEARCH CONTEXT=SORT ESORT,
-  FILTERS, PREVIEW)
+  FILTERS)
 - IMAP ACL support, for account sharing (interacts with many extensions and code)
 - Improve support for mobile clients with extensions: IMAP URLAUTH, SMTP
   CHUNKING and BINARYMIME, IMAP CATENATE
