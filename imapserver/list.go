@@ -115,7 +115,7 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 
 	if !isExtended && reference == "" && patterns[0] == "" {
 		// ../rfc/9051:2277 ../rfc/3501:2221
-		c.bwritelinef(`* LIST () "/" ""`)
+		c.xbwritelinef(`* LIST () "/" ""`)
 		c.ok(tag, cmd)
 		return
 	}
@@ -261,11 +261,11 @@ func (c *conn) cmdList(tag, cmd string, p *parser) {
 	})
 
 	for _, line := range responseLines {
-		c.bwritelinef("%s", line)
+		c.xbwritelinef("%s", line)
 	}
 	for _, meta := range respMetadata {
-		meta.writeTo(c, c.xbw)
-		c.bwritelinef("")
+		meta.xwriteTo(c, c.xbw)
+		c.xbwritelinef("")
 	}
 	c.ok(tag, cmd)
 }

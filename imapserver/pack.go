@@ -9,7 +9,7 @@ import (
 
 type token interface {
 	pack(c *conn) string
-	writeTo(c *conn, xw io.Writer) // Writes to xw panic on error.
+	xwriteTo(c *conn, xw io.Writer) // Writes to xw panic on error.
 }
 
 type bare string
@@ -18,7 +18,7 @@ func (t bare) pack(c *conn) string {
 	return string(t)
 }
 
-func (t bare) writeTo(c *conn, xw io.Writer) {
+func (t bare) xwriteTo(c *conn, xw io.Writer) {
 	xw.Write([]byte(t.pack(c)))
 }
 
@@ -30,7 +30,7 @@ func (t niltoken) pack(c *conn) string {
 	return "NIL"
 }
 
-func (t niltoken) writeTo(c *conn, xw io.Writer) {
+func (t niltoken) xwriteTo(c *conn, xw io.Writer) {
 	xw.Write([]byte(t.pack(c)))
 }
 
@@ -60,7 +60,7 @@ func (t string0) pack(c *conn) string {
 	return r
 }
 
-func (t string0) writeTo(c *conn, xw io.Writer) {
+func (t string0) xwriteTo(c *conn, xw io.Writer) {
 	xw.Write([]byte(t.pack(c)))
 }
 
@@ -78,7 +78,7 @@ func (t dquote) pack(c *conn) string {
 	return r
 }
 
-func (t dquote) writeTo(c *conn, xw io.Writer) {
+func (t dquote) xwriteTo(c *conn, xw io.Writer) {
 	xw.Write([]byte(t.pack(c)))
 }
 
@@ -88,7 +88,7 @@ func (t syncliteral) pack(c *conn) string {
 	return fmt.Sprintf("{%d}\r\n", len(t)) + string(t)
 }
 
-func (t syncliteral) writeTo(c *conn, xw io.Writer) {
+func (t syncliteral) xwriteTo(c *conn, xw io.Writer) {
 	fmt.Fprintf(xw, "{%d}\r\n", len(t))
 	xw.Write([]byte(t))
 }
@@ -112,7 +112,7 @@ func (t readerSizeSyncliteral) pack(c *conn) string {
 	return fmt.Sprintf("%s{%d}\r\n", lit, t.size) + string(buf)
 }
 
-func (t readerSizeSyncliteral) writeTo(c *conn, xw io.Writer) {
+func (t readerSizeSyncliteral) xwriteTo(c *conn, xw io.Writer) {
 	var lit string
 	if t.lit8 {
 		lit = "~"
@@ -137,7 +137,7 @@ func (t readerSyncliteral) pack(c *conn) string {
 	return fmt.Sprintf("{%d}\r\n", len(buf)) + string(buf)
 }
 
-func (t readerSyncliteral) writeTo(c *conn, xw io.Writer) {
+func (t readerSyncliteral) xwriteTo(c *conn, xw io.Writer) {
 	buf, err := io.ReadAll(t.r)
 	if err != nil {
 		panic(err)
@@ -162,13 +162,13 @@ func (t listspace) pack(c *conn) string {
 	return s
 }
 
-func (t listspace) writeTo(c *conn, xw io.Writer) {
+func (t listspace) xwriteTo(c *conn, xw io.Writer) {
 	fmt.Fprint(xw, "(")
 	for i, e := range t {
 		if i > 0 {
 			fmt.Fprint(xw, " ")
 		}
-		e.writeTo(c, xw)
+		e.xwriteTo(c, xw)
 	}
 	fmt.Fprint(xw, ")")
 }
@@ -187,12 +187,12 @@ func (t concatspace) pack(c *conn) string {
 	return s
 }
 
-func (t concatspace) writeTo(c *conn, xw io.Writer) {
+func (t concatspace) xwriteTo(c *conn, xw io.Writer) {
 	for i, e := range t {
 		if i > 0 {
 			fmt.Fprint(xw, " ")
 		}
-		e.writeTo(c, xw)
+		e.xwriteTo(c, xw)
 	}
 }
 
@@ -207,9 +207,9 @@ func (t concat) pack(c *conn) string {
 	return s
 }
 
-func (t concat) writeTo(c *conn, xw io.Writer) {
+func (t concat) xwriteTo(c *conn, xw io.Writer) {
 	for _, e := range t {
-		e.writeTo(c, xw)
+		e.xwriteTo(c, xw)
 	}
 }
 
@@ -231,7 +231,7 @@ next:
 	return string(t)
 }
 
-func (t astring) writeTo(c *conn, xw io.Writer) {
+func (t astring) xwriteTo(c *conn, xw io.Writer) {
 	xw.Write([]byte(t.pack(c)))
 }
 
@@ -246,7 +246,7 @@ func (t mailboxt) pack(c *conn) string {
 	return astring(s).pack(c)
 }
 
-func (t mailboxt) writeTo(c *conn, xw io.Writer) {
+func (t mailboxt) xwriteTo(c *conn, xw io.Writer) {
 	xw.Write([]byte(t.pack(c)))
 }
 
@@ -256,6 +256,6 @@ func (t number) pack(c *conn) string {
 	return fmt.Sprintf("%d", t)
 }
 
-func (t number) writeTo(c *conn, xw io.Writer) {
+func (t number) xwriteTo(c *conn, xw io.Writer) {
 	xw.Write([]byte(t.pack(c)))
 }

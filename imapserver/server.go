@@ -579,7 +579,7 @@ func (c *conn) lineChan() chan lineErr {
 }
 
 // readline from either the c.line channel, or otherwise read from connection.
-func (c *conn) readline(readCmd bool) string {
+func (c *conn) xreadline(readCmd bool) string {
 	var line string
 	var err error
 	if c.line != nil {
@@ -593,7 +593,7 @@ func (c *conn) readline(readCmd bool) string {
 		if readCmd && errors.Is(err, os.ErrDeadlineExceeded) {
 			err := c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			c.log.Check(err, "setting write deadline")
-			c.writelinef("* BYE inactive")
+			c.xwritelinef("* BYE inactive")
 		}
 		if !errors.Is(err, errIO) && !errors.Is(err, errProtocol) {
 			c.xbrokenf("%s (%w)", err, errIO)
@@ -618,13 +618,13 @@ func (c *conn) readline(readCmd bool) string {
 }
 
 // write tagged command response, but first write pending changes.
-func (c *conn) writeresultf(format string, args ...any) {
-	c.bwriteresultf(format, args...)
+func (c *conn) xwriteresultf(format string, args ...any) {
+	c.xbwriteresultf(format, args...)
 	c.xflush()
 }
 
 // write buffered tagged command response, but first write pending changes.
-func (c *conn) bwriteresultf(format string, args ...any) {
+func (c *conn) xbwriteresultf(format string, args ...any) {
 	switch c.cmd {
 	case "fetch", "store", "search":
 		// ../rfc/9051:5862 ../rfc/7162:2033
@@ -633,16 +633,16 @@ func (c *conn) bwriteresultf(format string, args ...any) {
 			c.applyChanges(c.comm.Get(), false)
 		}
 	}
-	c.bwritelinef(format, args...)
+	c.xbwritelinef(format, args...)
 }
 
-func (c *conn) writelinef(format string, args ...any) {
-	c.bwritelinef(format, args...)
+func (c *conn) xwritelinef(format string, args ...any) {
+	c.xbwritelinef(format, args...)
 	c.xflush()
 }
 
 // Buffer line for write.
-func (c *conn) bwritelinef(format string, args ...any) {
+func (c *conn) xbwritelinef(format string, args ...any) {
 	format += "\r\n"
 	fmt.Fprintf(c.xbw, format, args...)
 }
@@ -671,7 +671,7 @@ func (c *conn) xflush() {
 }
 
 func (c *conn) readCommand(tag *string) (cmd string, p *parser) {
-	line := c.readline(true)
+	line := c.xreadline(true)
 	p = newParser(line, c)
 	p.context("tag")
 	*tag = p.xtag()
@@ -683,7 +683,7 @@ func (c *conn) readCommand(tag *string) (cmd string, p *parser) {
 
 func (c *conn) xreadliteral(size int64, sync bool) []byte {
 	if sync {
-		c.writelinef("+ ")
+		c.xwritelinef("+ ")
 	}
 	buf := make([]byte, size)
 	if size > 0 {
@@ -817,13 +817,13 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	select {
 	case <-mox.Shutdown.Done():
 		// ../rfc/9051:5381
-		c.writelinef("* BYE mox shutting down")
+		c.xwritelinef("* BYE mox shutting down")
 		return
 	default:
 	}
 
 	if !limiterConnectionrate.Add(c.remoteIP, time.Now(), 1) {
-		c.writelinef("* BYE connection rate from your ip or network too high, slow down please")
+		c.xwritelinef("* BYE connection rate from your ip or network too high, slow down please")
 		return
 	}
 
@@ -831,13 +831,13 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 	if !mox.LimiterFailedAuth.CanAdd(c.remoteIP, time.Now(), 1) {
 		metrics.AuthenticationRatelimitedInc("imap")
 		c.log.Debug("refusing connection due to many auth failures", slog.Any("remoteip", c.remoteIP))
-		c.writelinef("* BYE too many auth failures")
+		c.xwritelinef("* BYE too many auth failures")
 		return
 	}
 
 	if !limiterConnections.Add(c.remoteIP, time.Now(), 1) {
 		c.log.Debug("refusing connection due to many open connections", slog.Any("remoteip", c.remoteIP))
-		c.writelinef("* BYE too many open connections from your ip or network")
+		c.xwritelinef("* BYE too many open connections from your ip or network")
 		return
 	}
 	defer limiterConnections.Add(c.remoteIP, time.Now(), -1)
@@ -851,7 +851,7 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 		acc, _, _, err := store.OpenEmail(c.log, preauthAddress, false)
 		if err != nil {
 			c.log.Debugx("open account for preauth address", err, slog.String("address", preauthAddress))
-			c.writelinef("* BYE open account for address: %s", err)
+			c.xwritelinef("* BYE open account for address: %s", err)
 			return
 		}
 		c.username = preauthAddress
@@ -861,9 +861,9 @@ func serve(listenerName string, cid int64, tlsConfig *tls.Config, nc net.Conn, x
 
 	if c.account != nil && !c.noPreauth {
 		c.state = stateAuthenticated
-		c.writelinef("* PREAUTH [CAPABILITY %s] mox imap welcomes %s", c.capabilities(), c.username)
+		c.xwritelinef("* PREAUTH [CAPABILITY %s] mox imap welcomes %s", c.capabilities(), c.username)
 	} else {
-		c.writelinef("* OK [CAPABILITY %s] mox imap", c.capabilities())
+		c.xwritelinef("* OK [CAPABILITY %s] mox imap", c.capabilities())
 	}
 
 	// Ensure any pending loginAttempt is written before we stop.
@@ -1101,7 +1101,7 @@ func (c *conn) xtlsHandshakeAndAuthenticate(conn net.Conn) {
 		// Verify client after session resumption.
 		err := c.tlsClientAuthVerifyPeerCertParsed(cs.PeerCertificates[0])
 		if err != nil {
-			c.writelinef("* BYE [ALERT] Error verifying client certificate after TLS session resumption: %s", err)
+			c.xwritelinef("* BYE [ALERT] Error verifying client certificate after TLS session resumption: %s", err)
 			c.xbrokenf("tls verify client certificate after resumption: %s (%w)", err, errIO)
 		}
 	}
@@ -1181,7 +1181,7 @@ func (c *conn) command() {
 				// Other side is likely speaking something else than IMAP, send error message and
 				// stop processing because there is a good chance whatever they sent has multiple
 				// lines.
-				c.writelinef("* BYE please try again speaking imap")
+				c.xwritelinef("* BYE please try again speaking imap")
 				c.xbrokenf("not speaking imap (%w)", errIO)
 			}
 			c.log.Debugx("imap command syntax error", sxerr.err, logFields...)
@@ -1192,13 +1192,13 @@ func (c *conn) command() {
 				c.log.Check(err, "setting write deadline")
 			}
 			if sxerr.line != "" {
-				c.bwritelinef("%s", sxerr.line)
+				c.xbwritelinef("%s", sxerr.line)
 			}
 			code := ""
 			if sxerr.code != "" {
 				code = "[" + sxerr.code + "] "
 			}
-			c.bwriteresultf("%s BAD %s%s unrecognized syntax/command: %v", tag, code, cmd, sxerr.errmsg)
+			c.xbwriteresultf("%s BAD %s%s unrecognized syntax/command: %v", tag, code, cmd, sxerr.errmsg)
 			if fatal {
 				c.xflush()
 				panic(fmt.Errorf("aborting connection after syntax error for command with non-sync literal: %w", errProtocol))
@@ -1207,14 +1207,14 @@ func (c *conn) command() {
 			result = "servererror"
 			c.log.Errorx("imap command server error", err, logFields...)
 			debug.PrintStack()
-			c.bwriteresultf("%s NO %s %v", tag, cmd, err)
+			c.xbwriteresultf("%s NO %s %v", tag, cmd, err)
 		} else if errors.As(err, &uerr) {
 			result = "usererror"
 			c.log.Debugx("imap command user error", err, logFields...)
 			if uerr.code != "" {
-				c.bwriteresultf("%s NO [%s] %s %v", tag, uerr.code, cmd, err)
+				c.xbwriteresultf("%s NO [%s] %s %v", tag, uerr.code, cmd, err)
 			} else {
-				c.bwriteresultf("%s NO %s %v", tag, cmd, err)
+				c.xbwriteresultf("%s NO %s %v", tag, cmd, err)
 			}
 		} else {
 			// Other type of panic, we pass it on, aborting the connection.
@@ -1234,7 +1234,7 @@ func (c *conn) command() {
 	select {
 	case <-mox.Shutdown.Done():
 		// ../rfc/9051:5375
-		c.writelinef("* BYE shutting down")
+		c.xwritelinef("* BYE shutting down")
 		c.xbrokenf("shutting down (%w)", errIO)
 	default:
 	}
@@ -1527,7 +1527,7 @@ func (c *conn) xnumSetConditionUIDs(forDB, returnUIDs bool, isUID bool, nums num
 }
 
 func (c *conn) ok(tag, cmd string) {
-	c.bwriteresultf("%s OK %s done", tag, cmd)
+	c.xbwriteresultf("%s OK %s done", tag, cmd)
 	c.xflush()
 }
 
@@ -1646,14 +1646,14 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 			// Write the exists, and the UID and flags as well. Hopefully the client waits for
 			// long enough after the EXISTS to see these messages, and doesn't request them
 			// again with a FETCH.
-			c.bwritelinef("* %d EXISTS", len(c.uids))
+			c.xbwritelinef("* %d EXISTS", len(c.uids))
 			for _, add := range adds {
 				seq := c.xsequence(add.UID)
 				var modseqStr string
 				if condstore {
 					modseqStr = fmt.Sprintf(" MODSEQ (%d)", add.ModSeq.Client())
 				}
-				c.bwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, add.UID, flaglist(add.Flags, add.Keywords).pack(c), modseqStr)
+				c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, add.UID, flaglist(add.Flags, add.Keywords).pack(c), modseqStr)
 			}
 			continue
 		}
@@ -1679,14 +1679,14 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 					if qresync {
 						vanishedUIDs.append(uint32(uid))
 					} else {
-						c.bwritelinef("* %d EXPUNGE", seq)
+						c.xbwritelinef("* %d EXPUNGE", seq)
 					}
 				}
 			}
 			if qresync {
 				// VANISHED without EARLIER. ../rfc/7162:2004
 				for _, s := range vanishedUIDs.Strings(4*1024 - 32) {
-					c.bwritelinef("* VANISHED %s", s)
+					c.xbwritelinef("* VANISHED %s", s)
 				}
 			}
 		case store.ChangeFlags:
@@ -1700,29 +1700,29 @@ func (c *conn) applyChanges(changes []store.Change, initial bool) {
 				if condstore {
 					modseqStr = fmt.Sprintf(" MODSEQ (%d)", ch.ModSeq.Client())
 				}
-				c.bwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
+				c.xbwritelinef("* %d FETCH (UID %d FLAGS %s%s)", seq, ch.UID, flaglist(ch.Flags, ch.Keywords).pack(c), modseqStr)
 			}
 		case store.ChangeRemoveMailbox:
 			// Only announce \NonExistent to modern clients, otherwise they may ignore the
 			// unrecognized \NonExistent and interpret this as a newly created mailbox, while
 			// the goal was to remove it...
 			if c.enabled[capIMAP4rev2] {
-				c.bwritelinef(`* LIST (\NonExistent) "/" %s`, mailboxt(ch.Name).pack(c))
+				c.xbwritelinef(`* LIST (\NonExistent) "/" %s`, mailboxt(ch.Name).pack(c))
 			}
 		case store.ChangeAddMailbox:
-			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.Flags, " "), mailboxt(ch.Mailbox.Name).pack(c))
+			c.xbwritelinef(`* LIST (%s) "/" %s`, strings.Join(ch.Flags, " "), mailboxt(ch.Mailbox.Name).pack(c))
 		case store.ChangeRenameMailbox:
 			// OLDNAME only with IMAP4rev2 or NOTIFY ../rfc/9051:2726 ../rfc/5465:628
 			var oldname string
 			if c.enabled[capIMAP4rev2] {
 				oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, mailboxt(ch.OldName).pack(c))
 			}
-			c.bwritelinef(`* LIST (%s) "/" %s%s`, strings.Join(ch.Flags, " "), mailboxt(ch.NewName).pack(c), oldname)
+			c.xbwritelinef(`* LIST (%s) "/" %s%s`, strings.Join(ch.Flags, " "), mailboxt(ch.NewName).pack(c), oldname)
 		case store.ChangeAddSubscription:
-			c.bwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.Flags...), " "), mailboxt(ch.Name).pack(c))
+			c.xbwritelinef(`* LIST (%s) "/" %s`, strings.Join(append([]string{`\Subscribed`}, ch.Flags...), " "), mailboxt(ch.Name).pack(c))
 		case store.ChangeAnnotation:
 			// ../rfc/5464:807 ../rfc/5464:788
-			c.bwritelinef(`* METADATA %s %s`, mailboxt(ch.MailboxName).pack(c), astring(ch.Key).pack(c))
+			c.xbwritelinef(`* METADATA %s %s`, mailboxt(ch.MailboxName).pack(c), astring(ch.Key).pack(c))
 		default:
 			panic(fmt.Sprintf("internal error, missing case for %#v", change))
 		}
@@ -1742,7 +1742,7 @@ func (c *conn) cmdCapability(tag, cmd string, p *parser) {
 	caps := c.capabilities()
 
 	// Response syntax: ../rfc/9051:6427 ../rfc/3501:4655
-	c.bwritelinef("* CAPABILITY %s", caps)
+	c.xbwritelinef("* CAPABILITY %s", caps)
 	c.ok(tag, cmd)
 }
 
@@ -1790,7 +1790,7 @@ func (c *conn) cmdLogout(tag, cmd string, p *parser) {
 	c.unselect()
 	c.state = stateNotAuthenticated
 	// Response syntax: ../rfc/9051:6886 ../rfc/3501:4935
-	c.bwritelinef("* BYE thanks")
+	c.xbwritelinef("* BYE thanks")
 	c.ok(tag, cmd)
 	panic(cleanClose)
 }
@@ -1843,9 +1843,9 @@ func (c *conn) cmdID(tag, cmd string, p *parser) {
 	// Response syntax: ../rfc/2971:243
 	// We send our name, and only the version for authenticated users. ../rfc/2971:193
 	if c.state == stateAuthenticated || c.state == stateSelected {
-		c.bwritelinef(`* ID ("name" "mox" "version" %s)`, string0(moxvar.Version).pack(c))
+		c.xbwritelinef(`* ID ("name" "mox" "version" %s)`, string0(moxvar.Version).pack(c))
 	} else {
-		c.bwritelinef(`* ID ("name" "mox")`)
+		c.xbwritelinef(`* ID ("name" "mox")`)
 	}
 	c.ok(tag, cmd)
 }
@@ -1981,8 +1981,8 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	xreadInitial := func() []byte {
 		var line string
 		if p.empty() {
-			c.writelinef("+ ")
-			line = c.readline(false)
+			c.xwritelinef("+ ")
+			line = c.xreadline(false)
 		} else {
 			// ../rfc/9051:1407 ../rfc/4959:84
 			p.xspace()
@@ -2005,7 +2005,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	}
 
 	xreadContinuation := func() []byte {
-		line := c.readline(false)
+		line := c.xreadline(false)
 		if line == "*" {
 			c.loginAttempt.Result = store.AuthAborted
 			xsyntaxErrorf("authenticate aborted by client")
@@ -2074,7 +2074,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 
 		// ../rfc/2195:82
 		chal := fmt.Sprintf("<%d.%d@%s>", uint64(mox.CryptoRandInt()), time.Now().UnixNano(), mox.Conf.Static.HostnameDomain.ASCII)
-		c.writelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(chal)))
+		c.xwritelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(chal)))
 
 		resp := xreadContinuation()
 		t := strings.Split(string(resp), " ")
@@ -2202,14 +2202,14 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 		})
 		s1, err := ss.ServerFirst(xscram.Iterations, xscram.Salt)
 		xcheckf(err, "scram first server step")
-		c.writelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(s1)))
+		c.xwritelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(s1)))
 		c2 := xreadContinuation()
 		s3, err := ss.Finish(c2, xscram.SaltedPassword)
 		if len(s3) > 0 {
-			c.writelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(s3)))
+			c.xwritelinef("+ %s", base64.StdEncoding.EncodeToString([]byte(s3)))
 		}
 		if err != nil {
-			c.readline(false) // Should be "*" for cancellation.
+			c.xreadline(false) // Should be "*" for cancellation.
 			if errors.Is(err, scram.ErrInvalidProof) {
 				c.loginAttempt.Result = store.AuthBadCredentials
 				c.log.Info("failed authentication attempt", slog.String("username", username), slog.Any("remote", c.remoteIP))
@@ -2304,7 +2304,7 @@ func (c *conn) cmdAuthenticate(tag, cmd string, p *parser) {
 	c.loginAttempt.Result = store.AuthSuccess
 	c.authFailed = 0
 	c.state = stateAuthenticated
-	c.writeresultf("%s OK [CAPABILITY %s] authenticate done", tag, c.capabilities())
+	c.xwriteresultf("%s OK [CAPABILITY %s] authenticate done", tag, c.capabilities())
 }
 
 // Login logs in with username and password.
@@ -2412,7 +2412,7 @@ func (c *conn) cmdLogin(tag, cmd string, p *parser) {
 	c.authFailed = 0
 	c.setSlow(false)
 	c.state = stateAuthenticated
-	c.writeresultf("%s OK [CAPABILITY %s] login done", tag, c.capabilities())
+	c.xwriteresultf("%s OK [CAPABILITY %s] login done", tag, c.capabilities())
 }
 
 // Enable explicitly opts in to an extension. A server can typically send new kinds
@@ -2461,7 +2461,7 @@ func (c *conn) cmdEnable(tag, cmd string, p *parser) {
 	}
 
 	// Response syntax: ../rfc/9051:6520 ../rfc/5161:211
-	c.bwritelinef("* ENABLED%s", enabled)
+	c.xbwritelinef("* ENABLED%s", enabled)
 	c.ok(tag, cmd)
 }
 
@@ -2486,7 +2486,7 @@ func (c *conn) xensureCondstore(tx *bstore.Tx) {
 		} else {
 			mb = c.xmailboxID(tx, c.mailboxID)
 		}
-		c.bwritelinef("* OK [HIGHESTMODSEQ %d] after condstore-enabling command", mb.ModSeq.Client())
+		c.xbwritelinef("* OK [HIGHESTMODSEQ %d] after condstore-enabling command", mb.ModSeq.Client())
 	}
 }
 
@@ -2573,7 +2573,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 	// ../rfc/9051:1809
 	if c.state == stateSelected {
 		// ../rfc/9051:1812 ../rfc/7162:2111
-		c.bwritelinef("* OK [CLOSED] x")
+		c.xbwritelinef("* OK [CLOSED] x")
 		c.unselect()
 	}
 
@@ -2624,23 +2624,23 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 	if len(mb.Keywords) > 0 {
 		flags = " " + strings.Join(mb.Keywords, " ")
 	}
-	c.bwritelinef(`* FLAGS (\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent%s)`, flags)
-	c.bwritelinef(`* OK [PERMANENTFLAGS (\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent \*)] x`)
+	c.xbwritelinef(`* FLAGS (\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent%s)`, flags)
+	c.xbwritelinef(`* OK [PERMANENTFLAGS (\Seen \Answered \Flagged \Deleted \Draft $Forwarded $Junk $NotJunk $Phishing $MDNSent \*)] x`)
 	if !c.enabled[capIMAP4rev2] {
-		c.bwritelinef(`* 0 RECENT`)
+		c.xbwritelinef(`* 0 RECENT`)
 	}
-	c.bwritelinef(`* %d EXISTS`, len(c.uids))
+	c.xbwritelinef(`* %d EXISTS`, len(c.uids))
 	if !c.enabled[capIMAP4rev2] && firstUnseen > 0 {
 		// ../rfc/9051:8051 ../rfc/3501:1774
-		c.bwritelinef(`* OK [UNSEEN %d] x`, firstUnseen)
+		c.xbwritelinef(`* OK [UNSEEN %d] x`, firstUnseen)
 	}
-	c.bwritelinef(`* OK [UIDVALIDITY %d] x`, mb.UIDValidity)
-	c.bwritelinef(`* OK [UIDNEXT %d] x`, mb.UIDNext)
-	c.bwritelinef(`* LIST () "/" %s`, mailboxt(mb.Name).pack(c))
+	c.xbwritelinef(`* OK [UIDVALIDITY %d] x`, mb.UIDValidity)
+	c.xbwritelinef(`* OK [UIDNEXT %d] x`, mb.UIDNext)
+	c.xbwritelinef(`* LIST () "/" %s`, mailboxt(mb.Name).pack(c))
 	if c.enabled[capCondstore] {
 		// ../rfc/7162:417
 		// ../rfc/7162-eid5055 ../rfc/7162:484 ../rfc/7162:1167
-		c.bwritelinef(`* OK [HIGHESTMODSEQ %d] x`, highestModSeq.Client())
+		c.xbwritelinef(`* OK [HIGHESTMODSEQ %d] x`, highestModSeq.Client())
 	}
 
 	// If QRESYNC uidvalidity matches, we send any changes. ../rfc/7162:1509
@@ -2711,7 +2711,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 						qrmodseq = m.ModSeq.Client() - 1
 						preVanished = 0
 						qrknownUIDs = nil
-						c.bwritelinef("* OK [ALERT] Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full synchronization recommended.")
+						c.xbwritelinef("* OK [ALERT] Synchronization inconsistency in client detected. Client tried to sync with a UID that was removed at or after the MODSEQ it sent in the request. Sending all historic message removals for selected mailbox. Full synchronization recommended.")
 					}
 				} else if err != bstore.ErrAbsent {
 					xcheckf(err, "checking old client uid")
@@ -2738,7 +2738,7 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 				}
 				msgseq := c.sequence(m.UID)
 				if msgseq > 0 {
-					c.bwritelinef("* %d FETCH (UID %d FLAGS %s MODSEQ (%d))", msgseq, m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
+					c.xbwritelinef("* %d FETCH (UID %d FLAGS %s MODSEQ (%d))", msgseq, m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
 				}
 				return nil
 			})
@@ -2774,16 +2774,16 @@ func (c *conn) cmdSelectExamine(isselect bool, tag, cmd string, p *parser) {
 			l := slices.Sorted(maps.Keys(vanishedUIDs))
 			// ../rfc/7162:1985
 			for _, s := range compactUIDSet(l).Strings(4*1024 - 32) {
-				c.bwritelinef("* VANISHED (EARLIER) %s", s)
+				c.xbwritelinef("* VANISHED (EARLIER) %s", s)
 			}
 		}
 	}
 
 	if isselect {
-		c.bwriteresultf("%s OK [READ-WRITE] x", tag)
+		c.xbwriteresultf("%s OK [READ-WRITE] x", tag)
 		c.readonly = false
 	} else {
-		c.bwriteresultf("%s OK [READ-ONLY] x", tag)
+		c.xbwriteresultf("%s OK [READ-ONLY] x", tag)
 		c.readonly = true
 	}
 	c.mailboxID = mb.ID
@@ -2870,7 +2870,7 @@ func (c *conn) cmdCreate(tag, cmd string, p *parser) {
 		if c.enabled[capIMAP4rev2] && n == name && name != origName && !(name == "Inbox" || strings.HasPrefix(name, "Inbox/")) {
 			oldname = fmt.Sprintf(` ("OLDNAME" (%s))`, mailboxt(origName).pack(c))
 		}
-		c.bwritelinef(`* LIST (\Subscribed) "/" %s%s`, mailboxt(n).pack(c), oldname)
+		c.xbwritelinef(`* LIST (\Subscribed) "/" %s%s`, mailboxt(n).pack(c), oldname)
 	}
 	c.ok(tag, cmd)
 }
@@ -3145,7 +3145,7 @@ func (c *conn) cmdLsub(tag, cmd string, p *parser) {
 
 	// Response syntax: ../rfc/3501:4833 ../rfc/3501:4837
 	for _, line := range lines {
-		c.bwritelinef("%s", line)
+		c.xbwritelinef("%s", line)
 	}
 	c.ok(tag, cmd)
 }
@@ -3163,7 +3163,7 @@ func (c *conn) cmdNamespace(tag, cmd string, p *parser) {
 	p.xempty()
 
 	// Response syntax: ../rfc/9051:6778 ../rfc/2342:415
-	c.bwritelinef(`* NAMESPACE (("" "/")) NIL NIL`)
+	c.xbwritelinef(`* NAMESPACE (("" "/")) NIL NIL`)
 	c.ok(tag, cmd)
 }
 
@@ -3200,7 +3200,7 @@ func (c *conn) cmdStatus(tag, cmd string, p *parser) {
 		})
 	})
 
-	c.bwritelinef("%s", responseLine)
+	c.xbwritelinef("%s", responseLine)
 	c.ok(tag, cmd)
 }
 
@@ -3394,7 +3394,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			defer store.CloseRemoveTempFile(c.log, a.file, "temporary message file")
 			f = a.file
 
-			c.writelinef("+ ")
+			c.xwritelinef("+ ")
 		} else {
 			// We'll discard the message and return an error as soon as we can (possible
 			// synchronizing literal of next message, or after we've seen all messages).
@@ -3422,7 +3422,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 		}
 		totalSize += msize
 
-		line := c.readline(false)
+		line := c.xreadline(false)
 		p = newParser(line, c)
 		if utf8 {
 			p.xtake(")")
@@ -3524,7 +3524,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 			c.uidAppend(a.m.UID)
 		}
 		// todo spec: with condstore/qresync, is there a mechanism to let the client know the modseq for the appended uid? in theory an untagged fetch with the modseq after the OK APPENDUID could make sense, but this probably isn't allowed.
-		c.bwritelinef("* %d EXISTS", len(c.uids))
+		c.xbwritelinef("* %d EXISTS", len(c.uids))
 	}
 
 	// ../rfc/4315:289 ../rfc/3502:236 APPENDUID
@@ -3535,7 +3535,7 @@ func (c *conn) cmdAppend(tag, cmd string, p *parser) {
 	} else {
 		uidset = fmt.Sprintf("%d:%d", appends[0].m.UID, appends[len(appends)-1].m.UID)
 	}
-	c.writeresultf("%s OK [APPENDUID %d %s] appended", tag, mb.UIDValidity, uidset)
+	c.xwriteresultf("%s OK [APPENDUID %d %s] appended", tag, mb.UIDValidity, uidset)
 }
 
 // Idle makes a client wait until the server sends untagged updates, e.g. about
@@ -3550,7 +3550,7 @@ func (c *conn) cmdIdle(tag, cmd string, p *parser) {
 	// Request syntax: ../rfc/9051:6594 ../rfc/2177:163
 	p.xempty()
 
-	c.writelinef("+ waiting")
+	c.xwritelinef("+ waiting")
 
 	var line string
 wait:
@@ -3566,7 +3566,7 @@ wait:
 			c.xflush()
 		case <-mox.Shutdown.Done():
 			// ../rfc/9051:5375
-			c.writelinef("* BYE shutting down")
+			c.xwritelinef("* BYE shutting down")
 			c.xbrokenf("shutting down (%w)", errIO)
 		}
 	}
@@ -3616,13 +3616,13 @@ func (c *conn) cmdGetquotaroot(tag, cmd string, p *parser) {
 
 	// We only have one per account quota, we name it "" like the examples in the RFC.
 	// Response syntax: ../rfc/9208:668 ../rfc/2087:242
-	c.bwritelinef(`* QUOTAROOT %s ""`, astring(name).pack(c))
+	c.xbwritelinef(`* QUOTAROOT %s ""`, astring(name).pack(c))
 
 	// We only write the quota response if there is a limit. The syntax doesn't allow
 	// an empty list, so we cannot send the current disk usage if there is no limit.
 	if quota > 0 {
 		// Response syntax: ../rfc/9208:666 ../rfc/2087:239
-		c.bwritelinef(`* QUOTA "" (STORAGE %d %d)`, (size+1024-1)/1024, (quota+1024-1)/1024)
+		c.xbwritelinef(`* QUOTA "" (STORAGE %d %d)`, (size+1024-1)/1024, (quota+1024-1)/1024)
 	}
 	c.ok(tag, cmd)
 }
@@ -3660,7 +3660,7 @@ func (c *conn) cmdGetquota(tag, cmd string, p *parser) {
 	// an empty list, so we cannot send the current disk usage if there is no limit.
 	if quota > 0 {
 		// Response syntax: ../rfc/9208:666 ../rfc/2087:239
-		c.bwritelinef(`* QUOTA "" (STORAGE %d %d)`, (size+1024-1)/1024, (quota+1024-1)/1024)
+		c.xbwritelinef(`* QUOTA "" (STORAGE %d %d)`, (size+1024-1)/1024, (quota+1024-1)/1024)
 	}
 	c.ok(tag, cmd)
 }
@@ -3830,18 +3830,18 @@ func (c *conn) cmdxExpunge(tag, cmd string, uidSet *numSet) {
 		if qresync {
 			vanishedUIDs.append(uint32(m.UID))
 		} else {
-			c.bwritelinef("* %d EXPUNGE", seq)
+			c.xbwritelinef("* %d EXPUNGE", seq)
 		}
 	}
 	if !vanishedUIDs.empty() {
 		// VANISHED without EARLIER. ../rfc/7162:2004
 		for _, s := range vanishedUIDs.Strings(4*1024 - 32) {
-			c.bwritelinef("* VANISHED %s", s)
+			c.xbwritelinef("* VANISHED %s", s)
 		}
 	}
 
 	if c.enabled[capCondstore] {
-		c.writeresultf("%s OK [HIGHESTMODSEQ %d] expunged", tag, highestModSeq.Client())
+		c.xwriteresultf("%s OK [HIGHESTMODSEQ %d] expunged", tag, highestModSeq.Client())
 	} else {
 		c.ok(tag, cmd)
 	}
@@ -4119,7 +4119,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 	})
 
 	// ../rfc/9051:6881 ../rfc/4315:183
-	c.writeresultf("%s OK [COPYUID %d %s %s] copied", tag, mbDst.UIDValidity, compactUIDSet(origUIDs).String(), compactUIDSet(newUIDs).String())
+	c.xwriteresultf("%s OK [COPYUID %d %s %s] copied", tag, mbDst.UIDValidity, compactUIDSet(origUIDs).String(), compactUIDSet(newUIDs).String())
 }
 
 // Move moves messages from the currently selected/active mailbox to a named mailbox.
@@ -4197,7 +4197,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 	// ../rfc/9051:4708 ../rfc/6851:254
 	// ../rfc/9051:4713
 	newUIDs := numSet{ranges: []numRange{{setNumber{number: uint32(uidFirst)}, &setNumber{number: uint32(mbDst.UIDNext - 1)}}}}
-	c.bwritelinef("* OK [COPYUID %d %s %s] moved", mbDst.UIDValidity, compactUIDSet(uids).String(), newUIDs.String())
+	c.xbwritelinef("* OK [COPYUID %d %s %s] moved", mbDst.UIDValidity, compactUIDSet(uids).String(), newUIDs.String())
 	qresync := c.enabled[capQresync]
 	var vanishedUIDs numSet
 	for i := range uids {
@@ -4206,19 +4206,19 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 		if qresync {
 			vanishedUIDs.append(uint32(uids[i]))
 		} else {
-			c.bwritelinef("* %d EXPUNGE", seq)
+			c.xbwritelinef("* %d EXPUNGE", seq)
 		}
 	}
 	if !vanishedUIDs.empty() {
 		// VANISHED without EARLIER. ../rfc/7162:2004
 		for _, s := range vanishedUIDs.Strings(4*1024 - 32) {
-			c.bwritelinef("* VANISHED %s", s)
+			c.xbwritelinef("* VANISHED %s", s)
 		}
 	}
 
 	if qresync {
 		// ../rfc/9051:6744 ../rfc/7162:1334
-		c.writeresultf("%s OK [HIGHESTMODSEQ %d] move", tag, modseq.Client())
+		c.xwriteresultf("%s OK [HIGHESTMODSEQ %d] move", tag, modseq.Client())
 	} else {
 		c.ok(tag, cmd)
 	}
@@ -4570,7 +4570,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 				modseqStr = fmt.Sprintf(" MODSEQ (%d)", m.ModSeq.Client())
 			}
 			// ../rfc/9051:6749 ../rfc/3501:4869 ../rfc/7162:2490
-			c.bwritelinef("* %d FETCH (UID %d%s%s)", c.xsequence(m.UID), m.UID, flags, modseqStr)
+			c.xbwritelinef("* %d FETCH (UID %d%s%s)", c.xsequence(m.UID), m.UID, flags, modseqStr)
 		}
 	}
 
@@ -4588,7 +4588,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 	// Also gather UIDs or sequences for the MODIFIED response below. ../rfc/7162:571
 	var mnums []store.UID
 	for _, m := range changed {
-		c.bwritelinef("* %d FETCH (UID %d FLAGS %s MODSEQ (%d))", c.xsequence(m.UID), m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
+		c.xbwritelinef("* %d FETCH (UID %d FLAGS %s MODSEQ (%d))", c.xsequence(m.UID), m.UID, flaglist(m.Flags, m.Keywords).pack(c), m.ModSeq.Client())
 		if isUID {
 			mnums = append(mnums, m.UID)
 		} else {
@@ -4599,5 +4599,5 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 	slices.Sort(mnums)
 	set := compactUIDSet(mnums)
 	// ../rfc/7162:2506
-	c.writeresultf("%s OK [MODIFIED %s] conditional store did not modify all", tag, set.String())
+	c.xwriteresultf("%s OK [MODIFIED %s] conditional store did not modify all", tag, set.String())
 }

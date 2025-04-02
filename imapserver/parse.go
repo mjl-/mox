@@ -306,7 +306,7 @@ func (p *parser) xstring() (r string) {
 	}
 	size, sync := p.xliteralSize(false, true)
 	buf := p.conn.xreadliteral(size, sync)
-	line := p.conn.readline(false)
+	line := p.conn.xreadline(false)
 	p.orig, p.upper, p.o = line, toUpper(line), 0
 	return string(buf)
 }
@@ -1041,7 +1041,7 @@ func (p *parser) xmetadataKeyValue() (key string, isString bool, value []byte) {
 	if p.hasPrefix("~{") {
 		size, sync := p.xliteralSize(true, true)
 		value = p.conn.xreadliteral(size, sync)
-		line := p.conn.readline(false)
+		line := p.conn.xreadline(false)
 		p.orig, p.upper, p.o = line, toUpper(line), 0
 	} else if p.hasPrefix(`"`) {
 		value = []byte(p.xstring())

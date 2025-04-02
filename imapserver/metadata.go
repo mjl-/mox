@@ -160,20 +160,20 @@ func (c *conn) cmdGetmetadata(tag, cmd string, p *parser) {
 			if i > 0 {
 				fmt.Fprint(c.xbw, " ")
 			}
-			astring(a.Key).writeTo(c, c.xbw)
+			astring(a.Key).xwriteTo(c, c.xbw)
 			fmt.Fprint(c.xbw, " ")
 			if a.IsString {
-				string0(string(a.Value)).writeTo(c, c.xbw)
+				string0(string(a.Value)).xwriteTo(c, c.xbw)
 			} else {
 				v := readerSizeSyncliteral{bytes.NewReader(a.Value), int64(len(a.Value)), true}
-				v.writeTo(c, c.xbw)
+				v.xwriteTo(c, c.xbw)
 			}
 		}
-		c.bwritelinef(")")
+		c.xbwritelinef(")")
 	}
 
 	if longentries >= 0 {
-		c.bwritelinef("%s OK [METADATA LONGENTRIES %d] getmetadata done", tag, longentries)
+		c.xbwritelinef("%s OK [METADATA LONGENTRIES %d] getmetadata done", tag, longentries)
 	} else {
 		c.ok(tag, cmd)
 	}

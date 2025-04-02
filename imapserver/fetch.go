@@ -242,7 +242,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 		// No hard limit on response sizes, but clients are recommended to not send more
 		// than 8k. We send a more conservative max 4k.
 		for _, s := range compactUIDSet(vanishedUIDs).Strings(4*1024 - 32) {
-			c.bwritelinef("* VANISHED (EARLIER) %s", s)
+			c.xbwritelinef("* VANISHED (EARLIER) %s", s)
 		}
 	}
 
@@ -338,7 +338,7 @@ func (c *conn) cmdxFetch(isUID bool, tag, cmdstr string, p *parser) {
 	if cmd.expungeIssued {
 		// ../rfc/2180:343
 		// ../rfc/9051:5102
-		c.writeresultf("%s OK [EXPUNGEISSUED] at least one message was expunged", tag)
+		c.xwriteresultf("%s OK [EXPUNGEISSUED] at least one message was expunged", tag)
 	} else {
 		c.ok(tag, cmdstr)
 	}
@@ -447,7 +447,7 @@ func (cmd *fetchCmd) process(atts []fetchAtt) {
 
 	// Write errors are turned into panics because we write through c.
 	fmt.Fprintf(cmd.conn.xbw, "* %d FETCH ", cmd.conn.xsequence(cmd.uid))
-	data.writeTo(cmd.conn, cmd.conn.xbw)
+	data.xwriteTo(cmd.conn, cmd.conn.xbw)
 	cmd.conn.xbw.Write([]byte("\r\n"))
 }
 

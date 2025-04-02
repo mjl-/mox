@@ -150,7 +150,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 			})
 		})
 
-		c.writelinef("+ ")
+		c.xwritelinef("+ ")
 	} else {
 		var err error
 		name, _, err = store.CheckMailboxName(name, true)
@@ -212,7 +212,7 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 	}
 
 	// Finish reading the command.
-	line := c.readline(false)
+	line := c.xreadline(false)
 	p = newParser(line, c)
 	if utf8 {
 		p.xtake(")")
@@ -328,8 +328,8 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 	if mbDst.ID == c.mailboxID {
 		c.uidAppend(nm.UID)
 		// We send an untagged OK with APPENDUID, for sane bookkeeping in clients. ../rfc/8508:401
-		c.bwritelinef("* OK [APPENDUID %d %d] ", mbDst.UIDValidity, nm.UID)
-		c.bwritelinef("* %d EXISTS", len(c.uids))
+		c.xbwritelinef("* OK [APPENDUID %d %d] ", mbDst.UIDValidity, nm.UID)
+		c.xbwritelinef("* %d EXISTS", len(c.uids))
 	}
 
 	// We must return vanished instead of expunge, and also highestmodseq, when qresync
@@ -341,10 +341,10 @@ func (c *conn) cmdxReplace(isUID bool, tag, cmd string, p *parser) {
 	omsgseq := c.xsequence(om.UID)
 	c.sequenceRemove(omsgseq, om.UID)
 	if qresync {
-		c.bwritelinef("* VANISHED %d", om.UID)
+		c.xbwritelinef("* VANISHED %d", om.UID)
 		// ../rfc/7162:1916
 	} else {
-		c.bwritelinef("* %d EXPUNGE", omsgseq)
+		c.xbwritelinef("* %d EXPUNGE", omsgseq)
 	}
-	c.writeresultf("%s OK [HIGHESTMODSEQ %d] replaced", tag, nm.ModSeq.Client())
+	c.xwriteresultf("%s OK [HIGHESTMODSEQ %d] replaced", tag, nm.ModSeq.Client())
 }

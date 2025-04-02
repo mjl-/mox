@@ -431,7 +431,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 					lastUID = m.UID
 
 					if time.Since(inProgressLast) > inProgressPeriod {
-						c.writelinef("* OK [INPROGRESS (%s %d %s)] still searching", inProgressTag, progress, goal)
+						c.xwritelinef("* OK [INPROGRESS (%s %d %s)] still searching", inProgressTag, progress, goal)
 						inProgressLast = time.Now()
 					}
 					progress++
@@ -468,7 +468,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 					xcheckf(err, "list messages in mailbox")
 
 					if time.Since(inProgressLast) > inProgressPeriod {
-						c.writelinef("* OK [INPROGRESS (%s %d %s)] still searching", inProgressTag, progress, goal)
+						c.xwritelinef("* OK [INPROGRESS (%s %d %s)] still searching", inProgressTag, progress, goal)
 						inProgressLast = time.Now()
 					}
 					progress++
@@ -497,7 +497,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 
 		// In IMAP4rev1, an untagged SEARCH response is required. ../rfc/3501:2728
 		if len(result.UIDs) == 0 {
-			c.bwritelinef("* SEARCH")
+			c.xbwritelinef("* SEARCH")
 		}
 
 		// Old-style SEARCH response. We must spell out each number. So we may be splitting
@@ -527,7 +527,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 				modseq = fmt.Sprintf(" (MODSEQ %d)", result.MaxModSeq.Client())
 			}
 
-			c.bwritelinef("* SEARCH%s%s", s, modseq)
+			c.xbwritelinef("* SEARCH%s%s", s, modseq)
 			result.UIDs = result.UIDs[n:]
 		}
 	} else {
@@ -595,7 +595,7 @@ func (c *conn) cmdxSearch(isUID, isE bool, tag, cmd string, p *parser) {
 					fmt.Fprintf(c.xbw, " MODSEQ %d", result.MaxModSeq.Client())
 				}
 
-				c.bwritelinef("")
+				c.xbwritelinef("")
 			}
 		}
 	}

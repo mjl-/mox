@@ -39,7 +39,7 @@ func (c *Conn) readbyte() (byte, error) {
 	return b, err
 }
 
-func (c *Conn) unreadbyte() {
+func (c *Conn) xunreadbyte() {
 	if c.record {
 		c.recordBuf = c.recordBuf[:len(c.recordBuf)-1]
 	}
@@ -70,7 +70,7 @@ func (c *Conn) xcrlf() {
 func (c *Conn) peek(exp byte) bool {
 	b, err := c.readbyte()
 	if err == nil {
-		c.unreadbyte()
+		c.xunreadbyte()
 	}
 	return err == nil && strings.EqualFold(string(rune(b)), string(rune(exp)))
 }
@@ -264,7 +264,7 @@ func (c *Conn) xtakeuntil(b byte) string {
 		x, err := c.readbyte()
 		c.xcheckf(err, "read byte")
 		if x == b {
-			c.unreadbyte()
+			c.xunreadbyte()
 			return s
 		}
 		s += string(rune(x))
@@ -279,14 +279,14 @@ func (c *Conn) xdigits() string {
 			s += string(rune(b))
 			continue
 		}
-		c.unreadbyte()
+		c.xunreadbyte()
 		return s
 	}
 }
 
 func (c *Conn) peekdigit() bool {
 	if b, err := c.readbyte(); err == nil {
-		c.unreadbyte()
+		c.xunreadbyte()
 		return b >= '0' && b <= '9'
 	}
 	return false
@@ -692,7 +692,7 @@ func (c *Conn) xmsgatt1() FetchAttr {
 			f += string(rune(b))
 			continue
 		}
-		c.unreadbyte()
+		c.xunreadbyte()
 		break
 	}
 
@@ -851,8 +851,7 @@ func (c *Conn) xatom() string {
 		b, err := c.readbyte()
 		c.xcheckf(err, "read byte for atom")
 		if b <= ' ' || strings.IndexByte("(){%*\"\\]", b) >= 0 {
-			err := c.br.UnreadByte()
-			c.xcheckf(err, "unreadbyte")
+			c.xunreadbyte()
 			if s == "" {
 				c.xerrorf("expected atom")
 			}
@@ -1288,7 +1287,7 @@ func (c *Conn) xtaggedExtVal() TaggedExtVal {
 	b, err := c.readbyte()
 	c.xcheckf(err, "read byte for tagged-ext-val")
 	if b < '0' || b > '9' {
-		c.unreadbyte()
+		c.xunreadbyte()
 		ss := c.xsequenceSet()
 		return TaggedExtVal{SeqSet: &ss}
 	}

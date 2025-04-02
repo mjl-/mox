@@ -779,10 +779,10 @@ func (c *conn) Read(buf []byte) (int, error) {
 // Filled on demand.
 var bufpool = moxio.NewBufpool(8, 2*1024)
 
-func (c *conn) readline() string {
+func (c *conn) xreadline() string {
 	line, err := bufpool.Readline(c.log, c.xbr)
 	if err != nil && errors.Is(err, moxio.ErrLineTooLong) {
-		c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Other0, "line too long, smtp max is 512, we reached 2048", nil)
+		c.xwritecodeline(smtp.C500BadSyntax, smtp.SeProto5Other0, "line too long, smtp max is 512, we reached 2048", nil)
 		panic(fmt.Errorf("%s (%w)", err, errIO))
 	} else if err != nil {
 		panic(fmt.Errorf("%s (%w)", err, errIO))
@@ -792,7 +792,7 @@ func (c *conn) readline() string {
 
 // Buffered-write command response line to connection with codes and msg.
 // Err is not sent to remote but is used for logging and can be empty.
-func (c *conn) bwritecodeline(code int, secode string, msg string, err error) {
+func (c *conn) xbwritecodeline(code int, secode string, msg string, err error) {
 	var ecode string
 	if secode != "" {
 		ecode = fmt.Sprintf("%d.%s", code/100, secode)
@@ -820,19 +820,19 @@ func (c *conn) bwritecodeline(code int, secode string, msg string, err error) {
 			for ; e > 400 && line[e] != ' '; e-- {
 			}
 			// todo future: understand if ecode should be on each line. won't hurt. at least as long as we don't do expn or vrfy.
-			c.bwritelinef("%d-%s%s%s", code, ecode, sep, line[:e])
+			c.xbwritelinef("%d-%s%s%s", code, ecode, sep, line[:e])
 			line = line[e:]
 		}
 		spdash := " "
 		if i < len(lines)-1 {
 			spdash = "-"
 		}
-		c.bwritelinef("%d%s%s%s%s", code, spdash, ecode, sep, line)
+		c.xbwritelinef("%d%s%s%s%s", code, spdash, ecode, sep, line)
 	}
 }
 
 // Buffered-write a formatted response line to connection.
-func (c *conn) bwritelinef(format string, args ...any) {
+func (c *conn) xbwritelinef(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Fprint(c.xbw, msg+"\r\n")
 }
@@ -843,14 +843,14 @@ func (c *conn) xflush() {
 }
 
 // Write (with flush) a response line with codes and message. err is not written, used for logging and can be nil.
-func (c *conn) writecodeline(code int, secode string, msg string, err error) {
-	c.bwritecodeline(code, secode, msg, err)
+func (c *conn) xwritecodeline(code int, secode string, msg string, err error) {
+	c.xbwritecodeline(code, secode, msg, err)
 	c.xflush()
 }
 
 // Write (with flush) a formatted response line to connection.
-func (c *conn) writelinef(format string, args ...any) {
-	c.bwritelinef(format, args...)
+func (c *conn) xwritelinef(format string, args ...any) {
+	c.xbwritelinef(format, args...)
 	c.xflush()
 }
 
@@ -965,13 +965,13 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 	select {
 	case <-mox.Shutdown.Done():
 		// ../rfc/5321:2811 ../rfc/5321:1666 ../rfc/3463:420
-		c.writecodeline(smtp.C421ServiceUnavail, smtp.SeSys3NotAccepting2, "shutting down", nil)
+		c.xwritecodeline(smtp.C421ServiceUnavail, smtp.SeSys3NotAccepting2, "shutting down", nil)
 		return
 	default:
 	}
 
 	if !limiterConnectionRate.Add(c.remoteIP, time.Now(), 1) {
-		c.writecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "connection rate from your ip or network too high, slow down please", nil)
+		c.xwritecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "connection rate from your ip or network too high, slow down please", nil)
 		return
 	}
 
@@ -979,13 +979,13 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 	if submission && !mox.LimiterFailedAuth.CanAdd(c.remoteIP, time.Now(), 1) {
 		metrics.AuthenticationRatelimitedInc("submission")
 		c.log.Debug("refusing connection due to many auth failures", slog.Any("remoteip", c.remoteIP))
-		c.writecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "too many auth failures", nil)
+		c.xwritecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "too many auth failures", nil)
 		return
 	}
 
 	if !limiterConnections.Add(c.remoteIP, time.Now(), 1) {
 		c.log.Debug("refusing connection due to many open connections", slog.Any("remoteip", c.remoteIP))
-		c.writecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "too many open connections from your ip or network", nil)
+		c.xwritecodeline(smtp.C421ServiceUnavail, smtp.SePol7Other0, "too many open connections from your ip or network", nil)
 		return
 	}
 	defer limiterConnections.Add(c.remoteIP, time.Now(), -1)
@@ -1000,7 +1000,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 	// We include the string ESMTP. https://cr.yp.to/smtp/greeting.html recommends it.
 	// Should not be too relevant nowadays, but does not hurt and default blackbox
 	// exporter SMTP health check expects it.
-	c.writelinef("%d %s ESMTP mox", smtp.C220ServiceReady, c.hostname.ASCII)
+	c.xwritelinef("%d %s ESMTP mox", smtp.C220ServiceReady, c.hostname.ASCII)
 
 	for {
 		command(c)
@@ -1051,7 +1051,7 @@ func command(c *conn) {
 
 		var serr smtpError
 		if errors.As(err, &serr) {
-			c.writecodeline(serr.code, serr.secode, fmt.Sprintf("%s (%s)", serr.errmsg, mox.ReceivedID(c.cid)), serr.err)
+			c.xwritecodeline(serr.code, serr.secode, fmt.Sprintf("%s (%s)", serr.errmsg, mox.ReceivedID(c.cid)), serr.err)
 			if serr.printStack {
 				c.log.Errorx("smtp error", serr.err, slog.Int("code", serr.code), slog.String("secode", serr.secode))
 				debug.PrintStack()
@@ -1065,7 +1065,7 @@ func command(c *conn) {
 
 	// todo future: we could wait for either a line or shutdown, and just close the connection on shutdown.
 
-	line := c.readline()
+	line := c.xreadline()
 	t := strings.SplitN(line, " ", 2)
 	var args string
 	if len(t) == 2 {
@@ -1079,7 +1079,7 @@ func command(c *conn) {
 	select {
 	case <-mox.Shutdown.Done():
 		// ../rfc/5321:2811 ../rfc/5321:1666 ../rfc/3463:420
-		c.writecodeline(smtp.C421ServiceUnavail, smtp.SeSys3NotAccepting2, "shutting down", nil)
+		c.xwritecodeline(smtp.C421ServiceUnavail, smtp.SeSys3NotAccepting2, "shutting down", nil)
 		panic(errIO)
 	default:
 	}
@@ -1095,7 +1095,7 @@ func command(c *conn) {
 			// Other side is likely speaking something else than SMTP, send error message and
 			// stop processing because there is a good chance whatever they sent has multiple
 			// lines.
-			c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Syntax2, "please try again speaking smtp", nil)
+			c.xwritecodeline(smtp.C500BadSyntax, smtp.SeProto5Syntax2, "please try again speaking smtp", nil)
 			panic(errIO)
 		}
 		// note: not "command not implemented", see ../rfc/5321:2934 ../rfc/5321:2539
@@ -1186,17 +1186,17 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 
 	// https://www.iana.org/assignments/mail-parameters/mail-parameters.xhtml
 
-	c.bwritelinef("250-%s", c.hostname.ASCII)
-	c.bwritelinef("250-PIPELINING")                // ../rfc/2920:108
-	c.bwritelinef("250-SIZE %d", c.maxMessageSize) // ../rfc/1870:70
+	c.xbwritelinef("250-%s", c.hostname.ASCII)
+	c.xbwritelinef("250-PIPELINING")                // ../rfc/2920:108
+	c.xbwritelinef("250-SIZE %d", c.maxMessageSize) // ../rfc/1870:70
 	// ../rfc/3207:237
 	if !c.tls && c.baseTLSConfig != nil {
 		// ../rfc/3207:90
-		c.bwritelinef("250-STARTTLS")
+		c.xbwritelinef("250-STARTTLS")
 	} else if c.extRequireTLS {
 		// ../rfc/8689:202
 		// ../rfc/8689:143
-		c.bwritelinef("250-REQUIRETLS")
+		c.xbwritelinef("250-REQUIRETLS")
 	}
 	if c.submission {
 		var mechs string
@@ -1212,16 +1212,16 @@ func (c *conn) cmdHello(p *parser, ehlo bool) {
 		if c.tls && len(c.conn.(*tls.Conn).ConnectionState().PeerCertificates) > 0 && !c.viaHTTPS {
 			mechs = "EXTERNAL " + mechs
 		}
-		c.bwritelinef("250-AUTH %s", mechs)
+		c.xbwritelinef("250-AUTH %s", mechs)
 		// ../rfc/4865:127
 		t := time.Now().Add(queue.FutureReleaseIntervalMax).UTC() // ../rfc/4865:98
-		c.bwritelinef("250-FUTURERELEASE %d %s", queue.FutureReleaseIntervalMax/time.Second, t.Format(time.RFC3339))
+		c.xbwritelinef("250-FUTURERELEASE %d %s", queue.FutureReleaseIntervalMax/time.Second, t.Format(time.RFC3339))
 	}
-	c.bwritelinef("250-ENHANCEDSTATUSCODES") // ../rfc/2034:71
+	c.xbwritelinef("250-ENHANCEDSTATUSCODES") // ../rfc/2034:71
 	// todo future? c.writelinef("250-DSN")
-	c.bwritelinef("250-8BITMIME")                       // ../rfc/6152:86
-	c.bwritelinef("250-LIMITS RCPTMAX=%d", rcptToLimit) // ../rfc/9422:301
-	c.bwritecodeline(250, "", "SMTPUTF8", nil)          // ../rfc/6531:201
+	c.xbwritelinef("250-8BITMIME")                       // ../rfc/6152:86
+	c.xbwritelinef("250-LIMITS RCPTMAX=%d", rcptToLimit) // ../rfc/9422:301
+	c.xbwritecodeline(250, "", "SMTPUTF8", nil)          // ../rfc/6531:201
 	c.xflush()
 }
 
@@ -1254,7 +1254,7 @@ func (c *conn) cmdStarttls(p *parser) {
 	}
 
 	// We add the cid to the output, to help debugging in case of a failing TLS connection.
-	c.writecodeline(smtp.C220ServiceReady, smtp.SeOther00, "go! ("+mox.ReceivedID(c.cid)+")", nil)
+	c.xwritecodeline(smtp.C220ServiceReady, smtp.SeOther00, "go! ("+mox.ReceivedID(c.cid)+")", nil)
 
 	c.xtlsHandshakeAndAuthenticate(conn)
 
@@ -1321,9 +1321,9 @@ func (c *conn) cmdAuth(p *parser) {
 	xreadInitial := func(encChal string) []byte {
 		var auth string
 		if p.empty() {
-			c.writelinef("%d %s", smtp.C334ContinueAuth, encChal) // ../rfc/4954:205
+			c.xwritelinef("%d %s", smtp.C334ContinueAuth, encChal) // ../rfc/4954:205
 			// todo future: handle max length of 12288 octets and return proper responde codes otherwise ../rfc/4954:253
-			auth = c.readline()
+			auth = c.xreadline()
 			if auth == "*" {
 				// ../rfc/4954:193
 				la.Result = store.AuthAborted
@@ -1355,7 +1355,7 @@ func (c *conn) cmdAuth(p *parser) {
 	}
 
 	xreadContinuation := func() []byte {
-		line := c.readline()
+		line := c.xreadline()
 		if line == "*" {
 			la.Result = store.AuthAborted
 			xsmtpUserErrorf(smtp.C501BadParamSyntax, smtp.SeProto5Other0, "authentication aborted")
@@ -1444,7 +1444,7 @@ func (c *conn) cmdAuth(p *parser) {
 
 		// Again, client should ignore the challenge, we send the same as the example in
 		// the I-D.
-		c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte("Password:")))
+		c.xwritelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte("Password:")))
 
 		// Password is in line in plain text, so hide it.
 		defer c.xtrace(mlog.LevelTraceauth)()
@@ -1468,7 +1468,7 @@ func (c *conn) cmdAuth(p *parser) {
 
 		// ../rfc/2195:82
 		chal := fmt.Sprintf("<%d.%d@%s>", uint64(mox.CryptoRandInt()), time.Now().UnixNano(), mox.Conf.Static.HostnameDomain.ASCII)
-		c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte(chal)))
+		c.xwritelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte(chal)))
 
 		resp := xreadContinuation()
 		t := strings.Split(string(resp), " ")
@@ -1597,14 +1597,14 @@ func (c *conn) cmdAuth(p *parser) {
 		})
 		s1, err := ss.ServerFirst(xscram.Iterations, xscram.Salt)
 		xcheckf(err, "scram first server step")
-		c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte(s1))) // ../rfc/4954:187
+		c.xwritelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte(s1))) // ../rfc/4954:187
 		c2 := xreadContinuation()
 		s3, err := ss.Finish(c2, xscram.SaltedPassword)
 		if len(s3) > 0 {
-			c.writelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte(s3))) // ../rfc/4954:187
+			c.xwritelinef("%d %s", smtp.C334ContinueAuth, base64.StdEncoding.EncodeToString([]byte(s3))) // ../rfc/4954:187
 		}
 		if err != nil {
-			c.readline() // Should be "*" for cancellation.
+			c.xreadline() // Should be "*" for cancellation.
 			if errors.Is(err, scram.ErrInvalidProof) {
 				la.Result = store.AuthBadCredentials
 				c.log.Info("failed authentication attempt", slog.String("username", username), slog.Any("remote", c.remoteIP))
@@ -1696,7 +1696,7 @@ func (c *conn) cmdAuth(p *parser) {
 	c.authFailed = 0
 	c.setSlow(false)
 	// ../rfc/4954:276
-	c.writecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
+	c.xwritecodeline(smtp.C235AuthSuccess, smtp.SePol7Other0, "nice", nil)
 }
 
 // ../rfc/5321:1879 ../rfc/5321:1025
@@ -1709,7 +1709,7 @@ func (c *conn) cmdMail(p *parser) {
 		// If we get many bad transactions, it's probably a spammer that is guessing user names.
 		// Useful in combination with rate limiting.
 		// ../rfc/5321:4349
-		c.writecodeline(smtp.C550MailboxUnavail, smtp.SeAddr1Other0, "too many failures", nil)
+		c.xwritecodeline(smtp.C550MailboxUnavail, smtp.SeAddr1Other0, "too many failures", nil)
 		panic(errIO)
 	}
 
@@ -1905,7 +1905,7 @@ func (c *conn) cmdMail(p *parser) {
 
 	c.mailFrom = &rpath
 
-	c.bwritecodeline(smtp.C250Completed, smtp.SeAddr1Other0, "looking good", nil)
+	c.xbwritecodeline(smtp.C250Completed, smtp.SeAddr1Other0, "looking good", nil)
 }
 
 // ../rfc/5321:1916 ../rfc/5321:1054
@@ -2049,7 +2049,7 @@ func (c *conn) cmdRcpt(p *parser) {
 		c.log.Errorx("looking up account for delivery", err, slog.Any("rcptto", fpath))
 		xsmtpServerErrorf(codes{smtp.C451LocalErr, smtp.SeSys3Other0}, "error processing")
 	}
-	c.bwritecodeline(smtp.C250Completed, smtp.SeAddr1Other0, "now on the list", nil)
+	c.xbwritecodeline(smtp.C250Completed, smtp.SeAddr1Other0, "now on the list", nil)
 }
 
 func hasNonASCII(s string) bool {
@@ -2109,7 +2109,7 @@ func (c *conn) cmdData(p *parser) {
 	}()
 
 	// ../rfc/5321:1994
-	c.writelinef("354 see you at the bare dot")
+	c.xwritelinef("354 see you at the bare dot")
 
 	// Mark as tracedata.
 	defer c.xtrace(mlog.LevelTracedata)()
@@ -2131,12 +2131,12 @@ func (c *conn) cmdData(p *parser) {
 			if n < config.DefaultMaxMsgSize {
 				ecode = smtp.SeMailbox2MsgLimitExceeded3
 			}
-			c.writecodeline(smtp.C451LocalErr, ecode, fmt.Sprintf("error copying data to file (%s)", mox.ReceivedID(c.cid)), err)
+			c.xwritecodeline(smtp.C451LocalErr, ecode, fmt.Sprintf("error copying data to file (%s)", mox.ReceivedID(c.cid)), err)
 			panic(fmt.Errorf("remote sent too much DATA: %w", errIO))
 		}
 
 		if errors.Is(err, smtp.ErrCRLF) {
-			c.writecodeline(smtp.C500BadSyntax, smtp.SeProto5Syntax2, fmt.Sprintf("invalid bare \\r or \\n, may be smtp smuggling (%s)", mox.ReceivedID(c.cid)), err)
+			c.xwritecodeline(smtp.C500BadSyntax, smtp.SeProto5Syntax2, fmt.Sprintf("invalid bare \\r or \\n, may be smtp smuggling (%s)", mox.ReceivedID(c.cid)), err)
 			return
 		}
 
@@ -2146,7 +2146,7 @@ func (c *conn) cmdData(p *parser) {
 		// available and our write blocks us from reading remaining data, leading to
 		// deadlock. We have a timeout on our connection writes though, so worst case we'll
 		// abort the connection due to expiration.
-		c.writecodeline(smtp.C451LocalErr, smtp.SeSys3Other0, fmt.Sprintf("error copying data to file (%s)", mox.ReceivedID(c.cid)), err)
+		c.xwritecodeline(smtp.C451LocalErr, smtp.SeSys3Other0, fmt.Sprintf("error copying data to file (%s)", mox.ReceivedID(c.cid)), err)
 		io.Copy(io.Discard, dr)
 		return
 	}
@@ -2560,7 +2560,7 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	c.transactionBad-- // Compensate for early earlier pessimistic increase.
 
 	c.rset()
-	c.writecodeline(smtp.C250Completed, smtp.SeMailbox2Other0, "it is done", nil)
+	c.xwritecodeline(smtp.C250Completed, smtp.SeMailbox2Other0, "it is done", nil)
 }
 
 func xrandomID(n int) string {
@@ -3689,7 +3689,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 	c.transactionGood++
 	c.transactionBad-- // Compensate for early earlier pessimistic increase.
 	c.rset()
-	c.writecodeline(smtp.C250Completed, smtp.SeMailbox2Other0, "it is done", nil)
+	c.xwritecodeline(smtp.C250Completed, smtp.SeMailbox2Other0, "it is done", nil)
 }
 
 // Return whether msgFrom address is allowed to send a message to alias.
@@ -3735,7 +3735,7 @@ func (c *conn) cmdRset(p *parser) {
 	p.xend()
 
 	c.rset()
-	c.bwritecodeline(smtp.C250Completed, smtp.SeOther00, "all clear", nil)
+	c.xbwritecodeline(smtp.C250Completed, smtp.SeOther00, "all clear", nil)
 }
 
 // ../rfc/5321:2108 ../rfc/5321:1222
@@ -3781,7 +3781,7 @@ func (c *conn) cmdHelp(p *parser) {
 	// Let's not strictly parse the request for help. We are ignoring the text anyway.
 	// ../rfc/5321:2166
 
-	c.bwritecodeline(smtp.C214Help, smtp.SeOther00, "see rfc 5321 (smtp)", nil)
+	c.xbwritecodeline(smtp.C214Help, smtp.SeOther00, "see rfc 5321 (smtp)", nil)
 }
 
 // ../rfc/5321:2191
@@ -3793,7 +3793,7 @@ func (c *conn) cmdNoop(p *parser) {
 	}
 	p.xend()
 
-	c.bwritecodeline(smtp.C250Completed, smtp.SeOther00, "alrighty", nil)
+	c.xbwritecodeline(smtp.C250Completed, smtp.SeOther00, "alrighty", nil)
 }
 
 // ../rfc/5321:2205
@@ -3801,6 +3801,6 @@ func (c *conn) cmdQuit(p *parser) {
 	// ../rfc/5321:2226
 	p.xend()
 
-	c.writecodeline(smtp.C221Closing, smtp.SeOther00, "okay thanks bye", nil)
+	c.xwritecodeline(smtp.C221Closing, smtp.SeOther00, "okay thanks bye", nil)
 	panic(cleanClose)
 }
