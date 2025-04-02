@@ -125,17 +125,21 @@ It is important to run with docker host networking, so mox can use the public
 IPs and has correct remote IP information for incoming connections (important
 for junk filtering and rate-limiting).
 
-# Future/development
+# Development
 
 See develop.txt for instructions/tips for developing on mox.
 
-Mox will receiving funding in 2024 and 2025 through NLnet/EU's NGI0 Zero Core,
-see https://nlnet.nl/project/Mox-Automation/.
+# Sponsors
 
-Mox received funding in 2023 and 2024 through NLnet/EU's NGI0 Entrust, see
-https://nlnet.nl/project/Mox/.
+Thanks to NLnet foundation, the European Commission's NGI programme, and the
+Netherlands Ministry of the Interior and Kingdom Relations for financial
+support:
 
-## Roadmap
+- 2024/2025, NLnet NGI0 Zero Core, https://nlnet.nl/project/Mox-Automation/
+- 2024, NLnet e-Commons Fund, https://nlnet.nl/project/Mox-API/
+- 2023/2024, NLnet NGI0 Entrust, https://nlnet.nl/project/Mox/
+
+# Roadmap
 
 - "mox setup" command, using admin web interface for interactive setup
 - Automate DNS management, for setup and maintenance, such as DANE/DKIM key rotation
@@ -177,9 +181,9 @@ There are many smaller improvements to make as well, search for "todo" in the co
 There is currently no plan to implement the following. Though this may
 change in the future.
 
-- Functioning as SMTP relay
+- Functioning as an SMTP relay without authentication
 - POP3
-- Delivery to (unix) OS system users
+- Delivery to (unix) OS system users (mbox/Maildir)
 - Support for pluggable delivery mechanisms
 
 

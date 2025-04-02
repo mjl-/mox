@@ -443,6 +443,8 @@ h2 { background: linear-gradient(90deg, #6dd5fd 0%, #77e8e3 100%); display: inli
 .two > div { flex-basis: 50%; max-width: 50em; }
 .toc { display: flex; gap: 2em; margin-bottom: 3ex; }
 .toc ul { margin-bottom: 0; }
+.logos { text-align: center; }
+.logos img { max-height: 50px; max-width: 120px; display: inline-block; vertical-align: top; }
 
 @media (min-width:1025px) {
 	.nav { box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.075); min-height: 100vh; }

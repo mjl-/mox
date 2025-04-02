@@ -69,6 +69,7 @@ Not ready for a full setup yet? Try mox in less than a minute:
 localserve". It serves a local-only SMTP/IMAP/Webmail/etc for testing and
 development. No setup required.
 
+
 ## Background
 
 Work on mox started in 2021. Admins were migrating their emails to just a few
@@ -85,8 +86,16 @@ single easy to use and maintain application.
 
 ## Sponsors
 
-Mox will receiving funding in 2024 and 2025 through NLnet/EU's NGI0 Zero Core,
-see https://nlnet.nl/project/Mox-Automation/.
+Thanks to [NLnet foundation](https://nlnet.nl/), the European Commission's
+[NGI](https://ngi.eu) programme, and the Netherlands Ministry of the Interior
+and Kingdom Relations for financial support:
 
-Mox received funding in 2023 and 2024 through NLnet/EU's NGI0 Entrust, see
-https://nlnet.nl/project/Mox/.
+- [2024/2025](https://nlnet.nl/project/Mox-Automation/), NLnet NGI0 Zero Core
+- [2024](https://nlnet.nl/project/Mox-API/), NLnet e-Commons Fund
+- [2023/2024](https://nlnet.nl/project/Mox/), NLnet NGI0 Entrust
+
+<div class="logos">
+<a href="https://nlnet.nl/entrust/"><img src="files/ngi0entrust.svg" alt="Logo of NGI Zero Entrust" /></a>
+<a href="https://nlnet.nl/core/"><img src="files/ngi0core.svg" alt="Logo of NGI Zero Core" /></a>
+<a href="https://www.government.nl/ministries/ministry-of-the-interior-and-kingdom-relations"><img src="files/minbzk.svg" alt="Logo of financial supporter Netherlands Ministry of the Interior and Kingdom Relations" /></a>
+</div>

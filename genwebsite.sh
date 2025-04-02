@@ -24,7 +24,7 @@ mkdir html/features
 (
 	cat features/index.md
 	echo
-	sed -n -e '/# FAQ/q' -e '/## Roadmap/,/# FAQ/p' < ../README.md
+	sed -n -e 's/^# Roadmap/## Roadmap/' -e '/# FAQ/q' -e '/# Roadmap/,/# FAQ/p' < ../README.md
 	echo
 	echo 'Also see the [Protocols](../protocols/) page for implementation status, and (non)-plans.'
 ) | go run website.go 'Features' >html/features/index.html
