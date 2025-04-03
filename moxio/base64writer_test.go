@@ -13,7 +13,7 @@ func TestBase64Writer(t *testing.T) {
 	err = bw.Close()
 	tcheckf(t, err, "close")
 	s := sb.String()
-	exp := "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nz\r\ng5MDEyMzQ1Njc4OQ==\r\n"
+	exp := "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2\r\nNzg5MDEyMzQ1Njc4OQ==\r\n"
 	if s != exp {
 		t.Fatalf("base64writer, got %q, expected %q", s, exp)
 	}

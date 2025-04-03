@@ -340,7 +340,7 @@ func (m *Message) Compose(log mlog.Log, smtputf8 bool) ([]byte, error) {
 			data := base64.StdEncoding.EncodeToString(headers)
 			for len(data) > 0 {
 				line := data
-				n := min(len(line), 78)
+				n := min(len(line), 76) // ../rfc/2045:1372
 				line, data = data[:n], data[n:]
 				if _, err := origp.Write([]byte(line + "\r\n")); err != nil {
 					return nil, err

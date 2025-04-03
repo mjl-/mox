@@ -26,7 +26,7 @@ func TestReceived(t *testing.T) {
 		Receiver:     "z",
 		Identity:     ReceivedMailFrom,
 		Mechanism:    "+ip4:0.0.0.0/0",
-	}, "Received-SPF: pass (c) client-ip=0.0.0.0; envelope-from=\"x@x\"; helo=y;\r\n\tproblem=\"a b\\\"\\\\\"; mechanism=\"+ip4:0.0.0.0/0\"; receiver=z; identity=mailfrom\r\n")
+	}, "Received-SPF: pass (c) client-ip=0.0.0.0; envelope-from=\"x@x\"; helo=y;\r\n\tproblem=\"a b\\\"\\\\\"; mechanism=\"+ip4:0.0.0.0/0\"; receiver=z;\r\n\tidentity=mailfrom\r\n")
 
 	test(Received{
 		Result:       StatusPass,
@@ -35,5 +35,5 @@ func TestReceived(t *testing.T) {
 		Helo:         dns.IPDomain{IP: net.ParseIP("2001:db8::1")},
 		Receiver:     "z",
 		Identity:     ReceivedMailFrom,
-	}, "Received-SPF: pass client-ip=0.0.0.0; envelope-from=\"x@x\"; helo=\"2001:db8::1\";\r\n\treceiver=z; identity=mailfrom\r\n")
+	}, "Received-SPF: pass client-ip=0.0.0.0; envelope-from=\"x@x\";\r\n\thelo=\"2001:db8::1\"; receiver=z; identity=mailfrom\r\n")
 }

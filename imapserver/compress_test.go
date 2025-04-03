@@ -64,7 +64,7 @@ func TestCompressBreak(t *testing.T) {
 	tcheck(t, err, "read random")
 	text := base64.StdEncoding.EncodeToString(buf)
 	for len(text) > 0 {
-		n := min(78, len(text))
+		n := min(76, len(text))
 		msg += text[:n] + "\r\n"
 		text = text[n:]
 	}

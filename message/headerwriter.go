@@ -27,7 +27,7 @@ func (w *HeaderWriter) Add(separator string, texts ...string) {
 	}
 	for _, text := range texts {
 		n := len(text)
-		if w.nonfirst && w.lineLen > 1 && w.lineLen+len(separator)+n > 78 {
+		if w.nonfirst && w.lineLen > 1 && w.lineLen+len(separator)+n > 76 {
 			w.b.WriteString("\r\n\t")
 			w.lineLen = 1
 		} else if w.nonfirst && separator != "" {
@@ -45,7 +45,7 @@ func (w *HeaderWriter) Add(separator string, texts ...string) {
 func (w *HeaderWriter) AddWrap(buf []byte, text bool) {
 	for len(buf) > 0 {
 		line := buf
-		n := 78 - w.lineLen
+		n := 76 - w.lineLen
 		if len(buf) > n {
 			if text {
 				if i := bytes.LastIndexAny(buf[:n], " \t"); i > 0 {

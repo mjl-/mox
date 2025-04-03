@@ -13,7 +13,7 @@ func (f closerFunc) Close() error {
 }
 
 // Base64Writer turns a writer for data into one that writes base64 content on
-// \r\n separated lines of max 78+2 characters length.
+// \r\n separated lines of max 76+2 characters length.
 func Base64Writer(w io.Writer) io.WriteCloser {
 	lw := &lineWrapper{w: w}
 	bw := base64.NewEncoder(base64.StdEncoding, lw)
@@ -39,7 +39,8 @@ type lineWrapper struct {
 func (lw *lineWrapper) Write(buf []byte) (int, error) {
 	wrote := 0
 	for len(buf) > 0 {
-		n := min(78-lw.n, len(buf))
+		// base64 has max 76 data bytes on per line. ../rfc/2045:1372
+		n := min(76-lw.n, len(buf))
 		nn, err := lw.w.Write(buf[:n])
 		if nn > 0 {
 			wrote += nn
@@ -49,7 +50,7 @@ func (lw *lineWrapper) Write(buf []byte) (int, error) {
 			return wrote, err
 		}
 		lw.n += nn
-		if lw.n == 78 {
+		if lw.n == 76 {
 			_, err := lw.w.Write([]byte("\r\n"))
 			if err != nil {
 				return wrote, err
