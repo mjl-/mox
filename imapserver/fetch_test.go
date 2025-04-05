@@ -35,20 +35,23 @@ func TestFetch(t *testing.T) {
 		MessageID: "<B27397-0100000@Blurdybloop.example>",
 	}
 	noflags := imapclient.FetchFlags(nil)
+	bodystructbody1 := imapclient.BodyTypeText{
+		MediaType:    "TEXT",
+		MediaSubtype: "PLAIN",
+		BodyFields: imapclient.BodyFields{
+			Params: [][2]string{[...]string{"CHARSET", "US-ASCII"}},
+			Octets: 57,
+		},
+		Lines: 2,
+	}
 	bodyxstructure1 := imapclient.FetchBodystructure{
 		RespAttr: "BODY",
-		Body: imapclient.BodyTypeText{
-			MediaType:    "TEXT",
-			MediaSubtype: "PLAIN",
-			BodyFields: imapclient.BodyFields{
-				Params: [][2]string{[...]string{"CHARSET", "US-ASCII"}},
-				Octets: 57,
-			},
-			Lines: 2,
-		},
+		Body:     bodystructbody1,
 	}
 	bodystructure1 := bodyxstructure1
 	bodystructure1.RespAttr = "BODYSTRUCTURE"
+	bodystructbody1.Ext = &imapclient.BodyExtension1Part{}
+	bodystructure1.Body = bodystructbody1
 
 	split := strings.SplitN(exampleMsg, "\r\n\r\n", 2)
 	exampleMsgHeader := split[0] + "\r\n\r\n"
@@ -288,17 +291,17 @@ func TestFetch(t *testing.T) {
 		RespAttr: "BODYSTRUCTURE",
 		Body: imapclient.BodyTypeMpart{
 			Bodies: []any{
-				imapclient.BodyTypeBasic{BodyFields: imapclient.BodyFields{Octets: 275}},
-				imapclient.BodyTypeText{MediaType: "TEXT", MediaSubtype: "PLAIN", BodyFields: imapclient.BodyFields{Params: [][2]string{{"CHARSET", "US-ASCII"}}, Octets: 114}, Lines: 3},
+				imapclient.BodyTypeBasic{BodyFields: imapclient.BodyFields{Octets: 275}, Ext: &imapclient.BodyExtension1Part{}},
+				imapclient.BodyTypeText{MediaType: "TEXT", MediaSubtype: "PLAIN", BodyFields: imapclient.BodyFields{Params: [][2]string{{"CHARSET", "US-ASCII"}}, Octets: 114}, Lines: 3, Ext: &imapclient.BodyExtension1Part{}},
 				imapclient.BodyTypeMpart{
 					Bodies: []any{
-						imapclient.BodyTypeBasic{MediaType: "AUDIO", MediaSubtype: "BASIC", BodyFields: imapclient.BodyFields{CTE: "BASE64", Octets: 22}},
-						imapclient.BodyTypeBasic{MediaType: "IMAGE", MediaSubtype: "JPEG", BodyFields: imapclient.BodyFields{CTE: "BASE64"}},
+						imapclient.BodyTypeBasic{MediaType: "AUDIO", MediaSubtype: "BASIC", BodyFields: imapclient.BodyFields{CTE: "BASE64", Octets: 22}, Ext: &imapclient.BodyExtension1Part{}},
+						imapclient.BodyTypeBasic{MediaType: "IMAGE", MediaSubtype: "JPEG", BodyFields: imapclient.BodyFields{CTE: "BASE64"}, Ext: &imapclient.BodyExtension1Part{Disposition: "inline", DispositionParams: [][2]string{{"filename", "image.jpg"}}}},
 					},
 					MediaSubtype: "PARALLEL",
-					Ext:          &imapclient.BodyExtensionMpart{Params: [][2]string{{"boundary", "unique-boundary-2"}}},
+					Ext:          &imapclient.BodyExtensionMpart{Params: [][2]string{{"BOUNDARY", "unique-boundary-2"}}},
 				},
-				imapclient.BodyTypeText{MediaType: "TEXT", MediaSubtype: "ENRICHED", BodyFields: imapclient.BodyFields{Octets: 145}, Lines: 5},
+				imapclient.BodyTypeText{MediaType: "TEXT", MediaSubtype: "ENRICHED", BodyFields: imapclient.BodyFields{Octets: 145}, Lines: 5, Ext: &imapclient.BodyExtension1Part{}},
 				imapclient.BodyTypeMsg{
 					MediaType:    "MESSAGE",
 					MediaSubtype: "RFC822",
@@ -311,12 +314,17 @@ func TestFetch(t *testing.T) {
 						To:      []imapclient.Address{{Name: "mox", Adl: "", Mailbox: "info", Host: "mox.example"}},
 					},
 					Bodystructure: imapclient.BodyTypeText{
-						MediaType: "TEXT", MediaSubtype: "PLAIN", BodyFields: imapclient.BodyFields{Params: [][2]string{{"CHARSET", "ISO-8859-1"}}, CTE: "QUOTED-PRINTABLE", Octets: 51}, Lines: 1},
+						MediaType: "TEXT", MediaSubtype: "PLAIN", BodyFields: imapclient.BodyFields{Params: [][2]string{{"CHARSET", "ISO-8859-1"}}, CTE: "QUOTED-PRINTABLE", Octets: 51}, Lines: 1, Ext: &imapclient.BodyExtension1Part{}},
 					Lines: 7,
+					Ext: &imapclient.BodyExtension1Part{
+						MD5:      "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+						Language: []string{"en", "de"},
+						Location: "http://localhost",
+					},
 				},
 			},
 			MediaSubtype: "MIXED",
-			Ext:          &imapclient.BodyExtensionMpart{Params: [][2]string{{"boundary", "unique-boundary-1"}}},
+			Ext:          &imapclient.BodyExtensionMpart{Params: [][2]string{{"BOUNDARY", "unique-boundary-1"}}},
 		},
 	}
 	tc.client.Append("inbox", makeAppendTime(nestedMessage, received))
@@ -390,6 +398,7 @@ aGVsbG8NCndvcmxkDQo=
 --unique-boundary-2
 Content-Type: image/jpeg
 Content-Transfer-Encoding: base64
+Content-Disposition: inline; filename=image.jpg
 
 
 --unique-boundary-2--

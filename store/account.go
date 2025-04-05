@@ -573,9 +573,9 @@ type Message struct {
 	// want to strip whitespace.
 	Preview *string
 
-	// ParsedBuf message structure. Currently saved as JSON of message.Part because bstore
-	// cannot yet store recursive types. Created when first needed, and saved in the
-	// database.
+	// ParsedBuf message structure. Currently saved as JSON of message.Part because
+	// bstore wasn't able to store recursive types when this was implemented. Created
+	// when first needed, and saved in the database.
 	// todo: once replaced with non-json storage, remove date fixup in ../message/part.go.
 	ParsedBuf []byte
 }

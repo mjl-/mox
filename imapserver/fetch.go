@@ -9,17 +9,18 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"mime"
 	"net/textproto"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/mjl-/bstore"
 
 	"github.com/mjl-/mox/message"
+	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
 	"github.com/mjl-/mox/store"
-	"slices"
 )
 
 // functions to handle fetch attribute requests are defined on fetchCmd.
@@ -483,7 +484,7 @@ func (cmd *fetchCmd) xprocessAtt(a fetchAtt) []token {
 
 	case "BODYSTRUCTURE":
 		_, part := cmd.xensureParsed()
-		bs := xbodystructure(part, true)
+		bs := xbodystructure(cmd.conn.log, part, true)
 		return []token{bare("BODYSTRUCTURE"), bs}
 
 	case "BODY":
@@ -768,7 +769,7 @@ func (cmd *fetchCmd) xbody(a fetchAtt) (string, token) {
 
 	if a.section == nil {
 		// Non-extensible form of BODYSTRUCTURE.
-		return a.field, xbodystructure(part, false)
+		return a.field, xbodystructure(cmd.conn.log, part, false)
 	}
 
 	cmd.peekOrSeen(a.peek)
@@ -939,24 +940,17 @@ func (cmd *fetchCmd) sectionMsgtextName(smt *sectionMsgtext) string {
 	return s
 }
 
-func bodyFldParams(params map[string]string) token {
-	if len(params) == 0 {
+func bodyFldParams(p *message.Part) token {
+	if len(p.ContentTypeParams) == 0 {
 		return nilt
 	}
+	params := make(listspace, 0, 2*len(p.ContentTypeParams))
 	// Ensure same ordering, easier for testing.
-	var keys []string
-	for k := range params {
-		keys = append(keys, k)
+	for _, k := range slices.Sorted(maps.Keys(p.ContentTypeParams)) {
+		v := p.ContentTypeParams[k]
+		params = append(params, string0(strings.ToUpper(k)), string0(v))
 	}
-	sort.Strings(keys)
-	l := make(listspace, 2*len(keys))
-	i := 0
-	for _, k := range keys {
-		l[i] = string0(strings.ToUpper(k))
-		l[i+1] = string0(params[k])
-		i += 2
-	}
-	return l
+	return params
 }
 
 func bodyFldEnc(s string) token {
@@ -968,26 +962,80 @@ func bodyFldEnc(s string) token {
 	return string0(s)
 }
 
+func bodyFldMd5(p *message.Part) token {
+	if p.ContentMD5 == "" {
+		return nilt
+	}
+	return string0(p.ContentMD5)
+}
+
+func bodyFldDisp(log mlog.Log, p *message.Part) token {
+	if p.ContentDisposition == "" {
+		return nilt
+	}
+
+	// ../rfc/9051:5989
+	// mime.ParseMediaType recombines parameter value continuations like "title*0" and
+	// "title*1" into "title". ../rfc/2231:147
+	// And decodes character sets and removes language tags, like
+	// "title*0*=us-ascii'en'hello%20world. ../rfc/2231:210
+
+	disp, params, err := mime.ParseMediaType(p.ContentDisposition)
+	if err != nil {
+		log.Debugx("parsing content-disposition, ignoring", err, slog.String("header", p.ContentDisposition))
+		return nilt
+	} else if len(params) == 0 {
+		log.Debug("content-disposition has no parameters, ignoring", slog.String("header", p.ContentDisposition))
+		return nilt
+	}
+	var fields listspace
+	for _, k := range slices.Sorted(maps.Keys(params)) {
+		fields = append(fields, string0(k), string0(params[k]))
+	}
+	return listspace{string0(disp), fields}
+}
+
+func bodyFldLang(p *message.Part) token {
+	// todo: ../rfc/3282:86 ../rfc/5646:218 we currently just split on comma and trim space, should properly parse header.
+	if p.ContentLanguage == "" {
+		return nilt
+	}
+	var l listspace
+	for _, s := range strings.Split(p.ContentLanguage, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return string0(p.ContentLanguage)
+		}
+		l = append(l, string0(s))
+	}
+	return l
+}
+
+func bodyFldLoc(p *message.Part) token {
+	if p.ContentLocation == "" {
+		return nilt
+	}
+	return string0(p.ContentLocation)
+}
+
 // xbodystructure returns a "body".
 // calls itself for multipart messages and message/{rfc822,global}.
-func xbodystructure(p *message.Part, extensible bool) token {
+func xbodystructure(log mlog.Log, p *message.Part, extensible bool) token {
 	if p.MediaType == "MULTIPART" {
 		// Multipart, ../rfc/9051:6355 ../rfc/9051:6411
 		var bodies concat
 		for i := range p.Parts {
-			bodies = append(bodies, xbodystructure(&p.Parts[i], extensible))
+			bodies = append(bodies, xbodystructure(log, &p.Parts[i], extensible))
 		}
 		r := listspace{bodies, string0(p.MediaSubType)}
+		// ../rfc/9051:6371
 		if extensible {
-			if len(p.ContentTypeParams) == 0 {
-				r = append(r, nilt)
-			} else {
-				params := make(listspace, 0, 2*len(p.ContentTypeParams))
-				for k, v := range p.ContentTypeParams {
-					params = append(params, string0(k), string0(v))
-				}
-				r = append(r, params)
-			}
+			r = append(r,
+				bodyFldParams(p),
+				bodyFldDisp(log, p),
+				bodyFldLang(p),
+				bodyFldLoc(p),
+			)
 		}
 		return r
 	}
@@ -999,7 +1047,7 @@ func xbodystructure(p *message.Part, extensible bool) token {
 		r = listspace{
 			dquote("TEXT"), string0(p.MediaSubType), // ../rfc/9051:6739
 			// ../rfc/9051:6376
-			bodyFldParams(p.ContentTypeParams), // ../rfc/9051:6401
+			bodyFldParams(p), // ../rfc/9051:6401
 			nilOrString(p.ContentID),
 			nilOrString(p.ContentDescription),
 			bodyFldEnc(p.ContentTransferEncoding),
@@ -1012,13 +1060,13 @@ func xbodystructure(p *message.Part, extensible bool) token {
 		r = listspace{
 			dquote("MESSAGE"), dquote(p.MediaSubType), // ../rfc/9051:6732
 			// ../rfc/9051:6376
-			bodyFldParams(p.ContentTypeParams), // ../rfc/9051:6401
+			bodyFldParams(p), // ../rfc/9051:6401
 			nilOrString(p.ContentID),
 			nilOrString(p.ContentDescription),
 			bodyFldEnc(p.ContentTransferEncoding),
 			number(p.EndOffset - p.BodyOffset),
 			xenvelope(p.Message),
-			xbodystructure(p.Message, extensible),
+			xbodystructure(log, p.Message, extensible),
 			number(p.RawLineCount), // todo: or mp.RawLineCount?
 		}
 	} else {
@@ -1033,13 +1081,21 @@ func xbodystructure(p *message.Part, extensible bool) token {
 		r = listspace{
 			media, string0(p.MediaSubType), // ../rfc/9051:6723
 			// ../rfc/9051:6376
-			bodyFldParams(p.ContentTypeParams), // ../rfc/9051:6401
+			bodyFldParams(p), // ../rfc/9051:6401
 			nilOrString(p.ContentID),
 			nilOrString(p.ContentDescription),
 			bodyFldEnc(p.ContentTransferEncoding),
 			number(p.EndOffset - p.BodyOffset),
 		}
 	}
-	// todo: if "extensible", we could add the value of the "content-md5" header. we don't have it in our parsed data structure, so we don't add it. likely no one would use it, also not any of the other optional fields. ../rfc/9051:6366
+	if extensible {
+		// ../rfc/9051:6366
+		r = append(r,
+			bodyFldMd5(p),
+			bodyFldDisp(log, p),
+			bodyFldLang(p),
+			bodyFldLoc(p),
+		)
+	}
 	return r
 }

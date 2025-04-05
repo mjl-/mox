@@ -118,6 +118,7 @@ aGVsbG8NCndvcmxkDQo=
 --unique-boundary-2
 Content-Type: image/jpeg
 Content-Transfer-Encoding: base64
+Content-Disposition: inline; filename=image.jpg
 
 
 --unique-boundary-2--
@@ -133,6 +134,9 @@ Isn't it
 
 --unique-boundary-1
 Content-Type: message/rfc822
+Content-MD5: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+Content-Language: en,de
+Content-Location: http://localhost
 
 From: info@mox.example
 To: mox <info@mox.example>

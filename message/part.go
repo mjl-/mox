@@ -67,7 +67,11 @@ type Part struct {
 	ContentTypeParams       map[string]string // E.g. holds "boundary" for multipart messages. Has lower-case keys, and original case values.
 	ContentID               string
 	ContentDescription      string
-	ContentTransferEncoding string    // In upper case.
+	ContentTransferEncoding string // In upper case.
+	ContentDisposition      string
+	ContentMD5              string
+	ContentLanguage         string
+	ContentLocation         string
 	Envelope                *Envelope // Email message headers. Not for non-message parts.
 
 	Parts []Part // Parts if this is a multipart.
@@ -155,6 +159,10 @@ func fallbackPart(p Part, r io.ReaderAt, size int64) (Part, error) {
 		ContentID:               p.ContentID,
 		ContentDescription:      p.ContentDescription,
 		ContentTransferEncoding: p.ContentTransferEncoding,
+		ContentDisposition:      p.ContentDisposition,
+		ContentMD5:              p.ContentMD5,
+		ContentLanguage:         p.ContentLanguage,
+		ContentLocation:         p.ContentLocation,
 		Envelope:                p.Envelope,
 		// We don't keep:
 		//   - BoundaryOffset: irrelevant for top-level message.
@@ -357,6 +365,10 @@ func newPart(log mlog.Log, strict bool, r io.ReaderAt, offset int64, parent *Par
 	p.ContentID = p.header.Get("Content-Id")
 	p.ContentDescription = p.header.Get("Content-Description")
 	p.ContentTransferEncoding = strings.ToUpper(p.header.Get("Content-Transfer-Encoding"))
+	p.ContentDisposition = p.header.Get("Content-Disposition")
+	p.ContentMD5 = p.header.Get("Content-Md5")
+	p.ContentLanguage = p.header.Get("Content-Language")
+	p.ContentLocation = p.header.Get("Content-Location")
 
 	if parent == nil {
 		p.Envelope, err = parseEnvelope(log, mail.Header(p.header))
@@ -644,13 +656,16 @@ var ErrParamEncoding = errors.New("bad header parameter encoding")
 // If the returned error is an ErrParamEncoding, it can be treated as a diagnostic
 // and a filename may still be returned.
 func (p *Part) DispositionFilename() (disposition string, filename string, err error) {
-	h, err := p.Header()
-	if err != nil {
-		return "", "", fmt.Errorf("parsing header: %w", err)
+	cd := p.ContentDisposition
+	if cd == "" {
+		h, err := p.Header()
+		if err != nil {
+			return "", "", fmt.Errorf("parsing header: %w", err)
+		}
+		cd = h.Get("Content-Disposition")
 	}
 	var disp string
 	var params map[string]string
-	cd := h.Get("Content-Disposition")
 	if cd != "" {
 		disp, params, err = mime.ParseMediaType(cd)
 	}
