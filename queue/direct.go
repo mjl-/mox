@@ -426,7 +426,6 @@ func deliverHost(log mlog.Log, resolver dns.Resolver, dialer smtpclient.Dialer, 
 
 		log.Debugx("queue deliverhost result", result.err,
 			slog.Any("host", host),
-			slog.Int("attempt", m0.Attempts),
 			slog.String("result", r),
 			slog.Int("delivered", len(result.delivered)),
 			slog.Int("failed", len(result.failed)),

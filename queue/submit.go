@@ -68,7 +68,6 @@ func deliverSubmit(qlog mlog.Log, resolver dns.Resolver, dialer smtpclient.Diale
 		qlog.Debugx("queue deliversubmit result", submiterr,
 			slog.Any("host", transport.DNSHost),
 			slog.Int("port", port),
-			slog.Int("attempt", m0.Attempts),
 			slog.String("result", r),
 			slog.Int("delivered", delivered),
 			slog.Int("failed", failed),

@@ -1338,7 +1338,7 @@ func deliver(log mlog.Log, resolver dns.Resolver, m0 Msg) {
 
 	qlog := log.WithCid(mox.Cid()).With(
 		slog.Any("from", m0.Sender()),
-		slog.Int("attempts", m0.Attempts))
+		slog.Int("attempts", m0.Attempts+1))
 
 	defer func() {
 		deliveryResults <- formatIPDomain(m0.RecipientDomain)
