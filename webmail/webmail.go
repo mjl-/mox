@@ -875,18 +875,6 @@ func handle(apiHandler http.Handler, isForwarded bool, accountPath string, w htt
 // CSP. On error, setHeader is not called, no output is written and the caller
 // should write an error response.
 func inlineSanitizeHTML(log mlog.Log, setHeaders func(), w io.Writer, p *message.Part, parents []*message.Part) error {
-	// Prepare cids if there is a chance we will use them.
-	cids := map[string]*message.Part{}
-	for _, parent := range parents {
-		if parent.MediaType+"/"+parent.MediaSubType == "MULTIPART/RELATED" && p.DecodedSize < 2*1024*1024 {
-			for i, rp := range parent.Parts {
-				if rp.ContentID != "" {
-					cids[strings.ToLower(rp.ContentID)] = &parent.Parts[i]
-				}
-			}
-		}
-	}
-
 	node, err := html.Parse(p.ReaderUTF8OrBinary())
 	if err != nil {
 		return fmt.Errorf("parsing html: %v", err)
@@ -894,7 +882,7 @@ func inlineSanitizeHTML(log mlog.Log, setHeaders func(), w io.Writer, p *message
 
 	// We track size, if it becomes too much, we abort and still copy as regular html.
 	var totalSize int64
-	if err := inlineNode(node, cids, &totalSize); err != nil {
+	if err := inlineNode(p, parents, node, &totalSize); err != nil {
 		return fmt.Errorf("inline cid uris in html nodes: %w", err)
 	}
 	sanitizeNode(node)
@@ -904,19 +892,50 @@ func inlineSanitizeHTML(log mlog.Log, setHeaders func(), w io.Writer, p *message
 	return nil
 }
 
+// findCID returns the part with the Content-ID matching cid, which includes
+// "<>", starting at the part's siblings, up the tree, and later from the
+// top-part down the tree.
+func findCID(p *message.Part, parents []*message.Part, cid string) *message.Part {
+	for i := len(parents) - 1; i >= 0; i-- {
+		for j, pp := range parents[i].Parts {
+			if strings.EqualFold(pp.ContentID, cid) {
+				return &parents[i].Parts[j]
+			}
+		}
+	}
+
+	if len(parents) > 0 {
+		return findCIDAll(parents[0], cid)
+	}
+	return nil
+}
+
+func findCIDAll(p *message.Part, cid string) *message.Part {
+	if strings.EqualFold(p.ContentID, cid) {
+		return p
+	}
+	for i := range p.Parts {
+		pp := findCIDAll(&p.Parts[i], cid)
+		if pp != nil {
+			return pp
+		}
+	}
+	return nil
+}
+
 // We inline cid: URIs into data: URIs. If a cid is missing in the
 // multipart/related, we ignore the error and continue with other HTML nodes. It
 // will probably just result in a "broken image". We limit the max size we
 // generate. We only replace "src" attributes that start with "cid:". A cid URI
 // could theoretically occur in many more places, like link href, and css url().
 // That's probably not common though. Let's wait for someone to need it.
-func inlineNode(node *html.Node, cids map[string]*message.Part, totalSize *int64) error {
+func inlineNode(p *message.Part, parents []*message.Part, node *html.Node, totalSize *int64) error {
 	for i, a := range node.Attr {
 		if a.Key != "src" || !caselessPrefix(a.Val, "cid:") || a.Namespace != "" {
 			continue
 		}
-		cid := a.Val[4:]
-		ap := cids["<"+strings.ToLower(cid)+">"]
+		cid := "<" + a.Val[4:] + ">"
+		ap := findCID(p, parents, cid)
 		if ap == nil {
 			// Missing cid, can happen with email, no need to stop returning data.
 			continue
@@ -936,7 +955,7 @@ func inlineNode(node *html.Node, cids map[string]*message.Part, totalSize *int64
 		node.Attr[i].Val = sb.String()
 	}
 	for node = node.FirstChild; node != nil; node = node.NextSibling {
-		if err := inlineNode(node, cids, totalSize); err != nil {
+		if err := inlineNode(p, parents, node, totalSize); err != nil {
 			return err
 		}
 	}
