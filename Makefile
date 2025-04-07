@@ -52,13 +52,13 @@ check:
 	CGO_ENABLED=0 go vet -tags errata rfc/errata.go
 	CGO_ENABLED=0 go vet -tags xr rfc/xr.go
 	GOARCH=386 CGO_ENABLED=0 go vet ./...
+	CGO_ENABLED=0 ineffassign ./...
 	CGO_ENABLED=0 staticcheck ./...
 	CGO_ENABLED=0 staticcheck -tags integration
 	CGO_ENABLED=0 staticcheck -tags website website/website.go
 	CGO_ENABLED=0 staticcheck -tags link rfc/link.go
 	CGO_ENABLED=0 staticcheck -tags errata rfc/errata.go
 	CGO_ENABLED=0 staticcheck -tags xr rfc/xr.go
-	CGO_ENABLED=0 ineffassign ./...
 
 # needed for check-shadow
 install-shadow:
