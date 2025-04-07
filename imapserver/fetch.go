@@ -826,35 +826,40 @@ func (cmd *fetchCmd) xpartnumsDeref(nums []uint32, p *message.Part) *message.Par
 }
 
 func (cmd *fetchCmd) xsection(section *sectionSpec, p *message.Part) io.Reader {
+	// msgtext is not nil, i.e. HEADER* or TEXT (not MIME), for the top-level part (a message).
 	if section.part == nil {
 		return cmd.xsectionMsgtext(section.msgtext, p)
 	}
 
 	p = cmd.xpartnumsDeref(section.part.part, p)
 
+	// If there is no sectionMsgText, then this isn't for HEADER*, TEXT or MIME, i.e. a
+	// part body, e.g. "BODY[1]".
 	if section.part.text == nil {
 		return p.RawReader()
 	}
 
-	// ../rfc/9051:4535
-	if p.Message != nil {
+	// MIME is defined for all parts. Otherwise it's HEADER* or TEXT, which is only
+	// defined for parts that are messages. ../rfc/9051:4500 ../rfc/9051:4517
+	if !section.part.text.mime {
+		if p.Message == nil {
+			cmd.xerrorf("part is not a message, cannot request header* or text")
+		}
+
 		err := p.SetMessageReaderAt()
 		cmd.xcheckf(err, "preparing submessage")
 		p = p.Message
-	}
 
-	if !section.part.text.mime {
 		return cmd.xsectionMsgtext(section.part.text.msgtext, p)
 	}
 
-	// MIME header, see ../rfc/9051:4534 ../rfc/2045:1645
+	// MIME header, see ../rfc/9051:4514 ../rfc/2045:1652
 	h, err := io.ReadAll(p.HeaderReader())
 	cmd.xcheckf(err, "reading header")
 
 	matchesFields := func(line []byte) bool {
 		k := textproto.CanonicalMIMEHeaderKey(string(bytes.TrimRight(bytes.SplitN(line, []byte(":"), 2)[0], " \t")))
-		// Only add MIME-Version and additional CRLF for messages, not other parts. ../rfc/2045:1645 ../rfc/2045:1652
-		return (p.Envelope != nil && k == "Mime-Version") || strings.HasPrefix(k, "Content-")
+		return strings.HasPrefix(k, "Content-")
 	}
 
 	var match bool
@@ -868,7 +873,7 @@ func (cmd *fetchCmd) xsection(section *sectionSpec, p *message.Part) io.Reader {
 		h = h[len(line):]
 
 		match = matchesFields(line) || match && (bytes.HasPrefix(line, []byte(" ")) || bytes.HasPrefix(line, []byte("\t")))
-		if match || len(line) == 2 {
+		if match {
 			hb.Write(line)
 		}
 	}
@@ -876,11 +881,10 @@ func (cmd *fetchCmd) xsection(section *sectionSpec, p *message.Part) io.Reader {
 }
 
 func (cmd *fetchCmd) xsectionMsgtext(smt *sectionMsgtext, p *message.Part) io.Reader {
-	if smt.s == "HEADER" {
-		return p.HeaderReader()
-	}
-
 	switch smt.s {
+	case "HEADER":
+		return p.HeaderReader()
+
 	case "HEADER.FIELDS":
 		return cmd.xmodifiedHeader(p, smt.headers, false)
 
@@ -888,8 +892,8 @@ func (cmd *fetchCmd) xsectionMsgtext(smt *sectionMsgtext, p *message.Part) io.Re
 		return cmd.xmodifiedHeader(p, smt.headers, true)
 
 	case "TEXT":
-		// It appears imap clients expect to get the body of the message, not a "text body"
-		// which sounds like it means a text/* part of a message. ../rfc/9051:4517
+		// TEXT the body (excluding headers) of a message, either the top-level message, or
+		// a nested as message/rfc822 or message/global. ../rfc/9051:4517
 		return p.RawReader()
 	}
 	panic(serverError{fmt.Errorf("missing case")})

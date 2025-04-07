@@ -78,9 +78,7 @@ func TestFetch(t *testing.T) {
 	headerSplit := strings.SplitN(exampleMsgHeader, "\r\n", 2)
 	dateheader1 := imapclient.FetchBody{RespAttr: "BODY[HEADER.FIELDS (Date)]", Section: "HEADER.FIELDS (Date)", Body: headerSplit[0] + "\r\n\r\n"}
 	nodateheader1 := imapclient.FetchBody{RespAttr: "BODY[HEADER.FIELDS.NOT (Date)]", Section: "HEADER.FIELDS.NOT (Date)", Body: headerSplit[1]}
-	date1header1 := imapclient.FetchBody{RespAttr: "BODY[1.HEADER.FIELDS (Date)]", Section: "1.HEADER.FIELDS (Date)", Body: headerSplit[0] + "\r\n\r\n"}
-	nodate1header1 := imapclient.FetchBody{RespAttr: "BODY[1.HEADER.FIELDS.NOT (Date)]", Section: "1.HEADER.FIELDS.NOT (Date)", Body: headerSplit[1]}
-	mime1 := imapclient.FetchBody{RespAttr: "BODY[1.MIME]", Section: "1.MIME", Body: "MIME-Version: 1.0\r\nContent-Type: TEXT/PLAIN; CHARSET=US-ASCII\r\n\r\n"}
+	mime1 := imapclient.FetchBody{RespAttr: "BODY[1.MIME]", Section: "1.MIME", Body: "Content-Type: TEXT/PLAIN; CHARSET=US-ASCII\r\n"}
 
 	flagsSeen := imapclient.FetchFlags{`\Seen`}
 
@@ -212,11 +210,10 @@ func TestFetch(t *testing.T) {
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, dateheader1}})
 	tc.transactf("ok", "fetch 1 body.peek[header.fields.not (date)]")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, nodateheader1}})
-	// For non-multipart messages, 1 means the whole message. ../rfc/9051:4481
-	tc.transactf("ok", "fetch 1 body.peek[1.header.fields (date)]")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, date1header1}})
-	tc.transactf("ok", "fetch 1 body.peek[1.header.fields.not (date)]")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 1, Attrs: []imapclient.FetchAttr{uid1, nodate1header1}})
+	// For non-multipart messages, 1 means the whole message, but since it's not of
+	// type message/{rfc822,global} (a message), you can't get the message headers.
+	// ../rfc/9051:4481
+	tc.transactf("no", "fetch 1 body.peek[1.header]")
 
 	// MIME, part 1 for non-multipart messages is the message itself. ../rfc/9051:4481
 	tc.transactf("ok", "fetch 1 body.peek[1.mime]")
@@ -407,9 +404,7 @@ Content-Disposition: inline; filename=image.jpg
 	tc.transactf("ok", "fetch 2 body.peek[3]")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{uid2, imapclient.FetchBody{RespAttr: "BODY[3]", Section: "3", Body: part3}}})
 
-	part2mime := tocrlf(`Content-type: text/plain; charset=US-ASCII
-
-`)
+	part2mime := "Content-type: text/plain; charset=US-ASCII\r\n"
 	tc.transactf("ok", "fetch 2 body.peek[2.mime]")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{uid2, imapclient.FetchBody{RespAttr: "BODY[2.MIME]", Section: "2.MIME", Body: part2mime}}})
 
@@ -434,19 +429,26 @@ Content-Transfer-Encoding: Quoted-printable
 	tc.transactf("ok", "fetch 2 body.peek[5.header]")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{uid2, imapclient.FetchBody{RespAttr: "BODY[5.HEADER]", Section: "5.HEADER", Body: part5header}}})
 
-	part5mime := tocrlf(`Content-Type: Text/plain; charset=ISO-8859-1
-Content-Transfer-Encoding: Quoted-printable
-
+	part5mime := tocrlf(`Content-Type: message/rfc822
+Content-MD5: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+Content-Language: en,de
+Content-Location: http://localhost
 `)
 	tc.transactf("ok", "fetch 2 body.peek[5.mime]")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{uid2, imapclient.FetchBody{RespAttr: "BODY[5.MIME]", Section: "5.MIME", Body: part5mime}}})
 
 	part5text := "  ... Additional text in ISO-8859-1 goes here ...\r\n"
+
 	tc.transactf("ok", "fetch 2 body.peek[5.text]")
 	tc.xuntagged(imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{uid2, imapclient.FetchBody{RespAttr: "BODY[5.TEXT]", Section: "5.TEXT", Body: part5text}}})
 
+	part5body := "  ... Additional text in ISO-8859-1 goes here ...\r\n"
 	tc.transactf("ok", "fetch 2 body.peek[5.1]")
-	tc.xuntagged(imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{uid2, imapclient.FetchBody{RespAttr: "BODY[5.1]", Section: "5.1", Body: part5text}}})
+	tc.xuntagged(imapclient.UntaggedFetch{Seq: 2, Attrs: []imapclient.FetchAttr{uid2, imapclient.FetchBody{RespAttr: "BODY[5.1]", Section: "5.1", Body: part5body}}})
+
+	// 5.1 is the part that is the sub message, but not as message/rfc822, but as part,
+	// so we cannot request a header.
+	tc.transactf("no", "fetch 2 body.peek[5.1.header]")
 
 	// In case of EXAMINE instead of SELECT, we should not be seeing any changed \Seen flags for non-peek commands.
 	tc.client.StoreFlagsClear("1", true, `\Seen`)
